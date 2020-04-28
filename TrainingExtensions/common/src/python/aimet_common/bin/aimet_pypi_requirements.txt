@@ -1,0 +1,10 @@
+numpy==1.15.4
+protobuf==3.7.1
+pybind11==2.2.3
+pytest==4.0.1
+scikit-learn==0.19.1
+tb-nightly==1.14.0a20190517
+tensorboardX==1.7
+torch==1.1.0
+torchvision==0.2.1
+https://storage.googleapis.com/tensorflow/linux/gpu/tensorflow_gpu-1.7.0-cp35-cp35m-linux_x86_64.whl
