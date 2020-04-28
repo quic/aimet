@@ -1,0 +1,140 @@
+//
+//  @@-COPYRIGHT-START-@@
+//
+//  Copyright (c) 2019, Qualcomm Innovation Center, Inc. All rights reserved.
+//
+//  Redistribution and use in source and binary forms, with or without
+//  modification, are permitted provided that the following conditions are met:
+//
+//  1. Redistributions of source code must retain the above copyright notice,
+//     this list of conditions and the following disclaimer.
+//
+//  2. Redistributions in binary form must reproduce the above copyright notice,
+//     this list of conditions and the following disclaimer in the documentation
+//     and/or other materials provided with the distribution.
+//
+//  3. Neither the name of the copyright holder nor the names of its contributors
+//     may be used to endorse or promote products derived from this software
+//     without specific prior written permission.
+//
+//  THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+//  AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+//  IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+//  ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE
+//  LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+//  CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+//  SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+//  INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+//  CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+//  ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+//  POSSIBILITY OF SUCH DAMAGE.
+//
+//  SPDX-License-Identifier: BSD-3-Clause
+//
+//  @@-COPYRIGHT-END-@@
+//
+//==============================================================================
+
+#ifndef DL_QUANTIZATION_TF_ENHANCED_ENCODING_ANALYZER_H
+#define DL_QUANTIZATION_TF_ENHANCED_ENCODING_ANALYZER_H
+
+// This file contains code to analyze and calculate quantization encodings
+// This code is specific for the TF Enhanced quantization scheme
+
+#include "math_functions.hpp"
+#include <DlQuantization/IQuantizationEncodingAnalyzer.hpp>
+
+namespace DlQuantization
+{
+template <typename DTYPE>
+class TfEnhancedEncodingAnalyzer : public IQuantizationEncodingAnalyzer<DTYPE>
+{
+public:
+    /**
+     * Updates internal PDF stats given a tensor.
+     * Intent is to keep a histogram of all the values that we have seen over multiple instances of a tensor
+     * @param tensor Reference to a tensor
+     * @param tensorSize Size of the tensor (number of elements)
+     * @param tensorCpuGpuMode Indicates if the tensor is in CPU or GPU memory
+     */
+    void updateStats(const DTYPE* tensor, const size_t tensorSize, ComputationMode tensorCpuGpuMode) override;
+
+    /***
+     * Given a number distribution in CPU memory, compute the TensorFlow encoding with the highest possible SQNR
+     *
+     * To do so, we perform a grid search over different deltas and offsets. This grid search optimizes the encoding
+     * to reduce the cost of quantization. In this cost function, saturation errors are weighted higher than
+     * quantization errors.
+     *
+     * @param bw Bitwidth to use for computing encodings
+     * @param useSymmetricEncodings If true, compute symmetric encodings
+     * @return Computed encoding
+     */
+    TfEncoding computeEncoding(uint8_t bw, bool useSymmetricEncodings) const override;
+
+
+private:
+    PDF _stats;
+
+    // Fudge factor which trades-off quantization and saturation error.
+    // The cost function will be "quantization cost" + GAMMA * "saturation cost".
+    static constexpr DTYPE GAMMA = 3.0;
+
+    // Minimum range of quantization
+    static constexpr double MIN_RANGE = 0.01;
+
+    /**
+     * @brief Given a probability density and a fixed point encoding, compute the
+     * quantization and saturation error of this number distribution.
+     *
+     * Note: This function computes the cost of quantizing a number distribution.
+     * The cost is defined as "quantization cost" + GAMMA * "saturation cost".
+     * For GAMMA==1, this function computes the means square error introduced
+     * by this specific fixed point encoding.
+     */
+    DTYPE _quantAndSatCost(const PDF& pdf, int bw, DTYPE delta, int offset) const;
+
+    /**
+     * Find range (min, max) of the aggregated stats
+     * @return Tuple of min and max values
+     */
+    std::tuple<DTYPE, DTYPE> _findRangeOfAggregateStats() const;
+
+    /**
+     * Pick asymmetric test candidates to use for searching the lowest quantized cost. Each candidates is expressed
+     * in terms of its delta and offset
+     * @param min_val Minimum value of the stats
+     * @param max_val Max value of the stats
+     * @param num_steps Number of delta steps (based on the bitwidth)
+     * @param test_deltas Vector of deltas (test candidate returned)
+     * @param test_offsets Vector of offsets (test candidate returned)
+     */
+    void _pickTestCandidatesAsymmetric(DTYPE min_val, DTYPE max_val, DTYPE num_steps,
+                                       std::vector<std::tuple<DTYPE, int>>& test_candidates) const;
+
+    /**
+     * Pick symmetric test candidates to use for searching the lowest quantized cost. Each candidates is expressed
+     * in terms of its delta and offset
+     * @param min_val Minimum value of the stats
+     * @param max_val Max value of the stats
+     * @param num_steps Number of delta steps (based on the bitwidth)
+     * @param test_deltas Vector of deltas (test candidate returned)
+     * @param test_offsets Vector of offsets (test candidate returned)
+     */
+    void _pickTestCandidatesSymmetric(DTYPE min_val, DTYPE max_val, DTYPE num_steps,
+                                      std::vector<std::tuple<DTYPE, int>>& test_candidates) const;
+
+    /**
+     * Given a set of test candidates (delta x offsets), find the best candidate with the lowest cost
+     * @param bw Bitwidth
+     * @param test_deltas Vector of deltas to test
+     * @param test_offsets Vector of offsets to test
+     * @return Tuple of <best delta, best offset>
+     */
+    std::tuple<DTYPE, int> _findBestCandidate(uint8_t bw,
+                                              const std::vector<std::tuple<DTYPE, int>>& test_candidates) const;
+};
+
+}   // namespace DlQuantization
+
+#endif   // DL_QUANTIZATION_TF_ENHANCED_ENCODING_ANALYZER_H

@@ -1,0 +1,374 @@
+# /usr/bin/env python3.5
+# -*- mode: python -*-
+# =============================================================================
+#  @@-COPYRIGHT-START-@@
+#
+#  Copyright (c) 2018, Qualcomm Innovation Center, Inc. All rights reserved.
+#
+#  Redistribution and use in source and binary forms, with or without
+#  modification, are permitted provided that the following conditions are met:
+#
+#  1. Redistributions of source code must retain the above copyright notice,
+#     this list of conditions and the following disclaimer.
+#
+#  2. Redistributions in binary form must reproduce the above copyright notice,
+#     this list of conditions and the following disclaimer in the documentation
+#     and/or other materials provided with the distribution.
+#
+#  3. Neither the name of the copyright holder nor the names of its contributors
+#     may be used to endorse or promote products derived from this software
+#     without specific prior written permission.
+#
+#  THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+#  AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+#  IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+#  ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE
+#  LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+#  CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+#  SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+#  INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+#  CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+#  ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+#  POSSIBILITY OF SUCH DAMAGE.
+#
+#  SPDX-License-Identifier: BSD-3-Clause
+#
+#  @@-COPYRIGHT-END-@@
+# =============================================================================
+""" Utilities that are used for different AIMET PyTorch features """
+
+from typing import List, Tuple, Union
+import numpy as np
+import torch.nn
+import torch
+
+from torchvision import datasets, transforms
+from aimet_common.utils import AimetLogger
+
+logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Utils)
+
+
+class IterFirstX:
+    """ Iterator for the first x samples in a given data-loader """
+
+    def __init__(self, data_loader, num_samples):
+        self.data_loader = data_loader
+        self.num_samples = num_samples
+
+    def __iter__(self):
+        for i, batch in enumerate(self.data_loader):
+            if i >= self.num_samples:
+                break
+            yield batch
+
+
+def run_hook_for_layers(model: torch.nn.Module, input_shapes: Union[Tuple, List[Tuple]], hook,
+                        module_type_for_attaching_hook=None):
+    """
+    Register the given hook function for all layers in the model
+    :param model: Model
+    :param input_shapes: Shape of inputs to pass to the model
+    :param hook: Hook function to register
+    :param module_type_for_attaching_hook: Tuple of torch.nn module types for which hook has to be attached
+    :return: None
+    """
+
+    # ------------------------
+    # Register hook function
+    # ------------------------
+    hooks = []
+    # All leaf modules
+    modules = [module for module in model.modules() if is_leaf_module(module)]
+    if module_type_for_attaching_hook:
+        # if needed, filter by module types specified by caller
+        modules = [module for module in modules if isinstance(module, module_type_for_attaching_hook)]
+    for module in modules:
+        hooks.append(module.register_forward_hook(hook))
+
+    # ------------------------------------------------
+    # Run forward pass to execute the hook functions
+    # ------------------------------------------------
+    device = get_device(model)
+    dummy_tensors = create_rand_tensors_given_shapes(input_shapes)
+    dummy_tensors = [tensor.to(device) for tensor in dummy_tensors]
+    with torch.no_grad():
+        _ = model(*dummy_tensors)
+
+    # --------------------------
+    # Remove all hooks we added
+    # --------------------------
+    for h in hooks:
+        h.remove()
+
+
+def to_numpy(tensor: torch.Tensor):
+    """
+     Helper function that turns the given tensor into a numpy array
+    :param tensor       : torch.Tensor
+    :return             : float or np.array
+    """
+
+    if isinstance(tensor, np.ndarray):
+        return tensor
+
+    # if tensor is allocated on GPU, first copy to CPU
+    # then detach from the current graph and convert to numpy array
+    if hasattr(tensor, 'is_cuda'):
+        if tensor.is_cuda:
+            return tensor.cpu().detach().numpy()
+
+    # if tensor is on CPU only
+    if hasattr(tensor, 'detach'):
+        return tensor.detach().numpy()
+
+    if hasattr(tensor, 'numpy'):
+        return tensor.numpy()
+
+    return np.array(tensor)
+
+
+def create_fake_data_loader(dataset_size: int, batch_size: int, image_size=(1, 28, 28)):
+    """
+    Helper function to create fake data loader which is default image size (1, 28, 28)
+    :param dataset_size     : total images in data set
+    :param batch_size       : batch size
+    :param image_size       : size of input
+    :return:
+    """
+    transform = transforms.Compose([transforms.ToTensor()])
+    data_loader = torch.utils.data.DataLoader(datasets.FakeData(size=dataset_size, image_size=image_size,
+                                                                num_classes=10, transform=transform,
+                                                                target_transform=None),
+                                              batch_size=batch_size, shuffle=False)
+    return data_loader
+
+
+def get_layer_name(model, layer):
+    """
+    Helper function to get layer name given model and layer reference
+    :param model: model (nn.Module)
+    :param layer: layer reference
+    :return:
+    """
+    for name, module in model.named_modules():
+        if module == layer:
+            return name
+    return KeyError
+
+
+def get_layer_by_name(model, layer_name):
+    """
+    Helper function to get layer reference given layer name
+    :param model        : model (nn.Module)
+    :param layer_name   : layer_name
+    :return:
+    """
+    for name, module in model.named_modules():
+        if name == layer_name:
+            return module
+    return KeyError
+
+
+def is_model_on_gpu(model):
+    """
+    Function to check whether given model is created on GPU or CPU
+    Assumption : model is on single device
+    :return:
+        True if the model is on GPU, False if on CPU
+    """
+    return next(model.parameters()).is_cuda
+
+
+def get_device(model):
+    """
+    Function to find which device is model on
+    Assumption : model is on single device
+    :param model:
+    :return: Device on which model is present
+    """
+    return next(model.parameters()).device
+
+
+def is_leaf_module(module):
+
+    """Utility function to determine if the given module is a leaf module - that is, does not have children modules
+    :return:
+        True if the module is a leaf, False otherwise
+    """
+    module_list = list(module.modules())
+
+    return bool(len(module_list) == 1)
+
+
+def get_input_shape_batch_size(data_loader):
+    """
+    Gets input shape of image and batch size from data loader
+    :param data_loader: Iterates over data set
+    :return: returns batch size and shape of one image
+    """
+    for _, (images_in_one_batch, _) in enumerate(data_loader):
+        # finding shape of a batch
+        input_shape = torch.Tensor.size(images_in_one_batch)
+
+        return input_shape[0], (1, input_shape[1], input_shape[2], input_shape[3])
+
+
+def has_hooks(module: torch.nn.Module):
+    """ Returns True if the module uses hooks. """
+
+    for hooks in (module._forward_pre_hooks,                       # pylint: disable=protected-access
+                  module._forward_hooks, module._backward_hooks):  # pylint: disable=protected-access
+        if hooks:
+            logger.warning("The specified model has registered hooks which might break winnowing")
+            return True
+    return False
+
+
+def get_one_positions_in_binary_mask(mask):
+    """
+    Return the indices of one positions in a binary mask.
+
+    :param mask: a mask that contains either 0s or 1s
+    :return:
+    """
+
+    mask_one_positions = [i for i in range(len(mask)) if mask[i] == 1]
+    return mask_one_positions
+
+
+def get_ordered_list_of_modules(model: torch.nn.Module, input_shapes: Union[Tuple, List[Tuple]]) -> List:
+    """
+    Finds order of nodes in graph
+    :param model: model
+    :param input_shapes: input shape to model (can be one or multiple inputs)
+    :return: List of names in graph in order
+    """
+    def _hook_to_collect_name_of_module(module, _, __):
+        """
+        hook to find name of module
+        """
+        for name, module_ref in model.named_modules():
+            if module is module_ref:
+                list_modules.append([name, module])
+    list_modules = []
+    run_hook_for_layers(model, input_shapes, hook=_hook_to_collect_name_of_module)
+
+    return list_modules
+
+
+def get_ordered_list_of_conv_modules(model: torch.nn.Module, input_shapes: Union[Tuple, List[Tuple]]) -> List:
+    """
+    Finds order of nodes in graph
+    :param model: model
+    :param input_shapes: input shape to model (can be one or multiple inputs)
+    :return: List of names in graph in order
+    """
+    module_list = get_ordered_list_of_modules(model, input_shapes)
+    module_list = [[name, module] for name, module in module_list if isinstance(module, torch.nn.Conv2d)]
+    return module_list
+
+
+def replace_modules_of_type1_with_type2(model: torch.nn.Module,
+                                        type1: type(torch.nn.Module), type2: type(torch.nn.Module)):
+    """
+    Given a model, finds all modules of type type1 and replaces them with instances of type2
+    Note: Since instances of type2 are instantiated using a default constructor (no parameters),
+    only certain module types e.g. torch.nn.ReLU can be used as type2
+    :param model: Model to replace modules in
+    :param type1: Module type of modules to replace
+    :param type2: Module type to instantiate to replace modules with
+    :return: None
+    """
+
+    for module_name, module_ref in model.named_children():
+
+        if isinstance(module_ref, type1):
+            setattr(model, module_name, type2())
+
+        children_module_list = list(module_ref.modules())
+        if len(children_module_list) != 1:
+            replace_modules_of_type1_with_type2(module_ref, type1, type2)
+
+
+def replace_modules_with_instances_of_new_type(model: torch.nn.Module, modules_to_replace_list: List[torch.nn.Module],
+                                               new_type: type(torch.nn.Module)):
+    """
+    Given a model, replaces given modules with instances of new_type
+    Note: Since instances of new_type are instantiated using a default constructor (no parameters),
+    only certain module types e.g. torch.nn.ReLU can be used as new_type
+    :param model: Model to replace modules in
+    :param modules_to_replace_list: Modules to replace
+    :param new_type: Module type to instantiate to replace modules with
+    :return: None
+    """
+
+    for module_name, module_ref in model.named_children():
+
+        if module_ref in modules_to_replace_list:
+            setattr(model, module_name, new_type())
+
+        children_module_list = list(module_ref.modules())
+        if len(children_module_list) != 1:
+            replace_modules_with_instances_of_new_type(module_ref, modules_to_replace_list, new_type)
+
+
+def create_rand_tensors_given_shapes(input_shape: Union[Tuple, List[Tuple]]) -> List[torch.Tensor]:
+    """
+    Given shapes of some tensors, create one or more random tensors and return them as a list of tensors
+    :param input_shape: Shapes of tensors to create
+    :return: Created list of tensors
+    """
+    if isinstance(input_shape, List):
+        input_shapes = input_shape
+    else:
+        input_shapes = [input_shape]
+
+    rand_tensors = []
+    for shape in input_shapes:
+        rand_tensors.append(torch.rand(shape))
+
+    return rand_tensors
+
+
+def get_ordered_lists_of_conv_fc(model: torch.nn.Module, input_shapes: Tuple) -> List:
+    """
+    Finds order of nodes in graph
+    :param model: model
+    :param input_shape: input shape to model
+    :return: List of names in graph in order
+    """
+
+    module_list = get_ordered_list_of_modules(model, input_shapes)
+    module_list = [[name, module] for name, module in module_list if
+                   isinstance(module, (torch.nn.Conv2d, torch.nn.Linear))]
+    return module_list
+
+
+def get_reused_modules(model: torch.nn.Module, input_shapes: Tuple) -> List[Tuple[str, torch.nn.Module]]:
+    """
+    Identify modules which are used more than once in the model
+    :param model: Model to check for modules used more than once
+    :param input_shapes: Input shapes of the model
+    :return: List of tuples of name and module for modules in the model which are used more than once
+    """
+    module_set = set()
+    reused_modules_set = set()
+
+    def forward_hook(curr_module, _, _1):
+        """
+        Custom forward hook function to add modules to module_set and reused_module_set.
+        :param curr_module: Current module being traversed during forward pass.
+        :param _1: Unused param
+        """
+        if curr_module in module_set:
+            reused_modules_set.add(curr_module)
+        else:
+            module_set.add(curr_module)
+
+    run_hook_for_layers(model, input_shapes, forward_hook)
+
+    reused_modules_list = []
+    for name, module in model.named_modules():
+        if is_leaf_module(module) and module in reused_modules_set:
+            reused_modules_list.append((name, module))
+    return reused_modules_list

@@ -1,0 +1,937 @@
+# /usr/bin/env python3.5
+# -*- mode: python -*-
+# =============================================================================
+#  @@-COPYRIGHT-START-@@
+#
+#  Copyright (c) 2019, Qualcomm Innovation Center, Inc. All rights reserved.
+#
+#  Redistribution and use in source and binary forms, with or without
+#  modification, are permitted provided that the following conditions are met:
+#
+#  1. Redistributions of source code must retain the above copyright notice,
+#     this list of conditions and the following disclaimer.
+#
+#  2. Redistributions in binary form must reproduce the above copyright notice,
+#     this list of conditions and the following disclaimer in the documentation
+#     and/or other materials provided with the distribution.
+#
+#  3. Neither the name of the copyright holder nor the names of its contributors
+#     may be used to endorse or promote products derived from this software
+#     without specific prior written permission.
+#
+#  THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+#  AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+#  IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+#  ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE
+#  LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+#  CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+#  SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+#  INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+#  CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+#  ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+#  POSSIBILITY OF SUCH DAMAGE.
+#
+#  SPDX-License-Identifier: BSD-3-Clause
+#
+#  @@-COPYRIGHT-END-@@
+# =============================================================================
+
+import unittest
+import unittest.mock
+import subprocess
+import os
+import sys
+import shutil
+import itertools
+import copy
+import logging
+
+import tensorflow as tf
+import numpy as np
+from glob import glob
+
+from keras.applications.vgg16 import VGG16
+from keras.applications.resnet50 import ResNet50
+
+import aimet_tensorflow.utils.graph_saver
+import aimet_tensorflow.utils.op.conv
+from aimet_common.defs import CostMetric, LayerCompRatioPair
+from aimet_common.utils import AimetLogger
+from aimet_torch.winnow.winnow_utils import to_numpy
+from aimet_common.input_match_search import InputMatchSearch
+
+from aimet_tensorflow import utils
+from aimet_tensorflow.channel_pruning.data_subsampler import DataSubSampler
+from aimet_tensorflow.channel_pruning.channel_pruner import InputChannelPruner
+from aimet_tensorflow.channel_pruning.weight_reconstruction import WeightReconstructor
+from aimet_tensorflow.layer_database import Layer, LayerDatabase
+from aimet_tensorflow.examples import mnist_tf_model
+
+
+logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Test)
+
+
+def mnist_parse(serialized_example):
+    """
+    Parser for MNIST model, reads the tfRecords file
+    :param serialized_example:
+    :return: Input image and labels
+    """
+
+    dim = 28
+    features = tf.parse_single_example(serialized_example,
+                                       features={'label': tf.FixedLenFeature([], tf.int64),
+                                                 'image_raw': tf.FixedLenFeature([], tf.string)})
+
+    # Mnist examples are flattened. Since we aren't performing an augmentations
+    # these can remain flattened.
+    image = tf.decode_raw(features['image_raw'], tf.uint8)
+    image.set_shape([dim * dim])
+
+    # Convert from bytes to floats 0 -> 1.
+    image = tf.cast(image, tf.float32) / 255
+    label = tf.cast(features['label'], tf.int32)
+    labels = tf.one_hot(indices=label, depth=10)
+
+    return image, labels
+
+
+def imagenet_parse(serialized_example):
+    """
+    Parser for IMAGENET models, reads the tfRecords file
+    :param serialized_example:
+    :return: Input image and labels
+    """
+    dim = 224
+
+    features = tf.parse_single_example(serialized_example,
+                                       features={
+                                           'image/class/label': tf.FixedLenFeature([], tf.int64),
+                                           'image/encoded': tf.FixedLenFeature([], tf.string)})
+    image_data = features['image/encoded']
+
+    # Decode the jpeg
+    with tf.name_scope('prep_image', None, None):
+        # decode and reshape to default 224x224
+        # pylint: disable=no-member
+        image = tf.image.decode_jpeg(image_data, channels=3)
+        image = tf.image.convert_image_dtype(image, dtype=tf.float32)
+        image = tf.image.resize_images(image, [dim, dim])
+
+    return image
+
+
+class TestTrainingExtensionsChannelPruning(unittest.TestCase):
+
+    @unittest.skip
+    def test_get_activation_data_keras_vgg16(self):
+
+        """
+        Test to collect activations and compare for Keras model
+        """
+
+        g = tf.Graph()
+        with g.as_default():
+            _ = VGG16(weights=None, input_shape=(224, 224, 3))
+            init = tf.global_variables_initializer()
+
+        inp_op_names = ['input_1']
+        conv = g.get_operation_by_name('block1_conv1/convolution')
+
+        batch_size = 2
+        input_data = np.random.rand(100, 224, 224, 3)
+
+        dataset = tf.data.Dataset.from_tensor_slices(input_data)
+        dataset = dataset.batch(batch_size=batch_size)
+
+        # create sess with graph
+        sess = tf.Session(graph=g)
+
+        # initialize all the variables in VGG16
+        sess.run(init)
+
+        DataSubSampler.get_sub_sampled_data(orig_layer=conv, pruned_layer=conv, inp_op_names=inp_op_names,
+                                            orig_model=sess, comp_model=sess, data_set=dataset,
+                                            batch_size=batch_size, num_reconstruction_samples=1000)
+
+        sess.close()
+
+    @unittest.skip
+    def test_get_activation_data_keras_vgg16_with_additional_samples(self):
+
+        """
+        Test to collect activations and compare for Keras model with additional num_reconstruction_samples
+        """
+
+        g = tf.Graph()
+        with g.as_default():
+            _ = VGG16(weights=None, input_shape=(224, 224, 3))
+            init = tf.global_variables_initializer()
+
+        inp_op_names = ['input_1']
+        conv = g.get_operation_by_name('block1_conv1/convolution')
+
+        batch_size = 2
+        input_data = np.random.rand(100, 224, 224, 3)
+
+        dataset = tf.data.Dataset.from_tensor_slices(input_data)
+        dataset = dataset.batch(batch_size=batch_size)
+
+        # create sess with graph
+        sess = tf.Session(graph=g)
+
+        # initialize all the variables in VGG16
+        sess.run(init)
+
+        self.assertRaises(StopIteration, lambda: DataSubSampler.get_sub_sampled_data(orig_layer=conv, pruned_layer=conv,
+                                                                                     inp_op_names=inp_op_names,
+                                                                                     orig_model=sess,
+                                                                                     comp_model=sess,
+                                                                                     data_set=dataset,
+                                                                                     batch_size=batch_size,
+                                                                                     num_reconstruction_samples=1010))
+
+        sess.close()
+
+    @unittest.skip
+    def test_get_activation_data_keras_vgg16_tfrecord_dataset(self):
+
+        """
+        Test to collect activations with tfrecord dataset
+        """
+        output_dir = str('./')
+        script_dir = str('/tensorflow/tensorflow/examples/how_tos/reading_data/convert_to_records.py')
+
+        # run the script to ownload data and convert into tfrecords
+        tf.logging.set_verbosity(tf.logging.ERROR)
+        subprocess.call([sys.executable, script_dir, '--directory', os.path.join(output_dir, 'data/mnist/')])
+
+        tfrecords = os.path.join('data', 'mnist', 'validation.tfrecords')
+        batch_size = 64
+
+        dataset = tf.data.TFRecordDataset(tfrecords).repeat(count=1)
+        dataset = dataset.map(mnist_parse, num_parallel_calls=1)
+        dataset = dataset.batch(batch_size=batch_size)
+
+        g = tf.Graph()
+        with g.as_default():
+            mnist_tf_model.create_model(data_format='channels_first')
+            init = tf.global_variables_initializer()
+
+        inp_op_names = ['reshape_1_input']
+        conv = g.get_operation_by_name('conv2d_1/Conv2D')
+
+        # create sess with graph
+        sess = tf.Session(graph=g)
+
+        # initialize all the variables in VGG16
+        sess.run(init)
+
+        # validation tfrecords has 5000 images
+        # samples_per_image = 10
+        # 5000 * 10 = 50000 possible reconstruction samples
+
+        DataSubSampler.get_sub_sampled_data(orig_layer=conv, pruned_layer=conv, inp_op_names=inp_op_names,
+                                            orig_model=sess, comp_model=sess, data_set=dataset,
+                                            batch_size=batch_size, num_reconstruction_samples=50000)
+
+        shutil.rmtree(os.path.join(output_dir, 'data'))
+        sess.close()
+
+    @unittest.skip
+    def test_get_activation_data_keras_vgg16_tfrecord_dataset_additional_samples(self):
+
+        """
+        Test to collect activations with tfrecord dataset
+        """
+        output_dir = str('./')
+        script_dir = str('/tensorflow/tensorflow/examples/how_tos/reading_data/convert_to_records.py')
+
+        # run the script to ownload data and convert into tfrecords
+        subprocess.call([sys.executable, script_dir, '--directory', os.path.join(output_dir, 'data/mnist/')])
+
+        tfrecords = os.path.join('data', 'mnist', 'validation.tfrecords')
+        batch_size = 64
+
+        dataset = tf.data.TFRecordDataset(tfrecords).repeat(count=1)
+        dataset = dataset.map(mnist_parse, num_parallel_calls=1)
+        dataset = dataset.batch(batch_size=batch_size)
+
+        g = tf.Graph()
+        with g.as_default():
+            mnist_tf_model.create_model(data_format='channels_first')
+            init = tf.global_variables_initializer()
+
+        inp_op_names = ['reshape_1_input']
+        conv = g.get_operation_by_name('conv2d_1/Conv2D')
+
+        # create sess with graph
+        sess = tf.Session(graph=g)
+
+        # initialize all the variables in VGG16
+        sess.run(init)
+
+        # validation tfrecords has 5000 images
+        # samples_per_image = 10
+        # 5000 * 10 = 50000 possible reconstruction samples
+
+        self.assertRaises(StopIteration, lambda: DataSubSampler.get_sub_sampled_data(orig_layer=conv, pruned_layer=conv,
+                                                                                     inp_op_names=inp_op_names,
+                                                                                     orig_model=sess,
+                                                                                     comp_model=sess,
+                                                                                     data_set=dataset,
+                                                                                     batch_size=batch_size,
+                                                                                     num_reconstruction_samples=50600))
+
+        shutil.rmtree(os.path.join(output_dir, 'data'))
+        sess.close()
+
+    def test_find_input_match_for_pixel_from_output_data_baseline_channels_first(self):
+        """
+        baseline test code from Qrunchy to compare against aimet TF implementation with channels_first (NCHW)
+        """
+        strides = [[1, 1], [2, 2], [1, 2], [2, 1]]
+        kernel_size_options = [[1, 1], [2, 2], [3, 3], [1, 3], [3, 1]]
+        padding_options = ['SAME', 'VALID']
+        # test middle and border values
+        size_options = [[5, 5], [0, 0], [3, 3]]
+
+        all_options = [kernel_size_options, padding_options, size_options, strides]
+
+        for kernel_size, padding, size_opt, stride in itertools.product(*all_options):
+
+            if isinstance(kernel_size, int):
+                kernel_size = [kernel_size, kernel_size]
+
+            if isinstance(stride, list) and len(stride) == 2:
+                height, width = [size_opt[0]//stride[0], size_opt[1] // stride[1]]
+
+            else:
+                height, width = [size // stride for size in size_opt]
+
+            output_data_pixel = (height, width)
+
+            input_data = np.array(range(8 * 8)).reshape([1, 1, 8, 8])
+            filter_data = np.ones([kernel_size[0], kernel_size[1], 1, 1], dtype=np.float32)
+
+            g = tf.Graph()
+            with g.as_default():
+
+                inp_tensor = tf.Variable(initial_value=input_data, name='inp_tensor', dtype=tf.float32)
+
+                filter_tensor = tf.Variable(initial_value=filter_data, name='filter_tensor', dtype=tf.float32)
+
+                conv1 = tf.nn.conv2d(input=inp_tensor, filter=filter_tensor, strides=[1, 1, stride[0], stride[1]],
+                                     padding=padding, data_format="NCHW", name='Conv2D_1')
+
+                init = tf.global_variables_initializer()
+
+            conv1_op = g.get_operation_by_name('Conv2D_1')
+
+            layer_attributes = aimet_tensorflow.utils.op.conv.get_layer_attributes(op=conv1_op)
+
+            input_match = InputMatchSearch._find_input_match_for_output_pixel(input_data[0], layer_attributes,
+                                                                              output_data_pixel)
+
+            sess = tf.Session(graph=g)
+            sess.run(init)
+
+            conv2d_out = sess.run(conv1_op.outputs[0])
+
+            predicted_output = np.sum(input_match)
+            generated_output = to_numpy(conv2d_out[0, 0, height, width])
+
+            self.assertTrue(generated_output == predicted_output)
+            self.assertTrue(np.prod(input_match.shape) == kernel_size[0] * kernel_size[1])
+
+            tf.reset_default_graph()
+            sess.close()
+
+    def test_find_input_match_for_pixel_from_output_data_baseline_channels_last(self):
+        """
+        baseline test code from Qrunchy to compare against aimet TF implementation with channels_last (NHWC)
+        NHWC - channels_last format
+        """
+        strides = [[1, 1], [2, 2], [1, 2], [2, 1]]
+        kernel_size_options = [[1, 1], [2, 2], [3, 3], [1, 3], [3, 1]]
+        padding_options = ['SAME', 'VALID']
+        # test middle and border values
+        size_options = [[5, 5], [0, 0], [3, 3]]
+
+        all_options = [kernel_size_options, padding_options, size_options, strides]
+
+        for kernel_size, padding, size_opt, stride in itertools.product(*all_options):
+
+            if isinstance(kernel_size, int):
+                kernel_size = [kernel_size, kernel_size]
+
+            if isinstance(stride, list) and len(stride) == 2:
+                height, width = [size_opt[0]//stride[0], size_opt[1] // stride[1]]
+
+            else:
+                height, width = [size // stride for size in size_opt]
+
+            output_data_pixel = (height, width)
+
+            input_data = np.array(range(8 * 8)).reshape([1, 8, 8, 1])
+            filter_data = np.ones([kernel_size[0], kernel_size[1], 1, 1], dtype=np.float32)
+
+            g = tf.Graph()
+            with g.as_default():
+
+                inp_tensor = tf.Variable(initial_value=input_data, name='inp_tensor', dtype=tf.float32)
+
+                filter_tensor = tf.Variable(initial_value=filter_data, name='filter_tensor', dtype=tf.float32)
+
+                conv1 = tf.nn.conv2d(input=inp_tensor, filter=filter_tensor, strides=[1, stride[0], stride[1], 1],
+                                     padding=padding, data_format="NHWC", name='Conv2D_1')
+
+                init = tf.global_variables_initializer()
+
+            conv1_op = g.get_operation_by_name('Conv2D_1')
+
+            layer_attributes = aimet_tensorflow.utils.op.conv.get_layer_attributes(op=conv1_op)
+
+            # reshape input_data, output_data function expects activations in channels_first format
+            input_data = input_data.reshape(1, 1, 8, 8)
+
+            input_match = InputMatchSearch._find_input_match_for_output_pixel(input_data[0], layer_attributes,
+                                                                              output_data_pixel)
+
+            sess = tf.Session(graph=g)
+            sess.run(init)
+
+            conv2d_out = sess.run(conv1_op.outputs[0])
+
+            predicted_output = np.sum(input_match)
+            generated_output = to_numpy(conv2d_out[0, height, width, 0])
+
+            self.assertTrue(generated_output == predicted_output)
+            self.assertTrue(np.prod(input_match.shape) == kernel_size[0] * kernel_size[1])
+
+            tf.reset_default_graph()
+            sess.close()
+
+    @unittest.mock.patch('numpy.random.choice')
+    def test_subsample_data_channels_first(self, np_choice_function):
+        """
+        Test to subsample input match for random output pixel (1, 1) and corresponding input match
+        """
+        # randomly selected output pixel (height, width) is fixed here and it is (1, 1)
+        np_choice_function.return_value = [1]
+
+        # input_data and output_data are in channels_first format, similar to Pytorch format
+        input_data = np.arange(0, 1440).reshape((2, 5, 12, 12))
+        output_data = np.arange(0, 1280).reshape((2, 10, 8, 8))
+
+        g = tf.Graph()
+
+        with g.as_default():
+
+            inp_tensor = tf.Variable(initial_value=input_data, name='inp_tensor', dtype=tf.float32)
+
+            filter_tensor = tf.get_variable('filter_tensor', shape=[5, 5, 5, 10],
+                                            initializer=tf.random_normal_initializer())
+
+            conv1 = tf.nn.conv2d(input=inp_tensor, filter=filter_tensor, strides=[1, 1, 1, 1], padding='VALID',
+                                 data_format="NCHW", name='Conv2D_1')
+
+        conv1_op = g.get_operation_by_name('Conv2D_1')
+
+        layer_attributes = aimet_tensorflow.utils.op.conv.get_layer_attributes(op=conv1_op)
+        sub_sample_input, sub_sample_output = InputMatchSearch.subsample_data(layer_attributes=layer_attributes,
+                                                                              input_data=input_data,
+                                                                              output_data=output_data,
+                                                                              samples_per_image=1)
+
+        # compare the inputs for both batches
+        self.assertEqual(sub_sample_input.shape, (2, 5, 5, 5))
+        self.assertTrue(np.array_equal(sub_sample_input[0, :, :, :], input_data[0, :, 1:6, 1:6]))
+        self.assertTrue(np.array_equal(sub_sample_input[1, :, :, :], input_data[1, :, 1:6, 1:6]))
+
+        # compare the output for batches
+        output_pixel = (1, 1)
+        self.assertEqual(sub_sample_output.shape, (2, 10))
+        self.assertTrue(np.array_equal(sub_sample_output, output_data[:, :, output_pixel[0], output_pixel[1]]))
+
+    @unittest.mock.patch('numpy.random.choice')
+    def test_subsample_data_channels_last(self, np_choice_function):
+        """
+        Test to subsample input match for random output pixel (1, 1) and corresponding input match
+        """
+        # randomly selected output pixel (height, width) is fixed here and it is (1, 1)
+        np_choice_function.return_value = [1]
+
+        # input_data and output_data are in channels_first format, similar to Pytorch format
+        input_data = np.arange(0, 1440).reshape((2, 12, 12, 5))
+        output_data = np.arange(0, 1280).reshape((2, 8, 8, 10))
+
+        g = tf.Graph()
+
+        with g.as_default():
+
+            inp_tensor = tf.Variable(initial_value=input_data, name='inp_tensor', dtype=tf.float32)
+
+            filter_tensor = tf.get_variable('filter_tensor', shape=[5, 5, 5, 10],
+                                            initializer=tf.random_normal_initializer())
+
+            conv1 = tf.nn.conv2d(input=inp_tensor, filter=filter_tensor, strides=[1, 1, 1, 1], padding='VALID',
+                                 data_format="NHWC", name='Conv2D_1')
+
+        conv1_op = g.get_operation_by_name('Conv2D_1')
+
+        layer_attributes = aimet_tensorflow.utils.op.conv.get_layer_attributes(op=conv1_op)
+
+        # reshape input_data, output_data function expects activations in channels_first format
+        input_data = input_data.reshape(2, 5, 12, 12)
+        output_data = output_data.reshape(2, 10, 8, 8)
+
+        sub_sample_input, sub_sample_output = InputMatchSearch.subsample_data(layer_attributes=layer_attributes,
+                                                                              input_data=input_data,
+                                                                              output_data=output_data,
+                                                                              samples_per_image=1)
+
+        # compare the inputs for both batches
+        self.assertEqual(sub_sample_input.shape, (2, 5, 5, 5))
+        self.assertTrue(np.array_equal(sub_sample_input[0, :, :, :], input_data[0, :, 1:6, 1:6]))
+        self.assertTrue(np.array_equal(sub_sample_input[1, :, :, :], input_data[1, :, 1:6, 1:6]))
+
+        # compare the output for batches
+        output_pixel = (1, 1)
+        self.assertEqual(sub_sample_output.shape, (2, 10))
+        self.assertTrue(np.array_equal(sub_sample_output, output_data[:, :, output_pixel[0], output_pixel[1]]))
+
+    def test_select_inp_channels(self):
+
+        data_set = unittest.mock.MagicMock()
+        number_of_batches = unittest.mock.MagicMock()
+        input_op_names = unittest.mock.MagicMock()
+        output_op_names = unittest.mock.MagicMock()
+        number_of_reconstruction_samples = unittest.mock.MagicMock()
+        num_examples = 2000
+
+        g = tf.Graph()
+
+        with g.as_default():
+
+            x1 = tf.range(5.0*5.0*32.0*64.0)
+            print("X1", x1)
+            x2 = tf.reshape(tensor=x1, shape=(5, 5, 32, 64))
+            print("x2 shape", x2.shape)
+
+            inp_tensor = tf.get_variable('inp_tensor', shape=[num_examples, 32, 5, 5],
+                                         initializer=tf.random_normal_initializer())
+            filter_tensor = tf.get_variable('filter_tensor', initializer=x2)
+
+            conv1 = tf.nn.conv2d(input=inp_tensor, filter=filter_tensor, strides=[1, 1, 1, 1], padding='VALID',
+                                 data_format="NCHW", name='Conv2D_1')
+
+            bias_tensor = tf.get_variable('bias_tensor', shape=[64], initializer=tf.random_normal_initializer())
+
+            bias = tf.nn.bias_add(value=conv1, bias=bias_tensor, data_format="NCHW")
+
+            init = tf.global_variables_initializer()
+
+        conv1_op = g.get_operation_by_name('Conv2D_1')
+
+        shape = conv1_op.outputs[0].get_shape().as_list()
+        self.assertEqual(shape, [num_examples, 64, 1, 1])
+
+        sess = tf.Session(graph=g)
+        # initialize all the variables in the graph
+        sess.run(init)
+        conv_layer = Layer(model=sess, op=conv1_op)
+
+        cp = InputChannelPruner(input_op_names=input_op_names, output_op_names=output_op_names, data_set=data_set,
+                                batch_size=number_of_batches,
+                                num_reconstruction_samples=number_of_reconstruction_samples,
+                                allow_custom_downsample_ops=True)
+
+        # in_channels = 32 and calculate remaining channels
+        # 1) 32 * 0.25 = 8
+        # 3) 32 * 0.50 = 16
+        # 4) 32 * 0.75 = 24
+        # 5) 32 * 1 = 32
+
+        input_channels_indices = list(range(32))
+
+        comp_ratio_prune_inp_channels_list = [(0.25, 24), (0.50, 16), (0.75, 8), (1, 0)]
+
+        for comp_ratio, remaining_channels in comp_ratio_prune_inp_channels_list:
+
+            prune_indices = cp._select_inp_channels(layer=conv_layer, comp_ratio=comp_ratio)
+
+            self.assertTrue(isinstance(prune_indices, list))
+            expected_indices = input_channels_indices[:remaining_channels]
+            self.assertEqual(len(prune_indices), len(expected_indices))
+            self.assertEqual(prune_indices, expected_indices)
+
+        tf.reset_default_graph()
+        sess.close()
+
+    def test_reconstruct_weight_for_layer(self):
+        """
+        Test the reconstruction of weight
+        """
+        # input shape should be [Ns, Nic, k_h, k_w]
+        number_of_images = 500
+        num_in_channels = 5
+        num_out_channels = 10
+        input_data = np.random.rand(number_of_images, num_in_channels, 5, 5)
+        g = tf.Graph()
+
+        with g.as_default():
+
+            inp_tensor = tf.Variable(initial_value=input_data, name='inp_tensor', dtype=tf.float32)
+
+            filter_tensor = tf.get_variable('filter_tensor', shape=[5, 5, num_in_channels, num_out_channels],
+                                            initializer=tf.random_normal_initializer())
+
+            conv = tf.nn.conv2d(input=inp_tensor, filter=filter_tensor, strides=[1, 1, 1, 1], padding='VALID',
+                                data_format="NCHW", name='Conv2D_1')
+
+            init = tf.global_variables_initializer()
+
+        conv_op = g.get_operation_by_name('Conv2D_1')
+        sess = tf.Session(graph=g)
+        sess.run(init)
+
+        conv_out = sess.run(conv_op.outputs[0])
+
+        conv2d_reshaped_out = conv_out.reshape([conv_out.shape[0], np.prod(conv_out.shape[1:4])])
+
+        # create layer
+        layer = Layer(model=sess, op=conv_op)
+
+        WeightReconstructor.reconstruct_params_for_conv2d(layer=layer, input_data=input_data,
+                                                          output_data=conv2d_reshaped_out,
+                                                          output_mask=[1]*num_out_channels)
+
+        meta_path = str('./temp_working_dir')
+
+        if not os.path.exists(meta_path):
+            os.mkdir(meta_path)
+
+        # get the same op output after reconstruction
+        conv_op = sess.graph.get_operation_by_name('Conv2D_1')
+        updated_conv_out = sess.run(conv_op.outputs[0])
+
+        # if data is increased, choose tolerance wisely
+        self.assertTrue(np.allclose(conv_out, updated_conv_out, atol=1e-5))
+
+        # they should not be exactly same
+        self.assertFalse(np.array_equal(conv_out, updated_conv_out))
+
+        # delete the directory
+        shutil.rmtree(meta_path)
+
+        tf.reset_default_graph()
+        sess.close()
+
+    def test_reconstruct_weight_and_bias_for_layer(self):
+        """
+        Test the reconstruction of weight and bias
+        """
+        # input shape should be [Ns, Nic, k_h, k_w]
+        number_of_images = 500
+        num_in_channels = 5
+        num_out_channels = 10
+        input_data = np.random.rand(number_of_images, 5, 5, 5)
+        g = tf.Graph()
+
+        with g.as_default():
+
+            inp_tensor = tf.Variable(initial_value=input_data, name='inp_tensor', dtype=tf.float32)
+
+            filter_tensor = tf.get_variable('filter_tensor', shape=[5, 5, num_in_channels, num_out_channels],
+                                            initializer=tf.random_normal_initializer())
+
+            conv = tf.nn.conv2d(input=inp_tensor, filter=filter_tensor, strides=[1, 1, 1, 1], padding='VALID',
+                                data_format="NCHW", name='Conv2D_1')
+
+            bias_tensor = tf.get_variable('bias_tensor', shape=[num_out_channels],
+                                          initializer=tf.random_normal_initializer())
+
+            tf.nn.bias_add(conv, bias_tensor, data_format="NCHW")
+
+            init = tf.global_variables_initializer()
+
+        sess = tf.Session(graph=g)
+        sess.run(init)
+
+        conv_op = g.get_operation_by_name('Conv2D_1')
+        # create layer
+        layer = Layer(model=sess, op=conv_op)
+
+        bias_op = g.get_operation_by_name('BiasAdd')
+        bias_out = sess.run(bias_op.outputs[0])
+
+        bias_reshaped_out = bias_out.reshape([bias_out.shape[0], np.prod(bias_out.shape[1:4])])
+
+        WeightReconstructor.reconstruct_params_for_conv2d(layer=layer, input_data=input_data,
+                                                          output_data=bias_reshaped_out,
+                                                          output_mask=[1]*num_out_channels)
+
+        meta_path = str('./temp_working_dir')
+
+        if not os.path.exists(meta_path):
+            os.mkdir(meta_path)
+
+        # get the updated output after reconstruction
+        bias_op = sess.graph.get_operation_by_name('BiasAdd')
+        updated_bias_out = sess.run(bias_op.outputs[0])
+
+        # if data is increased, choose tolerance wisely
+        # compare output after bias op
+        self.assertTrue(np.allclose(bias_out, updated_bias_out, atol=1e-5))
+
+        # they should not be exactly same
+        self.assertFalse(np.array_equal(bias_out, updated_bias_out))
+
+        # delete the directory
+        shutil.rmtree(meta_path)
+
+        tf.reset_default_graph()
+        sess.close()
+
+    def test_datasampling_and_reconstruction(self):
+        """
+        Test to collect activations with tfrecord dataset
+        """
+        batch_size = 1
+        input_data = np.random.rand(100, 224, 224, 3)
+        dataset = tf.data.Dataset.from_tensor_slices(input_data)
+        dataset = dataset.batch(batch_size=batch_size)
+
+        orig_g = tf.Graph()
+
+        with orig_g.as_default():
+
+            _ = VGG16(weights=None, input_shape=(224, 224, 3), include_top=False)
+            orig_init = tf.global_variables_initializer()
+
+        input_op_names = ['input_1']
+        output_op_names = ['block5_pool/MaxPool']
+        # create sess with graph
+        orig_sess = tf.Session(graph=orig_g)
+        # initialize all the variables in VGG16
+        orig_sess.run(orig_init)
+
+        # create layer database
+        layer_db = LayerDatabase(model=orig_sess, working_dir=None)
+        conv_layer = layer_db.find_layer_by_name('block1_conv1/convolution')
+
+        comp_layer_db = copy.deepcopy(layer_db)
+        comp_conv_layer = comp_layer_db.find_layer_by_name('block1_conv1/convolution')
+
+        # get the weights before reconstruction in original model
+        before_recon_weights_orig_model = layer_db.model.run(conv_layer.module.inputs[1])
+
+        # get the weights before reconstruction in pruned  model
+        before_recon_weights_pruned_model = comp_layer_db.model.run(comp_conv_layer.module.inputs[1])
+
+        # weight should be exactly same before reconstruction in original and pruned layer database
+        self.assertTrue(np.array_equal(before_recon_weights_orig_model, before_recon_weights_pruned_model))
+
+        cp = InputChannelPruner(input_op_names=input_op_names, output_op_names=output_op_names, data_set=dataset,
+                                batch_size=batch_size, num_reconstruction_samples=50, allow_custom_downsample_ops=True)
+
+        num_in_channels = comp_conv_layer.weight_shape[0]
+        cp._data_subsample_and_reconstruction(orig_layer=conv_layer, pruned_layer=comp_conv_layer,
+                                              output_mask=[1]*num_in_channels, orig_layer_db=layer_db,
+                                              comp_layer_db=comp_layer_db)
+
+        # get the weights after reconstruction
+        after_recon_weights_pruned_model = comp_layer_db.model.run(comp_conv_layer.module.inputs[1])
+
+        # weight should not be same before and after reconstruction
+        self.assertFalse(np.array_equal(before_recon_weights_orig_model, after_recon_weights_pruned_model))
+
+        layer_db.model.close()
+        comp_layer_db.model.close()
+        # delete temp directory
+        shutil.rmtree(str('./temp_meta/'))
+
+    def test_prune_model(self):
+        """
+        Test end-to-end prune_model with VGG16-imagenet
+        """
+
+        AimetLogger.set_area_logger_level(AimetLogger.LogAreas.Winnow, logging.INFO)
+
+        batch_size = 1
+        input_data = np.random.rand(100, 224, 224, 3)
+        dataset = tf.data.Dataset.from_tensor_slices(input_data)
+        dataset = dataset.batch(batch_size=batch_size)
+
+        orig_g = tf.Graph()
+
+        with orig_g.as_default():
+
+            _ = VGG16(weights=None, input_shape=(224, 224, 3), include_top=False)
+            orig_init = tf.global_variables_initializer()
+
+        input_op_names = ['input_1']
+        output_op_names = ['block5_pool/MaxPool']
+        # create sess with graph
+        orig_sess = tf.Session(graph=orig_g)
+        # initialize all the variables in VGG16
+        orig_sess.run(orig_init)
+
+        # create layer database
+        layer_db = LayerDatabase(model=orig_sess, working_dir=None)
+
+        block1_conv2 = layer_db.model.graph.get_operation_by_name('block1_conv2/convolution')
+        block2_conv1 = layer_db.model.graph.get_operation_by_name('block2_conv1/convolution')
+        block2_conv2 = layer_db.model.graph.get_operation_by_name('block2_conv2/convolution')
+
+        # keeping compression ratio = 0.5 for all layers
+        layer_comp_ratio_list = [LayerCompRatioPair(Layer(model=layer_db.model, op=block1_conv2), 0.5),
+                                 LayerCompRatioPair(Layer(model=layer_db.model, op=block2_conv1), 0.5),
+                                 LayerCompRatioPair(Layer(model=layer_db.model, op=block2_conv2), 0.5)
+                                 ]
+
+        cp = InputChannelPruner(input_op_names=input_op_names, output_op_names=output_op_names, data_set=dataset,
+                                batch_size=batch_size, num_reconstruction_samples=20, allow_custom_downsample_ops=True)
+
+        comp_layer_db = cp.prune_model(layer_db=layer_db, layer_comp_ratio_list=layer_comp_ratio_list,
+                                       cost_metric=CostMetric.mac, trainer=None)
+
+        pruned_block1_conv2 = comp_layer_db.find_layer_by_name('reduced_reduced_block1_conv2/Conv2D')
+        pruned_block2_conv1 = comp_layer_db.find_layer_by_name('reduced_reduced_block2_conv1/Conv2D')
+        pruned_block2_conv2 = comp_layer_db.find_layer_by_name('reduced_block2_conv2/Conv2D')
+
+        # input channels = 64 * 0.5 = 32
+        # output channels = 64 * 0.5 = 32
+        self.assertEqual(pruned_block1_conv2.weight_shape[1], 32)
+        self.assertEqual(pruned_block1_conv2.weight_shape[0], 32)
+
+        # input channels = 64 * 0.5 = 32
+        # output channels = 128 * 0.5 = 64
+        self.assertEqual(pruned_block2_conv1.weight_shape[1], 32)
+        self.assertEqual(pruned_block2_conv1.weight_shape[0], 64)
+
+        # input channels = 128 * 0.5 = 64
+        # output channels = 128
+        self.assertEqual(pruned_block2_conv2.weight_shape[1], 64)
+        self.assertEqual(pruned_block2_conv2.weight_shape[0], 128)
+
+        layer_db.model.close()
+        comp_layer_db.model.close()
+        # delete temp directory
+        shutil.rmtree(str('./temp_meta/'))
+
+    def test_sort_on_occurrence(self):
+        """
+        Test sorting of ops based on occurrence
+        """
+        AimetLogger.set_area_logger_level(AimetLogger.LogAreas.Winnow, logging.INFO)
+
+        orig_g = tf.Graph()
+
+        with orig_g.as_default():
+
+            _ = VGG16(weights=None, input_shape=(224, 224, 3), include_top=False)
+            orig_init = tf.global_variables_initializer()
+
+        # create sess with graph
+        orig_sess = tf.Session(graph=orig_g)
+
+        # initialize all the variables in VGG16
+        orig_sess.run(orig_init)
+
+        # create layer database
+        layer_db = LayerDatabase(model=orig_sess, working_dir=None)
+
+        block1_conv2 = layer_db.model.graph.get_operation_by_name('block1_conv2/convolution')
+        block2_conv1 = layer_db.model.graph.get_operation_by_name('block2_conv1/convolution')
+        block2_conv2 = layer_db.model.graph.get_operation_by_name('block2_conv2/convolution')
+        block5_conv3 = layer_db.model.graph.get_operation_by_name('block5_conv3/convolution')
+
+        # keeping compression ratio = None for all layers
+        layer_comp_ratio_list = [
+                                 LayerCompRatioPair(Layer(model=layer_db.model, op=block5_conv3), None),
+                                 LayerCompRatioPair(Layer(model=layer_db.model, op=block2_conv2), None),
+                                 LayerCompRatioPair(Layer(model=layer_db.model, op=block1_conv2), None),
+                                 LayerCompRatioPair(Layer(model=layer_db.model, op=block2_conv1), None)
+                                 ]
+
+        input_op_names = ['input_1']
+        output_op_names = ['block5_pool/MaxPool']
+        dataset = unittest.mock.MagicMock()
+        batch_size = unittest.mock.MagicMock()
+        num_reconstruction_samples = unittest.mock.MagicMock()
+
+        cp = InputChannelPruner(input_op_names=input_op_names, output_op_names=output_op_names, data_set=dataset,
+                                batch_size=batch_size, num_reconstruction_samples=num_reconstruction_samples,
+                                allow_custom_downsample_ops=True)
+
+        sorted_layer_comp_ratio_list = cp._sort_on_occurrence(layer_db.model, layer_comp_ratio_list)
+
+        self.assertEqual(sorted_layer_comp_ratio_list[0].layer.module, block1_conv2)
+        self.assertEqual(sorted_layer_comp_ratio_list[1].layer.module, block2_conv1)
+        self.assertEqual(sorted_layer_comp_ratio_list[2].layer.module, block2_conv2)
+        self.assertEqual(sorted_layer_comp_ratio_list[3].layer.module, block5_conv3)
+
+        self.assertEqual(len(sorted_layer_comp_ratio_list), 4)
+        layer_db.model.close()
+        # delete temp directory
+        shutil.rmtree(str('./temp_meta/'))
+
+    def test_sort_on_occurrence_resnet50(self):
+        """
+        Test sorting of ops based on occurrence
+        """
+        AimetLogger.set_area_logger_level(AimetLogger.LogAreas.Winnow, logging.INFO)
+
+        orig_g = tf.Graph()
+
+        with orig_g.as_default():
+
+            _ = ResNet50(weights=None, input_shape=(224, 224, 3), include_top=False)
+            orig_init = tf.global_variables_initializer()
+
+        # create sess with graph
+        orig_sess = tf.Session(graph=orig_g)
+
+        # initialize all the variables in VGG16
+        orig_sess.run(orig_init)
+
+        # create layer database
+        layer_db = LayerDatabase(model=orig_sess, working_dir=None)
+
+        res2b_branch2a = layer_db.model.graph.get_operation_by_name('res2b_branch2a/convolution')
+        res2a_branch1 = layer_db.model.graph.get_operation_by_name('res2a_branch1/convolution')
+        res2b_branch2b = layer_db.model.graph.get_operation_by_name('res2b_branch2a/convolution')
+        res2c_branch2a = layer_db.model.graph.get_operation_by_name('res2c_branch2a/convolution')
+
+        # keeping compression ratio = None for all layers
+        layer_comp_ratio_list = [
+            LayerCompRatioPair(Layer(model=layer_db.model, op=res2c_branch2a), None),
+            LayerCompRatioPair(Layer(model=layer_db.model, op=res2b_branch2b), None),
+            LayerCompRatioPair(Layer(model=layer_db.model, op=res2a_branch1), None),
+            LayerCompRatioPair(Layer(model=layer_db.model, op=res2b_branch2a), None)
+        ]
+
+        input_op_names = ['input_1']
+        output_op_names = ['avg_pool/AvgPool']
+        dataset = unittest.mock.MagicMock()
+        batch_size = unittest.mock.MagicMock()
+        num_reconstruction_samples = unittest.mock.MagicMock()
+
+        cp = InputChannelPruner(input_op_names=input_op_names, output_op_names=output_op_names, data_set=dataset,
+                                batch_size=batch_size, num_reconstruction_samples=num_reconstruction_samples,
+                                allow_custom_downsample_ops=True)
+
+        sorted_layer_comp_ratio_list = cp._sort_on_occurrence(layer_db.model, layer_comp_ratio_list)
+
+        self.assertEqual(sorted_layer_comp_ratio_list[0].layer.module, res2a_branch1)
+        self.assertEqual(sorted_layer_comp_ratio_list[1].layer.module, res2b_branch2a)
+        self.assertEqual(sorted_layer_comp_ratio_list[2].layer.module, res2b_branch2b)
+        self.assertEqual(sorted_layer_comp_ratio_list[3].layer.module, res2c_branch2a)
+
+        self.assertEqual(len(sorted_layer_comp_ratio_list), 4)
+        layer_db.model.close()
+        # delete temp directory
+        shutil.rmtree(str('./temp_meta/'))
+

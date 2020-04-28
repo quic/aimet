@@ -1,0 +1,2 @@
+resnet_v2_50/block1/unit_1/bottleneck_v2/shortcut/Conv2D, 70.123, 70.124, 70.125
+resnet_v2_50/block1/unit_1/bottleneck_v2/conv1/Conv2D, 87, 64, 99
