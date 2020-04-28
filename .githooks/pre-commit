@@ -1,0 +1,151 @@
+#!/bin/bash
+# =============================================================================
+#  @@-COPYRIGHT-START-@@
+#
+#  Copyright (c) 2016-2020, Qualcomm Innovation Center, Inc. All rights reserved.
+#
+#  Redistribution and use in source and binary forms, with or without
+#  modification, are permitted provided that the following conditions are met:
+#
+#  1. Redistributions of source code must retain the above copyright notice,
+#     this list of conditions and the following disclaimer.
+#
+#  2. Redistributions in binary form must reproduce the above copyright notice,
+#     this list of conditions and the following disclaimer in the documentation
+#     and/or other materials provided with the distribution.
+#
+#  3. Neither the name of the copyright holder nor the names of its contributors
+#     may be used to endorse or promote products derived from this software
+#     without specific prior written permission.
+#
+#  THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+#  AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+#  IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+#  ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE
+#  LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+#  CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+#  SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+#  INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+#  CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+#  ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+#  POSSIBILITY OF SUCH DAMAGE.
+#
+#  SPDX-License-Identifier: BSD-3-Clause
+#
+#  @@-COPYRIGHT-END-@@
+# =============================================================================
+
+
+# update the git username and email address
+GITREMOTE=$(git config --get remote.origin.url) || exit 1
+if [[ "$GITREMOTE" == *"github.qualcomm.com"* ]]; then
+  if [ "$USER" != "" ]; then
+    git config --local user.email quic_$USER@quicinc.com
+    #TODO Can we set it to the user's first and last name?
+    # git config --local user.name quic-$USER
+  fi
+fi
+
+# Check if Pylint related git hooks are
+# supported in the environment
+which git-pylint-commit-hook
+rc=$?
+
+if [[ $rc != 0 ]]; then 
+  echo "ERROR: No Pylint checks can be run as part of this commit!" 
+  echo "Please commit from within the development docker"
+  echo "Or install the git-pylint-commit-hook tool as documented here: https://git-pylint-commit-hook.readthedocs.io/en/latest/installation.html"
+  exit 1
+else
+  # enforce running pylint before commiting
+  # using highest level
+
+  # determine the project root
+  prj_root=`dirname "$(readlink -f "$0")"`/..
+  prj_root=$(realpath -s $prj_root)
+
+  # Verify that the pylint config file exists
+  if [ ! -f $prj_root/.pylintrc ]; then
+    echo "ERROR: .pylintrc does not exist in your root directory ($prj_root). Aborting commit..."
+    exit 1
+  fi
+
+  echo "Running Pylint - using $prj_root/.pylintrc" 
+  export PYTHONPATH=$prj_root/TrainingExtensions/torch/src/python:$prj_root/TrainingExtensions/tensorflow/src/python:$prj_root/TrainingExtensions/common/src/python
+  # Verify that each of the source path directories exist
+  for path in ${PYTHONPATH//:/ }; do
+    if [[ ! -d $path ]]; then
+      exit 1
+    fi
+  done
+  # Finally add the build directory to the PYTHONPATH (which may or may not exist at the time of commit)
+  export PYTHONPATH=$PYTHONPATH:$prj_root/build/artifacts
+
+  git-pylint-commit-hook --pylintrc $prj_root/.pylintrc --limit 1 --ignore test 
+  rc=$?
+  if [[ $rc != 0 ]]; then
+    echo "ERROR: Pylint violations prevent commit from occurring"; exit $rc
+  else
+    echo "INFO: Pylint checks passed"
+  fi
+fi
+
+
+# enforce file size limits 
+MAX_FILE_SIZE=1000000
+MAX_FILE_SIZE_HUMAN="1000kb"
+FILE_SIZE_VIOLATED=false
+
+STAT_CMD="stat -c %s"
+if [ $(uname) == Darwin ]; then
+   STAT_CMD="stat -f%z"
+fi
+
+# the file extensions that can be checked in if they are big...
+ALLOWED_EXT_LIST="c cxx cpp hpp h py"
+
+# Get LFS tracked files
+GIT_LFS_FILES=`git lfs status --porcelain | cut -f3 -d' '`
+
+# Prevent any files larger than 100K from being checked in.
+for FILE in `git diff-index --diff-filter=ACUXB --name-only HEAD` ; do
+
+   FILE_SIZE=$($STAT_CMD "$FILE")
+   FILE_EXT="${FILE##*.}"
+   NOT_ALLOWED_FILE=true
+
+   # If git-lfs tracked, dont check for the filesize
+   for LFS_TRACKED in $GIT_LFS_FILES ; do
+      if [ "$LFS_TRACKED" = "$FILE" ]; then
+         FILE_SIZE=0
+	 break
+      fi
+   done
+
+   if [[ FILE_SIZE -gt MAX_FILE_SIZE ]]; then
+      # Allow regular source files that maybe too big
+      for EXT in $ALLOWED_EXT_LIST; do
+         if [[ $EXT = $FILE_EXT ]]; then
+            NOT_ALLOWED_FILE=false
+            break
+         fi
+      done
+      if $NOT_ALLOWED_FILE; then
+         echo "$FILE is too big...unstaging it."
+         cmd="git reset HEAD $FILE"
+         $cmd
+         FILE_SIZE_VIOLATED=true
+      fi
+   fi
+done
+
+if $FILE_SIZE_VIOLATED; then
+   echo ""
+   echo "Attempted to commit one or more files larger than $MAX_FILE_SIZE_HUMAN."
+   echo "Large files were unstaged and commit was aborted."
+   echo ""
+   echo "Please use git-lfs ('git lfs track [file]' and "
+   echo "'git add [file] .gitattributes') to add the large file to git."
+   exit 1
+fi
+

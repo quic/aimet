@@ -1,0 +1,27 @@
+{"defaults": {
+	"ops": {
+		"is_output_quantized": "True"
+	},
+	"params": {
+		"is_quantized": "True"
+	}
+},
+"params": {
+	"bias": {
+		"is_quantized": "False"
+	}
+},
+"op_type": {},
+"supergroups": [
+	{
+		"op_list": ["Conv", "Relu"]
+	},
+	{
+		"op_list": ["Add", "Relu"]
+	},
+	{
+		"op_list": ["Gemm", "Relu"]
+	}
+],
+"model_input": {},
+"model_output": {}}

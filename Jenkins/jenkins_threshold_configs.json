@@ -1,0 +1,57 @@
+{
+  "unittests_thresholds" : {
+    "threshold_mode" : 1,
+    "failed_thresholds" : {
+      "new_tests" : "0",
+      "total_tests" : "0"
+    },
+    "skipped_thresholds" : {
+      "new_tests" : "",
+      "total_tests" : ""
+    }
+  },
+
+  "pylint_fail_thresholds" : {
+    "high_priority" : "0",
+    "normal_priority" : "0",
+    "low_priority" : "0"
+  },
+
+  "line_cov_targets_thresholds" : {
+    "mark_as_pass" : "75",
+    "mark_as_fail" : "0",
+    "mark_as_unstable" : "0"
+  },
+
+  "acceptance_tests_thresholds" : {
+    "threshold_mode" : 1,
+    "failed_thresholds" : {
+      "new_tests" : "0",
+      "total_tests" : "0"
+    },
+    "skipped_thresholds" : {
+      "new_tests" : "0",
+      "total_tests" : "0"
+    }
+  },
+
+  "bullseye_coverage_thresholds" : {
+    "comment" : "Theshold numbers are in percentage.  Must be integer.",
+    "healthy" : {
+        "method" : 70,
+        "conditional": 80,
+        "statement" : 80
+    },
+    "unhealthy" : {
+        "method" : 0,
+        "conditional": 0,
+        "statement" : 0
+    },
+    "failing" : {
+        "method" : 0,
+        "conditional": 0,
+        "statement" : 0
+    }
+  }
+}
+

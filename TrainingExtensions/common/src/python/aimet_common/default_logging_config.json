@@ -1,0 +1,93 @@
+{
+    "version": 1,
+    "disable_existing_loggers": false,
+    "formatters": {
+        "simple": {
+            "format": "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+        }
+    },
+
+    "handlers": {
+        "console": {
+            "class": "logging.StreamHandler",
+            "level": "DEBUG",
+            "formatter": "simple",
+            "stream": "ext://sys.stdout"
+        },
+
+        "utils_console": {
+        "class": "logging.StreamHandler",
+        "level": "CRITICAL",
+        "formatter": "simple",
+        "stream": "ext://sys.stdout"
+        }
+    },
+
+    "loggers": {
+        "Svd": {
+            "level": "INFO",
+            "handlers": ["console"],
+            "propagate": false
+        },
+
+        "CompRatioSelect": {
+            "level": "INFO",
+            "handlers": ["console"],
+            "propagate": false
+        },
+
+        "ChannelPruning": {
+            "level": "INFO",
+            "handlers": ["console"],
+            "propagate": false
+        },
+
+        "Quant": {
+            "level": "INFO",
+            "handlers": ["console"],
+            "propagate": false
+        },
+
+        "Winnow": {
+            "level": "INFO",
+            "handlers": ["console"],
+            "propagate": false
+        },
+
+        "Utils": {
+            "level": "INFO",
+            "handlers": ["console"],
+            "propagate": false
+        },
+
+        "Test": {
+            "level": "INFO",
+            "handlers": ["console"],
+            "propagate": false
+        },
+
+        "ConnectedGraph": {
+            "level": "INFO",
+            "handlers": ["console"],
+            "propagate": false
+        },
+       
+        "CrossLayerEqualization": {
+            "level": "INFO",
+            "handlers": ["console"],
+            "propagate": false
+        },
+
+        "MixedPrecision": {
+            "level": "INFO",
+            "handlers": ["console"],
+            "propagate": false
+        }
+
+    },
+
+    "root": {
+        "level": "INFO",
+        "handlers": ["console"]
+    }
+}

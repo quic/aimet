@@ -1,0 +1,105 @@
+#!/usr/bin/env python3.5
+# -*- mode: python -*-
+# =============================================================================
+#  @@-COPYRIGHT-START-@@
+#
+#  Copyright (c) 2019, Qualcomm Innovation Center, Inc. All rights reserved.
+#
+#  Redistribution and use in source and binary forms, with or without
+#  modification, are permitted provided that the following conditions are met:
+#
+#  1. Redistributions of source code must retain the above copyright notice,
+#     this list of conditions and the following disclaimer.
+#
+#  2. Redistributions in binary form must reproduce the above copyright notice,
+#     this list of conditions and the following disclaimer in the documentation
+#     and/or other materials provided with the distribution.
+#
+#  3. Neither the name of the copyright holder nor the names of its contributors
+#     may be used to endorse or promote products derived from this software
+#     without specific prior written permission.
+#
+#  THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+#  AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+#  IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+#  ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE
+#  LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+#  CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+#  SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+#  INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+#  CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+#  ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+#  POSSIBILITY OF SUCH DAMAGE.
+#
+#  SPDX-License-Identifier: BSD-3-Clause
+#
+#  @@-COPYRIGHT-END-@@
+# =============================================================================
+
+"""Update SNPE quantized DLC output encoding using aimet generated encoding for ONNX models"""
+
+
+import sys
+import json
+import argparse
+import os
+# pylint: disable=import-error
+import snpe
+
+if __name__ == '__main__':
+
+    parser = argparse.ArgumentParser()
+    required = parser.add_argument_group('required arguments')
+    optional = parser.add_argument_group('option arguments')
+    required.add_argument('-e', '--aimet_json', required=True, type=str, help="aimet encodings JSON file path ")
+    required.add_argument('-d', '--dlc', required=True, type=str, help="quantized dlc path ")
+    optional.add_argument('-o', '--output_dlc', required=True, type=str, help="updated quantized dlc path ")
+    args = parser.parse_args()
+
+    if not os.path.exists(args.dlc):
+        print("Cannot find quantized dlc")
+        sys.exit(-1)
+
+    if not os.path.exists(args.aimet_json):
+        print("Cannot find aimet_json")
+        sys.exit(-1)
+
+    # reading JSON file
+    with open(args.aimet_json, 'r') as json_file:
+        aimet_encodings = json.load(json_file)
+
+    # reading SNPE-dlc
+    model = snpe.modeltools.Model()
+    model.load(args.dlc)
+    model.set_tf_encoding_type("TF")
+
+    # iterate over all the SNPE layers
+    for snpe_layer in model.get_layers():
+
+        # iterate outputs of SNPE layers
+        for snpe_layer_out_ind, snpe_layer_out in enumerate(snpe_layer['output_names']):
+
+            # iterate over all the aimet encodings
+            for aimet_layer, encodings in aimet_encodings.items():
+
+                if str(snpe_layer_out) == str(aimet_layer).split('_')[-1]:
+
+                    # encodings format : max, min, delta, offset, weight_bitwidth, activation_bitwidth
+                    new_enc_max, new_enc_min, act_bitwidth = encodings[0], encodings[1], encodings[5]
+
+                    layer_name = snpe_layer['name']
+
+                    print('SNPE layer found in aimet JSON file: ', layer_name)
+                    print('Old Encodings : ', model.get_tf_output_encoding_by_index(name=layer_name,
+                                                                                    index=snpe_layer_out_ind))
+
+                    model.set_tf_output_encoding_by_index(name=layer_name, index=snpe_layer_out_ind,
+                                                          bitwidth=act_bitwidth, min=new_enc_min,
+                                                          max=new_enc_max)
+
+                    print('New Encodings : ', model.get_tf_output_encoding_by_index(name=layer_name,
+                                                                                    index=snpe_layer_out_ind))
+                    break
+
+    model.quantize_weights(should_quantize=True)
+    model.save(args.output_dlc)
