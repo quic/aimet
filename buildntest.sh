@@ -36,7 +36,7 @@
 # =============================================================================
 
 ###############################################################################
-## This is a script to build and run tests AIMET code.
+## This is a script to build and run tests on the AIMET code.
 ## This script must be run from within the AIMET top-level folder
 ###############################################################################
 
