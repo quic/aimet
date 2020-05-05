@@ -59,7 +59,7 @@ map_torch_types_to_onnx = {
     nn.ReLU: ['Relu'],
     nn.ReLU6: ['Clip'],
     nn.MaxPool2d: ['MaxPool'],
-    nn.Linear: ['Gemm'],
+    nn.Linear: ['Gemm', 'MatMul'],
     nn.AdaptiveAvgPool2d: ['GlobalAveragePool', 'AveragePool'],
     nn.AvgPool2d: ['AveragePool'],
     nn.LogSoftmax: ['LogSoftmax']
@@ -210,6 +210,11 @@ class OnnxSaver:
         onnx_index = 0
 
         while torch_index < len(torch_ordered_list):
+            # If few PyTorch ops are not mapped to ONNX ops
+            if onnx_index >= len(onnx_ordered_list):
+                _logger.warning('All ONNX ops were exhausted but few PyTorch ops did not get mapped to a '
+                                'corresponding ONNX op')
+                break
             name, module = torch_ordered_list[torch_index]
 
             if isinstance(module, torch_types_to_ignore):
