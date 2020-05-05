@@ -233,7 +233,8 @@ class QuantizationSimModel:
 
         self._replace_wrappers_for_quantize_dequantize()
 
-    def export(self, path: str, filename_prefix: str, input_shape: Union[Tuple, List[Tuple]]):
+    def export(self, path: str, filename_prefix: str, input_shape: Union[Tuple, List[Tuple]],
+               set_onnx_layer_names: bool = True):
         """
         This method exports out the quant-sim model so it is ready to be run on-target.
 
@@ -250,6 +251,7 @@ class QuantizationSimModel:
         :param filename_prefix: Prefix to use for filenames of the model pth and encodings files
         :param input_shape: shape of the model input as a tuple. If the model takes more than one input, specify this as
                a list of shapes.
+        :param set_onnx_layer_names: If ONNX layer names should be set while exporting the model. Default is True
         :return: None
 
         """
@@ -269,7 +271,8 @@ class QuantizationSimModel:
         torch.onnx.export(model_to_export, tuple(dummy_input), onnx_path)
 
         #  Set the onnx layer names
-        onnx_utils.OnnxSaver.set_node_names(onnx_path, model_to_export, input_shape)
+        if set_onnx_layer_names:
+            onnx_utils.OnnxSaver.set_node_names(onnx_path, model_to_export, input_shape)
 
         # Export encodings
         self._export_encodings_to_json(path, filename_prefix)
