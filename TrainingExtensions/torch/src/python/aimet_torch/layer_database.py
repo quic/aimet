@@ -73,7 +73,7 @@ class Layer(aimet_common.layer_database.Layer):
                 weight_shape = (module.out_channels, module.in_channels, module.kernel_size[0], module.kernel_size[1])
 
         elif isinstance(module, torch.nn.Linear):
-            weight_shape = (module.in_features, module.out_features, 1, 1)
+            weight_shape = (module.out_features, module.in_features, 1, 1)
         else:
             raise AssertionError("Layer currently supports only Conv2D and Linear")
 
