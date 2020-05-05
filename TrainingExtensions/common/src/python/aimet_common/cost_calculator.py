@@ -274,27 +274,36 @@ class SpatialSvdCostCalculator(CostCalculator):
     @staticmethod
     def calculate_cost_given_rank(layer: Layer, rank: int) -> Cost:
 
-        assert isinstance(layer.type_specific_params, Conv2dTypeSpecificParams)
-
         m = layer.weight_shape[1]
         n = layer.weight_shape[0]
-        kh = layer.weight_shape[2]
-        kw = layer.weight_shape[3]
 
-        # (m, n, kh, kw) is split into (m, rank, kh, 1) and (rank, n, 1, kw)
-        mem_cost = (m * rank * kh + rank * n * kw)
-        output_dim_cost = layer.output_shape[2] * layer.output_shape[3]
-        mac_cost = (m * rank * kh * layer.type_specific_params.stride[1] +
-                    rank * n * kw) * output_dim_cost
+        if isinstance(layer.type_specific_params, Conv2dTypeSpecificParams):
+            kh = layer.weight_shape[2]
+            kw = layer.weight_shape[3]
+
+            # (m, n, kh, kw) is split into (m, rank, kh, 1) and (rank, n, 1, kw)
+            mem_cost = (m * rank * kh + rank * n * kw)
+            output_dim_cost = layer.output_shape[2] * layer.output_shape[3]
+            mac_cost = (m * rank * kh * layer.type_specific_params.stride[1] +
+                        rank * n * kw) * output_dim_cost
+
+        else:
+            mem_cost = m * rank + rank * n
+            mac_cost = (m * rank + rank * n) * layer.weight_shape[2] * layer.weight_shape[3]
 
         return Cost(mem_cost, mac_cost)
 
     @staticmethod
     def calculate_max_rank(layer: Layer):
 
-        assert isinstance(layer.type_specific_params, Conv2dTypeSpecificParams)
-        # Nic * Kh
-        return layer.weight_shape[1] * layer.weight_shape[2]
+        if isinstance(layer.type_specific_params, Conv2dTypeSpecificParams):
+            # Nic * Kh
+            max_rank = layer.weight_shape[1] * layer.weight_shape[2]
+
+        else:
+            max_rank = layer.weight_shape[1]
+
+        return max_rank
 
 
 class WeightSvdCostCalculator(CostCalculator):
