@@ -53,11 +53,13 @@ logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.ConnectedGraph)
 
 class ModuleIdentifierOpInfo:
     """ Class for summarizing information regarding a tf operation """
-    def __init__(self, module_name, op_type, tf_op, tf_api=TfApi.keras):
+    def __init__(self, module_name, op_type, tf_op, tf_api=TfApi.keras, pattern_type: str = None):
         self._module_name = module_name
         self._op_type = op_type
         self._tf_op = tf_op
         self._tf_api = tf_api
+        # Pattern type is only used in subgraph matcher
+        self._pattern_type = pattern_type
         self._attributes = {}
 
     @property
@@ -94,6 +96,11 @@ class ModuleIdentifierOpInfo:
     def tf_api(self, tf_api):
         """ Sets the tf api of the module. """
         self._tf_api = tf_api
+
+    @property
+    def pattern_type(self):
+        """ Returns the pattern type corresponding to this operation. """
+        return self._pattern_type
 
     def add_attribute(self, attribute_name: str, attribute):
         """ Set an attribute of the module identifier op info """
