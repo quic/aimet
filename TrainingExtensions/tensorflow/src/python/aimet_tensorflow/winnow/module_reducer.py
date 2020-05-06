@@ -52,6 +52,7 @@ from aimet_common.winnow.winnow_utils import OpConnectivity, ConnectivityType,\
     get_indices_among_ones_of_overlapping_ones
 from aimet_tensorflow.common.connectedgraph import ConnectedGraph
 from aimet_tensorflow.common.operation import Op
+from aimet_tensorflow.utils.op.fusedbatchnorm import BNUtils
 import aimet_tensorflow.winnow.module_reducer_handler as module_reducers
 
 
@@ -86,8 +87,6 @@ class ModuleReducer(aimet_common.winnow.winnow_utils.ModuleReducer):
         self._sess = sess
         self._reduced_modules = {}
         self._reduced_op_info = {}
-        with sess.graph.as_default():
-            self._update_ops_names = {op.name for op in tf.get_collection(tf.GraphKeys.UPDATE_OPS)}
 
     def reduce_modules(self, _=None) -> (tf.Session, Dict[str, Tuple[tf.Operation, Mask]]):
         """
@@ -183,7 +182,7 @@ class ModuleReducer(aimet_common.winnow.winnow_utils.ModuleReducer):
 
         # Remove winnowed bn ops from UPDATE_OPS if present
         if op_tensor_tuple[0].type == 'FusedBatchNormV3':
-            self._remove_bn_ops_from_update_ops(op_tensor_tuple[0])
+            BNUtils.remove_bn_op_from_update_ops(self._sess, op_tensor_tuple[0].get_module())
         return output_tensors
 
     def _detach_op_from_inputs(self, op: Op):
@@ -309,22 +308,6 @@ class ModuleReducer(aimet_common.winnow.winnow_utils.ModuleReducer):
 
         assert len(input_tensors) == len(input_products)
         return input_tensors
-
-    def _remove_bn_ops_from_update_ops(self, bn_op: Op):
-        """
-        Remove batchnorm ops from update ops if the batchnorm has been winnowed.
-        :param bn_op: BatchNorm operation that was winnowed.
-        """
-        # This function assumes that the name associated with the BN op in Connected graph is the scope name of the BN
-        # op in the tf graph, an association that currently takes place in module identifier.
-        update_ops = tf.get_collection_ref(tf.GraphKeys.UPDATE_OPS)
-        scope_name = bn_op.name
-        op_names_to_remove = ['/AssignMovingAvg', '/AssignMovingAvg_1']
-        for name in op_names_to_remove:
-            if scope_name + name in self._update_ops_names:
-                op = self._sess.graph.get_operation_by_name(scope_name + name)
-                assert op in update_ops
-                update_ops.remove(op)
 
 
 def _insert_downsample_or_upsample_ops_if_needed(input_tensor: tf.Tensor,
