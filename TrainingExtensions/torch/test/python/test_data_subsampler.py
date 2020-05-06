@@ -57,7 +57,7 @@ class TestNet(nn.Module):
     def forward(self, x):
         x = functional.relu(functional.max_pool2d(self.conv1(x), 2))
         x = functional.relu(functional.max_pool2d(self.conv2(x), 2))
-        x = x.view(x.view(0), -1)
+        x = x.view(x.size(0), -1)
         x = functional.relu(self.fc1(x))
         x = self.fc2(x)
         return functional.log_softmax(x, dim=1)
@@ -78,7 +78,7 @@ class TestDataSubSampler(unittest.TestCase):
         orig_model = TestNet().cuda()
         comp_model = copy.deepcopy(orig_model)
         # only one image and from that 10 samples
-        dataset_size = 1
+        dataset_size = 100
         batch_size = 1
         num_reconstruction_samples = 10
 
@@ -148,3 +148,82 @@ class TestDataSubSampler(unittest.TestCase):
             self.assertTrue(np.array_equal(conv2_input_data[sample, :, :, :],
                                            conv2_input[0, :, heights[sample]:heights[sample] + kernel_size_h,
                                            widths[sample]:widths[sample] + kernel_size_w].detach().cpu().numpy()))
+
+    def test_subsampled_output_data_fc(self):
+
+        """ Test to collect activations (input from model_copy and output from model for fc1 layer) and compare
+            with sub sampled output data
+        """
+        orig_model = TestNet().cuda()
+        comp_model = copy.deepcopy(orig_model)
+        # only one image and from that 10 samples
+        dataset_size = 100
+        batch_size = 10
+        num_reconstruction_samples = 5000
+
+        # create fake data loader with image size (1, 28, 28)
+        data_loader = create_fake_data_loader(dataset_size=dataset_size, batch_size=batch_size, image_size=(1, 28, 28))
+
+        _, fc1_output_data = DataSubSampler.get_sub_sampled_data(orig_layer=orig_model.fc1,
+                                                                 pruned_layer=comp_model.fc1,
+                                                                 orig_model=orig_model,
+                                                                 comp_model=comp_model,
+                                                                 data_loader=data_loader,
+                                                                 num_reconstruction_samples=
+                                                                 num_reconstruction_samples)
+
+        self.assertTrue(fc1_output_data.shape[0] * fc1_output_data.shape[1] > num_reconstruction_samples)
+
+        # collect the output data of fc1 from original model using same data loader
+        iterator = data_loader.__iter__()
+        images_in_one_batch, _ = iterator.__next__()
+
+        conv1_output = orig_model.conv1(images_in_one_batch.cuda())
+        conv2_input = conv1_output
+        conv2_output = orig_model.conv2(functional.relu(functional.max_pool2d(conv2_input, 2)))
+        fc1_input = conv2_output
+        fc1_input = functional.relu(functional.max_pool2d(fc1_input, 2))
+        fc1_input = fc1_input.view(fc1_input.size(0), -1)
+        fc1_output = orig_model.fc1(fc1_input).detach().cpu().numpy()
+
+        # compare data of first batch only
+        self.assertTrue(np.array_equal(fc1_output_data[0:10], fc1_output))
+
+    def test_subsampled_input_data_fc(self):
+
+        """ Test to collect activations (input from model_copy and output from model for fc1 layer) and compare
+            with sub sampled output data
+        """
+        orig_model = TestNet().cuda()
+        comp_model = copy.deepcopy(orig_model)
+        # only one image and from that 10 samples
+        dataset_size = 100
+        batch_size = 10
+        num_reconstruction_samples = 5000
+
+        # create fake data loader with image size (1, 28, 28)
+        data_loader = create_fake_data_loader(dataset_size=dataset_size, batch_size=batch_size, image_size=(1, 28, 28))
+
+        fc1_input_data, _ = DataSubSampler.get_sub_sampled_data(orig_layer=orig_model.fc1,
+                                                                pruned_layer=comp_model.fc1,
+                                                                orig_model=orig_model,
+                                                                comp_model=comp_model,
+                                                                data_loader=data_loader,
+                                                                num_reconstruction_samples=
+                                                                num_reconstruction_samples)
+
+        self.assertTrue(fc1_input_data.shape[0] * fc1_input_data.shape[1] > num_reconstruction_samples)
+
+        # collect the output data of fc1 from original model using same data loader
+        iterator = data_loader.__iter__()
+        images_in_one_batch, _ = iterator.__next__()
+
+        conv1_output = orig_model.conv1(images_in_one_batch.cuda())
+        conv2_input = conv1_output
+        conv2_output = orig_model.conv2(functional.relu(functional.max_pool2d(conv2_input, 2)))
+        fc1_input = conv2_output
+        fc1_input = functional.relu(functional.max_pool2d(fc1_input, 2))
+        fc1_input = fc1_input.view(fc1_input.size(0), -1).detach().cpu().numpy()
+
+        # compare data of first batch only
+        self.assertTrue(np.array_equal(fc1_input_data[0:10], fc1_input))

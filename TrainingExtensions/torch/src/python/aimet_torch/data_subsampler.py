@@ -38,7 +38,8 @@
 
 """ Sub-sample data for weight reconstruction for channel pruning feature """
 
-from typing import Iterator, Callable
+from typing import Iterator, Callable, Tuple, Union
+import abc
 import math
 import numpy as np
 
@@ -56,6 +57,104 @@ logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.ChannelPruning)
 
 class StopForwardException(Exception):
     """ Dummy exception to early-terminate forward-pass """
+
+
+class LayerSubSampler(abc.ABC):
+    """
+    The LayerSubSampler declares operations common to all the layers. For now we only support Conv2d and Linear layers
+    """
+    @abc.abstractmethod
+    def verify_layers(self, orig_layer: torch.nn.Module, pruned_layer: torch.nn.Module):
+        """
+        :param orig_layer: original layer from uncompressed model
+        :param pruned_layer: pruned layer from compressed model
+        :return:
+        """
+
+    @abc.abstractmethod
+    def get_number_of_batches(self, data_loader: Iterator, orig_layer: torch.nn.Module, num_reconstruction_samples: int,
+                              samples_per_image: int) -> int:
+        """
+        :param orig_layer:
+        :param data_loader: data loader
+        :param num_reconstruction_samples: The number of reconstruction samples
+        :param samples_per_image: Number of samples per image
+        :return: number of batches
+        """
+
+    @abc.abstractmethod
+    def get_sub_sampled_data(self, orig_layer: torch.nn.Module, input_data: np.ndarray,
+                             output_data: np.ndarray, samples_per_image: int) -> Tuple[np.ndarray, np.ndarray]:
+        """
+        :param orig_layer: original layer
+        :param input_data: input data collected from compressed model
+        :param output_data: output data collected from un compressed model
+        :param samples_per_image: samples per image (default 10)
+        :return: (sub sampled input data, sub sampled output data)
+        """
+
+
+class Conv2dSubSampler(LayerSubSampler):
+    """
+    Sub Sampler for Linear layer
+    """
+    def verify_layers(self, orig_layer: torch.nn.Module, pruned_layer: torch.nn.Module):
+
+        assert isinstance(orig_layer, torch.nn.Conv2d)
+
+        assert isinstance(pruned_layer, torch.nn.Conv2d)
+
+        assert orig_layer.dilation == (1, 1), 'No Conv2d layers supported for dilation other than (1, 1)'
+
+        assert pruned_layer.dilation == (1, 1), 'No Conv2d layers supported for dilation other than (1, 1)'
+
+    def get_number_of_batches(self, data_loader: Iterator, orig_layer: torch.nn.Module, num_reconstruction_samples: int,
+                              samples_per_image: int) -> int:
+
+        total_num_of_images = int(num_reconstruction_samples / samples_per_image)
+
+        # number of possible batches - round up using ceil
+        num_of_batches = math.ceil(total_num_of_images / data_loader.batch_size)
+        return num_of_batches
+
+    def get_sub_sampled_data(self, orig_layer: torch.nn.Module, input_data: np.ndarray,
+                             output_data: np.ndarray, samples_per_image: int) -> Tuple[np.ndarray, np.ndarray]:
+
+        layer_attributes = (orig_layer.kernel_size, orig_layer.stride, orig_layer.padding)
+
+        # get the sub sampled input and output data
+        sub_sampled_inp_data, sub_sampled_out_data = InputMatchSearch.subsample_data(layer_attributes, input_data,
+                                                                                     output_data, samples_per_image)
+
+        return sub_sampled_inp_data, sub_sampled_out_data
+
+
+class LinearSubSampler(LayerSubSampler):
+    """
+    Sub Sampler for Linear layer
+    """
+    def verify_layers(self, orig_layer: torch.nn.Module, pruned_layer: torch.nn.Module):
+
+        assert isinstance(orig_layer, torch.nn.Linear)
+
+        assert isinstance(pruned_layer, torch.nn.Linear)
+
+    def get_number_of_batches(self, data_loader: Iterator, orig_layer: torch.nn.Module, num_reconstruction_samples: int,
+                              samples_per_image: int) -> int:
+
+        assert isinstance(orig_layer, torch.nn.Linear)
+
+        total_num_of_images = int(num_reconstruction_samples / orig_layer.out_features)
+
+        # number of possible batches - round up using ceil
+        num_of_batches = math.ceil(total_num_of_images / data_loader.batch_size)
+        return num_of_batches
+
+    def get_sub_sampled_data(self, orig_layer: torch.nn.Module, input_data: np.ndarray,
+                             output_data: np.ndarray, samples_per_image: int) -> Tuple[np.ndarray, np.ndarray]:
+
+        # just return the input and output data as it is. No sub sampling needed
+        return input_data, output_data
 
 
 class DataSubSampler:
@@ -93,7 +192,8 @@ class DataSubSampler:
         return hook_handle
 
     @classmethod
-    def get_sub_sampled_data(cls, orig_layer: torch.nn.Conv2d, pruned_layer: torch.nn.Conv2d,
+    def get_sub_sampled_data(cls, orig_layer: Union[torch.nn.Conv2d, torch.nn.Linear],
+                             pruned_layer: Union[torch.nn.Conv2d, torch.nn.Linear],
                              orig_model: torch.nn.Module, comp_model: torch.nn.Module, data_loader: Iterator,
                              num_reconstruction_samples: int) -> (np.ndarray, np.ndarray):
         # pylint: disable=too-many-locals
@@ -125,26 +225,29 @@ class DataSubSampler:
             orig_layer_out_data.append(out_data)
             raise StopForwardException
 
-        assert isinstance(orig_layer, torch.nn.Conv2d)
+        if isinstance(orig_layer, torch.nn.Conv2d) and isinstance(pruned_layer, torch.nn.Conv2d):
+            sub_sampler = Conv2dSubSampler()
 
-        assert isinstance(pruned_layer, torch.nn.Conv2d)
+        elif isinstance(orig_layer, torch.nn.Linear) and isinstance(pruned_layer, torch.nn.Linear):
+            sub_sampler = LinearSubSampler()
 
-        assert orig_layer.dilation == (1, 1), 'No Conv2d layers supported for dilation other than (1, 1)'
+        else:
+            raise ValueError('Layer type not supported!')
 
-        assert pruned_layer.dilation == (1, 1), 'No Conv2d layers supported for dilation other than (1, 1)'
+        # verify the layers
+        sub_sampler.verify_layers(orig_layer, pruned_layer)
 
         # hard coded value
         samples_per_image = 10
 
-        total_num_of_images = int(num_reconstruction_samples / samples_per_image)
-
-        # number of possible batches - round up
-        num_of_batches = math.ceil(total_num_of_images / data_loader.batch_size)
+        # get number of batches depending on the layer type
+        num_of_batches = sub_sampler.get_number_of_batches(data_loader, orig_layer, num_reconstruction_samples,
+                                                           samples_per_image)
 
         # Todo - I am not sure if checking the length of a data loader is a great idea.
-        if num_of_batches > len(data_loader):
+        if num_of_batches > len(data_loader) or num_of_batches < 1:
             raise ValueError("There are insufficient batches of data in the provided data loader for the "
-                             "purpose of weight reconstruction!")
+                             "purpose of weight reconstruction or number of reconstruction samples!")
 
         hook_handles = list()
 
@@ -172,17 +275,16 @@ class DataSubSampler:
             del pruned_layer_inp_data[:]
             del orig_layer_out_data[:]
 
-            layer_attributes = (orig_layer.kernel_size, orig_layer.stride, orig_layer.padding)
-
-            # get the sub sampled input and output data
-            sub_sampled_inp_data, sub_sampled_out_data = InputMatchSearch.subsample_data(layer_attributes, input_data,
-                                                                                         output_data, samples_per_image)
+            # get the sub sampled input and output data depending on layer type
+            sub_sampled_inp_data, sub_sampled_out_data = sub_sampler.get_sub_sampled_data(orig_layer, input_data,
+                                                                                          output_data,
+                                                                                          samples_per_image)
 
             all_sub_sampled_inp_data.append(sub_sampled_inp_data)
             all_sub_sampled_out_data.append(sub_sampled_out_data)
 
             if batch == num_of_batches - 1:
-                logger.info("batch index : %s reached number of batches: %s", batch + 1, num_of_batches)
+                logger.debug("batch index : %s reached number of batches: %s", batch + 1, num_of_batches)
                 break
 
         # remove hook handles
