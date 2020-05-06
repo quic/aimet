@@ -53,7 +53,7 @@ from aimet_tensorflow.examples.test_models import keras_model, single_residual, 
     model_with_upsample_already_present, model_with_multiple_downsamples
 from aimet_tensorflow.winnow.mask_propagation_winnower import MaskPropagationWinnower
 import aimet_tensorflow.winnow.winnow as winnow
-
+from aimet_tensorflow.utils.graph_saver import save_and_load_graph
 
 logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Test)
 AimetLogger.set_area_logger_level(AimetLogger.LogAreas.Test, logging.DEBUG)
@@ -135,6 +135,16 @@ class TestTfModuleReducer(unittest.TestCase):
         update_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS)
         self.assertEqual(0, len(update_ops))
 
+        # check that update_ops is still empty after saving and reloading graph
+        with new_sess.graph.as_default():
+            init = tf.global_variables_initializer()
+            new_sess.run(init)
+        new_sess_2 = save_and_load_graph('.', new_sess)
+        with new_sess_2.graph.as_default():
+            update_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS)
+        self.assertEqual(0, len(update_ops))
+
+        new_sess_2.close()
         new_sess.close()
         sess.close()
 

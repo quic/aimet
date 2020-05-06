@@ -42,6 +42,7 @@ import tensorflow as tf
 import numpy as np
 
 from aimet_tensorflow.batch_norm_fold import  fold_all_batch_norms, find_all_batch_norms_to_fold
+from aimet_tensorflow.examples.test_models import tf_slim_basic_model
 from aimet_tensorflow.utils.op.conv import WeightTensorUtils
 
 
@@ -316,3 +317,27 @@ class TestBatchNormFold(unittest.TestCase):
         output_after_fold = new_sess.run(new_relu_op.outputs[0], feed_dict= feed_dict)
 
         self.assertTrue(np.allclose(baseline_output, output_after_fold, atol=1.e-4))
+
+    def test_removing_bn_ops_from_update_ops(self):
+        """
+        Test that folding batch norms also removes associated ops from update_ops, if present.
+        """
+        tf.reset_default_graph()
+        sess = tf.Session()
+        x = tf.placeholder(tf.float32, [1, 32, 32, 3])
+        _ = tf_slim_basic_model(x)
+        init = tf.global_variables_initializer()
+        sess.run(init)
+
+        # check that update_ops list is not empty
+        with sess.graph.as_default():
+            update_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS)
+            self.assertEqual(4, len(update_ops))
+
+        new_sess, pairs = fold_all_batch_norms(sess, "Placeholder", 'tf_slim_model/Softmax')
+
+        self.assertEqual(3, len(pairs))
+        # check that update_ops list is empty
+        with new_sess.graph.as_default():
+            update_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS)
+            self.assertEqual(0, len(update_ops))
