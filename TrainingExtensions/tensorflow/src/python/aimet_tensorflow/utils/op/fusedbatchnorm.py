@@ -37,6 +37,7 @@
 # =============================================================================
 """ utilities for fused batchnorm op """
 
+from typing import Union
 import tensorflow as tf
 from tensorflow.contrib import graph_editor as ge
 from aimet_common.utils import AimetLogger
@@ -64,6 +65,7 @@ class BNUtils:
                 if bn_op.type in ['FusedBatchNormV3']:
                     ge.detach_outputs(in_tensor.op)
                     ge.reroute_ts(in_tensor, out_tensor)
+                    BNUtils.remove_bn_op_from_update_ops(sess, bn_op)
                 else:
                     logger.error("Error, Unknown BN op")
                     assert False
@@ -393,6 +395,70 @@ class BNUtils:
         numpy_epsilon = bn_op.get_attr("epsilon")
 
         return numpy_epsilon
+
+    @staticmethod
+    def get_assign_moving_avg_op(bn_op: tf.Operation) -> Union[tf.Operation, None]:
+        """
+        Get assign_moving_avg op corresponding with the bn_op, if it exists.
+        :param bn_op: Batchnorm op to search for corresponding assign_moving_avg op
+        :return: assign_moving_op corresponding with the bn op, or None if it does not exist.
+        """
+        assert bn_op.type == 'FusedBatchNormV3'
+        assert len(bn_op.outputs) == 6
+        if bn_op.outputs[1].consumers():
+            child_op = bn_op.outputs[1].consumers()[0]
+            if child_op.type == 'Merge':
+                sub_op = child_op.outputs[0].consumers()[0]
+            else:
+                sub_op = child_op
+            assert sub_op.type == 'Sub'
+            mul_op = sub_op.outputs[0].consumers()[0]
+            assert mul_op.type == 'Mul'
+            assign_moving_avg_op = mul_op.outputs[0].consumers()[0]
+            assert assign_moving_avg_op.type in ['AssignSub', 'AssignSubVariableOp']
+            return assign_moving_avg_op
+        return None
+
+    @staticmethod
+    def get_assign_moving_avg_1_op(bn_op: tf.Operation) -> Union[tf.Operation, None]:
+        """
+        Get assign_moving_avg_1 op corresponding with the bn_op, if it exists.
+        :param bn_op: Batchnorm op to search for corresponding assign_moving_avg_1 op
+        :return: assign_moving_avg_1 corresponding with the bn op, or None if it does not exist.
+        """
+        assert bn_op.type == 'FusedBatchNormV3'
+        assert len(bn_op.outputs) == 6
+        if bn_op.outputs[2].consumers():
+            child_op = bn_op.outputs[2].consumers()[0]
+            if child_op.type == 'Merge':
+                sub_op = child_op.outputs[0].consumers()[0]
+            else:
+                sub_op = child_op
+            assert sub_op.type == 'Sub'
+            mul_op = sub_op.outputs[0].consumers()[0]
+            assert mul_op.type == 'Mul'
+            assign_moving_avg_op = mul_op.outputs[0].consumers()[0]
+            assert assign_moving_avg_op.type in ['AssignSub', 'AssignSubVariableOp']
+            return assign_moving_avg_op
+        return None
+
+    @staticmethod
+    def remove_bn_op_from_update_ops(sess: tf.Session, bn_op: tf.Operation):
+        """
+        Remove batchnorm assign_moving_avg and assign_moving_avg_1 ops from update ops.
+        :param sess: tf Session
+        :param bn_op: BatchNorm operation whose assign_moving_avg and assign_moving_avg_1 ops should be removed.
+        """
+        with sess.graph.as_default():
+            update_ops = tf.get_collection_ref(tf.GraphKeys.UPDATE_OPS)
+            assign_moving_avg_op = BNUtils.get_assign_moving_avg_op(bn_op)
+            assign_moving_avg_op_1 = BNUtils.get_assign_moving_avg_1_op(bn_op)
+            if assign_moving_avg_op and assign_moving_avg_op in update_ops:
+                update_ops.remove(assign_moving_avg_op)
+                logger.debug('Removed %s from update ops', assign_moving_avg_op.name)
+            if assign_moving_avg_op_1 and assign_moving_avg_op_1 in update_ops:
+                update_ops.remove(assign_moving_avg_op_1)
+                logger.debug('Removed %s from update ops', assign_moving_avg_op_1.name)
 
     @staticmethod
     def _get_bn_param_tensor_using_name(sess: tf.Session, bn_op: tf.Operation, param_type: constants.BNOpParamType):
