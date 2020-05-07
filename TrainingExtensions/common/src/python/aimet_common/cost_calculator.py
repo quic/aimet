@@ -178,8 +178,6 @@ class CostCalculator:
         :return: Rank
         """
 
-        assert 0 <= comp_ratio <= 1
-
         orig_cost = CostCalculator.compute_layer_cost(layer)
         if cost_metric == CostMetric.mac:
             target_cost = orig_cost.mac * comp_ratio
@@ -297,11 +295,11 @@ class SpatialSvdCostCalculator(CostCalculator):
     def calculate_max_rank(layer: Layer):
 
         if isinstance(layer.type_specific_params, Conv2dTypeSpecificParams):
-            # Nic * Kh
-            max_rank = layer.weight_shape[1] * layer.weight_shape[2]
+            # min(Nic * Kh, Noc * Kw)
+            max_rank = min(layer.weight_shape[1] * layer.weight_shape[2], layer.weight_shape[0] * layer.weight_shape[3])
 
         else:
-            max_rank = layer.weight_shape[1]
+            max_rank = min(layer.weight_shape[1], layer.weight_shape[0])
 
         return max_rank
 
