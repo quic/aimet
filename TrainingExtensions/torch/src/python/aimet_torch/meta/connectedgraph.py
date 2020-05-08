@@ -132,7 +132,7 @@ from aimet_common.connected_graph.product import Product
 from aimet_common.connected_graph.operation import Op, determine_preceding_op_input_product_index_in_multi_input_op
 from aimet_common.model_module import PytorchModelModule
 from aimet_common.utils import AimetLogger, ModelApi, api_channel_index_dict
-from aimet_torch.utils import run_hook_for_layers
+from aimet_torch.utils import run_hook_for_layers, is_model_on_gpu
 
 logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Winnow)
 
@@ -250,6 +250,11 @@ class ConnectedGraph(AimetCommonConnectedGraph):
         :param model: Pytorch model to create connected graph from
         :param model_input: Example input to model.  Can be a single tensor or a list/tuple of input tensors
         """
+        if is_model_on_gpu(model):
+            model_input = tuple([inp.cuda() for inp in model_input])
+        else:
+            model_input = tuple([inp.cpu() for inp in model_input])
+
         trace = torch.jit.trace(model, model_input)
         # Parse trace code to create ops and products
         self._parse_trace_code(trace.code)
@@ -770,7 +775,6 @@ class ConnectedGraph(AimetCommonConnectedGraph):
         split_op_product_shape = preceding_op.output.shape
         split_op_product = self._add_product(split_op_product_name, split_op_product_shape)
         split_op_product.producer = split_op
-
         return split_op_product
 
     def _add_product(self, name: str, shape: List[int]) -> Product:
