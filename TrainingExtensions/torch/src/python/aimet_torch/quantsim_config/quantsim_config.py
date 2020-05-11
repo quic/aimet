@@ -110,7 +110,10 @@ class QuantSimConfigurator(AimetCommonQuantSimConfigurator):
 
         if not input_shapes:
             raise AssertionError("No input shapes provided")
+
         random_inputs = utils.create_rand_tensors_given_shapes(input_shapes)
+        device = utils.get_device(model)
+        random_inputs = tuple([inp.to(device) for inp in random_inputs])
         self._conn_graph = ConnectedGraph(model, random_inputs)
         self._onnx_conn_graph_name_mapper = OnnxConnectedGraphTypeMapper(onnx_pytorch_conn_graph_type_pairs)
         self._module_to_quantsim_wrapper_dict = _create_module_to_quantsim_wrapper_dict(model)

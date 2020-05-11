@@ -163,34 +163,3 @@ class TestConnectedGraph(unittest.TestCase):
         dropout_2_op = conn_graph.get_all_ops()['feature_dropout_4']
         self.assertEqual(model.dropout1, dropout_1_op.get_module())
         self.assertEqual(model.dropout2, dropout_2_op.get_module())
-
-    def test_model_and_input_on_cpu_and_gpu(self):
-        """ Test building the ConnectedGraph  for all possible combinations of the Model and the Input Tensor
-        on CPU and GPU """
-
-        # pylint: disable=protected-access
-        model = SingleResidual()
-        model.eval()
-
-        inp_shape = (1, 3, 32, 32)
-        inp_tensor_tuple_cpu = tuple(create_rand_tensors_given_shapes(inp_shape))
-
-        # 1. Model and Input on CPU
-        conn_graph = ConnectedGraph(model, inp_tensor_tuple_cpu)
-        self.assertEqual(17, len(conn_graph.ordered_ops))
-
-        # 2. Model on GPU, Input on CPU
-        model.cuda()
-        conn_graph = ConnectedGraph(model, inp_tensor_tuple_cpu)
-        self.assertEqual(17, len(conn_graph.ordered_ops))
-
-        # 3. Model on CPU, Input on GPU.
-        model.cpu()
-        inp_tensor_tuple_gpu = tuple([inp.cuda() for inp in inp_tensor_tuple_cpu])
-        conn_graph = ConnectedGraph(model, inp_tensor_tuple_gpu)
-        self.assertEqual(17, len(conn_graph.ordered_ops))
-
-        # 4. Model and Input on GPU.
-        model.cuda()
-        conn_graph = ConnectedGraph(model, inp_tensor_tuple_gpu)
-        self.assertEqual(17, len(conn_graph.ordered_ops))
