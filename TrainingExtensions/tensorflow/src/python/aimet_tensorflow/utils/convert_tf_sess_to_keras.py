@@ -103,7 +103,7 @@ def load_tf_sess_variables_to_keras_single_gpu(path: 'str', compressed_ops: List
         def call(self, inputs, training=None):
             """
             Creates a Keras model from the saved object in path
-            :param inputs:
+            :param inputs: Input to model
             :param training: If model is to be trained
             :return:
             """
@@ -167,8 +167,8 @@ def load_keras_model_multi_gpu(loading_path: 'str', input_shape: List):
         def call(self, inputs, training=None):
             """
              Creates a Keras model from the saved object in path
-            :param inputs:
-            :param training:
+            :param inputs: Input to model
+            :param training: If training is True or False
             :return:
             """
             if training:
