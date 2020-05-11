@@ -519,7 +519,7 @@ class TestTrainingExtensionsSvd(unittest.TestCase):
     def test_validate_params(self):
 
         si = svd_intf
-        model = mnist_model.Net()
+        model = MnistModel()
 
         # All the sunny day possibilities
         # Manual - Manual

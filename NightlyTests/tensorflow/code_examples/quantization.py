@@ -57,7 +57,9 @@ def quantize_model(generator):
 
     # Create quantsim model to quantize the network using the default 8 bit params/activations
     sim = quantsim.QuantizationSimModel(sess, starting_op_names=['reshape_input'], output_op_names=['dense_1/BiasAdd'],
-                                        quant_scheme=QuantScheme.post_training_tf_enhanced)
+                                        quant_scheme=QuantScheme.post_training_tf_enhanced,
+                                        config_file='../../../TrainingExtensions/common/src/python/aimet_common/'
+                                                    'quantsim_config/default_config.json')
 
     # Compute encodings
     sim.compute_encodings(forward_callback, forward_pass_callback_args=1)

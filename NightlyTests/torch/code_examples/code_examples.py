@@ -56,7 +56,7 @@ from aimet_torch.quantsim import QuantizationSimModel
 from aimet_torch.examples import mnist_torch_model
 
 
-def evaluate_model(model: torch.nn.Module, eval_iterations: int, use_cuda: bool) -> float:
+def evaluate_model(model: torch.nn.Module, eval_iterations: int, use_cuda: bool = False) -> float:
     """
     This is intended to be the user-defined model evaluation function.
     AIMET requires the above signature. So if the user's eval function does not
@@ -72,6 +72,8 @@ def evaluate_model(model: torch.nn.Module, eval_iterations: int, use_cuda: bool)
     :param use_cuda: If true, evaluate using gpu acceleration
     :return: single float number (accuracy) representing model's performance
     """
+    return .5
+
 
 class Trainer:
     """ Example trainer class """
@@ -95,7 +97,7 @@ class Trainer:
 def spatial_svd_manual_mode():
 
     # Load a trained MNIST model
-    model = torch.load(os.path.join('./', 'data', 'mnist_trained_on_GPU.pth'))
+    model = torch.load(os.path.join('../', 'data', 'mnist_trained_on_GPU.pth'))
 
     # Specify the necessary parameters
     manual_params = SpatialSvdParameters.ManualModeParams([ModuleCompRatioPair(model.conv1, 0.5),
@@ -120,7 +122,7 @@ def spatial_svd_manual_mode():
 def spatial_svd_auto_mode():
 
     # load trained MNIST model
-    model = torch.load(os.path.join('./', 'data', 'mnist_trained_on_GPU.pth'))
+    model = torch.load(os.path.join('../', 'data', 'mnist_trained_on_GPU.pth'))
 
     # Specify the necessary parameters
     greedy_params = GreedySelectionParameters(target_comp_ratio=Decimal(0.8),
@@ -148,7 +150,7 @@ def spatial_svd_auto_mode():
 def spatial_svd_auto_mode_with_layerwise_finetuning():
 
     # load trained MNIST model
-    model = torch.load(os.path.join('./', 'data', 'mnist_trained_on_GPU.pth'))
+    model = torch.load(os.path.join('../', 'data', 'mnist_trained_on_GPU.pth'))
 
     # Specify the necessary parameters
     greedy_params = GreedySelectionParameters(target_comp_ratio=Decimal(0.8),
@@ -176,7 +178,7 @@ def spatial_svd_auto_mode_with_layerwise_finetuning():
 def weight_svd_manual_mode():
 
     # Load a trained MNIST model
-    model = torch.load(os.path.join('./', 'data', 'mnist_trained_on_GPU.pth'))
+    model = torch.load(os.path.join('../', 'data', 'mnist_trained_on_GPU.pth'))
 
     # Specify the necessary parameters
     manual_params = WeightSvdParameters.ManualModeParams([ModuleCompRatioPair(model.conv1, 0.5),
@@ -201,7 +203,7 @@ def weight_svd_manual_mode():
 def weight_svd_auto_mode():
 
     # Load trained MNIST model
-    model = torch.load(os.path.join('./', 'data', 'mnist_trained_on_GPU.pth'))
+    model = torch.load(os.path.join('../', 'data', 'mnist_trained_on_GPU.pth'))
 
     # Specify the necessary parameters
     greedy_params = GreedySelectionParameters(target_comp_ratio=Decimal(0.8),
@@ -231,7 +233,7 @@ def weight_svd_auto_mode():
 def channel_pruning_auto_mode():
 
     # Load trained MNIST model
-    model = torch.load(os.path.join('./', 'data', 'mnist_trained_on_GPU.pth'))
+    model = torch.load(os.path.join('../', 'data', 'mnist_trained_on_GPU.pth'))
 
     # Specify the necessary parameters
     greedy_params = GreedySelectionParameters(target_comp_ratio=Decimal(0.8),
@@ -263,7 +265,7 @@ def channel_pruning_auto_mode():
 def channel_pruning_manual_mode():
 
     # Load a trained MNIST model
-    model = torch.load(os.path.join('./', 'data', 'mnist_trained_on_GPU.pth'))
+    model = torch.load(os.path.join('../', 'data', 'mnist_trained_on_GPU.pth'))
 
     # Specify the necessary parameters
     manual_params = ChannelPruningParameters.ManualModeParams([ModuleCompRatioPair(model.conv2, 0.4)])
@@ -291,9 +293,12 @@ def channel_pruning_manual_mode():
 
 def quantize_model(trainer_function):
 
-    model = mnist_torch_model.mnist_model.Net().to(torch.device('cuda'))
+    model = mnist_torch_model.Net().to(torch.device('cuda'))
+    input_shape = (1, 1, 28, 28)
 
-    sim = QuantizationSimModel(model, default_output_bw=8, default_param_bw=8)
+    sim = QuantizationSimModel(model, default_output_bw=8, default_param_bw=8, input_shapes=input_shape,
+                               config_file='../../../TrainingExtensions/common/src/python/aimet_common/quantsim_config/'
+                                           'default_config.json')
 
     # Quantize the untrained MNIST model
     sim.compute_encodings(forward_pass_callback=evaluate_model, forward_pass_callback_args=5)
@@ -302,7 +307,7 @@ def quantize_model(trainer_function):
     trainer_function(model=sim.model, epochs=1, num_batches=100, use_cuda=True)
 
     # Export the model
-    sim.export(path='./', filename_prefix='quantized_mnist', input_shape=(1, 1, 28, 28))
+    sim.export(path='./', filename_prefix='quantized_mnist', input_shape=input_shape)
 
 
 if __name__ == '__main__':
@@ -315,4 +320,4 @@ if __name__ == '__main__':
     channel_pruning_manual_mode()
     channel_pruning_auto_mode()
 
-    quantize_model()
+    quantize_model(mnist_torch_model.train)
