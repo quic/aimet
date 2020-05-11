@@ -50,6 +50,10 @@ import time
 from enum import Enum
 
 
+
+package_version_file = "package_info.py"
+
+
 class ModelApi(Enum):
     """ Enum differentiating between Pytorch or Tensorflow """
     pytorch = 0
@@ -126,6 +130,8 @@ class AimetLogger(metaclass=SingletonType):
         for area in log_areas_list:
             if area not in configured_areas_list:
                 raise ValueError(" ERROR: LogArea: {} NOT configured".format(area))
+
+        log_package_and_version()
 
     @staticmethod
     def get_area_logger(area):
@@ -217,3 +223,22 @@ def start_bokeh_server_session(port: int):
     # Doesn't allow document to be added to server unless there is some sort of wait time.
     time.sleep(4)
     return url, process
+
+
+def log_package_and_version():
+    """
+    Read the Package info file and log the Package name and the Version.
+    :return:
+    """
+
+    dir_name = os.path.dirname(__file__)
+    file_name = package_version_file
+    abs_file_path = os.path.join(dir_name, file_name)
+
+    try:
+        with open(abs_file_path) as version_file:
+            package, version = version_file.read().splitlines()
+        logging.info("Package Name: %s, Version: %s", package, version)
+
+    except IOError:
+        logging.info("Package name and version not initialized")
