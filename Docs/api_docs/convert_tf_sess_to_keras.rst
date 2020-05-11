@@ -1,11 +1,10 @@
-=========================================
-Convert TensorFlow Session to Keras Model
-=========================================
+============================
+Using AIMET with Keras Model
+============================
 
 Introduction
 ============
 Currently AIMET APIs support Tensorflow sessions. This example code shows a method for how to use AIMET if you have a Keras model by invoking AIMET on the back-end session and converting the returned session to a Keras model.
-The method would enable using multi-gpu fine-tuning on the compressed session returned by AIMET.
 
 APIs
 ====
@@ -63,11 +62,11 @@ Utility Functions
     :language: python
     :lines: 40-49
 
-**Utility function to get session**
+**Utility function to get session from Keras model**
 
 .. literalinclude:: ../../NightlyTests/tensorflow/code_examples/converting_tf_session_to_keras.py
     :language: python
-    :pyobject: get_sess_model
+    :pyobject: get_sess_from_keras_model
 
 **Utility function to get a compressed session**
 

@@ -3,7 +3,7 @@
 # =============================================================================
 #  @@-COPYRIGHT-START-@@
 #
-#  Copyright (c) 2019-2020, Qualcomm Innovation Center, Inc. All rights reserved.
+#  Copyright (c) 2020, Qualcomm Innovation Center, Inc. All rights reserved.
 #
 #  Redistribution and use in source and binary forms, with or without
 #  modification, are permitted provided that the following conditions are met:
@@ -35,13 +35,13 @@
 #
 #  @@-COPYRIGHT-END-@@
 # =============================================================================
-# pylint: skip-file
+""" Code examples to demonstrate Keras model with AIMET """
 
 import tensorflow as tf
-import numpy as np
-
 from tensorflow.keras.applications import MobileNet
 from keras.applications.vgg16 import preprocess_input
+
+import numpy as np
 
 from aimet_common.defs import CompressionScheme, CostMetric
 from aimet_tensorflow.defs import SpatialSvdParameters
@@ -53,6 +53,11 @@ from aimet_tensorflow.utils.convert_tf_sess_to_keras import save_tf_session_sing
 
 
 def train(model):
+    """
+    Trains using fake dataset
+    :param model: Keras model
+    :return: trained model
+    """
     # Create a fake dataset
     x_train = np.random.rand(32, 224, 224, 3)
     y_train = np.random.rand(32, )
@@ -64,7 +69,11 @@ def train(model):
     return model
 
 
-def get_sess_model():
+def get_sess_from_keras_model():
+    """
+    Gets TF session from keras model
+    :return: TF session
+    """
     tf.keras.backend.clear_session()
     tf.keras.backend.set_learning_phase(1)
     _ = MobileNet(weights=None, input_shape=(224, 224, 3))
@@ -72,24 +81,34 @@ def get_sess_model():
     return sess
 
 
-def compress_session(sess, cov_names):
-    layer_a = sess.graph.get_operation_by_name(cov_names[0])
+def compress_session(sess, compressible_ops):
+    """
+    Compressed TF session
+    :param sess: Tf session
+    :param compressible_ops: layers to compress
+    :return: compressed session
+    """
+    layer_a = sess.graph.get_operation_by_name(compressible_ops[0])
     list_of_module_comp_ratio_pairs = [ModuleCompRatioPair(layer_a, 0.5)]
     manual_params = SpatialSvdParameters.ManualModeParams(
         list_of_module_comp_ratio_pairs=list_of_module_comp_ratio_pairs)
     params = SpatialSvdParameters(input_op_names=['input_1'], output_op_names=['act_softmax/Softmax'],
                                   mode=SpatialSvdParameters.Mode.manual, params=manual_params)
-    scheme = CompressionScheme.spatial_svd  # spatial_svd, weight_svd or channel_pruning
+    scheme = CompressionScheme.spatial_svd
     metric = CostMetric.mac
-    def evaluate(sess, iterations, use_cuda): return 1
-    sess, stats = ModelCompressor.compress_model(sess=sess,
-                                                 working_dir="./",
-                                                 eval_callback=evaluate,
-                                                 eval_iterations=None,
-                                                 input_shape=(1, 3, 224, 224),
-                                                 compress_scheme=scheme,
-                                                 cost_metric=metric,
-                                                 parameters=params)
+
+    # pylint: disable=unused-argument
+    def evaluate(sess, iterations, use_cuda):
+        return 1
+
+    sess, _ = ModelCompressor.compress_model(sess=sess,
+                                             working_dir="./",
+                                             eval_callback=evaluate,
+                                             eval_iterations=None,
+                                             input_shape=(1, 3, 224, 224),
+                                             compress_scheme=scheme,
+                                             cost_metric=metric,
+                                             parameters=params)
     return sess
 
 
@@ -97,7 +116,7 @@ def convert_tf_session_to_keras_model():
     """
     Convert an AIMET  spatial SVD compressed session to a Keras model and train the Keras model with MirroredStrategy
     """
-    sess = get_sess_model()
+    sess = get_sess_from_keras_model()
 
     # For instance, if the first conv layer in MobilNetV1 graph is compressed, then:
     compressed_ops = ['conv1/Conv2D']
