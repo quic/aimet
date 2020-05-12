@@ -420,3 +420,50 @@ class TestQuantsimConfig(unittest.TestCase):
         self.assertTrue(starting_op in neighborhood)
         self.assertTrue(add_10_op in neighborhood)
         self.assertTrue(adaptive_avg_pool2d_9_op in neighborhood)
+
+
+    def test_parse_config_file_defaults_gpu(self):
+        """ Test that default quantization parameters are set correctly when using json config file """
+        model = SingleResidual()
+        model.eval()
+        model.cuda()
+
+        quantsim_config = {
+            "defaults": {
+                "ops": {
+                    "is_output_quantized": "True",
+                    "is_symmetric": "False"
+                },
+                "params": {
+                    "is_quantized": "False",
+                    "is_symmetric": "True"
+                }
+            },
+            "params": {},
+            "op_type": {},
+            "supergroups": [],
+            "model_input": {},
+            "model_output": {}
+        }
+        with open('./data/quantsim_config.json', 'w') as f:
+            json.dump(quantsim_config, f)
+
+        sim = QuantizationSimModel(model, quant_scheme='tf_enhanced', config_file='./data/quantsim_config.json',
+                                   input_shapes=(1, 3, 32, 32), in_place=True)
+        for name, module in sim.model.named_modules():
+            if isinstance(module, QcQuantizeWrapper):
+                # Output of add op is input quantized
+                if name == 'relu3':
+                    self.assertTrue(module.input_quantizer.enabled)
+                else:
+                    self.assertTrue(not module.input_quantizer.enabled)
+                self.assertTrue(module.output_quantizer.enabled)
+                self.assertTrue(not module.input_quantizer.use_symmetric_encodings)
+                self.assertTrue(not module.output_quantizer.use_symmetric_encodings)
+                if module.param_quantizers:
+                    for _, param_quantizer in module.param_quantizers.items():
+                        self.assertTrue(not param_quantizer.enabled)
+                        self.assertTrue(param_quantizer.use_symmetric_encodings)
+
+        if os.path.exists('./data/quantsim_config.json'):
+            os.remove('./data/quantsim_config.json')
