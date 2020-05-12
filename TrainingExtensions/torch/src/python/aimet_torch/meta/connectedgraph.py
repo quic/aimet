@@ -770,7 +770,6 @@ class ConnectedGraph(AimetCommonConnectedGraph):
         split_op_product_shape = preceding_op.output.shape
         split_op_product = self._add_product(split_op_product_name, split_op_product_shape)
         split_op_product.producer = split_op
-
         return split_op_product
 
     def _add_product(self, name: str, shape: List[int]) -> Product:
