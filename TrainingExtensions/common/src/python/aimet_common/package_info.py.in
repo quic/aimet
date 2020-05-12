@@ -35,8 +35,8 @@
 #
 #  @@-COPYRIGHT-END-@@
 # =============================================================================
-""" Product, Version and Feature set information written by build system and logged by AIMET. """
+""" Product, Version and Postfix information written by build system and logged by AIMET. """
 
 Product = '@PRODUCT@'
 Version_Info = '@VERSION@'
-Feature_Set = '@FEATURE_SET@'
+Postfix = '@POSTFIX@'

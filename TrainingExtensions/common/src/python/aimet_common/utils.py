@@ -52,13 +52,13 @@ from enum import Enum
 
 try:
     # The build system updates Product, Version and Feature set information in the package_info file.
-    from aimet_common.package_info import Product, Version_Info, Feature_Set
+    from aimet_common.package_info import Product, Version_Info, Postfix
 
 except ImportError:
     # Default values for Product, Version and Feature set information.
     Product = 'AIMET'
     Version_Info = ''
-    Feature_Set = ''
+    Postfix = ''
 
 
 class ModelApi(Enum):
@@ -234,8 +234,8 @@ def start_bokeh_server_session(port: int):
 
 def log_package_and_version():
     """
-    Log the Product, Version and Feature set.
+    Log the Product, Version and Postfix.
     :return:
     """
 
-    logging.info("%s-%s-%s", Product, Version_Info, Feature_Set)
+    logging.info("%s-%s-%s", Product, Version_Info, Postfix)
