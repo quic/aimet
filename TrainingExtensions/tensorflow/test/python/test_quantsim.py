@@ -35,7 +35,7 @@
 # =============================================================================
 
 import unittest
-import time
+import shutil
 import tensorflow as tf
 import numpy as np
 
@@ -43,7 +43,7 @@ import libpymo
 from aimet_tensorflow.quantsim import QuantizationSimModel
 from aimet_tensorflow.utils.graph_saver import load_model_from_meta
 from aimet_tensorflow.common.graph_eval import initialize_uninitialized_vars
-
+from aimet_tensorflow.quantsim import save_checkpoint, load_checkpoint
 
 class TestQuantSim(unittest.TestCase):
 
@@ -268,3 +268,74 @@ class TestQuantSim(unittest.TestCase):
 
         all_op_types = [op.type for op in new_sess.graph.get_operations()]
         self.assertNotIn('QcQuantize', all_op_types)
+        sess.close()
+
+    def test_save_load_ckpt_cpu_model(self):
+
+        """
+        Create QuantSim for a CPU model, test save and load on a quantsim model.
+        """
+        tf.reset_default_graph()
+        with tf.device('/cpu:0'):
+            model = tf.keras.Sequential()
+            model.add(tf.keras.layers.Conv2D(32, kernel_size=3, input_shape=(28, 28, 3), activation='relu'))
+            model.add(tf.keras.layers.MaxPooling2D((2, 2)))
+            model.add(tf.keras.layers.Conv2D(64, kernel_size=3, activation='relu'))
+            model.summary()
+
+        sess = tf.Session()
+        initialize_uninitialized_vars(sess)
+        sim = QuantizationSimModel(sess, [model.input.op.name], [model.output.op.name], use_cuda=False)
+
+        # save quantsim model
+        save_checkpoint(sim, './test_3', 'orig_quantsim_model')
+        new_quantsim = load_checkpoint('./test_3', 'orig_quantsim_model')
+
+        # validations
+        assert(sim is not new_quantsim)
+        self.assertTrue(new_quantsim.session is not None)
+        self.assertTrue(new_quantsim._quant_scheme == sim._quant_scheme)
+        self.assertTrue(new_quantsim._rounding_mode == sim._rounding_mode)
+        self.assertTrue(new_quantsim._use_cuda == sim._use_cuda)
+        self.assertTrue(len(new_quantsim._param_quantizers) == len(sim._param_quantizers))
+        self.assertTrue(len(new_quantsim._activation_quantizers) == len(sim._activation_quantizers))
+
+        for quantize_op in new_quantsim._param_quantizers:
+            self.assertTrue(sim._param_quantizers[quantize_op].tensor_quantizer.bitwidth ==
+                            new_quantsim._param_quantizers[quantize_op].tensor_quantizer.bitwidth)
+            self.assertTrue(sim._param_quantizers[quantize_op].tensor_quantizer.quantScheme ==
+                            new_quantsim._param_quantizers[quantize_op].tensor_quantizer.quantScheme)
+            self.assertTrue(sim._param_quantizers[quantize_op].tensor_quantizer.roundingMode ==
+                            new_quantsim._param_quantizers[quantize_op].tensor_quantizer.roundingMode)
+            self.assertTrue(sim._param_quantizers[quantize_op].tensor_quantizer.useSymmetricEncoding ==
+                            new_quantsim._param_quantizers[quantize_op].tensor_quantizer.useSymmetricEncoding)
+
+        for quantize_op in new_quantsim._activation_quantizers:
+            self.assertTrue(sim._activation_quantizers[quantize_op].tensor_quantizer.bitwidth ==
+                            new_quantsim._activation_quantizers[quantize_op].tensor_quantizer.bitwidth)
+            self.assertTrue(sim._activation_quantizers[quantize_op].tensor_quantizer.quantScheme ==
+                            new_quantsim._activation_quantizers[quantize_op].tensor_quantizer.quantScheme)
+            self.assertTrue(sim._activation_quantizers[quantize_op].tensor_quantizer.roundingMode ==
+                            new_quantsim._activation_quantizers[quantize_op].tensor_quantizer.roundingMode)
+            self.assertTrue(sim._activation_quantizers[quantize_op].tensor_quantizer.useSymmetricEncoding ==
+                            new_quantsim._activation_quantizers[quantize_op].tensor_quantizer.useSymmetricEncoding)
+
+        # remove the old quant sim reference and session
+        # to test that everything is loaded correctly on new quantsim including tensor quantizer references
+        sim.session.close()
+        del sim
+
+        def dummy_forward_pass(n_sess, args):
+            model_output = n_sess.graph.get_tensor_by_name(model.output.name)
+            model_output = model_output.consumers()[0].outputs[0]
+            model_input = n_sess.graph.get_tensor_by_name(model.input.name)
+            dummy_input = np.random.randn(20, 28, 28, 3)
+            n_sess.run(model_output, feed_dict={model_input: dummy_input})
+
+        new_quantsim.compute_encodings(dummy_forward_pass, None)
+
+        # delete temp folder created and close sessions
+        shutil.rmtree('./test_3')
+        sess.close()
+        new_quantsim.session.close()
+        del new_quantsim
