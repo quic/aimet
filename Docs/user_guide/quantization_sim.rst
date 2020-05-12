@@ -39,23 +39,41 @@ As explained above, in Step 3, AIMET analyzes the model and determines the optim
 
 To analyze, AIMET passes some training samples through the model and using hooks, captures the tensors as they are outputted from each layer. A histogram is created to model the distribution of the floating point numbers in the output tensor for each layer.
 
-Using the distribution of the floating point numbers in the output tensor for each layer, AIMET will use a scheme called "Enhanced TensorFlow" to determine the best encodings to convert the floating point numbers to fixed point. An encoding for a layer consists of four numbers
+Using the distribution of the floating point numbers in the output tensor for each layer, AIMET will use a scheme called "Enhanced TensorFlow" to determine the best encodings to convert the floating point numbers to fixed point. An encoding for a layer consists of four numbers:
 
 - Min:     Numbers below these are clamped
 - Max:    Numbers above these are clamped
 - Delta:   Granularity of the fixed point numbers (is a function of the bit-width selected)
 - Offset:  Offset from zero
 
-The delta and offset can be calculated using min and max and vice versa using the equations-
+The delta and offset can be calculated using min and max and vice versa using the equations:
     :math:`delta = \frac{min - max}{{2}^{bitwidth} - 1}` and :math:`offset = \frac{-min}{delta}`
 
-During the fine-tuning phase in Step 4, the following happens in the forward pass
+During the fine-tuning phase in Step 4, the following happens in the forward pass:
 
 .. image:: ../images/quant_4.png
 
-Weights from a given layer are first quantized to fixed point and then de-quantized back to floating point. And the same is done with the output tensor from the layer itself. AIMET achieves this by wrapping existing layers with a custom layer that add this functionality
+Weights from a given layer are first quantized to fixed point and then de-quantized back to floating point. And the same is done with the output tensor from the layer itself.
+AIMET achieves this by wrapping existing layers with a custom layer that add this functionality in PyTorch, and inserting quantization ops between layers in TensorFlow.
 
 .. image:: ../images/quant_5.png
 
 
 In the backward pass, AIMET will backprop normally. This is achieved by keeping the full-resolution floating point weights as shadow weights to be used during backprop.
+
+Placement of quantizers in the model
+====================================
+AIMET allows the configuration of quantizer placement in accordance with a set of rules specified in a json configuration file if provided when the Quantization Simulation API is called.
+In the configuration file, quantizers can be turned on and off, and/or configured with asymmetric or symmetric encodings.
+The general use case for this file would be for users to match the quantization rules for a particular runtime they would like to simulate.
+
+The configuration file contains six main sections, in increasing amounts of specificity:
+
+.. image:: ../images/quantsim_config_file.png
+
+Rules defined in a more general section can be overruled by subsequent rules defined in a more specific case.
+For example, one may specify in "defaults" for no layers to be quantized, but then turn on quantization for specific layers in the "op_type" section.
+
+It is advised for the user to begin with the default configuration file under
+
+aimet_common/quantsim_config/default_config.json
