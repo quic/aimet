@@ -44,6 +44,7 @@ import tensorflow as tf
 from aimet_common.connected_graph.connectedgraph_utils import get_all_input_ops
 from aimet_tensorflow.examples.test_models import single_residual
 from aimet_tensorflow.quantsim import QuantizationSimModel
+from aimet_tensorflow.common.connectedgraph import ConnectedGraph
 
 import libpymo as pymo
 
@@ -131,7 +132,7 @@ class TestQuantsimConfig(unittest.TestCase):
                     self.assertEqual(sim.session.run(op_mode_tensor),
                                      int(pymo.TensorQuantizerOpMode.oneShotQuantizeDequantize))
             op_mode_tensor = sim.session.graph.get_tensor_by_name(output_quantizer.name + '_op_mode:0')
-            if op in get_all_input_ops(sim._conn_graph):
+            if op.name == 'input_1':
                 self.assertEqual(sim.session.run(op_mode_tensor), int(pymo.TensorQuantizerOpMode.passThrough))
             else:
                 self.assertEqual(sim.session.run(op_mode_tensor), int(pymo.TensorQuantizerOpMode.updateStats))
@@ -321,12 +322,12 @@ class TestQuantsimConfig(unittest.TestCase):
         }
         with open('./quantsim_config.json', 'w') as f:
             json.dump(quantsim_config, f)
-
+        conn_graph = ConnectedGraph(sess.graph, ['input_1'], ['single_residual/Softmax'])
         sim = QuantizationSimModel(sess, ['input_1'], ['single_residual/Softmax'],
                                    config_file='./quantsim_config.json')
         ops_with_deactivated_output_quantizers = set()
         num_deactivated_quantizers = 0
-        for op in sim._conn_graph.get_all_ops().values():
+        for op in conn_graph.get_all_ops().values():
             if op.type == 'Conv2D' and op.output.consumers[0].type == 'FusedBatchNormV3':
                 ops_with_deactivated_output_quantizers.add(op)
                 num_deactivated_quantizers += 1
@@ -336,12 +337,13 @@ class TestQuantsimConfig(unittest.TestCase):
             elif op.type == 'Conv2D' and op.output.consumers[0].type == 'AvgPool':
                 ops_with_deactivated_output_quantizers.add(op)
                 num_deactivated_quantizers += 1
-            elif op in get_all_input_ops(sim._conn_graph):
+            elif op in get_all_input_ops(conn_graph):
                 ops_with_deactivated_output_quantizers.add(op)
                 num_deactivated_quantizers += 1
         for op, (_, output_quantizer) in sim._op_to_quant_ops_dict.items():
             op_mode_tensor = sim.session.graph.get_tensor_by_name(output_quantizer.name + '_op_mode:0')
-            if op in ops_with_deactivated_output_quantizers:
+            ops_with_deactivated_output_quantizers_names = [op.name for op in ops_with_deactivated_output_quantizers]
+            if op.name in ops_with_deactivated_output_quantizers_names:
                 self.assertEqual(sim.session.run(op_mode_tensor), int(pymo.TensorQuantizerOpMode.passThrough))
             else:
                 self.assertEqual(sim.session.run(op_mode_tensor), int(pymo.TensorQuantizerOpMode.updateStats))
@@ -377,12 +379,12 @@ class TestQuantsimConfig(unittest.TestCase):
         }
         with open('./quantsim_config.json', 'w') as f:
             json.dump(quantsim_config, f)
-
         sim = QuantizationSimModel(sess, ['input_1'], ['single_residual/Softmax'],
                                    config_file='./quantsim_config.json')
 
-        input_1_op = sim._conn_graph.get_op_from_module_name('input_1')
-        _, input_1_quantize_op = sim._op_to_quant_ops_dict[input_1_op]
+        for op in sim._op_to_quant_ops_dict.keys():
+            if op.name == 'input_1':
+                _, input_1_quantize_op = sim._op_to_quant_ops_dict[op]
         op_mode_tensor = sim.session.graph.get_tensor_by_name(input_1_quantize_op.name + '_op_mode:0')
         self.assertEqual(sim.session.run(op_mode_tensor), int(pymo.TensorQuantizerOpMode.updateStats))
 
@@ -420,8 +422,8 @@ class TestQuantsimConfig(unittest.TestCase):
         sim = QuantizationSimModel(sess, ['input_1'], ['single_residual/Softmax'],
                                    config_file='./quantsim_config.json')
 
-        softmax_op = sim._conn_graph.get_op_from_module_name('single_residual/Softmax')
-        _, softmax_quantize_op = sim._op_to_quant_ops_dict[softmax_op]
+        _, softmax_quantize_op = [(sim._op_to_quant_ops_dict[op]) for op in sim._op_to_quant_ops_dict.keys()
+             if op.name == 'single_residual/Softmax'][0]
         op_mode_tensor = sim.session.graph.get_tensor_by_name(softmax_quantize_op.name + '_op_mode:0')
         self.assertEqual(sim.session.run(op_mode_tensor), int(pymo.TensorQuantizerOpMode.updateStats))
 

@@ -39,6 +39,7 @@
 
 from typing import List, Union, Dict, Callable, Any
 import os
+from enum import Enum
 import shutil
 import json
 import math
@@ -49,7 +50,8 @@ from tensorflow.contrib import graph_editor
 
 from aimet_common.defs import QuantScheme
 from aimet_common.utils import AimetLogger
-from aimet_tensorflow.utils.common import update_variables_with_values
+from aimet_tensorflow.utils.common import update_variables_with_values, \
+    save_data_to_pickle_file, load_data_from_pickle_file
 from aimet_tensorflow.utils import graph_saver
 from aimet_tensorflow.common import core
 from aimet_tensorflow.common.connectedgraph import ConnectedGraph
@@ -61,6 +63,11 @@ import libpymo as pymo
 _logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Quant)
 WORKING_DIR = '/tmp/quantsim/'
 
+quant_scheme_to_pymo = {QuantScheme.post_training_tf: pymo.QuantizationMode.QUANTIZATION_TF,
+                        QuantScheme.post_training_tf_enhanced:
+                            pymo.QuantizationMode.QUANTIZATION_TF_ENHANCED,
+                        QuantScheme.training_range_learning:
+                            pymo.QuantizationMode.QUANTIZATION_RANGE_LEARNING}
 
 # by default we will have this registered for Qc Quantize op.
 @tf_ops.RegisterGradient("QcQuantize")
@@ -73,6 +80,23 @@ def _qc_dummy_quantized_grad(op, grad):
     :return: gradients computed per input
     """
     return grad, None, None, None, None, None, None
+
+
+class PickleableTensorQuantizerState:
+    """
+    State variables to be saved while pickling tensor quantizer
+    """
+    def __init__(self, quant_op_name, tensor_quantizer_ref):
+        """
+        class type to save pickle-able info pertaining to tensor quantizer
+        :param tensor_quantizer_ref: TensorQuantizer reference
+        """
+
+        self.quant_op_name = quant_op_name
+        self.bitwidth = tensor_quantizer_ref.bitwidth
+        self.quant_scheme = tensor_quantizer_ref.quantScheme
+        self.rounding_mode = tensor_quantizer_ref.roundingMode
+        self.use_symmetric_encoding = tensor_quantizer_ref.useSymmetricEncoding
 
 
 class QuantizerInfo:
@@ -96,6 +120,18 @@ class QuantizerInfo:
         op_mode_tensor = op.inputs[1]
         return session.run(op_mode_tensor)
 
+    def __getstate__(self):
+        # convert tensor quantizer state to pickle-able form
+        state = PickleableTensorQuantizerState(self.quant_op_name, self.tensor_quantizer)
+        return state
+
+    def __setstate__(self, state):
+        # Create the cpp tensor quantizer reference
+        self.quant_op_name = state.quant_op_name
+        self.tensor_quantizer = pymo.TensorQuantizer(state.bitwidth, state.quant_scheme,
+                                                     state.rounding_mode,
+                                                     state.use_symmetric_encoding)
+
 
 def _load_ops():
     """
@@ -112,10 +148,37 @@ def _load_ops():
 qcops = _load_ops()
 
 
-class QuantizationSimModel:
-    """
-    |
+class QuantizerType(Enum):
+    """ Enum for quantize op types """
+    param = 0
+    activation = 1
 
+
+class PickleableQuantSimState:
+    """
+    State variables to be saved while pickling
+    """
+    def __init__(self, quant_scheme, rounding_mode, use_cuda,
+                 param_quantizer_dict, activation_quantizer_dict):
+        """
+        class type to save pickle-able info pertaining to quantsim config
+        :param quant_scheme: quant scheme
+        :param rounding_mode: rounding mode
+        :param use_cuda: flag to indicate usage of GPU
+        :param param_quantizer_dict: param quantizers dictionary
+        :param activation_quantizer_dict: activation quantizers dictionary
+        """
+
+        self.quant_scheme = quant_scheme
+        self.rounding_mode = rounding_mode
+        self.use_cuda = use_cuda
+        self.param_quantizers = param_quantizer_dict
+        self.activation_quantizers = activation_quantizer_dict
+
+
+class QuantizationSimModel:
+
+    """
     Creates a QuantSim model by adding quantization simulations ops to a given model.
 
     This enables
@@ -130,8 +193,6 @@ class QuantizationSimModel:
                  default_output_bw: int = 8, default_param_bw: int = 8, use_cuda: bool = True, config_file: str = None):
         """
         :param session: The input model as session to add quantize ops to
-        :param starting_op_names: Names of the input ops of the model graph
-        :param output_op_names: Names of the output ops of the model graph
         :param quant_scheme: Quantization Scheme, currently supported schemes are post_training_tf and
                post_training_tf_enhanced, defaults to post_training_tf_enhanced
         :param rounding_mode: The round scheme to used. One of: 'nearest' or 'stochastic', defaults to 'nearest'.
@@ -165,31 +226,43 @@ class QuantizationSimModel:
                                    'tf_enhanced': QuantScheme.post_training_tf_enhanced}
             quant_scheme = quant_scheme_lookup[quant_scheme]
         self._quant_scheme = quant_scheme
-
         self._rounding_mode = rounding_mode
-        self._default_output_bw = default_output_bw
-        self._default_param_bw = default_param_bw
         self._use_cuda = use_cuda
         self._param_quantizers = {}
         self._activation_quantizers = {}
         self._op_to_quant_ops_dict = {}
-        self._conn_graph = ConnectedGraph(self.session.graph, starting_op_names, output_op_names)
+        conn_graph = ConnectedGraph(self.session.graph, starting_op_names, output_op_names)
 
         # We save a copy of the original model (to be used during export later)
         with self.session.graph.as_default():
             saver = tf.train.Saver()
         saver.save(self.session, save_path=WORKING_DIR+'orig_model_before_quantsim')
 
-        self._add_quant_nodes()
+        self._add_quant_nodes(conn_graph, default_param_bw, default_output_bw)
 
         # Save and load the session so the graph changes can take effect
         self._save_and_load_sim_model()
 
         # Use config file to set starting quantize op configurations
-        # Note: at this point, the session used to construct self._conn_graph is different than the current
+        # Note: at this point, the session used to construct conn_graph is different than the current
         # self.session, however we still use the connected graph to traverse the graph structure.
         if config_file:
-            QuantSimConfigurator(self.session, self._conn_graph, self._op_to_quant_ops_dict, config_file)
+            QuantSimConfigurator(self.session, conn_graph, self._op_to_quant_ops_dict, config_file)
+
+    def __getstate__(self):
+        # convert object to pickle-able state
+        state = PickleableQuantSimState(self._quant_scheme, self._rounding_mode,
+                                        self._use_cuda, self._param_quantizers,
+                                        self._activation_quantizers)
+        return state
+
+    def __setstate__(self, state):
+        self.session = None
+        self._quant_scheme = state.quant_scheme
+        self._rounding_mode = state.rounding_mode
+        self._use_cuda = state.use_cuda
+        self._param_quantizers = state.param_quantizers
+        self._activation_quantizers = state.activation_quantizers
 
     def _set_op_input_variables(self, op_name: str, encoding: pymo.TfEncoding, op_mode: pymo.TensorQuantizerOpMode):
         """
@@ -246,7 +319,7 @@ class QuantizationSimModel:
                 encoding = quantizer_info.tensor_quantizer.computeEncoding()
                 self._set_op_input_variables(op_name, encoding, op_mode)
 
-    def export(self, path: str, filename_prefix: str):
+    def export(self, path: str, filename_prefix: str, orig_sess: tf.Session = None):
         """
         This method exports out the quant-sim model so it is ready to be run on-target.
 
@@ -259,9 +332,18 @@ class QuantizationSimModel:
 
         :param path: path where to store model pth and encodings
         :param filename_prefix: Prefix to use for filenames of the model pth and encodings files
+        :param orig_sess: optional param to pass in original session without quant nodes for export
         :return: None
 
         """
+
+        # save session without quant nodes
+        if orig_sess is not None:
+            with orig_sess.graph.as_default():
+                saver = tf.train.Saver()
+            saver.save(orig_sess, save_path=WORKING_DIR+'orig_model_before_quantsim')
+        else:
+            _logger.info('Original session is not provided, use orig_model_before_quantsim.meta to export')
 
         vars_to_save = []
         with self.session.graph.as_default():
@@ -338,9 +420,13 @@ class QuantizationSimModel:
     def _save_and_load_sim_model(self):
         self.session = graph_saver.save_and_load_graph(WORKING_DIR, self.session)
 
-    def _add_quant_nodes(self):
+    def _add_quant_nodes(self, conn_graph: ConnectedGraph, default_param_bw: int, default_output_bw: int) -> None:
         """
-        Add quantization ops to the model
+        Utility to add quant nodes
+        :param conn_graph: Connected graph instance
+        :param default_param_bw: default param bitwidth
+        :param default_output_bw: default output bitwidth
+        :return: None
         """
         # Get the op query module
         query = core.OpQuery(self.session.graph, ops_to_ignore=None)
@@ -349,8 +435,8 @@ class QuantizationSimModel:
         weight_ops = query.get_weight_ops()
         input_indices = query.get_weight_inputs(weight_ops)
 
-        self._insert_weight_quantization_ops(weight_ops, input_indices, self._conn_graph)
-        self._insert_activation_quantization_ops(self._conn_graph)
+        self._insert_weight_quantization_ops(weight_ops, input_indices, conn_graph, default_param_bw)
+        self._insert_activation_quantization_ops(conn_graph, default_output_bw)
 
     @staticmethod
     def _get_quantized_name(op_name: str) -> str:
@@ -371,12 +457,14 @@ class QuantizationSimModel:
         assert quant_op_name.endswith('_quantized')
         return quant_op_name[:-len('_quantized')]
 
-    def _insert_weight_quantization_ops(self, ops: List[tf.Operation], indices: List[int], conn_graph: ConnectedGraph):
+    def _insert_weight_quantization_ops(self, ops: List[tf.Operation], indices: List[int], conn_graph: ConnectedGraph,
+                                        default_param_bw: int):
         """
         Inserts quantization ops for individual parameters
         :param ops: List of ops whose parameters are being quantized
         :param indices: List of input indices (one-to-one for each entry in ops)
         :param conn_graph: Connected graph to lookup Ops for ops with parameters
+        :param default_param_bw : default param bitwidth
         :return: None
         """
         assert len(ops) == len(indices)
@@ -404,7 +492,7 @@ class QuantizationSimModel:
                 param_type = 'weight'
 
             q_op_out = self._insert_post_training_quant_op(param_in, quant_op_name,
-                                                           op_mode, self._param_quantizers, self._default_param_bw)
+                                                           op_mode, self._param_quantizers, default_param_bw)
 
             nodes_modified_count = graph_editor.reroute_ts(tf_ops.convert_to_tensor(q_op_out), param_in, can_modify=op)
             if nodes_modified_count != 1:
@@ -413,10 +501,11 @@ class QuantizationSimModel:
             # Add a mapping to the connected graph op for the newly created weight quantizer op
             self._add_op_to_quant_ops_dict_entry(q_op_out, conn_graph_op, True, param_type)
 
-    def _insert_activation_quantization_ops(self, conn_graph: ConnectedGraph):
+    def _insert_activation_quantization_ops(self, conn_graph: ConnectedGraph, default_output_bw):
         """
         Inserts quantization ops at the outputs of given ops
         :param conn_graph: Connected graph containing ops to place quantization ops after
+        :param default_output_bw: default activation bitwidth
         :return: None
         """
         # Op types which we will not place quantize ops after
@@ -433,7 +522,7 @@ class QuantizationSimModel:
 
             q_op_out = self._insert_post_training_quant_op(output_op.outputs[0], quant_op_name,
                                                            pymo.TensorQuantizerOpMode.updateStats,
-                                                           self._activation_quantizers, self._default_output_bw)
+                                                           self._activation_quantizers, default_output_bw)
 
             # Re-route
             num_rerouted_outputs = graph_editor.reroute_ts(tf_ops.convert_to_tensor(q_op_out),
@@ -486,10 +575,6 @@ class QuantizationSimModel:
         # is_symmetric_encoding flag
         # (so we can change these in the future, if needed)
 
-        _quant_scheme_to_pymo = {QuantScheme.post_training_tf: pymo.QuantizationMode.QUANTIZATION_TF,
-                                 QuantScheme.post_training_tf_enhanced: pymo.QuantizationMode.QUANTIZATION_TF_ENHANCED,
-                                 QuantScheme.training_range_learning: pymo.QuantizationMode.QUANTIZATION_RANGE_LEARNING}
-
         with self.session.graph.as_default():
             op_mode_var = tf.Variable(int(op_mode),
                                       name=quant_op_name + '_op_mode', trainable=False,
@@ -497,7 +582,7 @@ class QuantizationSimModel:
 
             # Note: Last param of TensorQuantizer is a flag to indicate is_symmetric_encoding,
             # this value is to be read from config file
-            tensor_quantizer = pymo.TensorQuantizer(bit_width, _quant_scheme_to_pymo[self._quant_scheme],
+            tensor_quantizer = pymo.TensorQuantizer(bit_width, quant_scheme_to_pymo[self._quant_scheme],
                                                     pymo.RoundingMode.ROUND_NEAREST,
                                                     False)
             quantizer_info = QuantizerInfo(tensor_quantizer, quant_op_name)
@@ -553,3 +638,69 @@ class QuantizationSimModel:
             q_op_out = create_quantize_op()
 
         return q_op_out
+
+
+# load and save utilities
+
+def update_tensor_quantizer_references(quant_sim_sess: tf.Session, quantizer_dict: Dict[str, QuantizerInfo]):
+    """
+    updates the param / activation quant ops in the passed-in session with new tensor quantizer references.
+    :param quant_sim_sess: tensorflow session held by quantsim object
+    :param quantizer_dict: dictionary with quant ops and associated quantizer info
+    :return: None, updates passed-in session quant ops with new tensor quantizer references.
+    """
+
+    vars_with_value = {}
+    for q_op_name in quantizer_dict:
+        tensor_quantizer_ref = pymo.PtrToInt64(quantizer_dict[q_op_name].tensor_quantizer)
+        vars_with_value[q_op_name + '_quant_ref'] = tensor_quantizer_ref
+
+    update_variables_with_values(quant_sim_sess.session, vars_with_value)
+
+
+def save_checkpoint(quantsim: QuantizationSimModel, meta_path: str, file_name_prefix: str) -> None:
+    """
+    This API provides a way for the user to save a checkpoint of the quantized model which can
+    be loaded at a later point to continue fine-tuning e.g.
+    See also load_checkpoint()
+    :param quantsim: QuantizationSimModel to be saved
+    :param meta_path: path to save the file
+    :param file_name_prefix : filename prefix string
+    :return: None
+    """
+
+    if not os.path.exists(meta_path):
+        os.mkdir(meta_path)
+
+    save_path = os.path.join(meta_path, file_name_prefix)
+
+    # save the model with quant ops
+    graph_saver.save_model_to_meta(quantsim.session, save_path)
+
+    # save info in the quantsim object
+    save_data_to_pickle_file(quantsim, meta_path, 'orig_quantsim_config')
+
+
+def load_checkpoint(meta_path: str, file_name_prefix: str) -> QuantizationSimModel:
+    """
+    utility to load quantsim graph from saved checkpoint and pickle files.
+    :param meta_path: path to load meta from
+    :param file_name_prefix: filename prefix string
+    :return: returns new quantsim object
+    """
+    #pylint: disable=protected-access
+
+    # load saved session with quant ops
+    new_sess = graph_saver.load_model_from_meta(meta_path=str(meta_path + '/' + file_name_prefix + '.meta'))
+
+    # load quant sim model object with params from saved pickle data
+    new_quant_sim = load_data_from_pickle_file(meta_path + '/orig_quantsim_config')
+
+    # set session for the new quantsim object
+    new_quant_sim.session = new_sess
+
+    # update tensor references in the new quantsim object
+    update_tensor_quantizer_references(new_quant_sim, new_quant_sim._param_quantizers)
+    update_tensor_quantizer_references(new_quant_sim, new_quant_sim._activation_quantizers)
+
+    return new_quant_sim

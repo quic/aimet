@@ -38,6 +38,8 @@
 """ common TF utilities """
 from typing import List, Union, Tuple, Dict, Set
 
+import pickle
+import os
 import numpy as np
 import tensorflow as tf
 from aimet_common.utils import AimetLogger
@@ -369,3 +371,34 @@ def update_variables_with_values(sess: tf.Session, vars_with_values: Dict)->None
             else:
                 var_to_be_updated = vars_with_given_name[0]
                 var_to_be_updated.load(vars_with_values[var_name], sess)
+
+
+def save_data_to_pickle_file(info_to_be_saved, output_path: str, output_file_name: str):
+    """
+    utility to save given data structure to a pickle file.
+    :param info_to_be_saved: data to be saved as pickle file
+    :param output_path: output path to save pickle file
+    :param output_file_name: output pickle file name
+    :return: None
+    """
+
+    if not os.path.exists(output_path):
+        os.mkdir(output_path)
+    output_file_with_path = os.path.join(output_path, output_file_name)
+    # save the dictionaries of quant op nodes added as pickle files
+    outfile = open(output_file_with_path, 'wb')
+    pickle.dump(info_to_be_saved, outfile)
+    outfile.close()
+
+
+def load_data_from_pickle_file(filename: str):
+    """
+    utility to load data from pickle file
+    :param filename: name of the pickle file with path
+    :return: data loaded from pickle file
+    """
+
+    infile = open(filename, 'rb')
+    loaded_data = pickle.load(infile)
+    infile.close()
+    return loaded_data
