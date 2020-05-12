@@ -138,7 +138,7 @@ class AimetLogger(metaclass=SingletonType):
             if area not in configured_areas_list:
                 raise ValueError(" ERROR: LogArea: {} NOT configured".format(area))
 
-        log_package_and_version()
+        log_package_info()
 
     @staticmethod
     def get_area_logger(area):
@@ -232,10 +232,20 @@ def start_bokeh_server_session(port: int):
     return url, process
 
 
-def log_package_and_version():
+def log_package_info():
     """
     Log the Product, Version and Postfix.
     :return:
     """
 
-    logging.info("%s-%s-%s", Product, Version_Info, Postfix)
+    # The Product is always a non-empty string.
+    if Version_Info != '' and Postfix != '':
+        # Log Product-Version-Postfix
+        logging.info("%s-%s-%s", Product, Version_Info, Postfix)
+    elif Version_Info != '' and Postfix == '':
+        # Log Product-Version
+        logging.info("%s-%s", Product, Version_Info)
+    else:
+        # If Version is empty, the Postfix is not logged.
+        # Log Product.
+        logging.info("%s", Product)
