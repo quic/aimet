@@ -37,6 +37,7 @@
 # =============================================================================
 """ Utility classes and functions that are used by NightlyTests files as well as
     common to both PyTorch and TensorFlow. """
+
 import math
 import os
 import logging
@@ -49,9 +50,15 @@ import subprocess
 import time
 from enum import Enum
 
+try:
+    # The build system updates Product, Version and Feature set information in the package_info file.
+    from aimet_common.package_info import Product, Version_Info, Feature_Set
 
-
-package_version_file = "package_info.py"
+except ImportError:
+    # Default values for Product, Version and Feature set information.
+    Product = 'AIMET'
+    Version_Info = ''
+    Feature_Set = ''
 
 
 class ModelApi(Enum):
@@ -227,18 +234,8 @@ def start_bokeh_server_session(port: int):
 
 def log_package_and_version():
     """
-    Read the Package info file and log the Package name and the Version.
+    Log the Product, Version and Feature set.
     :return:
     """
 
-    dir_name = os.path.dirname(__file__)
-    file_name = package_version_file
-    abs_file_path = os.path.join(dir_name, file_name)
-
-    try:
-        with open(abs_file_path) as version_file:
-            package, version = version_file.read().splitlines()
-        logging.info("Package Name: %s, Version: %s", package, version)
-
-    except IOError:
-        logging.info("Package name and version not initialized")
+    logging.info("%s-%s-%s", Product, Version_Info, Feature_Set)

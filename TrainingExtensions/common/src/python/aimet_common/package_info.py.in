@@ -1,4 +1,4 @@
-# /usr/bin/env python3.5
+# /usr/bin/env python3.6
 # -*- mode: python -*-
 # =============================================================================
 #  @@-COPYRIGHT-START-@@
@@ -35,7 +35,7 @@
 #
 #  @@-COPYRIGHT-END-@@
 # =============================================================================
-""" Product, Version and Feature set inormation written by build system and logged by AIMET. """
+""" Product, Version and Feature set information written by build system and logged by AIMET. """
 
 Product = '@PRODUCT@'
 Version_Info = '@VERSION@'
