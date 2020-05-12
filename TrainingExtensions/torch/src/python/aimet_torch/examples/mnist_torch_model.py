@@ -108,18 +108,27 @@ class DataLoaderMnist:
         if not is_mnist_cache_present() and is_cache_env_set():
             copy_mnist_to_cache()
 
+
 class Net(nn.Module):
     """ Mnist Model """
+    # pylint: disable=too-many-instance-attributes
 
     def __init__(self):
         """ Constructor """
 
         super(Net, self).__init__()
         self.conv1 = nn.Conv2d(1, 32, kernel_size=5, padding=(2, 2))
+        self.relu1 = nn.ReLU()
+        self.maxpool1 = nn.MaxPool2d(2)
         self.conv2 = nn.Conv2d(32, 64, kernel_size=5, padding=(2, 2))
         self.conv2_drop = nn.Dropout2d()
+        self.relu2 = nn.ReLU()
+        self.maxpool2 = nn.MaxPool2d(2)
+        self.relu3 = nn.ReLU()
+        self.dropout2 = nn.Dropout2d()
         self.fc1 = nn.Linear(7*7*64, 1024)
         self.fc2 = nn.Linear(1024, 10)
+        self.log_softmax = nn.LogSoftmax(1)
 
     def forward(self, *inputs):
         """
@@ -128,13 +137,13 @@ class Net(nn.Module):
         :return: Output of the forward pass
         """
 
-        x = functional.relu(functional.max_pool2d(self.conv1(*inputs), 2))
-        x = functional.relu(functional.max_pool2d(self.conv2_drop(self.conv2(x)), 2))
+        x = self.relu1(self.maxpool1(self.conv1(*inputs)))
+        x = self.relu2(self.maxpool2(self.conv2_drop(self.conv2(x))))
         x = x.view(x.size(0), -1)
-        x = functional.relu(self.fc1(x))
-        x = functional.dropout(x, training=self.training)
+        x = self.relu3(self.fc1(x))
+        x = self.dropout2(x)
         x = self.fc2(x)
-        return functional.log_softmax(x, dim=1)
+        return self.log_softmax(x)
 
 
 class ExtendedNet(nn.Module):
