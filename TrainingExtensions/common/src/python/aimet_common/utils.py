@@ -37,6 +37,7 @@
 # =============================================================================
 """ Utility classes and functions that are used by NightlyTests files as well as
     common to both PyTorch and TensorFlow. """
+
 import math
 import os
 import logging
@@ -48,6 +49,16 @@ import socket
 import subprocess
 import time
 from enum import Enum
+
+try:
+    # The build system updates Product, Version and Feature set information in the package_info file.
+    from aimet_common.package_info import Product, Version_Info, Postfix
+
+except ImportError:
+    # Default values for Product, Version and Feature set information.
+    Product = 'AIMET'
+    Version_Info = ''
+    Postfix = ''
 
 
 class ModelApi(Enum):
@@ -126,6 +137,8 @@ class AimetLogger(metaclass=SingletonType):
         for area in log_areas_list:
             if area not in configured_areas_list:
                 raise ValueError(" ERROR: LogArea: {} NOT configured".format(area))
+
+        log_package_info()
 
     @staticmethod
     def get_area_logger(area):
@@ -217,3 +230,22 @@ def start_bokeh_server_session(port: int):
     # Doesn't allow document to be added to server unless there is some sort of wait time.
     time.sleep(4)
     return url, process
+
+
+def log_package_info():
+    """
+    Log the Product, Version and Postfix.
+    :return:
+    """
+
+    # The Product is always a non-empty string.
+    if Version_Info != '' and Postfix != '':
+        # Log Product-Version-Postfix
+        logging.info("%s-%s-%s", Product, Version_Info, Postfix)
+    elif Version_Info != '' and Postfix == '':
+        # Log Product-Version
+        logging.info("%s-%s", Product, Version_Info)
+    else:
+        # If Version is empty, the Postfix is not logged.
+        # Log Product.
+        logging.info("%s", Product)
