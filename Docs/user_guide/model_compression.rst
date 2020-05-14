@@ -94,3 +94,14 @@ FAQs
 5. Is per-layer fine tuning helpful?
 
    *Per-layer fine tuning is an experimental technique. We have not observed major gains by using it. But one can try out if it works for their model. In practice, we have observed that the best combination is to do say 1 epoch of fine-tuning per-layer and then do say 10-15 epochs of fine-tuning for the entire compressed model at the end.*
+
+References
+==========
+
+1.	Xiangyu Zhang, Jianhua Zou, Kaiming He, and Jian Sun. “Accelerating Very Deep Convolutional Networks for Classification and Detection.” IEEE Transactions on Pattern Analysis and Machine Intelligence, vol. 38, no. 10, pp. 1943-1955, 1 Oct. 2016.
+
+2.	Yihui He, Xiangyu Zhang, and Jian Sun. “Channel Pruning for Accelerating Very Deep Neural Networks.” IEEE International Conference on Computer Vision (ICCV), Venice, 2017, pp. 1398-1406.
+
+3.	Max Jaderberg, Andrea Vedaldi, and Andrew Zisserman. “Speeding up Convolutional Neural Networks with Low Rank Expansions.” British Machine Vision Conference, Jan. 2014.
+
+4.	Andrey Kuzmin, Markus Nagel, Saurabh Pitre, Sandeep Pendyam, Tijmen Blankevoort, Max Welling. “Taxonomy and Evaluation of Structured Compression of Convolutional Neural Networks.”
