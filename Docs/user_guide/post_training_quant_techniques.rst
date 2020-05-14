@@ -63,3 +63,8 @@ FAQs
 
 2. Which is better Empirical Bias Correction or Analytical + Empirical Bias Correction?
     *If speed is not a bottleneck, then it is suggested to use Empirical Bias Correction, else the hybrid approach of combining both.*
+
+References
+==========
+
+1.	Markus Nagel, Mart van Baalen, Tijmen Blankevoort, Max Welling. “Data-Free Quantization Through Weight Equalization and Bias Correction.” IEEE International Conference on Computer Vision (ICCV), Seoul, October 2019.
