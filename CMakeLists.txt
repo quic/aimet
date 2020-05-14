@@ -40,7 +40,7 @@ cmake_minimum_required(VERSION 3.5)
 project(aimet)
 
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11 -O0 -ggdb -fPIC -D_GLIBCXX_USE_CXX11_ABI=0")
-set(AIMET_INSTALL_DIR ${CMAKE_BINARY_DIR}/staging)
+set(AIMET_INSTALL_DIR ${CMAKE_BINARY_DIR}/staging/universal)
 
 set(AIMET_PYTHONPATH
       "PYTHONPATH=${CMAKE_BINARY_DIR}/artifacts:${CMAKE_CURRENT_SOURCE_DIR}/TrainingExtensions/torch/src/python/:${CMAKE_CURRENT_SOURCE_DIR}/TrainingExtensions/tensorflow/src/python/:${CMAKE_CURRENT_SOURCE_DIR}/TrainingExtensions/common/src/python/" CACHE STRING "python path")
