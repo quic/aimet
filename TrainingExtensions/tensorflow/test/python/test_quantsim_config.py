@@ -340,9 +340,9 @@ class TestQuantsimConfig(unittest.TestCase):
             elif op in get_all_input_ops(conn_graph):
                 ops_with_deactivated_output_quantizers.add(op)
                 num_deactivated_quantizers += 1
+        ops_with_deactivated_output_quantizers_names = [op.name for op in ops_with_deactivated_output_quantizers]
         for op, (_, output_quantizer) in sim._op_to_quant_ops_dict.items():
             op_mode_tensor = sim.session.graph.get_tensor_by_name(output_quantizer.name + '_op_mode:0')
-            ops_with_deactivated_output_quantizers_names = [op.name for op in ops_with_deactivated_output_quantizers]
             if op.name in ops_with_deactivated_output_quantizers_names:
                 self.assertEqual(sim.session.run(op_mode_tensor), int(pymo.TensorQuantizerOpMode.passThrough))
             else:

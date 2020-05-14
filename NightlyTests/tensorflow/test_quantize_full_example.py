@@ -50,6 +50,7 @@ from aimet_common.connected_graph.connectedgraph_utils import get_all_input_ops
 from aimet_tensorflow import quantsim
 from aimet_tensorflow.common import tfrecord_generator as tf_gen
 from aimet_tensorflow.common import graph_eval
+from aimet_tensorflow.common.connectedgraph import ConnectedGraph
 from aimet_tensorflow.utils import graph_saver
 from aimet_tensorflow.examples.test_models import multiple_input_model
 
@@ -161,13 +162,14 @@ class Quantization(unittest.TestCase):
         with open('./data/quantsim_config.json', 'w') as f:
             json.dump(quantsim_config, f)
 
+        conn_graph = ConnectedGraph(sess.graph, ['input_1'], ['probs/Softmax'])
         sim = quantsim.QuantizationSimModel(sess, ['input_1'], ['probs/Softmax'],
                                             config_file='./data/quantsim_config.json')
 
         ops_with_deactivated_output_quantizers = set()
         found_supergroup_1 = False
         found_supergroup_2 = False
-        for op in sim._conn_graph.get_all_ops().values():
+        for op in conn_graph.get_all_ops().values():
             if op.type == 'Conv2D' and op.output.consumers[0].type == 'FusedBatchNormV3' and \
                     op.output.consumers[0].output.consumers[0].type == 'Relu':
                 ops_with_deactivated_output_quantizers.add(op)
@@ -176,11 +178,12 @@ class Quantization(unittest.TestCase):
             elif op.type in ['Add', 'AddV2'] and op.output.consumers[0].type == 'Relu':
                 ops_with_deactivated_output_quantizers.add(op)
                 found_supergroup_2 = True
-            elif op in get_all_input_ops(sim._conn_graph):
+            elif op in get_all_input_ops(conn_graph):
                 ops_with_deactivated_output_quantizers.add(op)
+        ops_with_deactivated_output_quantizers_names = [op.name for op in ops_with_deactivated_output_quantizers]
         for op, (param_quantizers_dict, output_quantizer) in sim._op_to_quant_ops_dict.items():
             op_mode_tensor = sim.session.graph.get_tensor_by_name(output_quantizer.name + '_op_mode:0')
-            if op in ops_with_deactivated_output_quantizers:
+            if op.name in ops_with_deactivated_output_quantizers_names:
                 self.assertEqual(sim.session.run(op_mode_tensor), int(pymo.TensorQuantizerOpMode.passThrough))
             else:
                 self.assertEqual(sim.session.run(op_mode_tensor), int(pymo.TensorQuantizerOpMode.updateStats))
