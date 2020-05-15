@@ -194,10 +194,10 @@ def reduce_avgpool(sess: tf.Session, op_tensor_tuple: Tuple[Op, List[tf.Tensor]]
     return name, new_tensor.op, module
 
 
-def reduce_fusedbatchnorm(sess: tf.Session, op_tensor_tuple: Tuple[Op, List[tf.Tensor]], op_mask) -> (str, tf.Operation,
-                                                                                                      tf.Operation):
+def reduce_batchnorm(sess: tf.Session, op_tensor_tuple: Tuple[Op, List[tf.Tensor]], op_mask) -> (str, tf.Operation,
+                                                                                                 tf.Operation):
     """
-    Fused batchnorm module reducer
+    Fused and non fused batchnorm module reducer
     :param sess: current tf session
     :param op_tensor_tuple: tuple containing the op to reduce, and a list of input tensors to the op
     :param op_mask: Mask containing information on input and output channels to winnow
@@ -252,12 +252,14 @@ def reduce_fusedbatchnorm(sess: tf.Session, op_tensor_tuple: Tuple[Op, List[tf.T
     if isinstance(training, str):
         # Get the tensor in the graph corresponding to the string name
         training = sess.graph.get_tensor_by_name(training)
+    is_fused = op_tensor_tuple[0].type == 'FusedBatchNormV3'
     new_tensor = tf.keras.layers.BatchNormalization(center=use_beta,
                                                     scale=use_gamma,
                                                     beta_initializer=reduced_beta_init,
                                                     gamma_initializer=reduced_gamma_init,
                                                     moving_mean_initializer=reduced_mov_mean_init,
                                                     moving_variance_initializer=reduced_mov_variance_init,
+                                                    fused=is_fused,
                                                     name=name)(op_tensor_tuple[1][0], training=training)
     module = new_tensor.op.inputs[0].op
 

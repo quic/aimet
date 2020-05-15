@@ -186,7 +186,7 @@ def match_batchnorm_pattern_1(op_to_module_dict: dict, op_info: ModuleIdentifier
 
         # Batchnorms of this type always end with /batchnorm/mul_1 in the op name
         # Everything preceding the /batchnorm is the scope name
-        match_name = re.match('(.+)/batchnorm/mul_1', op.name)
+        match_name = re.match('(.+)/batchnorm(_[0-9]+)?/mul_1', op.name)
         if match_name:
             op_info.module_name = match_name.group(1)
         op_info.op_type = 'BatchNorm'
@@ -239,7 +239,7 @@ def match_batchnorm_pattern_2(op_to_module_dict: dict, op_info: ModuleIdentifier
 
         # Batchnorms of this type always end with /batchnorm/mul_1 in the op name
         # Everything preceding the /batchnorm is the scope name
-        match_name = re.match('(.+)/batchnorm/mul_1', op.name)
+        match_name = re.match('(.+)/batchnorm(_[0-9]+)?/mul_1', op.name)
         if match_name:
             op_info.module_name = match_name.group(1)
         op_info.op_type = 'BatchNorm'
@@ -281,7 +281,7 @@ def match_batchnorm_pattern_3(op_to_module_dict: dict, op_info: ModuleIdentifier
 
         # Batchnorms of this type always end with /batchnorm/mul_1 in the op name
         # Everything preceding the /batchnorm is the scope name
-        match_name = re.match('(.+)/batchnorm/mul_1', op.name)
+        match_name = re.match('(.+)/batchnorm(_[0-9]+)?/mul_1', op.name)
         if match_name:
             op_info.module_name = match_name.group(1)
         op_info.op_type = 'BatchNorm'
