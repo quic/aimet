@@ -173,7 +173,8 @@ class StructureModuleIdentifier(ModuleIdentifier):
             "Softmax": [module_identifier_matchers.match_softmax],
             "Unpack": [module_identifier_matchers.match_upsample],
             "GatherV2": [module_identifier_matchers.match_downsample],
-            "Shape": [module_identifier_matchers.match_upsample2d]
+            "Shape": [module_identifier_matchers.match_upsample2d],
+            "Max": [module_identifier_matchers.match_global_max_pool2d]
         }
 
         op_handlers = switcher.get(op_type, [module_identifier_matchers.handle_default])

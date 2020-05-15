@@ -159,7 +159,7 @@ class MaskPropagationWinnower(aimetCommonMaskPropagationWinnower):
         """
 
         if not tf_op.type == "Conv2D":
-            logger.critical("Winnowing is currently only supported for torch.nn.Conv2d modules. Attempting to winnow "
+            logger.critical("Winnowing is currently only supported for Conv2d modules. Attempting to winnow "
                             "module of type %s",
                             tf_op.type)
             raise NotImplementedError(tf_op.type)
