@@ -50,7 +50,7 @@ class TestTensorQuantizer : public ::testing::Test
 
 TEST(TestTensorQuantizer, SanityTestCpu)
 {
-    TensorQuantizer tensorQuantizer(8, QuantizationMode::QUANTIZATION_TF_ENHANCED, ROUND_NEAREST, false);
+    TensorQuantizer tensorQuantizer(QuantizationMode::QUANTIZATION_TF_ENHANCED, ROUND_NEAREST);
 
     float mean   = 2;
     float stddev = 2;
@@ -67,14 +67,14 @@ TEST(TestTensorQuantizer, SanityTestCpu)
 
     tensorQuantizer.updateStats(statsTensor.data(), statsTensor.size(), false);
     EXPECT_FALSE(tensorQuantizer.isEncodingValid);
-    TfEncoding encoding = tensorQuantizer.computeEncoding();
+    TfEncoding encoding = tensorQuantizer.computeEncoding(8, false);
     EXPECT_TRUE(tensorQuantizer.isEncodingValid);
 
     std::vector<float> inputTensor(tensorCount, 5);
     std::vector<float> quantizedTensor(tensorCount);
 
     tensorQuantizer.quantizeDequantize(inputTensor.data(), inputTensor.size(), quantizedTensor.data(),
-                                       encoding.min, encoding.max, false);
+                                       encoding.min, encoding.max, 8, false);
 
     std::cout << "Encoding min=" << encoding.min << ", max=" << encoding.max
               << std::endl;
@@ -91,7 +91,7 @@ TEST(TestTensorQuantizer, SanityTestCpu)
 
 TEST(TestTensorQuantizer, SanityTestGpu)
 {
-    TensorQuantizer tensorQuantizer(8, QuantizationMode::QUANTIZATION_TF_ENHANCED, ROUND_NEAREST, false);
+    TensorQuantizer tensorQuantizer(QuantizationMode::QUANTIZATION_TF_ENHANCED, ROUND_NEAREST);
 
     float mean   = 2;
     float stddev = 2;
@@ -109,13 +109,13 @@ TEST(TestTensorQuantizer, SanityTestGpu)
 
     tensorQuantizer.updateStats(statsTensorBlob.getDataPtrOnDevice(), statsTensor.size(), true);
     EXPECT_FALSE(tensorQuantizer.isEncodingValid);
-    TfEncoding encoding = tensorQuantizer.computeEncoding();
+    TfEncoding encoding = tensorQuantizer.computeEncoding(8, false);
     EXPECT_TRUE(tensorQuantizer.isEncodingValid);
 
     std::vector<float> inputTensor(tensorCount, 5);
     std::vector<float> quantizedTensor(tensorCount);
     tensorQuantizer.quantizeDequantize(inputTensor.data(), inputTensor.size(), quantizedTensor.data(),
-                                       encoding.min, encoding.max,false);
+                                       encoding.min, encoding.max, 8, false);
 
     std::cout << "Encoding min=" << encoding.min << ", max=" <<
     encoding.max << std::endl;

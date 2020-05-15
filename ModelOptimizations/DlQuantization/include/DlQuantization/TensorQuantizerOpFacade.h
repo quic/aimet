@@ -84,9 +84,24 @@ public:
                                     double encodingMin, double encodingMax, bool useCuda) = 0;
 
     /**
+    * Convert a tensor from float to quantized int and back to float
+    * @param input Input tensor
+    * @param tensorSize Size of the input tensor (number of tensor elements)
+    * @param output Output tensor
+    * @param encodingMin minimum value of encoding range
+    * @param encodingMax maximum value of encoding range
+    * @param bitwidth to be used
+    * @param useCuda If true, both the input and output tensors are assumed to be in CUDA memory
+    */
+    virtual void quantizeDequantize(const float* input, std::size_t tensorSize, float* output,
+                                    double encodingMin, double encodingMax, unsigned int bitwidth, bool useCuda) = 0;
+
+    /**
      * Compute the encoding for this tensor using stats collected so far
      */
     virtual TfEncoding computeEncoding() = 0;
+    virtual TfEncoding computeEncoding(unsigned int bitwidth, bool useSymmetricEncoding) = 0;
+
 };
 
 

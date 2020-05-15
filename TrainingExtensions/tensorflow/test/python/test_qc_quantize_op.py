@@ -51,20 +51,22 @@ class TestTrainingExtensionsQcQuantizeOp(unittest.TestCase):
         graph = tf.Graph()
         config = tf.ConfigProto(log_device_placement=False)
         sess = tf.Session(graph=graph, config=config)
+        bitwidth = 8
+        use_symm_encoding = True
 
         with graph.as_default():
             # place holder for the input
             with tf.device("/device:CPU:0"):
                 inp = tf.placeholder(tf.float32, shape=[10], name='input')
-                tensor_quantizer = libpymo.TensorQuantizer(8, libpymo.QuantizationMode.QUANTIZATION_TF_ENHANCED,
-                                                           libpymo.RoundingMode.ROUND_NEAREST, False)
+                tensor_quantizer = libpymo.TensorQuantizer(libpymo.QuantizationMode.QUANTIZATION_TF_ENHANCED,
+                                                           libpymo.RoundingMode.ROUND_NEAREST)
                 tensor_quantizer_val = libpymo.PtrToInt64(tensor_quantizer)
                 tensor_quant_ref = tf.Variable(initial_value=tensor_quantizer_val, trainable=False, dtype=tf.int64)
 
                 encoding_min = tf.Variable(initial_value=0.0, trainable=True, dtype=tf.double)
                 encoding_max = tf.Variable(initial_value=0.0, trainable=True, dtype=tf.double)
-                bit_width = tf.Variable(initial_value=8, trainable=False, dtype=tf.int8)
-                use_symmetric_encoding = tf.Variable(initial_value=False, trainable=False, dtype=tf.bool)
+                bit_width = tf.Variable(initial_value=bitwidth, trainable=False, dtype=tf.int8)
+                use_symmetric_encoding = tf.Variable(initial_value=use_symm_encoding, trainable=False, dtype=tf.bool)
 
                 mode_var = tf.Variable(initial_value=int(libpymo.TensorQuantizerOpMode.updateStats),
                                        trainable=False, dtype=tf.int32)
@@ -93,7 +95,7 @@ class TestTrainingExtensionsQcQuantizeOp(unittest.TestCase):
 
         # compute encodings
         self.assertFalse(tensor_quantizer.isEncodingValid)
-        encoding = tensor_quantizer.computeEncoding()
+        encoding = tensor_quantizer.computeEncoding(bitwidth, use_symm_encoding)
         self.assertTrue(tensor_quantizer.isEncodingValid)
         print('min=', encoding.min, ', max=', encoding.max)
 
@@ -117,13 +119,14 @@ class TestTrainingExtensionsQcQuantizeOp(unittest.TestCase):
         graph = tf.Graph()
         config = tf.ConfigProto(log_device_placement=False)
         sess = tf.Session(graph=graph, config=config)
-
+        bitwidth = 8
+        use_symm_encoding = False
         with graph.as_default():
             # place holder for the input
             with tf.device("/device:CPU:0"):
                 inp = tf.placeholder(tf.float32, shape=[10], name='input')
-                tensor_quantizer = libpymo.TensorQuantizer(8, libpymo.QuantizationMode.QUANTIZATION_TF_ENHANCED,
-                                                           libpymo.RoundingMode.ROUND_NEAREST, False)
+                tensor_quantizer = libpymo.TensorQuantizer(libpymo.QuantizationMode.QUANTIZATION_TF_ENHANCED,
+                                                           libpymo.RoundingMode.ROUND_NEAREST)
                 tensor_quantizer_val = libpymo.PtrToInt64(tensor_quantizer)
                 tensor_quant_ref = tf.Variable(initial_value=tensor_quantizer_val, trainable=False, dtype=tf.int64)
 
@@ -132,8 +135,8 @@ class TestTrainingExtensionsQcQuantizeOp(unittest.TestCase):
 
                 encoding_min = tf.Variable(initial_value=0.0, trainable=True, dtype=tf.double)
                 encoding_max = tf.Variable(initial_value=0.0, trainable=True, dtype=tf.double)
-                bit_width = tf.Variable(initial_value=8, trainable=False, dtype=tf.int8)
-                use_symmetric_encoding = tf.Variable(initial_value=False, trainable=False, dtype=tf.bool)
+                bit_width = tf.Variable(initial_value=bitwidth, trainable=False, dtype=tf.int8)
+                use_symmetric_encoding = tf.Variable(initial_value=use_symm_encoding, trainable=False, dtype=tf.bool)
 
                 sess.run([mode_var.initializer, tensor_quant_ref.initializer, encoding_min.initializer,
                           encoding_max.initializer, bit_width.initializer, use_symmetric_encoding.initializer])
@@ -155,7 +158,7 @@ class TestTrainingExtensionsQcQuantizeOp(unittest.TestCase):
         print(out_data)
 
         self.assertTrue(tensor_quantizer.isEncodingValid)
-        encoding = tensor_quantizer.computeEncoding()
+        encoding = tensor_quantizer.computeEncoding(bitwidth, use_symm_encoding)
 
         print('min=', encoding.min, ', max=', encoding.max)
 
@@ -172,12 +175,13 @@ class TestTrainingExtensionsQcQuantizeOp(unittest.TestCase):
         graph = tf.Graph()
         config = tf.ConfigProto(log_device_placement=False)
         sess = tf.Session(graph=graph, config=config)
-
+        bitwidth = 8
+        use_symm_encoding = False
         with graph.as_default():
 
             inp = tf.placeholder(tf.float32, shape=[10], name='input')
-            tensor_quantizer = libpymo.TensorQuantizer(8, libpymo.QuantizationMode.QUANTIZATION_TF_ENHANCED,
-                                                       libpymo.RoundingMode.ROUND_NEAREST, True)
+            tensor_quantizer = libpymo.TensorQuantizer(libpymo.QuantizationMode.QUANTIZATION_TF_ENHANCED,
+                                                       libpymo.RoundingMode.ROUND_NEAREST)
             tensor_quantizer_val = libpymo.PtrToInt64(tensor_quantizer)
             tensor_quant_ref = tf.Variable(initial_value=tensor_quantizer_val, trainable=False, dtype=tf.int64)
 
@@ -186,8 +190,8 @@ class TestTrainingExtensionsQcQuantizeOp(unittest.TestCase):
 
             encoding_min = tf.Variable(initial_value=0.0, trainable=True, dtype=tf.double)
             encoding_max = tf.Variable(initial_value=0.0, trainable=True, dtype=tf.double)
-            bit_width = tf.Variable(initial_value=8, trainable=False, dtype=tf.int8)
-            use_symmetric_encoding = tf.Variable(initial_value=False, trainable=False, dtype=tf.bool)
+            bit_width = tf.Variable(initial_value=bitwidth, trainable=False, dtype=tf.int8)
+            use_symmetric_encoding = tf.Variable(initial_value=use_symm_encoding, trainable=False, dtype=tf.bool)
 
             sess.run([mode_var.initializer, tensor_quant_ref.initializer, encoding_min.initializer,
                       encoding_max.initializer, bit_width.initializer, use_symmetric_encoding.initializer])
@@ -217,7 +221,7 @@ class TestTrainingExtensionsQcQuantizeOp(unittest.TestCase):
 
         # compute encodings
         self.assertFalse(tensor_quantizer.isEncodingValid)
-        encoding = tensor_quantizer.computeEncoding()
+        encoding = tensor_quantizer.computeEncoding(bitwidth, use_symm_encoding)
         self.assertTrue(tensor_quantizer.isEncodingValid)
         print('min=', encoding.min, ', max=', encoding.max)
 

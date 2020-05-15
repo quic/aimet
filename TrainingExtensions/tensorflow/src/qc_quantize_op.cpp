@@ -63,7 +63,7 @@ REGISTER_OP("QcQuantize")
 template <typename D, typename T>
 void modeSpecificAction(const D& d, const T* inTensor, size_t count, T* outTensor,
                         const uint64* tensorQuantizerRef, const int32* opMode,
-                        const double* min, const double* max)
+                        const double* min, const double* max, const int8* bw, const bool* useSymEncoding)
 {
     bool useCuda = false;
     if (std::is_same<D, GPUDevice>::value)
@@ -79,15 +79,17 @@ void modeSpecificAction(const D& d, const T* inTensor, size_t count, T* outTenso
     auto encodingMax = copyLiteralToHost<double>(d, max);
     auto tensorQuantizer = reinterpret_cast<DlQuantization::TensorQuantizerOpFacade*>(tensorQuantizerRefHost);
     auto opModeEnum = static_cast<const DlQuantization::TensorQuantizerOpMode>(opModeHost);
+    auto bitwidth = copyLiteralToHost<int8>(d, bw);
+    auto useSymmetricEncoding = copyLiteralToHost<bool>(d, useSymEncoding);
 
     switch (opModeEnum)
     {
     case DlQuantization::TensorQuantizerOpMode::oneShotQuantizeDequantize:
     {
         tensorQuantizer->updateStats(inTensor, count, useCuda);
-        DlQuantization::TfEncoding initial_encoding = tensorQuantizer->computeEncoding();
+        DlQuantization::TfEncoding initial_encoding = tensorQuantizer->computeEncoding(bitwidth, useSymmetricEncoding);
         tensorQuantizer->quantizeDequantize(inTensor, count, outTensor, initial_encoding.min, initial_encoding.max,
-                                            useCuda);
+                                            bitwidth, useCuda);
         break;
     }
     case DlQuantization::TensorQuantizerOpMode::updateStats:
@@ -98,7 +100,7 @@ void modeSpecificAction(const D& d, const T* inTensor, size_t count, T* outTenso
     }
     case DlQuantization::TensorQuantizerOpMode::quantizeDequantize:
     {
-        tensorQuantizer->quantizeDequantize(inTensor, count, outTensor, encodingMin, encodingMax, useCuda);
+        tensorQuantizer->quantizeDequantize(inTensor, count, outTensor, encodingMin, encodingMax, bitwidth, useCuda);
         break;
     }
     case DlQuantization::TensorQuantizerOpMode::passThrough:
@@ -150,13 +152,23 @@ public:
         OP_REQUIRES_OK(context, context->input("encoding_max", &encodingMaxTensor));
         const double* encodingMax = encodingMaxTensor->flat<double>().data();
 
+        // read bitwidth
+        const Tensor* bitwidthTensor;
+        OP_REQUIRES_OK(context, context->input("bit_width", &bitwidthTensor));
+        const int8* bitwidth = bitwidthTensor->flat<int8>().data();
+
+        // use symmetric encoding
+        const Tensor* useSymmetricEncodingTensor;
+        OP_REQUIRES_OK(context, context->input("use_symmetric_encoding", &useSymmetricEncodingTensor));
+        auto useSymmetricEncoding = useSymmetricEncodingTensor->flat<bool>().data();
+
         // allocate output tensors
         Tensor* outTensor = nullptr;
         OP_REQUIRES_OK(context, context->allocate_output(0, inTensor.shape(), &outTensor));
         auto outTensorFlat = outTensor->flat<T>().data();
 
         modeSpecificAction(context->eigen_device<Device>(), inTensorFlat, inTensor.NumElements(), outTensorFlat,
-                           quantizerAddr, opMode, encodingMin, encodingMax);
+                           quantizerAddr, opMode, encodingMin, encodingMax, bitwidth, useSymmetricEncoding);
     }
 };
 

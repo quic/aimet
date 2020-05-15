@@ -67,9 +67,10 @@ T copyLiteralToHost(const GPUDevice& d, const T* deviceValue)
 }
 
 template void copyInputTensorsToOutputTensors(const GPUDevice& d, const float* inTensor, size_t count, float* outTensor);
+template int8 copyLiteralToHost<int8>(const GPUDevice&, const int8* deviceValue);
 template int32 copyLiteralToHost<int32>(const GPUDevice&, const int32* deviceValue);
 template uint64 copyLiteralToHost<uint64>(const GPUDevice&, const uint64* deviceValue);
 template double copyLiteralToHost<double>(const GPUDevice&, const double* deviceValue);
-
+template bool copyLiteralToHost<bool>(const GPUDevice&, const bool* deviceValue);
 
 #endif   // GOOGLE_CUDA

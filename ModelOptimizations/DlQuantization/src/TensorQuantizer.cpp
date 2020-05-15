@@ -55,6 +55,16 @@ TensorQuantizer::TensorQuantizer(unsigned int bitwidth, QuantizationMode quantSc
     _tensorQuantizationSim = getTensorQuantizationSim<float>();
 }
 
+TensorQuantizer::TensorQuantizer(QuantizationMode quantScheme, RoundingMode roundingMode) :
+        quantScheme(quantScheme),
+        roundingMode(roundingMode),
+        isEncodingValid(false),
+        _validStats(false)
+{
+    _encodingAnalyzer      = getEncodingAnalyzerInstance<float>(quantScheme);
+    _tensorQuantizationSim = getTensorQuantizationSim<float>();
+}
+
 void TensorQuantizer::resetEncodingStats()
 {
     _validStats     = false;
@@ -102,12 +112,33 @@ TfEncoding TensorQuantizer::computeEncoding()
     return encoding;
 }
 
+TfEncoding TensorQuantizer::computeEncoding(unsigned int bitwidth, bool useSymmetricEncoding)
+{
+    TfEncoding encoding;
+
+    if (_validStats)
+    {
+        encoding        = _encodingAnalyzer->computeEncoding(bitwidth, useSymmetricEncoding);
+        isEncodingValid = true;
+    }
+
+    return encoding;
+}
+
 void TensorQuantizer::quantizeDequantize(const float* input, std::size_t tensorSize, float* output,
                                          double encodingMin, double encodingMax, bool useCuda)
 {
     assert(isEncodingValid);
     _tensorQuantizationSim->quantizeDequantizeTensor(input, tensorSize, output, encodingMin,
                                                      encodingMax, bitwidth, roundingMode, useCuda);
+}
+
+void TensorQuantizer::quantizeDequantize(const float* input, std::size_t tensorSize, float* output,
+                                         double encodingMin, double encodingMax, unsigned int bitwidth, bool useCuda)
+{
+    assert(isEncodingValid);
+    _tensorQuantizationSim->quantizeDequantizeTensor(input, tensorSize, output, encodingMin,
+            encodingMax, bitwidth, roundingMode, useCuda);
 }
 
 void TensorQuantizer::quantizeDequantize(py::array_t<float> inputTensor, py::array_t<float> outputTensor,
@@ -123,5 +154,20 @@ void TensorQuantizer::quantizeDequantize(py::array_t<float> inputTensor, py::arr
     // Delegate
     quantizeDequantize(inputTensorPtr, tensorSize, outputTensorPtr, encodingMin, encodingMax, useCuda);
 }
+
+void TensorQuantizer::quantizeDequantize(py::array_t<float> inputTensor, py::array_t<float> outputTensor,
+                                         double encodingMin, double encodingMax, unsigned int  bitwidth, bool useCuda)
+{
+    auto inputArr     = inputTensor.mutable_unchecked<4>();
+    auto outputArr    = outputTensor.mutable_unchecked<4>();
+    size_t tensorSize = inputArr.shape(0) * inputArr.shape(1) * inputArr.shape(2) * inputArr.shape(3);
+
+    auto inputTensorPtr  = static_cast<float*>(inputArr.mutable_data(0, 0, 0, 0));
+    auto outputTensorPtr = static_cast<float*>(outputArr.mutable_data(0, 0, 0, 0));
+
+    // Delegate
+    quantizeDequantize(inputTensorPtr, tensorSize, outputTensorPtr, encodingMin, encodingMax, bitwidth, useCuda);
+}
+
 
 }
