@@ -50,7 +50,7 @@ from aimet_tensorflow.common.connectedgraph import ConnectedGraph
 from aimet_tensorflow.examples.test_models import keras_model, single_residual, concat_model, pad_model, \
     depthwise_conv2d_model, keras_model_functional, dropout_keras_model, dropout_slim_model, tf_slim_basic_model, \
     upsample_model, multiple_input_model, model_with_postprocessing_nodes, minimum_maximum_model, \
-    model_with_upsample_already_present, model_with_multiple_downsamples
+    model_with_upsample_already_present, model_with_multiple_downsamples, model_with_upsample2d
 from aimet_tensorflow.winnow.mask_propagation_winnower import MaskPropagationWinnower
 import aimet_tensorflow.winnow.winnow as winnow
 from aimet_tensorflow.utils.graph_saver import save_and_load_graph
@@ -738,6 +738,39 @@ class TestTfModuleReducer(unittest.TestCase):
         new_sess, _ = winnow.winnow_tf_model(sess, input_op_names, output_op_names,
                                              module_zero_channels_list,
                                              reshape=True, in_place=True, verbose=True)
+        sess.close()
+        new_sess.close()
+        self.assertEqual(0, 0)
+
+    def test_reducing_upsample2d(self):
+        """ Test for reducing a model with upsample2D op """
+        tf.reset_default_graph()
+        sess = tf.Session()
+        module_zero_channels_list = []
+
+        _ = model_with_upsample2d()
+        init = tf.global_variables_initializer()
+        sess.run(init)
+
+        conv2d = tf.get_default_graph().get_operation_by_name("conv2d_1/Conv2D")
+        input_channels_to_winnow = [1, 2, 3]
+        module_mask_pair = (conv2d, input_channels_to_winnow)
+        module_zero_channels_list.append(module_mask_pair)
+
+        input_op_names = ['input_1']
+        output_op_names = ['model_with_upsample2d/Softmax']
+        new_sess, ordered_modules_list = winnow.winnow_tf_model(sess, input_op_names, output_op_names,
+                                                                module_zero_channels_list,
+                                                                reshape=True, in_place=True, verbose=True)
+
+        self.assertEqual(3, len(ordered_modules_list))
+        # Check that correct size was used
+        const_op = new_sess.graph.get_operation_by_name('reduced_up_sampling2d/Const')
+        tensor_content_length = const_op.get_attr('value').tensor_shape.dim[0].size
+        unpack_string = str(tensor_content_length) + 'i'
+        upsample_size = struct.unpack(unpack_string, const_op.get_attr('value').tensor_content)
+        self.assertEqual((2, 3), upsample_size)
+
         sess.close()
         new_sess.close()
         self.assertEqual(0, 0)
