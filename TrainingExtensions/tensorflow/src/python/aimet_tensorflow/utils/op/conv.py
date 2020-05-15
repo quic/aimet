@@ -582,6 +582,7 @@ def get_layer_attributes(sess: tf.Session, op: tf.Operation, input_op_names: Lis
     :param input_shape: tuple or list of tuple of input shape of model
     :return: (kernel_size, stride, padding)
     """
+    # pylint: disable=too-many-locals
     assert op.type == 'Conv2D'
 
     stride = op.get_attr('strides')
