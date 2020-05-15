@@ -343,6 +343,9 @@ class ConnectedGraph(aimetCommonConnectedGraph):
             create_and_connect_product('moving_variance', moving_variance_tensor.shape, my_op,
                                        moving_variance_tensor)
 
+            my_op.add_attribute('epsilon', BNUtils.get_epsilon(tf_op))
+            my_op.add_attribute('momentum', BNUtils.get_momentum(tf_op))
+
         def handle_default(my_op: Op):
             """ Handler for other modules """
             logger.debug("Nothing to handle for op %s", my_op.name)

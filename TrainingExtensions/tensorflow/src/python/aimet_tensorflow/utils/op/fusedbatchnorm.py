@@ -571,10 +571,22 @@ class BNUtils:
         :return: epsilon value
         """
 
-        # only support fused BNs
-        assert bn_op.type == 'FusedBatchNormV3'
-        # epsilon can be derived as attribute value
-        numpy_epsilon = bn_op.get_attr("epsilon")
+        if bn_op.type in ['Mul']:
+            assert len(bn_op.inputs) >= 2, _BN_STRUCTURE_ERROR_MSG
+            mul = bn_op.inputs[1].op
+            assert len(mul.inputs) >= 1, _BN_STRUCTURE_ERROR_MSG
+            rsqrt = mul.inputs[0].op
+            assert len(rsqrt.inputs) >= 1, _BN_STRUCTURE_ERROR_MSG
+            add = rsqrt.inputs[0].op
+            assert len(add.inputs) >= 2, _BN_STRUCTURE_ERROR_MSG
+            epsilon = add.inputs[1].op
+            numpy_epsilon = epsilon.get_attr('value').float_val[0]
+        elif bn_op.type in ['FusedBatchNormV3']:
+            # epsilon can be derived as attribute value
+            numpy_epsilon = bn_op.get_attr("epsilon")
+        else:
+            logger.error("Error, unknown BN op")
+            assert False
 
         return numpy_epsilon
 
@@ -665,3 +677,140 @@ class BNUtils:
         param_tensor = sess.graph.get_tensor_by_name(param_tensor_name)
 
         return param_tensor
+
+    @staticmethod
+    def _bn_op_momentum_struct_1(bn_op: tf.Operation):
+        """
+        Return momentum value corresponding to batchnorm with training tensor
+        :param bn_op: bn_op obtained from connected graph using get_modules
+        a mul_1 op inside BN scope.
+        :return: momentum value
+        """
+        try:
+            mul_op = bn_op.inputs[1].op
+            assert mul_op.type == 'Mul'
+            mul_2_op = mul_op.outputs[0].consumers()[1]
+            assert mul_2_op.type == 'Mul'
+            merge_op = mul_2_op.inputs[0].op
+            assert merge_op.type == 'Merge'
+            switch_1_op = merge_op.outputs[0].consumers()[0]
+            assert switch_1_op.type == 'Switch'
+            sub_op = switch_1_op.outputs[1].consumers()[0]
+            assert sub_op.type == 'Sub'
+            assign_moving_avg_mul_op = sub_op.outputs[0].consumers()[0]
+            assert assign_moving_avg_mul_op.type == 'Mul'
+            decay_op = assign_moving_avg_mul_op.inputs[1].op
+            assert decay_op.type == 'Const'
+            decay = decay_op.get_attr('value').float_val[0]
+            return 1 - decay
+        except:     # pylint: disable=bare-except
+            return None
+
+    @staticmethod
+    def _bn_op_momentum_struct_2(bn_op: tf.Operation):
+        """
+        Return momentum value corresponding to batchnorm with training=True
+        :param bn_op: bn_op obtained from connected graph using get_modules
+        a mul_1 op inside BN scope.
+        :return: momentum value
+        """
+        try:
+            mul_op = bn_op.inputs[1].op
+            assert mul_op.type == 'Mul'
+            mul_2_op = mul_op.outputs[0].consumers()[1]
+            assert mul_2_op.type == 'Mul'
+            squeeze_op = mul_2_op.inputs[0].op
+            assert squeeze_op.type == 'Squeeze'
+            sub_op = squeeze_op.outputs[0].consumers()[0]
+            assert sub_op.type == 'Sub'
+            assign_moving_avg_mul_op = sub_op.outputs[0].consumers()[0]
+            assert assign_moving_avg_mul_op.type == 'Mul'
+            decay_op = assign_moving_avg_mul_op.inputs[1].op
+            assert decay_op.type == 'Const'
+            decay = decay_op.get_attr('value').float_val[0]
+            return 1 - decay
+        except:     # pylint: disable=bare-except
+            return None
+
+    @staticmethod
+    def _fused_bn_op_momentum_struct_1(bn_op: tf.Operation):
+        """
+        Return momentum value corresponding to fused batchnorm with training tensor
+        :param bn_op: bn_op obtained from connected graph using get_modules
+        a mul_1 op inside BN scope.
+        :return: momentum value
+        """
+        try:
+            merge_1_op = bn_op.outputs[1].consumers()[0]
+            assert merge_1_op.type == 'Merge'
+            sub_op = merge_1_op.outputs[0].consumers()[0]
+            assert sub_op.type == 'Sub'
+            mul_op = sub_op.outputs[0].consumers()[0]
+            assert mul_op.type == 'Mul'
+            sub_2_op = mul_op.inputs[1].op
+            assert sub_2_op.type == 'Sub'
+            merge_op = sub_2_op.inputs[1].op
+            assert merge_op.type == 'Merge'
+            decay_op = merge_op.inputs[1].op
+            assert decay_op.type == 'Const'
+            decay = decay_op.get_attr('value').float_val[0]
+            return decay
+        except:     # pylint: disable=bare-except
+            return None
+
+    @staticmethod
+    def _fused_bn_op_momentum_struct_2(bn_op: tf.Operation):
+        """
+        Return momentum value corresponding to fused batchnorm with training=True
+        :param bn_op: bn_op obtained from connected graph using get_modules
+        a mul_1 op inside BN scope.
+        :return: momentum value
+        """
+        try:
+            sub_op = bn_op.outputs[1].consumers()[0]
+            assert sub_op.type == 'Sub'
+            mul_op = sub_op.outputs[0].consumers()[0]
+            assert mul_op.type == 'Mul'
+            sub_2_op = mul_op.inputs[1].op
+            assert sub_2_op.type == 'Sub'
+            decay_op = sub_2_op.inputs[1].op
+            assert decay_op.type == 'Const'
+            decay = decay_op.get_attr('value').float_val[0]
+            return decay
+        except:     # pylint: disable=bare-except
+            return None
+
+    @staticmethod
+    def get_momentum(bn_op: tf.Operation):
+        """
+        Returns momentum extracted from given bn op.  If bn op is training=False mode, momentum will be none.
+        :param bn_op: bn_op obtained from connected graph using get_modules
+        a mul_1 op inside BN scope.
+        :return: momentum value
+        """
+        # register handlers for different structures
+        bn_op_struct_for_momentum_handlers = [BNUtils._bn_op_momentum_struct_1,
+                                              BNUtils._bn_op_momentum_struct_2]
+        fused_bn_op_struct_for_momentum_handlers = [BNUtils._fused_bn_op_momentum_struct_1,
+                                                    BNUtils._fused_bn_op_momentum_struct_2]
+
+        decay = None
+        if bn_op.type in ['Mul']:
+            # try all handlers available
+            for handler in bn_op_struct_for_momentum_handlers:
+                if decay is None:
+                    decay = handler(bn_op)
+                else:
+                    break
+
+        elif bn_op.type in ['FusedBatchNormV3']:
+            # try all handlers available
+            for handler in fused_bn_op_struct_for_momentum_handlers:
+                if decay is None:
+                    decay = handler(bn_op)
+                else:
+                    break
+        else:
+            logger.error("Error, unknown BN op")
+            assert False
+        return decay
