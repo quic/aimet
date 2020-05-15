@@ -794,8 +794,7 @@ class TestTfModuleReducer(unittest.TestCase):
         module_mask_pair = (conv2d, input_channels_to_winnow)
         module_zero_channels_list.append(module_mask_pair)
 
-        alpha_op = sess.graph.get_operation_by_name('LeakyRelu/alpha')
-        orig_alpha = alpha_op.get_attr('value').float_val[0]
+        orig_alpha = sess.graph.get_operation_by_name('LeakyRelu').get_attr('alpha')
 
         input_op_names = ['input_1']
         output_op_names = ['model_with_leaky_relu/Softmax']
@@ -805,8 +804,7 @@ class TestTfModuleReducer(unittest.TestCase):
 
         self.assertEqual(3, len(ordered_modules_list))
         # Check that correct alpha was used
-        alpha_op = new_sess.graph.get_operation_by_name('reduced_LeakyRelu/alpha')
-        reduced_alpha = alpha_op.get_attr('value').float_val[0]
+        reduced_alpha = new_sess.graph.get_operation_by_name('reduced_LeakyRelu').get_attr('alpha')
         self.assertEqual(orig_alpha, reduced_alpha)
 
         sess.close()
