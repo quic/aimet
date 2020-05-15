@@ -740,11 +740,7 @@ class Mask:
                 self._set_default_masks_for_direct_connectivity_ops(in_channels, out_channels)
         elif op_connectivity == ConnectivityType.add:
             in_masks_list, out_masks_list = self._create_masks_list_for_multi_input_single_output_ops(out_channels)
-            # If add op does not have inputs from two ops in ConnectedGraph, do not try to mask propagate through it.
-            if len(in_masks_list) < 2:
-                self._internal_connectivity = StopInternalConnectivity(in_masks_list, out_masks_list)
-            else:
-                self._internal_connectivity = AddInternalConnectivity(in_masks_list, out_masks_list)
+            self._internal_connectivity = AddInternalConnectivity(in_masks_list, out_masks_list)
         elif op_connectivity == ConnectivityType.concat:
             in_masks_list, out_masks_list = self._create_masks_list_for_multi_input_single_output_ops(out_channels)
             self._internal_connectivity = ConcatInternalConnectivity(in_masks_list, out_masks_list)

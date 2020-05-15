@@ -419,3 +419,21 @@ def model_with_global_max_pool2d():
     x = tf.keras.layers.Flatten()(x)
     outputs = tf.keras.layers.Dense(10, activation=tf.nn.softmax, name="model_with_global_max_pool2d")(x)
     return outputs
+
+
+def model_to_test_downstream_masks():
+    """ Return model to test setting downstream masks for """
+    inputs = tf.keras.Input(shape=(8, 8, 3,))
+    x = tf.keras.layers.Conv2D(8, (2, 2), activation=tf.nn.relu)(inputs)
+    residual = x
+    x = tf.keras.layers.Conv2D(8, (1, 1))(x)
+    x = x + residual
+    x = tf.keras.layers.BatchNormalization(momentum=.3, epsilon=.65)(x)
+    x1 = tf.nn.relu(x)
+    x2 = tf.nn.relu(x)
+    x1 = tf.keras.layers.Conv2D(4, (2, 2))(x1)
+    x2 = tf.keras.layers.Conv2D(4, (2, 2))(x2)
+    x = x1 + x2
+    x = tf.keras.layers.Flatten()(x)
+    outputs = tf.keras.layers.Dense(10, activation=tf.nn.softmax, name="model_to_test_downstream_masks")(x)
+    return outputs
