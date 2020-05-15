@@ -52,7 +52,7 @@ from aimet_tensorflow.common.module_identifier_matchers import ModuleIdentifierO
 from aimet_tensorflow.examples.test_models import keras_model, keras_model_functional, tf_slim_basic_model, \
     single_residual, split_and_concat_model, concat_model, dropout_keras_model, dropout_slim_model, \
     tf_slim_with_softmax, multiple_input_model, upsample_model, model_with_upsample2d, model_with_leaky_relu, \
-    model_with_global_max_pool2d
+    model_with_global_max_pool2d, keras_model_functional_with_non_fused_batchnorms
 import aimet_tensorflow.winnow.winnow as winnow
 
 logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Test)
@@ -89,6 +89,30 @@ class TestTfConnectedGraph(unittest.TestCase):
         # all_ops = tf.get_default_graph().get_operations()
         # _ = tf.summary.FileWriter('./keras_model_functional', tf.get_default_graph())
         conn_graph = ConnectedGraph(tf.get_default_graph(), ['input_1'], ['keras_model_functional/Softmax'])
+        self.assertTrue(validate_branch_ops(conn_graph))
+        self.assertTrue(validate_product_tensor_lists(conn_graph))
+        bn1 = conn_graph.get_all_ops()['batch_normalization']
+        self.assertEqual(bn1.get_attribute('training'), True)
+        bn2 = conn_graph.get_all_ops()['scope_1/batch_normalization_1']
+        self.assertEqual(bn2.get_attribute('training'), 'is_training:0')
+        bn3 = conn_graph.get_all_ops()['scope_1/batch_normalization_2']
+        self.assertEqual(bn3.get_attribute('training'), False)
+        self.assertEqual(0, conn_graph.branch_count)
+        self.assertEqual(14, len(conn_graph.get_all_ops()))
+
+        # 13 products from inter module connections
+        # 22 products from parameters
+        self.assertEqual(35, len(conn_graph.get_all_products()))
+
+    def test_keras_model_functional_with_non_fused_batchnorms_get_op_product_graph(self):
+        """ Test connected graph construction on keras model functional with non fused batchnorms """
+        tf.reset_default_graph()
+
+        _ = keras_model_functional_with_non_fused_batchnorms()
+        # all_ops = tf.get_default_graph().get_operations()
+        # _ = tf.summary.FileWriter('./keras_model_functional_with_non_fused_batchnorms', tf.get_default_graph())
+        conn_graph = ConnectedGraph(tf.get_default_graph(), ['input_1'],
+                                    ['keras_model_functional_with_non_fused_batchnorms/Softmax'])
         self.assertTrue(validate_branch_ops(conn_graph))
         self.assertTrue(validate_product_tensor_lists(conn_graph))
         bn1 = conn_graph.get_all_ops()['batch_normalization']

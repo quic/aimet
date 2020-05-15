@@ -46,6 +46,7 @@ from typing import Dict
 import tensorflow as tf
 from aimet_common.utils import AimetLogger
 from aimet_tensorflow.common.operation import TfApi
+from aimet_tensorflow.utils.common import get_valid_ops
 
 logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.ConnectedGraph)
 
@@ -133,6 +134,162 @@ def match_conv2d_dense_type_ops(op_to_module_dict: Dict[tf.Operation, ModuleIden
         op_to_module_dict[op.outputs[0].consumers()[0]] = op_info
         return True
     return False
+
+
+def match_batchnorm_pattern_1(op_to_module_dict: dict, op_info: ModuleIdentifierOpInfo) -> bool:
+    """
+    Matcher for regular BatchNorm type ops
+    :param op_to_module_dict: Dictionary mapping tf ops to ModuleIdentifierOpInfo objects.  All tf ops belonging to the
+    same module will be mapped to the same ModuleIdentifierOpInfo object.
+    :param op_info: ModuleIdentifierOpInfo to fill in, for holding information about the module that multiple tf ops
+    belong to
+    :return: True if a valid match was made, False otherwise
+    """
+    # Begin at op of type mul, and try to match pattern 1 (uses placeholder tensor for switching between
+    # training and non training) to op_to_module_dict
+    # pylint: disable=too-many-locals
+    op = op_info.tf_op
+    try:
+        add_1_op = op.outputs[0].consumers()[0]
+        assert add_1_op.type == 'AddV2'
+        sub_op = add_1_op.inputs[1].op
+        assert sub_op.type == 'Sub'
+        mul_2_op = sub_op.inputs[1].op
+        assert mul_2_op.type == 'Mul'
+        mul_op = mul_2_op.inputs[1].op
+        assert mul_op.type == 'Mul'
+        rsqrt_op = mul_op.inputs[0].op
+        assert rsqrt_op.type == 'Rsqrt'
+        add_op = rsqrt_op.inputs[0].op
+        assert add_op.type == 'AddV2'
+        merge_op = add_op.inputs[0].op
+        assert merge_op.type == 'Merge'
+        switch_1_op = merge_op.inputs[1].op
+        assert switch_1_op.type == 'Switch'
+        squeeze_1_op = switch_1_op.inputs[0].op
+        assert squeeze_1_op.type == 'Squeeze'
+        variance_op = squeeze_1_op.inputs[0].op
+        assert variance_op.type == 'Mean'
+        squared_difference_op = variance_op.inputs[0].op
+        assert squared_difference_op.type == 'SquaredDifference'
+        stop_gradient_op = squared_difference_op.inputs[1].op
+        assert stop_gradient_op.type == 'StopGradient'
+        mean_op = stop_gradient_op.inputs[0].op
+        assert mean_op.type == 'Mean'
+        bn_ops_to_add = get_valid_ops(op.graph, [mean_op.name, squared_difference_op.name], [add_1_op.name])
+        assert len(bn_ops_to_add) == 17
+
+        # Get training tensor
+        pred_id_op = switch_1_op.inputs[1].op
+        training_tensor = pred_id_op.inputs[0]
+        op_info.add_attribute('training', training_tensor.name)
+
+        # Batchnorms of this type always end with /batchnorm/mul_1 in the op name
+        # Everything preceding the /batchnorm is the scope name
+        match_name = re.match('(.+)/batchnorm/mul_1', op.name)
+        if match_name:
+            op_info.module_name = match_name.group(1)
+        op_info.op_type = 'BatchNorm'
+        for bn_op in bn_ops_to_add:
+            op_to_module_dict.update({bn_op: op_info})
+        return True
+    except:     # pylint: disable=bare-except
+        return False
+
+
+def match_batchnorm_pattern_2(op_to_module_dict: dict, op_info: ModuleIdentifierOpInfo) -> bool:
+    """
+    Matcher for regular BatchNorm type ops
+    :param op_to_module_dict: Dictionary mapping tf ops to ModuleIdentifierOpInfo objects.  All tf ops belonging to the
+    same module will be mapped to the same ModuleIdentifierOpInfo object.
+    :param op_info: ModuleIdentifierOpInfo to fill in, for holding information about the module that multiple tf ops
+    belong to
+    :return: True if a valid match was made, False otherwise
+    """
+    # Begin at op of type mul, and try to match pattern 2 (training = True) to op_to_module_dict
+    # pylint: disable=too-many-locals
+    op = op_info.tf_op
+    try:
+        add_1_op = op.outputs[0].consumers()[0]
+        assert add_1_op.type == 'AddV2'
+        sub_op = add_1_op.inputs[1].op
+        assert sub_op.type == 'Sub'
+        mul_2_op = sub_op.inputs[1].op
+        assert mul_2_op.type == 'Mul'
+        mul_op = mul_2_op.inputs[1].op
+        assert mul_op.type == 'Mul'
+        rsqrt_op = mul_op.inputs[0].op
+        assert rsqrt_op.type == 'Rsqrt'
+        add_op = rsqrt_op.inputs[0].op
+        assert add_op.type == 'AddV2'
+        squeeze_1_op = add_op.inputs[0].op
+        assert squeeze_1_op.type == 'Squeeze'
+        variance_op = squeeze_1_op.inputs[0].op
+        assert variance_op.type == 'Mean'
+        squared_difference_op = variance_op.inputs[0].op
+        assert squared_difference_op.type == 'SquaredDifference'
+        stop_gradient_op = squared_difference_op.inputs[1].op
+        assert stop_gradient_op.type == 'StopGradient'
+        mean_op = stop_gradient_op.inputs[0].op
+        assert mean_op.type == 'Mean'
+        bn_ops_to_add = get_valid_ops(op.graph, [mean_op.name, squared_difference_op.name], [add_1_op.name])
+        assert len(bn_ops_to_add) == 13
+
+        op_info.add_attribute('training', True)
+
+        # Batchnorms of this type always end with /batchnorm/mul_1 in the op name
+        # Everything preceding the /batchnorm is the scope name
+        match_name = re.match('(.+)/batchnorm/mul_1', op.name)
+        if match_name:
+            op_info.module_name = match_name.group(1)
+        op_info.op_type = 'BatchNorm'
+        for bn_op in bn_ops_to_add:
+            op_to_module_dict.update({bn_op: op_info})
+        return True
+    except:     # pylint: disable=bare-except
+        return False
+
+
+def match_batchnorm_pattern_3(op_to_module_dict: dict, op_info: ModuleIdentifierOpInfo) -> bool:
+    """
+    Matcher for regular BatchNorm type ops
+    :param op_to_module_dict: Dictionary mapping tf ops to ModuleIdentifierOpInfo objects.  All tf ops belonging to the
+    same module will be mapped to the same ModuleIdentifierOpInfo object.
+    :param op_info: ModuleIdentifierOpInfo to fill in, for holding information about the module that multiple tf ops
+    belong to
+    :return: True if a valid match was made, False otherwise
+    """
+    # Begin at op of type mul, and try to match pattern 3 (training = False) to op_to_module_dict
+    op = op_info.tf_op
+    try:
+        add_1_op = op.outputs[0].consumers()[0]
+        assert add_1_op.type == 'AddV2'
+        sub_op = add_1_op.inputs[1].op
+        assert sub_op.type == 'Sub'
+        mul_2_op = sub_op.inputs[1].op
+        assert mul_2_op.type == 'Mul'
+        mul_op = mul_2_op.inputs[1].op
+        assert mul_op.type == 'Mul'
+        rsqrt_op = mul_op.inputs[0].op
+        assert rsqrt_op.type == 'Rsqrt'
+        add_op = rsqrt_op.inputs[0].op
+        assert add_op.type == 'AddV2'
+        moving_variance_op = add_op.inputs[0].op
+        assert moving_variance_op.type in ['ReadVariableOp']
+
+        op_info.add_attribute('training', False)
+
+        # Batchnorms of this type always end with /batchnorm/mul_1 in the op name
+        # Everything preceding the /batchnorm is the scope name
+        match_name = re.match('(.+)/batchnorm/mul_1', op.name)
+        if match_name:
+            op_info.module_name = match_name.group(1)
+        op_info.op_type = 'BatchNorm'
+        op_to_module_dict.update({op: op_info,
+                                  add_1_op: op_info})
+        return True
+    except:     # pylint: disable=bare-except
+        return False
 
 
 def match_fusedbatchnorm_pattern_1(op_to_module_dict: dict, op_info: ModuleIdentifierOpInfo) -> bool:

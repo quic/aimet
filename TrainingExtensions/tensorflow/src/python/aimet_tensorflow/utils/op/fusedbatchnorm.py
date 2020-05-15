@@ -47,6 +47,7 @@ logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Utils)
 
 _BN_STRUCTURE_ERROR_MSG = "BN op doesn't have the expected structure"
 
+
 class BNUtils:
     """ Batch Norm/ fused Batch Norm op related utils"""
 
@@ -101,42 +102,50 @@ class BNUtils:
         return var_read_tensor
 
     @staticmethod
-    def get_beta_read_op(bn_op: tf.Operation):
+    def get_beta_read_op(bn_op: tf.Operation) -> tf.Operation:
         """
         get beta read op from BN op specified
         :param bn_op: bn_op obtained from connected graph using get_modules
          (is mul_1 op inside BN scope)
         :return: beta read op
         """
-        # only support fused BN
-        assert bn_op.type == 'FusedBatchNormV3'
-        assert len(bn_op.inputs) == 5
+        if bn_op.type in ['Mul']:
+            # For regular BN
+            # mul_1 -> add_1 <-- sub <-- beta_read
+            assert len(bn_op.outputs) >= 1, _BN_STRUCTURE_ERROR_MSG
+            add_1 = bn_op.outputs[0].consumers()[0]
+            assert len(add_1.inputs) >= 2, _BN_STRUCTURE_ERROR_MSG
+            sub = add_1.inputs[1].op
+            assert len(sub.inputs) >= 1, _BN_STRUCTURE_ERROR_MSG
+            beta_read = sub.inputs[0].op
+        elif bn_op.type in ['FusedBatchNormV3']:
+            assert len(bn_op.inputs) == 5
+            beta_read = bn_op.inputs[constants.BN_OP_PARAM_INDICES['beta']].op
+            if beta_read.type == 'Switch':      # tf slim bn using training tensor form
+                beta_read = beta_read.inputs[0].op
+                assert 'read' in beta_read.name
+        else:
+            logger.error("Error, unknown BN op")
+            assert False
 
-        beta_read = bn_op.inputs[constants.BN_OP_PARAM_INDICES['beta']].op
-
-        assert beta_read.type == 'ReadVariableOp'
+        assert beta_read.type in ['ReadVariableOp', 'Identity']      # Will be identity for tf slim BNs
         return beta_read
 
     @staticmethod
-    def get_beta_read_var_op_tensor(bn_op: tf.Operation)->tf.Tensor:
+    def get_beta_read_var_op_tensor(bn_op: tf.Operation) -> tf.Tensor:
         """
         get beta readVariableOp tensor from BN op specified
         :param bn_op: FusedBatchNorm as tf.Operation
         :return: tensor associated with bn op beta readVariableOp type, as tf.Tensor
         """
-        # only support fused BN
-        assert bn_op.type == 'FusedBatchNormV3'
-        assert len(bn_op.inputs) == 5
-        beta_read_tensor = bn_op.inputs[constants.BN_OP_PARAM_INDICES['beta']]
+        assert bn_op.type in ['FusedBatchNormV3', 'Mul']
+        beta_read_tensor = BNUtils.get_beta_read_op(bn_op).outputs[0]
 
         assert beta_read_tensor is not None
 
         if beta_read_tensor.op.inputs[0].op.type == 'Switch':
             logger.debug('Fetching params from trainable BN op type')
             beta_read_tensor = BNUtils._get_tensor_read_var_op_trainable_bn_op(beta_read_tensor)
-        elif beta_read_tensor.op.type == 'Switch':      # tf slim bn using training tensor form
-            beta_read_tensor = beta_read_tensor.op.inputs[0]
-            assert 'read:0' in beta_read_tensor.name
 
         return beta_read_tensor
 
@@ -169,13 +178,23 @@ class BNUtils:
         (is mul_1 op inside BN scope)
         :return: gamma read op
         """
-
-        # only support fused BN
-        assert bn_op.type == 'FusedBatchNormV3'
-        assert len(bn_op.inputs) == 5
-
-        gamma_read = bn_op.inputs[constants.BN_OP_PARAM_INDICES['gamma']].op
-
+        if bn_op.type in ['Mul']:
+            # For regular BN
+            # mul_1 <-- mul <-- gamma_read <-- gamma_tensor
+            assert len(bn_op.inputs) >= 2, _BN_STRUCTURE_ERROR_MSG
+            mul = bn_op.inputs[1].op
+            assert len(mul.inputs) >= 2, _BN_STRUCTURE_ERROR_MSG
+            gamma_read = mul.inputs[1].op
+        elif bn_op.type in ['FusedBatchNormV3']:
+            assert len(bn_op.inputs) == 5
+            gamma_read = bn_op.inputs[constants.BN_OP_PARAM_INDICES['gamma']].op
+            if gamma_read.type == 'Switch':      # tf slim bn using training tensor form
+                gamma_read = gamma_read.inputs[0].op
+                assert 'read' in gamma_read.name or gamma_read.type == 'Const'
+        else:
+            logger.error("Error, unknown BN op")
+            assert False
+        assert gamma_read.type in ['ReadVariableOp', 'Identity', 'Const']    # Will be identity for tf slim BNs
         return gamma_read
 
     @staticmethod
@@ -185,19 +204,13 @@ class BNUtils:
         :param bn_op:
         :return:
         """
-        # only support fused BN
-        assert bn_op.type == 'FusedBatchNormV3'
-        assert len(bn_op.inputs) == 5
-        gamma_read_tensor = bn_op.inputs[constants.BN_OP_PARAM_INDICES['gamma']]
+        assert bn_op.type in ['FusedBatchNormV3', 'Mul']
+        gamma_read_tensor = BNUtils.get_gamma_as_read_op(bn_op).outputs[0]
         assert gamma_read_tensor is not None
 
         if gamma_read_tensor.op.inputs and gamma_read_tensor.op.inputs[0].op.type == 'Switch':
             logger.debug('Fetching params from trainable BN op type')
             gamma_read_tensor = BNUtils._get_tensor_read_var_op_trainable_bn_op(gamma_read_tensor)
-        # tf slim bn using training tensor form, or regular bn with const gamma
-        elif gamma_read_tensor.op.type == 'Switch':
-            gamma_read_tensor = gamma_read_tensor.op.inputs[0]
-            assert 'read:0' in gamma_read_tensor.name or gamma_read_tensor.op.type == 'Const'
 
         return gamma_read_tensor
 
@@ -225,6 +238,75 @@ class BNUtils:
         return numpy_data
 
     @staticmethod
+    def _bn_op_var_struct_1(bn_op: tf.Operation):
+        """
+        Return moving_variance op corresponding to batchnorm with training tensor
+        :param bn_op: bn_op obtained from connected graph using get_modules
+        a mul_1 op inside BN scope.
+        :return: Read operation for moving_variance
+        """
+        try:
+            mul_op = bn_op.inputs[1].op
+            assert mul_op.type == 'Mul'
+            rsqrt_op = mul_op.inputs[0].op
+            assert rsqrt_op.type == 'Rsqrt'
+            add_op = rsqrt_op.inputs[0].op
+            assert add_op.type == 'AddV2'
+            merge_op = add_op.inputs[0].op
+            assert merge_op.type == 'Merge'
+            read_op = merge_op.inputs[0].op
+            assert read_op.type in ['ReadVariableOp']
+            return read_op
+        except:     # pylint: disable=bare-except
+            return None
+
+    @staticmethod
+    def _bn_op_var_struct_2(bn_op: tf.Operation):
+        """
+        Return moving_variance op corresponding to batchnorm with training=True
+        :param bn_op: bn_op obtained from connected graph using get_modules
+        a mul_1 op inside BN scope.
+        :return: Read operation for moving_variance
+        """
+        try:
+            mul_op = bn_op.inputs[1].op
+            assert mul_op.type == 'Mul'
+            rsqrt_op = mul_op.inputs[0].op
+            assert rsqrt_op.type == 'Rsqrt'
+            add_op = rsqrt_op.inputs[0].op
+            assert add_op.type == 'AddV2'
+            squeeze_1_op = add_op.inputs[0].op
+            assert squeeze_1_op.type == 'Squeeze'
+            sub_op = squeeze_1_op.outputs[0].consumers()[0]
+            assert sub_op.type == 'Sub'
+            read_op = sub_op.inputs[0].op
+            assert read_op.type in ['ReadVariableOp']
+            return read_op
+        except:     # pylint: disable=bare-except
+            return None
+
+    @staticmethod
+    def _bn_op_var_struct_3(bn_op: tf.Operation):
+        """
+        Return moving_variance op corresponding to batchnorm with training=False
+        :param bn_op: bn_op obtained from connected graph using get_modules
+        a mul_1 op inside BN scope.
+        :return: Read operation for moving_variance
+        """
+        try:
+            mul_op = bn_op.inputs[1].op
+            assert mul_op.type == 'Mul'
+            rsqrt_op = mul_op.inputs[0].op
+            assert rsqrt_op.type == 'Rsqrt'
+            add_op = rsqrt_op.inputs[0].op
+            assert add_op.type == 'AddV2'
+            read_op = add_op.inputs[0].op
+            assert read_op.type in ['ReadVariableOp']
+            return read_op
+        except:     # pylint: disable=bare-except
+            return None
+
+    @staticmethod
     def get_moving_variance_as_read_op(bn_op: tf.Operation):
         """
         get moving variance read op from BN op specified
@@ -232,14 +314,35 @@ class BNUtils:
         a mul_1 op inside BN scope.
         :return: moving variance as read op
         """
+        # register handlers for different structures
+        bn_op_struct_for_variance_handlers = [BNUtils._bn_op_var_struct_1,
+                                              BNUtils._bn_op_var_struct_2,
+                                              BNUtils._bn_op_var_struct_3]
 
-        # only support fused BN
-        assert bn_op.type == 'FusedBatchNormV3'
-        assert len(bn_op.inputs) == 5
+        if bn_op.type in ['FusedBatchNormV3']:
+            assert len(bn_op.inputs) == 5
+            moving_var_read = bn_op.inputs[constants.BN_OP_PARAM_INDICES['movingvariance']].op
+            if moving_var_read.type == 'Switch':      # tf slim bn using training tensor form
+                moving_var_read = moving_var_read.inputs[0].op
+                assert 'read' in moving_var_read.name
+        elif bn_op.type in ['Mul']:
+            # For regular BN
+            moving_var_read = None
+            # try all handlers available
+            for handler in bn_op_struct_for_variance_handlers:
+                if moving_var_read is None:
+                    moving_var_read = handler(bn_op)
+                else:
+                    break
+            assert moving_var_read is not None, _BN_STRUCTURE_ERROR_MSG
+        else:
+            logger.error("Error, unknown BN op")
+            assert False
 
-        moving_var_read = bn_op.inputs[constants.BN_OP_PARAM_INDICES['movingvariance']].op
-        assert moving_var_read.type == 'ReadVariableOp'
+        if moving_var_read.type == 'Identity':
+            assert len(moving_var_read.inputs) == 1, _BN_STRUCTURE_ERROR_MSG
 
+        assert moving_var_read.type in ['ReadVariableOp', 'Const', 'Identity']
         return moving_var_read
 
     @staticmethod
@@ -250,9 +353,8 @@ class BNUtils:
         :return: tensor associated with bn op moving variance readVariableOp type, as tf.Tensor
         """
         # only support fused BN
-        assert bn_op.type == 'FusedBatchNormV3'
-        assert len(bn_op.inputs) == 5
-        moving_var_read_tensor = bn_op.inputs[constants.BN_OP_PARAM_INDICES['movingvariance']]
+        assert bn_op.type in ['FusedBatchNormV3', 'Mul']
+        moving_var_read_tensor = BNUtils.get_moving_variance_as_read_op(bn_op).outputs[0]
         assert moving_var_read_tensor is not None
 
         if moving_var_read_tensor.op.type == 'Const':
@@ -273,10 +375,6 @@ class BNUtils:
         elif moving_var_read_tensor.op.inputs[0].op.type == 'Switch':
             logger.debug("Fetch moving var from a trainable BN op structure")
             moving_var_read_tensor = BNUtils._get_tensor_read_var_op_trainable_bn_op(moving_var_read_tensor)
-
-        elif moving_var_read_tensor.op.type == 'Switch':      # tf slim bn using training tensor form
-            moving_var_read_tensor = moving_var_read_tensor.op.inputs[0]
-            assert 'read:0' in moving_var_read_tensor.name
 
         return moving_var_read_tensor
 
@@ -304,6 +402,69 @@ class BNUtils:
         return numpy_data
 
     @staticmethod
+    def _bn_op_mean_struct_1(bn_op: tf.Operation):
+        """
+        Return moving_mean op corresponding to batchnorm with training tensor
+        :param bn_op: bn_op obtained from connected graph using get_modules
+        a mul_1 op inside BN scope.
+        :return: Read operation for moving_mean
+        """
+        try:
+            mul_op = bn_op.inputs[1].op
+            assert mul_op.type == 'Mul'
+            mul_2_op = mul_op.outputs[0].consumers()[1]
+            assert mul_2_op.type == 'Mul'
+            merge_op = mul_2_op.inputs[0].op
+            assert merge_op.type == 'Merge'
+            read_op = merge_op.inputs[0].op
+            assert read_op.type in ['ReadVariableOp']
+            return read_op
+        except:     # pylint: disable=bare-except
+            return None
+
+    @staticmethod
+    def _bn_op_mean_struct_2(bn_op: tf.Operation):
+        """
+        Return moving_mean op corresponding to batchnorm with training=True
+        :param bn_op: bn_op obtained from connected graph using get_modules
+        a mul_1 op inside BN scope.
+        :return: Read operation for moving_mean
+        """
+        try:
+            mul_op = bn_op.inputs[1].op
+            assert mul_op.type == 'Mul'
+            mul_2_op = mul_op.outputs[0].consumers()[1]
+            assert mul_2_op.type == 'Mul'
+            squeeze_op = mul_2_op.inputs[0].op
+            assert squeeze_op.type == 'Squeeze'
+            sub_op = squeeze_op.outputs[0].consumers()[0]
+            assert sub_op.type == 'Sub'
+            read_op = sub_op.inputs[0].op
+            assert read_op.type in ['ReadVariableOp']
+            return read_op
+        except:     # pylint: disable=bare-except
+            return None
+
+    @staticmethod
+    def _bn_op_mean_struct_3(bn_op: tf.Operation):
+        """
+        Return moving_mean op corresponding to batchnorm with training=False
+        :param bn_op: bn_op obtained from connected graph using get_modules
+        a mul_1 op inside BN scope.
+        :return: Read operation for moving_mean
+        """
+        try:
+            mul_op = bn_op.inputs[1].op
+            assert mul_op.type == 'Mul'
+            mul_2_op = mul_op.outputs[0].consumers()[1]
+            assert mul_2_op.type == 'Mul'
+            read_op = mul_2_op.inputs[0].op
+            assert read_op.type in ['ReadVariableOp']
+            return read_op
+        except:     # pylint: disable=bare-except
+            return None
+
+    @staticmethod
     def get_moving_mean_as_read_op(bn_op: tf.Operation):
         """
         get moving mean read op from BN op specified
@@ -311,12 +472,38 @@ class BNUtils:
         a mul_1 op inside BN scope.
         :return: moving mean read op
         """
-        # only support fused BN
-        assert bn_op.type == 'FusedBatchNormV3'
-        assert len(bn_op.inputs) == 5
+        if bn_op.type in ['FusedBatchNormV3']:
+            assert len(bn_op.inputs) == 5
+            moving_mean_read = bn_op.inputs[constants.BN_OP_PARAM_INDICES['movingmean']].op
+            if moving_mean_read.type == 'Switch':      # tf slim bn using training tensor form
+                moving_mean_read = moving_mean_read.inputs[0].op
+                assert 'read' in moving_mean_read.name
+        elif bn_op.type in ['Mul']:
+            # For regular BN
+            # mul_1 << - mul --> mul_2 <-- cond/merge <-- switch2 <-- moving mean read < moving mean tensor
+            # inputs[1] is mul .op.inputs[1] is gamma:read op whose input is gamma tensor as variable v2
 
-        moving_mean_read = bn_op.inputs[constants.BN_OP_PARAM_INDICES['movingmean']].op
-        assert moving_mean_read.type == 'ReadVariableOp'
+            # register handlers for different structures
+            bn_op_struct_for_mean_handlers = [BNUtils._bn_op_mean_struct_1,
+                                              BNUtils._bn_op_mean_struct_2,
+                                              BNUtils._bn_op_mean_struct_3]
+
+            moving_mean_read = None
+            # try all handlers available
+            for handler in bn_op_struct_for_mean_handlers:
+                if moving_mean_read is None:
+                    moving_mean_read = handler(bn_op)
+                else:
+                    break
+            assert moving_mean_read is not None, _BN_STRUCTURE_ERROR_MSG
+        else:
+            logger.error("Error, unknown BN op")
+            assert False
+
+        if moving_mean_read.type == 'Identity':
+            assert len(moving_mean_read.inputs) == 1, _BN_STRUCTURE_ERROR_MSG
+
+        assert moving_mean_read.type in ['ReadVariableOp', 'Const', 'Identity']
         return moving_mean_read
 
     @staticmethod
@@ -327,9 +514,8 @@ class BNUtils:
         :return: tensor associated with bn op moving mean readVariableOp type, as tf.Tensor
         """
         # only support fused BN
-        assert bn_op.type == 'FusedBatchNormV3'
-        assert len(bn_op.inputs) == 5
-        moving_mean_read_tensor = bn_op.inputs[constants.BN_OP_PARAM_INDICES['movingmean']]
+        assert bn_op.type in ['FusedBatchNormV3', 'Mul']
+        moving_mean_read_tensor = BNUtils.get_moving_mean_as_read_op(bn_op).outputs[0]
         assert moving_mean_read_tensor is not None
 
         if moving_mean_read_tensor.op.type == 'Const':
@@ -350,10 +536,6 @@ class BNUtils:
         elif moving_mean_read_tensor.op.inputs[0].op.type == 'Switch':
             logger.debug("Fetch moving var from a trainable BN op structure")
             moving_mean_read_tensor = BNUtils._get_tensor_read_var_op_trainable_bn_op(moving_mean_read_tensor)
-
-        elif moving_mean_read_tensor.op.type == 'Switch':      # tf slim bn using training tensor form
-            moving_mean_read_tensor = moving_mean_read_tensor.op.inputs[0]
-            assert 'read:0' in moving_mean_read_tensor.name
 
         return moving_mean_read_tensor
 
