@@ -41,6 +41,7 @@
 """ Functions for matching different types of modules. """
 
 import re
+import struct
 from typing import Dict
 import tensorflow as tf
 from aimet_common.utils import AimetLogger
@@ -543,6 +544,49 @@ def match_upsample(op_to_module_dict: dict, op_info: ModuleIdentifierOpInfo) -> 
         op_to_module_dict.update({op: op_info,
                                   consumer_1: op_info,
                                   consumer_2: op_info})
+        return True
+    except:     # pylint: disable=bare-except
+        return False
+
+
+def match_upsample2d(op_to_module_dict: dict, op_info: ModuleIdentifierOpInfo) -> bool:
+    """
+    Matcher for upsample2D type ops
+    :param op_to_module_dict: Dictionary mapping tf ops to ModuleIdentifierOpInfo objects.  All tf ops belonging to the
+    same module will be mapped to the same ModuleIdentifierOpInfo object.
+    :param op_info: ModuleIdentifierOpInfo to fill in, for holding information about the module that multiple tf ops
+    belong to
+    :return: True if a valid match was made, False otherwise
+    """
+    # Begin at op of type Shape and try to match to upsample2d pattern
+    op = op_info.tf_op
+    try:
+        strided_slice = op.outputs[0].consumers()[0]
+        assert strided_slice.type == 'StridedSlice'
+        mul = strided_slice.outputs[0].consumers()[0]
+        assert mul.type == 'Mul'
+        resize_nearest_neighbor = mul.outputs[0].consumers()[0]
+        assert resize_nearest_neighbor.type == 'ResizeNearestNeighbor'
+        prev_op = op.inputs[0].op
+        assert prev_op == resize_nearest_neighbor.inputs[0].op
+
+        # Add ops to the op to module dict
+        op_info.op_type = "Upsample2D"
+        match_name = re.match("(.+)/Shape", op.name)
+        if match_name:
+            op_info.module_name = match_name.group(1)
+
+        # Fill in size attribute
+        const_op = mul.inputs[1].op
+        tensor_content_length = const_op.get_attr('value').tensor_shape.dim[0].size
+        unpack_string = str(tensor_content_length) + 'i'       # i for int, indices_length tells how many integers to parse out
+        upsample_size = struct.unpack(unpack_string, const_op.get_attr('value').tensor_content)
+        op_info.add_attribute('size', upsample_size)
+
+        op_to_module_dict.update({op: op_info,
+                                  strided_slice: op_info,
+                                  mul: op_info,
+                                  resize_nearest_neighbor: op_info})
         return True
     except:     # pylint: disable=bare-except
         return False
