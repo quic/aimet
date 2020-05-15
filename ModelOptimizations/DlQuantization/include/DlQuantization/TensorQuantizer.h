@@ -71,6 +71,13 @@ public:
                     bool useSymmetricEncoding);
 
     /**
+    * Constructor
+    * @param quantScheme Quantization scheme (e.g. TF-Enhanced)
+    * @param roundingMode Rounding mode to use during quantization
+    */
+    TensorQuantizer(QuantizationMode quantScheme, RoundingMode roundingMode);
+
+    /**
      * Reset stats being collected to compute encoding
      */
     void resetEncodingStats();
@@ -96,6 +103,13 @@ public:
     TfEncoding computeEncoding() override;
 
     /**
+     * Compute the encoding for this tensor using stats collected so far
+     * @param bitwidth to be used
+     * @param flag to indicate symmetric/asymmetric encoding is to be used
+     */
+    TfEncoding computeEncoding(unsigned int bitwidth, bool useSymmetricEncoding) override;
+
+    /**
      * Convert a tensor from float to quantized int and back to float
      * @param input Input tensor
      * @param tensorSize Size of the input tensor (number of tensor elements)
@@ -108,6 +122,19 @@ public:
                             double encodingMin, double encodingMax, bool useCuda) override;
 
     /**
+     * Convert a tensor from float to quantized int and back to float
+     * @param input Input tensor
+     * @param tensorSize Size of the input tensor (number of tensor elements)
+     * @param output Output tensor
+     * @param encodingMin minimum value of encoding range
+     * @param encodingMax maximum value of encoding range
+     * @param bitwidth to be used
+     * @param useCuda If true, both the input and output tensors are assumed to be in CUDA memory
+     */
+    void quantizeDequantize(const float* input, std::size_t tensorSize, float* output,
+                            double encodingMin, double encodingMax, unsigned int bitwidth, bool useCuda) override;
+
+    /**
      * Convert a tensor from float to quantized int and back to float. Overloaded version that accepts numpy tensors.
      * @param input Input tensor
      * @param output Output tensor
@@ -117,6 +144,18 @@ public:
      */
     void quantizeDequantize(py::array_t<float> input, py::array_t<float> output,
                             double encodingMin, double encodingMax, bool useCuda);
+
+    /**
+    * Convert a tensor from float to quantized int and back to float. Overloaded version that accepts numpy tensors.
+    * @param input Input tensor
+    * @param output Output tensor
+    * @param encodingMin minimum value of encoding range
+    * @param encodingMax maximum value of encoding range
+    * @param bitwidth bitwidth to be used
+    * @param useCuda If true, both the input and output tensors are assumed to be in CUDA memory
+    */
+    void quantizeDequantize(py::array_t<float> inputTensor, py::array_t<float> outputTensor,
+                            double encodingMin, double encodingMax, unsigned int bitwidth, bool useCuda);
 
     unsigned int bitwidth;          ///< Quantization bitwidth
     QuantizationMode quantScheme;   ///< Quantization scheme (e.g TF-Enhanced)

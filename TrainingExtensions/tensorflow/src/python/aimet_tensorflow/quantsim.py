@@ -53,6 +53,7 @@ from aimet_common.utils import AimetLogger
 from aimet_tensorflow.utils.common import update_variables_with_values, \
     save_data_to_pickle_file, load_data_from_pickle_file
 from aimet_tensorflow.utils import graph_saver
+from aimet_tensorflow.utils.constants import QuantizeOpIndices
 from aimet_tensorflow.common import core
 from aimet_tensorflow.common.connectedgraph import ConnectedGraph
 from aimet_tensorflow.common.operation import Op
@@ -280,6 +281,32 @@ class QuantizationSimModel:
             vars_with_value[quant_op.name + '_op_mode'] = int(op_mode)
             update_variables_with_values(self.session, vars_with_value)
 
+    def _get_op_variable_value(self, quant_op_name: str, var_index: int):
+        """
+        Utility to load variable values from quant op
+        :param quant_op_name: quantize op name
+        :param var_index: variable index to be read
+        :return: variable value
+        """
+
+        op = self.session.graph.get_operation_by_name(quant_op_name)
+        op_var_tensor = op.inputs[var_index]
+        return self.session.run(op_var_tensor)
+
+    def _get_bitwidth_and_symmetric_flag(self, quant_op_name: str) -> (int, bool):
+        """
+        utility to read bitwidth and symmetric encoding flag values from given Quantize op
+        :param quant_op_name: Quantize op name
+        :return: bitwidth and symmetric encoding flag
+        """
+
+        op_bitwidth = self._get_op_variable_value(quant_op_name,
+                                                  int(QuantizeOpIndices.bit_width))
+        op_use_symmetric_encodings = self._get_op_variable_value(quant_op_name,
+                                                                 int(QuantizeOpIndices.use_symmetric_encoding))
+
+        return op_bitwidth, op_use_symmetric_encodings
+
     def compute_encodings(self, forward_pass_callback: Callable[[tf.Session, Any], None],
                           forward_pass_callback_args):
         """
@@ -307,7 +334,9 @@ class QuantizationSimModel:
 
             # Calculate encodings
             if quantizer_info.get_op_mode(self.session) != int(pymo.TensorQuantizerOpMode.passThrough):
-                encoding = quantizer_info.tensor_quantizer.computeEncoding()
+                op_bitwidth, op_use_symmetric_encodings = self._get_bitwidth_and_symmetric_flag(
+                    quantizer_info.quant_op_name)
+                encoding = quantizer_info.tensor_quantizer.computeEncoding(op_bitwidth, op_use_symmetric_encodings)
                 self._set_op_input_variables(op_name, encoding, pymo.TensorQuantizerOpMode.quantizeDequantize)
 
         # For post-training mode, params will always be in one-shot mode
@@ -316,7 +345,9 @@ class QuantizationSimModel:
         for op_name, quantizer_info in self._param_quantizers.items():
 
             if quantizer_info.get_op_mode(self.session) != int(pymo.TensorQuantizerOpMode.passThrough):
-                encoding = quantizer_info.tensor_quantizer.computeEncoding()
+                op_bitwidth, op_use_symmetric_encodings = self._get_bitwidth_and_symmetric_flag(
+                    quantizer_info.quant_op_name)
+                encoding = quantizer_info.tensor_quantizer.computeEncoding(op_bitwidth, op_use_symmetric_encodings)
                 self._set_op_input_variables(op_name, encoding, op_mode)
 
     def export(self, path: str, filename_prefix: str, orig_sess: tf.Session = None):
@@ -389,27 +420,28 @@ class QuantizationSimModel:
             return delta, offset
 
         def update_encoding_dict_entry(encoding_dict: Dict,
-                                       quant_op_name: str, quantizer_info: QuantizerInfo):
+                                       quant_op_name: str):
             min_val, max_val = read_min_max(quant_op_name)
-            delta, offset = calculate_delta_offset(min_val, max_val, quantizer_info.tensor_quantizer.bitwidth)
+            op_bitwidth = int(self._get_op_variable_value(quant_op_name, int(QuantizeOpIndices.bit_width)))
+            delta, offset = calculate_delta_offset(min_val, max_val, op_bitwidth)
             op_name = self._get_unquantized_name(quant_op_name)
             encoding_dict[op_name] = {'min': min_val,
                                       'max': max_val,
                                       'scale': delta,
                                       'offset': offset,
-                                      'bitwidth': quantizer_info.tensor_quantizer.bitwidth}
+                                      'bitwidth': op_bitwidth}
 
         param_encodings = {}
         for quant_op_name, quantizer_info in self._param_quantizers.items():
             if not quantizer_info.tensor_quantizer.isEncodingValid:
                 continue
-            update_encoding_dict_entry(param_encodings, quant_op_name, quantizer_info)
+            update_encoding_dict_entry(param_encodings, quant_op_name)
 
         activation_encodings = {}
         for quant_op_name, quantizer_info in self._activation_quantizers.items():
             if not quantizer_info.tensor_quantizer.isEncodingValid:
                 continue
-            update_encoding_dict_entry(activation_encodings, quant_op_name, quantizer_info)
+            update_encoding_dict_entry(activation_encodings, quant_op_name)
 
         encodings_dict = {'param_encodings': param_encodings,
                           'activation_encodings': activation_encodings}
@@ -582,9 +614,8 @@ class QuantizationSimModel:
 
             # Note: Last param of TensorQuantizer is a flag to indicate is_symmetric_encoding,
             # this value is to be read from config file
-            tensor_quantizer = pymo.TensorQuantizer(bit_width, quant_scheme_to_pymo[self._quant_scheme],
-                                                    pymo.RoundingMode.ROUND_NEAREST,
-                                                    False)
+            tensor_quantizer = pymo.TensorQuantizer(quant_scheme_to_pymo[self._quant_scheme],
+                                                    pymo.RoundingMode.ROUND_NEAREST)
             quantizer_info = QuantizerInfo(tensor_quantizer, quant_op_name)
             tensor_quantizer = pymo.PtrToInt64(tensor_quantizer)
             tensor_quant_ref = tf.Variable(tensor_quantizer, name=quant_op_name + '_quant_ref',

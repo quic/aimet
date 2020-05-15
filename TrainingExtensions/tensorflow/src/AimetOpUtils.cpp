@@ -58,6 +58,8 @@ T copyLiteralToHost(const CPUDevice& d, const T* deviceValue)
 }
 
 template void copyInputTensorsToOutputTensors(const CPUDevice& d, const float* inTensor, size_t count, float* outTensor);
+template int8 copyLiteralToHost<int8>(const CPUDevice&, const int8* deviceValue);
 template int32 copyLiteralToHost<int32>(const CPUDevice&, const int32* deviceValue);
 template uint64 copyLiteralToHost<uint64>(const CPUDevice&, const uint64* deviceValue);
 template double copyLiteralToHost<double>(const CPUDevice&, const double* deviceValue);
+template bool copyLiteralToHost<bool>(const CPUDevice&, const bool* deviceValue);
