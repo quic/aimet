@@ -106,6 +106,25 @@ def keras_model_functional():
     return model
 
 
+def keras_model_functional_with_non_fused_batchnorms():
+    """ Function for returning basic keras model defined functionally using non fused batchnorms"""
+    is_training = tf.placeholder_with_default(tf.constant(True), shape=(), name='is_training')
+    inputs = tf.keras.Input(shape=(32, 32, 3,))
+    x = tf.keras.layers.Conv2D(32, (3, 3))(inputs)
+    x = tf.keras.layers.BatchNormalization(momentum=.3, epsilon=.65, fused=False)(x, training=True)
+    with tf.variable_scope("scope_1"):
+        x = tf.keras.layers.Conv2D(16, (2, 2), activation=tf.nn.tanh)(x)
+        x = tf.keras.layers.BatchNormalization(momentum=.4, epsilon=.25, fused=False)(x, training=is_training)
+        x = tf.keras.layers.Conv2D(8, (2, 2), activation=tf.nn.tanh)(x)
+        x = tf.keras.layers.BatchNormalization(momentum=.5, epsilon=.35, fused=False)(x, training=False)
+        x = tf.keras.layers.Conv2D(4, (2, 2), activation=tf.nn.relu6)(x)
+    x = tf.keras.layers.Flatten()(x)
+    outputs = tf.keras.layers.Dense(10, activation=tf.nn.softmax,
+                                    name="keras_model_functional_with_non_fused_batchnorms")(x)
+    model = tf.keras.Model(inputs=inputs, outputs=outputs)
+    return model
+
+
 def tf_slim_basic_model(inp):
     """ Function for returning basic tf slim model """
     is_training = tf.placeholder_with_default(tf.constant(True), shape=(), name='is_training')

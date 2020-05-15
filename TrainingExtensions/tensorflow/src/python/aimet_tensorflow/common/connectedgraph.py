@@ -325,7 +325,7 @@ class ConnectedGraph(aimetCommonConnectedGraph):
                 bias_op = BiasUtils.get_bias_read_op(tf_op)
                 create_and_connect_product('bias', bias_op.outputs[0].shape, my_op, bias_op.outputs[0])
 
-        def create_fusedbatchnorm_params(my_op: Op):
+        def create_batchnorm_params(my_op: Op):
             """ Create products for fusedbatchnorm """
             tf_op = my_op.get_module()
 
@@ -351,7 +351,8 @@ class ConnectedGraph(aimetCommonConnectedGraph):
             "Conv2D": create_conv2d_dense_type_params,
             "Dense": create_conv2d_dense_type_params,
             "DepthwiseConv2dNative": create_conv2d_dense_type_params,
-            "FusedBatchNormV3": create_fusedbatchnorm_params
+            "BatchNorm": create_batchnorm_params,
+            "FusedBatchNormV3": create_batchnorm_params
         }
 
         handler = switcher.get(op.type, handle_default)
