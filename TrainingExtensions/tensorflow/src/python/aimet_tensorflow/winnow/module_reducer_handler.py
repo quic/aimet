@@ -485,7 +485,7 @@ def reduce_leaky_relu(_, op_tensor_tuple: Tuple[Op, List[tf.Tensor]], _op_mask) 
     :param _op_mask: unused parameter
     """
     name = "reduced_" + op_tensor_tuple[0].dotted_name
-    alpha = op_tensor_tuple[0].get_attribute('alpha')
+    alpha = op_tensor_tuple[0].get_module().get_attr('alpha')
     assert alpha is not None
     new_tensor = tf.nn.leaky_relu(op_tensor_tuple[1][0], alpha=alpha, name=name)
     module = new_tensor.op
