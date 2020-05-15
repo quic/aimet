@@ -1,3 +1,7 @@
+:orphan:
+
+.. _ug-spatial-svd:
+
 =================
 AIMET Spatial SVD
 =================
