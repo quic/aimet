@@ -68,7 +68,7 @@ class TestTensorFlowLayerDatabase(unittest.TestCase):
             # initialize the weights and biases with appropriate initializer
             sess.run(tf.global_variables_initializer())
 
-        layer_db = LayerDatabase(model=sess, working_dir=None)
+        layer_db = LayerDatabase(model=sess, input_shape=(1, 28, 28, 1), working_dir=None)
 
         layers = list(layer_db._compressible_layers.values())
 
@@ -110,7 +110,7 @@ class TestTensorFlowLayerDatabase(unittest.TestCase):
             _ = mnist_tf_model.create_model(data_format='channels_last')
             sess.run(tf.global_variables_initializer())
 
-        layer_db = LayerDatabase(model=sess, working_dir=None)
+        layer_db = LayerDatabase(model=sess, input_shape=(1, 28, 28, 1), working_dir=None)
         layers = list(layer_db._compressible_layers.values())
 
         # set the picked_for_compression for first two layers
@@ -195,7 +195,7 @@ class TestTensorFlowLayerDatabase(unittest.TestCase):
         if not os.path.exists(meta_path):
             os.mkdir(meta_path)
 
-        layer_db = LayerDatabase(model=sess, working_dir=meta_path)
+        layer_db = LayerDatabase(model=sess, input_shape=(1, 28, 28, 1), working_dir=meta_path)
         copy_layer_db = copy.deepcopy(layer_db)
 
         shutil.rmtree(meta_path)
@@ -222,7 +222,7 @@ class TestTensorFlowLayerDatabase(unittest.TestCase):
             init = tf.global_variables_initializer()
 
         sess.run(init)
-        layer_db = LayerDatabase(model=sess, working_dir=None)
+        layer_db = LayerDatabase(model=sess, input_shape=(1, 28, 28, 1), working_dir=None)
 
         mem_before = psutil.virtual_memory().available
 
@@ -255,7 +255,7 @@ class TestTensorFlowLayerDatabase(unittest.TestCase):
             init = tf.global_variables_initializer()
 
         sess.run(init)
-        layer_db = LayerDatabase(model=sess, working_dir=None)
+        layer_db = LayerDatabase(model=sess, input_shape=(1, 28, 28, 1), working_dir=None)
 
         layer_db.destroy()
 
@@ -263,5 +263,52 @@ class TestTensorFlowLayerDatabase(unittest.TestCase):
         # delete temp directory
         shutil.rmtree(str('./temp_meta/'))
 
+    def test_layer_database_with_dynamic_shape(self):
+        """ test layer database creation with different input shapes"""
+        # create tf.Session and initialize the weights and biases with zeros
+        config = tf.ConfigProto()
+        config.gpu_options.allow_growth = True
 
+        graph = tf.Graph()
 
+        with graph.as_default():
+            # by default, model will be constructed in default graph
+            input_placeholder = tf.placeholder(tf.float32, [None, None, None, 3], 'input')
+            x = tf.keras.layers.Conv2D(8, (2, 2), padding='SAME')(input_placeholder)
+            x = tf.keras.layers.BatchNormalization(momentum=.3, epsilon=.65)(x)
+            x = tf.keras.layers.Conv2D(8, (1, 1), padding='SAME', activation=tf.nn.tanh)(x)
+            x = tf.keras.layers.BatchNormalization(momentum=.4, epsilon=.25)(x)
+            init = tf.global_variables_initializer()
+
+        # create session with graph
+        sess = tf.Session(graph=graph, config=config)
+        sess.run(init)
+
+        layer_db = LayerDatabase(model=sess, input_shape=(1, 224, 224, 3), working_dir=None, starting_ops=['input'],
+                                 ending_ops=['batch_normalization_1/cond/Merge'])
+
+        conv1_layer = layer_db.find_layer_by_name('conv2d/Conv2D')
+        conv2_layer = layer_db.find_layer_by_name('conv2d_1/Conv2D')
+
+        self.assertEqual(conv1_layer.output_shape, [1, 8, 224, 224])
+        self.assertEqual(conv2_layer.output_shape, [1, 8, 224, 224])
+
+        layer_db.destroy()
+
+        # 2) try with different input shape
+
+        # create another session with graph
+        sess = tf.Session(graph=graph, config=config)
+        sess.run(init)
+
+        batch_size = 32
+        layer_db = LayerDatabase(model=sess, input_shape=(batch_size, 28, 28, 3), working_dir=None,
+                                 starting_ops=['input'], ending_ops=['batch_normalization_1/cond/Merge'])
+
+        conv1_layer = layer_db.find_layer_by_name('conv2d/Conv2D')
+        conv2_layer = layer_db.find_layer_by_name('conv2d_1/Conv2D')
+
+        self.assertEqual(conv1_layer.output_shape, [32, 8, 28, 28])
+        self.assertEqual(conv2_layer.output_shape, [32, 8, 28, 28])
+
+        layer_db.destroy()

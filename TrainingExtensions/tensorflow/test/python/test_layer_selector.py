@@ -60,10 +60,21 @@ class TestLayerSelector(unittest.TestCase):
                 tf.keras.layers.Dense(64 * 28 * 28, name='linear')
             ])
 
-        layer1 = Layer(sess, sess.graph.get_operation_by_name("conv1/Conv2D"))
-        layer2 = Layer(sess, sess.graph.get_operation_by_name("conv2/Conv2D"))
-        layer3 = Layer(sess, sess.graph.get_operation_by_name("conv3/separable_conv2d"))
-        layer4 = Layer(sess, sess.graph.get_operation_by_name("linear/MatMul"))
+        conv1_op = sess.graph.get_operation_by_name("conv1/Conv2D")
+        conv2_op = sess.graph.get_operation_by_name("conv2/Conv2D")
+        conv3_op = sess.graph.get_operation_by_name("conv3/separable_conv2d")
+        matmul1_op = sess.graph.get_operation_by_name("linear/MatMul")
+
+        # output shape in NCHW format
+        conv1_op_output_shape = conv1_op.outputs[0].shape
+        conv2_op_output_shape = conv2_op.outputs[0].shape
+        conv3_op_output_shape = conv3_op.outputs[0].shape
+        matmul1_op_output_shape = matmul1_op.outputs[0].shape
+
+        layer1 = Layer(sess, conv1_op, output_shape=conv1_op_output_shape)
+        layer2 = Layer(sess, conv2_op, output_shape=conv2_op_output_shape)
+        layer3 = Layer(sess, conv3_op, output_shape=conv3_op_output_shape)
+        layer4 = Layer(sess, matmul1_op, output_shape=matmul1_op_output_shape)
 
         layer_db = MagicMock()
         layer_db.__iter__.return_value = [layer1, layer2, layer3, layer4]
@@ -91,10 +102,21 @@ class TestLayerSelector(unittest.TestCase):
                 tf.keras.layers.Dense(64 * 28 * 28, name='linear')
             ])
 
-        layer1 = Layer(sess, sess.graph.get_operation_by_name("conv1/Conv2D"))
-        layer2 = Layer(sess, sess.graph.get_operation_by_name("conv2/Conv2D"))
-        layer3 = Layer(sess, sess.graph.get_operation_by_name("conv3/separable_conv2d"))
-        layer4 = Layer(sess, sess.graph.get_operation_by_name("linear/MatMul"))
+        conv1_op = sess.graph.get_operation_by_name("conv1/Conv2D")
+        conv2_op = sess.graph.get_operation_by_name("conv2/Conv2D")
+        conv3_op = sess.graph.get_operation_by_name("conv3/separable_conv2d")
+        matmul1_op = sess.graph.get_operation_by_name("linear/MatMul")
+
+        # output shape in NCHW format
+        conv1_op_output_shape = conv1_op.outputs[0].shape
+        conv2_op_output_shape = conv2_op.outputs[0].shape
+        conv3_op_output_shape = conv3_op.outputs[0].shape
+        matmul1_op_output_shape = matmul1_op.outputs[0].shape
+
+        layer1 = Layer(sess, conv1_op, output_shape=conv1_op_output_shape)
+        layer2 = Layer(sess, conv2_op, output_shape=conv2_op_output_shape)
+        layer3 = Layer(sess, conv3_op, output_shape=conv3_op_output_shape)
+        layer4 = Layer(sess, matmul1_op, output_shape=matmul1_op_output_shape)
 
         layer_db = MagicMock()
         layer_db.__iter__.return_value = [layer1, layer2, layer3, layer4]

@@ -50,7 +50,7 @@ from aimet_tensorflow.utils.common import get_ordered_ops, create_input_feed_dic
 from aimet_tensorflow.utils.graph_saver import wrapper_func
 from aimet_tensorflow.examples.test_models import single_residual, multiple_input_model, \
     model_with_multiple_training_tensors
-from aimet_tensorflow.utils.op.conv import WeightTensorUtils, BiasUtils
+from aimet_tensorflow.utils.op.conv import WeightTensorUtils, BiasUtils, get_output_activation_shape
 from aimet_tensorflow.utils.op.fusedbatchnorm import BNUtils
 
 from aimet_tensorflow.utils.graph_saver import save_and_load_graph
@@ -658,3 +658,128 @@ class TestTrainingExtensionsTfUtils(unittest.TestCase):
         assert gamma is not None
         assert moving_mean is not None
         assert moving_var is not None
+
+    def test_get_output_activation_shape(self):
+        """Test for getting output activation shapes"""
+
+        # 1) dynamic shape
+
+        graph = tf.Graph()
+        filter_data = np.ones([5, 5, 3, 32], dtype=np.float32)
+
+        with graph.as_default():
+            input_tensor = tf.placeholder(tf.float32, [1, None, None, None], 'input')
+
+            filter_tensor = tf.Variable(initial_value=filter_data, name='filter_tensor', dtype=tf.float32)
+
+            _ = tf.nn.conv2d(input=input_tensor, filter=filter_tensor, padding='SAME', strides=[1, 1, 1, 1],
+                             data_format="NCHW", name='Conv2D_1')
+
+            init = tf.global_variables_initializer()
+
+        sess = tf.Session(graph=graph)
+        sess.run(init)
+
+        conv_op = sess.graph.get_operation_by_name('Conv2D_1')
+        output_shape = get_output_activation_shape(sess=sess, op=conv_op, input_op_names=['input'],
+                                                   input_shape=(1, 3, 10, 10))
+
+        batch_size, channels, activations_h, activations_w = output_shape
+
+        self.assertEqual(activations_h, 10)
+        self.assertEqual(activations_w, 10)
+        self.assertEqual(channels, 32)
+
+        sess.close()
+
+        # 2) static shape
+
+        graph = tf.Graph()
+        input_data = np.ones([1, 3, 10, 10], dtype=np.float32)
+        filter_data = np.ones([5, 5, 3, 32], dtype=np.float32)
+
+        with graph.as_default():
+            input_tensor = tf.Variable(initial_value=input_data, name='input', dtype=tf.float32)
+            filter_tensor = tf.Variable(initial_value=filter_data, name='filter_tensor', dtype=tf.float32)
+
+            _ = tf.nn.conv2d(input=input_tensor, filter=filter_tensor, padding='SAME', strides=[1, 1, 1, 1],
+                             data_format="NCHW", name='Conv2D_1')
+
+            init = tf.global_variables_initializer()
+
+        sess = tf.Session(graph=graph)
+        sess.run(init)
+
+        conv_op = sess.graph.get_operation_by_name('Conv2D_1')
+        output_shape = get_output_activation_shape(sess=sess, op=conv_op, input_op_names=['input'],
+                                                   input_shape=(1, 3, 10, 10))
+
+        batch_size, channels, activations_h, activations_w = output_shape
+        self.assertEqual(activations_h, 10)
+        self.assertEqual(activations_w, 10)
+        self.assertEqual(channels, 32)
+
+        sess.close()
+
+    def test_get_output_activation_shape_channels_last(self):
+        """Test for getting output activation shapes for channels_last format"""
+
+        # 1) dynamic shape
+
+        graph = tf.Graph()
+        filter_data = np.ones([5, 5, 3, 32], dtype=np.float32)
+
+        with graph.as_default():
+            input_tensor = tf.placeholder(tf.float32, [1, None, None, None], 'input')
+
+            filter_tensor = tf.Variable(initial_value=filter_data, name='filter_tensor', dtype=tf.float32)
+
+            _ = tf.nn.conv2d(input=input_tensor, filter=filter_tensor, padding='SAME', strides=[1, 1, 1, 1],
+                             data_format="NHWC", name='Conv2D_1')
+
+            init = tf.global_variables_initializer()
+
+        sess = tf.Session(graph=graph)
+        sess.run(init)
+
+        conv_op = sess.graph.get_operation_by_name('Conv2D_1')
+        output_shape = get_output_activation_shape(sess=sess, op=conv_op, input_op_names=['input'],
+                                                   input_shape=(1, 10, 10, 3))
+
+        batch_size, channels, activations_h, activations_w = output_shape
+
+        self.assertEqual(activations_h, 10)
+        self.assertEqual(activations_w, 10)
+        self.assertEqual(channels, 32)
+
+        sess.close()
+
+        # 2) static shape
+
+        graph = tf.Graph()
+        # channels_last format
+        input_data = np.ones([1, 10, 10, 3], dtype=np.float32)
+        filter_data = np.ones([5, 5, 3, 32], dtype=np.float32)
+
+        with graph.as_default():
+            input_tensor = tf.Variable(initial_value=input_data, name='input', dtype=tf.float32)
+            filter_tensor = tf.Variable(initial_value=filter_data, name='filter_tensor', dtype=tf.float32)
+
+            _ = tf.nn.conv2d(input=input_tensor, filter=filter_tensor, padding='SAME', strides=[1, 1, 1, 1],
+                             data_format="NHWC", name='Conv2D_1')
+
+            init = tf.global_variables_initializer()
+
+        sess = tf.Session(graph=graph)
+        sess.run(init)
+
+        conv_op = sess.graph.get_operation_by_name('Conv2D_1')
+        output_shape = get_output_activation_shape(sess=sess, op=conv_op, input_op_names=['input'],
+                                                   input_shape=(1, 10, 10, 3))
+
+        batch_size, channels, activations_h, activations_w = output_shape
+        self.assertEqual(activations_h, 10)
+        self.assertEqual(activations_w, 10)
+        self.assertEqual(channels, 32)
+
+        sess.close()

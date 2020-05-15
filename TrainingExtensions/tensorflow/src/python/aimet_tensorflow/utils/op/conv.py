@@ -37,13 +37,13 @@
 # =============================================================================
 """ utilities for conv op """
 
-from typing import Tuple, List
+from typing import Tuple, List, Union
 import numpy as np
 
 import tensorflow as tf
 from tensorflow.contrib import graph_editor as ge
 from aimet_common.utils import AimetLogger
-from aimet_tensorflow.utils.common import change_out_act_shape_to_channels_first, get_padding
+from aimet_tensorflow.utils.common import get_padding, create_input_feed_dict, create_rand_tensors_given_shapes
 from aimet_tensorflow.utils.graph_saver import save_and_load_graph
 from aimet_tensorflow.utils import constants
 
@@ -479,23 +479,53 @@ def get_weight_shape(op: tf.Operation) -> List:
     return weight_shape
 
 
-def get_output_shape(op: tf.Operation) -> List:
+def get_output_activation_shape(sess: tf.Session, op: tf.Operation, input_op_names: List[str],
+                                input_shape: Union[Tuple, List[Tuple]]) -> List:
     """
-    Output activation shape in the common format
-    [Batch_size, Channels, act_h, act_w]
-
-    :param op: TensorFlow Op
-    :return: shape
+     Output activation shape in the Common format [NCHW]
+    :param sess: TensorFlow Session
+    :param input_op_names: list of input op names of model
+    :param input_shape: tuple or list of tuple of input shape of model
+    :param op: TensorFlow op
+    :return: output_shape in Common format [NCHW]
     """
-
-    # use static shape for output activations
-    output_shape = op.outputs[0].get_shape().as_list()
-
     if op.type == 'MatMul':
+        # use static shape for output activations
+        output_shape = op.outputs[0].get_shape().as_list()
         output_shape.extend([1, 1])
 
     elif op.type == 'Conv2D':
-        output_shape = change_out_act_shape_to_channels_first(op)
+        # use static shape for output activations
+        output_shape = op.outputs[0].get_shape().as_list()
+
+        data_format = op.get_attr('data_format')
+
+        # convert output activation shape to Common format [NCHW], if channels_last
+        if str(data_format.decode("utf-8")) == "NHWC":
+            output_shape = [output_shape[0], output_shape[3], output_shape[1], output_shape[2]]
+
+        # if the static shape is undefined, then find dynamic shape of output activations
+        if output_shape[2] is None:
+
+            # create shape tensor for output activation in the same graph
+            with op.graph.as_default():
+                output_shape_tensor = tf.shape(op.outputs[0])
+
+            # get input data
+            input_data = create_rand_tensors_given_shapes(input_shape=input_shape)
+
+            # create feed_dict
+            feed_dict = create_input_feed_dict(graph=op.graph,
+                                               input_op_names_list=input_op_names,
+                                               input_data=input_data, training=False)
+
+            # get the output shape by evaluating the shape tensor
+            output_shape = output_shape_tensor.eval(feed_dict=feed_dict, session=sess)
+
+            # convert output activation shape to Common format [NCHW], if channels_last
+            if str(data_format.decode("utf-8")) == "NHWC":
+                output_shape = [output_shape[0].item(), output_shape[3].item(), output_shape[1].item(),
+                                output_shape[2].item()]
 
     else:
         raise ValueError("Op type is not supported!")
