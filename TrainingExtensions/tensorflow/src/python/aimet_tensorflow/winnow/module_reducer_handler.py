@@ -253,14 +253,29 @@ def reduce_batchnorm(sess: tf.Session, op_tensor_tuple: Tuple[Op, List[tf.Tensor
         # Get the tensor in the graph corresponding to the string name
         training = sess.graph.get_tensor_by_name(training)
     is_fused = op_tensor_tuple[0].type == 'FusedBatchNormV3'
-    new_tensor = tf.keras.layers.BatchNormalization(center=use_beta,
-                                                    scale=use_gamma,
-                                                    beta_initializer=reduced_beta_init,
-                                                    gamma_initializer=reduced_gamma_init,
-                                                    moving_mean_initializer=reduced_mov_mean_init,
-                                                    moving_variance_initializer=reduced_mov_variance_init,
-                                                    fused=is_fused,
-                                                    name=name)(op_tensor_tuple[1][0], training=training)
+    epsilon = op_tensor_tuple[0].get_attribute('epsilon')
+    momentum = op_tensor_tuple[0].get_attribute('momentum')
+    if momentum is not None:
+        new_tensor = tf.keras.layers.BatchNormalization(center=use_beta,
+                                                        scale=use_gamma,
+                                                        epsilon=epsilon,
+                                                        momentum=momentum,
+                                                        beta_initializer=reduced_beta_init,
+                                                        gamma_initializer=reduced_gamma_init,
+                                                        moving_mean_initializer=reduced_mov_mean_init,
+                                                        moving_variance_initializer=reduced_mov_variance_init,
+                                                        fused=is_fused,
+                                                        name=name)(op_tensor_tuple[1][0], training=training)
+    else:
+        new_tensor = tf.keras.layers.BatchNormalization(center=use_beta,
+                                                        scale=use_gamma,
+                                                        epsilon=epsilon,
+                                                        beta_initializer=reduced_beta_init,
+                                                        gamma_initializer=reduced_gamma_init,
+                                                        moving_mean_initializer=reduced_mov_mean_init,
+                                                        moving_variance_initializer=reduced_mov_variance_init,
+                                                        fused=is_fused,
+                                                        name=name)(op_tensor_tuple[1][0], training=training)
     module = new_tensor.op.inputs[0].op
 
     return name, new_tensor.op, module
