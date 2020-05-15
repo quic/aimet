@@ -39,7 +39,7 @@
 
 import copy
 from collections import OrderedDict
-from typing import Set
+from typing import Tuple, Set, Union, List
 
 import tensorflow as tf
 from tensorflow.contrib import graph_editor
@@ -47,6 +47,7 @@ from tensorflow.contrib import graph_editor
 # Import aimet specific modules
 from aimet_tensorflow.utils.common import is_op_compressible, get_valid_ops
 from aimet_tensorflow.utils import graph_saver
+from aimet_tensorflow.utils.op.conv import get_output_activation_shape
 import aimet_tensorflow.utils.op.conv
 import aimet_common.layer_database
 from aimet_common.utils import AimetLogger
@@ -80,20 +81,18 @@ class Layer(aimet_common.layer_database.Layer):
             params = aimet_common.layer_database.Conv2dTypeSpecificParams(strides, padding, groups)
             self.type_specific_params = params
 
-    def __init__(self, model: tf.Session, op: tf.Operation):
+    def __init__(self, model: tf.Session, op: tf.Operation, output_shape: Tuple):
 
         """
         :param model: TensorFlow Session
         :param op: TensorFlow Op
+        :param output_shape: output activation shape in Common format channels_first format (NCHW)
         """
 
         self.model = model
 
         # get the weight shape
         weight_shape = aimet_tensorflow.utils.op.conv.get_weight_shape(op)
-
-        # get the output activation shape
-        output_shape = aimet_tensorflow.utils.op.conv.get_output_shape(op)
 
         aimet_common.layer_database.Layer.__init__(self, module=op, name=op.name,
                                                    weight_shape=weight_shape, output_shape=output_shape)
@@ -106,23 +105,27 @@ class LayerDatabase(aimet_common.layer_database.LayerDatabase):
     Also stores compressible layers to model optimization
     """
 
-    def __init__(self, model: tf.Session, working_dir: str, starting_ops=None, ending_ops=None):
+    def __init__(self, model: tf.Session, input_shape: Union[Tuple, List[Tuple]], working_dir: str, starting_ops=None,
+                 ending_ops=None):
 
         """
         :param model: TensorFlow Session
+        :param input_shape: tuple or list of tuples of input shapes to the model
         :param working_dir: path to working directory to store intermediate graphs
         :param starting_ops: Starting ops of the graph, used in a top down DFS search
         :param ending_ops: Ending ops of the graph, used in a bottom up DFS search
         """
         self.meta_path = graph_saver.get_meta_and_checkpoint_path(working_dir)
         if starting_ops:
-            self._starting_ops = starting_ops
+            self.starting_ops = starting_ops
         else:
-            self._starting_ops = []
+            self.starting_ops = []
         if ending_ops:
-            self._ending_ops = ending_ops
+            self.ending_ops = ending_ops
         else:
-            self._ending_ops = []
+            self.ending_ops = []
+
+        self.input_shape = input_shape
 
         # Save the original model graph to meta path
         graph_saver.save_model_to_meta(model=model, meta_path=self.meta_path + 'original_model')
@@ -159,8 +162,13 @@ class LayerDatabase(aimet_common.layer_database.LayerDatabase):
                 # get the corresponding op in new graph
                 new_op = layer_db._model.graph.get_operation_by_name(existing_layer.name)
 
+                # get the output activation shape
+                output_shape = get_output_activation_shape(sess=layer_db._model, op=new_op,
+                                                           input_op_names=self.starting_ops,
+                                                           input_shape=self.input_shape)
+
                 # create new layer
-                new_layer = Layer(model=layer_db._model, op=new_op)
+                new_layer = Layer(model=layer_db._model, op=new_op, output_shape=output_shape)
 
                 new_layer.picked_for_compression = existing_layer.picked_for_compression
 
@@ -172,21 +180,23 @@ class LayerDatabase(aimet_common.layer_database.LayerDatabase):
 
         """
         Create Layer Database by populating with Conv2D and MatMul layers
-        :param starting_ops: Starting ops of the graph, used in a top down DFS search
-        :param ending_ops: Ending ops of the graph, used in a bottom up DFS search
         :return:
         """
         # get all the operations associated with graph in current session
         all_ops = self.model.graph.get_operations()
         # If starting ops is provided, use it to get a set of valid ops in the graph
-        if self._starting_ops:
-            valid_ops = get_valid_ops(self.model.graph, self._starting_ops, self._ending_ops)
+        if self.starting_ops:
+            valid_ops = get_valid_ops(self.model.graph, self.starting_ops, self.ending_ops)
             # Only keep ops in all_ops if it is a valid op
             all_ops = [op for op in all_ops if op in valid_ops]
 
         for op in all_ops:
             if is_op_compressible(op):
-                self._compressible_layers[id(op)] = Layer(model=self.model, op=op)
+
+                output_shape = get_output_activation_shape(sess=self.model, op=op, input_op_names=self.starting_ops,
+                                                           input_shape=self.input_shape)
+
+                self._compressible_layers[id(op)] = Layer(model=self.model, op=op, output_shape=output_shape)
 
     def replace_layer_with_sequential_of_two_layers(self, layer_to_replace: Layer,
                                                     layer_a: Layer, layer_b: Layer):
@@ -242,8 +252,8 @@ class LayerDatabase(aimet_common.layer_database.LayerDatabase):
         # get all the operations associated with graph in the provided session
         all_ops = self._model.graph.get_operations()
         # If starting ops is provided, use it to get a set of valid ops in the graph
-        if self._starting_ops:
-            valid_ops = get_valid_ops(self.model.graph, self._starting_ops, self._ending_ops)
+        if self.starting_ops:
+            valid_ops = get_valid_ops(self.model.graph, self.starting_ops, self.ending_ops)
             # Only keep ops in all_ops if it is a valid op
             all_ops = [op for op in all_ops if op in valid_ops]
 
@@ -251,7 +261,11 @@ class LayerDatabase(aimet_common.layer_database.LayerDatabase):
 
             if is_op_compressible(op) and op.name not in detached_op_names:
 
-                self._compressible_layers[id(op)] = Layer(model=self._model, op=op)
+                # get the output activation shape
+                output_shape = get_output_activation_shape(sess=self._model, op=op, input_op_names=self.starting_ops,
+                                                           input_shape=self.input_shape)
+
+                self._compressible_layers[id(op)] = Layer(model=self._model, op=op, output_shape=output_shape)
 
     def destroy(self):
         """

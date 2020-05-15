@@ -143,7 +143,7 @@ def get_succeeding_bias_tensor(op: tf.Operation) -> tf.Tensor:
     bias = None
     for consumer in op.outputs[0].consumers():
 
-        if consumer.type in ('Add', 'BiasAdd'):
+        if consumer.type in ('Add', 'BiasAdd') and len(consumer.inputs[1].shape) == 1:
             bias = consumer.inputs[1]
 
     return bias
@@ -402,3 +402,21 @@ def load_data_from_pickle_file(filename: str):
     loaded_data = pickle.load(infile)
     infile.close()
     return loaded_data
+
+
+def create_rand_tensors_given_shapes(input_shape: Union[Tuple, List[Tuple]]) -> List[np.ndarray]:
+    """
+    Given shapes of some tensors, create one or more random numpy tensors and return them as a list of tensors
+    :param input_shape: Shapes of tensors to create
+    :return: Created list of numpy tensors
+    """
+    if isinstance(input_shape, List):
+        input_shapes = input_shape
+    else:
+        input_shapes = [input_shape]
+
+    rand_tensors = []
+    for shape in input_shapes:
+        rand_tensors.append(np.random.rand(*shape))
+
+    return rand_tensors

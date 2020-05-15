@@ -83,6 +83,7 @@ class TestSpatialSvdLayerSplit(unittest.TestCase):
 
         orig_conv_op = g.get_operation_by_name('Conv2D_1')
 
+        # output shape in NCHW format
         shape = orig_conv_op.outputs[0].get_shape().as_list()
         self.assertEqual(shape, [num_examples, 50, 1, 1])
 
@@ -93,7 +94,8 @@ class TestSpatialSvdLayerSplit(unittest.TestCase):
 
         orig_conv_output = to_numpy(sess.run(orig_conv_op.outputs[0]))
 
-        layer1 = lad.Layer(model=sess, op=orig_conv_op)
+        layer1 = lad.Layer(model=sess, op=orig_conv_op, output_shape=shape)
+
         split_conv_op1, split_conv_op2 = SpatialSvdModuleSplitter.split_module(layer=layer1, rank=100)
 
         split_conv_output = to_numpy(sess.run(split_conv_op2.outputs[0]))
@@ -145,7 +147,9 @@ class TestSpatialSvdLayerSplit(unittest.TestCase):
         sess.run(init)
         orig_conv_output = to_numpy(sess.run(orig_conv_op.outputs[0]))
 
-        layer1 = lad.Layer(model=sess, op=orig_conv_op)
+        # but layer  expects output shape in NCHW format similar to PyTorch
+        shape = (shape[0], shape[3], shape[1], shape[2])
+        layer1 = lad.Layer(model=sess, op=orig_conv_op, output_shape=shape)
 
         split_conv_op1, split_conv_op2 = SpatialSvdModuleSplitter.split_module(layer=layer1, rank=100)
 
@@ -190,6 +194,7 @@ class TestSpatialSvdLayerSplit(unittest.TestCase):
 
         orig_conv_op = g.get_operation_by_name('Conv2D_1')
 
+        # output shape in NCHW format
         shape = orig_conv_op.outputs[0].get_shape().as_list()
 
         self.assertEqual(shape, [num_examples, 50, 2, 2])
@@ -201,7 +206,7 @@ class TestSpatialSvdLayerSplit(unittest.TestCase):
 
         orig_conv_output = to_numpy(sess.run(orig_conv_op.outputs[0]))
 
-        layer1 = lad.Layer(model=sess, op=orig_conv_op)
+        layer1 = lad.Layer(model=sess, op=orig_conv_op, output_shape=shape)
 
         split_conv_op1, split_conv_op2 = SpatialSvdModuleSplitter.split_module(layer=layer1, rank=100)
 
@@ -256,7 +261,10 @@ class TestSpatialSvdLayerSplit(unittest.TestCase):
 
         orig_conv_output = to_numpy(sess.run(orig_conv_op.outputs[0]))
 
-        layer1 = lad.Layer(model=sess, op=orig_conv_op)
+        # but layer  expects output shape in NCHW format similar to PyTorch
+        shape = (shape[0], shape[3], shape[1], shape[2])
+
+        layer1 = lad.Layer(model=sess, op=orig_conv_op, output_shape=shape)
 
         split_conv_op1, split_conv_op2 = SpatialSvdModuleSplitter.split_module(layer=layer1, rank=100)
 
@@ -310,7 +318,7 @@ class TestSpatialSvdLayerSplit(unittest.TestCase):
 
         orig_conv_output = to_numpy(sess.run(orig_conv_op.outputs[0]))
 
-        layer1 = lad.Layer(model=sess, op=orig_conv_op)
+        layer1 = lad.Layer(model=sess, op=orig_conv_op, output_shape=shape)
 
         split_conv_op1, split_conv_op2 = SpatialSvdModuleSplitter.split_module(layer=layer1, rank=96)
 
@@ -351,7 +359,7 @@ class TestSpatialSvdPruning(unittest.TestCase):
             sess.run(tf.global_variables_initializer())
 
         # Create a layer database
-        orig_layer_db = LayerDatabase(model=sess, working_dir=None)
+        orig_layer_db = LayerDatabase(model=sess, input_shape=(1, 28, 28, 1), working_dir=None)
         # Copy the db
         comp_layer_db = copy.deepcopy(orig_layer_db)
         conv1 = comp_layer_db.find_layer_by_name('conv2d/Conv2D')
@@ -409,7 +417,7 @@ class TestSpatialSvdPruning(unittest.TestCase):
             sess.run(tf.global_variables_initializer())
 
         # Create a layer database
-        orig_layer_db = LayerDatabase(model=sess, working_dir=None)
+        orig_layer_db = LayerDatabase(model=sess, input_shape=(1, 28, 28, 1), working_dir=None)
         conv1 = orig_layer_db.find_layer_by_name('conv2d/Conv2D')
         conv2 = orig_layer_db.find_layer_by_name('conv2d_1/Conv2D')
 
@@ -441,4 +449,3 @@ class TestSpatialSvdPruning(unittest.TestCase):
         sess.close()
         # delete temp directory
         shutil.rmtree(str('./temp_meta/'))
-
