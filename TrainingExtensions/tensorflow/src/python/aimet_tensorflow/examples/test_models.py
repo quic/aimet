@@ -368,3 +368,14 @@ def model_with_three_convs():
     x = tf.keras.layers.Flatten()(x)
     outputs = tf.keras.layers.Dense(10, activation=tf.nn.softmax, name="three_convs")(x)
     return outputs
+
+
+def model_with_upsample2d():
+    """ Return model with upsample2D op """
+    inputs = tf.keras.Input(shape=(8, 8, 3,))
+    x = tf.keras.layers.Conv2D(8, (2, 2))(inputs)
+    x = tf.keras.layers.UpSampling2D(size=(2, 3))(x)
+    x = tf.keras.layers.Conv2D(4, (2, 2))(x)
+    x = tf.keras.layers.Flatten()(x)
+    outputs = tf.keras.layers.Dense(10, activation=tf.nn.softmax, name="model_with_upsample2d")(x)
+    return outputs

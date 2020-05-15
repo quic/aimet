@@ -203,6 +203,7 @@ class OpConnectivity:
                        'MirrorPad': ConnectivityType.direct,
                        'Minimum': ConnectivityType.direct,
                        'Maximum': ConnectivityType.direct,
+                       'Upsample2D': ConnectivityType.direct,
                        'Add': ConnectivityType.add,
                        'AddN': ConnectivityType.add,
                        'AddV2': ConnectivityType.add,

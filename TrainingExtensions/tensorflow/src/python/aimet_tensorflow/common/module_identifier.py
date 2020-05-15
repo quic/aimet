@@ -171,7 +171,8 @@ class StructureModuleIdentifier(ModuleIdentifier):
             "Mul": [module_identifier_matchers.match_dropout_pattern_3],
             "Softmax": [module_identifier_matchers.match_softmax],
             "Unpack": [module_identifier_matchers.match_upsample],
-            "GatherV2": [module_identifier_matchers.match_downsample]
+            "GatherV2": [module_identifier_matchers.match_downsample],
+            "Shape": [module_identifier_matchers.match_upsample2d]
         }
 
         op_handlers = switcher.get(op_type, [module_identifier_matchers.handle_default])

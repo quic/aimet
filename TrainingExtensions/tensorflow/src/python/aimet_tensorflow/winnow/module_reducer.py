@@ -167,7 +167,8 @@ class ModuleReducer(aimet_common.winnow.winnow_utils.ModuleReducer):
             "MirrorPad": module_reducers.reduce_pad,
             "Minimum": module_reducers.reduce_min_max,
             "Maximum": module_reducers.reduce_min_max,
-            "Downsample": module_reducers.reduce_downsample
+            "Downsample": module_reducers.reduce_downsample,
+            "Upsample2D": module_reducers.reduce_upsample2d
         }
 
         reducer = switcher.get(op_tensor_tuple[0].type, module_reducers.reduce_default)
