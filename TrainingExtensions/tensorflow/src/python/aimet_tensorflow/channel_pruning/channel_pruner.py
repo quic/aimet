@@ -212,8 +212,8 @@ class InputChannelPruner(Pruner):
                 for orig_op_name, _, _, _ in ordered_modules_list:
                     detached_op_names.add(orig_op_name)
 
-        # update layer database with new session and exclude the detached ops
-        comp_layer_db.update_database(current_sess, detached_op_names)
+        # update layer database by excluding the detached ops
+        comp_layer_db.update_database(current_sess, detached_op_names, update_model=False)
 
         # calculate the cost of this model
         compressed_model_cost = CostCalculator.compute_model_cost(comp_layer_db)
@@ -273,7 +273,7 @@ class InputChannelPruner(Pruner):
         with current_sess.graph.as_default():
             initialize_uninitialized_vars(current_sess)
         current_sess = save_and_load_graph('./saver', current_sess)
-        comp_layer_db.update_database(current_sess, detached_op_names)
+        comp_layer_db.update_database(current_sess, detached_op_names, update_model=True)
 
         # Perform reconstruction
         self._reconstruct_layers(layers_to_reconstruct, orig_layer_name_to_pruned_name_and_mask_dict, layer_db,

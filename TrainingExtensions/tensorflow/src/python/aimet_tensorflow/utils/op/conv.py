@@ -118,9 +118,10 @@ class WeightTensorUtils:
         return get_wt_as_read_var_tensor
 
     @staticmethod
-    def get_tensor_as_numpy_data(sess, op: tf.Operation) -> np.array:
+    def get_tensor_as_numpy_data(sess: tf.Session, op: tf.Operation) -> np.array:
         """
         return weight kernel in the op as numpy data
+        :param sess: TensorFlow session
         :param op: tf operation to extract weight tensor from.
         :return : weight tensor as numpy array type, if found in the given op
         """
@@ -180,7 +181,7 @@ class BiasUtils:
         Note : Higher level api needs to perform a save and load to get updated session after usage of this api
         """
 
-        assert conv_op_out_tensor is not None, ('Error, insert_bias_add_op() : conv op output tensor must be provided')
+        assert conv_op_out_tensor is not None, 'Error, insert_bias_add_op() : conv op output tensor must be provided'
         with sess.graph.as_default():
             if conv_op_out_tensor.consumers():
 
@@ -196,7 +197,6 @@ class BiasUtils:
 
                 # initialize tensor once it's added
                 sess.run(tf.variables_initializer([new_bias_tensor]))
-
 
     @staticmethod
     def initialize_model_with_bias(sess: tf.Session) -> tf.Session:
@@ -257,7 +257,7 @@ class BiasUtils:
         :return: index of bias tensor in the inputs of the given op
         """
         if input_op.type not in constants.OP_BIAS_INDICES:
-            raise ValueError('Op type: '+input_op.type+' does not contain bias!')
+            raise ValueError('Op type: ' + input_op.type + ' does not contain bias!')
         return constants.OP_BIAS_INDICES[input_op.type]
 
     @staticmethod
@@ -276,7 +276,7 @@ class BiasUtils:
             bias_index = BiasUtils.get_bias_index_in_given_op(input_op)
             for consumer in input_op.outputs[bias_index].consumers():
                 # check the input types of the add or bias_add
-                if consumer.type in ['BiasAdd', 'Add']:
+                if consumer.type in ['BiasAdd', 'Add'] and len(consumer.inputs[1].shape) == 1:
                     # check num tensors and op types coming into this bias add or add
                     assert len(consumer.inputs) == 2
                     # check if one of the inputs is ReadVariableOp type or Identity type
@@ -353,11 +353,12 @@ class BiasUtils:
         return bias_add_op
 
     @staticmethod
-    def get_bias_as_numpy_data(sess, op: tf.Operation) -> tf.Variable:
+    def get_bias_as_numpy_data(sess: tf.Session, op: tf.Operation) -> tf.Variable:
         """
         return bias in the op as a tf variable type
-        :param op: tf operation to extract bias tensor from.
-        :return : bias tensor as numpy data array, if found in the given op
+        :param sess: TensorFlow session
+        :param op: tf operation to extract weight tensor from.
+        :return : weight tensor as tf variable type, if found in the given op
         """
 
         # bias tensor feeds into bias-add op through ReadVariableOp type
@@ -376,6 +377,7 @@ class BiasUtils:
         Note :
         Caller needs to perform a load and save of the graph
         if this api is invoked for an op without existing bias.
+        :param sess: TensorFlow session
         :param op:op for which the bias is to be updated
         :param bias_as_numpy_array: new bias as a numpy array
         :param bias_name: optional name can be specified by user
@@ -452,8 +454,8 @@ def get_strides_for_split_conv_ops(op: tf.Operation) -> (List, List):
 
 def get_weight_shape(op: tf.Operation) -> List:
     """
-    Weight shape of an Op in common format
-    common format
+    Weight shape of an Op in Common format
+    Common format
     Conv2D - [Noc, Nic, k_h, k_w]
     MatMul - [Noc, Nic]
 
@@ -484,48 +486,16 @@ def get_output_activation_shape(sess: tf.Session, op: tf.Operation, input_op_nam
     """
      Output activation shape in the Common format [NCHW]
     :param sess: TensorFlow Session
+    :param op: TensorFlow op
     :param input_op_names: list of input op names of model
     :param input_shape: tuple or list of tuple of input shape of model
-    :param op: TensorFlow op
     :return: output_shape in Common format [NCHW]
     """
     if op.type == 'MatMul':
-        # use static shape for output activations
-        output_shape = op.outputs[0].get_shape().as_list()
-        output_shape.extend([1, 1])
+        output_shape = get_matmul_activation_shape(op=op, input_activation=False)
 
     elif op.type == 'Conv2D':
-        # use static shape for output activations
-        output_shape = op.outputs[0].get_shape().as_list()
-
-        data_format = op.get_attr('data_format')
-
-        # convert output activation shape to Common format [NCHW], if channels_last
-        if str(data_format.decode("utf-8")) == "NHWC":
-            output_shape = [output_shape[0], output_shape[3], output_shape[1], output_shape[2]]
-
-        # if the static shape is undefined, then find dynamic shape of output activations
-        if output_shape[2] is None:
-
-            # create shape tensor for output activation in the same graph
-            with op.graph.as_default():
-                output_shape_tensor = tf.shape(op.outputs[0])
-
-            # get input data
-            input_data = create_rand_tensors_given_shapes(input_shape=input_shape)
-
-            # create feed_dict
-            feed_dict = create_input_feed_dict(graph=op.graph,
-                                               input_op_names_list=input_op_names,
-                                               input_data=input_data, training=False)
-
-            # get the output shape by evaluating the shape tensor
-            output_shape = output_shape_tensor.eval(feed_dict=feed_dict, session=sess)
-
-            # convert output activation shape to Common format [NCHW], if channels_last
-            if str(data_format.decode("utf-8")) == "NHWC":
-                output_shape = [output_shape[0].item(), output_shape[3].item(), output_shape[1].item(),
-                                output_shape[2].item()]
+        output_shape = get_conv2d_activation_shape(sess, op, input_op_names, input_shape, input_activation=False)
 
     else:
         raise ValueError("Op type is not supported!")
@@ -533,10 +503,90 @@ def get_output_activation_shape(sess: tf.Session, op: tf.Operation, input_op_nam
     return output_shape
 
 
-def get_layer_attributes(op: tf.Operation) -> (Tuple, Tuple, Tuple):
+def get_conv2d_activation_shape(sess: tf.Session, op: tf.Operation, input_op_names: List[str],
+                                input_shape: Union[Tuple, List[Tuple]], input_activation: bool) -> List:
+    """
+    :param sess: TensorFlow Session
+    :param op: TensorFlow op
+    :param input_op_names: list of input op names of model
+    :param input_shape: tuple or list of tuple of input shape of model
+    :param input_activation: whether input / output activation shape
+    :return: List of input / output activation shape in Common format [NCHW]
+    """
+    # use static shape for input / output activations
+    if input_activation:
+        activation_shape = op.inputs[0].get_shape().as_list()
+
+    else:
+        activation_shape = op.outputs[0].get_shape().as_list()
+
+    data_format = op.get_attr('data_format')
+
+    # convert input / output activation shape to Common format [NCHW], if channels_last
+    if str(data_format.decode("utf-8")) == "NHWC":
+        activation_shape = [activation_shape[0], activation_shape[3], activation_shape[1], activation_shape[2]]
+
+    # if the static shape is undefined, then find dynamic shape of input / output activations
+    if activation_shape[2] is None:
+
+        # create shape tensor for both output and input activations in the same graph
+        with op.graph.as_default():
+            input_shape_tensor = tf.shape(op.inputs[0])
+            output_shape_tensor = tf.shape(op.outputs[0])
+
+        # get input data
+        input_data = create_rand_tensors_given_shapes(input_shape=input_shape)
+
+        # create feed_dict
+        feed_dict = create_input_feed_dict(graph=op.graph,
+                                           input_op_names_list=input_op_names,
+                                           input_data=input_data, training=False)
+
+        if input_activation:
+            # get the input shape by evaluating the input shape tensor
+            activation_shape = input_shape_tensor.eval(feed_dict=feed_dict, session=sess)
+        else:
+            # get the output shape by evaluating the output shape tensor
+            activation_shape = output_shape_tensor.eval(feed_dict=feed_dict, session=sess)
+
+        # (numpy.ndarray).item() converts to Python 'int' class
+        activation_shape = [activation_shape[0].item(), activation_shape[1].item(), activation_shape[2].item(),
+                            activation_shape[3].item()]
+
+        # convert output activation shape to Common format [NCHW], if channels_last
+        if str(data_format.decode("utf-8")) == "NHWC":
+            activation_shape = [activation_shape[0], activation_shape[3], activation_shape[1], activation_shape[2]]
+
+    return activation_shape
+
+
+def get_matmul_activation_shape(op: tf.Operation, input_activation: bool) -> List:
+    """
+    :param op: TensorFlow Operation
+    :param input_activation: whether input / output activation shape
+    :return: List activation shape [N, out_channels, 1, 1]
+    """
+    assert op.type == 'MatMul'
+
+    # use static shape for output/input activations of matmul
+    if input_activation:
+        activation_shape = op.inputs[0].get_shape().as_list()
+        activation_shape.extend([1, 1])
+        return activation_shape
+
+    activation_shape = op.outputs[0].get_shape().as_list()
+    activation_shape.extend([1, 1])
+    return activation_shape
+
+
+def get_layer_attributes(sess: tf.Session, op: tf.Operation, input_op_names: List[str],
+                         input_shape: Union[Tuple, List[Tuple]]) -> (Tuple, Tuple, Tuple):
     """
     Get attributes (kernel_size, stride, padding) of tf.nn.Conv2d Op
-    :param op: tf.Operation
+    :param sess: TensorFLow Session
+    :param op: TensorFLow Operation
+    :param input_op_names: List of input op names of model
+    :param input_shape: tuple or list of tuple of input shape of model
     :return: (kernel_size, stride, padding)
     """
     assert op.type == 'Conv2D'
@@ -544,19 +594,27 @@ def get_layer_attributes(op: tf.Operation) -> (Tuple, Tuple, Tuple):
     stride = op.get_attr('strides')
     data_format = op.get_attr('data_format')
 
+    output_activation_shape = get_conv2d_activation_shape(sess=sess, op=op, input_op_names=input_op_names,
+                                                          input_shape=input_shape, input_activation=False)
+
+    input_activation_shape = get_conv2d_activation_shape(sess=sess, op=op, input_op_names=input_op_names,
+                                                         input_shape=input_shape, input_activation=True)
+
+    _, _, activation_h, activation_w = output_activation_shape
+    output_shape = (activation_h, activation_w)
+
+    _, _, activation_h, activation_w = input_activation_shape
+    input_shape = (activation_h, activation_w)
+
     # 'channels_last' format
     if str(data_format.decode("utf-8")) == "NHWC":
 
         stride = (int(stride[1]), int(stride[2]))
-        output_shape = (int(op.outputs[0].shape[1]), int(op.outputs[0].shape[2]))
-        input_shape = (int(op.inputs[0].shape[1]), int(op.inputs[0].shape[2]))
 
     # 'channels_first' format
     elif str(data_format.decode("utf-8")) == "NCHW":
 
         stride = (int(stride[2]), int(stride[3]))
-        output_shape = (int(op.outputs[0].shape[2]), int(op.outputs[0].shape[3]))
-        input_shape = (int(op.inputs[0].shape[2]), int(op.inputs[0].shape[3]))
 
     else:
         raise ValueError("Unknown data format!")
@@ -594,16 +652,16 @@ def get_weight_tensor_with_shape(model: tf.Session, input_op: tf.Operation):
             # we will use format [Nic, Noc, kh, kw] -
             # to be compatible with cpp backend.
             wt_tensor = np.transpose(weight_tensor, (2, 3, 0, 1))
-            #[Nic, Noc, kh, kw]
+            # [Nic, Noc, kh, kw]
             shape = np.array([shape[2], shape[3], shape[0], shape[1]])
         elif input_op.type == 'MatMul':
             shape = np.concatenate((np.array([1, 1]), shape))
             wt_tensor = np.transpose(weight_tensor, (1, 0))
-            #[Noc, Nic, kh, kw]
+            # [Noc, Nic, kh, kw]
             shape = np.array([shape[3], shape[2], shape[0], shape[1]])
         elif input_op.type == 'Conv2D':
             wt_tensor = np.transpose(weight_tensor, (3, 2, 0, 1))
-            #[Noc, Nic, kh, kw]
+            # [Noc, Nic, kh, kw]
             shape = np.array([shape[3], shape[2], shape[0], shape[1]])
         else:
             logger.error("_get_weight_tensor_transpose_reshape(): Operation type unsupported")

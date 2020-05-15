@@ -81,7 +81,7 @@ class Layer(aimet_common.layer_database.Layer):
             params = aimet_common.layer_database.Conv2dTypeSpecificParams(strides, padding, groups)
             self.type_specific_params = params
 
-    def __init__(self, model: tf.Session, op: tf.Operation, output_shape: Tuple):
+    def __init__(self, model: tf.Session, op: tf.Operation, output_shape: List):
 
         """
         :param model: TensorFlow Session
@@ -234,26 +234,29 @@ class LayerDatabase(aimet_common.layer_database.LayerDatabase):
         # Remove the the layer being replaced from the database
         del self._compressible_layers[id(layer_to_replace.module)]
 
-    def update_database(self, model: tf.Session, detached_op_names: Set):
+    def update_database(self, model: tf.Session, detached_op_names: Set, update_model=False):
         """
         Update layer database with new provided session and exclude detached ops
 
         :param model: TensorFlow Session
         :param detached_op_names: list of detached op names
+        :param update_model: update model (session) with provided session if True
         :return:
         """
-        # close the existing session
-        self._model.close()
+        if update_model:
+            # close the existing session
+            self._model.close()
+            # update the model (session) with new provided tf.Session
+            self._model = model
+
         # clear the dictionary
         self._compressible_layers.clear()
-
-        self._model = model
 
         # get all the operations associated with graph in the provided session
         all_ops = self._model.graph.get_operations()
         # If starting ops is provided, use it to get a set of valid ops in the graph
         if self.starting_ops:
-            valid_ops = get_valid_ops(self.model.graph, self.starting_ops, self.ending_ops)
+            valid_ops = get_valid_ops(self._model.graph, self.starting_ops, self.ending_ops)
             # Only keep ops in all_ops if it is a valid op
             all_ops = [op for op in all_ops if op in valid_ops]
 

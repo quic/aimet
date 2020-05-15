@@ -62,7 +62,7 @@ class DataSubSampler:
 
     @classmethod
     def get_sub_sampled_data(cls, orig_layer: Layer, pruned_layer: Layer, inp_op_names: List,
-                             orig_model: LayerDatabase, comp_model: LayerDatabase, data_set: tf.data.Dataset,
+                             orig_layer_db: LayerDatabase, comp_layer_db: LayerDatabase, data_set: tf.data.Dataset,
                              batch_size: int, num_reconstruction_samples: int) -> (np.ndarray, np.ndarray):
 
         # pylint: disable=too-many-arguments
@@ -74,8 +74,8 @@ class DataSubSampler:
         :param orig_layer: layer in original model database
         :param pruned_layer: layer in pruned model database
         :param inp_op_names : input Op names, should be same in both models
-        :param orig_model: original model database, un-pruned, used to provide the actual outputs
-        :param comp_model: comp. model database, this is potentially already pruned in the upstreams layers of given
+        :param orig_layer_db: original model database, un-pruned, used to provide the actual outputs
+        :param comp_layer_db: comp. model database, this is potentially already pruned in the upstreams layers of given
          layer name
         :param data_set: tf.data.Dataset object
         :param batch_size : batch size
@@ -115,19 +115,24 @@ class DataSubSampler:
                 batch_data = sess.run(next_element)
 
                 # output data from original model
-                feed_dict = aimet_tensorflow.utils.common.create_input_feed_dict(orig_model.model.graph, inp_op_names,
-                                                                                 batch_data)
-                output_data = orig_model.model.run(orig_layer.module.outputs[0], feed_dict=feed_dict)
+                feed_dict = aimet_tensorflow.utils.common.create_input_feed_dict(orig_layer_db.model.graph,
+                                                                                 inp_op_names, batch_data)
+                output_data = orig_layer_db.model.run(orig_layer.module.outputs[0], feed_dict=feed_dict)
 
                 # input data from compressed model
-                feed_dict = aimet_tensorflow.utils.common.create_input_feed_dict(comp_model.model.graph, inp_op_names,
-                                                                                 batch_data)
-                input_data = comp_model.model.run(pruned_layer.module.inputs[0], feed_dict=feed_dict)
+                feed_dict = aimet_tensorflow.utils.common.create_input_feed_dict(comp_layer_db.model.graph,
+                                                                                 inp_op_names, batch_data)
+                input_data = comp_layer_db.model.run(pruned_layer.module.inputs[0], feed_dict=feed_dict)
 
                 # get the layer attributes (kernel_size, stride, padding)
-                layer_attributes = aimet_tensorflow.utils.op.conv.get_layer_attributes(op=orig_layer.module)
+                layer_attributes = aimet_tensorflow.utils.op.conv.get_layer_attributes(sess=orig_layer_db.model,
+                                                                                       op=orig_layer.module,
+                                                                                       input_op_names=
+                                                                                       orig_layer_db.starting_ops,
+                                                                                       input_shape=
+                                                                                       orig_layer_db.input_shape)
 
-                # channels_last (NHWC) to channels_first data format (NCHW)
+                # channels_last (NHWC) to channels_first data format (NCHW - Common format)
                 input_data = np.transpose(input_data, (0, 3, 1, 2))
                 output_data = np.transpose(output_data, (0, 3, 1, 2))
 

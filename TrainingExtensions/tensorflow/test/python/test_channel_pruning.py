@@ -48,7 +48,6 @@ import logging
 
 import tensorflow as tf
 import numpy as np
-from glob import glob
 
 from keras.applications.vgg16 import VGG16
 from keras.applications.resnet50 import ResNet50
@@ -60,7 +59,6 @@ from aimet_common.utils import AimetLogger
 from aimet_torch.winnow.winnow_utils import to_numpy
 from aimet_common.input_match_search import InputMatchSearch
 
-from aimet_tensorflow import utils
 from aimet_tensorflow.channel_pruning.data_subsampler import DataSubSampler
 from aimet_tensorflow.channel_pruning.channel_pruner import InputChannelPruner
 from aimet_tensorflow.channel_pruning.weight_reconstruction import WeightReconstructor
@@ -151,7 +149,7 @@ class TestTrainingExtensionsChannelPruning(unittest.TestCase):
         sess.run(init)
 
         DataSubSampler.get_sub_sampled_data(orig_layer=conv, pruned_layer=conv, inp_op_names=inp_op_names,
-                                            orig_model=sess, comp_model=sess, data_set=dataset,
+                                            orig_layer_db=sess, comp_layer_db=sess, data_set=dataset,
                                             batch_size=batch_size, num_reconstruction_samples=1000)
 
         sess.close()
@@ -185,8 +183,8 @@ class TestTrainingExtensionsChannelPruning(unittest.TestCase):
 
         self.assertRaises(StopIteration, lambda: DataSubSampler.get_sub_sampled_data(orig_layer=conv, pruned_layer=conv,
                                                                                      inp_op_names=inp_op_names,
-                                                                                     orig_model=sess,
-                                                                                     comp_model=sess,
+                                                                                     orig_layer_db=sess,
+                                                                                     comp_layer_db=sess,
                                                                                      data_set=dataset,
                                                                                      batch_size=batch_size,
                                                                                      num_reconstruction_samples=1010))
@@ -232,7 +230,7 @@ class TestTrainingExtensionsChannelPruning(unittest.TestCase):
         # 5000 * 10 = 50000 possible reconstruction samples
 
         DataSubSampler.get_sub_sampled_data(orig_layer=conv, pruned_layer=conv, inp_op_names=inp_op_names,
-                                            orig_model=sess, comp_model=sess, data_set=dataset,
+                                            orig_layer_db=sess, comp_layer_db=sess, data_set=dataset,
                                             batch_size=batch_size, num_reconstruction_samples=50000)
 
         shutil.rmtree(os.path.join(output_dir, 'data'))
@@ -277,8 +275,8 @@ class TestTrainingExtensionsChannelPruning(unittest.TestCase):
 
         self.assertRaises(StopIteration, lambda: DataSubSampler.get_sub_sampled_data(orig_layer=conv, pruned_layer=conv,
                                                                                      inp_op_names=inp_op_names,
-                                                                                     orig_model=sess,
-                                                                                     comp_model=sess,
+                                                                                     orig_layer_db=sess,
+                                                                                     comp_layer_db=sess,
                                                                                      data_set=dataset,
                                                                                      batch_size=batch_size,
                                                                                      num_reconstruction_samples=50600))
@@ -328,7 +326,9 @@ class TestTrainingExtensionsChannelPruning(unittest.TestCase):
 
             conv1_op = g.get_operation_by_name('Conv2D_1')
 
-            layer_attributes = aimet_tensorflow.utils.op.conv.get_layer_attributes(op=conv1_op)
+            layer_attributes = aimet_tensorflow.utils.op.conv.get_layer_attributes(sess=None, op=conv1_op,
+                                                                                   input_op_names=None,
+                                                                                   input_shape=None)
 
             input_match = InputMatchSearch._find_input_match_for_output_pixel(input_data[0], layer_attributes,
                                                                               output_data_pixel)
@@ -390,7 +390,9 @@ class TestTrainingExtensionsChannelPruning(unittest.TestCase):
 
             conv1_op = g.get_operation_by_name('Conv2D_1')
 
-            layer_attributes = aimet_tensorflow.utils.op.conv.get_layer_attributes(op=conv1_op)
+            layer_attributes = aimet_tensorflow.utils.op.conv.get_layer_attributes(sess=None, op=conv1_op,
+                                                                                   input_op_names=None,
+                                                                                   input_shape=None)
 
             # reshape input_data, output_data function expects activations in channels_first format
             input_data = input_data.reshape(1, 1, 8, 8)
@@ -438,7 +440,59 @@ class TestTrainingExtensionsChannelPruning(unittest.TestCase):
 
         conv1_op = g.get_operation_by_name('Conv2D_1')
 
-        layer_attributes = aimet_tensorflow.utils.op.conv.get_layer_attributes(op=conv1_op)
+        layer_attributes = aimet_tensorflow.utils.op.conv.get_layer_attributes(sess=None, op=conv1_op,
+                                                                               input_op_names=None,
+                                                                               input_shape=None)
+        sub_sample_input, sub_sample_output = InputMatchSearch.subsample_data(layer_attributes=layer_attributes,
+                                                                              input_data=input_data,
+                                                                              output_data=output_data,
+                                                                              samples_per_image=1)
+
+        # compare the inputs for both batches
+        self.assertEqual(sub_sample_input.shape, (2, 5, 5, 5))
+        self.assertTrue(np.array_equal(sub_sample_input[0, :, :, :], input_data[0, :, 1:6, 1:6]))
+        self.assertTrue(np.array_equal(sub_sample_input[1, :, :, :], input_data[1, :, 1:6, 1:6]))
+
+        # compare the output for batches
+        output_pixel = (1, 1)
+        self.assertEqual(sub_sample_output.shape, (2, 10))
+        self.assertTrue(np.array_equal(sub_sample_output, output_data[:, :, output_pixel[0], output_pixel[1]]))
+
+    @unittest.mock.patch('numpy.random.choice')
+    def test_subsample_data_channels_first_dynamic_shape(self, np_choice_function):
+        """
+        Test to subsample input match for random output pixel (1, 1) and corresponding input match
+        using dynamic input shape
+        """
+        # randomly selected output pixel (height, width) is fixed here and it is (1, 1)
+        np_choice_function.return_value = [1]
+
+        # input_data and output_data are in channels_first format, similar to Pytorch format
+        input_data = np.arange(0, 1440).reshape((2, 5, 12, 12))
+        output_data = np.arange(0, 1280).reshape((2, 10, 8, 8))
+
+        g = tf.Graph()
+
+        with g.as_default():
+
+            inp_tensor = tf.placeholder(tf.float32, [None, None, None, None], 'inp_tensor')
+
+            filter_tensor = tf.get_variable('filter_tensor', shape=[5, 5, 5, 10],
+                                            initializer=tf.random_normal_initializer())
+
+            conv1 = tf.nn.conv2d(input=inp_tensor, filter=filter_tensor, strides=[1, 1, 1, 1], padding='VALID',
+                                 data_format="NCHW", name='Conv2D_1')
+
+            init = tf.global_variables_initializer()
+
+        sess = tf.Session(graph=g)
+        sess.run(init)
+
+        conv1_op = g.get_operation_by_name('Conv2D_1')
+
+        layer_attributes = aimet_tensorflow.utils.op.conv.get_layer_attributes(sess=sess, op=conv1_op,
+                                                                               input_op_names=['inp_tensor'],
+                                                                               input_shape=(2, 5, 12, 12))
         sub_sample_input, sub_sample_output = InputMatchSearch.subsample_data(layer_attributes=layer_attributes,
                                                                               input_data=input_data,
                                                                               output_data=output_data,
@@ -480,7 +534,63 @@ class TestTrainingExtensionsChannelPruning(unittest.TestCase):
 
         conv1_op = g.get_operation_by_name('Conv2D_1')
 
-        layer_attributes = aimet_tensorflow.utils.op.conv.get_layer_attributes(op=conv1_op)
+        layer_attributes = aimet_tensorflow.utils.op.conv.get_layer_attributes(sess=None, op=conv1_op,
+                                                                               input_op_names=None,
+                                                                               input_shape=None)
+
+        # reshape input_data, output_data function expects activations in channels_first format
+        input_data = input_data.reshape(2, 5, 12, 12)
+        output_data = output_data.reshape(2, 10, 8, 8)
+
+        sub_sample_input, sub_sample_output = InputMatchSearch.subsample_data(layer_attributes=layer_attributes,
+                                                                              input_data=input_data,
+                                                                              output_data=output_data,
+                                                                              samples_per_image=1)
+
+        # compare the inputs for both batches
+        self.assertEqual(sub_sample_input.shape, (2, 5, 5, 5))
+        self.assertTrue(np.array_equal(sub_sample_input[0, :, :, :], input_data[0, :, 1:6, 1:6]))
+        self.assertTrue(np.array_equal(sub_sample_input[1, :, :, :], input_data[1, :, 1:6, 1:6]))
+
+        # compare the output for batches
+        output_pixel = (1, 1)
+        self.assertEqual(sub_sample_output.shape, (2, 10))
+        self.assertTrue(np.array_equal(sub_sample_output, output_data[:, :, output_pixel[0], output_pixel[1]]))
+
+    @unittest.mock.patch('numpy.random.choice')
+    def test_subsample_data_channels_last_dynamic_shape(self, np_choice_function):
+        """
+        Test to subsample input match for random output pixel (1, 1) and corresponding input match
+        using dynamic input shape
+        """
+        # randomly selected output pixel (height, width) is fixed here and it is (1, 1)
+        np_choice_function.return_value = [1]
+
+        # input_data and output_data are in channels_first format, similar to Pytorch format
+        input_data = np.arange(0, 1440).reshape((2, 12, 12, 5))
+        output_data = np.arange(0, 1280).reshape((2, 8, 8, 10))
+
+        g = tf.Graph()
+
+        with g.as_default():
+
+            inp_tensor = tf.placeholder(tf.float32, [None, None, None, None], 'inp_tensor')
+
+            filter_tensor = tf.get_variable('filter_tensor', shape=[5, 5, 5, 10],
+                                            initializer=tf.random_normal_initializer())
+
+            conv1 = tf.nn.conv2d(input=inp_tensor, filter=filter_tensor, strides=[1, 1, 1, 1], padding='VALID',
+                                 data_format="NHWC", name='Conv2D_1')
+
+            init = tf.global_variables_initializer()
+
+        sess = tf.Session(graph=g)
+        sess.run(init)
+        conv1_op = g.get_operation_by_name('Conv2D_1')
+
+        layer_attributes = aimet_tensorflow.utils.op.conv.get_layer_attributes(sess=sess, op=conv1_op,
+                                                                               input_op_names=['inp_tensor'],
+                                                                               input_shape=(2, 12, 12, 5))
 
         # reshape input_data, output_data function expects activations in channels_first format
         input_data = input_data.reshape(2, 5, 12, 12)
