@@ -592,6 +592,42 @@ def match_upsample2d(op_to_module_dict: dict, op_info: ModuleIdentifierOpInfo) -
         return False
 
 
+def match_leaky_relu(op_to_module_dict: dict, op_info: ModuleIdentifierOpInfo) -> bool:
+    """
+    Matcher for leaky_relu type ops
+    :param op_to_module_dict: Dictionary mapping tf ops to ModuleIdentifierOpInfo objects.  All tf ops belonging to the
+    same module will be mapped to the same ModuleIdentifierOpInfo object.
+    :param op_info: ModuleIdentifierOpInfo to fill in, for holding information about the module that multiple tf ops
+    belong to
+    :return: True if a valid match was made, False otherwise
+    """
+    # Begin at op of type Mul and try to match to leaky_relu pattern
+    op = op_info.tf_op
+    try:
+        alpha_op = op.inputs[0].op
+        assert alpha_op.type == 'Const'
+        maximum = op.outputs[0].consumers()[0]
+        assert maximum.type == 'Maximum'
+        prev_op = op.inputs[1].op
+        assert prev_op == maximum.inputs[1].op
+
+        # Fill in alpha attribute
+        alpha = alpha_op.get_attr('value').float_val[0]
+        op_info.add_attribute('alpha', alpha)
+
+        # Add ops to the op to module dict
+        op_info.op_type = "LeakyRelu"
+        match_name = re.match("(.+)/mul", op.name)
+        if match_name:
+            op_info.module_name = match_name.group(1)
+
+        op_to_module_dict.update({op: op_info,
+                                  maximum: op_info})
+        return True
+    except:     # pylint: disable=bare-except
+        return False
+
+
 def handle_default(*_) -> bool:
     """ Do nothing here """
     return True
