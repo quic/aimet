@@ -579,7 +579,8 @@ def match_upsample2d(op_to_module_dict: dict, op_info: ModuleIdentifierOpInfo) -
         # Fill in size attribute
         const_op = mul.inputs[1].op
         tensor_content_length = const_op.get_attr('value').tensor_shape.dim[0].size
-        unpack_string = str(tensor_content_length) + 'i'       # i for int, indices_length tells how many integers to parse out
+        # i for int, tensor_content_length tells how many integers to parse out
+        unpack_string = str(tensor_content_length) + 'i'
         upsample_size = struct.unpack(unpack_string, const_op.get_attr('value').tensor_content)
         op_info.add_attribute('size', upsample_size)
 

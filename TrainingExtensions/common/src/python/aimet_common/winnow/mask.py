@@ -446,6 +446,41 @@ class ConcatInternalConnectivity(InternalConnectivity):
         return ConnectivityType.concat
 
 
+class StopInternalConnectivity(InternalConnectivity):
+    """ Models STOP internal connectivity for an Op. """
+
+    def __init__(self, input_mask_list: List[Tuple[List, int]], output_mask_list: List[Tuple[List, int]]):
+        """
+        :param input_mask_list: List of Tuples. Each Tuple contains a list of input masks and the mask length.
+        :param output_mask_list: List of Tuples. Each Tuple contains a list of output masks and the mask length.
+        """
+
+        self.initialize_masks(input_mask_list, output_mask_list)
+
+    def forward_propagate_the_masks(self, input_mask_list: List, output_mask_list: List):
+        """
+        :param input_mask_list:
+        :param output_mask_list:
+        :return:
+        """
+        # Since internal connectivity is STOP, nothing needs to be done.
+        mask_changed = False
+        return mask_changed
+
+    def backward_propagate_the_masks(self, output_mask_list: List, input_mask_list: List):
+        """
+        :param ouput_mask_list:
+        :param input_mask_list:
+        :return:
+        """
+        # Since internal connectivity is STOP, nothing needs to be done.
+        mask_changed = False
+        return mask_changed
+
+    def get_connectivity_type(self):
+        return ConnectivityType.stop
+
+
 # pylint: disable=too-many-instance-attributes
 class Mask:
     """ The Mask class contains properties and functions related to input channel mask
@@ -653,12 +688,14 @@ class Mask:
 
         self._internal_connectivity = DirectInternalConnectivity(in_mask_length_list, out_mask_length_list)
 
-    def _set_default_masks_for_null_connectivity_ops(self, in_channels, out_channels):
+    def _set_default_masks_for_null_and_stop_connectivity_ops(self, in_channels, out_channels,
+                                                              is_null_connectivity: bool):
         """
         Set the default input and output masks for Modules that have "Null" internal connectivity.
 
         :param input_shape: The input shape of the module
         :param output_shape: The output shape of the module
+        :param is_null_connectivity: True if op is null connectivity, False otherwise
         :return:
         """
 
@@ -674,8 +711,12 @@ class Mask:
         in_mask_length_list, out_mask_length_list = self._create_input_output_mask_and_length_tuples(
             num_input_masks, input_mask_length, num_output_masks, output_mask_length)
 
-        self._internal_connectivity = NullInternalConnectivity(in_mask_length_list, out_mask_length_list)
+        if is_null_connectivity:
+            self._internal_connectivity = NullInternalConnectivity(in_mask_length_list, out_mask_length_list)
+        else:
+            self._internal_connectivity = StopInternalConnectivity(in_mask_length_list, out_mask_length_list)
 
+    # pylint: disable=too-many-branches
     def _set_default_input_output_masks(self, in_channels, out_channels):
         """ Based on the Op type, sets default input and output channel masks. """
 
@@ -686,18 +727,24 @@ class Mask:
                     self._op_type in get_linear_ops_for_api(self._model_api):
                 self._set_default_masks_for_conv_and_linear()
             else:
-                self._set_default_masks_for_null_connectivity_ops(in_channels, out_channels)
+                self._set_default_masks_for_null_and_stop_connectivity_ops(in_channels, out_channels,
+                                                                           is_null_connectivity=True)
         elif op_connectivity == ConnectivityType.direct:
             # Necessary to switch connectivity of padding to null when adjusting channel size since staying at direct
             # connectivity will cause input and output channel sizes to become equal
             if self._model_api == ModelApi.tensorflow and self._op_type in ["Pad", "PadV2", "MirrorPad"] and \
                     in_channels != out_channels:
-                self._set_default_masks_for_null_connectivity_ops(in_channels, out_channels)
+                self._set_default_masks_for_null_and_stop_connectivity_ops(in_channels, out_channels,
+                                                                           is_null_connectivity=True)
             else:
                 self._set_default_masks_for_direct_connectivity_ops(in_channels, out_channels)
         elif op_connectivity == ConnectivityType.add:
             in_masks_list, out_masks_list = self._create_masks_list_for_multi_input_single_output_ops(out_channels)
-            self._internal_connectivity = AddInternalConnectivity(in_masks_list, out_masks_list)
+            # If add op does not have inputs from two ops in ConnectedGraph, do not try to mask propagate through it.
+            if len(in_masks_list) < 2:
+                self._internal_connectivity = StopInternalConnectivity(in_masks_list, out_masks_list)
+            else:
+                self._internal_connectivity = AddInternalConnectivity(in_masks_list, out_masks_list)
         elif op_connectivity == ConnectivityType.concat:
             in_masks_list, out_masks_list = self._create_masks_list_for_multi_input_single_output_ops(out_channels)
             self._internal_connectivity = ConcatInternalConnectivity(in_masks_list, out_masks_list)
@@ -708,6 +755,9 @@ class Mask:
             in_masks_list = None
             out_masks_list = None
             self._internal_connectivity = SkipInternalConnectivity(in_masks_list, out_masks_list)
+        elif op_connectivity == ConnectivityType.stop:
+            self._set_default_masks_for_null_and_stop_connectivity_ops(in_channels, out_channels,
+                                                                       is_null_connectivity=False)
         else:
             logger.error("Unsupported op_type %s, dotted %s, input_ops: %s",
                          self._op_type, self._dotted_name, self._op_input_ops)
