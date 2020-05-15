@@ -127,7 +127,7 @@ def get_succeeding_bias_op(op: tf.Operation) -> tf.Operation:
     bias = None
     for consumer in op.outputs[0].consumers():
 
-        if consumer.type in ('Add', 'BiasAdd'):
+        if consumer.type in ('Add', 'BiasAdd') and len(consumer.inputs[1].shape) == 1:
             bias = consumer
 
     return bias
