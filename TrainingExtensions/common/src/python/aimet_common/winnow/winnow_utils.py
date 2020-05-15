@@ -106,6 +106,7 @@ class ConnectivityType(Enum):
     add = 4
     concat = 5
     skip = 6
+    stop = 7
 
 
 class OpConnectivity:
@@ -184,12 +185,9 @@ class OpConnectivity:
     tensorflow_dict = {'Conv2D': ConnectivityType.null,
                        'DepthwiseConv2dNative': ConnectivityType.null,
                        'Dense': ConnectivityType.null,
-                       'Flatten': ConnectivityType.null,
                        'Placeholder': ConnectivityType.null,
                        'PlaceholderWithDefault': ConnectivityType.null,
                        'Downsample': ConnectivityType.null,
-                       'Upsample': ConnectivityType.null,
-                       'GlobalMaxpool2D': ConnectivityType.null,
                        'BatchNorm': ConnectivityType.direct,
                        'AvgPool': ConnectivityType.direct,
                        'FusedBatchNormV3': ConnectivityType.direct,
@@ -211,14 +209,17 @@ class OpConnectivity:
                        'AddV2': ConnectivityType.add,
                        'ConcatV2': ConnectivityType.concat,
                        'branch': ConnectivityType.split,
-                       'Softmax': ConnectivityType.skip,
-                       'Squeeze': ConnectivityType.skip,
-                       'ArgMax': ConnectivityType.skip,
-                       'Equal': ConnectivityType.skip,
-                       'Cast': ConnectivityType.skip,
-                       'Mean': ConnectivityType.skip,
-                       'Reshape': ConnectivityType.skip,
-                       'Shape': ConnectivityType.skip}
+                       'Softmax': ConnectivityType.stop,
+                       'Squeeze': ConnectivityType.stop,
+                       'ArgMax': ConnectivityType.stop,
+                       'Equal': ConnectivityType.stop,
+                       'Cast': ConnectivityType.stop,
+                       'Mean': ConnectivityType.stop,
+                       'Reshape': ConnectivityType.stop,
+                       'Shape': ConnectivityType.stop,
+                       'Upsample': ConnectivityType.stop,
+                       'Flatten': ConnectivityType.stop,
+                       'GlobalMaxpool2D': ConnectivityType.stop}
 
     @classmethod
     def get_op_connectivity(cls, model_api: ModelApi, op_type: str) -> ConnectivityType:
@@ -230,7 +231,7 @@ class OpConnectivity:
         """
         if model_api == ModelApi.pytorch:
             return cls.pytorch_dict.get(op_type, None)
-        return cls.tensorflow_dict.get(op_type, None)
+        return cls.tensorflow_dict.get(op_type, ConnectivityType.stop)
 
 
 def get_conv_ops_for_api(model_api: ModelApi) -> Set:

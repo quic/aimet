@@ -58,7 +58,6 @@ from aimet_tensorflow.utils.graph_saver import save_and_load_graph
 
 logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Test)
 AimetLogger.set_area_logger_level(AimetLogger.LogAreas.Test, logging.DEBUG)
-AimetLogger.set_area_logger_level(AimetLogger.LogAreas.ConnectedGraph, logging.DEBUG)
 AimetLogger.set_area_logger_level(AimetLogger.LogAreas.Winnow, logging.DEBUG)
 
 
