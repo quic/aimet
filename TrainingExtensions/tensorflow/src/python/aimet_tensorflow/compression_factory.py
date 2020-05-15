@@ -77,6 +77,7 @@ class CompressionFactory:
         :return: An instance of SpatialSvdCompressionAlgo
         """
 
+        # pylint: disable=too-many-arguments
         # pylint: disable=too-many-locals
         # Rationale: Factory functions unfortunately need to deal with a lot of parameters
 
@@ -139,6 +140,7 @@ class CompressionFactory:
         :return: An instance of ChannelPruningCompressionAlgo
         """
 
+        # pylint: disable=too-many-arguments
         # pylint: disable=too-many-locals
         # Rationale: Factory functions unfortunately need to deal with a lot of parameters
 
