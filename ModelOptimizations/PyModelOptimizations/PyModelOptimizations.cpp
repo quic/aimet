@@ -137,7 +137,12 @@ PYBIND11_MODULE(libpymo, m)
 
     py::class_<DlQuantization::TensorQuantizationSimForPython>(m, "TensorQuantizationSimForPython")
         .def(py::init<>())
-        .def("quantizeDequantize", &DlQuantization::TensorQuantizationSimForPython::quantizeDequantize);
+        .def("quantizeDequantize", (py::array_t<float>(TensorQuantizationSimForPython::*)(py::array_t<float>,
+                DlQuantization::TfEncoding&, DlQuantization::RoundingMode, unsigned int, bool))
+                &DlQuantization::TensorQuantizationSimForPython::quantizeDequantize)
+        .def("quantizeDequantize", (py::array_t<float>(TensorQuantizationSimForPython::*)(py::array_t<float>,
+                DlQuantization::TfEncoding&, DlQuantization::RoundingMode, bool))
+                &DlQuantization::TensorQuantizationSimForPython::quantizeDequantize);
 
     py::enum_<DlQuantization::TensorQuantizerOpMode>(m, "TensorQuantizerOpMode")
         .value("updateStats", DlQuantization::TensorQuantizerOpMode::updateStats)
@@ -147,13 +152,16 @@ PYBIND11_MODULE(libpymo, m)
 
     py::class_<DlQuantization::TensorQuantizer>(m, "TensorQuantizer")
         .def(py::init<unsigned int, DlQuantization::QuantizationMode, DlQuantization::RoundingMode, bool>())
+        .def(py::init<DlQuantization::QuantizationMode, DlQuantization::RoundingMode>())
         .def("updateStats",
              (void (TensorQuantizer::*)(py::array_t<float>, bool)) & DlQuantization::TensorQuantizer::updateStats)
         .def("resetEncodingStats", &DlQuantization::TensorQuantizer::resetEncodingStats)
-        .def("computeEncoding", &DlQuantization::TensorQuantizer::computeEncoding)
+        .def("computeEncoding", (DlQuantization::TfEncoding(TensorQuantizer::*)()) &DlQuantization::TensorQuantizer::computeEncoding)
+        .def("computeEncoding", (DlQuantization::TfEncoding(TensorQuantizer::*)(unsigned int, bool)) &DlQuantization::TensorQuantizer::computeEncoding)
         .def("quantizeDequantize", (void (TensorQuantizer::*)(py::array_t<float>, py::array_t<float>, double, double, bool)) &
                                        DlQuantization::TensorQuantizer::quantizeDequantize)
-
+        .def("quantizeDequantize", (void (TensorQuantizer::*)(py::array_t<float>, py::array_t<float>, double, double,
+                                                              unsigned int, bool)) &DlQuantization::TensorQuantizer::quantizeDequantize)
         .def_readwrite("bitwidth", &DlQuantization::TensorQuantizer::bitwidth)
         .def_readwrite("quantScheme", &DlQuantization::TensorQuantizer::quantScheme)
         .def_readwrite("roundingMode", &DlQuantization::TensorQuantizer::roundingMode)

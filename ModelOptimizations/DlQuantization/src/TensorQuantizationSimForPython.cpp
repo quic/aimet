@@ -80,4 +80,27 @@ py::array_t<float> TensorQuantizationSimForPython::quantizeDequantize(py::array_
 }
 
 
+py::array_t<float> TensorQuantizationSimForPython::quantizeDequantize(py::array_t<float> input,
+                                                                      DlQuantization::TfEncoding& encoding,
+                                                                      DlQuantization::RoundingMode roundingMode,
+                                                                      unsigned int bitwidth,
+                                                                      bool use_cuda)
+{
+    auto npArr        = input.mutable_unchecked<4>();
+    auto inputDataPtr = (float*) npArr.mutable_data(0, 0, 0, 0);
+
+    // Allocate an output tensor as the same shape as the input
+    py::array_t<float> output = input;
+    auto outNpArr             = output.mutable_unchecked<4>();
+    auto outputDataPtr        = (float*) outNpArr.mutable_data(0, 0, 0, 0);
+
+    size_t inputTensorSize = npArr.shape(0) * npArr.shape(1) * npArr.shape(2) * npArr.shape(3);
+
+    _tensorQuantizationSim->quantizeDequantizeTensor(inputDataPtr, inputTensorSize, outputDataPtr,
+                                                     encoding.min, encoding.max, bitwidth, roundingMode,
+                                                     use_cuda);
+
+    return output;
+}
+
 }
