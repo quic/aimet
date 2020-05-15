@@ -51,7 +51,8 @@ from aimet_tensorflow.common.connectedgraph import ConnectedGraph
 from aimet_tensorflow.examples.test_models import keras_model, single_residual, concat_model, pad_model, \
     depthwise_conv2d_model, keras_model_functional, dropout_keras_model, dropout_slim_model, tf_slim_basic_model, \
     upsample_model, multiple_input_model, model_with_postprocessing_nodes, minimum_maximum_model, \
-    model_with_upsample_already_present, model_with_multiple_downsamples, model_with_upsample2d, model_with_leaky_relu
+    model_with_upsample_already_present, model_with_multiple_downsamples, model_with_upsample2d, \
+    model_with_leaky_relu, keras_model_functional_with_non_fused_batchnorms
 from aimet_tensorflow.winnow.mask_propagation_winnower import MaskPropagationWinnower
 import aimet_tensorflow.winnow.winnow as winnow
 from aimet_tensorflow.utils.graph_saver import save_and_load_graph
@@ -594,6 +595,51 @@ class TestTfModuleReducer(unittest.TestCase):
                                                                     'FusedBatchNormV3')
         self.assertTrue(reduced_batch_norm_2.inputs[0].op.name, 'reduced_scope_1/conv2d_2/Tanh')
         self.assertEqual(reduced_batch_norm_2.get_attr('is_training'), False)
+
+        self.assertEqual(9, len(ordered_modules_list))
+        new_sess.close()
+        sess.close()
+
+    def test_reducing_keras_non_fused_bn_training_true_and_false(self):
+        """ Test for reducing keras type non fused bn ops, both for training true and false """
+
+        tf.reset_default_graph()
+        sess = tf.Session()
+        module_zero_channels_list = []
+
+        _ = keras_model_functional_with_non_fused_batchnorms()
+        init = tf.global_variables_initializer()
+        sess.run(init)
+
+        tf_op = tf.get_default_graph().get_operation_by_name("scope_1/conv2d_2/Conv2D")
+        input_channels_to_winnow = [1, 2, 3]
+        module_mask_pair = (tf_op, input_channels_to_winnow)
+        module_zero_channels_list.append(module_mask_pair)
+
+        tf_op = tf.get_default_graph().get_operation_by_name("scope_1/conv2d_1/Conv2D")
+        input_channels_to_winnow = [3, 5, 7]
+        module_mask_pair = (tf_op, input_channels_to_winnow)
+        module_zero_channels_list.append(module_mask_pair)
+
+        tf_op = tf.get_default_graph().get_operation_by_name("scope_1/conv2d_3/Conv2D")
+        input_channels_to_winnow = [2, 4, 6]
+        module_mask_pair = (tf_op, input_channels_to_winnow)
+        module_zero_channels_list.append(module_mask_pair)
+
+        input_op_names = ["input_1"]
+        output_op_names = ['keras_model_functional_with_non_fused_batchnorms/Softmax']
+        new_sess, ordered_modules_list = winnow.winnow_tf_model(sess, input_op_names, output_op_names,
+                                                                module_zero_channels_list,
+                                                                reshape=True, in_place=True, verbose=True)
+        # _ = tf.summary.FileWriter('./reduced_graph', new_sess.graph)
+
+        reduced_conv2d_1_tanh_op = new_sess.graph.get_operation_by_name('reduced_scope_1/conv2d_2/Tanh')
+        self.assertEqual(reduced_conv2d_1_tanh_op.inputs[0].op.name, 'reduced_scope_1/conv2d_2/BiasAdd')
+        reduced_conv2d_1_op = new_sess.graph.get_operation_by_name('reduced_scope_1/conv2d_2/Conv2D')
+        self.assertEqual(reduced_conv2d_1_op.inputs[0].name, 'reduced_scope_1/batch_normalization_1/batchnorm/add_1:0')
+        self.assertEqual(reduced_conv2d_1_op.inputs[0].shape.as_list()[-1], 13)
+        reduced_conv2d_op = new_sess.graph.get_operation_by_name('reduced_scope_1/conv2d_1/Conv2D')
+        self.assertEqual(reduced_conv2d_op.inputs[0].name, 'reduced_batch_normalization/batchnorm/add_1:0')
 
         self.assertEqual(9, len(ordered_modules_list))
         new_sess.close()
