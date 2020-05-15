@@ -529,11 +529,6 @@ def get_conv2d_activation_shape(sess: tf.Session, op: tf.Operation, input_op_nam
     # if the static shape is undefined, then find dynamic shape of input / output activations
     if activation_shape[2] is None:
 
-        # create shape tensor for both output and input activations in the same graph
-        with op.graph.as_default():
-            input_shape_tensor = tf.shape(op.inputs[0])
-            output_shape_tensor = tf.shape(op.outputs[0])
-
         # get input data
         input_data = create_rand_tensors_given_shapes(input_shape=input_shape)
 
@@ -543,15 +538,13 @@ def get_conv2d_activation_shape(sess: tf.Session, op: tf.Operation, input_op_nam
                                            input_data=input_data, training=False)
 
         if input_activation:
-            # get the input shape by evaluating the input shape tensor
-            activation_shape = input_shape_tensor.eval(feed_dict=feed_dict, session=sess)
+            # get the input activation shape by evaluating the input tensor
+            input_tensor = op.inputs[0]
+            activation_shape = input_tensor.eval(feed_dict=feed_dict, session=sess).shape
         else:
-            # get the output shape by evaluating the output shape tensor
-            activation_shape = output_shape_tensor.eval(feed_dict=feed_dict, session=sess)
-
-        # (numpy.ndarray).item() converts to Python 'int' class
-        activation_shape = [activation_shape[0].item(), activation_shape[1].item(), activation_shape[2].item(),
-                            activation_shape[3].item()]
+            # get the output activation shape by evaluating the output tensor
+            output_tensor = op.outputs[0]
+            activation_shape = output_tensor.eval(feed_dict=feed_dict, session=sess).shape
 
         # convert output activation shape to Common format [NCHW], if channels_last
         if str(data_format.decode("utf-8")) == "NHWC":
