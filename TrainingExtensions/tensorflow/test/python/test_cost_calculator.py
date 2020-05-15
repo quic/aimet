@@ -104,7 +104,7 @@ class TestTrainingExtensionsCostCalculator(unittest.TestCase):
         # data format NCHW
         self.assertEqual(shape, [1, 32, 28, 28])
 
-        layer1 = Layer(model=sess, op=conv_op1)
+        layer1 = Layer(model=sess, op=conv_op1, output_shape=shape)
 
         cost1 = cc.CostCalculator.compute_layer_cost(layer1)
 
@@ -131,7 +131,7 @@ class TestTrainingExtensionsCostCalculator(unittest.TestCase):
         # data format NCHW
         self.assertEqual(shape, [1, 64, 14, 14])
 
-        layer2 = Layer(model=sess, op=conv_op2)
+        layer2 = Layer(model=sess, op=conv_op2, output_shape=shape)
 
         cost1 = cc.CostCalculator.compute_layer_cost(layer2)
 
@@ -155,7 +155,7 @@ class TestTrainingExtensionsCostCalculator(unittest.TestCase):
             _ = mnist_tf_model.create_model(data_format='channels_last')
             sess.run(tf.global_variables_initializer())
 
-        layer_database = LayerDatabase(model=sess, working_dir=None)
+        layer_database = LayerDatabase(model=sess, input_shape=(1, 28, 28, 1), working_dir=None)
 
         cost_calc = cc.CostCalculator()
         network_cost = cost_calc.compute_model_cost(layer_database)
@@ -188,7 +188,7 @@ class TestTrainingExtensionsSpatialSvdCostCalculator(unittest.TestCase):
         # data format NCHW
         self.assertEqual(shape, [1, 64, 28, 28])
 
-        layer = Layer(model=sess, op=conv_op)
+        layer = Layer(model=sess, op=conv_op, output_shape=shape)
 
         self.assertEqual(32 * 5, cc.SpatialSvdCostCalculator.calculate_max_rank(layer))
 
@@ -232,8 +232,9 @@ class TestTrainingExtensionsSpatialSvdCostCalculator(unittest.TestCase):
         # data format : NHWC
         self.assertEqual(shape, [1, 14, 14, 64])
 
-        # but layer database expects in NCHW format similar to PyTorch
-        layer = Layer(model=sess, op=conv_op)
+        # but layer  expects output shape in NCHW format similar to PyTorch
+        shape = (shape[0], shape[3], shape[1], shape[2])
+        layer = Layer(model=sess, op=conv_op, output_shape=shape)
 
         original_cost = cc.CostCalculator.compute_layer_cost(layer)
         compressed_cost = cc.SpatialSvdCostCalculator.calculate_cost_given_rank(layer, 40)
@@ -258,7 +259,7 @@ class TestTrainingExtensionsSpatialSvdCostCalculator(unittest.TestCase):
             _ = mnist_tf_model.create_model(data_format='channels_last')
             sess.run(tf.global_variables_initializer())
 
-        layer_database = LayerDatabase(model=sess, working_dir=None)
+        layer_database = LayerDatabase(model=sess, input_shape=(1, 28, 28, 1), working_dir=None)
 
         # Compress all layers by 50%
 
@@ -303,7 +304,7 @@ class TestTrainingExtensionsChannelPruningCostCalculator(unittest.TestCase):
         if not os.path.exists(meta_path):
             os.mkdir(meta_path)
 
-        layer_db = LayerDatabase(model=sess, working_dir=meta_path)
+        layer_db = LayerDatabase(model=sess, input_shape=(1, 28, 28, 1), working_dir=meta_path)
 
         # Compress all layers by 50%
 
@@ -365,7 +366,7 @@ class TestTrainingExtensionsChannelPruningCostCalculator(unittest.TestCase):
         if not os.path.exists(meta_path):
             os.mkdir(meta_path)
 
-        layer_db = LayerDatabase(model=sess, working_dir=meta_path)
+        layer_db = LayerDatabase(model=sess, input_shape=None, working_dir=meta_path)
 
         # Create a list of tuples of (layer, comp_ratio)
         layer_ratio_list = []

@@ -41,6 +41,7 @@
 from aimet_common.utils import AimetLogger
 import aimet_common.svd_pruner
 
+from aimet_tensorflow.utils.op.conv import get_output_activation_shape
 from aimet_tensorflow.layer_database import LayerDatabase, Layer
 from aimet_tensorflow.svd_spiltter import SpatialSvdModuleSplitter
 
@@ -65,8 +66,18 @@ class SpatialSvdPruner(aimet_common.svd_pruner.SpatialSvdPruner):
         # Split module using Spatial SVD
         module_a, module_b = SpatialSvdModuleSplitter.split_module(layer, rank)
 
+        # get the output activation shape for first conv op
+        output_shape_a = get_output_activation_shape(sess=layer.model, op=module_a,
+                                                     input_op_names=comp_layer_db.starting_ops,
+                                                     input_shape=comp_layer_db.input_shape)
+
+        # get the output activation shape for second conv op
+        output_shape_b = get_output_activation_shape(sess=layer.model, op=module_b,
+                                                     input_op_names=comp_layer_db.starting_ops,
+                                                     input_shape=comp_layer_db.input_shape)
+
         # Create two new layers and return them
-        layer_a = Layer(model=layer.model, op=module_a)
-        layer_b = Layer(model=layer.model, op=module_b)
+        layer_a = Layer(model=layer.model, op=module_a, output_shape=output_shape_a)
+        layer_b = Layer(model=layer.model, op=module_b, output_shape=output_shape_b)
 
         comp_layer_db.replace_layer_with_sequential_of_two_layers(layer, layer_a, layer_b)

@@ -77,7 +77,7 @@ class TestTrainingExtensionsCompRatioSelect(unittest.TestCase):
             sess.run(tf.global_variables_initializer())
 
         # Create a layer database
-        layer_db = LayerDatabase(model=sess, working_dir=None)
+        layer_db = LayerDatabase(model=sess, input_shape=(1, 28, 28, 1), working_dir=None)
         layer1 = layer_db.find_layer_by_name('conv2d/Conv2D')
 
         layer_db.mark_picked_layers([layer1])
@@ -96,7 +96,10 @@ class TestTrainingExtensionsCompRatioSelect(unittest.TestCase):
                                                                   comp_ratio_rounding_algo=None, use_cuda=False,
                                                                   bokeh_session=bokeh_session)
         progress_bar = ProgressBar(1, "eval scores", "green", bokeh_session=bokeh_session)
-        data_table = DataTable(num_columns=3, num_rows=1, column_names=['0.1', '0.2', '0.3', '0.4', '0.5', '0.6', '0.7', '0.8', '0.9'], row_index_names= [layer1.name], bokeh_session=bokeh_session)
+        data_table = DataTable(num_columns=3, num_rows=1,
+                               column_names=['0.1', '0.2', '0.3', '0.4', '0.5', '0.6', '0.7', '0.8', '0.9'],
+                               row_index_names=[layer1.name], bokeh_session=bokeh_session)
+
         pruner.prune_model.return_value = layer_db
         eval_dict = greedy_algo._compute_layerwise_eval_score_per_comp_ratio_candidate(data_table, progress_bar, layer1)
 
@@ -128,12 +131,11 @@ class TestTrainingExtensionsCompRatioSelect(unittest.TestCase):
             sess.run(tf.global_variables_initializer())
 
         # Create a layer database
-        layer_db = LayerDatabase(model=sess, working_dir=None)
+        layer_db = LayerDatabase(model=sess, input_shape=(1, 28, 28, 1), working_dir=None)
         layer1 = layer_db.find_layer_by_name('conv2d/Conv2D')
         layer2 = layer_db.find_layer_by_name('conv2d_1/Conv2D')
 
         layer_db.mark_picked_layers([layer1, layer2])
-
 
         url, process = start_bokeh_server_session(8006)
         bokeh_session = BokehServerSession(url=url, session_id="compression")
@@ -148,12 +150,12 @@ class TestTrainingExtensionsCompRatioSelect(unittest.TestCase):
                                                                   comp_ratio_rounding_algo=None, use_cuda=False,
                                                                   bokeh_session=bokeh_session)
 
-        dict = greedy_algo._compute_eval_scores_for_all_comp_ratio_candidates()
+        eval_dict = greedy_algo._compute_eval_scores_for_all_comp_ratio_candidates()
 
-        self.assertEqual(50, dict['conv2d/Conv2D'][Decimal('0.5')])
-        self.assertEqual(60, dict['conv2d/Conv2D'][Decimal('0.4')])
+        self.assertEqual(50, eval_dict['conv2d/Conv2D'][Decimal('0.5')])
+        self.assertEqual(60, eval_dict['conv2d/Conv2D'][Decimal('0.4')])
 
-        self.assertEqual(11, dict['conv2d_1/Conv2D'][Decimal('0.9')])
+        self.assertEqual(11, eval_dict['conv2d_1/Conv2D'][Decimal('0.9')])
 
         tf.reset_default_graph()
         sess.close()
@@ -181,12 +183,11 @@ class TestTrainingExtensionsCompRatioSelect(unittest.TestCase):
             sess.run(tf.global_variables_initializer())
 
         # Create a layer database
-        layer_db = LayerDatabase(model=sess, working_dir=None)
+        layer_db = LayerDatabase(model=sess, input_shape=(1, 28, 28, 1), working_dir=None)
         layer1 = layer_db.find_layer_by_name('conv2d/Conv2D')
         layer2 = layer_db.find_layer_by_name('conv2d_1/Conv2D')
 
         layer_db.mark_picked_layers([layer1, layer2])
-
 
         url, process = start_bokeh_server_session(8006)
         bokeh_session = BokehServerSession(url=url, session_id="compression")
@@ -256,7 +257,10 @@ class TestTrainingExtensionsCompRatioSelect(unittest.TestCase):
         sess = tf.Session()
         sess.run(tf.global_variables_initializer())
 
-        layer2 = Layer(model=sess, op=conv_op)
+        # output shape in NCHW format
+        output_shape = conv_op.outputs[0].shape
+
+        layer2 = Layer(model=sess, op=conv_op, output_shape=output_shape)
 
         greedy_algo = comp_ratio_select.GreedyCompRatioSelectAlgo
         comp_ratio = greedy_algo._find_layer_comp_ratio_given_eval_score(eval_scores_dict,
@@ -301,7 +305,7 @@ class TestTrainingExtensionsCompRatioSelect(unittest.TestCase):
             sess.run(tf.global_variables_initializer())
 
         # Create a layer database
-        layer_db = LayerDatabase(model=sess, working_dir=None)
+        layer_db = LayerDatabase(model=sess, input_shape=(1, 28, 28, 1), working_dir=None)
         layer1 = layer_db.find_layer_by_name('conv2d/Conv2D')
         layer2 = layer_db.find_layer_by_name('conv2d_1/Conv2D')
 
@@ -404,7 +408,7 @@ class TestTrainingExtensionsCompRatioSelect(unittest.TestCase):
             sess.run(tf.global_variables_initializer())
 
         # Create a layer database
-        layer_db = LayerDatabase(model=sess, working_dir=None)
+        layer_db = LayerDatabase(model=sess, input_shape=(1, 28, 28, 1), working_dir=None)
 
         selected_layers = [layer for layer in layer_db if layer.module.type == 'Conv2D']
         layer_db.mark_picked_layers(selected_layers)

@@ -38,7 +38,7 @@
 
 """ Top-level API for aimet compression library """
 
-from typing import Union, Tuple
+from typing import Union, Tuple, List
 import tensorflow as tf
 
 from aimet_common.defs import CostMetric, CompressionScheme, EvalFunction, CompressionStats
@@ -56,7 +56,7 @@ class ModelCompressor:
 
     @staticmethod
     def compress_model(sess: tf.Session, working_dir: str, eval_callback: EvalFunction, eval_iterations,
-                       input_shape: Tuple,
+                       input_shape: Union[Tuple, List[Tuple]],
                        compress_scheme: CompressionScheme, cost_metric: CostMetric,
                        parameters: Union[SpatialSvdParameters,
                                          ChannelPruningParameters],
@@ -72,7 +72,7 @@ class ModelCompressor:
         :param trainer: Training Class: Contains a callable, train_model, which takes model, layer which is being fine
                         tuned and an optional parameter train_flag as a parameter
                         None: If per layer fine tuning is not required while creating the final compressed model
-        :param input_shape: Shape of the input tensor for model
+        :param input_shape: tuple or list of tuples of input shapes to the model (channels_last format)
         :param compress_scheme: Compression scheme. See the enum for allowed values
         :param cost_metric: Cost metric to use for the compression-ratio (either mac or memory)
         :param parameters: Compression parameters specific to given compression scheme
@@ -100,8 +100,9 @@ class ModelCompressor:
             algo = CompressionFactory.create_spatial_svd_algo(sess, working_dir, eval_callback, eval_iterations,
                                                               input_shape, cost_metric, parameters, bokeh_session)
         elif compress_scheme == CompressionScheme.channel_pruning:
-            algo = CompressionFactory.create_channel_pruning_algo(sess, working_dir, eval_callback, eval_iterations,
-                                                                  cost_metric, parameters, bokeh_session)
+            algo = CompressionFactory.create_channel_pruning_algo(sess, working_dir, eval_callback, input_shape,
+                                                                  eval_iterations, cost_metric, parameters,
+                                                                  bokeh_session)
         else:
             raise ValueError("Compression scheme not supported: {}".format(compress_scheme))
 

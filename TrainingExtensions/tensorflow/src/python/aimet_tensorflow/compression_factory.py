@@ -38,7 +38,7 @@
 
 """ Provides a factory to construct various aimet model compression classes based on a scheme """
 
-from typing import Tuple, List
+from typing import Tuple, List, Union
 
 import tensorflow as tf
 
@@ -61,8 +61,8 @@ class CompressionFactory:
 
     @classmethod
     def create_spatial_svd_algo(cls, sess: tf.Session, working_dir: str, eval_callback: EvalFunction, eval_iterations,
-                                _input_shape: Tuple, cost_metric: CostMetric, params: SpatialSvdParameters,
-                                bokeh_session=None) -> CompressionAlgo:
+                                input_shape: Union[Tuple, List[Tuple]], cost_metric: CostMetric,
+                                params: SpatialSvdParameters, bokeh_session=None) -> CompressionAlgo:
         """
         Factory method to construct SpatialSvdCompressionAlgo
 
@@ -70,7 +70,7 @@ class CompressionFactory:
         :param working_dir: path to store temp meta and checkpoint files
         :param eval_callback: Evaluation callback for the model
         :param eval_iterations: Evaluation iterations
-        :param input_shape: Shape of the input tensor for model
+        :param input_shape: tuple or list of tuples of input shape to the model
         :param cost_metric: Cost metric (mac or memory)
         :param params: Spatial SVD compression parameters
         :param bokeh_session: The Bokeh Session to display plots
@@ -81,7 +81,7 @@ class CompressionFactory:
         # Rationale: Factory functions unfortunately need to deal with a lot of parameters
 
         # Create a layer database
-        layer_db = LayerDatabase(sess, working_dir, starting_ops=params.input_op_names,
+        layer_db = LayerDatabase(sess, input_shape, working_dir, starting_ops=params.input_op_names,
                                  ending_ops=params.output_op_names)
         use_cuda = False
 
@@ -122,8 +122,8 @@ class CompressionFactory:
         return spatial_svd_algo
 
     @classmethod
-    def create_channel_pruning_algo(cls, sess: tf.Session, working_dir: str,  # pylint: disable=too-many-arguments
-                                    eval_callback: EvalFunction, eval_iterations, cost_metric: CostMetric,
+    def create_channel_pruning_algo(cls, sess: tf.Session, working_dir: str, eval_callback: EvalFunction,
+                                    input_shape: Union[Tuple, List[Tuple]], eval_iterations, cost_metric: CostMetric,
                                     params: ChannelPruningParameters, bokeh_session: BokehServerSession) -> \
             CompressionAlgo:
         """
@@ -132,6 +132,7 @@ class CompressionFactory:
         :param working_dir: path to store temp meta and checkpoint files
         :param eval_callback: Evaluation callback for the model
         :param eval_iterations: Evaluation iterations
+        :param input_shape: tuple or list of tuples of input shapes to the model
         :param cost_metric: Cost metric (mac or memory)
         :param params: Channel Pruning compression parameters
         :param bokeh_session: The Bokeh session to display plots
@@ -142,7 +143,7 @@ class CompressionFactory:
         # Rationale: Factory functions unfortunately need to deal with a lot of parameters
 
         # Create a layer database
-        layer_db = LayerDatabase(sess, working_dir, starting_ops=params.input_op_names,
+        layer_db = LayerDatabase(sess, input_shape, working_dir, starting_ops=params.input_op_names,
                                  ending_ops=params.output_op_names)
         use_cuda = False
 

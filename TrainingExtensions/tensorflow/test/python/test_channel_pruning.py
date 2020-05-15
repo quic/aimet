@@ -533,6 +533,8 @@ class TestTrainingExtensionsChannelPruning(unittest.TestCase):
             init = tf.global_variables_initializer()
 
         conv1_op = g.get_operation_by_name('Conv2D_1')
+        # output shape in NCHW format
+        output_shape = conv1_op.outputs[0].shape
 
         shape = conv1_op.outputs[0].get_shape().as_list()
         self.assertEqual(shape, [num_examples, 64, 1, 1])
@@ -540,7 +542,7 @@ class TestTrainingExtensionsChannelPruning(unittest.TestCase):
         sess = tf.Session(graph=g)
         # initialize all the variables in the graph
         sess.run(init)
-        conv_layer = Layer(model=sess, op=conv1_op)
+        conv_layer = Layer(model=sess, op=conv1_op, output_shape=output_shape)
 
         cp = InputChannelPruner(input_op_names=input_op_names, output_op_names=output_op_names, data_set=data_set,
                                 batch_size=number_of_batches,
@@ -597,11 +599,12 @@ class TestTrainingExtensionsChannelPruning(unittest.TestCase):
         sess.run(init)
 
         conv_out = sess.run(conv_op.outputs[0])
+        # output shape in NCHW format
+        output_shape = conv_op.outputs[0].shape
 
         conv2d_reshaped_out = conv_out.reshape([conv_out.shape[0], np.prod(conv_out.shape[1:4])])
-
         # create layer
-        layer = Layer(model=sess, op=conv_op)
+        layer = Layer(model=sess, op=conv_op, output_shape=output_shape)
 
         WeightReconstructor.reconstruct_params_for_conv2d(layer=layer, input_data=input_data,
                                                           output_data=conv2d_reshaped_out,
@@ -660,8 +663,11 @@ class TestTrainingExtensionsChannelPruning(unittest.TestCase):
         sess.run(init)
 
         conv_op = g.get_operation_by_name('Conv2D_1')
+        # output shape in NCHW format
+        output_shape = conv_op.outputs[0].shape
+
         # create layer
-        layer = Layer(model=sess, op=conv_op)
+        layer = Layer(model=sess, op=conv_op, output_shape=output_shape)
 
         bias_op = g.get_operation_by_name('BiasAdd')
         bias_out = sess.run(bias_op.outputs[0])
@@ -718,7 +724,7 @@ class TestTrainingExtensionsChannelPruning(unittest.TestCase):
         orig_sess.run(orig_init)
 
         # create layer database
-        layer_db = LayerDatabase(model=orig_sess, working_dir=None)
+        layer_db = LayerDatabase(model=orig_sess, input_shape=(1, 224, 224, 3), working_dir=None)
         conv_layer = layer_db.find_layer_by_name('block1_conv1/convolution')
 
         comp_layer_db = copy.deepcopy(layer_db)
@@ -779,16 +785,24 @@ class TestTrainingExtensionsChannelPruning(unittest.TestCase):
         orig_sess.run(orig_init)
 
         # create layer database
-        layer_db = LayerDatabase(model=orig_sess, working_dir=None)
+        layer_db = LayerDatabase(model=orig_sess, input_shape=(1, 224, 224, 3), working_dir=None)
 
         block1_conv2 = layer_db.model.graph.get_operation_by_name('block1_conv2/convolution')
         block2_conv1 = layer_db.model.graph.get_operation_by_name('block2_conv1/convolution')
         block2_conv2 = layer_db.model.graph.get_operation_by_name('block2_conv2/convolution')
 
+        # output shape in NCHW format
+        block1_conv2_output_shape = block1_conv2.outputs[0].shape
+        block2_conv1_output_shape = block2_conv1.outputs[0].shape
+        block2_conv2_output_shape = block2_conv2.outputs[0].shape
+
         # keeping compression ratio = 0.5 for all layers
-        layer_comp_ratio_list = [LayerCompRatioPair(Layer(model=layer_db.model, op=block1_conv2), 0.5),
-                                 LayerCompRatioPair(Layer(model=layer_db.model, op=block2_conv1), 0.5),
-                                 LayerCompRatioPair(Layer(model=layer_db.model, op=block2_conv2), 0.5)
+        layer_comp_ratio_list = [LayerCompRatioPair(Layer(model=layer_db.model, op=block1_conv2,
+                                                          output_shape=block1_conv2_output_shape), 0.5),
+                                 LayerCompRatioPair(Layer(model=layer_db.model, op=block2_conv1,
+                                                          output_shape=block2_conv1_output_shape), 0.5),
+                                 LayerCompRatioPair(Layer(model=layer_db.model, op=block2_conv2,
+                                                          output_shape=block2_conv2_output_shape), 0.5)
                                  ]
 
         cp = InputChannelPruner(input_op_names=input_op_names, output_op_names=output_op_names, data_set=dataset,
@@ -841,19 +855,29 @@ class TestTrainingExtensionsChannelPruning(unittest.TestCase):
         orig_sess.run(orig_init)
 
         # create layer database
-        layer_db = LayerDatabase(model=orig_sess, working_dir=None)
+        layer_db = LayerDatabase(model=orig_sess, input_shape=(1, 224, 224, 3), working_dir=None)
 
         block1_conv2 = layer_db.model.graph.get_operation_by_name('block1_conv2/convolution')
         block2_conv1 = layer_db.model.graph.get_operation_by_name('block2_conv1/convolution')
         block2_conv2 = layer_db.model.graph.get_operation_by_name('block2_conv2/convolution')
         block5_conv3 = layer_db.model.graph.get_operation_by_name('block5_conv3/convolution')
 
+        # output shape in NCHW format
+        block1_conv2_output_shape = block1_conv2.outputs[0].shape
+        block2_conv1_output_shape = block2_conv1.outputs[0].shape
+        block2_conv2_output_shape = block2_conv2.outputs[0].shape
+        block5_conv3_output_shape = block5_conv3.outputs[0].shape
+
         # keeping compression ratio = None for all layers
         layer_comp_ratio_list = [
-                                 LayerCompRatioPair(Layer(model=layer_db.model, op=block5_conv3), None),
-                                 LayerCompRatioPair(Layer(model=layer_db.model, op=block2_conv2), None),
-                                 LayerCompRatioPair(Layer(model=layer_db.model, op=block1_conv2), None),
-                                 LayerCompRatioPair(Layer(model=layer_db.model, op=block2_conv1), None)
+                                 LayerCompRatioPair(Layer(model=layer_db.model, op=block5_conv3,
+                                                          output_shape=block5_conv3_output_shape), None),
+                                 LayerCompRatioPair(Layer(model=layer_db.model, op=block2_conv2,
+                                                          output_shape=block2_conv2_output_shape), None),
+                                 LayerCompRatioPair(Layer(model=layer_db.model, op=block1_conv2,
+                                                          output_shape=block1_conv2_output_shape), None),
+                                 LayerCompRatioPair(Layer(model=layer_db.model, op=block2_conv1,
+                                                          output_shape=block2_conv1_output_shape), None)
                                  ]
 
         input_op_names = ['input_1']
@@ -898,19 +922,29 @@ class TestTrainingExtensionsChannelPruning(unittest.TestCase):
         orig_sess.run(orig_init)
 
         # create layer database
-        layer_db = LayerDatabase(model=orig_sess, working_dir=None)
+        layer_db = LayerDatabase(model=orig_sess, input_shape=(1, 224, 224, 3), working_dir=None)
 
         res2b_branch2a = layer_db.model.graph.get_operation_by_name('res2b_branch2a/convolution')
         res2a_branch1 = layer_db.model.graph.get_operation_by_name('res2a_branch1/convolution')
         res2b_branch2b = layer_db.model.graph.get_operation_by_name('res2b_branch2a/convolution')
         res2c_branch2a = layer_db.model.graph.get_operation_by_name('res2c_branch2a/convolution')
 
+        # output shape in NCHW format
+        res2b_branch2a_output_shape = res2b_branch2a.outputs[0].shape
+        res2a_branch1_output_shape = res2a_branch1.outputs[0].shape
+        res2b_branch2b_output_shape = res2b_branch2b.outputs[0].shape
+        res2c_branch2a_output_shape = res2c_branch2a.outputs[0].shape
+
         # keeping compression ratio = None for all layers
         layer_comp_ratio_list = [
-            LayerCompRatioPair(Layer(model=layer_db.model, op=res2c_branch2a), None),
-            LayerCompRatioPair(Layer(model=layer_db.model, op=res2b_branch2b), None),
-            LayerCompRatioPair(Layer(model=layer_db.model, op=res2a_branch1), None),
-            LayerCompRatioPair(Layer(model=layer_db.model, op=res2b_branch2a), None)
+            LayerCompRatioPair(Layer(model=layer_db.model, op=res2c_branch2a,
+                                     output_shape=res2c_branch2a_output_shape), None),
+            LayerCompRatioPair(Layer(model=layer_db.model, op=res2b_branch2b,
+                                     output_shape=res2b_branch2b_output_shape), None),
+            LayerCompRatioPair(Layer(model=layer_db.model, op=res2a_branch1,
+                                     output_shape=res2a_branch1_output_shape), None),
+            LayerCompRatioPair(Layer(model=layer_db.model, op=res2b_branch2a,
+                                     output_shape=res2b_branch2a_output_shape), None)
         ]
 
         input_op_names = ['input_1']
