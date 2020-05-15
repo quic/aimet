@@ -628,6 +628,46 @@ def match_leaky_relu(op_to_module_dict: dict, op_info: ModuleIdentifierOpInfo) -
         return False
 
 
+def match_global_max_pool2d(op_to_module_dict: dict, op_info: ModuleIdentifierOpInfo) -> bool:
+    """
+    Matcher for global maxpool2d type ops
+    :param op_to_module_dict: Dictionary mapping tf ops to ModuleIdentifierOpInfo objects.  All tf ops belonging to the
+    same module will be mapped to the same ModuleIdentifierOpInfo object.
+    :param op_info: ModuleIdentifierOpInfo to fill in, for holding information about the module that multiple tf ops
+    belong to
+    :return: True if a valid match was made, False otherwise
+    """
+    # Begin at op of type Max and try to match to global maxpool2d pattern
+    op = op_info.tf_op
+    try:
+        keep_dims = op.get_attr('keep_dims')
+        assert keep_dims is not None
+        assert not keep_dims
+        reduction_indices_op = op.inputs[1].op
+        tensor_content_length = reduction_indices_op.get_attr('value').tensor_shape.dim[0].size
+        # i for int, tensor_content_length tells how many integers to parse out
+        unpack_string = str(tensor_content_length) + 'i'
+        reduction_indices = struct.unpack(unpack_string, reduction_indices_op.get_attr('value').tensor_content)
+        if reduction_indices == (1, 2):
+            data_format = 'channels_last'
+        elif reduction_indices == (2, 3):
+            data_format = 'channels_first'
+        else:
+            assert False
+
+        # Add ops to the op to module dict
+        op_info.add_attribute('data_format', data_format)
+        op_info.op_type = "GlobalMaxPool2D"
+        match_name = re.match("(.+)/Max", op.name)
+        if match_name:
+            op_info.module_name = match_name.group(1)
+
+        op_to_module_dict.update({op: op_info})
+        return True
+    except:     # pylint: disable=bare-except
+        return False
+
+
 def handle_default(*_) -> bool:
     """ Do nothing here """
     return True

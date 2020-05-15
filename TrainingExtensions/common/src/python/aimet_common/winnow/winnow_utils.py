@@ -189,6 +189,7 @@ class OpConnectivity:
                        'PlaceholderWithDefault': ConnectivityType.null,
                        'Downsample': ConnectivityType.null,
                        'Upsample': ConnectivityType.null,
+                       'GlobalMaxpool2D': ConnectivityType.null,
                        'BatchNorm': ConnectivityType.direct,
                        'AvgPool': ConnectivityType.direct,
                        'FusedBatchNormV3': ConnectivityType.direct,
