@@ -181,14 +181,16 @@ class MaskPropagator:
                             continue
                         if isinstance(consumer_connectivity, mask.ConcatInternalConnectivity):
                             self._propagate_up_concat_inter_module_masks(consumer, a_product)
-                        elif isinstance(consumer_connectivity, mask.AddInternalConnectivity) and not \
-                                isinstance(consumer_connectivity, mask.SplitInternalConnectivity):
+                        elif isinstance(consumer_connectivity, mask.AddInternalConnectivity):
                             self._propagate_up_add_masks(consumer, a_product)
                         elif isinstance(consumer_connectivity, mask.SkipInternalConnectivity):
                             # Get the Op's output product's consumer and propagate up that consumer's mask.
                             self._propagate_up_skip_masks(consumer, a_product)
                         else:
-                            # Consumers  that are not Add or Concat
+                            # Consumers that are not Add or Concat
+                            assert isinstance(consumer_connectivity, (mask.DirectInternalConnectivity,
+                                                                      mask.NullInternalConnectivity,
+                                                                      mask.SplitInternalConnectivity))
                             self._set_inter_module_producer_output_and_consumer_input_mask(consumer, a_product)
 
     def _validate_and_adjust_masks_for_multi_input_multi_output_ops(self):

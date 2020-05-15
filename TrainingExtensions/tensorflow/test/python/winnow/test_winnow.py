@@ -52,7 +52,7 @@ from aimet_tensorflow.examples.test_models import keras_model, single_residual, 
     depthwise_conv2d_model, keras_model_functional, dropout_keras_model, dropout_slim_model, tf_slim_basic_model, \
     upsample_model, multiple_input_model, model_with_postprocessing_nodes, minimum_maximum_model, \
     model_with_upsample_already_present, model_with_multiple_downsamples, model_with_upsample2d, \
-    model_with_leaky_relu, keras_model_functional_with_non_fused_batchnorms
+    model_with_leaky_relu, keras_model_functional_with_non_fused_batchnorms, model_to_test_downstream_masks
 from aimet_tensorflow.winnow.mask_propagation_winnower import MaskPropagationWinnower
 import aimet_tensorflow.winnow.winnow as winnow
 from aimet_tensorflow.utils.graph_saver import save_and_load_graph
@@ -1150,6 +1150,117 @@ class TestTfWinnower(unittest.TestCase):
         self.assertEqual([1, 1, 0, 0, 1, 1, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 0],
                          conv2d_4_op_mask.input_channel_masks[0])
         sess.close()
+
+    def test_mask_propagation_for_add_with_split_parent(self):
+        """ Test mask propagation on a model with add that has a split parent """
+        tf.reset_default_graph()
+        sess = tf.Session()
+
+        _ = upsample_model()
+        init = tf.global_variables_initializer()
+        sess.run(init)
+
+        input_op_names = ["input_1"]
+        output_op_names = ['upsample_model/Softmax']
+
+        # This conv2d is directly below an add that has split as one of its parents.  Thus we expect this mask to
+        # propagate only through the parent that is not a split.  Additionally, due to special handling for add ops at
+        # the end of mask propagation, we expect add's input and output masks to be all ones.
+        module_zero_channels_list = []
+        tf_op = tf.get_default_graph().get_operation_by_name("conv2d_3/Conv2D")
+        input_channels_to_winnow = [3, 5, 7]
+        module_mask_pair = (tf_op, input_channels_to_winnow)
+        module_zero_channels_list.append(module_mask_pair)
+
+        mask_winnower = MaskPropagationWinnower(sess, input_op_names, output_op_names, module_zero_channels_list,
+                                                reshape=True, in_place=True, verbose=True)
+        mask_winnower._propagate_masks()
+
+        conv2d_2_op = mask_winnower._conn_graph.get_all_ops()["conv2d_2/Conv2D"]
+        conv2d_2_op_mask = mask_winnower._mask_propagator.op_to_mask_dict[conv2d_2_op]
+        self.assertEqual([1, 1, 1, 0, 1, 0, 1, 0], conv2d_2_op_mask.output_channel_masks[0])
+
+        add_op = mask_winnower._conn_graph.get_all_ops()['Add']
+        add_mask = mask_winnower._mask_propagator.op_to_mask_dict[add_op]
+        self.assertEqual(8, sum(add_mask.input_channel_masks[0]))
+        self.assertEqual(8, sum(add_mask.input_channel_masks[1]))
+        self.assertEqual(8, sum(add_mask.output_channel_masks[0]))
+
+    def test_mask_propagation_for_add_with_non_split_parents(self):
+        """ Test mask propagation on a model with add that does not have a split parent """
+        tf.reset_default_graph()
+        sess = tf.Session()
+
+        _ = single_residual()
+        init = tf.global_variables_initializer()
+        sess.run(init)
+
+        input_op_names = ["input_1"]
+        output_op_names = ['conv2d_4/Conv2D']
+
+        # This conv2d is not directly below an add that has split as one of its parents.  Thus we expect this mask to
+        # propagate through both parents of the add.  At the end of mask propagation, we expect add's input and output
+        # masks to have channels 3, 5, and 7 marked for winnowing.
+        module_zero_channels_list = []
+        tf_op = tf.get_default_graph().get_operation_by_name("conv2d_4/Conv2D")
+        input_channels_to_winnow = [3, 5, 7]
+        module_mask_pair = (tf_op, input_channels_to_winnow)
+        module_zero_channels_list.append(module_mask_pair)
+
+        mask_winnower = MaskPropagationWinnower(sess, input_op_names, output_op_names, module_zero_channels_list,
+                                                reshape=True, in_place=True, verbose=True)
+        mask_winnower._propagate_masks()
+
+        conv2d_1_op = mask_winnower._conn_graph.get_all_ops()["conv2d_1/Conv2D"]
+        conv2d_1_op_mask = mask_winnower._mask_propagator.op_to_mask_dict[conv2d_1_op]
+        self.assertEqual([1, 1, 1, 0, 1, 0, 1, 0], conv2d_1_op_mask.output_channel_masks[0])
+        conv2d_3_op = mask_winnower._conn_graph.get_all_ops()["conv2d_3/Conv2D"]
+        conv2d_3_op_mask = mask_winnower._mask_propagator.op_to_mask_dict[conv2d_3_op]
+        self.assertEqual([1, 1, 1, 0, 1, 0, 1, 0], conv2d_3_op_mask.output_channel_masks[0])
+
+        add_op = mask_winnower._conn_graph.get_all_ops()['Add']
+        add_mask = mask_winnower._mask_propagator.op_to_mask_dict[add_op]
+        self.assertEqual([1, 1, 1, 0, 1, 0, 1, 0], add_mask.input_channel_masks[0])
+        self.assertEqual([1, 1, 1, 0, 1, 0, 1, 0], add_mask.input_channel_masks[1])
+        self.assertEqual([1, 1, 1, 0, 1, 0, 1, 0], add_mask.output_channel_masks[0])
+
+    def test_mask_propagation_set_downstream_masks(self):
+        """ Test setting downstream masks """
+        tf.reset_default_graph()
+        sess = tf.Session()
+
+        _ = model_to_test_downstream_masks()
+        init = tf.global_variables_initializer()
+        sess.run(init)
+
+        input_op_names = ["input_1"]
+        output_op_names = ['model_to_test_downstream_masks/Softmax']
+
+        # This conv2d is not directly below an add that has split as one of its parents.  Thus we expect this mask to
+        # propagate through both parents of the add.  At the end of mask propagation, we expect add's input and output
+        # masks to have channels 3, 5, and 7 marked for winnowing.
+        module_zero_channels_list = []
+        tf_op = tf.get_default_graph().get_operation_by_name("conv2d_2/Conv2D")
+        input_channels_to_winnow = [3, 5, 7]
+        module_mask_pair = (tf_op, input_channels_to_winnow)
+        module_zero_channels_list.append(module_mask_pair)
+
+        tf_op = tf.get_default_graph().get_operation_by_name("conv2d_3/Conv2D")
+        input_channels_to_winnow = [3, 5, 7]
+        module_mask_pair = (tf_op, input_channels_to_winnow)
+        module_zero_channels_list.append(module_mask_pair)
+
+        mask_winnower = MaskPropagationWinnower(sess, input_op_names, output_op_names, module_zero_channels_list,
+                                                reshape=True, in_place=True, verbose=True)
+        mask_winnower._propagate_masks()
+
+        relu_op = mask_winnower._conn_graph.get_all_ops()["Relu"]
+        relu_op_mask = mask_winnower._mask_propagator.op_to_mask_dict[relu_op]
+        self.assertEqual(8, sum(relu_op_mask.output_channel_masks[0]))
+
+        relu_1_op = mask_winnower._conn_graph.get_all_ops()["Relu_1"]
+        relu_1_op_mask = mask_winnower._mask_propagator.op_to_mask_dict[relu_1_op]
+        self.assertEqual(8, sum(relu_1_op_mask.output_channel_masks[0]))
 
     def test_create_masks_with_postprocessing_ops(self):
         """ Test that create_masks() is able to handle models with postprocessing nodes """
