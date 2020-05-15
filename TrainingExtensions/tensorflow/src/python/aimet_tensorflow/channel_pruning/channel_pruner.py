@@ -196,6 +196,8 @@ class InputChannelPruner(Pruner):
 
                 # select input channels of conv2d op to winnow
                 prune_indices = self._select_inp_channels(orig_layer, comp_ratio)
+                if not prune_indices:
+                    continue
 
                 # Winnow the selected op and modify it's upstream affected ops
                 current_sess, ordered_modules_list = winnow.winnow_tf_model(current_sess, self._input_op_names,
@@ -246,6 +248,8 @@ class InputChannelPruner(Pruner):
             if layer_comp_ratio.comp_ratio is not None and layer_comp_ratio.comp_ratio < 1.0:
                 # 1) channel selection
                 prune_indices = self._select_inp_channels(orig_layer, layer_comp_ratio.comp_ratio)
+                if not prune_indices:
+                    continue
 
                 # 2) Winnowing the model
                 current_sess, ordered_modules_list = winnow.winnow_tf_model(current_sess, self._input_op_names,
