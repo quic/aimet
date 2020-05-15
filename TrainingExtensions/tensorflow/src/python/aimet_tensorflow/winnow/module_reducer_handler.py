@@ -477,6 +477,22 @@ def reduce_upsample2d(_, op_tensor_tuple: Tuple[Op, List[tf.Tensor]], _op_mask) 
     return name, new_tensor.op, module
 
 
+def reduce_leaky_relu(_, op_tensor_tuple: Tuple[Op, List[tf.Tensor]], _op_mask) -> (str, tf.Operation,
+                                                                                    tf.Operation):
+    """
+    Leaky_relu module reducer
+    :param op_tensor_tuple: tuple containing the op to reduce, and a list of input tensors to the op
+    :param _op_mask: unused parameter
+    """
+    name = "reduced_" + op_tensor_tuple[0].dotted_name
+    alpha = op_tensor_tuple[0].get_attribute('alpha')
+    assert alpha is not None
+    new_tensor = tf.nn.leaky_relu(op_tensor_tuple[1][0], alpha=alpha, name=name)
+    module = new_tensor.op
+
+    return name, new_tensor.op, module
+
+
 def reduce_default(_, op_tensor_tuple: Tuple[Op, List[tf.Tensor]], _op_mask):
     """ Default reducer handler """
     raise NotImplementedError("reduction for op type %s not implemented" % op_tensor_tuple[0].type)

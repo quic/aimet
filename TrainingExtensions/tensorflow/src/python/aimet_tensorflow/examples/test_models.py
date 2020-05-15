@@ -379,3 +379,15 @@ def model_with_upsample2d():
     x = tf.keras.layers.Flatten()(x)
     outputs = tf.keras.layers.Dense(10, activation=tf.nn.softmax, name="model_with_upsample2d")(x)
     return outputs
+
+
+def model_with_leaky_relu():
+    """ Return model with leaky relu op """
+    inputs = tf.keras.Input(shape=(8, 8, 3,))
+    x = tf.keras.layers.Conv2D(8, (2, 2))(inputs)
+    # x = tf.keras.layers.LeakyReLU(alpha=.4)(x)
+    x = tf.nn.leaky_relu(x, alpha=.4)
+    x = tf.keras.layers.Conv2D(4, (2, 2))(x)
+    x = tf.keras.layers.Flatten()(x)
+    outputs = tf.keras.layers.Dense(10, activation=tf.nn.softmax, name="model_with_leaky_relu")(x)
+    return outputs

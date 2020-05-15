@@ -37,6 +37,7 @@
 # =============================================================================
 """ This file contains unit tests for testing winnowing for tf models. """
 
+# pylint: disable=too-many-lines
 import unittest
 import logging
 import struct
@@ -50,7 +51,7 @@ from aimet_tensorflow.common.connectedgraph import ConnectedGraph
 from aimet_tensorflow.examples.test_models import keras_model, single_residual, concat_model, pad_model, \
     depthwise_conv2d_model, keras_model_functional, dropout_keras_model, dropout_slim_model, tf_slim_basic_model, \
     upsample_model, multiple_input_model, model_with_postprocessing_nodes, minimum_maximum_model, \
-    model_with_upsample_already_present, model_with_multiple_downsamples, model_with_upsample2d
+    model_with_upsample_already_present, model_with_multiple_downsamples, model_with_upsample2d, model_with_leaky_relu
 from aimet_tensorflow.winnow.mask_propagation_winnower import MaskPropagationWinnower
 import aimet_tensorflow.winnow.winnow as winnow
 from aimet_tensorflow.utils.graph_saver import save_and_load_graph
@@ -757,6 +758,11 @@ class TestTfModuleReducer(unittest.TestCase):
         module_mask_pair = (conv2d, input_channels_to_winnow)
         module_zero_channels_list.append(module_mask_pair)
 
+        const_op = sess.graph.get_operation_by_name('up_sampling2d/Const')
+        tensor_content_length = const_op.get_attr('value').tensor_shape.dim[0].size
+        unpack_string = str(tensor_content_length) + 'i'
+        orig_upsample_size = struct.unpack(unpack_string, const_op.get_attr('value').tensor_content)
+
         input_op_names = ['input_1']
         output_op_names = ['model_with_upsample2d/Softmax']
         new_sess, ordered_modules_list = winnow.winnow_tf_model(sess, input_op_names, output_op_names,
@@ -768,12 +774,44 @@ class TestTfModuleReducer(unittest.TestCase):
         const_op = new_sess.graph.get_operation_by_name('reduced_up_sampling2d/Const')
         tensor_content_length = const_op.get_attr('value').tensor_shape.dim[0].size
         unpack_string = str(tensor_content_length) + 'i'
-        upsample_size = struct.unpack(unpack_string, const_op.get_attr('value').tensor_content)
-        self.assertEqual((2, 3), upsample_size)
+        reduced_upsample_size = struct.unpack(unpack_string, const_op.get_attr('value').tensor_content)
+        self.assertEqual(orig_upsample_size, reduced_upsample_size)
 
         sess.close()
         new_sess.close()
-        self.assertEqual(0, 0)
+
+    def test_reducing_leakyrelu(self):
+        """ Test for reducing a model with leaky_relu op """
+        tf.reset_default_graph()
+        sess = tf.Session()
+        module_zero_channels_list = []
+
+        _ = model_with_leaky_relu()
+        init = tf.global_variables_initializer()
+        sess.run(init)
+
+        conv2d = tf.get_default_graph().get_operation_by_name("conv2d_1/Conv2D")
+        input_channels_to_winnow = [1, 2, 3]
+        module_mask_pair = (conv2d, input_channels_to_winnow)
+        module_zero_channels_list.append(module_mask_pair)
+
+        alpha_op = sess.graph.get_operation_by_name('LeakyRelu/alpha')
+        orig_alpha = alpha_op.get_attr('value').float_val[0]
+
+        input_op_names = ['input_1']
+        output_op_names = ['model_with_leaky_relu/Softmax']
+        new_sess, ordered_modules_list = winnow.winnow_tf_model(sess, input_op_names, output_op_names,
+                                                                module_zero_channels_list,
+                                                                reshape=True, in_place=True, verbose=True)
+
+        self.assertEqual(3, len(ordered_modules_list))
+        # Check that correct alpha was used
+        alpha_op = new_sess.graph.get_operation_by_name('reduced_LeakyRelu/alpha')
+        reduced_alpha = alpha_op.get_attr('value').float_val[0]
+        self.assertEqual(orig_alpha, reduced_alpha)
+
+        sess.close()
+        new_sess.close()
 
 
 class TestTfWinnower(unittest.TestCase):

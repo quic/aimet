@@ -204,6 +204,7 @@ class OpConnectivity:
                        'Minimum': ConnectivityType.direct,
                        'Maximum': ConnectivityType.direct,
                        'Upsample2D': ConnectivityType.direct,
+                       'LeakyRelu': ConnectivityType.direct,
                        'Add': ConnectivityType.add,
                        'AddN': ConnectivityType.add,
                        'AddV2': ConnectivityType.add,
