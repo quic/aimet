@@ -51,7 +51,7 @@ from aimet_tensorflow.common.module_identifier import StructureModuleIdentifier
 from aimet_tensorflow.common.module_identifier_matchers import ModuleIdentifierOpInfo
 from aimet_tensorflow.examples.test_models import keras_model, keras_model_functional, tf_slim_basic_model, \
     single_residual, split_and_concat_model, concat_model, dropout_keras_model, dropout_slim_model, \
-    tf_slim_with_softmax, multiple_input_model, upsample_model, model_with_upsample2d
+    tf_slim_with_softmax, multiple_input_model, upsample_model, model_with_upsample2d, model_with_leaky_relu
 import aimet_tensorflow.winnow.winnow as winnow
 
 logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Test)
@@ -340,6 +340,24 @@ class TestTfConnectedGraph(unittest.TestCase):
         # _ = tf.summary.FileWriter('./model_with_upsample2d', tf.get_default_graph())
         conn_graph = ConnectedGraph(tf.get_default_graph(), starting_op_names=['input_1'],
                                     output_op_names=['model_with_upsample2d/Softmax'])
+        self.assertTrue(validate_branch_ops(conn_graph))
+        self.assertTrue(validate_product_tensor_lists(conn_graph))
+        self.assertEqual(0, conn_graph.branch_count)
+        self.assertEqual(7, len(conn_graph.get_all_ops()))
+
+        # 6 products from inter module connections
+        # 6 products from parameters
+        self.assertEqual(12, len(conn_graph.get_all_products()))
+
+        tf.reset_default_graph()
+
+    def test_model_with_leaky_relu(self):
+        """ Test connected graph construction on model with leaky relu op """
+        tf.reset_default_graph()
+        _ = model_with_leaky_relu()
+        # _ = tf.summary.FileWriter('./model_with_leaky_relu', tf.get_default_graph())
+        conn_graph = ConnectedGraph(tf.get_default_graph(), starting_op_names=['input_1'],
+                                    output_op_names=['model_with_leaky_relu/Softmax'])
         self.assertTrue(validate_branch_ops(conn_graph))
         self.assertTrue(validate_product_tensor_lists(conn_graph))
         self.assertEqual(0, conn_graph.branch_count)
