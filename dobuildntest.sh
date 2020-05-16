@@ -41,7 +41,7 @@
 ###############################################################################
 
 # verbose mode
-set -x
+# set -x
 
 # enable exit on error.
 set -e
@@ -82,12 +82,13 @@ function pre_exit {
 
     summaryFile=${outputFolder}/summary.txt
 
-    echo -e "----------------------------------------------------------------------------------------------------------\n" | tee -a ${summaryFile}
-    echo -e "\nResults are in location:\n${outputFolder}\n" | tee -a ${summaryFile}
-    cat ${summaryFile}
-
-    if grep -q FAIL "${summaryFile}"; then
-        EXIT_CODE=3
+    if [[ -f ${summaryFile} ]]; then
+       echo -e "----------------------------------------------------------------------------------------------------------\n" | tee -a ${summaryFile}
+       echo -e "\nResults are in location:\n${outputFolder}\n" | tee -a ${summaryFile}
+       cat ${summaryFile}
+       if grep -q FAIL "${summaryFile}"; then
+           EXIT_CODE=3
+       fi
     fi
 
     # Return the exit code
@@ -114,9 +115,18 @@ function check_stage() {
 }
 
 usage() {
+  echo -e "\nThis is a script to build and run tests on AIMET code."
+  echo -e "This script must be executed from within the AIMET repo's top-level folder."
+  echo -e "NOTE: This script must be executed within the docker container (or in a machine with all dependencies installed). It will NOT start a docker container.\n"
   echo "${0} [-o <output_folder>]"
+  echo "    -b --> build the code"
+  echo "    -u --> run unit tests"
+  echo "    -v --> run code violation checks (using pylint tool)"
+  echo "    -g --> run code coverage checks (using pycov tool)"
+  echo "    -s --> run static analysis (using clang-tidy tool)"
+  echo "    -a --> run acceptance tests (Warning: This will take a long time to complete!)"  
   echo "    -o --> optional output folder. Default is current directory"
-  echo "    -w --> AIMET workspace. Default is current directory"
+  echo "    -w --> path to AIMET workspace. Default is current directory"
 }
 
 while getopts "o:w:abcghsuv" opt;

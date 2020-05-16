@@ -19,7 +19,7 @@ The AIMET package requires the following host platform setup:
 
 - 64-bit Intel x86-compatible processor
 - Nvidia GPU card
-- Linux Ubuntu: 16.04 LTS
+- Linux Ubuntu: 18.04 LTS
 - nvidia-docker (optional) - Installation instructions: https://github.com/NVIDIA/nvidia-docker
 - bash command shell
 
@@ -42,7 +42,14 @@ WORKSPACE="<absolute_path_to_workspace>"
 mkdir $WORKSPACE && cd $WORKSPACE
 git clone https://github.com/quic/aimet.git
 ```
-
+Clone the google test repo as follows:
+```
+cd aimet
+mkdir -p ./ThirdParty/googletest
+pushd ./ThirdParty/googletest
+git clone https://github.com/google/googletest.git -b release-1.8.0 googletest-release-1.8.0
+popd
+```
 ## Setup the environment
 In order to build and run AIMET code, several dependencies are required (such as python, cmake, tensorflow, pytorch, etc). A docker file with all prerequisites and dependencies is available [here](Jenkins/Dockerfile). Either install the dependencies on your machine using [this Dockerfile](Jenkins/Dockerfile) as a guide, or just build and launch the docker using the instructions [here](#docker-information).
 
