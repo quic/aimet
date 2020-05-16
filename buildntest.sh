@@ -36,8 +36,9 @@
 # =============================================================================
 
 ###############################################################################
-## This is a script to build and run tests AIMET code.
-## This script must be run from within the AIMET top-level folder
+## This is a script to build and run tests on AIMET code.
+## This script must be run from within the AIMET top-level folder.
+## For help and usage information: buildntest.sh -h
 ###############################################################################
 
 # enable exit on error.
@@ -57,8 +58,21 @@ loading_symbol="..."
 USER_MOUNT_DIRS=""
 
 usage() {
+  echo -e "\nThis is a script to build and run tests on AIMET code."
+  echo -e "This script must be executed from within the AIMET repo's top-level folder."
+  echo -e "NOTE: This script will build and start a docker container.\n"
+  
   echo "${0} [-o <output_folder>]"
+  echo "    -b --> build the code"
+  echo "    -u --> run unit tests"
+  echo "    -v --> run code violation checks (using pylint tool)"
+  echo "    -g --> run code coverage checks (using pycov tool)"
+  echo "    -s --> run static analysis (using clang-tidy tool)"
+  echo "    -a --> run acceptance tests (Warning: This will take a long time to complete!)"
   echo "    -o --> optional output folder. Default is current directory"
+  echo "    -i --> just build and start the docker in interactive mode (shell prompt)"
+  echo "    -m --> mount the volumes (comma-separated list of paths)"
+  echo "    -n --> dry run mode (just display the docker command)"
 }
 
 
@@ -88,15 +102,15 @@ while getopts "o:abcim:nghsuv" opt;
              exit 0
              ;;
          i)
-	     interactive_mode=1
-	     ;;
+             interactive_mode=1
+             ;;
          m)
-	     USER_MOUNT_DIRS=$OPTARG
-	     ;;
+             USER_MOUNT_DIRS=$OPTARG
+             ;;
          n)
-	     dry_run=1
-	     loading_symbol=":"
-	     ;;
+             dry_run=1
+             loading_symbol=":"
+             ;;
          o)
              outputRootFolder=$OPTARG
              ;;
