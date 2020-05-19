@@ -39,10 +39,12 @@
 import unittest.mock
 import copy
 import numpy as np
+import torch
 import torch.nn as nn
 import torch.nn.functional as functional
 
 from aimet_torch.utils import create_fake_data_loader
+from aimet_torch.examples.test_models import MultiInput
 from aimet_torch.data_subsampler import DataSubSampler
 
 
@@ -227,3 +229,75 @@ class TestDataSubSampler(unittest.TestCase):
 
         # compare data of first batch only
         self.assertTrue(np.array_equal(fc1_input_data[0:10], fc1_input))
+
+    def test_forward_pass_with_single_input(self):
+        """
+        test _forward_pass of DataSubsampler with single input
+        """
+        model = TestNet()
+        model_on_gpu = TestNet().to(device=torch.device('cuda:0'))
+
+        # 1) input on cpu
+        data = torch.rand(1, 1, 28, 28)
+
+        _ = DataSubSampler._forward_pass(model, data)
+        _ = DataSubSampler._forward_pass(model_on_gpu, data)
+
+        # 2) input on gpu
+        data = torch.rand(1, 1, 28, 28).to(device=torch.device('cuda:0'))
+
+        _ = DataSubSampler._forward_pass(model, data)
+        _ = DataSubSampler._forward_pass(model_on_gpu, data)
+
+        # 3) input on gpu - list
+        data = [torch.rand(1, 1, 28, 28).to(device=torch.device('cuda:0'))]
+
+        _ = DataSubSampler._forward_pass(model, data)
+        _ = DataSubSampler._forward_pass(model_on_gpu, data)
+
+        # 1) input on cpu - tuple
+        data = (torch.rand(1, 1, 28, 28))
+
+        _ = DataSubSampler._forward_pass(model, data)
+        _ = DataSubSampler._forward_pass(model_on_gpu, data)
+
+    def test_forward_pass_with_multiple_inputs(self):
+        """
+        test _forward_pass of DataSubsampler with different combinations of inputs
+        """
+
+        # 1) input only on CPU, model CPU and GPU both
+        data = [[torch.rand(1, 3, 28, 28), torch.rand(1, 3, 18, 18)] for i in range(2)]
+
+        model = MultiInput()
+        model_on_gpu = MultiInput().to(device=torch.device('cuda:0'))
+
+        _ = DataSubSampler._forward_pass(model, data[0])
+
+        _ = DataSubSampler._forward_pass(model_on_gpu, data[1])
+
+        # 2) one input on CPU another on GPU, model CPU and GPU both
+        data = [[torch.rand(1, 3, 28, 28).to(device=torch.device('cuda:0')),
+                 torch.rand(1, 3, 18, 18)] for i in range(2)]
+
+        _ = DataSubSampler._forward_pass(model, data[0])
+
+        _ = DataSubSampler._forward_pass(model_on_gpu, data[1])
+
+        # 3) both inputs on GPU, model CPU and GPU both - using list
+
+        data = [[torch.rand(1, 3, 28, 28).to(device=torch.device('cuda:0')),
+                 torch.rand(1, 3, 18, 18).to(device=torch.device('cuda:0'))] for i in range(2)]
+
+        _ = DataSubSampler._forward_pass(model, data[0])
+
+        _ = DataSubSampler._forward_pass(model_on_gpu, data[1])
+
+        # 4) both inputs on GPU, model CPU and GPU both - using tuple
+
+        data = ([torch.rand(1, 3, 28, 28).to(device=torch.device('cuda:0')),
+                 torch.rand(1, 3, 18, 18).to(device=torch.device('cuda:0'))] for i in range(2))
+
+        _ = DataSubSampler._forward_pass(model, next(data))
+
+        _ = DataSubSampler._forward_pass(model_on_gpu, next(data))
