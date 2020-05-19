@@ -372,3 +372,31 @@ def get_reused_modules(model: torch.nn.Module, input_shapes: Tuple) -> List[Tupl
         if is_leaf_module(module) and module in reused_modules_set:
             reused_modules_list.append((name, module))
     return reused_modules_list
+
+
+def change_tensor_device_placement(tensor_data: Union[torch.tensor, List, Tuple], device: torch.device):
+    """
+    Change the tensor_data's device placement
+    :param tensor_data: torch.tensor , list of torch.tensors, or tuple of torch.tensors
+    :param device: device information
+    :return: tensor_data with modified device placement
+    """
+
+    if isinstance(tensor_data, torch.Tensor):
+        tensor_data = tensor_data.to(device=device)
+
+    elif isinstance(tensor_data, tuple):
+        # convert to list first
+        tensor_data = list(tensor_data)
+        # call the function recursively
+        tensor_data = change_tensor_device_placement(tensor_data, device)
+        # convert back to tuple
+        tensor_data = tuple(tensor_data)
+
+    else:
+        for index, item in enumerate(tensor_data):
+            # change the entry in-place
+            # and call the function recursively
+            tensor_data[index] = change_tensor_device_placement(item, device=device)
+
+    return tensor_data

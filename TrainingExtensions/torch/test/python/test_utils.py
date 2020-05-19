@@ -43,7 +43,7 @@ import torchvision
 
 from aimet_common.utils import round_up_to_multiplicity, round_down_to_multiplicity
 from aimet_torch.utils import replace_modules_of_type1_with_type2, replace_modules_with_instances_of_new_type, \
-    get_ordered_list_of_modules, get_ordered_list_of_conv_modules, get_reused_modules
+    get_ordered_list_of_modules, get_ordered_list_of_conv_modules, get_reused_modules, change_tensor_device_placement
 from aimet_torch.defs import PassThroughOp
 from aimet_torch.examples.test_models import ModelWithReusedNodes
 
@@ -118,3 +118,111 @@ class TestTrainingExtensionsUtils(unittest.TestCase):
         reused_modules = get_reused_modules(model, inp_shape)
         self.assertEqual(1, len(reused_modules))
         self.assertEqual(reused_modules[0][1], model.relu1)
+
+    def test_change_tensor_device(self):
+
+        # 1) test only tensor on CPU and GPU
+
+        random_tensor = torch.rand(2, 2)
+        random_tensor_new = change_tensor_device_placement(random_tensor, device=torch.device('cuda:0'))
+
+        self.assertEqual(random_tensor.device, torch.device('cpu'))
+        self.assertEqual(random_tensor_new.device, torch.device('cuda:0'))
+
+        random_tensor = torch.rand(2, 2).to(device='cuda:0')
+        random_tensor_new = change_tensor_device_placement(random_tensor, device=torch.device('cpu'))
+
+        self.assertEqual(random_tensor.device, torch.device('cuda:0'))
+        self.assertEqual(random_tensor_new.device, torch.device('cpu'))
+
+        # 2) list of tensors
+
+        random_tensor = [
+                        torch.rand(2, 2),
+                        torch.rand(2, 2),
+                        torch.rand(2, 2)
+                        ]
+
+        random_tensor_new = change_tensor_device_placement(random_tensor, device=torch.device('cuda:0'))
+
+        for item in random_tensor_new:
+            self.assertEqual(item.device, torch.device('cuda:0'))
+
+        self.assertEqual(len(random_tensor), len(random_tensor_new))
+
+        random_tensor = [
+                         torch.rand(2, 2).to(device='cuda:0'),
+                         torch.rand(2, 2).to(device='cuda:0'),
+                         torch.rand(2, 2).to(device='cuda:0')
+                        ]
+
+        random_tensor_new = change_tensor_device_placement(random_tensor, device=torch.device('cpu'))
+
+        for item in random_tensor_new:
+            self.assertEqual(item.device, torch.device('cpu'))
+
+        self.assertEqual(len(random_tensor), len(random_tensor_new))
+
+        # 3) list of list of tenors
+
+        random_tensor = [
+                         [torch.rand(1, 1), torch.rand(1, 1)],
+                         [torch.rand(2, 2), torch.rand(2, 2), torch.rand(2, 2), torch.rand(2, 2)],
+                         torch.rand(2, 2)
+                        ]
+
+        random_tensor_new = change_tensor_device_placement(random_tensor, device=torch.device('cuda:0'))
+
+        self.assertEqual(random_tensor_new[0][0].device, torch.device('cuda:0'))
+        self.assertEqual(random_tensor_new[0][1].device, torch.device('cuda:0'))
+        self.assertEqual(random_tensor_new[1][0].device, torch.device('cuda:0'))
+        self.assertEqual(random_tensor_new[1][1].device, torch.device('cuda:0'))
+        self.assertEqual(random_tensor_new[1][2].device, torch.device('cuda:0'))
+        self.assertEqual(random_tensor_new[1][3].device, torch.device('cuda:0'))
+        self.assertEqual(random_tensor_new[2].device, torch.device('cuda:0'))
+
+        self.assertEqual(len(random_tensor), len(random_tensor_new))
+
+        # 4) tuple of tensors
+        random_tensor = (
+                        [torch.rand(1, 1), torch.rand(1, 1)],
+                        [torch.rand(2, 2), torch.rand(2, 2), torch.rand(2, 2), torch.rand(2, 2)],
+                        (torch.rand(2, 2), torch.rand(2, 2), torch.rand(2, 2), torch.rand(2, 2)),
+                        )
+        random_tensor_new = change_tensor_device_placement(random_tensor, device=torch.device('cuda:0'))
+
+        self.assertEqual(random_tensor_new[0][0].device, torch.device('cuda:0'))
+        self.assertEqual(random_tensor_new[0][1].device, torch.device('cuda:0'))
+        self.assertEqual(random_tensor_new[1][0].device, torch.device('cuda:0'))
+        self.assertEqual(random_tensor_new[1][1].device, torch.device('cuda:0'))
+        self.assertEqual(random_tensor_new[1][2].device, torch.device('cuda:0'))
+        self.assertEqual(random_tensor_new[1][3].device, torch.device('cuda:0'))
+        self.assertEqual(random_tensor_new[2][0].device, torch.device('cuda:0'))
+        self.assertEqual(random_tensor_new[2][1].device, torch.device('cuda:0'))
+        self.assertEqual(random_tensor_new[2][2].device, torch.device('cuda:0'))
+        self.assertEqual(random_tensor_new[2][3].device, torch.device('cuda:0'))
+
+        self.assertEqual(len(random_tensor), len(random_tensor_new))
+        self.assertTrue(isinstance(random_tensor_new, tuple))
+        self.assertTrue(isinstance(random_tensor_new[0], list))
+        self.assertTrue(isinstance(random_tensor_new[1], list))
+        self.assertTrue(isinstance(random_tensor_new[2], tuple))
+
+        # 4) tuple of tuple of tenors
+
+        random_tensor = (
+                        (torch.rand(1, 1), torch.rand(1, 1)),
+                        torch.rand(2, 2),
+                        torch.rand(2, 2)
+                        )
+
+        random_tensor_new = change_tensor_device_placement(random_tensor, device=torch.device('cuda:0'))
+
+        self.assertEqual(random_tensor_new[0][0].device, torch.device('cuda:0'))
+        self.assertEqual(random_tensor_new[0][1].device, torch.device('cuda:0'))
+        self.assertEqual(random_tensor_new[1].device, torch.device('cuda:0'))
+        self.assertEqual(random_tensor_new[2].device, torch.device('cuda:0'))
+
+        self.assertEqual(len(random_tensor), len(random_tensor_new))
+        self.assertTrue(isinstance(random_tensor_new, tuple))
+        self.assertTrue(isinstance(random_tensor_new[0], tuple))

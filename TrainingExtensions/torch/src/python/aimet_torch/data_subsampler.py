@@ -38,7 +38,7 @@
 
 """ Sub-sample data for weight reconstruction for channel pruning feature """
 
-from typing import Iterator, Callable, Tuple, Union
+from typing import Iterator, Callable, Tuple, Union, List
 import abc
 import math
 import numpy as np
@@ -161,22 +161,26 @@ class DataSubSampler:
     """ Utilities to sub-sample data for weight reconstruction """
 
     @staticmethod
-    def _forward_pass(model: torch.nn.Module, batch: torch.Tensor):
+    def _forward_pass(model: torch.nn.Module, batch: Union[torch.Tensor, List, Tuple]):
         """
         forward pass depending model allocation on CPU / GPU till StopForwardException
         :param model: model
         :param batch: batch
-        :return: Nothing
         """
+        # keep the model in eval mode
         model.eval()
 
-        # first check if the model is on GPU or not
-        if utils.is_model_on_gpu(model):
-            batch = batch.cuda()
+        # get the model's device placement information
+        device = utils.get_device(model)
+        # place the batch to appropriate device
+        batch = utils.change_tensor_device_placement(batch, device)
+
+        if isinstance(batch, torch.Tensor):
+            batch = [batch]
 
         try:
             with torch.no_grad():
-                _ = model(batch)
+                _ = model(*batch)
         except StopForwardException:
             pass
 
@@ -263,10 +267,15 @@ class DataSubSampler:
         hook_handles.append(cls._register_fwd_hook_for_layer(pruned_layer, _hook_to_collect_input_data))
 
         # forward pass for given number of batches for both original model and compressed model
-        for batch, (images_in_one_batch, _) in enumerate(data_loader):
+        for batch_index, batch in enumerate(data_loader):
 
-            DataSubSampler._forward_pass(orig_model, images_in_one_batch)
-            DataSubSampler._forward_pass(comp_model, images_in_one_batch)
+            assert isinstance(batch, (tuple, list)), 'data loader should provide data in list or tuple format' \
+                                                     '(input_data, labels) or [input_data, labels]'
+
+            batch, _ = batch
+
+            DataSubSampler._forward_pass(orig_model, batch)
+            DataSubSampler._forward_pass(comp_model, batch)
 
             input_data = np.vstack(pruned_layer_inp_data)
             output_data = np.vstack(orig_layer_out_data)
@@ -283,8 +292,8 @@ class DataSubSampler:
             all_sub_sampled_inp_data.append(sub_sampled_inp_data)
             all_sub_sampled_out_data.append(sub_sampled_out_data)
 
-            if batch == num_of_batches - 1:
-                logger.debug("batch index : %s reached number of batches: %s", batch + 1, num_of_batches)
+            if batch_index == num_of_batches - 1:
+                logger.debug("batch index : %s reached number of batches: %s", batch_index + 1, num_of_batches)
                 break
 
         # remove hook handles
