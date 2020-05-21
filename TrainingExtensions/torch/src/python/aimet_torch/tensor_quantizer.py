@@ -67,22 +67,6 @@ class TensorQuantizer:
         self.use_symmetric_encodings = use_symmetric_encodings
         self.bitwidth = bitwidth
         self.enabled = enabled_by_default
-        self.encoding = None
-
-    def __str__(self):
-        stream = io.StringIO(newline='\n')
-        stream.write('TensorQuantizer:\n')
-        stream.write('  quant-scheme:{}, round_mode={}, bitwidth={}, enabled={}\n'.format(self.quant_scheme,
-                                                                                          self.round_mode,
-                                                                                          self.bitwidth,
-                                                                                          self.enabled))
-        if self.encoding:
-            stream.write('  min:{}, max={}, delta={}, offset={}\n'.format(self.encoding.min, self.encoding.max,
-                                                                          self.encoding.delta, self.encoding.offset))
-        else:
-            stream.write('  no encoding\n')
-
-        return stream.getvalue()
 
 
 class PickableState:
@@ -118,6 +102,23 @@ class PostTrainingTensorQuantizer(TensorQuantizer):
         super(PostTrainingTensorQuantizer, self).__init__(bitwidth, round_mode, quant_scheme, use_symmetric_encodings,
                                                           enabled_by_default)
         self._cppOp = AimetTensorQuantizer.AimetTensorQuantizer(quant_scheme)
+        self.encoding = None
+
+    def __str__(self):
+        stream = io.StringIO(newline='\n')
+        stream.write('Post Training TensorQuantizer:\n')
+        stream.write('  quant-scheme:{}, round_mode={}, bitwidth={}, enabled={}\n'.format(self.quant_scheme,
+                                                                                          self.round_mode,
+                                                                                          self.bitwidth,
+                                                                                          self.enabled))
+        if self.encoding:
+            stream.write('  min:{}, max={}, delta={}, offset={}\n'.format(self.encoding.min, self.encoding.max,
+                                                                          self.encoding.delta, self.encoding.offset))
+        else:
+            stream.write('  no encoding\n')
+
+        return stream.getvalue()
+
 
     def __getstate__(self):
         # Copy the object's state from self.__dict__ which contains
