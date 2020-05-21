@@ -98,8 +98,8 @@ AimetEqualization::RescalingParams* ScaleFactorCalculator::ForDepthWiseSeparable
     }
 
     // compute S12 and S23 using :
-    // S12 = range1/sqrt(range1 * range2 * range3)
-    // S23 = sqrt(range1 * range2 * range3)/range2
+    // S12 = range1/cubeRoot(range1 * range2 * range3)
+    // S23 = cubeRoot(range1 * range2 * range3)/range3
     // assumes weightTensor1 passed as  MXNxHxW weightTensor2 and weightTensor3 as NxMxHxW
     // where, M is ouptut channels , N is input channels
     cv::Mat rangeVec1 = TensorOperations::computeRangeAlongFirstAxis(weightTensor1);
