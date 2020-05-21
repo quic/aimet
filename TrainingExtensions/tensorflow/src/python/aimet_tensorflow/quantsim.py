@@ -94,10 +94,8 @@ class PickleableTensorQuantizerState:
         """
 
         self.quant_op_name = quant_op_name
-        self.bitwidth = tensor_quantizer_ref.bitwidth
         self.quant_scheme = tensor_quantizer_ref.quantScheme
         self.rounding_mode = tensor_quantizer_ref.roundingMode
-        self.use_symmetric_encoding = tensor_quantizer_ref.useSymmetricEncoding
 
 
 class QuantizerInfo:
@@ -129,9 +127,8 @@ class QuantizerInfo:
     def __setstate__(self, state):
         # Create the cpp tensor quantizer reference
         self.quant_op_name = state.quant_op_name
-        self.tensor_quantizer = pymo.TensorQuantizer(state.bitwidth, state.quant_scheme,
-                                                     state.rounding_mode,
-                                                     state.use_symmetric_encoding)
+        self.tensor_quantizer = pymo.TensorQuantizer(state.quant_scheme,
+                                                     state.rounding_mode)
 
 
 def _load_ops():
