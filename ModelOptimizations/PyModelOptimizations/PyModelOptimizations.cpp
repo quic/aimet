@@ -156,16 +156,11 @@ PYBIND11_MODULE(libpymo, m)
         .def("updateStats",
              (void (TensorQuantizer::*)(py::array_t<float>, bool)) & DlQuantization::TensorQuantizer::updateStats)
         .def("resetEncodingStats", &DlQuantization::TensorQuantizer::resetEncodingStats)
-        .def("computeEncoding", (DlQuantization::TfEncoding(TensorQuantizer::*)()) &DlQuantization::TensorQuantizer::computeEncoding)
         .def("computeEncoding", (DlQuantization::TfEncoding(TensorQuantizer::*)(unsigned int, bool)) &DlQuantization::TensorQuantizer::computeEncoding)
-        .def("quantizeDequantize", (void (TensorQuantizer::*)(py::array_t<float>, py::array_t<float>, double, double, bool)) &
-                                       DlQuantization::TensorQuantizer::quantizeDequantize)
         .def("quantizeDequantize", (void (TensorQuantizer::*)(py::array_t<float>, py::array_t<float>, double, double,
                                                               unsigned int, bool)) &DlQuantization::TensorQuantizer::quantizeDequantize)
-        .def_readwrite("bitwidth", &DlQuantization::TensorQuantizer::bitwidth)
         .def_readwrite("quantScheme", &DlQuantization::TensorQuantizer::quantScheme)
         .def_readwrite("roundingMode", &DlQuantization::TensorQuantizer::roundingMode)
-        .def_readwrite("useSymmetricEncoding", &DlQuantization::TensorQuantizer::useSymmetricEncoding)
         .def_readwrite("isEncodingValid", &DlQuantization::TensorQuantizer::isEncodingValid);
 
     m.def("PtrToInt64", [](void* ptr) { return (uint64_t) ptr; });

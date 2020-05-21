@@ -301,24 +301,16 @@ class TestQuantSim(unittest.TestCase):
         self.assertTrue(len(new_quantsim._activation_quantizers) == len(sim._activation_quantizers))
 
         for quantize_op in new_quantsim._param_quantizers:
-            self.assertTrue(sim._param_quantizers[quantize_op].tensor_quantizer.bitwidth ==
-                            new_quantsim._param_quantizers[quantize_op].tensor_quantizer.bitwidth)
             self.assertTrue(sim._param_quantizers[quantize_op].tensor_quantizer.quantScheme ==
                             new_quantsim._param_quantizers[quantize_op].tensor_quantizer.quantScheme)
             self.assertTrue(sim._param_quantizers[quantize_op].tensor_quantizer.roundingMode ==
                             new_quantsim._param_quantizers[quantize_op].tensor_quantizer.roundingMode)
-            self.assertTrue(sim._param_quantizers[quantize_op].tensor_quantizer.useSymmetricEncoding ==
-                            new_quantsim._param_quantizers[quantize_op].tensor_quantizer.useSymmetricEncoding)
 
         for quantize_op in new_quantsim._activation_quantizers:
-            self.assertTrue(sim._activation_quantizers[quantize_op].tensor_quantizer.bitwidth ==
-                            new_quantsim._activation_quantizers[quantize_op].tensor_quantizer.bitwidth)
             self.assertTrue(sim._activation_quantizers[quantize_op].tensor_quantizer.quantScheme ==
                             new_quantsim._activation_quantizers[quantize_op].tensor_quantizer.quantScheme)
             self.assertTrue(sim._activation_quantizers[quantize_op].tensor_quantizer.roundingMode ==
                             new_quantsim._activation_quantizers[quantize_op].tensor_quantizer.roundingMode)
-            self.assertTrue(sim._activation_quantizers[quantize_op].tensor_quantizer.useSymmetricEncoding ==
-                            new_quantsim._activation_quantizers[quantize_op].tensor_quantizer.useSymmetricEncoding)
 
         # remove the old quant sim reference and session
         # to test that everything is loaded correctly on new quantsim including tensor quantizer references
