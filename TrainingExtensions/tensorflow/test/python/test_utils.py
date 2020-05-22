@@ -49,13 +49,41 @@ from aimet_tensorflow.utils.common import get_ordered_ops, create_input_feed_dic
     iter_first_x, get_ordered_conv_linears, get_training_tensors
 from aimet_tensorflow.utils.graph_saver import wrapper_func
 from aimet_tensorflow.examples.test_models import single_residual, multiple_input_model, \
-    model_with_multiple_training_tensors
+    model_with_multiple_training_tensors, keras_model_functional
 from aimet_tensorflow.utils.op.conv import WeightTensorUtils, BiasUtils, get_output_activation_shape
 from aimet_tensorflow.utils.op.fusedbatchnorm import BNUtils
 
 from aimet_tensorflow.utils.graph_saver import save_and_load_graph
 
 logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Test)
+
+
+def get_bn_params_keras_layer(layer):
+    """
+    helper to get param values from Keras BN layer
+    :param layer: BN layer
+    :return: param values extracted from layer
+    """
+    gamma = layer.weights[0].eval()
+    beta = layer.weights[1].eval()
+    mean = layer.weights[2].eval()
+    variance = layer.weights[3].eval()
+
+    return [beta, gamma, mean, variance]
+
+
+def get_bn_params_aimet_api(sess, bn_op):
+    """
+    Helper to get param values from BN layer using AIMET api(s)
+    :param bn_op: BN layer
+    :return: beta, gamma, mean and vairance values extracted from BN layer
+    """
+    beta = BNUtils.get_beta_as_numpy_data(sess, bn_op)
+    gamma = BNUtils.get_gamma_as_numpy_data(sess, bn_op)
+    moving_mean = BNUtils.get_moving_mean_as_numpy_data(sess, bn_op)
+    moving_var = BNUtils.get_moving_variance_as_numpy_data(sess, bn_op)
+
+    return [beta, gamma, moving_mean, moving_var]
 
 
 class TestTrainingExtensionsTfUtils(unittest.TestCase):
@@ -469,144 +497,43 @@ class TestTrainingExtensionsTfUtils(unittest.TestCase):
         training_tensors = get_training_tensors(tf.get_default_graph())
         self.assertEqual(3, len(training_tensors))
 
-    def test_param_read_bn_training_true(self):
+    def test_param_read_keras_model_with_fused_batchnorms(self):
         """
-        test we can fetch the params from a bn op that has training set to true.
+        Test to validate fused BN op param read AIMET api(s) on Keras layers.
+        This test also reproduces SFTI issue
+        tensorflow.python.framework.errors_impl.InvalidArgumentError
         :return:
         """
-        tf.reset_default_graph()
 
-        sess = tf.Session(graph=tf.get_default_graph())
-
-        with sess.as_default():
-            inputs = tf.keras.Input(shape=(32, 32, 3,))
-
-            conv_op = tf.keras.layers.Conv2D(32, (3, 3), use_bias=False)(inputs)
-            bn_op = tf.keras.layers.BatchNormalization(fused=True)(conv_op, training=True)
-
-            init = tf.global_variables_initializer()
-            sess.run(init)
-
-            moving_mean = BNUtils.get_moving_mean_as_numpy_data(sess, bn_op.op)
-
-            moving_var = BNUtils.get_moving_variance_as_numpy_data(sess, bn_op.op)
-
-            assert moving_mean is not None
-            assert moving_var is not None
-
-        sess.close()
-
-    def test_param_read_keras_bn_op_default(self):
-        """
-        Test we can fetch the params from a bn op with no explicit setting of training flag
-        :return:
-        """
-        tf.reset_default_graph()
-        sess = tf.Session(graph=tf.get_default_graph())
-
-        with sess.as_default():
-            inputs = tf.keras.Input(shape=(32, 32, 3,))
-            conv_op = tf.keras.layers.Conv2D(32, (3, 3), use_bias=False)(inputs)
-            bn = tf.keras.layers.BatchNormalization(fused=True)(conv_op)
-
-            init = tf.global_variables_initializer()
-            sess.run(init)
-            # _ = tf.summary.FileWriter('./keras_model_bn_op', sess.graph)
-
-            # we use the bn op with is_training attribute set to false
-            bn_op_tensor = sess.graph.get_tensor_by_name('batch_normalization/cond/FusedBatchNormV3_1:0')
-            moving_mean = BNUtils.get_moving_mean_as_numpy_data(sess, bn_op_tensor.op)
-            moving_var = BNUtils.get_moving_variance_as_numpy_data(sess, bn_op_tensor.op)
-            beta = BNUtils.get_beta_as_numpy_data(sess, bn_op_tensor.op)
-            gamma = BNUtils.get_gamma_as_numpy_data(sess, bn_op_tensor.op)
-            assert beta is not None
-            assert gamma is not None
-            assert moving_mean is not None
-            assert moving_var is not None
-
-        sess.close()
-
-    def test_param_read_keras_bn_training_true(self):
-        """
-        test we can fetch the params from a bn op that has training set to true.
-        :return:
-        """
-        tf.reset_default_graph()
-        sess = tf.Session(graph=tf.get_default_graph())
-
-        with sess.as_default():
-            inputs = tf.keras.Input(shape=(32, 32, 3,))
-            conv_op = tf.keras.layers.Conv2D(32, (3, 3), use_bias=False)(inputs)
-            bn_op_tensor = tf.keras.layers.BatchNormalization(fused=True, name="bn_op_1/")(conv_op, training=True)
-
-            init = tf.global_variables_initializer()
-            sess.run(init)
-
-            moving_mean = BNUtils.get_moving_mean_as_numpy_data(sess, bn_op_tensor.op)
-            moving_var = BNUtils.get_moving_variance_as_numpy_data(sess, bn_op_tensor.op)
-            beta = BNUtils.get_beta_as_numpy_data(sess, bn_op_tensor.op)
-            gamma = BNUtils.get_gamma_as_numpy_data(sess, bn_op_tensor.op)
-            assert beta is not None
-            assert gamma is not None
-            assert moving_mean is not None
-            assert moving_var is not None
-
-        sess.close()
-
-    def test_param_read_keras_bn_training_false(self):
-        """
-        test we can fetch the params from a bn op that has training set to false.
-        :return:
-        """
-        tf.reset_default_graph()
-        sess = tf.Session(graph=tf.get_default_graph())
-
-        with sess.as_default():
-            inputs = tf.keras.Input(shape=(32, 32, 3,))
-            conv_op = tf.keras.layers.Conv2D(32, (3, 3), use_bias=False)(inputs)
-            bn_op_tensor = tf.keras.layers.BatchNormalization(fused=True, name="bn_op_1")(conv_op, training=False)
-
-            init = tf.global_variables_initializer()
-            sess.run(init)
-
-            moving_mean = BNUtils.get_moving_mean_as_numpy_data(sess, bn_op_tensor.op)
-            moving_var = BNUtils.get_moving_variance_as_numpy_data(sess, bn_op_tensor.op)
-            beta = BNUtils.get_beta_as_numpy_data(sess, bn_op_tensor.op)
-            gamma = BNUtils.get_gamma_as_numpy_data(sess, bn_op_tensor.op)
-
-            assert beta is not None
-            assert gamma is not None
-            assert moving_mean is not None
-            assert moving_var is not None
-
-        sess.close()
-
-    def test_with_keras_resnet50_with_weights(self):
-        """
-        Test to replicate SFTI issue reported with Keras Resnet50 BN layer param extraction
-        :return:
-        """
-        from tensorflow.python.keras.applications.resnet import ResNet50
         tf.keras.backend.clear_session()
-        _ = ResNet50(weights='imagenet', input_shape=(224, 224, 3))
+        with tf.device('/cpu:0'):
+            model = keras_model_functional()
+            model.summary()
+
         sess = tf.keras.backend.get_session()
+        init = tf.global_variables_initializer()
+        sess.run(init)
 
-        # error reported by SFTI
-        # tensorflow.python.framework.errors_impl.InvalidArgumentError
-        # (0) Invalid argument: You must feed a value for placeholder tensor
-        # 'Placeholder_5' with dtype float and shape [?]
+        # layer 1 , 3 and 5 are fused BN of different types
         with sess.as_default():
-            bn_op_name = "conv1_bn/cond/FusedBatchNormV3_1"
-            bn_op = sess.graph.get_operation_by_name(bn_op_name)
-            moving_mean = BNUtils.get_moving_mean_as_numpy_data(sess, bn_op)
-            moving_var = BNUtils.get_moving_variance_as_numpy_data(sess, bn_op)
-            beta = BNUtils.get_beta_as_numpy_data(sess, bn_op)
-            gamma = BNUtils.get_gamma_as_numpy_data(sess, bn_op)
+            # read weights ( beta, gamma, mean, variance)
+            bn_1 = model.layers[2]
+            bn_2 = model.layers[4]
+            bn_3 = model.layers[6]
+            keras_bn_1_params = get_bn_params_keras_layer(bn_1)
+            keras_bn_2_params = get_bn_params_keras_layer(bn_2)
+            keras_bn_3_params = get_bn_params_keras_layer(bn_3)
 
-            assert beta is not None
-            assert gamma is not None
-            assert moving_mean is not None
-            assert moving_var is not None
+            bn_op_1 = sess.graph.get_operation_by_name('batch_normalization/FusedBatchNormV3')
+            bn_op_2 = sess.graph.get_operation_by_name('scope_1/batch_normalization_1/cond/FusedBatchNormV3_1')
+            bn_op_3 = sess.graph.get_operation_by_name('scope_1/batch_normalization_2/FusedBatchNormV3')
+            bn_1_params = get_bn_params_aimet_api(sess, bn_op_1)
+            bn_2_params = get_bn_params_aimet_api(sess, bn_op_2)
+            bn_3_params = get_bn_params_aimet_api(sess, bn_op_3)
+
+            self.assertTrue(np.allclose(keras_bn_1_params, bn_1_params))
+            self.assertTrue(np.allclose(keras_bn_2_params, bn_2_params))
+            self.assertTrue(np.allclose(keras_bn_3_params, bn_3_params))
 
         sess.close()
 
@@ -624,16 +551,25 @@ class TestTrainingExtensionsTfUtils(unittest.TestCase):
         # _ = tf.summary.FileWriter('./keras_model_bn_op', sess.graph)
         init = tf.global_variables_initializer()
         sess.run(init)
-        bn_op = sess.graph.get_operation_by_name('batch_normalization/FusedBatchNormV3')
-        moving_mean = BNUtils.get_moving_mean_as_numpy_data(sess, bn_op)
-        moving_var = BNUtils.get_moving_variance_as_numpy_data(sess, bn_op)
-        beta = BNUtils.get_beta_as_numpy_data(sess, bn_op)
-        gamma = BNUtils.get_gamma_as_numpy_data(sess, bn_op)
 
-        assert beta is not None
-        assert gamma is not None
-        assert moving_mean is not None
-        assert moving_var is not None
+        with sess.as_default():
+            bn_op = sess.graph.get_operation_by_name('batch_normalization/FusedBatchNormV3')
+            moving_mean = BNUtils.get_moving_mean_as_numpy_data(sess, bn_op)
+            moving_var = BNUtils.get_moving_variance_as_numpy_data(sess, bn_op)
+            beta = BNUtils.get_beta_as_numpy_data(sess, bn_op)
+            gamma = BNUtils.get_gamma_as_numpy_data(sess, bn_op)
+
+        # check the values read are equal to init values
+        expected_beta = np.zeros_like(beta)
+        expected_gamma = np.ones_like(gamma)
+        expected_mean = np.zeros_like(moving_mean)
+        expected_variance = np.ones_like(moving_var)
+
+        self.assertTrue(np.allclose(expected_beta, beta))
+        self.assertTrue(np.allclose(expected_gamma, gamma))
+        self.assertTrue(np.allclose(expected_mean, moving_mean))
+        self.assertTrue(np.allclose(expected_variance, moving_var))
+        sess.close()
 
     def test_with_slim_bn_op(self):
         """
@@ -649,15 +585,23 @@ class TestTrainingExtensionsTfUtils(unittest.TestCase):
         init = tf.global_variables_initializer()
         sess.run(init)
         # _ = tf.summary.FileWriter('./keras_model_bn_op', sess.graph)
-        bn_op = sess.graph.get_operation_by_name('BatchNorm/FusedBatchNormV3')
-        moving_mean = BNUtils.get_moving_mean_as_numpy_data(sess, bn_op)
-        moving_var = BNUtils.get_moving_variance_as_numpy_data(sess, bn_op)
-        beta = BNUtils.get_beta_as_numpy_data(sess, bn_op)
-        gamma = BNUtils.get_gamma_as_numpy_data(sess, bn_op)
-        assert beta is not None
-        assert gamma is not None
-        assert moving_mean is not None
-        assert moving_var is not None
+        with sess.graph.as_default():
+            bn_op = sess.graph.get_operation_by_name('BatchNorm/FusedBatchNormV3')
+            moving_mean = BNUtils.get_moving_mean_as_numpy_data(sess, bn_op)
+            moving_var = BNUtils.get_moving_variance_as_numpy_data(sess, bn_op)
+            beta = BNUtils.get_beta_as_numpy_data(sess, bn_op)
+            gamma = BNUtils.get_gamma_as_numpy_data(sess, bn_op)
+
+        # check the values read are equal to init values
+        expected_beta = np.zeros_like(beta)
+        expected_gamma = np.ones_like(gamma)
+        expected_mean = np.zeros_like(moving_mean)
+        expected_variance = np.ones_like(moving_var)
+
+        self.assertTrue(np.allclose(expected_beta, beta))
+        self.assertTrue(np.allclose(expected_gamma, gamma))
+        self.assertTrue(np.allclose(expected_mean, moving_mean))
+        self.assertTrue(np.allclose(expected_variance, moving_var))
 
     def test_get_output_activation_shape(self):
         """Test for getting output activation shapes"""
