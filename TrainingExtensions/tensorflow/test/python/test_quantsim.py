@@ -301,12 +301,16 @@ class TestQuantSim(unittest.TestCase):
         self.assertTrue(len(new_quantsim._activation_quantizers) == len(sim._activation_quantizers))
 
         for quantize_op in new_quantsim._param_quantizers:
+            self.assertFalse(sim._param_quantizers[quantize_op].session ==
+                             new_quantsim._param_quantizers[quantize_op].session)
             self.assertTrue(sim._param_quantizers[quantize_op].tensor_quantizer.quantScheme ==
                             new_quantsim._param_quantizers[quantize_op].tensor_quantizer.quantScheme)
             self.assertTrue(sim._param_quantizers[quantize_op].tensor_quantizer.roundingMode ==
                             new_quantsim._param_quantizers[quantize_op].tensor_quantizer.roundingMode)
 
         for quantize_op in new_quantsim._activation_quantizers:
+            self.assertFalse(sim._activation_quantizers[quantize_op].session ==
+                             new_quantsim._activation_quantizers[quantize_op].session)
             self.assertTrue(sim._activation_quantizers[quantize_op].tensor_quantizer.quantScheme ==
                             new_quantsim._activation_quantizers[quantize_op].tensor_quantizer.quantScheme)
             self.assertTrue(sim._activation_quantizers[quantize_op].tensor_quantizer.roundingMode ==
@@ -331,3 +335,56 @@ class TestQuantSim(unittest.TestCase):
         sess.close()
         new_quantsim.session.close()
         del new_quantsim
+
+    def test_set_get_quantizer_params_using_properties(self):
+
+        """
+        Create QuantSim for a CPU model, test param read and write using properties
+        """
+
+        tf.reset_default_graph()
+        with tf.device('/cpu:0'):
+            model = tf.keras.Sequential()
+            model.add(tf.keras.layers.Conv2D(32, kernel_size=3, input_shape=(28, 28, 3), activation='relu'))
+            model.add(tf.keras.layers.MaxPooling2D((2, 2)))
+            model.add(tf.keras.layers.Conv2D(64, kernel_size=3, activation='relu'))
+            model.summary()
+
+        sess = tf.Session()
+        initialize_uninitialized_vars(sess)
+        sim = QuantizationSimModel(sess, [model.input.op.name], [model.output.op.name], use_cuda=False)
+
+        p_quantizer = sim.param_quantizer('conv2d/Conv2D')
+        o_quantizer = sim.output_quantizer('conv2d/Relu')
+        bias_quantizer = sim.param_quantizer('conv2d/BiasAdd')
+
+        bitwidth = p_quantizer.bitwidth
+        self.assertTrue(8 == bitwidth)
+        p_quantizer.bitwidth = 6
+        bitwidth = p_quantizer.bitwidth
+        self.assertTrue(6 == bitwidth)
+
+        bitwidth = o_quantizer.bitwidth
+        self.assertTrue(8 == bitwidth)
+        o_quantizer.bitwidth = 6
+        bitwidth = o_quantizer.bitwidth
+        self.assertTrue(6 == bitwidth)
+
+        sym_encoding = bias_quantizer.use_symmetric_encoding
+        self.assertFalse(sym_encoding)
+        bias_quantizer.use_symmetric_encoding = True
+        sym_encoding = bias_quantizer.use_symmetric_encoding
+        self.assertTrue(sym_encoding)
+
+        rounding_mode = o_quantizer.rounding_mode
+        self.assertTrue(libpymo.RoundingMode.ROUND_NEAREST == rounding_mode)
+        o_quantizer.rounding_mode = libpymo.RoundingMode.ROUND_STOCHASTIC
+        rounding_mode = o_quantizer.rounding_mode
+        self.assertTrue(libpymo.RoundingMode.ROUND_STOCHASTIC == rounding_mode)
+
+        quant_scheme = o_quantizer.quant_scheme
+        self.assertTrue(libpymo.QuantizationMode.QUANTIZATION_TF_ENHANCED == quant_scheme)
+        o_quantizer.quant_scheme = libpymo.QuantizationMode.QUANTIZATION_TF
+        quant_scheme = o_quantizer.quant_scheme
+        self.assertTrue(libpymo.QuantizationMode.QUANTIZATION_TF == quant_scheme)
+        self.assertFalse(o_quantizer.tensor_quantizer.isEncodingValid)
