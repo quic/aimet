@@ -100,14 +100,87 @@ class PickleableTensorQuantizerState:
 
 class QuantizerInfo:
     """
-    Holds information about a given MO quantizer object
+    Holds information about a given MO Quantizer object and active session
     """
 
-    __slots__ = ['tensor_quantizer', 'quant_op_name']
+    __slots__ = ['session', 'tensor_quantizer', 'quant_op_name']
 
-    def __init__(self, tensor_quantizer: pymo.TensorQuantizer, quant_op_name: str):
+    def __init__(self, session: tf.Session, tensor_quantizer: pymo.TensorQuantizer, quant_op_name: str):
+        self.session = session
         self.tensor_quantizer = tensor_quantizer
         self.quant_op_name = quant_op_name
+
+    def set_variable(self, var_name, value):
+        """
+        helper method to set variable value
+        :return: None
+        """
+
+        with self.session.graph.as_default():
+            vars_with_given_name = [var for var in tf.global_variables()
+                                    if var.op.name == var_name]
+        var_to_be_updated = vars_with_given_name[0]
+        var_to_be_updated.load(value, self.session)
+
+    def get_variable_from_op(self, var_index):
+        """
+        helper method to read variable from Quantize op
+        :param var_index: Quantize op input param index corresponding to the variable to be read
+        :return: variable value read from the Quantize op
+        """
+        quantize_op = self.session.graph.get_operation_by_name(self.quant_op_name)
+        op_var_tensor = quantize_op.inputs[var_index]
+        return self.session.run(op_var_tensor)
+
+    @property
+    def bitwidth(self):
+        """ Returns the bitwidth read from the Quantize op"""
+        # return the variable value from op
+        return self.get_variable_from_op(QuantizeOpIndices.bit_width)
+
+    @bitwidth.setter
+    def bitwidth(self, bitwidth):
+        """ Sets the bitwidth in the Quantize op"""
+
+        var_name = self.quant_op_name + '_bit_width'
+        self.set_variable(var_name, bitwidth)
+
+    @property
+    def use_symmetric_encoding(self):
+        """ Returns the use_symmetric_encoding flag in the Quantize op"""
+
+        return self.get_variable_from_op(QuantizeOpIndices.use_symmetric_encoding)
+
+    @use_symmetric_encoding.setter
+    def use_symmetric_encoding(self, use_symmetric_encoding):
+        """ Sets the use_symmetric_encoding flag in the Quantize op"""
+
+        var_name = self.quant_op_name + '_use_symmetric_encoding'
+        self.set_variable(var_name, use_symmetric_encoding)
+
+    @property
+    def quant_scheme(self):
+        """ Returns the quant_scheme associated with the Quantize op"""
+
+        return self.tensor_quantizer.quantScheme
+
+    @quant_scheme.setter
+    def quant_scheme(self, quant_scheme):
+        """ Sets the quant_scheme associated with the Quantize op"""
+        self.tensor_quantizer.isEncodingValid = False
+        self.tensor_quantizer.quantScheme = quant_scheme
+
+    @property
+    def rounding_mode(self):
+        """ Returns the rounding_mode associated with the Quantize op"""
+
+        return self.tensor_quantizer.roundingMode
+
+    @rounding_mode.setter
+    def rounding_mode(self, rounding_mode):
+        """ Sets the rounding_mode associated with the Quantize op"""
+        self.tensor_quantizer.isEncodingValid = False
+        self.tensor_quantizer.roundingMode = rounding_mode
 
     def get_op_mode(self, session: tf.Session) -> pymo.TensorQuantizerOpMode:
         """
@@ -116,7 +189,7 @@ class QuantizerInfo:
         :return: Op mode
         """
         op = session.graph.get_operation_by_name(self.quant_op_name)
-        op_mode_tensor = op.inputs[1]
+        op_mode_tensor = op.inputs[QuantizeOpIndices.op_mode]
         return session.run(op_mode_tensor)
 
     def __getstate__(self):
@@ -125,6 +198,7 @@ class QuantizerInfo:
         return state
 
     def __setstate__(self, state):
+        self.session = None
         # Create the cpp tensor quantizer reference
         self.quant_op_name = state.quant_op_name
         self.tensor_quantizer = pymo.TensorQuantizer(state.quant_scheme,
@@ -261,6 +335,33 @@ class QuantizationSimModel:
         self._use_cuda = state.use_cuda
         self._param_quantizers = state.param_quantizers
         self._activation_quantizers = state.activation_quantizers
+
+    def param_quantizer(self, quant_op_name: str) -> QuantizerInfo:
+        """
+        Helper method to fetch param quantizer info associated with the given quantize op
+        :param quant_op_name: quant op name
+        :return: param quantizer info associated with the quant op
+        """
+        read_variable_op_name = quant_op_name+'/ReadVariableOp_quantized'
+        if read_variable_op_name in self._param_quantizers.keys():
+            return self._param_quantizers[read_variable_op_name]
+
+        _logger.error('Could not find param quantizer for op {%s} ', quant_op_name)
+        return None
+
+    def output_quantizer(self, quant_op_name: str) -> QuantizerInfo:
+        """
+        Helper method to fetch output quantizer info associated with the given quantize op
+        :param quant_op_name: quant op name
+        :return: output quantizer info associated with the quant op
+        """
+
+        output_activation_op_name = quant_op_name+'_quantized'
+        if output_activation_op_name in self._activation_quantizers.keys():
+            return self._activation_quantizers[output_activation_op_name]
+
+        _logger.error('Could not find output quantizer for op {%s} ', quant_op_name)
+        return None
 
     def _set_op_input_variables(self, op_name: str, encoding: pymo.TfEncoding, op_mode: pymo.TensorQuantizerOpMode):
         """
@@ -613,7 +714,7 @@ class QuantizationSimModel:
             # this value is to be read from config file
             tensor_quantizer = pymo.TensorQuantizer(quant_scheme_to_pymo[self._quant_scheme],
                                                     pymo.RoundingMode.ROUND_NEAREST)
-            quantizer_info = QuantizerInfo(tensor_quantizer, quant_op_name)
+            quantizer_info = QuantizerInfo(self.session, tensor_quantizer, quant_op_name)
             tensor_quantizer = pymo.PtrToInt64(tensor_quantizer)
             tensor_quant_ref = tf.Variable(tensor_quantizer, name=quant_op_name + '_quant_ref',
                                            trainable=False, dtype=tf.int64)
@@ -680,10 +781,12 @@ def update_tensor_quantizer_references(quant_sim_sess: tf.Session, quantizer_dic
 
     vars_with_value = {}
     for q_op_name in quantizer_dict:
+        # also update the session held by tensor quantizer object
+        quantizer_dict[q_op_name].session = quant_sim_sess
         tensor_quantizer_ref = pymo.PtrToInt64(quantizer_dict[q_op_name].tensor_quantizer)
         vars_with_value[q_op_name + '_quant_ref'] = tensor_quantizer_ref
 
-    update_variables_with_values(quant_sim_sess.session, vars_with_value)
+    update_variables_with_values(quant_sim_sess, vars_with_value)
 
 
 def save_checkpoint(quantsim: QuantizationSimModel, meta_path: str, file_name_prefix: str) -> None:
@@ -728,7 +831,7 @@ def load_checkpoint(meta_path: str, file_name_prefix: str) -> QuantizationSimMod
     new_quant_sim.session = new_sess
 
     # update tensor references in the new quantsim object
-    update_tensor_quantizer_references(new_quant_sim, new_quant_sim._param_quantizers)
-    update_tensor_quantizer_references(new_quant_sim, new_quant_sim._activation_quantizers)
+    update_tensor_quantizer_references(new_sess, new_quant_sim._param_quantizers)
+    update_tensor_quantizer_references(new_sess, new_quant_sim._activation_quantizers)
 
     return new_quant_sim
