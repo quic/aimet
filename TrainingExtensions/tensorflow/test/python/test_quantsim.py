@@ -388,3 +388,9 @@ class TestQuantSim(unittest.TestCase):
         quant_scheme = o_quantizer.quant_scheme
         self.assertTrue(libpymo.QuantizationMode.QUANTIZATION_TF == quant_scheme)
         self.assertFalse(o_quantizer.tensor_quantizer.isEncodingValid)
+
+        is_enabled = p_quantizer.enabled
+        self.assertTrue(is_enabled)
+        p_quantizer.enabled = False
+        is_enabled = p_quantizer.enabled
+        self.assertFalse(is_enabled)
