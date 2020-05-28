@@ -70,6 +70,12 @@ quant_scheme_to_pymo = {QuantScheme.post_training_tf: pymo.QuantizationMode.QUAN
                         QuantScheme.training_range_learning:
                             pymo.QuantizationMode.QUANTIZATION_RANGE_LEARNING}
 
+
+class QuantizerType(Enum):
+    """ Enum for quantize op types """
+    param = 0
+    activation = 1
+
 # by default we will have this registered for Qc Quantize op.
 @tf_ops.RegisterGradient("QcQuantize")
 def _qc_dummy_quantized_grad(op, grad):
@@ -87,15 +93,18 @@ class PickleableTensorQuantizerState:
     """
     State variables to be saved while pickling tensor quantizer
     """
-    def __init__(self, quant_op_name, tensor_quantizer_ref):
+    def __init__(self, quant_op_name, tensor_quantizer_ref, quantizer_type):
         """
         class type to save pickle-able info pertaining to tensor quantizer
+        :param quant_op_name: name of the quantize op
         :param tensor_quantizer_ref: TensorQuantizer reference
+        :param quantizer_type : param or activation quantizer
         """
 
         self.quant_op_name = quant_op_name
         self.quant_scheme = tensor_quantizer_ref.quantScheme
         self.rounding_mode = tensor_quantizer_ref.roundingMode
+        self.quantizer_type = quantizer_type
 
 
 class QuantizerInfo:
@@ -103,12 +112,14 @@ class QuantizerInfo:
     Holds information about a given MO Quantizer object and active session
     """
 
-    __slots__ = ['session', 'tensor_quantizer', 'quant_op_name']
+    __slots__ = ['session', 'tensor_quantizer', 'quant_op_name', 'quantizer_type']
 
-    def __init__(self, session: tf.Session, tensor_quantizer: pymo.TensorQuantizer, quant_op_name: str):
+    def __init__(self, session: tf.Session, tensor_quantizer: pymo.TensorQuantizer,
+                 quant_op_name: str, quantizer_type: QuantizerType):
         self.session = session
         self.tensor_quantizer = tensor_quantizer
         self.quant_op_name = quant_op_name
+        self.quantizer_type = quantizer_type
 
     def set_variable(self, var_name, value):
         """
@@ -153,6 +164,7 @@ class QuantizerInfo:
 
         var_name = self.quant_op_name + '_bit_width'
         self.set_variable(var_name, bitwidth)
+        self.tensor_quantizer.isEncodingValid = False
 
     @property
     def use_symmetric_encoding(self) -> bool:
@@ -173,6 +185,7 @@ class QuantizerInfo:
 
         var_name = self.quant_op_name + '_use_symmetric_encoding'
         self.set_variable(var_name, use_symmetric_encoding)
+        self.tensor_quantizer.isEncodingValid = False
 
     @property
     def quant_scheme(self) -> pymo.QuantizationMode:
@@ -211,25 +224,66 @@ class QuantizerInfo:
         self.tensor_quantizer.isEncodingValid = False
         self.tensor_quantizer.roundingMode = rounding_mode
 
-    def get_op_mode(self, session: tf.Session) -> pymo.TensorQuantizerOpMode:
+    def get_op_mode(self) -> pymo.TensorQuantizerOpMode:
         """
-        Get op mode for this quantizer
-        :param session: Session in which the quant-op is added
-        :return: Op mode
+        Reads op mode variable from Quantize op
+        :return: Op mode as pymo.TensorQuantizerOpMode type
         """
-        op = session.graph.get_operation_by_name(self.quant_op_name)
+        op = self.session.graph.get_operation_by_name(self.quant_op_name)
         op_mode_tensor = op.inputs[QuantizeOpIndices.op_mode]
-        return session.run(op_mode_tensor)
+        return self.session.run(op_mode_tensor)
+
+    @property
+    def enabled(self) -> bool:
+        """
+        Reads Quantize op flag that indicates if op is enabled or disabled
+        :return: bool
+        """
+        is_enabled = True
+        # return the variable value from op
+        if self.get_op_mode() == int(pymo.TensorQuantizerOpMode.passThrough):
+            is_enabled = False
+        return is_enabled
+
+    @enabled.setter
+    def enabled(self, enabled: bool):
+        """
+         Enables or disables given Quantize op if enabled is False
+        :param enabled: boolean flag to indicate enable or disable
+        :return:
+        """
+
+        # if disable is requested on the op and this op was not already in "passThrough" mode,
+        # we will disable the op by marking it as "passThrough"
+        if not enabled and self.get_op_mode() != int(pymo.TensorQuantizerOpMode.passThrough):
+            op_mode = int(pymo.TensorQuantizerOpMode.passThrough)
+            # update the isEncodingValid state to False
+            self.tensor_quantizer.isEncodingValid = False
+        # if enable is requested and this op was previously disabled
+        # we enable the op by setting the initial op_mode that depends on the Quantizer type
+        elif enabled and self.get_op_mode() == int(pymo.TensorQuantizerOpMode.passThrough):
+            if self.quantizer_type is QuantizerType.param:
+                op_mode = int(pymo.TensorQuantizerOpMode.oneShotQuantizeDequantize)
+            elif self.quantizer_type is QuantizerType.activation:
+                op_mode = int(pymo.TensorQuantizerOpMode.updateStats)
+            # update the isEncodingValid state to False
+            self.tensor_quantizer.isEncodingValid = False
+
+        var_name = self.quant_op_name + '_op_mode'
+        self.set_variable(var_name, op_mode)
 
     def __getstate__(self):
         # convert tensor quantizer state to pickle-able form
-        state = PickleableTensorQuantizerState(self.quant_op_name, self.tensor_quantizer)
+        state = PickleableTensorQuantizerState(self.quant_op_name,
+                                               self.tensor_quantizer,
+                                               self.quantizer_type)
         return state
 
     def __setstate__(self, state):
         self.session = None
         # Create the cpp tensor quantizer reference
         self.quant_op_name = state.quant_op_name
+        self.quantizer_type = state.quantizer_type
         self.tensor_quantizer = pymo.TensorQuantizer(state.quant_scheme,
                                                      state.rounding_mode)
 
@@ -247,12 +301,6 @@ def _load_ops():
 
 # Load the aimet ops
 qcops = _load_ops()
-
-
-class QuantizerType(Enum):
-    """ Enum for quantize op types """
-    param = 0
-    activation = 1
 
 
 class PickleableQuantSimState:
@@ -460,7 +508,7 @@ class QuantizationSimModel:
         for op_name, quantizer_info in self._activation_quantizers.items():
 
             # Calculate encodings
-            if quantizer_info.get_op_mode(self.session) != int(pymo.TensorQuantizerOpMode.passThrough):
+            if quantizer_info.get_op_mode() != int(pymo.TensorQuantizerOpMode.passThrough):
                 op_bitwidth, op_use_symmetric_encodings = self._get_bitwidth_and_symmetric_flag(
                     quantizer_info.quant_op_name)
                 encoding = quantizer_info.tensor_quantizer.computeEncoding(op_bitwidth, op_use_symmetric_encodings)
@@ -471,7 +519,7 @@ class QuantizationSimModel:
 
         for op_name, quantizer_info in self._param_quantizers.items():
 
-            if quantizer_info.get_op_mode(self.session) != int(pymo.TensorQuantizerOpMode.passThrough):
+            if quantizer_info.get_op_mode() != int(pymo.TensorQuantizerOpMode.passThrough):
                 op_bitwidth, op_use_symmetric_encodings = self._get_bitwidth_and_symmetric_flag(
                     quantizer_info.quant_op_name)
                 encoding = quantizer_info.tensor_quantizer.computeEncoding(op_bitwidth, op_use_symmetric_encodings)
@@ -651,7 +699,8 @@ class QuantizationSimModel:
                 param_type = 'weight'
 
             q_op_out = self._insert_post_training_quant_op(param_in, quant_op_name,
-                                                           op_mode, self._param_quantizers, default_param_bw)
+                                                           op_mode, self._param_quantizers, QuantizerType.param,
+                                                           default_param_bw)
 
             nodes_modified_count = graph_editor.reroute_ts(tf_ops.convert_to_tensor(q_op_out), param_in, can_modify=op)
             if nodes_modified_count != 1:
@@ -681,7 +730,8 @@ class QuantizationSimModel:
 
             q_op_out = self._insert_post_training_quant_op(output_op.outputs[0], quant_op_name,
                                                            pymo.TensorQuantizerOpMode.updateStats,
-                                                           self._activation_quantizers, default_output_bw)
+                                                           self._activation_quantizers, QuantizerType.activation,
+                                                           default_output_bw)
 
             # Re-route
             num_rerouted_outputs = graph_editor.reroute_ts(tf_ops.convert_to_tensor(q_op_out),
@@ -719,13 +769,15 @@ class QuantizationSimModel:
                 self._op_to_quant_ops_dict[conn_graph_op] = [dict(), qc_quantize_tensor.op]
 
     def _insert_post_training_quant_op(self, preceeding_tensor, quant_op_name: str, op_mode: pymo.QuantizationMode,
-                                       quantizer_dict: Dict[str, QuantizerInfo], bit_width: int = 8):
+                                       quantizer_dict: Dict[str, QuantizerInfo], quantizer_type: QuantizerType,
+                                       bit_width: int = 8):
         """
         Create and insert a post-training quant op after a given tensor
         :param preceeding_tensor: Preceeding tensor to insert the quant op after
         :param quant_op_name: Name to give to the new quant op
         :param op_mode: Starting mode to configure for the new quant op
         :param quantizer_dict: dictionary of op and QuantizerInfo
+        :param quantizer_type : indicate param or activation quantizer
         :param bit_width : bit-width to be used (output or param quantization bit-width), default set to 8.
         :return: None
         """
@@ -743,7 +795,7 @@ class QuantizationSimModel:
             # this value is to be read from config file
             tensor_quantizer = pymo.TensorQuantizer(quant_scheme_to_pymo[self._quant_scheme],
                                                     pymo.RoundingMode.ROUND_NEAREST)
-            quantizer_info = QuantizerInfo(self.session, tensor_quantizer, quant_op_name)
+            quantizer_info = QuantizerInfo(self.session, tensor_quantizer, quant_op_name, quantizer_type)
             tensor_quantizer = pymo.PtrToInt64(tensor_quantizer)
             tensor_quant_ref = tf.Variable(tensor_quantizer, name=quant_op_name + '_quant_ref',
                                            trainable=False, dtype=tf.int64)
