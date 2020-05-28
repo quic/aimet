@@ -358,17 +358,19 @@ class TestQuantSim(unittest.TestCase):
         o_quantizer = sim.output_quantizer('conv2d/Relu')
         bias_quantizer = sim.param_quantizer('conv2d/BiasAdd')
 
+        # check if __str__ can print the object info
+        print(p_quantizer)
         bitwidth = p_quantizer.bitwidth
-        self.assertTrue(8 == bitwidth)
+        self.assertEqual(8, bitwidth)
         p_quantizer.bitwidth = 6
         bitwidth = p_quantizer.bitwidth
-        self.assertTrue(6 == bitwidth)
+        self.assertEqual(6, bitwidth)
 
         bitwidth = o_quantizer.bitwidth
-        self.assertTrue(8 == bitwidth)
+        self.assertEqual(8, bitwidth)
         o_quantizer.bitwidth = 6
         bitwidth = o_quantizer.bitwidth
-        self.assertTrue(6 == bitwidth)
+        self.assertEqual(6, bitwidth)
 
         sym_encoding = bias_quantizer.use_symmetric_encoding
         self.assertFalse(sym_encoding)
@@ -377,16 +379,16 @@ class TestQuantSim(unittest.TestCase):
         self.assertTrue(sym_encoding)
 
         rounding_mode = o_quantizer.rounding_mode
-        self.assertTrue(libpymo.RoundingMode.ROUND_NEAREST == rounding_mode)
+        self.assertEqual(libpymo.RoundingMode.ROUND_NEAREST, rounding_mode)
         o_quantizer.rounding_mode = libpymo.RoundingMode.ROUND_STOCHASTIC
         rounding_mode = o_quantizer.rounding_mode
-        self.assertTrue(libpymo.RoundingMode.ROUND_STOCHASTIC == rounding_mode)
+        self.assertEqual(libpymo.RoundingMode.ROUND_STOCHASTIC, rounding_mode)
 
         quant_scheme = o_quantizer.quant_scheme
-        self.assertTrue(libpymo.QuantizationMode.QUANTIZATION_TF_ENHANCED == quant_scheme)
+        self.assertEqual(libpymo.QuantizationMode.QUANTIZATION_TF_ENHANCED, quant_scheme)
         o_quantizer.quant_scheme = libpymo.QuantizationMode.QUANTIZATION_TF
         quant_scheme = o_quantizer.quant_scheme
-        self.assertTrue(libpymo.QuantizationMode.QUANTIZATION_TF == quant_scheme)
+        self.assertEqual(libpymo.QuantizationMode.QUANTIZATION_TF, quant_scheme)
         self.assertFalse(o_quantizer.tensor_quantizer.isEncodingValid)
 
         is_enabled = p_quantizer.enabled
