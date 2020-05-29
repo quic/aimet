@@ -133,23 +133,30 @@ class ModelWithStandaloneOps(nn.Module):
     def __init__(self):
         super(ModelWithStandaloneOps, self).__init__()
         self.conv1 = nn.Conv2d(1, 10, kernel_size=5)
+        self.maxpool1 = nn.MaxPool2d(2)
+        self.relu1 = nn.ReLU()
         self.conv2 = nn.Conv2d(10, 20, kernel_size=5)
         self.myquant = QcQuantizeStandalone(activation_bw=8, round_mode=MAP_ROUND_MODE_TO_PYMO['nearest'],
                                             quant_scheme=MAP_QUANT_SCHEME_TO_PYMO['tf_enhanced'], is_symmetric=False)
         self.conv2_drop = nn.Dropout2d()
+        self.maxpool2 = nn.MaxPool2d(2)
+        self.relu2 = nn.ReLU()
         self.fc1 = nn.Linear(320, 50)
+        self.relu3 = nn.ReLU()
+        self.dropout = nn.Dropout2d()
         self.fc2 = nn.Linear(50, 10)
+        self.log_softmax = nn.LogSoftmax(dim=1)
 
-    def forward(self, x):
-        x = F.relu(F.max_pool2d(self.conv1(x), 2))
+    def forward(self, *inputs):
+        x = self.relu1(self.maxpool1(self.conv1(inputs[0])))
         x = self.conv2(x)
         x = self.myquant(x)
-        x = F.relu(F.max_pool2d(self.conv2_drop(x), 2))
+        x = self.relu2(self.maxpool2(self.conv2_drop(x)))
         x = x.view(-1, 320)
-        x = F.relu(self.fc1(x))
-        x = F.dropout(x, training=self.training)
+        x = self.relu3(self.fc1(x))
+        x = self.dropout(x)
         x = self.fc2(x)
-        return F.log_softmax(x, dim=1)
+        return self.log_softmax(x)
 
 
 class ModelWithTwoInputs(nn.Module):
@@ -267,8 +274,17 @@ class TestQuantizationSim(unittest.TestCase):
                 self.fc1 = nn.Linear(320, 50)
                 self.fc2 = nn.Linear(50, 10)
 
+            def forward(self, *inputs):
+                x = self.conv1(inputs[0])
+                x = self.conv2(x)
+                x = self.conv2_drop(x)
+                x = x.view(x.size(0), -1)
+                x = self.fc1(x)
+                x = self.fc2(x)
+                return x
+
         model = Net()
-        sim = QuantizationSimModel(model)
+        sim = QuantizationSimModel(model, input_shapes=(1, 1, 12, 12))
 
         self.verify_quantization_wrappers(model, sim.model)
 
@@ -285,10 +301,19 @@ class TestQuantizationSim(unittest.TestCase):
                 self.fc1 = nn.Linear(320, 50)
                 self.fc2 = nn.Linear(50, 10)
 
+            def forward(self, *inputs):
+                x = self.conv1(inputs[0])
+                x = self.conv2(x)
+                x = self.conv2_drop(x)
+                x = x.view(x.size(0), -1)
+                x = self.fc1(x)
+                x = self.fc2(x)
+                return x
+
         net = Net()
         model = net.to(torch.device('cpu'))
 
-        sim = QuantizationSimModel(model)
+        sim = QuantizationSimModel(model, input_shapes=(1, 1, 12, 12))
 
         # Add wrappers again, expect to be a nop
         sim._add_quantization_wrappers(model)
@@ -315,10 +340,13 @@ class TestQuantizationSim(unittest.TestCase):
                 self.SubNet2 = SubNet()
                 self.fc2 = nn.Linear(50, 10)
 
+            def forward(self, *inputs):
+                return self.conv1(inputs[0])
+
         net = Net()
         model = net.to(torch.device('cpu'))
 
-        sim = QuantizationSimModel(model)
+        sim = QuantizationSimModel(model, input_shapes=(1, 1, 12, 12))
 
         self.verify_quantization_wrappers(model, sim.model)
 
@@ -344,10 +372,13 @@ class TestQuantizationSim(unittest.TestCase):
                 )
                 self.fc2 = nn.Linear(50, 10)
 
+            def forward(self, *inputs):
+                return self.conv1(inputs[0])
+
         net = Net()
         model = net.to(torch.device('cpu'))
         print(model)
-        sim = QuantizationSimModel(model)
+        sim = QuantizationSimModel(model, input_shapes=(1, 1, 12, 12))
         print(sim.model)
         self.verify_quantization_wrappers(model, sim.model)
 
@@ -373,9 +404,12 @@ class TestQuantizationSim(unittest.TestCase):
                 self.fc1 = nn.Linear(320, 50)
                 self.fc2 = nn.Linear(50, 10)
 
+            def forward(self, *inputs):
+                return self.conv1(inputs[0])
+
         net = Net()
         model = net.to(torch.device('cpu'))
-        sim = QuantizationSimModel(model)
+        sim = QuantizationSimModel(model, input_shapes=(1, 1, 12, 12))
 
         self.verify_quantization_wrappers(model, sim.model)
 
@@ -389,8 +423,11 @@ class TestQuantizationSim(unittest.TestCase):
                                              QcPostTrainingWrapper(nn.Conv2d(1, 10, 5), weight_bw=8, activation_bw=8,
                                                                    round_mode='nearest', quant_scheme='tf_enhanced')])
 
+            def forward(self, *inputs):
+                return self.layers[2](inputs[0])
+
         model = Net()
-        sim = QuantizationSimModel(model)
+        sim = QuantizationSimModel(model, input_shapes=(1, 1, 12, 12))
 
         self.verify_quantization_wrappers(model, sim.model)
 
@@ -407,9 +444,12 @@ class TestQuantizationSim(unittest.TestCase):
                                                   QcPostTrainingWrapper(nn.Conv2d(1, 10, 5), weight_bw=8, activation_bw=8,
                                                                     round_mode='nearest', quant_scheme='tf_enhanced')])
 
+            def forward(self, *inputs):
+                return self.layers[2](inputs[0])
+
         model = Net()
         print(model)
-        sim = QuantizationSimModel(model)
+        sim = QuantizationSimModel(model, input_shapes=(1, 3, 12, 12))
         print(sim.model)
 
         self.verify_quantization_wrappers(model, sim.model)
@@ -427,9 +467,13 @@ class TestQuantizationSim(unittest.TestCase):
                                                   QcPostTrainingWrapper(nn.Conv2d(1, 10, 5), weight_bw=8, activation_bw=8,
                                                                     round_mode='nearest',
                                                                     quant_scheme='tf_enhanced')])
+
+            def forward(self, *inputs):
+                return self.layers[2](inputs[0])
+
         model = Net()
 
-        sim = QuantizationSimModel(model)
+        sim = QuantizationSimModel(model, input_shapes=(1, 3, 12, 12))
         layers_to_exclude = [sim.model.layers_deep[1], sim.model.layers_deep[3]]
         sim.exclude_layers_from_quantization(layers_to_exclude)
         print(sim.model)
@@ -459,7 +503,7 @@ class TestQuantizationSim(unittest.TestCase):
 
         model = ModelWithTwoInputs()
 
-        sim = QuantizationSimModel(model)
+        sim = QuantizationSimModel(model, input_shapes=[(32, 1, 28, 28), (32, 1, 28, 28)])
 
         # Quantize
         sim.compute_encodings(forward_pass, None)
@@ -477,7 +521,7 @@ class TestQuantizationSim(unittest.TestCase):
                 model(torch.randn((32, 1, 28, 28)), torch.randn(32, 1, 28, 28))
 
         model = ModelWithTwoInputs()
-        sim = QuantizationSimModel(model)
+        sim = QuantizationSimModel(model, input_shapes=[(32, 1, 28, 28), (32, 1, 28, 28)])
 
         # Quantize
         sim.compute_encodings(forward_pass, None)
@@ -512,7 +556,7 @@ class TestQuantizationSim(unittest.TestCase):
         """"""
         model = SmallMnist()
 
-        sim = QuantizationSimModel(model, quant_scheme='tf_enhanced')
+        sim = QuantizationSimModel(model, quant_scheme='tf_enhanced', input_shapes=(1, 1, 12, 12))
         self.assertTrue(isinstance(sim.model.conv1, QcQuantizeWrapper))
 
         # Find encodings
@@ -526,7 +570,7 @@ class TestQuantizationSim(unittest.TestCase):
         """"""
         model = SmallMnist()
 
-        sim = QuantizationSimModel(model, quant_scheme='tf')
+        sim = QuantizationSimModel(model, quant_scheme='tf', input_shapes=(1, 1, 12, 12))
         for module in sim.model.modules():
             if isinstance(module, QcQuantizeWrapper):
                 module.output_quantizer.enabled = False
@@ -549,7 +593,7 @@ class TestQuantizationSim(unittest.TestCase):
         """"""
         model = SmallMnist()
 
-        sim = QuantizationSimModel(model, quant_scheme='tf')
+        sim = QuantizationSimModel(model, quant_scheme='tf', input_shapes=(1, 1, 12, 12))
         for module in sim.model.modules():
             if isinstance(module, QcQuantizeWrapper):
                 module.output_quantizer.enabled = True
@@ -572,7 +616,7 @@ class TestQuantizationSim(unittest.TestCase):
         model = SmallMnistNoDropout()
         print(model)
 
-        sim = QuantizationSimModel(model, quant_scheme='tf')
+        sim = QuantizationSimModel(model, quant_scheme='tf', input_shapes=(1, 1, 28, 28))
         sim.create_super_nodes_of_layers_and_activation_functions((1, 1, 28, 28))
 
         # Find encodings
@@ -600,7 +644,7 @@ class TestQuantizationSim(unittest.TestCase):
         model = SmallMnistNoDropoutWithPassThrough().eval()
         print(model)
 
-        sim = QuantizationSimModel(model, quant_scheme='tf')
+        sim = QuantizationSimModel(model, quant_scheme='tf', input_shapes=(1, 1, 28, 28))
         sim.create_super_nodes_of_layers_and_activation_functions((1, 1, 28, 28))
 
         # Find encodings
@@ -628,7 +672,7 @@ class TestQuantizationSim(unittest.TestCase):
         model = SmallMnist().eval()
         print(model)
 
-        sim = QuantizationSimModel(model, quant_scheme='tf')
+        sim = QuantizationSimModel(model, quant_scheme='tf', input_shapes=(1, 1, 28, 28))
         sim.create_super_nodes_of_layers_and_activation_functions((1, 1, 28, 28))
 
         # Find encodings
@@ -686,11 +730,8 @@ class TestQuantizationSim(unittest.TestCase):
 
         model = Net()
         model(torch.rand(1, 3, 28, 28))
-        sim = QuantizationSimModel(model, quant_scheme='tf')
+        sim = QuantizationSimModel(model, quant_scheme='tf', input_shapes=(1, 3, 28, 28))
 
-        self.assertFalse(sim.model.conv3.input_quantizer.enabled)
-        self.assertFalse(sim.model.conv5.input_quantizer.enabled)
-        sim.handle_element_wise_ops((1, 3, 28, 28))
         self.assertTrue(sim.model.conv3.input_quantizer.enabled)
         self.assertTrue(sim.model.conv5.input_quantizer.enabled)
 
@@ -729,12 +770,8 @@ class TestQuantizationSim(unittest.TestCase):
 
         model = Net()
         model(torch.rand(1, 3, 28, 28))
-        sim = QuantizationSimModel(model, quant_scheme='tf')
+        sim = QuantizationSimModel(model, quant_scheme='tf', input_shapes=(1, 3, 28, 28))
 
-        self.assertFalse(sim.model.conv4a.input_quantizer.enabled)
-        self.assertFalse(sim.model.conv4b.input_quantizer.enabled)
-        self.assertFalse(sim.model.conv5.input_quantizer.enabled)
-        sim.handle_element_wise_ops((1, 3, 28, 28))
         self.assertTrue(sim.model.conv4a.input_quantizer.enabled)
         self.assertTrue(sim.model.conv4b.input_quantizer.enabled)
         self.assertTrue(sim.model.conv5.input_quantizer.enabled)
@@ -774,11 +811,8 @@ class TestQuantizationSim(unittest.TestCase):
 
         model = Net()
         model(torch.rand(1, 3, 28, 28))
-        sim = QuantizationSimModel(model, quant_scheme='tf')
+        sim = QuantizationSimModel(model, quant_scheme='tf', input_shapes=(1, 3, 28, 28))
 
-        self.assertFalse(sim.model.conv4a.input_quantizer.enabled)
-        self.assertFalse(sim.model.conv5.input_quantizer.enabled)
-        sim.handle_element_wise_ops((1, 3, 28, 28))
         self.assertTrue(sim.model.conv4a.input_quantizer.enabled)
         self.assertTrue(sim.model.conv5.input_quantizer.enabled)
 
@@ -818,11 +852,8 @@ class TestQuantizationSim(unittest.TestCase):
 
         model = Net()
         model(torch.rand(1, 3, 28, 28))
-        sim = QuantizationSimModel(model, quant_scheme='tf')
+        sim = QuantizationSimModel(model, quant_scheme='tf', input_shapes=(1, 3, 28, 28))
 
-        self.assertFalse(sim.model.conv3.input_quantizer.enabled)
-        self.assertFalse(sim.model.conv5.input_quantizer.enabled)
-        sim.handle_element_wise_ops((1, 3, 28, 28))
         self.assertTrue(sim.model.conv3.input_quantizer.enabled)
         self.assertTrue(sim.model.conv5.input_quantizer.enabled)
 
@@ -862,11 +893,8 @@ class TestQuantizationSim(unittest.TestCase):
 
         model = Net()
         model(torch.rand(1, 3, 28, 28))
-        sim = QuantizationSimModel(model, quant_scheme='tf')
+        sim = QuantizationSimModel(model, quant_scheme='tf', input_shapes=(1, 3, 28, 28))
 
-        self.assertFalse(sim.model.conv3.input_quantizer.enabled)
-        self.assertFalse(sim.model.conv5.input_quantizer.enabled)
-        sim.handle_element_wise_ops((1, 3, 28, 28))
         self.assertTrue(sim.model.conv3.input_quantizer.enabled)
         self.assertTrue(sim.model.conv5.input_quantizer.enabled)
 
@@ -907,11 +935,8 @@ class TestQuantizationSim(unittest.TestCase):
 
         model = Net()
         model(torch.rand(1, 3, 28, 28))
-        sim = QuantizationSimModel(model, quant_scheme='tf')
+        sim = QuantizationSimModel(model, quant_scheme='tf', input_shapes=(1, 3, 28, 28))
 
-        self.assertFalse(sim.model.conv3.input_quantizer.enabled)
-        self.assertFalse(sim.model.conv5.input_quantizer.enabled)
-        sim.handle_element_wise_ops((1, 3, 28, 28))
         self.assertTrue(sim.model.conv3.input_quantizer.enabled)
         self.assertTrue(sim.model.conv5.input_quantizer.enabled)
 
@@ -920,7 +945,7 @@ class TestQuantizationSim(unittest.TestCase):
     def test_no_finetuning_tf(self):
         model = SmallMnist()
 
-        sim = QuantizationSimModel(model, quant_scheme='tf')
+        sim = QuantizationSimModel(model, quant_scheme='tf', input_shapes=(1, 1, 28, 28))
         self.assertTrue(isinstance(sim.model.conv1, QcQuantizeWrapper))
 
         # Find encodings
@@ -931,7 +956,7 @@ class TestQuantizationSim(unittest.TestCase):
         """"""
         model = SmallMnist()
 
-        sim = QuantizationSimModel(model, quant_scheme='tf_enhanced')
+        sim = QuantizationSimModel(model, quant_scheme='tf_enhanced', input_shapes=(1, 1, 28, 28))
         self.assertTrue(isinstance(sim.model.conv1, QcQuantizeWrapper))
         sim.model.conv1.set_output_bw(16)
 
@@ -948,7 +973,7 @@ class TestQuantizationSim(unittest.TestCase):
     def test_with_standalone_ops(self):
 
         model = ModelWithStandaloneOps()
-        sim = QuantizationSimModel(model=model)
+        sim = QuantizationSimModel(model=model, input_shapes=(1, 1, 28, 28))
 
         # Quantize
         sim.compute_encodings(dummy_forward_pass, None)
@@ -963,7 +988,7 @@ class TestQuantizationSim(unittest.TestCase):
 
         model = SmallMnist()
 
-        sim = QuantizationSimModel(model)
+        sim = QuantizationSimModel(model, input_shapes=(1, 1, 28, 28))
         layers_to_ignore = [sim.model.conv1, sim.model.fc2]
         sim.exclude_layers_from_quantization(layers_to_ignore)
 
@@ -1000,7 +1025,7 @@ class TestQuantizationSim(unittest.TestCase):
 
         model = ModelWithStandaloneOps()
 
-        sim = QuantizationSimModel(model)
+        sim = QuantizationSimModel(model, input_shapes=(32, 1, 28, 28))
 
         # Quantize
         sim.compute_encodings(dummy_forward_pass, None)
@@ -1020,7 +1045,6 @@ class TestQuantizationSim(unittest.TestCase):
         self.check_quant_params(sim.model.conv1, loaded_model.conv1, True)
         self.check_quant_params(sim.model.conv2, loaded_model.conv2, True)
         self.check_quant_params(sim.model.conv2_drop, loaded_model.conv2_drop, False)
-        self.check_quant_params(sim.model.fc1, loaded_model.fc1, True)
         self.check_quant_params(sim.model.fc2, loaded_model.fc2, True)
 
         self.assertTrue(np.allclose(output_before_save.detach().numpy(),

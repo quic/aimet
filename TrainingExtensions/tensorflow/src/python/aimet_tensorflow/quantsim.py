@@ -407,11 +407,9 @@ class QuantizationSimModel:
         # Save and load the session so the graph changes can take effect
         self._save_and_load_sim_model()
 
-        # Use config file to set starting quantize op configurations
         # Note: at this point, the session used to construct conn_graph is different than the current
         # self.session, however we still use the connected graph to traverse the graph structure.
-        if config_file:
-            QuantSimConfigurator(self.session, conn_graph, self._op_to_quant_ops_dict, config_file)
+        QuantSimConfigurator(self.session, conn_graph, self._op_to_quant_ops_dict, config_file)
 
     def __getstate__(self):
         # convert object to pickle-able state
