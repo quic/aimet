@@ -86,7 +86,7 @@ class QuantizationSimAcceptanceTests(unittest.TestCase):
         model = mnist_model.Net().to(torch.device('cuda'))
         mnist_torch_model.evaluate(model=model, iterations=None, use_cuda=True)
 
-        sim = QuantizationSimModel(model)
+        sim = QuantizationSimModel(model, input_shapes=(1, 1, 28, 28))
 
         # Quantize the untrained MNIST model
         sim.compute_encodings(self.forward_pass, forward_pass_callback_args=5)
@@ -106,7 +106,8 @@ class QuantizationSimAcceptanceTests(unittest.TestCase):
 
         sim = QuantizationSimModel(model,
                                    default_output_bw=4,
-                                   default_param_bw=4)
+                                   default_param_bw=4,
+                                   input_shapes=(1, 1, 28, 28))
 
         # Quantize the untrained MNIST model
         sim.compute_encodings(self.forward_pass, forward_pass_callback_args=5)
@@ -142,7 +143,7 @@ class QuantizationSimAcceptanceTests(unittest.TestCase):
                                                          quant_scheme='tf')
                 setattr(model, module_name, quantized_module)
 
-        sim = QuantizationSimModel(model)
+        sim = QuantizationSimModel(model, input_shapes=(1, 1, 28, 28))
 
         # Quantize the untrained MNIST model
         sim.compute_encodings(self.forward_pass, forward_pass_callback_args=5)

@@ -38,6 +38,7 @@
 """ Utilities for parsing and applying quantsim configurations from json config file """
 
 from abc import ABC, abstractmethod
+import os
 from typing import List
 from aimet_common.connected_graph.operation import Op
 from aimet_common.graph_pattern_matcher import PatternType
@@ -91,6 +92,10 @@ class OnnxConnectedGraphTypeMapper:
 class QuantSimConfigurator(ABC):
     """ Class for parsing and applying quantsim configurations from json config file """
     def __init__(self, config_file: str):
+        if not config_file:
+            default_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'default_config.json')
+            logger.info('No config file provided, defaulting to config file at %s', default_path)
+            config_file = default_path
         self._quantsim_configs = JsonConfigImporter.import_json_config_file(config_file)
 
     def _set_quantsim_configs(self):

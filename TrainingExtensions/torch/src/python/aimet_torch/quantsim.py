@@ -84,7 +84,7 @@ class QuantizationSimModel:
     # pylint: disable=too-many-arguments
     def __init__(self, model: torch.nn.Module, quant_scheme: Union[str, QuantScheme] = QuantScheme.post_training_tf_enhanced,
                  rounding_mode: str = 'nearest', default_output_bw: int = 8, default_param_bw: int = 8,
-                 in_place: bool = False, config_file=None, input_shapes=None):
+                 in_place: bool = False, config_file: str = None, input_shapes=None):
         """
         Constructor
 
@@ -138,9 +138,7 @@ class QuantizationSimModel:
         # Disable bias quantization
         self.exclude_param_from_quantization("bias")
 
-        # Apply configurations from json file if applicable
-        if config_file:
-            QuantSimConfigurator(self.model, input_shapes, config_file)
+        QuantSimConfigurator(self.model, input_shapes, config_file)
 
     def __str__(self):
         """
