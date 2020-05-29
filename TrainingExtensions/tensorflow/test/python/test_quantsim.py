@@ -160,9 +160,18 @@ class TestQuantSim(unittest.TestCase):
         sim.compute_encodings(dummy_forward_pass, None)
 
         # Check if encodings have been calculated
+        deactivated_quantizers = [
+            'conv2d_input_quantized',
+            'conv2d/BiasAdd_quantized',
+            'conv2d_1/BiasAdd_quantized'
+        ]
         for name, quantizer in sim._activation_quantizers.items():
-            self.assertTrue(quantizer.tensor_quantizer.isEncodingValid,
-                            "quantizer: {} does not have a valid encoding".format(name))
+            if name in deactivated_quantizers:
+                self.assertTrue(int(libpymo.TensorQuantizerOpMode.passThrough),
+                                sim.session.run(name + '_op_mode/read:0'))
+            else:
+                self.assertTrue(quantizer.tensor_quantizer.isEncodingValid,
+                                "quantizer: {} does not have a valid encoding".format(name))
 
         # Check that op-mode is set correctly
         # Check that quantized ops got added for all params
@@ -208,9 +217,18 @@ class TestQuantSim(unittest.TestCase):
         sim.compute_encodings(dummy_forward_pass, None)
 
         # Check if encodings have been calculated
+        deactivated_quantizers = [
+            'conv2d_input_quantized',
+            'conv2d/BiasAdd_quantized',
+            'conv2d_1/BiasAdd_quantized'
+        ]
         for name, quantizer in sim._activation_quantizers.items():
-            self.assertTrue(quantizer.tensor_quantizer.isEncodingValid,
-                            "quantizer: {} does not have a valid encoding".format(name))
+            if name in deactivated_quantizers:
+                self.assertTrue(int(libpymo.TensorQuantizerOpMode.passThrough),
+                                sim.session.run(name + '_op_mode/read:0'))
+            else:
+                self.assertTrue(quantizer.tensor_quantizer.isEncodingValid,
+                                "quantizer: {} does not have a valid encoding".format(name))
 
         # Check that op-mode is set correctly
         # Check that quantized ops got added for all params

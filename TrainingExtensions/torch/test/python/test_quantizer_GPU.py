@@ -68,7 +68,7 @@ class QuantizerCpuGpu(unittest.TestCase):
         # create model on CPU
         model_cpu = mnist_model.Net().to('cpu')
         model_gpu = copy.deepcopy(model_cpu).to('cuda')
-        cpu_sim_model = QuantizationSimModel(model_cpu, quant_scheme='tf', in_place=True)
+        cpu_sim_model = QuantizationSimModel(model_cpu, quant_scheme='tf', in_place=True, input_shapes=(1, 1, 28, 28))
         # Quantize
         cpu_sim_model.compute_encodings(forward_pass, None)
 
@@ -77,7 +77,7 @@ class QuantizerCpuGpu(unittest.TestCase):
         start_time = time.time()
 
         # create model on GPU
-        gpu_sim_model = QuantizationSimModel(model_gpu, quant_scheme='tf', in_place=True)
+        gpu_sim_model = QuantizationSimModel(model_gpu, quant_scheme='tf', in_place=True, input_shapes=(1, 1, 28, 28))
         # Quantize
         gpu_sim_model.compute_encodings(forward_pass, None)
 
@@ -90,6 +90,7 @@ class QuantizerCpuGpu(unittest.TestCase):
         # decimal places (default 7), and comparing to zero. Note that these
         # methods round the values to the given number of decimal places
         # (i.e. like the round() function) and not significant digits
+        # excluding fc1 since it is part of Matmul->Relu supergroup
         # can't use assertEqual for FC2, so using assertAlmostEquals for FC2
         self.assertAlmostEqual(model_gpu.conv1.output_quantizer.encoding.min,
                                model_cpu.conv1.output_quantizer.encoding.min, delta=0.001)
@@ -100,11 +101,6 @@ class QuantizerCpuGpu(unittest.TestCase):
                                model_cpu.conv2.output_quantizer.encoding.min, delta=0.001)
         self.assertAlmostEqual(model_gpu.conv2.output_quantizer.encoding.max,
                                model_cpu.conv2.output_quantizer.encoding.max, delta=0.001)
-
-        self.assertAlmostEqual(model_gpu.fc1.output_quantizer.encoding.min,
-                               model_cpu.fc1.output_quantizer.encoding.min, delta=0.001)
-        self.assertAlmostEqual(model_gpu.fc1.output_quantizer.encoding.max,
-                               model_cpu.fc1.output_quantizer.encoding.max, delta=0.001)
 
         self.assertAlmostEqual(model_gpu.fc2.output_quantizer.encoding.min,
                                model_cpu.fc2.output_quantizer.encoding.min, delta=0.001)
