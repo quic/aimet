@@ -52,11 +52,7 @@ RUN apt-get update > /dev/null && \
         xterm > /dev/null && \
         rm -rf /var/lib/apt/lists/*
 
-# Install QCOM certificates
-RUN wget -P /usr/local/share/ca-certificates https://pki.qualcomm.com/code_signing_key_v2_cert.crt
-RUN wget -P /usr/local/share/ca-certificates https://pki.qualcomm.com/issuing_key_v2_cert.crt
-RUN wget -P /usr/local/share/ca-certificates https://pki.qualcomm.com/ssl_v2_cert.crt
-RUN wget -P /usr/local/share/ca-certificates https://pki.qualcomm.com/qc_root_g2.crl
+# Install certificates
 RUN sudo update-ca-certificates
 
 # Modified version of bash.bashrc that adjusts the prompt
