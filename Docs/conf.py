@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-
+# pylint: skip-file
 # =============================================================================
 #  @@-COPYRIGHT-START-@@
 #
@@ -35,10 +35,8 @@
 #
 #  @@-COPYRIGHT-END-@@
 # =============================================================================
+""" Configuration file for the Sphinx documentation builder """
 
-#
-# Configuration file for the Sphinx documentation builder.
-#
 # This file does only contain a selection of the most common options. For a
 # full list see the documentation:
 # http://www.sphinx-doc.org/en/master/config
@@ -63,7 +61,7 @@ author = 'Qualcomm Innovation Center, Inc.'
 # The short X.Y version
 version = ''
 # The full version, including alpha/beta/rc tags
-release = '1.7.0'
+release = '1.9.0'
 
 
 # -- General configuration ---------------------------------------------------
@@ -118,7 +116,7 @@ autosectionlabel_prefix_document = True
 # a list of builtin themes.
 #
 html_theme = 'bizstyle'
-html_title = 'AIMET Documentation: ver 1.7.0'
+html_title = 'AIMET Documentation: ver 1.9.0'
 html_logo = 'images/brain_logo.png'
 
 # Theme options are theme-specific and customize the look and feel of a theme
