@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-
+# pylint: skip-file
 # =============================================================================
 #  @@-COPYRIGHT-START-@@
 #
@@ -55,7 +55,7 @@
 # -- Project information -----------------------------------------------------
 
 project = 'AIMET'
-copyright = '2020, Qualcomm Innovation Center, Inc.' # pylint: disable=redefined-builtin
+copyright = '2020, Qualcomm Innovation Center, Inc.'
 author = 'Qualcomm Innovation Center, Inc.'
 
 # The short X.Y version
