@@ -108,9 +108,6 @@ class QuantSimConfigurator(AimetCommonQuantSimConfigurator):
 
         _report_unsupported_ops(self._quantsim_configs)
 
-        if not input_shapes:
-            raise AssertionError("No input shapes provided")
-
         random_inputs = utils.create_rand_tensors_given_shapes(input_shapes)
         device = utils.get_device(model)
         random_inputs = tuple([inp.to(device) for inp in random_inputs])
