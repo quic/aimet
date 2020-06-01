@@ -82,13 +82,15 @@ class QuantizationSimModel:
     """
 
     # pylint: disable=too-many-arguments
-    def __init__(self, model: torch.nn.Module, quant_scheme: Union[str, QuantScheme] = QuantScheme.post_training_tf_enhanced,
+    def __init__(self, model: torch.nn.Module, input_shapes: Union[Tuple, List[Tuple]],
+                 quant_scheme: Union[str, QuantScheme] = QuantScheme.post_training_tf_enhanced,
                  rounding_mode: str = 'nearest', default_output_bw: int = 8, default_param_bw: int = 8,
-                 in_place: bool = False, config_file: str = None, input_shapes=None):
+                 in_place: bool = False, config_file: str = None):
         """
         Constructor
 
         :param model: Model to add simulation ops to
+        :param input_shapes: List of input shapes to the model
         :param quant_scheme: Quantization scheme. Supported options are 'tf_enhanced' or 'tf' or using Quant Scheme Enum
                              QuantScheme.post_training_tf or QuantScheme.post_training_tf_enhanced
         :param rounding_mode: Rounding mode. Supported options are 'nearest' or 'stochastic'
@@ -97,7 +99,6 @@ class QuantizationSimModel:
         :param in_place: If True, then the given 'model' is modified in-place to add quant-sim nodes.
                 Only suggested use of this option is when the user wants to avoid creating a copy of the model
         :param config_file: Configuration file for model quantizers
-        :param input_shapes: List of input shapes to the model
 
         """
 
