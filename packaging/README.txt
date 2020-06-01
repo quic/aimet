@@ -1,4 +1,4 @@
-AIMET-1.7.0
+AIMET-1.9.0
 
 Copyright (c) 2020, Qualcomm Innovation Center, Inc. All rights reserved.
 
