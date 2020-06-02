@@ -1,13 +1,13 @@
 .. _ug-index:
 
-================
-AIMET User Guide
-================
+======================================
+AI Model Efficiency Toolkit User Guide
+======================================
 
 Overview
 ========
 
-AIMET (AI Model Efficiency Toolkit) is a software toolkit that enables users to compress and quantize models.
+AI Model Efficiency Toolkit (AIMET) is a software toolkit that enables users to compress and quantize models.
 
 AIMET provides optimizations that are designed to be used on trained models, so that the resulting compressed
 and/or quantized model can be further trained (also called fine-tuning) to recover any accuracy losses.
@@ -21,7 +21,7 @@ The above picture shows a high-level view of the workflow when using AIMET. The 
 model in either the TensorFlow or PyTorch training framework. This trained model is passed to AIMET using APIs
 for compression and quantization that we will look at in detail. AIMET returns a compressed/quantized version of the model
 that the users can fine-tune (or train further for a small number of epochs) to recover lost accuracy. Users can then
-export via ONNX to an on-target runtime like Qualcomm Neural Processing SDK.
+export via ONNX to an on-target runtime like Qualcomm\ |reg| Neural Processing SDK.
 
 
 Features
@@ -48,3 +48,12 @@ Please visit the generated AIMET API documentation here
     :maxdepth: 1
 
     API Documentation<../api_docs/index>
+
+|
+
+|
+
+| AI Model Efficiency Toolkit is a product of Qualcomm Innovation Center, Inc.
+| Qualcomm\ |reg| Neural Processing SDK is a product of Qualcomm Technologies, Inc. and/or its subsidiaries.
+
+.. |reg|    unicode:: U+000AE .. REGISTERED SIGN
