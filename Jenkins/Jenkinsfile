@@ -55,10 +55,13 @@ pipeline {
                                     if (env.CHANGE_FORK != null) {
                                         env.REPO_OR_FORK_URL = "https://github.com/${env.CHANGE_FORK}/aimet"
                                     }
-                                }
-                                sh "bash -l -c \"git clone ${env.REPO_OR_FORK_URL} -b ${env.CHANGE_BRANCH} commit_checks_repo\""
-                                withCredentials([usernameColonPassword(credentialsId: 'neoci-pat', variable: 'USERPASS')]) {
-                                    sh "bash -l -c \"cd ${REPO_NAME} && ${env.DEPENDENCY_DATA_PATH}/commit_check/commit-checks.sh \""
+                                    if ("${env.QCInternalValidation}" == "true") {
+                                        withCredentials([usernameColonPassword(credentialsId: 'neoci-pat', variable: 'USERPASS')]) {
+                                            sh "bash -l -c \"cd ${REPO_NAME} && ${env.DEPENDENCY_DATA_PATH}/commit_check/commit-checks.sh \""
+                                        }
+                                    } else {
+                                        sh "bash -l -c \"cd ${REPO_NAME} && ${env.DEPENDENCY_DATA_PATH}/commit_check/commit-checks.sh \""
+                                    }
                                 }
                                 sh "bash -l -c \"rm -rf commit_checks_repo\""
                             }
