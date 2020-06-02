@@ -53,7 +53,7 @@ pipeline {
                                 script{
                                     env.REPO_OR_FORK_URL = "${REPO_URL}"
                                     if (env.CHANGE_FORK != null) {
-                                        env.REPO_OR_FORK_URL = "https://github.com/${env.CHANGE_FORK}"
+                                        env.REPO_OR_FORK_URL = "https://github.com/${env.CHANGE_FORK}/aimet"
                                     }
                                 }
                                 sh "bash -l -c \"git clone ${env.REPO_OR_FORK_URL} -b ${env.CHANGE_BRANCH} commit_checks_repo\""
