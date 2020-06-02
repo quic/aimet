@@ -5,7 +5,7 @@
 
 
 
-# AIMET - AI Model Efficiency Toolkit
+# AI Model Efficiency Toolkit (AIMET)
 
 <a href="https://quic.github.io/aimet-pages/index.html">AIMET</a> is a library that provides advanced model quantization 
 and compression techniques for trained neural network models.
@@ -122,7 +122,7 @@ approx. 1% of the original uncompressed model.
 * [Installation Guide](USAGE.md)
 * [User Guide](https://quic.github.io/aimet-pages/AimetDocs/user_guide/index.html)
 * [API Docs](https://quic.github.io/aimet-pages/AimetDocs/api_docs/index.html)
-* [Discussion Forums](https://aimet-forum.trydiscourse.com)
+* [Discussion Forums](https://forums.quicinc.com/)
 * [Tutorial Videos](https://quic.github.io/aimet-pages/index.html#video)
 
 ## Contributions
