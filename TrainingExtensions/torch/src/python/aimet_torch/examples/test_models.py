@@ -159,22 +159,20 @@ class ModuleListModel(nn.Module):
             nn.ReLU(inplace=True),      # use 3rd
             nn.Conv2d(16, 8, kernel_size=2, stride=2, padding=2),                # use 5th
             nn.ReLU(),      # dummy unused op
-            nn.Conv2d(3, 16, kernel_size=2, stride=2, padding=2, bias=False)        # use 1st
-        ])
-        self.seq_list = nn.Sequential(
+            nn.Conv2d(3, 16, kernel_size=2, stride=2, padding=2, bias=False),       # use 1st
             nn.Conv2d(8, 4, kernel_size=2, stride=2, padding=2),                # use 6th
             nn.ReLU(),      # dummy unused op
             nn.BatchNorm2d(16),     # use 2nd
-        )
+        ])
         self.fc = nn.Linear(64, num_classes)
 
     def forward(self, *inputs):
         x = self.mod_list[4](inputs[0])
-        x = self.seq_list[2](x)
+        x = self.mod_list[7](x)
         x = self.mod_list[1](x)
         x = self.mod_list[0](x)
         x = self.mod_list[2](x)
-        x = self.seq_list[0](x)
+        x = self.mod_list[5](x)
         x = x.view(x.size(0), -1)
         x = self.fc(x)
         return x
@@ -258,4 +256,102 @@ class ModelWithReusedNodes(nn.Module):
         x = self.relu2(x)
         x = x.view(x.size(0), -1)
         x = self.fc(x)
+        return x
+
+class SequentialModel(nn.Module):
+    """ A model with modules defined using nn.Sequential.
+        Use this model for unit testing purposes.
+        Expected inputs: 3 inputs, all of size (1, 3, 8, 8) """
+
+    def __init__(self, num_classes=3):
+        super(SequentialModel, self).__init__()
+        self.seq_list = nn.Sequential(
+            nn.Conv2d(3, 16, kernel_size=2, stride=2, padding=2, bias=False),
+            nn.BatchNorm2d(16),
+            nn.ReLU(inplace=True),
+            nn.MaxPool2d(kernel_size=2, stride=2, padding=1),
+            nn.Conv2d(16, 8, kernel_size=2, stride=2, padding=2),
+            nn.Conv2d(8, 4, kernel_size=2, stride=2, padding=2)
+        )
+        self.fc = nn.Linear(64, num_classes)
+
+    def forward(self, *inputs):
+        x = self.seq_list(inputs[0])
+        x = x.view(x.size(0), -1)
+        x = self.fc(x)
+        return x
+
+class BasicConv2d(nn.Module):
+    """ A Simple Super Node Model used as building block in Hierarchical Model  """
+
+    def __init__(self, **kwargs):
+        super(BasicConv2d, self).__init__()
+        self.conv = nn.Conv2d(64, 64, bias=False, **kwargs)
+        self.dropout = torch.nn.Dropout(p=0.1)
+        self.bn = nn.BatchNorm2d(64, eps=0.001)
+
+    def forward(self, x):
+        x = self.conv(x)
+        x = self.dropout(x)
+        x = self.bn(x)
+        return nn.functional.relu(x, inplace=True)
+
+class MultiConv2dModel(nn.Module):
+    """ Sequential Model contains sequences of BasicConv2d Model  """
+
+    def __init__(self):
+        super(MultiConv2dModel, self).__init__()
+        self.seq_list = nn.Sequential(
+         BasicConv2d(kernel_size=3),
+         BasicConv2d(kernel_size=1),
+         BasicConv2d(kernel_size=3)
+        )
+
+    def forward(self, *inputs):
+        return self.seq_list(inputs[0])
+
+class NestedModel(nn.Module):
+    """ Aggregation Model contains two instance of Tiny Model """
+
+    def __init__(self):
+        super(NestedModel, self).__init__()
+        self.tm1 = TinyModel()
+        self.tm2 = TinyModel()
+
+    def forward(self, *inputs):
+        c1 = self.tm1(inputs[0])
+        c2 = self.tm2(inputs[1])
+        cat_inputs = [c1, c2]
+        x = torch.cat(cat_inputs, 1)
+        return x
+
+class HierarchicalModel(nn.Module):
+    """ Aggregation Model contains multi-level of PyTorch Module
+        Expected 5 inputs with shapes  in the following order:
+            (1, 64, 32, 32)
+            (1,  3, 32, 32)
+            (1, 64, 32, 32)
+            (1,  3, 32, 32)
+            (1,  3,  8,  8) """
+
+    def __init__(self):
+        super(HierarchicalModel, self).__init__()
+        self.conv1 = BasicConv2d(kernel_size=3)
+        self.conv2 = BasicConv2d(kernel_size=3)
+        self.multi_conv = MultiConv2dModel()
+        self.nm1 = NestedModel()
+        self.nm2 = NestedModel()
+        self.sq = SequentialModel()
+
+    def forward(self, *inputs):
+        x = self.conv1((inputs[0]))
+        x= x.narrow(1, 0, 3)
+        c1 = self.nm1(x, inputs[1])
+        x = self.conv2(inputs[2])
+        x = self.multi_conv(x)
+        x= x.narrow(1, 0, 3)
+        c2 = self.nm2(x, inputs[3])
+        c3 = self.sq(inputs[4])
+        cat_inputs = [c1, c2, c3]
+        x = torch.cat(cat_inputs, 1)
         return x

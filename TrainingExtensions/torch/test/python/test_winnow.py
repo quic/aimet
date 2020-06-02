@@ -1675,7 +1675,7 @@ class TestTrainingExtensionsWinnow(unittest.TestCase):      # pylint: disable=to
                             list_of_modules_to_winnow,
                             reshape=True, in_place=True, verbose=False)
         self.assertEqual(10, model.mod_list[4].weight.shape[0])
-        self.assertEqual(10, model.seq_list[2].weight.shape[0])
+        self.assertEqual(10, model.mod_list[7].weight.shape[0])
         self.assertEqual(10, model.mod_list[2].weight.shape[1])
 
     def test_convTranspose2d(self):

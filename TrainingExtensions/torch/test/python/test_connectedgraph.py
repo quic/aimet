@@ -40,7 +40,8 @@
 import unittest
 import torch
 from aimet_common.connected_graph.connectedgraph_utils import get_all_input_ops, get_all_output_ops
-from aimet_torch.examples.test_models import SingleResidual, MultiInput, ConcatModel, ModuleListModel, ModelWithDropouts
+from aimet_torch.examples.test_models import SingleResidual, MultiInput, ConcatModel, ModuleListModel, ModelWithDropouts, \
+    SequentialModel, HierarchicalModel
 from aimet_torch.meta.connectedgraph import _split_inputs, ConnectedGraph
 from aimet_torch.utils import create_rand_tensors_given_shapes
 
@@ -127,11 +128,11 @@ class TestConnectedGraph(unittest.TestCase):
         conn_graph = ConnectedGraph(model, (inp_data_1,))
         self.assertEqual(10, len(conn_graph.ordered_ops))
         self.assertEqual(conn_graph.get_op_from_module_name('ModuleListModel.mod_list.4'), conn_graph.ordered_ops[0])
-        self.assertEqual(conn_graph.get_op_from_module_name('ModuleListModel.seq_list.2'), conn_graph.ordered_ops[1])
+        self.assertEqual(conn_graph.get_op_from_module_name('ModuleListModel.mod_list.7'), conn_graph.ordered_ops[1])
         self.assertEqual(conn_graph.get_op_from_module_name('ModuleListModel.mod_list.1'), conn_graph.ordered_ops[2])
         self.assertEqual(conn_graph.get_op_from_module_name('ModuleListModel.mod_list.0'), conn_graph.ordered_ops[3])
         self.assertEqual(conn_graph.get_op_from_module_name('ModuleListModel.mod_list.2'), conn_graph.ordered_ops[4])
-        self.assertEqual(conn_graph.get_op_from_module_name('ModuleListModel.seq_list.0'), conn_graph.ordered_ops[5])
+        self.assertEqual(conn_graph.get_op_from_module_name('ModuleListModel.mod_list.5'), conn_graph.ordered_ops[5])
 
     def test_concat(self):
         """ Test building ConnectedGraph on a model with concat """
@@ -163,3 +164,34 @@ class TestConnectedGraph(unittest.TestCase):
         dropout_2_op = conn_graph.get_all_ops()['feature_dropout_4']
         self.assertEqual(model.dropout1, dropout_1_op.get_module())
         self.assertEqual(model.dropout2, dropout_2_op.get_module())
+
+    def test_sequential(self):
+        """ Test building ConnectedGraph on a model constructed with nn.Sequential Module """
+        model = SequentialModel()
+        model.eval()
+        inp_data_1 = torch.rand(1, 3, 8, 8)
+        conn_graph = ConnectedGraph(model, (inp_data_1,))
+        self.assertEqual(10, len(conn_graph.ordered_ops))
+        # Expect 1 split for the reshape operation
+        self.assertEqual(1, conn_graph._split_count)
+
+    def test_hierarchial_model(self):
+        """ Test building ConnectedGraph on model which multi-level aggregation of nn.Modules  """
+        # pylint: disable=protected-access
+        model = HierarchicalModel()
+        model.eval()
+        conv_shape = (1, 64, 32, 32)
+        inp_shape = (1, 3, 32, 32)
+        seq_shape = (1, 3, 8, 8)
+        inp_tensor_list = create_rand_tensors_given_shapes([conv_shape, inp_shape, conv_shape, inp_shape, seq_shape])
+        conn_graph = ConnectedGraph(model, inp_tensor_list)
+        self.assertEqual(95, len(conn_graph.ordered_ops))
+        self.assertEqual(5, conn_graph._split_count)
+        self.assertEqual(conn_graph.get_op_from_module_name('HierarchicalModel.conv1.conv'), conn_graph.ordered_ops[0])
+        self.assertEqual(conn_graph.get_op_from_module_name('HierarchicalModel.nm1.tm1.conv1'), conn_graph.ordered_ops[5])
+        self.assertEqual(conn_graph.get_op_from_module_name('HierarchicalModel.nm1.tm2.conv1'), conn_graph.ordered_ops[20])
+        self.assertEqual(conn_graph.get_op_from_module_name('HierarchicalModel.conv2.conv'), conn_graph.ordered_ops[36])
+        self.assertEqual(conn_graph.get_op_from_module_name('HierarchicalModel.multi_conv.seq_list.0.conv'), conn_graph.ordered_ops[40])
+        self.assertEqual(conn_graph.get_op_from_module_name('HierarchicalModel.nm2.tm1.conv1'), conn_graph.ordered_ops[53])
+        self.assertEqual(conn_graph.get_op_from_module_name('HierarchicalModel.nm2.tm2.conv1'), conn_graph.ordered_ops[68])
+        self.assertEqual(conn_graph.get_op_from_module_name('HierarchicalModel.sq.seq_list.0'), conn_graph.ordered_ops[84])
