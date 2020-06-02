@@ -54,7 +54,7 @@
 
 # -- Project information -----------------------------------------------------
 
-project = 'AIMET'
+project = 'AI Model Efficiency Toolkit'
 copyright = '2020, Qualcomm Innovation Center, Inc.'
 author = 'Qualcomm Innovation Center, Inc.'
 
@@ -116,7 +116,7 @@ autosectionlabel_prefix_document = True
 # a list of builtin themes.
 #
 html_theme = 'bizstyle'
-html_title = 'AIMET Documentation: ver 1.9.0'
+html_title = 'AI Model Efficiency Toolkit Documentation: ver 1.9.0'
 html_logo = 'images/brain_logo.png'
 
 # Theme options are theme-specific and customize the look and feel of a theme
@@ -171,7 +171,7 @@ latex_elements = {
 # (source start file, target name, title,
 #  author, documentclass [howto, manual, or own class]).
 latex_documents = [
-    (master_doc, 'AIMET.tex', 'AIMET Documentation',
+    (master_doc, 'AIMET.tex', 'AI Model Efficiency Toolkit Documentation',
      'Qualcomm Innovation Center, Inc.', 'manual'),
 ]
 
@@ -181,7 +181,7 @@ latex_documents = [
 # One entry per manual page. List of tuples
 # (source start file, name, description, authors, manual section).
 man_pages = [
-    (master_doc, 'aimet', 'AIMET Documentation',
+    (master_doc, 'aimet', 'AI Model Efficiency Toolkit Documentation',
      [author], 1)
 ]
 
@@ -192,7 +192,7 @@ man_pages = [
 # (source start file, target name, title, author,
 #  dir menu entry, description, category)
 texinfo_documents = [
-    (master_doc, 'AIMET', 'AIMET Documentation',
+    (master_doc, 'AIMET', 'AI Model Efficiency Toolkit  Documentation',
      author, 'AIMET', 'One line description of project.',
      'Miscellaneous'),
 ]
