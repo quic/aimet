@@ -639,6 +639,8 @@ class QuantizationSimModel:
 
     def _save_and_load_sim_model(self):
         self.session = graph_saver.save_and_load_graph(WORKING_DIR, self.session)
+        update_tensor_quantizer_references(self.session, self._activation_quantizers)
+        update_tensor_quantizer_references(self.session, self._param_quantizers)
 
     def _add_quant_nodes(self, conn_graph: ConnectedGraph, default_param_bw: int, default_output_bw: int) -> None:
         """
