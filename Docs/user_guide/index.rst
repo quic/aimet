@@ -37,6 +37,7 @@ AIMET supports two types of features
 
 |
 
+Please see the :ref:`AIMET Guidebook<ug-guidebook>` - which includes some practical advice on using the above features, and how to combine the features
 
 API Documentation and Usage Examples
 ====================================
