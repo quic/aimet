@@ -48,6 +48,7 @@ workspaceFolder=`pwd`
 workspaceFolder=`readlink -f ${workspaceFolder}`
 outputRootFolder=$workspaceFolder
 scriptPath=`readlink -f $(dirname "$0")`
+entrypoint="${scriptPath}/dobuildntest.sh"
 options_string=""
 EXIT_CODE=0
 
@@ -56,6 +57,7 @@ interactive_mode=0
 dry_run=0
 loading_symbol="..."
 USER_MOUNT_DIRS=""
+USER_ENV_VARS=""
 
 usage() {
   echo -e "\nThis is a script to build and run tests on AIMET code."
@@ -71,12 +73,14 @@ usage() {
   echo "    -a --> run acceptance tests (Warning: This will take a long time to complete!)"
   echo "    -o --> optional output folder. Default is current directory"
   echo "    -i --> just build and start the docker in interactive mode (shell prompt)"
-  echo "    -m --> mount the volumes (comma-separated list of paths)"
+  echo "    -m --> mount the volumes (space-separated list of paths)"
+  echo "    -e --> set existing env var from current environment (space-separated list of vars name)"
+  echo "    -y --> set any custom script/command as entrypoint for docker (default is dobuildntest.sh)"
   echo "    -n --> dry run mode (just display the docker command)"
 }
 
 
-while getopts "o:abcim:nghsuv" opt;
+while getopts "o:abce:im:nghsuvy:" opt;
    do
       case $opt in
          a)
@@ -84,6 +88,9 @@ while getopts "o:abcim:nghsuv" opt;
              ;;
          b)
              options_string+=" -b"
+             ;;
+         e)
+             USER_ENV_VARS=$OPTARG
              ;;
          g)
              options_string+=" -g"
@@ -113,6 +120,9 @@ while getopts "o:abcim:nghsuv" opt;
              ;;
          o)
              outputRootFolder=$OPTARG
+             ;;
+         y)
+             entrypoint=$OPTARG
              ;;
          :)
              echo "Option -$OPTARG requires an argument" >&2
@@ -209,10 +219,17 @@ if [[ -v HOME ]]; then
 	DOCKER_RUN_CMD="${DOCKER_RUN_CMD} -v ${HOME}:${HOME}"
 fi
 
+#set env variables if requested
+for user_env_var in ${USER_ENV_VARS}; do
+    DOCKER_RUN_CMD="${DOCKER_RUN_CMD} -e ${user_env_var}=\$${user_env_var}"
+done
+
+#mount directories if requested
+for user_dir in ${USER_MOUNT_DIRS}; do
+	DOCKER_RUN_CMD="${DOCKER_RUN_CMD} -v ${user_dir}:${user_dir}"
+done
+
 if [ $interactive_mode -eq 1 ]; then
-	for user_dir in ${USER_MOUNT_DIRS}; do
-		DOCKER_RUN_CMD="${DOCKER_RUN_CMD} -v ${user_dir}:${user_dir}"
-	done
 	DOCKER_RUN_CMD="${DOCKER_RUN_CMD} -it --hostname aimet-dev ${docker_image_name}"
 	if [ $dry_run -eq 1 ]; then
 		echo ${DOCKER_RUN_CMD}
@@ -221,7 +238,7 @@ if [ $interactive_mode -eq 1 ]; then
 		eval ${DOCKER_RUN_CMD}
 	fi
 else
-	DOCKER_RUN_CMD="${DOCKER_RUN_CMD} --entrypoint=${scriptPath}/dobuildntest.sh \
+	DOCKER_RUN_CMD="${DOCKER_RUN_CMD} --entrypoint=${entrypoint} \
 	${docker_image_name} ${options_string} -w ${workspaceFolder} \
 	-o ${results_path} | tee ${results_path}/full_log.txt"
 	eval ${DOCKER_RUN_CMD}
