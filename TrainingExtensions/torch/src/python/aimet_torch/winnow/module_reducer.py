@@ -43,8 +43,8 @@
 from typing import List
 import torch
 from aimet_common.utils import AimetLogger, ModelApi
-from aimet_common.winnow.winnow_utils import ModuleReducer as AimetCommonModuleReducer, \
-    get_zero_positions_in_binary_mask, get_conv_ops_for_api, get_indices_among_ones_of_overlapping_ones
+from aimet_common.winnow.winnow_utils import get_zero_positions_in_binary_mask, get_conv_ops_for_api, get_indices_among_ones_of_overlapping_ones
+from aimet_common.winnow.module_reducer import ModuleReducer as AimetCommonModuleReducer
 from aimet_common.connected_graph.operation import Op as Operation
 from aimet_common.connected_graph.operation import determine_preceding_op_input_product_index_in_multi_input_op, \
     determine_succeeding_op_output_product_index_in_multi_output_op

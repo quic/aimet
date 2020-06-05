@@ -4,7 +4,7 @@
 #
 #  @@-COPYRIGHT-START-@@
 #
-#  Copyright (c) 2019, Qualcomm Innovation Center, Inc. All rights reserved.
+#  Copyright (c) 2019-2020, Qualcomm Innovation Center, Inc. All rights reserved.
 #
 #  Redistribution and use in source and binary forms, with or without
 #  modification, are permitted provided that the following conditions are met:
@@ -40,12 +40,14 @@
 
 """ Contains functionality related  to all aspects of propagating the masks. """
 
-from typing import List, Union
+from typing import List, Union, Dict
 from aimet_common.connected_graph.operation import Op, determine_preceding_op_input_product_index_in_multi_input_op, \
     determine_succeeding_op_output_product_index_in_multi_output_op
 from aimet_common.connected_graph.connectedgraph import ConnectedGraph
 from aimet_common.connected_graph.product import Product
-from aimet_common.winnow import mask
+from aimet_common.winnow.mask import Mask, NullInternalConnectivity, DirectInternalConnectivity, \
+    SplitInternalConnectivity, SkipInternalConnectivity, AddInternalConnectivity, StopInternalConnectivity, \
+    ConcatInternalConnectivity
 from aimet_common.winnow.winnow_utils import get_zero_positions_in_binary_mask, get_conv_ops_for_api
 from aimet_common.utils import AimetLogger, ModelApi, api_channel_index_dict
 
@@ -58,7 +60,7 @@ class MaskPropagator:
      It is responsible for Forward and Backward mask propagation within a module
      as well as inter module mask propagation."""
 
-    def __init__(self, conn_graph: ConnectedGraph, model_api):
+    def __init__(self, conn_graph: ConnectedGraph, model_api: ModelApi):
         """
         Initialize the MaskPropagator
 
@@ -75,7 +77,7 @@ class MaskPropagator:
         self._create_masks()
 
     @property
-    def op_to_mask_dict(self):
+    def op_to_mask_dict(self) -> Dict[Op, Mask]:
         """ Return the op_to_mask_dict """
         return self._op_to_mask_dict
 
@@ -91,7 +93,11 @@ class MaskPropagator:
                 self._create_masks_for_op_and_all_ancestors(op)
 
     def _create_masks_for_op_and_all_ancestors(self, op: Op):
-        """ Create mask for the current op, as well as all ancestors of the op """
+        """
+        Create mask for the current op, as well as all ancestors of the op
+
+        :param op: Op to create mask for as well as all ancestor ops
+        """
         dfs_queue = [op]
 
         while dfs_queue:
@@ -109,7 +115,7 @@ class MaskPropagator:
                 output_shape = current_op.output.shape
                 if output_shape:
                     current_op.num_out_channels = output_shape[api_channel_index_dict[self._model_api]]
-            self._op_to_mask_dict[current_op] = mask.Mask(current_op, self._model_api)
+            self._op_to_mask_dict[current_op] = Mask(current_op, self._model_api)
             input_products = current_op.get_input_products()
             if input_products:
                 for inp in input_products:
@@ -168,7 +174,7 @@ class MaskPropagator:
                 # This Product is between two Ops
                 producer = a_product.producer
                 # If parent op is stop connectivity, do not propagate mask up
-                if isinstance(self._op_to_mask_dict[producer].internal_connectivity, mask.StopInternalConnectivity):
+                if isinstance(self._op_to_mask_dict[producer].internal_connectivity, StopInternalConnectivity):
                     continue
                 # Look at the Producer Op and the consumer Op of the product and propagate the masks between them.
                 consumers = a_product.consumers
@@ -177,20 +183,20 @@ class MaskPropagator:
                     if consumer in self._op_to_mask_dict.keys():
                         consumer_connectivity = self._op_to_mask_dict[consumer].internal_connectivity
                         # If consumer op is stop connectivity, do not propagate mask up
-                        if isinstance(consumer_connectivity, mask.StopInternalConnectivity):
+                        if isinstance(consumer_connectivity, StopInternalConnectivity):
                             continue
-                        if isinstance(consumer_connectivity, mask.ConcatInternalConnectivity):
+                        if isinstance(consumer_connectivity, ConcatInternalConnectivity):
                             self._propagate_up_concat_inter_module_masks(consumer, a_product)
-                        elif isinstance(consumer_connectivity, mask.AddInternalConnectivity):
+                        elif isinstance(consumer_connectivity, AddInternalConnectivity):
                             self._propagate_up_add_masks(consumer, a_product)
-                        elif isinstance(consumer_connectivity, mask.SkipInternalConnectivity):
+                        elif isinstance(consumer_connectivity, SkipInternalConnectivity):
                             # Get the Op's output product's consumer and propagate up that consumer's mask.
                             self._propagate_up_skip_masks(consumer, a_product)
                         else:
                             # Consumers that are not Add or Concat
-                            assert isinstance(consumer_connectivity, (mask.DirectInternalConnectivity,
-                                                                      mask.NullInternalConnectivity,
-                                                                      mask.SplitInternalConnectivity))
+                            assert isinstance(consumer_connectivity, (DirectInternalConnectivity,
+                                                                      NullInternalConnectivity,
+                                                                      SplitInternalConnectivity))
                             self._set_inter_module_producer_output_and_consumer_input_mask(consumer, a_product)
 
     def _validate_and_adjust_masks_for_multi_input_multi_output_ops(self):
@@ -199,13 +205,13 @@ class MaskPropagator:
 
         for op in (op for op, _ in self._op_to_mask_dict.items()):
             internal_connectivity = self._op_to_mask_dict[op].internal_connectivity
-            if isinstance(internal_connectivity, mask.SplitInternalConnectivity):
+            if isinstance(internal_connectivity, SplitInternalConnectivity):
                 self._validate_and_adjust_split_op_masks(op)
 
-            elif isinstance(internal_connectivity, mask.AddInternalConnectivity):
+            elif isinstance(internal_connectivity, AddInternalConnectivity):
                 self._validate_and_adjust_add_op_masks(op, self._model_api)
 
-            elif isinstance(internal_connectivity, mask.ConcatInternalConnectivity):
+            elif isinstance(internal_connectivity, ConcatInternalConnectivity):
                 self._validate_and_adjust_concat_op_masks(op)
 
     def _adjust_masks_for_upsample_ops(self):
@@ -270,7 +276,7 @@ class MaskPropagator:
                 logger.debug("Op: %s ip mask zero indices: %s, op mask zero indices: %s",
                              op.dotted_name, ip_mask_zero_positions_list, op_mask_zero_positions_list)
 
-    def get_ops_with_non_default_ip_op_masks(self):
+    def get_ops_with_non_default_ip_op_masks(self) -> List[Op]:
         """ Returns a list of Ops whose input and/or output channel default masks have been modified. """
 
         list_of_mask_modified_ops = []
@@ -310,6 +316,7 @@ class MaskPropagator:
 
     def _is_module_reshape_needed(self, op: Op):
         """
+        Tells whether the module requires reshaping during winnowing.
 
         :param op: Determine if this Op is in reshape scenario
         :return: True, if the module requires reshaping.
@@ -329,7 +336,7 @@ class MaskPropagator:
         if (input_op.type in ('Add', 'Concat', 'Split', 'add', 'cat') and self._model_api == ModelApi.pytorch) or \
             (input_op.type in ('Add', 'ConcatV2', 'branch', 'Upsample', 'Downsample') and self._model_api ==
              ModelApi.tensorflow) or isinstance(self._op_to_mask_dict[input_op].internal_connectivity,
-                                                mask.StopInternalConnectivity):
+                                                StopInternalConnectivity):
             logger.debug("Op: %s, below: %s", op.dotted_name, input_op.dotted_name)
             return True
         # TODO: remove 'Conv2d' when old CG is gone
@@ -341,10 +348,10 @@ class MaskPropagator:
 
     def _set_inter_module_producer_output_and_consumer_input_mask(self, consumer_op: Op, input_product: Product):
         """
+        Set the product's producer op's output mask and the product's consumer op's output mask.
 
-        :param consumer_op:
-        :param input_product:
-        :return:
+        :param consumer_op: Consumer op whose input mask will be set
+        :param input_product: Product with consumer op as output
         """
 
         producer = input_product.producer
@@ -393,7 +400,6 @@ class MaskPropagator:
         :param concat_op: The Concat Op for which the mask associated with the input_product must be propagated up.
         :param input_product:  One of the products for which the Concat Op is the consumer. The corresponding mask must
         be propagated through this product to it's Producer Op.
-        :return:
         """
 
         logger.debug("Propagate up concat: For Concat Op: %s, all input product names: %s", concat_op.dotted_name,
@@ -464,7 +470,7 @@ class MaskPropagator:
             a_product = add_op.inputs[index]
             if a_product.producer.dotted_name == product.producer.dotted_name:
                 if isinstance(self._op_to_mask_dict[a_product.producer].internal_connectivity,
-                              mask.SplitInternalConnectivity):
+                              SplitInternalConnectivity):
                     add_op_mask = self._op_to_mask_dict[add_op]
                     logger.debug("Not propagating to Split. Restoring mask to default value.")
                     input_masks = add_op_mask.input_channel_masks
@@ -476,10 +482,10 @@ class MaskPropagator:
 
     def _propagate_up_skip_masks(self, skip_op: Op, product: Product):
         """
+        Propagate up mask from skip op's child op to skip op's parent op.
 
         :param skip_op: The Skip op for which masks are getting propagated.
         :param product: The product through which masks are considered to be propagated.
-        :return:
         """
 
         if skip_op.output:
@@ -501,13 +507,12 @@ class MaskPropagator:
             connection_mask = producer_out_masks[producer_mask_index] and consumer_in_masks[consumer_mask_index]
             producer_mask.set_output_channel_mask(producer_mask_index, connection_mask)
 
-    def _validate_and_adjust_concat_op_masks(self, op):
+    def _validate_and_adjust_concat_op_masks(self, op: Op):
         """
         Check if the concatenation of the multiple input masks yield the single output mask.
         If the check fails, adjust the masks.
 
         :param op: The Concat Op for which masks are validated and adjusted.
-        :return:
         """
 
         op_mask = self._op_to_mask_dict[op]
@@ -527,14 +532,13 @@ class MaskPropagator:
         out_modified_mask = [1 for _ in range(out_mask_length)]
         op_mask.set_output_channel_mask(0, out_modified_mask)
 
-    def _validate_and_adjust_split_op_masks(self, op):
+    def _validate_and_adjust_split_op_masks(self, op: Op):
         """
         This function is called as a final step during mask propagation.
         Make sure Split Op's input mask and output masks are the same.
         Propagate the masks downstream so that Ops downstream have teh updated mask.
 
         :param op: the Split Op for which masks are validated and adjusted.
-        :return:
         """
 
         op_mask = self._op_to_mask_dict[op]
@@ -554,7 +558,7 @@ class MaskPropagator:
         # as this considered as a special-Op to special-Op.
         for consumer in op.output.consumers:
             while consumer in self._op_to_mask_dict.keys() and \
-                    isinstance(self._op_to_mask_dict[consumer].internal_connectivity, mask.DirectInternalConnectivity):
+                    isinstance(self._op_to_mask_dict[consumer].internal_connectivity, DirectInternalConnectivity):
                 self._op_to_mask_dict[consumer].set_input_channel_mask(0, input_mask)
                 if not consumer.output:
                     break
@@ -562,14 +566,13 @@ class MaskPropagator:
                 logger.debug("Masks adjusted for: %s, %s", consumer.dotted_name, consumer.type)
                 consumer = consumer.output.consumers[0]
 
-    def _validate_and_adjust_add_op_masks(self, op, model_api: ModelApi):
+    def _validate_and_adjust_add_op_masks(self, op: Op, model_api: ModelApi):
         """
         Check if the Add Op's all input masks are the same.
         If not, adjust the masks to default values.
 
         :param op: the Add Op for which masks are validated and adjusted.
         :param model_api: either tensorflow or pytorch
-        :return:
         """
 
         op_mask = self._op_to_mask_dict[op]
@@ -588,7 +591,7 @@ class MaskPropagator:
 
         if all(mask == in_masks[0] for mask in in_masks):
             logger.debug("Valid masks for Add Op: %s", op.dotted_name)
-            return True
+            return
 
         # Reset the all the input masks and the output mask to default value.
         modified_mask = [1 for _ in range(len(mask_length))]
@@ -608,19 +611,17 @@ class MaskPropagator:
         # need to be prepended to the Conv.
         downstream_op = op.output.consumers[0]
         self._adjust_downstream_op_masks(downstream_op, modified_mask, model_api)
-        return False
 
-    def _adjust_downstream_op_masks(self, downstream_op: Op, modified_mask, model_api: ModelApi):
+    def _adjust_downstream_op_masks(self, downstream_op: Op, modified_mask: List[int], model_api: ModelApi):
         """
         Starting with the downstream_op, adjust the input and output masks for the Ops until a Conv Op is reached.
         :param downstream_op: the starting downstream op
         :param modified_mask: the mask to be set for the downstream Ops
         :param model_api: either tensorflow or pytorch
-        :return:
         """
         if downstream_op.type not in get_conv_ops_for_api(model_api):
             downstream_op_mask = self._op_to_mask_dict[downstream_op]
-            if isinstance(self._op_to_mask_dict[downstream_op].internal_connectivity, mask.SplitInternalConnectivity):
+            if isinstance(self._op_to_mask_dict[downstream_op].internal_connectivity, SplitInternalConnectivity):
                 # Downstream Op has single input and multiple outputs.
                 downstream_op_mask.set_input_channel_mask(0, modified_mask)
                 downstream_out_masks = downstream_op_mask.output_channel_masks
@@ -629,7 +630,7 @@ class MaskPropagator:
                     downstream_op_mask.set_output_channel_mask(index, modified_mask)
                     self._adjust_downstream_op_masks(downstream_op.output.consumers[index], modified_mask, model_api)
             elif not isinstance(self._op_to_mask_dict[downstream_op].internal_connectivity,
-                                mask.StopInternalConnectivity):
+                                StopInternalConnectivity):
                 # Downstream Op has single input and single output.
                 downstream_op_mask.set_input_channel_mask(0, modified_mask)
                 downstream_op_mask.set_output_channel_mask(0, modified_mask)
@@ -643,6 +644,7 @@ class MaskPropagator:
     def update_channels_to_winnow(self, name: str, reshape: bool, input_channels_to_winnow: Union[None, List[int]],
                                   output_channels_to_winnow: Union[None, List[int]]):
         """ For the Given Op, update the channels to be winnowed.
+
         :param name: Name of module to winnow to search in ConnectedGraph
         :param reshape: If set to False, UpSampleLayers and DownSampleLayers will not be used in the winnowed model.
                         If set to True, UpSampleLayers and DownSampleLayers will be used in the winnowed model.
@@ -654,8 +656,7 @@ class MaskPropagator:
         if module_op:
             if reshape:
                 # DownSampleLayers and UpSampleLayers can be added as needed.
-                self._op_to_mask_dict[module_op].update_channels_to_winnow(module_op.type,
-                                                                           input_channels_to_winnow,
+                self._op_to_mask_dict[module_op].update_channels_to_winnow(input_channels_to_winnow,
                                                                            output_channels_to_winnow)
             else:
                 # Determine if the OP is right below a Split, Add or Concat.
@@ -665,8 +666,7 @@ class MaskPropagator:
                     logger.debug("Reshape flag set to False. Module :%s will not be winnowed.",
                                  module_op.dotted_name)
                 else:
-                    self._op_to_mask_dict[module_op].update_channels_to_winnow(module_op.type,
-                                                                               input_channels_to_winnow,
+                    self._op_to_mask_dict[module_op].update_channels_to_winnow(input_channels_to_winnow,
                                                                                output_channels_to_winnow)
         else:
             logger.error(" Update channels to winnow: module_op is None for: %s", name)

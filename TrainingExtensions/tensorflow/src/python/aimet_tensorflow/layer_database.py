@@ -63,15 +63,13 @@ OP_WEIGHT_INDICES = {'Conv2D': 1,
 
 
 class Layer(aimet_common.layer_database.Layer):
-
     """ Holds attributes for given Op """
 
-    def _set_type_specific_params(self, module):
-
+    def _set_type_specific_params(self, module: tf.Operation):
         """
-        Using the provided module set type-specific-params
+        Using the provided module set type-specific-params.
+
         :param module: Training-extension specific module
-        :return:
         """
 
         if module.type == 'Conv2D':
@@ -82,7 +80,6 @@ class Layer(aimet_common.layer_database.Layer):
             self.type_specific_params = params
 
     def __init__(self, model: tf.Session, op: tf.Operation, output_shape: List):
-
         """
         :param model: TensorFlow Session
         :param op: TensorFlow Op
@@ -99,15 +96,13 @@ class Layer(aimet_common.layer_database.Layer):
 
 
 class LayerDatabase(aimet_common.layer_database.LayerDatabase):
-
     """
-    Stores, creates and updates the Layer database
-    Also stores compressible layers to model optimization
+    Stores, creates and updates the Layer database.
+    Also stores compressible layers to model optimization.
     """
 
-    def __init__(self, model: tf.Session, input_shape: Union[Tuple, List[Tuple]], working_dir: str, starting_ops=None,
-                 ending_ops=None):
-
+    def __init__(self, model: tf.Session, input_shape: Union[Tuple, List[Tuple]], working_dir: str,
+                 starting_ops: List[str] = None, ending_ops: List[str] = None):
         """
         :param model: TensorFlow Session
         :param input_shape: tuple or list of tuples of input shapes to the model
@@ -134,10 +129,11 @@ class LayerDatabase(aimet_common.layer_database.LayerDatabase):
 
         self._create_database()
 
-    def __deepcopy__(self, memodict):
-
+    def __deepcopy__(self, memodict: dict):
         """
-        Create deepcopy of Layer Database
+        Create deepcopy of Layer Database.
+
+        :param memodict: id to object dictionary
         """
 
         # pylint: disable=protected-access
@@ -177,10 +173,8 @@ class LayerDatabase(aimet_common.layer_database.LayerDatabase):
         return layer_db
 
     def _create_database(self):
-
         """
-        Create Layer Database by populating with Conv2D and MatMul layers
-        :return:
+        Create Layer Database by populating with Conv2D and MatMul layers.
         """
         # get all the operations associated with graph in current session
         all_ops = self.model.graph.get_operations()
@@ -200,14 +194,13 @@ class LayerDatabase(aimet_common.layer_database.LayerDatabase):
 
     def replace_layer_with_sequential_of_two_layers(self, layer_to_replace: Layer,
                                                     layer_a: Layer, layer_b: Layer):
-
         """
-        replaces original layer with two new layers in the graph
-        adds two new layers in the database and remove the original layer from database
+        Replaces original layer with two new layers in the graph.
+        Adds two new layers in the database and remove the original layer from database.
+
         :param layer_to_replace: layer to replace
         :param layer_a: layer a
         :param layer_b: layer b
-        :return:
         """
 
         old_bias_op = aimet_tensorflow.utils.common.get_succeeding_bias_op(layer_to_replace.module)
@@ -236,12 +229,11 @@ class LayerDatabase(aimet_common.layer_database.LayerDatabase):
 
     def update_database(self, model: tf.Session, detached_op_names: Set, update_model=False):
         """
-        Update layer database with new provided session and exclude detached ops
+        Update layer database with new provided session and exclude detached ops.
 
         :param model: TensorFlow Session
         :param detached_op_names: list of detached op names
         :param update_model: update model (session) with provided session if True
-        :return:
         """
         if update_model:
             # close the existing session
@@ -272,7 +264,7 @@ class LayerDatabase(aimet_common.layer_database.LayerDatabase):
 
     def destroy(self):
         """
-        Close the session and reset the default graph if in case any graph is created without 'with' keyword
+        Close the session and reset the default graph if in case any graph is created without 'with' keyword.
         """
         # clear the dictionary
         self._compressible_layers.clear()
