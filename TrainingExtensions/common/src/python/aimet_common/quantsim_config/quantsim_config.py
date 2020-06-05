@@ -66,11 +66,11 @@ class OnnxConnectedGraphTypeMapper:
     def __init__(self, type_pairs: List[List[List[str]]]):
         self._onnx_to_conn_graph_dict = {}
         self._conn_graph_to_onnx_dict = {}
-        for onnx_types, pytorch_types in type_pairs:
+        for onnx_types, conn_graph_types in type_pairs:
             for onnx_type in onnx_types:
-                self._onnx_to_conn_graph_dict[onnx_type] = pytorch_types
-            for pytorch_type in pytorch_types:
-                self._conn_graph_to_onnx_dict[pytorch_type] = onnx_types
+                self._onnx_to_conn_graph_dict[onnx_type] = conn_graph_types
+            for conn_graph_type in conn_graph_types:
+                self._conn_graph_to_onnx_dict[conn_graph_type] = onnx_types
 
     def get_conn_graph_type_from_onnx_type(self, onnx_type: str):
         """

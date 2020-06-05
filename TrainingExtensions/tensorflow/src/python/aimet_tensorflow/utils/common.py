@@ -51,15 +51,21 @@ logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Utils)
 # Multiple onnx types may be associated with a tf connected graph type, and vice versa.
 onnx_tf_conn_graph_type_pairs = [
     [["Conv"], ["Conv2D", "DepthwiseConv2dNative"]],
-    [["BatchNormalization"], ["FusedBatchNormV3"]],
+    [["BatchNormalization"], ["FusedBatchNormV3", "BatchNorm"]],
     [["MaxPool"], ["MaxPool"]],
     [["AveragePool"], ["AvgPool"]],
     [["Relu"], ["Relu", "Relu6"]],
     [["Gemm"], ["Dense"]],
     [["Add"], ["Add", "AddV2"]],
+    [["Concat"], ["ConcatV2"]],
+    [["Mul"], ["Mul"]],
+    [["Div"], ["RealDiv"]],
+    [["Dropout"], ["Dropout"]],
     [["Mean"], ["Mean"]],
+    [["Flatten"], ["Flatten"]],
     [["Pad"], ["Pad"]],
     [["Squeeze"], ["Squeeze"]],
+    [["Identity"], ["Identity"]]
 ]
 
 

@@ -76,7 +76,11 @@ onnx_pytorch_conn_graph_type_pairs = [
     [["AveragePool"], ["avg_pool2d"]],
     [["Relu"], ["relu"]],
     [["Gemm"], ["addmm", "matmul"]],
-    [["Add"], ["add"]]
+    [["Add"], ["add"]],
+    [["Concat"], ["cat"]],
+    [["Mul"], ["mul"]],
+    [["Div"], ["div"]],
+    [["Dropout"], ["dropout"]]
 ]
 
 
