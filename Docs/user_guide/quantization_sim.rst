@@ -19,7 +19,7 @@ The above explains a typical work flow a AIMET user can follow to make use of th
 #. The AIMET user will create their model in one of the supported training frameworks (PyTorch or TensorFlow)
 #. User trains their model
 #. After the user has a working and trained model, she/he can invoke the AIMET quantization APIs to created a quantized version of the model. During this step, AIMET uses a dataloader passed in by the user to analyze the model and determine the best quantization encodings on a per-layer basis.
-#. User will further train the quantized version of the model. The user can re-train the model just like in Step 2 on smaller training dataset. This step is the key step where the benefit of AIMET quantization comes into effect. The model will learn from the effects of quantization simulation.
+#. User will further train the quantized version of the model. The user can re-train the model just like in Step 2. The model will learn to counter the effect of quantization noise. Please see :ref:`some recommendations<qat_recommendations>` for quantization-aware fine-tuning.
 #. User uses AIMET to save the model and the per-layer quantization encodings
 #. These can be fed to a runtime like Qualcomm Neural Processing SDK to run the model on target (AIMET Importing encodings into quantized runtimes)
 
@@ -61,8 +61,8 @@ AIMET achieves this by wrapping existing layers with a custom layer that add thi
 
 In the backward pass, AIMET will backprop normally. This is achieved by keeping the full-resolution floating point weights as shadow weights to be used during backprop.
 
-Placement of quantizers in the model
-====================================
+Placement of quantization simulation ops in the model
+=====================================================
 AIMET allows the configuration of quantizer placement in accordance with a set of rules specified in a json configuration file if provided when the Quantization Simulation API is called.
 In the configuration file, quantizers can be turned on and off, and/or configured with asymmetric or symmetric encodings.
 The general use case for this file would be for users to match the quantization rules for a particular runtime they would like to simulate.
@@ -77,3 +77,17 @@ For example, one may specify in "defaults" for no layers to be quantized, but th
 It is advised for the user to begin with the default configuration file under
 
 aimet_common/quantsim_config/default_config.json
+
+
+.. _qat_recommendations:
+
+Recommendations for quantization-aware fine-tuning
+==================================================
+Here are some general guidelines that can aid in improving performance or faster convergence with Quantization-aware Training (QAT):
+
+* Initialization:
+    - Often it can be beneficial to first apply :ref:`post-training quantization<ug-post-training-quantization>` (Cross layer equalization (CLE) and bias correction) before applying QAT. This is especially beneficial if there is large drop in INT8 performance compared to the FP32 baseline.
+* Hyper-parameters:
+    - Number of epochs: 15-20 epochs are generally sufficient for convergence
+    - Learning rate: Comparable (or one order higher) to FP32 model’s final learning rate at convergence. Results in AIMET are with learning of the order 1e-6.
+    - Learning rate schedule: Divide learning rate by 10 every 5-10 epochs
