@@ -193,37 +193,6 @@ subgraph_constructors = {
 }
 
 
-class Node:
-    """
-
-    A data class that holds an Op and its input Ops.
-    Used for creating OpTypePattern() for an Op.
-    """
-    def __init__(self, op, inputs: List):
-        self._op = op
-        self._inputs = inputs
-
-    @property
-    def op(self) -> tf.Operation:
-        """
-        Return the Op
-        :return: The Op
-        """
-        return self._op
-
-    @property
-    def inputs(self) -> List[tf.Operation]:
-        """
-        Retrun the inputs which are Ops
-        :return:
-        """
-        return self._inputs
-
-    def __repr__(self):
-        """ Printable representation of the object. """
-        return self._op.name + ' (%s)' % [inp_op.name for inp_op in self._inputs]
-
-
 class SubGraphMatcher:
     """
 
@@ -408,7 +377,7 @@ def create_op_type_patterns_from_subgraph(subgraph: tf.Graph) -> List[graph_matc
     starting_op_names = ['aimet_input', 'aimet_constant']
     ending_op_names = ['aimet_identity']
     ops_from_ending_ops = set()
-    node_list = []
+    op_list = []
 
     # DFS is done bottom up.
     #   Reason:
@@ -430,34 +399,33 @@ def create_op_type_patterns_from_subgraph(subgraph: tf.Graph) -> List[graph_matc
             input_ops.append(inp.op)
             dfs_upwards(inp.op)
         if curr_op.name not in ending_op_names:
-            add_node_to_list(curr_op, input_ops, node_list)
+            op_list.append(curr_op)
 
     for name in ending_op_names:
         op = subgraph.get_operation_by_name(name)
         dfs_upwards(op)
 
-    sub_patterns = get_op_type_patterns(node_list)
+    sub_patterns = get_op_type_patterns(op_list)
 
     return sub_patterns
 
 
-def get_op_type_patterns(node_list: List[Node]) -> List[graph_matcher.OpTypePattern]:
+def get_op_type_patterns(op_list: List[tf.Operation]) -> List[graph_matcher.OpTypePattern]:
     """
-    From the list of Nodes, create the OpTypePattern()
-    :param node_list: List of Nodes that are specific to an Op.
+    From the list of ops, create the OpTypePattern()
+    :param op_list: List of ops to create patterns for
     :return: the list of OpTypePattern() objects that are specific to an Op.
     """
 
     sub_patterns = []  # A list that holds all the OpTypePattern objects created for a specific Op
-    for i, node in enumerate(node_list):
-        node_op_type = node.op.type
-        if node.inputs:
+    for i, op in enumerate(op_list):
+        if op.inputs:
             # The list of input ops is used to create the OpTypePattern for the current Op.
-            input_ops_list = get_op_type_patterns_for_input_ops(node, i, sub_patterns)
-            sub_patterns.append(graph_matcher.OpTypePattern(str(node_op_type), name=node.op.name,
+            input_ops_list = get_op_type_patterns_for_input_ops(op, i, sub_patterns)
+            sub_patterns.append(graph_matcher.OpTypePattern(str(op.type), name=op.name,
                                                             inputs=input_ops_list))
         else:
-            sub_patterns.append(graph_matcher.OpTypePattern(str(node_op_type), name=node.op.name))
+            sub_patterns.append(graph_matcher.OpTypePattern(str(op.type), name=op.name))
 
     return sub_patterns
 
@@ -493,30 +461,28 @@ def create_subgraph_for_op(input_shape: tuple, op_string: str) -> tf.Graph:
     return sess.graph
 
 
-def get_op_type_patterns_for_input_ops(node: Node, node_list_index: int,
+def get_op_type_patterns_for_input_ops(op: tf.Operation, op_list_index: int,
                                        sub_patterns: List[graph_matcher.OpTypePattern]) \
         -> List[graph_matcher.OpTypePattern]:
     """
     For Ops with multiple inputs, return the list of OpTypePatterns corresponding to the Op's input Ops.
 
-    :param node: The Node that is holding an Op and its input Ops
-    :param node_list_index: The Node's index in the node_list
+    :param op: Tf operation to get pattern for
+    :param op_list_index: The op's index in the op_list
     :param sub_patterns A list where created OpTypePatten objects are added.
     :return: List of OpTypePatterns that correspond to the input Ops
     """
 
     inp_op_type_patterns_list = []
-    for _, inp in enumerate(node.inputs):
-        # if inp.op.type == 'Placeholder':
-        if inp.type in ['Placeholder', 'Const']:
+    for _, inp in enumerate(op.inputs):
+        if inp.op.type in ['Placeholder', 'Const']:
             # This sub-graph for the Op was created to always with an input of tf.Keras.Input Type = Placeholder) and
             # an output Op of tf.identity(Type = Identity). A give Op under consideration would receive it's input
             # from any other Op preceding it. For OpType pattern(), this is represented as a '*'
             inp_op_type_patterns_list.append('*')
         else:
-            # When the Op has multiple inputs, check all the inputs and get the Node index in the seq_list
-            # plain_index = find_index_of_node_in_node_list(inp.op.type, seq_list, seq_list_index)
-            op_index = find_input_op_index_in_list_of_op_type_patterns(inp, node_list_index, sub_patterns)
+            # When the Op has multiple inputs, check all the inputs and get the op index in the seq_list
+            op_index = find_input_op_index_in_list_of_op_type_patterns(inp.op, op_list_index, sub_patterns)
 
             if op_index is not None:
                 inp_op_type_patterns_list.append(sub_patterns[op_index])
@@ -527,24 +493,11 @@ def get_op_type_patterns_for_input_ops(node: Node, node_list_index: int,
     return inp_op_type_patterns_list
 
 
-def add_node_to_list(op: tf.Operation, input_ops: List[tf.Operation], node_list: List):
-    """
-    Create a Node object and add it to the node list.
-
-    :param op: Op to be added to the list
-    :param input_ops: List of input Ops of the Op
-    :param node_list: Node list to which Node objects are added
-    :return:
-    """
-    node = Node(op, input_ops)
-    node_list.append(node)
-
-
 def find_input_op_index_in_list_of_op_type_patterns(op: tf.Operation, starting_index: int,
                                                     sub_patterns: List[graph_matcher.OpTypePattern]) \
         -> Union[int, None]:
     """
-    For every Node in the list of Nodes, an OpTypePattern() is created. Starting from the input of the model to the
+    For every op, an OpTypePattern() is created. Starting from the input of the model to the
     output, when creating the OpTypePattern() for an Op, the OpTypePattern for the Op's inputs would have been created
     already. This function finds the index of the input OpTypePattern() for a given "input Op" of an Op.
 
@@ -563,7 +516,7 @@ def find_input_op_index_in_list_of_op_type_patterns(op: tf.Operation, starting_i
         # If it is 0, there is no previously created sub_patterns to consider.
         return None
 
-    m = starting_index - 1  # Since starting_index is for the node, consider the sub_pattern just before it. Hence -1.
+    m = starting_index - 1  # Since starting_index is for the op, consider the sub_pattern just before it. Hence -1.
     while m >= 0:
         pattern = sub_patterns[m]
         if op.type == pattern._op_type and op.name == pattern._name:  # pylint: disable=protected-access
