@@ -51,7 +51,7 @@ from aimet_tensorflow.common.module_identifier import StructureModuleIdentifier
 from aimet_tensorflow.common.module_identifier_matchers import ModuleIdentifierOpInfo
 from aimet_tensorflow.examples.test_models import keras_model, keras_model_functional, tf_slim_basic_model, \
     single_residual, split_and_concat_model, concat_model, dropout_keras_model, dropout_slim_model, \
-    tf_slim_with_softmax, multiple_input_model, upsample_model
+    tf_slim_with_softmax, multiple_input_model, upsample_model, keras_model_functional_with_non_fused_batchnorms
 import aimet_tensorflow.winnow.winnow as winnow
 
 logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Test)
@@ -92,6 +92,26 @@ class TestTfConnectedGraph(unittest.TestCase):
                                     use_subgraph_matcher=True)
         self.assertTrue(validate_branch_ops(conn_graph))
         self.assertTrue(validate_product_tensor_lists(conn_graph))
+        self.assertEqual(0, conn_graph.branch_count)
+        self.assertEqual(14, len(conn_graph.get_all_ops()))
+
+        # 13 products from inter module connections
+        # 22 products from parameters
+        self.assertEqual(35, len(conn_graph.get_all_products()))
+
+    def test_keras_model_functional_with_non_fused_batchnorms_get_op_product_graph(self):
+        """ Test connected graph construction on keras model functional with non fused batchnorms """
+        tf.reset_default_graph()
+
+        _ = keras_model_functional_with_non_fused_batchnorms()
+        conn_graph = ConnectedGraph(tf.get_default_graph(), ['input_1'],
+                                    ['keras_model_functional_with_non_fused_batchnorms/Softmax'],
+                                    use_subgraph_matcher=True)
+        self.assertTrue(validate_branch_ops(conn_graph))
+        self.assertTrue(validate_product_tensor_lists(conn_graph))
+        _ = conn_graph.get_all_ops()['batch_normalization']
+        _ = conn_graph.get_all_ops()['scope_1/batch_normalization_1']
+        _ = conn_graph.get_all_ops()['scope_1/batch_normalization_2']
         self.assertEqual(0, conn_graph.branch_count)
         self.assertEqual(14, len(conn_graph.get_all_ops()))
 

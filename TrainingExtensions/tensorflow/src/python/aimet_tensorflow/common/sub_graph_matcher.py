@@ -113,6 +113,27 @@ subgraph_constructors = {
         'module_regex': '(.+)/FusedBatchNormV3$',
         'associated_op_regex': 'FusedBatchNormV3$'
     },
+    'BN_non_fused_keras_with_training_tensor': {
+        'input_shape': (10, 10, 3,),
+        'op_type': 'BatchNorm',
+        'constructor': "tf.keras.layers.BatchNormalization(fused=False)(inputs)",
+        'module_regex': '(.+)/batchnorm/mul_1$',
+        'associated_op_regex': 'batchnorm/mul_1$'
+    },
+    'BN_non_fused_keras_with_training_True': {
+        'input_shape': (10, 10, 3,),
+        'op_type': 'BatchNorm',
+        'constructor': "tf.keras.layers.BatchNormalization(fused=False)(inputs, training=True)",
+        'module_regex': '(.+)/batchnorm/mul_1$',
+        'associated_op_regex': 'batchnorm/mul_1$'
+    },
+    'BN_non_fused_keras_with_training_False': {
+        'input_shape': (10, 10, 3,),
+        'op_type': 'BatchNorm',
+        'constructor': "tf.keras.layers.BatchNormalization(fused=False)(inputs, training=False)",
+        'module_regex': '(.+)/batchnorm/mul_1$',
+        'associated_op_regex': 'batchnorm/mul_1$'
+    },
     'BN_slim_with_training_tensor': {
         'input_shape': (10, 10, 3,),
         'op_type': 'FusedBatchNormV3',
@@ -389,22 +410,6 @@ def create_op_type_patterns_from_subgraph(subgraph: tf.Graph) -> List[graph_matc
     ops_from_ending_ops = set()
     node_list = []
 
-    # For each ending op, do a Depth First Search (DFS) upwards and add all parent ops to "ops_from_ending_ops" set
-    for name in ending_op_names:
-        op = subgraph.get_operation_by_name(name)
-        queue = [op]
-        while queue:
-            curr_op = queue.pop()
-            ops_from_ending_ops.add(curr_op)
-            input_ops = []
-            for inp in curr_op.inputs:
-                if inp.op not in ops_from_ending_ops:
-                    queue.append(inp.op)
-                if curr_op not in ending_op_names:
-                    input_ops.append(inp)
-            if curr_op.name not in ending_op_names and curr_op.name not in starting_op_names:
-                add_node_to_list(curr_op, input_ops, node_list)
-
     # DFS is done bottom up.
     #   Reason:
     #       If we do top down DFS, it becomes necessary to indicate a starting Op other than well known 'aimet_input'
@@ -413,8 +418,24 @@ def create_op_type_patterns_from_subgraph(subgraph: tf.Graph) -> List[graph_matc
     #       This is not an issue for bottom up DFS since bottom up DFS looks at all inputs.
     # For building OpTypePattern() sequence, the dependent OpTypePattern() must be build first before using that
     # OpTypePattern() as an input in the next OpTypePattern()
-    # For this purpose, the pattern list is reversed.
-    node_list.reverse()
+    def dfs_upwards(curr_op):
+        """ Function to perform DFS upwards starting at curr_op """
+        if curr_op in ops_from_ending_ops or curr_op.name in starting_op_names:
+            # Do not process curr_op if we have seen it before, or if it is one of the starting ops
+            return
+        ops_from_ending_ops.add(curr_op)
+        # List to hold inputs to curr_op
+        input_ops = []
+        for inp in curr_op.inputs:
+            input_ops.append(inp.op)
+            dfs_upwards(inp.op)
+        if curr_op.name not in ending_op_names:
+            add_node_to_list(curr_op, input_ops, node_list)
+
+    for name in ending_op_names:
+        op = subgraph.get_operation_by_name(name)
+        dfs_upwards(op)
+
     sub_patterns = get_op_type_patterns(node_list)
 
     return sub_patterns
@@ -487,7 +508,7 @@ def get_op_type_patterns_for_input_ops(node: Node, node_list_index: int,
     inp_op_type_patterns_list = []
     for _, inp in enumerate(node.inputs):
         # if inp.op.type == 'Placeholder':
-        if inp.op.type in ['Placeholder', 'Const']:
+        if inp.type in ['Placeholder', 'Const']:
             # This sub-graph for the Op was created to always with an input of tf.Keras.Input Type = Placeholder) and
             # an output Op of tf.identity(Type = Identity). A give Op under consideration would receive it's input
             # from any other Op preceding it. For OpType pattern(), this is represented as a '*'
@@ -495,9 +516,9 @@ def get_op_type_patterns_for_input_ops(node: Node, node_list_index: int,
         else:
             # When the Op has multiple inputs, check all the inputs and get the Node index in the seq_list
             # plain_index = find_index_of_node_in_node_list(inp.op.type, seq_list, seq_list_index)
-            op_index = find_input_op_index_in_list_of_op_type_patterns(inp.op, node_list_index, sub_patterns)
+            op_index = find_input_op_index_in_list_of_op_type_patterns(inp, node_list_index, sub_patterns)
 
-            if op_index:
+            if op_index is not None:
                 inp_op_type_patterns_list.append(sub_patterns[op_index])
             else:
                 # None means that we are dealing with an input for which a OpTypePattern() has not been created.
@@ -520,7 +541,8 @@ def add_node_to_list(op: tf.Operation, input_ops: List[tf.Operation], node_list:
 
 
 def find_input_op_index_in_list_of_op_type_patterns(op: tf.Operation, starting_index: int,
-                                                    sub_patterns: List[graph_matcher.OpTypePattern]) -> int:
+                                                    sub_patterns: List[graph_matcher.OpTypePattern]) \
+        -> Union[int, None]:
     """
     For every Node in the list of Nodes, an OpTypePattern() is created. Starting from the input of the model to the
     output, when creating the OpTypePattern() for an Op, the OpTypePattern for the Op's inputs would have been created
@@ -542,7 +564,7 @@ def find_input_op_index_in_list_of_op_type_patterns(op: tf.Operation, starting_i
         return None
 
     m = starting_index - 1  # Since starting_index is for the node, consider the sub_pattern just before it. Hence -1.
-    while m != 0:
+    while m >= 0:
         pattern = sub_patterns[m]
         if op.type == pattern._op_type and op.name == pattern._name:  # pylint: disable=protected-access
             return m
