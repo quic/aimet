@@ -276,7 +276,7 @@ class BiasUtils:
             bias_index = BiasUtils.get_bias_index_in_given_op(input_op)
             for consumer in input_op.outputs[bias_index].consumers():
                 # check the input types of the add or bias_add
-                if consumer.type in ['BiasAdd', 'Add'] and len(consumer.inputs[1].shape) == 1:
+                if consumer.type == 'BiasAdd':
                     # check num tensors and op types coming into this bias add or add
                     assert len(consumer.inputs) == 2
                     # check if one of the inputs is ReadVariableOp type or Identity type

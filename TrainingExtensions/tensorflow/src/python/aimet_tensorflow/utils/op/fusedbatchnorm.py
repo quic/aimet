@@ -3,7 +3,7 @@
 # =============================================================================
 #  @@-COPYRIGHT-START-@@
 #
-#  Copyright (c) 2019, Qualcomm Innovation Center, Inc. All rights reserved.
+#  Copyright (c) 2019-2020, Qualcomm Innovation Center, Inc. All rights reserved.
 #
 #  Redistribution and use in source and binary forms, with or without
 #  modification, are permitted provided that the following conditions are met:
@@ -38,6 +38,7 @@
 """ utilities for fused batchnorm op """
 
 from typing import Union
+import numpy as np
 import tensorflow as tf
 from tensorflow.contrib import graph_editor as ge
 from aimet_common.utils import AimetLogger
@@ -54,8 +55,13 @@ class BNUtils:
     @staticmethod
     def skip_bn_op(sess: tf.Session, bn_op: tf.Operation, in_tensor: tf.Tensor, out_tensor: tf.Tensor):
         """
-        skip given bn op specified (fused batch norm op)
-        Note : supports only Fused bn op types.
+        Skip given bn op specified (fused batch norm op).
+        Note: supports only Fused bn op types.
+
+        :param sess: Tensorflow session
+        :param bn_op: Batchnorm op to be skipped
+        :param in_tensor: Input tensor to the batchnorm op
+        :param out_tensor: Output tensor of the batchnorm op
         """
 
         if in_tensor is None or out_tensor is None:
@@ -74,8 +80,10 @@ class BNUtils:
     @staticmethod
     def _get_tensor_read_var_op_trainable_bn_op(input_tensor: tf.Tensor) -> tf.Tensor:
         """
-         generic helper to find a read op tensor associated with input tensor
-         that can be evaluated, when the bn op is marked trainable.
+        Generic helper to find a read op tensor associated with input tensor that can be evaluated, when the bn op is
+        marked trainable.
+
+        :param input_tensor: Input tensor to find corresponding read op tensor that can be evaluated
         :return: read var op type tensor as tf.Tensor type.
         """
 
@@ -104,9 +112,9 @@ class BNUtils:
     @staticmethod
     def get_beta_read_op(bn_op: tf.Operation) -> tf.Operation:
         """
-        get beta read op from BN op specified
-        :param bn_op: bn_op obtained from connected graph using get_modules
-         (is mul_1 op inside BN scope)
+        Get beta read op from BN op specified.
+
+        :param bn_op: bn_op obtained from connected graph using get_modules (is mul_1 op inside BN scope)
         :return: beta read op
         """
         if bn_op.type in ['Mul']:
@@ -134,7 +142,8 @@ class BNUtils:
     @staticmethod
     def get_beta_read_var_op_tensor(bn_op: tf.Operation) -> tf.Tensor:
         """
-        get beta readVariableOp tensor from BN op specified
+        Get beta readVariableOp tensor from BN op specified.
+
         :param bn_op: FusedBatchNorm as tf.Operation
         :return: tensor associated with bn op beta readVariableOp type, as tf.Tensor
         """
@@ -150,9 +159,10 @@ class BNUtils:
         return beta_read_tensor
 
     @staticmethod
-    def get_beta_as_numpy_data(sess: tf.Session, bn_op: tf.Operation):
+    def get_beta_as_numpy_data(sess: tf.Session, bn_op: tf.Operation) -> np.ndarray:
         """
-        get beta param from BN op specified
+        Get beta param from BN op specified.
+
         :param sess: tensorflow session
         :param bn_op: bn_op as tf.Operation
         :return: beta tensor as numpy data
@@ -171,11 +181,11 @@ class BNUtils:
         return numpy_data
 
     @staticmethod
-    def get_gamma_as_read_op(bn_op: tf.Operation):
+    def get_gamma_as_read_op(bn_op: tf.Operation) -> tf.Operation:
         """
-        get gamma read op from BN op specified
-        :param bn_op: bn_op obtained from connected graph using get_modules
-        (is mul_1 op inside BN scope)
+        Get gamma read op from BN op specified.
+
+        :param bn_op: bn_op obtained from connected graph using get_modules (is mul_1 op inside BN scope)
         :return: gamma read op
         """
         if bn_op.type in ['Mul']:
@@ -198,11 +208,12 @@ class BNUtils:
         return gamma_read
 
     @staticmethod
-    def get_gamma_read_var_op_tensor(bn_op: tf.Operation)->tf.Tensor:
+    def get_gamma_read_var_op_tensor(bn_op: tf.Operation) -> tf.Tensor:
         """
+        Get the gamma read var op tensor associated with the batchnorm op.
 
-        :param bn_op:
-        :return:
+        :param bn_op: Batchnorm op to get gamma read var op tensor from
+        :return: Gamma read var op tensor associated with bn_op
         """
         assert bn_op.type in ['FusedBatchNormV3', 'Mul']
         gamma_read_tensor = BNUtils.get_gamma_as_read_op(bn_op).outputs[0]
@@ -215,12 +226,12 @@ class BNUtils:
         return gamma_read_tensor
 
     @staticmethod
-    def get_gamma_as_numpy_data(sess: tf.Session, bn_op: tf.Operation):
+    def get_gamma_as_numpy_data(sess: tf.Session, bn_op: tf.Operation) -> np.ndarray:
         """
-        get gamma param from BN op specified
+        Get gamma param from BN op specified.
+
         :param sess: tensorflow session
-        :param bn_op: bn_op obtained from connected graph using get_modules
-        (is mul_1 op inside BN scope)
+        :param bn_op: bn_op obtained from connected graph using get_modules (is mul_1 op inside BN scope)
         :return: gamma as numpy data
         """
         try:
@@ -238,11 +249,11 @@ class BNUtils:
         return numpy_data
 
     @staticmethod
-    def _bn_op_var_struct_1(bn_op: tf.Operation):
+    def _bn_op_var_struct_1(bn_op: tf.Operation) -> Union[tf.Operation, None]:
         """
-        Return moving_variance op corresponding to batchnorm with training tensor
-        :param bn_op: bn_op obtained from connected graph using get_modules
-        a mul_1 op inside BN scope.
+        Return moving_variance op corresponding to batchnorm with training tensor.
+
+        :param bn_op: bn_op obtained from connected graph using get_modules a mul_1 op inside BN scope.
         :return: Read operation for moving_variance
         """
         try:
@@ -261,11 +272,11 @@ class BNUtils:
             return None
 
     @staticmethod
-    def _bn_op_var_struct_2(bn_op: tf.Operation):
+    def _bn_op_var_struct_2(bn_op: tf.Operation) -> Union[tf.Operation, None]:
         """
-        Return moving_variance op corresponding to batchnorm with training=True
-        :param bn_op: bn_op obtained from connected graph using get_modules
-        a mul_1 op inside BN scope.
+        Return moving_variance op corresponding to batchnorm with training=True.
+
+        :param bn_op: bn_op obtained from connected graph using get_modules a mul_1 op inside BN scope.
         :return: Read operation for moving_variance
         """
         try:
@@ -286,11 +297,11 @@ class BNUtils:
             return None
 
     @staticmethod
-    def _bn_op_var_struct_3(bn_op: tf.Operation):
+    def _bn_op_var_struct_3(bn_op: tf.Operation) -> Union[tf.Operation, None]:
         """
-        Return moving_variance op corresponding to batchnorm with training=False
-        :param bn_op: bn_op obtained from connected graph using get_modules
-        a mul_1 op inside BN scope.
+        Return moving_variance op corresponding to batchnorm with training=False.
+
+        :param bn_op: bn_op obtained from connected graph using get_modules a mul_1 op inside BN scope.
         :return: Read operation for moving_variance
         """
         try:
@@ -307,11 +318,11 @@ class BNUtils:
             return None
 
     @staticmethod
-    def get_moving_variance_as_read_op(bn_op: tf.Operation):
+    def get_moving_variance_as_read_op(bn_op: tf.Operation) -> Union[tf.Operation, None]:
         """
-        get moving variance read op from BN op specified
-        :param bn_op: bn_op obtained from connected graph using get_modules
-        a mul_1 op inside BN scope.
+        Get moving variance read op from BN op specified.
+
+        :param bn_op: bn_op obtained from connected graph using get_modules a mul_1 op inside BN scope.
         :return: moving variance as read op
         """
         # register handlers for different structures
@@ -346,9 +357,10 @@ class BNUtils:
         return moving_var_read
 
     @staticmethod
-    def get_moving_variance_read_var_op_tensor(bn_op: tf.Operation)->tf.Tensor:
+    def get_moving_variance_read_var_op_tensor(bn_op: tf.Operation) -> tf.Tensor:
         """
-        get moving variance readVariableOp tensor from BN op specified
+        Get moving variance readVariableOp tensor from BN op specified.
+
         :param bn_op: FusedBatchNorm as tf.Operation
         :return: tensor associated with bn op moving variance readVariableOp type, as tf.Tensor
         """
@@ -379,12 +391,12 @@ class BNUtils:
         return moving_var_read_tensor
 
     @staticmethod
-    def get_moving_variance_as_numpy_data(sess: tf.Session, bn_op: tf.Operation):
+    def get_moving_variance_as_numpy_data(sess: tf.Session, bn_op: tf.Operation) -> np.ndarray:
         """
-        get moving variance param from BN op specified
+        Get moving variance param from BN op specified.
+
         :param sess: tensorflow session
-        :param bn_op: bn_op obtained from connected graph using get_modules
-        a mul_1 op inside BN scope.
+        :param bn_op: bn_op obtained from connected graph using get_modules a mul_1 op inside BN scope.
         :return: moving variance as numpy data
         """
 
@@ -402,11 +414,11 @@ class BNUtils:
         return numpy_data
 
     @staticmethod
-    def _bn_op_mean_struct_1(bn_op: tf.Operation):
+    def _bn_op_mean_struct_1(bn_op: tf.Operation) -> Union[tf.Operation, None]:
         """
-        Return moving_mean op corresponding to batchnorm with training tensor
-        :param bn_op: bn_op obtained from connected graph using get_modules
-        a mul_1 op inside BN scope.
+        Return moving_mean op corresponding to batchnorm with training tensor.
+
+        :param bn_op: bn_op obtained from connected graph using get_modules a mul_1 op inside BN scope.
         :return: Read operation for moving_mean
         """
         try:
@@ -423,11 +435,11 @@ class BNUtils:
             return None
 
     @staticmethod
-    def _bn_op_mean_struct_2(bn_op: tf.Operation):
+    def _bn_op_mean_struct_2(bn_op: tf.Operation) -> Union[tf.Operation, None]:
         """
-        Return moving_mean op corresponding to batchnorm with training=True
-        :param bn_op: bn_op obtained from connected graph using get_modules
-        a mul_1 op inside BN scope.
+        Return moving_mean op corresponding to batchnorm with training=True.
+
+        :param bn_op: bn_op obtained from connected graph using get_modules a mul_1 op inside BN scope.
         :return: Read operation for moving_mean
         """
         try:
@@ -446,9 +458,10 @@ class BNUtils:
             return None
 
     @staticmethod
-    def _bn_op_mean_struct_3(bn_op: tf.Operation):
+    def _bn_op_mean_struct_3(bn_op: tf.Operation) -> Union[tf.Operation, None]:
         """
-        Return moving_mean op corresponding to batchnorm with training=False
+        Return moving_mean op corresponding to batchnorm with training=False.
+
         :param bn_op: bn_op obtained from connected graph using get_modules
         a mul_1 op inside BN scope.
         :return: Read operation for moving_mean
@@ -465,11 +478,11 @@ class BNUtils:
             return None
 
     @staticmethod
-    def get_moving_mean_as_read_op(bn_op: tf.Operation):
+    def get_moving_mean_as_read_op(bn_op: tf.Operation) -> Union[tf.Operation, None]:
         """
-        get moving mean read op from BN op specified
-        :param bn_op: bn_op obtained from connected graph using get_modules
-        a mul_1 op inside BN scope.
+        Get moving mean read op from BN op specified.
+
+        :param bn_op: bn_op obtained from connected graph using get_modules a mul_1 op inside BN scope.
         :return: moving mean read op
         """
         if bn_op.type in ['FusedBatchNormV3']:
@@ -507,9 +520,10 @@ class BNUtils:
         return moving_mean_read
 
     @staticmethod
-    def get_moving_mean_read_var_op_tensor(bn_op: tf.Operation)->tf.Tensor:
+    def get_moving_mean_read_var_op_tensor(bn_op: tf.Operation) -> tf.Tensor:
         """
-        get moving mean readVariableOp tensor from BN op specified
+        Get moving mean readVariableOp tensor from BN op specified.
+
         :param bn_op: FusedBatchNorm as tf.Operation
         :return: tensor associated with bn op moving mean readVariableOp type, as tf.Tensor
         """
@@ -540,12 +554,12 @@ class BNUtils:
         return moving_mean_read_tensor
 
     @staticmethod
-    def get_moving_mean_as_numpy_data(sess: tf.Session, bn_op: tf.Operation):
+    def get_moving_mean_as_numpy_data(sess: tf.Session, bn_op: tf.Operation) -> np.ndarray:
         """
-        get moving mean param from BN op specified
+        Get moving mean param from BN op specified.
+
         :param sess: tensorflow session
-        :param bn_op: bn_op obtained from connected graph using get_modules
-        a mul_1 op inside BN scope.
+        :param bn_op: bn_op obtained from connected graph using get_modules a mul_1 op inside BN scope.
         :return: moving mean as numpy data
         """
 
@@ -563,11 +577,11 @@ class BNUtils:
         return numpy_data
 
     @staticmethod
-    def get_epsilon(bn_op: tf.Operation):
+    def get_epsilon(bn_op: tf.Operation) -> float:
         """
-        Returns epsilon extracted from given bn ip
-        :param bn_op: bn_op obtained from connected graph using get_modules
-        a mul_1 op inside BN scope.
+        Returns epsilon extracted from given bn op.
+
+        :param bn_op: bn_op obtained from connected graph using get_modules a mul_1 op inside BN scope.
         :return: epsilon value
         """
 
@@ -594,6 +608,7 @@ class BNUtils:
     def get_assign_moving_avg_op(bn_op: tf.Operation) -> Union[tf.Operation, None]:
         """
         Get assign_moving_avg op corresponding with the bn_op, if it exists.
+
         :param bn_op: Batchnorm op to search for corresponding assign_moving_avg op
         :return: assign_moving_op corresponding with the bn op, or None if it does not exist.
         """
@@ -617,6 +632,7 @@ class BNUtils:
     def get_assign_moving_avg_1_op(bn_op: tf.Operation) -> Union[tf.Operation, None]:
         """
         Get assign_moving_avg_1 op corresponding with the bn_op, if it exists.
+
         :param bn_op: Batchnorm op to search for corresponding assign_moving_avg_1 op
         :return: assign_moving_avg_1 corresponding with the bn op, or None if it does not exist.
         """
@@ -640,6 +656,7 @@ class BNUtils:
     def remove_bn_op_from_update_ops(sess: tf.Session, bn_op: tf.Operation):
         """
         Remove batchnorm assign_moving_avg and assign_moving_avg_1 ops from update ops.
+
         :param sess: tf Session
         :param bn_op: BatchNorm operation whose assign_moving_avg and assign_moving_avg_1 ops should be removed.
         """
@@ -657,12 +674,12 @@ class BNUtils:
     @staticmethod
     def _get_bn_param_tensor_using_name(sess: tf.Session, bn_op: tf.Operation, param_type: constants.BNOpParamType):
         """
-        Helper to get BN op param read tensor
+        Helper to get BN op param read tensor.
+
         :param sess: TensorFlow session tf.Session
         :param bn_op: BN op from which param read tensor is to be extracted
-        :param param_type: param type for which param tensor is to be
-        extracted, as constants.BNOpParamType (supported types are beta,
-        gamma, moving_mean or moving_variance)
+        :param param_type: param type for which param tensor is to be extracted, as constants.BNOpParamType (supported
+            types are beta, gamma, moving_mean or moving_variance)
         :return: param read tensor
         """
 
@@ -679,11 +696,11 @@ class BNUtils:
         return param_tensor
 
     @staticmethod
-    def _bn_op_momentum_struct_1(bn_op: tf.Operation):
+    def _bn_op_momentum_struct_1(bn_op: tf.Operation) -> Union[float, None]:
         """
-        Return momentum value corresponding to batchnorm with training tensor
-        :param bn_op: bn_op obtained from connected graph using get_modules
-        a mul_1 op inside BN scope.
+        Return momentum value corresponding to batchnorm with training tensor.
+
+        :param bn_op: bn_op obtained from connected graph using get_modules a mul_1 op inside BN scope.
         :return: momentum value
         """
         try:
@@ -707,11 +724,11 @@ class BNUtils:
             return None
 
     @staticmethod
-    def _bn_op_momentum_struct_2(bn_op: tf.Operation):
+    def _bn_op_momentum_struct_2(bn_op: tf.Operation) -> Union[float, None]:
         """
-        Return momentum value corresponding to batchnorm with training=True
-        :param bn_op: bn_op obtained from connected graph using get_modules
-        a mul_1 op inside BN scope.
+        Return momentum value corresponding to batchnorm with training=True.
+
+        :param bn_op: bn_op obtained from connected graph using get_modules a mul_1 op inside BN scope.
         :return: momentum value
         """
         try:
@@ -733,11 +750,11 @@ class BNUtils:
             return None
 
     @staticmethod
-    def _fused_bn_op_momentum_struct_1(bn_op: tf.Operation):
+    def _fused_bn_op_momentum_struct_1(bn_op: tf.Operation) -> Union[float, None]:
         """
-        Return momentum value corresponding to fused batchnorm with training tensor
-        :param bn_op: bn_op obtained from connected graph using get_modules
-        a mul_1 op inside BN scope.
+        Return momentum value corresponding to fused batchnorm with training tensor.
+
+        :param bn_op: bn_op obtained from connected graph using get_modules a mul_1 op inside BN scope.
         :return: momentum value
         """
         try:
@@ -759,11 +776,11 @@ class BNUtils:
             return None
 
     @staticmethod
-    def _fused_bn_op_momentum_struct_2(bn_op: tf.Operation):
+    def _fused_bn_op_momentum_struct_2(bn_op: tf.Operation) -> Union[float, None]:
         """
-        Return momentum value corresponding to fused batchnorm with training=True
-        :param bn_op: bn_op obtained from connected graph using get_modules
-        a mul_1 op inside BN scope.
+        Return momentum value corresponding to fused batchnorm with training=True.
+
+        :param bn_op: bn_op obtained from connected graph using get_modules a mul_1 op inside BN scope.
         :return: momentum value
         """
         try:
@@ -781,11 +798,11 @@ class BNUtils:
             return None
 
     @staticmethod
-    def get_momentum(bn_op: tf.Operation):
+    def get_momentum(bn_op: tf.Operation) -> float:
         """
         Returns momentum extracted from given bn op.  If bn op is training=False mode, momentum will be none.
-        :param bn_op: bn_op obtained from connected graph using get_modules
-        a mul_1 op inside BN scope.
+
+        :param bn_op: bn_op obtained from connected graph using get_modules a mul_1 op inside BN scope.
         :return: momentum value
         """
         # register handlers for different structures

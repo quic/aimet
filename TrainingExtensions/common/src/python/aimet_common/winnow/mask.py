@@ -4,7 +4,7 @@
 #
 #  @@-COPYRIGHT-START-@@
 #
-#  Copyright (c) 2019, Qualcomm Innovation Center, Inc. All rights reserved.
+#  Copyright (c) 2019-2020, Qualcomm Innovation Center, Inc. All rights reserved.
 #
 #  Redistribution and use in source and binary forms, with or without
 #  modification, are permitted provided that the following conditions are met:
@@ -61,58 +61,62 @@ class InternalConnectivity(abc.ABC):
     in the backward (output to input) directions.
     """
 
+    def __init__(self, input_mask_and_length_tuple: List[Tuple[List, int]],
+                 output_mask_and_length_tuple: List[Tuple[List, int]]):
+        """
+        :param input_mask_and_length_tuple: List of Tuples. Each Tuple contains a list of input masks and the mask
+            length
+        :param output_mask_and_length_tuple: List of Tuples. Each Tuple contains a list of output masks and the mask
+            length
+        """
+        self.initialize_masks(input_mask_and_length_tuple, output_mask_and_length_tuple)
+
     @staticmethod
-    def initialize_masks(input_mask_list: List[Tuple[List, int]], output_mask_list: List[Tuple[List, int]]):
+    def initialize_masks(input_mask_and_length_tuple: List[Tuple[List, int]],
+                         output_mask_and_length_tuple: List[Tuple[List, int]]):
+        """
+        Initialize input and output masks given lengths of each.
+
+        :param input_mask_and_length_tuple: List of Tuples. Each Tuple contains a list of input masks and the mask
+            length.
+        :param output_mask_and_length_tuple: List of Tuples. Each Tuple contains a list of output masks and the mask
+            length.
         """
 
-        :param input_mask_list: List of Tuples. Each Tuple contains a list of input masks and the mask length.
-        :param output_mask_list: List of Tuples. Each Tuple contains a list of output masks and the mask length.
-        :return:
-        """
-
-        if not input_mask_list and not output_mask_list:
+        if not input_mask_and_length_tuple and not output_mask_and_length_tuple:
             # SKIP internal Connectivity. Nothing to do.
             return
 
-        num_in_masks = len(input_mask_list)
+        num_in_masks = len(input_mask_and_length_tuple)
         for i in range(num_in_masks):
-            in_masks, in_mask_length = input_mask_list[i]
+            in_masks, in_mask_length = input_mask_and_length_tuple[i]
             assert in_mask_length > 0
             for _ in range(in_mask_length):
                 in_masks.append(1)
 
-        num_out_masks = len(output_mask_list)
+        num_out_masks = len(output_mask_and_length_tuple)
         for k in range(num_out_masks):
-            out_masks, out_mask_length = output_mask_list[k]
+            out_masks, out_mask_length = output_mask_and_length_tuple[k]
             if out_mask_length > 0:
                 for _ in range(out_mask_length):
                     out_masks.append(1)
 
     @abc.abstractmethod
-    def forward_propagate_the_masks(self, input_mask_list: List, output_mask_list: List):
+    def forward_propagate_the_masks(self, input_mask_list: List[List[int]], output_mask_list: List[List[int]]):
         """
-        Based on the internal connectivity and input mask(s), updates the output mask(s)
+        Based on the internal connectivity and input mask(s), updates the output mask(s).
 
         :param input_mask_list: The input mask(s) to be propagated
-        :param output_mask_list: The output mask(s) to be updated based on teh Op's Internal Connectivity
-        :return: None
+        :param output_mask_list: The output mask(s) to be updated based on the Op's Internal Connectivity
         """
 
     @abc.abstractmethod
-    def backward_propagate_the_masks(self, output_mask_list: List, input_mask_list: List):
+    def backward_propagate_the_masks(self, output_mask_list: List[List[int]], input_mask_list: List[List[int]]):
         """
-        Based on the internal connectivity and output mask(s), updates the input mask(s)
+        Based on the internal connectivity and output mask(s), updates the input mask(s).
 
-        :param ouput_mask_list:
-        :param input_mask_list:
-        :return: None
-        """
-
-    @abc.abstractmethod
-    def get_connectivity_type(self):
-        """
-
-        :return: The Internal Connectivity type
+        :param output_mask_list: The output mask(s) to be propagated
+        :param input_mask_list: The input mask(s) to be updated based on the Op's Internal Connectivity
         """
 
 
@@ -124,103 +128,76 @@ class SkipInternalConnectivity(InternalConnectivity):
     with the operators present in the model. During Mask Propagation, these operators are
     not a factor and are skipped over."""
 
-    def __init__(self, input_mask_list: List[Tuple[List, int]], output_mask_list: List[Tuple[List, int]]):
+    def forward_propagate_the_masks(self, input_mask_list: List[List[int]], output_mask_list: List[List[int]]):
         """
+        Based on the internal connectivity and input mask(s), updates the output mask(s).
 
-        :param input_mask_list: List of Tuples. Each Tuple contains a list of input masks and the mask length.
-        :param output_mask_list: List of Tuples. Each Tuple contains a list of output masks and the mask length.
-        """
-
-        # # The first Conv2d of the model doesn't have the input mask but its output channels can be pruned.
-        # # For all other Conv2d modules, there is one input mask and one output mask.
-        # if input_mask_list and output_mask_list:
-        #     assert len(input_mask_list) == len(output_mask_list) == 1
-
-        self.initialize_masks(input_mask_list, output_mask_list)
-
-    def forward_propagate_the_masks(self, input_mask_list: List, output_mask_list: List):
-        """
-
-        :param input_mask_list:
-        :param output_mask_list:
-        :return:
+        :param input_mask_list: The input mask(s) to be propagated
+        :param output_mask_list: The output mask(s) to be updated based on the Op's Internal Connectivity
         """
         # Since internal connectivity is SKIP, nothing needs to be done.
 
-    def backward_propagate_the_masks(self, output_mask_list: List, input_mask_list: List):
+    def backward_propagate_the_masks(self, output_mask_list: List[List[int]], input_mask_list: List[List[int]]):
         """
+        Based on the internal connectivity and output mask(s), updates the input mask(s).
 
-        :param output_mask_list:
-        :param input_mask_list:
-        :return:
+        :param output_mask_list: The output mask(s) to be propagated
+        :param input_mask_list: The input mask(s) to be updated based on the Op's Internal Connectivity
         """
         # Since internal connectivity is SKIP, nothing needs to be done.
-
-    def get_connectivity_type(self):
-        return ConnectivityType.skip
 
 
 class NullInternalConnectivity(InternalConnectivity):
     """ Models NULL internal connectivity for an Op. """
 
-    def __init__(self, input_mask_list: List[Tuple[List, int]], output_mask_list: List[Tuple[List, int]]):
+    def __init__(self, input_mask_and_length_tuple: List[Tuple[List, int]],
+                 output_mask_and_length_tuple: List[Tuple[List, int]]):
         """
-
-        :param input_mask_list: List of Tuples. Each Tuple contains a list of input masks and the mask length.
-        :param output_mask_list: List of Tuples. Each Tuple contains a list of output masks and the mask length.
+        :param input_mask_and_length_tuple: List of Tuples. Each Tuple contains a list of input masks and the mask
+            length.
+        :param output_mask_and_length_tuple: List of Tuples. Each Tuple contains a list of output masks and the mask
+            length.
         """
 
         # The first Conv2d of the model doesn't have the input mask but its output channels can be pruned.
         # For all other Conv2d modules, there is one input mask and one output mask.
-        if input_mask_list and output_mask_list:
-            assert len(input_mask_list) == len(output_mask_list) == 1
+        if input_mask_and_length_tuple and output_mask_and_length_tuple:
+            assert len(input_mask_and_length_tuple) == len(output_mask_and_length_tuple) == 1
 
-        self.initialize_masks(input_mask_list, output_mask_list)
+        super().__init__(input_mask_and_length_tuple, output_mask_and_length_tuple)
 
-    def forward_propagate_the_masks(self, input_mask_list: List, output_mask_list: List):
+    def forward_propagate_the_masks(self, input_mask_list: List[List[int]], output_mask_list: List[List[int]]) -> bool:
         """
+        Based on the internal connectivity and input mask(s), updates the output mask(s).
 
-        :param input_mask_list:
-        :param output_mask_list:
-        :return:
-        """
-        # Since internal connectivity is NULL, nothing needs to be done.
-        mask_changed = False
-        return mask_changed
-
-    def backward_propagate_the_masks(self, output_mask_list: List, input_mask_list: List):
-        """
-
-        :param ouput_mask_list:
-        :param input_mask_list:
-        :return:
+        :param input_mask_list: The input mask(s) to be propagated
+        :param output_mask_list: The output mask(s) to be updated based on the Op's Internal Connectivity
         """
         # Since internal connectivity is NULL, nothing needs to be done.
         mask_changed = False
         return mask_changed
 
-    def get_connectivity_type(self):
-        return ConnectivityType.null
+    def backward_propagate_the_masks(self, output_mask_list: List[List[int]], input_mask_list: List[List[int]]) -> bool:
+        """
+        Based on the internal connectivity and output mask(s), updates the input mask(s).
+
+        :param output_mask_list: The output mask(s) to be propagated
+        :param input_mask_list: The input mask(s) to be updated based on the Op's Internal Connectivity
+        """
+        # Since internal connectivity is NULL, nothing needs to be done.
+        mask_changed = False
+        return mask_changed
 
 
 class DirectInternalConnectivity(InternalConnectivity):
     """ Models DIRECT internal connectivity for an Op. """
 
-    def __init__(self, input_mask_list: List[Tuple[List, int]], output_mask_list: List[Tuple[List, int]]):
+    def forward_propagate_the_masks(self, input_mask_list: List[List[int]], output_mask_list: List[List[int]]) -> bool:
         """
+        Based on the internal connectivity and input mask(s), updates the output mask(s).
 
-        :param input_mask_list: List of Tuples. Each Tuple contains a list of input masks and the mask length.
-        :param output_mask_list: List of Tuples. Each Tuple contains a list of output masks and the mask length.
-        """
-
-        self.initialize_masks(input_mask_list, output_mask_list)
-
-    def forward_propagate_the_masks(self, input_mask_list: List, output_mask_list: List):
-        """
-
-        :param input_mask_list:
-        :param output_mask_list:
-        :return:
+        :param input_mask_list: The input mask(s) to be propagated
+        :param output_mask_list: The output mask(s) to be updated based on the Op's Internal Connectivity
         """
 
         mask_changed = False
@@ -230,47 +207,38 @@ class DirectInternalConnectivity(InternalConnectivity):
             output_mask_list[0] = input_mask_list[0]
             if output_mask_list[0] != original_out_mask:
                 mask_changed = True
-                logger.debug("Direct Connectivity: Output mask changed from %s to %s.", get_zero_positions_in_binary_mask(original_out_mask),
+                logger.debug("Direct Connectivity: Output mask changed from %s to %s.",
+                             get_zero_positions_in_binary_mask(original_out_mask),
                              get_zero_positions_in_binary_mask(output_mask_list[0]))
         return mask_changed
 
-    def backward_propagate_the_masks(self, output_mask_list: List, input_mask_list):
+    def backward_propagate_the_masks(self, output_mask_list: List[List[int]], input_mask_list: List[List[int]]) -> bool:
         """
+        Based on the internal connectivity and output mask(s), updates the input mask(s).
 
-        :param ouput_mask_list:
-        :param input_mask_list:
-        :return:
+        :param output_mask_list: The output mask(s) to be propagated
+        :param input_mask_list: The input mask(s) to be updated based on the Op's Internal Connectivity
         """
         mask_changed = False
         original_in_mask = input_mask_list[0]
         input_mask_list[0] = output_mask_list[0]
         if input_mask_list[0] != original_in_mask:
             mask_changed = True
-            logger.debug("Direct Connectivity: Input mask changed from %s to %s.", get_zero_positions_in_binary_mask(original_in_mask),
+            logger.debug("Direct Connectivity: Input mask changed from %s to %s.",
+                         get_zero_positions_in_binary_mask(original_in_mask),
                          get_zero_positions_in_binary_mask(input_mask_list[0]))
         return mask_changed
-
-    def get_connectivity_type(self):
-        return ConnectivityType.direct
 
 
 class SplitInternalConnectivity(InternalConnectivity):
     """ Models SPLIT internal connectivity for an Op. """
 
-    def __init__(self, input_mask_list: List[Tuple[List, int]], output_mask_list: List[Tuple[List, int]]):
+    def forward_propagate_the_masks(self, input_mask_list: List[List[int]], output_mask_list: List[List[int]]) -> bool:
         """
+        Based on the internal connectivity and input mask(s), updates the output mask(s).
 
-        :param input_mask_list: List of Tuples. Each Tuple contains a list of input masks and the mask length.
-        :param output_mask_list: List of Tuples. Each Tuple contains a list of output masks and the mask length.
-        """
-        self.initialize_masks(input_mask_list, output_mask_list)
-
-    def forward_propagate_the_masks(self, input_mask_list: List, output_mask_list: List):
-        """
-
-        :param input_mask_list:
-        :param output_mask_list:
-        :return:
+        :param input_mask_list: The input mask(s) to be propagated
+        :param output_mask_list: The output mask(s) to be updated based on the Op's Internal Connectivity
         """
         # Split has one input and multiple outputs.
         # All the output masks are set to the same value as the input mask.
@@ -283,18 +251,16 @@ class SplitInternalConnectivity(InternalConnectivity):
         num_out_masks = len(output_mask_list)
         for i in range(num_out_masks):
             output_mask_list[i] = input_mask
-        #logger.debug("SplitInternalConnectivity: Forward propagated :%s", zero_positions)
         mask_changed = True
         return mask_changed
 
-    def backward_propagate_the_masks(self, output_mask_list: List, input_mask_list):
+    def backward_propagate_the_masks(self, output_mask_list: List[List[int]], input_mask_list: List[List[int]]) -> bool:
         """
+        Based on the internal connectivity and output mask(s), updates the input mask(s).
 
-        :param ouput_mask_list:
-        :param input_mask_list:
-        :return:
+        :param output_mask_list: The output mask(s) to be propagated
+        :param input_mask_list: The input mask(s) to be updated based on the Op's Internal Connectivity
         """
-        #logger.debug("SplitInternalConnectivity: backward_propagate_the_masks")
 
         mask_changed = False
         saved_input_mask = input_mask_list[0]
@@ -313,38 +279,37 @@ class SplitInternalConnectivity(InternalConnectivity):
 
         return mask_changed
 
-    def get_connectivity_type(self):
-        return ConnectivityType.split
-
 
 class AddInternalConnectivity(InternalConnectivity):
     """ Models ADD internal connectivity for an Op. """
 
-    def __init__(self, input_mask_list: List[Tuple[List, int]], output_mask_list: List[Tuple[List, int]]):
+    def __init__(self, input_mask_and_length_tuple: List[Tuple[List, int]],
+                 output_mask_and_length_tuple: List[Tuple[List, int]]):
+        """
+        :param input_mask_and_length_tuple: List of Tuples. Each Tuple contains a list of input masks and the mask
+            length.
+        :param output_mask_and_length_tuple: List of Tuples. Each Tuple contains a list of output masks and the mask
+            length.
         """
 
-        :param input_mask_list: List of Tuples. Each Tuple contains a list of input masks and the mask length.
-        :param output_mask_list: List of Tuples. Each Tuple contains a list of output masks and the mask length.
-        """
-
-        if len(input_mask_list) < 2:
-            # As an intended design stratgey, winnower ignores certain types of Ops in ConnectedGraph's parse_xnode().
+        if len(input_mask_and_length_tuple) < 2:
+            # As an intended design strategy, winnower ignores certain types of Ops in ConnectedGraph's parse_xnode().
             # Because of this, in ConnectedGraph's connect_xnode(), an Add Op could have only one input.
             # This happens with teh Inception V3 models.
             # In this scenarios, the Add Op doesn't have an impact on winnowing and is ignored.
             # The Add Op can not be ignored during graph construction since there could be a legitimate Add Op in the
-            # model (e.g., ResNet18) whenere both the inputs are NOT ignored.
+            # model (e.g., ResNet18) where both the inputs are NOT ignored.
             # The Add op is ignored only when it has only one input as detected in this code block.
             return
-        assert len(output_mask_list) == 1
-        self.initialize_masks(input_mask_list, output_mask_list)
+        assert len(output_mask_and_length_tuple) == 1
+        super().__init__(input_mask_and_length_tuple, output_mask_and_length_tuple)
 
-    def forward_propagate_the_masks(self, input_mask_list: List, output_mask_list: List):
+    def forward_propagate_the_masks(self, input_mask_list: List[List[int]], output_mask_list: List[List[int]]) -> bool:
         """
+        Based on the internal connectivity and input mask(s), updates the output mask(s).
 
-        :param input_mask_list:
-        :param output_mask_list:
-        :return:
+        :param input_mask_list: The input mask(s) to be propagated
+        :param output_mask_list: The output mask(s) to be updated based on the Op's Internal Connectivity
         """
 
         # The Add Op has multiple inputs and a single output.
@@ -366,14 +331,13 @@ class AddInternalConnectivity(InternalConnectivity):
 
         return mask_changed
 
-    def backward_propagate_the_masks(self, output_mask_list: List, input_mask_list):
+    def backward_propagate_the_masks(self, output_mask_list: List[List[int]], input_mask_list: List[List[int]]) -> bool:
         """
+        Based on the internal connectivity and output mask(s), updates the input mask(s).
 
-        :param ouput_mask_list: List of Tuples. Each Tuple contains a list of input masks and the mask length.
-        :param input_mask_list: List of Tuples. Each Tuple contains a list of output masks and the mask length.
-        :return:
+        :param output_mask_list: The output mask(s) to be propagated
+        :param input_mask_list: The input mask(s) to be updated based on the Op's Internal Connectivity
         """
-        logger.debug("AddInternalConnectivity: backward_propagate_the_masks")
 
         mask_changed = False
         zero_positions = get_zero_positions_in_binary_mask(output_mask_list[0])
@@ -387,41 +351,40 @@ class AddInternalConnectivity(InternalConnectivity):
 
         return mask_changed
 
-    def get_connectivity_type(self):
-        return ConnectivityType.add
-
 
 class ConcatInternalConnectivity(InternalConnectivity):
     """ Models CONCAT internal connectivity for an Op. """
 
-    def __init__(self, input_mask_list: List[Tuple[List, int]], output_mask_list: List[Tuple[List, int]]):
+    def __init__(self, input_mask_and_length_tuple: List[Tuple[List, int]],
+                 output_mask_and_length_tuple: List[Tuple[List, int]]):
         """
-
-        :param input_mask_list: List of Tuples. Each Tuple contains a list of input masks and the mask length.
-        :param output_mask_list: List of Tuples. Each Tuple contains a list of output masks and the mask length.
+        :param input_mask_and_length_tuple: List of Tuples. Each Tuple contains a list of input masks and the mask
+            length.
+        :param output_mask_and_length_tuple: List of Tuples. Each Tuple contains a list of output masks and the mask
+            length.
         """
-        assert len(input_mask_list) > 1
-        assert len(output_mask_list) == 1
-        self.initialize_masks(input_mask_list, output_mask_list)
+        assert len(input_mask_and_length_tuple) > 1
+        assert len(output_mask_and_length_tuple) == 1
+        super().__init__(input_mask_and_length_tuple, output_mask_and_length_tuple)
 
-    def forward_propagate_the_masks(self, input_mask_list: List, output_mask_list: List):
+    def forward_propagate_the_masks(self, input_mask_list: List[List[int]], output_mask_list: List[List[int]]):
         """
+        Based on the internal connectivity and input mask(s), updates the output mask(s).
 
-        :param input_mask_list:
-        :param output_mask_list:
-        :return:
+        :param input_mask_list: The input mask(s) to be propagated
+        :param output_mask_list: The output mask(s) to be updated based on the Op's Internal Connectivity
         """
         assert len(input_mask_list) > 1
         assert len(output_mask_list) == 1
 
         output_mask_list[0] = [item for input_mask in input_mask_list for item in input_mask]
 
-    def backward_propagate_the_masks(self, output_mask_list: List, input_mask_list: List):
+    def backward_propagate_the_masks(self, output_mask_list: List[List[int]], input_mask_list: List[List[int]]):
         """
+        Based on the internal connectivity and output mask(s), updates the input mask(s).
 
-        :param output_mask_list:
-        :param input_mask_list:
-        :return:
+        :param output_mask_list: The output mask(s) to be propagated
+        :param input_mask_list: The input mask(s) to be updated based on the Op's Internal Connectivity
         """
 
         output_mask = output_mask_list[0]
@@ -442,43 +405,31 @@ class ConcatInternalConnectivity(InternalConnectivity):
                 input_mask_list[index] = segmented_mask
                 index += 1
 
-    def get_connectivity_type(self):
-        return ConnectivityType.concat
-
 
 class StopInternalConnectivity(InternalConnectivity):
     """ Models STOP internal connectivity for an Op. """
 
-    def __init__(self, input_mask_list: List[Tuple[List, int]], output_mask_list: List[Tuple[List, int]]):
+    def forward_propagate_the_masks(self, input_mask_list: List[List[int]], output_mask_list: List[List[int]]) -> bool:
         """
-        :param input_mask_list: List of Tuples. Each Tuple contains a list of input masks and the mask length.
-        :param output_mask_list: List of Tuples. Each Tuple contains a list of output masks and the mask length.
-        """
+        Based on the internal connectivity and input mask(s), updates the output mask(s).
 
-        self.initialize_masks(input_mask_list, output_mask_list)
-
-    def forward_propagate_the_masks(self, input_mask_list: List, output_mask_list: List):
-        """
-        :param input_mask_list:
-        :param output_mask_list:
-        :return:
+        :param input_mask_list: The input mask(s) to be propagated
+        :param output_mask_list: The output mask(s) to be updated based on the Op's Internal Connectivity
         """
         # Since internal connectivity is STOP, nothing needs to be done.
         mask_changed = False
         return mask_changed
 
-    def backward_propagate_the_masks(self, output_mask_list: List, input_mask_list: List):
+    def backward_propagate_the_masks(self, output_mask_list: List[List[int]], input_mask_list: List[List[int]]) -> bool:
         """
-        :param ouput_mask_list:
-        :param input_mask_list:
-        :return:
+        Based on the internal connectivity and output mask(s), updates the input mask(s).
+
+        :param output_mask_list: The output mask(s) to be propagated
+        :param input_mask_list: The input mask(s) to be updated based on the Op's Internal Connectivity
         """
         # Since internal connectivity is STOP, nothing needs to be done.
         mask_changed = False
         return mask_changed
-
-    def get_connectivity_type(self):
-        return ConnectivityType.stop
 
 
 # pylint: disable=too-many-instance-attributes
@@ -516,33 +467,25 @@ class Mask:
         self._set_default_input_output_masks(self._num_in_channels, self._num_out_channels)
 
     @property
-    def internal_connectivity(self):
+    def internal_connectivity(self) -> InternalConnectivity:
         """ Returns the internal connectivity """
         return self._internal_connectivity
 
-    def get_connectivity_type(self):
-        """
-
-        :return: Internal Connectivity type
-        """
-
-        return self._internal_connectivity.get_connectivity_type()
-
     @property
-    def input_channel_masks(self):
+    def input_channel_masks(self) -> List[List[int]]:
         """ Returns the input channel_mask. """
         return self._input_channel_masks
 
-    def set_input_channel_mask(self, index, in_channel_mask):
+    def set_input_channel_mask(self, index: int, in_channel_mask: List[int]):
         """ Sets the input channel mask. """
         self._input_channel_masks[index] = in_channel_mask
 
     @property
-    def output_channel_masks(self):
+    def output_channel_masks(self) -> List[List[int]]:
         """ Returns the output channel_mask. """
         return self._output_channel_masks
 
-    def set_output_channel_mask(self, index, out_channel_mask):
+    def set_output_channel_mask(self, index: int, out_channel_mask: List[int]):
         """ Sets the output channel mask. """
         original_mask = self._output_channel_masks[index]
         self._output_channel_masks[index] = out_channel_mask
@@ -552,8 +495,18 @@ class Mask:
                 logger.debug("For %s, for output mask index: %s mask changed from %s to %s", self._dotted_name, index,
                              get_zero_positions_in_binary_mask(original_mask), get_zero_positions_in_binary_mask(new_mask))
 
-    def _create_input_output_mask_and_length_tuples(self, num_input_masks, input_mask_length,
-                                                    num_output_masks, output_mask_length):
+    def _create_input_output_mask_and_length_tuples(self, num_input_masks: int, input_mask_length: int,
+                                                    num_output_masks: int, output_mask_length: int) \
+            -> Tuple[List[Tuple[List[int], int]], List[Tuple[List[int], int]]]:
+        """
+        Create a tuple of input and output mask lists and lengths for each mask list.
+
+        :param num_input_masks: Number of input masks
+        :param input_mask_length: Length of input masks
+        :param num_output_masks: Number of output masks
+        :param output_mask_length: Length of output masks
+        :return: Tuple of lists of tuples of input and output masks and their lengths
+        """
 
         input_mask_and_length_tuple_list = []
         output_mask_and_length_tuple_list = []
@@ -568,11 +521,17 @@ class Mask:
 
         return input_mask_and_length_tuple_list, output_mask_and_length_tuple_list
 
-    def _create_masks_list_for_single_input_multi_output_ops(self, in_channels):
+    def _create_masks_list_for_single_input_multi_output_ops(self, in_channels: int) \
+            -> Tuple[List[Tuple[List[int], int]], List[Tuple[List[int], int]]]:
 
-        """ For Ops that have single input and single outputs (e.g., Split), set the default mask value
-         (all 1s) for the output masks (multiple) based on the output consumer Ops' output shapes.
-         Set the default mask value (all 1s) for the input mask (single) based on the current Op's input shape. """
+        """
+        For Ops that have single input and multiple outputs (e.g., Split), set the default mask value
+        (all 1s) for the output masks (multiple) based on the output consumer Ops' output shapes.
+        Set the default mask value (all 1s) for the input mask (single) based on the current Op's input shape.
+
+        :param in_channels: Number of input channels
+        :return: Tuple of lists of tuples of input and output masks and their lengths
+        """
 
         input_masks_list = []
         output_masks_list = []
@@ -593,11 +552,17 @@ class Mask:
 
         return input_masks_list, output_masks_list
 
-    def _create_masks_list_for_multi_input_single_output_ops(self, out_channels):
+    def _create_masks_list_for_multi_input_single_output_ops(self, out_channels: int) \
+            -> Tuple[List[Tuple[List[int], int]], List[Tuple[List[int], int]]]:
 
-        """ For Ops that have multiple inputs and single output (e.g., Add, Concat), set the default mask value
+        """
+        For Ops that have multiple inputs and single output (e.g., Add, Concat), set the default mask value
         (all 1s) for the input masks (multiple) based on the input Op's output shapes. Set the default mask value
-        (all 1s) for the output mask (single) based on the current Op's output shape. """
+        (all 1s) for the output mask (single) based on the current Op's output shape.
+
+        :param out_channels: Number of output channels
+        :return: Tuple of lists of tuples of input and output masks and their lengths
+        """
 
         input_masks_list = []
         output_masks_list = []
@@ -621,8 +586,6 @@ class Mask:
     def _set_default_masks_for_conv_and_linear(self):
         """
         Set the default input and output masks for Conv and Linear modules.
-
-        :return: None
         """
         if self._op_type in get_conv_ops_for_api(self._model_api):
             num_input_masks = len(self._op_input_ops)
@@ -656,13 +619,12 @@ class Mask:
                 num_input_masks, input_mask_length, num_output_masks, output_mask_length)
             self._internal_connectivity = NullInternalConnectivity(in_mask_length_list, out_mask_length_list)
 
-    def _set_default_masks_for_direct_connectivity_ops(self, in_channels, out_channels):
+    def _set_default_masks_for_direct_connectivity_ops(self, in_channels: int, out_channels: int):
         """
         Set the default input and output masks for Modules that have "Direct" internal connectivity.
 
-        :param input_shape: The input shape of the module
-        :param output_shape: The output shape of the module
-        :return:
+        :param in_channels: Number of input channels
+        :param out_channels: Number of output channels
         """
 
         num_input_masks = len(self._op_input_ops)
@@ -688,15 +650,14 @@ class Mask:
 
         self._internal_connectivity = DirectInternalConnectivity(in_mask_length_list, out_mask_length_list)
 
-    def _set_default_masks_for_null_and_stop_connectivity_ops(self, in_channels, out_channels,
+    def _set_default_masks_for_null_and_stop_connectivity_ops(self, in_channels: int, out_channels: int,
                                                               is_null_connectivity: bool):
         """
         Set the default input and output masks for Modules that have "Null" internal connectivity.
 
-        :param input_shape: The input shape of the module
-        :param output_shape: The output shape of the module
+        :param in_channels: The number of input channels
+        :param out_channels: The number of output channels
         :param is_null_connectivity: True if op is null connectivity, False otherwise
-        :return:
         """
 
         num_input_masks = len(self._op_input_ops)
@@ -717,8 +678,13 @@ class Mask:
             self._internal_connectivity = StopInternalConnectivity(in_mask_length_list, out_mask_length_list)
 
     # pylint: disable=too-many-branches
-    def _set_default_input_output_masks(self, in_channels, out_channels):
-        """ Based on the Op type, sets default input and output channel masks. """
+    def _set_default_input_output_masks(self, in_channels: int, out_channels: int):
+        """
+        Based on the Op type, sets default input and output channel masks.
+
+        :param in_channels: The number of input channels
+        :param out_channels: The number of output channels
+        """
 
         op_connectivity = OpConnectivity.get_op_connectivity(self._model_api, self._op_type)
 
@@ -748,8 +714,8 @@ class Mask:
             in_masks_list, out_masks_list = self._create_masks_list_for_single_input_multi_output_ops(in_channels)
             self._internal_connectivity = SplitInternalConnectivity(in_masks_list, out_masks_list)
         elif op_connectivity == ConnectivityType.skip:
-            in_masks_list = None
-            out_masks_list = None
+            in_masks_list = []
+            out_masks_list = []
             self._internal_connectivity = SkipInternalConnectivity(in_masks_list, out_masks_list)
         elif op_connectivity == ConnectivityType.stop:
             self._set_default_masks_for_null_and_stop_connectivity_ops(in_channels, out_channels,
@@ -759,23 +725,37 @@ class Mask:
                          self._op_type, self._dotted_name, self._op_input_ops)
             raise NotImplementedError()
 
-    def _update_input_output_channels_to_winnow(self, channel_type: ChannelType, total_num_channels, winnow_channels):
+    def _update_input_output_channels_to_winnow(self, channel_type: ChannelType, total_num_channels: int,
+                                                winnow_channels: List[int]):
+        """
+        Set winnowed channels for the input or output mask.
+
+        :param channel_type: Determines whether mask to be winnowed is input or output
+        :param total_num_channels: Total number of channels
+        :param winnow_channels: Channel indices to be winnowed
+        """
 
         if winnow_channels:
             if max(winnow_channels) < total_num_channels:
                 for k in winnow_channels:
                     if channel_type == Mask.ChannelType.INPUT:
                         self._input_channel_masks[0][k] = 0
-                        #logger.debug("Updated in channels: %s", self._input_channel_masks)
                     else:
                         self._output_channel_masks[0][k] = 0
-                        #logger.debug("Updated out channels: %s", self._output_channel_masks)
             else:
                 logger.error("Max channel number to winnow: %s exceeds the module's max channels: %s",
                              max(winnow_channels), total_num_channels)
 
-    def _update_conv_linear_channels_to_winnow(self, in_channels_total_and_winnow, out_channels_total_and_winnow):
-        """ For Conv2d and Linear modules, sets the input and output channel masks. """
+    def _update_conv_linear_channels_to_winnow(self, in_channels_total_and_winnow: Tuple[int, List[int]],
+                                               out_channels_total_and_winnow: Tuple[int, List[int]]):
+        """
+        For Conv2d and Linear modules, sets the input and output channel masks.
+
+        :param in_channels_total_and_winnow: Tuple of number of total input channels and list of input channels to
+            winnow.
+        :param out_channels_total_and_winnow: Tuple of number of total output channels and list of output channels to
+            winnow.
+        """
 
         if in_channels_total_and_winnow:
             in_total, in_winnow = in_channels_total_and_winnow
@@ -799,12 +779,17 @@ class Mask:
 
         return True
 
-    def update_channels_to_winnow(self, op_type, list_of_zero_in_channels, list_of_zero_out_channels):
-        """ Sets the parameters associated with Mask Propagation"""
+    def update_channels_to_winnow(self, list_of_zero_in_channels: List[int], list_of_zero_out_channels: List[int]):
+        """
+        Sets the parameters associated with Mask Propagation
+
+        :param list_of_zero_in_channels: List of in channels to winnow
+        :param list_of_zero_out_channels: List of out channels to winnow
+        """
 
         if self._op_type not in get_conv_ops_for_api(self._model_api) and \
                 self._op_type not in get_linear_ops_for_api(self._model_api):
-            raise ValueError(" Module type %s is not allowed to be winnowed" % op_type)
+            raise ValueError(" Module type %s is not allowed to be winnowed" % self._op_type)
 
         if self._op_type in get_conv_ops_for_api(self._model_api):
             num_in_channels = self._num_in_channels
@@ -836,7 +821,3 @@ class Mask:
             if self._internal_connectivity is not None:
                 self._internal_connectivity.backward_propagate_the_masks(self._output_channel_masks,
                                                                          self._input_channel_masks)
-
-    def get_input_output_channel_masks(self):
-        """ Returns the input and output channel masks associated with this Op."""
-        return self._input_channel_masks, self._output_channel_masks

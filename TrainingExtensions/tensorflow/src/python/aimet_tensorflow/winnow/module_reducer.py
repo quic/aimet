@@ -44,6 +44,7 @@ from typing import List, Tuple, Dict
 import tensorflow as tf
 from tensorflow.contrib import graph_editor
 
+import aimet_common.winnow.module_reducer
 from aimet_common.connected_graph.connectedgraph import get_ordered_ops
 import aimet_common.winnow.winnow_utils
 from aimet_common.winnow.mask import Mask
@@ -67,7 +68,7 @@ class ReducedInfo:
         self.module = module
 
 
-class ModuleReducer(aimet_common.winnow.winnow_utils.ModuleReducer):
+class ModuleReducer(aimet_common.winnow.module_reducer.ModuleReducer):
     """ Class responsible for reducing TensorFlow modules. """
 
     def __init__(self, conn_graph: ConnectedGraph, sess: tf.Session, using_cuda: bool, reshape: bool,
