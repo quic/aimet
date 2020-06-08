@@ -69,8 +69,6 @@ class TestTfConnectedGraph(unittest.TestCase):
         tf.reset_default_graph()
 
         _ = keras_model()
-        # all_ops = tf.get_default_graph().get_operations()
-        # _ = tf.summary.FileWriter('./keras_model', tf.get_default_graph())
         conn_graph = ConnectedGraph(tf.get_default_graph(), ['conv2d_input'], ['keras_model/Softmax'])
         self.assertTrue(validate_branch_ops(conn_graph))
         self.assertTrue(validate_product_tensor_lists(conn_graph))
@@ -86,8 +84,6 @@ class TestTfConnectedGraph(unittest.TestCase):
         tf.reset_default_graph()
 
         _ = keras_model_functional()
-        # all_ops = tf.get_default_graph().get_operations()
-        # _ = tf.summary.FileWriter('./keras_model_functional', tf.get_default_graph())
         conn_graph = ConnectedGraph(tf.get_default_graph(), ['input_1'], ['keras_model_functional/Softmax'])
         self.assertTrue(validate_branch_ops(conn_graph))
         self.assertTrue(validate_product_tensor_lists(conn_graph))
@@ -109,8 +105,6 @@ class TestTfConnectedGraph(unittest.TestCase):
         tf.reset_default_graph()
 
         _ = keras_model_functional_with_non_fused_batchnorms()
-        # all_ops = tf.get_default_graph().get_operations()
-        # _ = tf.summary.FileWriter('./keras_model_functional_with_non_fused_batchnorms', tf.get_default_graph())
         conn_graph = ConnectedGraph(tf.get_default_graph(), ['input_1'],
                                     ['keras_model_functional_with_non_fused_batchnorms/Softmax'])
         self.assertTrue(validate_branch_ops(conn_graph))
@@ -135,8 +129,6 @@ class TestTfConnectedGraph(unittest.TestCase):
 
         x = tf.placeholder(tf.float32, [1, 32, 32, 3])
         _ = tf_slim_basic_model(x)
-        # all_ops = tf.get_default_graph().get_operations()
-        # _ = tf.summary.FileWriter('./tf_slim_model', tf.get_default_graph())
         conn_graph = ConnectedGraph(tf.get_default_graph(), ['Placeholder'], ['tf_slim_model/Softmax'])
         self.assertTrue(validate_branch_ops(conn_graph))
         self.assertTrue(validate_product_tensor_lists(conn_graph))
@@ -161,8 +153,6 @@ class TestTfConnectedGraph(unittest.TestCase):
 
         x = tf.placeholder(tf.float32, [1, 32, 32, 3])
         _ = tf_slim_with_softmax(x)
-        # all_ops = tf.get_default_graph().get_operations()
-        # _ = tf.summary.FileWriter('./tf_slim_with_softmax', tf.get_default_graph())
         conn_graph = ConnectedGraph(tf.get_default_graph(), ['Placeholder'], ['softmax/Reshape_1'])
         self.assertTrue(validate_branch_ops(conn_graph))
         self.assertTrue(validate_product_tensor_lists(conn_graph))
@@ -178,8 +168,6 @@ class TestTfConnectedGraph(unittest.TestCase):
 
         tf.reset_default_graph()
         _ = single_residual()
-        # all_ops = tf.get_default_graph().get_operations()
-        # _ = tf.summary.FileWriter('./single_residual', tf.get_default_graph())
         conn_graph = ConnectedGraph(tf.get_default_graph(), ['input_1'], ['single_residual/Softmax'])
         self.assertTrue(validate_branch_ops(conn_graph))
         self.assertTrue(validate_product_tensor_lists(conn_graph))
@@ -194,8 +182,6 @@ class TestTfConnectedGraph(unittest.TestCase):
         tf.reset_default_graph()
 
         _ = split_and_concat_model()
-        # all_ops = tf.get_default_graph().get_operations()
-        # _ = tf.summary.FileWriter('./split_and_concat', tf.get_default_graph())
         conn_graph = ConnectedGraph(tf.get_default_graph(), ['input_1'], ['split_and_concat_model/Softmax'])
         self.assertTrue(validate_branch_ops(conn_graph))
         self.assertTrue(validate_product_tensor_lists(conn_graph))
@@ -210,8 +196,6 @@ class TestTfConnectedGraph(unittest.TestCase):
         tf.reset_default_graph()
 
         _ = concat_model()
-        # all_ops = tf.get_default_graph().get_operations()
-        # _ = tf.summary.FileWriter('./concat', tf.get_default_graph())
         conn_graph = ConnectedGraph(tf.get_default_graph(), ['input_1'], ['concat_model/Softmax'])
         self.assertTrue(validate_branch_ops(conn_graph))
         self.assertTrue(validate_product_tensor_lists(conn_graph))
@@ -232,8 +216,6 @@ class TestTfConnectedGraph(unittest.TestCase):
 
         tf.reset_default_graph()
         _ = dropout_keras_model()
-        # all_ops = tf.get_default_graph().get_operations()
-        # _ = tf.summary.FileWriter('./dropout_keras', tf.get_default_graph())
         conn_graph = ConnectedGraph(tf.get_default_graph(), ['input_1'], ['dropout_keras_model/Softmax'])
         self.assertTrue(validate_branch_ops(conn_graph))
         self.assertTrue(validate_product_tensor_lists(conn_graph))
@@ -247,8 +229,6 @@ class TestTfConnectedGraph(unittest.TestCase):
 
         tf.reset_default_graph()
         _ = dropout_slim_model()
-        # all_ops = tf.get_default_graph().get_operations()
-        # _ = tf.summary.FileWriter('./dropout_slim', tf.get_default_graph())
         conn_graph = ConnectedGraph(tf.get_default_graph(), ['input_1'], ['dropout_slim_model/Softmax'])
         self.assertTrue(validate_branch_ops(conn_graph))
         self.assertTrue(validate_product_tensor_lists(conn_graph))
@@ -266,8 +246,6 @@ class TestTfConnectedGraph(unittest.TestCase):
         tf.reset_default_graph()
         inp = tf.placeholder(tf.float32, [1, 224, 224, 3])
         _ = vgg.vgg_16(inp)
-        # all_ops = tf.get_default_graph().get_operations()
-        # _ = tf.summary.FileWriter('./vgg16_slim', tf.get_default_graph())
         conn_graph = ConnectedGraph(tf.get_default_graph(), ['Placeholder'], ['vgg_16/fc8/squeezed'])
         self.assertTrue(validate_branch_ops(conn_graph))
         self.assertTrue(validate_product_tensor_lists(conn_graph))
@@ -281,8 +259,6 @@ class TestTfConnectedGraph(unittest.TestCase):
 
         tf.reset_default_graph()
         _ = multiple_input_model()
-        # all_ops = tf.get_default_graph().get_operations()
-        # _ = tf.summary.FileWriter('./multiple_input_model', tf.get_default_graph())
         conn_graph = ConnectedGraph(tf.get_default_graph(), ['input1', 'input2'], ['multiple_input_model/Softmax'])
         self.assertTrue(validate_branch_ops(conn_graph))
         self.assertTrue(validate_product_tensor_lists(conn_graph))
@@ -318,7 +294,6 @@ class TestTfConnectedGraph(unittest.TestCase):
         _ = upsample_model()
         init = tf.global_variables_initializer()
         sess.run(init)
-        # _ = tf.summary.FileWriter('./upsample_model', tf.get_default_graph())
 
         input_op_names = ['input_1']
         output_op_names = ['upsample_model/Softmax']
@@ -362,7 +337,6 @@ class TestTfConnectedGraph(unittest.TestCase):
         """ Test connected graph construction on model with upsample2D op """
         tf.reset_default_graph()
         _ = model_with_upsample2d()
-        # _ = tf.summary.FileWriter('./model_with_upsample2d', tf.get_default_graph())
         conn_graph = ConnectedGraph(tf.get_default_graph(), starting_op_names=['input_1'],
                                     output_op_names=['model_with_upsample2d/Softmax'])
         self.assertTrue(validate_branch_ops(conn_graph))
@@ -385,7 +359,6 @@ class TestTfConnectedGraph(unittest.TestCase):
         """ Test connected graph construction on model with leaky relu op """
         tf.reset_default_graph()
         _ = model_with_leaky_relu()
-        # _ = tf.summary.FileWriter('./model_with_leaky_relu', tf.get_default_graph())
         conn_graph = ConnectedGraph(tf.get_default_graph(), starting_op_names=['input_1'],
                                     output_op_names=['model_with_leaky_relu/Softmax'])
         self.assertTrue(validate_branch_ops(conn_graph))
@@ -408,7 +381,6 @@ class TestTfConnectedGraph(unittest.TestCase):
         """ Test connected graph construction on model with leaky relu op """
         tf.reset_default_graph()
         _ = model_with_global_max_pool2d()
-        # _ = tf.summary.FileWriter('./model_with_global_max_pool2d', tf.get_default_graph())
         conn_graph = ConnectedGraph(tf.get_default_graph(), starting_op_names=['input_1'],
                                     output_op_names=['model_with_global_max_pool2d/Softmax'])
         self.assertTrue(validate_branch_ops(conn_graph))

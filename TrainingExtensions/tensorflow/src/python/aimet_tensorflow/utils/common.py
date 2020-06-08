@@ -149,7 +149,7 @@ def get_succeeding_bias_tensor(op: tf.Operation) -> tf.Tensor:
     bias = None
     for consumer in op.outputs[0].consumers():
 
-        if consumer.type in ('Add', 'BiasAdd') and len(consumer.inputs[1].shape) == 1:
+        if consumer.type == 'BiasAdd':
             bias = consumer.inputs[1]
 
     return bias

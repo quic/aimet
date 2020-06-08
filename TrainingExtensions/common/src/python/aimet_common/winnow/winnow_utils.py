@@ -4,7 +4,7 @@
 #
 #  @@-COPYRIGHT-START-@@
 #
-#  Copyright (c) 2019, Qualcomm Innovation Center, Inc. All rights reserved.
+#  Copyright (c) 2019-2020, Qualcomm Innovation Center, Inc. All rights reserved.
 #
 #  Redistribution and use in source and binary forms, with or without
 #  modification, are permitted provided that the following conditions are met:
@@ -40,61 +40,33 @@
 
 """ Contains Winnowing related utility functions are used by both PyTorch and TensorFlow Winnower. """
 
-import abc
-from typing import List, Set
+from typing import List, Set, Union
 from enum import Enum
 from aimet_common.utils import ModelApi
 
 
-def get_one_positions_in_binary_mask(mask):
+def get_one_positions_in_binary_mask(mask: List[int]) -> List[int]:
     """
     Return the indices of one positions in a binary mask.
+
     :param mask: a mask that contains either 0s or 1s
-    :return:
+    :return: List of indices of positions of ones in a binary mask.
     """
 
     mask_one_positions = [idx for (idx, channel) in enumerate(mask) if channel]
     return mask_one_positions
 
 
-def get_zero_positions_in_binary_mask(mask):
+def get_zero_positions_in_binary_mask(mask: List[int]) -> List[int]:
     """
     Return the indices of zero positions in a binary mask.
+
     :param mask: a mask that contains either 0s or 1s
-    :return: list of indices that contain 0s
+    :return: List of indices of positions of zeros in a binary mask.
     """
 
     mask_zero_positions = [idx for (idx, channel) in enumerate(mask) if not channel]
     return mask_zero_positions
-
-
-class ModuleReducer(abc.ABC):
-    """ The ModuleReducer class contains functionality to reduce a module's weight parameter and adjust the module's
-    number of input and output channels.
-    """
-
-    def __init__(self, using_cuda, reshape, op_to_mask_dict: dict):
-        """
-        ModuleReducer initialization.
-
-        :param using_cuda: Indicates if a module is on GPU.
-        :param reshape: If True, ModuleReducer will add DownsampleLayer and UpsampleLayer as needed.
-                        If False, ModuleReducer will not add DownsampleLayer and UpsampleLayer.
-        :param op_to_mask_dict: Dictionary mapping Op to mask
-        """
-
-        self._using_cuda = using_cuda
-        self._reshape = reshape
-        self._op_to_mask_dict = op_to_mask_dict
-
-    @abc.abstractmethod
-    def reduce_modules(self, list_of_ops_to_reduce: List):
-        """
-        For the Ops in the list, reduce the corresponding module.
-
-        :param list_of_ops_to_reduce: list of Ops  whose associated modules need to be reduced.
-        :return: list of reduced modules
-        """
 
 
 class ConnectivityType(Enum):
@@ -222,7 +194,7 @@ class OpConnectivity:
                        'GlobalMaxpool2D': ConnectivityType.stop}
 
     @classmethod
-    def get_op_connectivity(cls, model_api: ModelApi, op_type: str) -> ConnectivityType:
+    def get_op_connectivity(cls, model_api: ModelApi, op_type: str) -> Union[ConnectivityType, None]:
         """
         Get op connectivity for a module, and return None if the module is not recognized.
         :param model_api: Represents either pytorch or tensorflow
@@ -235,20 +207,28 @@ class OpConnectivity:
 
 
 def get_conv_ops_for_api(model_api: ModelApi) -> Set:
-    """ Return a set of op types that represent conv ops, based on the model api """
+    """
+    Return a set of op types that represent conv ops, based on the model api
+
+    :param model_api: Enum for whether the api is pytorch or tensorflow
+    """
     if model_api == ModelApi.pytorch:
         return {'Conv', 'Conv2d', 'ConvTranspose', 'convolution'}   # 'convolution' used in new connected graph
     return {'Conv2D', 'DepthwiseConv2dNative'}
 
 
 def get_linear_ops_for_api(model_api: ModelApi) -> Set:
-    """ Return a set of op types that represent linear ops, based on the model api """
+    """
+    Return a set of op types that represent linear ops, based on the model api
+
+    :param model_api: Enum for whether the api is pytorch or tensorflow
+    """
     if model_api == ModelApi.pytorch:
         return {'Linear', 'addmm', 'matmul'}    # 'addmm' and 'matmul' used in new connected graph
     return {'Dense'}
 
 
-def get_indices_among_ones_of_overlapping_ones(more_ones_mask: List, less_ones_mask: List) -> List:
+def get_indices_among_ones_of_overlapping_ones(more_ones_mask: List[int], less_ones_mask: List[int]) -> List[int]:
     """
     :param more_ones_mask: Mask that has more ones
     :param less_ones_mask: Mask that has less ones
