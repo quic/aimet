@@ -54,11 +54,23 @@ logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.ConnectedGraph)
 class ModuleIdentifierOpInfo:
     """ Class for summarizing information regarding a tf operation """
     def __init__(self, module_name, op_type, tf_op, tf_api=TfApi.keras, pattern_type: str = None):
+        """
+        Initialize the ModuleIdentifierOpInfo class.
+
+        :param module_name: Module name associated with the module
+        :param op_type: Op type associated with the module (this will be the type shown in ConnectedGraph)
+        :param tf_op: Main op associated with the module (may be different than the op corresponding to this object
+            in the op_to_module_dict)
+        :param tf_api: Keras or Slim depending on which api was used to generate this module
+        :param pattern_type: Pattern used to generate the graph that matched the op corresponding to the
+            ModuleIdentifierOpInfo object. Only used in subgraph matcher
+        """
         self._module_name = module_name
         self._op_type = op_type
         self._tf_op = tf_op
         self._tf_api = tf_api
-        # Pattern type is only used in subgraph matcher
+        # Pattern type is only used in subgraph matcher, and contains info about which pattern (Conv2D_keras,
+        # Conv2D_keras_with_bias, etc. was used to match the op for this op info class.
         self._pattern_type = pattern_type
         self._attributes = {}
 

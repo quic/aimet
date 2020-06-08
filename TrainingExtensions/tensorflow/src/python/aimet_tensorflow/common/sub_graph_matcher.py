@@ -207,7 +207,9 @@ class SubGraphMatcher:
         """
         Initialize the SubGraphMatcher.
 
-        :param graph: Session Graph associated with the model.
+        :param graph: Session Graph associated with the model
+        :param op_to_module_dict: Dictionary mapping op to module op info, to be filled in by SubGraphMatcher
+        :param valid_ops: Ops that will be considered during module detection
         """
 
         self._graph = graph
@@ -232,7 +234,7 @@ class SubGraphMatcher:
         Create OpTypePattern objects for individual Ops. Use the OpTypePattern objects to detect Ops in a
         specific Session Graph. Keep the detected Ops and their associated internal Ops.
 
-        :return:
+        :param op_to_module_dict: Dictionary mapping op to module op info, to be filled in by SubGraphMatcher
         """
 
         self.create_patterns_for_ops()
@@ -254,6 +256,9 @@ class SubGraphMatcher:
                 # op was already matched with a different pattern previously. Compare lengths of the previous
                 # pattern with current pattern, and replace the previous op type with the current op type if more
                 # ops were matched.
+                # This can happen if one pattern is a subset of another (Conv2D without bias vs Conv2D with bias for
+                # example. If the same op is matched with both patterns, we will pick Conv2D with bias to be the one
+                # to use.
                 op_info = op_to_module_dict[op]
                 if self._pattern_subgraph[op_info.op_type]['length'] >= \
                         self._pattern_subgraph[current_pattern]['length']:
