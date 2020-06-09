@@ -79,7 +79,7 @@ def run_hook_for_layers(model: torch.nn.Module, input_shapes: Union[Tuple, List[
     # ------------------------
     hooks = []
     # All leaf modules
-    modules = [module for module in model.modules() if leaf_node_only is False or is_leaf_module(module)]
+    modules = [module for module in model.modules() if not leaf_node_only or is_leaf_module(module)]
     if module_type_for_attaching_hook:
         # if needed, filter by module types specified by caller
         modules = [module for module in modules if isinstance(module, module_type_for_attaching_hook)]

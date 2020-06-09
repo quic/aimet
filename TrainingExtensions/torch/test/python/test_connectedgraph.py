@@ -128,11 +128,11 @@ class TestConnectedGraph(unittest.TestCase):
         conn_graph = ConnectedGraph(model, (inp_data_1,))
         self.assertEqual(10, len(conn_graph.ordered_ops))
         self.assertEqual(conn_graph.get_op_from_module_name('ModuleListModel.mod_list.4'), conn_graph.ordered_ops[0])
-        self.assertEqual(conn_graph.get_op_from_module_name('ModuleListModel.mod_list.7'), conn_graph.ordered_ops[1])
+        self.assertEqual(conn_graph.get_op_from_module_name('ModuleListModel.seq_list.2'), conn_graph.ordered_ops[1])
         self.assertEqual(conn_graph.get_op_from_module_name('ModuleListModel.mod_list.1'), conn_graph.ordered_ops[2])
         self.assertEqual(conn_graph.get_op_from_module_name('ModuleListModel.mod_list.0'), conn_graph.ordered_ops[3])
         self.assertEqual(conn_graph.get_op_from_module_name('ModuleListModel.mod_list.2'), conn_graph.ordered_ops[4])
-        self.assertEqual(conn_graph.get_op_from_module_name('ModuleListModel.mod_list.5'), conn_graph.ordered_ops[5])
+        self.assertEqual(conn_graph.get_op_from_module_name('ModuleListModel.seq_list.0'), conn_graph.ordered_ops[5])
 
     def test_concat(self):
         """ Test building ConnectedGraph on a model with concat """
@@ -166,6 +166,7 @@ class TestConnectedGraph(unittest.TestCase):
         self.assertEqual(model.dropout2, dropout_2_op.get_module())
 
     def test_sequential(self):
+        # pylint: disable=protected-access
         """ Test building ConnectedGraph on a model constructed with nn.Sequential Module """
         model = SequentialModel()
         model.eval()

@@ -159,20 +159,22 @@ class ModuleListModel(nn.Module):
             nn.ReLU(inplace=True),      # use 3rd
             nn.Conv2d(16, 8, kernel_size=2, stride=2, padding=2),                # use 5th
             nn.ReLU(),      # dummy unused op
-            nn.Conv2d(3, 16, kernel_size=2, stride=2, padding=2, bias=False),       # use 1st
+            nn.Conv2d(3, 16, kernel_size=2, stride=2, padding=2, bias=False)        # use 1st
+        ])
+        self.seq_list = nn.Sequential(
             nn.Conv2d(8, 4, kernel_size=2, stride=2, padding=2),                # use 6th
             nn.ReLU(),      # dummy unused op
             nn.BatchNorm2d(16),     # use 2nd
-        ])
+        )
         self.fc = nn.Linear(64, num_classes)
 
     def forward(self, *inputs):
         x = self.mod_list[4](inputs[0])
-        x = self.mod_list[7](x)
+        x = self.seq_list[2](x)
         x = self.mod_list[1](x)
         x = self.mod_list[0](x)
         x = self.mod_list[2](x)
-        x = self.mod_list[5](x)
+        x = self.seq_list[0](x)
         x = x.view(x.size(0), -1)
         x = self.fc(x)
         return x
@@ -290,8 +292,8 @@ class BasicConv2d(nn.Module):
         self.dropout = torch.nn.Dropout(p=0.1)
         self.bn = nn.BatchNorm2d(64, eps=0.001)
 
-    def forward(self, x):
-        x = self.conv(x)
+    def forward(self, *inputs):
+        x = self.conv(inputs[0])
         x = self.dropout(x)
         x = self.bn(x)
         return nn.functional.relu(x, inplace=True)
@@ -302,9 +304,9 @@ class MultiConv2dModel(nn.Module):
     def __init__(self):
         super(MultiConv2dModel, self).__init__()
         self.seq_list = nn.Sequential(
-         BasicConv2d(kernel_size=3),
-         BasicConv2d(kernel_size=1),
-         BasicConv2d(kernel_size=3)
+            BasicConv2d(kernel_size=3),
+            BasicConv2d(kernel_size=1),
+            BasicConv2d(kernel_size=3)
         )
 
     def forward(self, *inputs):
@@ -345,11 +347,11 @@ class HierarchicalModel(nn.Module):
 
     def forward(self, *inputs):
         x = self.conv1((inputs[0]))
-        x= x.narrow(1, 0, 3)
+        x = x.narrow(1, 0, 3)
         c1 = self.nm1(x, inputs[1])
         x = self.conv2(inputs[2])
         x = self.multi_conv(x)
-        x= x.narrow(1, 0, 3)
+        x = x.narrow(1, 0, 3)
         c2 = self.nm2(x, inputs[3])
         c3 = self.sq(inputs[4])
         cat_inputs = [c1, c2, c3]
