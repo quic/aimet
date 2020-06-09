@@ -93,6 +93,7 @@ class OpConnectivity:
                     'ConvTranspose': ConnectivityType.null,
                     'ConvTranspose2d': ConnectivityType.null,
                     'Linear': ConnectivityType.null,
+                    'DownsampleLayer': ConnectivityType.stop,
                     'Dropout': ConnectivityType.direct,
                     'Dropout2d': ConnectivityType.direct,
                     'Relu': ConnectivityType.direct,
