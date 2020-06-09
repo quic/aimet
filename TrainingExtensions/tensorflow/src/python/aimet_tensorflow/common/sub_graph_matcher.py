@@ -61,134 +61,134 @@ subgraph_constructors = {
         'input_shape': (1, 10, 10, 3),
         'op_type': 'Conv2D',
         'constructor': "tf.keras.layers.Conv2D(10, (1, 1), use_bias=False)(constants)",
-        'module_regex': '(.+)/Conv2D$',
-        'associated_op_regex': 'Conv2D$'
+        'module_regex': ['(.+)/Conv2D$'],
+        'associated_op_regex': ['Conv2D$']
     },
     'Conv2D_keras_with_bias': {
         'input_shape': (1, 10, 10, 3),
         'op_type': 'Conv2D',
         'constructor': "tf.keras.layers.Conv2D(10, (1, 1), use_bias=True)(constants)",
-        'module_regex': '(.+)/Conv2D$',
-        'associated_op_regex': 'Conv2D$'
+        'module_regex': ['(.+)/Conv2D$'],
+        'associated_op_regex': ['Conv2D$']
     },
     'Conv2D_slim_with_bias': {
         'input_shape': (1, 10, 10, 3),
         'op_type': 'Conv2D',
         'constructor': "slim.conv2d(constants, 10, [3, 3], activation_fn=None)",
-        'module_regex': '(.+)/Conv2D$',
-        'associated_op_regex': 'Conv2D$'
+        'module_regex': ['(.+)/Conv2D$', '(.+)/convolution$'],
+        'associated_op_regex': ['Conv2D$', 'convolution$']
     },
     'Dense_keras': {
         'input_shape': (1, 10),
         'op_type': 'Dense',
         'constructor': "tf.keras.layers.Dense(10, activation=None)(constants)",
-        'module_regex': '(.+)/MatMul$',
-        'associated_op_regex': 'MatMul$'
+        'module_regex': ['(.+)/MatMul$'],
+        'associated_op_regex': ['MatMul$']
     },
     'Dense_slim': {
         'input_shape': (1, 10),
         'op_type': 'Dense',
         'constructor': "slim.fully_connected(constants, num_outputs=10, activation_fn=None)",
-        'module_regex': '(.+)/MatMul$',
-        'associated_op_regex': 'MatMul$'
+        'module_regex': ['(.+)/MatMul$'],
+        'associated_op_regex': ['MatMul$']
     },
     'BN_keras_with_training_tensor': {
         'input_shape': (10, 10, 3,),
         'op_type': 'FusedBatchNormV3',
         'constructor': "tf.keras.layers.BatchNormalization()(inputs)",
-        'module_regex': '(.+)/cond/FusedBatchNormV3_1$',
-        'associated_op_regex': 'FusedBatchNormV3_1$'
+        'module_regex': ['(.+)/cond/FusedBatchNormV3_1$'],
+        'associated_op_regex': ['FusedBatchNormV3_1$']
     },
     'BN_keras_with_training_True': {
         'input_shape': (10, 10, 3,),
         'op_type': 'FusedBatchNormV3',
         'constructor': "tf.keras.layers.BatchNormalization()(inputs, training=True)",
-        'module_regex': '(.+)/FusedBatchNormV3$',
-        'associated_op_regex': 'FusedBatchNormV3$'
+        'module_regex': ['(.+)/FusedBatchNormV3$'],
+        'associated_op_regex': ['FusedBatchNormV3$']
     },
     'BN_keras_with_training_False': {
         'input_shape': (10, 10, 3,),
         'op_type': 'FusedBatchNormV3',
         'constructor': "tf.keras.layers.BatchNormalization()(inputs, training=False)",
-        'module_regex': '(.+)/FusedBatchNormV3$',
-        'associated_op_regex': 'FusedBatchNormV3$'
+        'module_regex': ['(.+)/FusedBatchNormV3$'],
+        'associated_op_regex': ['FusedBatchNormV3$']
     },
     'BN_non_fused_keras_with_training_tensor': {
         'input_shape': (10, 10, 3,),
         'op_type': 'BatchNorm',
         'constructor': "tf.keras.layers.BatchNormalization(fused=False)(inputs)",
-        'module_regex': '(.+)/batchnorm/mul_1$',
-        'associated_op_regex': 'batchnorm/mul_1$'
+        'module_regex': ['(.+)/batchnorm/mul_1$'],
+        'associated_op_regex': ['batchnorm/mul_1$']
     },
     'BN_non_fused_keras_with_training_True': {
         'input_shape': (10, 10, 3,),
         'op_type': 'BatchNorm',
         'constructor': "tf.keras.layers.BatchNormalization(fused=False)(inputs, training=True)",
-        'module_regex': '(.+)/batchnorm/mul_1$',
-        'associated_op_regex': 'batchnorm/mul_1$'
+        'module_regex': ['(.+)/batchnorm/mul_1$'],
+        'associated_op_regex': ['batchnorm/mul_1$']
     },
     'BN_non_fused_keras_with_training_False': {
         'input_shape': (10, 10, 3,),
         'op_type': 'BatchNorm',
         'constructor': "tf.keras.layers.BatchNormalization(fused=False)(inputs, training=False)",
-        'module_regex': '(.+)/batchnorm/mul_1$',
-        'associated_op_regex': 'batchnorm/mul_1$'
+        'module_regex': ['(.+)/batchnorm/mul_1$'],
+        'associated_op_regex': ['batchnorm/mul_1$']
     },
     'BN_slim_with_training_tensor': {
         'input_shape': (10, 10, 3,),
         'op_type': 'FusedBatchNormV3',
         'constructor': "slim.batch_norm(inputs, is_training=is_training)",
-        'module_regex': '(.+)/cond/FusedBatchNormV3_1$',
-        'associated_op_regex': 'FusedBatchNormV3_1$'
+        'module_regex': ['(.+)/cond/FusedBatchNormV3_1$'],
+        'associated_op_regex': ['FusedBatchNormV3_1$']
     },
     'BN_slim_with_training_True': {
         'input_shape': (10, 10, 3,),
         'op_type': 'FusedBatchNormV3',
         'constructor': "slim.batch_norm(inputs, is_training=True)",
-        'module_regex': '(.+)/FusedBatchNormV3$',
-        'associated_op_regex': 'FusedBatchNormV3$'
+        'module_regex': ['(.+)/FusedBatchNormV3$'],
+        'associated_op_regex': ['FusedBatchNormV3$']
     },
     'BN_slim_with_training_False': {
         'input_shape': (10, 10, 3,),
         'op_type': 'FusedBatchNormV3',
         'constructor': "slim.batch_norm(inputs, is_training=False)",
-        'module_regex': '(.+)/FusedBatchNormV3$',
-        'associated_op_regex': 'FusedBatchNormV3$'
+        'module_regex': ['(.+)/FusedBatchNormV3$'],
+        'associated_op_regex': ['FusedBatchNormV3$']
     },
     'Softmax_slim': {
         'input_shape': (1, 10),
         'op_type': 'Softmax',
         'constructor': "slim.softmax(constants)",
-        'module_regex': '(.+)/Softmax$',
-        'associated_op_regex': 'Softmax$'
+        'module_regex': ['(.+)/Softmax$'],
+        'associated_op_regex': ['Softmax$']
     },
     'Softmax_slim_with_unknown_shape': {
         'input_shape': (10,),
         'op_type': 'Softmax',
         'constructor': "slim.softmax(inputs)",
-        'module_regex': '(.+)/Softmax$',
-        'associated_op_regex': 'Softmax$'
+        'module_regex': ['(.+)/Softmax$'],
+        'associated_op_regex': ['Softmax$']
     },
     'Dropout_with_training_tensor': {
         'input_shape': (1, 10, 10, 3),
         'op_type': 'Dropout',
         'constructor': "tf.keras.layers.Dropout(rate=.4)(constants)",
-        'module_regex': '(.+)/cond/dropout/mul_1$',
-        'associated_op_regex': 'cond/dropout/mul_1$'
+        'module_regex': ['(.+)/cond/dropout/mul_1$'],
+        'associated_op_regex': ['cond/dropout/mul_1$']
     },
     'Dropout_training_True': {
         'input_shape': (1, 10, 10, 3),
         'op_type': 'Dropout',
         'constructor': "tf.keras.layers.Dropout(rate=.4)(constants, training=True)",
-        'module_regex': '(.+)/.+/mul_1$',
-        'associated_op_regex': '/.+/mul_1$'
+        'module_regex': ['(.+)/.+/mul_1$'],
+        'associated_op_regex': ['/.+/mul_1$']
     },
     'Flatten': {
         'input_shape': (10, 10, 3,),
         'op_type': 'Flatten',
         'constructor': "tf.keras.layers.Flatten()(inputs)",
-        'module_regex': '(.+)/Reshape$',
-        'associated_op_regex': 'Reshape$'
+        'module_regex': ['(.+)/Reshape$'],
+        'associated_op_regex': ['Reshape$']
     }
 }
 
@@ -314,34 +314,36 @@ class SubGraphMatcher:
         return False
 
 
-def get_module_name(module_regex: str, ops_list: List[tf.Operation]) -> str:
+def get_module_name(module_regex_list: List[str], ops_list: List[tf.Operation]) -> str:
     """
     Extract module name for the matched ops by matching with a given regex pattern.
-    :param module_regex: Regex pattern to match with
+    :param module_regex_list: List of regex patterns to match with
     :param ops_list: List of matched ops
     :return: String representing the module name for the set of matched ops. If no name is successfully matched, return
     the name of the first op in the list.
     """
-    for op in ops_list:
-        match_name = re.match(module_regex, op.name)
-        if match_name:
-            return match_name.group(1)
+    for module_regex in module_regex_list:
+        for op in ops_list:
+            match_name = re.match(module_regex, op.name)
+            if match_name:
+                return match_name.group(1)
     logger.warning('Unable to identify module name, using name of first op as module name: %s', ops_list[0].name)
     return ops_list[0].name
 
 
-def get_associated_op(associated_op_regex: str, ops_list: List[tf.Operation]) -> Union[None, tf.Operation]:
+def get_associated_op(associated_op_regex_list: List[str], ops_list: List[tf.Operation]) -> Union[None, tf.Operation]:
     """
     Identify the op to associate with the module representing the set of matched ops. Use a regex pattern to match a
     particular op.
-    :param associated_op_regex: Regex pattern to match with
+    :param associated_op_regex_list: Regex pattern to match with
     :param ops_list: List of matched ops
     :return: Tf op that was matched by the regex. If no op is matched, return None
     """
-    for op in ops_list:
-        match_name = re.search(associated_op_regex, op.name)
-        if match_name:
-            return op
+    for associated_op_regex in associated_op_regex_list:
+        for op in ops_list:
+            match_name = re.search(associated_op_regex, op.name)
+            if match_name:
+                return op
     logger.warning('Unable to identify associated op of module')
     return None
 
