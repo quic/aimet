@@ -815,16 +815,20 @@ class QuantizationSimModel:
             tensor_quant_ref = tf.Variable(tensor_quantizer, name=quant_op_name + '_quant_ref',
                                            trainable=False, dtype=tf.int64)
 
-            encoding_min = tf.Variable(initial_value=0.0,
-                                       name=quant_op_name + '_encoding_min',
-                                       trainable=True, dtype=tf.double)
-            encoding_max = tf.Variable(initial_value=0.0,
-                                       name=quant_op_name + '_encoding_max',
-                                       trainable=True, dtype=tf.double)
-
             bit_width = tf.Variable(initial_value=bit_width,
                                     name=quant_op_name + '_bit_width',
                                     trainable=False, dtype=tf.int8)
+            # min and max are configured not trainable by default
+            is_trainable = False
+            if self._quant_scheme == QuantScheme.training_range_learning:
+                is_trainable = True
+
+            encoding_min = tf.Variable(initial_value=0.0,
+                                       name=quant_op_name + '_encoding_min',
+                                       trainable=is_trainable, dtype=tf.double)
+            encoding_max = tf.Variable(initial_value=0.0,
+                                       name=quant_op_name + '_encoding_max',
+                                       trainable=is_trainable, dtype=tf.double)
 
             # Note: Later, is_symmetric_encoding value is to be read from config file
             use_symmetric_encoding = tf.Variable(initial_value=False,
