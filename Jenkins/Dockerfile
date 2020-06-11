@@ -90,7 +90,7 @@ RUN apt-get update && apt-get install -y python-pip && rm -rf /var/lib/apt/lists
 # Upgrade Python3 pip and install some more packages
 RUN pip3 --no-cache-dir install --upgrade \
         setuptools \
-        pip==9.0.1 \
+        pip==20.1.1 \
         numpy \
         wheel
 

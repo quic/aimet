@@ -210,9 +210,6 @@ sed 's@session\s*required\s*pam_loginuid.so@session optional pam_loginuid.so@g' 
 cd / && git clone https://github.com/tensorflow/tensorflow.git && cd tensorflow && git checkout v1.15.0
 
 
-cp *.whl /tmp/
-cd /tmp && pip install *.whl && rm -f /tmp/*.whl
-
 pip install osqp onnx
 
 #install bokeh and related packages
