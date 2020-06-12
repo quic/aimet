@@ -372,9 +372,9 @@ class TestQuantSim(unittest.TestCase):
         initialize_uninitialized_vars(sess)
         sim = QuantizationSimModel(sess, [model.input.op.name], [model.output.op.name], use_cuda=False)
 
-        p_quantizer = sim.param_quantizer('conv2d/Conv2D')
-        o_quantizer = sim.output_quantizer('conv2d/Relu')
-        bias_quantizer = sim.param_quantizer('conv2d/BiasAdd')
+        p_quantizer = sim.quantizer_config('conv2d/Conv2D/ReadVariableOp_quantized')
+        o_quantizer = sim.quantizer_config('conv2d/Relu_quantized')
+        bias_quantizer = sim.quantizer_config('conv2d/BiasAdd/ReadVariableOp_quantized')
 
         # check if __str__ can print the object info
         print(p_quantizer)
