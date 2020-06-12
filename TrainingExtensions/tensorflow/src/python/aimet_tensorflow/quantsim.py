@@ -426,31 +426,20 @@ class QuantizationSimModel:
         self._param_quantizers = state.param_quantizers
         self._activation_quantizers = state.activation_quantizers
 
-    def param_quantizer(self, quant_op_name: str) -> QuantizerInfo:
+    def quantizer_config(self, quant_op_name: str) -> QuantizerInfo:
         """
-        Helper method to fetch param quantizer info associated with the given quantize op
-        :param quant_op_name: quant op name
-        :return: param quantizer info associated with the quant op
-        """
-        read_variable_op_name = quant_op_name+'/ReadVariableOp_quantized'
-        if read_variable_op_name in self._param_quantizers.keys():
-            return self._param_quantizers[read_variable_op_name]
-
-        _logger.error('Could not find param quantizer for op {%s} ', quant_op_name)
-        return None
-
-    def output_quantizer(self, quant_op_name: str) -> QuantizerInfo:
-        """
-        Helper method to fetch output quantizer info associated with the given quantize op
-        :param quant_op_name: quant op name
-        :return: output quantizer info associated with the quant op
+        gets QuantizerInfo associated with given quantize op
+        :param quant_op_name: Name of the Quantize op
+        :return: QuantizerInfo associated with the Quant op
         """
 
-        output_activation_op_name = quant_op_name+'_quantized'
-        if output_activation_op_name in self._activation_quantizers.keys():
-            return self._activation_quantizers[output_activation_op_name]
+        if quant_op_name in self._param_quantizers:
+            return self._param_quantizers[quant_op_name]
 
-        _logger.error('Could not find output quantizer for op {%s} ', quant_op_name)
+        if quant_op_name in self._activation_quantizers:
+            return self._activation_quantizers[quant_op_name]
+
+        _logger.error('Could not find  Quantizer for given op {%s} ', quant_op_name)
         return None
 
     def _set_op_input_variables(self, op_name: str, encoding: libpymo.TfEncoding, op_mode: libpymo.TensorQuantizerOpMode):
