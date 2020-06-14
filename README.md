@@ -1,7 +1,7 @@
 
 ![Qualcomm Innovation Center, Inc.](Docs/images/logo-quic-on@h68.png)
-![](Docs/images/white-space.png)
 [![AIMET on GitHub Pages](Docs/images/button_aimet-on-github-pages.png)](https://quic.github.io/aimet-pages/index.html)
+[![Discussion Forums](Docs/images/button_discussion-forums.png)](https://forums.quicinc.com)
 
 
 
