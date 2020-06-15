@@ -403,10 +403,10 @@ class BiasCorrection:
                 assert(0, 'Unknown activation type', preceeding_bn_layer_info.in_activation_type)
         else:
             if is_first_conv:
-                # for the first conv layer case, we use gamma = 0 and beta = 1
+                # for the first conv layer case, we use gamma = 1 and beta = 0
                 shape = weight_tensor.shape[1]
-                bn_params.gamma = np.zeros(shape)
-                bn_params.beta = np.ones(shape)
+                bn_params.gamma = np.ones(shape)
+                bn_params.beta = np.zeros(shape)
             else:
                 assert 0, "layer info is None and is not first conv layer"
 
