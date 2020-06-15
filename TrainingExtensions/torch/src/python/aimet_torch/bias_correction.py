@@ -189,8 +189,8 @@ def call_analytical_mo_correct_bias(layer: torch.nn.Module, bn: Union[torch.nn.B
     bn_params = libpymo.BnParamsBiasCorr()
     if bn is None:
         shape = weight_tensor.shape[1]
-        bn_params.gamma = np.zeros(shape)
-        bn_params.beta = np.ones(shape)
+        bn_params.gamma = np.ones(shape)
+        bn_params.beta = np.zeros(shape)
     else:
         bn_params.gamma = bn.get_module().weight.detach().cpu().numpy()
         bn_params.beta = bn.get_module().bias.detach().cpu().numpy()
