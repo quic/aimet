@@ -71,3 +71,87 @@ TEST(TestTensorQuantizationSim, SanityTest)
         EXPECT_FLOAT_EQ(outputTensor[i], expectedOutput[i]);
     }
 }
+
+TEST(TestTensorQuantizationSim, SanityTestWithGatedMin)
+{
+    // Instantiate TensorQuantizationSim
+    DlQuantization::TensorQuantizationSim<float> sim;
+
+    // Create a dummy tensor
+    const std::vector<float> tensor = {-0.5f, -0.25f, 0, 0.25, 0.5, 0.75};
+    std::vector<float> outputTensor(tensor.size());
+
+    uint8_t bw     = 8;
+    // min is greater than 0, this will be gated at 0.0
+    // New range will be 0 to 1.0
+    double min    = 0.5;
+    double max    = 1.0;
+
+    sim.quantizeDequantizeTensor(tensor.data(), tensor.size(), outputTensor.data(), min, max, bw,
+                                 DlQuantization::RoundingMode::ROUND_NEAREST,  false);
+
+    std::vector<float> expectedOutput = {0.0, 0.0, 0.0, 0.25098041,  0.50196081, 0.74901962};
+
+    EXPECT_EQ(outputTensor.size(), expectedOutput.size());
+
+    for (int i = 0; i < outputTensor.size(); i++)
+    {
+        EXPECT_FLOAT_EQ(outputTensor[i], expectedOutput[i]);
+    }
+}
+
+TEST(TestTensorQuantizationSim, SanityTestWithGatedMinMaxEqual)
+{
+    // Instantiate TensorQuantizationSim
+    DlQuantization::TensorQuantizationSim<float> sim;
+
+    // Create a dummy tensor
+    const std::vector<float> tensor = {-0.5f, -0.25f, 0, 0.25, 0.5, 0.75};
+    std::vector<float> outputTensor(tensor.size());
+
+    uint8_t bw     = 8;
+    // min max are equal
+    // New range will be 0.5 to 0.5+1e-5
+    double min    = 0.5;
+    double max    = 0.5;
+
+    sim.quantizeDequantizeTensor(tensor.data(), tensor.size(), outputTensor.data(), min, max, bw,
+                                 DlQuantization::RoundingMode::ROUND_NEAREST,  false);
+
+    std::vector<float> expectedOutput = {0.0, 0.0, 0.0, 0.25098041,  0.5, 0.5};
+
+    EXPECT_EQ(outputTensor.size(), expectedOutput.size());
+
+    for (int i = 0; i < outputTensor.size(); i++)
+    {
+        EXPECT_FLOAT_EQ(outputTensor[i], expectedOutput[i]);
+    }
+}
+
+TEST(TestTensorQuantizationSim, SanityTestWithGatedMax)
+{
+    // Instantiate TensorQuantizationSim
+    DlQuantization::TensorQuantizationSim<float> sim;
+
+    // Create a dummy tensor
+    const std::vector<float> tensor = {-0.5f, -0.25f, 0, 0.25, 0.5, 0.75};
+    std::vector<float> outputTensor(tensor.size());
+
+    uint8_t bw     = 8;
+    // min is greater than 0, this will be gated at 0.0
+    // New range will be -0.5 to 0.0
+    double min    = -0.5;
+    double max    = -0.1;
+
+    sim.quantizeDequantizeTensor(tensor.data(), tensor.size(), outputTensor.data(), min, max, bw,
+                                 DlQuantization::RoundingMode::ROUND_NEAREST,  false);
+
+    std::vector<float> expectedOutput = {-0.5, -0.25098041, 0.0, 0.0, 0.0, 0.0};
+
+    EXPECT_EQ(outputTensor.size(), expectedOutput.size());
+
+    for (int i = 0; i < outputTensor.size(); i++)
+    {
+        EXPECT_FLOAT_EQ(outputTensor[i], expectedOutput[i]);
+    }
+}
