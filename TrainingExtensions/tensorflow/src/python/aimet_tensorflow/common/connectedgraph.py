@@ -54,12 +54,15 @@ logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.ConnectedGraph)
 
 class ConnectedGraph(aimetCommonConnectedGraph):
     """ Connected Graph class """
-    def __init__(self, graph: tf.Graph, starting_op_names: List[str], output_op_names: List[str]):
+    def __init__(self, graph: tf.Graph, starting_op_names: List[str], output_op_names: List[str],
+                 use_subgraph_matcher: bool = False):
         """
         :param graph: Tensorflow graph to represent using connected graph
         :param starting_op_names: Ops to start building the connected graph from
         :param output_op_names: Ending ops of the graph.  Used to assist in identifying unnecessary ops like training
         ops.
+        :param use_subgraph_matcher: If True, use subgraph matcher to identify modules. Otherwise, use module
+        identifier.
         """
         super().__init__()
         self._graph = graph
@@ -71,7 +74,8 @@ class ConnectedGraph(aimetCommonConnectedGraph):
 
         # Create the connected graph
         self._valid_ops = get_valid_ops(self._graph, self._starting_op_names, output_op_names)
-        self._module_identifier = StructureModuleIdentifier(self._graph, self._starting_op_names, self._valid_ops)
+        self._module_identifier = StructureModuleIdentifier(self._graph, self._starting_op_names, self._valid_ops,
+                                                            use_subgraph_matcher=use_subgraph_matcher)
         self.fill_op_product_graph()
 
     @property
