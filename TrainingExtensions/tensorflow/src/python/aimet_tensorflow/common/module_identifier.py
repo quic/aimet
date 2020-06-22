@@ -73,7 +73,8 @@ class ModuleIdentifier(ABC):
 class StructureModuleIdentifier(ModuleIdentifier):
     """ Module identifier using graph structures """
 
-    def __init__(self, graph: tf.Graph, starting_op_names: List[str], valid_ops: Set[tf.Operation]):
+    def __init__(self, graph: tf.Graph, starting_op_names: List[str], valid_ops: Set[tf.Operation],
+                 use_subgraph_matcher: bool = False):
         """ Initializer for ModuleIdentifier
         :param graph: Tensorflow graph to represent using connected graph.
         :param starting_op_names: Names of the starting ops of the model.
@@ -86,8 +87,11 @@ class StructureModuleIdentifier(ModuleIdentifier):
         self.starting_op_names = starting_op_names
         self._valid_ops = valid_ops
         self.processed_ops = set()
-        self._sub_graph_matcher = sub_graph_matcher.SubGraphMatcher(self._graph)
-        self._identify_modules()
+        if use_subgraph_matcher:
+            self._sub_graph_matcher = sub_graph_matcher.SubGraphMatcher(self._graph, self.op_to_module_dict,
+                                                                        self._valid_ops)
+        else:
+            self._identify_modules()
 
     def _identify_modules(self):
         """ Parse tf graph to extract modules from operations """
@@ -119,34 +123,6 @@ class StructureModuleIdentifier(ModuleIdentifier):
         op_info = self.op_to_module_dict.get(op, default_op_info)
 
         return op_info
-
-    def _add_ops_in_module_using_sub_graph_matcher(self, op: tf.Operation, op_type: str):
-        """ Find and add all ops belonging to the same module as op to op_to_module_dict (if possible) """
-
-        op_info = ModuleIdentifierOpInfo(module_name=op.name,
-                                         op_type=op.type,
-                                         tf_op=op)
-
-        # Each value in switcher is a list of functions which attempt to match known module patterns around the current
-        # op.  For a certain type of op, we proceed through each function in the corresponding list until one function
-        # returns True (means a module pattern match succeeded)
-        switcher = {
-            "Conv2D": [self._sub_graph_matcher.match_conv2d_dense_type_ops],
-            "DepthwiseConv2dNative": [self._sub_graph_matcher.match_conv2d_dense_type_ops],
-            "FusedBatchNormV3": [self._sub_graph_matcher.match_fused_batchnorm],
-            "MatMul": [self._sub_graph_matcher.match_conv2d_dense_type_ops],
-            "Reshape": [self._sub_graph_matcher.match_flatten],
-            "RandomUniform": [self._sub_graph_matcher.match_dropout_1],
-            "Mul": [self._sub_graph_matcher.match_dropout_2],
-            "Softmax": [self._sub_graph_matcher.match_softmax],
-            "Unpack": [module_identifier_matchers.match_upsample],
-            "GatherV2": [module_identifier_matchers.match_downsample]
-        }
-
-        op_handlers = switcher.get(op_type, [module_identifier_matchers.handle_default])
-        for handler in op_handlers:
-            if handler(self.op_to_module_dict, op_info):       # match found, no need to try to match more functions
-                break
 
     def _add_ops_in_module(self, op: tf.Operation, op_type: str):
         """ Find and add all ops belonging to the same module as op to op_to_module_dict (if possible) """

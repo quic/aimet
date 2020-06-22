@@ -43,7 +43,7 @@ import tensorflow as tf
 from tensorflow_core.contrib.quantize.python import graph_matcher
 
 from aimet_common.utils import AimetLogger
-from aimet_tensorflow.common.sub_graph_matcher import create_subgraph_for_op, create_op_type_pattens_from_subgraph, \
+from aimet_tensorflow.common.sub_graph_matcher import create_subgraph_for_op, create_op_type_patterns_from_subgraph, \
     subgraph_constructors
 from aimet_tensorflow.examples.test_models import keras_model_functional
 
@@ -60,14 +60,15 @@ class TestSubGraph(unittest.TestCase):
     def test_conv2d_no_bias_subgraph(self):
         """ test sub graph for conv2D Op without bias """
 
-        input_shape, constructor_string = subgraph_constructors['Conv2D']
+        input_shape = subgraph_constructors['Conv2D_keras']['input_shape']
+        constructor_string = subgraph_constructors['Conv2D_keras']['constructor']
         conv_subgraph = create_subgraph_for_op(input_shape, constructor_string)
 
         logger.debug("The OPs created by create_subgraph_for_op()")
         for op in conv_subgraph.get_operations():
             logger.debug("OP: %s", op.name)
 
-        op_type_patterns = create_op_type_pattens_from_subgraph(conv_subgraph)
+        op_type_patterns = create_op_type_patterns_from_subgraph(conv_subgraph)
         for pat in op_type_patterns:
             logger.debug(pat._op_type)
 
@@ -79,14 +80,15 @@ class TestSubGraph(unittest.TestCase):
     def test_conv2d_with_bias_subgraph(self):
         """ test sub graph for conv2D Op with bias """
 
-        input_shape, constructor_string = subgraph_constructors['Conv2D_with_bias']
+        input_shape = subgraph_constructors['Conv2D_keras_with_bias']['input_shape']
+        constructor_string = subgraph_constructors['Conv2D_keras_with_bias']['constructor']
         conv_subgraph = create_subgraph_for_op(input_shape, constructor_string)
 
         logger.debug("The OPs created by create_subgraph_for_op()")
         for op in conv_subgraph.get_operations():
             logger.debug("OP: %s", op.name)
 
-        op_type_patterns = create_op_type_pattens_from_subgraph(conv_subgraph)
+        op_type_patterns = create_op_type_patterns_from_subgraph(conv_subgraph)
         for pat in op_type_patterns:
             logger.debug(pat._op_type)
 
@@ -98,14 +100,15 @@ class TestSubGraph(unittest.TestCase):
     def test_fused_batchnorm_training_tensor_subgraph(self):
         """ test sub graph for FusedBatchNorm training Tensor"""
 
-        input_shape, constructor_string = subgraph_constructors['BN_0']
+        input_shape = subgraph_constructors['BN_keras_with_training_tensor']['input_shape']
+        constructor_string = subgraph_constructors['BN_keras_with_training_tensor']['constructor']
         bn_subgraph = create_subgraph_for_op(input_shape, constructor_string)
 
         logger.debug("Step: I The OPs created by create_subgraph_for_op()")
         for op in bn_subgraph.get_operations():
             logger.debug("OP 1: %s", op.name)
 
-        op_type_patterns = create_op_type_pattens_from_subgraph(bn_subgraph)
+        op_type_patterns = create_op_type_patterns_from_subgraph(bn_subgraph)
         logger.debug("Step: II The OPs created by create_op_type_pattens_from_subgraph() %d", len(op_type_patterns))
         for pat in op_type_patterns:
             logger.debug("OP 2: %s", pat._op_type)
@@ -117,14 +120,15 @@ class TestSubGraph(unittest.TestCase):
     def test_fused_batchnorm_with_training_False_subgraph(self):
         """ test sub graph for FusedBatchNorm training False"""
 
-        input_shape, constructor_string = subgraph_constructors['BN_2']
+        input_shape = subgraph_constructors['BN_keras_with_training_False']['input_shape']
+        constructor_string = subgraph_constructors['BN_keras_with_training_False']['constructor']
         bn_subgraph = create_subgraph_for_op(input_shape, constructor_string)
 
         logger.debug("Step: I The OPs created by create_subgraph_for_op()")
         for op in bn_subgraph.get_operations():
             logger.debug("OP 1: %s", op.name)
 
-        op_type_patterns = create_op_type_pattens_from_subgraph(bn_subgraph)
+        op_type_patterns = create_op_type_patterns_from_subgraph(bn_subgraph)
         logger.debug("Step: II The OPs created by create_op_type_pattens_from_subgraph() %d", len(op_type_patterns))
         for pat in op_type_patterns:
             logger.debug("OP 2: %s", pat._op_type)
@@ -136,14 +140,15 @@ class TestSubGraph(unittest.TestCase):
     def test_dense_subgraph(self):
         """ test sub graph for dense """
 
-        input_shape, constructor_string = subgraph_constructors['Dense']
+        input_shape = subgraph_constructors['Dense_keras']['input_shape']
+        constructor_string = subgraph_constructors['Dense_keras']['constructor']
         dense_subgraph = create_subgraph_for_op(input_shape, constructor_string)
 
         logger.debug("Step: I The OPs created by create_subgraph_for Dense Op()")
         for op in dense_subgraph.get_operations():
             logger.debug("OP: %s", op.name)
 
-        dense_patterns = create_op_type_pattens_from_subgraph(dense_subgraph)
+        dense_patterns = create_op_type_patterns_from_subgraph(dense_subgraph)
         logger.debug("Length of Dense pattern: %d", len(dense_patterns))
         for pat in dense_patterns:
             logger.debug(pat._op_type)
@@ -158,13 +163,15 @@ class TestSubGraph(unittest.TestCase):
 
         patterns_to_match = []
         op_to_pattern_dict = {}
-        for op_type, (input_shape, constructor_string) in subgraph_constructors.items():
-            logger.debug(op_type)
+        for pattern_name, subgraph_constructor in subgraph_constructors.items():
+            input_shape = subgraph_constructor['input_shape']
+            constructor_string = subgraph_constructor['constructor']
+            logger.debug(pattern_name)
             subgraph = create_subgraph_for_op(input_shape, constructor_string)
-            patterns = create_op_type_pattens_from_subgraph(subgraph)
+            patterns = create_op_type_patterns_from_subgraph(subgraph)
             patterns_to_match.append(patterns[-1])
-            op_to_pattern_dict[op_type] = patterns[-1]
-            logger.debug("Length of %s pattern: %d", op_type, len(patterns))
+            op_to_pattern_dict[pattern_name] = patterns[-1]
+            logger.debug("Length of %s pattern: %d", pattern_name, len(patterns))
 
         # OneOfPattern for Conv@D, Conv2D with Bias and FusedBatchNorm
         all_patterns = graph_matcher.OneofPattern(patterns_to_match)
@@ -192,7 +199,7 @@ class TestSubGraph(unittest.TestCase):
 
                 # Conv2D Ops could be with or without Bias.
                 # As the first step, detect all the Conv2D Ops with Bias.
-                conv_bias_op = match_result.get_op(op_to_pattern_dict['Conv2D_with_bias'])
+                conv_bias_op = match_result.get_op(op_to_pattern_dict['Conv2D_keras_with_bias'])
                 if conv_bias_op:
                     if conv_bias_op.inputs[0]._op not in matched_op_set:
                         logger.debug("Conv Op with bias: %s, %d", conv_bias_op.name, match_counter)
@@ -200,13 +207,13 @@ class TestSubGraph(unittest.TestCase):
 
                 # Since the Conv Op with Bias is already added to the matched_op_set,
                 # Conv Ops with Bias won't be duplicated by the following match.
-                conv_op = match_result.get_op(op_to_pattern_dict['Conv2D'])
+                conv_op = match_result.get_op(op_to_pattern_dict['Conv2D_keras'])
                 if conv_op:
                     if conv_op not in matched_op_set:
                         logger.debug("Conv Op no bias: %s, %d", conv_op.name, match_counter)
                         matched_op_set.add(conv_op)
 
-                bn_1_op = match_result.get_op(op_to_pattern_dict['BN_0'])
+                bn_1_op = match_result.get_op(op_to_pattern_dict['BN_keras_with_training_tensor'])
                 if bn_1_op:
                     if bn_1_op.inputs[0]._op not in matched_op_set:
                         matched_op_set.add(bn_1_op.inputs[0]._op)
@@ -215,11 +222,11 @@ class TestSubGraph(unittest.TestCase):
                         matched_op_set.add(bn_1_op.inputs[1]._op)
                         logger.debug("FusedBatchNorm 1 Op: %s, %d", bn_1_op.inputs[1]._op.name, match_counter)
 
-                bn_2_op = match_result.get_op(op_to_pattern_dict['BN_2'])
+                bn_2_op = match_result.get_op(op_to_pattern_dict['BN_keras_with_training_False'])
                 if bn_2_op:
                     logger.debug("FusedBatchNorm 2 Op: %s", bn_2_op.name)
 
-                bn_3_op = match_result.get_op(op_to_pattern_dict['BN_3'])
+                bn_3_op = match_result.get_op(op_to_pattern_dict['BN_keras_with_training_True'])
                 if bn_3_op:
                     logger.debug("FusedBatchNorm 3 Op: %s", bn_3_op.name)
 
@@ -228,7 +235,7 @@ class TestSubGraph(unittest.TestCase):
                     logger.debug("Flatten Op: %s, %d", flatten_op.name, match_counter)
                     matched_op_set.add(flatten_op)
 
-                dense_op = match_result.get_op(op_to_pattern_dict['Dense'])
+                dense_op = match_result.get_op(op_to_pattern_dict['Dense_keras'])
                 if dense_op:
                     logger.debug("dense Op: %s, %d", dense_op.name, match_counter)
                     matched_op_set.add(dense_op)
