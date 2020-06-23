@@ -584,6 +584,14 @@ class QuantizationSimModel:
                 if var.name.endswith('_encoding_min:0') or var.name.endswith('_encoding_max:0'):
                     variable_dict[var.name] = var
 
+        def gate_min_max(min_val: float, max_val: float):
+            epsilon = 1e-5
+            gated_min = min(min_val, 0.0)
+            gated_max = max(max_val, 0.0)
+            gated_max = max(gated_max, gated_min + epsilon)
+
+            return gated_min, gated_max
+
         def read_min_max(op_name: str):
             min_var = variable_dict[op_name + '_encoding_min:0']
             max_var = variable_dict[op_name + '_encoding_max:0']
@@ -599,6 +607,7 @@ class QuantizationSimModel:
         def update_encoding_dict_entry(encoding_dict: Dict,
                                        quant_op_name: str):
             min_val, max_val = read_min_max(quant_op_name)
+            min_val, max_val = gate_min_max(min_val, max_val)
             op_bitwidth = int(self._get_op_variable_value(quant_op_name, int(QuantizeOpIndices.bit_width)))
             delta, offset = calculate_delta_offset(min_val, max_val, op_bitwidth)
             op_name = self._get_unquantized_name(quant_op_name)
