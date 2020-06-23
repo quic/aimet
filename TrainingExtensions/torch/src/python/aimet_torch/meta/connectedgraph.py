@@ -518,8 +518,10 @@ class ConnectedGraph(AimetCommonConnectedGraph):
         _fill_conv_op_info(op, model)
 
         # populating input and output shapes obtained via hook and forward pass
-        input_tensor_tuple, output_tensor_tuple = module_tensor_tuples_map[model]
-        _fill_and_check_op_product_shapes(op, list(input_tensor_tuple[0].shape), list(output_tensor_tuple[0].shape))
+        i, o = module_tensor_tuples_map[model]
+        output_shape = list(o[0].shape if isinstance(o, tuple) else o.shape)
+        input_shape = list(i[0].shape if isinstance(i, tuple) else i.shape)
+        _fill_and_check_op_product_shapes(op, input_shape, output_shape)
         return op
 
     def _create_functional_op(self, node: torch._C.Node, ops: Dict[str, Union[Op, Product]]) -> Union[Op, None]:
@@ -556,7 +558,7 @@ class ConnectedGraph(AimetCommonConnectedGraph):
             input_shape = inp_op.shape
         else:
             input_shape = inp_op.output_shape
-        _fill_and_check_op_product_shapes(op, input_shape, output_shape[1:])
+        _fill_and_check_op_product_shapes(op, input_shape, output_shape)
         return op
 
     def _create_op_and_products(self, op_type: str, inputs: List[torch._C.Node],
@@ -883,7 +885,8 @@ class ConnectedGraph(AimetCommonConnectedGraph):
                     self._module_to_op_dict[current_named_module] = current_op
                     current_op.dotted_name = self._module_to_name[current_named_module]
 
-                _fill_and_check_op_product_shapes(current_op, input_shape, output_shape)
+                # '1' element is prepended to output_shape to fill in the missing num_batches index
+                _fill_and_check_op_product_shapes(current_op, input_shape, [1] + output_shape)
                 _fill_conv_op_info(current_op, current_op.get_module())
 
                 module_id_index += 1
@@ -1186,10 +1189,9 @@ def _fill_and_check_op_product_shapes(op: Op, input_shape: List, output_shape: L
     shapes; if not, log an error.
     :param op: Current op to fill shape parameter
     :param input_shape: Input shape obtained from forward pass
-    :param output_shape: Output shape obtained from forward pass.  A '1' element is prepended to it to fill in the
-    missing num_batches index
+    :param output_shape: Output shape obtained from forward pass
     """
-    op.output_shape = [1] + output_shape
+    op.output_shape = output_shape
     for inp in op.inputs:
         if not inp.is_parm:
             if inp.shape and inp.shape[1:] != input_shape[1:]:
