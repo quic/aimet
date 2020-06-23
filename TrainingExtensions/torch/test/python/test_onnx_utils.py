@@ -69,4 +69,5 @@ class TestOnnxUtils(unittest.TestCase):
         self.assertEqual('relu', onnx_model.graph.node[2].name)
         self.assertEqual('maxpool', onnx_model.graph.node[3].name)
 
-        self.assertEqual('fc', onnx_model.graph.node[75].name)
+        # last op in the model is expected to be fully-connected layer
+        self.assertEqual('fc', onnx_model.graph.node[-1].name)
