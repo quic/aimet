@@ -92,10 +92,9 @@ class TestStructureModuleIdentifier(unittest.TestCase):
         tf.reset_default_graph()
         x = tf.placeholder(tf.float32, [1, 32, 32, 3])
         _ = tf_slim_basic_model(x)
-        _ = tf.summary.FileWriter('/tmp/tf/', tf.get_default_graph())
         module_identifier = StructureModuleIdentifier(tf.get_default_graph(), ["Placeholder"],
                                                       set(tf.get_default_graph().get_operations()))
-        mul_op = tf.get_default_graph().get_operation_by_name('BatchNorm/AssignMovingAvg/mul')
+        mul_op = tf.get_default_graph().get_operation_by_name('BatchNorm/FusedBatchNormV3')
         self.assertEqual(module_identifier.op_to_module_dict[mul_op].module_name, 'BatchNorm')
         bn_1_merge_op = tf.get_default_graph().get_operation_by_name('BatchNorm_1/cond/Merge')
         self.assertEqual(module_identifier.op_to_module_dict[bn_1_merge_op].module_name, 'BatchNorm_1')

@@ -56,10 +56,6 @@ class ModuleIdentifier(ABC):
         self._graph = graph
 
     @abstractmethod
-    def _identify_modules(self):
-        """ Parse tf graph to extract modules from operations """
-
-    @abstractmethod
     def get_op_info(self, op: tf.Operation) -> ModuleIdentifierOpInfo:
         """
         Given a tf op in the graph, return OpInfo class containing:
@@ -73,8 +69,7 @@ class ModuleIdentifier(ABC):
 class StructureModuleIdentifier(ModuleIdentifier):
     """ Module identifier using graph structures """
 
-    def __init__(self, graph: tf.Graph, starting_op_names: List[str], valid_ops: Set[tf.Operation],
-                 use_subgraph_matcher: bool = False):
+    def __init__(self, graph: tf.Graph, starting_op_names: List[str], valid_ops: Set[tf.Operation]):
         """ Initializer for ModuleIdentifier
         :param graph: Tensorflow graph to represent using connected graph.
         :param starting_op_names: Names of the starting ops of the model.
@@ -87,26 +82,8 @@ class StructureModuleIdentifier(ModuleIdentifier):
         self.starting_op_names = starting_op_names
         self._valid_ops = valid_ops
         self.processed_ops = set()
-        if use_subgraph_matcher:
-            self._sub_graph_matcher = sub_graph_matcher.SubGraphMatcher(self._graph, self.op_to_module_dict,
-                                                                        self._valid_ops)
-        else:
-            self._identify_modules()
-
-    def _identify_modules(self):
-        """ Parse tf graph to extract modules from operations """
-        queue = []
-        for starting_op_name in self.starting_op_names:
-            queue.append(self._graph.get_operation_by_name(starting_op_name))
-        while queue:
-            current_op = queue.pop()
-            self.processed_ops.add(current_op)
-            if current_op not in self.op_to_module_dict.keys():
-                self._add_ops_in_module(current_op, current_op.type)
-            for product in current_op.outputs:
-                for consumer in product.consumers():
-                    if consumer not in self.processed_ops and consumer in self._valid_ops:
-                        queue.append(consumer)
+        self._sub_graph_matcher = sub_graph_matcher.SubGraphMatcher(self._graph, self.op_to_module_dict,
+                                                                    self._valid_ops)
 
     def get_op_info(self, op: tf.Operation) -> ModuleIdentifierOpInfo:
         """

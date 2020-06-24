@@ -45,7 +45,6 @@ import struct
 from typing import Dict
 import tensorflow as tf
 from aimet_common.utils import AimetLogger
-from aimet_tensorflow.common.operation import TfApi
 from aimet_tensorflow.utils.common import get_valid_ops
 
 logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.ConnectedGraph)
@@ -53,7 +52,7 @@ logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.ConnectedGraph)
 
 class ModuleIdentifierOpInfo:
     """ Class for summarizing information regarding a tf operation """
-    def __init__(self, module_name, op_type, tf_op, tf_api=TfApi.keras, pattern_type: str = None):
+    def __init__(self, module_name, op_type, tf_op, pattern_type: str = None):
         """
         Initialize the ModuleIdentifierOpInfo class.
 
@@ -61,14 +60,12 @@ class ModuleIdentifierOpInfo:
         :param op_type: Op type associated with the module (this will be the type shown in ConnectedGraph)
         :param tf_op: Main op associated with the module (may be different than the op corresponding to this object
             in the op_to_module_dict)
-        :param tf_api: Keras or Slim depending on which api was used to generate this module
         :param pattern_type: Pattern used to generate the graph that matched the op corresponding to the
             ModuleIdentifierOpInfo object. Only used in subgraph matcher
         """
         self._module_name = module_name
         self._op_type = op_type
         self._tf_op = tf_op
-        self._tf_api = tf_api
         # Pattern type is only used in subgraph matcher, and contains info about which pattern (Conv2D_keras,
         # Conv2D_keras_with_bias, etc. was used to match the op for this op info class.
         self._pattern_type = pattern_type
@@ -98,16 +95,6 @@ class ModuleIdentifierOpInfo:
     def tf_op(self):
         """ Returns the tf op for the module corresponding to this operation. """
         return self._tf_op
-
-    @property
-    def tf_api(self):
-        """ Returns the tf api of the module. """
-        return self._tf_api
-
-    @tf_api.setter
-    def tf_api(self, tf_api):
-        """ Sets the tf api of the module. """
-        self._tf_api = tf_api
 
     @property
     def pattern_type(self):
@@ -466,7 +453,6 @@ def match_flatten_ops(op_to_module_dict: dict, op_info: ModuleIdentifierOpInfo) 
     # Begin at op of type reshape and try to match to tf slim flatten pattern
     op = op_info.tf_op
     op_info.op_type = "Flatten"
-    op_info.tf_api = TfApi.slim
     try:
         pack_op = op.inputs[1].op
         assert pack_op.type == "Pack"
@@ -480,7 +466,6 @@ def match_flatten_ops(op_to_module_dict: dict, op_info: ModuleIdentifierOpInfo) 
         # shape_op will either be an actual shape op, or a const representing a shape
         shape_op = strided_slice_op.inputs[0].op
         if shape_op.inputs:
-            op_info.tf_api = TfApi.keras
             op_to_module_dict[pack_op] = op_info
             op_to_module_dict[strided_slice_op] = op_info
             op_to_module_dict[shape_op] = op_info
@@ -580,7 +565,6 @@ def match_dropout_pattern_2(op_to_module_dict: dict, op_info: ModuleIdentifierOp
         # Add ops to the op to module dict
         op_info.op_type = "Dropout"
         op_info.add_attribute('rate_tensor', greater_equal.inputs[1])
-        op_info.tf_api = TfApi.slim
         match_name = re.search("(.+)/random_uniform/RandomUniform", op.name)
         if match_name:
             op_info.module_name = match_name.group(1)
@@ -632,7 +616,6 @@ def match_dropout_pattern_3(op_to_module_dict: dict, op_info: ModuleIdentifierOp
         # Add ops to the op to module dict
         op_info.op_type = "Dropout"
         op_info.add_attribute('rate_tensor', greater_equal.inputs[1])
-        op_info.tf_api = TfApi.slim
         match_name = re.search("(.+)/random_uniform/RandomUniform", random_uniform.name)
         if match_name:
             op_info.module_name = match_name.group(1)
@@ -654,7 +637,6 @@ def match_softmax(op_to_module_dict: dict, op_info: ModuleIdentifierOpInfo) -> b
     """
     # Begin at op of type softmax and try to match to tf slim softmax pattern
     op = op_info.tf_op
-    op_info.tf_api = TfApi.slim
     try:
         reshape = op.inputs[0].op
         assert reshape.type == "Reshape"

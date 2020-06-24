@@ -831,3 +831,42 @@ class BNUtils:
             logger.error("Error, unknown BN op")
             assert False
         return decay
+
+    @staticmethod
+    def get_training(bn_op: tf.Operation) -> Union[None, bool, tf.Tensor]:
+        """
+        Returns either a boolean of whether the BN op training mode is True or False, or the is_training tensor
+        feeding into the BN op if it is using a tensor to determine the mode dynamically.
+        :param bn_op: bn_op obtained in the connected graph
+        :return: True or False for training mode, or tf.Tensor that determines the mode dynamically.
+        """
+        assert bn_op.type in ['FusedBatchNormV3', 'Mul']
+        if bn_op.type == 'FusedBatchNormV3':
+            if 'FusedBatchNormV3_1' in bn_op.name:
+                switch_op = bn_op.inputs[0].op
+                pred_id_op = switch_op.inputs[1].op
+                training = pred_id_op.inputs[0]
+            else:
+                training = bn_op.get_attr('is_training')
+            return training
+
+        # Non fused batchnorm case
+        mul_op = bn_op.inputs[1].op
+        assert mul_op.type == 'Mul'
+        rsqrt_op = mul_op.inputs[0].op
+        assert rsqrt_op.type == 'Rsqrt'
+        add_op = rsqrt_op.inputs[0].op
+        assert add_op.type == 'AddV2'
+        add_input_op = add_op.inputs[0].op
+        if add_input_op.type == 'Squeeze':
+            return True
+        if add_input_op.type == 'ReadVariableOp':
+            return False
+        if add_input_op.type == 'Merge':
+            switch_op = add_input_op.inputs[1].op
+            assert switch_op.type == 'Switch'
+            pred_id_op = switch_op.inputs[1].op
+            assert pred_id_op.type == 'Identity'
+            return pred_id_op.inputs[0]
+        logger.error('Error, unknown BN structure')
+        return None

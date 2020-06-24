@@ -42,6 +42,7 @@ import unittest
 import logging
 import struct
 from typing import List
+import os
 import numpy as np
 import tensorflow as tf
 
@@ -60,6 +61,7 @@ from aimet_tensorflow.utils.graph_saver import save_and_load_graph
 logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Test)
 AimetLogger.set_area_logger_level(AimetLogger.LogAreas.Test, logging.DEBUG)
 AimetLogger.set_area_logger_level(AimetLogger.LogAreas.Winnow, logging.DEBUG)
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 
 
 # pylint: disable=too-many-locals
@@ -103,7 +105,6 @@ class TestTfModuleReducer(unittest.TestCase):
         new_sess, ordered_modules_list = winnow.winnow_tf_model(sess, input_op_names, output_op_names,
                                                                 module_zero_channels_list,
                                                                 reshape=True, in_place=True, verbose=True)
-        # _ = tf.summary.FileWriter('./reduced_graph', new_sess.graph)
 
         conv3_relu = new_sess.graph.get_operation_by_name('Conv_3/Relu')
         self.assertEqual(conv3_relu.inputs[0].op.name, 'reduced_Conv_3/BiasAdd')
@@ -195,7 +196,6 @@ class TestTfModuleReducer(unittest.TestCase):
         new_sess, ordered_modules_list = winnow.winnow_tf_model(sess, input_op_names, output_op_names,
                                                                 module_zero_channels_list,
                                                                 reshape=True, in_place=True, verbose=True)
-        # _ = tf.summary.FileWriter('./reduced_graph', new_sess.graph)
 
         with new_sess.graph.as_default():
             reduced_conv2d_1_input = new_sess.graph.get_operation_by_name("reduced_conv2d_1/Conv2D").inputs[0]
@@ -231,7 +231,6 @@ class TestTfModuleReducer(unittest.TestCase):
         new_sess, ordered_modules_list = winnow.winnow_tf_model(sess, input_op_names, output_op_names,
                                                                 module_zero_channels_list,
                                                                 reshape=True, in_place=True, verbose=True)
-        # _ = tf.summary.FileWriter('./reduced_graph', new_sess.graph)
 
         stack_output = new_sess.graph.get_tensor_by_name("upsample/stack:0")
         reduced_batch_normalization_1_output = new_sess.graph.get_tensor_by_name("reduced_batch_normalization_1/"
@@ -261,7 +260,7 @@ class TestTfModuleReducer(unittest.TestCase):
         gather_output = new_sess_2.graph.get_tensor_by_name("downsample_1/GatherV2:0")
         self.assertEqual([None, 7, 7, 8], relu_1_output.shape.as_list())
         self.assertEqual([None, 7, 7, 2], gather_output.shape.as_list())
-        self.assertEqual(2, len(ordered_modules_list))
+        self.assertEqual(1, len(ordered_modules_list))
 
         new_sess.close()
         new_sess_2.close()
@@ -293,7 +292,6 @@ class TestTfModuleReducer(unittest.TestCase):
         new_sess, ordered_modules_list = winnow.winnow_tf_model(sess, input_op_names, output_op_names,
                                                                 module_zero_channels_list,
                                                                 reshape=True, in_place=True, verbose=True)
-        # _ = tf.summary.FileWriter('./reduced_graph', new_sess.graph)
 
         with new_sess.graph.as_default():
             conv2d_3_input = new_sess.graph.get_operation_by_name("reduced_conv2d_3/Conv2D").inputs[0]
@@ -320,7 +318,7 @@ class TestTfModuleReducer(unittest.TestCase):
 
         # Test that original versions of winnowed ops have been detached from main graph
         new_conn_graph = ConnectedGraph(new_sess.graph, input_op_names, output_op_names)
-        self.assertEqual(18, len(new_conn_graph.get_all_ops().keys()))
+        self.assertEqual(27, len(new_conn_graph.get_all_ops().keys()))
         self.assertTrue(new_conn_graph.get_op_from_module_name('conv2d_3/Conv2D') is None)
         self.assertTrue(new_conn_graph.get_op_from_module_name('conv2d_4/Conv2D') is None)
 
@@ -457,7 +455,6 @@ class TestTfModuleReducer(unittest.TestCase):
         module_zero_channels_list = []
 
         _ = depthwise_conv2d_model()
-        _ = tf.summary.FileWriter('./depthwise_conv2d_model', tf.get_default_graph())
         init = tf.global_variables_initializer()
         sess.run(init)
 
@@ -476,11 +473,9 @@ class TestTfModuleReducer(unittest.TestCase):
         new_sess, ordered_modules_list = winnow.winnow_tf_model(sess, input_op_names, output_op_names,
                                                                 module_zero_channels_list,
                                                                 reshape=True, in_place=True, verbose=True)
-        _ = tf.summary.FileWriter('./reduced_graph', new_sess.graph)
-
         reduced_depthwise = new_sess.graph.get_operation_by_name("reduced_depthwise_conv2d/depthwise")
         reduced_separable_depthwise = new_sess.graph.get_operation_by_name("reduced_separable_conv2d/separable_conv2d/"
-                                                                           "depthwise")
+                                                                           "depthwise/depthwise")
         self.assertEqual(7, reduced_depthwise.outputs[0].shape.as_list()[-1])
         self.assertEqual(7, reduced_depthwise.inputs[0].shape.as_list()[-1])
         self.assertEqual(13, reduced_separable_depthwise.outputs[0].shape.as_list()[-1])
@@ -510,15 +505,16 @@ class TestTfModuleReducer(unittest.TestCase):
         new_sess, ordered_modules_list = winnow.winnow_tf_model(sess, input_op_names, output_op_names,
                                                                 module_zero_channels_list,
                                                                 reshape=True, in_place=True, verbose=True)
-        # _ = tf.summary.FileWriter('./reduced_graph', new_sess.graph)
 
         reduced_identity = new_sess.graph.get_tensor_by_name("reduced_Identity:0")
         self.assertEqual(13, reduced_identity.shape.as_list()[-1])
         self.assertEqual(reduced_identity.op.inputs[0].name, 'reduced_dropout/cond/Merge:0')
+        old_dropout_greater_equal_op = new_sess.graph.get_operation_by_name('dropout/cond/dropout/GreaterEqual')
         reduced_dropout_greater_equal_op = new_sess.graph.get_operation_by_name('reduced_dropout/cond/dropout/'
                                                                                 'GreaterEqual')
+        old_rate = old_dropout_greater_equal_op.inputs[1].op.get_attr('value').float_val[0]
         rate = reduced_dropout_greater_equal_op.inputs[1].op.get_attr('value').float_val[0]
-        self.assertTrue(np.allclose(.6, rate))
+        self.assertTrue(np.allclose(old_rate, rate))
         self.assertEqual(4, len(ordered_modules_list))
         new_sess.close()
         sess.close()
@@ -544,15 +540,16 @@ class TestTfModuleReducer(unittest.TestCase):
         new_sess, ordered_modules_list = winnow.winnow_tf_model(sess, input_op_names, output_op_names,
                                                                 module_zero_channels_list,
                                                                 reshape=True, in_place=True, verbose=True)
-        # _ = tf.summary.FileWriter('./reduced_graph', new_sess.graph)
 
         reduced_identity = new_sess.graph.get_tensor_by_name("reduced_Identity:0")
         self.assertEqual(13, reduced_identity.shape.as_list()[-1])
-        self.assertEqual(reduced_identity.op.inputs[0].name, 'reduced_Dropout/dropout_1/dropout/mul_1:0')
-        reduced_dropout_greater_equal_op = new_sess.graph.get_operation_by_name('reduced_Dropout/dropout_1/dropout/'
+        self.assertEqual(reduced_identity.op.inputs[0].name, 'reduced_Dropout/dropout/mul_1:0')
+        old_dropout_greater_equal_op = new_sess.graph.get_operation_by_name('Dropout/dropout_1/GreaterEqual')
+        reduced_dropout_greater_equal_op = new_sess.graph.get_operation_by_name('reduced_Dropout/dropout/'
                                                                                 'GreaterEqual')
+        old_rate = old_dropout_greater_equal_op.inputs[1].op.get_attr('value').float_val[0]
         rate = reduced_dropout_greater_equal_op.inputs[1].op.get_attr('value').float_val[0]
-        self.assertTrue(np.allclose(.6, rate))
+        self.assertTrue(np.allclose(old_rate, rate))
 
         self.assertEqual(5, len(ordered_modules_list))
         new_sess.close()
@@ -589,7 +586,6 @@ class TestTfModuleReducer(unittest.TestCase):
         new_sess, ordered_modules_list = winnow.winnow_tf_model(sess, input_op_names, output_op_names,
                                                                 module_zero_channels_list,
                                                                 reshape=True, in_place=True, verbose=True)
-        # _ = tf.summary.FileWriter('./reduced_graph', new_sess.graph)
 
         reduced_conv2d_2_tanh_op = new_sess.graph.get_operation_by_name('reduced_scope_1/conv2d_2/Tanh')
         self.assertEqual(reduced_conv2d_2_tanh_op.inputs[0].op.name, 'reduced_scope_1/conv2d_2/BiasAdd')
@@ -675,7 +671,6 @@ class TestTfModuleReducer(unittest.TestCase):
         new_sess, ordered_modules_list = winnow.winnow_tf_model(sess, input_op_names, output_op_names,
                                                                 module_zero_channels_list,
                                                                 reshape=True, in_place=True, verbose=True)
-        # _ = tf.summary.FileWriter('./reduced_graph', new_sess.graph)
 
         reduced_conv2d_1_tanh_op = new_sess.graph.get_operation_by_name('reduced_scope_1/conv2d_2/Tanh')
         self.assertEqual(reduced_conv2d_1_tanh_op.inputs[0].op.name, 'reduced_scope_1/conv2d_2/BiasAdd')
@@ -740,7 +735,6 @@ class TestTfModuleReducer(unittest.TestCase):
         new_sess, ordered_modules_list = winnow.winnow_tf_model(sess, input_op_names, output_op_names,
                                                                 module_zero_channels_list,
                                                                 reshape=True, in_place=True, verbose=True)
-        # _ = tf.summary.FileWriter('./reduced_graph', new_sess.graph)
 
         reduced_conv2d_output = new_sess.graph.get_tensor_by_name("reduced_conv1a/BiasAdd:0")
         self.assertEqual(5, reduced_conv2d_output.shape.as_list()[-1])
@@ -771,7 +765,6 @@ class TestTfModuleReducer(unittest.TestCase):
         new_sess, ordered_modules_list = winnow.winnow_tf_model(sess, input_op_names, output_op_names,
                                                                 module_zero_channels_list,
                                                                 reshape=True, in_place=True, verbose=True)
-        # _ = tf.summary.FileWriter('./reduced_graph', new_sess.graph)
 
         old_minimum_op = sess.graph.get_operation_by_name('Minimum')
         old_minimum_rate = old_minimum_op.inputs[1].op.get_attr('value').float_val[0]
@@ -956,9 +949,9 @@ class TestTfWinnower(unittest.TestCase):
                                                 in_place=True, verbose=True)
         mask_winnower._propagate_masks()
 
-        first_conv2d_opname = "conv2d/Conv2D"
+        first_conv2d_opname = "conv2d"
         middle_batchnorm_opname = "batch_normalization"
-        second_conv2d_opname = "conv2d_1/Conv2D"
+        second_conv2d_opname = "conv2d_1"
         ops_dict = mask_winnower._conn_graph.get_all_ops()
         first_conv2d_mask = mask_winnower._mask_propagator.op_to_mask_dict[ops_dict[first_conv2d_opname]]
         self.assertEqual(3, sum(first_conv2d_mask.input_channel_masks[0]))
@@ -1004,19 +997,19 @@ class TestTfWinnower(unittest.TestCase):
         mask_winnower._propagate_masks()
         ops_dict = mask_winnower._conn_graph.get_all_ops()
         self._check_mask_indices(input_channels_to_winnow, "input",
-                                 mask_winnower._mask_propagator.op_to_mask_dict[ops_dict["conv2d_3/Conv2D"]])
+                                 mask_winnower._mask_propagator.op_to_mask_dict[ops_dict["conv2d_3"]])
         self._check_mask_indices(input_channels_to_winnow_2, "output",
                                  mask_winnower._mask_propagator.op_to_mask_dict[ops_dict["batch_normalization"]])
         self._check_mask_indices(input_channels_to_winnow_2, "input",
                                  mask_winnower._mask_propagator.op_to_mask_dict[ops_dict["batch_normalization"]])
         self._check_mask_indices(input_channels_to_winnow, "output",
-                                 mask_winnower._mask_propagator.op_to_mask_dict[ops_dict["conv2d_2/Conv2D"]])
+                                 mask_winnower._mask_propagator.op_to_mask_dict[ops_dict["conv2d_2"]])
         self._check_mask_indices(input_channels_to_winnow_2, "output",
                                  mask_winnower._mask_propagator.op_to_mask_dict[ops_dict["Relu"]])
         self._check_mask_indices(input_channels_to_winnow_2, "input",
                                  mask_winnower._mask_propagator.op_to_mask_dict[ops_dict["Relu"]])
         self._check_mask_indices(input_channels_to_winnow_2, "output",
-                                 mask_winnower._mask_propagator.op_to_mask_dict[ops_dict["conv2d/Conv2D"]])
+                                 mask_winnower._mask_propagator.op_to_mask_dict[ops_dict["conv2d"]])
         sess.close()
 
     def test_mask_propagation_with_maxpool_as_last_layer(self):
@@ -1132,20 +1125,20 @@ class TestTfWinnower(unittest.TestCase):
         modified_op_list = mask_winnower._mask_propagator.get_ops_with_non_default_ip_op_masks()
         self.assertEqual(6, len(modified_op_list))
 
-        conv2d_1_op = mask_winnower._conn_graph.get_all_ops()["conv2d_1/Conv2D"]
+        conv2d_1_op = mask_winnower._conn_graph.get_all_ops()["conv2d_1"]
         conv2d_1_op_mask = mask_winnower._mask_propagator.op_to_mask_dict[conv2d_1_op]
         self.assertEqual([1, 1, 0, 0, 1, 1], conv2d_1_op_mask.output_channel_masks[0])
-        conv2d_op = mask_winnower._conn_graph.get_all_ops()["conv2d/Conv2D"]
+        conv2d_op = mask_winnower._conn_graph.get_all_ops()["conv2d"]
         conv2d_op_mask = mask_winnower._mask_propagator.op_to_mask_dict[conv2d_op]
         self.assertEqual([0, 0, 1, 1, 1], conv2d_op_mask.output_channel_masks[0])
-        conv2d_2_op = mask_winnower._conn_graph.get_all_ops()["conv2d_2/Conv2D"]
+        conv2d_2_op = mask_winnower._conn_graph.get_all_ops()["conv2d_2"]
         conv2d_2_op_mask = mask_winnower._mask_propagator.op_to_mask_dict[conv2d_2_op]
         self.assertEqual([1, 1, 1, 1, 1, 1, 0], conv2d_2_op_mask.output_channel_masks[0])
-        conv2d_3_op = mask_winnower._conn_graph.get_all_ops()["conv2d_3/Conv2D"]
+        conv2d_3_op = mask_winnower._conn_graph.get_all_ops()["conv2d_3"]
         conv2d_3_op_mask = mask_winnower._mask_propagator.op_to_mask_dict[conv2d_3_op]
         self.assertEqual([1, 1, 0, 0, 1, 1, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0],
                          conv2d_3_op_mask.input_channel_masks[0])
-        conv2d_4_op = mask_winnower._conn_graph.get_all_ops()["conv2d_4/Conv2D"]
+        conv2d_4_op = mask_winnower._conn_graph.get_all_ops()["conv2d_4"]
         conv2d_4_op_mask = mask_winnower._mask_propagator.op_to_mask_dict[conv2d_4_op]
         self.assertEqual([1, 1, 0, 0, 1, 1, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 0],
                          conv2d_4_op_mask.input_channel_masks[0])
@@ -1176,7 +1169,7 @@ class TestTfWinnower(unittest.TestCase):
                                                 reshape=True, in_place=True, verbose=True)
         mask_winnower._propagate_masks()
 
-        conv2d_2_op = mask_winnower._conn_graph.get_all_ops()["conv2d_2/Conv2D"]
+        conv2d_2_op = mask_winnower._conn_graph.get_all_ops()["conv2d_2"]
         conv2d_2_op_mask = mask_winnower._mask_propagator.op_to_mask_dict[conv2d_2_op]
         self.assertEqual([1, 1, 1, 0, 1, 0, 1, 0], conv2d_2_op_mask.output_channel_masks[0])
 
@@ -1211,10 +1204,10 @@ class TestTfWinnower(unittest.TestCase):
                                                 reshape=True, in_place=True, verbose=True)
         mask_winnower._propagate_masks()
 
-        conv2d_1_op = mask_winnower._conn_graph.get_all_ops()["conv2d_1/Conv2D"]
+        conv2d_1_op = mask_winnower._conn_graph.get_all_ops()["conv2d_1"]
         conv2d_1_op_mask = mask_winnower._mask_propagator.op_to_mask_dict[conv2d_1_op]
         self.assertEqual([1, 1, 1, 0, 1, 0, 1, 0], conv2d_1_op_mask.output_channel_masks[0])
-        conv2d_3_op = mask_winnower._conn_graph.get_all_ops()["conv2d_3/Conv2D"]
+        conv2d_3_op = mask_winnower._conn_graph.get_all_ops()["conv2d_3"]
         conv2d_3_op_mask = mask_winnower._mask_propagator.op_to_mask_dict[conv2d_3_op]
         self.assertEqual([1, 1, 1, 0, 1, 0, 1, 0], conv2d_3_op_mask.output_channel_masks[0])
 
@@ -1276,7 +1269,7 @@ class TestTfWinnower(unittest.TestCase):
         output_op_names = ['top1-acc', 'top5-acc']
         mask_winnower = MaskPropagationWinnower(sess, input_op_names, output_op_names, module_zero_channels_list,
                                                 reshape=True, in_place=True, verbose=True)
-        flatten_op = mask_winnower._conn_graph.get_all_ops()['flatten/Reshape']
+        flatten_op = mask_winnower._conn_graph.get_all_ops()['flatten']
         self.assertTrue(flatten_op not in mask_winnower._mask_propagator.op_to_mask_dict.keys())
         self.assertEqual(3, len(mask_winnower._mask_propagator.op_to_mask_dict))
 

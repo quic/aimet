@@ -49,7 +49,7 @@ from aimet_tensorflow.utils.common import get_ordered_ops, create_input_feed_dic
     iter_first_x, get_ordered_conv_linears, get_training_tensors
 from aimet_tensorflow.utils.graph_saver import wrapper_func
 from aimet_tensorflow.examples.test_models import single_residual, multiple_input_model, \
-    model_with_multiple_training_tensors, keras_model_functional
+    model_with_multiple_training_tensors, keras_model_functional, keras_model_functional_with_non_fused_batchnorms
 from aimet_tensorflow.utils.op.conv import WeightTensorUtils, BiasUtils, get_output_activation_shape
 from aimet_tensorflow.utils.op.fusedbatchnorm import BNUtils
 
@@ -497,112 +497,6 @@ class TestTrainingExtensionsTfUtils(unittest.TestCase):
         training_tensors = get_training_tensors(tf.get_default_graph())
         self.assertEqual(3, len(training_tensors))
 
-    def test_param_read_keras_model_with_fused_batchnorms(self):
-        """
-        Test to validate fused BN op param read AIMET api(s) on Keras layers.
-        This test also reproduces SFTI issue
-        tensorflow.python.framework.errors_impl.InvalidArgumentError
-        :return:
-        """
-
-        tf.keras.backend.clear_session()
-        with tf.device('/cpu:0'):
-            model = keras_model_functional()
-            model.summary()
-
-        sess = tf.keras.backend.get_session()
-        init = tf.global_variables_initializer()
-        sess.run(init)
-
-        # layer 1 , 3 and 5 are fused BN of different types
-        with sess.as_default():
-            # read weights ( beta, gamma, mean, variance)
-            bn_1 = model.layers[2]
-            bn_2 = model.layers[4]
-            bn_3 = model.layers[6]
-            keras_bn_1_params = get_bn_params_keras_layer(bn_1)
-            keras_bn_2_params = get_bn_params_keras_layer(bn_2)
-            keras_bn_3_params = get_bn_params_keras_layer(bn_3)
-
-            bn_op_1 = sess.graph.get_operation_by_name('batch_normalization/FusedBatchNormV3')
-            bn_op_2 = sess.graph.get_operation_by_name('scope_1/batch_normalization_1/cond/FusedBatchNormV3_1')
-            bn_op_3 = sess.graph.get_operation_by_name('scope_1/batch_normalization_2/FusedBatchNormV3')
-            bn_1_params = get_bn_params_aimet_api(sess, bn_op_1)
-            bn_2_params = get_bn_params_aimet_api(sess, bn_op_2)
-            bn_3_params = get_bn_params_aimet_api(sess, bn_op_3)
-
-            self.assertTrue(np.allclose(keras_bn_1_params, bn_1_params))
-            self.assertTrue(np.allclose(keras_bn_2_params, bn_2_params))
-            self.assertTrue(np.allclose(keras_bn_3_params, bn_3_params))
-
-        sess.close()
-
-    def test_with_tf_bn_op(self):
-        """
-        Test with TF BN op
-        :return:
-        """
-        tf.reset_default_graph()
-        sess = tf.Session(graph=tf.get_default_graph())
-        inp = tf.placeholder(tf.float32, [1, 32, 32, 3])
-        net = tf.layers.conv2d(inp, 32, [3, 3])
-        _ = tf.compat.v1.layers.batch_normalization(net)
-
-        # _ = tf.summary.FileWriter('./keras_model_bn_op', sess.graph)
-        init = tf.global_variables_initializer()
-        sess.run(init)
-
-        with sess.as_default():
-            bn_op = sess.graph.get_operation_by_name('batch_normalization/FusedBatchNormV3')
-            moving_mean = BNUtils.get_moving_mean_as_numpy_data(sess, bn_op)
-            moving_var = BNUtils.get_moving_variance_as_numpy_data(sess, bn_op)
-            beta = BNUtils.get_beta_as_numpy_data(sess, bn_op)
-            gamma = BNUtils.get_gamma_as_numpy_data(sess, bn_op)
-
-        # check the values read are equal to init values
-        expected_beta = np.zeros_like(beta)
-        expected_gamma = np.ones_like(gamma)
-        expected_mean = np.zeros_like(moving_mean)
-        expected_variance = np.ones_like(moving_var)
-
-        self.assertTrue(np.allclose(expected_beta, beta))
-        self.assertTrue(np.allclose(expected_gamma, gamma))
-        self.assertTrue(np.allclose(expected_mean, moving_mean))
-        self.assertTrue(np.allclose(expected_variance, moving_var))
-        sess.close()
-
-    def test_with_slim_bn_op(self):
-        """
-        Test with Tf Slim BN op
-        :return:
-        """
-        tf.reset_default_graph()
-        sess = tf.Session(graph=tf.get_default_graph())
-        inp = tf.placeholder(tf.float32, [1, 32, 32, 3])
-        net = slim.conv2d(inp, 32, [3, 3])
-        _ = slim.batch_norm(net, decay=.7, epsilon=.65, is_training=True)
-
-        init = tf.global_variables_initializer()
-        sess.run(init)
-        # _ = tf.summary.FileWriter('./keras_model_bn_op', sess.graph)
-        with sess.graph.as_default():
-            bn_op = sess.graph.get_operation_by_name('BatchNorm/FusedBatchNormV3')
-            moving_mean = BNUtils.get_moving_mean_as_numpy_data(sess, bn_op)
-            moving_var = BNUtils.get_moving_variance_as_numpy_data(sess, bn_op)
-            beta = BNUtils.get_beta_as_numpy_data(sess, bn_op)
-            gamma = BNUtils.get_gamma_as_numpy_data(sess, bn_op)
-
-        # check the values read are equal to init values
-        expected_beta = np.zeros_like(beta)
-        expected_gamma = np.ones_like(gamma)
-        expected_mean = np.zeros_like(moving_mean)
-        expected_variance = np.ones_like(moving_var)
-
-        self.assertTrue(np.allclose(expected_beta, beta))
-        self.assertTrue(np.allclose(expected_gamma, gamma))
-        self.assertTrue(np.allclose(expected_mean, moving_mean))
-        self.assertTrue(np.allclose(expected_variance, moving_var))
-
     def test_get_output_activation_shape(self):
         """Test for getting output activation shapes"""
 
@@ -727,3 +621,150 @@ class TestTrainingExtensionsTfUtils(unittest.TestCase):
         self.assertEqual(channels, 32)
 
         sess.close()
+
+
+class TestBNUtils(unittest.TestCase):
+    """ Unittest class for testing BN Utils """
+
+    def test_with_tf_bn_op(self):
+        """
+        Test with TF BN op
+        :return:
+        """
+        tf.reset_default_graph()
+        sess = tf.Session(graph=tf.get_default_graph())
+        inp = tf.placeholder(tf.float32, [1, 32, 32, 3])
+        net = tf.layers.conv2d(inp, 32, [3, 3])
+        _ = tf.compat.v1.layers.batch_normalization(net)
+
+        init = tf.global_variables_initializer()
+        sess.run(init)
+
+        with sess.as_default():
+            bn_op = sess.graph.get_operation_by_name('batch_normalization/FusedBatchNormV3')
+            moving_mean = BNUtils.get_moving_mean_as_numpy_data(sess, bn_op)
+            moving_var = BNUtils.get_moving_variance_as_numpy_data(sess, bn_op)
+            beta = BNUtils.get_beta_as_numpy_data(sess, bn_op)
+            gamma = BNUtils.get_gamma_as_numpy_data(sess, bn_op)
+
+        # check the values read are equal to init values
+        expected_beta = np.zeros_like(beta)
+        expected_gamma = np.ones_like(gamma)
+        expected_mean = np.zeros_like(moving_mean)
+        expected_variance = np.ones_like(moving_var)
+
+        self.assertTrue(np.allclose(expected_beta, beta))
+        self.assertTrue(np.allclose(expected_gamma, gamma))
+        self.assertTrue(np.allclose(expected_mean, moving_mean))
+        self.assertTrue(np.allclose(expected_variance, moving_var))
+        sess.close()
+
+    def test_with_slim_bn_op(self):
+        """
+        Test with Tf Slim BN op
+        :return:
+        """
+        tf.reset_default_graph()
+        sess = tf.Session(graph=tf.get_default_graph())
+        inp = tf.placeholder(tf.float32, [1, 32, 32, 3])
+        net = slim.conv2d(inp, 32, [3, 3])
+        _ = slim.batch_norm(net, decay=.7, epsilon=.65, is_training=True)
+
+        init = tf.global_variables_initializer()
+        sess.run(init)
+        with sess.graph.as_default():
+            bn_op = sess.graph.get_operation_by_name('BatchNorm/FusedBatchNormV3')
+            moving_mean = BNUtils.get_moving_mean_as_numpy_data(sess, bn_op)
+            moving_var = BNUtils.get_moving_variance_as_numpy_data(sess, bn_op)
+            beta = BNUtils.get_beta_as_numpy_data(sess, bn_op)
+            gamma = BNUtils.get_gamma_as_numpy_data(sess, bn_op)
+
+        # check the values read are equal to init values
+        expected_beta = np.zeros_like(beta)
+        expected_gamma = np.ones_like(gamma)
+        expected_mean = np.zeros_like(moving_mean)
+        expected_variance = np.ones_like(moving_var)
+
+        self.assertTrue(np.allclose(expected_beta, beta))
+        self.assertTrue(np.allclose(expected_gamma, gamma))
+        self.assertTrue(np.allclose(expected_mean, moving_mean))
+        self.assertTrue(np.allclose(expected_variance, moving_var))
+
+    def test_param_read_keras_model_with_fused_batchnorms(self):
+        """
+        Test to validate fused BN op param read AIMET api(s) on Keras layers.
+        This test also reproduces SFTI issue
+        tensorflow.python.framework.errors_impl.InvalidArgumentError
+        :return:
+        """
+
+        tf.keras.backend.clear_session()
+        with tf.device('/cpu:0'):
+            model = keras_model_functional()
+            model.summary()
+
+        sess = tf.keras.backend.get_session()
+        init = tf.global_variables_initializer()
+        sess.run(init)
+
+        # layer 1 , 3 and 5 are fused BN of different types
+        with sess.as_default():
+            # read weights ( beta, gamma, mean, variance)
+            bn_1 = model.layers[2]
+            bn_2 = model.layers[4]
+            bn_3 = model.layers[6]
+            keras_bn_1_params = get_bn_params_keras_layer(bn_1)
+            keras_bn_2_params = get_bn_params_keras_layer(bn_2)
+            keras_bn_3_params = get_bn_params_keras_layer(bn_3)
+
+            bn_op_1 = sess.graph.get_operation_by_name('batch_normalization/FusedBatchNormV3')
+            bn_op_2 = sess.graph.get_operation_by_name('scope_1/batch_normalization_1/cond/FusedBatchNormV3_1')
+            bn_op_3 = sess.graph.get_operation_by_name('scope_1/batch_normalization_2/FusedBatchNormV3')
+            bn_1_params = get_bn_params_aimet_api(sess, bn_op_1)
+            bn_2_params = get_bn_params_aimet_api(sess, bn_op_2)
+            bn_3_params = get_bn_params_aimet_api(sess, bn_op_3)
+
+            self.assertTrue(np.allclose(keras_bn_1_params, bn_1_params))
+            self.assertTrue(np.allclose(keras_bn_2_params, bn_2_params))
+            self.assertTrue(np.allclose(keras_bn_3_params, bn_3_params))
+
+        sess.close()
+
+    def test_training_batchnorm(self):
+        """ Test BNUtils get_training() with both fused and non fused batchnorms, with all three training modes """
+
+        tf.reset_default_graph()
+
+        # Model with fused batchnorms
+        _ = keras_model_functional()
+        fused_bn_training_true_op = tf.get_default_graph().get_operation_by_name('batch_normalization/FusedBatchNormV3')
+        self.assertTrue(BNUtils.get_training(fused_bn_training_true_op))
+        self.assertTrue(isinstance(BNUtils.get_training(fused_bn_training_true_op), bool))
+
+        fused_bn_training_tensor_op = tf.get_default_graph().get_operation_by_name('scope_1/batch_normalization_1/cond/'
+                                                                                   'FusedBatchNormV3_1')
+        training_tensor = tf.get_default_graph().get_tensor_by_name('is_training:0')
+        self.assertEqual(BNUtils.get_training(fused_bn_training_tensor_op), training_tensor)
+
+        fused_bn_training_false_op = tf.get_default_graph().get_operation_by_name('scope_1/batch_normalization_2/'
+                                                                                  'FusedBatchNormV3')
+        self.assertFalse(BNUtils.get_training(fused_bn_training_false_op))
+
+        tf.reset_default_graph()
+
+        # Model with non fused batchnorms
+        _ = keras_model_functional_with_non_fused_batchnorms()
+        bn_training_true_op = tf.get_default_graph().get_operation_by_name('batch_normalization/batchnorm/mul_1')
+        self.assertTrue(BNUtils.get_training(bn_training_true_op))
+        self.assertTrue(isinstance(BNUtils.get_training(bn_training_true_op), bool))
+
+        bn_training_tensor_op = tf.get_default_graph().get_operation_by_name('scope_1/batch_normalization_1/batchnorm/'
+                                                                             'mul_1')
+        training_tensor = tf.get_default_graph().get_tensor_by_name('is_training:0')
+        self.assertEqual(BNUtils.get_training(bn_training_tensor_op), training_tensor)
+
+        bn_training_false_op = tf.get_default_graph().get_operation_by_name('scope_1/batch_normalization_2/batchnorm/'
+                                                                            'mul_1')
+        self.assertFalse(BNUtils.get_training(bn_training_false_op))
+
+        tf.reset_default_graph()

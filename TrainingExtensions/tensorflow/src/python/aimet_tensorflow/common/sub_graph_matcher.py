@@ -61,15 +61,15 @@ subgraph_constructors = {
         'input_shape': (1, 10, 10, 3),
         'op_type': 'Conv2D',
         'constructor': "tf.keras.layers.Conv2D(10, (1, 1), use_bias=False)(constants)",
-        'module_regex': ['(.+)/Conv2D$'],
-        'associated_op_regex': ['Conv2D$']
+        'module_regex': ['(.+)/Conv2D$', '(.+)/separable_conv2d$'],
+        'associated_op_regex': ['Conv2D$', 'separable_conv2d$']
     },
     'Conv2D_keras_with_bias': {
         'input_shape': (1, 10, 10, 3),
         'op_type': 'Conv2D',
         'constructor': "tf.keras.layers.Conv2D(10, (1, 1), use_bias=True)(constants)",
-        'module_regex': ['(.+)/Conv2D$'],
-        'associated_op_regex': ['Conv2D$']
+        'module_regex': ['(.+)/Conv2D$', '(.+)/separable_conv2d$'],
+        'associated_op_regex': ['Conv2D$', 'separable_conv2d$']
     },
     'Conv2D_slim_with_bias': {
         'input_shape': (1, 10, 10, 3),
@@ -77,6 +77,13 @@ subgraph_constructors = {
         'constructor': "slim.conv2d(constants, 10, [3, 3], activation_fn=None)",
         'module_regex': ['(.+)/Conv2D$', '(.+)/convolution$'],
         'associated_op_regex': ['Conv2D$', 'convolution$']
+    },
+    'DepthwiseConv2dNative': {
+        'input_shape': (1, 10, 10, 3),
+        'op_type': 'DepthwiseConv2dNative',
+        'constructor': "tf.keras.layers.DepthwiseConv2D(3, (1, 1))(constants)",
+        'module_regex': ['(.+)/depthwise$'],
+        'associated_op_regex': ['depthwise$']
     },
     'Dense_keras': {
         'input_shape': (1, 10),
@@ -96,6 +103,13 @@ subgraph_constructors = {
         'input_shape': (10, 10, 3,),
         'op_type': 'FusedBatchNormV3',
         'constructor': "tf.keras.layers.BatchNormalization()(inputs)",
+        'module_regex': ['(.+)/cond/FusedBatchNormV3_1$'],
+        'associated_op_regex': ['FusedBatchNormV3_1$']
+    },
+    'BN_keras_with_training_tensor_scale_False': {
+        'input_shape': (10, 10, 3,),
+        'op_type': 'FusedBatchNormV3',
+        'constructor': "tf.keras.layers.BatchNormalization(scale=False)(inputs)",
         'module_regex': ['(.+)/cond/FusedBatchNormV3_1$'],
         'associated_op_regex': ['FusedBatchNormV3_1$']
     },
@@ -189,6 +203,27 @@ subgraph_constructors = {
         'constructor': "tf.keras.layers.Flatten()(inputs)",
         'module_regex': ['(.+)/Reshape$'],
         'associated_op_regex': ['Reshape$']
+    },
+    'Reshape_to_3D': {
+        'input_shape': (300,),
+        'op_type': 'Reshape',
+        'constructor': "tf.keras.layers.Reshape(target_shape=[10, 10, 3])(inputs)",
+        'module_regex': ['(.+)/Reshape$'],
+        'associated_op_regex': ['Reshape$']
+    },
+    'Upsample2D': {
+        'input_shape': (10, 10, 3,),
+        'op_type': 'Upsample2D',
+        'constructor': "tf.keras.layers.UpSampling2D(size=(2, 3))(inputs)",
+        'module_regex': ['(.+)/Shape$'],
+        'associated_op_regex': ['Shape$']
+    },
+    'GlobalMaxPool2D': {
+        'input_shape': (10, 10, 3,),
+        'op_type': 'GlobalMaxPool2D',
+        'constructor': "tf.keras.layers.GlobalMaxPool2D()(inputs)",
+        'module_regex': ['(.+)/Max$'],
+        'associated_op_regex': ['Max$']
     }
 }
 
@@ -239,43 +274,43 @@ class SubGraphMatcher:
 
         self.create_patterns_for_ops()
         all_op_patterns_list = [op_dict['pattern'] for op_dict in list(self._pattern_subgraph.values())]
-        one_of_pattern_for_all_ops = graph_matcher.OneofPattern(all_op_patterns_list)
-        layer_matcher = graph_matcher.GraphMatcher(one_of_pattern_for_all_ops)
+        for pattern in all_op_patterns_list:
+            layer_matcher = graph_matcher.GraphMatcher(pattern)
 
-        # Graph Match
-        for match_result in layer_matcher.match_graph(self._graph):
-            matched_patterns = list(match_result._pattern_to_op_tensor.keys())
-            op = match_result.get_op(matched_patterns[0])
-            # For ops like FusedBatchNorm, there are multiple output ops of the model which may be matched (Merge,
-            # Merge_1, Merge_2. In these cases, Merge is the one that should be matched because if either of the other
-            # two are matched, Merge will not make it into the op_to_module_dict.
-            if op not in self._valid_ops:
-                continue
-            current_pattern = self._pattern_to_op_type[matched_patterns[0]]
-            if op in op_to_module_dict:
-                # op was already matched with a different pattern previously. Compare lengths of the previous
-                # pattern with current pattern, and replace the previous op type with the current op type if more
-                # ops were matched.
-                # This can happen if one pattern is a subset of another (Conv2D without bias vs Conv2D with bias for
-                # example. If the same op is matched with both patterns, we will pick Conv2D with bias to be the one
-                # to use.
-                op_info = op_to_module_dict[op]
-                if self._pattern_subgraph[op_info.op_type]['length'] >= \
-                        self._pattern_subgraph[current_pattern]['length']:
-                    # op was already matched with a larger pattern set
+            # Graph Match
+            for match_result in layer_matcher.match_graph(self._graph):
+                matched_patterns = list(match_result._pattern_to_op_tensor.keys())
+                op = match_result.get_op(matched_patterns[0])
+                # For ops like FusedBatchNorm, there are multiple output ops of the model which may be matched (Merge,
+                # Merge_1, Merge_2. In these cases, Merge is the one that should be matched because if either of the
+                # other two are matched, Merge will not make it into the op_to_module_dict.
+                if op not in self._valid_ops:
                     continue
+                current_pattern = self._pattern_to_op_type[matched_patterns[0]]
+                if op in op_to_module_dict:
+                    # op was already matched with a different pattern previously. Compare lengths of the previous
+                    # pattern with current pattern, and replace the previous op type with the current op type if more
+                    # ops were matched.
+                    # This can happen if one pattern is a subset of another (Conv2D without bias vs Conv2D with bias for
+                    # example. If the same op is matched with both patterns, we will pick Conv2D with bias to be the one
+                    # to use.
+                    op_info = op_to_module_dict[op]
+                    if self._pattern_subgraph[op_info.pattern_type]['length'] >= \
+                            self._pattern_subgraph[current_pattern]['length']:
+                        # op was already matched with a larger pattern set
+                        continue
 
-            ops_list = get_internal_ops_for_pattern(match_result)
-            # Check if any ops in ops_list were already matched with a larger pattern. If so, no need to change existing
-            # entries in op_to_module_dict.
-            if not self.is_subset_of_already_matched_op(current_pattern, ops_list, op_to_module_dict):
-                module_name = get_module_name(subgraph_constructors[current_pattern]['module_regex'], ops_list)
-                associated_op = get_associated_op(subgraph_constructors[current_pattern]['associated_op_regex'],
-                                                  ops_list)
-                op_type = subgraph_constructors[current_pattern]['op_type']
-                op_info = ModuleIdentifierOpInfo(module_name, op_type, associated_op, pattern_type=current_pattern)
-                for op in ops_list:
-                    op_to_module_dict[op] = op_info
+                ops_list = [op for op in get_internal_ops_for_pattern(match_result) if op in self._valid_ops]
+                # Check if any ops in ops_list were already matched with a larger pattern. If so, no need to change
+                # existing entries in op_to_module_dict.
+                if not self.is_subset_of_already_matched_op(current_pattern, ops_list, op_to_module_dict):
+                    module_name = get_module_name(subgraph_constructors[current_pattern]['module_regex'], ops_list)
+                    associated_op = get_associated_op(subgraph_constructors[current_pattern]['associated_op_regex'],
+                                                      ops_list)
+                    op_type = subgraph_constructors[current_pattern]['op_type']
+                    op_info = ModuleIdentifierOpInfo(module_name, op_type, associated_op, pattern_type=current_pattern)
+                    for op in ops_list:
+                        op_to_module_dict[op] = op_info
 
     # pylint: enable=protected-access
     def create_patterns_for_ops(self):
@@ -381,7 +416,7 @@ def create_op_type_patterns_from_subgraph(subgraph: tf.Graph) -> List[graph_matc
     :return: List of OpTypePattern()
     """
 
-    starting_op_names = ['aimet_input', 'aimet_constant']
+    starting_op_names = ['aimet_input', 'aimet_constant', 'is_training']
     ending_op_names = ['aimet_identity']
     ops_from_ending_ops = set()
     op_list = []
