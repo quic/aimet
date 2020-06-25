@@ -133,6 +133,7 @@ from aimet_common.connected_graph.operation import Op, determine_preceding_op_in
 from aimet_common.model_module import PytorchModelModule
 from aimet_common.utils import AimetLogger, ModelApi, api_channel_index_dict
 from aimet_torch.utils import run_hook_for_layers, is_leaf_module
+from aimet_torch.defs import PassThroughOp
 
 logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Winnow)
 
@@ -400,9 +401,11 @@ class ConnectedGraph(AimetCommonConnectedGraph):
                                                        module_tensor_tuples_map)
         if input_name in modules and is_leaf_module(modules[input_name]):
             # the graph is fully represented by a directional graph of leaf torch modules so the recursion is
-            # stopped at this level.
-            ops[output_name] = self._create_leaf_module_op(modules[input_name],
-                                                           inputs, ops, module_tensor_tuples_map)
+            # stopped at this level. PassThroughOp are being ignored because in graph node representation
+            # the passthrough op generate no output and are not part of inputs for downstream op
+            if not isinstance(modules[input_name], PassThroughOp):
+                ops[output_name] = self._create_leaf_module_op(modules[input_name],
+                                                               inputs, ops, module_tensor_tuples_map)
 
     def _create_input_products(self, model_input: Tuple[torch.Tensor], graph: torch._C.Graph) -> \
             Tuple[str, Dict[str, Product]]:
