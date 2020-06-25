@@ -39,14 +39,11 @@
 #include <cmath>
 #include <cstring>
 #include <iostream>
-#include <memory>
-#include <omp.h>
 #include <tuple>
 // including lapacke header file after SvdAlgorithm.hpp to avoid compilation error caused by OpenCV and LAPCK
 #include "SvdAlgorithm.hpp"
 #include <lapacke.h>
 
-#define NUM_OF_THREADS 8
 namespace DlCompression
 {
 template <typename DTYPE>
@@ -365,11 +362,6 @@ void SVD_CORE<DTYPE>::EstimateTAR_(typename std::map<std::string, LayerAttribute
     cv::Mat U, W, VT;
     std::tie(U, W, VT) = LapackSvd_(srcMat);
 
-    omp_set_num_threads(NUM_OF_THREADS);
-// dynamic scheduling is used because each iteration of for loop
-// construct has varying amount of work
-#pragma omp parallel for schedule(dynamic)
-
     for (int i = 0; i < rankPool.size(); i++)
     {
         unsigned int r = 0, s = 0;
@@ -387,10 +379,7 @@ void SVD_CORE<DTYPE>::EstimateTAR_(typename std::map<std::string, LayerAttribute
             cv::Mat reconstructMat = layerA_Mat * layerB_Mat;
             // Estimate the tensor approximation residual (TAR)
             DTYPE recon_error = cv::norm(reconstructMat, srcMat, (cv::NORM_RELATIVE | cv::NORM_L2));
-#pragma omp critical
-            {
-                TARMap.insert(std::make_pair(*ranks, recon_error));
-            }
+            TARMap.insert(std::make_pair(*ranks, recon_error));
             // TODO: Enable these logs in debug mode.
             // std::cout << "rank " << r << ": TAR = " << recon_error << std::endl;
         }
@@ -413,10 +402,7 @@ void SVD_CORE<DTYPE>::EstimateTAR_(typename std::map<std::string, LayerAttribute
             // Finally reconstruct the original matrix from these parts.
             cv::Mat reconstructMat = layerA_Mat * layerB_Recon_T;
             DTYPE recon_error      = cv::norm(reconstructMat, srcMat, (cv::NORM_RELATIVE | cv::NORM_L2));
-#pragma omp critical
-            {
-                TARMap.insert(std::make_pair(*ranks, recon_error));
-            }
+            TARMap.insert(std::make_pair(*ranks, recon_error));
             // TODO: Enable these logs in debug mode.
             // std::cout << "ranks (r, s) = (" << r << ", " << s << "): TAR = " << recon_error << std::endl;
         }
