@@ -439,12 +439,12 @@ def get_strides_for_split_conv_ops(op: tf.Operation) -> (List, List):
     data_format = op.get_attr("data_format")
 
     if str(data_format.decode("utf-8")) == "NHWC":
-        conv_a_strides = [1, strides[1], 1, 1]
-        conv_b_strides = [1, 1, strides[2], 1]
+        conv_a_strides = [strides[1], 1]
+        conv_b_strides = [1, strides[2]]
 
     elif str(data_format.decode("utf-8")) == "NCHW":
-        conv_a_strides = [1, 1, strides[2], 1]
-        conv_b_strides = [1, 1, 1, strides[3]]
+        conv_a_strides = [strides[2], 1]
+        conv_b_strides = [1, strides[3]]
 
     else:
         raise ValueError("Unknown data format!")
