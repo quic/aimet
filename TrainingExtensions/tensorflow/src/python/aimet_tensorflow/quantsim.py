@@ -43,13 +43,13 @@ import io
 from enum import Enum
 import shutil
 import json
-import math
 
 import tensorflow as tf
 from tensorflow.python.framework import ops as tf_ops
 from tensorflow.contrib import graph_editor
 
 from aimet_common.defs import QuantScheme
+from aimet_common.quantsim import gate_min_max, calculate_delta_offset
 from aimet_common.utils import AimetLogger
 from aimet_tensorflow.utils.common import update_variables_with_values, \
     save_data_to_pickle_file, load_data_from_pickle_file
@@ -576,37 +576,41 @@ class QuantizationSimModel:
         """
         return libpymo.TensorQuantizerOpMode.oneShotQuantizeDequantize
 
-    def _export_encodings(self, encoding_file_path: str):
-
+    def get_min_max_var_dict(self)-> Dict:
+        """
+        Fetches all the min max variables in given Quantized graph.
+        :return: dictionary of min/ max variable names to var mapping
+        """
         variable_dict = {}
         with self.session.graph.as_default():
             for var in tf.global_variables():
                 if var.name.endswith('_encoding_min:0') or var.name.endswith('_encoding_max:0'):
                     variable_dict[var.name] = var
 
-        def gate_min_max(min_val: float, max_val: float):
-            epsilon = 1e-5
-            gated_min = min(min_val, 0.0)
-            gated_max = max(max_val, 0.0)
-            gated_max = max(gated_max, gated_min + epsilon)
+        return variable_dict
 
-            return gated_min, gated_max
+    def read_min_max(self, quant_op_name: str, variable_dict: Dict = None)-> (float, float):
+        """
+        Reads min and max params from quantize op
+        :param quant_op_name: quantize op name to read min and max variables from.
+        :param variable_dict: dictionary of min/max variable names to variable mapping for given quantized graph, optional
+        :return: min and max variable values from the given quant op.
+        """
+        if not variable_dict:
+            # get a variable dict if one is not provided
+            variable_dict = self.get_min_max_var_dict()
 
-        def read_min_max(op_name: str):
-            min_var = variable_dict[op_name + '_encoding_min:0']
-            max_var = variable_dict[op_name + '_encoding_max:0']
-            return self.session.run([min_var, max_var])
+        min_var = variable_dict[quant_op_name + '_encoding_min:0']
+        max_var = variable_dict[quant_op_name + '_encoding_max:0']
+        return self.session.run([min_var, max_var])
 
-        def calculate_delta_offset(min_val: float, max_val: float, bw: int):
-            delta = (max_val - min_val) / (2 ** bw - 1)
-            if delta == 0:
-                delta = 1e-5
-            offset = math.floor(-min_val / delta)
-            return delta, offset
+    def _export_encodings(self, encoding_file_path: str):
+
+        variable_dict = self.get_min_max_var_dict()
 
         def update_encoding_dict_entry(encoding_dict: Dict,
                                        quant_op_name: str):
-            min_val, max_val = read_min_max(quant_op_name)
+            min_val, max_val = self.read_min_max(quant_op_name, variable_dict)
             min_val, max_val = gate_min_max(min_val, max_val)
             op_bitwidth = int(self._get_op_variable_value(quant_op_name, int(QuantizeOpIndices.bit_width)))
             delta, offset = calculate_delta_offset(min_val, max_val, op_bitwidth)
@@ -866,8 +870,8 @@ class QuantizationSimModel:
 
         return q_op_out
 
-
 # load and save utilities
+
 
 def update_tensor_quantizer_references(quant_sim_sess: tf.Session, quantizer_dict: Dict[str, QuantizerInfo]):
     """
