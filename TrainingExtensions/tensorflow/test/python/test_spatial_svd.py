@@ -50,10 +50,14 @@ from aimet_common.defs import CostMetric, LayerCompRatioPair
 
 from aimet_tensorflow import layer_database as lad
 from aimet_tensorflow.layer_database import LayerDatabase
+from aimet_tensorflow.common.connectedgraph import ConnectedGraph
 from aimet_tensorflow.examples import mnist_tf_model
+from aimet_tensorflow.examples.test_models import tf_slim_basic_model
 from aimet_tensorflow.svd_spiltter import SpatialSvdModuleSplitter
 from aimet_tensorflow.svd_pruner import SpatialSvdPruner
 from aimet_tensorflow.utils.common import get_succeeding_bias_op
+from aimet_tensorflow.utils.graph_saver import save_and_load_graph
+from aimet_tensorflow.utils.op.conv import WeightTensorUtils, BiasUtils
 logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Test)
 
 
@@ -371,9 +375,13 @@ class TestSpatialSvdPruning(unittest.TestCase):
 
         spatial_svd_pruner = SpatialSvdPruner()
         spatial_svd_pruner._prune_layer(orig_layer_db, comp_layer_db, conv1, 0.5, CostMetric.mac)
+        conv2d_a_op = comp_layer_db.model.graph.get_operation_by_name('conv2d_a/Conv2D')
+        conv2d_b_op = comp_layer_db.model.graph.get_operation_by_name('conv2d_b/Conv2D')
+        conv2d_a_weight = WeightTensorUtils.get_tensor_as_numpy_data(comp_layer_db.model, conv2d_a_op)
+        conv2d_b_weight = WeightTensorUtils.get_tensor_as_numpy_data(comp_layer_db.model, conv2d_b_op)
 
-        conv1_a = comp_layer_db.find_layer_by_name('conv2d/Conv2D_a')
-        conv1_b = comp_layer_db.find_layer_by_name('conv2d/Conv2D_b')
+        conv1_a = comp_layer_db.find_layer_by_name('conv2d_a/Conv2D')
+        conv1_b = comp_layer_db.find_layer_by_name('conv2d_b/Conv2D')
 
         # [Noc, Nic, kh, kw]
         self.assertEqual([2, 1, 5, 1], conv1_a.weight_shape)
@@ -396,8 +404,18 @@ class TestSpatialSvdPruning(unittest.TestCase):
         consumers = [consumer for consumer in bias_op.outputs[0].consumers()]
         self.assertEqual(len(consumers), 0)
 
+        # Check that weights loaded during svd pruning will stick after save and load
+        new_sess = save_and_load_graph('./temp_meta/', comp_layer_db.model)
+        conv2d_a_op = comp_layer_db.model.graph.get_operation_by_name('conv2d_a/Conv2D')
+        conv2d_b_op = comp_layer_db.model.graph.get_operation_by_name('conv2d_b/Conv2D')
+        conv2d_a_weight_after_save_load = WeightTensorUtils.get_tensor_as_numpy_data(comp_layer_db.model, conv2d_a_op)
+        conv2d_b_weight_after_save_load = WeightTensorUtils.get_tensor_as_numpy_data(comp_layer_db.model, conv2d_b_op)
+        self.assertTrue(np.array_equal(conv2d_a_weight, conv2d_a_weight_after_save_load))
+        self.assertTrue(np.array_equal(conv2d_b_weight, conv2d_b_weight_after_save_load))
+
         tf.reset_default_graph()
         sess.close()
+        new_sess.close()
         # delete temp directory
         shutil.rmtree(str('./temp_meta/'))
 
@@ -428,15 +446,15 @@ class TestSpatialSvdPruning(unittest.TestCase):
         comp_layer_db = spatial_svd_pruner.prune_model(orig_layer_db, layer_comp_ratio_list, CostMetric.mac,
                                                        trainer=None)
 
-        conv1_a = comp_layer_db.find_layer_by_name('conv2d/Conv2D_a')
-        conv1_b = comp_layer_db.find_layer_by_name('conv2d/Conv2D_b')
+        conv1_a = comp_layer_db.find_layer_by_name('conv2d_a/Conv2D')
+        conv1_b = comp_layer_db.find_layer_by_name('conv2d_b/Conv2D')
 
         # Weights shape [kh, kw, Nic, Noc]
         self.assertEqual([5, 1, 1, 2], conv1_a.module.inputs[1].get_shape().as_list())
         self.assertEqual([1, 5, 2, 32], conv1_b.module.inputs[1].get_shape().as_list())
 
-        conv2_a = comp_layer_db.find_layer_by_name('conv2d_1/Conv2D_a')
-        conv2_b = comp_layer_db.find_layer_by_name('conv2d_1/Conv2D_b')
+        conv2_a = comp_layer_db.find_layer_by_name('conv2d_1_a/Conv2D')
+        conv2_b = comp_layer_db.find_layer_by_name('conv2d_1_b/Conv2D')
 
         self.assertEqual([5, 1, 32, 53], conv2_a.module.inputs[1].get_shape().as_list())
         self.assertEqual([1, 5, 53, 64], conv2_b.module.inputs[1].get_shape().as_list())
@@ -449,3 +467,78 @@ class TestSpatialSvdPruning(unittest.TestCase):
         sess.close()
         # delete temp directory
         shutil.rmtree(str('./temp_meta/'))
+
+    def test_prune_model_tf_slim(self):
+        """ Punning a model with tf slim api """
+
+        # create tf.Session and initialize the weights and biases with zeros
+        config = tf.ConfigProto()
+        config.gpu_options.allow_growth = True
+
+        # create session with graph
+        sess = tf.Session(graph=tf.Graph(), config=config)
+
+        with sess.graph.as_default():
+            # by default, model will be constructed in default graph
+            x = tf.placeholder(tf.float32, [1, 32, 32, 3])
+            _ = tf_slim_basic_model(x)
+            sess.run(tf.global_variables_initializer())
+
+        conn_graph_orig = ConnectedGraph(sess.graph, ['Placeholder'], ['tf_slim_model/Softmax'],
+                                         use_subgraph_matcher=True)
+        num_ops_orig = len(conn_graph_orig.get_all_ops())
+
+        # Create a layer database
+        orig_layer_db = LayerDatabase(model=sess, input_shape=(1, 32, 32, 3), working_dir=None)
+        conv1 = orig_layer_db.find_layer_by_name('Conv_1/Conv2D')
+        conv1_bias = BiasUtils.get_bias_as_numpy_data(orig_layer_db.model, conv1.module)
+
+        layer_comp_ratio_list = [LayerCompRatioPair(conv1, Decimal(0.5))]
+
+        spatial_svd_pruner = SpatialSvdPruner()
+        comp_layer_db = spatial_svd_pruner.prune_model(orig_layer_db, layer_comp_ratio_list, CostMetric.mac,
+                                                       trainer=None)
+        # Check that svd added these ops
+        _ = comp_layer_db.model.graph.get_operation_by_name('Conv_1_a/Conv2D')
+        _ = comp_layer_db.model.graph.get_operation_by_name('Conv_1_b/Conv2D')
+
+        conn_graph_new = ConnectedGraph(comp_layer_db.model.graph, ['Placeholder'], ['tf_slim_model/Softmax'],
+                                        use_subgraph_matcher=True)
+        num_ops_new = len(conn_graph_new.get_all_ops())
+        self.assertEqual(num_ops_orig + 1, num_ops_new)
+        bias_add_op = comp_layer_db.model.graph.get_operation_by_name('Conv_1_b/BiasAdd')
+        conv_1_b_op = comp_layer_db.model.graph.get_operation_by_name('Conv_1_b/Conv2D')
+        self.assertEqual(conn_graph_new._module_identifier.get_op_info(bias_add_op),
+                         conn_graph_new._module_identifier.get_op_info(conv_1_b_op))
+        self.assertTrue(np.array_equal(conv1_bias, BiasUtils.get_bias_as_numpy_data(comp_layer_db.model, conv_1_b_op)))
+
+    def test_prune_conv_no_bias(self):
+        """ Test spatial svd on a conv layer with no bias """
+        # create tf.Session and initialize the weights and biases with zeros
+        config = tf.ConfigProto()
+        config.gpu_options.allow_growth = True
+
+        # create session with graph
+        sess = tf.Session(graph=tf.Graph(), config=config)
+
+        with sess.graph.as_default():
+            # by default, model will be constructed in default graph
+            inputs = tf.keras.Input(shape=(32, 32, 3,))
+            x = tf.keras.layers.Conv2D(32, (3, 3), use_bias=False)(inputs)
+            _ = tf.keras.layers.Flatten()(x)
+            sess.run(tf.global_variables_initializer())
+
+        # Create a layer database
+        orig_layer_db = LayerDatabase(model=sess, input_shape=(1, 32, 32, 3), working_dir=None)
+        conv_op = orig_layer_db.find_layer_by_name('conv2d/Conv2D')
+
+        layer_comp_ratio_list = [LayerCompRatioPair(conv_op, Decimal(0.5))]
+
+        spatial_svd_pruner = SpatialSvdPruner()
+        comp_layer_db = spatial_svd_pruner.prune_model(orig_layer_db, layer_comp_ratio_list, CostMetric.mac,
+                                                       trainer=None)
+        # Check that svd added these ops
+        _ = comp_layer_db.model.graph.get_operation_by_name('conv2d_a/Conv2D')
+        conv2d_b_op = comp_layer_db.model.graph.get_operation_by_name('conv2d_b/Conv2D')
+        reshape_op = comp_layer_db.model.graph.get_operation_by_name('flatten/Reshape')
+        self.assertEqual(conv2d_b_op, reshape_op.inputs[0].op)

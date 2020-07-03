@@ -42,7 +42,7 @@ import numpy as np
 import tensorflow as tf
 
 import aimet_tensorflow.utils.common
-import aimet_tensorflow.utils.op.conv
+from aimet_tensorflow.utils.op.conv import get_strides_for_split_conv_ops, WeightTensorUtils, BiasUtils
 from aimet_tensorflow.layer_database import Layer
 
 from aimet_common.utils import AimetLogger
@@ -65,41 +65,44 @@ class SpatialSvdModuleSplitter:
 
         h, v = SpatialSvdModuleSplitter.get_svd_matrices(layer, rank)
 
-        conv_a_stride, conv_b_stride = aimet_tensorflow.utils.op.conv.get_strides_for_split_conv_ops(op=layer.module)
+        conv_a_stride, conv_b_stride = get_strides_for_split_conv_ops(op=layer.module)
 
         with layer.model.graph.as_default():
-
-            conv_a_name = layer.module.name+'_a'
-            conv_a_w = tf.Variable(initial_value=v, name=conv_a_name+'_w', dtype=tf.float32)
-            # pylint: disable=no-member
-
+            # Use last_last_index to get name of conv layer prior to '/Conv2D' suffix
+            last_slash_index = layer.module.name.rfind('/')
             data_format = layer.module.get_attr('data_format').decode('utf-8')
-            conv_a_out = tf.nn.conv2d(input=layer.module.inputs[0], filter=conv_a_w, strides=conv_a_stride,
-                                      data_format=data_format,
-                                      padding=layer.module.get_attr('padding'),
-                                      name=layer.module.name+'_a')
+            if data_format == "NHWC":
+                data_format_channels = "channels_last"
+            else:
+                data_format_channels = "channels_first"
+            padding = layer.module.get_attr('padding').decode('utf-8')
 
-            conv_b_name = layer.module.name+'_b'
-            conv_b_w = tf.Variable(initial_value=h, name=conv_b_name+'_w', dtype=tf.float32)
-            # pylint: disable=no-member
-            conv_b_out = tf.nn.conv2d(input=conv_a_out, filter=conv_b_w, strides=conv_b_stride,
-                                      data_format=data_format,
-                                      padding=layer.module.get_attr('padding'),
-                                      name=layer.module.name+'_b')
+            # Conv weight indices follow 'HWIO'
+            conv_a_out = tf.keras.layers.Conv2D(filters=v.shape[3], kernel_size=(v.shape[0], v.shape[1]),
+                                                strides=conv_a_stride, name=layer.module.name[:last_slash_index] + '_a',
+                                                data_format=data_format_channels, padding=padding, use_bias=False)\
+                (layer.module.inputs[0])
+
+            # Update weights for conv_a
+            WeightTensorUtils.update_tensor_for_op(layer.model, conv_a_out.op, v)
 
             # get the succeeding bias tensor
             bias_tensor = aimet_tensorflow.utils.common.get_succeeding_bias_tensor(layer.module)
+            use_bias = bias_tensor is not None
+            conv_b_out = tf.keras.layers.Conv2D(filters=h.shape[3], kernel_size=(h.shape[0], h.shape[1]),
+                                                strides=conv_b_stride,
+                                                name=layer.module.name[:last_slash_index] + '_b',
+                                                data_format=data_format_channels, padding=padding, use_bias=use_bias)\
+                (conv_a_out)
+            if use_bias:
+                # Find and write bias value into newly created bias variable
+                bias_value = BiasUtils.get_bias_as_numpy_data(layer.model, layer.module)
+                BiasUtils.update_bias_for_op(layer.model, conv_b_out.op.inputs[0].op, bias_value)
+                conv_b_out = conv_b_out.op.inputs[0]        # set conv_b_out to be output tensor of Conv2D op
 
-            if bias_tensor is not None:
-                tf.nn.bias_add(value=conv_b_out, bias=bias_tensor, data_format=data_format)
-
-            # initialize the two new weight tensor variables
-            val_list = [conv_a_w, conv_b_w]
-
-            layer.model.run(tf.variables_initializer(var_list=val_list))
-
-        return layer.model.graph.get_operation_by_name(conv_a_name),\
-               layer.model.graph.get_operation_by_name(conv_b_name)
+            # Update weights for conv_b
+            WeightTensorUtils.update_tensor_for_op(layer.model, conv_b_out.op, h)
+        return conv_a_out.op, conv_b_out.op
 
     @staticmethod
     def get_svd_matrices(layer: Layer, rank: int) -> (np.array, np.array):

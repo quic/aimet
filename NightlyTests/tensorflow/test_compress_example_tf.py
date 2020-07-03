@@ -234,7 +234,7 @@ class SvdAcceptanceTests(unittest.TestCase):
 
         # get the weights after fine tuning
 
-        conv2d_1_a_op = compr_model_sess.graph.get_operation_by_name('conv2/Conv2D_a')
+        conv2d_1_a_op = compr_model_sess.graph.get_operation_by_name('conv2_a/Conv2D')
         conv2d_1_a_op_weights_before = conv2d_1_a_op.inputs[1].eval(session=compr_model_sess)
 
         # fine tune the model
@@ -263,7 +263,7 @@ class SvdAcceptanceTests(unittest.TestCase):
 
         # get the weights after fine tuning
 
-        conv2d_1_a_op = compr_model_sess.graph.get_operation_by_name('conv2/Conv2D_a')
+        conv2d_1_a_op = compr_model_sess.graph.get_operation_by_name('conv2_a/Conv2D')
         conv2d_1_a_op_weights_after = conv2d_1_a_op.inputs[1].eval(session=compr_model_sess)
 
         # weight should be different after one iteration
@@ -345,12 +345,12 @@ class SvdAcceptanceTests(unittest.TestCase):
         print(stats)
 
         # split ops for res2a_branch2b_Conv2D op
-        conv2_block1_2_conv_a = compr_model_sess.graph.get_operation_by_name('conv2_block1_2_conv/Conv2D_a')
-        conv2_block1_2_conv_b = compr_model_sess.graph.get_operation_by_name('conv2_block1_2_conv/Conv2D_b')
+        conv2_block1_2_conv_a = compr_model_sess.graph.get_operation_by_name('conv2_block1_2_conv_a/Conv2D')
+        conv2_block1_2_conv_b = compr_model_sess.graph.get_operation_by_name('conv2_block1_2_conv_b/Conv2D')
 
         # split ops for res3a_branch2b_Conv2D op
-        conv3_block1_2_conv_a = compr_model_sess.graph.get_operation_by_name('conv3_block1_2_conv/Conv2D_a')
-        conv3_block1_2_conv_b = compr_model_sess.graph.get_operation_by_name('conv3_block1_2_conv/Conv2D_b')
+        conv3_block1_2_conv_a = compr_model_sess.graph.get_operation_by_name('conv3_block1_2_conv_a/Conv2D')
+        conv3_block1_2_conv_b = compr_model_sess.graph.get_operation_by_name('conv3_block1_2_conv_b/Conv2D')
 
         # res2a_branch2b_Conv2D
         self.assertEqual(compr_model_sess.run(conv2_block1_2_conv_a.inputs[1]).shape, (3, 1, 64, 48))
@@ -985,8 +985,8 @@ class SvdAndChannelPruningAcceptanceTests(unittest.TestCase):
                                                  trainer=None)
 
         # Check that svd added these ops
-        _ = sess.graph.get_operation_by_name('conv2d_1/Conv2D_a')
-        _ = sess.graph.get_operation_by_name('conv2d_1/Conv2D_b')
+        _ = sess.graph.get_operation_by_name('conv2d_1_a/Conv2D')
+        _ = sess.graph.get_operation_by_name('conv2d_1_b/Conv2D')
 
         greedy_params = aimet_common.defs.GreedySelectionParameters(target_comp_ratio=Decimal(0.5),
                                                                     num_comp_ratio_candidates=4,
@@ -1025,6 +1025,6 @@ class SvdAndChannelPruningAcceptanceTests(unittest.TestCase):
                                                  parameters=params)
 
         # Check that these ops were added by cp
-        _ = sess.graph.get_operation_by_name('reduced_reduced_conv2d_1/Conv2D')
-        _ = sess.graph.get_operation_by_name('reduced_reduced_conv2d_1_1/Conv2D')
+        _ = sess.graph.get_operation_by_name('reduced_reduced_conv2d_1_a/Conv2D')
+        _ = sess.graph.get_operation_by_name('reduced_reduced_conv2d_1_b/Conv2D')
         _ = sess.graph.get_operation_by_name('reduced_conv2d_2/Conv2D')
