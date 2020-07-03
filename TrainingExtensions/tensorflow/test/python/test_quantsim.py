@@ -44,6 +44,7 @@ from aimet_tensorflow.quantsim import QuantizationSimModel
 from aimet_tensorflow.utils.graph_saver import load_model_from_meta
 from aimet_tensorflow.common.graph_eval import initialize_uninitialized_vars
 from aimet_tensorflow.quantsim import save_checkpoint, load_checkpoint
+from aimet_tensorflow.utils.constants import QuantizeOpIndices
 
 class TestQuantSim(unittest.TestCase):
 
@@ -307,6 +308,7 @@ class TestQuantSim(unittest.TestCase):
 
         # save quantsim model
         save_checkpoint(sim, './test_3', 'orig_quantsim_model')
+
         new_quantsim = load_checkpoint('./test_3', 'orig_quantsim_model')
 
         # validations
@@ -325,6 +327,8 @@ class TestQuantSim(unittest.TestCase):
                             new_quantsim._param_quantizers[quantize_op].tensor_quantizer.quantScheme)
             self.assertTrue(sim._param_quantizers[quantize_op].tensor_quantizer.roundingMode ==
                             new_quantsim._param_quantizers[quantize_op].tensor_quantizer.roundingMode)
+            self.assertFalse(sim._param_quantizers[quantize_op].tensor_quantizer.isEncodingValid)
+            self.assertFalse(new_quantsim._param_quantizers[quantize_op].tensor_quantizer.isEncodingValid)
 
         for quantize_op in new_quantsim._activation_quantizers:
             self.assertFalse(sim._activation_quantizers[quantize_op].session ==
@@ -333,11 +337,36 @@ class TestQuantSim(unittest.TestCase):
                             new_quantsim._activation_quantizers[quantize_op].tensor_quantizer.quantScheme)
             self.assertTrue(sim._activation_quantizers[quantize_op].tensor_quantizer.roundingMode ==
                             new_quantsim._activation_quantizers[quantize_op].tensor_quantizer.roundingMode)
+            self.assertFalse(sim._activation_quantizers[quantize_op].tensor_quantizer.isEncodingValid)
+            self.assertFalse(new_quantsim._activation_quantizers[quantize_op].tensor_quantizer.isEncodingValid)
 
         # remove the old quant sim reference and session
         # to test that everything is loaded correctly on new quantsim including tensor quantizer references
         sim.session.close()
         del sim
+
+        # delete temp folder created and close sessions
+        shutil.rmtree('./test_3')
+        sess.close()
+        new_quantsim.session.close()
+        del new_quantsim
+
+    def test_save_load_ckpt_after_compute_encoding_on_orig_object(self):
+        """
+        Create QuantSim for a CPU model, test save and load on a quantsim model
+        when encodings have been computed on original quantsim object
+        """
+        tf.reset_default_graph()
+        with tf.device('/cpu:0'):
+            model = tf.keras.Sequential()
+            model.add(tf.keras.layers.Conv2D(32, kernel_size=3, input_shape=(28, 28, 3), activation='relu'))
+            model.add(tf.keras.layers.MaxPooling2D((2, 2)))
+            model.add(tf.keras.layers.Conv2D(64, kernel_size=3, activation='relu'))
+            model.summary()
+
+        sess = tf.Session()
+        initialize_uninitialized_vars(sess)
+        sim = QuantizationSimModel(sess, [model.input.op.name], [model.output.op.name], use_cuda=False)
 
         def dummy_forward_pass(n_sess, args):
             model_output = n_sess.graph.get_tensor_by_name(model.output.name)
@@ -346,13 +375,50 @@ class TestQuantSim(unittest.TestCase):
             dummy_input = np.random.randn(20, 28, 28, 3)
             n_sess.run(model_output, feed_dict={model_input: dummy_input})
 
-        new_quantsim.compute_encodings(dummy_forward_pass, None)
+        sim.compute_encodings(dummy_forward_pass, None)
+
+        # save quantsim model
+        save_checkpoint(sim, './test_3', 'orig_quantsim_model')
+
+        new_quantsim = load_checkpoint('./test_3', 'orig_quantsim_model')
+
+        # validations
+        assert(sim is not new_quantsim)
+
+        # as we have performed computeEncodings() on saved quantsim object, these must be set to True/False
+        # in loaded quantsim object as on orig model
+        for quantize_op in new_quantsim._param_quantizers:
+            self.assertTrue(new_quantsim._param_quantizers[quantize_op].tensor_quantizer.isEncodingValid ==
+                            sim._param_quantizers[quantize_op].tensor_quantizer.isEncodingValid)
+            self.assertTrue(new_quantsim._param_quantizers[quantize_op].
+                            get_variable_from_op(QuantizeOpIndices.encoding_min) ==
+                            sim._param_quantizers[quantize_op].
+                            get_variable_from_op(QuantizeOpIndices.encoding_min))
+            self.assertTrue(new_quantsim._param_quantizers[quantize_op].
+                            get_variable_from_op(QuantizeOpIndices.encoding_max) ==
+                            sim._param_quantizers[quantize_op].
+                            get_variable_from_op(QuantizeOpIndices.encoding_max))
+
+        for quantize_op in new_quantsim._activation_quantizers:
+            self.assertTrue(new_quantsim._activation_quantizers[quantize_op].tensor_quantizer.isEncodingValid ==
+                            sim._activation_quantizers[quantize_op].tensor_quantizer.isEncodingValid)
+            self.assertTrue(new_quantsim._activation_quantizers[quantize_op].
+                            get_variable_from_op(QuantizeOpIndices.encoding_min) ==
+                            sim._activation_quantizers[quantize_op].
+                            get_variable_from_op(QuantizeOpIndices.encoding_min))
+            self.assertTrue(new_quantsim._activation_quantizers[quantize_op].
+                            get_variable_from_op(QuantizeOpIndices.encoding_max) ==
+                            sim._activation_quantizers[quantize_op].
+                            get_variable_from_op(QuantizeOpIndices.encoding_max))
 
         # delete temp folder created and close sessions
         shutil.rmtree('./test_3')
         sess.close()
+        sim.session.close()
         new_quantsim.session.close()
+        del sim
         del new_quantsim
+
 
     def test_set_get_quantizer_params_using_properties(self):
 
