@@ -109,6 +109,7 @@ class PickleableTensorQuantizerState:
         self.quant_op_name = quant_op_name
         self.quant_scheme = tensor_quantizer_ref.quantScheme
         self.rounding_mode = tensor_quantizer_ref.roundingMode
+        self.is_encoding_valid = tensor_quantizer_ref.isEncodingValid
         self.quantizer_type = quantizer_type
 
 
@@ -291,6 +292,7 @@ class QuantizerInfo:
         self.quantizer_type = state.quantizer_type
         self.tensor_quantizer = libpymo.TensorQuantizer(state.quant_scheme,
                                                         state.rounding_mode)
+        self.tensor_quantizer.isEncodingValid = state.is_encoding_valid
 
     def __str__(self):
         stream = io.StringIO(newline='\n')
