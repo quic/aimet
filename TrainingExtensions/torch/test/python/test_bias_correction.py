@@ -39,6 +39,9 @@
 import unittest.mock
 import copy
 import numpy as np
+
+import libpymo
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as functional
@@ -179,66 +182,27 @@ class TestTrainingExtensionBnFold(unittest.TestCase):
         self.assertEqual(conv_bn_dict[conv_2].output_bn, None)
         self.assertEqual(18, len(conv_bn_dict))
 
-    def test_bias_correction_with_updated_quantsim(self):
-        '''
-        tests the updated quantizer
-        :return:
-        '''
-        def _hook_to_collect_output_data(module, _, out_data):
-            """
-            hook to collect output data
-            """
-            from aimet_torch import utils
-            out_data = utils.to_numpy(out_data)
-            orig_layer_out_data.append(out_data)
+    def test_bias_correction_bias_update(self):
+        np.random.seed(1)
 
-        torch.manual_seed(10)
-        model = MockMobileNetV1()
-        model.eval()
-        dataset_size = 2
-        batch_size = 1
+        layer = nn.Conv2d(3, 10, 5)
+        bias_corr = libpymo.BiasCorrection()
+        bias_before = layer.bias.detach().cpu().numpy()
 
-        data_loader = create_fake_data_loader(dataset_size=dataset_size, batch_size=batch_size, image_size=(3, 224, 224))
-        params = qsim.QuantParams(weight_bw=8, act_bw=8, round_mode="nearest",
-                                  quant_scheme='tf'
-                                 )
-        conv_bn_dict = find_all_conv_bn_with_activation(model, input_shape=(1, 3, 224, 224))
+        shape = (10, 10, 5, 5)
 
-        bias_correction.correct_bias(model, params, 2, data_loader, 2, conv_bn_dict, perform_only_empirical_bias_corr = True)
+        reference_output_batch = np.random.randn(*shape)
+        quantized_model_output_batch = np.random.randn(*shape)
 
+        bias_corr.storePreActivationOutput(reference_output_batch)
+        bias_corr.storeQuantizedPreActivationOutput(quantized_model_output_batch)
 
-        # For layer3 we perform empirical BC that uses quantizer.
-        # check the bias and compare
-        new_model_1_2_bias  = model.model[1][2].bias.detach().cpu().numpy().reshape(-1)
-        new_model_1_2_weights  = model.model[1][2].weight.detach().cpu().numpy().reshape(-1)
+        bias_correction.call_empirical_mo_correct_bias(layer, bias_corr)
 
-        # in case we want to check layer output
-        hook_handles = list()
-        orig_layer_out_data = list()
-        hook_handles.append(model.model[1][2].register_forward_hook(_hook_to_collect_output_data))
+        bias_after = layer.bias.detach().cpu().numpy()
 
-        np.random.seed(0)
-        inp_data = torch.rand(1, 3, 224, 224)
-
-        with torch.no_grad():
-            _ = model(inp_data)
-
-        _ = orig_layer_out_data[0].reshape(-1)
-
-        for hook_handle in hook_handles:
-            hook_handle.remove()
-
-        # we recorded the bias we observed when old quantizer was used.
-        ref_model_1_2_bias = [0.13416477, 0.16463749, 0.006915508, -0.11823632, -0.042272247, -0.1231364, -0.14524677, 0.11495129, 0.13525873,
-                    -0.12211427, 0.13239658, -0.026878614, 0.032136727, -0.049814742, 0.1496965, 0.023653626, 0.004951938, -0.07484536,
-                    0.15355694, 0.05401889, 0.004869867, 0.13777985, 0.052989908, -0.006976959, 0.040764436, -0.006203071, 0.13691252,
-                    -0.14307816, -0.13579868, -0.13622427, 0.10511946, 0.00884756, 0.075533904, -0.036618445, 0.07738414, -0.14853345,
-                    0.091384344, -0.16644184, -0.11411467, -0.0064487234, -0.0132480515, 0.010812189, -0.099912055, 0.15872453, 0.17395662,
-                    -0.1206288, 0.17381206, 0.16031563, -0.009573824, 0.11802861, -0.15066624, -0.05074876, -0.14428341, -0.17168832,
-                    0.045424946, -0.11126628, -0.09583544, 0.03932162, -0.123743564, 0.06084253, 0.09650699, -0.02348134, 0.14565137, -0.017025044]
-
-        # validation : compare bias with new quantisim implementation with ref_model_1_2_bias
-        self.assertTrue(np.allclose(ref_model_1_2_bias, new_model_1_2_bias, rtol=1e-1))
+        # Assert bias has changed after running bias correction
+        self.assertFalse(np.allclose(bias_before, bias_after))
 
     def test_bias_correction_analytical_and_empirical_ignore_layer(self):
         '''
