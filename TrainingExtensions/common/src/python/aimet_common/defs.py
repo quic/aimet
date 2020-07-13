@@ -54,7 +54,9 @@ class QuantScheme(Enum):
     """ Tf scheme """
     post_training_tf_enhanced = 2
     """ Tf- enhanced scheme """
-    training_range_learning = 3
+    training_range_learning_with_tf_init = 3
+    training_range_learning_with_tf_enhanced_init = 4
+    training_range_learning = 5
 
 
 class ActivationType(Enum):
