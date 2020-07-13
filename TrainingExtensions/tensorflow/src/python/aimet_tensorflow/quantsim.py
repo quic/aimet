@@ -69,7 +69,11 @@ quant_scheme_to_libpymo = {QuantScheme.post_training_tf: libpymo.QuantizationMod
                            QuantScheme.post_training_tf_enhanced:
                            libpymo.QuantizationMode.QUANTIZATION_TF_ENHANCED,
                            QuantScheme.training_range_learning:
-                           libpymo.QuantizationMode.QUANTIZATION_RANGE_LEARNING}
+                           libpymo.QuantizationMode.QUANTIZATION_RANGE_LEARNING,
+                           QuantScheme.training_range_learning_with_tf_init:
+                           libpymo.QuantizationMode.QUANTIZATION_TF,
+                           QuantScheme.training_range_learning_with_tf_enhanced_init:
+                           libpymo.QuantizationMode.QUANTIZATION_TF_ENHANCED}
 
 
 class QuantizerType(Enum):
@@ -820,9 +824,12 @@ class QuantizationSimModel:
             bit_width = tf.Variable(initial_value=bit_width,
                                     name=quant_op_name + '_bit_width',
                                     trainable=False, dtype=tf.int8)
+
             # min and max are configured not trainable by default
             is_trainable = False
-            if self._quant_scheme == QuantScheme.training_range_learning:
+            if self._quant_scheme in [QuantScheme.training_range_learning_with_tf_init,
+                                      QuantScheme.training_range_learning_with_tf_enhanced_init,
+                                      QuantScheme.training_range_learning]:
                 is_trainable = True
 
             encoding_min = tf.Variable(initial_value=0.0,
