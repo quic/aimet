@@ -521,10 +521,12 @@ class ConnectedGraph(AimetCommonConnectedGraph):
         _fill_conv_op_info(op, model)
 
         # populating input and output shapes from xxx_tensor_tuple obtained via hook and forward pass
+        input_tensor_tuple, output_tensor_tuple = module_tensor_tuples_map[model]
         # xxx_tensor_tuple is a union(Tensor, tuple(Tensor)), obtain the shape of the Tensor (or first Tensor if Tuple)
-        i, o = module_tensor_tuples_map[model] # i -> input_tensor_tuple, o -> output_tensor_tuple
-        output_shape = list(o[0].shape if isinstance(o, tuple) else o.shape)
-        input_shape = list(i[0].shape if isinstance(i, tuple) else i.shape)
+        output_shape = list(
+            output_tensor_tuple[0].shape if isinstance(output_tensor_tuple, tuple) else output_tensor_tuple.shape)
+        input_shape = list(
+            input_tensor_tuple[0].shape if isinstance(input_tensor_tuple, tuple) else input_tensor_tuple.shape)
         _fill_and_check_op_product_shapes(op, input_shape, output_shape)
         return op
 
