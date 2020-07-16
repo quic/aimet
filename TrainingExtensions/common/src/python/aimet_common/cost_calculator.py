@@ -37,12 +37,13 @@
 # =============================================================================
 
 """Network and per layer cost calculator"""
-from typing import List
 from decimal import Decimal
 from functools import reduce
+from typing import List, Tuple
+
+from aimet_common.defs import CostMetric, LayerCompRatioPair
 from aimet_common.layer_database import Layer, Conv2dTypeSpecificParams, LayerDatabase
 from aimet_common.utils import AimetLogger
-from aimet_common.defs import CostMetric, LayerCompRatioPair
 
 logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Utils)
 
@@ -243,6 +244,27 @@ class CostCalculator:
                                                                layer_comp_ratio_pair.comp_ratio, cost_metric)
             else:
                 cost = cls.compute_layer_cost(layer_comp_ratio_pair.layer)
+
+            running_cost += cost
+
+        return running_cost
+
+    @classmethod
+    def calculate_compressed_cost_given_ranks(cls, _layer_db: LayerDatabase,
+                                              layer_rank_list: List[Tuple[Layer, int]]) -> Cost:
+        """
+        Calculate compressed cost of a model given a list of layer and rank pairs
+        :param _layer_db: Layer database for the original model
+        :param layer_rank_list: List of layer, corresponding rank
+        :return: Compressed cost
+        """
+
+        running_cost = Cost(0, 0)
+        for layer, rank in layer_rank_list:
+            if rank:
+                cost = cls.calculate_cost_given_rank(layer, rank)
+            else:
+                cost = cls.compute_layer_cost(layer)
 
             running_cost += cost
 
