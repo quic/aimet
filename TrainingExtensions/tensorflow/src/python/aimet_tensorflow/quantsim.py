@@ -807,6 +807,22 @@ class QuantizationSimModel:
         # is_symmetric_encoding flag
         # (so we can change these in the future, if needed)
 
+        def _create_encoding_min_max_vars(q_op_name: str) -> (tf.Variable, tf.Variable):
+            """
+            creates encoding min and max variables for quant op.
+            :param q_op_name: name of quantize op
+            :return: encoding min and max as tf.Variable type
+            """
+            # @todo make these not trainable by default
+            encoding_min_var = tf.Variable(initial_value=0.0,
+                                           name=q_op_name + '_encoding_min',
+                                           trainable=True, dtype=tf.double)
+            encoding_max_var = tf.Variable(initial_value=0.0,
+                                           name=q_op_name + '_encoding_max',
+                                           trainable=True, dtype=tf.double)
+
+            return encoding_min_var, encoding_max_var
+
         with self.session.graph.as_default():
             op_mode_var = tf.Variable(int(op_mode),
                                       name=quant_op_name + '_op_mode', trainable=False,
@@ -825,19 +841,7 @@ class QuantizationSimModel:
                                     name=quant_op_name + '_bit_width',
                                     trainable=False, dtype=tf.int8)
 
-            # min and max are configured not trainable by default
-            is_trainable = False
-            if self._quant_scheme in [QuantScheme.training_range_learning_with_tf_init,
-                                      QuantScheme.training_range_learning_with_tf_enhanced_init,
-                                      QuantScheme.training_range_learning]:
-                is_trainable = True
-
-            encoding_min = tf.Variable(initial_value=0.0,
-                                       name=quant_op_name + '_encoding_min',
-                                       trainable=is_trainable, dtype=tf.double)
-            encoding_max = tf.Variable(initial_value=0.0,
-                                       name=quant_op_name + '_encoding_max',
-                                       trainable=is_trainable, dtype=tf.double)
+            encoding_min, encoding_max = _create_encoding_min_max_vars(quant_op_name)
 
             # Note: Later, is_symmetric_encoding value is to be read from config file
             use_symmetric_encoding = tf.Variable(initial_value=False,
