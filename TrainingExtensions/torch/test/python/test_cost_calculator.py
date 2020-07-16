@@ -36,20 +36,20 @@
 #  @@-COPYRIGHT-END-@@
 # =============================================================================
 
-import unittest
 import math
+import unittest
 from decimal import Decimal
 
 import torch
 import torch.nn as nn
 from torchvision import datasets, transforms
 
-from aimet_torch.examples import mnist_torch_model as mnist_model
+from aimet_common import cost_calculator as cc
+from aimet_common.defs import CostMetric, LayerCompRatioPair
 from aimet_common.utils import AimetLogger
 from aimet_torch import layer_database as lad
-from aimet_common import cost_calculator as cc
 from aimet_torch.channel_pruning.channel_pruner import InputChannelPruner, ChannelPruningCostCalculator
-from aimet_common.defs import CostMetric, LayerCompRatioPair
+from aimet_torch.examples import mnist_torch_model as mnist_model
 
 logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Test)
 
@@ -209,7 +209,7 @@ class TestTrainingExtensionsSpatialSvdCostCalculator(unittest.TestCase):
         layer_ratio_list = []
 
         for layer in layer_database:
-                layer_ratio_list.append(LayerCompRatioPair(layer, Decimal(0.5)))
+            layer_ratio_list.append(LayerCompRatioPair(layer, Decimal(0.5)))
 
         compressed_cost = cc.SpatialSvdCostCalculator.calculate_compressed_cost(layer_database,
                                                                                 layer_ratio_list, CostMetric.mac)
@@ -217,6 +217,42 @@ class TestTrainingExtensionsSpatialSvdCostCalculator(unittest.TestCase):
         self.assertEqual(5244960
                          + (3136 * 385 + 385 * 1024)
                          + (1024 * 4 + 4 * 10),
+                         compressed_cost.mac)
+
+    def test_calculate_spatial_svd_cost_all_layers_given_ranks(self):
+
+        model = mnist_model.Net().to("cpu")
+
+        ld = lad.LayerDatabase(model=model, input_shape=(1, 1, 28, 28))
+
+        # Compress all layers by 50%
+
+        # Create a list of tuples of (layer, comp_ratio)
+        layer_rank_list = [(ld.find_layer_by_module(model.conv1), 2),
+                           (ld.find_layer_by_module(model.conv2), 53),
+                           (ld.find_layer_by_module(model.fc1), 385),
+                           (ld.find_layer_by_module(model.fc2), 4)]
+
+        compressed_cost = cc.SpatialSvdCostCalculator.calculate_compressed_cost_given_ranks(ld,
+                                                                                            layer_rank_list)
+
+        self.assertEqual(5244960
+                         + (3136 * 385 + 385 * 1024)
+                         + (1024 * 4 + 4 * 10),
+                         compressed_cost.mac)
+
+        # Create a list of tuples of (layer, comp_ratio)
+        layer_rank_list = [(ld.find_layer_by_module(model.conv1), 2),
+                           (ld.find_layer_by_module(model.conv2), 53),
+                           (ld.find_layer_by_module(model.fc1), 385),
+                           (ld.find_layer_by_module(model.fc2), None)]
+
+        compressed_cost = cc.SpatialSvdCostCalculator.calculate_compressed_cost_given_ranks(ld,
+                                                                                            layer_rank_list)
+
+        self.assertEqual(5244960
+                         + (3136 * 385 + 385 * 1024)
+                         + (1024 * 10),
                          compressed_cost.mac)
 
 
