@@ -60,8 +60,8 @@ class TestSubGraph(unittest.TestCase):
     def test_conv2d_no_bias_subgraph(self):
         """ test sub graph for conv2D Op without bias """
 
-        input_shape = subgraph_constructors['Conv2D_keras']['input_shape']
-        constructor_string = subgraph_constructors['Conv2D_keras']['constructor']
+        input_shape = subgraph_constructors['Conv2D']['input_shape']
+        constructor_string = subgraph_constructors['Conv2D']['constructor']
         conv_subgraph = create_subgraph_for_op(input_shape, constructor_string)
 
         logger.debug("The OPs created by create_subgraph_for_op()")
@@ -80,8 +80,8 @@ class TestSubGraph(unittest.TestCase):
     def test_conv2d_with_bias_subgraph(self):
         """ test sub graph for conv2D Op with bias """
 
-        input_shape = subgraph_constructors['Conv2D_keras_with_bias']['input_shape']
-        constructor_string = subgraph_constructors['Conv2D_keras_with_bias']['constructor']
+        input_shape = subgraph_constructors['Conv2D_with_bias']['input_shape']
+        constructor_string = subgraph_constructors['Conv2D_with_bias']['constructor']
         conv_subgraph = create_subgraph_for_op(input_shape, constructor_string)
 
         logger.debug("The OPs created by create_subgraph_for_op()")
@@ -199,7 +199,7 @@ class TestSubGraph(unittest.TestCase):
 
                 # Conv2D Ops could be with or without Bias.
                 # As the first step, detect all the Conv2D Ops with Bias.
-                conv_bias_op = match_result.get_op(op_to_pattern_dict['Conv2D_keras_with_bias'])
+                conv_bias_op = match_result.get_op(op_to_pattern_dict['Conv2D_with_bias'])
                 if conv_bias_op:
                     if conv_bias_op.inputs[0]._op not in matched_op_set:
                         logger.debug("Conv Op with bias: %s, %d", conv_bias_op.name, match_counter)
@@ -207,7 +207,7 @@ class TestSubGraph(unittest.TestCase):
 
                 # Since the Conv Op with Bias is already added to the matched_op_set,
                 # Conv Ops with Bias won't be duplicated by the following match.
-                conv_op = match_result.get_op(op_to_pattern_dict['Conv2D_keras'])
+                conv_op = match_result.get_op(op_to_pattern_dict['Conv2D'])
                 if conv_op:
                     if conv_op not in matched_op_set:
                         logger.debug("Conv Op no bias: %s, %d", conv_op.name, match_counter)

@@ -49,6 +49,7 @@ import tensorflow as tf
 from tensorflow_core.contrib import slim # pylint: disable=unused-import
 from tensorflow_core.contrib.quantize.python import graph_matcher
 from aimet_tensorflow.common.module_identifier_matchers import ModuleIdentifierOpInfo
+from aimet_tensorflow.utils.common import get_valid_ops
 from aimet_common.utils import AimetLogger
 
 logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.ConnectedGraph)
@@ -57,33 +58,26 @@ logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.ConnectedGraph)
 # Note that 'inputs' is the name of an input op that is instantiated with shape of the input shape.
 # 'Constants' is the name of a constant op that is instantiated with shape of the input shape.
 subgraph_constructors = {
-    'Conv2D_keras': {
+    'Conv2D': {
         'input_shape': (1, 10, 10, 3),
         'op_type': 'Conv2D',
         'constructor': "tf.keras.layers.Conv2D(10, (1, 1), use_bias=False)(constants)",
-        'module_regex': ['(.+)/Conv2D$', '(.+)/separable_conv2d$'],
-        'associated_op_regex': ['Conv2D$', 'separable_conv2d$']
+        'module_regex': ['(.+)/Conv2D$', '(.+)/separable_conv2d$', '(.+)/convolution$'],
+        'associated_op_regex': ['Conv2D$', 'separable_conv2d$', 'convolution$']
     },
-    'Conv2D_keras_with_bias': {
+    'Conv2D_with_bias': {
         'input_shape': (1, 10, 10, 3),
         'op_type': 'Conv2D',
         'constructor': "tf.keras.layers.Conv2D(10, (1, 1), use_bias=True)(constants)",
-        'module_regex': ['(.+)/Conv2D$', '(.+)/separable_conv2d$'],
-        'associated_op_regex': ['Conv2D$', 'separable_conv2d$']
-    },
-    'Conv2D_slim_with_bias': {
-        'input_shape': (1, 10, 10, 3),
-        'op_type': 'Conv2D',
-        'constructor': "slim.conv2d(constants, 10, [3, 3], activation_fn=None)",
-        'module_regex': ['(.+)/Conv2D$', '(.+)/convolution$'],
-        'associated_op_regex': ['Conv2D$', 'convolution$']
+        'module_regex': ['(.+)/Conv2D$', '(.+)/separable_conv2d$', '(.+)/convolution$'],
+        'associated_op_regex': ['Conv2D$', 'separable_conv2d$', 'convolution$']
     },
     'DepthwiseConv2dNative': {
         'input_shape': (1, 10, 10, 3),
         'op_type': 'DepthwiseConv2dNative',
         'constructor': "tf.keras.layers.DepthwiseConv2D(3, (1, 1))(constants)",
-        'module_regex': ['(.+)/depthwise$'],
-        'associated_op_regex': ['depthwise$']
+        'module_regex': ['(.+)/depthwise$', '(.+)/DepthwiseConv2dNative$'],
+        'associated_op_regex': ['depthwise$', 'DepthwiseConv2dNative$']
     },
     'Dense_keras': {
         'input_shape': (1, 10),
@@ -186,11 +180,25 @@ subgraph_constructors = {
     'Dropout_with_training_tensor': {
         'input_shape': (1, 10, 10, 3),
         'op_type': 'Dropout',
-        'constructor': "tf.keras.layers.Dropout(rate=.4)(constants)",
+        'constructor': "tf.keras.layers.Dropout(rate=.4)(inputs)",
         'module_regex': ['(.+)/cond/dropout/mul_1$'],
         'associated_op_regex': ['cond/dropout/mul_1$']
     },
     'Dropout_training_True': {
+        'input_shape': (1, 10, 10, 3),
+        'op_type': 'Dropout',
+        'constructor': "tf.keras.layers.Dropout(rate=.4)(inputs, training=True)",
+        'module_regex': ['(.+)/.+/mul_1$'],
+        'associated_op_regex': ['/.+/mul_1$']
+    },
+    'Dropout_with_training_tensor_unknown_shape': {
+        'input_shape': (1, 10, 10, 3),
+        'op_type': 'Dropout',
+        'constructor': "tf.keras.layers.Dropout(rate=.4)(constants)",
+        'module_regex': ['(.+)/cond/dropout/mul_1$'],
+        'associated_op_regex': ['cond/dropout/mul_1$']
+    },
+    'Dropout_training_True_unknown_shape': {
         'input_shape': (1, 10, 10, 3),
         'op_type': 'Dropout',
         'constructor': "tf.keras.layers.Dropout(rate=.4)(constants, training=True)",
@@ -420,6 +428,7 @@ def create_op_type_patterns_from_subgraph(subgraph: tf.Graph) -> List[graph_matc
     ending_op_names = ['aimet_identity']
     ops_from_ending_ops = set()
     op_list = []
+    valid_ops = get_valid_ops(subgraph, starting_op_names=starting_op_names, ending_op_names=ending_op_names)
 
     # DFS is done bottom up.
     #   Reason:
@@ -440,7 +449,7 @@ def create_op_type_patterns_from_subgraph(subgraph: tf.Graph) -> List[graph_matc
         for inp in curr_op.inputs:
             input_ops.append(inp.op)
             dfs_upwards(inp.op)
-        if curr_op.name not in ending_op_names:
+        if curr_op.name not in ending_op_names and curr_op in valid_ops:
             op_list.append(curr_op)
 
     for name in ending_op_names:

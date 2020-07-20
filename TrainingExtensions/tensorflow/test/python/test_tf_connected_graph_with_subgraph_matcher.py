@@ -208,6 +208,7 @@ class TestTfConnectedGraph(unittest.TestCase):
         self.assertEqual(8, len(conn_graph.get_all_ops()))
         self.assertEqual(7 + len(tf.get_default_graph().get_collection('variables')),
                          len(conn_graph.get_all_products()))
+        self.assertTrue(conn_graph.get_all_ops()['dropout'], 'Dropout_with_training_tensor')
 
     def test_dropout_slim_get_op_product_graph(self):
         """ Test connected graph construction on a slim graph with dropout op """
@@ -221,6 +222,7 @@ class TestTfConnectedGraph(unittest.TestCase):
         self.assertEqual(10, len(conn_graph.get_all_ops()))
         self.assertEqual(9 + len(tf.get_default_graph().get_collection('variables')),
                          len(conn_graph.get_all_products()))
+        self.assertTrue(conn_graph.get_all_ops()['Dropout'], 'Dropout_training_True')
 
     def test_vgg16_slim_get_op_product_graph(self):
         """
@@ -238,6 +240,8 @@ class TestTfConnectedGraph(unittest.TestCase):
         self.assertEqual(40, len(conn_graph.get_all_ops()))
         self.assertEqual(39 + len(tf.get_default_graph().get_collection('variables')),
                          len(conn_graph.get_all_products()))
+        self.assertTrue(conn_graph.get_all_ops()['vgg_16/dropout6'], 'Dropout_training_True_unknown_shape')
+        self.assertTrue(conn_graph.get_all_ops()['vgg_16/dropout7'], 'Dropout_training_True_unknown_shape')
 
     def test_multiple_input_model_get_op_product_graph(self):
         """ Test connected graph construction on a multiple input graph """
