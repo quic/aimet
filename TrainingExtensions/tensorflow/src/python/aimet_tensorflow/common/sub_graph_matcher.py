@@ -79,17 +79,10 @@ subgraph_constructors = {
         'module_regex': ['(.+)/depthwise$', '(.+)/DepthwiseConv2dNative$'],
         'associated_op_regex': ['depthwise$', 'DepthwiseConv2dNative$']
     },
-    'Dense_keras': {
+    'Dense': {
         'input_shape': (1, 10),
         'op_type': 'Dense',
         'constructor': "tf.keras.layers.Dense(10, activation=None)(constants)",
-        'module_regex': ['(.+)/MatMul$'],
-        'associated_op_regex': ['MatMul$']
-    },
-    'Dense_slim': {
-        'input_shape': (1, 10),
-        'op_type': 'Dense',
-        'constructor': "slim.fully_connected(constants, num_outputs=10, activation_fn=None)",
         'module_regex': ['(.+)/MatMul$'],
         'associated_op_regex': ['MatMul$']
     },
@@ -97,13 +90,6 @@ subgraph_constructors = {
         'input_shape': (10, 10, 3,),
         'op_type': 'FusedBatchNormV3',
         'constructor': "tf.keras.layers.BatchNormalization()(inputs)",
-        'module_regex': ['(.+)/cond/FusedBatchNormV3_1$'],
-        'associated_op_regex': ['FusedBatchNormV3_1$']
-    },
-    'BN_keras_with_training_tensor_scale_False': {
-        'input_shape': (10, 10, 3,),
-        'op_type': 'FusedBatchNormV3',
-        'constructor': "tf.keras.layers.BatchNormalization(scale=False)(inputs)",
         'module_regex': ['(.+)/cond/FusedBatchNormV3_1$'],
         'associated_op_regex': ['FusedBatchNormV3_1$']
     },
@@ -140,7 +126,8 @@ subgraph_constructors = {
         'op_type': 'BatchNorm',
         'constructor': "tf.keras.layers.BatchNormalization(fused=False)(inputs, training=False)",
         'module_regex': ['(.+)/batchnorm/mul_1$'],
-        'associated_op_regex': ['batchnorm/mul_1$']
+        'associated_op_regex': ['batchnorm/mul_1$'],
+        'additional_starting_ops': ['batch_normalization/batchnorm/mul']
     },
     'BN_slim_with_training_tensor': {
         'input_shape': (10, 10, 3,),
@@ -328,8 +315,9 @@ class SubGraphMatcher:
         for op_type, info_dict in subgraph_constructors.items():
             input_shape = info_dict['input_shape']
             constructor_string = info_dict['constructor']
+            additional_starting_ops = info_dict.get('additional_starting_ops', [])
             subgraph = create_subgraph_for_op(input_shape, constructor_string)
-            patterns = create_op_type_patterns_from_subgraph(subgraph)
+            patterns = create_op_type_patterns_from_subgraph(subgraph, additional_starting_ops)
             self._pattern_subgraph[op_type] = {'pattern': patterns[-1], 'subgraph': subgraph, 'length': len(patterns)}
             for pattern in patterns:
                 self._pattern_to_op_type[pattern] = op_type
@@ -414,17 +402,23 @@ def get_internal_ops_for_pattern(match_result: graph_matcher.MatchResult) -> Lis
     return internal_ops_list
 
 
-def create_op_type_patterns_from_subgraph(subgraph: tf.Graph) -> List[graph_matcher.OpTypePattern]:
+def create_op_type_patterns_from_subgraph(subgraph: tf.Graph, additional_starting_ops: List[str]) ->\
+        List[graph_matcher.OpTypePattern]:
     """
     Create and return a list of TensorFlow OpTypePattern objects for the given subgraph.
     The OpTypepatterns() are created in sequence from the input to the output of the subgraph.
     The last OpTypepattern() object in the returned list is for the Op under consideration.
 
     :param subgraph: The subgraph of an Op for which OpTypePattern is created.
+    :param additional_starting_ops: Additional starting points for identifying valid ops to match with.  Valid ops are
+    defined as ops which can be traversed with both a dfs any input op as well as dfs backwards from any output op.
+    Additional starting ops can be used when simply using default input and output ops gives a pattern easily matched by
+    individual ops that are not actually of the desired matched type (BN_non_fused_keras_with_training_False would be
+    matched with only a mul -> add, for example)
     :return: List of OpTypePattern()
     """
 
-    starting_op_names = ['aimet_input', 'aimet_constant', 'is_training']
+    starting_op_names = ['aimet_input', 'aimet_constant', 'is_training'] + additional_starting_ops
     ending_op_names = ['aimet_identity']
     ops_from_ending_ops = set()
     op_list = []
@@ -505,9 +499,6 @@ def create_subgraph_for_op(input_shape: tuple, op_string: str) -> tf.Graph:
             x = tf.identity(x, name='aimet_identity')
         init = tf.global_variables_initializer()
     sess.run(init)
-
-    # Uncomment the following line to use TensorBoard.
-    # _ = tf.summary.FileWriter('./subgraph', sess.graph)
 
     return sess.graph
 

@@ -68,7 +68,7 @@ class TestSubGraph(unittest.TestCase):
         for op in conv_subgraph.get_operations():
             logger.debug("OP: %s", op.name)
 
-        op_type_patterns = create_op_type_patterns_from_subgraph(conv_subgraph)
+        op_type_patterns = create_op_type_patterns_from_subgraph(conv_subgraph, additional_starting_ops=[])
         for pat in op_type_patterns:
             logger.debug(pat._op_type)
 
@@ -88,7 +88,7 @@ class TestSubGraph(unittest.TestCase):
         for op in conv_subgraph.get_operations():
             logger.debug("OP: %s", op.name)
 
-        op_type_patterns = create_op_type_patterns_from_subgraph(conv_subgraph)
+        op_type_patterns = create_op_type_patterns_from_subgraph(conv_subgraph, additional_starting_ops=[])
         for pat in op_type_patterns:
             logger.debug(pat._op_type)
 
@@ -108,7 +108,7 @@ class TestSubGraph(unittest.TestCase):
         for op in bn_subgraph.get_operations():
             logger.debug("OP 1: %s", op.name)
 
-        op_type_patterns = create_op_type_patterns_from_subgraph(bn_subgraph)
+        op_type_patterns = create_op_type_patterns_from_subgraph(bn_subgraph, additional_starting_ops=[])
         logger.debug("Step: II The OPs created by create_op_type_pattens_from_subgraph() %d", len(op_type_patterns))
         for pat in op_type_patterns:
             logger.debug("OP 2: %s", pat._op_type)
@@ -128,7 +128,7 @@ class TestSubGraph(unittest.TestCase):
         for op in bn_subgraph.get_operations():
             logger.debug("OP 1: %s", op.name)
 
-        op_type_patterns = create_op_type_patterns_from_subgraph(bn_subgraph)
+        op_type_patterns = create_op_type_patterns_from_subgraph(bn_subgraph, additional_starting_ops=[])
         logger.debug("Step: II The OPs created by create_op_type_pattens_from_subgraph() %d", len(op_type_patterns))
         for pat in op_type_patterns:
             logger.debug("OP 2: %s", pat._op_type)
@@ -140,15 +140,15 @@ class TestSubGraph(unittest.TestCase):
     def test_dense_subgraph(self):
         """ test sub graph for dense """
 
-        input_shape = subgraph_constructors['Dense_keras']['input_shape']
-        constructor_string = subgraph_constructors['Dense_keras']['constructor']
+        input_shape = subgraph_constructors['Dense']['input_shape']
+        constructor_string = subgraph_constructors['Dense']['constructor']
         dense_subgraph = create_subgraph_for_op(input_shape, constructor_string)
 
         logger.debug("Step: I The OPs created by create_subgraph_for Dense Op()")
         for op in dense_subgraph.get_operations():
             logger.debug("OP: %s", op.name)
 
-        dense_patterns = create_op_type_patterns_from_subgraph(dense_subgraph)
+        dense_patterns = create_op_type_patterns_from_subgraph(dense_subgraph, additional_starting_ops=[])
         logger.debug("Length of Dense pattern: %d", len(dense_patterns))
         for pat in dense_patterns:
             logger.debug(pat._op_type)
@@ -168,7 +168,7 @@ class TestSubGraph(unittest.TestCase):
             constructor_string = subgraph_constructor['constructor']
             logger.debug(pattern_name)
             subgraph = create_subgraph_for_op(input_shape, constructor_string)
-            patterns = create_op_type_patterns_from_subgraph(subgraph)
+            patterns = create_op_type_patterns_from_subgraph(subgraph, additional_starting_ops=[])
             patterns_to_match.append(patterns[-1])
             op_to_pattern_dict[pattern_name] = patterns[-1]
             logger.debug("Length of %s pattern: %d", pattern_name, len(patterns))
@@ -235,7 +235,7 @@ class TestSubGraph(unittest.TestCase):
                     logger.debug("Flatten Op: %s, %d", flatten_op.name, match_counter)
                     matched_op_set.add(flatten_op)
 
-                dense_op = match_result.get_op(op_to_pattern_dict['Dense_keras'])
+                dense_op = match_result.get_op(op_to_pattern_dict['Dense'])
                 if dense_op:
                     logger.debug("dense Op: %s, %d", dense_op.name, match_counter)
                     matched_op_set.add(dense_op)
