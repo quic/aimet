@@ -42,7 +42,7 @@ from aimet_common.utils import AimetLogger
 from aimet_common.model_module import TfModelModule
 from aimet_common.connected_graph.connectedgraph import ConnectedGraph as aimetCommonConnectedGraph
 from aimet_tensorflow.common.module_identifier import StructureModuleIdentifier
-from aimet_tensorflow.common.module_identifier_matchers import ModuleIdentifierOpInfo
+from aimet_tensorflow.common.sub_graph_matcher import ModuleIdentifierOpInfo
 from aimet_tensorflow.common.operation import Op
 from aimet_tensorflow.common.product import Product
 from aimet_tensorflow.utils.common import get_valid_ops

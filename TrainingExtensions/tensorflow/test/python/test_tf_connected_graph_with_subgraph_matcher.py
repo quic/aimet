@@ -48,7 +48,7 @@ from tensorflow.contrib.slim.nets import vgg
 from aimet_common.utils import AimetLogger
 from aimet_tensorflow.common.connectedgraph import ConnectedGraph
 from aimet_tensorflow.common.module_identifier import StructureModuleIdentifier
-from aimet_tensorflow.common.module_identifier_matchers import ModuleIdentifierOpInfo
+from aimet_tensorflow.common.sub_graph_matcher import ModuleIdentifierOpInfo
 from aimet_tensorflow.examples.test_models import keras_model, keras_model_functional, tf_slim_basic_model, \
     single_residual, split_and_concat_model, concat_model, dropout_keras_model, dropout_slim_model, \
     tf_slim_with_softmax, multiple_input_model, upsample_model, model_with_upsample2d, model_with_leaky_relu, \

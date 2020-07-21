@@ -41,9 +41,8 @@ from abc import ABC, abstractmethod
 from typing import List, Set
 import tensorflow as tf
 from aimet_common.utils import AimetLogger
-from aimet_tensorflow.common import module_identifier_matchers
 from aimet_tensorflow.common import sub_graph_matcher
-from aimet_tensorflow.common.module_identifier_matchers import ModuleIdentifierOpInfo
+from aimet_tensorflow.common.sub_graph_matcher import ModuleIdentifierOpInfo
 
 logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.ConnectedGraph)
 
@@ -100,39 +99,3 @@ class StructureModuleIdentifier(ModuleIdentifier):
         op_info = self.op_to_module_dict.get(op, default_op_info)
 
         return op_info
-
-    def _add_ops_in_module(self, op: tf.Operation, op_type: str):
-        """ Find and add all ops belonging to the same module as op to op_to_module_dict (if possible) """
-
-        op_info = ModuleIdentifierOpInfo(module_name=op.name,
-                                         op_type=op.type,
-                                         tf_op=op)
-
-        # Each value in switcher is a list of functions which attempt to match known module patterns around the current
-        # op.  For a certain type of op, we proceed through each function in the corresponding list until one function
-        # returns True (means a module pattern match succeeded)
-        switcher = {
-            "Conv2D": [module_identifier_matchers.match_conv2d_dense_type_ops],
-            "DepthwiseConv2dNative": [module_identifier_matchers.match_conv2d_dense_type_ops],
-            "FusedBatchNormV3": [module_identifier_matchers.match_fusedbatchnorm_pattern_1,
-                                 module_identifier_matchers.match_fusedbatchnorm_pattern_2,
-                                 module_identifier_matchers.match_fusedbatchnorm_pattern_3],
-            "MatMul": [module_identifier_matchers.match_conv2d_dense_type_ops],
-            "Reshape": [module_identifier_matchers.match_flatten_ops],
-            "RandomUniform": [module_identifier_matchers.match_dropout_pattern_1,
-                              module_identifier_matchers.match_dropout_pattern_2],
-            "Mul": [module_identifier_matchers.match_dropout_pattern_3,
-                    module_identifier_matchers.match_batchnorm_pattern_1,
-                    module_identifier_matchers.match_batchnorm_pattern_2,
-                    module_identifier_matchers.match_batchnorm_pattern_3],
-            "Softmax": [module_identifier_matchers.match_softmax],
-            "Unpack": [module_identifier_matchers.match_upsample],
-            "GatherV2": [module_identifier_matchers.match_downsample],
-            "Shape": [module_identifier_matchers.match_upsample2d],
-            "Max": [module_identifier_matchers.match_global_max_pool2d]
-        }
-
-        op_handlers = switcher.get(op_type, [module_identifier_matchers.handle_default])
-        for handler in op_handlers:
-            if handler(self.op_to_module_dict, op_info):       # match found, no need to try to match more functions
-                break

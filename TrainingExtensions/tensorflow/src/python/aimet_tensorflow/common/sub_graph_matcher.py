@@ -48,7 +48,6 @@ from collections import OrderedDict
 import tensorflow as tf
 from tensorflow_core.contrib import slim # pylint: disable=unused-import
 from tensorflow_core.contrib.quantize.python import graph_matcher
-from aimet_tensorflow.common.module_identifier_matchers import ModuleIdentifierOpInfo
 from aimet_tensorflow.utils.common import get_valid_ops
 from aimet_common.utils import AimetLogger
 
@@ -221,6 +220,66 @@ subgraph_constructors = {
         'associated_op_regex': ['Max$']
     }
 }
+
+
+class ModuleIdentifierOpInfo:
+    """ Class for summarizing information regarding a tf operation """
+    def __init__(self, module_name, op_type, tf_op, pattern_type: str = None):
+        """
+        Initialize the ModuleIdentifierOpInfo class.
+
+        :param module_name: Module name associated with the module
+        :param op_type: Op type associated with the module (this will be the type shown in ConnectedGraph)
+        :param tf_op: Main op associated with the module (may be different than the op corresponding to this object
+            in the op_to_module_dict)
+        :param pattern_type: Pattern used to generate the graph that matched the op corresponding to the
+            ModuleIdentifierOpInfo object. Only used in subgraph matcher
+        """
+        self._module_name = module_name
+        self._op_type = op_type
+        self._tf_op = tf_op
+        # Pattern type is only used in subgraph matcher, and contains info about which pattern (Conv2D_keras,
+        # Conv2D_keras_with_bias, etc. was used to match the op for this op info class.
+        self._pattern_type = pattern_type
+        self._attributes = {}
+
+    @property
+    def module_name(self):
+        """ Returns the module name corresponding to this operation. """
+        return self._module_name
+
+    @module_name.setter
+    def module_name(self, module_name):
+        """ Sets the module name of an Operation. """
+        self._module_name = module_name
+
+    @property
+    def op_type(self):
+        """ Returns the op type of the module corresponding to this operation. """
+        return self._op_type
+
+    @op_type.setter
+    def op_type(self, op_type):
+        """ Sets the op type """
+        self._op_type = op_type
+
+    @property
+    def tf_op(self):
+        """ Returns the tf op for the module corresponding to this operation. """
+        return self._tf_op
+
+    @property
+    def pattern_type(self):
+        """ Returns the pattern type corresponding to this operation. """
+        return self._pattern_type
+
+    def add_attribute(self, attribute_name: str, attribute):
+        """ Set an attribute of the module identifier op info """
+        self._attributes[attribute_name] = attribute
+
+    def get_attributes(self):
+        """ Return the attributes dictionary """
+        return self._attributes
 
 
 class SubGraphMatcher:
