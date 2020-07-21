@@ -151,7 +151,6 @@ PYBIND11_MODULE(libpymo, m)
         .value("passThrough", DlQuantization::TensorQuantizerOpMode::passThrough);
 
     py::class_<DlQuantization::TensorQuantizer>(m, "TensorQuantizer")
-        .def(py::init<unsigned int, DlQuantization::QuantizationMode, DlQuantization::RoundingMode, bool>())
         .def(py::init<DlQuantization::QuantizationMode, DlQuantization::RoundingMode>())
         .def("updateStats",
              (void (TensorQuantizer::*)(py::array_t<float>, bool)) & DlQuantization::TensorQuantizer::updateStats)
