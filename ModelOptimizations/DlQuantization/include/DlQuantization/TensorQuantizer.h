@@ -60,15 +60,6 @@ namespace DlQuantization
 class TensorQuantizer : public TensorQuantizerOpFacade
 {
 public:
-    /**
-     * Constructor
-     * @param bitwidth Quantization bitwidth
-     * @param quantScheme Quantization scheme (e.g. TF-Enhanced)
-     * @param roundingMode Rounding mode to use during quantization
-     * @param useSymmetricEncoding If true, the computed encodings are symmetric
-     */
-    TensorQuantizer(unsigned int bitwidth, QuantizationMode quantScheme, RoundingMode roundingMode,
-                    bool useSymmetricEncoding);
 
     /**
     * Constructor

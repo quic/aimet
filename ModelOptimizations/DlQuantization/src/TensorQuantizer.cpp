@@ -42,16 +42,6 @@
 
 namespace DlQuantization
 {
-TensorQuantizer::TensorQuantizer(unsigned int bitwidth, QuantizationMode quantScheme, RoundingMode roundingMode,
-                                 bool useSymmetricEncoding) :
-    quantScheme(quantScheme),
-    roundingMode(roundingMode),
-    isEncodingValid(false),
-    _validStats(false)
-{
-    _encodingAnalyzer      = getEncodingAnalyzerInstance<float>(quantScheme);
-    _tensorQuantizationSim = getTensorQuantizationSim<float>();
-}
 
 TensorQuantizer::TensorQuantizer(QuantizationMode quantScheme, RoundingMode roundingMode) :
         quantScheme(quantScheme),
