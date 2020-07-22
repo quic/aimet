@@ -155,10 +155,11 @@ PYBIND11_MODULE(libpymo, m)
         .def("updateStats",
              (void (TensorQuantizer::*)(py::array_t<float>, bool)) & DlQuantization::TensorQuantizer::updateStats)
         .def("resetEncodingStats", &DlQuantization::TensorQuantizer::resetEncodingStats)
+        .def("setQuantScheme", (void (TensorQuantizer::*)(DlQuantization::QuantizationMode)) &DlQuantization::TensorQuantizer::setQuantScheme)
+        .def("getQuantScheme", (DlQuantization::QuantizationMode (TensorQuantizer::*)()) &DlQuantization::TensorQuantizer::getQuantScheme)
         .def("computeEncoding", (DlQuantization::TfEncoding(TensorQuantizer::*)(unsigned int, bool)) &DlQuantization::TensorQuantizer::computeEncoding)
         .def("quantizeDequantize", (void (TensorQuantizer::*)(py::array_t<float>, py::array_t<float>, double, double,
                                                               unsigned int, bool)) &DlQuantization::TensorQuantizer::quantizeDequantize)
-        .def_readwrite("quantScheme", &DlQuantization::TensorQuantizer::quantScheme)
         .def_readwrite("roundingMode", &DlQuantization::TensorQuantizer::roundingMode)
         .def_readwrite("isEncodingValid", &DlQuantization::TensorQuantizer::isEncodingValid);
 
