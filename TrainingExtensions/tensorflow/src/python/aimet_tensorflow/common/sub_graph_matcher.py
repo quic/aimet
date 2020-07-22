@@ -61,28 +61,28 @@ subgraph_constructors = {
         'input_shape': (1, 10, 10, 3),
         'op_type': 'Conv2D',
         'constructor': "tf.keras.layers.Conv2D(10, (1, 1), use_bias=False)(constants)",
-        'module_regex': ['(.+)/Conv2D$', '(.+)/separable_conv2d$', '(.+)/convolution$'],
+        'module_regex': ['(.+/Conv2D)$', '(.+/separable_conv2d)$', '(.+/convolution)$'],
         'associated_op_regex': ['Conv2D$', 'separable_conv2d$', 'convolution$']
     },
     'Conv2D_with_bias': {
         'input_shape': (1, 10, 10, 3),
         'op_type': 'Conv2D',
         'constructor': "tf.keras.layers.Conv2D(10, (1, 1), use_bias=True)(constants)",
-        'module_regex': ['(.+)/Conv2D$', '(.+)/separable_conv2d$', '(.+)/convolution$'],
+        'module_regex': ['(.+/Conv2D)$', '(.+/separable_conv2d)$', '(.+/convolution)$'],
         'associated_op_regex': ['Conv2D$', 'separable_conv2d$', 'convolution$']
     },
     'DepthwiseConv2dNative': {
         'input_shape': (1, 10, 10, 3),
         'op_type': 'DepthwiseConv2dNative',
         'constructor': "tf.keras.layers.DepthwiseConv2D(3, (1, 1))(constants)",
-        'module_regex': ['(.+)/depthwise$', '(.+)/DepthwiseConv2dNative$'],
+        'module_regex': ['(.+/depthwise)$', '(.+/DepthwiseConv2dNative)$'],
         'associated_op_regex': ['depthwise$', 'DepthwiseConv2dNative$']
     },
     'Dense': {
         'input_shape': (1, 10),
         'op_type': 'Dense',
         'constructor': "tf.keras.layers.Dense(10, activation=None)(constants)",
-        'module_regex': ['(.+)/MatMul$'],
+        'module_regex': ['(.+/MatMul)$'],
         'associated_op_regex': ['MatMul$']
     },
     'BN_keras_with_training_tensor': {
@@ -195,7 +195,7 @@ subgraph_constructors = {
         'input_shape': (10, 10, 3,),
         'op_type': 'Flatten',
         'constructor': "tf.keras.layers.Flatten()(inputs)",
-        'module_regex': ['(.+)/Reshape$'],
+        'module_regex': ['(.+/Reshape)$'],
         'associated_op_regex': ['Reshape$']
     },
     'Reshape_to_3D': {

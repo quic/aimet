@@ -69,7 +69,10 @@ def reduce_conv2d(sess: tf.Session, op_tensor_tuple: Tuple[Op, List[tf.Tensor]],
     tf_op = op_tensor_tuple[0].get_module()
     padding = str(tf_op.get_attr("padding"), "utf-8")
     strides = tf_op.get_attr("strides")
-    name = "reduced_" + op_tensor_tuple[0].dotted_name
+    # Remove last part of conv op's name, or else we end up with names like Conv2D/Conv2D/Conv2D... if the same conv op
+    # is reduced multiple times
+    last_slash = op_tensor_tuple[0].dotted_name.rfind('/')
+    name = "reduced_" + op_tensor_tuple[0].dotted_name[:last_slash]
     kernel_product = op_tensor_tuple[0].get_param_product('kernel')
     kernel_size = kernel_product.shape.as_list()[:2]
 

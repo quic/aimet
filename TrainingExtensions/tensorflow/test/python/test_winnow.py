@@ -475,7 +475,7 @@ class TestTfModuleReducer(unittest.TestCase):
                                                                 reshape=True, in_place=True, verbose=True)
         reduced_depthwise = new_sess.graph.get_operation_by_name("reduced_depthwise_conv2d/depthwise")
         reduced_separable_depthwise = new_sess.graph.get_operation_by_name("reduced_separable_conv2d/separable_conv2d/"
-                                                                           "depthwise/depthwise")
+                                                                           "depthwise")
         self.assertEqual(7, reduced_depthwise.outputs[0].shape.as_list()[-1])
         self.assertEqual(7, reduced_depthwise.inputs[0].shape.as_list()[-1])
         self.assertEqual(13, reduced_separable_depthwise.outputs[0].shape.as_list()[-1])
@@ -949,9 +949,9 @@ class TestTfWinnower(unittest.TestCase):
                                                 in_place=True, verbose=True)
         mask_winnower._propagate_masks()
 
-        first_conv2d_opname = "conv2d"
+        first_conv2d_opname = "conv2d/Conv2D"
         middle_batchnorm_opname = "batch_normalization"
-        second_conv2d_opname = "conv2d_1"
+        second_conv2d_opname = "conv2d_1/Conv2D"
         ops_dict = mask_winnower._conn_graph.get_all_ops()
         first_conv2d_mask = mask_winnower._mask_propagator.op_to_mask_dict[ops_dict[first_conv2d_opname]]
         self.assertEqual(3, sum(first_conv2d_mask.input_channel_masks[0]))
@@ -997,19 +997,19 @@ class TestTfWinnower(unittest.TestCase):
         mask_winnower._propagate_masks()
         ops_dict = mask_winnower._conn_graph.get_all_ops()
         self._check_mask_indices(input_channels_to_winnow, "input",
-                                 mask_winnower._mask_propagator.op_to_mask_dict[ops_dict["conv2d_3"]])
+                                 mask_winnower._mask_propagator.op_to_mask_dict[ops_dict["conv2d_3/Conv2D"]])
         self._check_mask_indices(input_channels_to_winnow_2, "output",
                                  mask_winnower._mask_propagator.op_to_mask_dict[ops_dict["batch_normalization"]])
         self._check_mask_indices(input_channels_to_winnow_2, "input",
                                  mask_winnower._mask_propagator.op_to_mask_dict[ops_dict["batch_normalization"]])
         self._check_mask_indices(input_channels_to_winnow, "output",
-                                 mask_winnower._mask_propagator.op_to_mask_dict[ops_dict["conv2d_2"]])
+                                 mask_winnower._mask_propagator.op_to_mask_dict[ops_dict["conv2d_2/Conv2D"]])
         self._check_mask_indices(input_channels_to_winnow_2, "output",
                                  mask_winnower._mask_propagator.op_to_mask_dict[ops_dict["Relu"]])
         self._check_mask_indices(input_channels_to_winnow_2, "input",
                                  mask_winnower._mask_propagator.op_to_mask_dict[ops_dict["Relu"]])
         self._check_mask_indices(input_channels_to_winnow_2, "output",
-                                 mask_winnower._mask_propagator.op_to_mask_dict[ops_dict["conv2d"]])
+                                 mask_winnower._mask_propagator.op_to_mask_dict[ops_dict["conv2d/Conv2D"]])
         sess.close()
 
     def test_mask_propagation_with_maxpool_as_last_layer(self):
@@ -1125,20 +1125,20 @@ class TestTfWinnower(unittest.TestCase):
         modified_op_list = mask_winnower._mask_propagator.get_ops_with_non_default_ip_op_masks()
         self.assertEqual(6, len(modified_op_list))
 
-        conv2d_1_op = mask_winnower._conn_graph.get_all_ops()["conv2d_1"]
+        conv2d_1_op = mask_winnower._conn_graph.get_all_ops()["conv2d_1/Conv2D"]
         conv2d_1_op_mask = mask_winnower._mask_propagator.op_to_mask_dict[conv2d_1_op]
         self.assertEqual([1, 1, 0, 0, 1, 1], conv2d_1_op_mask.output_channel_masks[0])
-        conv2d_op = mask_winnower._conn_graph.get_all_ops()["conv2d"]
+        conv2d_op = mask_winnower._conn_graph.get_all_ops()["conv2d/Conv2D"]
         conv2d_op_mask = mask_winnower._mask_propagator.op_to_mask_dict[conv2d_op]
         self.assertEqual([0, 0, 1, 1, 1], conv2d_op_mask.output_channel_masks[0])
-        conv2d_2_op = mask_winnower._conn_graph.get_all_ops()["conv2d_2"]
+        conv2d_2_op = mask_winnower._conn_graph.get_all_ops()["conv2d_2/Conv2D"]
         conv2d_2_op_mask = mask_winnower._mask_propagator.op_to_mask_dict[conv2d_2_op]
         self.assertEqual([1, 1, 1, 1, 1, 1, 0], conv2d_2_op_mask.output_channel_masks[0])
-        conv2d_3_op = mask_winnower._conn_graph.get_all_ops()["conv2d_3"]
+        conv2d_3_op = mask_winnower._conn_graph.get_all_ops()["conv2d_3/Conv2D"]
         conv2d_3_op_mask = mask_winnower._mask_propagator.op_to_mask_dict[conv2d_3_op]
         self.assertEqual([1, 1, 0, 0, 1, 1, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0],
                          conv2d_3_op_mask.input_channel_masks[0])
-        conv2d_4_op = mask_winnower._conn_graph.get_all_ops()["conv2d_4"]
+        conv2d_4_op = mask_winnower._conn_graph.get_all_ops()["conv2d_4/Conv2D"]
         conv2d_4_op_mask = mask_winnower._mask_propagator.op_to_mask_dict[conv2d_4_op]
         self.assertEqual([1, 1, 0, 0, 1, 1, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 0],
                          conv2d_4_op_mask.input_channel_masks[0])
@@ -1169,7 +1169,7 @@ class TestTfWinnower(unittest.TestCase):
                                                 reshape=True, in_place=True, verbose=True)
         mask_winnower._propagate_masks()
 
-        conv2d_2_op = mask_winnower._conn_graph.get_all_ops()["conv2d_2"]
+        conv2d_2_op = mask_winnower._conn_graph.get_all_ops()["conv2d_2/Conv2D"]
         conv2d_2_op_mask = mask_winnower._mask_propagator.op_to_mask_dict[conv2d_2_op]
         self.assertEqual([1, 1, 1, 0, 1, 0, 1, 0], conv2d_2_op_mask.output_channel_masks[0])
 
@@ -1204,10 +1204,10 @@ class TestTfWinnower(unittest.TestCase):
                                                 reshape=True, in_place=True, verbose=True)
         mask_winnower._propagate_masks()
 
-        conv2d_1_op = mask_winnower._conn_graph.get_all_ops()["conv2d_1"]
+        conv2d_1_op = mask_winnower._conn_graph.get_all_ops()["conv2d_1/Conv2D"]
         conv2d_1_op_mask = mask_winnower._mask_propagator.op_to_mask_dict[conv2d_1_op]
         self.assertEqual([1, 1, 1, 0, 1, 0, 1, 0], conv2d_1_op_mask.output_channel_masks[0])
-        conv2d_3_op = mask_winnower._conn_graph.get_all_ops()["conv2d_3"]
+        conv2d_3_op = mask_winnower._conn_graph.get_all_ops()["conv2d_3/Conv2D"]
         conv2d_3_op_mask = mask_winnower._mask_propagator.op_to_mask_dict[conv2d_3_op]
         self.assertEqual([1, 1, 1, 0, 1, 0, 1, 0], conv2d_3_op_mask.output_channel_masks[0])
 
@@ -1269,7 +1269,7 @@ class TestTfWinnower(unittest.TestCase):
         output_op_names = ['top1-acc', 'top5-acc']
         mask_winnower = MaskPropagationWinnower(sess, input_op_names, output_op_names, module_zero_channels_list,
                                                 reshape=True, in_place=True, verbose=True)
-        flatten_op = mask_winnower._conn_graph.get_all_ops()['flatten']
+        flatten_op = mask_winnower._conn_graph.get_all_ops()['flatten/Reshape']
         self.assertTrue(flatten_op not in mask_winnower._mask_propagator.op_to_mask_dict.keys())
         self.assertEqual(3, len(mask_winnower._mask_propagator.op_to_mask_dict))
 
