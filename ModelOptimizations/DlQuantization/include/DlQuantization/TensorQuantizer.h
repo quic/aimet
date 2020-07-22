@@ -120,11 +120,23 @@ public:
     void quantizeDequantize(py::array_t<float> inputTensor, py::array_t<float> outputTensor,
                             double encodingMin, double encodingMax, unsigned int bitwidth, bool useCuda);
 
-    QuantizationMode quantScheme;   ///< Quantization scheme (e.g TF-Enhanced)
+    /**
+    * sets quantScheme and creates new encoding analyzer instance
+    * @param quantScheme Quantization scheme (e.g. TF-Enhanced)
+    */
+    void setQuantScheme(QuantizationMode quantScheme);
+
+    /**
+    * gets quantScheme configured for this Tensor Quantizer
+    * @return quantScheme as QuantizationMode
+    */
+    QuantizationMode getQuantScheme();
+
     RoundingMode roundingMode;      ///< Rounding mode to use during quantization
     bool isEncodingValid;           ///< Is encoding valid
 
 private:
+    QuantizationMode _quantScheme;   ///< Quantization scheme (e.g TF-Enhanced)
     bool _validStats;
     std::unique_ptr<IQuantizationEncodingAnalyzer<float>> _encodingAnalyzer;
     std::unique_ptr<ITensorQuantizationSim<float>> _tensorQuantizationSim;

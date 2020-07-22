@@ -105,7 +105,7 @@ class PickleableTensorQuantizerState:
         """
 
         self.quant_op_name = quant_op_name
-        self.quant_scheme = tensor_quantizer_ref.quantScheme
+        self.quant_scheme = tensor_quantizer_ref.getQuantScheme()
         self.rounding_mode = tensor_quantizer_ref.roundingMode
         self.is_encoding_valid = tensor_quantizer_ref.isEncodingValid
         self.quantizer_type = quantizer_type
@@ -197,7 +197,7 @@ class QuantizerInfo:
         Reads the quant_scheme associated with the Quantize op
         :return: quant_scheme as libpymo.QuantizationMode type
         """
-        return self.tensor_quantizer.quantScheme
+        return self.tensor_quantizer.getQuantScheme()
 
     @quant_scheme.setter
     def quant_scheme(self, quant_scheme: libpymo.QuantizationMode):
@@ -206,8 +206,8 @@ class QuantizerInfo:
         :param quant_scheme: value to be assigned to quant_scheme param in Quantizer
         :return:
         """
-        self.tensor_quantizer.isEncodingValid = False
-        self.tensor_quantizer.quantScheme = quant_scheme
+
+        self.tensor_quantizer.setQuantScheme(quant_scheme_to_libpymo[quant_scheme])
 
     @property
     def rounding_mode(self) -> libpymo.RoundingMode:
