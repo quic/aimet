@@ -44,13 +44,30 @@ namespace DlQuantization
 {
 
 TensorQuantizer::TensorQuantizer(QuantizationMode quantScheme, RoundingMode roundingMode) :
-        quantScheme(quantScheme),
+        _quantScheme(quantScheme),
         roundingMode(roundingMode),
         isEncodingValid(false),
         _validStats(false)
 {
     _encodingAnalyzer      = getEncodingAnalyzerInstance<float>(quantScheme);
     _tensorQuantizationSim = getTensorQuantizationSim<float>();
+}
+
+
+QuantizationMode TensorQuantizer::getQuantScheme()
+{
+    return _quantScheme;
+}
+
+void TensorQuantizer::setQuantScheme(QuantizationMode quantScheme)
+{
+    // update quantScheme held by Tensor Quantizer
+    _quantScheme = quantScheme;
+
+    // create new encoding analyzer instance and reset associated flags
+    // _validStats is tightly coupled with the encoding analyzer instance, needs reset
+    resetEncodingStats();
+
 }
 
 void TensorQuantizer::resetEncodingStats()
@@ -60,7 +77,7 @@ void TensorQuantizer::resetEncodingStats()
 
     // This is syntactic sugar provided by unique_ptr to call reset() - delete the underlying object
     _encodingAnalyzer = nullptr;
-    _encodingAnalyzer = getEncodingAnalyzerInstance<float>(quantScheme);
+    _encodingAnalyzer = getEncodingAnalyzerInstance<float>(_quantScheme);
 }
 
 void TensorQuantizer::updateStats(const float* tensor, std::size_t tensorSize, bool useCuda)

@@ -43,6 +43,7 @@ import libpymo
 from aimet_tensorflow.quantsim import QuantizationSimModel
 from aimet_tensorflow.utils.graph_saver import load_model_from_meta
 from aimet_tensorflow.common.graph_eval import initialize_uninitialized_vars
+from aimet_common.defs import QuantScheme
 from aimet_tensorflow.quantsim import save_checkpoint, load_checkpoint
 from aimet_tensorflow.utils.constants import QuantizeOpIndices
 
@@ -241,6 +242,60 @@ class TestQuantSim(unittest.TestCase):
         self.assertEqual(int(libpymo.TensorQuantizerOpMode.quantizeDequantize),
                          sim.session.run(conv2d_output_quant_op.inputs[1]))
 
+    def test_compute_encodings_quant_scheme_update(self):
+        """
+        Create QuantSim model and update quantScheme using property interface
+        """
+
+
+        tf.reset_default_graph()
+        np.random.seed(0)
+        tf.set_random_seed(0)
+
+        with tf.device('/gpu:0'):
+            model = tf.keras.Sequential()
+            model.add(tf.keras.layers.Conv2D(32, kernel_size=3, input_shape=(28, 28, 3), activation='relu'))
+            model.add(tf.keras.layers.MaxPooling2D((2, 2)))
+            model.add(tf.keras.layers.Conv2D(64, kernel_size=3, activation='relu'))
+            model.summary()
+
+        sess = tf.Session()
+        initialize_uninitialized_vars(sess)
+        sim = QuantizationSimModel(sess, ['conv2d_input'], ['conv2d_1/Relu'], use_cuda=True)
+
+        # Check that op-mode is set correctly
+        conv2d_weight_quant_op = sim.session.graph.get_operation_by_name('conv2d/Conv2D/ReadVariableOp_quantized')
+
+        self.assertEqual(int(libpymo.TensorQuantizerOpMode.oneShotQuantizeDequantize),
+                         sim.session.run(conv2d_weight_quant_op.inputs[1]))
+
+        def dummy_forward_pass(sess, args):
+            np.random.seed(0)
+            tf.set_random_seed(0)
+            model_output = sess.graph.get_tensor_by_name('conv2d_1/Relu_quantized:0')
+            model_input = sess.graph.get_tensor_by_name('conv2d_input:0')
+            dummy_input = np.random.randn(20, 28, 28, 3)
+            sess.run(model_output, feed_dict={model_input: dummy_input})
+
+        sim.compute_encodings(dummy_forward_pass, None)
+
+        p_quantizer = sim.quantizer_config('conv2d/Conv2D/ReadVariableOp_quantized')
+        old_p_encoding_min = p_quantizer.get_variable_from_op(QuantizeOpIndices.encoding_min)
+        old_p_encoding_max = p_quantizer.get_variable_from_op(QuantizeOpIndices.encoding_max)
+
+        self.assertEqual(libpymo.QuantizationMode.QUANTIZATION_TF_ENHANCED, p_quantizer.quant_scheme)
+        p_quantizer.quant_scheme = QuantScheme.post_training_tf
+        self.assertEqual(libpymo.QuantizationMode.QUANTIZATION_TF, p_quantizer.quant_scheme)
+
+        # invoke compute encoding after quantScheme update
+        sim.compute_encodings(dummy_forward_pass, None)
+        new_p_encoding_min = p_quantizer.get_variable_from_op(QuantizeOpIndices.encoding_min)
+        new_p_encoding_max = p_quantizer.get_variable_from_op(QuantizeOpIndices.encoding_max)
+
+        # validate
+        self.assertNotEqual(old_p_encoding_min, new_p_encoding_min)
+        self.assertNotEqual(old_p_encoding_max, new_p_encoding_max)
+
     def test_export_cpu_model(self):
 
         """
@@ -323,8 +378,8 @@ class TestQuantSim(unittest.TestCase):
         for quantize_op in new_quantsim._param_quantizers:
             self.assertFalse(sim._param_quantizers[quantize_op].session ==
                              new_quantsim._param_quantizers[quantize_op].session)
-            self.assertTrue(sim._param_quantizers[quantize_op].tensor_quantizer.quantScheme ==
-                            new_quantsim._param_quantizers[quantize_op].tensor_quantizer.quantScheme)
+            self.assertTrue(sim._param_quantizers[quantize_op].tensor_quantizer.getQuantScheme() ==
+                            new_quantsim._param_quantizers[quantize_op].tensor_quantizer.getQuantScheme())
             self.assertTrue(sim._param_quantizers[quantize_op].tensor_quantizer.roundingMode ==
                             new_quantsim._param_quantizers[quantize_op].tensor_quantizer.roundingMode)
             self.assertFalse(sim._param_quantizers[quantize_op].tensor_quantizer.isEncodingValid)
@@ -333,8 +388,8 @@ class TestQuantSim(unittest.TestCase):
         for quantize_op in new_quantsim._activation_quantizers:
             self.assertFalse(sim._activation_quantizers[quantize_op].session ==
                              new_quantsim._activation_quantizers[quantize_op].session)
-            self.assertTrue(sim._activation_quantizers[quantize_op].tensor_quantizer.quantScheme ==
-                            new_quantsim._activation_quantizers[quantize_op].tensor_quantizer.quantScheme)
+            self.assertTrue(sim._activation_quantizers[quantize_op].tensor_quantizer.getQuantScheme() ==
+                            new_quantsim._activation_quantizers[quantize_op].tensor_quantizer.getQuantScheme())
             self.assertTrue(sim._activation_quantizers[quantize_op].tensor_quantizer.roundingMode ==
                             new_quantsim._activation_quantizers[quantize_op].tensor_quantizer.roundingMode)
             self.assertFalse(sim._activation_quantizers[quantize_op].tensor_quantizer.isEncodingValid)
@@ -419,7 +474,6 @@ class TestQuantSim(unittest.TestCase):
         del sim
         del new_quantsim
 
-
     def test_set_get_quantizer_params_using_properties(self):
 
         """
@@ -470,7 +524,7 @@ class TestQuantSim(unittest.TestCase):
 
         quant_scheme = o_quantizer.quant_scheme
         self.assertEqual(libpymo.QuantizationMode.QUANTIZATION_TF_ENHANCED, quant_scheme)
-        o_quantizer.quant_scheme = libpymo.QuantizationMode.QUANTIZATION_TF
+        o_quantizer.quant_scheme = QuantScheme.post_training_tf
         quant_scheme = o_quantizer.quant_scheme
         self.assertEqual(libpymo.QuantizationMode.QUANTIZATION_TF, quant_scheme)
         self.assertFalse(o_quantizer.tensor_quantizer.isEncodingValid)
