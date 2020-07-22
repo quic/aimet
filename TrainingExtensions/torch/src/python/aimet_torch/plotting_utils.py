@@ -130,19 +130,19 @@ def line_plot_changes_in_summary_stats(data_before, data_after, x_axis_label=Non
                   title=title,
                   tools="pan, box_zoom, crosshair, reset, save",
                   plot_width=950, plot_height=600, sizing_mode='stretch_both', output_backend="webgl")
-    plot.line(x='index', y='min', line_width=2, line_color="#2171b5", line_dash='dotted', legend="After Optimization",
-              source=layer_weights_old_model, name="new model")
+    plot.line(x='index', y='min', line_width=2, line_color="#2171b5", line_dash='dotted', legend="Before Optimization",
+              source=layer_weights_old_model, name="old model")
     plot.line(x='index', y='max', line_width=2, line_color="green", line_dash='dotted', source=layer_weights_old_model,
-              name="new model")
+              name="old model")
     plot.line(x='index', y='mean', line_width=2, line_color="orange", line_dash='dotted',
-              source=layer_weights_old_model, name="new model")
+              source=layer_weights_old_model, name="old model")
 
     plot.line(x='index', y='min', line_width=2, line_color="#2171b5",
-              legend="Before Optimization", source=layer_weights_new_model, name="old model")
+              legend="After Optimization", source=layer_weights_new_model, name="new model")
     plot.line(x='index', y='max', line_width=2, line_color="green",
-              source=layer_weights_new_model, name="old model")
+              source=layer_weights_new_model, name="new model")
     plot.line(x='index', y='mean', line_width=2, line_color="orange",
-              source=layer_weights_new_model, name="old model")
+              source=layer_weights_new_model, name="new model")
 
     plot.varea(x=data_after.index,
                y1=data_after['min'],
