@@ -191,7 +191,7 @@ def bias_correction_analytical_and_empirical():
 
     # Perform Bias Correction
     bias_correction.correct_bias(model.to(device="cuda"), params, num_quant_samples=1000,
-                                 data_loader=data_loader.train_loader, num_bias_correct_samples=512,
+                                 data_loader=data_loader, num_bias_correct_samples=512,
                                  conv_bn_dict=module_prop_dict, perform_only_empirical_bias_corr=False)
 
 
