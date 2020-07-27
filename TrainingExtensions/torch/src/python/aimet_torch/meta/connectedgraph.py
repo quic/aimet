@@ -133,6 +133,7 @@ from aimet_common.connected_graph.operation import Op, determine_preceding_op_in
 from aimet_common.model_module import PytorchModelModule
 from aimet_common.utils import AimetLogger, ModelApi, api_channel_index_dict
 from aimet_torch.utils import run_hook_for_layers, is_leaf_module
+from aimet_torch.defs import PassThroughOp
 
 logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Winnow)
 
@@ -400,9 +401,11 @@ class ConnectedGraph(AimetCommonConnectedGraph):
                                                        module_tensor_tuples_map)
         if input_name in modules and is_leaf_module(modules[input_name]):
             # the graph is fully represented by a directional graph of leaf torch modules so the recursion is
-            # stopped at this level.
-            ops[output_name] = self._create_leaf_module_op(modules[input_name],
-                                                           inputs, ops, module_tensor_tuples_map)
+            # stopped at this level. PassThroughOp are being ignored because in graph node representation
+            # the passthrough op generate no output and are not part of inputs for downstream op
+            if not isinstance(modules[input_name], PassThroughOp):
+                ops[output_name] = self._create_leaf_module_op(modules[input_name],
+                                                               inputs, ops, module_tensor_tuples_map)
 
     def _create_input_products(self, model_input: Tuple[torch.Tensor], graph: torch._C.Graph) -> \
             Tuple[str, Dict[str, Product]]:
@@ -517,9 +520,14 @@ class ConnectedGraph(AimetCommonConnectedGraph):
         op.dotted_name = self._module_to_name[op.get_module()]
         _fill_conv_op_info(op, model)
 
-        # populating input and output shapes obtained via hook and forward pass
+        # populating input and output shapes from xxx_tensor_tuple obtained via hook and forward pass
         input_tensor_tuple, output_tensor_tuple = module_tensor_tuples_map[model]
-        _fill_and_check_op_product_shapes(op, list(input_tensor_tuple[0].shape), list(output_tensor_tuple[0].shape))
+        # xxx_tensor_tuple is a union(Tensor, tuple(Tensor)), obtain the shape of the Tensor (or first Tensor if Tuple)
+        output_shape = list(
+            output_tensor_tuple[0].shape if isinstance(output_tensor_tuple, tuple) else output_tensor_tuple.shape)
+        input_shape = list(
+            input_tensor_tuple[0].shape if isinstance(input_tensor_tuple, tuple) else input_tensor_tuple.shape)
+        _fill_and_check_op_product_shapes(op, input_shape, output_shape)
         return op
 
     def _create_functional_op(self, node: torch._C.Node, ops: Dict[str, Union[Op, Product]]) -> Union[Op, None]:
@@ -556,7 +564,7 @@ class ConnectedGraph(AimetCommonConnectedGraph):
             input_shape = inp_op.shape
         else:
             input_shape = inp_op.output_shape
-        _fill_and_check_op_product_shapes(op, input_shape, output_shape[1:])
+        _fill_and_check_op_product_shapes(op, input_shape, output_shape)
         return op
 
     def _create_op_and_products(self, op_type: str, inputs: List[torch._C.Node],
@@ -883,7 +891,8 @@ class ConnectedGraph(AimetCommonConnectedGraph):
                     self._module_to_op_dict[current_named_module] = current_op
                     current_op.dotted_name = self._module_to_name[current_named_module]
 
-                _fill_and_check_op_product_shapes(current_op, input_shape, output_shape)
+                # '1' element is prepended to output_shape to fill in the missing num_batches index
+                _fill_and_check_op_product_shapes(current_op, input_shape, [1] + output_shape)
                 _fill_conv_op_info(current_op, current_op.get_module())
 
                 module_id_index += 1
@@ -1186,10 +1195,9 @@ def _fill_and_check_op_product_shapes(op: Op, input_shape: List, output_shape: L
     shapes; if not, log an error.
     :param op: Current op to fill shape parameter
     :param input_shape: Input shape obtained from forward pass
-    :param output_shape: Output shape obtained from forward pass.  A '1' element is prepended to it to fill in the
-    missing num_batches index
+    :param output_shape: Output shape obtained from forward pass
     """
-    op.output_shape = [1] + output_shape
+    op.output_shape = output_shape
     for inp in op.inputs:
         if not inp.is_parm:
             if inp.shape and inp.shape[1:] != input_shape[1:]:
