@@ -57,17 +57,18 @@ from bokeh.plotting import figure
 class BokehServerSession:
     """ Creates a unique bokeh session specified by a bokeh session id as input name and a port number"""
 
-    def __init__(self, url: str, session_id: str = None) -> object:
+    def __init__(self, url: str, session_id: str = None, display: bool = True) -> object:
         """
         Create a BokehServerSession object. We will link this server session with a document, self.document,
         which allows changes to be pushed to the server.
         :param url: url for server
         :param session_id: unique session id for server session
+        :param display: a bool variable to indicate if output is to be displayed immediately.
         """
         self.document = Document()
         self.server_session = push_session(self.document, url=url, session_id=session_id)
-
-        self.server_session.show()
+        if display:
+            self.server_session.show()
 
 
 class ProgressBar:
