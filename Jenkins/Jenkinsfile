@@ -145,47 +145,6 @@ pipeline {
                             }
                         }
 
-                        stage('Code coverage') {
-                            steps {
-                                echo 'Running code coverage...'
-                                sh 'bash -l -c "cd ${REPO_NAME} && ./buildntest.sh -g"'
-                                script{
-                                    linecovtargets_pass = THRESHOLD_OBJ.line_cov_targets_thresholds.mark_as_pass
-                                    linecovtargets_fail = THRESHOLD_OBJ.line_cov_targets_thresholds.mark_as_fail
-                                    linecovtargets_unstable = THRESHOLD_OBJ.line_cov_targets_thresholds.mark_as_unstable
-                                }
-                            }
-                            post {
-                                always {
-                                    step([
-                                          $class: 'CoberturaPublisher',
-                                          autoUpdateHealth: false,
-                                          autoUpdateStability: false,
-                                          coberturaReportFile: '**/coverage_test_results/**/code_coverage.xml',
-                                          conditionalCoverageTargets: '70, 0, 0',
-                                          fileCoverageTargets: '70, 0, 0',
-                                          lineCoverageTargets: "${linecovtargets_pass}, ${linecovtargets_fail}, ${linecovtargets_unstable}",
-                                          methodCoverageTargets: '80, 0, 0',
-                                          packageCoverageTargets: '70, 0, 0',
-                                          maxNumberOfBuilds: 10,
-                                          onlyStable: false,
-                                          sourceEncoding: 'ASCII',
-                                          zoomCoverageChart: false,
-                                          failNoReports: false,
-                                          failUnhealthy: true,
-                                          failUnstable: false
-                                    ])
-                                    script {
-                                        if (currentBuild.currentResult.equals("FAILURE")) {
-                                            // the plugin won't fail the stage.  it only sets the build status, so we have to fail it
-                                            // manually
-                                            sh "exit 1"
-                                        }
-                                    }             
-                                }
-                            }
-                        }
-
                         stage('Static analysis') {
                             steps {
                                 echo 'Running static analysis...'
