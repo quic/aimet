@@ -19,18 +19,18 @@ Code Examples for Visualization of Weight tensors
 
 **Required imports**
 
-.. literalinclude:: ../../NightlyTests/tensorflow/code_examples/visualization.py
+.. literalinclude:: ../tf_code_examples/visualization.py
     :language: python
     :lines: 39-45
 
 **Visualizing weight ranges for layer**
 
-.. literalinclude:: ../../NightlyTests/tensorflow/code_examples/visualization.py
+.. literalinclude:: ../tf_code_examples/visualization.py
     :language: python
     :pyobject: visualizing_weight_ranges_for_single_layer
 
 **Visualizing Relative weight ranges for layer**
 
-.. literalinclude:: ../../NightlyTests/tensorflow/code_examples/visualization.py
+.. literalinclude:: ../tf_code_examples/visualization.py
     :language: python
     :pyobject: visualizing_relative_weight_ranges_for_single_layer

@@ -32,14 +32,14 @@ Code Example
 
 **Required imports**
 
-.. literalinclude:: ../../NightlyTests/torch/code_examples/post_training_techniques_examples.py
+.. literalinclude:: ../torch_code_examples/post_training_techniques_examples.py
     :language: python
     :lines: 42, 47
 
 
 **Cross Layer Equalization in auto mode**
 
-.. literalinclude:: ../../NightlyTests/torch/code_examples/post_training_techniques_examples.py
+.. literalinclude:: ../torch_code_examples/post_training_techniques_examples.py
     :language: python
     :pyobject: cross_layer_equalization_auto
 

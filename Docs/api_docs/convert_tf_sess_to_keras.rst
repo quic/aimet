@@ -44,13 +44,13 @@ Code Example
 
 **Required imports**
 
-.. literalinclude:: ../../NightlyTests/tensorflow/code_examples/converting_tf_session_to_keras.py
+.. literalinclude:: ../tf_code_examples/converting_tf_session_to_keras.py
     :language: python
     :lines: 40, 51-52
 
 **Steps to convert a TF session found after compression to Keras model**
 
-.. literalinclude:: ../../NightlyTests/tensorflow/code_examples/converting_tf_session_to_keras.py
+.. literalinclude:: ../tf_code_examples/converting_tf_session_to_keras.py
     :language: python
     :pyobject: convert_tf_session_to_keras_model
 
@@ -58,24 +58,24 @@ Utility Functions
 =================
 **Required imports**
 
-.. literalinclude:: ../../NightlyTests/tensorflow/code_examples/converting_tf_session_to_keras.py
+.. literalinclude:: ../tf_code_examples/converting_tf_session_to_keras.py
     :language: python
     :lines: 40-49
 
 **Utility function to get session from Keras model**
 
-.. literalinclude:: ../../NightlyTests/tensorflow/code_examples/converting_tf_session_to_keras.py
+.. literalinclude:: ../tf_code_examples/converting_tf_session_to_keras.py
     :language: python
     :pyobject: get_sess_from_keras_model
 
 **Utility function to get a compressed session**
 
-.. literalinclude:: ../../NightlyTests/tensorflow/code_examples/converting_tf_session_to_keras.py
+.. literalinclude:: ../tf_code_examples/converting_tf_session_to_keras.py
     :language: python
     :pyobject: compress_session
 
 **Utility function for training**
 
-.. literalinclude:: ../../NightlyTests/tensorflow/code_examples/converting_tf_session_to_keras.py
+.. literalinclude:: ../tf_code_examples/converting_tf_session_to_keras.py
     :language: python
     :pyobject: train

@@ -25,12 +25,12 @@ Code Examples
 
 **Required imports**
 
-.. literalinclude:: ../../NightlyTests/torch/code_examples/visualization.py
+.. literalinclude:: ../torch_code_examples/visualization.py
     :language: python
     :lines: 41-49, 53-56
 
 **Model Compression with Visualization Parameter**
 
-.. literalinclude:: ../../NightlyTests/torch/code_examples/visualization.py
+.. literalinclude:: ../torch_code_examples/visualization.py
     :language: python
     :pyobject: model_compression_with_visualization

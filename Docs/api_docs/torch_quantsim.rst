@@ -50,18 +50,18 @@ Code Examples
 
 **Required imports**
 
-.. literalinclude:: ../../NightlyTests/torch/code_examples/code_examples.py
+.. literalinclude:: ../torch_code_examples/code_examples.py
    :language: python
    :lines: 43, 56, 52-53
 
 **Evaluation function**
 
-.. literalinclude:: ../../NightlyTests/torch/code_examples/code_examples.py
+.. literalinclude:: ../torch_code_examples/code_examples.py
    :language: python
    :pyobject: evaluate_model
 
 **Quantize and fine-tune a trained model**
 
-.. literalinclude:: ../../NightlyTests/torch/code_examples/code_examples.py
+.. literalinclude:: ../torch_code_examples/code_examples.py
    :language: python
    :pyobject: quantize_model
