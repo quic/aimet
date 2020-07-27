@@ -29,13 +29,13 @@ Code Example
 
 **Required imports**
 
-.. literalinclude:: ../../NightlyTests/tensorflow/code_examples/post_training_techniques_examples.py
+.. literalinclude:: ../tf_code_examples/post_training_techniques_examples.py
     :language: python
     :lines: 41-47
 
 **Cross Layer Equalization in auto mode comprehensive**
 
-.. literalinclude:: ../../NightlyTests/tensorflow/code_examples/post_training_techniques_examples.py
+.. literalinclude:: ../tf_code_examples/post_training_techniques_examples.py
     :language: python
     :pyobject: cross_layer_equalization_auto
 

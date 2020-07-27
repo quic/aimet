@@ -99,61 +99,61 @@ Code Examples
 
 **Required imports**
 
-.. literalinclude:: ../../NightlyTests/torch/code_examples/code_examples.py
+.. literalinclude:: ../torch_code_examples/code_examples.py
    :language: python
    :lines: 41-50, 56
 
 **Evaluation function**
 
-.. literalinclude:: ../../NightlyTests/torch/code_examples/code_examples.py
+.. literalinclude:: ../torch_code_examples/code_examples.py
    :language: python
    :pyobject: evaluate_model
 
 **Compressing using Spatial SVD in auto mode with multiplicity = 8 for rank rounding**
 
-.. literalinclude:: ../../NightlyTests/torch/code_examples/code_examples.py
+.. literalinclude:: ../torch_code_examples/code_examples.py
    :language: python
    :pyobject: spatial_svd_auto_mode
 
 **Compressing using Spatial SVD in manual mode**
 
-.. literalinclude:: ../../NightlyTests/torch/code_examples/code_examples.py
+.. literalinclude:: ../torch_code_examples/code_examples.py
    :language: python
    :pyobject: spatial_svd_manual_mode
 
 **Compressing using Weight SVD in auto mode**
 
-.. literalinclude:: ../../NightlyTests/torch/code_examples/code_examples.py
+.. literalinclude:: ../torch_code_examples/code_examples.py
    :language: python
    :pyobject: weight_svd_auto_mode
 
 **Compressing using Weight SVD in manual mode with multiplicity = 8 for rank rounding**
 
-.. literalinclude:: ../../NightlyTests/torch/code_examples/code_examples.py
+.. literalinclude:: ../torch_code_examples/code_examples.py
    :language: python
    :pyobject: weight_svd_manual_mode
 
 **Compressing using Channel Pruning in auto mode**
 
-.. literalinclude:: ../../NightlyTests/torch/code_examples/code_examples.py
+.. literalinclude:: ../torch_code_examples/code_examples.py
    :language: python
    :pyobject: channel_pruning_auto_mode
 
 **Compressing using Channel Pruning in manual mode**
 
-.. literalinclude:: ../../NightlyTests/torch/code_examples/code_examples.py
+.. literalinclude:: ../torch_code_examples/code_examples.py
    :language: python
    :pyobject: channel_pruning_manual_mode
 
 **Example Training Object**
 
-.. literalinclude:: ../../NightlyTests/torch/code_examples/code_examples.py
+.. literalinclude:: ../torch_code_examples/code_examples.py
    :language: python
    :pyobject: Trainer
 
 **Compressing using Spatial SVD in auto mode with layer-wise fine tuning**
 
-.. literalinclude:: ../../NightlyTests/torch/code_examples/code_examples.py
+.. literalinclude:: ../torch_code_examples/code_examples.py
    :language: python
    :pyobject: spatial_svd_auto_mode_with_layerwise_finetuning
 

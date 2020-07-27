@@ -60,14 +60,14 @@ Code Examples for Higher Level APIs
 
 **Required imports**
 
-.. literalinclude:: ../../NightlyTests/torch/code_examples/post_training_techniques_examples.py
+.. literalinclude:: ../torch_code_examples/post_training_techniques_examples.py
     :language: python
     :lines: 41-42, 45-46, 49
 
 
 **Cross Layer Equalization in auto mode calling each API**
 
-.. literalinclude:: ../../NightlyTests/torch/code_examples/post_training_techniques_examples.py
+.. literalinclude:: ../torch_code_examples/post_training_techniques_examples.py
     :language: python
     :pyobject: cross_layer_equalization_auto_step_by_step
 
@@ -101,19 +101,19 @@ Code Examples for Lower Level APIs
 
 **Required imports**
 
-.. literalinclude:: ../../NightlyTests/torch/code_examples/post_training_techniques_examples.py
+.. literalinclude:: ../torch_code_examples/post_training_techniques_examples.py
     :language: python
     :lines: 42, 54, 45-46, 49
 
 **Cross Layer Equalization in manual mode**
 
-.. literalinclude:: ../../NightlyTests/torch/code_examples/post_training_techniques_examples.py
+.. literalinclude:: ../torch_code_examples/post_training_techniques_examples.py
     :language: python
     :pyobject: cross_layer_equalization_manual
 
 **Cross Layer Equalization in manual mode for Depthwise Separable layer**
 
-.. literalinclude:: ../../NightlyTests/torch/code_examples/post_training_techniques_examples.py
+.. literalinclude:: ../torch_code_examples/post_training_techniques_examples.py
     :language: python
     :pyobject: cross_layer_equalization_depthwise_layers
 

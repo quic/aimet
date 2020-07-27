@@ -40,25 +40,25 @@ Code Examples for Bias Correction
 
 **Required imports**
 
-.. literalinclude:: ../../NightlyTests/tensorflow/code_examples/post_training_techniques_examples.py
+.. literalinclude:: ../tf_code_examples/post_training_techniques_examples.py
     :language: python
     :lines: 41-55
 
 **Only Empirical Bias correction on a given model**
 
-.. literalinclude:: ../../NightlyTests/tensorflow/code_examples/post_training_techniques_examples.py
+.. literalinclude:: ../tf_code_examples/post_training_techniques_examples.py
     :language: python
     :pyobject: bias_correction_empirical
 
 **Empirical and Analytical Bias correction on a given model**
 
-.. literalinclude:: ../../NightlyTests/tensorflow/code_examples/post_training_techniques_examples.py
+.. literalinclude:: ../tf_code_examples/post_training_techniques_examples.py
     :language: python
     :pyobject: bias_correction_empirical_analytical
 
 **Empirical and Analytical Bias correction on a given model after performing CLE**
 
-.. literalinclude:: ../../NightlyTests/tensorflow/code_examples/post_training_techniques_examples.py
+.. literalinclude:: ../tf_code_examples/post_training_techniques_examples.py
     :language: python
     :pyobject: bias_correction_after_cle
 
@@ -76,12 +76,12 @@ Code Example for Per-Layer Bias Correction
 
 **Empirical Bias correction on one layer**
 
-.. literalinclude:: ../../NightlyTests/tensorflow/code_examples/post_training_techniques_examples.py
+.. literalinclude:: ../tf_code_examples/post_training_techniques_examples.py
     :language: python
     :pyobject: bias_correction_single_layer_empirical
 
 **Analytical Bias correction on one layer**
 
-.. literalinclude:: ../../NightlyTests/tensorflow/code_examples/post_training_techniques_examples.py
+.. literalinclude:: ../tf_code_examples/post_training_techniques_examples.py
     :language: python
     :pyobject: bias_correction_single_layer_analytical

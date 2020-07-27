@@ -32,19 +32,19 @@ Code Examples
 
 **Required imports**
 
-.. literalinclude:: ../../NightlyTests/tensorflow/code_examples/quantization.py
+.. literalinclude:: ../tf_code_examples/quantization.py
     :language: python
     :lines: 39-46
 
 **Quantize with Range Learning**
 
-.. literalinclude:: ../../NightlyTests/tensorflow/code_examples/quantization.py
+.. literalinclude:: ../tf_code_examples/quantization.py
     :language: python
     :pyobject: quantize_model
 
 **Example Fine-tuning step**
 
-.. literalinclude:: ../../NightlyTests/tensorflow/code_examples/quantization.py
+.. literalinclude:: ../tf_code_examples/quantization.py
     :language: python
     :pyobject: training_helper
 
