@@ -36,24 +36,24 @@ Code Examples
 
 **Required imports**
 
-.. literalinclude:: ../../NightlyTests/torch/code_examples/post_training_techniques_examples.py
+.. literalinclude:: ../torch_code_examples/post_training_techniques_examples.py
     :language: python
     :lines: 51-55
 
 **Empirical Bias correction**
 
-.. literalinclude:: ../../NightlyTests/torch/code_examples/post_training_techniques_examples.py
+.. literalinclude:: ../torch_code_examples/post_training_techniques_examples.py
     :language: python
     :pyobject: bias_correction_empirical
 
 **Analytical + Empirical Bias correction**
 
-.. literalinclude:: ../../NightlyTests/torch/code_examples/post_training_techniques_examples.py
+.. literalinclude:: ../torch_code_examples/post_training_techniques_examples.py
     :language: python
     :pyobject: bias_correction_analytical_and_empirical
 
 **Bias correction Data loader format example**
 
-.. literalinclude:: ../../NightlyTests/torch/code_examples/post_training_techniques_examples.py
+.. literalinclude:: ../torch_code_examples/post_training_techniques_examples.py
     :language: python
     :pyobject: BatchIterator

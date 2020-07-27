@@ -39,13 +39,13 @@ Code Examples for Higher Level APIs
 
 **Required imports**
 
-.. literalinclude:: ../../NightlyTests/tensorflow/code_examples/post_training_techniques_examples.py
+.. literalinclude:: ../tf_code_examples/post_training_techniques_examples.py
     :language: python
     :lines: 41-44, 48-49
 
 **Perform Cross Layer Equalization in auto mode step by step**
 
-.. literalinclude:: ../../NightlyTests/tensorflow/code_examples/post_training_techniques_examples.py
+.. literalinclude:: ../tf_code_examples/post_training_techniques_examples.py
     :language: python
     :pyobject: cross_layer_equalization_auto_stepwise
 
@@ -84,13 +84,13 @@ Code Example for Lower level APIs
 
 **Required imports**
 
-.. literalinclude:: ../../NightlyTests/tensorflow/code_examples/post_training_techniques_examples.py
+.. literalinclude:: ../tf_code_examples/post_training_techniques_examples.py
     :language: python
     :lines: 41-44, 48, 50-51
 
 **Perform Cross Layer Equalization in manual mode**
 
-.. literalinclude:: ../../NightlyTests/tensorflow/code_examples/post_training_techniques_examples.py
+.. literalinclude:: ../tf_code_examples/post_training_techniques_examples.py
     :language: python
     :pyobject: cross_layer_equalization_manual
 
@@ -100,19 +100,19 @@ Example helper methods to perform CLE in manual mode
 
 **Helper to pick layers for batchnorm fold**
 
-.. literalinclude:: ../../NightlyTests/tensorflow/code_examples/post_training_techniques_examples.py
+.. literalinclude:: ../tf_code_examples/post_training_techniques_examples.py
     :language: python
     :pyobject: get_layer_pairs_Resnet50_for_folding
 
 **Helper to pick layers for cross layer scaling**
 
-.. literalinclude:: ../../NightlyTests/tensorflow/code_examples/post_training_techniques_examples.py
+.. literalinclude:: ../tf_code_examples/post_training_techniques_examples.py
     :language: python
     :pyobject: get_consecutive_layer_list_from_resnet50_for_scaling
 
 **Helper to format data from batchnorm fold and cross layer scaling for usage by high bias fold**
 
-.. literalinclude:: ../../NightlyTests/tensorflow/code_examples/post_training_techniques_examples.py
+.. literalinclude:: ../tf_code_examples/post_training_techniques_examples.py
     :language: python
     :pyobject: format_info_for_high_bias_fold
 

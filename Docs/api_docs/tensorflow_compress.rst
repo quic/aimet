@@ -85,37 +85,37 @@ Code Examples
 
 **Required imports**
 
-.. literalinclude:: ../../NightlyTests/tensorflow/code_examples/code_examples.py
+.. literalinclude:: ../tf_code_examples/code_examples.py
     :language: python
     :lines: 41-51
 
 **Evaluation function**
 
-.. literalinclude:: ../../NightlyTests/tensorflow/code_examples/code_examples.py
+.. literalinclude:: ../tf_code_examples/code_examples.py
     :language: python
     :pyobject: evaluate_model
 
 **Compressing using Spatial SVD in auto mode with multiplicity = 8 for rank rounding**
 
-.. literalinclude:: ../../NightlyTests/tensorflow/code_examples/code_examples.py
+.. literalinclude:: ../tf_code_examples/code_examples.py
     :language: python
     :pyobject: spatial_svd_auto_mode
 
 **Compressing using Spatial SVD in manual mode**
 
-.. literalinclude:: ../../NightlyTests/tensorflow/code_examples/code_examples.py
+.. literalinclude:: ../tf_code_examples/code_examples.py
     :language: python
     :pyobject: spatial_svd_manual_mode
 
 **Compressing using Channel Pruning in auto mode**
 
-.. literalinclude:: ../../NightlyTests/tensorflow/code_examples/code_examples.py
+.. literalinclude:: ../tf_code_examples/code_examples.py
    :language: python
    :pyobject: channel_pruning_auto_mode
 
 **Compressing using Channel Pruning in manual mode**
 
-.. literalinclude:: ../../NightlyTests/tensorflow/code_examples/code_examples.py
+.. literalinclude:: ../tf_code_examples/code_examples.py
    :language: python
    :pyobject: channel_pruning_manual_mode
 
@@ -138,19 +138,19 @@ Code Examples for Weight SVD
 
 **Required imports**
 
-.. literalinclude:: ../../NightlyTests/tensorflow/code_examples/weight_svd.py
+.. literalinclude:: ../tf_code_examples/weight_svd.py
    :language: python
    :lines: 38-41
 
 **Compressing using Weight SVD in auto mode**
 
-.. literalinclude:: ../../NightlyTests/tensorflow/code_examples/weight_svd.py
+.. literalinclude:: ../tf_code_examples/weight_svd.py
    :language: python
    :pyobject: weight_svd_auto_mode
 
 
 **Compressing using Weight SVD in manual mode**
 
-.. literalinclude:: ../../NightlyTests/tensorflow/code_examples/weight_svd.py
+.. literalinclude:: ../tf_code_examples/weight_svd.py
    :language: python
    :pyobject: weight_svd_manual_mode
