@@ -54,7 +54,7 @@ Please visit the generated AIMET API documentation here
 
 |
 
-| AI Model Efficiency Toolkit is a product of Qualcomm Innovation Center, Inc.
+| |project| is a product of |author|
 | Qualcomm\ |reg| Neural Processing SDK is a product of Qualcomm Technologies, Inc. and/or its subsidiaries.
 
 .. |reg|    unicode:: U+000AE .. REGISTERED SIGN

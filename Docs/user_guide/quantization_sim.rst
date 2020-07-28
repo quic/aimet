@@ -76,7 +76,7 @@ For example, one may specify in "defaults" for no layers to be quantized, but th
 
 It is advised for the user to begin with the default configuration file under
 
-aimet_common/quantsim_config/default_config.json
+|default-quantsim-config-file|
 
 
 .. _qat_recommendations:
