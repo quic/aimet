@@ -146,6 +146,12 @@ html_sidebars = {'**': ['localtoc.html', 'relations.html', 'searchbox.html']}
 # Output file base name for HTML help builder.
 htmlhelp_basename = 'AIMETdoc'
 
+# Use this section to define substitution patterns that get exported to each rst page
+rst_epilog = """
+.. |author| replace:: {author}
+.. |project| replace:: {project}
+.. |default-quantsim-config-file| replace:: aimet_common/quantsim_config/default_config.json
+""".format(project=project, author=author)
 
 # -- Options for LaTeX output ------------------------------------------------
 
