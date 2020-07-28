@@ -44,14 +44,14 @@ from typing import Tuple, List, Union
 import struct
 import numpy as np
 import tensorflow as tf
-import tensorflow.contrib.slim as slim      # pylint: disable=no-name-in-module
 
 from aimet_common.winnow.mask import Mask
 from aimet_common.winnow.winnow_utils import get_zero_positions_in_binary_mask
 from aimet_common.utils import AimetLogger
-from aimet_tensorflow.common.operation import Op, TfApi
+from aimet_tensorflow.common.operation import Op
 from aimet_tensorflow.common.product import Product
 from aimet_tensorflow.utils.op.conv import WeightTensorUtils, BiasUtils
+from aimet_tensorflow.utils.op.fusedbatchnorm import BNUtils
 
 logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Winnow)
 
@@ -247,14 +247,11 @@ def reduce_batchnorm(sess: tf.Session, op_tensor_tuple: Tuple[Op, List[tf.Tensor
     name = "reduced_" + op_tensor_tuple[0].dotted_name
     # Get training attribute
     # This will either be True, False, or a string representing a training_placeholder the original BN was using
-    training = op_tensor_tuple[0].get_attribute('training')
+    training = BNUtils.get_training(op_tensor_tuple[0].get_module())
     assert training is not None
-    if isinstance(training, str):
-        # Get the tensor in the graph corresponding to the string name
-        training = sess.graph.get_tensor_by_name(training)
     is_fused = op_tensor_tuple[0].type == 'FusedBatchNormV3'
-    epsilon = op_tensor_tuple[0].get_attribute('epsilon')
-    momentum = op_tensor_tuple[0].get_attribute('momentum')
+    epsilon = BNUtils.get_epsilon(op_tensor_tuple[0].get_module())
+    momentum = BNUtils.get_momentum(op_tensor_tuple[0].get_module())
     if momentum is not None:
         new_tensor = tf.keras.layers.BatchNormalization(center=use_beta,
                                                         scale=use_gamma,
@@ -326,13 +323,17 @@ def reduce_dropout(_, op_tensor_tuple: Tuple[Op, List[tf.Tensor]], _op_mask) -> 
     """
 
     name = "reduced_" + op_tensor_tuple[0].dotted_name
-    rate_tensor = op_tensor_tuple[0].get_attribute('rate_tensor')
+    # Get rate tensor
+    cast_op = op_tensor_tuple[0].get_module().inputs[1].op
+    assert cast_op.type == 'Cast'
+    greater_equal_op = cast_op.inputs[0].op
+    assert greater_equal_op.type == 'GreaterEqual'
+    rate_tensor = greater_equal_op.inputs[1]
     rate = rate_tensor.op.get_attr('value').float_val[0]
-    if op_tensor_tuple[0].tf_api == TfApi.keras:
-        rate = 1 - rate
+    if op_tensor_tuple[0].pattern_type == 'Dropout_with_training_tensor':
         new_tensor = tf.keras.layers.Dropout(rate, name=name)(op_tensor_tuple[1][0])
     else:
-        new_tensor = slim.dropout(op_tensor_tuple[1][0], keep_prob=rate, scope=name)
+        new_tensor = tf.keras.layers.Dropout(rate, name=name)(op_tensor_tuple[1][0], training=True)
     module = new_tensor.op
 
     return name, new_tensor.op, module
@@ -486,8 +487,15 @@ def reduce_upsample2d(_, op_tensor_tuple: Tuple[Op, List[tf.Tensor]], _op_mask) 
     :param _op_mask: unused parameter
     """
     name = "reduced_" + op_tensor_tuple[0].dotted_name
-    size = op_tensor_tuple[0].get_attribute('size')
-    assert size is not None
+    # Get size attribute
+    strided_slice = op_tensor_tuple[0].get_module().outputs[0].consumers()[0]
+    assert strided_slice.type == 'StridedSlice'
+    mul = strided_slice.outputs[0].consumers()[0]
+    const_op = mul.inputs[1].op
+    tensor_content_length = const_op.get_attr('value').tensor_shape.dim[0].size
+    # i for int, tensor_content_length tells how many integers to parse out
+    unpack_string = str(tensor_content_length) + 'i'
+    size = struct.unpack(unpack_string, const_op.get_attr('value').tensor_content)
     new_tensor = tf.keras.layers.UpSampling2D(size=size, name=name)(op_tensor_tuple[1][0])
     module = new_tensor.op
 

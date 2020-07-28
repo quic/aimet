@@ -42,6 +42,7 @@ import tensorflow as tf
 import numpy as np
 
 from aimet_tensorflow.batch_norm_fold import  fold_all_batch_norms, find_all_batch_norms_to_fold
+from aimet_tensorflow.common.connectedgraph import ConnectedGraph
 from aimet_tensorflow.examples.test_models import tf_slim_basic_model
 from aimet_tensorflow.utils.op.conv import WeightTensorUtils
 
@@ -341,3 +342,37 @@ class TestBatchNormFold(unittest.TestCase):
         with new_sess.graph.as_default():
             update_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS)
             self.assertEqual(0, len(update_ops))
+
+    def test_bn_fold_with_no_bias(self):
+        tf.reset_default_graph()
+        inputs = tf.keras.Input(shape=(32, 32, 3,))
+        conv_op = tf.keras.layers.Conv2D(32, (3, 3), use_bias=False)(inputs)
+        bn_op = tf.keras.layers.BatchNormalization(fused=True)(conv_op, training=False)
+        _ = tf.nn.relu(bn_op)
+
+        init = tf.global_variables_initializer()
+        sess = tf.Session()
+        sess.run(init)
+
+        conv_op = sess.graph.get_operation_by_name('conv2d/Conv2D')
+        np.random.seed(0)
+        w_shape = conv_op.inputs[0].shape
+        numpy_data = np.random.rand(1, w_shape[1], w_shape[2], w_shape[3])
+
+        relu_op = sess.graph.get_operation_by_name('Relu')
+        baseline_output = sess.run(relu_op.outputs[0], feed_dict={conv_op.inputs[0]:numpy_data})
+        old_conn_graph = ConnectedGraph(sess.graph, starting_op_names=['input_1'], output_op_names=['Relu'])
+
+        new_sess, pairs = fold_all_batch_norms(sess, "input_1", 'Relu')
+
+        new_conv_op = new_sess.graph.get_operation_by_name('conv2d/Conv2D')
+        w2 = new_conv_op.inputs[0]
+        feed_dict = {w2: numpy_data}
+
+        new_relu_op = new_sess.graph.get_operation_by_name('Relu')
+        output_after_fold = new_sess.run(new_relu_op.outputs[0], feed_dict= feed_dict)
+        new_conn_graph = ConnectedGraph(new_sess.graph, starting_op_names=['input_1'], output_op_names=['Relu'])
+
+        self.assertTrue(np.allclose(baseline_output, output_after_fold, atol=1.e-4))
+        # New connected graph should have one less op since bn was removed
+        self.assertTrue(len(old_conn_graph.get_all_ops()), len(new_conn_graph.get_all_ops()) - 1)

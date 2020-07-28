@@ -42,7 +42,7 @@ from aimet_common.utils import AimetLogger
 from aimet_common.model_module import TfModelModule
 from aimet_common.connected_graph.connectedgraph import ConnectedGraph as aimetCommonConnectedGraph
 from aimet_tensorflow.common.module_identifier import StructureModuleIdentifier
-from aimet_tensorflow.common.module_identifier_matchers import ModuleIdentifierOpInfo
+from aimet_tensorflow.common.sub_graph_matcher import ModuleIdentifierOpInfo
 from aimet_tensorflow.common.operation import Op
 from aimet_tensorflow.common.product import Product
 from aimet_tensorflow.utils.common import get_valid_ops
@@ -54,15 +54,12 @@ logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.ConnectedGraph)
 
 class ConnectedGraph(aimetCommonConnectedGraph):
     """ Connected Graph class """
-    def __init__(self, graph: tf.Graph, starting_op_names: List[str], output_op_names: List[str],
-                 use_subgraph_matcher: bool = False):
+    def __init__(self, graph: tf.Graph, starting_op_names: List[str], output_op_names: List[str]):
         """
         :param graph: Tensorflow graph to represent using connected graph
         :param starting_op_names: Ops to start building the connected graph from
         :param output_op_names: Ending ops of the graph.  Used to assist in identifying unnecessary ops like training
         ops.
-        :param use_subgraph_matcher: If True, use subgraph matcher to identify modules. Otherwise, use module
-        identifier.
         """
         super().__init__()
         self._graph = graph
@@ -74,8 +71,7 @@ class ConnectedGraph(aimetCommonConnectedGraph):
 
         # Create the connected graph
         self._valid_ops = get_valid_ops(self._graph, self._starting_op_names, output_op_names)
-        self._module_identifier = StructureModuleIdentifier(self._graph, self._starting_op_names, self._valid_ops,
-                                                            use_subgraph_matcher=use_subgraph_matcher)
+        self._module_identifier = StructureModuleIdentifier(self._graph, self._starting_op_names, self._valid_ops)
         self.fill_op_product_graph()
 
     @property
@@ -170,7 +166,8 @@ class ConnectedGraph(aimetCommonConnectedGraph):
                     dotted_name=current_op_info.module_name,
                     output_shape=None,
                     is_anonymous=False,
-                    op_type=current_op_info.op_type)
+                    op_type=current_op_info.op_type,
+                    pattern_type=current_op_info.pattern_type)
             fill_op_info(op, current_op_info)
             self._ops[current_op_info.module_name] = op
             logger.debug("Created new op: %s ", current_op_info.module_name)
@@ -222,7 +219,8 @@ class ConnectedGraph(aimetCommonConnectedGraph):
                     dotted_name=starting_op_info.module_name,
                     output_shape=None,
                     is_anonymous=False,
-                    op_type=starting_op_info.op_type)
+                    op_type=starting_op_info.op_type,
+                    pattern_type=starting_op_info.pattern_type)
             fill_op_info(op, starting_op_info)
             self._ops[starting_op_info.module_name] = op
             self._add_children_ops_to_op_queue(starting_op)
@@ -257,7 +255,8 @@ class ConnectedGraph(aimetCommonConnectedGraph):
                 dotted_name='branch_' + str(self._branch_count),
                 output_shape=output_shape,
                 is_anonymous=True,
-                op_type='branch')
+                op_type='branch',
+                pattern_type=None)
         self._ops[op.name] = op
         self._branch_count += 1
         return op
@@ -347,9 +346,6 @@ class ConnectedGraph(aimetCommonConnectedGraph):
             create_and_connect_product('moving_variance', moving_variance_tensor.shape, my_op,
                                        moving_variance_tensor)
 
-            my_op.add_attribute('epsilon', BNUtils.get_epsilon(tf_op))
-            my_op.add_attribute('momentum', BNUtils.get_momentum(tf_op))
-
         def handle_default(my_op: Op):
             """ Handler for other modules """
             logger.debug("Nothing to handle for op %s", my_op.name)
@@ -420,7 +416,6 @@ def fill_op_info(op: Op, tf_op_info: ModuleIdentifierOpInfo):
         op.groups = tf_op_info.tf_op.inputs[0].shape.as_list()[-1]
 
     op.model_module = TfModelModule(tf_op_info.tf_op)
-    op.tf_api = tf_op_info.tf_api
     for attribute_name, attribute in tf_op_info.get_attributes().items():
         op.add_attribute(attribute_name, attribute)
 

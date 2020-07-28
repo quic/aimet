@@ -65,7 +65,7 @@ from aimet_tensorflow.channel_pruning.weight_reconstruction import WeightReconst
 from aimet_tensorflow.layer_database import Layer, LayerDatabase
 from aimet_tensorflow.examples import mnist_tf_model
 
-
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
 logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Test)
 
 

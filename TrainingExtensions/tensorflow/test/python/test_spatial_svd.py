@@ -484,8 +484,7 @@ class TestSpatialSvdPruning(unittest.TestCase):
             _ = tf_slim_basic_model(x)
             sess.run(tf.global_variables_initializer())
 
-        conn_graph_orig = ConnectedGraph(sess.graph, ['Placeholder'], ['tf_slim_model/Softmax'],
-                                         use_subgraph_matcher=True)
+        conn_graph_orig = ConnectedGraph(sess.graph, ['Placeholder'], ['tf_slim_model/Softmax'])
         num_ops_orig = len(conn_graph_orig.get_all_ops())
 
         # Create a layer database
@@ -502,8 +501,7 @@ class TestSpatialSvdPruning(unittest.TestCase):
         _ = comp_layer_db.model.graph.get_operation_by_name('Conv_1_a/Conv2D')
         _ = comp_layer_db.model.graph.get_operation_by_name('Conv_1_b/Conv2D')
 
-        conn_graph_new = ConnectedGraph(comp_layer_db.model.graph, ['Placeholder'], ['tf_slim_model/Softmax'],
-                                        use_subgraph_matcher=True)
+        conn_graph_new = ConnectedGraph(comp_layer_db.model.graph, ['Placeholder'], ['tf_slim_model/Softmax'])
         num_ops_new = len(conn_graph_new.get_all_ops())
         self.assertEqual(num_ops_orig + 1, num_ops_new)
         bias_add_op = comp_layer_db.model.graph.get_operation_by_name('Conv_1_b/BiasAdd')

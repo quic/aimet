@@ -36,17 +36,10 @@
 #  @@-COPYRIGHT-END-@@
 # =============================================================================
 """ Tf Operation class and utilities """
-from enum import Enum
 
 import tensorflow as tf
 import aimet_common.connected_graph.operation
 from aimet_tensorflow.common.product import Product
-
-
-class TfApi(Enum):
-    """ Enum for distinguishing between keras and slim modules """
-    keras = 0
-    slim = 1
 
 
 class OpWithMetaInfoType:
@@ -60,13 +53,21 @@ class OpWithMetaInfoType:
 class Op(aimet_common.connected_graph.operation.Op):
     """ Subclass Op inherited from aimet_common.connected_graph.operation.Op """
 
-    def __init__(self, name, dotted_name, output_shape, is_anonymous, op_type):
-        """ Initializer for Op """
+    def __init__(self, name, dotted_name, output_shape, is_anonymous, op_type, pattern_type):
+        """
+        Initializer for Op
+        :param name: namme of the operation
+        :param dotted_name: dotted name of the operation
+        :param output_shape: shape of the output product of the operation
+        :param is_anonymous: whether this is an anonymous operation
+        :param op_type: type of the operation
+        :param pattern_type: pattern type used to match the operation
+        """
         super().__init__(name, dotted_name, output_shape, is_anonymous, op_type)
         self._output_op_node = None
         self._parameters = {}
         self._attributes = {}
-        self._tf_api = None
+        self._pattern_type = pattern_type
 
     @property
     def output_op_node(self):
@@ -79,14 +80,9 @@ class Op(aimet_common.connected_graph.operation.Op):
         self._output_op_node = op
 
     @property
-    def tf_api(self):
-        """ Get the tf api type for this operation """
-        return self._tf_api
-
-    @tf_api.setter
-    def tf_api(self, tf_api: TfApi):
-        """ Set the tf api type for this operation """
-        self._tf_api = tf_api
+    def pattern_type(self):
+        """ Get the pattern type matched for this operation """
+        return self._pattern_type
 
     def get_attribute(self, attribute_name: str):
         """ Get an attribute for this operation, returns None if attribute doesn't exist """
