@@ -71,6 +71,7 @@ def fold_given_batch_norms(model, layer_pairs: List[PairType]):
     :param layer_pairs: Pairs of conv and batch_norm layers to use for folding
     :return: None
     """
+    # pylint: disable=too-many-locals
 
     # Assuming that the entire model in on one device
     device = next(model.parameters()).device
@@ -88,7 +89,7 @@ def fold_given_batch_norms(model, layer_pairs: List[PairType]):
             bn = pair[1]
             conv_linear = pair[0]
 
-        assert isinstance(conv_linear, (torch.nn.Linear, torch.nn.Conv2d))
+        assert isinstance(conv_linear, (torch.nn.Linear, torch.nn.Conv2d, torch.nn.ConvTranspose2d))
 
         list_of_bn_layers.append(bn)
 
@@ -100,7 +101,11 @@ def fold_given_batch_norms(model, layer_pairs: List[PairType]):
         bn_params.runningVar = sigma.detach().numpy().reshape(-1)
 
         weight_tensor = libpymo.TensorParams()
-        weight_tensor.data = conv_linear.weight.detach().numpy().reshape(-1)
+        weight = conv_linear.weight
+        # Transpose weights to C, N, H, W from N, C, H, W since axis are flipped for transposed conv
+        if isinstance(conv_linear, torch.nn.ConvTranspose2d):
+            weight = weight.permute(1, 0, 2, 3)
+        weight_tensor.data = weight.detach().numpy().reshape(-1)
 
         weight_shape = np.array(conv_linear.weight.shape)
         if len(conv_linear.weight.shape) == 2:
@@ -121,7 +126,12 @@ def fold_given_batch_norms(model, layer_pairs: List[PairType]):
         conv_linear.bias = torch.nn.Parameter(torch.Tensor(bias))
         conv_linear.weight.data = torch.from_numpy(np.reshape(weight_tensor.data,
                                                               np.array(conv_linear.weight.shape)))
+
         conv_linear.weight.data = conv_linear.weight.data.type(torch.FloatTensor)
+
+        # Transpose weight back to N, C, H, W for transposed Conv2D
+        if isinstance(conv_linear, torch.nn.ConvTranspose2d):
+            conv_linear.weight.data = conv_linear.weight.data.permute(1, 0, 2, 3)
 
     _delete_bn_from_model(model, list_of_bn_layers)
     model.to(device)
