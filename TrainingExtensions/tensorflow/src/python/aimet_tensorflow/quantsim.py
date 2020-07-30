@@ -618,12 +618,13 @@ class QuantizationSimModel:
             min_val, max_val = gate_min_max(min_val, max_val)
             op_bitwidth = int(self._get_op_variable_value(quant_op_name, int(QuantizeOpIndices.bit_width)))
             delta, offset = calculate_delta_offset(min_val, max_val, op_bitwidth)
-            op_name = self._get_unquantized_name(quant_op_name)
-            encoding_dict[op_name] = {'min': min_val,
-                                      'max': max_val,
-                                      'scale': delta,
-                                      'offset': offset,
-                                      'bitwidth': op_bitwidth}
+            quant_op = self.session.graph.get_operation_by_name(quant_op_name)
+            tensor_name = quant_op.inputs[0].name
+            encoding_dict[tensor_name] = [{'min': min_val,
+                                           'max': max_val,
+                                           'scale': delta,
+                                           'offset': offset,
+                                           'bitwidth': op_bitwidth}]
 
         param_encodings = {}
         for quant_op_name, quantizer_info in self._param_quantizers.items():
