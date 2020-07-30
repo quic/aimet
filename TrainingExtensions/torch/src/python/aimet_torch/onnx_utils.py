@@ -84,6 +84,19 @@ onnx_pytorch_conn_graph_type_pairs = [
 ]
 
 
+class OnnxNodeIOTensors:
+    """
+    Data class to store the input and output tensor names of an ONNX node as a lists.
+    """
+    def __init__(self, node_inputs: List[str], node_outputs: List[str]):
+        """
+        :param node_inputs: name of inputs to the node
+        :param node_outputs: name of output from the node
+        """
+
+        self.inputs = node_inputs
+        self.outputs = node_outputs
+
 class OnnxSaver:
     """
     Utilities to save/load onnx models
@@ -266,3 +279,17 @@ class OnnxSaver:
                 nodes.append(map_output_tensor_to_node[in_tensor])
 
         return nodes
+
+    @staticmethod
+    def get_onnx_node_to_io_tensor_names_map(onnx_model: onnx.NodeProto) -> Dict[str, OnnxNodeIOTensors]:
+        """
+        Given an ONNX model, gets the inputs and output tensor names for each node in the model.
+        :param onnx_model: The ONNX model instance
+        :return: Dictionary of ONNX node name and corresponding input and output tensor names.
+        """
+
+        node_to_io_tensor_name_map = {}
+        for node in onnx_model.graph.node:
+            node_to_io_tensor_name_map[node.name] = OnnxNodeIOTensors(list(node.input), list(node.output))
+
+        return node_to_io_tensor_name_map

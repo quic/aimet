@@ -45,7 +45,8 @@ from torchvision import models
 import onnx
 from aimet_common.utils import AimetLogger
 from aimet_torch import onnx_utils
-
+import onnx
+from torchvision.models import resnet18
 
 class TestOnnxUtils(unittest.TestCase):
 
@@ -71,3 +72,22 @@ class TestOnnxUtils(unittest.TestCase):
 
         # last op in the model is expected to be fully-connected layer
         self.assertEqual('fc', onnx_model.graph.node[-1].name)
+
+    def test_onnx_node_name_to_input_output_names_util(self):
+        """ test onxx based utility to find mapping between onnx node names and io tensors"""
+        model = models.resnet18(pretrained=False)
+        input_shape = (1, 3, 224, 224)
+        torch.onnx.export(model, torch.rand(*input_shape), './data/resnet18.onnx')
+        onnx_utils.OnnxSaver.set_node_names('./data/resnet18.onnx', model, input_shape)
+        onnx_model = onnx.load('./data/resnet18.onnx')
+
+        # Set onnx node names to corresponding pytorch layer names
+        # This is necessary before the 'map_onnx_node_name_to_input_output_names' utility can be used below
+        # onnx_utils.OnnxSaver.set_node_names(f.name, resnet18, input_shape)
+
+        # Get Dict mapping node name to the input and output names
+        node_to_io_dict = onnx_utils.OnnxSaver.get_onnx_node_to_io_tensor_names_map(onnx_model)
+
+        node_0 = onnx_model.graph.node[0]
+        self.assertEqual(node_0.input, node_to_io_dict[node_0.name].inputs)
+        self.assertEqual(node_0.output, node_to_io_dict[node_0.name].outputs)
