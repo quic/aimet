@@ -38,7 +38,7 @@ import unittest
 import shutil
 import tensorflow as tf
 import numpy as np
-
+import json
 import libpymo
 from aimet_tensorflow.quantsim import QuantizationSimModel
 from aimet_tensorflow.utils.graph_saver import load_model_from_meta
@@ -334,6 +334,16 @@ class TestQuantSim(unittest.TestCase):
         self.assertIn('QcQuantize', all_op_types)
 
         sim.export('/tmp', 'quant_sim_model')
+
+        with open('/tmp/quant_sim_model.encodings') as json_file:
+            encoding_data = json.load(json_file)
+        activation_keys = list(encoding_data["activation_encodings"].keys())
+        self.assertTrue(activation_keys[0] == "conv2d/Relu:0")
+        self.assertTrue(isinstance(encoding_data["activation_encodings"]["conv2d/Relu:0"], list))
+
+        param_keys = list(encoding_data["param_encodings"].keys())
+        self.assertTrue(param_keys[0] == "conv2d/Conv2D/ReadVariableOp:0")
+        self.assertTrue(isinstance(encoding_data["param_encodings"]["conv2d/Conv2D/ReadVariableOp:0"], list))
 
         new_sess = load_model_from_meta('/tmp/quant_sim_model.meta')
         first_bias_tensor = new_sess.graph.get_tensor_by_name('conv2d/BiasAdd/ReadVariableOp:0')
