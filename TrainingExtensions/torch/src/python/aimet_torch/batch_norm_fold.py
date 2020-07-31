@@ -63,6 +63,48 @@ PairType = Union[Tuple[LayerType, torch.nn.BatchNorm2d],
                  Tuple[torch.nn.BatchNorm2d, LayerType]]
 
 
+def call_mo_batch_norm_fold(conv_linear: Union[torch.nn.Linear, torch.nn.Conv2d, torch.nn.ConvTranspose2d],
+                            bn: torch.nn.BatchNorm2d, is_batch_norm_second: bool):
+    """
+    Calls Model optimization batch norm fold code and returns updated bias and weight
+
+    :param conv_linear: Conv or Linear layer. For Conv layers Conv2D and TransposedConv2D are supported currently
+    :param bn: Batch Norm layer
+    :param is_batch_norm_second: True if BatchNorm comes after Conv/Linear layer
+    :return: Updated bias and weight
+    """
+    bn_params = libpymo.BNParams()
+    bn_params.gamma = bn.weight.detach().numpy().reshape(-1)
+    bn_params.beta = bn.bias.detach().numpy().reshape(-1)
+    bn_params.runningMean = bn.running_mean.detach().numpy().reshape(-1)
+    sigma = torch.sqrt(bn.running_var + bn.eps)
+    bn_params.runningVar = sigma.detach().numpy().reshape(-1)
+
+    weight_tensor = libpymo.TensorParams()
+    weight = conv_linear.weight
+    # Transpose weights to C, N, H, W from N, C, H, W since axis are flipped for transposed conv
+    if isinstance(conv_linear, torch.nn.ConvTranspose2d):
+        weight = weight.permute(1, 0, 2, 3)
+    weight_tensor.data = weight.detach().numpy().reshape(-1)
+
+    weight_shape = np.array(conv_linear.weight.shape)
+    if len(conv_linear.weight.shape) == 2:
+        weight_shape = np.append(weight_shape, [1, 1])
+
+    weight_tensor.shape = weight_shape
+
+    bias_tensor = libpymo.TensorParams()
+    if conv_linear.bias is not None:
+        bias_tensor.data = conv_linear.bias.detach().numpy().reshape(-1)
+        bias_tensor.shape = np.array(conv_linear.bias.shape)
+        is_bias_valid = True
+    else:
+        is_bias_valid = False
+
+    bias = libpymo.fold(bn_params, weight_tensor, bias_tensor, is_bias_valid, is_batch_norm_second)
+    return bias, weight_tensor
+
+
 def fold_given_batch_norms(model, layer_pairs: List[PairType]):
     """
     Fold a given set of batch_norm layers into conv layers
@@ -71,7 +113,6 @@ def fold_given_batch_norms(model, layer_pairs: List[PairType]):
     :param layer_pairs: Pairs of conv and batch_norm layers to use for folding
     :return: None
     """
-    # pylint: disable=too-many-locals
 
     # Assuming that the entire model in on one device
     device = next(model.parameters()).device
@@ -93,35 +134,7 @@ def fold_given_batch_norms(model, layer_pairs: List[PairType]):
 
         list_of_bn_layers.append(bn)
 
-        bn_params = libpymo.BNParams()
-        bn_params.gamma = bn.weight.detach().numpy().reshape(-1)
-        bn_params.beta = bn.bias.detach().numpy().reshape(-1)
-        bn_params.runningMean = bn.running_mean.detach().numpy().reshape(-1)
-        sigma = torch.sqrt(bn.running_var + bn.eps)
-        bn_params.runningVar = sigma.detach().numpy().reshape(-1)
-
-        weight_tensor = libpymo.TensorParams()
-        weight = conv_linear.weight
-        # Transpose weights to C, N, H, W from N, C, H, W since axis are flipped for transposed conv
-        if isinstance(conv_linear, torch.nn.ConvTranspose2d):
-            weight = weight.permute(1, 0, 2, 3)
-        weight_tensor.data = weight.detach().numpy().reshape(-1)
-
-        weight_shape = np.array(conv_linear.weight.shape)
-        if len(conv_linear.weight.shape) == 2:
-            weight_shape = np.append(weight_shape, [1, 1])
-
-        weight_tensor.shape = weight_shape
-
-        bias_tensor = libpymo.TensorParams()
-        if conv_linear.bias is not None:
-            bias_tensor.data = conv_linear.bias.detach().numpy().reshape(-1)
-            bias_tensor.shape = np.array(conv_linear.bias.shape)
-            is_bias_valid = True
-        else:
-            is_bias_valid = False
-
-        bias = libpymo.fold(bn_params, weight_tensor, bias_tensor, is_bias_valid, is_batch_norm_second)
+        bias, weight_tensor = call_mo_batch_norm_fold(conv_linear, bn, is_batch_norm_second)
 
         conv_linear.bias = torch.nn.Parameter(torch.Tensor(bias))
         conv_linear.weight.data = torch.from_numpy(np.reshape(weight_tensor.data,
