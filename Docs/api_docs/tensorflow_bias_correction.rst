@@ -19,7 +19,8 @@ Input Parameter Types
 
 **Quantization Params**
 
-.. autofunction:: aimet_tensorflow.bias_correction.QuantParams
+.. autoclass:: aimet_tensorflow.bias_correction.QuantParams
+    :members:
 
 **Bias Correction Params**
 

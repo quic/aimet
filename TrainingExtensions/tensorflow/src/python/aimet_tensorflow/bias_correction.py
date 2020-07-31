@@ -59,17 +59,12 @@ from aimet_tensorflow.utils.op.conv import get_weight_tensor_with_shape, BiasUti
 from aimet_tensorflow.common.connectedgraph import ConnectedGraph
 
 
-
 logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Quant)
+
 
 class QuantParams:
     """
     Quant Params to be passed in by user
-
-    :param quant_mode: quantize mode
-    :param round_mode:  round mode for quantization
-    :param use_cuda: flag to indicate if GPU is to be used
-    :param ops_to_ignore: ops to be ignored
 
     """
 
@@ -79,7 +74,12 @@ class QuantParams:
                  use_cuda=True,
                  ops_to_ignore=None):
         """
+        Constructor
 
+        :param quant_mode: quantize mode
+        :param round_mode:  round mode for quantization
+        :param use_cuda: flag to indicate if GPU is to be used
+        :param ops_to_ignore: ops to be ignored
         """
         self.quant_mode = quant_mode
         self.round_mode = round_mode
