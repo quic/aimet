@@ -64,7 +64,8 @@ PairType = Union[Tuple[LayerType, torch.nn.BatchNorm2d],
 
 
 def call_mo_batch_norm_fold(conv_linear: Union[torch.nn.Linear, torch.nn.Conv2d, torch.nn.ConvTranspose2d],
-                            bn: torch.nn.BatchNorm2d, is_batch_norm_second: bool):
+                            bn: torch.nn.BatchNorm2d, is_batch_norm_second: bool) -> [torch.nn.Parameter,
+                                                                                      torch.nn.Parameter]:
     """
     Calls Model optimization batch norm fold code and returns updated bias and weight
 
@@ -94,12 +95,11 @@ def call_mo_batch_norm_fold(conv_linear: Union[torch.nn.Linear, torch.nn.Conv2d,
     weight_tensor.shape = weight_shape
 
     bias_tensor = libpymo.TensorParams()
+    is_bias_valid = False
     if conv_linear.bias is not None:
         bias_tensor.data = conv_linear.bias.detach().numpy().reshape(-1)
         bias_tensor.shape = np.array(conv_linear.bias.shape)
         is_bias_valid = True
-    else:
-        is_bias_valid = False
 
     bias = libpymo.fold(bn_params, weight_tensor, bias_tensor, is_bias_valid, is_batch_norm_second)
     return bias, weight_tensor
