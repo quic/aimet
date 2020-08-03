@@ -40,8 +40,8 @@
 import unittest
 import torch
 from aimet_common.connected_graph.connectedgraph_utils import get_all_input_ops, get_all_output_ops
-from aimet_torch.examples.test_models import SingleResidual, MultiInput, ConcatModel, ModuleListModel, ModelWithDropouts, \
-    SequentialModel, HierarchicalModel
+from aimet_torch.examples.test_models import SingleResidual, MultiInput, ConcatModel, ModuleListModel,\
+    ModelWithDropouts, SequentialModel, HierarchicalModel, PassThroughOpLastLayerModel
 from aimet_torch.meta.connectedgraph import _split_inputs, ConnectedGraph
 from aimet_torch.utils import create_rand_tensors_given_shapes
 
@@ -196,3 +196,12 @@ class TestConnectedGraph(unittest.TestCase):
         self.assertEqual(conn_graph.get_op_from_module_name('HierarchicalModel.nm2.tm1.conv1'), conn_graph.ordered_ops[53])
         self.assertEqual(conn_graph.get_op_from_module_name('HierarchicalModel.nm2.tm2.conv1'), conn_graph.ordered_ops[68])
         self.assertEqual(conn_graph.get_op_from_module_name('HierarchicalModel.sq.seq_list.0'), conn_graph.ordered_ops[84])
+
+    def test_passthrough_op_last_module(self):
+        """ Test building a connected graph on a model where a PassThroughOp is the last module in the graph. """
+        model = PassThroughOpLastLayerModel()
+        model.eval()
+        inp_shape = (1, 3, 32, 32)
+        inp_tensor_list = create_rand_tensors_given_shapes(inp_shape)
+        conn_graph = ConnectedGraph(model, inp_tensor_list)
+        self.assertEqual(1, len(conn_graph.ordered_ops))
