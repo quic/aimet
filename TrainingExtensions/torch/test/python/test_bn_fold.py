@@ -38,6 +38,7 @@
 
 import unittest.mock
 import torch
+import torch.nn as nn
 from torchvision import models
 
 import numpy as np
@@ -121,6 +122,28 @@ class TwoInputs(torch.nn.Module):
         x = self.maxpool(x)
         x = x.view(x.size(0), -1)
         x = self.fc(x)
+        return x
+
+
+class TransposedConvModel(torch.nn.Module):
+    def __init__(self):
+        super(TransposedConvModel, self).__init__()
+        self.conv1 = torch.nn.ConvTranspose2d(10, 10, 3)
+        self.bn1 = torch.nn.BatchNorm2d(10)
+        self.relu1 = torch.nn.ReLU()
+
+        self.conv2 = torch.nn.ConvTranspose2d(10, 10, 3)
+        self.bn2 = torch.nn.BatchNorm2d(10)
+
+
+    def forward(self, x):
+        # Regular case - conv followed by bn
+        x = self.conv1(x)
+        x = self.bn1(x)
+        x = self.relu1(x)
+
+        x = self.conv2(x)
+        x = self.bn2(x)
         return x
 
 
@@ -457,6 +480,23 @@ class TestTrainingExtensionBnFold(unittest.TestCase):
         self.assertEqual(2, len(bn_pairs))
         self.assertTrue((model.conv1, model.bn1) in bn_pairs)
         self.assertTrue((model.bn2, model.conv3) in bn_pairs)
+
+    def test_bn_fold_auto_mode_transposed_conv2d(self):
+        torch.manual_seed(0)
+        model = TransposedConvModel()
+        model = model.eval()
+
+        random_input = torch.rand((10, 10, 4, 4))
+
+        baseline_output = model(random_input).detach().numpy()
+
+        folded_pairs = fold_all_batch_norms(model, (10, 10, 4, 4))
+
+        output_after_fold = model(random_input).detach().numpy()
+
+        self.assertFalse(isinstance(model.bn1, torch.nn.BatchNorm2d))
+        self.assertTrue(np.allclose(baseline_output, output_after_fold, rtol=1.e-2))
+        self.assertEqual(len(folded_pairs), 2)
 
     def test_find_batch_norms_to_fold_multi_input(self):
 
