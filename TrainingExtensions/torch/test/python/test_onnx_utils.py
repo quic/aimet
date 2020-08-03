@@ -81,10 +81,6 @@ class TestOnnxUtils(unittest.TestCase):
         onnx_utils.OnnxSaver.set_node_names('./data/resnet18.onnx', model, input_shape)
         onnx_model = onnx.load('./data/resnet18.onnx')
 
-        # Set onnx node names to corresponding pytorch layer names
-        # This is necessary before the 'map_onnx_node_name_to_input_output_names' utility can be used below
-        # onnx_utils.OnnxSaver.set_node_names(f.name, resnet18, input_shape)
-
         # Get Dict mapping node name to the input and output names
         node_to_io_dict = onnx_utils.OnnxSaver.get_onnx_node_to_io_tensor_names_map(onnx_model)
 

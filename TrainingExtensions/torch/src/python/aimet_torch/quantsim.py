@@ -44,6 +44,7 @@ import pickle
 from typing import Tuple, List, Union, Dict
 import json
 import torch
+import onnx
 
 from aimet_common.utils import AimetLogger
 from aimet_common.defs import QuantScheme
@@ -272,9 +273,10 @@ class QuantizationSimModel:
         #  Set the onnx layer names
         if set_onnx_layer_names:
             onnx_utils.OnnxSaver.set_node_names(onnx_path, model_to_export, input_shape)
-
+        onnx_model = onnx.load(onnx_path)
+        onnx_node_to_io_tensor_map = onnx_utils.OnnxSaver.get_onnx_node_to_io_tensor_names_map(onnx_model)
         # Export encodings
-        self._export_encodings_to_json(path, filename_prefix)
+        self._export_encodings_to_json(path, filename_prefix, onnx_node_to_io_tensor_map)
 
     def exclude_layers_from_quantization(self, layers_to_exclude: List[torch.nn.Module]):
         """
@@ -375,12 +377,13 @@ class QuantizationSimModel:
         # Downstream op not the right type
         return False
 
-    def _export_encodings_to_json(self, path: str, filename_prefix: str):
+    def _export_encodings_to_json(self, path: str, filename_prefix: str, onnx_node_to_io_tensor_map: Dict):
         """
         Save the quantized model weight encodings
 
         :param path: path where to store model pth and encodings
         :param filename_prefix: filename to store exported weight encodings in json format
+        :param onnx_node_to_io_tensor_map: Dictionary of layer to I/O tensor mapping from onnx model
         :return: None
         """
 
@@ -390,7 +393,8 @@ class QuantizationSimModel:
         quantized_layers = self._get_qc_quantized_layers(self.model)
 
         for layer_name, layer in quantized_layers:
-            self._update_encoding_dicts_for_layer(layer, layer_name, activation_encodings, param_encodings)
+            self._update_encoding_dicts_for_layer(layer, layer_name, activation_encodings,
+                                                  param_encodings, onnx_node_to_io_tensor_map)
 
         encodings_dict = {'activation_encodings': activation_encodings,
                           'param_encodings': param_encodings}
@@ -400,31 +404,48 @@ class QuantizationSimModel:
         with open(encoding_file_path, 'w') as encoding_fp:
             json.dump(encodings_dict, encoding_fp, sort_keys=True, indent=4)
 
-    @classmethod
-    def _update_encoding_dicts_for_layer(cls, layer: torch.nn.Module, layer_name: str, activation_encodings: Dict,
-                                         param_encodings: Dict):
-        tensor_dict = {}
+    def _update_encoding_dicts_for_layer(self, layer: torch.nn.Module, layer_name: str, activation_encodings: Dict,
+                                         param_encodings: Dict, onnx_node_to_io_tensor_map: Dict):
 
-        if isinstance(layer, QcQuantizeWrapper):
-            tensor_encoding = cls._create_encoding_dict_for_quantizer(layer.output_quantizer)
-            tensor_dict['output'] = tensor_encoding
+        """
+        Add given layer param and activation encodings to respective dictionaries to be used for exporting encodings
+        :param layer: layer as torch.nn.Module
+        :param layer_name: Name of the layer
+        :param activation_encodings: dictionary of activation encodings
+        :param param_encodings: dictionary of param encodings
+        :param onnx_node_to_io_tensor_map: ONNX map of layer name to it's input/output tensors
+        :return:
+        """
 
-        if isinstance(layer, QcQuantizeWrapper):
+        if layer_name not in onnx_node_to_io_tensor_map:
+            logger.info("layer with name {%s} not found in onnx model, not an issue; "
+                        "skip and continue ", layer_name)
 
+        if isinstance(layer, QcQuantizeWrapper) and layer_name in onnx_node_to_io_tensor_map:
+            # get activation quantizers
             if layer.input_quantizer.enabled:
-                tensor_encoding = cls._create_encoding_dict_for_quantizer(layer.input_quantizer)
-                tensor_dict['input'] = tensor_encoding
-            else:
-                tensor_dict['input'] = None
+                param_inputs = [layer_name + '.' + param_name for param_name in layer.param_quantizers]
+                if onnx_node_to_io_tensor_map[layer_name].inputs:
+                    for input_tensor in onnx_node_to_io_tensor_map[layer_name].inputs:
+                        if input_tensor not in param_inputs:
+                            tensor_encoding = self._create_encoding_dict_for_quantizer(layer.input_quantizer)
+                            activation_encodings[input_tensor] = [tensor_encoding]
+            if layer.output_quantizer.enabled:
+                if onnx_node_to_io_tensor_map[layer_name].outputs:
+                    for output_tensor in onnx_node_to_io_tensor_map[layer_name].outputs:
+                        tensor_encoding = self._create_encoding_dict_for_quantizer(layer.output_quantizer)
+                        activation_encodings[output_tensor] = [tensor_encoding]
 
-            for param_name, param_quantizer in layer.param_quantizers.items():
-
-                param_name = layer_name + '.' + param_name
+            # get param quantizers
+            for orig_param_name, param_quantizer in layer.param_quantizers.items():
+                param_name = layer_name + '.' + orig_param_name
                 if param_quantizer.enabled:
-                    tensor_encoding = cls._create_encoding_dict_for_quantizer(param_quantizer)
-                    param_encodings[param_name] = tensor_encoding
+                    layer_inputs = onnx_node_to_io_tensor_map[layer_name].inputs
+                    param_as_input_tensor = [input for input in layer_inputs
+                                             if param_name == input][0]
 
-        activation_encodings[layer_name] = tensor_dict
+                    tensor_encoding = self._create_encoding_dict_for_quantizer(param_quantizer)
+                    param_encodings[param_as_input_tensor] = [tensor_encoding]
 
     @staticmethod
     def _create_encoding_dict_for_quantizer(quantizer: TensorQuantizer) -> Dict:
