@@ -341,7 +341,7 @@ def get_ordered_lists_of_conv_fc(model: torch.nn.Module, input_shapes: Tuple) ->
 
     module_list = get_ordered_list_of_modules(model, input_shapes)
     module_list = [[name, module] for name, module in module_list if
-                   isinstance(module, (torch.nn.Conv2d, torch.nn.Linear))]
+                   isinstance(module, (torch.nn.Conv2d, torch.nn.Linear, torch.nn.ConvTranspose2d))]
     return module_list
 
 
