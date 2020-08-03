@@ -76,8 +76,9 @@ class QuantParams:
         """
         Constructor
 
-        :param quant_mode: quantize mode
-        :param round_mode:  round mode for quantization
+        :param quant_mode: Indicates which quantization algorithm should be used, either
+                           'tf' or 'tf_enhanced'. Defaults to 'tf_enhanced'
+        :param round_mode:  The round scheme to used. One of: 'nearest' or 'stochastic'. Default is 'nearest'.
         :param use_cuda: flag to indicate if GPU is to be used
         :param ops_to_ignore: ops to be ignored
         """
