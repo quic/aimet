@@ -42,6 +42,10 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import json as json
+import onnx
+
+from torchvision import models
+from aimet_torch import onnx_utils
 from aimet_common.defs import QuantScheme
 
 from aimet_torch.quantsim import QuantizationSimModel
@@ -143,6 +147,7 @@ class ModelWithStandaloneOps(nn.Module):
         self.relu2 = nn.ReLU()
         self.fc1 = nn.Linear(320, 50)
         self.relu3 = nn.ReLU()
+
         self.dropout = nn.Dropout2d()
         self.fc2 = nn.Linear(50, 10)
         self.log_softmax = nn.LogSoftmax(dim=1)
@@ -512,6 +517,40 @@ class TestQuantizationSim(unittest.TestCase):
         sim.export('./data/', 'two_input_model', input_shape=[(1, 1, 28, 28), (1, 1, 28, 28)])
 
     # -------------------------------------------
+
+    def test_export_unified_encoding_format(self):
+        """ test export functionality on ResNet18 """
+
+        resnet18 = models.resnet18()
+        resnet18.eval()
+        input_shapes = (1, 3, 224, 224)
+
+        # Get Dict mapping node name to the input and output names
+        sim = QuantizationSimModel(resnet18, input_shapes=(1, 3, 224, 224))
+
+        def forward_pass(model, args):
+            model.eval()
+            with torch.no_grad():
+                model(torch.randn(1, 3, 224, 224))
+
+        # Quantize
+        sim.compute_encodings(forward_pass, None)
+
+        sim.export('./data/', 'resnet18', input_shape=(1, 3, 224, 224))
+        with open('./data/resnet18.encodings') as json_file:
+            encoding_data = json.load(json_file)
+            print(encoding_data)
+
+        activation_keys = list(encoding_data["activation_encodings"].keys())
+        self.assertTrue(activation_keys[0] == "123")
+        self.assertTrue(isinstance(encoding_data["activation_encodings"]["123"], list))
+
+        param_keys = list(encoding_data["param_encodings"].keys())
+        self.assertTrue(param_keys[1] == "conv1.weight")
+        self.assertTrue(isinstance(encoding_data["param_encodings"]["conv1.weight"], list))
+
+    # -------------------------------------------
+
     def test_export(self):
         """Exporting encodings and model"""
 
@@ -539,13 +578,9 @@ class TestQuantizationSim(unittest.TestCase):
             activation_encodings = encodings['activation_encodings']
             param_encodings = encodings['param_encodings']
             self.assertEqual(13, len(activation_encodings))
-            self.assertEqual(None, activation_encodings['conv1_a']['input'])
             self.assertNotIn('conv1_a.bias', param_encodings)
-            self.assertEqual(5, len(activation_encodings['conv1_a']['output']))
-            self.assertEqual(5, len(param_encodings['conv1_a.weight']))
-
-            self.assertEqual(10, param_encodings['conv1_a.weight']['max'])
-            self.assertEqual(30, activation_encodings['conv1_a']['output']['max'])
+            self.assertEqual(5, len(param_encodings['conv1_a.weight'][0]))
+            self.assertEqual(10, param_encodings['conv1_a.weight'][0]['max'])
 
         # check the exported model
         loaded_model = torch.load('./data/two_input_model.pth')
@@ -981,6 +1016,10 @@ class TestQuantizationSim(unittest.TestCase):
 
         # Save encodings
         sim.export("./data/", "encodings_with_standalone_ops", input_shape=(1, 1, 28, 28))
+        with open('./data/encodings_with_standalone_ops.encodings') as json_file:
+            encoding_data = json.load(json_file)
+        # in onnx definition tensor 16 is output of Reshape, to be ignored
+        self.assertTrue("16" not in encoding_data["activation_encodings"].keys())
 
     # -------------------------------------------------------------------------------
     def test_layers_to_ignore(self):
