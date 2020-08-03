@@ -897,7 +897,12 @@ class ConnectedGraph(AimetCommonConnectedGraph):
 
                 module_id_index += 1
             ordered_ops_index += 1
-        assert module_id_index == len(named_module_list)
+        if module_id_index < len(named_module_list):
+            # Unmatched modules in named_module_list. Only expect these to be PassThroughOps, raise assertion if not.
+            for (module, _, _) in named_module_list[module_id_index:]:
+                if not isinstance(module, PassThroughOp):
+                    logger.error('Unmatched module %s during connected graph construction', type(module))
+                    raise AssertionError
 
     def _fill_op_params(self):
         """

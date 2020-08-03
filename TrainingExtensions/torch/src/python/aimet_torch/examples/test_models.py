@@ -39,6 +39,7 @@
 
 import torch
 import torch.nn as nn
+from aimet_torch.defs import PassThroughOp
 
 
 # pylint: disable=too-many-instance-attributes
@@ -181,7 +182,7 @@ class ModuleListModel(nn.Module):
 
 
 class TinyModel(nn.Module):
-    """ Use this model for unit testing purposes. """
+    """ Use this model for unit testing purposes. Expect input shape (1, 3, 32, 32) """
 
     def __init__(self):
         super(TinyModel, self).__init__()
@@ -260,6 +261,7 @@ class ModelWithReusedNodes(nn.Module):
         x = self.fc(x)
         return x
 
+
 class SequentialModel(nn.Module):
     """ A model with modules defined using nn.Sequential.
         Use this model for unit testing purposes.
@@ -283,6 +285,7 @@ class SequentialModel(nn.Module):
         x = self.fc(x)
         return x
 
+
 class BasicConv2d(nn.Module):
     """ A Simple Super Node Model used as building block in Hierarchical Model  """
 
@@ -298,6 +301,7 @@ class BasicConv2d(nn.Module):
         x = self.bn(x)
         return nn.functional.relu(x, inplace=True)
 
+
 class MultiConv2dModel(nn.Module):
     """ Sequential Model contains sequences of BasicConv2d Model  """
 
@@ -311,6 +315,7 @@ class MultiConv2dModel(nn.Module):
 
     def forward(self, *inputs):
         return self.seq_list(inputs[0])
+
 
 class NestedModel(nn.Module):
     """ Aggregation Model contains two instance of Tiny Model """
@@ -326,6 +331,7 @@ class NestedModel(nn.Module):
         cat_inputs = [c1, c2]
         x = torch.cat(cat_inputs, 1)
         return x
+
 
 class HierarchicalModel(nn.Module):
     """ Aggregation Model contains multi-level of PyTorch Module
@@ -356,4 +362,18 @@ class HierarchicalModel(nn.Module):
         c3 = self.sq(inputs[4])
         cat_inputs = [c1, c2, c3]
         x = torch.cat(cat_inputs, 1)
+        return x
+
+
+class PassThroughOpLastLayerModel(nn.Module):
+    """ Model with PassThroughOp as last layer. Expect input shape (1, 3, 32, 32) """
+
+    def __init__(self):
+        super(PassThroughOpLastLayerModel, self).__init__()
+        self.conv1 = nn.Conv2d(3, 32, kernel_size=2, stride=2, padding=2, bias=False)
+        self.passthrough = PassThroughOp()
+
+    def forward(self, *inputs):
+        x = self.conv1(inputs[0])
+        x = self.passthrough(x)
         return x
