@@ -281,7 +281,14 @@ class CrossLayerScaling:
         return scale_factor
 
     @staticmethod
-    def call_mo_scale(cls_set):
+    def call_mo_scale(cls_set: Tuple[torch.nn.Conv2d, torch.nn.Conv2d]) -> List[np.ndarray,
+                                                                                libpymo.EqualizationParams(),
+                                                                                libpymo.EqualizationParams()]:
+        """
+        Invokes scale API in model optimization library
+        :param cls_set: Consecutive Conv layers Tuple whose weights and biases need to be equalized
+        :return: Scaling factor, prev and current layer updated parameters
+        """
         # Create structs for holding layer weights and bias parameters
         prev_layer_params = libpymo.EqualizationParams()
         curr_layer_params = libpymo.EqualizationParams()
