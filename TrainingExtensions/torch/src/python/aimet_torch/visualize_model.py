@@ -47,7 +47,8 @@ from aimet_common.bokeh_plots import BokehServerSession
 
 def visualize_changes_after_optimization(old_model: torch.nn.Module, new_model: torch.nn.Module,
                                          visualization_url: str, selected_layers: List = None,
-                                         session_id: str = "optimization"):
+                                         session_id: str = "optimization",
+                                         display: bool = True):
     """
     Visualizes changes before and after some optimization has been applied to a model.
     Visualization_url is in the form: http://<host name>:<port number>/
@@ -58,10 +59,11 @@ def visualize_changes_after_optimization(old_model: torch.nn.Module, new_model: 
     :param selected_layers: a list of layers a user can choose to have visualized. If selected layers is None,
         all Linear and Conv layers will be visualized.
     :param session_id : custom string descriptor to be associated with this session, appended to visualization url.
+    :param display: a flag to indicate if output is to be displayed immediately.
     :return: None
     """
 
-    bokeh_session = BokehServerSession(url=visualization_url, session_id=session_id)
+    bokeh_session = BokehServerSession(url=visualization_url, session_id=session_id, display=display)
     server_document = bokeh_session.document
     if selected_layers:
         for name, module in new_model.named_modules():
@@ -88,7 +90,8 @@ def visualize_changes_after_optimization(old_model: torch.nn.Module, new_model: 
 
 def visualize_weight_ranges(model: torch.nn.Module, visualization_url: str,
                             selected_layers: List = None,
-                            session_id: str = "optimization"):
+                            session_id: str = "optimization",
+                            display: bool = True):
     """
     Visualizes weight ranges for each layer through a scatter plot showing mean plotted against the standard deviation,
     the minimum plotted against the max, and a line plot with min, max, and mean for each output channel.
@@ -99,10 +102,11 @@ def visualize_weight_ranges(model: torch.nn.Module, visualization_url: str,
     :param selected_layers:  a list of layers a user can choose to have visualized. If selected layers is None,
         all Linear and Conv layers will be visualized.
     :param session_id : custom string descriptor to be associated with this session, appended to visualization url.
+    :param display: a bool variable to indicate if output is to be displayed immediately.
     :return: None
     """
 
-    bokeh_session = BokehServerSession(url=visualization_url, session_id=session_id)
+    bokeh_session = BokehServerSession(url=visualization_url, session_id=session_id, display=display)
     server_document = bokeh_session.document
     if selected_layers:
         for name, module in model.named_modules():
@@ -122,7 +126,8 @@ def visualize_weight_ranges(model: torch.nn.Module, visualization_url: str,
 
 def visualize_relative_weight_ranges_to_identify_problematic_layers(model: torch.nn.Module, visualization_url: str,
                                                                     selected_layers: List = None,
-                                                                    session_id: str = "optimization"):
+                                                                    session_id: str = "optimization",
+                                                                    display: bool = True):
     """
     For each of the selected layers, publishes a line plot showing  weight ranges for each layer, summary statistics
     for relative weight ranges, and a histogram showing weight ranges of output channels
@@ -134,10 +139,11 @@ def visualize_relative_weight_ranges_to_identify_problematic_layers(model: torch
     :param selected_layers: a list of layers a user can choose to have visualized. If selected layers is None,
         all Linear and Conv layers will be visualized.
     :param session_id : custom string descriptor to be associated with this session, appended to visualization url.
+    :param display: a bool variable to indicate if output is to be displayed immediately.
     :return: None
     """
 
-    bokeh_session = BokehServerSession(url=visualization_url, session_id=session_id)
+    bokeh_session = BokehServerSession(url=visualization_url, session_id=session_id, display=display)
     server_document = bokeh_session.document
     # layer name -> module weights data frame mapping
     if not selected_layers:
