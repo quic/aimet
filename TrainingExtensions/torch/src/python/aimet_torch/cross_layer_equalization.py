@@ -133,11 +133,12 @@ class GraphSearchUtils:
         # print("Visiting node: {}".format(op.dotted_name))
 
         # If current node is Conv2D, add to the current group
-        if op.model_module and isinstance(op.model_module.get_module(), torch.nn.Conv2d):
+        if op.model_module and isinstance(op.model_module.get_module(), (torch.nn.Conv2d, torch.nn.ConvTranspose2d)):
             current_group.append(op.model_module.get_module())
 
         # Terminating condition for current group
-        if not op.model_module or not isinstance(op.model_module.get_module(), (torch.nn.Conv2d, torch.nn.ReLU)):
+        if not op.model_module or not isinstance(op.model_module.get_module(), (torch.nn.Conv2d, torch.nn.ReLU,
+                                                                                torch.nn.ConvTranspose2d)):
             if (len(current_group) > 1) and (current_group not in layer_groups):
                 layer_groups.append(current_group)
             current_group = []
@@ -280,28 +281,30 @@ class CrossLayerScaling:
         return scale_factor
 
     @staticmethod
-    def scale_cls_set_with_conv_layers(cls_set: Tuple[torch.nn.Conv2d, torch.nn.Conv2d]) -> np.ndarray:
+    def call_mo_scale(cls_set: Union[Tuple[torch.nn.Conv2d, torch.nn.Conv2d],
+                                     Tuple[torch.nn.ConvTranspose2d, torch.nn.ConvTranspose2d]]) \
+            -> Tuple[np.ndarray, libpymo.EqualizationParams, libpymo.EqualizationParams]:
         """
-        API to invoke equalize layer params (update for weights and bias is in place)
+        Invokes scale API in model optimization library
         :param cls_set: Consecutive Conv layers Tuple whose weights and biases need to be equalized
-        :return: Scaling factor S_12 for each conv layer pair: numpy array
+        :return: Scaling factor, prev and current layer updated parameters
         """
-
-        on_gpu = False
-        for module in cls_set:
-            if not isinstance(module, torch.nn.Conv2d):
-                raise ValueError("Only conv layers are supported for cross layer equalization")
-            if module.weight.is_cuda:
-                on_gpu = True
-                module.cpu()
-
         # Create structs for holding layer weights and bias parameters
         prev_layer_params = libpymo.EqualizationParams()
         curr_layer_params = libpymo.EqualizationParams()
 
-        prev_layer_params.weight = cls_set[0].weight.detach().numpy().reshape(-1)
+        weight_set_0 = cls_set[0].weight
+        # Transpose weights to C, N, H, W from N, C, H, W since axis are flipped for transposed conv
+        if isinstance(cls_set[0], torch.nn.ConvTranspose2d):
+            weight_set_0 = weight_set_0.permute(1, 0, 2, 3)
+        prev_layer_params.weight = weight_set_0.detach().numpy().reshape(-1)
         prev_layer_params.weightShape = np.array(cls_set[0].weight.shape)
-        curr_layer_params.weight = cls_set[1].weight.detach().numpy().reshape(-1)
+
+        weight_set_1 = cls_set[1].weight
+        # Transpose weights to C, N, H, W from N, C, H, W since axis are flipped for transposed conv
+        if isinstance(cls_set[1], torch.nn.ConvTranspose2d):
+            weight_set_1 = weight_set_1.permute(1, 0, 2, 3)
+        curr_layer_params.weight = weight_set_1.detach().numpy().reshape(-1)
         curr_layer_params.weightShape = np.array(cls_set[1].weight.shape)
 
         if cls_set[0].bias is not None:
@@ -310,14 +313,43 @@ class CrossLayerScaling:
             prev_layer_params.isBiasNone = True
 
         scaling_factor = libpymo.scaleLayerParams(prev_layer_params, curr_layer_params)
+        return scaling_factor, prev_layer_params, curr_layer_params
+
+    @staticmethod
+    def scale_cls_set_with_conv_layers(cls_set: Union[Tuple[torch.nn.Conv2d, torch.nn.Conv2d],
+                                                      Tuple[torch.nn.ConvTranspose2d, torch.nn.ConvTranspose2d]]) \
+            -> np.ndarray:
+        """
+        API to invoke equalize layer params (update for weights and bias is in place)
+        :param cls_set: Consecutive Conv layers Tuple whose weights and biases need to be equalized
+        :return: Scaling factor S_12 for each conv layer pair: numpy array
+        """
+
+        on_gpu = False
+        for module in cls_set:
+            if not isinstance(module, (torch.nn.Conv2d, torch.nn.ConvTranspose2d)):
+                raise ValueError("Only Conv or Transposed Conv layers are supported for cross layer equalization")
+            if module.weight.is_cuda:
+                on_gpu = True
+                module.cpu()
+
+        scaling_factor, prev_layer_params, curr_layer_params = CrossLayerScaling.call_mo_scale(cls_set)
 
         cls_set[0].weight.data = torch.from_numpy(np.reshape(prev_layer_params.weight,
                                                              prev_layer_params.weightShape))
         cls_set[0].weight.data = cls_set[0].weight.data.type(torch.FloatTensor)
 
+        # Transpose weight back to N, C, H, W for transposed Conv2D
+        if isinstance(cls_set[0], torch.nn.ConvTranspose2d):
+            cls_set[0].weight.data = cls_set[0].weight.data.permute(1, 0, 2, 3)
+
         cls_set[1].weight.data = torch.from_numpy(np.reshape(curr_layer_params.weight,
                                                              curr_layer_params.weightShape))
         cls_set[1].weight.data = cls_set[1].weight.data.type(torch.FloatTensor)
+
+        # Transpose weight back to N, C, H, W for transposed Conv2D
+        if isinstance(cls_set[1], torch.nn.ConvTranspose2d):
+            cls_set[1].weight.data = cls_set[1].weight.data.permute(1, 0, 2, 3)
 
         if cls_set[0].bias is not None:
             cls_set[0].bias.data = torch.from_numpy(np.reshape(prev_layer_params.bias,
