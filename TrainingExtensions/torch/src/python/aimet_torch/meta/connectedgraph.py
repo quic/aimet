@@ -209,6 +209,7 @@ class ConnectedGraph(AimetCommonConnectedGraph):
         torch.nn.ConvTranspose2d: ['convolution'],
         torch.nn.BatchNorm2d: ['batch_norm'],
         torch.nn.ReLU: ['relu'],
+        torch.nn.ReLU6: ['hardtanh'],
         torch.nn.MaxPool2d: ['max_pool2d'],
         torch.nn.AdaptiveAvgPool2d: ['adaptive_avg_pool2d'],
         torch.nn.AvgPool2d: ['avg_pool2d'],
@@ -621,27 +622,20 @@ class ConnectedGraph(AimetCommonConnectedGraph):
 
         # Input patterns that represent possible inputs to the graph in trace code. Ex. input, input0, input1, or
         # x, x0, x1, etc.
-        input_patterns = [
-            re.compile(r'(input([0-9]*))[,:]'),
-            re.compile(r'(x([0-9]*))[,:]')
-        ]
-        found_input = False
-        for input_pattern in input_patterns:
-            for line in lines:
-                result = input_pattern.search(line)
-                if result:
-                    found_input = True
-
-                    # Get shape of the corresponding input
-                    if not result.group(2):
-                        shape = self._model_input[0].shape
-                    else:
-                        # First input has no number, second input is '0', third is '1', and so on.
-                        # Ex. input, input0, input1, etc.  Need to add 1 to the ending number to get the correct index.
-                        shape = self._model_input[int(result.group(2)) + 1].shape
-                    self._parameters[result.group(1)] = (None, 'input', list(shape))
-            if found_input:
+        # An assumption is made that the first set of inputs in the forward trace correspond to the inputs tensors
+        # given in model_input, and any further inputs found are internal to the model and not user provided.
+        # This is commonly seen with parameters named slot[0-9]+ in the forward trace.
+        input_pattern = re.compile(r'([a-z]+[0-9]*)[,:]')
+        input_index = 0
+        for line in lines:
+            if input_index == len(self._model_input):
+                # Processed all the inputs that correspond to tensors in model_input
                 break
+            result = input_pattern.search(line)
+            if result:
+                shape = self._model_input[input_index].shape
+                self._parameters[result.group(1)] = (None, 'input', list(shape))
+                input_index += 1
 
     def _parse_parameter_lines(self, lines: List[str]):
         """
@@ -671,8 +665,15 @@ class ConnectedGraph(AimetCommonConnectedGraph):
         for line in lines:
             stripped_line = line.strip()
             split_at_equal = stripped_line.split(' = ')
-            output_name = split_at_equal[0]
-            _ = self._parse_expression(split_at_equal[1], output_name)
+            outputs = split_at_equal[0]
+            # If there are commas, there are potentially multiple outputs. We do not support this case currently.
+            outputs = outputs.split(',')
+            if len(outputs) > 1:
+                for output in outputs[1:]:
+                    if output.strip():
+                        logger.error('Multiple outputs not supported, operation line currently parsed: %s', line)
+                        raise AssertionError
+            _ = self._parse_expression(split_at_equal[1], outputs[0].strip())
 
     def _parse_return_lines(self, lines: List[str]):
         """
@@ -729,8 +730,13 @@ class ConnectedGraph(AimetCommonConnectedGraph):
         # The below patter matches such expressions like:
         # torch._convolution(...)
         # ops.prim.NumToTensor(...)
-        # ^CustomFunctionName()(...)
-        function_pattern = re.compile(r'([\^_A-Za-z0-9.]+(\(\))*)\((.+)\)')
+        # ^CustomFunctionName(function args)(...)
+        # Function args in custom functions are currently not processed as operation arguments; they are simply
+        # included with the custom function name as part of the operation name.
+        # For example, ^Scatter([0], None, 0)(input) will show up as Scatter([0], None, 0) as the operation name, and
+        # only 'input' will be processed as an input tensor.  In the future, custom function arguments can be processed
+        # as function parameters perhaps.
+        function_pattern = re.compile(r'([\^_A-Za-z0-9.]+(\(.*\))*)\((.+)\)')
         result = function_pattern.match(exp)
         if result:
             # Extract operation name, taking only the rightmost part of function expression as the name, and stripping
