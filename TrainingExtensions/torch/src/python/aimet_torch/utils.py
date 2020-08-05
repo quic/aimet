@@ -265,7 +265,8 @@ def get_ordered_list_of_conv_modules(model: torch.nn.Module, input_shapes: Union
     :return: List of names in graph in order
     """
     module_list = get_ordered_list_of_modules(model, input_shapes)
-    module_list = [[name, module] for name, module in module_list if isinstance(module, torch.nn.Conv2d)]
+    module_list = [[name, module] for name, module in module_list if isinstance(module, (torch.nn.Conv2d,
+                                                                                         torch.nn.ConvTranspose2d))]
     return module_list
 
 

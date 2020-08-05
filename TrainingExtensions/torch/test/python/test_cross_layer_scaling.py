@@ -90,6 +90,24 @@ class MyModel(torch.nn.Module):
         return x
 
 
+class TransposedConvModel(torch.nn.Module):
+    def __init__(self):
+        super(TransposedConvModel, self).__init__()
+        self.conv1 = torch.nn.ConvTranspose2d(10, 10, 3)
+        self.relu1 = torch.nn.ReLU()
+
+        self.conv2 = torch.nn.ConvTranspose2d(10, 10, 3)
+
+
+    def forward(self, x):
+        # Regular case - conv followed by bn
+        x = self.conv1(x)
+        x = self.relu1(x)
+
+        x = self.conv2(x)
+        return x
+
+
 class TestTrainingExtensionsCrossLayerScaling(unittest.TestCase):
 
     def test_verify_cross_layer_scaling(self):
@@ -288,3 +306,16 @@ class TestTrainingExtensionsCrossLayerScaling(unittest.TestCase):
 
         scale_factors = CrossLayerScaling.scale_model(model, (1, 3, 224, 224))
         self.assertEqual(8, len(scale_factors))
+
+    def test_auto_transposed_conv2d_model(self):
+        torch.manual_seed(10)
+        model = TransposedConvModel()
+        model.eval()
+        random_input = torch.rand((10, 10, 4, 4))
+
+        baseline_output = model(random_input).detach().numpy()
+        scale_factors = CrossLayerScaling.scale_model(model, (10, 10, 4, 4))
+
+        output_after_scaling = model(random_input).detach().numpy()
+        self.assertTrue(np.allclose(baseline_output, output_after_scaling, rtol=1.e-2))
+        self.assertEqual(10, len(scale_factors[0].cls_pair_info_list[0].scale_factor))
