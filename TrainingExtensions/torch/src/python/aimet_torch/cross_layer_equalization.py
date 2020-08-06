@@ -538,7 +538,7 @@ class HighBiasFold:
         prev_layer_bn_params.beta = bn_layers[cls_pair_info.layer1].bias.detach().numpy().reshape(-1)
 
         if len(scaling_parameter) != len(prev_layer_bn_params.gamma) or \
-                len(scaling_parameter) != len(prev_layer_bn_params.gamma):
+                len(scaling_parameter) != len(prev_layer_bn_params.beta):
             raise ValueError("High Bias absorption is not supported for networks with fold-forward BatchNorms")
         prev_layer_bn_params.gamma = np.divide(prev_layer_bn_params.gamma, scaling_parameter)
         prev_layer_bn_params.beta = np.divide(prev_layer_bn_params.beta, scaling_parameter)
