@@ -69,6 +69,15 @@ class QuantParams:
                  act_bw: int = 8,
                  round_mode: str = 'nearest',
                  quant_scheme: str = 'tf_enhanced'):
+        """
+        Constructor
+
+        :param weight_bw: Weight bitwidth (4-31) to use for quantizing layer weights. Default = 8
+        :param act_bw: Activation bitwidth(4-31) to use for quantizing layer activations. Default = 8
+        :param round_mode: Rounding mode. Supported options are 'nearest' or 'stochastic'
+        :param quant_scheme: Quantization scheme. Supported options are 'tf_enhanced' or 'tf' or using Quant Scheme Enum
+                             QuantScheme.post_training_tf or QuantScheme.post_training_tf_enhanced
+        """
 
         self.weight_bw = weight_bw
         self.act_bw = act_bw

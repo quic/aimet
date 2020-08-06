@@ -27,7 +27,8 @@ ActivationType
 Quantization Params
 ===================
 
-.. autofunction:: aimet_torch.quantsim.QuantParams
+.. autoclass:: aimet_torch.quantsim.QuantParams
+    :members:
 
 |
 
