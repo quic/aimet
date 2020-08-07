@@ -41,7 +41,7 @@
 #define EIGEN_USE_GPU
 #define EIGEN_USE_THREADS
 
-#include "qc_quantize_op_deprecated.hpp"
+#include "QcQuantizeOpDeprecated.hpp"
 
 using namespace tensorflow;
 

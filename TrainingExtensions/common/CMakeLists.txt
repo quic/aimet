@@ -44,7 +44,11 @@ target_include_directories(PyTrainingExtensions PUBLIC
 target_link_libraries(PyTrainingExtensions PUBLIC
       stdc++
       PYBIND11
-      TrainingExtensionsTf)
+      MoDlQuantization
+      MoDlQuantizationCuda
+        ${CUDA_LIBRARIES}
+        ${CUDA_CUBLAS_LIBRARIES}
+        "/usr/local/cuda-10.0/targets/x86_64-linux/lib/libcublas.so")
 
 set_target_properties(PyTrainingExtensions PROPERTIES
       OUTPUT_NAME "pytrext")

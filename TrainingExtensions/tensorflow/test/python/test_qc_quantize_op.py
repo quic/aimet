@@ -237,3 +237,189 @@ class TestTrainingExtensionsQcQuantizeOp(unittest.TestCase):
         self.assertFalse(np.allclose(out_data, inp_data))
 
         sess.close()
+
+    def test_qc_quantize_static_op_cpu(self):
+        """
+        test custom static op with CPU
+        """
+        zero_out_module = tf.load_op_library('libaimet_tf_ops.so')
+        graph = tf.Graph()
+        config = tf.compat.v1.ConfigProto(log_device_placement=False)
+        sess = tf.compat.v1.Session(graph=graph, config=config)
+
+        with graph.as_default():
+            # place holder for the input
+            with tf.device("/device:CPU:0"):
+                inp = tf.compat.v1.placeholder(tf.float32, shape=[10], name='input')
+
+                pass_through_op_output = zero_out_module.qc_quantize_static(name='quant_op', in_tensor=inp,
+                                                                            encoding_min=-1.0,
+                                                                            encoding_max=1.0,
+                                                                            bitwidth=8,
+                                                                            quant_scheme=libpymo.QuantizationMode.QUANTIZATION_TF_ENHANCED,
+                                                                            op_mode=libpymo.TensorQuantizerOpMode.passThrough,
+                                                                            is_symmetric=False)
+
+        inp_tensor = sess.graph.get_tensor_by_name('input:0')
+        inp_data = np.random.rand(10).astype(np.float32)
+
+        # get the output
+        print(inp_data)
+        out_data = sess.run(pass_through_op_output, feed_dict={inp_tensor: inp_data})
+        print(out_data)
+
+        # compare qc_quantize op's output with input
+        self.assertTrue(np.allclose(out_data, inp_data, atol=1e-6))
+        sess.close()
+
+        graph = tf.Graph()
+        config = tf.compat.v1.ConfigProto(log_device_placement=False)
+        sess = tf.compat.v1.Session(graph=graph, config=config)
+
+        with graph.as_default():
+            # place holder for the input
+            with tf.device("/device:CPU:0"):
+                inp = tf.compat.v1.placeholder(tf.float32, shape=[10], name='input')
+
+                pass_through_op_output = zero_out_module.qc_quantize_static(name='quant_op', in_tensor=inp,
+                                                                            encoding_min=-1.0,
+                                                                            encoding_max=0.5,
+                                                                            bitwidth=8,
+                                                                            quant_scheme=libpymo.QuantizationMode.QUANTIZATION_TF_ENHANCED,
+                                                                            op_mode=libpymo.TensorQuantizerOpMode.quantizeDequantize,
+                                                                            is_symmetric=False)
+
+        inp_tensor = sess.graph.get_tensor_by_name('input:0')
+        inp_data = np.random.rand(10).astype(np.float32)
+
+        # get the output
+        print(inp_data)
+        out_data = sess.run(pass_through_op_output, feed_dict={inp_tensor: inp_data})
+        print(out_data)
+
+        # compare qc_quantize op's output with input
+        self.assertFalse(np.allclose(out_data, inp_data, atol=1e-1))
+        sess.close()
+
+        graph = tf.Graph()
+        config = tf.compat.v1.ConfigProto(log_device_placement=False)
+        sess = tf.compat.v1.Session(graph=graph, config=config)
+
+        with graph.as_default():
+            # place holder for the input
+            with tf.device("/device:CPU:0"):
+                inp = tf.compat.v1.placeholder(tf.float32, shape=[10], name='input')
+
+                pass_through_op_output = zero_out_module.qc_quantize_static(name='quant_op', in_tensor=inp,
+                                                                            encoding_min=-1.0,
+                                                                            encoding_max=1.0,
+                                                                            bitwidth=8,
+                                                                            quant_scheme=libpymo.QuantizationMode.QUANTIZATION_TF_ENHANCED,
+                                                                            op_mode=libpymo.TensorQuantizerOpMode.oneShotQuantizeDequantize,
+                                                                            is_symmetric=False)
+
+        inp_tensor = sess.graph.get_tensor_by_name('input:0')
+        inp_data = np.random.rand(10).astype(np.float32)
+
+        # get the output
+        print(inp_data)
+        out_data = sess.run(pass_through_op_output, feed_dict={inp_tensor: inp_data})
+        print(out_data)
+
+        # compare qc_quantize op's output with input
+        self.assertFalse(np.allclose(out_data, inp_data, atol=1e-3))
+
+        sess.close()
+
+    def test_qc_quantize_static_op_gpu(self):
+        """
+        test custom static op with GPU
+        """
+        zero_out_module = tf.load_op_library('libaimet_tf_ops.so')
+        graph = tf.Graph()
+        config = tf.compat.v1.ConfigProto(log_device_placement=False)
+        sess = tf.compat.v1.Session(graph=graph, config=config)
+
+        with graph.as_default():
+            # place holder for the input
+            with tf.device("/device:GPU:0"):
+                inp = tf.compat.v1.placeholder(tf.float32, shape=[10], name='input')
+
+                pass_through_op_output = zero_out_module.qc_quantize_static(name='quant_op', in_tensor=inp,
+                                                                            encoding_min=-1.0,
+                                                                            encoding_max=1.0,
+                                                                            bitwidth=8,
+                                                                            quant_scheme=libpymo.QuantizationMode.QUANTIZATION_TF_ENHANCED,
+                                                                            op_mode=libpymo.TensorQuantizerOpMode.passThrough,
+                                                                            is_symmetric=False)
+
+        inp_tensor = sess.graph.get_tensor_by_name('input:0')
+        inp_data = np.random.rand(10).astype(np.float32)
+
+        # get the output
+        print(inp_data)
+        out_data = sess.run(pass_through_op_output, feed_dict={inp_tensor: inp_data})
+        print(out_data)
+
+        # compare qc_quantize op's output with input
+        self.assertTrue(np.allclose(out_data, inp_data, atol=1e-6))
+        sess.close()
+
+        graph = tf.Graph()
+        config = tf.compat.v1.ConfigProto(log_device_placement=False)
+        sess = tf.compat.v1.Session(graph=graph, config=config)
+
+        with graph.as_default():
+            # place holder for the input
+            with tf.device("/device:GPU:0"):
+                inp = tf.compat.v1.placeholder(tf.float32, shape=[10], name='input')
+
+                pass_through_op_output = zero_out_module.qc_quantize_static(name='quant_op', in_tensor=inp,
+                                                                            encoding_min=-1.0,
+                                                                            encoding_max=0.5,
+                                                                            bitwidth=8,
+                                                                            quant_scheme=libpymo.QuantizationMode.QUANTIZATION_TF_ENHANCED,
+                                                                            op_mode=libpymo.TensorQuantizerOpMode.quantizeDequantize,
+                                                                            is_symmetric=False)
+
+        inp_tensor = sess.graph.get_tensor_by_name('input:0')
+        inp_data = np.random.rand(10).astype(np.float32)
+
+        # get the output
+        print(inp_data)
+        out_data = sess.run(pass_through_op_output, feed_dict={inp_tensor: inp_data})
+        print(out_data)
+
+        # compare qc_quantize op's output with input
+        self.assertFalse(np.allclose(out_data, inp_data, atol=1e-1))
+        sess.close()
+
+        graph = tf.Graph()
+        config = tf.compat.v1.ConfigProto(log_device_placement=False)
+        sess = tf.compat.v1.Session(graph=graph, config=config)
+
+        with graph.as_default():
+            # place holder for the input
+            with tf.device("/device:GPU:0"):
+                inp = tf.compat.v1.placeholder(tf.float32, shape=[10], name='input')
+
+                pass_through_op_output = zero_out_module.qc_quantize_static(name='quant_op', in_tensor=inp,
+                                                                            encoding_min=-1.0,
+                                                                            encoding_max=1.0,
+                                                                            bitwidth=8,
+                                                                            quant_scheme=libpymo.QuantizationMode.QUANTIZATION_TF_ENHANCED,
+                                                                            op_mode=libpymo.TensorQuantizerOpMode.oneShotQuantizeDequantize,
+                                                                            is_symmetric=False)
+
+        inp_tensor = sess.graph.get_tensor_by_name('input:0')
+        inp_data = np.random.rand(10).astype(np.float32)
+
+        # get the output
+        print(inp_data)
+        out_data = sess.run(pass_through_op_output, feed_dict={inp_tensor: inp_data})
+        print(out_data)
+
+        # compare qc_quantize op's output with input
+        self.assertFalse(np.allclose(out_data, inp_data, atol=1e-3))
+
+        sess.close()

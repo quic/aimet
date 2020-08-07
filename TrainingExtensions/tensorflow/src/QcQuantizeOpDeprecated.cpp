@@ -36,7 +36,7 @@
 //
 //==============================================================================
 
-#include "qc_quantize_op_deprecated.hpp"
+#include "QcQuantizeOpDeprecated.hpp"
 
 #define EIGEN_USE_THREADS
 using namespace tensorflow;

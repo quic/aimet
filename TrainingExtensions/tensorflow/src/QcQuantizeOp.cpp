@@ -36,7 +36,7 @@
 //
 //==============================================================================
 
-#include "qc_quantize_op.hpp"
+#include "QcQuantizeOp.hpp"
 #include "AimetOpUtils.h"
 #include <type_traits>
 
