@@ -36,12 +36,14 @@
 cmake_minimum_required(VERSION 3.5)
 
 add_library(TrainingExtensionsTf SHARED
-        src/qc_quantize_op_deprecated.cpp
-        src/qc_quantize_op_deprecated.hpp
+        src/QcQuantizeStaticOp.hpp
+        src/QcQuantizeStaticOp.cpp
+        src/QcQuantizeOpDeprecated.cpp
+        src/QcQuantizeOpDeprecated.hpp
         src/AimetOpUtils.h
         src/AimetOpUtils.cpp
-        src/qc_quantize_op.hpp
-        src/qc_quantize_op.cpp
+        src/QcQuantizeOp.hpp
+        src/QcQuantizeOp.cpp
         )
 
 target_compile_options(TrainingExtensionsTf
@@ -79,7 +81,7 @@ get_target_property(dirs MoDlQuantization INCLUDE_DIRECTORIES)
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/../common/include /usr/local/lib/python3.6/dist-packages/tensorflow_core/include/external/nsync/public ${dirs})
 
 add_library(TrainingExtensionsTfCuda
-        src/qc_quantize_op_gpu_deprecated.cu
+        src/QcQuantizeOpGpuDeprecated.cu
         src/AimetOpUtilsGpu.cu
       )
 
