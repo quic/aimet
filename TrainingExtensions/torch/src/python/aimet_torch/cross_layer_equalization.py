@@ -518,7 +518,48 @@ class HighBiasFold:
     ScaleForFirstModule = np.ndarray
 
     @staticmethod
-    def bias_fold(cls_set_info_list: List[ClsSetInfo], bn_layers: Dict[torch.nn.Conv2d, torch.nn.BatchNorm2d]):
+    def call_mo_high_bias_fold(cls_pair_info: ClsSetInfo.ClsSetLayerPairInfo,
+                               bn_layers: Dict[Union[torch.nn.Conv2d, torch.nn.ConvTranspose2d], torch.nn.BatchNorm2d])\
+            -> Tuple[libpymo.LayerParams, libpymo.LayerParams]:
+        """
+        Invokes high bias fold MO API
+        :param cls_pair_info: Pair of layers that were scaled using CLS and related information
+        :param bn_layers: Key: Conv/Linear layer Value: Corresponding folded BN layer
+        :return: Updated layer params
+        """
+        prev_layer_params = libpymo.LayerParams()
+        curr_layer_params = libpymo.LayerParams()
+        prev_layer_bn_params = libpymo.BNParamsHighBiasFold()
+
+        scaling_parameter = cls_pair_info.scale_factor
+
+        # Scaling gamma and beta parameter of batch norm layer
+        prev_layer_bn_params.gamma = bn_layers[cls_pair_info.layer1].weight.detach().numpy().reshape(-1)
+        prev_layer_bn_params.beta = bn_layers[cls_pair_info.layer1].bias.detach().numpy().reshape(-1)
+
+        if len(scaling_parameter) != len(prev_layer_bn_params.gamma) or \
+                len(scaling_parameter) != len(prev_layer_bn_params.beta):
+            raise ValueError("High Bias absorption is not supported for networks with fold-forward BatchNorms")
+        prev_layer_bn_params.gamma = np.divide(prev_layer_bn_params.gamma, scaling_parameter)
+        prev_layer_bn_params.beta = np.divide(prev_layer_bn_params.beta, scaling_parameter)
+
+        prev_layer_params.activationIsRelu = cls_pair_info.relu_activation_between_layers
+        prev_layer_params.bias = cls_pair_info.layer1.bias.detach().numpy()
+
+        weight = cls_pair_info.layer2.weight
+        # Transpose weights to C, N, H, W from N, C, H, W since axis are flipped for transposed conv
+        if isinstance(cls_pair_info.layer2, torch.nn.ConvTranspose2d):
+            weight = weight.permute(1, 0, 2, 3)
+
+        curr_layer_params.bias = cls_pair_info.layer2.bias.detach().numpy()
+        curr_layer_params.weight = weight.detach().numpy().reshape(-1)
+        curr_layer_params.weightShape = np.array(cls_pair_info.layer2.weight.shape)
+        libpymo.updateBias(prev_layer_params, curr_layer_params, prev_layer_bn_params)
+        return prev_layer_params, curr_layer_params
+
+    @staticmethod
+    def bias_fold(cls_set_info_list: List[ClsSetInfo], bn_layers: Dict[Union[torch.nn.Conv2d, torch.nn.ConvTranspose2d],
+                                                                       torch.nn.BatchNorm2d]):
         """
         Folds bias values greater than 3 * sigma to next layer's bias
 
@@ -538,31 +579,13 @@ class HighBiasFold:
                         (cls_pair_info.layer1 not in bn_layers):
                     continue
 
-                prev_layer_params = libpymo.LayerParams()
-                curr_layer_params = libpymo.LayerParams()
-                prev_layer_bn_params = libpymo.BNParamsHighBiasFold()
+                prev_layer_params, curr_layer_params = HighBiasFold.call_mo_high_bias_fold(cls_pair_info, bn_layers)
 
-                scaling_parameter = cls_pair_info.scale_factor
+                # Transpose weight back to N, C, H, W for transposed Conv2D
+                if isinstance(cls_pair_info.layer2, torch.nn.ConvTranspose2d):
+                    cls_pair_info.layer2.weight.data = cls_pair_info.layer2.weight.data.permute(1, 0, 2, 3)
 
-                # Scaling gamma and beta parameter of batch norm layer
-                prev_layer_bn_params.gamma = bn_layers[cls_pair_info.layer1].weight.detach().numpy().reshape(-1)
-                prev_layer_bn_params.beta = bn_layers[cls_pair_info.layer1].bias.detach().numpy().reshape(-1)
-
-                if len(scaling_parameter) != len(prev_layer_bn_params.gamma) or \
-                        len(scaling_parameter) != len(prev_layer_bn_params.gamma):
-                    raise ValueError("High Bias absorption is not supported for networks with fold-forward BatchNorms")
-                prev_layer_bn_params.gamma = np.divide(prev_layer_bn_params.gamma, scaling_parameter)
-                prev_layer_bn_params.beta = np.divide(prev_layer_bn_params.beta, scaling_parameter)
-
-                prev_layer_params.activationIsRelu = cls_pair_info.relu_activation_between_layers
-                prev_layer_params.bias = cls_pair_info.layer1.bias.detach().numpy()
                 prev_layer_params_weight_shape = cls_pair_info.layer1.weight.shape
-
-                curr_layer_params.bias = cls_pair_info.layer2.bias.detach().numpy()
-                curr_layer_params.weight = cls_pair_info.layer2.weight.detach().numpy().reshape(-1)
-                curr_layer_params.weightShape = np.array(cls_pair_info.layer2.weight.shape)
-                libpymo.updateBias(prev_layer_params, curr_layer_params, prev_layer_bn_params)
-
                 cls_pair_info.layer1.bias.data = torch.from_numpy(np.reshape(prev_layer_params.bias,
                                                                              prev_layer_params_weight_shape[0]))
                 cls_pair_info.layer1.bias.data = cls_pair_info.layer1.bias.data.type(torch.FloatTensor)

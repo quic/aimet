@@ -44,6 +44,7 @@ from torchvision import models
 import numpy as np
 
 from aimet_torch.batch_norm_fold import fold_given_batch_norms, fold_all_batch_norms, find_all_batch_norms_to_fold
+from aimet_torch.examples.test_models import TransposedConvModel
 
 
 class MyModel(torch.nn.Module):
@@ -122,28 +123,6 @@ class TwoInputs(torch.nn.Module):
         x = self.maxpool(x)
         x = x.view(x.size(0), -1)
         x = self.fc(x)
-        return x
-
-
-class TransposedConvModel(torch.nn.Module):
-    def __init__(self):
-        super(TransposedConvModel, self).__init__()
-        self.conv1 = torch.nn.ConvTranspose2d(10, 10, 3)
-        self.bn1 = torch.nn.BatchNorm2d(10)
-        self.relu1 = torch.nn.ReLU()
-
-        self.conv2 = torch.nn.ConvTranspose2d(10, 10, 3)
-        self.bn2 = torch.nn.BatchNorm2d(10)
-
-
-    def forward(self, x):
-        # Regular case - conv followed by bn
-        x = self.conv1(x)
-        x = self.bn1(x)
-        x = self.relu1(x)
-
-        x = self.conv2(x)
-        x = self.bn2(x)
         return x
 
 

@@ -37,12 +37,15 @@
 # =============================================================================
 
 import unittest.mock
+import copy
 import torch
 from torchvision import models
 
 import numpy as np
 
 from aimet_torch.cross_layer_equalization import HighBiasFold, ClsSetInfo
+from aimet_torch.batch_norm_fold import fold_all_batch_norms
+from aimet_torch.examples.test_models import TransposedConvModel
 
 
 class TestTrainingExtensionHighBiasFold(unittest.TestCase):
@@ -70,3 +73,22 @@ class TestTrainingExtensionHighBiasFold(unittest.TestCase):
 
         for i in range(len(model.layer1[0].conv1.bias)):
             self.assertTrue(model.layer1[0].conv1.bias.data[i] <= bias.data[i])
+
+    def test_auto_hbf_transposed_conv2d_model(self):
+        torch.manual_seed(10)
+        model = TransposedConvModel()
+        model.eval()
+
+        bn_dict = {model.conv1: model.bn1}
+        fold_all_batch_norms(model, (10, 10, 4, 4))
+
+        scale_factor = np.array(np.random.randn(10))
+        cls_pair_info = ClsSetInfo.ClsSetLayerPairInfo(model.conv1, model.conv2,
+                                                       scale_factor, True)
+        cls_set_info = ClsSetInfo(cls_pair_info)
+        bias = copy.deepcopy(model.conv1.bias.data)
+
+        HighBiasFold.bias_fold([cls_set_info], bn_dict)
+
+        for i in range(len(model.conv1.bias)):
+            self.assertTrue(model.conv1.bias.data[i] <= bias.data[i])
