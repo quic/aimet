@@ -475,7 +475,7 @@ class TestTrainingExtensionBnFold(unittest.TestCase):
 
         self.assertFalse(isinstance(model.bn1, torch.nn.BatchNorm2d))
 
-        self.assertTrue(sum(baseline_output.reshape(-1) - output_after_fold.reshape(-1)) < 1e-6)
+        self.assertTrue(sum(baseline_output.reshape(-1) - output_after_fold.reshape(-1)) < 1e-5)
         self.assertEqual(len(folded_pairs), 2)
 
     def test_find_batch_norms_to_fold_multi_input(self):
