@@ -143,6 +143,7 @@ class WeightReconstructor:
         Nic, Noc = input and output channels of given layer
         k_h, k_w = kernel dimensions of given layer (height, width)
         """
+
         assert isinstance(layer, torch.nn.Conv2d)
         assert len(input_data.shape) == 4
         assert len(output_data.shape) == 2
@@ -165,4 +166,5 @@ class WeightReconstructor:
         new_weight = new_weight.reshape([layer.out_channels, layer.in_channels, *layer.kernel_size])
 
         # update layer with newer weights and bias (if exist)
-        cls._update_layer_params(layer=layer, new_weight=new_weight, new_bias=new_bias)
+        #TODO: PyLint crashes here with the error: "RecursionError: maximum recursion depth exceeded"
+        cls._update_layer_params(layer=layer, new_weight=new_weight, new_bias=new_bias) # pylint: disable=all
