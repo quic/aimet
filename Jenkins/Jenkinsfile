@@ -106,43 +106,49 @@ pipeline {
 
                         stage('Unit tests') {
                             steps {
-                                echo 'Building code and running tests...'
-                                sh 'bash -l -c "cd ${REPO_NAME} && ./buildntest.sh -u"'
-                            }
-                            post {            
-                                always {
-                                    // Parse CTest, Junit, or GoogleTest results
-                                    step([$class: 'XUnitBuilder', testTimeMargin: '3000', thresholdMode: THRESHOLD_OBJ.unittests_thresholds.threshold_mode,
-                                          thresholds: [
-                                                [$class: 'FailedThreshold',
-                                                    failureNewThreshold: THRESHOLD_OBJ.unittests_thresholds.failed_thresholds.new_tests,
-                                                    failureThreshold: THRESHOLD_OBJ.unittests_thresholds.failed_thresholds.total_tests,
-                                                    unstableNewThreshold: '',
-                                                    unstableThreshold: ''],
-                                                [$class: 'SkippedThreshold',
-                                                    failureNewThreshold: THRESHOLD_OBJ.unittests_thresholds.skipped_thresholds.new_tests,
-                                                    failureThreshold: THRESHOLD_OBJ.unittests_thresholds.skipped_thresholds.total_tests,
-                                                    unstableNewThreshold: '',
-                                                    unstableThreshold: '']],
-                                          tools: [
-                                                [$class: 'CustomType',
-                                                    customXSL: "${XUNIT_XSL_FILE}",
-                                                    deleteOutputFiles: false,
-                                                    failIfNotNew: false,
-                                                    pattern: "**/unit_test_results/**/*.xml",
-                                                    skipNoTestFiles: true,
-                                                    stopProcessingIfError: false]
-                                          ]
-                                    ])
-                                    script {
-                                        if (currentBuild.currentResult.equals("FAILURE")) {
-                                            // the plugin won't fail the stage.  it only sets the build status, so we have to fail it
-                                            // manually
-                                            sh "exit 1"
-                                        }
+                                script {
+                                    if ("${env.QCInternalValidation}" == "false") {
+                                        echo 'Building code and running tests...'
+                                        sh 'bash -l -c "cd ${REPO_NAME} && ./buildntest.sh -u"'
                                     }
                                 }
                             }
+                            post {            
+                                always {
+                                    script {
+                                        if ("${env.QCInternalValidation}" == "false") {
+                                            // Parse CTest, Junit, or GoogleTest results
+                                            step([$class: 'XUnitBuilder', testTimeMargin: '3000', thresholdMode: THRESHOLD_OBJ.unittests_thresholds.threshold_mode,
+                                                thresholds: [
+                                                        [$class: 'FailedThreshold',
+                                                            failureNewThreshold: THRESHOLD_OBJ.unittests_thresholds.failed_thresholds.new_tests,
+                                                            failureThreshold: THRESHOLD_OBJ.unittests_thresholds.failed_thresholds.total_tests,
+                                                            unstableNewThreshold: '',
+                                                            unstableThreshold: ''],
+                                                        [$class: 'SkippedThreshold',
+                                                            failureNewThreshold: THRESHOLD_OBJ.unittests_thresholds.skipped_thresholds.new_tests,
+                                                            failureThreshold: THRESHOLD_OBJ.unittests_thresholds.skipped_thresholds.total_tests,
+                                                            unstableNewThreshold: '',
+                                                            unstableThreshold: '']],
+                                                tools: [
+                                                        [$class: 'CustomType',
+                                                            customXSL: "${XUNIT_XSL_FILE}",
+                                                            deleteOutputFiles: false,
+                                                            failIfNotNew: false,
+                                                            pattern: "**/unit_test_results/**/*.xml",
+                                                            skipNoTestFiles: true,
+                                                            stopProcessingIfError: false]
+                                                ]
+                                            ])
+                                            if (currentBuild.currentResult.equals("FAILURE")) {
+                                                // the plugin won't fail the stage.  it only sets 
+                                                // the build status, so we have to fail it manually
+                                                sh "exit 1"
+                                            }
+                                        }
+                                    }
+                                }
+                            }                    
                         }
 
                         stage('Static analysis') {
