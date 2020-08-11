@@ -329,7 +329,6 @@ class ConnectedGraph(AimetCommonConnectedGraph):
         Implements a depth-first graph extraction to create an equivalent connected graph representation
         with Ops and Products. depth-first extraction is realized using recursion.
 
-        :param node: trace graph node
         :param model: Pytorch model to create connected graph from
         :param model_input: Example input to model.  Can be a single tensor or a list/tuple of input tensors
         :param module_tensor_tuples_map: Map of modules and input and output tensor obtained from a forward pass
@@ -340,6 +339,10 @@ class ConnectedGraph(AimetCommonConnectedGraph):
         # graph node equivalent Ops or Products locally constructed or populated via recursive invocation
         # initialized with input products
         model_debug_name, ops = self._create_input_products(model_input, trace.graph)
+
+        if is_leaf_module(model):
+            return self._parse_single_module_model(model, module_tensor_tuples_map, ops, trace.graph)
+
         # pending sub-graph that have to be explored
         pending_nodes = dict()
         # modules that are being referenced within the sub-graph
@@ -373,6 +376,23 @@ class ConnectedGraph(AimetCommonConnectedGraph):
 
         # return the last op enqueued in the sub-graph forward pass
         return self.ordered_ops[-1]
+
+    def _parse_single_module_model(self, module: torch.nn.Module, module_tensor_tuples_map,
+                                   ops: Dict[str, Union[Op, Product]],
+                                   graph: torch._C.Graph) -> Op:
+        # pylint: disable=protected-access
+        """
+        Creates a fully populated Op and along with associated products representing inputs for the model
+        :param module:  Pytorch model composed on single module
+        :param module_tensor_tuples_map: Map of modules and input and output tensor obtained from a forward pass
+        :param ops: dictionary of Ops and Products indexed by output names referenced in the graph
+        :param graph: trace graph representing the model
+        :return: Ops
+        """
+        inputs = []
+        for inp in graph.inputs():
+            inputs.append(inp)
+        return self._create_leaf_module_op(module, inputs, ops, module_tensor_tuples_map)
 
     def parse_callmethod_node(self, node: torch._C.Node,
                               module_tensor_tuples_map: Dict[str, Tuple[Tuple[torch.Tensor]]],
@@ -497,13 +517,13 @@ class ConnectedGraph(AimetCommonConnectedGraph):
         return inputs
 
     def _create_leaf_module_op(self, model: torch.nn.Module,
-                               inputs: List[torch._C.Node], ops: Dict[str, Union[Op, Product]],
+                               inputs: List[Union[torch._C.Node, torch._C.Value]], ops: Dict[str, Union[Op, Product]],
                                module_tensor_tuples_map: Dict[str, Tuple[Tuple[torch.Tensor]]]) -> Op:
         # pylint: disable=protected-access
         """
         Creates a fully populated Op and along with associated products representing inputs
         :param model: PyTorch Module representing the model or a sub-set of the model
-        :param inputs: list of producer graph nodes
+        :param inputs: list of producer graph nodes or graph input values
         :param ops: dictionary of Ops and Products indexed by output names referenced in the graph
         :return: Ops
         """
@@ -568,7 +588,7 @@ class ConnectedGraph(AimetCommonConnectedGraph):
         _fill_and_check_op_product_shapes(op, input_shape, output_shape)
         return op
 
-    def _create_op_and_products(self, op_type: str, inputs: List[torch._C.Node],
+    def _create_op_and_products(self, op_type: str, inputs: List[Union[torch._C.Node, torch._C.Value]],
                                 ops: Dict[str, Union[Op, Product]]) -> Op:
         # pylint: disable=protected-access
         """
@@ -577,7 +597,7 @@ class ConnectedGraph(AimetCommonConnectedGraph):
             > normalized name if mapping exists in op_type_map
             > class name if associated with an instance of torch.nn.Module
             > string extracted from graph node description in case of functional Op
-        :param inputs: list of producer graph nodes
+        :param inputs: list of producer graph nodes or graph input values
         :param ops: dictionary of Ops and Products indexed by output names referenced in the graph
         :return: Ops
         """
@@ -585,8 +605,8 @@ class ConnectedGraph(AimetCommonConnectedGraph):
         op = Op(unique_op_name, unique_op_name, None, False, op_type)
         self.ordered_ops.append(op)
         self._ops[unique_op_name] = op
-        for input_node in inputs:
-            input_name = input_node.debugName()
+        for inp in inputs:
+            input_name = inp.debugName()
             resolved_inp = ops[input_name]
             if isinstance(resolved_inp, Op):
                 # Create a product linking the identified Operation with the current Operation.
