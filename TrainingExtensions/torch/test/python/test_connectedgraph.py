@@ -40,9 +40,11 @@
 import unittest
 import torch
 from aimet_common.connected_graph.connectedgraph_utils import get_all_input_ops, get_all_output_ops
-from aimet_torch.examples.test_models import SingleResidual, MultiInput, ConcatModel, ModuleListModel,\
+from aimet_torch.examples.test_models import TinyModel, SingleResidual, MultiInput, ConcatModel, ModuleListModel,\
     ModelWithDropouts, SequentialModel, HierarchicalModel, PassThroughOpLastLayerModel
+from aimet_torch.examples.mnist_torch_model import ExtendedNet
 from aimet_torch.meta.connectedgraph import _split_inputs, ConnectedGraph
+from aimet_torch.meta.connectedgraph_utils import get_module_act_func_pair
 from aimet_torch.utils import create_rand_tensors_given_shapes
 
 
@@ -205,3 +207,45 @@ class TestConnectedGraph(unittest.TestCase):
         inp_tensor_list = create_rand_tensors_given_shapes(inp_shape)
         conn_graph = ConnectedGraph(model, inp_tensor_list)
         self.assertEqual(1, len(conn_graph.ordered_ops))
+
+    def test_get_module_act_func_pair_with_modules(self):
+        """ Test get module activation function pair - activations are nn.Modules """
+
+        model = TinyModel().eval()
+        inp_tensor_list = [torch.randn(1, 3, 32, 32)]
+
+        module_act_func_pair = get_module_act_func_pair(model, inp_tensor_list)
+
+        # 12 modules
+        self.assertEqual(len(module_act_func_pair), 12)
+
+        # followed by relu case
+        self.assertEqual(type(module_act_func_pair[model.bn1]), type(model.relu1))
+        self.assertEqual(type(module_act_func_pair[model.bn2]), type(model.relu2))
+        self.assertEqual(type(module_act_func_pair[model.conv3]), type(model.relu3))
+
+        # not followed by relu case
+        self.assertEqual(module_act_func_pair[model.conv1], None)
+        self.assertEqual(module_act_func_pair[model.conv2], None)
+        # final module case
+        self.assertEqual(module_act_func_pair[model.fc], None)
+
+    def test_get_module_act_func_pair_with_functional(self):
+        """ Test get module activation function pair - activations are functional """
+
+        model = ExtendedNet().eval()
+
+        inp_tensor_list = [torch.randn(1, 1, 28, 28)]
+
+        module_act_func_pair = get_module_act_func_pair(model, inp_tensor_list)
+
+        # six modules
+        self.assertEqual(len(module_act_func_pair), 6)
+
+        self.assertEqual(type(module_act_func_pair[model.fc1]), type(torch.nn.ReLU()))
+
+        self.assertEqual(module_act_func_pair[model.conv1], None)
+        self.assertEqual(module_act_func_pair[model.conv2], None)
+        self.assertEqual(module_act_func_pair[model.conv2_drop], None)
+        self.assertEqual(module_act_func_pair[model.conv3], None)
+        self.assertEqual(module_act_func_pair[model.fc2], None)
