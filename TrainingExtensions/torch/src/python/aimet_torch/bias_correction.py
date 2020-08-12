@@ -251,6 +251,8 @@ def correct_bias(model: torch.nn.Module, quant_params: qsim.QuantParams,
     # Find batch size and shape of input tensor
     batch_size, input_shape = utils.get_input_shape_batch_size(data_loader)
 
+    # input_shape = (10, 10, 4, 4)
+
     # Rounding up number of samples to batch size
     n_batches_bias_correction = int(np.ceil(num_bias_correct_samples / batch_size))
     n_batches_quantization = int(np.ceil(num_quant_samples / batch_size))
