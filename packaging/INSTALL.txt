@@ -67,15 +67,14 @@ pip3 install protobuf==3.7.1
 pip3 install scikit-learn==0.19.1
 pip3 install tb-nightly==1.14.0a20190517
 pip3 install tensorboardX==1.7
-pip3 install torch==1.1.0
-pip3 install torchvision==0.3.0
+pip3 install https://download.pytorch.org/whl/cu100/torchvision-0.5.0%2Bcu100-cp36-cp36m-linux_x86_64.whl
+pip3 install https://download.pytorch.org/whl/cu100/torch-1.4.0%2Bcu100-cp36-cp36m-linux_x86_64.whl
 pip3 install --upgrade pip
 pip3 install tensorflow-gpu==1.15.0
 
 
 pip3 install future==0.17.1
-pip3 uninstall tb-nightly==1.14.0a20190517
-pip3 install tb-nightly==1.14.0a20190517
+pip3 install tensorboard==1.14
 pip3 install bokeh==1.2.0
 pip3 install pandas==0.22.0
 pip3 install holoviews==1.12.7
@@ -90,4 +89,3 @@ apt-get update && apt-get install -y libjpeg8-dev
 ln -s /usr/lib/x86_64-linux-gnu/libjpeg.so /usr/lib
 apt install -y zlib1g-dev
 pip3 uninstall -y Pillow && pip3 install Pillow-SIMD==6.0.0.post0
-
