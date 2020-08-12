@@ -42,44 +42,31 @@ from typing import Tuple, Union, List, Dict
 import torch
 
 # Import AIMET specific modules
+from aimet_common.utils import AimetLogger
 from aimet_torch.meta.connectedgraph import ConnectedGraph
 
-ActivationFunctionMap = {
-        'relu': torch.nn.ReLU(),
-        'relu6': torch.nn.ReLU6(),
-        'sigmoid': torch.nn.Sigmoid(),
-        'tanh': torch.nn.Tanh(),
-        'hardtanh': torch.nn.Hardtanh()
-}
+logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Utils)
 
-def get_module_act_func_pair(model: torch.nn.Module, inp_tensor: Union[Tuple[torch.Tensor], List[torch.Tensor]]) -> \
+ActivationModule = (torch.nn.ReLU6, torch.nn.ReLU, torch.nn.PReLU, torch.nn.RReLU, torch.nn.LeakyReLU,
+                    torch.nn.Sigmoid, torch.nn.LogSigmoid, torch.nn.Softmin, torch.nn.Softmax, torch.nn.LogSoftmax,
+                    torch.nn.Tanh, torch.nn.Hardtanh)
+
+def get_module_act_func_pair(model: torch.nn.Module, model_input: Union[Tuple[torch.Tensor], List[torch.Tensor]]) -> \
         Dict[torch.nn.Module, Union[torch.nn.Module, None]]:
     """
-    For given model, returns dictionary of module to immediate following activation function else mops
-    module to None
+    For given model, returns dictionary of module to immediate following activation function else maps
+    module to None.
 
-    :param model: model
-    :param inp_tensor:  list/tuple of input tensor to model
-    :return: dictionary of module to activation function
+    Activation functions should be defined as nn.Modules in model and not as functional in the forward pass.
+
+    :param model: Pytorch model
+    :param model_input:  Model input, Can be a list/tuple of input tensor(s)
+    :return: Dictionary of module to activation function
     """
-
-    def get_act_func_from_name(op_name: str) -> Union[torch.nn.Module, None]:
-        """
-        For given op name from connected graph return following activation function else return None
-        :param op_name: op name
-        :return: activation function or None
-        """
-        for act_func in ActivationFunctionMap:
-
-            if act_func in op_name:
-                return ActivationFunctionMap[act_func]
-
-        return None
-
     model.eval()
 
-    # Create the ConnectedGraph
-    graph = ConnectedGraph(model, inp_tensor)
+    # Create ConnectedGraph
+    graph = ConnectedGraph(model, model_input)
 
     # Maps module to next following activation function else None
     module_act_func_pair = {}
@@ -87,8 +74,8 @@ def get_module_act_func_pair(model: torch.nn.Module, inp_tensor: Union[Tuple[tor
     # get all the ops
     all_ops = graph.get_all_ops()
 
-    for _, op in all_ops.items():
-        for _, module in model.named_children():
+    for op in all_ops.values():
+        for module in model.children():
 
             if module == op.get_module():
                 module_act_func_pair[module] = None
@@ -97,9 +84,13 @@ def get_module_act_func_pair(model: torch.nn.Module, inp_tensor: Union[Tuple[tor
                     assert len(op.output.consumers) == 1, 'op output should have at least one consumer.'
                     # get the next op
                     next_op = op.output.consumers[0]
-                    # get the activation function
-                    activation_function = get_act_func_from_name(next_op.name_op)
+                    # get module associate with next op
+                    next_module = next_op.get_module()
 
-                    module_act_func_pair[module] = activation_function
+                    # get the appropriate activation function
+                    if isinstance(next_module, ActivationModule):
+                        module_act_func_pair[module] = next_module
+                        logger.debug("Module: %s is followed by activation function: %s", op.dotted_name,
+                                     next_op.dotted_name)
 
     return module_act_func_pair

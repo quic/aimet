@@ -220,32 +220,13 @@ class TestConnectedGraph(unittest.TestCase):
         self.assertEqual(len(module_act_func_pair), 12)
 
         # followed by relu case
-        self.assertEqual(type(module_act_func_pair[model.bn1]), type(model.relu1))
-        self.assertEqual(type(module_act_func_pair[model.bn2]), type(model.relu2))
-        self.assertEqual(type(module_act_func_pair[model.conv3]), type(model.relu3))
+        self.assertTrue(isinstance(module_act_func_pair[model.bn1], torch.nn.ReLU))
+        self.assertTrue(isinstance(module_act_func_pair[model.bn2], torch.nn.ReLU))
+        self.assertTrue(isinstance(module_act_func_pair[model.conv3], torch.nn.ReLU))
 
         # not followed by relu case
         self.assertEqual(module_act_func_pair[model.conv1], None)
         self.assertEqual(module_act_func_pair[model.conv2], None)
+
         # final module case
         self.assertEqual(module_act_func_pair[model.fc], None)
-
-    def test_get_module_act_func_pair_with_functional(self):
-        """ Test get module activation function pair - activations are functional """
-
-        model = ExtendedNet().eval()
-
-        inp_tensor_list = [torch.randn(1, 1, 28, 28)]
-
-        module_act_func_pair = get_module_act_func_pair(model, inp_tensor_list)
-
-        # six modules
-        self.assertEqual(len(module_act_func_pair), 6)
-
-        self.assertEqual(type(module_act_func_pair[model.fc1]), type(torch.nn.ReLU()))
-
-        self.assertEqual(module_act_func_pair[model.conv1], None)
-        self.assertEqual(module_act_func_pair[model.conv2], None)
-        self.assertEqual(module_act_func_pair[model.conv2_drop], None)
-        self.assertEqual(module_act_func_pair[model.conv3], None)
-        self.assertEqual(module_act_func_pair[model.fc2], None)
