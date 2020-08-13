@@ -544,3 +544,62 @@ class TestQuantSim(unittest.TestCase):
         p_quantizer.enabled = False
         is_enabled = p_quantizer.enabled
         self.assertFalse(is_enabled)
+
+    def test_manual_quantize(self):
+        """ Test quantizing a model by manually specifying ops to quantize """
+        def get_manual_activations(_conn_graph, _op_types_to_ignore):
+            """
+            Overriding function for getting a list of ops to insert activation quantizers for
+            :param _conn_graph: Unused argument
+            :param _op_types_to_ignore: Unused argument
+            :return: List of ops to insert activation quantizers for
+            """
+            return ['conv2d/Relu']
+
+        def get_manual_weights(_query):
+            """
+            Overriding function for getting a list of ops to insert weight quantizers for
+            :param _query: Unused argument
+            :return: List of ops to insert weight quantizers for
+            """
+            return ['conv2d_1/Conv2D']
+
+        def configure_quantization_ops(self, _conn_graph, _config_file):
+            """
+            Overriding function for configuring quantization ops inserted by QuantizationSimModel
+            :param self: Self refers to QuantizationSimModel object
+            :param _conn_graph: Unused argument
+            :param _config_file: Unused argument
+            """
+            conv2d_relu_quant_info = self._activation_quantizers['conv2d/Relu_quantized']
+            conv2d_relu_quant_info.enabled = False
+            conv2d_relu_quant_info.enabled = True
+            conv2d_1_weight_quant_info = self._param_quantizers['conv2d_1/Conv2D/ReadVariableOp_quantized']
+            conv2d_1_weight_quant_info.enabled = False
+            conv2d_1_weight_quant_info.enabled = True
+
+        tf.reset_default_graph()
+        with tf.device('/cpu:0'):
+            model = tf.keras.Sequential()
+            model.add(tf.keras.layers.Conv2D(32, kernel_size=3, input_shape=(28, 28, 3), activation='relu'))
+            model.add(tf.keras.layers.MaxPooling2D((2, 2)))
+            model.add(tf.keras.layers.Conv2D(64, kernel_size=3, activation='relu'))
+            model.summary()
+
+        sess = tf.Session()
+        initialize_uninitialized_vars(sess)
+
+        orig_get_ops_to_quantize_activations_for = QuantizationSimModel.get_ops_to_quantize_activations_for
+        orig_get_ops_to_quantize_weights_for = QuantizationSimModel.get_ops_to_quantize_weights_for
+        orig_configure_quantization_ops = QuantizationSimModel.configure_quantization_ops
+        QuantizationSimModel.get_ops_to_quantize_activations_for = get_manual_activations
+        QuantizationSimModel.get_ops_to_quantize_weights_for = get_manual_weights
+        QuantizationSimModel.configure_quantization_ops = configure_quantization_ops
+        sim = QuantizationSimModel(sess, ['conv2d_input'], ['conv2d_1/Relu'], use_cuda=False)
+        self.assertEqual(1, len(sim._activation_quantizers))
+        self.assertEqual(1, len(sim._param_quantizers))
+        sess.close()
+        sim.session.close()
+        QuantizationSimModel.get_ops_to_quantize_activations_for = orig_get_ops_to_quantize_activations_for
+        QuantizationSimModel.get_ops_to_quantize_weights_for = orig_get_ops_to_quantize_weights_for
+        QuantizationSimModel.configure_quantization_ops = orig_configure_quantization_ops
