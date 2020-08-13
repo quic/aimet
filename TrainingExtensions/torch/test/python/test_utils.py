@@ -37,15 +37,19 @@
 # =============================================================================
 
 import unittest.mock
+import numpy as np
 
 import torch
 import torchvision
 
 from aimet_common.utils import round_up_to_multiplicity, round_down_to_multiplicity
 from aimet_torch.utils import replace_modules_of_type1_with_type2, replace_modules_with_instances_of_new_type, \
-    get_ordered_list_of_modules, get_ordered_list_of_conv_modules, get_reused_modules, change_tensor_device_placement
+    get_ordered_list_of_modules, get_ordered_list_of_conv_modules, get_reused_modules, change_tensor_device_placement,\
+    ModuleData, to_numpy, create_rand_tensors_given_shapes
+
+from aimet_torch.quantsim import QuantizationSimModel
 from aimet_torch.defs import PassThroughOp
-from aimet_torch.examples.test_models import ModelWithReusedNodes
+from aimet_torch.examples.test_models import TinyModel, MultiInput, ModelWithReusedNodes
 
 
 class TestTrainingExtensionsUtils(unittest.TestCase):
@@ -226,3 +230,96 @@ class TestTrainingExtensionsUtils(unittest.TestCase):
         self.assertEqual(len(random_tensor), len(random_tensor_new))
         self.assertTrue(isinstance(random_tensor_new, tuple))
         self.assertTrue(isinstance(random_tensor_new[0], tuple))
+
+    def test_collect_inp_out_data(self):
+        """ test collect input output data from module """
+
+        device_list = [torch.device('cpu'), torch.device('cuda:0')]
+
+        for device in device_list:
+
+            model = TinyModel().to(device=device)
+            model_input = torch.randn(1, 3, 32, 32).to(device=device)
+
+            module_data = ModuleData(model, model.conv1)
+            inp, out = module_data.collect_inp_out_data(model_input, collect_input=False, collect_output=False)
+            self.assertEqual(inp, None)
+            self.assertEqual(out, None)
+
+            module_data = ModuleData(model, model.conv1)
+            inp, out = module_data.collect_inp_out_data(model_input, collect_input=True, collect_output=False)
+            self.assertTrue(np.array_equal(to_numpy(inp), to_numpy(model_input)))
+            self.assertEqual(out, None)
+
+            module_data = ModuleData(model, model.conv1)
+            inp, out = module_data.collect_inp_out_data(model_input, collect_input=False, collect_output=True)
+            conv1_out = model.conv1(model_input)
+            self.assertTrue(np.array_equal(to_numpy(out), to_numpy(conv1_out)))
+            self.assertEqual(inp, None)
+
+            module_data = ModuleData(model, model.conv1)
+            inp, out = module_data.collect_inp_out_data(model_input, collect_input=True, collect_output=True)
+            conv1_out = model.conv1(model_input)
+            self.assertTrue(np.array_equal(to_numpy(out), to_numpy(conv1_out)))
+            self.assertTrue(np.array_equal(to_numpy(inp), to_numpy(model_input)))
+
+            module_data = ModuleData(model, model.fc)
+            inp, out = module_data.collect_inp_out_data(model_input, collect_input=False, collect_output=True)
+            fc_out = model(model_input)
+            self.assertTrue(np.array_equal(to_numpy(out), to_numpy(fc_out)))
+            self.assertEqual(inp, None)
+
+    def test_collect_inp_out_data_multi_input(self):
+        """ test collect input output data from module using multi input """
+
+        device_list = [torch.device('cpu'), torch.device('cuda:0')]
+
+        for device in device_list:
+
+            model = MultiInput().to(device=device)
+            inp_shape_1 = (1, 3, 32, 32)
+            inp_shape_2 = (1, 3, 20, 20)
+            model_input = create_rand_tensors_given_shapes([inp_shape_1, inp_shape_2])
+
+            module_data = ModuleData(model, model.conv1)
+            inp, out = module_data.collect_inp_out_data(model_input, collect_input=True, collect_output=False)
+            self.assertTrue(np.array_equal(to_numpy(inp), to_numpy(model_input[0])))
+            self.assertEqual(out, None)
+
+            module_data = ModuleData(model, model.conv1)
+            inp, out = module_data.collect_inp_out_data(model_input, collect_input=False, collect_output=True)
+            conv1_out = model.conv1(model_input[0])
+            self.assertTrue(np.array_equal(to_numpy(out), to_numpy(conv1_out)))
+            self.assertEqual(inp, None)
+
+            module_data = ModuleData(model, model.conv3)
+            inp, out = module_data.collect_inp_out_data(model_input, collect_input=True, collect_output=True)
+            conv3_out = model.conv3(model_input[1])
+            self.assertTrue(np.array_equal(to_numpy(out), to_numpy(conv3_out)))
+            self.assertTrue(np.array_equal(to_numpy(inp), to_numpy(model_input[1])))
+
+            module_data = ModuleData(model, model.fc)
+            inp, out = module_data.collect_inp_out_data(model_input, collect_input=False, collect_output=True)
+            fc_out = model(*model_input)
+            self.assertTrue(np.array_equal(to_numpy(out), to_numpy(fc_out)))
+            self.assertEqual(inp, None)
+
+    def test_collect_inp_out_data_quantsim_model(self):
+        """ test collect input output data from module """
+
+        device_list = [torch.device('cpu'), torch.device('cuda:0')]
+
+        for device in device_list:
+
+            model = TinyModel().to(device=device)
+            model_input = torch.randn(1, 3, 32, 32).to(device=device)
+            sim = QuantizationSimModel(model, input_shapes=(1, 3, 32, 32))
+
+            module_data = ModuleData(model, model.fc)
+            inp, out = module_data.collect_inp_out_data(model_input, collect_input=False, collect_output=True)
+            fc_out = sim.model(model_input)
+            self.assertFalse(np.array_equal(to_numpy(out), to_numpy(fc_out)))
+
+            module_data = ModuleData(model, model.conv1)
+            inp, out = module_data.collect_inp_out_data(model_input, collect_input=True, collect_output=False)
+            self.assertTrue(np.array_equal(to_numpy(inp), to_numpy(model_input)))

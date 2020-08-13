@@ -62,6 +62,84 @@ class IterFirstX:
             yield batch
 
 
+class StopForwardException(Exception):
+    """
+    Dummy exception to early-terminate forward-pass
+    """
+
+
+class ModuleData:
+    """
+    Collect input and output data to and from module
+    """
+    def __init__(self, model: torch.nn.Module, module: torch.nn.Module):
+        """
+        :param model: Pytorch model
+        :param module: Module reference
+        """
+        self._model = model
+        self._module = module
+
+    def collect_inp_out_data(self, model_input: Union[torch.tensor, List[torch.Tensor], Tuple[torch.Tensor]],
+                             collect_input: bool, collect_output: bool) -> Tuple[torch.Tensor, torch.Tensor]:
+        """
+        Collect input and output data depending on the collect_input and collect_output flag
+
+        :param model_input: Input to model, Can be a single tensor or a list/tuple of tensors
+        :param collect_input: Boolean to collect input or not
+        :param collect_output: Boolean to collect output or not
+        :return: Module's input and output data
+        """
+        def _hook_to_collect_inp_out_data(_, inp, out):
+            """
+            hook to collect input and output data
+            """
+            if collect_input:
+                inp_data_list.append(inp[0])
+
+            if collect_output:
+                out_data_list.append(out)
+
+            raise StopForwardException
+
+        inp_data_list = []
+        out_data_list = []
+
+        handle = self._module.register_forward_hook(_hook_to_collect_inp_out_data)
+
+        # keep the model in eval mode
+        self._model.eval()
+
+        # get the model's device placement information
+        device = get_device(self._model)
+
+        # place the input to appropriate device
+        model_input = change_tensor_device_placement(model_input, device)
+
+        if isinstance(model_input, torch.Tensor):
+            model_input = [model_input]
+
+        try:
+            with torch.no_grad():
+                _ = self._model(*model_input)
+
+        except StopForwardException:
+            pass
+
+        # remove hook handle
+        handle.remove()
+
+        inp_data, out_data = None, None
+
+        if inp_data_list and isinstance(inp_data_list[0], torch.Tensor):
+            inp_data = inp_data_list[0].detach()
+
+        if out_data_list and isinstance(out_data_list[0], torch.Tensor):
+            out_data = out_data_list[0].detach()
+
+        return inp_data, out_data
+
+
 def run_hook_for_layers(model: torch.nn.Module, input_shapes: Union[Tuple, List[Tuple]], hook,
                         module_type_for_attaching_hook=None, leaf_node_only=True):
     """
