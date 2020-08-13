@@ -78,21 +78,21 @@ RUN apt-get update > /dev/null && \
 
         # lmdb depenedency
         libffi-dev && \
-        rm -rf /var/lib/apt/lists/
+        rm -rf /var/lib/apt/lists/*
 
 # Python 2 pip installation
 RUN apt-get update && apt-get install -y python-pip && rm -rf /var/lib/apt/lists/* && \
     python2.7 -m pip --no-cache-dir install --upgrade \
         pip==9.0.1 \
-        restkit \
+        restkit==4.2.2 \
         PyYAML
 
 # Upgrade Python3 pip and install some more packages
 RUN pip3 --no-cache-dir install --upgrade \
-        setuptools \
+        setuptools==41.0.1 \
         pip==9.0.1 \
-        numpy \
-        wheel
+        numpy==1.16.4 \
+        wheel==0.33.4
 
 # nvidia-docker hooks
 LABEL com.nvidia.volumes.needed="nvidia_driver"
@@ -137,13 +137,12 @@ RUN apt-get update > /dev/null && \
 # Python3 Packages
 RUN pip3 --no-cache-dir install \
         attrs==19.1.0 \
-        wget \
         behave==1.2.6 \
         blosc==1.8.1 \
-        cffi \
-        click \
+        cffi==1.12.3 \
+        click==7.0 \
         cython==0.29.10 \
-        h5py==2.10.0 \
+        h5py==2.9.0 \
         ipykernel==4.8.2 \
         keras==2.2.4 \
         lmdb==0.95 \
@@ -155,20 +154,20 @@ RUN pip3 --no-cache-dir install \
         pylint==2.3.1 \
         pytest==4.6.5 \
         pytest-cov==2.6.1 \
-        pytorch-ignite==0.1.0 && \
-        pip3 install  https://download.pytorch.org/whl/cu100/torch-1.1.0-cp36-cp36m-linux_x86_64.whl && \
-        pip3 install  https://download.pytorch.org/whl/cu100/torchvision-0.3.0-cp36-cp36m-linux_x86_64.whl && \
-        pip3 --no-cache-dir install \
-        scikit-image \
+        pytorch-ignite==0.1.0 \
+        https://download.pytorch.org/whl/cu100/torchvision-0.5.0%2Bcu100-cp36-cp36m-linux_x86_64.whl \
+        https://download.pytorch.org/whl/cu100/torch-1.4.0%2Bcu100-cp36-cp36m-linux_x86_64.whl \
+        scikit-image==0.15.0 \
         scikit-learn==0.19.1 \
         scipy==1.1.0 \
         sphinx==2.1.1 \
         sphinx-autodoc-typehints==1.6.0 \
-        tb-nightly==1.14.0a20190517 \
+        tensorboard==1.14 \
         tensorboardX==1.7 \
         tensorlayer==2.1.0 \
         torchtext==0.3.1 \
-        tqdm==4.32.2 && \
+        tqdm==4.32.2 \
+        wget==3.2 && \
     python3 -m ipykernel.kernelspec
 
 # Opencv
@@ -193,6 +192,9 @@ RUN apt-get update && apt-get install -y libjpeg8-dev \
     cuda-cublas-dev-10-0 \
     cuda-curand-dev-10-0 && \
     rm -rf /var/lib/apt/lists/*
+
+# Set up symlink to point to the correct python version
+RUN ln -sf /usr/bin/python3.6 /usr/bin/python
 RUN ln -s /usr/lib/x86_64-linux-gnu/libjpeg.so /usr/lib
 RUN pip3 uninstall -y Pillow && pip3 install Pillow-SIMD==6.0.0.post0
 
@@ -213,7 +215,9 @@ RUN mkdir /var/tmp/bokeh_hvplot_download
 RUN pip download bokeh==1.2.0 hvplot==0.4.0 -d /var/tmp/bokeh_hvplot_download | grep Collecting | cut -d' ' -f2 | grep -Ev "pillow(~|=|\!|>|<|$)" | grep -Ev "bokeh(~|=|\!|>|<|$)"  | grep -Ev "hvplot(~|=|\!|>|<|$)" > /var/tmp/bokeh_hvplot_requirements.txt
 RUN pip install --no-deps -r /var/tmp/bokeh_hvplot_requirements.txt
 # NOTE: We need to pin the holoviews version to this since the latest version has a circular dependency on bokeh 2.0.0 through the panel package
-RUN pip install holoviews==1.12.7
+RUN pip install holoviews==1.12.7 \
+                netron
+
 RUN pip install --no-deps bokeh==1.2.0 hvplot==0.4.0
 RUN rm -rf /var/tmp/bokeh_hvplot_download /var/tmp/bokeh_hvplot_requirements.txt
 

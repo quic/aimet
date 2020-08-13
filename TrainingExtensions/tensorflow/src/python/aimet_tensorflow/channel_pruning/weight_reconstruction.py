@@ -162,4 +162,5 @@ class WeightReconstructor:
         # re order in TensorFlow Conv2d shape [kh, kw, Nic, Noc]
         new_weight = np.transpose(new_weight, (2, 3, 1, 0))
 
-        cls._update_layer_params(layer=layer, new_weight=new_weight, new_bias=new_bias)
+        #TODO: PyLint crashes here with the error: "RecursionError: maximum recursion depth exceeded"
+        cls._update_layer_params(layer=layer, new_weight=new_weight, new_bias=new_bias) # pylint: disable=all
