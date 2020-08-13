@@ -294,12 +294,13 @@ class BasicConv2d(nn.Module):
         self.conv = nn.Conv2d(64, 64, bias=False, **kwargs)
         self.dropout = torch.nn.Dropout(p=0.1)
         self.bn = nn.BatchNorm2d(64, eps=0.001)
+        self.relu = nn.ReLU(inplace=True)
 
     def forward(self, *inputs):
         x = self.conv(inputs[0])
         x = self.dropout(x)
         x = self.bn(x)
-        return nn.functional.relu(x, inplace=True)
+        return self.relu(x)
 
 
 class MultiConv2dModel(nn.Module):

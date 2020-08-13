@@ -201,12 +201,14 @@ class ConnectedGraph(AimetCommonConnectedGraph):
 
         self._generate_module_lookup_table(model)
         self._construct_graph(model, model_input)
+        self._validate_op_modules()
 
     # Map torch module types to normalized names to provide backward compatibility to
     # trace code based construction
     op_type_map = {
         torch.nn.Conv2d: ['convolution'],
         torch.nn.ConvTranspose2d: ['convolution'],
+        torch.nn.BatchNorm1d: ['batch_norm'],
         torch.nn.BatchNorm2d: ['batch_norm'],
         torch.nn.ReLU: ['relu'],
         torch.nn.ReLU6: ['hardtanh'],
@@ -215,7 +217,28 @@ class ConnectedGraph(AimetCommonConnectedGraph):
         torch.nn.AvgPool2d: ['avg_pool2d'],
         torch.nn.Linear: ['addmm', 'matmul'],
         torch.nn.Dropout: ['dropout'],
-        torch.nn.Dropout2d: ['feature_dropout']
+        torch.nn.Dropout2d: ['feature_dropout'],
+        torch.nn.LogSoftmax: ['log_softmax'],
+        torch.nn.Sigmoid: ['sigmoid']
+    }
+
+    functional_ops = {
+        'cat',
+        'size',
+        'NumToTensor',
+        'view',
+        'add',
+        'sub',
+        'mul',
+        'div',
+        'narrow',
+        'reshape',
+        'mean',
+        'index_select',
+        'slice',
+        'select',
+        'unsqueeze',
+        'Split'
     }
 
     # Graph nodes for which which we will completely ignore and skip processing
@@ -1217,6 +1240,25 @@ class ConnectedGraph(AimetCommonConnectedGraph):
                     op.output_shape = op.inputs[0].shape
                 if op.output:
                     op.output.shape = op.output_shape
+
+    def _validate_op_modules(self):
+        """
+        Utility function to ensure that all connected graph ops of a certain type have associated modules
+        """
+        missing_modules = []
+        for op_name, op in self.get_all_ops().items():
+            if not op.get_module() and op.type not in self.functional_ops:
+                missing_modules.append(op_name)
+        if missing_modules:
+            logger.warning('Ops with missing modules: %s\n'
+                           'This can be due to several reasons:\n'
+                           '1. There is no mapping for the op in ConnectedGraph.op_type_map. Add a mapping for '
+                           'ConnectedGraph to recognize and be able to map the op.\n'
+                           '2. The op is defined as a functional in the forward function, instead of as a class '
+                           'module. Redefine the op as a class module if possible. Else, check 3.\n'
+                           '3. This op is one that cannot be defined as a class module, but has not been added to '
+                           'ConnectedGraph.functional_ops. Add to continue.'
+                           , missing_modules)
 
 
 def _fill_and_check_op_product_shapes(op: Op, input_shape: List, output_shape: List):
