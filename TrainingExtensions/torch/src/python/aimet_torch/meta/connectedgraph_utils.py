@@ -47,9 +47,10 @@ from aimet_torch.meta.connectedgraph import ConnectedGraph
 
 logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Utils)
 
-ActivationModule = (torch.nn.ReLU6, torch.nn.ReLU, torch.nn.PReLU, torch.nn.RReLU, torch.nn.LeakyReLU,
-                    torch.nn.Sigmoid, torch.nn.LogSigmoid, torch.nn.Softmin, torch.nn.Softmax, torch.nn.LogSoftmax,
-                    torch.nn.Tanh, torch.nn.Hardtanh)
+ActivationTypes = {torch.nn.ReLU6, torch.nn.ReLU, torch.nn.PReLU, torch.nn.RReLU, torch.nn.LeakyReLU,
+                   torch.nn.Sigmoid, torch.nn.LogSigmoid, torch.nn.Softmin, torch.nn.Softmax, torch.nn.LogSoftmax,
+                   torch.nn.Tanh, torch.nn.Hardtanh}
+
 
 def get_module_act_func_pair(model: torch.nn.Module, model_input: Union[Tuple[torch.Tensor], List[torch.Tensor]]) -> \
         Dict[torch.nn.Module, Union[torch.nn.Module, None]]:
@@ -63,6 +64,7 @@ def get_module_act_func_pair(model: torch.nn.Module, model_input: Union[Tuple[to
     :param model_input:  Model input, Can be a list/tuple of input tensor(s)
     :return: Dictionary of module to activation function
     """
+    # Keep model in evaluation mode
     model.eval()
 
     # Create ConnectedGraph
@@ -71,26 +73,28 @@ def get_module_act_func_pair(model: torch.nn.Module, model_input: Union[Tuple[to
     # Maps module to next following activation function else None
     module_act_func_pair = {}
 
-    # get all the ops
+    # Get all the ops
     all_ops = graph.get_all_ops()
 
     for op in all_ops.values():
-        for module in model.children():
 
-            if module == op.get_module():
-                module_act_func_pair[module] = None
+        # Get module associated with op
+        cur_module = op.get_module()
 
-                if op.output:
-                    assert len(op.output.consumers) == 1, 'op output should have at least one consumer.'
-                    # get the next op
-                    next_op = op.output.consumers[0]
-                    # get module associate with next op
-                    next_module = next_op.get_module()
+        if cur_module:
+            module_act_func_pair[cur_module] = None
 
-                    # get the appropriate activation function
-                    if isinstance(next_module, ActivationModule):
-                        module_act_func_pair[module] = next_module
-                        logger.debug("Module: %s is followed by activation function: %s", op.dotted_name,
-                                     next_op.dotted_name)
+            if op.output:
+                assert op.output.consumers, 'op output should have at least one consumer op.'
+                # Get the next op
+                next_op = op.output.consumers[0]
+                # Get module associated with next op
+                next_module = next_op.get_module()
+
+                # Get the appropriate activation function
+                if any([isinstance(next_module, act) for act in ActivationTypes]):
+                    module_act_func_pair[cur_module] = next_module
+                    logger.debug("Module: %s is followed by activation function: %s", op.dotted_name,
+                                 next_op.dotted_name)
 
     return module_act_func_pair
