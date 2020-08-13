@@ -37,7 +37,7 @@
 
 """ Implementation for simulating models running on Quantized hardware """
 
-from typing import List, Union, Dict, Callable, Any
+from typing import List, Union, Dict, Callable, Any, Set
 import os
 import io
 from enum import Enum
@@ -413,7 +413,7 @@ class QuantizationSimModel:
 
         # Note: at this point, the session used to construct conn_graph is different than the current
         # self.session, however we still use the connected graph to traverse the graph structure.
-        QuantSimConfigurator(self.session, conn_graph, self._op_to_quant_ops_dict, config_file)
+        self.configure_quantization_ops(conn_graph, config_file)
 
     def __getstate__(self):
         # convert object to pickle-able state
@@ -487,6 +487,14 @@ class QuantizationSimModel:
                                                                  int(QuantizeOpIndices.use_symmetric_encoding))
 
         return op_bitwidth, op_use_symmetric_encodings
+
+    def configure_quantization_ops(self, conn_graph: ConnectedGraph, config_file: str):
+        """
+        Configure inserted quantize ops using config file
+        :param conn_graph: Connected graph of the model
+        :param config_file: Configuration file to use
+        """
+        QuantSimConfigurator(self.session, conn_graph, self._op_to_quant_ops_dict, config_file)
 
     def compute_encodings(self, forward_pass_callback: Callable[[tf.Session, Any], None],
                           forward_pass_callback_args):
@@ -661,7 +669,8 @@ class QuantizationSimModel:
         query = core.OpQuery(self.session.graph, ops_to_ignore=None)
 
         # Query all ops with weights and quantize the input weights
-        weight_ops = query.get_weight_ops()
+        weight_ops = QuantizationSimModel.get_ops_to_quantize_weights_for(query)
+        weight_ops = [self.session.graph.get_operation_by_name(op_name) for op_name in weight_ops]
         input_indices = query.get_weight_inputs(weight_ops)
 
         self._insert_weight_quantization_ops(weight_ops, input_indices, conn_graph, default_param_bw)
@@ -685,6 +694,29 @@ class QuantizationSimModel:
         """
         assert quant_op_name.endswith('_quantized')
         return quant_op_name[:-len('_quantized')]
+
+    @staticmethod
+    def get_ops_to_quantize_weights_for(query: core.OpQuery) -> List[str]:
+        """
+        Get names of ops to insert weight quantizers for
+        :param query: OpQuery utility to help get ops with weights
+        :return: List of op names with weights to insert quantize ops for
+        """
+        weight_op_names = [op.name for op in query.get_weight_ops()]
+        return weight_op_names
+
+    @staticmethod
+    def get_ops_to_quantize_activations_for(conn_graph: ConnectedGraph, op_types_to_ignore: Set[str]) \
+            -> List[str]:
+        """
+        Get names of ops to insert activation quantizers for
+        :param conn_graph: Connected graph of the model
+        :param op_types_to_ignore: Op types for which we don't want ot insert quantizers for
+        :return: List of op names to insert activation quantize ops for
+        """
+        valid_ops = [op for op in conn_graph.get_all_ops().values() if op.type not in op_types_to_ignore]
+        op_names_to_quantize = [conn_graph_op.output_op_node.name for conn_graph_op in valid_ops]
+        return op_names_to_quantize
 
     def _insert_weight_quantization_ops(self, ops: List[tf.Operation], indices: List[int], conn_graph: ConnectedGraph,
                                         default_param_bw: int):
@@ -741,28 +773,29 @@ class QuantizationSimModel:
         # Op types which we will not place quantize ops after
         op_types_to_ignore = {'branch', 'Flatten'}
         # Get a list of valid connected graph Ops to insert quantize ops after
-        valid_ops = [op for op in conn_graph.get_all_ops().values() if op.type not in op_types_to_ignore]
-        for conn_graph_op in valid_ops:
+        valid_op_names = QuantizationSimModel.get_ops_to_quantize_activations_for(conn_graph, op_types_to_ignore)
+        for op_name in valid_op_names:
             # Get the last op in the connected graph Op
-            output_op = conn_graph_op.output_op_node
-            quant_op_name = self._get_quantized_name(output_op.name)
+            quant_op_name = self._get_quantized_name(op_name)
+            op = self.session.graph.get_operation_by_name(op_name)
             _logger.info("Adding activation quantization op %s", quant_op_name)
 
-            consumers = [consumer for consumer in output_op.outputs[0].consumers() if 'gradients' not in consumer.name]
+            consumers = [consumer for consumer in op.outputs[0].consumers() if 'gradients' not in consumer.name]
 
-            q_op_out = self._insert_post_training_quant_op(output_op.outputs[0], quant_op_name,
+            q_op_out = self._insert_post_training_quant_op(op.outputs[0], quant_op_name,
                                                            libpymo.TensorQuantizerOpMode.updateStats,
                                                            self._activation_quantizers, QuantizerType.activation,
                                                            default_output_bw)
 
             # Re-route
             num_rerouted_outputs = graph_editor.reroute_ts(tf_ops.convert_to_tensor(q_op_out),
-                                                           output_op.outputs[0], can_modify=consumers)
+                                                           op.outputs[0], can_modify=consumers)
             if num_rerouted_outputs != len(consumers):
                 raise ValueError('Failed to map ' + str(len(consumers)) + ' quantization output(s). Only mapped ' +
                                  str(num_rerouted_outputs))
 
             # Map connected graph op to output qc quantize op
+            conn_graph_op = conn_graph.get_op_from_module_name(op_name)
             self._add_op_to_quant_ops_dict_entry(q_op_out, conn_graph_op, False)
 
     def _add_op_to_quant_ops_dict_entry(self, qc_quantize_tensor: tf.Operation, conn_graph_op: Op, is_param: bool,
