@@ -47,9 +47,9 @@ from aimet_torch.meta.connectedgraph import ConnectedGraph
 
 logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Utils)
 
-ActivationTypes = {torch.nn.ReLU6, torch.nn.ReLU, torch.nn.PReLU, torch.nn.RReLU, torch.nn.LeakyReLU,
+ActivationTypes = (torch.nn.ReLU6, torch.nn.ReLU, torch.nn.PReLU, torch.nn.RReLU, torch.nn.LeakyReLU,
                    torch.nn.Sigmoid, torch.nn.LogSigmoid, torch.nn.Softmin, torch.nn.Softmax, torch.nn.LogSoftmax,
-                   torch.nn.Tanh, torch.nn.Hardtanh}
+                   torch.nn.Tanh, torch.nn.Hardtanh)
 
 
 def get_module_act_func_pair(model: torch.nn.Module, model_input: Union[Tuple[torch.Tensor], List[torch.Tensor]]) -> \
@@ -92,7 +92,7 @@ def get_module_act_func_pair(model: torch.nn.Module, model_input: Union[Tuple[to
                 next_module = next_op.get_module()
 
                 # Get the appropriate activation function
-                if any([isinstance(next_module, act) for act in ActivationTypes]):
+                if isinstance(next_module, ActivationTypes):
                     module_act_func_pair[cur_module] = next_module
                     logger.debug("Module: %s is followed by activation function: %s", op.dotted_name,
                                  next_op.dotted_name)
