@@ -52,6 +52,7 @@ from aimet_torch.utils import to_numpy, create_fake_data_loader, get_ordered_lis
 from aimet_torch.bias_correction import find_all_conv_bn_with_activation
 from aimet_torch import quantsim as qsim
 from aimet_torch.examples.mobilenet import MockMobileNetV11 as MockMobileNetV1
+from aimet_torch.examples.test_models import TransposedConvModel
 
 
 class TestNet(nn.Module):
@@ -205,10 +206,7 @@ class TestTrainingExtensionBnFold(unittest.TestCase):
         self.assertFalse(np.allclose(bias_before, bias_after))
 
     def test_bias_correction_analytical_and_empirical_ignore_layer(self):
-        '''
-        Test bias correction with ignore layers specified.
-        :return:
-        '''
+
         torch.manual_seed(10)
         model = MockMobileNetV1()
         model = model.eval()
@@ -233,3 +231,38 @@ class TestTrainingExtensionBnFold(unittest.TestCase):
         self.assertEqual(analytical_mock.call_count, 8) # one layer ignored
         self.assertEqual(empirical_mock.call_count, 9)
         self.assertTrue(model.model[1][0].bias.detach().cpu().numpy() is not None)
+
+    def test_hybrid_bias_correction_for_transposed_conv2d(self):
+
+        torch.manual_seed(10)
+        model = TransposedConvModel()
+
+        model = model.eval()
+
+
+        # data_loader = create_fake_data_loader(dataset_size=dataset_size, batch_size=batch_size, image_size=(12, 4, 4),
+        #                                       )
+        data_loader = BatchIterator((1, 10, 4, 4))
+        params = qsim.QuantParams(weight_bw=8, act_bw=8, round_mode="nearest",
+                                  quant_scheme='tf'
+                                  )
+        conv_bn_dict = find_all_conv_bn_with_activation(model, input_shape=(10, 10, 4, 4))
+
+        with unittest.mock.patch('aimet_torch.bias_correction.call_analytical_mo_correct_bias') as analytical_mock:
+            with unittest.mock.patch('aimet_torch.bias_correction.call_empirical_mo_correct_bias') as empirical_mock:
+                bias_correction.correct_bias(model, params, 2, data_loader, 2, conv_bn_dict,
+                                             perform_only_empirical_bias_corr=False,
+                                             layers_to_ignore=[])
+
+        self.assertEqual(analytical_mock.call_count, 2) # one layer ignored
+        self.assertEqual(empirical_mock.call_count, 0)
+
+
+class BatchIterator:
+    def __init__(self, img_size):
+        # self.data_loader = self._create_dataloader(img_size, batch_size, dataset_size)
+        self.image_size = img_size
+
+    def __iter__(self):
+        img = torch.randn(*self.image_size)
+        yield img, 0
