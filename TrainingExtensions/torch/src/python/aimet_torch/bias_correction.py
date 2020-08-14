@@ -177,9 +177,17 @@ def call_analytical_mo_correct_bias(layer: torch.nn.Module, bn: Union[torch.nn.B
     device = layer._modules['_module_to_wrap'].bias.device
     use_cuda = utils.is_model_on_gpu(layer)
 
-    quant_dequant_weight = get_quantized_dequantized_weight(layer, use_cuda).detach().cpu().numpy()
+    quant_dequant_weight = get_quantized_dequantized_weight(layer, use_cuda)
 
     weight_tensor = layer._modules['_module_to_wrap'].weight
+
+    # Transpose weights to C, N, H, W from N, C, H, W since axis are flipped for transposed conv
+    if isinstance(layer._modules['_module_to_wrap'], torch.nn.ConvTranspose2d):
+        weight_tensor = weight_tensor.permute(1, 0, 2, 3)
+        quant_dequant_weight = quant_dequant_weight.permute(1, 0, 2, 3)
+
+    quant_dequant_weight = quant_dequant_weight.detach().cpu().numpy()
+
     weight_tensor = weight_tensor.detach().cpu().numpy()
     bias_tensor = libpymo.TensorParamBiasCorrection()
     bias_tensor.data = layer._modules['_module_to_wrap'].bias.detach().cpu().numpy()
@@ -202,6 +210,10 @@ def call_analytical_mo_correct_bias(layer: torch.nn.Module, bn: Union[torch.nn.B
             activation = libpymo.ActivationType.relu6
 
     bias_correction.correctBias(bias_tensor, quant_dequant_weight, weight_tensor, bn_params, activation)
+
+    # Transpose weight back to N, C, H, W for transposed Conv2D
+    if isinstance(layer._modules['_module_to_wrap'], torch.nn.ConvTranspose2d):
+        layer._modules['_module_to_wrap'].weight.data = layer._modules['_module_to_wrap'].weight.data.permute(1, 0, 2, 3)
 
     # Assigning the updated bias back to the layer
     bias = torch.nn.Parameter(torch.Tensor(bias_tensor.data))
@@ -265,7 +277,7 @@ def correct_bias(model: torch.nn.Module, quant_params: qsim.QuantParams,
     # Add bias for all the layers whose bias is None
     for name, module in ordered_conv_linear_nodes:
         if module.bias is None:
-            if isinstance(module, torch.nn.Conv2d):
+            if isinstance(module, (torch.nn.Conv2d, torch.nn.ConvTranspose2d)):
                 output_size = module.out_channels
             elif isinstance(module, torch.nn.Linear):
                 output_size = module.out_features
