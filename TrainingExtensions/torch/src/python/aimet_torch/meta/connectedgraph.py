@@ -1250,6 +1250,8 @@ class ConnectedGraph(AimetCommonConnectedGraph):
             if not op.get_module() and op.type not in self.functional_ops:
                 missing_modules.append(op_name)
         if missing_modules:
+            # TODO: replace with logger.error and assertion after rewriting unit tests to avoid using built in vgg,
+            #  resnet, and inception models (since they use functionals in their models)
             logger.warning('Ops with missing modules: %s\n'
                            'This can be due to several reasons:\n'
                            '1. There is no mapping for the op in ConnectedGraph.op_type_map. Add a mapping for '
