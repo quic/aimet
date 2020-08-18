@@ -78,6 +78,7 @@ class SmallMnistNoDropoutWithPassThrough(nn.Module):
         self.fc1 = nn.Linear(320, 50)
         self.relu3 = nn.ReLU()
         self.fc2 = nn.Linear(50, 10)
+        self.log_softmax = nn.LogSoftmax(dim=1)
 
     def forward(self, x):
         x = self.relu1(self.pt1(self.conv1(x)))
@@ -85,9 +86,8 @@ class SmallMnistNoDropoutWithPassThrough(nn.Module):
         x = self.relu2(self.pt2(x))
         x = x.view(-1, 320)
         x = self.relu3(self.fc1(x))
-        x = F.dropout(x, training=self.training)
         x = self.fc2(x)
-        return F.log_softmax(x, dim=1)
+        return self.log_softmax(x)
 
 
 class SmallMnist(nn.Module):
@@ -100,7 +100,9 @@ class SmallMnist(nn.Module):
         self.relu2 = nn.ReLU()
         self.fc1 = nn.Linear(320, 50)
         self.relu3 = nn.ReLU()
+        self.dropout = nn.Dropout()
         self.fc2 = nn.Linear(50, 10)
+        self.log_softmax = nn.LogSoftmax(dim=1)
 
     def forward(self, x):
         x = self.relu1(self.conv1(x))
@@ -108,9 +110,9 @@ class SmallMnist(nn.Module):
         x = self.relu2(self.conv2_drop(x))
         x = x.view(-1, 320)
         x = self.relu3(self.fc1(x))
-        x = F.dropout(x, training=self.training)
+        x = self.dropout(x)
         x = self.fc2(x)
-        return F.log_softmax(x, dim=1)
+        return self.log_softmax(x)
 
 
 class SmallMnistNoDropout(nn.Module):
@@ -123,6 +125,7 @@ class SmallMnistNoDropout(nn.Module):
         self.fc1 = nn.Linear(320, 50)
         self.relu3 = nn.ReLU()
         self.fc2 = nn.Linear(50, 10)
+        self.log_softmax = nn.LogSoftmax(dim=1)
 
     def forward(self, x):
         x = self.relu1(self.conv1(x))
@@ -130,7 +133,7 @@ class SmallMnistNoDropout(nn.Module):
         x = x.view(-1, 320)
         x = self.relu3(self.fc1(x))
         x = self.fc2(x)
-        return F.log_softmax(x, dim=1)
+        return self.log_softmax(x)
 
 
 class ModelWithStandaloneOps(nn.Module):
@@ -182,6 +185,7 @@ class ModelWithTwoInputs(nn.Module):
 
         self.fc1 = nn.Linear(320, 50)
         self.relu3 = nn.ReLU()
+        self.dropout = nn.Dropout()
         self.fc2 = nn.Linear(50, 10)
 
         self.softmax = nn.LogSoftmax(dim=1)
@@ -193,7 +197,7 @@ class ModelWithTwoInputs(nn.Module):
         x = self.relu2(self.maxpool2(self.conv2(x)))
         x = x.view(-1, 320)
         x = self.relu3(self.fc1(x))
-        x = F.dropout(x, training=self.training)
+        x = self.dropout(x)
         x = self.fc2(x)
         return self.softmax(x)
 
