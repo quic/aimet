@@ -853,6 +853,20 @@ class TestQuantizationSim(unittest.TestCase):
 
         print(sim)
 
+    def test_quantizing_model_with_input_leading_to_add(self):
+        class Net(nn.Module):
+            def __init__(self):
+                super(Net, self).__init__()
+                self.conv1 = nn.Conv2d(3, 3, kernel_size=5)
+                self.softmax = nn.LogSoftmax(dim=1)
+
+            def forward(self, x1, x2):
+                x = self.conv1(x1)
+                x = x + x2
+                return self.softmax(x)
+        model = Net().eval()
+        _ = QuantizationSimModel(model, quant_scheme='tf', input_shapes=[(1, 3, 28, 28), (1, 3, 24, 24)])
+
     def test_quantizing_models_with_mul_ops(self):
         """
         Testing models with elementwise multiply functional ops

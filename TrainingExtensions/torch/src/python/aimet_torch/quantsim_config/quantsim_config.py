@@ -186,7 +186,7 @@ class QuantSimConfigurator(AimetCommonQuantSimConfigurator):
             while queue:
                 current_op = queue.pop()
                 if current_op.inputs:
-                    input_ops = [inp.producer for inp in current_op.inputs]
+                    input_ops = [inp.producer for inp in current_op.inputs if not inp.is_model_input]
                     for input_op in input_ops:
                         if input_op.get_module() is not None:
                             qc_quantize_wrapper = self._module_to_quantsim_wrapper_dict[input_op.get_module()]
