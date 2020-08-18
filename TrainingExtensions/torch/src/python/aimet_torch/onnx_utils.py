@@ -38,7 +38,7 @@
 
 """ Utilities to load and save onnx models """
 
-from typing import Union, List, Tuple, Dict, Set
+from typing import Union, List, Tuple, Dict
 
 import torch
 import torch.nn as nn
@@ -121,19 +121,7 @@ class OnnxSaver:
         # Parse the ONNX model and create mapping from input and output tensors to corresponding nodes
         map_output_tensor_to_node, map_input_tensor_to_node = cls.create_map_of_tensor_to_node(onnx_model)
 
-        # Find the nodes of the ONNX model that are input nodes (no preceeding nodes)
-        input_nodes = cls.find_model_input_nodes(onnx_model, map_output_tensor_to_node)
-
-        for node in input_nodes:
-            _logger.debug("Input Node: %r -> %r", node.op_type, node.output)
-
-        # Find a ordinal ordering of the nodes - all nodes before node of index x preceed the node in the graph
-        visited_nodes = set()
-        ordered_list_of_nodes = []
-
-        for node in input_nodes:
-            cls.append_ordered_list_of_onnx_nodes(node, map_input_tensor_to_node, map_output_tensor_to_node,
-                                                  ordered_list_of_nodes, visited_nodes)
+        ordered_list_of_nodes = cls.find_ordered_list_of_onnx_nodes(onnx_model, map_output_tensor_to_node)
 
         # Find corresponding pytorch nodes for every ONNX node
         # and set the name of the ONNX nodes to the names of the corresponding PyTorch modules
@@ -172,43 +160,28 @@ class OnnxSaver:
         return map_output_tensor_to_node, map_input_tensor_to_node
 
     @classmethod
-    def append_ordered_list_of_onnx_nodes(cls, node: onnx.NodeProto,
-                                          map_input_tensor_to_node: Dict[str, List[onnx.NodeProto]],
-                                          map_output_tensor_to_node: Dict[str, onnx.NodeProto],
-                                          running_list: List[onnx.NodeProto],
-                                          visited_nodes: Set[int]):
+    def find_ordered_list_of_onnx_nodes(cls, onnx_model: onnx.ModelProto,
+                                        map_output_tensor_to_node: Dict[str, onnx.NodeProto]) -> List[onnx.NodeProto]:
         """
-        Recursive function that returns an ordered list of nodes in a ONNX model
-        :param node: Starting node to order from
-        :param map_input_tensor_to_node: Dict of (tensor->nodes that consume this tensor)
-        :param map_output_tensor_to_node: Dict of (tensor->node that produces this tensor)
-        :param running_list: Running ordered list
-        :param visited_nodes: Running set of visited nodes (to short-circuit the graph search)
-        :return:
+        Given a ONNX model find all the nodes that are inputs to the model - meaning nodes who have no
+        preceeding nodes
+        :param onnx_model: ONNX model instance
+        :param map_output_tensor_to_node: Map of tensor->node that produces this tensor
+        :return: List of input nodes
         """
+        node_output_tensor_pairs = [(node, output) for output, node in map_output_tensor_to_node.items()]
+        node_output_tensor_pairs.sort(key=lambda x: int(x[1]))
+        ordered_nodes = [node for node, _ in node_output_tensor_pairs]
 
-        # Need to use id(node) since NodeProto is unfortunately unhashable
-        if id(node) in visited_nodes:
-            return
-        visited_nodes.add(id(node))
+        # Remove duplicates - multiple output nodes will be duplicates in the above list
+        ordered_nodes_no_duplicates = []
+        set_of_ordered_nodes = set()
+        for node in ordered_nodes:
+            if id(node) not in set_of_ordered_nodes:
+                set_of_ordered_nodes.add(id(node))
+                ordered_nodes_no_duplicates.append(node)
 
-        running_list.append(node)
-
-        for output in node.output:
-            if output in map_input_tensor_to_node:
-                for downstream_node in map_input_tensor_to_node[output]:
-                    # check if all preceeding nodes leading to the current node have been visited
-                    # Else, we return. IOW, don't traverse downstream till all nodes leading to me have been reached
-                    preceeding_nodes = cls.find_preceeding_nodes(downstream_node, map_output_tensor_to_node)
-                    all_preceeding_visited = True
-                    for pnode in preceeding_nodes:
-                        if id(pnode) not in visited_nodes:
-                            all_preceeding_visited = False
-
-                    if all_preceeding_visited:
-                        OnnxSaver.append_ordered_list_of_onnx_nodes(downstream_node, map_input_tensor_to_node,
-                                                                    map_output_tensor_to_node, running_list,
-                                                                    visited_nodes)
+        return ordered_nodes_no_duplicates
 
     @staticmethod
     def map_onnx_nodes_to_pytorch(torch_model: nn.Module, input_shape: Union[Tuple, List[Tuple]],
