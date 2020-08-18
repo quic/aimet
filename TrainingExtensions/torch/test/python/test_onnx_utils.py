@@ -48,6 +48,39 @@ from aimet_torch import onnx_utils
 import onnx
 from torchvision.models import resnet18
 
+
+class OutOfOrderModel(torch.nn.Module):
+
+    def __init__(self):
+        super(OutOfOrderModel, self).__init__()
+        self.conv1 = torch.nn.Conv2d(16, 32, 3, padding=1)
+        self.bn1 = torch.nn.BatchNorm2d(32)
+        self.relu1 = torch.nn.ReLU()
+
+        self.conv2 = torch.nn.Conv2d(16, 32, 3)
+        self.bn2 = torch.nn.BatchNorm2d(32)
+        self.relu2 = torch.nn.ReLU()
+
+        self.conv3 = torch.nn.Conv2d(32, 32, 3)
+        self.bn3 = torch.nn.BatchNorm2d(32)
+        self.relu3 = torch.nn.ReLU()
+
+    def forward(self, x):
+        x1 = self.conv1(x)
+        x1 = self.bn1(x1)
+        x1 = self.relu1(x1)
+
+        y1 = self.conv2(x)
+        y1 = self.bn2(y1)
+        y1 = self.relu2(y1)
+
+        x1 = self.conv3(x1)
+        x1 = self.bn3(x1)
+        x1 = self.relu3(x1)
+
+        return x1 + y1
+
+
 class TestOnnxUtils(unittest.TestCase):
 
     def test_add_pytorch_node_names_to_onnx(self):
@@ -56,22 +89,40 @@ class TestOnnxUtils(unittest.TestCase):
 
         model = models.resnet18(pretrained=False)
         input_shape = (1, 3, 224, 224)
-        torch.onnx.export(model, torch.rand(*input_shape), './data/resnet18.onnx')
 
-        onnx_utils.OnnxSaver.set_node_names('./data/resnet18.onnx', model, input_shape)
+        torch.onnx.export(model, torch.rand(*input_shape), './data/' + model_name + '.onnx')
+        onnx_utils.OnnxSaver.set_node_names('./data/' + model_name + '.onnx', model, input_shape)
 
-        onnx_model = onnx.load('./data/resnet18.onnx')
+        onnx_model = onnx.load('./data/' + model_name + '.onnx')
         for node in onnx_model.graph.node:
             if node.op_type in ('Conv', 'Gemm', 'MaxPool'):
                 self.assertTrue(node.name)
 
-        self.assertEqual('conv1', onnx_model.graph.node[0].name)
-        self.assertEqual('bn1', onnx_model.graph.node[1].name)
-        self.assertEqual('relu', onnx_model.graph.node[2].name)
-        self.assertEqual('maxpool', onnx_model.graph.node[3].name)
+            for in_tensor in node.input:
+                if in_tensor.endswith('weight'):
+                    print("Checking " + in_tensor)
+                    self.assertEqual(node.name, in_tensor[:-7])
 
-        # last op in the model is expected to be fully-connected layer
-        self.assertEqual('fc', onnx_model.graph.node[-1].name)
+    def test_add_pytorch_node_names_to_onnx_ooo(self):
+
+        AimetLogger.set_level_for_all_areas(logging.DEBUG)
+
+        model_name = 'out_of_order'
+        model = OutOfOrderModel()
+        input_shape = (1, 16, 20, 20)
+
+        torch.onnx.export(model, torch.rand(*input_shape), './data/' + model_name + '.onnx')
+        onnx_utils.OnnxSaver.set_node_names('./data/' + model_name + '.onnx', model, input_shape)
+
+        onnx_model = onnx.load('./data/' + model_name + '.onnx')
+        for node in onnx_model.graph.node:
+            if node.op_type in ('Conv', 'Gemm', 'MaxPool'):
+                self.assertTrue(node.name)
+
+            for in_tensor in node.input:
+                if in_tensor.endswith('weight'):
+                    print("Checking " + in_tensor)
+                    self.assertEqual(node.name, in_tensor[:-7])
 
     def test_onnx_node_name_to_input_output_names_util(self):
         """ test onxx based utility to find mapping between onnx node names and io tensors"""
