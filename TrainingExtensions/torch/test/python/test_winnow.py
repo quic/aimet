@@ -393,6 +393,7 @@ class DualResidual(nn.Module):      # pylint: disable=too-many-instance-attribut
         self.bn2 = nn.BatchNorm2d(64)
         self.relu2 = nn.ReLU(inplace=True)
         self.conv3 = nn.Conv2d(64, 64, kernel_size=7, stride=2, padding=3, bias=False)
+        self.ada1 = nn.AdaptiveAvgPool2d(56)
 
         # The output of Conv2d layer above(conv3) is added with the the residual from
         # MaxPool2d and then fed to the relu layer below.
@@ -404,6 +405,7 @@ class DualResidual(nn.Module):      # pylint: disable=too-many-instance-attribut
         self.relu4 = nn.ReLU(inplace=True)
         self.conv5 = nn.Conv2d(64, 64, kernel_size=7, stride=2, padding=3, bias=False)
         self.maxpool2 = nn.MaxPool2d(kernel_size=3, stride=2, padding=1)
+        self.ada2 = nn.AdaptiveAvgPool2d(7)
 
         # The output of Conv2d layer above(conv4) is added with the the residual from
         # MaxPool2d (maxpool2) and then fed to the relu layer below.
@@ -429,8 +431,7 @@ class DualResidual(nn.Module):      # pylint: disable=too-many-instance-attribut
 
         # Add the residual
         # AdaptiveAvgPool2d is used to get the desired dimension before adding.
-        ada1 = nn.AdaptiveAvgPool2d(56)
-        residual1 = ada1(residual1)
+        residual1 = self.ada1(residual1)
         x += residual1
         x = self.relu3(x)
 
@@ -445,8 +446,7 @@ class DualResidual(nn.Module):      # pylint: disable=too-many-instance-attribut
 
         # Add the residual
         # AdaptiveAvgPool2d is used to get the desired dimension before adding.
-        ada2 = nn.AdaptiveAvgPool2d(7)
-        residual2 = ada2(residual2)
+        residual2 = self.ada2(residual2)
 
         x += residual2
         x = self.relu5(x)
