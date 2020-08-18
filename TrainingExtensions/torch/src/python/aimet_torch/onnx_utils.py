@@ -3,7 +3,7 @@
 # =============================================================================
 #  @@-COPYRIGHT-START-@@
 #
-#  Copyright (c) 2017-2018, Qualcomm Innovation Center, Inc. All rights reserved.
+#  Copyright (c) 2017-2020, Qualcomm Innovation Center, Inc. All rights reserved.
 #
 #  Redistribution and use in source and binary forms, with or without
 #  modification, are permitted provided that the following conditions are met:
@@ -119,9 +119,9 @@ class OnnxSaver:
         onnx_model = onnx.load(onnx_model_path)
 
         # Parse the ONNX model and create mapping from input and output tensors to corresponding nodes
-        map_output_tensor_to_node, map_input_tensor_to_node = cls.create_map_of_tensor_to_node(onnx_model)
+        map_output_tensor_to_node, _ = cls.create_map_of_tensor_to_node(onnx_model)
 
-        ordered_list_of_nodes = cls.find_ordered_list_of_onnx_nodes(onnx_model, map_output_tensor_to_node)
+        ordered_list_of_nodes = cls.find_ordered_list_of_onnx_nodes(map_output_tensor_to_node)
 
         # Find corresponding pytorch nodes for every ONNX node
         # and set the name of the ONNX nodes to the names of the corresponding PyTorch modules
@@ -159,13 +159,11 @@ class OnnxSaver:
 
         return map_output_tensor_to_node, map_input_tensor_to_node
 
-    @classmethod
-    def find_ordered_list_of_onnx_nodes(cls, onnx_model: onnx.ModelProto,
-                                        map_output_tensor_to_node: Dict[str, onnx.NodeProto]) -> List[onnx.NodeProto]:
+    @staticmethod
+    def find_ordered_list_of_onnx_nodes(map_output_tensor_to_node: Dict[str, onnx.NodeProto]) -> List[onnx.NodeProto]:
         """
         Given a ONNX model find all the nodes that are inputs to the model - meaning nodes who have no
         preceeding nodes
-        :param onnx_model: ONNX model instance
         :param map_output_tensor_to_node: Map of tensor->node that produces this tensor
         :return: List of input nodes
         """

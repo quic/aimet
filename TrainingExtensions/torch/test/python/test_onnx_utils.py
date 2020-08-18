@@ -3,7 +3,7 @@
 # =============================================================================
 #  @@-COPYRIGHT-START-@@
 #
-#  Copyright (c) 2019, Qualcomm Innovation Center, Inc. All rights reserved.
+#  Copyright (c) 2019-2020, Qualcomm Innovation Center, Inc. All rights reserved.
 #
 #  Redistribution and use in source and binary forms, with or without
 #  modification, are permitted provided that the following conditions are met:
@@ -42,11 +42,9 @@ import logging
 import torch
 from torchvision import models
 
-import onnx
 from aimet_common.utils import AimetLogger
 from aimet_torch import onnx_utils
 import onnx
-from torchvision.models import resnet18
 
 
 class OutOfOrderModel(torch.nn.Module):
@@ -83,10 +81,11 @@ class OutOfOrderModel(torch.nn.Module):
 
 class TestOnnxUtils(unittest.TestCase):
 
-    def test_add_pytorch_node_names_to_onnx(self):
+    def test_add_pytorch_node_names_to_onnx_resnet(self):
 
         AimetLogger.set_level_for_all_areas(logging.DEBUG)
 
+        model_name = 'resnet18'
         model = models.resnet18(pretrained=False)
         input_shape = (1, 3, 224, 224)
 
