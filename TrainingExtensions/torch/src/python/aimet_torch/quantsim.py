@@ -60,6 +60,10 @@ from aimet_torch.meta.connectedgraph import ConnectedGraph
 logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Quant)
 
 
+# Types of modules which cannot be quantized
+unquantizable_modules = (QcQuantizeWrapper, QcQuantizeStandAloneBase, PassThroughOp)
+
+
 class QuantParams:
     """
     Data type to hold quantization related params.
@@ -149,7 +153,7 @@ class QuantizationSimModel:
         # Disable bias quantization
         self.exclude_param_from_quantization("bias")
 
-        QuantSimConfigurator(self.model, input_shapes, config_file)
+        self.configure_quantization_ops(input_shapes, config_file)
 
     def __str__(self):
         """
@@ -490,11 +494,11 @@ class QuantizationSimModel:
             Quantized or if the module is in the layers_to_ignore list, don't quantize.
         """
 
-        if isinstance(module_ref, (QcQuantizeWrapper, PassThroughOp)):
-            logger.debug("Module %s already Quantized", module_ref)
+        if isinstance(module_ref, unquantizable_modules):
+            logger.debug("Module %s not quantizable", module_ref)
             return False
 
-        logger.debug("Module %s is Quantizable", module_ref)
+        logger.debug("Module %s is quantizable", module_ref)
         return True
 
     def _create_quantizer_module(self, module_to_wrap: torch.nn.Module) -> torch.nn.Module:
@@ -516,20 +520,16 @@ class QuantizationSimModel:
             logger.debug("nn.Module found : %s", module_ref)
 
             # check if the module already quantized then ignore
-            if isinstance(module_ref, (QcQuantizeWrapper, QcQuantizeStandAloneBase)):
-                logger.debug("Module %s already Quantized", module_ref)
+            if not self._is_quantizable_module(module_ref):
                 continue
 
             # check if the module is leaf or not
             if self._is_leaf_module(module_ref):
 
-                # check if the module is quantizable
-                if self._is_quantizable_module(module_ref):
+                # Create a new QcQuantize wrapper module
+                quantized_module = self._create_quantizer_module(module_ref)
 
-                    # Create a new QcQuantize wrapper module
-                    quantized_module = self._create_quantizer_module(module_ref)
-
-                    setattr(module, module_name, quantized_module)
+                setattr(module, module_name, quantized_module)
 
             # recursively call children modules
             else:
@@ -560,6 +560,14 @@ class QuantizationSimModel:
             # Recursively call children modules if present
             if not cls._is_leaf_module(module_ref):
                 cls._remove_quantization_wrappers(module_ref, list_of_modules_to_exclude)
+
+    def configure_quantization_ops(self, input_shapes: Union[Tuple, List[Tuple]], config_file: str):
+        """
+        Configure inserted quantize ops using config file
+        :param input_shapes: List of input shapes to the model
+        :param config_file: Configuration file to use
+        """
+        QuantSimConfigurator(self.model, input_shapes, config_file)
 
 
 def save_checkpoint(quant_sim_model: QuantizationSimModel, file_path: str):
