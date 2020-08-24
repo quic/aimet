@@ -218,6 +218,13 @@ subgraph_constructors = {
         'constructor': "tf.keras.layers.GlobalMaxPool2D()(inputs)",
         'module_regex': ['(.+)/Max$'],
         'associated_op_regex': ['Max$']
+    },
+    'SimpleRNN': {
+        'input_shape': (3, 100),
+        'op_type': 'SimpleRNN',
+        'constructor': "tf.keras.layers.SimpleRNN(10)(inputs)",
+        'module_regex': ['(.+)/while/MatMul$'],
+        'associated_op_regex': ['MatMul$']
     }
 }
 
