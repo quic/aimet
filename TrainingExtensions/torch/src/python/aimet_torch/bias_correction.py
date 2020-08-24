@@ -179,10 +179,10 @@ def call_analytical_mo_correct_bias(layer: torch.nn.Module, bn: Union[torch.nn.B
 
     quant_dequant_weight = get_quantized_dequantized_weight(layer, use_cuda)
 
-    weight_tensor = layer._modules['_module_to_wrap'].weight
+    weight_tensor = layer._module_to_wrap.weight
 
     # Transpose weights to C, N, H, W from N, C, H, W since axis are flipped for transposed conv
-    if isinstance(layer._modules['_module_to_wrap'], torch.nn.ConvTranspose2d):
+    if isinstance(layer._module_to_wrap, torch.nn.ConvTranspose2d):
         weight_tensor = weight_tensor.permute(1, 0, 2, 3)
         quant_dequant_weight = quant_dequant_weight.permute(1, 0, 2, 3)
 
@@ -190,7 +190,7 @@ def call_analytical_mo_correct_bias(layer: torch.nn.Module, bn: Union[torch.nn.B
 
     weight_tensor = weight_tensor.detach().cpu().numpy()
     bias_tensor = libpymo.TensorParamBiasCorrection()
-    bias_tensor.data = layer._modules['_module_to_wrap'].bias.detach().cpu().numpy()
+    bias_tensor.data = layer._module_to_wrap.bias.detach().cpu().numpy()
 
     # Assigning activation to No Acivation
     activation = libpymo.ActivationType.noActivation
@@ -212,13 +212,13 @@ def call_analytical_mo_correct_bias(layer: torch.nn.Module, bn: Union[torch.nn.B
     bias_correction.correctBias(bias_tensor, quant_dequant_weight, weight_tensor, bn_params, activation)
 
     # Transpose weight back to N, C, H, W for transposed Conv2D
-    if isinstance(layer._modules['_module_to_wrap'], torch.nn.ConvTranspose2d):
-        layer._modules['_module_to_wrap'].weight.data = layer._modules['_module_to_wrap'].weight.data.permute(1, 0, 2, 3)
+    if isinstance(layer._module_to_wrap, torch.nn.ConvTranspose2d):
+        layer._module_to_wrap.weight.data = layer._module_to_wrap.weight.data.permute(1, 0, 2, 3)
 
     # Assigning the updated bias back to the layer
     bias = torch.nn.Parameter(torch.Tensor(bias_tensor.data))
 
-    layer._modules['_module_to_wrap'].bias.data = bias.to(device=device)
+    layer._module_to_wrap.bias.data = bias.to(device=device)
 
 
 def correct_bias(model: torch.nn.Module, quant_params: qsim.QuantParams,
