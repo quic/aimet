@@ -389,6 +389,36 @@ class TestTfConnectedGraph(unittest.TestCase):
 
         tf.reset_default_graph()
 
+    def test_model_with_simple_rnn_layer(self):
+        """ Test connected graph construction on a model with simple RNN op """
+        tf.reset_default_graph()
+        sess = tf.Session()
+        with sess.graph.as_default():
+            inputs = tf.keras.Input(shape=(3, 100))
+
+            # Add an RNN layer with 12 internal units.
+            x = tf.keras.layers.SimpleRNN(12)(inputs)
+            outputs = tf.keras.layers.Dense(12, activation=tf.nn.softmax,
+                                            name="simplernn_model")(x)
+
+            init = tf.global_variables_initializer()
+            sess.run(init)
+            # _ = tf.summary.FileWriter('./simple_rnn', sess.graph)
+
+        # construct a connected graph
+        conn_graph = ConnectedGraph(sess.graph, ['input_1'], ['simplernn_model/Softmax'])
+
+        # there should be only 4 connected graph ops, input, simpleRNN , Dense and Softmax
+        self.assertTrue(len(conn_graph.get_all_ops()) == 4)
+        simple_rnn_detected = False
+        for op in conn_graph.get_all_ops().values():
+            if op.type == 'SimpleRNN':
+                simple_rnn_detected = True
+                self.assertTrue(op.get_module() == sess.graph.get_operation_by_name('simple_rnn/while/MatMul'))
+                self.assertTrue(op.name == 'simple_rnn')
+        self.assertTrue(simple_rnn_detected)
+
+
 
 def validate_branch_ops(conn_graph: ConnectedGraph):
     """ A helper function for validating that branch ops are inserted correctly """
