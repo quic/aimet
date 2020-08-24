@@ -3,7 +3,7 @@
 # =============================================================================
 #  @@-COPYRIGHT-START-@@
 #
-#  Copyright (c) 2019, Qualcomm Innovation Center, Inc. All rights reserved.
+#  Copyright (c) 2019-2020, Qualcomm Innovation Center, Inc. All rights reserved.
 #
 #  Redistribution and use in source and binary forms, with or without
 #  modification, are permitted provided that the following conditions are met:
@@ -137,11 +137,11 @@ class QuantizationSimModel:
         else:
             self.model = copy.deepcopy(model)
 
-        if isinstance(quant_scheme, QuantScheme):
-            if quant_scheme == QuantScheme.post_training_tf:
-                quant_scheme = 'tf'
-            elif quant_scheme == QuantScheme.post_training_tf_enhanced:
-                quant_scheme = 'tf_enhanced'
+        if isinstance(quant_scheme, str):
+            if quant_scheme == 'tf':
+                quant_scheme = QuantScheme.post_training_tf
+            elif quant_scheme == 'tf_enhanced':
+                quant_scheme = QuantScheme.post_training_tf_enhanced
         self._quant_scheme = quant_scheme
         self._rounding_mode = rounding_mode
         self._default_output_bw = default_output_bw
@@ -504,8 +504,7 @@ class QuantizationSimModel:
     def _create_quantizer_module(self, module_to_wrap: torch.nn.Module) -> torch.nn.Module:
         """Instantiates wrapper based on quant scheme
         """
-        assert self._quant_scheme in ['tf', 'tf_enhanced',
-                                      QuantScheme.post_training_tf, QuantScheme.post_training_tf_enhanced]
+        assert self._quant_scheme in [QuantScheme.post_training_tf, QuantScheme.post_training_tf_enhanced]
 
         quantized_module = QcPostTrainingWrapper(module_to_wrap, self._default_param_bw, self._default_output_bw,
                                                  self._rounding_mode, self._quant_scheme)

@@ -3,7 +3,7 @@
 # =============================================================================
 #  @@-COPYRIGHT-START-@@
 #
-#  Copyright (c) 2018, Qualcomm Innovation Center, Inc. All rights reserved.
+#  Copyright (c) 2018-2020, Qualcomm Innovation Center, Inc. All rights reserved.
 #
 #  Redistribution and use in source and binary forms, with or without
 #  modification, are permitted provided that the following conditions are met:
@@ -53,7 +53,9 @@ MAP_ROUND_MODE_TO_PYMO = {'nearest':     libpymo.RoundingMode.ROUND_NEAREST,
                           'stochastic':  libpymo.RoundingMode.ROUND_STOCHASTIC}
 
 MAP_QUANT_SCHEME_TO_PYMO = {'tf_enhanced': libpymo.QuantizationMode.QUANTIZATION_TF_ENHANCED,
-                            'tf':  libpymo.QuantizationMode.QUANTIZATION_TF}
+                            QuantScheme.post_training_tf_enhanced: libpymo.QuantizationMode.QUANTIZATION_TF_ENHANCED,
+                            'tf':  libpymo.QuantizationMode.QUANTIZATION_TF,
+                            QuantScheme.post_training_tf: libpymo.QuantizationMode.QUANTIZATION_TF}
 
 
 _logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Quant)
