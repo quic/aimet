@@ -499,7 +499,8 @@ class QuantizationSimModel:
     def compute_encodings(self, forward_pass_callback: Callable[[tf.Session, Any], None],
                           forward_pass_callback_args):
         """
-        Computes encodings for all quantization sim nodes in the model
+        Computes encodings for all quantization sim nodes in the model.
+        This is also used to set initial encodings for Range Learning.
 
         :param forward_pass_callback: A callback function that is expected to runs forward passes on a session.
                This callback function should use representative data for the forward pass, so the calculated
@@ -940,15 +941,16 @@ def update_tensor_quantizer_references(quant_sim_sess: tf.Session, quantizer_dic
     update_variables_with_values(quant_sim_sess, vars_with_value)
 
 
-def save_checkpoint(quantsim: QuantizationSimModel, meta_path: str, file_name_prefix: str) -> None:
+def save_checkpoint(quantsim: QuantizationSimModel, meta_path: str, file_name_prefix: str):
     """
-    This API provides a way for the user to save a checkpoint of the quantized model which can
-    be loaded at a later point to continue fine-tuning e.g.
-    See also load_checkpoint()
+    Saves a checkpoint of the QuantSim model which can be loaded at a later point to continue fine-tuning.
+    See also load_checkpoint().
+
     :param quantsim: QuantizationSimModel to be saved
-    :param meta_path: path to save the file
-    :param file_name_prefix : filename prefix string
+    :param meta_path: path to save the meta file
+    :param file_name_prefix: filename prefix string
     :return: None
+
     """
 
     if not os.path.exists(meta_path):
@@ -965,11 +967,14 @@ def save_checkpoint(quantsim: QuantizationSimModel, meta_path: str, file_name_pr
 
 def load_checkpoint(meta_path: str, file_name_prefix: str) -> QuantizationSimModel:
     """
-    utility to load quantsim graph from saved checkpoint and pickle files.
-    :param meta_path: path to load meta from
+    Loads QuantSim model from saved checkpoint and pickle files.
+
+    :param meta_path path: to load meta from
     :param file_name_prefix: filename prefix string
-    :return: returns new quantsim object
+    :return: returns new QuantSim object
+
     """
+
     #pylint: disable=protected-access
 
     # load saved session with quant ops
