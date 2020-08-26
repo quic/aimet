@@ -358,7 +358,7 @@ class ConnectedGraph(AimetCommonConnectedGraph):
         :param model: Pytorch model to create connected graph from
         :param model_input: Example input to model.  Can be a single tensor or a list/tuple of input tensors
         :param module_tensor_tuples_map: Map of modules and input and output tensor obtained from a forward pass
-        :return: Ops
+        :return: the last created Op in the model or submodule
         """
 
         # graph node equivalent Ops or Products locally constructed or populated via recursive invocation
@@ -634,7 +634,7 @@ class ConnectedGraph(AimetCommonConnectedGraph):
         :param model: PyTorch Module representing the model or a sub-set of the model
         :param inputs: list of producer graph nodes or graph input values
         :param ops: dictionary of Ops and Products indexed by output names referenced in the graph
-        :return: Ops
+        :return: Op
         """
         # use nominal Op type if its a known type else use torch defined Module name
         if isinstance(model, tuple(self.op_type_map.keys())):
@@ -668,7 +668,7 @@ class ConnectedGraph(AimetCommonConnectedGraph):
         :param node: trace graph node
         :param inputs: list of producer graph nodes
         :param ops: dictionary of Ops and Products indexed by output names referenced in the graph
-        :return: Ops
+        :return: Op
         """
         inputs = self._resolve_input_nodes(node)
 
@@ -708,7 +708,7 @@ class ConnectedGraph(AimetCommonConnectedGraph):
             > string extracted from graph node description in case of functional Op
         :param inputs: list of producer graph nodes or graph input values
         :param ops: dictionary of Ops and Products indexed by output names referenced in the graph
-        :return: Ops
+        :return: Op
         """
         unique_op_name = self._make_unique_op_name(op_type)
         op = Op(unique_op_name, unique_op_name, None, False, op_type)
