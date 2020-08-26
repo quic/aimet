@@ -45,7 +45,7 @@ import tensorflow as tf
 import libpymo
 
 from aimet_common.bias_correction import ConvBnInfoType
-from aimet_common.defs import ActivationType
+from aimet_common.defs import ActivationType, QuantScheme
 from aimet_common.utils import AimetLogger
 from aimet_common.graph_searcher import GraphSearcher
 from aimet_common.bias_correction import ConvBnPatternHandler
@@ -305,7 +305,7 @@ class BiasCorrection:
         q_wt_tensor = weight_tensor
 
         quant_mode = libpymo.QuantizationMode.QUANTIZATION_TF_ENHANCED
-        if quant_params.quant_mode == 'tf':
+        if quant_params.quant_mode == QuantScheme.post_training_tf or quant_params.quant_mode == 'tf':
             quant_mode = libpymo.QuantizationMode.QUANTIZATION_TF
 
         round_mode = libpymo.RoundingMode.ROUND_NEAREST

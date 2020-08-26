@@ -53,6 +53,7 @@ from aimet_torch.bias_correction import find_all_conv_bn_with_activation
 from aimet_torch import quantsim as qsim
 from aimet_torch.examples.mobilenet import MockMobileNetV11 as MockMobileNetV1
 from aimet_torch.examples.test_models import TransposedConvModel
+from aimet_common.defs import QuantScheme
 
 
 class TestNet(nn.Module):
@@ -106,7 +107,7 @@ class TestTrainingExtensionBnFold(unittest.TestCase):
         model = mnist_model.Net()
 
         params = qsim.QuantParams(weight_bw=4, act_bw=4, round_mode="nearest",
-                                       quant_scheme='tf'
+                                       quant_scheme=QuantScheme.post_training_tf
                                  )
         use_cuda = False
         dataset_size = 2
@@ -138,7 +139,7 @@ class TestTrainingExtensionBnFold(unittest.TestCase):
         data_loader = create_fake_data_loader(dataset_size=dataset_size, batch_size=batch_size, image_size=(3, 224, 224))
 
         params = qsim.QuantParams(weight_bw=8, act_bw=8, round_mode="nearest",
-                                  quant_scheme='tf'
+                                  quant_scheme=QuantScheme.post_training_tf
                                  )
         conv_bn_dict = find_all_conv_bn_with_activation(model, input_shape=(1, 3, 224, 224))
 
@@ -163,7 +164,7 @@ class TestTrainingExtensionBnFold(unittest.TestCase):
         data_loader = create_fake_data_loader(dataset_size=dataset_size, batch_size=batch_size, image_size=(1, 28, 28))
 
         params = qsim.QuantParams(weight_bw=4, act_bw=4, round_mode="nearest",
-                                  quant_scheme='tf'
+                                  quant_scheme=QuantScheme.post_training_tf
                                   )
         with unittest.mock.patch('aimet_torch.bias_correction.call_empirical_mo_correct_bias') as empirical_mock:
             bias_correction.correct_bias(model, params, 2, data_loader, 2)
@@ -215,7 +216,7 @@ class TestTrainingExtensionBnFold(unittest.TestCase):
 
         data_loader = create_fake_data_loader(dataset_size=dataset_size, batch_size=batch_size, image_size=(3, 224, 224))
         params = qsim.QuantParams(weight_bw=8, act_bw=8, round_mode="nearest",
-                                  quant_scheme='tf'
+                                  quant_scheme=QuantScheme.post_training_tf
                                   )
         conv_bn_dict = find_all_conv_bn_with_activation(model, input_shape=(1, 3, 224, 224))
 
@@ -244,7 +245,7 @@ class TestTrainingExtensionBnFold(unittest.TestCase):
         #                                       )
         data_loader = BatchIterator((1, 10, 4, 4))
         params = qsim.QuantParams(weight_bw=8, act_bw=8, round_mode="nearest",
-                                  quant_scheme='tf'
+                                  quant_scheme=QuantScheme.post_training_tf
                                   )
         conv_bn_dict = find_all_conv_bn_with_activation(model, input_shape=(10, 10, 4, 4))
 

@@ -39,8 +39,8 @@
 import unittest
 
 import torch
-from torch import nn
 
+from aimet_common.defs import QuantScheme
 from aimet_torch.qc_quantize_op import QcPostTrainingWrapper, QcQuantizeOpMode
 
 
@@ -51,7 +51,7 @@ class TestQcQuantizeOp(unittest.TestCase):
         device = torch.device('cpu')
         conv1 = torch.nn.Conv2d(4, 4, 1)
         quantize = QcPostTrainingWrapper(conv1, weight_bw=8, activation_bw=8, round_mode='nearest',
-                                         quant_scheme='tf_enhanced')
+                                         quant_scheme=QuantScheme.post_training_tf_enhanced)
 
         input_var = torch.autograd.Variable(torch.randn(4, 4, 2, 2), requires_grad=False).to(device)
         print(input_var)
@@ -70,7 +70,7 @@ class TestQcQuantizeOp(unittest.TestCase):
         device = torch.device('cpu')
         conv1 = torch.nn.Conv2d(4, 4, 1)
         quantize = QcPostTrainingWrapper(conv1, weight_bw=8, activation_bw=8, round_mode='nearest',
-                                         quant_scheme='tf_enhanced')
+                                         quant_scheme=QuantScheme.post_training_tf_enhanced)
 
         input_var = torch.autograd.Variable(torch.randn(4, 4, 2, 2), requires_grad=True).to(device)
 

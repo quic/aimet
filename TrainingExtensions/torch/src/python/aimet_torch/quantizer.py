@@ -48,6 +48,7 @@ import torch
 
 # Import AIMET specific modules
 from aimet_common.utils import AimetLogger
+from aimet_common.defs import QuantScheme
 from aimet_torch.batch_norm_fold import PassThroughOp
 from aimet_torch import utils
 from aimet_torch.qc_quantize_op import QcQuantizeWrapper, QcQuantizeStandAloneBase, QcQuantizeOpMode, \
@@ -85,7 +86,15 @@ class Quantizer:
 
         self._model = model
         self._use_cuda = use_cuda
+
+        if isinstance(quant_mode, str):
+            if quant_mode == 'tf':
+                quant_mode = QuantScheme.post_training_tf
+            elif quant_mode == 'tf_enhanced':
+                quant_mode = QuantScheme.post_training_tf_enhanced
+
         self._quant_mode = quant_mode
+
         self._round_mode = round_mode
 
         self._logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Quant)

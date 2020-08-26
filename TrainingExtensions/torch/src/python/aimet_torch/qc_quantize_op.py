@@ -52,9 +52,7 @@ import libpymo
 MAP_ROUND_MODE_TO_PYMO = {'nearest':     libpymo.RoundingMode.ROUND_NEAREST,
                           'stochastic':  libpymo.RoundingMode.ROUND_STOCHASTIC}
 
-MAP_QUANT_SCHEME_TO_PYMO = {'tf_enhanced': libpymo.QuantizationMode.QUANTIZATION_TF_ENHANCED,
-                            QuantScheme.post_training_tf_enhanced: libpymo.QuantizationMode.QUANTIZATION_TF_ENHANCED,
-                            'tf':  libpymo.QuantizationMode.QUANTIZATION_TF,
+MAP_QUANT_SCHEME_TO_PYMO = {QuantScheme.post_training_tf_enhanced: libpymo.QuantizationMode.QUANTIZATION_TF_ENHANCED,
                             QuantScheme.post_training_tf: libpymo.QuantizationMode.QUANTIZATION_TF}
 
 

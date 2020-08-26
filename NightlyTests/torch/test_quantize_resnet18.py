@@ -40,17 +40,16 @@ from __future__ import print_function
 import torch
 import torch.nn as nn
 import unittest
-import copy
 import torch.optim as optim
 import numpy as np
 from torchvision import models
 from torch.optim import lr_scheduler
 
+from aimet_common.defs import QuantScheme
 from aimet_torch.quantsim import QuantizationSimModel
-from aimet_torch.qc_quantize_op import QcQuantizeWrapper
 
 from aimet_torch.examples.imagenet_dataloader import ImageNetDataLoader
-from aimet_torch.utils import IterFirstX, is_leaf_module
+from aimet_torch.utils import IterFirstX
 from aimet_torch.examples.supervised_classification_pipeline import create_stand_alone_supervised_classification_evaluator,\
     create_supervised_classification_trainer
 
@@ -141,7 +140,7 @@ class QuantizeAcceptanceTests(unittest.TestCase):
         model = model.to(torch.device('cuda'))
 
         # layers_to_ignore = [model.conv1]
-        sim = QuantizationSimModel(model, quant_scheme='tf', default_param_bw=8, default_output_bw=8,
+        sim = QuantizationSimModel(model, quant_scheme=QuantScheme.post_training_tf, default_param_bw=8, default_output_bw=8,
                                    input_shapes=(1, 3, 224, 224))
 
         print(sim.model)
@@ -179,7 +178,7 @@ class QuantizeAcceptanceTests(unittest.TestCase):
         base_model_loaded_mark = torch.cuda.memory_allocated()
         #
         # # Now use AIMET
-        sim = QuantizationSimModel(model, quant_scheme='tf_enhanced', default_param_bw=8, default_output_bw=4,
+        sim = QuantizationSimModel(model, quant_scheme=QuantScheme.post_training_tf_enhanced, default_param_bw=8, default_output_bw=4,
                                    input_shapes=(1, 3, 224, 224))
         sim.compute_encodings(model_eval, forward_pass_callback_args=1)
 
@@ -232,7 +231,7 @@ class QuantizeAcceptanceTests(unittest.TestCase):
         base_model_loaded_mark = torch.cuda.memory_allocated()
 
         # Now use AIMET
-        sim = QuantizationSimModel(model, quant_scheme='tf_enhanced', default_param_bw=8, default_output_bw=4,
+        sim = QuantizationSimModel(model, quant_scheme=QuantScheme.post_training_tf_enhanced, default_param_bw=8, default_output_bw=4,
                                    input_shapes=(1, 3, 224, 224))
         sim.compute_encodings(model_eval, forward_pass_callback_args=1)
 

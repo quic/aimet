@@ -42,6 +42,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 
+from aimet_common.defs import QuantScheme
 import aimet_torch.bias_correction
 import aimet_torch.layer_selector
 from aimet_torch import bias_correction
@@ -81,7 +82,7 @@ class TestBiasCorrection(unittest.TestCase):
 
         data_loader = ImageNetDataLoader(image_dir, image_size, batch_size, num_workers)
         params = QuantParams(weight_bw=4, act_bw=4, round_mode="nearest",
-                             quant_scheme='tf_enhanced')
+                             quant_scheme=QuantScheme.post_training_tf)
         bias_correction.correct_bias(model.to(device="cuda"), params, 1, data_loader.train_loader, 1, layers_to_ignore=[model.features[0][0]])
 
         self.assertTrue(np.allclose(model.features[0][0].bias.detach().cpu().numpy(),
@@ -113,7 +114,7 @@ class TestBiasCorrection(unittest.TestCase):
 
         data_loader = ImageNetDataLoader(image_dir, image_size, batch_size, num_workers)
         params = QuantParams(weight_bw=4, act_bw=4, round_mode="nearest",
-                             quant_scheme='tf_enhanced'
+                             quant_scheme=QuantScheme.post_training_tf
                             )
 
         bias_correction.correct_bias(model.to(device="cuda"), params, 1, data_loader.train_loader, 1,

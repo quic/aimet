@@ -140,7 +140,7 @@ class QuantizationSimAcceptanceTests(unittest.TestCase):
         for module_name, module_ref in model.named_children():
             if module_name is 'conv1':
                 quantized_module = QcPostTrainingWrapper(module_ref, weight_bw=8, activation_bw=8, round_mode='nearest',
-                                                         quant_scheme='tf')
+                                                         quant_scheme=QuantScheme.post_training_tf)
                 setattr(model, module_name, quantized_module)
 
         sim = QuantizationSimModel(model, input_shapes=(1, 1, 28, 28))
