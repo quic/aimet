@@ -40,7 +40,7 @@ import unittest
 import json
 import os
 import torch
-
+from aimet_common.defs import QuantScheme
 from aimet_torch.examples.test_models import SingleResidual, TinyModel, MultiInput
 from aimet_torch.quantsim import QuantizationSimModel
 from aimet_torch.quantsim_config.quantsim_config import _get_all_ops_in_neighborhood
@@ -78,7 +78,8 @@ class TestQuantsimConfig(unittest.TestCase):
         with open('./data/quantsim_config.json', 'w') as f:
             json.dump(quantsim_config, f)
 
-        sim = QuantizationSimModel(model, quant_scheme='tf_enhanced', config_file='./data/quantsim_config.json',
+        sim = QuantizationSimModel(model, quant_scheme=QuantScheme.post_training_tf_enhanced,
+                                   config_file='./data/quantsim_config.json',
                                    input_shapes=(1, 3, 32, 32), in_place=True)
         for name, module in sim.model.named_modules():
             if isinstance(module, QcQuantizeWrapper):
@@ -127,7 +128,8 @@ class TestQuantsimConfig(unittest.TestCase):
         }
         with open('./data/quantsim_config.json', 'w') as f:
             json.dump(quantsim_config, f)
-        sim = QuantizationSimModel(model, quant_scheme='tf_enhanced', config_file='./data/quantsim_config.json',
+        sim = QuantizationSimModel(model, quant_scheme=QuantScheme.post_training_tf_enhanced,
+                                   config_file='./data/quantsim_config.json',
                                    input_shapes=(1, 3, 32, 32))
         for _, module in sim.model.named_modules():
             if isinstance(module, QcQuantizeWrapper):
@@ -177,7 +179,8 @@ class TestQuantsimConfig(unittest.TestCase):
         }
         with open('./data/quantsim_config.json', 'w') as f:
             json.dump(quantsim_config, f)
-        sim = QuantizationSimModel(model, quant_scheme='tf_enhanced', config_file='./data/quantsim_config.json',
+        sim = QuantizationSimModel(model, quant_scheme=QuantScheme.post_training_tf_enhanced,
+                                   config_file='./data/quantsim_config.json',
                                    input_shapes=(1, 3, 32, 32))
         for name, module in sim.model.named_modules():
             if isinstance(module, QcQuantizeWrapper):
@@ -240,7 +243,8 @@ class TestQuantsimConfig(unittest.TestCase):
         with open('./data/quantsim_config.json', 'w') as f:
             json.dump(quantsim_config, f)
         # Use in_place=True here for easy access to modules through model instance variables
-        sim = QuantizationSimModel(model, quant_scheme='tf_enhanced', config_file='./data/quantsim_config.json',
+        sim = QuantizationSimModel(model, quant_scheme=QuantScheme.post_training_tf_enhanced,
+                                   config_file='./data/quantsim_config.json',
                                    in_place=True, input_shapes=(1, 3, 32, 32))
         for _, module in sim.model.named_modules():
             if isinstance(module, QcQuantizeWrapper):
@@ -284,7 +288,8 @@ class TestQuantsimConfig(unittest.TestCase):
         }
         with open('./data/quantsim_config.json', 'w') as f:
             json.dump(quantsim_config, f)
-        sim = QuantizationSimModel(model, quant_scheme='tf_enhanced', config_file='./data/quantsim_config.json',
+        sim = QuantizationSimModel(model, quant_scheme=QuantScheme.post_training_tf_enhanced,
+                                   config_file='./data/quantsim_config.json',
                                    input_shapes=(1, 3, 32, 32))
         for name, module in sim.model.named_modules():
             if isinstance(module, QcQuantizeWrapper):
@@ -318,7 +323,7 @@ class TestQuantsimConfig(unittest.TestCase):
         with open('./data/quantsim_config.json', 'w') as f:
             json.dump(quantsim_config, f)
 
-        sim = QuantizationSimModel(model, quant_scheme='tf_enhanced', config_file='./data/quantsim_config.json',
+        sim = QuantizationSimModel(model, quant_scheme=QuantScheme.post_training_tf_enhanced, config_file='./data/quantsim_config.json',
                                    input_shapes=[(1, 3, 32, 32), (1, 3, 20, 20)], in_place=True)
         for name, module in sim.model.named_modules():
             if isinstance(module, QcQuantizeWrapper):
@@ -354,7 +359,7 @@ class TestQuantsimConfig(unittest.TestCase):
         }
         with open('./data/quantsim_config.json', 'w') as f:
             json.dump(quantsim_config, f)
-        sim = QuantizationSimModel(model, quant_scheme='tf_enhanced', config_file='./data/quantsim_config.json',
+        sim = QuantizationSimModel(model, quant_scheme=QuantScheme.post_training_tf_enhanced, config_file='./data/quantsim_config.json',
                                    input_shapes=(1, 3, 32, 32))
         for name, module in sim.model.named_modules():
             if isinstance(module, QcQuantizeWrapper):
@@ -392,7 +397,7 @@ class TestQuantsimConfig(unittest.TestCase):
         with open('./data/quantsim_config.json', 'w') as f:
             json.dump(quantsim_config, f)
         # Use in_place=True here for easy access to modules through model instance variables
-        sim = QuantizationSimModel(model, quant_scheme='tf_enhanced', config_file='./data/quantsim_config.json',
+        sim = QuantizationSimModel(model, quant_scheme=QuantScheme.post_training_tf_enhanced, config_file='./data/quantsim_config.json',
                                    in_place=True, input_shapes=(1, 3, 32, 32))
         for _, module in sim.model.named_modules():
             if isinstance(module, QcQuantizeWrapper):
@@ -448,7 +453,7 @@ class TestQuantsimConfig(unittest.TestCase):
         with open('./data/quantsim_config.json', 'w') as f:
             json.dump(quantsim_config, f)
 
-        sim = QuantizationSimModel(model, quant_scheme='tf_enhanced', config_file='./data/quantsim_config.json',
+        sim = QuantizationSimModel(model, quant_scheme=QuantScheme.post_training_tf_enhanced, config_file='./data/quantsim_config.json',
                                    input_shapes=(1, 3, 32, 32), in_place=True)
         for name, module in sim.model.named_modules():
             if isinstance(module, QcQuantizeWrapper):
