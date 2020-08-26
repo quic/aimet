@@ -72,7 +72,7 @@ class QuantParams:
                  weight_bw: int = 8,
                  act_bw: int = 8,
                  round_mode: str = 'nearest',
-                 quant_scheme: str = 'tf_enhanced'):
+                 quant_scheme: Union[QuantScheme, str] = QuantScheme.post_training_tf_enhanced):
         """
         Constructor
 
