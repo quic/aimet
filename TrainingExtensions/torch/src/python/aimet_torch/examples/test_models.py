@@ -403,3 +403,56 @@ class TransposedConvModel(torch.nn.Module):
         x = self.conv2(x)
         x = self.bn2(x)
         return x
+
+
+class TupleOutputModel(torch.nn.Module):
+    """
+    Model with Tuple of Tensors as output
+    """
+    def __init__(self):
+        super(TupleOutputModel, self).__init__()
+        self.conv1 = torch.nn.Conv2d(3, 2, kernel_size=3, padding=1, bias=False)
+        self.conv2 = torch.nn.Conv2d(3, 4, kernel_size=3, padding=1)
+        self.conv3 = torch.nn.Conv2d(3, 6, kernel_size=3, padding=1)
+
+    def forward(self, *inputs):
+        c1 = self.conv1(inputs[0])
+        c2 = self.conv2(inputs[0])
+        c3 = self.conv3(inputs[0])
+        return c1, c2, c3
+
+
+class MultiOutputModel(torch.nn.Module):
+    """
+    Model with Tuple of Tensors as output
+    """
+    def __init__(self):
+        super(MultiOutputModel, self).__init__()
+        self.layer = TupleOutputModel()
+        self.conv1 = torch.nn.Conv2d(2, 4, kernel_size=3, padding=1)
+        self.conv2 = torch.nn.Conv2d(4, 4, kernel_size=3, padding=1)
+        self.conv3 = torch.nn.Conv2d(6, 4, kernel_size=3, padding=1)
+
+    def forward(self, *inputs):
+        x, y, z = self.layer(inputs[0])
+        x1 = self.conv1(x)
+        x2 = self.conv2(y)
+        x3 = self.conv3(z)
+        return torch.cat([x1, x2, x3], 1)
+
+
+class ConfigurableTupleOutputModel(torch.nn.Module):
+    """
+    Model with Tuple of Tensors as output with configurable channels
+    """
+    def __init__(self, channels=(2, 4, 6)):
+        super(ConfigurableTupleOutputModel, self).__init__()
+        self.conv1 = torch.nn.Conv2d(channels[0], channels[0], kernel_size=3, padding=1)
+        self.conv2 = torch.nn.Conv2d(channels[1], channels[1], kernel_size=3, padding=1)
+        self.conv3 = torch.nn.Conv2d(channels[2], channels[2], kernel_size=3, padding=1)
+
+    def forward(self, *inputs):
+        c1 = self.conv1(inputs[0])
+        c2 = self.conv2(inputs[1])
+        c3 = self.conv3(inputs[2])
+        return c1, c2, c3
