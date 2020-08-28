@@ -28,7 +28,7 @@ Certain packages would take effect
 
 Please run below commands to install dependencies to build AIMET:
 
-```python
+```
 !pip3 uninstall protobuf
 
 !pip3 uninstall tensorflow
@@ -155,7 +155,7 @@ Runtime -> Restart runtime
 ## AIMET build and installation
 Please run below commands to fetch AIMET, and googletest from github repo, and compile, and install AIMET.
 
-```python
+```
 %cd /content/
 
 !mkdir aimet_code
@@ -210,7 +210,7 @@ os.environ['LD_LIBRARY_PATH']+= ":/content/aimet_code4/build/artifacts"
 You can run unit tests to make sure AIMET installation was successful.
 Please run below commands to run unit tests:
 
-```python
+```
 %cd /content/aimet_code/build/
 
 !ctest
