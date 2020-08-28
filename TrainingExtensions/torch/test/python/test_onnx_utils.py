@@ -132,7 +132,7 @@ class TestOnnxUtils(unittest.TestCase):
         onnx_model = onnx.load('./data/resnet18.onnx')
 
         # Get Dict mapping node name to the input and output names
-        node_to_io_dict = onnx_utils.OnnxSaver.get_onnx_node_to_io_tensor_names_map(onnx_model)
+        node_to_io_dict,_ = onnx_utils.OnnxSaver.get_onnx_node_to_io_tensor_names_map(onnx_model)
 
         node_0 = onnx_model.graph.node[0]
         self.assertEqual(node_0.input, node_to_io_dict[node_0.name].inputs)
