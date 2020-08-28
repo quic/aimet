@@ -362,6 +362,11 @@ class SubGraphMatcher:
                         continue
 
                 ops_list = [op for op in get_internal_ops_for_pattern(match_result) if op in self._valid_ops]
+                # ops_list should not be empty since there was an earlier check that the current match_result has ops
+                # in self._valid_ops.
+                if not ops_list:
+                    logger.error('Valid matched ops list should not be empty')
+                    raise AssertionError
                 # Check if any ops in ops_list were already matched with a larger pattern. If so, no need to change
                 # existing entries in op_to_module_dict.
                 if not self.is_subset_of_already_matched_op(current_pattern, ops_list, op_to_module_dict):
@@ -434,15 +439,16 @@ def get_associated_op(associated_op_regex_list: List[str], ops_list: List[tf.Ope
     particular op.
     :param associated_op_regex_list: Regex pattern to match with
     :param ops_list: List of matched ops
-    :return: Tf op that was matched by the regex. If no op is matched, return None
+    :return: Tf op that was matched by the regex. If no op is matched, use first op in ops_list.
     """
     for associated_op_regex in associated_op_regex_list:
         for op in ops_list:
             match_name = re.search(associated_op_regex, op.name)
             if match_name:
                 return op
-    logger.warning('Unable to identify associated op of module')
-    return None
+    logger.warning('Unable to identify associated op of module, setting first op in ops_list as associated op.')
+    # Ops list is in reverse order with the first index being the last op in the sequence.
+    return ops_list[0]
 
 
 def get_internal_ops_for_pattern(match_result: graph_matcher.MatchResult) -> List[tf.Operation]:
