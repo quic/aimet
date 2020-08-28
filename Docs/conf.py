@@ -61,7 +61,7 @@ author = 'Qualcomm Innovation Center, Inc.'
 # The short X.Y version
 version = ''
 # The full version, including alpha/beta/rc tags
-release = '1.9.0'
+release = '1.11.0'
 
 
 # -- General configuration ---------------------------------------------------
@@ -116,7 +116,7 @@ autosectionlabel_prefix_document = True
 # a list of builtin themes.
 #
 html_theme = 'bizstyle'
-html_title = 'AI Model Efficiency Toolkit Documentation: ver 1.9.0'
+html_title = 'AI Model Efficiency Toolkit Documentation: ver 1.11.0'
 html_logo = 'images/brain_logo.png'
 
 # Theme options are theme-specific and customize the look and feel of a theme
