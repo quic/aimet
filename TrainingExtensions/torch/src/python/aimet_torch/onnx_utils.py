@@ -252,15 +252,39 @@ class OnnxSaver:
         return nodes
 
     @staticmethod
-    def get_onnx_node_to_io_tensor_names_map(onnx_model: onnx.NodeProto) -> Dict[str, OnnxNodeIOTensors]:
+    def is_onnx_tensor_valid_param(onnx_tensor_name: str):
+        """
+        This is based on the assumption that parameters have string names and not just numeric.
+        param names are non-numeric like "classifier.weight" etc, and not only numeric
+        ONNX tensor names that is used for tensors such as "123", "14" etc.
+        :param onnx_tensor_name: Name of the ONNX tensor
+        :return: True, if valid param, False otherwise.
+        """
+
+        if onnx_tensor_name.isnumeric():
+            return False
+
+        return True
+
+    @staticmethod
+    def get_onnx_node_to_io_tensor_names_map(onnx_model: onnx.NodeProto) -> (Dict[str, OnnxNodeIOTensors], set):
         """
         Given an ONNX model, gets the inputs and output tensor names for each node in the model.
         :param onnx_model: The ONNX model instance
-        :return: Dictionary of ONNX node name and corresponding input and output tensor names.
+        :return: Dictionary of ONNX node name and corresponding input and output tensor names and a set with all valid
+        param names in model
         """
 
         node_to_io_tensor_name_map = {}
-        for node in onnx_model.graph.node:
-            node_to_io_tensor_name_map[node.name] = OnnxNodeIOTensors(list(node.input), list(node.output))
+        valid_param_set = set()
 
-        return node_to_io_tensor_name_map
+        for node in onnx_model.graph.node:
+            if node.name:
+                node_to_io_tensor_name_map[node.name] = OnnxNodeIOTensors(list(node.input), list(node.output))
+
+            # update valid params list
+            for input_tensor in list(node.input):
+                if OnnxSaver.is_onnx_tensor_valid_param(input_tensor):
+                    valid_param_set.add(input_tensor)
+
+        return node_to_io_tensor_name_map, valid_param_set
