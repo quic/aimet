@@ -62,8 +62,13 @@ from aimet_tensorflow.quantsim_config.quantsim_config import QuantSimConfigurato
 
 import libpymo
 
+# pylint: disable=too-many-lines
 _logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Quant)
 WORKING_DIR = '/tmp/quantsim/'
+
+DTYPES_QUANTIZE_NOT_REQUIRED = [tf.dtypes.int8, tf.dtypes.uint8, tf.dtypes.int16, tf.dtypes.uint16,
+                                tf.dtypes.int32, tf.dtypes.uint32, tf.dtypes.int64, tf.dtypes.uint64,
+                                tf.bool, tf.dtypes.string]
 
 quant_scheme_to_libpymo = {QuantScheme.post_training_tf: libpymo.QuantizationMode.QUANTIZATION_TF,
                            QuantScheme.post_training_tf_enhanced:
@@ -764,6 +769,20 @@ class QuantizationSimModel:
             # Add a mapping to the connected graph op for the newly created weight quantizer op
             self._add_op_to_quant_ops_dict_entry(q_op_out, conn_graph_op, True, param_type)
 
+    @staticmethod
+    def _is_op_quantizable(op: tf.Operation)->bool:
+        """
+        utility to check if the quantization can be supported for this op
+        :param op: op as tf.Operation type
+        :return: True if the op can be quantized, False otherwise
+        """
+
+        if op.outputs:
+            if op.outputs[0].dtype not in DTYPES_QUANTIZE_NOT_REQUIRED:
+                return True
+
+        return False
+
     def _insert_activation_quantization_ops(self, conn_graph: ConnectedGraph, default_output_bw):
         """
         Inserts quantization ops at the outputs of given ops
@@ -783,21 +802,25 @@ class QuantizationSimModel:
 
             consumers = [consumer for consumer in op.outputs[0].consumers() if 'gradients' not in consumer.name]
 
-            q_op_out = self._insert_post_training_quant_op(op.outputs[0], quant_op_name,
-                                                           libpymo.TensorQuantizerOpMode.updateStats,
-                                                           self._activation_quantizers, QuantizerType.activation,
-                                                           default_output_bw)
+            if QuantizationSimModel._is_op_quantizable(op):
+                q_op_out = self._insert_post_training_quant_op(op.outputs[0], quant_op_name,
+                                                               libpymo.TensorQuantizerOpMode.updateStats,
+                                                               self._activation_quantizers, QuantizerType.activation,
+                                                               default_output_bw)
 
-            # Re-route
-            num_rerouted_outputs = graph_editor.reroute_ts(tf_ops.convert_to_tensor(q_op_out),
-                                                           op.outputs[0], can_modify=consumers)
-            if num_rerouted_outputs != len(consumers):
-                raise ValueError('Failed to map ' + str(len(consumers)) + ' quantization output(s). Only mapped ' +
-                                 str(num_rerouted_outputs))
+                # Re-route
+                num_rerouted_outputs = graph_editor.reroute_ts(tf_ops.convert_to_tensor(q_op_out),
+                                                               op.outputs[0], can_modify=consumers)
+                if num_rerouted_outputs != len(consumers):
+                    raise ValueError('Failed to map ' + str(len(consumers)) + ' quantization output(s). Only mapped ' +
+                                     str(num_rerouted_outputs))
 
-            # Map connected graph op to output qc quantize op
-            conn_graph_op = conn_graph.get_op_from_module_name(op_name)
-            self._add_op_to_quant_ops_dict_entry(q_op_out, conn_graph_op, False)
+                # Map connected graph op to output qc quantize op
+                conn_graph_op = conn_graph.get_op_from_module_name(op_name)
+                self._add_op_to_quant_ops_dict_entry(q_op_out, conn_graph_op, False)
+            else:
+                _logger.info('Unsupported dtype {%s} detected for op {%s}, Skipping quantize op insertion',
+                             op.outputs[0].dtype, op_name)
 
     def _add_op_to_quant_ops_dict_entry(self, qc_quantize_tensor: tf.Operation, conn_graph_op: Op, is_param: bool,
                                         param_type: str = ''):
