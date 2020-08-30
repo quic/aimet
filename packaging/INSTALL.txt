@@ -65,7 +65,7 @@ pip3 install numpy==1.16.4
 pip3 install scipy==1.1.0
 pip3 install protobuf==3.7.1
 pip3 install scikit-learn==0.19.1
-pip3 install tb-nightly==1.14.0a20190517
+pip3 install tensorboard==1.14.0
 pip3 install tensorboardX==1.7
 pip3 install https://download.pytorch.org/whl/cu100/torchvision-0.5.0%2Bcu100-cp36-cp36m-linux_x86_64.whl
 pip3 install https://download.pytorch.org/whl/cu100/torch-1.4.0%2Bcu100-cp36-cp36m-linux_x86_64.whl
@@ -74,13 +74,13 @@ pip3 install tensorflow-gpu==1.15.0
 
 
 pip3 install future==0.17.1
-pip3 install tensorboard==1.14
 pip3 install bokeh==1.2.0
-pip3 install pandas==0.22.0
+pip3 install pandas==1.1.1
 pip3 install holoviews==1.12.7
-pip3 install --no-deps bokeh==1.2.0 hvplot==0.4.0
+pip3 install hvplot==0.4.0
 pip3 install jsonschema==3.1.1
-pip3 install osqp onnx
+pip3 install osqp==0.6.1
+pip3 install onnx==1.7.0
 
 ln -s /usr/local/cuda-10.0 /usr/local/cuda
 
