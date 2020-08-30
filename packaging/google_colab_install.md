@@ -99,9 +99,9 @@ Please run below commands to install dependencies to build AIMET:
 
 !pip3 install tensorboardX==1.7
 
-!pip3 install torch==1.1.0
+!pip3 install https://download.pytorch.org/whl/cu100/torch-1.4.0%2Bcu100-cp36-cp36m-linux_x86_64.whl
 
-!pip3 install torchvision==0.3.0
+!pip3 install https://download.pytorch.org/whl/cu100/torchvision-0.5.0%2Bcu100-cp36-cp36m-linux_x86_64.whl
 
 !pip3 install --upgrade pip
 
@@ -109,9 +109,7 @@ Please run below commands to install dependencies to build AIMET:
 
 !pip3 install future==0.17.1
 
-!pip3 uninstall tb-nightly==1.14.0a20190517
-
-!pip3 install tb-nightly==1.14.0a20190517
+!pip3 install tensorboard==1.14
 
 !pip3 install bokeh==1.2.0
 
@@ -203,7 +201,7 @@ sys.path.append(r'/content/aimet_code/build/artifacts')
 
 import os
 
-os.environ['LD_LIBRARY_PATH']+= ":/content/aimet_code4/build/artifacts"
+os.environ['LD_LIBRARY_PATH']+= ":/content/aimet_code/build/artifacts"
 ```
 
 ## Run unit tests
