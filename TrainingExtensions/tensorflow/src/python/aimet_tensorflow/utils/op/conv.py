@@ -43,7 +43,8 @@ import numpy as np
 import tensorflow as tf
 from tensorflow.contrib import graph_editor as ge
 from aimet_common.utils import AimetLogger
-from aimet_tensorflow.utils.common import get_padding, create_input_feed_dict, create_rand_tensors_given_shapes
+from aimet_tensorflow.utils.common import get_padding, create_input_feed_dict, create_rand_tensors_given_shapes, \
+    get_valid_ops
 from aimet_tensorflow.utils.graph_saver import save_and_load_graph
 from aimet_tensorflow.utils import constants
 
@@ -199,7 +200,8 @@ class BiasUtils:
                 sess.run(tf.variables_initializer([new_bias_tensor]))
 
     @staticmethod
-    def initialize_model_with_bias(sess: tf.Session) -> tf.Session:
+    def initialize_model_with_bias(sess: tf.Session, input_op_names: List[str], output_op_names: List[str]) \
+            -> tf.Session:
         """
         Initializes given model with bias.
         Adds zero bias to conv/linear layers without bias param, in given model.
@@ -209,7 +211,7 @@ class BiasUtils:
 
         assert sess is not None
         with sess.graph.as_default():
-            ops = sess.graph.get_operations()
+            ops = get_valid_ops(sess.graph, input_op_names, output_op_names)
 
             for op in ops:
                 # skip gradient ops

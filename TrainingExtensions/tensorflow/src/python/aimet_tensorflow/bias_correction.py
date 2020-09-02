@@ -522,7 +522,8 @@ class BiasCorrection:
         """
 
         # one time initialization of all layers with bias param
-        reference_model = BiasUtils.initialize_model_with_bias(reference_model)
+        reference_model = BiasUtils.initialize_model_with_bias(reference_model, bias_correct_params.input_op_names,
+                                                               bias_correct_params.output_op_names)
 
         # Create a copy of the model as reference model
         corrected_model = save_and_load_graph('./temp_meta_path', reference_model)
