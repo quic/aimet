@@ -584,7 +584,6 @@ class ConnectedGraph(AimetCommonConnectedGraph):
     def _get_module_instance(node: torch._C.Node,
                              node_name_to_module: Dict[str, torch.nn.Module]) -> torch.nn.Module:
         # pylint: disable=protected-access
-        # pylint: disable=eval-used
         """
         Get the torch.nn.Module referenced by the node.
         the node are typically of 1st type shown below and in case of nn.ModuleList (2nd case):
@@ -598,10 +597,7 @@ class ConnectedGraph(AimetCommonConnectedGraph):
         input_name: str = node.input().debugName()
         attributes = ConnectedGraph._get_attribute_name(node)
         model = node_name_to_module[input_name]
-        if isinstance(model, tuple([torch.nn.modules.container.Sequential, torch.nn.modules.ModuleList])):
-            sub_model = eval('model[' + attributes['name'] + ']')
-        else:
-            sub_model = eval('model.' + attributes['name'])
+        sub_model = getattr(model, attributes['name'])
         return sub_model
 
     def _resolve_input_nodes(self, node: torch._C.Node) -> List[torch._C.Node]:
