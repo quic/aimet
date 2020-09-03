@@ -181,20 +181,25 @@ class Quantization(unittest.TestCase):
             elif op in get_all_input_ops(conn_graph):
                 ops_with_deactivated_output_quantizers.add(op)
         ops_with_deactivated_output_quantizers_names = [op.name for op in ops_with_deactivated_output_quantizers]
-        for op, (param_quantizers_dict, output_quantizer) in sim._op_to_quant_ops_dict.items():
-            op_mode_tensor = sim.session.graph.get_tensor_by_name(output_quantizer.name + '_op_mode:0')
-            if op.name in ops_with_deactivated_output_quantizers_names:
+        activation_quantizers = [op for op in sim.session.graph.get_operations() if op.type == 'QcQuantize' and
+                                 'ReadVariableOp' not in op.name]
+        param_quantizers = [op for op in sim.session.graph.get_operations() if op.type == 'QcQuantize' and
+                            'ReadVariableOp' in op.name]
+        for quantize_op in activation_quantizers:
+            op_mode_tensor = sim.session.graph.get_tensor_by_name(quantize_op.name + '_op_mode:0')
+            conn_graph_op = conn_graph.get_op_from_module_name(quantize_op.inputs[0].op.name)
+            if conn_graph_op.name in ops_with_deactivated_output_quantizers_names:
                 self.assertEqual(sim.session.run(op_mode_tensor), int(pymo.TensorQuantizerOpMode.passThrough))
             else:
                 self.assertEqual(sim.session.run(op_mode_tensor), int(pymo.TensorQuantizerOpMode.updateStats))
-            for param_name, param_quantizer_set in param_quantizers_dict.items():
-                for param_quantizer in param_quantizer_set:
-                    op_mode_tensor = sim.session.graph.get_tensor_by_name(param_quantizer.name + '_op_mode:0')
-                    if param_name == 'bias':
-                        self.assertEqual(sim.session.run(op_mode_tensor), int(pymo.TensorQuantizerOpMode.passThrough))
-                    else:
-                        self.assertEqual(sim.session.run(op_mode_tensor),
-                                         int(pymo.TensorQuantizerOpMode.oneShotQuantizeDequantize))
+
+        for quantize_op in param_quantizers:
+            op_mode_tensor = sim.session.graph.get_tensor_by_name(quantize_op.name + '_op_mode:0')
+            if 'BiasAdd' in quantize_op.name:
+                self.assertEqual(sim.session.run(op_mode_tensor), int(pymo.TensorQuantizerOpMode.passThrough))
+            else:
+                self.assertEqual(sim.session.run(op_mode_tensor),
+                                 int(pymo.TensorQuantizerOpMode.oneShotQuantizeDequantize))
 
         def dummy_forward_pass(session: tf.Session, args):
             out_tensor = session.graph.get_tensor_by_name(model.outputs[0].name)
