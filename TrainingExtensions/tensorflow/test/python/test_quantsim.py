@@ -547,28 +547,33 @@ class TestQuantSim(unittest.TestCase):
 
     def test_manual_quantize(self):
         """ Test quantizing a model by manually specifying ops to quantize """
-        def get_manual_activations(_conn_graph, _op_types_to_ignore):
+        def get_manual_activations(_graph, _starting_ops, _ending_ops):
             """
             Overriding function for getting a list of ops to insert activation quantizers for
-            :param _conn_graph: Unused argument
-            :param _op_types_to_ignore: Unused argument
-            :return: List of ops to insert activation quantizers for
+            :param _graph: Unused argument
+            :param _starting_ops: Unused argument
+            :param _ending_ops: Unused argument
+            :return: List of ops to insert activation quantizers for, None for placeholder
             """
-            return ['conv2d/Relu']
+            return ['conv2d/Relu'], None
 
-        def get_manual_weights(_query):
+        def get_manual_params(_graph):
             """
-            Overriding function for getting a list of ops to insert weight quantizers for
-            :param _query: Unused argument
-            :return: List of ops to insert weight quantizers for
+            Overriding function for getting a list of ops to insert param quantizers for
+            :param _graph: Unused argument
+            :return: List of ops to insert param quantizers for, and list of param indices for these ops
             """
-            return ['conv2d_1/Conv2D']
+            return ['conv2d_1/Conv2D'], [1]
 
-        def configure_quantization_ops(self, _conn_graph, _config_file):
+        def configure_quantization_ops(self, _conn_graph, _ops_with_param_names, _indices, _activation_op_names,
+                                       _config_file):
             """
             Overriding function for configuring quantization ops inserted by QuantizationSimModel
             :param self: Self refers to QuantizationSimModel object
             :param _conn_graph: Unused argument
+            :param _ops_with_param_names: Unused argument
+            :param _indices: Unused argument
+            :param _activation_op_names: Unused argument
             :param _config_file: Unused argument
             """
             conv2d_relu_quant_info = self._activation_quantizers['conv2d/Relu_quantized']
@@ -590,10 +595,10 @@ class TestQuantSim(unittest.TestCase):
         initialize_uninitialized_vars(sess)
 
         orig_get_ops_to_quantize_activations_for = QuantizationSimModel.get_ops_to_quantize_activations_for
-        orig_get_ops_to_quantize_weights_for = QuantizationSimModel.get_ops_to_quantize_weights_for
+        orig_get_ops_to_quantize_weights_for = QuantizationSimModel.get_ops_to_quantize_params_for
         orig_configure_quantization_ops = QuantizationSimModel.configure_quantization_ops
         QuantizationSimModel.get_ops_to_quantize_activations_for = get_manual_activations
-        QuantizationSimModel.get_ops_to_quantize_weights_for = get_manual_weights
+        QuantizationSimModel.get_ops_to_quantize_params_for = get_manual_params
         QuantizationSimModel.configure_quantization_ops = configure_quantization_ops
         sim = QuantizationSimModel(sess, ['conv2d_input'], ['conv2d_1/Relu'], use_cuda=False)
         self.assertEqual(1, len(sim._activation_quantizers))
@@ -601,5 +606,5 @@ class TestQuantSim(unittest.TestCase):
         sess.close()
         sim.session.close()
         QuantizationSimModel.get_ops_to_quantize_activations_for = orig_get_ops_to_quantize_activations_for
-        QuantizationSimModel.get_ops_to_quantize_weights_for = orig_get_ops_to_quantize_weights_for
+        QuantizationSimModel.get_ops_to_quantize_params_for = orig_get_ops_to_quantize_weights_for
         QuantizationSimModel.configure_quantization_ops = orig_configure_quantization_ops
