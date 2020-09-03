@@ -190,7 +190,6 @@ class ConnectedGraph(AimetCommonConnectedGraph):
             r'int\(([_A-Za-z0-9.]+)\)'
         ]
 
-
         # Parameter types which we do not care about, and will not be identified as parameters in _parse_expression()
         self._parameter_types_to_ignore = [
             'num_batches_tracked'
@@ -335,7 +334,7 @@ class ConnectedGraph(AimetCommonConnectedGraph):
         else:
             module_tensor_tuples_map = ConnectedGraph._generate_module_tensors_lookup_table(model, model_input)
             _ = self._parse_trace_graph(trace, model, model_input, module_tensor_tuples_map)
-            self._remove_tuple_ops(module_tensor_tuples_map)
+            self._remove_tuple_ops()
         # Create parameters for ops such as conv, batchnorm, etc.
         self._fill_op_params()
 
@@ -347,7 +346,7 @@ class ConnectedGraph(AimetCommonConnectedGraph):
         self._fill_empty_shapes()
 
     def _parse_trace_graph(self, trace: Union[torch.jit.TopLevelTracedModule, torch.jit.TracedModule],
-                           model: torch.nn.Module, model_input: Tuple[torch.Tensor],
+                           model: torch.nn.Module, model_input: Union[Tuple[torch.Tensor], List[Union[Op, Product]]],
                            module_tensor_tuples_map: Dict[str, Tuple[Tuple[torch.Tensor]]]) -> Op:
         # pylint: disable=protected-access
         """
@@ -368,10 +367,10 @@ class ConnectedGraph(AimetCommonConnectedGraph):
         if is_leaf_module(model):
             return self._parse_single_module_model(model, module_tensor_tuples_map, ops, trace.graph)
 
-        # pending sub-graph that have to be explored
-        pending_nodes = dict()
+        # A map of sub-graph models and node name that requires recursive parsing
+        node_name_to_subgraph_model = dict()
         # modules that are being referenced within the sub-graph
-        modules = {model_debug_name: model}
+        node_name_to_module = {model_debug_name: model}
         for node in trace.graph.nodes():
 
             if 'prim::TupleUnpack' in node.kind():
@@ -387,7 +386,7 @@ class ConnectedGraph(AimetCommonConnectedGraph):
                 # i.e. %Z.1 and %Z.2 as consumer for the module referenced in %Y( & %Z) above.
                 # when support is added for multiple output Op and Product tracking of consumer and producer w/ indexed
                 # output tensor then %Z.* will be subsumed into handling of %Y.
-                self._create_tuple_ops(node, module_tensor_tuples_map, modules, ops)
+                self._create_tuple_ops(node, module_tensor_tuples_map, node_name_to_module, ops)
             else:
                 if node.outputsSize() != 1:
                     logger.error("multiple output Ops are not supported %s", str(node))
@@ -397,18 +396,19 @@ class ConnectedGraph(AimetCommonConnectedGraph):
 
                 # retrieving a module reference
                 if 'GetAttr' in node.kind():
-                    subgraph_model = ConnectedGraph._get_module_instance(node, modules)
-                    if output_name not in modules:
-                        modules[output_name] = subgraph_model
+                    subgraph_model = ConnectedGraph._get_module_instance(node, node_name_to_module)
+                    if output_name not in node_name_to_module:
+                        node_name_to_module[output_name] = subgraph_model
                     else:
                         raise ValueError("duplicate model for {0} -> {1} and {2}".format(
-                            output_name, modules[output_name], subgraph_model))
+                            output_name, node_name_to_module[output_name], subgraph_model))
                     if not is_leaf_module(subgraph_model):
-                        pending_nodes[output_name] = subgraph_model
+                        node_name_to_subgraph_model[output_name] = subgraph_model
 
                 # invoking forward method
                 elif 'CallMethod' in node.kind():
-                    self.parse_callmethod_node(node, model, trace, module_tensor_tuples_map, modules, ops, pending_nodes)
+                    self.parse_callmethod_node(node, model, trace, module_tensor_tuples_map,
+                                               node_name_to_module, ops, node_name_to_subgraph_model)
 
                 # functional operations e.g. cat, size etc
                 elif node.kind() not in self.ignore_graph_nodes:
@@ -419,20 +419,20 @@ class ConnectedGraph(AimetCommonConnectedGraph):
 
     def _create_tuple_ops(self, node: torch._C.Node,
                           module_tensor_tuples_map: Dict[str, Tuple[Tuple[torch.Tensor]]],
-                          modules: Dict[str, torch.nn.Module],
+                          node_name_to_module: Dict[str, torch.nn.Module],
                           ops: Dict[str, Union[Op, Product]]):
         # pylint: disable=protected-access
         """
         parses a 'TupleUnpack' node and generates multiple TupleUnpack functional ops to account for each output tensor
         :param node: trace graph node representing the i.e. 'TupleUnpack' node
         :param module_tensor_tuples_map: Map of modules and input and output tensor obtained from a forward pass
-        :param modules: dictionary of module indexed by output_name referenced in the sub-graph
+        :param node_name_to_module: dictionary of module indexed by output_name referenced in the sub-graph
         :param ops: dictionary of Ops and Products indexed by output names referenced in the graph
         """
 
         # Traverse the graph back to the module get instance
         node_name = next(node.input().node().inputs()).debugName()
-        _, output_tensor_tuple = module_tensor_tuples_map[modules[node_name]]
+        _, output_tensor_tuple = module_tensor_tuples_map[node_name_to_module[node_name]]
 
         # flatten the output tensors which may contain tuple of tuple to a list
         output_tensors = []
@@ -488,9 +488,9 @@ class ConnectedGraph(AimetCommonConnectedGraph):
                               model: torch.nn.Module,
                               trace: Union[torch.jit.TopLevelTracedModule, torch.jit.TracedModule],
                               module_tensor_tuples_map: Dict[str, Tuple[Tuple[torch.Tensor]]],
-                              modules: Dict[str, torch.nn.Module],
+                              node_name_to_module: Dict[str, torch.nn.Module],
                               ops: Dict[str, Union[Op, Product]],
-                              pending_nodes: Dict[str, torch._C.Node]):
+                              node_name_to_subgraph_model: Dict[str, torch._C.Node]):
         # pylint: disable=protected-access
         # pylint: disable=too-many-locals
         """
@@ -499,42 +499,37 @@ class ConnectedGraph(AimetCommonConnectedGraph):
             %output_N : Tensor = prim::CallMethod[name="forward"](%output_L, %output_M)
         :param node: trace graph node i.e. 'CallMethod' node
         :param model: Pytorch model to create connected graph from
-        :param parent_module: parent module
         :param trace: trace of model or submodule
         :param module_tensor_tuples_map: Map of modules and input and output tensor obtained from a forward pass
-        :param modules: dictionary of module indexed by output_name referenced in the sub-graph
+        :param node_name_to_module: dictionary of module indexed by output_name referenced in the sub-graph
         :param ops: dictionary of Ops and Products indexed by output names referenced in the graph
-        :param pending_nodes: dictionary of torch graph nodes index of output_name that have not been resolved.
+        :param node_name_to_subgraph_model: dictionary of torch graph nodes index of output_name that have not been resolved.
         """
         output_name: str = node.output().debugName()
         inputs = self._resolve_input_nodes(node)
         # 1st input is a reference on which the call method is being invoked.
         input_name: str = inputs[0].debugName()
-        if input_name in pending_nodes:
+        if input_name in node_name_to_subgraph_model:
             input_ops = [ops[i.debugName()] for i in inputs[1:]]
 
-            subgraph_model = pending_nodes[input_name]
-            # In the process of recursion if we are processing module at say ModuleA.ModuleB.ModuleC
-            # the trace for ModuleC will be available in passed in 'trace' for submodule ModuleA.ModuleB
-            # at trace.ModuleC
-            # ModuleList are an exception where the passed in 'trace' is for submodule ModuleA
-            # for ModuleC the trace needs to be traverse from one level up i.e. at trace.ModuleB.ModuleC
-
+            subgraph_model = node_name_to_subgraph_model[input_name]
+            # The trace and subgraph_model might not be at the same depth depending on the number of indirection
+            # used in the form of ModuleList or Sequential,
+            # the trace is traversed one level at a time to allow for accessing the instance at each level.
             trace_level = self._module_to_name[subgraph_model].replace(self._module_to_name[model], '')[1:].split('.')
-            subtrace = trace
+            subgraph_trace = trace
             for level in trace_level:
-                subtrace = getattr(subtrace, level)
+                subgraph_trace = getattr(subgraph_trace, level)
 
             # the op returned on parsing the sub-graph shall be last op in the sub-graph forward pass
-            ops[output_name] = self._parse_trace_graph(subtrace, subgraph_model, input_ops,
+            ops[output_name] = self._parse_trace_graph(subgraph_trace, subgraph_model, input_ops,
                                                        module_tensor_tuples_map)
-            pending_nodes.pop(input_name)
-        if input_name in modules and is_leaf_module(modules[input_name]):
+        if input_name in node_name_to_module and is_leaf_module(node_name_to_module[input_name]):
             # the graph is fully represented by a directional graph of leaf torch modules so the recursion is
             # stopped at this level. PassThroughOp are being ignored because in graph node representation
             # the passthrough op generate no output and are not part of inputs for downstream op
-            if not isinstance(modules[input_name], PassThroughOp):
-                ops[output_name] = self._create_leaf_module_op(modules[input_name],
+            if not isinstance(node_name_to_module[input_name], PassThroughOp):
+                ops[output_name] = self._create_leaf_module_op(node_name_to_module[input_name],
                                                                inputs, ops, module_tensor_tuples_map)
 
     def _create_input_products(self, model_input: Tuple[torch.Tensor], graph: torch._C.Graph) -> \
@@ -568,7 +563,7 @@ class ConnectedGraph(AimetCommonConnectedGraph):
         return model_debug_name, products
 
     @staticmethod
-    def _get_attribute_name(node: torch._C.Node) -> List[str]:
+    def _get_attribute_name(node: torch._C.Node) -> Dict[str, str]:
         # pylint: disable=protected-access
         """
         Retrieve the attributes associated with the graph node
@@ -587,9 +582,8 @@ class ConnectedGraph(AimetCommonConnectedGraph):
 
     @staticmethod
     def _get_module_instance(node: torch._C.Node,
-                             modules: Dict[str, torch.nn.Module]) -> torch.nn.Module:
+                             node_name_to_module: Dict[str, torch.nn.Module]) -> torch.nn.Module:
         # pylint: disable=protected-access
-        # pylint: disable=eval-used
         """
         Get the torch.nn.Module referenced by the node.
         the node are typically of 1st type shown below and in case of nn.ModuleList (2nd case):
@@ -597,16 +591,13 @@ class ConnectedGraph(AimetCommonConnectedGraph):
             %output_M : __torch__.torch ... Module = prim::GetAttr[name="5"](%output_K)
             2nd type shown about is for nn.ModuleList which reference a prior output '%output_K' instead of '%self.1'
         :param node: trace graph node
-        :param modules: dictionary of module index by output_name referenced in the sub-graph
+        :param node_name_to_module: dictionary of module index by output_name referenced in the sub-graph
         :return: list of attributes defined with the node
         """
         input_name: str = node.input().debugName()
         attributes = ConnectedGraph._get_attribute_name(node)
-        model = modules[input_name]
-        if isinstance(model, tuple([torch.nn.modules.container.Sequential, torch.nn.modules.ModuleList])):
-            sub_model = eval('model[' + attributes['name'] + ']')
-        else:
-            sub_model = eval('model.' + attributes['name'])
+        model = node_name_to_module[input_name]
+        sub_model = getattr(model, attributes['name'])
         return sub_model
 
     def _resolve_input_nodes(self, node: torch._C.Node) -> List[torch._C.Node]:
@@ -660,13 +651,12 @@ class ConnectedGraph(AimetCommonConnectedGraph):
         _fill_and_check_op_product_shapes(op, input_shape, output_shape)
         return op
 
-    def _create_functional_op(self, node: torch._C.Node, ops: Dict[str, Union[Op, Product]]) -> Union[Op, None]:
+    def _create_functional_op(self, node: torch._C.Node, ops: Dict[str, Union[Op, Product]]) -> Op:
         # pylint: disable=protected-access
         """
         Creates an Op and along with associated products representing inputs. If output shape is available then shapes
         attribute are populated as well.
         :param node: trace graph node
-        :param inputs: list of producer graph nodes
         :param ops: dictionary of Ops and Products indexed by output names referenced in the graph
         :return: Op
         """
@@ -1039,11 +1029,10 @@ class ConnectedGraph(AimetCommonConnectedGraph):
                     logger.error('Unmatched module %s during connected graph construction', type(module))
                     raise AssertionError
 
-    def _remove_tuple_ops(self, module_tensor_tuples_map: Dict[str, Tuple[Tuple[torch.Tensor]]]):
+    def _remove_tuple_ops(self):
         """
         Removes Op and Products related to TupleConstruct and TupleUnpack and creates new products to directly
         bind TupleConstruct producers  with TupleUnpack consumers
-        :param module_tensor_tuples_map: Map of modules and input and output tensor obtained from a forward pass
         """
         # TODO remove the below pylint suppression
         # pylint: disable=too-many-locals
@@ -1460,20 +1449,15 @@ def _fill_and_check_op_product_shapes(op: Op, input_shape: List, output_shape: L
     for inp in op.inputs:
         if not inp.is_parm:
             if inp.shape and inp.shape[1:] != input_shape[1:]:
-                logger.error('[Deprecate?] Mismatch btw shape %s for product %s and input shape %s for input of op %s',
-                             inp.shape,
-                             inp,
-                             input_shape,
-                             op)
+                logger.warning(
+                    '[Deprecate?] Mismatch btw shape %s for product %s and input shape %s for input of op %s',
+                    inp.shape, inp, input_shape, op)
             elif not inp.shape:
                 inp.shape = input_shape
     if op.output:
         if op.output.shape and op.output.shape[1:] != output_shape[1:]:
             logger.error('Mismatch between existing shape %s for product %s and output shape %s for output of op %s',
-                         op.output.shape,
-                         output_shape,
-                         input_shape,
-                         op)
+                         op.output.shape, output_shape, input_shape, op)
         elif not op.output.shape:
             op.output.shape = op.output_shape
 

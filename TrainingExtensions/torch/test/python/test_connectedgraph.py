@@ -437,3 +437,57 @@ class TestConnectedGraph(unittest.TestCase):
         conn_graph = ConnectedGraph(ModuleListAndSequentialModel(), (inp_data_1, inp_data_2))
         self.assertEqual(30, len(conn_graph.ordered_ops))
         self.assertEqual(0, len([op for op in conn_graph.get_all_ops().keys() if 'Tuple' in op]))
+
+    def test_module_reuse_model(self):
+        class ReuseReluLeafModel(torch.nn.Module):
+            """ A model with Relu instance used multiple times
+            Expected one input of size (1, 64, 8, 8) """
+
+            def __init__(self):
+                super(ReuseReluLeafModel, self).__init__()
+                self.conv1 = torch.nn.Conv2d(64, 64, kernel_size=3, padding=1)
+                self.conv2 = torch.nn.Conv2d(64, 64, kernel_size=3, padding=1)
+                self.relu = torch.nn.ReLU(inplace=True)
+
+            def forward(self, *inputs):
+                x = self.conv1(inputs[0])
+                x = self.relu(x)
+                x = self.conv2(x)
+                return self.relu(x)
+
+        inp_data = torch.rand(1, 64, 8, 8)
+        model = ReuseReluLeafModel()
+        conn_graph = ConnectedGraph(model, (inp_data,))
+        self.assertEqual(4, len(conn_graph.ordered_ops))
+        self.assertEqual(2, len([op for name, op in conn_graph.get_all_ops().items()
+                                 if 'relu' in name and
+                                 op.get_module() == model.relu]))
+
+        class ReluModel(torch.nn.Module):
+            def __init__(self):
+                super(ReluModel, self).__init__()
+                self.relu = torch.nn.ReLU(inplace=True)
+
+            def forward(self, *inputs):
+                return self.relu( inputs[0])
+
+        class ReuseReluLayerModel(torch.nn.Module):
+            """ A model with Relu Layer instance used multiple times
+            Expected one input of size (1, 64, 8, 8) """
+
+            def __init__(self):
+                super(ReuseReluLayerModel, self).__init__()
+                self.conv = torch.nn.Conv2d(64, 64, kernel_size=3, padding=1)
+                self.layer = ReluModel()
+
+            def forward(self, *inputs):
+                x = self.layer(inputs[0])
+                x = self.conv(x)
+                return self.layer(x)
+
+        layer_model = ReuseReluLayerModel()
+        conn_graph = ConnectedGraph(layer_model, (inp_data,))
+        self.assertEqual(3, len(conn_graph.ordered_ops))
+        self.assertEqual(2, len([op for name, op in conn_graph.get_all_ops().items()
+                                 if 'relu' in name and
+                                 op.get_module() == layer_model.layer.relu]))
