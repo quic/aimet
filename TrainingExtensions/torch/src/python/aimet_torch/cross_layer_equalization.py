@@ -298,14 +298,14 @@ class CrossLayerScaling:
         if isinstance(cls_set[0], torch.nn.ConvTranspose2d):
             weight_set_0 = weight_set_0.permute(1, 0, 2, 3)
         prev_layer_params.weight = weight_set_0.detach().numpy().reshape(-1)
-        prev_layer_params.weightShape = np.array(cls_set[0].weight.shape)
+        prev_layer_params.weightShape = np.array(weight_set_0.shape)
 
         weight_set_1 = cls_set[1].weight
         # Transpose weights to C, N, H, W from N, C, H, W since axis are flipped for transposed conv
         if isinstance(cls_set[1], torch.nn.ConvTranspose2d):
             weight_set_1 = weight_set_1.permute(1, 0, 2, 3)
         curr_layer_params.weight = weight_set_1.detach().numpy().reshape(-1)
-        curr_layer_params.weightShape = np.array(cls_set[1].weight.shape)
+        curr_layer_params.weightShape = np.array(weight_set_1.shape)
 
         if cls_set[0].bias is not None:
             prev_layer_params.bias = cls_set[0].bias.detach().numpy()
@@ -553,7 +553,7 @@ class HighBiasFold:
 
         curr_layer_params.bias = cls_pair_info.layer2.bias.detach().numpy()
         curr_layer_params.weight = weight.detach().numpy().reshape(-1)
-        curr_layer_params.weightShape = np.array(cls_pair_info.layer2.weight.shape)
+        curr_layer_params.weightShape = np.array(weight.shape)
         libpymo.updateBias(prev_layer_params, curr_layer_params, prev_layer_bn_params)
         return prev_layer_params, curr_layer_params
 
@@ -581,13 +581,13 @@ class HighBiasFold:
 
                 prev_layer_params, curr_layer_params = HighBiasFold.call_mo_high_bias_fold(cls_pair_info, bn_layers)
 
+                prev_layer_bias_shape = cls_pair_info.layer1.weight.shape[0]
                 # Transpose weight back to N, C, H, W for transposed Conv2D
-                if isinstance(cls_pair_info.layer2, torch.nn.ConvTranspose2d):
-                    cls_pair_info.layer2.weight.data = cls_pair_info.layer2.weight.data.permute(1, 0, 2, 3)
+                if isinstance(cls_pair_info.layer1, torch.nn.ConvTranspose2d):
+                    prev_layer_bias_shape = cls_pair_info.layer1.weight.shape[1]
 
-                prev_layer_params_weight_shape = cls_pair_info.layer1.weight.shape
                 cls_pair_info.layer1.bias.data = torch.from_numpy(np.reshape(prev_layer_params.bias,
-                                                                             prev_layer_params_weight_shape[0]))
+                                                                             prev_layer_bias_shape))
                 cls_pair_info.layer1.bias.data = cls_pair_info.layer1.bias.data.type(torch.FloatTensor)
                 cls_pair_info.layer2.bias.data = torch.from_numpy(np.reshape(curr_layer_params.bias,
                                                                              curr_layer_params.weightShape[0]))

@@ -211,10 +211,6 @@ def call_analytical_mo_correct_bias(layer: torch.nn.Module, bn: Union[torch.nn.B
 
     bias_correction.correctBias(bias_tensor, quant_dequant_weight, weight_tensor, bn_params, activation)
 
-    # Transpose weight back to N, C, H, W for transposed Conv2D
-    if isinstance(layer._module_to_wrap, torch.nn.ConvTranspose2d):
-        layer._module_to_wrap.weight.data = layer._module_to_wrap.weight.data.permute(1, 0, 2, 3)
-
     # Assigning the updated bias back to the layer
     bias = torch.nn.Parameter(torch.Tensor(bias_tensor.data))
 
