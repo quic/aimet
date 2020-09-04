@@ -88,7 +88,7 @@ def call_mo_batch_norm_fold(conv_linear: Union[torch.nn.Linear, torch.nn.Conv2d,
         weight = weight.permute(1, 0, 2, 3)
     weight_tensor.data = weight.detach().numpy().reshape(-1)
 
-    weight_shape = np.array(conv_linear.weight.shape)
+    weight_shape = np.array(weight.shape)
     if len(conv_linear.weight.shape) == 2:
         weight_shape = np.append(weight_shape, [1, 1])
 
@@ -136,9 +136,12 @@ def fold_given_batch_norms(model, layer_pairs: List[PairType]):
 
         bias, weight_tensor = call_mo_batch_norm_fold(conv_linear, bn, is_batch_norm_second)
 
+        if isinstance(conv_linear, torch.nn.Linear):
+            weight_tensor.shape = np.array([weight_tensor.shape[0], weight_tensor.shape[1]])
+
         conv_linear.bias = torch.nn.Parameter(torch.Tensor(bias))
         conv_linear.weight.data = torch.from_numpy(np.reshape(weight_tensor.data,
-                                                              np.array(conv_linear.weight.shape)))
+                                                              np.array(weight_tensor.shape)))
 
         conv_linear.weight.data = conv_linear.weight.data.type(torch.FloatTensor)
 

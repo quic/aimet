@@ -137,6 +137,42 @@ class TestCrossLayerEqualization(unittest.TestCase):
         bokeh_server_session.server_session.close("test complete")
         os.killpg(os.getpgid(process.pid), signal.SIGTERM)
 
+    def test_cle_transposed_conv2D(self):
+        class TransposedConvModel(torch.nn.Module):
+            def __init__(self):
+                super(TransposedConvModel, self).__init__()
+                self.conv1 = torch.nn.ConvTranspose2d(20, 10, 3)
+                self.bn1 = torch.nn.BatchNorm2d(10)
+                self.relu1 = torch.nn.ReLU()
+                self.conv2 = torch.nn.ConvTranspose2d(10, 15, 3)
+                self.bn2 = torch.nn.BatchNorm2d(15)
+
+            def forward(self, x):
+                # Regular case - conv followed by bn
+                x = self.conv1(x)
+                x = self.bn1(x)
+                x = self.relu1(x)
+                x = self.conv2(x)
+                x = self.bn2(x)
+                return x
+        torch.manual_seed(10)
+        model = TransposedConvModel()
+
+        w_shape_1 = copy.deepcopy(model.conv1.weight.shape)
+        w_shape_2 = copy.deepcopy(model.conv2.weight.shape)
+        model = model.eval()
+
+        input_shapes = (1, 20, 3, 4)
+        folded_pairs = batch_norm_fold.fold_all_batch_norms(model, input_shapes)
+        bn_dict = {}
+        for conv_bn in folded_pairs:
+            bn_dict[conv_bn[0]] = conv_bn[1]
+
+        cls_set_info_list = CrossLayerScaling.scale_model(model, input_shapes)
+
+        HighBiasFold.bias_fold(cls_set_info_list, bn_dict)
+        self.assertEqual(w_shape_1, model.conv1.weight.shape)
+        self.assertEqual(w_shape_2, model.conv2.weight.shape)
 
 
 
