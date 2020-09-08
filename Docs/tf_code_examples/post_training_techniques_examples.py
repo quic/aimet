@@ -240,7 +240,8 @@ def bias_correction_single_layer_empirical(dataset: tf.data.Dataset):
 
     with sess.as_default():
         # initialize model with zero bias
-        sess = BiasUtils.initialize_model_with_bias(sess)
+        sess = BiasUtils.initialize_model_with_bias(sess, bias_correction_params.input_op_names,
+                                                    bias_correction_params.output_op_names)
 
         # pick a layer for bias correction
         example_conv_layer = sess.graph.get_operation_by_name('res2a_branch2a/Conv2D')
@@ -273,7 +274,7 @@ def bias_correction_single_layer_analytical():
 
     with sess.as_default():
         # initialize model with zero bias
-        sess = BiasUtils.initialize_model_with_bias(sess)
+        sess = BiasUtils.initialize_model_with_bias(sess, ['input_1'], ['fc1000/Softmax'])
 
         # pick a layer for bias correction
         example_conv_layer = sess.graph.get_operation_by_name('res2a_branch2a/Conv2D')

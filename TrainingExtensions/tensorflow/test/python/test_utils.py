@@ -41,6 +41,7 @@ import numpy as np
 
 import tensorflow as tf
 import tensorflow.contrib.slim as slim
+from tensorflow.contrib import graph_editor
 from keras.applications.vgg16 import VGG16
 from keras.applications.resnet50 import ResNet50
 
@@ -454,7 +455,7 @@ class TestTrainingExtensionsTfUtils(unittest.TestCase):
         dense_op = sess.graph.get_operation_by_name('single_residual/MatMul')
         self.assertTrue(BiasUtils.is_bias_none(dense_op))
 
-        new_sess = BiasUtils.initialize_model_with_bias(sess)
+        new_sess = BiasUtils.initialize_model_with_bias(sess, ['input_1'], ['Relu'])
 
         dense_op = new_sess.graph.get_operation_by_name('single_residual/MatMul')
         self.assertTrue(not BiasUtils.is_bias_none(dense_op))
@@ -768,3 +769,26 @@ class TestBNUtils(unittest.TestCase):
         self.assertFalse(BNUtils.get_training(bn_training_false_op))
 
         tf.reset_default_graph()
+
+    def test_initialize_with_bias_with_detached_ops(self):
+        """ Test that initialize with bias only affects valid ops """
+        tf.reset_default_graph()
+        sess = tf.Session()
+
+        inputs = tf.keras.Input(shape=(32, 32, 3,))
+        conv1 = tf.keras.layers.Conv2D(32, (3, 3), use_bias=False)(inputs)
+        _ = tf.keras.layers.Conv2D(16, (2, 2), activation=tf.nn.tanh, use_bias=False)(conv1)
+        _ = tf.keras.layers.Conv2D(8, (2, 2), activation=tf.nn.tanh)(conv1)
+        graph_editor.detach_inputs(sess.graph.get_operation_by_name('conv2d_1/Conv2D'))
+        init = tf.global_variables_initializer()
+        sess.run(init)
+
+        # Check that outputs of conv2d and conv2d_1 have no biases
+        self.assertTrue(sess.graph.get_operation_by_name('conv2d/Conv2D').outputs[0].consumers()[0].type != 'BiasAdd')
+        self.assertTrue(sess.graph.get_operation_by_name('conv2d_1/Conv2D').outputs[0].consumers()[0].type != 'BiasAdd')
+
+        sess = BiasUtils.initialize_model_with_bias(sess, ['input_1'], ['conv2d_2/BiasAdd'])
+
+        # Check that conv2d has a bias inserted but not conv2d_1
+        self.assertTrue(sess.graph.get_operation_by_name('conv2d/Conv2D').outputs[0].consumers()[0].type == 'BiasAdd')
+        self.assertTrue(sess.graph.get_operation_by_name('conv2d_1/Conv2D').outputs[0].consumers()[0].type != 'BiasAdd')
