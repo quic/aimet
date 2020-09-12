@@ -37,84 +37,6 @@
 #  @@-COPYRIGHT-END-@@
 #
 #  =============================================================================
-#  =============================================================================
-#
-#  @@-COPYRIGHT-START-@@
-#  From PyTorch:
-#
-#  Copyright (c) 2016-     Facebook, Inc            (Adam Paszke)
-#  Copyright (c) 2014-     Facebook, Inc            (Soumith Chintala)
-#  Copyright (c) 2011-2014 Idiap Research Institute (Ronan Collobert)
-#  Copyright (c) 2012-2014 Deepmind Technologies    (Koray Kavukcuoglu)
-#  Copyright (c) 2011-2012 NEC Laboratories America (Koray Kavukcuoglu)
-#  Copyright (c) 2011-2013 NYU                      (Clement Farabet)
-#  Copyright (c) 2006-2010 NEC Laboratories America (Ronan Collobert, Leon Bottou, Iain Melvin, Jason Weston)
-#  Copyright (c) 2006      Idiap Research Institute (Samy Bengio)
-#  Copyright (c) 2001-2004 Idiap Research Institute (Ronan Collobert, Samy Bengio, Johnny Mariethoz)
-#
-#  From Caffe2:
-#
-#  Copyright (c) 2016-present, Facebook Inc. All rights reserved.
-#
-#  All contributions by Facebook:
-#  Copyright (c) 2016 Facebook Inc.
-#
-#  All contributions by Google:
-#  Copyright (c) 2015 Google Inc.
-#  All rights reserved.
-#
-#  All contributions by Yangqing Jia:
-#  Copyright (c) 2015 Yangqing Jia
-#  All rights reserved.
-#
-#  All contributions from Caffe:
-#  Copyright(c) 2013, 2014, 2015, the respective contributors
-#  All rights reserved.
-#
-#  All other contributions:
-#  Copyright(c) 2015, 2016 the respective contributors
-#  All rights reserved.
-#
-#  Caffe2 uses a copyright model similar to Caffe: each contributor holds
-#  copyright over their contributions to Caffe2. The project versioning records
-#  all such contribution and copyright details. If a contributor wants to further
-#  mark their specific copyright on a particular contribution, they should
-#  indicate their copyright solely in the commit message of the change when it is
-#  committed.
-#
-#  All rights reserved.
-#
-#  Redistribution and use in source and binary forms, with or without
-#  modification, are permitted provided that the following conditions are met:
-#
-#  1. Redistributions of source code must retain the above copyright
-#  notice, this list of conditions and the following disclaimer.
-#
-#  2. Redistributions in binary form must reproduce the above copyright
-#  notice, this list of conditions and the following disclaimer in the
-#  documentation and/or other materials provided with the distribution.
-#
-#  3. Neither the names of Facebook, Deepmind Technologies, NYU, NEC Laboratories America
-#  and IDIAP Research Institute nor the names of its contributors may be
-#  used to endorse or promote products derived from this software without
-#  specific prior written permission.
-#
-#  THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
-#  AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
-#  IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
-#  ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
-#  LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
-#  CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
-#  SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
-#  INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
-#  CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
-#  ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
-#  POSSIBILITY OF SUCH DAMAGE.
-#  © 2019 GitHub, Inc.
-#
-#  @@-COPYRIGHT-END-@@
-#
-#  =============================================================================
 
 """For constructing a uniform representation of the computational graph for a PyTorch model,
 that is easy to navigate and stores information for the purpose of winnowing.
@@ -138,14 +60,12 @@ from aimet_torch.defs import PassThroughOp
 logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Winnow)
 
 
-# pylint: disable=too-many-instance-attributes
 class ConnectedGraph(AimetCommonConnectedGraph):
     """
     For construction of a graph that connects operations together (
         either module or functional) as producers and consumers of tensors.
         Note that the graph has two kinds of nodes: operations and products."""
 
-    # pylint: disable=unused-argument
     def __init__(self, model: torch.nn.Module, model_input: Tuple[torch.Tensor]):
         """
         Init function for connected graph
@@ -153,15 +73,13 @@ class ConnectedGraph(AimetCommonConnectedGraph):
         :param model_input: Example input to model.  Can be a single tensor or a list/tuple of input tensors
         """
         super().__init__()
-        self._model = model
-        self._model_input = model_input
         self._model_name = type(model).__name__
         # Maps pytorch module names to modules
-        self._name_to_module = dict()
+        self._name_to_module = {}
         # Maps pytorch modules to module names
-        self._module_to_name = dict()
+        self._module_to_name = {}
         # Maps pytorch modules to connected graph ops
-        self._module_to_op_dict = dict()
+        self._module_to_op_dict = {}
 
         # Parameters dict to hold parameters identified from trace code, to be made into Products
         # Maps parameter name as found in trace code to tuple of (corresponding module, parameter type, parameter shape)
@@ -170,30 +88,8 @@ class ConnectedGraph(AimetCommonConnectedGraph):
         # Ops dict to map names of ops as found in trace code to corresponding Ops that are created
         self._named_ops = {}
 
-        # In trace code, a group of operations can show up as a named line to be used later.
-        # Ex. _6 = [branch1x1, branch5x5, branch3x3dbl, branch_pool]
-        # In this case, save this as a named group, and when we parse inputs with split_inputs in a different line,
-        # treat each member in the group as a separate input.
-        self._named_groups = {}
         self._op_count = 0
         self._split_count = 0  # Use it in the name of split Ops getting added to the connected graph.
-
-        # Operations for which which we will completely ignore and skip processing (will not look at op arguments
-        # either).
-        self._skip_processing_ops = {
-            'annotate'
-        }
-
-        # If the following are detected as the outermost function in trace code, ignore it and evaluate what is inside.
-        self._patterns_to_ignore = [
-            r'torch\.t\(([_A-Za-z0-9.]+)\)',
-            r'int\(([_A-Za-z0-9.]+)\)'
-        ]
-
-        # Parameter types which we do not care about, and will not be identified as parameters in _parse_expression()
-        self._parameter_types_to_ignore = [
-            'num_batches_tracked'
-        ]
 
         # List of ops in the order they are traversed using the forward function
         self.ordered_ops = []
@@ -205,20 +101,20 @@ class ConnectedGraph(AimetCommonConnectedGraph):
     # Map torch module types to normalized names to provide backward compatibility to
     # trace code based construction
     op_type_map = {
-        torch.nn.Conv2d: ['convolution'],
-        torch.nn.ConvTranspose2d: ['convolution'],
-        torch.nn.BatchNorm1d: ['batch_norm'],
-        torch.nn.BatchNorm2d: ['batch_norm'],
-        torch.nn.ReLU: ['relu'],
-        torch.nn.ReLU6: ['hardtanh'],
-        torch.nn.MaxPool2d: ['max_pool2d'],
-        torch.nn.AdaptiveAvgPool2d: ['adaptive_avg_pool2d'],
-        torch.nn.AvgPool2d: ['avg_pool2d'],
-        torch.nn.Linear: ['addmm', 'matmul'],
-        torch.nn.Dropout: ['dropout'],
-        torch.nn.Dropout2d: ['feature_dropout'],
-        torch.nn.LogSoftmax: ['log_softmax'],
-        torch.nn.Sigmoid: ['sigmoid']
+        torch.nn.Conv2d: 'convolution',
+        torch.nn.ConvTranspose2d: 'convolution',
+        torch.nn.BatchNorm1d: 'batch_norm',
+        torch.nn.BatchNorm2d: 'batch_norm',
+        torch.nn.ReLU: 'relu',
+        torch.nn.ReLU6: 'hardtanh',
+        torch.nn.MaxPool2d: 'max_pool2d',
+        torch.nn.AdaptiveAvgPool2d: 'adaptive_avg_pool2d',
+        torch.nn.AvgPool2d: 'avg_pool2d',
+        torch.nn.Linear: 'addmm',
+        torch.nn.Dropout: 'dropout',
+        torch.nn.Dropout2d: 'feature_dropout',
+        torch.nn.LogSoftmax: 'log_softmax',
+        torch.nn.Sigmoid: 'sigmoid'
     }
 
     functional_ops = {
@@ -302,7 +198,7 @@ class ConnectedGraph(AimetCommonConnectedGraph):
         :param model: Pytorch model
         :return: Map of modules and input and output tensor obtained from a forward pass
         """
-        module_tensor_tuples_map = dict()
+        module_tensor_tuples_map = {}
 
         def forward_hook(curr_module: torch.nn.Module,
                          input_tensor_tuple: Tuple[torch.Tensor],
@@ -327,16 +223,10 @@ class ConnectedGraph(AimetCommonConnectedGraph):
         :param model: Pytorch model to create connected graph from
         :param model_input: Example input to model.  Can be a single tensor or a list/tuple of input tensors
         """
+        module_tensor_tuples_map = ConnectedGraph._generate_module_tensors_lookup_table(model, model_input)
         trace = torch.jit.trace(model, model_input)
-        if torch.__version__ == '1.1.0':
-            # Parse trace code to create ops and products
-            self._parse_trace_code(trace.code)
-            # Associate ops in connected graph with corresponding pytorch modules, and fill in shapes if possible
-            self._fill_op_modules_and_shapes()
-        else:
-            module_tensor_tuples_map = ConnectedGraph._generate_module_tensors_lookup_table(model, model_input)
-            _ = self._parse_trace_graph(trace, model, model_input, module_tensor_tuples_map)
-            self._remove_tuple_ops()
+        _ = self._parse_trace_graph(trace, model, model_input, module_tensor_tuples_map)
+        self._remove_tuple_ops()
         # Create parameters for ops such as conv, batchnorm, etc.
         self._fill_op_params()
 
@@ -370,7 +260,7 @@ class ConnectedGraph(AimetCommonConnectedGraph):
             return self._parse_single_module_model(model, module_tensor_tuples_map, ops, trace.graph)
 
         # A map of sub-graph models and node name that requires recursive parsing
-        node_name_to_subgraph_model = dict()
+        node_name_to_subgraph_model = {}
         # modules that are being referenced within the sub-graph
         node_name_to_module = {model_debug_name: model}
         for node in trace.graph.nodes():
@@ -535,7 +425,7 @@ class ConnectedGraph(AimetCommonConnectedGraph):
                                                                inputs, ops, module_tensor_tuples_map)
 
     def _create_input_products(self, model_input: Tuple[torch.Tensor], graph: torch._C.Graph) -> \
-            Tuple[str, Dict[str, Product]]:
+            Tuple[str, Dict[str, Union[Op, Product]]]:
         # pylint: disable=protected-access
         """
         Creates a dictionary of input products index by input name referenced in the sub-graph
@@ -543,14 +433,14 @@ class ConnectedGraph(AimetCommonConnectedGraph):
         :param graph: trace graph representing the model or sub-set of the model
         :return: model input name , dictionary of input products
         """
-        products = dict()
+        products = {}
         model_debug_name = None
-        for i, inp in enumerate(graph.inputs()):
+        for input_index, inp in enumerate(graph.inputs()):
             input_name: str = inp.debugName()
-            if i == 0:
+            if input_index == 0:
                 model_debug_name = input_name
             else:
-                inp_op = model_input[i - 1]
+                inp_op = model_input[input_index - 1]
                 if isinstance(inp_op, torch.Tensor):
                     shape = list(inp_op.shape)
                     self._parameters[input_name] = (None, 'input', shape)
@@ -562,6 +452,7 @@ class ConnectedGraph(AimetCommonConnectedGraph):
                     products[input_name] = inp_op
                 else:
                     logger.warning("ignoring input %s of unknown type %s", str(inp_op), type(inp_op))
+        assert model_debug_name is not None
         return model_debug_name, products
 
     @staticmethod
@@ -572,7 +463,7 @@ class ConnectedGraph(AimetCommonConnectedGraph):
         :param node: trace graph node
         :return: a dictionary of attributes associated with the node
         """
-        attributes = dict()
+        attributes = {}
         # node description has pseudo-code of the form  '... torch_mangle_2.Module = prim::GetAttr[name="fc"](%self.1)'
         # for the above example attributeNames() iterator should return a string 'name'
         node_desc = str(node)
@@ -588,10 +479,6 @@ class ConnectedGraph(AimetCommonConnectedGraph):
         # pylint: disable=protected-access
         """
         Get the torch.nn.Module referenced by the node.
-        the node are typically of 1st type shown below and in case of nn.ModuleList (2nd case):
-            %output_N : __torch__.torch ... Module = prim::GetAttr[name="fc"](%self.1)
-            %output_M : __torch__.torch ... Module = prim::GetAttr[name="5"](%output_K)
-            2nd type shown about is for nn.ModuleList which reference a prior output '%output_K' instead of '%self.1'
         :param node: trace graph node
         :param node_name_to_module: dictionary of module index by output_name referenced in the sub-graph
         :return: list of attributes defined with the node
@@ -631,10 +518,12 @@ class ConnectedGraph(AimetCommonConnectedGraph):
         """
         # use nominal Op type if its a known type else use torch defined Module name
         if isinstance(model, tuple(self.op_type_map.keys())):
-            op_type = self.op_type_map[type(model)][0]
+            op_type = self.op_type_map[type(model)]
         else:
             op_type = type(model).__name__
+            logger.info("unknown op_type -- defaulting to class name %s", op_type)
 
+        # inputs[0] refers to the module instance, the tensor inputs starts from 1.
         op = self._create_op_and_products(op_type, inputs[1:], ops)
 
         # populating module info associated with Op
@@ -703,7 +592,7 @@ class ConnectedGraph(AimetCommonConnectedGraph):
         :return: Op
         """
         unique_op_name = self._make_unique_op_name(op_type)
-        op = Op(unique_op_name, unique_op_name, None, False, op_type)
+        op = Op(name=unique_op_name, dotted_name=unique_op_name, output_shape=None, is_anonymous=False, op_type=op_type)
         self.ordered_ops.append(op)
         self._ops[unique_op_name] = op
         for inp in inputs:
@@ -714,214 +603,6 @@ class ConnectedGraph(AimetCommonConnectedGraph):
                 self._create_and_link_inter_op_product(resolved_inp, op)
             elif isinstance(resolved_inp, Product):
                 self._associate_op_with_parameter_product(op, resolved_inp)
-        return op
-
-    # trace code implementation will be deprecated once migration to PyTorch v1.4 is complete
-    # pylint: disable=too-many-lines
-    def _parse_trace_code(self, code: str):
-        """
-        Given a torch.jit.trace code of the model, parse the code to create ops and products
-        :param code: code attribute of torch.jit.trace output of the model
-        """
-        lines = code.split('\n')
-        # Find indices corresponding to the starts of different sections in the code.
-        first_parameter_line_index, first_operation_line_index, first_return_line_index = \
-            _get_operation_and_return_line_indices(lines)
-
-        # Identify model inputs in the code and create a corresponding Operation for each one.  These are named ops
-        # so add them to both self._ops as well as self._named_ops.
-        self._parse_input_lines(lines[:first_parameter_line_index])
-        self._parse_parameter_lines(lines[first_parameter_line_index:first_operation_line_index])
-        self._parse_operation_lines(lines[first_operation_line_index:first_return_line_index])
-        self._parse_return_lines(lines[first_return_line_index:])
-
-    def _parse_input_lines(self, lines: List[str]):
-        """
-        Parse input lines and create an entry in self._parameters for each input
-        :param lines: List of trace code lines pertaining to model inputs
-        """
-
-        # Input patterns that represent possible inputs to the graph in trace code. Ex. input, input0, input1, or
-        # x, x0, x1, etc.
-        # An assumption is made that the first set of inputs in the forward trace correspond to the inputs tensors
-        # given in model_input, and any further inputs found are internal to the model and not user provided.
-        # This is commonly seen with parameters named slot[0-9]+ in the forward trace.
-        input_pattern = re.compile(r'([a-z]+[0-9]*)[,:]')
-        input_index = 0
-        for line in lines:
-            if input_index == len(self._model_input):
-                # Processed all the inputs that correspond to tensors in model_input
-                break
-            result = input_pattern.search(line)
-            if result:
-                shape = self._model_input[input_index].shape
-                self._parameters[result.group(1)] = (None, 'input', list(shape))
-                input_index += 1
-
-    def _parse_parameter_lines(self, lines: List[str]):
-        """
-        Parse the lines in the trace code that deal with obtaining parameters for certain modules.
-        :param lines: List of trace code lines pertaining to obtaining parameters
-        """
-        underscore_param_pattern = re.compile(r'(_[0-9]+)')
-        for line in lines:
-            stripped_line = line.strip()
-            split_at_equal = stripped_line.split(' = ')
-            result = underscore_param_pattern.match(split_at_equal[1])
-            if result:
-                assert result.group(1) in self._parameters.keys()
-                split_at_equal[1] = split_at_equal[1].replace(result.group(1), self._parameters[result.group(1)][1])
-
-            split_at_equal[1] = split_at_equal[1].replace('self', self._model_name, 1)
-            last_period_index = split_at_equal[1].rfind('.')
-            param_type = split_at_equal[1][last_period_index + 1:]
-            corresponding_op = self._name_to_module.get(split_at_equal[1][:last_period_index], None)
-            self._parameters[split_at_equal[0]] = (corresponding_op, param_type, None)
-
-    def _parse_operation_lines(self, lines: List[str]):
-        """
-        Parse the lines in the trace code that deal with torch operations
-        :param lines: List of trace code lines pertaining to torch operations
-        """
-        for line in lines:
-            stripped_line = line.strip()
-            split_at_equal = stripped_line.split(' = ')
-            outputs = split_at_equal[0]
-            # If there are commas, there are potentially multiple outputs. We do not support this case currently.
-            outputs = outputs.split(',')
-            if len(outputs) > 1:
-                for output in outputs[1:]:
-                    if output.strip():
-                        logger.error('Multiple outputs not supported, operation line currently parsed: %s', line)
-                        raise AssertionError
-            _ = self._parse_expression(split_at_equal[1], outputs[0].strip())
-
-    def _parse_return_lines(self, lines: List[str]):
-        """
-        Parse return lines in the trace code.  Return lines may still contain expressions.
-        :param lines: List of trace code lines pertaining to returns
-        """
-        for line in lines:
-            stripped_line = line.strip()
-            return_pattern = re.compile(r'return (.+)')
-            result = return_pattern.match(stripped_line)
-            if result:
-                _ = self._parse_expression(result.group(1))
-
-    def _parse_expression(self, expression: str, output_name=None) -> Union[Op, Product, None]:
-        """
-        Parse a single expression. This could be a torch operation, or name of an op or parameter already created, or an
-        input argument to a torch operation.  Basically, this can be any line that is to the right of the '=' for an
-        operation line in the code, or any input item of that operation, which could be an operation itself. Together
-        with _parse_operation(), this works recursively to create all ops and products in a single line of trace code.
-        :param expression: Expression to parse
-        :param output_name: If this is an operation with a name, self_named_ops will register the created Op with this
-        name.  This only happens for outermost operations in the trace code, and not for internal anonymous operations.
-        :return: Either a corresponding Operation or Product for this expression, or None if not applicable
-        """
-        exp = expression
-        # Ignore certain expressions which are not important with regards to connected graph.  Ex. torch.Tensor() or
-        # int()
-        for pattern in self._patterns_to_ignore:
-            regex = re.compile(pattern)
-            result = regex.match(exp)
-            if result:
-                exp = result.group(1)
-                break
-
-        # If expression is a parameter, either return the corresponding Product if it exists, or create one.
-        if exp in self._parameters.keys() and self._parameters[exp][1] not in self._parameter_types_to_ignore:
-            if exp in self._products.keys():
-                return self._products[exp]
-
-            product = Product(exp, self._parameters[exp][2])
-            if self._parameters[exp][1] == 'input':
-                product.is_model_input = True
-            else:
-                product.is_parm = True
-            self._products[product.name] = product
-            return product
-
-        # If expression is the name of an operation we have processed earlier, return the corresponding Operation.
-        if exp in self._named_ops:
-            return self._named_ops[exp]
-
-        # If expression is a torch operation, process its arguments with _parse_operation, and return the corresponding
-        # Operation.
-        # The below patter matches such expressions like:
-        # torch._convolution(...)
-        # ops.prim.NumToTensor(...)
-        # ^CustomFunctionName(function args)(...)
-        # Function args in custom functions are currently not processed as operation arguments; they are simply
-        # included with the custom function name as part of the operation name.
-        # For example, ^Scatter([0], None, 0)(input) will show up as Scatter([0], None, 0) as the operation name, and
-        # only 'input' will be processed as an input tensor.  In the future, custom function arguments can be processed
-        # as function parameters perhaps.
-        function_pattern = re.compile(r'([\^_A-Za-z0-9.]+(\(.*\))*)\((.+)\)')
-        result = function_pattern.match(exp)
-        if result:
-            # Extract operation name, taking only the rightmost part of function expression as the name, and stripping
-            # leading and trailing '_' characters.  Ex. torch.relu_ -> relu, ops.prim.NumToTensor -> NumToTensor,
-            # torch._convolution -> convolution, etc.
-            operation = result.group(1)
-            last_period_index = operation.rfind('.')
-            operation = operation[last_period_index + 1:]
-            operation = operation.lstrip('_^')
-            operation = operation.rstrip('_^')
-            op = self._parse_operation(operation, result.group(3), output_name)
-            return op
-
-        # In trace code, a group of operations can show up as a named line to be used later.
-        # Ex. _6 = [branch1x1, branch5x5, branch3x3dbl, branch_pool]
-        # In this case, save this as a named group, and when we parse inputs with split_inputs in a different line,
-        # treat each member in the group as a separate input.
-        if exp[0] == '[' and exp[-1] == ']' and output_name:
-            self._named_groups[output_name] = exp[1:-1]
-
-        return None
-
-    def _parse_operation(self, op_name: str, inputs: str, output_name=None) -> Union[Op, None]:
-        """
-        Parse a single operation's inputs, which can recursively be operations as well.  For each input, call
-        _parse_expression to parse it.
-        :param op_name: name of the torch operation
-        :param inputs: inputs to the torch operation
-        :param output_name: If this is an operation with a name, self_named_ops will register the created Op with this
-        name.  This only happens for outermost operations in the trace code, and not for internal anonymous operations.
-        :return: The Operation created as a result of parsing
-        """
-        # Skip processing this op if it is one of the ops we don't care about.
-        if op_name in self._skip_processing_ops:
-            return None
-
-        # Parse each input argument of the operation and make a local list of the results.  Will either be Op, Product,
-        # or None.
-        input_list = _split_inputs(inputs, self._named_groups)
-        parsed_inp_list = []
-        for inp in input_list:
-            parsed_inp = self._parse_expression(inp)
-            parsed_inp_list.append(parsed_inp)
-
-        # Setting op to none for now.  If all parsed_inp values are None, no point in creating the op.
-        op = None
-        for parsed_inp in parsed_inp_list:
-            # Currently only do special processing for inputs if it turns out to be an Operation or a parameter.
-            if parsed_inp:
-                if not op:
-                    # Create op object
-                    unique_op_name = self._make_unique_op_name(op_name)
-                    op = Op(unique_op_name, unique_op_name, None, False, op_name)
-                    self.ordered_ops.append(op)
-                    if output_name:
-                        self._named_ops[output_name] = op
-                    self._ops[unique_op_name] = op
-                if isinstance(parsed_inp, Op):
-                    # Create a product linking the identified Operation with the current Operation.
-                    self._create_and_link_inter_op_product(parsed_inp, op)
-                else:
-                    # If input is a parameter, we are able to identify the actual pytorch module it corresponds to.
-                    # Also link the created product to the Operation.
-                    self._associate_op_with_parameter_product(op, parsed_inp)
         return op
 
     def _make_unique_op_name(self, op_name: str) -> str:
@@ -964,73 +645,6 @@ class ConnectedGraph(AimetCommonConnectedGraph):
         parameter_product.add_consumer(op)
         op.add_input(parameter_product)
 
-    def _fill_op_modules_and_shapes(self):
-        """
-        Use a forward pass through the model with a custom hook to obtain the actual pytorch modules corresponding to
-        named modules defined in the model.  Then cross reference with the connected graph created earlier to match ops
-        with the modules.  This assumes that modules are traversed in the same order in the forward pass as they showed
-        up in the trace code.  Since trace code is also generated from a forward pass through the model, this seems to
-        be a valid assumption.
-        """
-        named_module_list = []
-
-        def forward_hook(curr_module, input_tensor_tuple, output_tensor_tuple):
-            """
-            Custom forward hook function to simply add the current module to named_module_list.
-            :param curr_module: Current module being traversed during forward pass.
-            :param input_tensor_tuple: tuple of input tensors to the current module
-            :param output_tensor_tuple: tuple of output tensors of the current module
-            """
-            # Currently, we assume that multiple input tensors have the same shape, and likewise for output tensors.
-            named_module_list.append((curr_module,
-                                      list(input_tensor_tuple[0].shape),
-                                      list(output_tensor_tuple[0].shape)))
-
-        input_shapes = [inp.shape for inp in self._model_input]
-        run_hook_for_layers(self._model, input_shapes, forward_hook)
-
-        ordered_ops_index = 0
-        module_id_index = 0
-        # Step through named_module_list as well as self.ordered_ops in order, matching up corresponding ops.
-        # self.ordered_ops may have more ops than named_module_list if there are anonymous ops
-        while module_id_index < len(named_module_list) and ordered_ops_index < len(self.ordered_ops):
-            current_op = self.ordered_ops[ordered_ops_index]
-            current_named_module, input_shape, output_shape = named_module_list[module_id_index]
-
-            # If named_module is a type we don't recognize, skip it.
-            if not isinstance(current_named_module, tuple(self.op_type_map.keys())):
-                module_id_index += 1
-                logger.debug('No known mapping for %s in pytorch module types to op types, skipping.',
-                             type(current_named_module))
-                continue
-            # If current module from named_module_list and Op from self.ordered_ops match in type, pair them up.
-            # If there is already a module associated with the Op, check that it is identical to the current module
-            # from named_module_list.
-            if current_op.type in self.op_type_map[type(current_named_module)]:
-                if current_op.model_module:
-                    if not current_op.get_module() == current_named_module:
-                        logger.error('Module %s identified during fill_op_modules does not agree with module %s found'
-                                     'from parameters', type(current_op.get_module()), type(current_named_module))
-                    self._module_to_op_dict[current_op.get_module()] = current_op
-                    current_op.dotted_name = self._module_to_name[current_op.get_module()]
-                else:
-                    current_op.model_module = PytorchModelModule(current_named_module)
-                    self._module_to_op_dict[current_named_module] = current_op
-                    current_op.dotted_name = self._module_to_name[current_named_module]
-
-                # '1' element is prepended to output_shape to fill in the missing num_batches index
-                _fill_and_check_op_product_shapes(current_op, input_shape, [1] + output_shape)
-                _fill_conv_op_info(current_op, current_op.get_module())
-
-                module_id_index += 1
-            ordered_ops_index += 1
-        if module_id_index < len(named_module_list):
-            # Unmatched modules in named_module_list. Only expect these to be PassThroughOps, raise assertion if not.
-            for (module, _, _) in named_module_list[module_id_index:]:
-                if not isinstance(module, PassThroughOp):
-                    logger.error('Unmatched module %s during connected graph construction', type(module))
-                    raise AssertionError
-
     def _remove_tuple_ops(self):
         """
         Removes Op and Products related to TupleConstruct and TupleUnpack and creates new products to directly
@@ -1038,7 +652,6 @@ class ConnectedGraph(AimetCommonConnectedGraph):
         """
         # TODO remove the below pylint suppression
         # pylint: disable=too-many-locals
-        # pylint: disable=too-many-nested-blocks
         remove_ops = []
         remove_products = []
         for op in self.ordered_ops:
@@ -1057,20 +670,7 @@ class ConnectedGraph(AimetCommonConnectedGraph):
                     remove_products.extend(pack_producers)
                     continue
 
-                if len(pack_consumers) != len(pack_producers):
-                    logger.error(
-                        "Module: '%s' produces a tensor tuple of which not all tensor is consumed in the forward pass, "
-                        "AIMET currently doesn't support parsing this construct\n"
-                        "As workaround if you have following construct:-\n"
-                        "\tx, _, z = self.layer(...)\n"
-                        "\tx1 = self.conv1(x)\n"
-                        "\tz1 = self.conv2(z)\n"
-                        "Please consider changing the first line as shown below:\n"
-                        "\tx, y, z = self.layer(...)\n"
-                        "\t _ = torch.nn.functional.dropout(y) //< or relu()",
-                        self.get_parent_module_name(pack_producers))
-                    raise NotImplementedError
-
+                assert len(pack_consumers) == len(pack_producers)
                 for pack_producer, pack_consumer in zip(pack_producers, pack_consumers):
 
                     unpack_op = self._products[pack_consumer].consumers
@@ -1086,10 +686,6 @@ class ConnectedGraph(AimetCommonConnectedGraph):
                     unpack_consumers_product = [k for k, v in self._products.items() if v.producer == unpack_op]
 
                     # unpack_consumers is empty if the unpacked tensor is not part of subsequent forward pass
-                    # one scenario this occurs is if the tensor feeds a functional whose output is not consumed
-                    # e.g.
-                    #   x, y, z = self.layer(...)
-                    #   _ =  torch.nn.functional.dropout(y)
                     if not unpack_consumers_product:
                         producer_op.output = None
                         continue
@@ -1114,19 +710,6 @@ class ConnectedGraph(AimetCommonConnectedGraph):
         for op in remove_ops:
             self.ordered_ops.remove(op)
             self._ops.pop(op.name)
-
-    def get_parent_module_name(self, products: List[Product]) -> str:
-        """
-        Get the parent module name which is producing the tuple output
-        @param products: List of product  with producer belonging to the same module.
-        @return name of the parent module if found else '-'
-        """
-        for p in products:
-            module = self._products[p].producer.get_module()
-            if module is not None:
-                return '.'.join(self._module_to_name[module].rsplit('.')[:-1])
-
-        return ' -'
 
     def _fill_op_params(self):
         """
@@ -1228,7 +811,8 @@ class ConnectedGraph(AimetCommonConnectedGraph):
         split_dotted_name_parts = [self._model_name, split_name]
         split_dotted_name = '.'.join(split_dotted_name_parts)
         is_anonymous = True
-        split_op = Op(split_name, split_dotted_name, op.output_shape, is_anonymous, 'Split')
+        split_op = Op(name=split_name, dotted_name=split_dotted_name, output_shape=op.output_shape,
+                      is_anonymous=is_anonymous, op_type='Split')
         self._ops[split_name] = split_op
         return split_op
 
@@ -1416,6 +1000,7 @@ class ConnectedGraph(AimetCommonConnectedGraph):
                 if op.output:
                     op.output.shape = op.output_shape
 
+    # pylint: disable=too-many-lines
     def _validate_op_modules(self):
         """
         Utility function to ensure that all connected graph ops of a certain type have associated modules
@@ -1469,90 +1054,3 @@ def _fill_conv_op_info(op: Op, module: torch.nn.Module):
 
     if op.type in 'convolution':
         op.groups = module.groups
-
-
-def _get_operation_and_return_line_indices(lines: List[str]) -> Tuple[int, int, int]:
-    """
-    Torch jit trace code is split into 4 sections: forward function signature, parameter getting, operations, and return
-    statements.
-    Each section can be identified by certain attributes.
-    Identify the line indices marking the start of the parameter getting, operations, and return statements sections.
-    :param lines: Lines of torch jit trace code.
-    :return: A tuple of three integers corresponding to starting indices of the parameter getting, operations and return
-    statements sections.
-    """
-    curr_index = 0
-    parameter_index = 0
-    operation_index = 0
-    return_index = 0
-    for line in lines:
-        # Forward function signature lines have no '=' signs, so the first line to have one is the start of the
-        # parameter getting section.
-        if '=' in line and not parameter_index:
-            parameter_index = curr_index
-
-        # Parameter getting section only contains parentheses if it uses the 'getattr()' function.  Operation lines
-        # don't use the getattr() function, so the first line with parentheses and no getattr() function is the start
-        # of the operation section,
-        if '(' in line and 'getattr' not in line and 'forward' not in line and not operation_index:
-            operation_index = curr_index
-
-        # Return sections lines all have 'return' within.
-        if 'return' in line:
-            return_index = curr_index
-            break
-        curr_index += 1
-    return parameter_index, operation_index, return_index
-
-
-def _split_inputs(inputs: str, named_groups: dict) -> List[str]:
-    """
-    Identify and split inputs for torch operations.
-    This assumes that no quotes, apostrophes, or braces show up in the operation string.
-    Currently, items in lists that are not within functions will be broken up into separate inputs.
-    :param inputs: String of inputs to a torch operation.
-    :param named_groups: Dictionary of names of grouped inputs.  If the name of a group shows up in the inputs list,
-    Map it to the group in this dictionary and treat each member of the group as a separate input.
-    :return: List of strings representing each input to the operation.
-    """
-    replaced_str = inputs
-    parentheses_depth = 0
-    bracket_depth = 0
-
-    # Step through each character in the line and see if it is a comma which separates inputs.
-    # Keep counters for parentheses, brackets, and braces to only identify commas outside of any such structures.
-    for idx, inp in enumerate(inputs):
-        curr_char = inp
-        # Currently, individual elements in lists are each treated as a separate parameter.  See if we need to keep the
-        # lists intact as well (check bracket depth as well)
-        if curr_char == ',' and parentheses_depth == 0:
-            # Replace comma with '$' for easy splitting later.  Assumes '$' does not normally show up in the code.
-            replaced_str = replaced_str[:idx] + '$' + replaced_str[idx + 1:]
-        elif curr_char == '(':
-            parentheses_depth += 1
-        elif curr_char == '[':
-            bracket_depth += 1
-        elif curr_char == ')':
-            parentheses_depth -= 1
-        elif curr_char == ']':
-            bracket_depth -= 1
-
-        # We should never have seen more right parentheses, brackets, or braces than left ones.
-        assert parentheses_depth >= 0 and bracket_depth >= 0
-
-    # Split the string using the '$' characters replaced earlier.
-    # Also remove leading and trailing list brackets
-    split = replaced_str.split('$')
-    split = [s.strip('[] ') for s in split]
-
-    # Items in split may be a named group.  If so, replace the item with each item in the group.
-    # Call split inputs recursively on the group in case it contains named groups within as well.
-    split_inputs = []
-    for inp in split:
-        if inp in named_groups.keys():
-            group_items = _split_inputs(named_groups[inp], named_groups)
-            for item in group_items:
-                split_inputs.append(item)
-        else:
-            split_inputs.append(inp)
-    return split_inputs
