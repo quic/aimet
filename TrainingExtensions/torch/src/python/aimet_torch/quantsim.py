@@ -48,6 +48,7 @@ import onnx
 
 from aimet_common.utils import AimetLogger
 from aimet_common.defs import QuantScheme
+from aimet_common.quantsim import calculate_delta_offset
 from aimet_torch.quantsim_config.quantsim_config import QuantSimConfigurator
 from aimet_torch.qc_quantize_op import QcQuantizeStandAloneBase, QcQuantizeWrapper, QcQuantizeOpMode, \
     QcPostTrainingWrapper
@@ -482,11 +483,13 @@ class QuantizationSimModel:
     @staticmethod
     def _create_encoding_dict_for_quantizer(quantizer: TensorQuantizer) -> Dict:
         if quantizer.encoding:
-            return {'min': quantizer.encoding.min,
-                    'max': quantizer.encoding.max,
-                    'scale': quantizer.encoding.delta,
-                    'offset': quantizer.encoding.offset,
-                    'bitwidth': quantizer.encoding.bw}
+            min, max, bw = quantizer.encoding.min, quantizer.encoding.max, quantizer.encoding.bw
+            scale, offset = calculate_delta_offset(min, max, bw)
+            return {'min': min,
+                    'max': max,
+                    'scale': scale,
+                    'offset': offset,
+                    'bitwidth': bw}
         return None
 
     @staticmethod
