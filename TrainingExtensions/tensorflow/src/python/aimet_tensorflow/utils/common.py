@@ -227,20 +227,19 @@ def is_op_compressible(op: tf.Operation) -> bool:
     return op.type in ('Conv2D', 'MatMul') and not op.name.startswith('gradients/')
 
 
-def get_ordered_ops(graph: tf.Graph, starting_op_names: List) -> List:
+def get_ordered_ops(graph: tf.Graph, starting_op_names: List[str], output_op_names: List[str]) -> List[tf.Operation]:
     """
     Function to get all the ops in graph based on occurrence by Depth First Traversal
     :param graph: tf.Graph
     :param starting_op_names: List of starting op names
+    :param output_op_names: List of output op names of the model, used to help determine valid ops
     :return: ordered_ops: List of ops in order of occurrence
     """
 
-    def add_children_ops_before_parent_op(current_op: tf.Operation, visited_ops: Set, ordered_ops: List):
+    def add_children_ops_before_parent_op(current_op: tf.Operation):
         """
         Util function to add all the children ops in ordered_ops list before parent op using Depth First Traversal
         :param current_op: tf.Operation
-        :param visited_ops: Set of ops visited so far (to cut short duplicate traversals)
-        :param ordered_ops: List of ops in order of occurrence
         """
         # Add current op to visited_ops set
         visited_ops.add(current_op)
@@ -251,10 +250,13 @@ def get_ordered_ops(graph: tf.Graph, starting_op_names: List) -> List:
             for consumer_op in output_tensor.consumers():
                 # add consumer op to visited_ops list if not added previously and recursively call
                 if consumer_op not in visited_ops:
-                    add_children_ops_before_parent_op(consumer_op, visited_ops, ordered_ops)
+                    add_children_ops_before_parent_op(consumer_op)
 
         # add to ordered_ops list only when all the children ops are traversed
         ordered_ops.append(current_op)
+
+    # get set of valid operations in TF graph
+    valid_ops = get_valid_ops(graph, starting_op_names, output_op_names)
 
     #  Set of all ops that have been visited (to cut short duplicate traversals)
     visited_ops = set()
@@ -263,34 +265,35 @@ def get_ordered_ops(graph: tf.Graph, starting_op_names: List) -> List:
     ordered_ops = []
 
     for starting_op_name in starting_op_names:
-
         starting_op = graph.get_operation_by_name(starting_op_name)
-
-        add_children_ops_before_parent_op(starting_op, visited_ops, ordered_ops)
+        add_children_ops_before_parent_op(starting_op)
 
     # reverse the list because ops are in reverse order
     ordered_ops.reverse()
 
+    # filter ordered ops for only valid ops
+    ordered_ops = [op for op in ordered_ops if op in valid_ops]
+
     return ordered_ops
 
 
-def get_ordered_conv_linears(sess: tf.Session, input_op_names: List[str]) -> List[str]:
+def get_ordered_conv_linears(sess: tf.Session, input_op_names: List[str], output_op_names: List[str]) \
+        -> List[tf.Operation]:
     """
     helper to select a list of candidate layers for bias correction
     :param sess: active tensorflow session as tf.Session type
     :param input_op_names: list of input op names
+    :param output_op_names: List of output op names of the model, used to help determine valid ops
     :return: List of conv/linear layer names
     """
-
     # get ordered operations list in TF graph
-    list_of_ordered_ops = get_ordered_ops(sess.graph, input_op_names)
+    list_of_ordered_ops = get_ordered_ops(sess.graph, input_op_names, output_op_names)
 
     # look for conv layers
     ordered_convs = []
     for op in list_of_ordered_ops:
         if op.type in ['Conv2D', 'DepthwiseConv2dNative', 'MatMul'] and not op.name.startswith('gradients/'):
             ordered_convs.append(op)
-
     return ordered_convs
 
 

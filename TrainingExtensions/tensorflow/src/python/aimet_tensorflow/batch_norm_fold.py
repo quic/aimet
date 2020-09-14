@@ -148,7 +148,7 @@ def find_all_batch_norms_to_fold(sess: tf.Session, start_op_names: Union[List[st
     convs_linears_bn_activation_info_dict = _find_conv_bn_pairs(sess, start_op_names, output_op_names)
 
     # get all ordered convs/ linears and skip gradient ops
-    ordered_conv_linears = get_ordered_conv_linears(sess, start_op_names)
+    ordered_conv_linears = get_ordered_conv_linears(sess, start_op_names, output_op_names)
 
     # get the in out tensor for bns found, we need this on TF to remove the bns after fold.
     bn_conv_linear_pairs = []
