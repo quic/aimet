@@ -231,7 +231,7 @@ subgraph_constructors = {
 
 class ModuleIdentifierOpInfo:
     """ Class for summarizing information regarding a tf operation """
-    def __init__(self, module_name, op_type, tf_op, pattern_type: str = None):
+    def __init__(self, module_name, op_type, tf_op, pattern_type: str = None, internal_ops: List[tf.Operation] = None):
         """
         Initialize the ModuleIdentifierOpInfo class.
 
@@ -241,6 +241,7 @@ class ModuleIdentifierOpInfo:
             in the op_to_module_dict)
         :param pattern_type: Pattern used to generate the graph that matched the op corresponding to the
             ModuleIdentifierOpInfo object. Only used in subgraph matcher
+        :param internal_ops : List of internal tf operations associated with the module
         """
         self._module_name = module_name
         self._op_type = op_type
@@ -249,6 +250,7 @@ class ModuleIdentifierOpInfo:
         # Conv2D_keras_with_bias, etc. was used to match the op for this op info class.
         self._pattern_type = pattern_type
         self._attributes = {}
+        self._internal_ops = internal_ops
 
     @property
     def module_name(self):
@@ -279,6 +281,11 @@ class ModuleIdentifierOpInfo:
     def pattern_type(self):
         """ Returns the pattern type corresponding to this operation. """
         return self._pattern_type
+
+    @property
+    def internal_ops(self):
+        """ Returns the internal ops for the module corresponding to this operation. """
+        return self._internal_ops
 
     def add_attribute(self, attribute_name: str, attribute):
         """ Set an attribute of the module identifier op info """
@@ -374,7 +381,8 @@ class SubGraphMatcher:
                     associated_op = get_associated_op(subgraph_constructors[current_pattern]['associated_op_regex'],
                                                       ops_list)
                     op_type = subgraph_constructors[current_pattern]['op_type']
-                    op_info = ModuleIdentifierOpInfo(module_name, op_type, associated_op, pattern_type=current_pattern)
+                    op_info = ModuleIdentifierOpInfo(module_name, op_type, associated_op, pattern_type=current_pattern,
+                                                     internal_ops=ops_list)
                     for op in ops_list:
                         op_to_module_dict[op] = op_info
 

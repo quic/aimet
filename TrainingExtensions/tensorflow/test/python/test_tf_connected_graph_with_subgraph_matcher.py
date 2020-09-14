@@ -398,8 +398,8 @@ class TestTfConnectedGraph(unittest.TestCase):
 
             # Add an RNN layer with 12 internal units.
             x = tf.keras.layers.SimpleRNN(12)(inputs)
-            outputs = tf.keras.layers.Dense(12, activation=tf.nn.softmax,
-                                            name="simplernn_model")(x)
+            _ = tf.keras.layers.Dense(12, activation=tf.nn.softmax,
+                                      name="simplernn_model")(x)
 
             init = tf.global_variables_initializer()
             sess.run(init)
@@ -414,10 +414,27 @@ class TestTfConnectedGraph(unittest.TestCase):
         for op in conn_graph.get_all_ops().values():
             if op.type == 'SimpleRNN':
                 simple_rnn_detected = True
+                inner_list = op.internal_ops
                 self.assertTrue(op.get_module() == sess.graph.get_operation_by_name('simple_rnn/while/MatMul'))
                 self.assertTrue(op.name == 'simple_rnn')
         self.assertTrue(simple_rnn_detected)
+        self.assertTrue(len(inner_list) == 49)
 
+        # check for 2 MatMuls, 1 BiasAdd and an activation function in the inner op list
+        valid_matmuls = []
+        valid_bias_add = []
+        valid_activation = []
+        for op in inner_list:
+            if op.type == 'MatMul' and op not in valid_matmuls:
+                valid_matmuls.append(op)
+            if op.type == 'BiasAdd' and op not in valid_bias_add:
+                valid_bias_add.append(op)
+            if op.type == 'Tanh' and op not in valid_activation:
+                valid_activation.append(op)
+
+        self.assertTrue(len(valid_matmuls) == 2)
+        self.assertTrue(len(valid_bias_add) == 1)
+        self.assertTrue(len(valid_activation) == 1)
 
 
 def validate_branch_ops(conn_graph: ConnectedGraph):
