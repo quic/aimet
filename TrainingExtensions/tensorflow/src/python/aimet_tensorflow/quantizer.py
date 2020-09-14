@@ -49,8 +49,8 @@ from tensorflow.contrib import graph_editor as ge
 from tensorflow.python.framework import ops as tf_ops
 
 # Import aimet specific modules
-import libpymo
 import libpytrext
+import libpymo
 from aimet_common.utils import AimetLogger
 from aimet_tensorflow.common import core
 from aimet_tensorflow.common import graph_eval
