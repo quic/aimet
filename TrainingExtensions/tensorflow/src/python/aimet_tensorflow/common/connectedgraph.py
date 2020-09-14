@@ -167,7 +167,8 @@ class ConnectedGraph(aimetCommonConnectedGraph):
                     output_shape=None,
                     is_anonymous=False,
                     op_type=current_op_info.op_type,
-                    pattern_type=current_op_info.pattern_type)
+                    pattern_type=current_op_info.pattern_type,
+                    internal_ops=current_op_info.internal_ops)
             fill_op_info(op, current_op_info)
             self._ops[current_op_info.module_name] = op
             logger.debug("Created new op: %s ", current_op_info.module_name)
@@ -220,7 +221,8 @@ class ConnectedGraph(aimetCommonConnectedGraph):
                     output_shape=None,
                     is_anonymous=False,
                     op_type=starting_op_info.op_type,
-                    pattern_type=starting_op_info.pattern_type)
+                    pattern_type=starting_op_info.pattern_type,
+                    internal_ops=starting_op_info.internal_ops)
             fill_op_info(op, starting_op_info)
             self._ops[starting_op_info.module_name] = op
             self._add_children_ops_to_op_queue(starting_op)
@@ -256,7 +258,8 @@ class ConnectedGraph(aimetCommonConnectedGraph):
                 output_shape=output_shape,
                 is_anonymous=True,
                 op_type='branch',
-                pattern_type=None)
+                pattern_type=None,
+                internal_ops=None)
         self._ops[op.name] = op
         self._branch_count += 1
         return op

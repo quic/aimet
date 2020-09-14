@@ -37,6 +37,7 @@
 # =============================================================================
 """ Tf Operation class and utilities """
 
+from typing import List
 import tensorflow as tf
 import aimet_common.connected_graph.operation
 from aimet_tensorflow.common.product import Product
@@ -53,21 +54,24 @@ class OpWithMetaInfoType:
 class Op(aimet_common.connected_graph.operation.Op):
     """ Subclass Op inherited from aimet_common.connected_graph.operation.Op """
 
-    def __init__(self, name, dotted_name, output_shape, is_anonymous, op_type, pattern_type):
+    def __init__(self, name: str, dotted_name: str, output_shape: tf.TensorShape,
+                 is_anonymous: bool, op_type: str, pattern_type, internal_ops: List[tf.Operation]):
         """
         Initializer for Op
-        :param name: namme of the operation
+        :param name: name of the operation
         :param dotted_name: dotted name of the operation
         :param output_shape: shape of the output product of the operation
         :param is_anonymous: whether this is an anonymous operation
         :param op_type: type of the operation
         :param pattern_type: pattern type used to match the operation
+        :param internal_ops: internal tf operations of the operation
         """
         super().__init__(name, dotted_name, output_shape, is_anonymous, op_type)
         self._output_op_node = None
         self._parameters = {}
         self._attributes = {}
         self._pattern_type = pattern_type
+        self._internal_ops = internal_ops
 
     @property
     def output_op_node(self):
@@ -83,6 +87,11 @@ class Op(aimet_common.connected_graph.operation.Op):
     def pattern_type(self):
         """ Get the pattern type matched for this operation """
         return self._pattern_type
+
+    @property
+    def internal_ops(self) -> List[tf.Operation]:
+        """ Returns the internal ops for the module corresponding to this operation. """
+        return self._internal_ops
 
     def get_attribute(self, attribute_name: str):
         """ Get an attribute for this operation, returns None if attribute doesn't exist """
