@@ -437,3 +437,16 @@ def model_to_test_downstream_masks():
     x = tf.keras.layers.Flatten()(x)
     outputs = tf.keras.layers.Dense(10, activation=tf.nn.softmax, name="model_to_test_downstream_masks")(x)
     return outputs
+
+
+def model_with_dtype_int():
+    """ Function containing dtype int32 op """
+
+    input_1 = tf.keras.Input(shape=(8, 8, 3,), dtype=tf.int32)
+    input_2 = tf.keras.Input(shape=(8, 8, 3,), dtype=tf.float32)
+    x = tf.cast(input_1, tf.float32)
+    x = tf.add(x, input_2)
+    x = tf.keras.layers.Conv2D(8, (2, 2))(x)
+    x = tf.keras.layers.Flatten()(x)
+    outputs = tf.keras.layers.Dense(10, activation=tf.nn.softmax, name="model_with_dtype_int")(x)
+    return outputs

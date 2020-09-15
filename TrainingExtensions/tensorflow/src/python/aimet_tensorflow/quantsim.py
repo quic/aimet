@@ -756,7 +756,8 @@ class QuantizationSimModel:
         """
         conn_graph = ConnectedGraph(graph, starting_op_names, output_op_names)
         valid_ops = [op for op in conn_graph.get_all_ops().values() if op.type not in op_types_to_ignore]
-        op_names_to_quantize = [conn_graph_op.output_op_node.name for conn_graph_op in valid_ops]
+        op_names_to_quantize = [conn_graph_op.output_op_node.name for conn_graph_op in valid_ops if
+                                QuantizationSimModel._is_op_quantizable(conn_graph_op.output_op_node)]
         return op_names_to_quantize, conn_graph
 
     def _insert_param_quantization_ops(self, op_names: List[str], indices: List[int], default_param_bw: int):
@@ -787,7 +788,7 @@ class QuantizationSimModel:
                 raise ValueError('Input ' + param_in.name + ' not quantized!')
 
     @staticmethod
-    def _is_op_quantizable(op: tf.Operation)->bool:
+    def _is_op_quantizable(op: tf.Operation) -> bool:
         """
         utility to check if the quantization can be supported for this op
         :param op: op as tf.Operation type
@@ -813,21 +814,17 @@ class QuantizationSimModel:
 
             consumers = [consumer for consumer in op.outputs[0].consumers() if 'gradients' not in consumer.name]
 
-            if QuantizationSimModel._is_op_quantizable(op):
-                q_op_out = self._insert_post_training_quant_op(op.outputs[0], quant_op_name,
-                                                               libpymo.TensorQuantizerOpMode.updateStats,
-                                                               self._activation_quantizers, QuantizerType.activation,
-                                                               default_output_bw)
+            q_op_out = self._insert_post_training_quant_op(op.outputs[0], quant_op_name,
+                                                           libpymo.TensorQuantizerOpMode.updateStats,
+                                                           self._activation_quantizers, QuantizerType.activation,
+                                                           default_output_bw)
 
-                # Re-route
-                num_rerouted_outputs = graph_editor.reroute_ts(tf_ops.convert_to_tensor(q_op_out),
-                                                               op.outputs[0], can_modify=consumers)
-                if num_rerouted_outputs != len(consumers):
-                    raise ValueError('Failed to map ' + str(len(consumers)) + ' quantization output(s). Only mapped ' +
-                                     str(num_rerouted_outputs))
-            else:
-                _logger.info('Unsupported dtype {%s} detected for op {%s}, Skipping quantize op insertion',
-                             op.outputs[0].dtype, op_name)
+            # Re-route
+            num_rerouted_outputs = graph_editor.reroute_ts(tf_ops.convert_to_tensor(q_op_out),
+                                                           op.outputs[0], can_modify=consumers)
+            if num_rerouted_outputs != len(consumers):
+                raise ValueError('Failed to map ' + str(len(consumers)) + ' quantization output(s). Only mapped ' +
+                                 str(num_rerouted_outputs))
 
     def _create_encoding_min_max_vars(self, q_op_name: str) -> (tf.Variable, tf.Variable):
         """
