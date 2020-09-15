@@ -51,8 +51,8 @@ from tensorflow.contrib import graph_editor
 from aimet_common.defs import QuantScheme
 from aimet_common.quantsim import gate_min_max, calculate_delta_offset
 from aimet_common.utils import AimetLogger
-from aimet_tensorflow.utils.common import update_variables_with_values, \
-    save_data_to_pickle_file, load_data_from_pickle_file
+from aimet_tensorflow.utils.common import update_variables_with_values, save_data_to_pickle_file, \
+    load_data_from_pickle_file, get_valid_ops
 from aimet_tensorflow.utils import graph_saver
 from aimet_tensorflow.utils.constants import QuantizeOpIndices
 from aimet_tensorflow.utils.quantsim import create_op_to_quant_ops_dict
@@ -685,7 +685,9 @@ class QuantizationSimModel:
         """
 
         # Get list of ops with params to insert quantizers for, as well as the input indices to insert on.
-        ops_with_param_names, input_indices = QuantizationSimModel.get_ops_to_quantize_params_for(self.session.graph)
+        ops_with_param_names, input_indices = QuantizationSimModel.get_ops_to_quantize_params_for(self.session.graph,
+                                                                                                  starting_op_names,
+                                                                                                  output_op_names)
 
         # Get list of activation ops to insert quantizers for, and the connected graph used to obtain these ops
         activation_op_names, conn_graph = QuantizationSimModel.get_ops_to_quantize_activations_for(self.session.graph,
@@ -720,16 +722,20 @@ class QuantizationSimModel:
         return quant_op_name[:-len('_quantized')]
 
     @staticmethod
-    def get_ops_to_quantize_params_for(graph: tf.Graph) -> Tuple[List[str], List[int]]:
+    def get_ops_to_quantize_params_for(graph: tf.Graph, starting_op_names: List[str], output_op_names: List[str]) \
+            -> Tuple[List[str], List[int]]:
         """
         Get names of ops to insert param quantizers for, as well as corresponding indices
         :param graph: Tensorflow graph to get names of ops to quantize weights for
+        :param starting_op_names: List of starting op names of the model
+        :param output_op_names: List of output op names of the model
         :return: Tuple consisting of list of op names with params to insert quantize ops for as well as list of indices
         of parameters for each op
         """
         # Get the op query module
         query = core.OpQuery(graph, ops_to_ignore=None)
-        ops_with_param_names = [op.name for op in query.get_weight_ops()]
+        valid_ops = get_valid_ops(graph, starting_op_names, output_op_names)
+        ops_with_param_names = [op.name for op in query.get_weight_ops() if op in valid_ops]
         ops_with_params = [graph.get_operation_by_name(op_name) for op_name in ops_with_param_names]
         input_indices = query.get_weight_inputs(ops_with_params)
         if len(ops_with_param_names) != len(input_indices):
