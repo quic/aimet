@@ -814,6 +814,10 @@ class QuantizationSimModel:
 
             consumers = [consumer for consumer in op.outputs[0].consumers() if 'gradients' not in consumer.name]
 
+            if not QuantizationSimModel._is_op_quantizable(op):
+                _logger.error('Unsupported dtype {%s} detected for op {%s}.', op.outputs[0].dtype, op_name)
+                raise AssertionError
+
             q_op_out = self._insert_post_training_quant_op(op.outputs[0], quant_op_name,
                                                            libpymo.TensorQuantizerOpMode.updateStats,
                                                            self._activation_quantizers, QuantizerType.activation,
