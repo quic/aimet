@@ -483,10 +483,10 @@ class QuantizationSimModel:
     @staticmethod
     def _create_encoding_dict_for_quantizer(quantizer: TensorQuantizer) -> Dict:
         if quantizer.encoding:
-            min, max, bw = quantizer.encoding.min, quantizer.encoding.max, quantizer.encoding.bw
-            scale, offset = calculate_delta_offset(min, max, bw)
-            return {'min': min,
-                    'max': max,
+            encoding_min, encoding_max, bw = quantizer.encoding.min, quantizer.encoding.max, quantizer.encoding.bw
+            scale, offset = calculate_delta_offset(encoding_min, encoding_max, bw)
+            return {'min': encoding_min,
+                    'max': encoding_max,
                     'scale': scale,
                     'offset': offset,
                     'bitwidth': bw}
