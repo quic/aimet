@@ -60,6 +60,8 @@ from aimet_tensorflow.common import core
 from aimet_tensorflow.common.connectedgraph import ConnectedGraph
 from aimet_tensorflow.quantsim_config.quantsim_config import QuantSimConfigurator
 
+# this is required to associate gradient with QcQuantize op
+from aimet_tensorflow import quantsim_straight_through_grad      # pylint: disable=unused-import
 import libpymo
 
 _logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Quant)
@@ -85,18 +87,6 @@ class QuantizerType(Enum):
 
 # Op types which we will not place quantize ops after
 op_types_to_ignore = {'branch', 'Flatten', 'Shape'}
-
-# by default we will have this registered for Qc Quantize op.
-@tf_ops.RegisterGradient("QcQuantize")
-def _qc_dummy_quantized_grad(op, grad):
-    # pylint: disable=unused-argument
-    """
-    Dummy function to allow QcQuantize op to not do any gradient calculations
-    :param op: quantize op
-    :param grad: gradient
-    :return: gradients computed per input
-    """
-    return grad, None, None, None, None, None, None
 
 
 class PickleableTensorQuantizerState:
