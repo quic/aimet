@@ -36,38 +36,22 @@
 #  @@-COPYRIGHT-END-@@
 # =============================================================================
 
-""" Common utility for Quantization """
+
+import unittest
+import numpy as np
 
 
-def gate_min_max(min_val: float, max_val: float)-> (float, float):
-    """
-    Gates min and max encoding values to retain zero in the range representation.
-    Rules : min at maximum can be zero, max at minimum can be zero and
-    if max and min are equal, adds epsilon to maintain range.
-    :param min_val: min encoding value
-    :param max_val: max encoding value
-    :return: gated min and max values
-    """
+class TestCommonQuantSim(unittest.TestCase):
 
-    epsilon = 1e-5
-    gated_min = min(min_val, 0.0)
-    gated_max = max(max_val, 0.0)
-    gated_max = max(gated_max, gated_min + epsilon)
+    def test_offset_delta_compute(self):
+        """ test computation of delta and offset for export """
+        from aimet_tensorflow.quantsim import calculate_delta_offset
+        max = 1.700559472933134
+        min = -2.1006477158567995
+        bitwidth = 8
 
-    return gated_min, gated_max
-
-
-def calculate_delta_offset(min_val: float, max_val: float, bitwidth: int)-> (float, float):
-    """
-    calculates delta and offset given min and max.
-    :param min_val: min encoding value
-    :param max_val: max encoding value
-    :param bitwidth: bitwidth used for quantization
-    :return: delta and offset values computed
-    """
-
-    delta = (max_val - min_val) / (2 ** bitwidth - 1)
-    if delta == 0:
-        delta = 1e-5
-    offset = round(min_val / delta)
-    return delta, offset
+        expected_delta = (max - min) / (2 ** bitwidth - 1)
+        expected_offset = np.round(min / expected_delta)
+        delta, offset = calculate_delta_offset(min, max, bitwidth)
+        self.assertTrue(expected_delta == delta)
+        self.assertTrue(expected_offset == offset)
