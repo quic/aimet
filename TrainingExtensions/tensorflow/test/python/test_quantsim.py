@@ -43,6 +43,7 @@ import libpymo
 from aimet_tensorflow.quantsim import QuantizationSimModel
 from aimet_tensorflow.utils.graph_saver import load_model_from_meta
 from aimet_tensorflow.common.graph_eval import initialize_uninitialized_vars
+from aimet_tensorflow.examples.test_models import model_with_dtype_int
 from aimet_common.defs import QuantScheme
 from aimet_tensorflow.quantsim import save_checkpoint, load_checkpoint
 from aimet_tensorflow.utils.constants import QuantizeOpIndices
@@ -610,3 +611,14 @@ class TestQuantSim(unittest.TestCase):
         QuantizationSimModel.get_ops_to_quantize_activations_for = orig_get_ops_to_quantize_activations_for
         QuantizationSimModel.get_ops_to_quantize_params_for = orig_get_ops_to_quantize_weights_for
         QuantizationSimModel.configure_quantization_ops = orig_configure_quantization_ops
+
+    def test_skip_quantizing_dtype_int(self):
+        """ Test that op with dtype int32 is skipped during quantization """
+        tf.reset_default_graph()
+        with tf.Session() as sess:
+            _ = model_with_dtype_int()
+            initialize_uninitialized_vars(sess)
+            sim = QuantizationSimModel(sess, ['input_1', 'input_2'], ['model_with_dtype_int/Softmax'], use_cuda=False)
+            self.assertEqual(6, len(sim._activation_quantizers))
+            self.assertTrue('input_1_quantized' not in sim._activation_quantizers)
+            self.assertTrue('input_2_quantized' in sim._activation_quantizers)
