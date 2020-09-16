@@ -98,7 +98,7 @@ class TestBatchNormFold(unittest.TestCase):
         sess = tf.Session()
         sess.run(init)
         start_op = ["inputs"]
-        bn_conv_linear_pairs = find_all_batch_norms_to_fold(sess, start_op, 'Relu')
+        bn_conv_linear_pairs = find_all_batch_norms_to_fold(sess, start_op, ['Relu'])
         self.assertEqual(1, len(bn_conv_linear_pairs))
 
     def test_bn_fold_layer_selection_looped_network(self):
@@ -147,7 +147,7 @@ class TestBatchNormFold(unittest.TestCase):
         sess.run(init)
 
         start_op = ["inputs"]
-        bn_conv_linear_pairs = find_all_batch_norms_to_fold(sess, start_op, 'Relu')
+        bn_conv_linear_pairs = find_all_batch_norms_to_fold(sess, start_op, ['Relu'])
 
         self.assertEqual(1, len(bn_conv_linear_pairs))
 
@@ -172,7 +172,7 @@ class TestBatchNormFold(unittest.TestCase):
 
         ins = sess.graph.get_operations()
         start_ops = ['input1', 'input2']
-        bn_conv_linear_pairs = find_all_batch_norms_to_fold(sess, start_ops, 'Relu')
+        bn_conv_linear_pairs = find_all_batch_norms_to_fold(sess, start_ops, ['Relu'])
 
         assert(1 == len(bn_conv_linear_pairs))
 
@@ -223,7 +223,7 @@ class TestBatchNormFold(unittest.TestCase):
         sess = tf.Session()
         sess.run(init)
         start_op = ["inputs"]
-        bn_conv_linear_pairs = find_all_batch_norms_to_fold(sess, start_op, 'Relu')
+        bn_conv_linear_pairs = find_all_batch_norms_to_fold(sess, start_op, ['Relu'])
         self.assertEqual(1, len(bn_conv_linear_pairs))
         conv_linear, batchnorm, is_batch_norm_second = bn_conv_linear_pairs[0]
         first_conv = sess.graph.get_operation_by_name('conv2d/Conv2D')

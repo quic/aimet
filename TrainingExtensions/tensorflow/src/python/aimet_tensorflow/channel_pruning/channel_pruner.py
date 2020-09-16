@@ -152,7 +152,8 @@ class InputChannelPruner(Pruner):
         """
         sorted_layer_comp_ratio_list = []
 
-        ordered_ops = get_ordered_ops(graph=sess.graph, starting_op_names=self._input_op_names)
+        ordered_ops = get_ordered_ops(graph=sess.graph, starting_op_names=self._input_op_names,
+                                      output_op_names=self._output_op_names)
 
         for op in ordered_ops:
 
