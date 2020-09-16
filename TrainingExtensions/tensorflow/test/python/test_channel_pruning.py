@@ -1058,7 +1058,7 @@ class TestTrainingExtensionsChannelPruning(unittest.TestCase):
         ]
 
         input_op_names = ['input_1']
-        output_op_names = ['avg_pool/AvgPool']
+        output_op_names = ['activation_49/Relu']
         dataset = unittest.mock.MagicMock()
         batch_size = unittest.mock.MagicMock()
         num_reconstruction_samples = unittest.mock.MagicMock()

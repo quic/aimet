@@ -158,7 +158,7 @@ class TestTrainingExtensionsTfUtils(unittest.TestCase):
         with g.as_default():
             single_residual()
 
-        ordered_ops = get_ordered_ops(g, ['input_1'])
+        ordered_ops = get_ordered_ops(g, ['input_1'], ['single_residual/Softmax'])
 
         self.assertTrue(ordered_ops.index(g.get_operation_by_name('conv2d_4/Conv2D')) >
                         ordered_ops.index(g.get_operation_by_name('conv2d_1/Conv2D')))
@@ -171,23 +171,15 @@ class TestTrainingExtensionsTfUtils(unittest.TestCase):
 
         with g.as_default():
             _ = ResNet50(weights=None)
-
-            inp_tensor = tf.get_variable('inp_tensor', shape=[1, 20, 5, 5],
-                                         initializer=tf.random_normal_initializer())
-
-            filter_tensor = tf.get_variable('filter_tensor', shape=[5, 5, 20, 50],
+            filter_tensor = tf.get_variable('filter_tensor', shape=[5, 5, 3, 50],
                                             initializer=tf.random_normal_initializer())
 
-            # add random conv, which is not part of forward pass
+            # add dangling conv, which is not a valid op
             # pylint: disable=no-member
-            _ = tf.nn.conv2d(input=inp_tensor, filter=filter_tensor, strides=[1, 1, 1, 1], padding='VALID',
-                             data_format="NCHW", name='dangling/Conv2D')
+            _ = tf.nn.conv2d(input=g.get_tensor_by_name('input_1:0'), filter=filter_tensor, strides=[1, 1, 1, 1],
+                             padding='VALID', data_format="NHWC", name='dangling/Conv2D')
 
-        ordered_ops = get_ordered_ops(g, ['input_1'])
-
-        for op in ordered_ops:
-            if op.type == 'Conv2D':
-                print(op.name)
+        ordered_ops = get_ordered_ops(g, ['input_1'], ['fc1000/Softmax'])
 
         self.assertTrue(ordered_ops.index(g.get_operation_by_name('res2a_branch2b/convolution')) >
                         ordered_ops.index(g.get_operation_by_name('res2a_branch1/convolution')))
@@ -210,7 +202,7 @@ class TestTrainingExtensionsTfUtils(unittest.TestCase):
         with g.as_default():
             multiple_input_model()
 
-        ordered_ops = get_ordered_ops(g, ['input2', 'input1'])
+        ordered_ops = get_ordered_ops(g, ['input2', 'input1'], ['multiple_input_model/Softmax'])
 
         self.assertTrue(ordered_ops.index(g.get_operation_by_name('conv1b/Conv2D')) >
                         ordered_ops.index(g.get_operation_by_name('input2')))
@@ -483,7 +475,7 @@ class TestTrainingExtensionsTfUtils(unittest.TestCase):
 
         # check if we get ordered list
         input_op = conv_op.inputs[0].op.name
-        selected_ops = get_ordered_conv_linears(sess, [input_op])
+        selected_ops = get_ordered_conv_linears(sess, [input_op], ['Relu_1'])
 
         self.assertEqual(2, len(selected_ops))
         conv_op = sess.graph.get_operation_by_name('conv2d/Conv2D')
