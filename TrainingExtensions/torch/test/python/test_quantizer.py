@@ -42,11 +42,14 @@ import torch
 import torch.nn as nn
 import json as json
 
+
 from torchvision import models
 from aimet_common.defs import QuantScheme
 
 from aimet_torch.quantsim import QuantizationSimModel
+from aimet_torch.quantsim_straight_through_grad import compute_dloss_by_dx
 from aimet_torch.defs import PassThroughOp
+
 from aimet_torch.qc_quantize_op import QcQuantizeWrapper, QcQuantizeStandalone, MAP_ROUND_MODE_TO_PYMO, \
     MAP_QUANT_SCHEME_TO_PYMO, QcPostTrainingWrapper
 from aimet_common.utils import AimetLogger
@@ -1101,3 +1104,33 @@ class TestQuantizationSim(unittest.TestCase):
 
         self.assertTrue(np.allclose(output_before_save.detach().numpy(),
                                     output_after_load.detach().numpy()))
+
+    def test_ste_gradient_math(self):
+        """
+        Unit test to validate custom gradient computation with auto grad computation.
+        :return: None
+        """
+
+        c_enc_min = torch.Tensor([-0.25])
+        c_enc_max = torch.Tensor([1.0])
+        grad = torch.Tensor([[1.0, 1.0], [1.0, 1.0]])
+
+        # input > max
+        custom_input_1 = torch.Tensor([[1.0, 1.5], [0.125, -0.12]])
+        expected_grad_1 = torch.Tensor([[1.0, 0.0], [1.0, 1.0]])
+        grad_out_1 = compute_dloss_by_dx(custom_input_1, grad, c_enc_min, c_enc_max)
+
+        # input < min
+        custom_input_2 = torch.Tensor([[1.0, 0.5], [0.125, -0.30]])
+        expected_grad_2 = torch.Tensor([[1.0, 1.0], [1.0, 0.0]])
+        grad_out_2 = compute_dloss_by_dx(custom_input_2, grad, c_enc_min, c_enc_max)
+
+        # valid input range
+        custom_input_3 = torch.Tensor([[1.0, 0.5], [0.125, -0.25]])
+        expected_grad_3 = torch.Tensor([[1.0, 1.0], [1.0, 1.0]])
+        grad_out_3 = compute_dloss_by_dx(custom_input_3, grad, c_enc_min, c_enc_max)
+
+        self.assertTrue(np.allclose(expected_grad_1, grad_out_1))
+        self.assertTrue(np.allclose(expected_grad_2, grad_out_2))
+        self.assertTrue(np.allclose(expected_grad_3, grad_out_3))
+
