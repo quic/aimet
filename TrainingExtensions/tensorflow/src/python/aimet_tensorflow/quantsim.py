@@ -64,6 +64,9 @@ from aimet_tensorflow.quantsim_config.quantsim_config import QuantSimConfigurato
 from aimet_tensorflow import quantsim_straight_through_grad      # pylint: disable=unused-import
 import libpymo
 
+
+# pylint: disable=too-many-lines
+
 _logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Quant)
 WORKING_DIR = '/tmp/quantsim/'
 
@@ -585,6 +588,53 @@ class QuantizationSimModel:
                             os.path.join(path, filename_prefix) + '.meta')
 
         self._export_encodings(os.path.join(path, filename_prefix) + '.encodings')
+
+    def save_to_keras(self, temp_dir_path: str = "/tmp/") -> tf.Session:
+        """
+        This method exports out the quant-sim model so it is ready to be eval/trained using a Keras pipeline
+
+        :param temp_dir_path: temporary directory to store intermediate files
+        :return: Session to import into a Keras model
+
+        """
+        current_graph = self.session.graph
+        with current_graph.as_default():
+            ops = current_graph.get_operations()
+            for op in ops:
+                if op.type == 'QcQuantize':
+
+                    # Read the config
+                    # -----------------
+                    quant_config = self.quantizer_config(op.name)
+                    config_tuple = self.session.run([op.inputs[QuantizeOpIndices.op_mode],
+                                                     op.inputs[QuantizeOpIndices.encoding_min],
+                                                     op.inputs[QuantizeOpIndices.encoding_max],
+                                                     op.inputs[QuantizeOpIndices.bit_width],
+                                                     op.inputs[QuantizeOpIndices.use_symmetric_encoding]])
+                    op_mode, encoding_min, encoding_max, bitwidth, is_symmetric = config_tuple
+
+                    # Create the static op
+                    # --------------------
+                    if not self._use_cuda:
+                        with tf.device('/cpu:0'):
+                            static_op = qcops.qc_quantize_static(name=op.name+"_static", in_tensor=op.inputs[0],
+                                                                 encoding_min=encoding_min, encoding_max=encoding_max,
+                                                                 bitwidth=bitwidth, quant_scheme=quant_config.quant_scheme,
+                                                                 op_mode=op_mode, is_symmetric=bool(is_symmetric))
+                    else:
+                        static_op = qcops.qc_quantize_static(name=op.name + "_static", in_tensor=op.inputs[0],
+                                                             encoding_min=encoding_min, encoding_max=encoding_max,
+                                                             bitwidth=bitwidth, quant_scheme=quant_config.quant_scheme,
+                                                             op_mode=op_mode, is_symmetric=bool(is_symmetric))
+
+                    # Replace in graph
+                    # -----------------
+                    graph_editor.reroute_ts(ts0=[static_op], ts1=[op.outputs[0]],
+                                            can_modify=op.outputs[0].consumers())
+                    graph_editor.detach_inputs(op)
+
+        new_sess = graph_saver.save_and_load_graph(temp_dir_path, self.session)
+        return new_sess
 
     @staticmethod
     def _param_op_mode_after_analysis(_) -> libpymo.TensorQuantizerOpMode:
