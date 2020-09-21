@@ -186,6 +186,86 @@ class TestQuantSim(unittest.TestCase):
         self.assertEqual(int(libpymo.TensorQuantizerOpMode.quantizeDequantize),
                          sim.session.run(conv2d_output_quant_op.inputs[1]))
 
+    def _save_to_keras_common_test_code(self, use_cuda):
+        tf.reset_default_graph()
+        if not use_cuda:
+            model = tf.keras.Sequential()
+            model.add(tf.keras.layers.Conv2D(32, kernel_size=3, input_shape=(28, 28, 3), activation='relu'))
+            model.add(tf.keras.layers.MaxPooling2D((2, 2)))
+            model.add(tf.keras.layers.Conv2D(64, kernel_size=3, activation='relu'))
+            model.summary()
+        else:
+            with tf.device('/cpu:0'):
+                model = tf.keras.Sequential()
+                model.add(tf.keras.layers.Conv2D(32, kernel_size=3, input_shape=(28, 28, 3), activation='relu'))
+                model.add(tf.keras.layers.MaxPooling2D((2, 2)))
+                model.add(tf.keras.layers.Conv2D(64, kernel_size=3, activation='relu'))
+                model.summary()
+
+        sess = tf.Session()
+        initialize_uninitialized_vars(sess)
+        sim = QuantizationSimModel(sess, ['conv2d_input'], ['conv2d_1/Relu'], use_cuda=use_cuda)
+
+        # Check that op-mode is set correctly
+        conv2d_weight_quant_op = sim.session.graph.get_operation_by_name('conv2d/Conv2D/ReadVariableOp_quantized')
+        conv2d_output_quant_op = sim.session.graph.get_operation_by_name('conv2d/Relu_quantized')
+        self.assertEqual(int(libpymo.TensorQuantizerOpMode.oneShotQuantizeDequantize),
+                         sim.session.run(conv2d_weight_quant_op.inputs[1]))
+        self.assertEqual(int(libpymo.TensorQuantizerOpMode.updateStats),
+                         sim.session.run(conv2d_output_quant_op.inputs[1]))
+
+        def dummy_forward_pass(sess, eval_tensor_name):
+            model_output = sess.graph.get_tensor_by_name(eval_tensor_name)
+            model_input = sess.graph.get_tensor_by_name('conv2d_input:0')
+            dummy_input = np.random.randn(20, 28, 28, 3)
+            sess.run(model_output, feed_dict={model_input: dummy_input})
+
+        sim.compute_encodings(dummy_forward_pass, 'conv2d_1/Relu_quantized:0')
+        mod_sess = sim.save_to_keras()
+
+        # Check 1: The new graph is well formed. Try forward pass through the graph.
+        dummy_forward_pass(mod_sess, 'conv2d_1/Relu_quantized_static:0')
+
+        # Check 2: All the QcQuantizeOp nodes have no output - meaning are disconnected from the main graph
+        op_count = 0
+        for op in mod_sess.graph.get_operations():
+            if op.type == "QcQuantize":
+                op_count += 1
+                self.assertFalse(op.outputs[0].consumers())
+
+        # Check 3: One QcQuantizeStatic for each QcQuantize op
+        static_op_count = 0
+        for op in mod_sess.graph.get_operations():
+            if op.type == "QcQuantizeStatic":
+                static_op_count += 1
+        self.assertEqual(op_count, static_op_count)
+
+        # Check 4: Make sure the attributes are set correctly
+        op = mod_sess.graph.get_operation_by_name("conv2d/Conv2D/ReadVariableOp_quantized_static")
+        self.assertEqual(8, op.get_attr("bitwidth"))
+        self.assertEqual(1, op.get_attr("quant_scheme"))  # TF-Enhanced
+        self.assertEqual(1, op.get_attr("op_mode"))  # oneShotQuantizeDequantize
+
+        op = mod_sess.graph.get_operation_by_name("conv2d/BiasAdd_quantized_static")
+        self.assertEqual(3, op.get_attr("op_mode"))  # passThrough
+
+        op = mod_sess.graph.get_operation_by_name("conv2d/Relu_quantized_static")
+        self.assertEqual(8, op.get_attr("bitwidth"))
+        self.assertEqual(1, op.get_attr("quant_scheme"))  # TF-Enhanced
+        self.assertEqual(2, op.get_attr("op_mode"))  # quantizeDequantize
+
+    def test_save_to_keras_cpu_model(self):
+        """
+        Create sim model for a keras pipeline
+        """
+        self._save_to_keras_common_test_code(False)
+
+    def test_save_to_keras_gpu_model(self):
+        """
+        Create sim model for a keras pipeline
+        """
+        self._save_to_keras_common_test_code(True)
+
     def test_compute_encodings_gpu_model(self):
         """
         Create QuantSim for a CPU model and test that activation encodings are computed
