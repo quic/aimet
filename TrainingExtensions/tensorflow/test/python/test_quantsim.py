@@ -702,3 +702,47 @@ class TestQuantSim(unittest.TestCase):
             self.assertEqual(6, len(sim._activation_quantizers))
             self.assertTrue('input_1_quantized' not in sim._activation_quantizers)
             self.assertTrue('input_2_quantized' in sim._activation_quantizers)
+
+    def test_insert_quant_op_recurrent(self):
+
+        """ test insertion of quant ops to recurrent layer with conditional blocks """
+
+        tf.reset_default_graph()
+        sess = tf.Session()
+
+        with sess.graph.as_default():
+            inputs = tf.keras.Input(shape=(3, 100))
+
+            # Add an RNN layer with 12 internal units.
+            # Add an RNN layer
+            x = tf.keras.layers.SimpleRNN(12)(inputs)
+            _ = tf.keras.layers.Dense(12, activation=tf.nn.softmax,
+                                      name="simplernn_model")(x)
+
+        init = tf.global_variables_initializer()
+        sess.run(init)
+        ops = sess.graph.get_operations()
+        quant_op_inside_while_block_name = "simple_rnn/while/MatMul/ReadVariableOp_quantized"
+        self.assertFalse(quant_op_inside_while_block_name in [op.name for op in ops])
+
+        # construct a quantization sim model
+        sim = QuantizationSimModel(sess, ['input_1'], ['simplernn_model/Softmax'], use_cuda=False)
+
+        while_matmul_weight_read_tensor_name = "simple_rnn/while/MatMul/ReadVariableOp:0"
+        while_matmul_weight_read_tensor = sim.session.graph.get_tensor_by_name(while_matmul_weight_read_tensor_name)
+        op_mode = libpymo.TensorQuantizerOpMode.oneShotQuantizeDequantize
+
+        # while block ops won't be updated by sim before invoking new api below
+        ops = sim.session.graph.get_operations()
+        self.assertFalse(quant_op_inside_while_block_name in [op.name for op in ops])
+
+        # test the new api to insert quant ops to conditional blocks
+        sim._insert_post_training_quant_op_recurrent(while_matmul_weight_read_tensor,
+                                                     quant_op_inside_while_block_name,
+                                                     op_mode, sim._param_quantizers, 0, 8)
+        # make sure graph is updated
+        sim._save_and_load_sim_model()
+
+        # get ops and make sure we have a quantized op added to the conditional block
+        ops = sim.session.graph.get_operations()
+        self.assertTrue(quant_op_inside_while_block_name in [op.name for op in ops])
