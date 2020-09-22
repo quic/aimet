@@ -762,6 +762,25 @@ class QuantizationSimModel:
         return quant_op_name[:-len('_quantized')]
 
     @staticmethod
+    def op_in_valid_context(graph: tf.Graph, input_op: tf.Operation) -> bool:
+        """
+        checks if the  op has valid context to be used to perform modifications in active graph
+        :param graph: tf.Graph is the active graph
+        :param input_op: op as tf.Operation
+        :return: True if op in valid context, false otherwise
+        """
+        # pylint: disable=protected-access
+        active_ctxt = graph._get_control_flow_context()
+        input_ctxt = input_op._get_control_flow_context()
+
+        if not input_ctxt or input_ctxt is active_ctxt:
+            # input_op isn't in 'a' control flow context or
+            # input_op is in the same context as op.
+            return True
+
+        return False
+
+    @staticmethod
     def get_ops_to_quantize_params_for(graph: tf.Graph, starting_op_names: List[str], output_op_names: List[str]) \
             -> Tuple[List[str], List[int]]:
         """
@@ -775,7 +794,9 @@ class QuantizationSimModel:
         # Get the op query module
         query = core.OpQuery(graph, ops_to_ignore=None)
         valid_ops = get_valid_ops(graph, starting_op_names, output_op_names)
-        ops_with_param_names = [op.name for op in query.get_weight_ops() if op in valid_ops]
+        ops_with_param_names = [op.name for op in query.get_weight_ops() if op in valid_ops and
+                                QuantizationSimModel.op_in_valid_context(graph, graph.get_operation_by_name(op.name))]
+        # op's control_flow_context() will be populated for ops within conditional blocks
         ops_with_params = [graph.get_operation_by_name(op_name) for op_name in ops_with_param_names]
         input_indices = query.get_weight_inputs(ops_with_params)
         if len(ops_with_param_names) != len(input_indices):
@@ -797,7 +818,8 @@ class QuantizationSimModel:
         conn_graph = ConnectedGraph(graph, starting_op_names, output_op_names)
         valid_ops = [op for op in conn_graph.get_all_ops().values() if op.type not in op_types_to_ignore]
         op_names_to_quantize = [conn_graph_op.output_op_node.name for conn_graph_op in valid_ops if
-                                QuantizationSimModel._is_op_quantizable(conn_graph_op.output_op_node)]
+                                QuantizationSimModel._is_op_quantizable(conn_graph_op.output_op_node)
+                                and QuantizationSimModel.op_in_valid_context(graph, conn_graph_op.output_op_node)]
         return op_names_to_quantize, conn_graph
 
     def _insert_param_quantization_ops(self, op_names: List[str], indices: List[int], default_param_bw: int):
@@ -889,6 +911,33 @@ class QuantizationSimModel:
                                        trainable=is_trainable, dtype=tf.double)
 
         return encoding_min_var, encoding_max_var
+
+    def _insert_post_training_quant_op_recurrent(self, preceeding_tensor, quant_op_name: str,
+                                                 op_mode: libpymo.QuantizationMode,
+                                                 quantizer_dict: Dict[str, QuantizerInfo],
+                                                 quantizer_type: QuantizerType, bit_width: int = 8):
+        """
+        Create and insert a post-training quant op after a given tensor within a conditional block
+        :param preceeding_tensor: Preceeding tensor to insert the quant op after
+        :param quant_op_name: Name to give to the new quant op
+        :param op_mode: Starting mode to configure for the new quant op
+        :param quantizer_dict: dictionary of op and QuantizerInfo
+        :param quantizer_type : indicate param or activation quantizer
+        :param bit_width : bit-width to be used (output or param quantization bit-width), default set to 8.
+        :return: None
+        """
+
+        # pylint: disable=protected-access
+        # this handles cases such as conditional blocks that are defined in their own context
+        context_bk = self.session.graph._get_control_flow_context()
+        self.session.graph._set_control_flow_context(preceeding_tensor.op._get_control_flow_context())
+        q_op_out = self._insert_post_training_quant_op(preceeding_tensor, quant_op_name, op_mode, quantizer_dict,
+                                                       quantizer_type, bit_width)
+
+        # revert the context back to graph level from op context
+        self.session.graph._set_control_flow_context(context_bk)
+
+        return q_op_out
 
     def _insert_post_training_quant_op(self, preceeding_tensor, quant_op_name: str, op_mode: libpymo.QuantizationMode,
                                        quantizer_dict: Dict[str, QuantizerInfo], quantizer_type: QuantizerType,
