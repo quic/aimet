@@ -19,8 +19,8 @@ The AIMET package requires the following host platform setup:
 
 - 64-bit Intel x86-compatible processor
 - Nvidia GPU card
-- Linux Ubuntu: 18.04 LTS
-- nvidia-docker (optional) - Installation instructions: https://github.com/NVIDIA/nvidia-docker
+- Linux Ubuntu: 16.04 LTS or later
+- nvidia-docker - Installation instructions: https://github.com/NVIDIA/nvidia-docker
 - bash command shell
 
 To use the GPU accelerated training modules an Nvidia CUDA enabled GPU with a minimum Nvidia driver version of 361+ is required. Using the latest driver is always recommended, especially if using a newer GPU. Both CUDA and cuDNN (the more advanced CUDA interface) enabled GPUs are supported.
@@ -53,6 +53,11 @@ popd
 ## Setup the environment
 In order to build and run AIMET code, several dependencies are required (such as python, cmake, tensorflow, pytorch, etc). A docker file with all prerequisites and dependencies is available [here](Jenkins/Dockerfile). Either install the dependencies on your machine using [this Dockerfile](Jenkins/Dockerfile) as a guide, or just build and launch the docker using the instructions [here](#docker-information).
 
+Set the *common* environment variables as follows:
+```bash
+source $WORKSPACE/aimet/packaging/envsetup.sh
+```
+
 ## Build code and install
 Follow these instructions to build the AIMET code:
 
@@ -60,19 +65,19 @@ Follow these instructions to build the AIMET code:
 ```bash
 cd $WORKSPACE 
 mkdir build && cd build
-cmake -DCMAKE_EXPORT_COMPILE_COMMANDS=ON ../aimet && make -j8 
+cmake -DCMAKE_EXPORT_COMPILE_COMMANDS=ON ../aimet
+make -j8 
 ```
 
-After a successful build, AIMET package can be installed using the following instructions:
-
+After a successful build, install the package using the following instructions:
 ```bash
 cd $WORKSPACE/build
 make install
 ```
+Once the installation step is complete, the AIMET package is created at `$WORKSPACE/build/staging/lib/`.
 
-## Set package and library paths
-Once the installation step is complete, AIMET package would be available at `$WORKSPACE/build/staging/lib/`, which should get reflected in some environment variables:
-
+## Setup paths
+Setup the package and library paths as follows:
 ```bash
 export PYTHONPATH=$WORKSPACE/build/staging/lib/x86_64-linux-gnu:$WORKSPACE/build/staging/lib/python:$PYTHONPATH
 export LD_LIBRARY_PATH=$WORKSPACE/build/staging/lib/x86_64-linux-gnu:$WORKSPACE/build/staging/lib/python:$LD_LIBRARY_PATH
