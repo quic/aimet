@@ -245,7 +245,9 @@ class ConnectedGraph(AimetCommonConnectedGraph):
         "prim::Constant",
         "prim::ListConstruct",
         "aten::Int",
-        "aten::t"
+        "aten::t",
+        "aten::to",
+        "aten::detach"
     ]
 
     def __del__(self):
