@@ -527,26 +527,36 @@ class QuantizationSimModel:
         # Run data through the quantsim so we can compute activation encodings
         forward_pass_callback(self.session, forward_pass_callback_args)
 
+        ops_with_invalid_encodings = []
+
         # For activations, calculate encodings and update min-max parameters
         for op_name, quantizer_info in self._activation_quantizers.items():
-
             # Calculate encodings
             if quantizer_info.get_op_mode() != int(libpymo.TensorQuantizerOpMode.passThrough):
                 op_bitwidth, op_use_symmetric_encodings = self._get_bitwidth_and_symmetric_flag(
                     quantizer_info.quant_op_name)
                 encoding = quantizer_info.tensor_quantizer.computeEncoding(op_bitwidth, op_use_symmetric_encodings)
-                self._set_op_input_variables(op_name, encoding, libpymo.TensorQuantizerOpMode.quantizeDequantize)
+                if quantizer_info.tensor_quantizer.isEncodingValid:
+                    self._set_op_input_variables(op_name, encoding, libpymo.TensorQuantizerOpMode.quantizeDequantize)
+                else:
+                    ops_with_invalid_encodings.append(op_name)
 
         # For post-training mode, params will always be in one-shot mode
         op_mode = QuantizationSimModel._param_op_mode_after_analysis(self._quant_scheme)
 
         for op_name, quantizer_info in self._param_quantizers.items():
-
             if quantizer_info.get_op_mode() != int(libpymo.TensorQuantizerOpMode.passThrough):
                 op_bitwidth, op_use_symmetric_encodings = self._get_bitwidth_and_symmetric_flag(
                     quantizer_info.quant_op_name)
                 encoding = quantizer_info.tensor_quantizer.computeEncoding(op_bitwidth, op_use_symmetric_encodings)
-                self._set_op_input_variables(op_name, encoding, op_mode)
+                if quantizer_info.tensor_quantizer.isEncodingValid:
+                    self._set_op_input_variables(op_name, encoding, op_mode)
+                else:
+                    ops_with_invalid_encodings.append(op_name)
+
+        if ops_with_invalid_encodings:
+            _logger.info('The following ops did not have valid encodings and remain in updateStats mode: %s',
+                         ops_with_invalid_encodings)
 
     def export(self, path: str, filename_prefix: str, orig_sess: tf.Session = None):
         """

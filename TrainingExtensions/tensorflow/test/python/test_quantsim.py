@@ -43,7 +43,7 @@ import libpymo
 from aimet_tensorflow.quantsim import QuantizationSimModel
 from aimet_tensorflow.utils.graph_saver import load_model_from_meta
 from aimet_tensorflow.common.graph_eval import initialize_uninitialized_vars
-from aimet_tensorflow.examples.test_models import model_with_dtype_int
+from aimet_tensorflow.examples.test_models import model_with_dtype_int, keras_model_functional
 from aimet_common.defs import QuantScheme
 from aimet_tensorflow.quantsim import save_checkpoint, load_checkpoint
 from aimet_tensorflow.utils.constants import QuantizeOpIndices
@@ -746,3 +746,39 @@ class TestQuantSim(unittest.TestCase):
         # get ops and make sure we have a quantized op added to the conditional block
         ops = sim.session.graph.get_operations()
         self.assertTrue(quant_op_inside_while_block_name in [op.name for op in ops])
+
+    def test_compute_encodings(self):
+        """ Test that computing encodings does not affect quantizer state of ops with no stats """
+        tf.reset_default_graph()
+        sess = tf.Session()
+        test_inp = np.ndarray((1, 32, 32, 3))
+
+        def dummy_forward_func(sess, _):
+            input_tensor = sess.graph.get_tensor_by_name('input_1:0')
+            output_tensor = sess.graph.get_tensor_by_name('flatten/Reshape:0')
+            sess.run(output_tensor, feed_dict={input_tensor: test_inp})
+
+        with sess.as_default():
+            _ = keras_model_functional()
+            init = tf.global_variables_initializer()
+            sess.run(init)
+            sim = QuantizationSimModel(sess, ['input_1'], ['keras_model_functional/Softmax'])
+            sim.compute_encodings(dummy_forward_func, None)
+
+            for name, quant_info in sim._activation_quantizers.items():
+                if name in ['keras_model_functional/Softmax_quantized', 'keras_model_functional/BiasAdd_quantized']:
+                    # Check that quantizers after op evaluated in compute_encodings are still in updateStats (0) mode
+                    self.assertEqual(quant_info.get_op_mode(), 0)
+                    self.assertFalse(quant_info.tensor_quantizer.isEncodingValid)
+                elif name in ['input_1_quantized', 'scope_1/conv2d_3/BiasAdd_quantized']:
+                    # Check that passThrough quantizers remain as passThrough (3)
+                    self.assertEqual(quant_info.get_op_mode(), 3)
+                    self.assertFalse(quant_info.tensor_quantizer.isEncodingValid)
+                else:
+                    # Check that all other quantizers are in quantizeDequantize (2) mode
+                    self.assertEqual(quant_info.get_op_mode(), 2)
+                    self.assertTrue(quant_info.tensor_quantizer.isEncodingValid)
+
+            input_tensor = sim.session.graph.get_tensor_by_name('input_1:0')
+            output_tensor = sim.session.graph.get_tensor_by_name('keras_model_functional/Softmax:0')
+            sim.session.run(output_tensor, feed_dict={input_tensor: test_inp})
