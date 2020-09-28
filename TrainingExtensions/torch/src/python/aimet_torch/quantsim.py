@@ -216,8 +216,11 @@ class QuantizationSimModel:
         """
         quantized_layers = self._get_qc_quantized_layers(self.model)
 
-        # And set the mode to analysis
-        for name, layer in quantized_layers:
+        for _, layer in quantized_layers:
+            # Clear stats and encodings if they are present
+            layer.reset_encodings()
+
+            # And set the mode to analysis
             layer.set_mode(QcQuantizeOpMode.ANALYSIS)
 
         # Run forward iterations so we can collect statistics to compute the appropriate encodings
@@ -493,7 +496,7 @@ class QuantizationSimModel:
         return None
 
     @staticmethod
-    def _get_qc_quantized_layers(model):
+    def _get_qc_quantized_layers(model) -> List[Tuple[str, QcQuantizeWrapper]]:
         quantized_layers = []
         for name, module in model.named_modules():
             if isinstance(module, QcQuantizeWrapper):

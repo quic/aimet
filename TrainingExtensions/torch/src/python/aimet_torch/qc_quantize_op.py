@@ -249,6 +249,18 @@ class QcQuantizeWrapper(nn.Module):
         """
         self._mode = mode
 
+    def reset_encodings(self):
+        """
+        Reset encoding stats and set encodings to None for all quantizers
+        """
+        self.input_quantizer.reset_encoding_stats()
+        self.input_quantizer.encoding = None
+        self.output_quantizer.reset_encoding_stats()
+        self.output_quantizer.encoding = None
+        for param_quantizer in self.param_quantizers.values():
+            param_quantizer.reset_encoding_stats()
+            param_quantizer.encoding = None
+
 
 class QcPostTrainingWrapper(QcQuantizeWrapper):
     """ A custom PyTorch module that derives from QcQuantizeWrapper and quantizes modules """
@@ -323,22 +335,23 @@ class QcPostTrainingWrapper(QcQuantizeWrapper):
             # Store current weight for use later on
             shadow_params[name] = param.detach().clone()
 
-            param_quantizer = self.param_quantizers[name]
+            if self._mode is not QcQuantizeOpMode.PASSTHROUGH:
+                param_quantizer = self.param_quantizers[name]
 
-            # If we are in training mode with quant-sim nodes, then we want to calculate encodings for the parameters
-            # in every pass
-            if self._module_to_wrap.training or param_quantizer.encoding is None:
-                param_quantizer.reset_encoding_stats()
-                param_quantizer.update_encoding_stats(param.data)
-                param_quantizer.compute_encoding()
+                # If we are in training mode with quant-sim nodes, then we want to calculate encodings for the
+                # parameters in every pass
+                if self._module_to_wrap.training or param_quantizer.encoding is None:
+                    param_quantizer.reset_encoding_stats()
+                    param_quantizer.update_encoding_stats(param.data)
+                    param_quantizer.compute_encoding()
 
-            # if we are not in training, then only nearest rounding should be used
-            # else we should use whatever the user desires (i.e.. stochastic rounding is a valid option)
-            if self.training:
-                round_mode = param_quantizer.round_mode
-            else:
-                round_mode = libpymo.RoundingMode.ROUND_NEAREST
-            param.data = param_quantizer.quantize_dequantize(param.data, round_mode)
+                # if we are not in training, then only nearest rounding should be used
+                # else we should use whatever the user desires (i.e.. stochastic rounding is a valid option)
+                if self.training:
+                    round_mode = param_quantizer.round_mode
+                else:
+                    round_mode = libpymo.RoundingMode.ROUND_NEAREST
+                param.data = param_quantizer.quantize_dequantize(param.data, round_mode)
 
         return shadow_params
 
