@@ -63,6 +63,11 @@ version = ''
 # The full version, including alpha/beta/rc tags
 release = '1.11.0'
 
+included_features = 'tensorflow'
+
+def setup(app):
+    app.add_config_value('included_features', included_features, 'env')
+
 
 # -- General configuration ---------------------------------------------------
 
@@ -76,7 +81,8 @@ release = '1.11.0'
 extensions = [
     'sphinx.ext.autodoc',
     'sphinx_autodoc_typehints',
-    'sphinx.ext.autosectionlabel'
+    'sphinx.ext.autosectionlabel',
+    'sphinx.ext.ifconfig'
     # 'rinoh.frontend.sphinx'
 ]
 
