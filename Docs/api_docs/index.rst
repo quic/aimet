@@ -19,7 +19,15 @@ Please follow the links below to see AIMET APIs for either TensorFlow or PyTorch
    :maxdepth: 2
 
    AIMET APIs for PyTorch<torch>
-   AIMET APIs for TensorFlow<tensorflow>
+
+
+.. ifconfig:: 'tensorflow' in  included_features
+
+    .. toctree::
+       :titlesonly:
+       :maxdepth: 2
+
+       AIMET APIs for TensorFlow<tensorflow>
 
 |
 |
