@@ -51,7 +51,7 @@ from aimet_torch.quantsim_straight_through_grad import compute_dloss_by_dx
 from aimet_torch.defs import PassThroughOp
 
 from aimet_torch.qc_quantize_op import QcQuantizeWrapper, QcQuantizeStandalone, MAP_ROUND_MODE_TO_PYMO, \
-    MAP_QUANT_SCHEME_TO_PYMO, QcPostTrainingWrapper
+    MAP_QUANT_SCHEME_TO_PYMO, QcPostTrainingWrapper, QcQuantizeOpMode
 from aimet_common.utils import AimetLogger
 
 logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Test)
@@ -1168,3 +1168,24 @@ class TestQuantizationSim(unittest.TestCase):
         # Check that mins and maxes have been recomputed
         self.assertNotEqual(asym_min, sym_min)
         self.assertNotEqual(asym_max, sym_max)
+
+    def test_compute_encodings_on_subset_of_modules(self):
+        """ Test that computing encodings on a subset of modules causes remaining quantized modules to be set to
+            passThrough mode. """
+
+        def dummy_forward_pass(model, _):
+            conv1_out = model.conv1(torch.randn((1, 1, 28, 28)))
+            relu1_out = model.relu1(conv1_out)
+
+        model = SmallMnist()
+        model.eval()
+        sim = QuantizationSimModel(model, input_shapes=(1, 1, 28, 28))
+        sim.compute_encodings(dummy_forward_pass, None)
+        for name, module in sim.model.named_modules():
+            if isinstance(module, QcPostTrainingWrapper):
+                if name == 'relu1':
+                    self.assertTrue(module.output_quantizer.enabled)
+                    self.assertEqual(QcQuantizeOpMode.ACTIVE, module._mode)
+                elif name in ['conv2', 'conv2_drop', 'relu2', 'relu3', 'dropout', 'fc2', 'log_softmax']:
+                    self.assertTrue(module.output_quantizer.enabled)
+                    self.assertEqual(QcQuantizeOpMode.PASSTHROUGH, module._mode)

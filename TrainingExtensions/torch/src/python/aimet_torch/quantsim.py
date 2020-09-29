@@ -228,6 +228,7 @@ class QuantizationSimModel:
         with torch.no_grad():
             _ = forward_pass_callback(self.model, forward_pass_callback_args)
 
+        layers_with_invalid_encodings = []
         # Get the computed per-layer encodings and log them
         for name, layer in quantized_layers:
             layer.compute_encoding()
@@ -239,14 +240,29 @@ class QuantizationSimModel:
                 encoding = layer.output_quantizer.encoding
                 logger.debug("Encoding for %s: min=%f, max=%f, offset=%f. delta=%f, bw=%f",
                              name, encoding.min, encoding.max, encoding.delta, encoding.offset, encoding.bw)
+            elif layer.output_quantizer.enabled:
+                layers_with_invalid_encodings.append((name, 'output'))
+                layer.set_mode(QcQuantizeOpMode.PASSTHROUGH)
 
-            elif layer.input_quantizer.enabled and layer.input_quantizer.encoding:
+            if layer.input_quantizer.enabled and layer.input_quantizer.encoding:
                 layer.set_mode(QcQuantizeOpMode.ACTIVE)
                 encoding = layer.input_quantizer.encoding
                 logger.debug("Encoding for %s: min=%f, max=%f, offset=%f. delta=%f, bw=%f",
                              name, encoding.min, encoding.max, encoding.delta, encoding.offset, encoding.bw)
-            else:
+            elif layer.input_quantizer.enabled:
+                layers_with_invalid_encodings.append((name, 'input'))
                 layer.set_mode(QcQuantizeOpMode.PASSTHROUGH)
+
+        if layers_with_invalid_encodings:
+            logger.info('The following modules (name, input|output quantizer) did not have valid encodings and have '
+                        'been set to passThrough mode: %s', layers_with_invalid_encodings)
+            logger.info('This can be due to the quantizers not having been evaluated during the forward pass in '
+                        'compute encodings. Evaluation is required to collect statistics needed to compute valid '
+                        'encodings.\n'
+                        'As a result, the quantizers have been set to passThrough mode, meaning no quantization '
+                        'noise will be simulated for these modules if they are evaluated in the future.\n'
+                        'If this is not desired, amend the forward pass to evaluate these modules, and recompute '
+                        'encodings.')
 
         self._replace_wrappers_for_quantize_dequantize()
 

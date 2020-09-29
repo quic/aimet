@@ -335,8 +335,8 @@ class QcPostTrainingWrapper(QcQuantizeWrapper):
             # Store current weight for use later on
             shadow_params[name] = param.detach().clone()
 
-            if self._mode is not QcQuantizeOpMode.PASSTHROUGH:
-                param_quantizer = self.param_quantizers[name]
+            param_quantizer = self.param_quantizers[name]
+            if self._mode is not QcQuantizeOpMode.PASSTHROUGH and param_quantizer.enabled:
 
                 # If we are in training mode with quant-sim nodes, then we want to calculate encodings for the
                 # parameters in every pass
