@@ -1134,3 +1134,37 @@ class TestQuantizationSim(unittest.TestCase):
         self.assertTrue(np.allclose(expected_grad_2, grad_out_2))
         self.assertTrue(np.allclose(expected_grad_3, grad_out_3))
 
+    def test_changing_param_quantizer_settings(self):
+        """ Test that changing param quantizer settings takes effect after computing encodings is run """
+        model = SmallMnist()
+
+        # Skew weights of conv1
+        old_weight = model.conv1.weight.detach().clone()
+        model.conv1.weight = torch.nn.Parameter(old_weight + .9 * torch.abs(torch.min(old_weight)), requires_grad=False)
+
+        sim = QuantizationSimModel(model, input_shapes=(1, 1, 28, 28))
+
+        # Check that no encoding is present for param quantizer
+        self.assertEqual(None, sim.model.conv1.param_quantizers['weight'].encoding)
+
+        # Compute encodings
+        sim.compute_encodings(dummy_forward_pass, None)
+        asym_min = sim.model.conv1.param_quantizers['weight'].encoding.min
+        asym_max = sim.model.conv1.param_quantizers['weight'].encoding.max
+        self.assertEqual(8, sim.model.conv1.param_quantizers['weight'].encoding.bw)
+        # Check that offset is not relatively symmetric
+        self.assertNotIn(sim.model.conv1.param_quantizers['weight'].encoding.offset, [-127, -128])
+
+        # Change param quantizer to symmetric and new bitwidth
+        sim.model.conv1.param_quantizers['weight'].use_symmetric_encodings = True
+        sim.model.conv1.param_quantizers['weight'].bitwidth = 4
+        sim.compute_encodings(dummy_forward_pass, None)
+        sym_min = sim.model.conv1.param_quantizers['weight'].encoding.min
+        sym_max = sim.model.conv1.param_quantizers['weight'].encoding.max
+        self.assertEqual(4, sim.model.conv1.param_quantizers['weight'].encoding.bw)
+        # Check that offset is still symmetric
+        self.assertIn(sim.model.conv1.param_quantizers['weight'].encoding.offset, [-7, -8])
+
+        # Check that mins and maxes have been recomputed
+        self.assertNotEqual(asym_min, sym_min)
+        self.assertNotEqual(asym_max, sym_max)
