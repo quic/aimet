@@ -748,7 +748,7 @@ class TestQuantSim(unittest.TestCase):
         self.assertTrue(quant_op_inside_while_block_name in [op.name for op in ops])
 
     def test_compute_encodings(self):
-        """ Test that computing encodings does not affect quantizer state of ops with no stats """
+        """ Test that ops not evaluated during compute encodings are set to passThrough mode. """
         tf.reset_default_graph()
         sess = tf.Session()
         test_inp = np.ndarray((1, 32, 32, 3))
@@ -767,8 +767,8 @@ class TestQuantSim(unittest.TestCase):
 
             for name, quant_info in sim._activation_quantizers.items():
                 if name in ['keras_model_functional/Softmax_quantized', 'keras_model_functional/BiasAdd_quantized']:
-                    # Check that quantizers after op evaluated in compute_encodings are still in updateStats (0) mode
-                    self.assertEqual(quant_info.get_op_mode(), 0)
+                    # Check that quantizers after op evaluated in compute_encodings are in passThrough (3) mode
+                    self.assertEqual(quant_info.get_op_mode(), 3)
                     self.assertFalse(quant_info.tensor_quantizer.isEncodingValid)
                 elif name in ['input_1_quantized', 'scope_1/conv2d_3/BiasAdd_quantized']:
                     # Check that passThrough quantizers remain as passThrough (3)

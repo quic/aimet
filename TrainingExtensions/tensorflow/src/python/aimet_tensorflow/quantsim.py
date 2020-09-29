@@ -539,6 +539,7 @@ class QuantizationSimModel:
                 if quantizer_info.tensor_quantizer.isEncodingValid:
                     self._set_op_input_variables(op_name, encoding, libpymo.TensorQuantizerOpMode.quantizeDequantize)
                 else:
+                    self._set_op_input_variables(op_name, encoding, libpymo.TensorQuantizerOpMode.passThrough)
                     ops_with_invalid_encodings.append(op_name)
 
         # For post-training mode, params will always be in one-shot mode
@@ -552,11 +553,19 @@ class QuantizationSimModel:
                 if quantizer_info.tensor_quantizer.isEncodingValid:
                     self._set_op_input_variables(op_name, encoding, op_mode)
                 else:
+                    self._set_op_input_variables(op_name, encoding, libpymo.TensorQuantizerOpMode.passThrough)
                     ops_with_invalid_encodings.append(op_name)
 
         if ops_with_invalid_encodings:
-            _logger.info('The following ops did not have valid encodings and remain in updateStats mode: %s',
-                         ops_with_invalid_encodings)
+            _logger.info('The following quantizers did not have valid encodings and have been set to passThrough mode: '
+                         '%s', ops_with_invalid_encodings)
+            _logger.info('This can be due to the quantizers not having been evaluated during the forward pass in '
+                         'compute encodings. Evaluation is required to collect statistics needed to compute valid '
+                         'encodings.\n'
+                         'As a result, the quantizers have been set to passThrough mode, meaning no quantization noise '
+                         'will be simulated for these ops if they are evaluated in the future.\n'
+                         'If this is not desired, amend the forward pass to evaluate tensors which require these ops '
+                         'to be evaluated, and recompute encodings.')
 
     def export(self, path: str, filename_prefix: str, orig_sess: tf.Session = None):
         """
