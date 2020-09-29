@@ -47,16 +47,17 @@ import json
 import tensorflow as tf
 from tensorflow.python.framework import ops as tf_ops
 from tensorflow.contrib import graph_editor
-
 from aimet_common.defs import QuantScheme
 from aimet_common.quantsim import gate_min_max, calculate_delta_offset
 from aimet_common.utils import AimetLogger
+from aimet_tensorflow.common import core
 from aimet_tensorflow.utils.common import update_variables_with_values, save_data_to_pickle_file, \
     load_data_from_pickle_file, get_valid_ops
 from aimet_tensorflow.utils import graph_saver
 from aimet_tensorflow.utils.constants import QuantizeOpIndices
-from aimet_tensorflow.utils.quantsim import create_op_to_quant_ops_dict
-from aimet_tensorflow.common import core
+from aimet_tensorflow.utils.quantsim import create_op_to_quant_ops_dict, is_op_quantizable
+from aimet_tensorflow.utils.graph import updated_graph_flow_context_to_loop_context, set_graph_flow_context, \
+    op_not_in_loop_control_flow_context
 from aimet_tensorflow.common.connectedgraph import ConnectedGraph
 from aimet_tensorflow.quantsim_config.quantsim_config import QuantSimConfigurator
 
@@ -69,6 +70,10 @@ import libpymo
 
 _logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Quant)
 WORKING_DIR = '/tmp/quantsim/'
+
+
+# Op types which we will not place quantize ops after
+op_types_to_ignore = {'branch', 'Flatten', 'Shape'}
 
 DTYPES_QUANTIZE_NOT_REQUIRED = [tf.dtypes.int8, tf.dtypes.uint8, tf.dtypes.int16, tf.dtypes.uint16,
                                 tf.dtypes.int32, tf.dtypes.uint32, tf.dtypes.int64, tf.dtypes.uint64,
@@ -87,9 +92,6 @@ class QuantizerType(Enum):
     """ Enum for quantize op types """
     param = 0
     activation = 1
-
-# Op types which we will not place quantize ops after
-op_types_to_ignore = {'branch', 'Flatten', 'Shape'}
 
 
 class PickleableTensorQuantizerState:
@@ -500,8 +502,9 @@ class QuantizationSimModel:
                           'quantization ops is being done, and get_ops_to_quantize_activations_for() has been '
                           'overriden, please override configure_quantization_ops() as well.')
             raise AssertionError
-        op_to_quant_ops_dict = create_op_to_quant_ops_dict(self.session.graph, conn_graph, ops_with_param_names,
-                                                           indices, activation_op_names)
+        op_to_quant_ops_dict = create_op_to_quant_ops_dict(self.session.graph, conn_graph,
+                                                           ops_with_param_names, indices,
+                                                           activation_op_names)
         QuantSimConfigurator(self.session, conn_graph, op_to_quant_ops_dict, config_file)
 
     def compute_encodings(self, forward_pass_callback: Callable[[tf.Session, Any], None],
@@ -744,14 +747,14 @@ class QuantizationSimModel:
         """
 
         # Get list of ops with params to insert quantizers for, as well as the input indices to insert on.
-        ops_with_param_names, input_indices = QuantizationSimModel.get_ops_to_quantize_params_for(self.session.graph,
-                                                                                                  starting_op_names,
-                                                                                                  output_op_names)
-
-        # Get list of activation ops to insert quantizers for, and the connected graph used to obtain these ops
-        activation_op_names, conn_graph = QuantizationSimModel.get_ops_to_quantize_activations_for(self.session.graph,
+        ops_with_param_names, input_indices = QuantizationSimModel._get_ops_to_quantize_params_for(self.session.graph,
                                                                                                    starting_op_names,
                                                                                                    output_op_names)
+
+        # Get list of activation ops to insert quantizers for, and the connected graph used to obtain these ops
+        activation_op_names, conn_graph = QuantizationSimModel._get_ops_to_quantize_activations_for(self.session.graph,
+                                                                                                    starting_op_names,
+                                                                                                    output_op_names)
 
         self._insert_param_quantization_ops(ops_with_param_names, input_indices, default_param_bw)
         self._insert_activation_quantization_ops(activation_op_names, default_output_bw)
@@ -780,73 +783,14 @@ class QuantizationSimModel:
         assert quant_op_name.endswith('_quantized')
         return quant_op_name[:-len('_quantized')]
 
-    @staticmethod
-    def op_in_valid_context(graph: tf.Graph, input_op: tf.Operation) -> bool:
-        """
-        checks if the  op has valid context to be used to perform modifications in active graph
-        :param graph: tf.Graph is the active graph
-        :param input_op: op as tf.Operation
-        :return: True if op in valid context, false otherwise
-        """
-        # pylint: disable=protected-access
-        active_ctxt = graph._get_control_flow_context()
-        input_ctxt = input_op._get_control_flow_context()
-
-        if not input_ctxt or input_ctxt is active_ctxt:
-            # input_op isn't in 'a' control flow context or
-            # input_op is in the same context as op.
-            return True
-
-        return False
-
-    @staticmethod
-    def get_ops_to_quantize_params_for(graph: tf.Graph, starting_op_names: List[str], output_op_names: List[str]) \
-            -> Tuple[List[str], List[int]]:
-        """
-        Get names of ops to insert param quantizers for, as well as corresponding indices
-        :param graph: Tensorflow graph to get names of ops to quantize weights for
-        :param starting_op_names: List of starting op names of the model
-        :param output_op_names: List of output op names of the model
-        :return: Tuple consisting of list of op names with params to insert quantize ops for as well as list of indices
-        of parameters for each op
-        """
-        # Get the op query module
-        query = core.OpQuery(graph, ops_to_ignore=None)
-        valid_ops = get_valid_ops(graph, starting_op_names, output_op_names)
-        ops_with_param_names = [op.name for op in query.get_weight_ops() if op in valid_ops and
-                                QuantizationSimModel.op_in_valid_context(graph, graph.get_operation_by_name(op.name))]
-        # op's control_flow_context() will be populated for ops within conditional blocks
-        ops_with_params = [graph.get_operation_by_name(op_name) for op_name in ops_with_param_names]
-        input_indices = query.get_weight_inputs(ops_with_params)
-        if len(ops_with_param_names) != len(input_indices):
-            _logger.error("Length of ops with params and input indices differ")
-            raise AssertionError
-        return ops_with_param_names, input_indices
-
-    @staticmethod
-    def get_ops_to_quantize_activations_for(graph: tf.Graph, starting_op_names: List[str], output_op_names: List[str])\
-            -> Tuple[List[str], ConnectedGraph]:
-        """
-        Get names of ops to insert activation quantizers for
-        :param graph: Tensorflow graph to get names of ops to quantize weights for
-        :param starting_op_names: List of starting op names of the model
-        :param output_op_names: List of output op names of the model
-        :return: List of op names to insert activation quantize ops for, and the connected graph used to obtain these
-        ops.
-        """
-        conn_graph = ConnectedGraph(graph, starting_op_names, output_op_names)
-        valid_ops = [op for op in conn_graph.get_all_ops().values() if op.type not in op_types_to_ignore]
-        op_names_to_quantize = [conn_graph_op.output_op_node.name for conn_graph_op in valid_ops if
-                                QuantizationSimModel._is_op_quantizable(conn_graph_op.output_op_node)
-                                and QuantizationSimModel.op_in_valid_context(graph, conn_graph_op.output_op_node)]
-        return op_names_to_quantize, conn_graph
-
-    def _insert_param_quantization_ops(self, op_names: List[str], indices: List[int], default_param_bw: int):
+    def _insert_param_quantization_ops(self, op_names: List[str], indices: List[int], default_param_bw: int,
+                                       in_loop_context: bool = False):
         """
         Inserts quantization ops for individual parameters
         :param ops: List of ops whose parameters are being quantized
         :param indices: List of input indices (one-to-one for each entry in ops)
         :param default_param_bw : default param bitwidth
+        :param in_loop_context: True, if the ops belong to loop control flow context
         :return: None
         """
         ops = [self.session.graph.get_operation_by_name(op_name) for op_name in op_names]
@@ -860,9 +804,15 @@ class QuantizationSimModel:
             _logger.info("Adding weight quantization op %s", quant_op_name)
             op_mode = libpymo.TensorQuantizerOpMode.oneShotQuantizeDequantize
 
-            q_op_out = self._insert_post_training_quant_op(param_in, quant_op_name,
-                                                           op_mode, self._param_quantizers, QuantizerType.param,
-                                                           default_param_bw)
+            if in_loop_context:
+                q_op_out = self._insert_post_training_quant_op_in_loop_context(param_in, quant_op_name,
+                                                                               op_mode, self._param_quantizers,
+                                                                               QuantizerType.param,
+                                                                               default_param_bw)
+            else:
+                q_op_out = self._insert_post_training_quant_op(param_in, quant_op_name,
+                                                               op_mode, self._param_quantizers, QuantizerType.param,
+                                                               default_param_bw)
 
             nodes_modified_count = graph_editor.reroute_ts(tf_ops.convert_to_tensor(q_op_out), param_in, can_modify=op)
             if nodes_modified_count != 1:
@@ -882,11 +832,14 @@ class QuantizationSimModel:
 
         return False
 
-    def _insert_activation_quantization_ops(self, valid_op_names: List[str], default_output_bw):
+    def _insert_activation_quantization_ops(self, valid_op_names: List[str], default_output_bw,
+                                            in_loop_context: bool = False):
         """
         Inserts quantization ops at the outputs of given ops
         :param valid_op_names: List of op names to insert activation quantizers for
         :param default_output_bw: default activation bitwidth
+        :param in_loop_context: True, if the ops belong to a loop control flow context
+        return:
         """
         for op_name in valid_op_names:
             quant_op_name = self._get_quantized_name(op_name)
@@ -899,10 +852,17 @@ class QuantizationSimModel:
                 _logger.error('Unsupported dtype {%s} detected for op {%s}.', op.outputs[0].dtype, op_name)
                 raise AssertionError
 
-            q_op_out = self._insert_post_training_quant_op(op.outputs[0], quant_op_name,
-                                                           libpymo.TensorQuantizerOpMode.updateStats,
-                                                           self._activation_quantizers, QuantizerType.activation,
-                                                           default_output_bw)
+            if in_loop_context:
+                q_op_out = self._insert_post_training_quant_op_in_loop_context(op.outputs[0], quant_op_name,
+                                                                               libpymo.TensorQuantizerOpMode.updateStats,
+                                                                               self._activation_quantizers,
+                                                                               QuantizerType.activation,
+                                                                               default_output_bw)
+            else:
+                q_op_out = self._insert_post_training_quant_op(op.outputs[0], quant_op_name,
+                                                               libpymo.TensorQuantizerOpMode.updateStats,
+                                                               self._activation_quantizers, QuantizerType.activation,
+                                                               default_output_bw)
 
             # Re-route
             num_rerouted_outputs = graph_editor.reroute_ts(tf_ops.convert_to_tensor(q_op_out),
@@ -931,12 +891,57 @@ class QuantizationSimModel:
 
         return encoding_min_var, encoding_max_var
 
-    def _insert_post_training_quant_op_recurrent(self, preceeding_tensor, quant_op_name: str,
-                                                 op_mode: libpymo.QuantizationMode,
-                                                 quantizer_dict: Dict[str, QuantizerInfo],
-                                                 quantizer_type: QuantizerType, bit_width: int = 8):
+    @staticmethod
+    def _get_ops_to_quantize_params_for(graph: tf.Graph, starting_op_names: List[str], output_op_names: List[str]) \
+            -> Tuple[List[str], List[int]]:
         """
-        Create and insert a post-training quant op after a given tensor within a conditional block
+        Get names of ops to insert param quantizers for, as well as corresponding indices
+        :param graph: TensorFlow graph to get names of ops to quantize weights for
+        :param starting_op_names: List of starting op names of the model
+        :param output_op_names: List of output op names of the model
+        :return: Tuple consisting of list of op names with params to insert quantize ops for as well as list of indices
+        of parameters for each op
+        """
+        # Get the op query module
+        query = core.OpQuery(graph, ops_to_ignore=None)
+        valid_ops = get_valid_ops(graph, starting_op_names, output_op_names)
+        ops_with_param_names = [op.name for op in query.get_weight_ops() if op in valid_ops and
+                                op_not_in_loop_control_flow_context(graph,
+                                                                    graph.get_operation_by_name(op.name))]
+        # op's control_flow_context() will be populated for ops within conditional blocks
+        ops_with_params = [graph.get_operation_by_name(op_name) for op_name in ops_with_param_names]
+        input_indices = query.get_weight_inputs(ops_with_params)
+        if len(ops_with_param_names) != len(input_indices):
+            _logger.error("Length of ops with params and input indices differ")
+            raise AssertionError
+        return ops_with_param_names, input_indices
+
+    @staticmethod
+    def _get_ops_to_quantize_activations_for(graph: tf.Graph, starting_op_names: List[str], output_op_names: List[str]) \
+            -> Tuple[List[str], ConnectedGraph]:
+        """
+        Get names of ops to insert activation quantizers for
+        :param graph: TensorFlow graph to get names of ops to quantize weights for
+        :param starting_op_names: List of starting op names of the model
+        :param output_op_names: List of output op names of the model
+        :return: List of op names to insert activation quantize ops for, and the connected graph used to obtain these
+        ops.
+        """
+        conn_graph = ConnectedGraph(graph, starting_op_names, output_op_names)
+        valid_ops = [op for op in conn_graph.get_all_ops().values() if op.type not in op_types_to_ignore]
+        op_names_to_quantize = [conn_graph_op.output_op_node.name for conn_graph_op in valid_ops if
+                                is_op_quantizable(conn_graph_op.output_op_node)
+                                and op_not_in_loop_control_flow_context(graph, conn_graph_op.output_op_node)]
+        return op_names_to_quantize, conn_graph
+
+    def _insert_post_training_quant_op_in_loop_context(self, preceeding_tensor,
+                                                       quant_op_name: str,
+                                                       op_mode: libpymo.QuantizationMode,
+                                                       quantizer_dict: Dict[str, QuantizerInfo],
+                                                       quantizer_type: QuantizerType,
+                                                       bit_width: int = 8):
+        """
+        Create and insert a post-training quant op after a given tensor in a loop control flow context.
         :param preceeding_tensor: Preceeding tensor to insert the quant op after
         :param quant_op_name: Name to give to the new quant op
         :param op_mode: Starting mode to configure for the new quant op
@@ -946,15 +951,13 @@ class QuantizationSimModel:
         :return: None
         """
 
-        # pylint: disable=protected-access
         # this handles cases such as conditional blocks that are defined in their own context
-        context_bk = self.session.graph._get_control_flow_context()
-        self.session.graph._set_control_flow_context(preceeding_tensor.op._get_control_flow_context())
+        context_bk = updated_graph_flow_context_to_loop_context(self.session.graph, preceeding_tensor)
         q_op_out = self._insert_post_training_quant_op(preceeding_tensor, quant_op_name, op_mode, quantizer_dict,
                                                        quantizer_type, bit_width)
 
         # revert the context back to graph level from op context
-        self.session.graph._set_control_flow_context(context_bk)
+        set_graph_flow_context(self.session.graph, context_bk)
 
         return q_op_out
 

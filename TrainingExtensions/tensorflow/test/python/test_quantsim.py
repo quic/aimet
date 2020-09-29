@@ -48,6 +48,7 @@ from aimet_common.defs import QuantScheme
 from aimet_tensorflow.quantsim import save_checkpoint, load_checkpoint
 from aimet_tensorflow.utils.constants import QuantizeOpIndices
 
+
 class TestQuantSim(unittest.TestCase):
 
     def test_construction_cpu_model(self):
@@ -677,19 +678,19 @@ class TestQuantSim(unittest.TestCase):
         sess = tf.Session()
         initialize_uninitialized_vars(sess)
 
-        orig_get_ops_to_quantize_activations_for = QuantizationSimModel.get_ops_to_quantize_activations_for
-        orig_get_ops_to_quantize_weights_for = QuantizationSimModel.get_ops_to_quantize_params_for
+        orig_get_ops_to_quantize_activations_for = QuantizationSimModel._get_ops_to_quantize_activations_for
+        orig_get_ops_to_quantize_weights_for = QuantizationSimModel._get_ops_to_quantize_params_for
         orig_configure_quantization_ops = QuantizationSimModel.configure_quantization_ops
-        QuantizationSimModel.get_ops_to_quantize_activations_for = get_manual_activations
-        QuantizationSimModel.get_ops_to_quantize_params_for = get_manual_params
+        QuantizationSimModel._get_ops_to_quantize_activations_for = get_manual_activations
+        QuantizationSimModel._get_ops_to_quantize_params_for = get_manual_params
         QuantizationSimModel.configure_quantization_ops = configure_quantization_ops
         sim = QuantizationSimModel(sess, ['conv2d_input'], ['conv2d_1/Relu'], use_cuda=False)
         self.assertEqual(1, len(sim._activation_quantizers))
         self.assertEqual(1, len(sim._param_quantizers))
         sess.close()
         sim.session.close()
-        QuantizationSimModel.get_ops_to_quantize_activations_for = orig_get_ops_to_quantize_activations_for
-        QuantizationSimModel.get_ops_to_quantize_params_for = orig_get_ops_to_quantize_weights_for
+        QuantizationSimModel._get_ops_to_quantize_activations_for = orig_get_ops_to_quantize_activations_for
+        QuantizationSimModel._get_ops_to_quantize_params_for = orig_get_ops_to_quantize_weights_for
         QuantizationSimModel.configure_quantization_ops = orig_configure_quantization_ops
 
     def test_skip_quantizing_dtype_int(self):
@@ -737,9 +738,9 @@ class TestQuantSim(unittest.TestCase):
         self.assertFalse(quant_op_inside_while_block_name in [op.name for op in ops])
 
         # test the new api to insert quant ops to conditional blocks
-        sim._insert_post_training_quant_op_recurrent(while_matmul_weight_read_tensor,
-                                                     quant_op_inside_while_block_name,
-                                                     op_mode, sim._param_quantizers, 0, 8)
+        sim._insert_post_training_quant_op_in_loop_context(while_matmul_weight_read_tensor,
+                                                           quant_op_inside_while_block_name,
+                                                           op_mode, sim._param_quantizers, 0, 8)
         # make sure graph is updated
         sim._save_and_load_sim_model()
 
@@ -782,3 +783,4 @@ class TestQuantSim(unittest.TestCase):
             input_tensor = sim.session.graph.get_tensor_by_name('input_1:0')
             output_tensor = sim.session.graph.get_tensor_by_name('keras_model_functional/Softmax:0')
             sim.session.run(output_tensor, feed_dict={input_tensor: test_inp})
+
