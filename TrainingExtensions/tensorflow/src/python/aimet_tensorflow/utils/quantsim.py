@@ -44,9 +44,15 @@ import tensorflow as tf
 from aimet_common.utils import AimetLogger
 from aimet_tensorflow.common.connectedgraph import ConnectedGraph
 from aimet_tensorflow.common.operation import Op
+from aimet_tensorflow.common import core
 from aimet_tensorflow.quantsim_config.quantsim_config import OpToQuantOpsDictType
 
 _logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Quant)
+
+DTYPES_QUANTIZE_NOT_REQUIRED = [tf.dtypes.int8, tf.dtypes.uint8, tf.dtypes.int16, tf.dtypes.uint16,
+                                tf.dtypes.int32, tf.dtypes.uint32, tf.dtypes.int64, tf.dtypes.uint64,
+                                tf.bool, tf.dtypes.string, tf.dtypes.resource]
+
 
 def create_op_to_quant_ops_dict(graph: tf.Graph, conn_graph: ConnectedGraph, ops_with_param_names: List[str],
                                 indices: List[int], activation_op_names: List[str]) -> OpToQuantOpsDictType:
@@ -110,3 +116,34 @@ def add_op_to_quant_ops_dict_entry(qc_quantize_op: tf.Operation, conn_graph_op: 
             op_to_quant_ops_dict[conn_graph_op][1] = qc_quantize_op
         else:
             op_to_quant_ops_dict[conn_graph_op] = [dict(), qc_quantize_op]
+
+
+def get_op_input_indices(graph: tf.Graph, ops_with_param_names: List) -> List[int]:
+    """
+    Get input indices of ops
+    :param graph: Tensorflow graph as tf.Graph
+    :param ops_with_param_names: List of op names with params to insert quantize ops for
+    :return: list of indices of parameters for each op
+    """
+
+    query = core.OpQuery(graph, ops_to_ignore=None)
+    ops_with_params = [graph.get_operation_by_name(op_name) for op_name in ops_with_param_names]
+    input_indices = query.get_weight_inputs(ops_with_params)
+    if len(ops_with_param_names) != len(input_indices):
+        _logger.error("Length of ops with params and input indices differ")
+        raise AssertionError
+    return input_indices
+
+
+def is_op_quantizable(op: tf.Operation) -> bool:
+    """
+    utility to check if the quantization can be supported for this op
+    :param op: op as tf.Operation type
+    :return: True if the op can be quantized, False otherwise
+    """
+
+    if op.outputs:
+        if op.outputs[0].dtype not in DTYPES_QUANTIZE_NOT_REQUIRED:
+            return True
+
+    return False
