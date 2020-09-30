@@ -51,7 +51,7 @@ from aimet_torch.quantsim_straight_through_grad import compute_dloss_by_dx
 from aimet_torch.defs import PassThroughOp
 
 from aimet_torch.qc_quantize_op import QcQuantizeWrapper, QcQuantizeStandalone, MAP_ROUND_MODE_TO_PYMO, \
-    MAP_QUANT_SCHEME_TO_PYMO, QcPostTrainingWrapper
+    MAP_QUANT_SCHEME_TO_PYMO, QcPostTrainingWrapper, QcQuantizeOpMode
 from aimet_common.utils import AimetLogger
 
 logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Test)
@@ -1134,3 +1134,58 @@ class TestQuantizationSim(unittest.TestCase):
         self.assertTrue(np.allclose(expected_grad_2, grad_out_2))
         self.assertTrue(np.allclose(expected_grad_3, grad_out_3))
 
+    def test_changing_param_quantizer_settings(self):
+        """ Test that changing param quantizer settings takes effect after computing encodings is run """
+        model = SmallMnist()
+
+        # Skew weights of conv1
+        old_weight = model.conv1.weight.detach().clone()
+        model.conv1.weight = torch.nn.Parameter(old_weight + .9 * torch.abs(torch.min(old_weight)), requires_grad=False)
+
+        sim = QuantizationSimModel(model, input_shapes=(1, 1, 28, 28))
+
+        # Check that no encoding is present for param quantizer
+        self.assertEqual(None, sim.model.conv1.param_quantizers['weight'].encoding)
+
+        # Compute encodings
+        sim.compute_encodings(dummy_forward_pass, None)
+        asym_min = sim.model.conv1.param_quantizers['weight'].encoding.min
+        asym_max = sim.model.conv1.param_quantizers['weight'].encoding.max
+        self.assertEqual(8, sim.model.conv1.param_quantizers['weight'].encoding.bw)
+        # Check that offset is not relatively symmetric
+        self.assertNotIn(sim.model.conv1.param_quantizers['weight'].encoding.offset, [-127, -128])
+
+        # Change param quantizer to symmetric and new bitwidth
+        sim.model.conv1.param_quantizers['weight'].use_symmetric_encodings = True
+        sim.model.conv1.param_quantizers['weight'].bitwidth = 4
+        sim.compute_encodings(dummy_forward_pass, None)
+        sym_min = sim.model.conv1.param_quantizers['weight'].encoding.min
+        sym_max = sim.model.conv1.param_quantizers['weight'].encoding.max
+        self.assertEqual(4, sim.model.conv1.param_quantizers['weight'].encoding.bw)
+        # Check that offset is still symmetric
+        self.assertIn(sim.model.conv1.param_quantizers['weight'].encoding.offset, [-7, -8])
+
+        # Check that mins and maxes have been recomputed
+        self.assertNotEqual(asym_min, sym_min)
+        self.assertNotEqual(asym_max, sym_max)
+
+    def test_compute_encodings_on_subset_of_modules(self):
+        """ Test that computing encodings on a subset of modules causes remaining quantized modules to be set to
+            passThrough mode. """
+
+        def dummy_forward_pass(model, _):
+            conv1_out = model.conv1(torch.randn((1, 1, 28, 28)))
+            relu1_out = model.relu1(conv1_out)
+
+        model = SmallMnist()
+        model.eval()
+        sim = QuantizationSimModel(model, input_shapes=(1, 1, 28, 28))
+        sim.compute_encodings(dummy_forward_pass, None)
+        for name, module in sim.model.named_modules():
+            if isinstance(module, QcPostTrainingWrapper):
+                if name == 'relu1':
+                    self.assertTrue(module.output_quantizer.enabled)
+                    self.assertEqual(QcQuantizeOpMode.ACTIVE, module._mode)
+                elif name in ['conv2', 'conv2_drop', 'relu2', 'relu3', 'dropout', 'fc2', 'log_softmax']:
+                    self.assertTrue(module.output_quantizer.enabled)
+                    self.assertEqual(QcQuantizeOpMode.PASSTHROUGH, module._mode)
