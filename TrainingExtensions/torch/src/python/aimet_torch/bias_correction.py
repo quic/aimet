@@ -286,7 +286,7 @@ def correct_bias(model: torch.nn.Module, quant_params: qsim.QuantParams,
                                   default_output_bw=quant_params.act_bw,
                                   default_param_bw=quant_params.weight_bw,
                                   in_place=True,
-                                  input_shapes=input_shape)
+                                  input_shapes=input_shape, config_file=quant_params.config_file)
     # make sure  model got updated in-place before we use it for bc updates
     assert(q.model is model)
 
