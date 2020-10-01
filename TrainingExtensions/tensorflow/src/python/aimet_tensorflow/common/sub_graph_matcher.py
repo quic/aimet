@@ -232,7 +232,21 @@ subgraph_constructors = {
         'constructor': "tf.keras.layers.SimpleRNN(10, activation='relu')(inputs)",
         'module_regex': ['(.+)/while/MatMul$'],
         'associated_op_regex': ['MatMul$']
-    }
+    },
+    'SimpleRNNWithSequencesReturned': {
+        'input_shape': (3, 100),
+        'op_type': 'SimpleRNN',
+        'constructor': "tf.keras.layers.SimpleRNN(10, return_sequences=True)(inputs)",
+        'module_regex': ['(.+)/while/MatMul$'],
+        'associated_op_regex': ['MatMul$']
+    },
+    'SimpleRNNWithSequencesReturnedRelu': {
+        'input_shape': (3, 100),
+        'op_type': 'SimpleRNN',
+        'constructor': "tf.keras.layers.SimpleRNN(10, activation='relu', return_sequences=True)(inputs)",
+        'module_regex': ['(.+)/while/MatMul$'],
+        'associated_op_regex': ['MatMul$']
+    },
 
 }
 
@@ -582,10 +596,10 @@ def create_subgraph_for_op(input_shape: tuple, op_string: str) -> tf.Graph:
             # pylint: disable=unused-variable
             inputs = tf.keras.Input(shape=input_shape, name='aimet_input')
             constants = tf.constant(1, shape=input_shape, dtype=tf.float32, name='aimet_constant')
-            is_training = tf.placeholder_with_default(tf.constant(True), shape=(), name='is_training')
+            is_training = tf.compat.v1.placeholder_with_default(tf.constant(True), shape=(), name='is_training')
             x = eval(op_string)  # pylint: disable=eval-used
             x = tf.identity(x, name='aimet_identity')
-        init = tf.global_variables_initializer()
+        init = tf.compat.v1.global_variables_initializer()
     sess.run(init)
 
     return sess.graph
