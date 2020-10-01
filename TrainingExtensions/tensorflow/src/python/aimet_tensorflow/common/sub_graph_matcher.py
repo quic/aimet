@@ -225,7 +225,15 @@ subgraph_constructors = {
         'constructor': "tf.keras.layers.SimpleRNN(10)(inputs)",
         'module_regex': ['(.+)/while/MatMul$'],
         'associated_op_regex': ['MatMul$']
+    },
+    'SimpleRNNWithRelu': {
+        'input_shape': (3, 100),
+        'op_type': 'SimpleRNN',
+        'constructor': "tf.keras.layers.SimpleRNN(10, activation='relu')(inputs)",
+        'module_regex': ['(.+)/while/MatMul$'],
+        'associated_op_regex': ['MatMul$']
     }
+
 }
 
 
