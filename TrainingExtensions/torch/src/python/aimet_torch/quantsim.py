@@ -73,7 +73,8 @@ class QuantParams:
                  weight_bw: int = 8,
                  act_bw: int = 8,
                  round_mode: str = 'nearest',
-                 quant_scheme: Union[QuantScheme, str] = QuantScheme.post_training_tf_enhanced):
+                 quant_scheme: Union[QuantScheme, str] = QuantScheme.post_training_tf_enhanced,
+                 config_file: str = None):
         """
         Constructor
 
@@ -82,12 +83,14 @@ class QuantParams:
         :param round_mode: Rounding mode. Supported options are 'nearest' or 'stochastic'
         :param quant_scheme: Quantization scheme. Supported options are 'tf_enhanced' or 'tf' or using Quant Scheme Enum
                              QuantScheme.post_training_tf or QuantScheme.post_training_tf_enhanced
+        :param config_file: Path to Configuration file for model quantizers
         """
 
         self.weight_bw = weight_bw
         self.act_bw = act_bw
         self.round_mode = round_mode
         self.quant_scheme = quant_scheme
+        self.config_file = config_file
 
 
 class QuantizationSimModel:
@@ -113,7 +116,7 @@ class QuantizationSimModel:
         :param default_param_bw: Default bitwidth (4-31) to use for quantizing layer parameters
         :param in_place: If True, then the given 'model' is modified in-place to add quant-sim nodes.
                 Only suggested use of this option is when the user wants to avoid creating a copy of the model
-        :param config_file: Configuration file for model quantizers
+        :param config_file: Path to Configuration file for model quantizers
 
         """
 

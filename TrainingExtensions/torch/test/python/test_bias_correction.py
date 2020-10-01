@@ -39,6 +39,7 @@
 import unittest.mock
 import copy
 import numpy as np
+import json
 
 import libpymo
 
@@ -150,7 +151,7 @@ class TestTrainingExtensionBnFold(unittest.TestCase):
         self.assertEqual(empirical_mock.call_count, 9)
         self.assertTrue(model.model[1][0].bias.detach().cpu().numpy() is not None)
 
-    def test_bias_correction_empirical(self):
+    def test_bias_correction_empirical_with_config_file(self):
         # Using a dummy extension of MNIST
         torch.manual_seed(10)
         model = mnist_model.Net()
@@ -163,8 +164,9 @@ class TestTrainingExtensionBnFold(unittest.TestCase):
 
         data_loader = create_fake_data_loader(dataset_size=dataset_size, batch_size=batch_size, image_size=(1, 28, 28))
 
+        # Takes default config file
         params = qsim.QuantParams(weight_bw=4, act_bw=4, round_mode="nearest",
-                                  quant_scheme=QuantScheme.post_training_tf
+                                  quant_scheme=QuantScheme.post_training_tf, config_file=None
                                   )
         with unittest.mock.patch('aimet_torch.bias_correction.call_empirical_mo_correct_bias') as empirical_mock:
             bias_correction.correct_bias(model, params, 2, data_loader, 2)
