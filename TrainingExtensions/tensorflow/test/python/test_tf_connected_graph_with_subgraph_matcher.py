@@ -513,6 +513,57 @@ class TestTfConnectedGraph(unittest.TestCase):
                 self.assertEqual(49, len(inner_list))
         self.assertEqual(3, num_detected_rnns)
 
+    def test_model_with_lstm_layer_sigmoid(self):
+        """ Test connected graph construction on a model with LSTM op with sigmoid activation """
+
+        tf.reset_default_graph()
+        sess = tf.Session()
+        with sess.graph.as_default():
+            inputs = tf.keras.Input(shape=(3, 100))
+
+            # Add an RNN layer with 12 internal units.
+            x = tf.keras.layers.LSTM(12, recurrent_activation='sigmoid', name='lstm0')(inputs)
+            _ = tf.keras.layers.Dense(12, activation=tf.nn.softmax,
+                                      name="matmul0")(x)
+
+            init = tf.global_variables_initializer()
+            sess.run(init)
+            # _ = tf.summary.FileWriter('./lstm_sigmoid', sess.graph)
+
+        # construct a connected graph
+        conn_graph = ConnectedGraph(sess.graph, ['input_1'], ['matmul0/Softmax'])
+
+        # there should be only 4 connected graph ops, input, LSTM , Dense and Softmax
+        self.assertEqual(4, len(conn_graph.get_all_ops()))
+        lstm_detected = False
+        for op in conn_graph.get_all_ops().values():
+            if op.type == 'LSTM':
+                lstm_detected = True
+                inner_list = op.internal_ops
+                self.assertEqual(77, len(inner_list))
+                self.assertEqual(op.get_module(), sess.graph.get_operation_by_name('lstm0/while/MatMul'))
+                self.assertEqual('lstm0', op.name)
+        self.assertTrue(lstm_detected)
+
+        valid_matmuls = []
+        valid_muls = []
+        valid_bias_add = []
+        valid_activation = []
+        for op in inner_list:
+            if op.type == 'MatMul' and op not in valid_matmuls:
+                valid_matmuls.append(op)
+            if op.type == 'Mul' and op not in valid_matmuls:
+                valid_muls.append(op)
+            if op.type == 'BiasAdd' and op not in valid_bias_add:
+                valid_bias_add.append(op)
+            if op.type == 'Sigmoid' and op not in valid_activation:
+                valid_activation.append(op)
+
+        self.assertEqual(8, len(valid_matmuls))
+        self.assertEqual(4, len(valid_muls))
+        self.assertEqual(4, len(valid_bias_add))
+        self.assertEqual(3, len(valid_activation))
+
     def test_model_with_basic_lstm_layer(self):
         """ Test connected graph construction on a model with LSTM op """
         tf.reset_default_graph()
@@ -527,7 +578,7 @@ class TestTfConnectedGraph(unittest.TestCase):
 
             init = tf.global_variables_initializer()
             sess.run(init)
-            _ = tf.summary.FileWriter('./lstm', sess.graph)
+            # _ = tf.summary.FileWriter('./lstm', sess.graph)
 
         # construct a connected graph
         conn_graph = ConnectedGraph(sess.graph, ['input_1'], ['matmul0/Softmax'])

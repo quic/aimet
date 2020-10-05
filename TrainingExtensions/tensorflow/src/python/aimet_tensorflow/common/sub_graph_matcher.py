@@ -253,7 +253,15 @@ subgraph_constructors = {
         'constructor': "tf.keras.layers.LSTM(10)(inputs)",
         'module_regex': ['(.+)/while/MatMul$'],
         'associated_op_regex': ['MatMul$']
+    },
+    'LSTM_Sigmoid': {
+        'input_shape': (3, 100),
+        'op_type': 'LSTM',
+        'constructor': "tf.keras.layers.LSTM(10, recurrent_activation='sigmoid')(inputs)",
+        'module_regex': ['(.+)/while/MatMul$'],
+        'associated_op_regex': ['MatMul$']
     }
+
 }
 
 
