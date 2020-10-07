@@ -78,7 +78,7 @@ public:
             inputTensorSize *= size;
 
         // Get a pointer to the tensor data
-        float* inputDataPtr = input.data<float>();
+        float* inputDataPtr = input.data_ptr<float>();
 
         DlQuantization::ComputationMode cpu_gpu_mode =
             use_cuda ? DlQuantization::ComputationMode::COMP_MODE_GPU : DlQuantization::ComputationMode::COMP_MODE_CPU;
@@ -97,7 +97,7 @@ public:
         for (auto size: sizes)
             inputTensorSize *= size;
 
-        _tensorQuantizationSim->quantizeDequantizeTensor(input.data<float>(), inputTensorSize, output.data<float>(),
+        _tensorQuantizationSim->quantizeDequantizeTensor(input.data_ptr<float>(), inputTensorSize, output.data_ptr<float>(),
                                                          encoding.min, encoding.max, encoding.bw, roundingMode, use_cuda);
 
         return output;
