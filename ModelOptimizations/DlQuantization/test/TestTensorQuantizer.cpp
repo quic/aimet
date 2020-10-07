@@ -88,6 +88,7 @@ TEST(TestTensorQuantizer, SanityTestCpu)
     EXPECT_NEAR(quantizedTensor.data()[0], 5.008, 0.001);
 }
 
+#ifdef GPU_QUANTIZATION_ENABLED
 
 TEST(TestTensorQuantizer, SanityTestGpu)
 {
@@ -127,3 +128,5 @@ TEST(TestTensorQuantizer, SanityTestGpu)
     EXPECT_NE(inputTensor.data()[0], quantizedTensor.data()[0]);
     EXPECT_NEAR(quantizedTensor.data()[0], 5.008, 0.001);
 }
+
+#endif

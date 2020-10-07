@@ -53,19 +53,29 @@ add_executable(MoDlQuantizationTest
       TestTensorQuantizationSim.cpp
       TestTensorQuantizer.cpp)
 
-target_compile_options(MoDlQuantizationTest
-      PRIVATE
-      -DGPU_QUANTIZATION_ENABLED=1
-      )
+if (ENABLE_CUDA)
+    target_compile_options(MoDlQuantizationTest
+            PRIVATE
+                -DGPU_QUANTIZATION_ENABLED=1
+            )
 
-target_link_libraries(MoDlQuantizationTest
-      MoDlQuantization
-      MoDlQuantizationCuda
-      ${CUDA_LIBRARIES}
-      ${CUDA_CUBLAS_LIBRARIES}
-      "/usr/local/cuda-10.0/targets/x86_64-linux/lib/libcublas.so"
-      gtest gtest_main
-      )
+    target_link_libraries(MoDlQuantizationTest
+            MoDlQuantization
+            MoDlQuantizationCuda
+            ${CUDA_LIBRARIES}
+            ${CUDA_CUBLAS_LIBRARIES}
+            "/usr/local/cuda-10.0/targets/x86_64-linux/lib/libcublas.so"
+            gtest gtest_main
+            )
+
+else (ENABLE_CUDA)
+    target_link_libraries(MoDlQuantizationTest
+            MoDlQuantization
+            gtest gtest_main
+            )
+
+endif (ENABLE_CUDA)
+
 
 add_test(MoDlQuantizationTest
       MoDlQuantizationTest --gtest_output=xml:cpp_test_output.xml)

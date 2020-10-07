@@ -41,14 +41,25 @@ add_library(PyTrainingExtensions SHARED
 target_include_directories(PyTrainingExtensions PUBLIC
       ${CMAKE_CURRENT_SOURCE_DIR}/include)
 
-target_link_libraries(PyTrainingExtensions PUBLIC
-      stdc++
-      PYBIND11
-      MoDlQuantization
-      MoDlQuantizationCuda
-        ${CUDA_LIBRARIES}
-        ${CUDA_CUBLAS_LIBRARIES}
-        "/usr/local/cuda-10.0/targets/x86_64-linux/lib/libcublas.so")
+if (ENABLE_CUDA)
+    target_link_libraries(PyTrainingExtensions PUBLIC
+            stdc++
+            PYBIND11
+            MoDlQuantization
+            MoDlQuantizationCuda
+            ${CUDA_LIBRARIES}
+            ${CUDA_CUBLAS_LIBRARIES}
+            "/usr/local/cuda-10.0/targets/x86_64-linux/lib/libcublas.so"
+            )
+
+else (ENABLE_CUDA)
+    target_link_libraries(PyTrainingExtensions PUBLIC
+            stdc++
+            PYBIND11
+            MoDlQuantization
+            )
+
+endif (ENABLE_CUDA)
 
 set_target_properties(PyTrainingExtensions PROPERTIES
       OUTPUT_NAME "pytrext")
