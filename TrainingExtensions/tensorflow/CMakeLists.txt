@@ -46,49 +46,61 @@ add_library(TrainingExtensionsTf SHARED
         src/QcQuantizeOp.cpp
         )
 
-target_compile_options(TrainingExtensionsTf
-      PRIVATE
-         -DGOOGLE_CUDA=1
-      )
-
 target_include_directories(TrainingExtensionsTf PRIVATE
-      /usr/local/lib/python3.6/dist-packages/tensorflow_core/include
-      /usr/local/lib/python3.6/dist-packages/tensorflow_core/include/external/nsync/public
-      ${CMAKE_CURRENT_SOURCE_DIR}/../common/include
-      )
+        /usr/local/lib/python3.6/dist-packages/tensorflow_core/include
+        /usr/local/lib/python3.6/dist-packages/tensorflow_core/include/external/nsync/public
+        ${CMAKE_CURRENT_SOURCE_DIR}/../common/include
+        )
 
-target_link_libraries(TrainingExtensionsTf PUBLIC
-      MoDlCompression
-      MoDlCompressionCuda
-      MoDlQuantization
-      MoDlQuantizationCuda
-      TensorFlow
-      TrainingExtensionsTfCuda
-      )
+if (ENABLE_CUDA)
+    target_compile_options(TrainingExtensionsTf
+            PRIVATE
+            -DGOOGLE_CUDA=1
+            )
+
+    target_link_libraries(TrainingExtensionsTf PUBLIC
+          MoDlCompression
+          MoDlQuantization
+          MoDlQuantizationCuda
+          TensorFlow
+          TrainingExtensionsTfCuda
+          )
+
+else(ENABLE_CUDA)
+    target_link_libraries(TrainingExtensionsTf PUBLIC
+            MoDlCompression
+            MoDlQuantization
+            TensorFlow
+            )
+
+endif(ENABLE_CUDA)
 
 set_target_properties(TrainingExtensionsTf PROPERTIES
       OUTPUT_NAME "aimet_tf_ops"
       LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/artifacts"
       )
 
-set(CUDA_NVCC_FLAGS ${CUDA_NVCC_FLAGS}
-      -DGOOGLE_CUDA=1
-      -I /usr/local/lib/python3.6/dist-packages/tensorflow_core/include
-      --expt-relaxed-constexpr
-      )
-
 get_target_property(dirs MoDlQuantization INCLUDE_DIRECTORIES)
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/../common/include /usr/local/lib/python3.6/dist-packages/tensorflow_core/include/external/nsync/public ${dirs})
 
-add_library(TrainingExtensionsTfCuda
-        src/QcQuantizeOpGpuDeprecated.cu
-        src/AimetOpUtilsGpu.cu
-      )
+if (ENABLE_CUDA)
+    add_library(TrainingExtensionsTfCuda
+            src/QcQuantizeOpGpuDeprecated.cu
+            src/AimetOpUtilsGpu.cu
+            )
 
-target_compile_options(TrainingExtensionsTfCuda
-      PRIVATE
-         -Xcompiler -fPIC -D_GLIBCXX_USE_CXX11_ABI=0 -DGOOGLE_CUDA=1 -I /usr/local/lib/python3.6/dist-packages/tensorflow_core/include --expt-relaxed-constexpr
-      )
+    target_compile_options(TrainingExtensionsTfCuda
+            PRIVATE
+            -Xcompiler -fPIC -D_GLIBCXX_USE_CXX11_ABI=0 -DGOOGLE_CUDA=1 -I /usr/local/lib/python3.6/dist-packages/tensorflow_core/include --expt-relaxed-constexpr
+            )
+
+    set(CUDA_NVCC_FLAGS ${CUDA_NVCC_FLAGS}
+            -DGOOGLE_CUDA=1
+            -I /usr/local/lib/python3.6/dist-packages/tensorflow_core/include
+            --expt-relaxed-constexpr
+            )
+endif(ENABLE_CUDA)
+
 
 install(FILES $<TARGET_FILE:TrainingExtensionsTf>
       DESTINATION ${AIMET_INSTALL_DIR}/lib/x86_64-linux-gnu

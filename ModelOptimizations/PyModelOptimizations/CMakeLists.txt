@@ -40,23 +40,39 @@ cmake_minimum_required(VERSION 3.5)
 add_library(PyModelOptimizations SHARED
       PyModelOptimizations.cpp)
 
-target_link_libraries(PyModelOptimizations
-      PUBLIC
-         stdc++
-         PYBIND11
-         MoDlQuantization
-         MoDlEqualization
-         MoDlQuantizationCuda
-         MoDlCompression
-         MoDlCompressionCuda
+if (ENABLE_CUDA)
+    target_link_libraries(PyModelOptimizations
+          PUBLIC
+             stdc++
+             PYBIND11
+             MoDlQuantization
+             MoDlEqualization
+             MoDlQuantizationCuda
+             MoDlCompression
 
-         ${CUDA_LIBRARIES}
-         ${CUDA_CUBLAS_LIBRARIES}
-         "/usr/local/cuda-10.0/targets/x86_64-linux/lib/libcublas.so"
-         ${LAPACKE_LIBRARY}
-         ${OPENCV_LIBRARY}
-         z
-      )
+             ${CUDA_LIBRARIES}
+             ${CUDA_CUBLAS_LIBRARIES}
+             "/usr/local/cuda-10.0/targets/x86_64-linux/lib/libcublas.so"
+             ${LAPACKE_LIBRARY}
+             ${OPENCV_LIBRARY}
+             z
+          )
+
+else (ENABLE_CUDA)
+    target_link_libraries(PyModelOptimizations
+            PUBLIC
+            stdc++
+            PYBIND11
+            MoDlQuantization
+            MoDlEqualization
+            MoDlCompression
+
+            ${LAPACKE_LIBRARY}
+            ${OPENCV_LIBRARY}
+            z
+            )
+
+endif (ENABLE_CUDA)
 
 set_target_properties(PyModelOptimizations
       PROPERTIES
