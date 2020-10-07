@@ -36,10 +36,6 @@
 cmake_minimum_required(VERSION 3.5)
 
 add_library(MoDlCompression STATIC
-      src/math_functions.cpp
-      src/math_functions.hpp
-      src/pack_functions.cpp
-      src/pack_functions.hpp
       src/SvdAlgorithm.cpp
       src/SvdAlgorithm.hpp
 
@@ -51,18 +47,10 @@ target_include_directories(MoDlCompression
          ${CMAKE_CURRENT_SOURCE_DIR}/include)
 
 target_compile_options(MoDlCompression
-      PRIVATE
-         -DGPU_COMPRESSION_ENABLED=1 -DUSE_OPENCV
-      )
+        PRIVATE
+            -DUSE_OPENCV)
+
 
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/include)
-
-add_library(MoDlCompressionCuda
-      src/math_functions.cu
-      )
-
-target_compile_options(MoDlCompressionCuda
-      PRIVATE
-      -Xcompiler -fPIC)
 
 add_subdirectory(test)
