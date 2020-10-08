@@ -36,6 +36,7 @@
 #  @@-COPYRIGHT-END-@@
 # =============================================================================
 
+import pytest
 import unittest.mock
 import copy
 import numpy as np
@@ -77,7 +78,7 @@ class TestDataSubSampler(unittest.TestCase):
         # (0, 0), (1, 1), (2, 2), (3, 3), (4, 4), (5, 5), (6, 6), (7, 7), (6, 6), (5, 5)
         np_choice_function.return_value = heights = widths = [0, 1, 2, 3, 4, 5, 6, 7, 6, 5]
 
-        orig_model = TestNet().cuda()
+        orig_model = TestNet()
         comp_model = copy.deepcopy(orig_model)
         # only one image and from that 10 samples
         dataset_size = 100
@@ -98,7 +99,7 @@ class TestDataSubSampler(unittest.TestCase):
         # collect the output data of conv2 from original model using same data loader
         iterator = data_loader.__iter__()
         images_in_one_batch, _ = iterator.__next__()
-        conv1_output = orig_model.conv1(images_in_one_batch.cuda())
+        conv1_output = orig_model.conv1(images_in_one_batch)
         conv2_input = conv1_output
         conv2_output = orig_model.conv2(functional.relu(functional.max_pool2d(conv2_input, 2))).\
             detach().cpu().numpy()
@@ -119,7 +120,7 @@ class TestDataSubSampler(unittest.TestCase):
         # (0, 0), (1, 1), (2, 2), (3, 3), (4, 4), (5, 5), (6, 6), (7, 7), (6, 6), (5, 5)
         np_choice_function.return_value = heights = widths = [0, 1, 2, 3, 4, 5, 6, 7, 6, 5]
 
-        orig_model = TestNet().cuda()
+        orig_model = TestNet()
         comp_model = copy.deepcopy(orig_model)
         # only one image and from that 10 samples
         dataset_size = 1
@@ -140,7 +141,7 @@ class TestDataSubSampler(unittest.TestCase):
 
         iterator = data_loader.__iter__()
         images_in_one_batch, _ = iterator.__next__()
-        conv1_output = comp_model.conv1(images_in_one_batch.cuda())
+        conv1_output = comp_model.conv1(images_in_one_batch)
         conv2_input = functional.relu(functional.max_pool2d(conv1_output, 2))
 
         kernel_size_h, kernel_size_w = comp_model.conv2.kernel_size
@@ -156,7 +157,7 @@ class TestDataSubSampler(unittest.TestCase):
         """ Test to collect activations (input from model_copy and output from model for fc1 layer) and compare
             with sub sampled output data
         """
-        orig_model = TestNet().cuda()
+        orig_model = TestNet()
         comp_model = copy.deepcopy(orig_model)
         # only one image and from that 10 samples
         dataset_size = 100
@@ -180,7 +181,7 @@ class TestDataSubSampler(unittest.TestCase):
         iterator = data_loader.__iter__()
         images_in_one_batch, _ = iterator.__next__()
 
-        conv1_output = orig_model.conv1(images_in_one_batch.cuda())
+        conv1_output = orig_model.conv1(images_in_one_batch)
         conv2_input = conv1_output
         conv2_output = orig_model.conv2(functional.relu(functional.max_pool2d(conv2_input, 2)))
         fc1_input = conv2_output
@@ -196,7 +197,7 @@ class TestDataSubSampler(unittest.TestCase):
         """ Test to collect activations (input from model_copy and output from model for fc1 layer) and compare
             with sub sampled output data
         """
-        orig_model = TestNet().cuda()
+        orig_model = TestNet()
         comp_model = copy.deepcopy(orig_model)
         # only one image and from that 10 samples
         dataset_size = 100
@@ -220,7 +221,7 @@ class TestDataSubSampler(unittest.TestCase):
         iterator = data_loader.__iter__()
         images_in_one_batch, _ = iterator.__next__()
 
-        conv1_output = orig_model.conv1(images_in_one_batch.cuda())
+        conv1_output = orig_model.conv1(images_in_one_batch)
         conv2_input = conv1_output
         conv2_output = orig_model.conv2(functional.relu(functional.max_pool2d(conv2_input, 2)))
         fc1_input = conv2_output
@@ -230,7 +231,8 @@ class TestDataSubSampler(unittest.TestCase):
         # compare data of first batch only
         self.assertTrue(np.array_equal(fc1_input_data[0:10], fc1_input))
 
-    def test_forward_pass_with_single_input(self):
+    @pytest.mark.cuda
+    def test_forward_pass_with_single_input_gpu(self):
         """
         test _forward_pass of DataSubsampler with single input
         """
@@ -261,7 +263,8 @@ class TestDataSubSampler(unittest.TestCase):
         _ = DataSubSampler._forward_pass(model, data)
         _ = DataSubSampler._forward_pass(model_on_gpu, data)
 
-    def test_forward_pass_with_multiple_inputs(self):
+    @pytest.mark.cuda
+    def test_forward_pass_with_multiple_inputs_gpu(self):
         """
         test _forward_pass of DataSubsampler with different combinations of inputs
         """

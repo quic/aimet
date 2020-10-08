@@ -415,7 +415,7 @@ class TestTrainingExtensionsChannelPruning(unittest.TestCase):
 
     def test_data_sub_sampling_and_reconstruction(self):
         """Test end to end data sub sampling and reconstruction for MNIST conv2 layer"""
-        orig_model = mnist_model().cuda()
+        orig_model = mnist_model()
         comp_model = copy.deepcopy(orig_model)
 
         dataset_size = 100
@@ -449,7 +449,7 @@ class TestTrainingExtensionsChannelPruning(unittest.TestCase):
 
     def test_data_sub_sample_and_reconstruction_with_zero_channels(self):
         """Test end to end data sub sampling and reconstruction for MNIST conv2 layer"""
-        orig_model = mnist_model().cuda()
+        orig_model = mnist_model()
         comp_model = copy.deepcopy(orig_model)
 
         dataset_size = 100
@@ -483,7 +483,7 @@ class TestTrainingExtensionsChannelPruning(unittest.TestCase):
     def test_data_sub_sampling_and_reconstruction_without_bias(self):
         """Test end to end data sub sampling and reconstruction for MNIST conv2 layer (without bias)"""
 
-        orig_model = mnist_model().cuda()
+        orig_model = mnist_model()
         # set bias to None
         orig_model.conv2.bias = None
 
@@ -527,7 +527,7 @@ class TestTrainingExtensionsChannelPruning(unittest.TestCase):
 
     def test_select_inp_channels(self):
 
-        orig_model = mnist_model().cuda()
+        orig_model = mnist_model()
         data_loader = unittest.mock.MagicMock()
         number_of_batches = unittest.mock.MagicMock()
         samples_per_image = unittest.mock.MagicMock()

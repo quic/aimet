@@ -76,7 +76,7 @@ class TestNet(nn.Module):
 
 class TestTrainingExtensionBnFold(unittest.TestCase):
     def test_get_output_of_layer(self):
-        model = TestNet().cuda()
+        model = TestNet()
         dataset_size = 2
         batch_size = 2
         data_loader = create_fake_data_loader(dataset_size=dataset_size, batch_size=batch_size)
@@ -90,7 +90,7 @@ class TestTrainingExtensionBnFold(unittest.TestCase):
         for batch in range(number_of_batches):
 
             images_in_one_batch, _ = iterator.__next__()
-            conv1_output = model.conv1(images_in_one_batch.cuda())
+            conv1_output = model.conv1(images_in_one_batch)
             conv2_input = conv1_output
             conv2_output = model.conv2(functional.relu(functional.max_pool2d(conv2_input, 2)))
             # compare the output from conv2 layer
