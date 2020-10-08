@@ -67,7 +67,7 @@ target_include_directories(MoDlEqualization
 
 target_compile_options(MoDlEqualization
         PRIVATE
-        -DGPU_COMPRESSION_ENABLED=1 -DUSE_OPENCV
+            -DUSE_OPENCV
         )
 
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/include)
