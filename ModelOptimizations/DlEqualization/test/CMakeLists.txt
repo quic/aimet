@@ -48,7 +48,7 @@ add_executable(MoDlEqualizationTest
 
 target_compile_options(MoDlEqualizationTest
         PRIVATE
-        -DGPU_COMPRESSION_ENABLED=1 -DUSE_OPENCV
+            -DUSE_OPENCV
         )
 
 target_link_libraries(MoDlEqualizationTest
@@ -58,9 +58,6 @@ target_link_libraries(MoDlEqualizationTest
         ${LAPACKE_LIBRARY}
         ${OPENCV_LIBRARY}
         z
-        ${CUDA_LIBRARIES}
-        ${CUDA_CUBLAS_LIBRARIES}
-        "/usr/local/cuda-10.0/targets/x86_64-linux/lib/libcublas.so"
         dl
         gtest gtest_main
         )
