@@ -1,4 +1,3 @@
-# /usr/bin/env python2.7
 # -*- mode: python -*-
 # =============================================================================
 #  @@-COPYRIGHT-START-@@
@@ -36,6 +35,7 @@
 #  @@-COPYRIGHT-END-@@
 # =============================================================================
 
+import pytest
 import unittest
 import copy
 import time
@@ -58,6 +58,7 @@ def forward_pass(model, args):
 
 class QuantizerCpuGpu(unittest.TestCase):
 
+    @pytest.mark.cuda
     def test_and_compare_quantizer_no_fine_tuning_CPU_and_GPU(self):
 
         torch.manual_seed(1)

@@ -35,9 +35,17 @@
 #==============================================================================
 cmake_minimum_required(VERSION 3.5)
 
-add_test(TorchTrainingExtensionTest
-      pytest ${CMAKE_CURRENT_SOURCE_DIR} --junitxml=${CMAKE_CURRENT_BINARY_DIR}/py_test_output.xml
-      )
+if (ENABLE_CUDA)
+    add_test(TorchTrainingExtensionTest
+            pytest ${CMAKE_CURRENT_SOURCE_DIR} --junitxml=${CMAKE_CURRENT_BINARY_DIR}/py_test_output.xml
+            )
+
+else (ENABLE_CUDA)
+    add_test(TorchTrainingExtensionTest
+            pytest ${CMAKE_CURRENT_SOURCE_DIR} -m "not cuda" --junitxml=${CMAKE_CURRENT_BINARY_DIR}/py_test_output.xml
+            )
+
+endif (ENABLE_CUDA)
 
 set_property(TEST TorchTrainingExtensionTest
       APPEND PROPERTY ENVIRONMENT "${AIMET_LD_LIBRARY_PATH}")

@@ -742,6 +742,7 @@ class TestTrainingExtensionsSvd(unittest.TestCase):
         self.assertEqual('conv2', stats.per_rank_index[0].per_selected_layer[0].layer_name)
         self.assertEqual('fc2', stats.per_rank_index[0].per_selected_layer[1].layer_name)
 
+    @pytest.mark.cuda
     def test_model_allocation_gpu(self):
 
         model = MnistModel().to("cuda")

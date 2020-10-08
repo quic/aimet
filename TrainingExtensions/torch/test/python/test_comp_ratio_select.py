@@ -141,7 +141,7 @@ class TestTrainingExtensionsCompRatioSelect(unittest.TestCase):
         eval_func.side_effect = [90, 80, 70, 60, 50, 40, 30, 20, 10,
                                  91, 81, 71, 61, 51, 41, 31, 21, 11]
 
-        model = mnist_torch_model.Net().cuda()
+        model = mnist_torch_model.Net()
 
         # Create a layer database
         layer_db = LayerDatabase(model, input_shape=(1, 1, 28, 28))
