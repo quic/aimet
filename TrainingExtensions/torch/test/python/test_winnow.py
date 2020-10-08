@@ -47,6 +47,7 @@ Scenario 4 : conv2d/Linear with zero planes right below an Add layer
  """
 
 import os
+import pytest
 import unittest
 import math
 import numpy as np
@@ -1099,6 +1100,7 @@ class TestTrainingExtensionsWinnow(unittest.TestCase):      # pylint: disable=to
         test_output = winnowed_model(input_tensor)
         self.assertTrue(test_output.shape == validation_output.shape)
 
+    @pytest.mark.cuda
     def test_winnow_model_api_resnet18_memory_check(self):
         """
         Tests the winnow_model() API and check the memory leak
@@ -1297,6 +1299,7 @@ class TestTrainingExtensionsWinnow(unittest.TestCase):      # pylint: disable=to
         self.assertEqual(new_model.features[12].in_channels, 245)
         self.assertEqual(new_model.features[12].out_channels, 256)
 
+    @pytest.mark.cuda
     def test_winnowing_resnet18_on_cuda(self):
         """ Tests winnowing resnet18 with multiple layers  with zero planes. """
 
@@ -1328,6 +1331,7 @@ class TestTrainingExtensionsWinnow(unittest.TestCase):      # pylint: disable=to
         self.assertTrue(winnowed_model.layer2[0].conv2.out_channels == 128)
         self.assertTrue(winnowed_model.layer2[0].conv1.out_channels == 117)
 
+    @pytest.mark.cuda
     def test_inception_model_conv_below_split_on_cuda(self):
         """ Test winnowing inception model for a conv module below a split """
         model = models.inception_v3(pretrained=True)
@@ -1417,6 +1421,7 @@ class TestTrainingExtensionsWinnow(unittest.TestCase):      # pylint: disable=to
             winnowed_model(torch.rand(input_shape))
         self.assertEqual(0, 0)
 
+    @pytest.mark.cuda
     def test_inception_model_conv_has_upstream_concat(self):
         """
         Test winnow on inception model for conv module with concat above

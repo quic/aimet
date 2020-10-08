@@ -36,6 +36,7 @@
 #  @@-COPYRIGHT-END-@@
 # =============================================================================
 
+import pytest
 import unittest.mock
 import numpy as np
 
@@ -123,6 +124,7 @@ class TestTrainingExtensionsUtils(unittest.TestCase):
         self.assertEqual(1, len(reused_modules))
         self.assertEqual(reused_modules[0][1], model.relu1)
 
+    @pytest.mark.cuda
     def test_change_tensor_device(self):
 
         # 1) test only tensor on CPU and GPU
@@ -231,83 +233,114 @@ class TestTrainingExtensionsUtils(unittest.TestCase):
         self.assertTrue(isinstance(random_tensor_new, tuple))
         self.assertTrue(isinstance(random_tensor_new[0], tuple))
 
-    def test_collect_inp_out_data(self):
+    def _collect_inp_out_data(self, device):
+        model = TinyModel().to(device=device)
+        model_input = torch.randn(1, 3, 32, 32).to(device=device)
+
+        module_data = ModuleData(model, model.conv1)
+        inp, out = module_data.collect_inp_out_data(model_input, collect_input=False, collect_output=False)
+        self.assertEqual(inp, None)
+        self.assertEqual(out, None)
+
+        module_data = ModuleData(model, model.conv1)
+        inp, out = module_data.collect_inp_out_data(model_input, collect_input=True, collect_output=False)
+        self.assertTrue(np.array_equal(to_numpy(inp), to_numpy(model_input)))
+        self.assertEqual(out, None)
+
+        module_data = ModuleData(model, model.conv1)
+        inp, out = module_data.collect_inp_out_data(model_input, collect_input=False, collect_output=True)
+        conv1_out = model.conv1(model_input)
+        self.assertTrue(np.array_equal(to_numpy(out), to_numpy(conv1_out)))
+        self.assertEqual(inp, None)
+
+        module_data = ModuleData(model, model.conv1)
+        inp, out = module_data.collect_inp_out_data(model_input, collect_input=True, collect_output=True)
+        conv1_out = model.conv1(model_input)
+        self.assertTrue(np.array_equal(to_numpy(out), to_numpy(conv1_out)))
+        self.assertTrue(np.array_equal(to_numpy(inp), to_numpy(model_input)))
+
+        module_data = ModuleData(model, model.fc)
+        inp, out = module_data.collect_inp_out_data(model_input, collect_input=False, collect_output=True)
+        fc_out = model(model_input)
+        self.assertTrue(np.array_equal(to_numpy(out), to_numpy(fc_out)))
+        self.assertEqual(inp, None)
+
+    def test_collect_inp_out_data_cpu(self):
         """ test collect input output data from module """
 
-        device_list = [torch.device('cpu'), torch.device('cuda:0')]
+        self._collect_inp_out_data(torch.device('cpu'))
+
+    @pytest.mark.cuda
+    def test_collect_inp_out_data_gpu(self):
+        """ test collect input output data from module """
+
+        self._collect_inp_out_data(torch.device('cuda:0'))
+
+    def _collect_inp_out_data_multi_input(self, device):
+        model = MultiInput().to(device=device)
+        inp_shape_1 = (1, 3, 32, 32)
+        inp_shape_2 = (1, 3, 20, 20)
+        model_input = create_rand_tensors_given_shapes([inp_shape_1, inp_shape_2])
+
+        module_data = ModuleData(model, model.conv1)
+        inp, out = module_data.collect_inp_out_data(model_input, collect_input=True, collect_output=False)
+        self.assertTrue(np.array_equal(to_numpy(inp), to_numpy(model_input[0])))
+        self.assertEqual(out, None)
+
+        module_data = ModuleData(model, model.conv1)
+        inp, out = module_data.collect_inp_out_data(model_input, collect_input=False, collect_output=True)
+        conv1_out = model.conv1(model_input[0])
+        self.assertTrue(np.array_equal(to_numpy(out), to_numpy(conv1_out)))
+        self.assertEqual(inp, None)
+
+        module_data = ModuleData(model, model.conv3)
+        inp, out = module_data.collect_inp_out_data(model_input, collect_input=True, collect_output=True)
+        conv3_out = model.conv3(model_input[1])
+        self.assertTrue(np.array_equal(to_numpy(out), to_numpy(conv3_out)))
+        self.assertTrue(np.array_equal(to_numpy(inp), to_numpy(model_input[1])))
+
+        module_data = ModuleData(model, model.fc)
+        inp, out = module_data.collect_inp_out_data(model_input, collect_input=False, collect_output=True)
+        fc_out = model(*model_input)
+        self.assertTrue(np.array_equal(to_numpy(out), to_numpy(fc_out)))
+        self.assertEqual(inp, None)
+
+    def test_collect_inp_out_data_multi_input_cpu(self):
+        """ test collect input output data from module using multi input """
+
+        self._collect_inp_out_data_multi_input(torch.device('cpu'))
+
+    @pytest.mark.cuda
+    def test_collect_inp_out_data_multi_input_gpu(self):
+        """ test collect input output data from module using multi input """
+
+        self._collect_inp_out_data_multi_input(torch.device('cuda:0'))
+
+    def test_collect_inp_out_data_quantsim_model_cpu(self):
+        """ test collect input output data from module """
+
+        device_list = [torch.device('cpu')]
 
         for device in device_list:
 
             model = TinyModel().to(device=device)
             model_input = torch.randn(1, 3, 32, 32).to(device=device)
+            sim = QuantizationSimModel(model, input_shapes=(1, 3, 32, 32))
 
-            module_data = ModuleData(model, model.conv1)
-            inp, out = module_data.collect_inp_out_data(model_input, collect_input=False, collect_output=False)
-            self.assertEqual(inp, None)
-            self.assertEqual(out, None)
+            module_data = ModuleData(model, model.fc)
+            inp, out = module_data.collect_inp_out_data(model_input, collect_input=False, collect_output=True)
+            fc_out = sim.model(model_input)
+            self.assertFalse(np.array_equal(to_numpy(out), to_numpy(fc_out)))
 
             module_data = ModuleData(model, model.conv1)
             inp, out = module_data.collect_inp_out_data(model_input, collect_input=True, collect_output=False)
             self.assertTrue(np.array_equal(to_numpy(inp), to_numpy(model_input)))
-            self.assertEqual(out, None)
 
-            module_data = ModuleData(model, model.conv1)
-            inp, out = module_data.collect_inp_out_data(model_input, collect_input=False, collect_output=True)
-            conv1_out = model.conv1(model_input)
-            self.assertTrue(np.array_equal(to_numpy(out), to_numpy(conv1_out)))
-            self.assertEqual(inp, None)
-
-            module_data = ModuleData(model, model.conv1)
-            inp, out = module_data.collect_inp_out_data(model_input, collect_input=True, collect_output=True)
-            conv1_out = model.conv1(model_input)
-            self.assertTrue(np.array_equal(to_numpy(out), to_numpy(conv1_out)))
-            self.assertTrue(np.array_equal(to_numpy(inp), to_numpy(model_input)))
-
-            module_data = ModuleData(model, model.fc)
-            inp, out = module_data.collect_inp_out_data(model_input, collect_input=False, collect_output=True)
-            fc_out = model(model_input)
-            self.assertTrue(np.array_equal(to_numpy(out), to_numpy(fc_out)))
-            self.assertEqual(inp, None)
-
-    def test_collect_inp_out_data_multi_input(self):
-        """ test collect input output data from module using multi input """
-
-        device_list = [torch.device('cpu'), torch.device('cuda:0')]
-
-        for device in device_list:
-
-            model = MultiInput().to(device=device)
-            inp_shape_1 = (1, 3, 32, 32)
-            inp_shape_2 = (1, 3, 20, 20)
-            model_input = create_rand_tensors_given_shapes([inp_shape_1, inp_shape_2])
-
-            module_data = ModuleData(model, model.conv1)
-            inp, out = module_data.collect_inp_out_data(model_input, collect_input=True, collect_output=False)
-            self.assertTrue(np.array_equal(to_numpy(inp), to_numpy(model_input[0])))
-            self.assertEqual(out, None)
-
-            module_data = ModuleData(model, model.conv1)
-            inp, out = module_data.collect_inp_out_data(model_input, collect_input=False, collect_output=True)
-            conv1_out = model.conv1(model_input[0])
-            self.assertTrue(np.array_equal(to_numpy(out), to_numpy(conv1_out)))
-            self.assertEqual(inp, None)
-
-            module_data = ModuleData(model, model.conv3)
-            inp, out = module_data.collect_inp_out_data(model_input, collect_input=True, collect_output=True)
-            conv3_out = model.conv3(model_input[1])
-            self.assertTrue(np.array_equal(to_numpy(out), to_numpy(conv3_out)))
-            self.assertTrue(np.array_equal(to_numpy(inp), to_numpy(model_input[1])))
-
-            module_data = ModuleData(model, model.fc)
-            inp, out = module_data.collect_inp_out_data(model_input, collect_input=False, collect_output=True)
-            fc_out = model(*model_input)
-            self.assertTrue(np.array_equal(to_numpy(out), to_numpy(fc_out)))
-            self.assertEqual(inp, None)
-
-    def test_collect_inp_out_data_quantsim_model(self):
+    @pytest.mark.cuda
+    def test_collect_inp_out_data_quantsim_model_gpu(self):
         """ test collect input output data from module """
 
-        device_list = [torch.device('cpu'), torch.device('cuda:0')]
+        device_list = [torch.device('cuda:0')]
 
         for device in device_list:
 
