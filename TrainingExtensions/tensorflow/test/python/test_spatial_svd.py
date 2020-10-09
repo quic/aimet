@@ -36,6 +36,7 @@
 #  @@-COPYRIGHT-END-@@
 # =============================================================================
 
+import pytest
 import unittest
 import copy
 import shutil
@@ -71,17 +72,17 @@ class TestSpatialSvdLayerSplit(unittest.TestCase):
 
         with g.as_default():
 
-            inp_tensor = tf.get_variable('inp_tensor', shape=[num_examples, 20, 5, 5],
+            inp_tensor = tf.get_variable('inp_tensor', shape=[num_examples, 5, 5, 20],
                                          initializer=tf.random_normal_initializer())
             filter_tensor = tf.get_variable('filter_tensor', shape=[5, 5, 20, 50],
                                             initializer=tf.random_normal_initializer())
 
             conv1 = tf.nn.conv2d(input=inp_tensor, filter=filter_tensor, strides=[1, 1, 1, 1], padding='VALID',
-                                 data_format="NCHW", name='Conv2D_1')
+                                 data_format="NHWC", name='Conv2D_1')
 
             bias_tensor = tf.get_variable('bias_tensor', shape=[50], initializer=tf.random_normal_initializer())
 
-            bias = tf.nn.bias_add(value=conv1, bias=bias_tensor, data_format="NCHW")
+            bias = tf.nn.bias_add(value=conv1, bias=bias_tensor, data_format="NHWC")
 
             init = tf.global_variables_initializer()
 
@@ -89,7 +90,7 @@ class TestSpatialSvdLayerSplit(unittest.TestCase):
 
         # output shape in NCHW format
         shape = orig_conv_op.outputs[0].get_shape().as_list()
-        self.assertEqual(shape, [num_examples, 50, 1, 1])
+        self.assertEqual(shape, [num_examples, 1, 1, 50])
 
         sess = tf.Session(graph=g)
 
@@ -173,8 +174,10 @@ class TestSpatialSvdLayerSplit(unittest.TestCase):
         tf.reset_default_graph()
         sess.close()
 
-    def test_split_layer_with_stirde(self):
+    @pytest.mark.cuda
+    def test_split_layer_with_stride(self):
         """test the conv2d split after and before split_module call with stride option """
+        """Conv NCHW not allowed on CPU"""
 
         num_examples = 2000
         g = tf.Graph()
@@ -295,25 +298,25 @@ class TestSpatialSvdLayerSplit(unittest.TestCase):
         g = tf.Graph()
         with g.as_default():
 
-            inp_tensor = tf.get_variable('inp_tensor', shape=[num_examples, 20, 5, 5],
+            inp_tensor = tf.get_variable('inp_tensor', shape=[num_examples, 5, 5, 20],
                                          initializer=tf.random_normal_initializer())
 
             filter_tensor = tf.get_variable('filter_tensor', shape=[5, 5, 20, 50],
                                             initializer=tf.random_normal_initializer())
 
             conv1 = tf.nn.conv2d(input=inp_tensor, filter=filter_tensor, strides=[1, 1, 1, 1], padding='VALID',
-                                 data_format="NCHW", name='Conv2D_1')
+                                 data_format="NHWC", name='Conv2D_1')
 
             bias_tensor = tf.get_variable('bias_tensor', shape=[50], initializer=tf.random_normal_initializer())
 
-            bias = tf.nn.bias_add(value=conv1, bias=bias_tensor, data_format="NCHW")
+            bias = tf.nn.bias_add(value=conv1, bias=bias_tensor, data_format="NHWC")
 
             init = tf.global_variables_initializer()
 
         orig_conv_op = g.get_operation_by_name('Conv2D_1')
 
         shape = orig_conv_op.outputs[0].get_shape().as_list()
-        self.assertEqual(shape, [num_examples, 50, 1, 1])
+        self.assertEqual(shape, [num_examples, 1, 1, 50])
 
         sess = tf.Session(graph=g)
 

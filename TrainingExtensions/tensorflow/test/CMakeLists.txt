@@ -35,13 +35,21 @@
 #==============================================================================
 cmake_minimum_required(VERSION 3.5)
 
-add_test(TfOpTest
-      pytest ${CMAKE_CURRENT_SOURCE_DIR} --junitxml=${CMAKE_CURRENT_BINARY_DIR}/py_test_output.xml
-      )
+if (ENABLE_CUDA)
+    add_test(TfTrainingExtensionTest
+            pytest ${CMAKE_CURRENT_SOURCE_DIR} --junitxml=${CMAKE_CURRENT_BINARY_DIR}/py_test_output.xml
+            )
 
-set_property(TEST TfOpTest
+else (ENABLE_CUDA)
+    add_test(TfTrainingExtensionTest
+            pytest ${CMAKE_CURRENT_SOURCE_DIR} -m "not cuda" --junitxml=${CMAKE_CURRENT_BINARY_DIR}/py_test_output.xml
+            )
+
+endif (ENABLE_CUDA)
+
+set_property(TEST TfTrainingExtensionTest
       APPEND PROPERTY ENVIRONMENT "${AIMET_LD_LIBRARY_PATH}")
-set_property(TEST TfOpTest
+set_property(TEST TfTrainingExtensionTest
       APPEND PROPERTY ENVIRONMENT "${AIMET_PYTHONPATH}")
 
 
