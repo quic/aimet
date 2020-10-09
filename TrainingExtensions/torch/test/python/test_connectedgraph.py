@@ -44,33 +44,13 @@ from aimet_torch.examples.test_models import TinyModel, SingleResidual, MultiInp
     ModelWithDropouts, SequentialModel, HierarchicalModel, PassThroughOpLastLayerModel, MultiOutputModel,\
     TupleOutputModel, ConfigurableTupleOutputModel, BasicConv2d
 
-from aimet_torch.meta.connectedgraph import _split_inputs, ConnectedGraph
+from aimet_torch.meta.connectedgraph import ConnectedGraph
 from aimet_torch.meta.connectedgraph_utils import get_module_act_func_pair
 from aimet_torch.utils import create_rand_tensors_given_shapes
 
 
 class TestConnectedGraph(unittest.TestCase):
     """ Unit tests for testing ConnectedGraph module"""
-
-    def test_split_inputs(self):
-        """ Test split_inputs() utility"""
-        named_groups = {}
-        inputs = 'input2, weight0, _3, [1, 1], False, [0,0], 1'
-        split = _split_inputs(inputs, named_groups)
-        self.assertEqual(9, len(split))
-
-        inputs = 'x1, [annotate(List[_3, _4], int), -1]'
-        split = _split_inputs(inputs, named_groups)
-        self.assertEqual('annotate(List[_3, _4], int)', split[1])
-        self.assertEqual(3, len(split))
-
-        with self.assertRaises(AssertionError):
-            inputs = 'input2, weight0, _3)'
-            _ = _split_inputs(inputs, named_groups)
-
-        with self.assertRaises(AssertionError):
-            inputs = 'input2, weight0, _3]'
-            _ = _split_inputs(inputs, named_groups)
 
     def test_single_residual(self):
         """ Test building ConnectedGraph on single residual model """
