@@ -1,4 +1,3 @@
-# /usr/bin/env python2.7
 # -*- mode: python -*-
 # =============================================================================
 #  @@-COPYRIGHT-START-@@
@@ -37,6 +36,7 @@
 # =============================================================================
 
 import os
+import pytest
 import tensorflow as tf
 import numpy as np
 from tensorflow.python.framework import ops
@@ -66,6 +66,7 @@ class QCQuantizeTest(tf.test.TestCase):
     tf_encoding = np.array(list([new_min, new_max, delta, offset]))
     return tf_encoding
 
+  @pytest.mark.cuda
   def testQCQuantize_Params(self):
     _log.info('running testQCQuantize_Params')
     for use_gpu in [False, True]:
@@ -118,6 +119,7 @@ class QCQuantizeTest(tf.test.TestCase):
 
         libpytrext.ResetQuantizer()
 
+  @pytest.mark.cuda
   def testQCQuantize_SingleActivation(self):
     _log.info('running testQCQuantize_SingleActivation')
     for use_gpu in [False, True]:
@@ -192,7 +194,7 @@ class QCQuantizeTest(tf.test.TestCase):
   def testQCQuantize_MultipleActivations(self):
 
     _log.info('running testQCQuantize_MultipleActivations')
-    for use_gpu in [False, True]:
+    for use_gpu in [False]:
       _log.info('GPU mode is selected') if use_gpu else _log.info('CPU mode is selected')
       with self.test_session(use_gpu=use_gpu):
         bw = 8
@@ -263,7 +265,7 @@ class QCQuantizeTest(tf.test.TestCase):
 
   def testQCQuantize_GetEncodings(self):
     _log.info('running testQCQuantize_GetEncodings')
-    for use_gpu in [False, True]:
+    for use_gpu in [False]:
       _log.info('GPU mode is selected') if use_gpu else _log.info('CPU mode is selected')
       with self.test_session(use_gpu=use_gpu):
         bw = 8
@@ -305,9 +307,54 @@ class QCQuantizeTest(tf.test.TestCase):
 
         libpytrext.ResetQuantizer()
 
+  @pytest.mark.cuda
+  def testQCQuantize_GetEncodingsGpu(self):
+      _log.info('running testQCQuantize_GetEncodings')
+      for use_gpu in [True]:
+          _log.info('GPU mode is selected') if use_gpu else _log.info('CPU mode is selected')
+          with self.test_session(use_gpu=use_gpu):
+              bw = 8
+              # Prepare activation tensors
+              ACT_MIN = -20.0
+              ACT_MAX = 25.0
+              actvn_1 = constant_op.constant([-10.0, -20.0, 25.0])
+              actvn_2 = constant_op.constant([8.0, -19.0, 30.0])
+              actvn_3 = constant_op.constant([12.0, -31.0, 35.4])
+
+              # Instantiate DlQuantization object
+              comp_mode = libpymo.ComputationMode.COMP_MODE_GPU if use_gpu else libpymo.ComputationMode.COMP_MODE_CPU
+              libpytrext.InitQuantizer(["conv1"], comp_mode, [], libpymo.QuantizationMode.QUANTIZATION_TF)
+
+              # Update stats
+              output_0 = self.qc_quantize_module.qc_quantize_deprecated(op_name='conv1',
+                                                                        training_in_progress=False,
+                                                                        config=
+                                                                        int(libpytrext.config_type.CONFIG_TYPE_UPDATE_STATS),
+                                                                        bitwidth=bw, in_tensors=[actvn_1, actvn_2, actvn_3],
+                                                                        fixed_enc_mins=[], fixed_enc_maxs=[])
+              ops.convert_to_tensor(output_0[0]).eval()
+
+              # Get encodings
+              output_1 = self.qc_quantize_module.qc_quantize_deprecated(op_name='conv1',
+                                                                        training_in_progress=False,
+                                                                        config=
+                                                                        int(libpytrext.config_type.CONFIG_TYPE_GET_ENCODING),
+                                                                        bitwidth=bw, in_tensors=[[]],
+                                                                        fixed_enc_mins=[], fixed_enc_maxs=[], num_tensors=3)
+
+              enc_min = ops.convert_to_tensor(output_1[1]).eval()
+              enc_max = ops.convert_to_tensor(output_1[2]).eval()
+
+              true_encodings = self._compute_encodings(enc_min[0], enc_max[0], bw)
+              expected_encodings = self._compute_encodings(ACT_MIN, ACT_MAX, bw)
+              error_margin = 1e-5  # Use better heuristics
+              self.assertArrayNear (true_encodings, expected_encodings, error_margin)
+
+              libpytrext.ResetQuantizer()
+
   def testQCQuantize_SetEncodings(self):
     _log.info('running testQCQuantize_SetEncodings')
-    for use_gpu in [False, True]:
+    for use_gpu in [False]:
       _log.info('GPU mode is selected') if use_gpu else _log.info('CPU mode is selected')
       with self.test_session(use_gpu=use_gpu):
         bw = 8
@@ -354,7 +401,7 @@ class QCQuantizeTest(tf.test.TestCase):
 
   def testQCQuantize_CheckZeroRepresentation(self):
     _log.info('running testQCQuantize_CheckZeroRepresentation')
-    for use_gpu in [False, True]:
+    for use_gpu in [False]:
       _log.info('GPU mode is selected') if use_gpu else _log.info('CPU mode is selected')
       with self.test_session(use_gpu=use_gpu):
         bw = 8
@@ -413,7 +460,7 @@ class QCQuantizeTest(tf.test.TestCase):
 
   def test_QCQuantize_CheckInvalidConfig(self):
     _log.info('running test_QCQuantize_CheckInvalidConfig')
-    for use_gpu in [False, True]:
+    for use_gpu in [False]:
       _log.info('GPU mode is selected') if use_gpu else _log.info('CPU mode is selected')
       with self.test_session(use_gpu = use_gpu):
         bw = 8
@@ -433,53 +480,59 @@ class QCQuantizeTest(tf.test.TestCase):
 
         libpytrext.ResetQuantizer()
 
-  def testQCQuantize_CheckInvalidEncodings(self):
-    _log.info('running testQCQuantize_CheckInvalidEncodings')
-    for use_gpu in [False, True]:
-      _log.info('GPU mode is selected') if use_gpu else _log.info('CPU mode is selected')
-      with self.test_session(use_gpu=use_gpu):
-        bw = 8
-        # Instantiate DlQuantization object
-        comp_mode = libpymo.ComputationMode.COMP_MODE_GPU if use_gpu else libpymo.ComputationMode.COMP_MODE_CPU
-        libpytrext.InitQuantizer(["conv1"], comp_mode, [], libpymo.QuantizationMode.QUANTIZATION_TF_ENHANCED)
+    def testQCQuantize_CheckInvalidEncodingsCpu(self):
+        _log.info('running testQCQuantize_CheckInvalidEncodings')
+        for use_gpu in [False]:
+            _log.info('GPU mode is selected') if use_gpu else _log.info('CPU mode is selected')
+            with self.test_session(use_gpu=use_gpu):
+                bw = 8
+                # Instantiate DlQuantization object
+                comp_mode = libpymo.ComputationMode.COMP_MODE_GPU if use_gpu else libpymo.ComputationMode.COMP_MODE_CPU
+                libpytrext.InitQuantizer(["conv1"], comp_mode, [], libpymo.QuantizationMode.QUANTIZATION_TF_ENHANCED)
 
-        # Set encodings
-        enc_min_list = [-10.0, 0.5, 20]
-        enc_max_list = [100.0, 150.0, 200.0, 255.0]
+                # Set encodings
+                enc_min_list = [-10.0, 0.5, 20]
+                enc_max_list = [100.0, 150.0, 200.0, 255.0]
 
-        output = self.qc_quantize_module.qc_quantize_deprecated(op_name='conv1',
-                                                                training_in_progress=False,
-                                                                config=
-                                                                int(libpytrext.config_type.CONFIG_TYPE_SET_ENCODING),
-                                                                bitwidth=bw, in_tensors=[[]],
-                                                                fixed_enc_mins=enc_min_list,
-                                                                fixed_enc_maxs=enc_max_list)
-        with self.assertRaises(errors_impl.InvalidArgumentError):
-          ops.convert_to_tensor(output[0]).eval()
+                output = self.qc_quantize_module.qc_quantize_deprecated(op_name='conv1',
+                                                                        training_in_progress=False,
+                                                                        config=
+                                                                        int(libpytrext.config_type.CONFIG_TYPE_SET_ENCODING),
+                                                                        bitwidth=bw, in_tensors=[[]],
+                                                                        fixed_enc_mins=enc_min_list,
+                                                                        fixed_enc_maxs=enc_max_list)
+                with self.assertRaises(errors_impl.InvalidArgumentError):
+                    ops.convert_to_tensor(output[0]).eval()
 
-        libpytrext.ResetQuantizer()
+            libpytrext.ResetQuantizer()
 
-  # Handle std::runtime_error from C++ to enable this test
-  # def testQCQuantize_CheckNoEncodings(self):
+    @pytest.mark.cuda
+    def testQCQuantize_CheckInvalidEncodingsGpu(self):
+        _log.info('running testQCQuantize_CheckInvalidEncodings')
+        for use_gpu in [True]:
+            _log.info('GPU mode is selected') if use_gpu else _log.info('CPU mode is selected')
+            with self.test_session(use_gpu=use_gpu):
+                bw = 8
+                # Instantiate DlQuantization object
+                comp_mode = libpymo.ComputationMode.COMP_MODE_GPU if use_gpu else libpymo.ComputationMode.COMP_MODE_CPU
+                libpytrext.InitQuantizer(["conv1"], comp_mode, [], libpymo.QuantizationMode.QUANTIZATION_TF_ENHANCED)
 
-    # with self.test_session():
-      # bw = 8
+                # Set encodings
+                enc_min_list = [-10.0, 0.5, 20]
+                enc_max_list = [100.0, 150.0, 200.0, 255.0]
 
-      #Instantiate DlQuantization object
-      # libpytrext.InitQuantizer(["conv1"], libpymo.ComputationMode.COMP_MODE_CPU,
-        # [], libpymo.QuantizationMode.QUANTIZATION_TF)
+                output = self.qc_quantize_module.qc_quantize_deprecated(op_name='conv1',
+                                                                        training_in_progress=False,
+                                                                        config=
+                                                                        int(libpytrext.config_type.CONFIG_TYPE_SET_ENCODING),
+                                                                        bitwidth=bw, in_tensors=[[]],
+                                                                        fixed_enc_mins=enc_min_list,
+                                                                        fixed_enc_maxs=enc_max_list)
+                with self.assertRaises(errors_impl.InvalidArgumentError):
+                    ops.convert_to_tensor(output[0]).eval()
 
-      #Do not Update stats. Directly attempt to get encodings
-      # output = self.qc_quantize_module.qc_quantize(op_name='conv1', config=int(libpytrext.config_type.CONFIG_TYPE_GET_ENCODING),
-          # bitwidth=bw, in_tensors=[[]],
-          # fixed_enc_mins=[], fixed_enc_maxs=[])
+                libpytrext.ResetQuantizer()
 
-      # try:
-        # enc_min = ops.convert_to_tensor(output[1]).eval()
-      # except RuntimeError:
-        # raise
-
-      #libpytrext.ResetQuantizer()
 
 if __name__ == "__main__":
   tf.test.main()

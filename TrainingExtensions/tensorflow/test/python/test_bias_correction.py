@@ -121,7 +121,7 @@ class TestBiasCorrection(unittest.TestCase):
                                                input_op_names=[input_op_name],
                                                output_op_names =[output_op.name])
 
-        quant_params = QuantParams()
+        quant_params = QuantParams(use_cuda=False)
 
         np.random.seed(0)
         shape = conv_op.inputs[0].shape
@@ -199,7 +199,7 @@ class TestBiasCorrection(unittest.TestCase):
         dataset = tf.convert_to_tensor(dataset)
         dataset = tf.data.Dataset.from_tensor_slices(dataset)
 
-        quant_params = QuantParams()
+        quant_params = QuantParams(use_cuda=False)
         quant_params.use_cuda = False
         bias_correction_params = BiasCorrectionParams(batch_size=batch_size,
                                                       num_quant_samples=num_samples,
@@ -271,7 +271,7 @@ class TestBiasCorrection(unittest.TestCase):
         dataset = tf.convert_to_tensor(dataset)
         dataset = tf.data.Dataset.from_tensor_slices(dataset)
 
-        quant_params = QuantParams(quant_mode='tf')
+        quant_params = QuantParams(quant_mode='tf', use_cuda=False)
         bias_correction_params = BiasCorrectionParams(batch_size=batch_size,
                                                       num_quant_samples=num_samples,
                                                       num_bias_correct_samples=num_samples,
@@ -325,7 +325,7 @@ class TestBiasCorrection(unittest.TestCase):
         dataset = tf.convert_to_tensor(dataset)
         dataset = tf.data.Dataset.from_tensor_slices(dataset)
 
-        quant_params = QuantParams()
+        quant_params = QuantParams(use_cuda=False)
         bias_correction_params = BiasCorrectionParams(batch_size=batch_size,
                                                       num_quant_samples=num_samples,
                                                       num_bias_correct_samples=num_samples,
@@ -379,7 +379,7 @@ class TestBiasCorrection(unittest.TestCase):
         dataset = tf.convert_to_tensor(dataset)
         dataset = tf.data.Dataset.from_tensor_slices(dataset)
 
-        quant_params = QuantParams()
+        quant_params = QuantParams(use_cuda=False)
         bias_correction_params = BiasCorrectionParams(batch_size=batch_size,
                                                       num_quant_samples=num_samples,
                                                       num_bias_correct_samples=num_samples,
@@ -521,7 +521,7 @@ class TestBiasCorrection(unittest.TestCase):
                                                num_bias_correct_samples=10,
                                                input_op_names=[input_op_name],
                                                output_op_names =[output_op.name])
-        quant_params = QuantParams()
+        quant_params = QuantParams(use_cuda=False)
 
         np.random.seed(0)
         shape = conv_op.inputs[0].shape
@@ -591,7 +591,7 @@ class TestBiasCorrection(unittest.TestCase):
                                                num_bias_correct_samples=10,
                                                input_op_names=[input_op_name],
                                                output_op_names =[output_op.name])
-        quant_params = QuantParams()
+        quant_params = QuantParams(use_cuda=False)
 
         np.random.seed(0)
 
@@ -663,7 +663,7 @@ class TestBiasCorrection(unittest.TestCase):
         dataset = tf.convert_to_tensor(dataset)
         dataset = tf.data.Dataset.from_tensor_slices(dataset)
 
-        quant_params = QuantParams(quant_mode='tf')
+        quant_params = QuantParams(quant_mode='tf', use_cuda=False)
         bias_correction_params = BiasCorrectionParams(batch_size=batch_size,
                                                       num_quant_samples=num_samples,
                                                       num_bias_correct_samples=num_samples,
@@ -728,7 +728,7 @@ class TestBiasCorrection(unittest.TestCase):
                                                num_bias_correct_samples=10,
                                                input_op_names=[input_op_name],
                                                output_op_names=[output_op.name])
-        quant_params = QuantParams()
+        quant_params = QuantParams(use_cuda=False)
 
         np.random.seed(0)
 

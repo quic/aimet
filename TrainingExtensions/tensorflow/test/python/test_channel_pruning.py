@@ -36,6 +36,7 @@
 #  @@-COPYRIGHT-END-@@
 # =============================================================================
 
+import pytest
 import unittest
 import unittest.mock
 import subprocess
@@ -49,8 +50,8 @@ import logging
 import tensorflow as tf
 import numpy as np
 
-from keras.applications.vgg16 import VGG16
-from keras.applications.resnet50 import ResNet50
+from tensorflow.keras.applications.vgg16 import VGG16
+from tensorflow.keras.applications.resnet50 import ResNet50
 
 import aimet_tensorflow.utils.graph_saver
 import aimet_tensorflow.utils.op.conv
@@ -284,6 +285,8 @@ class TestTrainingExtensionsChannelPruning(unittest.TestCase):
         shutil.rmtree(os.path.join(output_dir, 'data'))
         sess.close()
 
+    # Need to mark this for CUDA because TF CPU Conv does not support NCHW
+    @pytest.mark.cuda
     def test_find_input_match_for_pixel_from_output_data_baseline_channels_first(self):
         """
         baseline test code from Qrunchy to compare against aimet TF implementation with channels_first (NCHW)
@@ -459,6 +462,7 @@ class TestTrainingExtensionsChannelPruning(unittest.TestCase):
         self.assertTrue(np.array_equal(sub_sample_output, output_data[:, :, output_pixel[0], output_pixel[1]]))
 
     @unittest.mock.patch('numpy.random.choice')
+    @pytest.mark.cuda
     def test_subsample_data_channels_first_dynamic_shape(self, np_choice_function):
         """
         Test to subsample input match for random output pixel (1, 1) and corresponding input match
@@ -681,6 +685,8 @@ class TestTrainingExtensionsChannelPruning(unittest.TestCase):
         tf.reset_default_graph()
         sess.close()
 
+    # Need to mark this for CUDA because TF CPU Conv does not support NCHW
+    @pytest.mark.cuda
     def test_reconstruct_weight_for_layer(self):
         """
         Test the reconstruction of weight
@@ -741,6 +747,8 @@ class TestTrainingExtensionsChannelPruning(unittest.TestCase):
         tf.reset_default_graph()
         sess.close()
 
+    # Need to mark this for CUDA because TF CPU Conv does not support NCHW
+    @pytest.mark.cuda
     def test_reconstruct_weight_and_bias_for_layer(self):
         """
         Test the reconstruction of weight and bias
@@ -835,10 +843,10 @@ class TestTrainingExtensionsChannelPruning(unittest.TestCase):
 
         # create layer database
         layer_db = LayerDatabase(model=orig_sess, input_shape=(1, 224, 224, 3), working_dir=None)
-        conv_layer = layer_db.find_layer_by_name('block1_conv1/convolution')
+        conv_layer = layer_db.find_layer_by_name('block1_conv1/Conv2D')
 
         comp_layer_db = copy.deepcopy(layer_db)
-        comp_conv_layer = comp_layer_db.find_layer_by_name('block1_conv1/convolution')
+        comp_conv_layer = comp_layer_db.find_layer_by_name('block1_conv1/Conv2D')
 
         # get the weights before reconstruction in original model
         before_recon_weights_orig_model = layer_db.model.run(conv_layer.module.inputs[1])
@@ -897,9 +905,9 @@ class TestTrainingExtensionsChannelPruning(unittest.TestCase):
         # create layer database
         layer_db = LayerDatabase(model=orig_sess, input_shape=(1, 224, 224, 3), working_dir=None)
 
-        block1_conv2 = layer_db.model.graph.get_operation_by_name('block1_conv2/convolution')
-        block2_conv1 = layer_db.model.graph.get_operation_by_name('block2_conv1/convolution')
-        block2_conv2 = layer_db.model.graph.get_operation_by_name('block2_conv2/convolution')
+        block1_conv2 = layer_db.model.graph.get_operation_by_name('block1_conv2/Conv2D')
+        block2_conv1 = layer_db.model.graph.get_operation_by_name('block2_conv1/Conv2D')
+        block2_conv2 = layer_db.model.graph.get_operation_by_name('block2_conv2/Conv2D')
 
         # output shape in NCHW format
         block1_conv2_output_shape = block1_conv2.outputs[0].shape
@@ -967,10 +975,10 @@ class TestTrainingExtensionsChannelPruning(unittest.TestCase):
         # create layer database
         layer_db = LayerDatabase(model=orig_sess, input_shape=(1, 224, 224, 3), working_dir=None)
 
-        block1_conv2 = layer_db.model.graph.get_operation_by_name('block1_conv2/convolution')
-        block2_conv1 = layer_db.model.graph.get_operation_by_name('block2_conv1/convolution')
-        block2_conv2 = layer_db.model.graph.get_operation_by_name('block2_conv2/convolution')
-        block5_conv3 = layer_db.model.graph.get_operation_by_name('block5_conv3/convolution')
+        block1_conv2 = layer_db.model.graph.get_operation_by_name('block1_conv2/Conv2D')
+        block2_conv1 = layer_db.model.graph.get_operation_by_name('block2_conv1/Conv2D')
+        block2_conv2 = layer_db.model.graph.get_operation_by_name('block2_conv2/Conv2D')
+        block5_conv3 = layer_db.model.graph.get_operation_by_name('block5_conv3/Conv2D')
 
         # output shape in NCHW format
         block1_conv2_output_shape = block1_conv2.outputs[0].shape
@@ -1034,10 +1042,10 @@ class TestTrainingExtensionsChannelPruning(unittest.TestCase):
         # create layer database
         layer_db = LayerDatabase(model=orig_sess, input_shape=(1, 224, 224, 3), working_dir=None)
 
-        res2b_branch2a = layer_db.model.graph.get_operation_by_name('res2b_branch2a/convolution')
-        res2a_branch1 = layer_db.model.graph.get_operation_by_name('res2a_branch1/convolution')
-        res2b_branch2b = layer_db.model.graph.get_operation_by_name('res2b_branch2a/convolution')
-        res2c_branch2a = layer_db.model.graph.get_operation_by_name('res2c_branch2a/convolution')
+        res2b_branch2a = layer_db.model.graph.get_operation_by_name('conv1_conv/Conv2D')
+        res2a_branch1 = layer_db.model.graph.get_operation_by_name('conv2_block1_0_conv/Conv2D')
+        res2b_branch2b = layer_db.model.graph.get_operation_by_name('conv2_block1_1_conv/Conv2D')
+        res2c_branch2a = layer_db.model.graph.get_operation_by_name('conv2_block1_2_conv/Conv2D')
 
         # output shape in NCHW format
         res2b_branch2a_output_shape = res2b_branch2a.outputs[0].shape
@@ -1058,7 +1066,7 @@ class TestTrainingExtensionsChannelPruning(unittest.TestCase):
         ]
 
         input_op_names = ['input_1']
-        output_op_names = ['activation_49/Relu']
+        output_op_names = ['conv5_block3_out/Relu']
         dataset = unittest.mock.MagicMock()
         batch_size = unittest.mock.MagicMock()
         num_reconstruction_samples = unittest.mock.MagicMock()
@@ -1069,10 +1077,10 @@ class TestTrainingExtensionsChannelPruning(unittest.TestCase):
 
         sorted_layer_comp_ratio_list = cp._sort_on_occurrence(layer_db.model, layer_comp_ratio_list)
 
-        self.assertEqual(sorted_layer_comp_ratio_list[0].layer.module, res2a_branch1)
-        self.assertEqual(sorted_layer_comp_ratio_list[1].layer.module, res2b_branch2a)
-        self.assertEqual(sorted_layer_comp_ratio_list[2].layer.module, res2b_branch2b)
-        self.assertEqual(sorted_layer_comp_ratio_list[3].layer.module, res2c_branch2a)
+        self.assertEqual(sorted_layer_comp_ratio_list[0].layer.module, res2b_branch2a)
+        self.assertEqual(sorted_layer_comp_ratio_list[1].layer.module, res2b_branch2b)
+        self.assertEqual(sorted_layer_comp_ratio_list[2].layer.module, res2c_branch2a)
+        self.assertEqual(sorted_layer_comp_ratio_list[3].layer.module, res2a_branch1)
 
         self.assertEqual(len(sorted_layer_comp_ratio_list), 4)
         layer_db.model.close()
