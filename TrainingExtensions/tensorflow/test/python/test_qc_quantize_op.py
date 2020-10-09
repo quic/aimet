@@ -33,7 +33,7 @@
 #
 #  @@-COPYRIGHT-END-@@
 # =============================================================================
-
+import pytest
 import unittest
 import numpy as np
 import tensorflow as tf
@@ -167,6 +167,7 @@ class TestTrainingExtensionsQcQuantizeOp(unittest.TestCase):
 
         sess.close()
 
+    @pytest.mark.cuda
     def test_qc_quantize_op_gpu(self):
         """
         test custom op with GPU
@@ -331,6 +332,7 @@ class TestTrainingExtensionsQcQuantizeOp(unittest.TestCase):
 
         sess.close()
 
+    @pytest.mark.cuda
     def test_qc_quantize_static_op_gpu(self):
         """
         test custom static op with GPU

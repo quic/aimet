@@ -34,6 +34,7 @@
 #  @@-COPYRIGHT-END-@@
 # =============================================================================
 
+import pytest
 import unittest
 import shutil
 import tensorflow as tf
@@ -91,6 +92,7 @@ class TestQuantSim(unittest.TestCase):
 
         sess.close()
 
+    @pytest.mark.cuda
     def test_construction_gpu_model(self):
         """
         Create QuantSim for a GPU model and check that quantizers have been added to the graph
@@ -267,6 +269,7 @@ class TestQuantSim(unittest.TestCase):
         """
         self._save_to_keras_common_test_code(True)
 
+    @pytest.mark.cuda
     def test_compute_encodings_gpu_model(self):
         """
         Create QuantSim for a CPU model and test that activation encodings are computed
@@ -324,6 +327,7 @@ class TestQuantSim(unittest.TestCase):
         self.assertEqual(int(libpymo.TensorQuantizerOpMode.quantizeDequantize),
                          sim.session.run(conv2d_output_quant_op.inputs[1]))
 
+    @pytest.mark.cuda
     def test_compute_encodings_quant_scheme_update(self):
         """
         Create QuantSim model and update quantScheme using property interface
