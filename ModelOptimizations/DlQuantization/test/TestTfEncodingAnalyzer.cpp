@@ -128,7 +128,7 @@ TYPED_TEST(TestTfEncodingAnalyzer, SanityTestSymmetric)
 
     // Min and Max will get adjusted slightly to represent an exact zero with one of the quantized values
     // Adjustment is expected to be less than half a delta worth
-    EXPECT_NEAR(encoding.min, -expected_max, encoding.delta / 2 + 1e-4);
+    EXPECT_NEAR(encoding.min, -expected_max, encoding.delta * 1.5 + 1e-4);
     EXPECT_NEAR(encoding.max, expected_max, encoding.delta / 2 + 1e-4);
 
     // Check that the center value is absolute 0
@@ -136,7 +136,7 @@ TYPED_TEST(TestTfEncodingAnalyzer, SanityTestSymmetric)
 
     EXPECT_FLOAT_EQ(encoding.delta, (encoding.max - encoding.min) / 255);
 
-    // Check that offset is either -128 or -127 - another check for symmetric encodings
-    EXPECT_NEAR(encoding.offset, -128, 1);
+    // Check that offset is -128 - another check for symmetric encodings
+    EXPECT_NEAR(encoding.offset, -128, 0);
     EXPECT_EQ(encoding.bw, 8);
 }
