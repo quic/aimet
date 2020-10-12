@@ -81,37 +81,45 @@ TfEncoding TfEncodingAnalyzer<DTYPE>::computeEncoding(uint8_t bw, bool useSymmet
         // If we desire symmetric encodings then we need to expand either the min or max to be mirrors of each other
         // centered around 0
         new_max = std::max(std::abs(new_max), std::abs(new_min));
-        new_min = -new_max;
-    }
-
-    encoding.delta = (new_max - new_min) / num_steps;
-    if (new_min < 0 && new_max > 0)
-    {
-        // Need to make sure 0-value is exactly quantizable
-        // Quantization of q into b is given by:
-        //     b = q / delta - offset, where
-        //                             delta = (max - min)/#steps
-        //                             offset = min / delta
-        // For q = 0: b = -min / delta
-        // Find the closest round b, and set q=0 for it
-        double b_zero   = round(-new_min / encoding.delta);
-        b_zero          = std::min(num_steps, std::max(0.0, b_zero));   // just to be safe
-        encoding.offset = -b_zero;
+        unsigned int num_positive_steps = pow(2, bw - 1) - 1;
+        encoding.delta = new_max / num_positive_steps;
+        encoding.offset = - (double)(num_positive_steps + 1);
+        encoding.min = encoding.offset * encoding.delta;
+        encoding.max = encoding.delta * num_positive_steps;
     }
     else
     {
-        // One of min or max is guaranteed to be zero, so 0 is exactly quantizable already
-        encoding.offset = round(new_min / encoding.delta);
+        encoding.delta = (new_max - new_min) / num_steps;
+        if (new_min < 0 && new_max > 0)
+        {
+            // Need to make sure 0-value is exactly quantizable
+            // Quantization of q into b is given by:
+            //     b = q / delta - offset, where
+            //                             delta = (max - min)/#steps
+            //                             offset = min / delta
+            // For q = 0: b = -min / delta
+            // Find the closest round b, and set q=0 for it
+            double b_zero   = round(-new_min / encoding.delta);
+            b_zero          = std::min(num_steps, std::max(0.0, b_zero));   // just to be safe
+            encoding.offset = -b_zero;
+        }
+        else
+        {
+            // One of min or max is guaranteed to be zero, so 0 is exactly quantizable already
+            encoding.offset = round(new_min / encoding.delta);
+        }
+
+        // Calculate 'min' and 'max' based on 'delta' and 'offset'.
+        // Note this min and max can vary from the one in 'stats'. This min and max
+        // can really be represented with the integer offset.
+        encoding.min = encoding.delta * encoding.offset;
+        // We want to calculate: max = delta * num_steps + min.
+        // To avoid numerical accuracy issues on Linaro, we simplify the math.
+        encoding.max = new_max - new_min + encoding.min;
+        encoding.bw  = bw;
+
     }
 
-    // Calculate 'min' and 'max' based on 'delta' and 'offset'.
-    // Note this min and max can vary from the one in 'stats'. This min and max
-    // can really be represented with the integer offset.
-    encoding.min = encoding.delta * encoding.offset;
-    // We want to calculate: max = delta * num_steps + min.
-    // To avoid numerical accuracy issues on Linaro, we simplify the math.
-    encoding.max = new_max - new_min + encoding.min;
-    encoding.bw  = bw;
 
     return encoding;
 }
