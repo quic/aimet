@@ -75,6 +75,7 @@ TfEncoding TfEncodingAnalyzer<DTYPE>::computeEncoding(uint8_t bw, bool useSymmet
     // minimum range requirement
     // This also handles the case where min==max==0 to avoid division by zero
     new_max = std::max(new_max, new_min + MIN_RANGE);
+    encoding.bw  = bw;
 
     if (useSymmetricEncodings)
     {
@@ -116,8 +117,6 @@ TfEncoding TfEncodingAnalyzer<DTYPE>::computeEncoding(uint8_t bw, bool useSymmet
         // We want to calculate: max = delta * num_steps + min.
         // To avoid numerical accuracy issues on Linaro, we simplify the math.
         encoding.max = new_max - new_min + encoding.min;
-        encoding.bw  = bw;
-
     }
 
 
