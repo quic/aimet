@@ -137,3 +137,37 @@ class TestOnnxUtils(unittest.TestCase):
         node_0 = onnx_model.graph.node[0]
         self.assertEqual(node_0.input, node_to_io_dict[node_0.name].inputs)
         self.assertEqual(node_0.output, node_to_io_dict[node_0.name].outputs)
+
+    def test_single_pytorch_module_mapping_to_many_onnx_nodes(self):
+        """ test onxx based utility to find mapping between onnx node names and io tensors
+        when more than one onnx node maps to the same torch module
+        """
+
+        AimetLogger.set_level_for_all_areas(logging.DEBUG)
+
+        class TwoLayerLstmModel(torch.nn.Module):
+            """
+            Model using torch.nn.LSTM module
+            """
+            def __init__(self):
+                super(TwoLayerLstmModel, self).__init__()
+                self.lstm = torch.nn.LSTM(input_size=3, hidden_size=5, num_layers=3)
+
+            def forward(self, x, hx=None):
+                return self.lstm(x, hx)
+
+        model_name = 'multilayer_lstm'
+        model = TwoLayerLstmModel()
+        input_shape = (10, 1, 3)
+
+        torch.onnx.export(model, torch.rand(*input_shape), './data/' + model_name + '.onnx')
+        onnx_utils.OnnxSaver.set_node_names('./data/' + model_name + '.onnx', model, input_shape)
+        onnx_model = onnx.load('./data/' + model_name + '.onnx')
+
+        lstm_nodes = [node for node in onnx_model.graph.node if node.op_type == 'LSTM']
+        self.assertEqual(3, len(lstm_nodes))
+
+        node_to_io_dict, _ = onnx_utils.OnnxSaver.get_onnx_node_to_io_tensor_names_map(onnx_model)
+        self.assertEqual(1, len(node_to_io_dict))
+        self.assertTrue(isinstance(node_to_io_dict['lstm'], list))
+        self.assertEqual(3, len(node_to_io_dict['lstm']))
