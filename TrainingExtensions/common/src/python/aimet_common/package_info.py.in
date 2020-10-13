@@ -38,5 +38,5 @@
 """ Product, Version and Postfix information written by build system and logged by AIMET. """
 
 Product = '@PRODUCT@'
-Version_Info = '@VERSION@'
+Version_Info = '@SW_VERSION@'
 Postfix = '@POSTFIX@'

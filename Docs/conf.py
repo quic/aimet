@@ -47,8 +47,8 @@
 # add these directories to sys.path here. If the directory is relative to the
 # documentation root, use os.path.abspath to make it absolute, like shown here.
 #
-# import os
-# import sys
+import os
+import sys
 # sys.path.insert(0, os.path.abspath('.'))
 
 
@@ -61,7 +61,11 @@ author = 'Qualcomm Innovation Center, Inc.'
 # The short X.Y version
 version = ''
 # The full version, including alpha/beta/rc tags
-release = '1.11.0'
+release = ''
+if "SW_VERSION" in os.environ:
+    release = os.environ['SW_VERSION']
+else:    
+    sys.exit("Unable to set version. SOFTWARE_VERSION is NOT defined.")
 
 included_features = 'tensorflow'
 

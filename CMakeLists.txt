@@ -48,6 +48,12 @@ set(AIMET_PYTHONPATH
 set(AIMET_LD_LIBRARY_PATH
       "LD_LIBRARY_PATH=${CMAKE_BINARY_DIR}/artifacts:$ENV{LD_LIBRARY_PATH}")
 
+# Set the software version from version.txt file (if not already set)
+if(NOT DEFINED SW_VERSION)
+  file(STRINGS "packaging/version.txt" SW_VERSION)
+  message(STATUS "Set SW_VERSION = ${SW_VERSION} from ${CMAKE_CURRENT_SOURCE_DIR}/packaging/version.txt")
+endif(NOT DEFINED SW_VERSION)
+
 find_package(Threads)
 # Disabling openMP since statically linked OpenMP in PyTorch (v1.5.0) seems to conflict with aimet usage
 #find_package(OpenMP REQUIRED)
