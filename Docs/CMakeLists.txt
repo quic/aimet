@@ -48,6 +48,7 @@ add_custom_target(doc
       COMMAND ${CMAKE_COMMAND} -E env
       "${AIMET_LD_LIBRARY_PATH}"
       "${AIMET_PYTHONPATH}"
+      "SW_VERSION=${SW_VERSION}"
       sphinx-build -b html ${CMAKE_CURRENT_SOURCE_DIR} ${CMAKE_CURRENT_BINARY_DIR})
 
 add_custom_target(copy_doc_source
