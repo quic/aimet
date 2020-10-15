@@ -101,7 +101,8 @@ def get_module_act_func_pair(model: torch.nn.Module, model_input: Union[Tuple[to
     return module_act_func_pair
 
 
-def create_connected_graph(model: torch.nn.Module, input_shapes: Union[Tuple, List[Tuple]]) -> ConnectedGraph:
+def create_connected_graph_with_input_shapes(model: torch.nn.Module, input_shapes: Union[Tuple, List[Tuple]]) \
+        -> ConnectedGraph:
     """
     Create connected graph, using random inputs generated from given input shapes.
     :param model: torch model to create a connected graph from

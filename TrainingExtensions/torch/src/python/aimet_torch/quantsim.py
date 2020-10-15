@@ -56,7 +56,7 @@ from aimet_torch.tensor_quantizer import TensorQuantizer
 from aimet_torch.batch_norm_fold import PassThroughOp
 from aimet_torch import utils
 from aimet_torch import onnx_utils
-from aimet_torch.meta.connectedgraph_utils import create_connected_graph
+from aimet_torch.meta.connectedgraph_utils import create_connected_graph_with_input_shapes
 from aimet_torch.meta.connectedgraph import ConnectedGraph
 
 logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Quant)
@@ -143,7 +143,7 @@ class QuantizationSimModel:
             self.model = copy.deepcopy(model)
 
         try:
-            connected_graph = create_connected_graph(self.model, input_shapes)
+            connected_graph = create_connected_graph_with_input_shapes(self.model, input_shapes)
         except (torch.jit.TracingCheckError, AssertionError):
             logger.warning('Error in tracing while creating the connected graph.\n'
                            'The connected graph passed into self.configure_quantization_ops() will be None.\n'
