@@ -580,7 +580,7 @@ class TestQuantizationSim(unittest.TestCase):
             param_encodings = encodings['param_encodings']
             self.assertEqual(13, len(activation_encodings))
             self.assertNotIn('conv1_a.bias', param_encodings)
-            self.assertEqual(5, len(param_encodings['conv1_a.weight'][0]))
+            self.assertEqual(6, len(param_encodings['conv1_a.weight'][0]))
             self.assertEqual(10, param_encodings['conv1_a.weight'][0]['max'])
 
         # check the exported model
