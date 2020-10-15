@@ -144,7 +144,7 @@ class QuantizationSimModel:
 
         try:
             connected_graph = create_connected_graph(self.model, input_shapes)
-        except torch.jit.TracingCheckError:
+        except (torch.jit.TracingCheckError, AssertionError):
             logger.warning('Error in tracing while creating the connected graph.\n'
                            'The connected graph passed into self.configure_quantization_ops() will be None.\n'
                            'If this function has been overridden to not depend on connected graph, this warning can be '
