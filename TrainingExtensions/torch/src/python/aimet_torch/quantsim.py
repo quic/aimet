@@ -511,7 +511,8 @@ class QuantizationSimModel:
                     'max': encoding_max,
                     'scale': scale,
                     'offset': offset,
-                    'bitwidth': bw}
+                    'bitwidth': bw,
+                    'is_symmetric': str(quantizer.use_symmetric_encodings)}
         return None
 
     @staticmethod
