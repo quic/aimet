@@ -1202,3 +1202,30 @@ class TestQuantizationSim(unittest.TestCase):
             with unittest.mock.patch.object(ConnectedGraph, '__del__', lambda _self: None):
                 with self.assertRaises(AssertionError):
                     _ = QuantizationSimModel(model, input_shapes=(1, 1, 28, 28))
+
+    def test_quantsim_with_given_inputs(self):
+        """ Test that QuantSim can be initialized using inputs instead of input shapes """
+
+        def check_valid_connected_graph_in_configure_quantization_ops(_self, connected_graph: ConnectedGraph,
+                                                                      _config_file: str):
+            """ Replacement configure_quantization_ops function for QuantSim to check for a valid connected graph """
+            self.assertTrue(isinstance(connected_graph, ConnectedGraph))
+
+        # Use model with one input
+        model = SmallMnist()
+        model.eval()
+        dummy_input = torch.randn((1, 1, 28, 28))
+
+        orig_configure_quantization_ops = QuantizationSimModel.configure_quantization_ops
+        QuantizationSimModel.configure_quantization_ops = check_valid_connected_graph_in_configure_quantization_ops
+
+        # Pass in None for input shapes to induce an error if input_shapes is being used.
+        _ = QuantizationSimModel(model, input_shapes=None, inputs=(dummy_input,))
+
+        # Use model with two inputs
+        model = ModelWithTwoInputs()
+        model.eval()
+        _ = QuantizationSimModel(model, input_shapes=None,
+                                 inputs=(torch.randn((32, 1, 28, 28)), torch.randn(32, 1, 28, 28)))
+
+        QuantizationSimModel.configure_quantization_ops = orig_configure_quantization_ops
