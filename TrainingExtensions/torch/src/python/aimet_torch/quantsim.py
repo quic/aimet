@@ -145,10 +145,6 @@ class QuantizationSimModel:
         try:
             connected_graph = create_connected_graph_with_input_shapes(self.model, input_shapes)
         except (torch.jit.TracingCheckError, AssertionError):
-            logger.warning('Error in tracing while creating the connected graph.\n'
-                           'The connected graph passed into self.configure_quantization_ops() will be None.\n'
-                           'If this function has been overridden to not depend on connected graph, this warning can be '
-                           'ignored.')
             connected_graph = None
 
         if isinstance(quant_scheme, str):
@@ -623,9 +619,9 @@ class QuantizationSimModel:
         """
         if connected_graph is None:
             logger.error('A connected graph failed to be built.\n'
-                         'Unable to proceed with configuring the quantization ops using the config file.\n'
-                         'Please configure quantization ops manually by redefining the configure_quantization_ops() '
-                         'function.')
+                         'Unable to proceed with automatically configuring quantization ops using the config file.\n'
+                         'Please configure quantization ops manually by redefining '
+                         'QuantizationSimModel.configure_quantization_ops()')
             raise AssertionError
         QuantSimConfigurator(self.model, connected_graph, config_file)
 
@@ -649,7 +645,7 @@ def load_checkpoint(file_path: str) -> QuantizationSimModel:
     Load the quantized model
 
     :param file_path: Path to the file where you want to save the checkpoint
-    :return: A new instance of the QUantizationSimModel created after loading the checkpoint
+    :return: A new instance of the QuantizationSimModel created after loading the checkpoint
     """
     with open(file_path, 'rb') as file:
         sim = pickle.load(file)
