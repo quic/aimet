@@ -83,8 +83,10 @@ def call_mo_batch_norm_fold(conv_linear: Union[torch.nn.Linear, torch.nn.Conv2d,
 
     weight_tensor = libpymo.TensorParams()
     weight = conv_linear.weight
+
     # Transpose weights to C, N, H, W from N, C, H, W since axis are flipped for transposed conv
-    if isinstance(conv_linear, torch.nn.ConvTranspose2d):
+    # However depthwise conv layers are always N, 1, H, W whether transposed-conv or not, so no need to transpose
+    if isinstance(conv_linear, torch.nn.ConvTranspose2d) and conv_linear.groups == 1:
         weight = weight.permute(1, 0, 2, 3)
     weight_tensor.data = weight.detach().numpy().reshape(-1)
 
@@ -145,8 +147,8 @@ def fold_given_batch_norms(model, layer_pairs: List[PairType]):
 
         conv_linear.weight.data = conv_linear.weight.data.type(torch.FloatTensor)
 
-        # Transpose weight back to N, C, H, W for transposed Conv2D
-        if isinstance(conv_linear, torch.nn.ConvTranspose2d):
+        # Transpose weight back to N, C, H, W for transposed Conv2D, for non-depthwise layers
+        if isinstance(conv_linear, torch.nn.ConvTranspose2d) and conv_linear.groups == 1:
             conv_linear.weight.data = conv_linear.weight.data.permute(1, 0, 2, 3)
 
     _delete_bn_from_model(model, list_of_bn_layers)

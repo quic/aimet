@@ -267,6 +267,80 @@ class TestTrainingExtensionBnFold(unittest.TestCase):
         self.assertFalse(isinstance(model.bn1, torch.nn.BatchNorm2d))
         self.assertTrue(np.allclose(baseline_output, output_after_fold, rtol=1.e-2))
 
+    def test_fold_bn_after_conv_depthwise(self):
+
+        class MyModel(torch.nn.Module):
+            def __init__(self):
+
+                super(MyModel, self).__init__()
+                self.conv1 = torch.nn.Conv2d(10, 10, 3, groups=10)
+                self.bn1 = torch.nn.BatchNorm2d(10)
+                self.reul1 = torch.nn.ReLU()
+
+            def forward(self, x):
+                x = self.conv1(x)
+                x = self.bn1(x)
+                x = self.reul1(x)
+
+                return x
+
+        torch.manual_seed(10)
+        model = MyModel()
+
+        model = model.eval()
+        random_input = torch.rand(2, 10, 24, 24)
+
+        # Set the batch norm params to something non-zero with a random batch
+        model.train()
+        model(torch.randn((2, 10, 24, 24)))
+        model.eval()
+
+        baseline_output = model(random_input).detach().numpy()
+
+        fold_all_batch_norms(model, (2, 10, 24, 24))
+
+        output_after_fold = model(random_input).detach().numpy()
+
+        self.assertFalse(isinstance(model.bn1, torch.nn.BatchNorm2d))
+        self.assertTrue(np.allclose(baseline_output, output_after_fold, rtol=1.e-2))
+
+    def test_fold_bn_after_transposed_conv_depthwise(self):
+
+        class MyModel(torch.nn.Module):
+            def __init__(self):
+
+                super(MyModel, self).__init__()
+                self.conv1 = torch.nn.ConvTranspose2d(10, 10, 3, groups=10)
+                self.bn1 = torch.nn.BatchNorm2d(10)
+                self.reul1 = torch.nn.ReLU()
+
+            def forward(self, x):
+                x = self.conv1(x)
+                x = self.bn1(x)
+                x = self.reul1(x)
+
+                return x
+
+        torch.manual_seed(10)
+        model = MyModel()
+
+        model = model.eval()
+        random_input = torch.rand(2, 10, 24, 24)
+
+        # Set the batch norm params to something non-zero with a random batch
+        model.train()
+        model(torch.randn((2, 10, 24, 24)))
+        model.eval()
+
+        baseline_output = model(random_input).detach().numpy()
+
+        fold_all_batch_norms(model, (2, 10, 24, 24))
+
+        output_after_fold = model(random_input).detach().numpy()
+
+        self.assertFalse(isinstance(model.bn1, torch.nn.BatchNorm2d))
+        self.assertTrue(np.allclose(baseline_output, output_after_fold, rtol=1.e-2))
+
     def test_fold_bn_after_conv_with_bias(self):
 
         class MyModel(torch.nn.Module):
