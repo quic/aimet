@@ -482,7 +482,6 @@ class TestTfConnectedGraph(unittest.TestCase):
         self.assertEqual(1, len(valid_bias_add))
         self.assertEqual(1, len(valid_activation))
 
-
     def test_model_with_simple_rnn_multiple_layers(self):
         """ Test connected graph construction on a model with multiple simple RNN layers """
         tf.compat.v1.reset_default_graph()
@@ -613,6 +612,149 @@ class TestTfConnectedGraph(unittest.TestCase):
         self.assertEqual(7, len(valid_muls))
         self.assertEqual(4, len(valid_bias_add))
         self.assertEqual(2, len(valid_activation))
+
+    def validate_internal_structure_lstm(self, inner_list):
+        """
+        Given a list of internal ops, this is utility function to validate
+        the structure for LSTM module tests
+        :return:
+        """
+        valid_matmuls = []
+        valid_muls = []
+        valid_bias_add = []
+        valid_activation = []
+        for op in inner_list:
+            if op.type == 'MatMul' and op not in valid_matmuls:
+                valid_matmuls.append(op)
+            if op.type == 'Mul' and op not in valid_matmuls:
+                valid_muls.append(op)
+            if op.type == 'BiasAdd' and op not in valid_bias_add:
+                valid_bias_add.append(op)
+            if op.type =='Tanh' and op not in valid_activation:
+                valid_activation.append(op)
+
+        self.assertEqual(8, len(valid_matmuls))
+        self.assertEqual(7, len(valid_muls))
+        self.assertEqual(4, len(valid_bias_add))
+        self.assertEqual(2, len(valid_activation))
+
+    def test_model_with_lstm_layer_time_major_true(self):
+        """ Test connected graph construction on a model with LSTM time major true option"""
+
+        tf.reset_default_graph()
+        sess = tf.Session()
+        with sess.graph.as_default():
+            inputs = tf.keras.Input(shape=(3, 100))
+
+            # Defaults
+            # return_state=False, unit_forget_bias=True
+            # return_sequences=False, time_major=False
+            x = tf.keras.layers.LSTM(12,
+                                     time_major=True,
+                                     name='lstm_tm')(inputs)
+
+            _ = tf.keras.layers.Dense(12, activation=tf.nn.softmax,
+                                      name="matmul0")(x)
+
+            init = tf.global_variables_initializer()
+            sess.run(init)
+            # _ = tf.summary.FileWriter('./lstm_time_major_true', sess.graph)
+
+        # construct a connected graph
+        conn_graph = ConnectedGraph(sess.graph, ['input_1'], ['matmul0/Softmax'])
+
+        self.assertEqual(4, len(conn_graph.get_all_ops()))
+        lstm_detected = False
+        for op in conn_graph.get_all_ops().values():
+            if op.type == 'LSTM' and op.name == 'lstm_tm':
+                self.assertEqual(op.pattern_type, 'LSTM_TimeMajor_True')
+                lstm_detected = True
+                inner_list = op.internal_ops
+                self.assertEqual(85, len(inner_list))
+                self.assertEqual(op.get_module(), sess.graph.get_operation_by_name('lstm_tm/while/MatMul'))
+        self.assertTrue(lstm_detected)
+        self.validate_internal_structure_lstm(inner_list)
+
+    def test_model_with_lstm_layer_deepspeech_time_major_true(self):
+        """ Test connected graph construction on a model with stacked sLSTM op in DeepSpeech model"""
+
+        tf.reset_default_graph()
+        sess = tf.Session()
+        with sess.graph.as_default():
+            inputs = tf.keras.Input(shape=(3, 100))
+
+            # Defaults
+            # return_state=False, unit_forget_bias=True
+            # return_sequences=False, time_major=False
+            x = tf.keras.layers.LSTM(12,
+                                     unit_forget_bias=False,
+                                     time_major=True,
+                                     return_sequences=True,
+                                     name='lstm_stacked')(inputs)
+
+            x2 = tf.keras.layers.LSTM(12, name='last_lstm')(x)
+
+            _ = tf.keras.layers.Dense(12, activation=tf.nn.softmax,
+                                      name="matmul0")(x2)
+
+            init = tf.global_variables_initializer()
+            sess.run(init)
+            # _ = tf.summary.FileWriter('./lstm_deepspeech', sess.graph)
+
+        # construct a connected graph
+        conn_graph = ConnectedGraph(sess.graph, ['input_1'], ['matmul0/Softmax'])
+
+        self.assertEqual(5, len(conn_graph.get_all_ops()))
+        lstm_detected = False
+        for op in conn_graph.get_all_ops().values():
+            if op.type == 'LSTM' and op.name == 'lstm_stacked':
+                self.assertEqual(op.pattern_type, 'LSTM_Stacked_TimeMajor_True')
+                lstm_detected = True
+                inner_list = op.internal_ops
+                self.assertEqual(84, len(inner_list))
+                self.assertEqual(op.get_module(), sess.graph.get_operation_by_name('lstm_stacked/while/MatMul'))
+        self.assertTrue(lstm_detected)
+        self.validate_internal_structure_lstm(inner_list)
+
+    def test_model_with_lstm_layer_deepspeech_time_major_false(self):
+        """ Test connected graph construction on a model with LSTM op in DeepSpeech model"""
+
+        tf.reset_default_graph()
+        sess = tf.Session()
+        with sess.graph.as_default():
+            inputs = tf.keras.Input(shape=(3, 100))
+
+            # Defaults
+            # return_state=False, unit_forget_bias=True
+            # return_sequences=False, time_major=False
+            # use both return state and return sequence
+            x, state_h, state_c = tf.keras.layers.LSTM(12, return_state=True,
+                                                       return_sequences=True,
+                                                       name='lstm_stacked')(inputs)
+
+            x2 = tf.keras.layers.LSTM(12, name='last_lstm')(x)
+
+            _ = tf.keras.layers.Dense(12, activation=tf.nn.softmax,
+                                      name="matmul0")(x2)
+
+            init = tf.global_variables_initializer()
+            sess.run(init)
+            # _ = tf.summary.FileWriter('./lstm_deepspeech', sess.graph)
+
+        # construct a connected graph
+        conn_graph = ConnectedGraph(sess.graph, ['input_1'], ['matmul0/Softmax'])
+
+        self.assertEqual(5, len(conn_graph.get_all_ops()))
+        lstm_detected = False
+        for op in conn_graph.get_all_ops().values():
+            if op.type == 'LSTM' and op.name == 'lstm_stacked':
+                self.assertEqual(op.pattern_type, 'LSTM_Stacked')
+                lstm_detected = True
+                inner_list = op.internal_ops
+                self.assertEqual(86, len(inner_list))
+                self.assertEqual(op.get_module(), sess.graph.get_operation_by_name('lstm_stacked/while/MatMul'))
+        self.assertTrue(lstm_detected)
+        self.validate_internal_structure_lstm(inner_list)
 
 
 def validate_branch_ops(conn_graph: ConnectedGraph):
