@@ -56,6 +56,7 @@ from aimet_torch.tensor_quantizer import TensorQuantizer
 from aimet_torch.batch_norm_fold import PassThroughOp
 from aimet_torch import utils
 from aimet_torch import onnx_utils
+from aimet_torch.meta.connectedgraph_utils import create_connected_graph_with_input_shapes
 from aimet_torch.meta.connectedgraph import ConnectedGraph
 
 logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Quant)
@@ -141,6 +142,11 @@ class QuantizationSimModel:
         else:
             self.model = copy.deepcopy(model)
 
+        try:
+            connected_graph = create_connected_graph_with_input_shapes(self.model, input_shapes)
+        except (torch.jit.TracingCheckError, AssertionError):
+            connected_graph = None
+
         if isinstance(quant_scheme, str):
             if quant_scheme == 'tf':
                 quant_scheme = QuantScheme.post_training_tf
@@ -157,7 +163,7 @@ class QuantizationSimModel:
         # Disable bias quantization
         self.exclude_param_from_quantization("bias")
 
-        self.configure_quantization_ops(input_shapes, config_file)
+        self.configure_quantization_ops(connected_graph, config_file)
 
     def __str__(self):
         """
@@ -605,13 +611,19 @@ class QuantizationSimModel:
             if not cls._is_leaf_module(module_ref):
                 cls._remove_quantization_wrappers(module_ref, list_of_modules_to_exclude)
 
-    def configure_quantization_ops(self, input_shapes: Union[Tuple, List[Tuple]], config_file: str):
+    def configure_quantization_ops(self, connected_graph: Union[None, ConnectedGraph], config_file: str):
         """
         Configure inserted quantize ops using config file
-        :param input_shapes: List of input shapes to the model
+        :param connected_graph: Connected graph representation of the model
         :param config_file: Configuration file to use
         """
-        QuantSimConfigurator(self.model, input_shapes, config_file)
+        if connected_graph is None:
+            logger.error('A connected graph failed to be built.\n'
+                         'Unable to proceed with automatically configuring quantization ops using the config file.\n'
+                         'Please configure quantization ops manually by redefining '
+                         'QuantizationSimModel.configure_quantization_ops()')
+            raise AssertionError
+        QuantSimConfigurator(self.model, connected_graph, config_file)
 
 
 def save_checkpoint(quant_sim_model: QuantizationSimModel, file_path: str):
@@ -633,7 +645,7 @@ def load_checkpoint(file_path: str) -> QuantizationSimModel:
     Load the quantized model
 
     :param file_path: Path to the file where you want to save the checkpoint
-    :return: A new instance of the QUantizationSimModel created after loading the checkpoint
+    :return: A new instance of the QuantizationSimModel created after loading the checkpoint
     """
     with open(file_path, 'rb') as file:
         sim = pickle.load(file)

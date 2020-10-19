@@ -37,7 +37,7 @@
 # =============================================================================
 """ Utilities for parsing and applying quantsim configurations from json config file """
 
-from typing import Dict, Union, List, Tuple, Set
+from typing import Dict, List, Tuple, Set
 import torch
 
 from aimet_common.utils import AimetLogger
@@ -51,7 +51,6 @@ from aimet_common.quantsim_config.quantsim_config import SupergroupConfigCallbac
 from aimet_common.quantsim_config.quantsim_config import get_setting_type, OnnxConnectedGraphTypeMapper
 from aimet_torch.qc_quantize_op import QcQuantizeWrapper
 from aimet_torch.tensor_quantizer import TensorQuantizer
-from aimet_torch import utils
 from aimet_torch.meta.connectedgraph import ConnectedGraph
 from aimet_torch.onnx_utils import map_torch_types_to_onnx, onnx_pytorch_conn_graph_type_pairs
 
@@ -103,15 +102,11 @@ class SupergroupConfigCallback(AimetCommonSupergroupConfigCallback):
 
 class QuantSimConfigurator(AimetCommonQuantSimConfigurator):
     """ Class for parsing and applying quantsim configurations from json config file """
-    def __init__(self, model, input_shapes: Union[Tuple, List[Tuple]], config_file: str):
+    def __init__(self, model, connected_graph: ConnectedGraph, config_file: str):
         super().__init__(config_file)
 
         _report_unsupported_ops(self._quantsim_configs)
-
-        random_inputs = utils.create_rand_tensors_given_shapes(input_shapes)
-        device = utils.get_device(model)
-        random_inputs = tuple([inp.to(device) for inp in random_inputs])
-        self._conn_graph = ConnectedGraph(model, random_inputs)
+        self._conn_graph = connected_graph
         self._onnx_conn_graph_name_mapper = OnnxConnectedGraphTypeMapper(onnx_pytorch_conn_graph_type_pairs)
         self._module_to_quantsim_wrapper_dict = _create_module_to_quantsim_wrapper_dict(model)
         self._named_modules_to_tensor_quantizers_dict = self._create_named_modules_to_tensor_quantizers_dict()

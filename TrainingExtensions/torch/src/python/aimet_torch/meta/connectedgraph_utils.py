@@ -44,6 +44,7 @@ import torch
 # Import AIMET specific modules
 from aimet_common.utils import AimetLogger
 from aimet_torch.meta.connectedgraph import ConnectedGraph
+from aimet_torch.utils import create_rand_tensors_given_shapes, get_device
 
 logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Utils)
 
@@ -98,3 +99,17 @@ def get_module_act_func_pair(model: torch.nn.Module, model_input: Union[Tuple[to
                                  next_op.dotted_name)
 
     return module_act_func_pair
+
+
+def create_connected_graph_with_input_shapes(model: torch.nn.Module, input_shapes: Union[Tuple, List[Tuple]]) \
+        -> ConnectedGraph:
+    """
+    Create connected graph, using random inputs generated from given input shapes.
+    :param model: torch model to create a connected graph from
+    :param input_shapes: input shapes to the torch model
+    :return: ConnectedGraph representation of the model
+    """
+    random_inputs = create_rand_tensors_given_shapes(input_shapes)
+    device = get_device(model)
+    random_inputs = tuple([inp.to(device) for inp in random_inputs])
+    return ConnectedGraph(model, random_inputs)
