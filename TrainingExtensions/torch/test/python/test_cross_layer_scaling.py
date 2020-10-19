@@ -221,6 +221,29 @@ class TestTrainingExtensionsCrossLayerScaling(unittest.TestCase):
             for module in layer_group:
                 print("   " + get_layer_name(model, module))
 
+    def test_find_layer_groups_to_scale_depthwise_no_pointwise(self):
+
+        model = torch.nn.Sequential(
+            torch.nn.Conv2d(10, 20, 3),
+            torch.nn.ReLU(),
+            torch.nn.Conv2d(20, 20, 3, groups=10),
+            torch.nn.ReLU(),
+            torch.nn.Conv2d(20, 40, 3)
+        )
+        model.eval()
+
+        graph_search = GraphSearchUtils(model, (1, 10, 24, 24))
+        layer_groups = graph_search.find_layer_groups_to_scale()
+
+        # Find cls sets from the layer groups
+        cls_sets = []
+        for layer_group in layer_groups:
+            cls_set = GraphSearchUtils.convert_layer_group_to_cls_sets(layer_group)
+            cls_sets += cls_set
+
+        self.assertEqual(1, len(cls_sets))
+        self.assertIn((model[0], model[2], model[4]), cls_sets)
+
     def test_find_cls_sets_vgg16(self):
 
         torch.manual_seed(10)
@@ -319,3 +342,25 @@ class TestTrainingExtensionsCrossLayerScaling(unittest.TestCase):
         output_after_scaling = model(random_input).detach().numpy()
         self.assertTrue(np.allclose(baseline_output, output_after_scaling, rtol=1.e-2))
         self.assertEqual(10, len(scale_factors[0].cls_pair_info_list[0].scale_factor))
+
+    def test_auto_depthwise_transposed_conv_model(self):
+
+        model = torch.nn.Sequential(
+            torch.nn.Conv2d(5, 10, 3),
+            torch.nn.ReLU(),
+            torch.nn.ConvTranspose2d(10, 10, 3, groups=10),
+            torch.nn.ReLU(),
+            torch.nn.Conv2d(10, 24, 3),
+            torch.nn.ReLU(),
+            torch.nn.ConvTranspose2d(24, 32, 3),
+        )
+        model.eval()
+        random_input = torch.rand((1, 5, 32, 32))
+
+        baseline_output = model(random_input).detach().numpy()
+        scale_factors = CrossLayerScaling.scale_model(model, (1, 5, 32, 32))
+
+        output_after_scaling = model(random_input).detach().numpy()
+        self.assertTrue(np.allclose(baseline_output, output_after_scaling, rtol=1.e-2))
+        self.assertEqual(2, len(scale_factors))
+        self.assertEqual(2, len(scale_factors[0].cls_pair_info_list))
