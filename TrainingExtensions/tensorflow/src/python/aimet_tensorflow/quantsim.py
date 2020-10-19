@@ -786,6 +786,32 @@ class QuantizationSimModel:
         assert quant_op_name.endswith('_quantized')
         return quant_op_name[:-len('_quantized')]
 
+    @staticmethod
+    def _get_op_to_modify_with_param_in(op: tf.Operation, index: int) -> (tf.Operation, tf.Tensor):
+        """
+        utility to get op to modify along with param input
+        :param op: TensorFlow operation
+        :param index: input index to get param from
+        :return: Tuple of TF operation and param in tensor
+        """
+
+        op_to_modify = None
+        param_in = None
+        # case of params being depth 2 input nodes to MatMul
+        # via strided-slice or split op
+        if op.inputs[index].op.type in ['StridedSlice', 'Split']:
+            strided_slice_op = op.inputs[index].op
+            for inp in strided_slice_op.inputs:
+                if inp.op.type in ['ReadVariableOp']:
+                    op_to_modify = strided_slice_op
+                    param_in = inp
+        else:
+            # case of params being direct input nodes to MatMul
+            op_to_modify = op
+            param_in = op.inputs[index]
+
+        return op_to_modify, param_in
+
     def _insert_param_quantization_ops(self, op_names: List[str], indices: List[int], default_param_bw: int,
                                        in_loop_context: bool = False):
         """
@@ -801,25 +827,27 @@ class QuantizationSimModel:
 
         for op, index in zip(ops, indices):
             # Modify the weight/bias inputs to use the quantized inputs
-            param_in = op.inputs[index]
+            can_modify_op, param_in = QuantizationSimModel._get_op_to_modify_with_param_in(op, index)
 
-            quant_op_name = self._get_quantized_name(param_in.op.name)
-            _logger.info("Adding weight quantization op %s", quant_op_name)
-            op_mode = libpymo.TensorQuantizerOpMode.oneShotQuantizeDequantize
+            if param_in is not None:
+                quant_op_name = self._get_quantized_name(param_in.op.name)
+                _logger.info("Adding weight quantization op %s", quant_op_name)
+                op_mode = libpymo.TensorQuantizerOpMode.oneShotQuantizeDequantize
 
-            if in_loop_context:
-                q_op_out = self._insert_post_training_quant_op_in_loop_context(param_in, quant_op_name,
-                                                                               op_mode, self._param_quantizers,
-                                                                               QuantizerType.param,
-                                                                               default_param_bw)
-            else:
-                q_op_out = self._insert_post_training_quant_op(param_in, quant_op_name,
-                                                               op_mode, self._param_quantizers, QuantizerType.param,
-                                                               default_param_bw)
+                if in_loop_context:
+                    q_op_out = self._insert_post_training_quant_op_in_loop_context(param_in, quant_op_name,
+                                                                                   op_mode, self._param_quantizers,
+                                                                                   QuantizerType.param,
+                                                                                   default_param_bw)
+                else:
+                    q_op_out = self._insert_post_training_quant_op(param_in, quant_op_name,
+                                                                   op_mode, self._param_quantizers, QuantizerType.param,
+                                                                   default_param_bw)
 
-            nodes_modified_count = graph_editor.reroute_ts(tf_ops.convert_to_tensor(q_op_out), param_in, can_modify=op)
-            if nodes_modified_count != 1:
-                raise ValueError('Input ' + param_in.name + ' not quantized!')
+                nodes_modified_count = graph_editor.reroute_ts(tf_ops.convert_to_tensor(q_op_out), param_in,
+                                                               can_modify=can_modify_op)
+                if nodes_modified_count != 1:
+                    raise ValueError('Input ' + param_in.name + ' not quantized!')
 
     @staticmethod
     def _is_op_quantizable(op: tf.Operation) -> bool:

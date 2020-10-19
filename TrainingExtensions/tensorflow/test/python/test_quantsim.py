@@ -802,3 +802,40 @@ class TestQuantSim(unittest.TestCase):
             output_tensor = sim.session.graph.get_tensor_by_name('keras_model_functional/Softmax:0')
             sim.session.run(output_tensor, feed_dict={input_tensor: test_inp})
 
+    def test_matmul_param_selection_lstm(self):
+        """ Test apis to select input params to MatMuls within LSTM for quantization """
+        tf.reset_default_graph()
+        sess = tf.Session()
+        with sess.graph.as_default():
+            inputs = tf.keras.Input(shape=(3, 100))
+
+            # Add an RNN layer with 12 internal units.
+            x = tf.keras.layers.LSTM(12, name='lstm0')(inputs)
+            _ = tf.keras.layers.Dense(12, activation=tf.nn.softmax,
+                                      name="matmul0")(x)
+
+            init = tf.global_variables_initializer()
+            sess.run(init)
+            # _ = tf.summary.FileWriter('./lstm', sess.graph)
+
+            matmul_with_split_inside_lstm = "lstm0/while/MatMul"
+            tf_split_op_in = sess.graph.get_operation_by_name("lstm0/while/split")
+            tf_matmul_with_split_inside_lstm = sess.graph.get_operation_by_name(matmul_with_split_inside_lstm)
+            param_in_through_split = sess.graph.get_tensor_by_name("lstm0/while/split/ReadVariableOp:0")
+
+            can_modify_op, param_in = QuantizationSimModel._get_op_to_modify_with_param_in(
+                tf_matmul_with_split_inside_lstm, 1)
+
+            self.assertEqual(can_modify_op, tf_split_op_in)
+            self.assertEqual(param_in, param_in_through_split)
+
+            matmul_with_slice_inside_lstm = "lstm0/while/MatMul_5"
+            tf_strided_slice_op_in = sess.graph.get_operation_by_name("lstm0/while/strided_slice_1")
+            tf_matmul_with_slice_inside_lstm = sess.graph.get_operation_by_name(matmul_with_slice_inside_lstm)
+            param_in_through_strided_slice = sess.graph.get_tensor_by_name("lstm0/while/ReadVariableOp_1:0")
+
+            can_modify_op, param_in = QuantizationSimModel._get_op_to_modify_with_param_in(
+                tf_matmul_with_slice_inside_lstm, 1)
+
+            self.assertEqual(can_modify_op, tf_strided_slice_op_in)
+            self.assertEqual(param_in, param_in_through_strided_slice)
