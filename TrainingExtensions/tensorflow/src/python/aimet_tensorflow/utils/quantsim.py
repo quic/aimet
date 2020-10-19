@@ -54,6 +54,27 @@ DTYPES_QUANTIZE_NOT_REQUIRED = [tf.dtypes.int8, tf.dtypes.uint8, tf.dtypes.int16
                                 tf.bool, tf.dtypes.string, tf.dtypes.resource]
 
 
+def get_param_quantizer(op: tf.Operation, index: int) -> tf.Operation:
+    """
+    utility to get param quantizer inserted for given op
+    :param op: TensorFlow operation
+    :param index: input index to get param from
+    :return: AIMET Quantizer op associated with the param
+    """
+
+    # MatMul param is directly connected input node, get quantized readVarOp
+    quantized_op = op.inputs[index].op
+    # handle MatMuls where the param is fed via strided_slice or split op types
+    if op.inputs[index].op.type in ['StridedSlice', 'Split']:
+        matmul_input_op = op.inputs[index].op
+        # get quantized readVarOp
+        for inp in matmul_input_op.inputs:
+            if inp.op.type in ['QcQuantize']:
+                quantized_op = inp.op
+
+    return quantized_op
+
+
 def create_op_to_quant_ops_dict(graph: tf.Graph, conn_graph: ConnectedGraph, ops_with_param_names: List[str],
                                 indices: List[int], activation_op_names: List[str]) -> OpToQuantOpsDictType:
     """
@@ -75,7 +96,7 @@ def create_op_to_quant_ops_dict(graph: tf.Graph, conn_graph: ConnectedGraph, ops
         param_type = 'weight'
         if op_with_param.type == 'BiasAdd':
             param_type = 'bias'
-        param_quantizer = op_with_param.inputs[index].op
+        param_quantizer = get_param_quantizer(op_with_param, index)
         assert param_quantizer.type == 'QcQuantize'
         add_op_to_quant_ops_dict_entry(param_quantizer, conn_graph_op, True, param_type, op_to_quant_ops_dict)
     for activation_op_name in activation_op_names:
