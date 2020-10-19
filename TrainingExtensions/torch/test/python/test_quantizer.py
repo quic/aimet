@@ -36,6 +36,7 @@
 # =============================================================================
 
 import unittest
+import unittest.mock
 import numpy as np
 import torch
 import torch.nn as nn
@@ -45,6 +46,7 @@ import json as json
 from torchvision import models
 from aimet_common.defs import QuantScheme
 
+from aimet_torch.meta.connectedgraph import ConnectedGraph
 from aimet_torch.quantsim import QuantizationSimModel
 from aimet_torch.quantsim_straight_through_grad import compute_dloss_by_dx
 from aimet_torch.defs import PassThroughOp
@@ -1188,3 +1190,15 @@ class TestQuantizationSim(unittest.TestCase):
                 elif name in ['conv2', 'conv2_drop', 'relu2', 'relu3', 'dropout', 'fc2', 'log_softmax']:
                     self.assertTrue(module.output_quantizer.enabled)
                     self.assertEqual(QcQuantizeOpMode.PASSTHROUGH, module._mode)
+
+    def test_connected_graph_is_none(self):
+        """ Test that an assertion is thrown when connected graph is not able to be built. """
+        def raise_trace_error(_self, _model, _inputs):
+            raise torch.jit.TracingCheckError(None, None)
+
+        model = SmallMnist()
+        model.eval()
+        with unittest.mock.patch.object(ConnectedGraph, '__init__', raise_trace_error):
+            with unittest.mock.patch.object(ConnectedGraph, '__del__', lambda _self: None):
+                with self.assertRaises(AssertionError):
+                    _ = QuantizationSimModel(model, input_shapes=(1, 1, 28, 28))
