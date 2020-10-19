@@ -260,6 +260,35 @@ class TestTrainingExtensionBnFold(unittest.TestCase):
         self.assertEqual(analytical_mock.call_count, 2) # one layer ignored
         self.assertEqual(empirical_mock.call_count, 0)
 
+    def test_bias_correction_for_depthwise_transposed_conv2d(self):
+
+        torch.manual_seed(10)
+        model = torch.nn.Sequential(
+            torch.nn.ConvTranspose2d(10, 10, 3, groups=10),
+            torch.nn.BatchNorm2d(10),
+            torch.nn.ReLU(),
+            torch.nn.ConvTranspose2d(10, 10, 3),
+            torch.nn.BatchNorm2d(10),
+        )
+
+        model = model.eval()
+
+        # data_loader = create_fake_data_loader(dataset_size=dataset_size, batch_size=batch_size, image_size=(12, 4, 4),
+        #                                       )
+        data_loader = BatchIterator((1, 10, 4, 4))
+        params = qsim.QuantParams(weight_bw=8, act_bw=8, round_mode="nearest",
+                                  quant_scheme=QuantScheme.post_training_tf
+                                  )
+        conv_bn_dict = find_all_conv_bn_with_activation(model, input_shape=(1, 10, 4, 4))
+
+        with unittest.mock.patch('aimet_torch.bias_correction.call_analytical_mo_correct_bias') as analytical_mock:
+            with unittest.mock.patch('aimet_torch.bias_correction.call_empirical_mo_correct_bias') as empirical_mock:
+                bias_correction.correct_bias(model, params, 2, data_loader, 2, conv_bn_dict,
+                                             perform_only_empirical_bias_corr=False,
+                                             layers_to_ignore=[])
+
+        self.assertEqual(analytical_mock.call_count, 2) # one layer ignored
+        self.assertEqual(empirical_mock.call_count, 0)
 
 class BatchIterator:
     def __init__(self, img_size):
