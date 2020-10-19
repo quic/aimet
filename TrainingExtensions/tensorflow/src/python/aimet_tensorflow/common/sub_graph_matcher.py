@@ -254,10 +254,33 @@ subgraph_constructors = {
         'module_regex': ['(.+)/while/MatMul$'],
         'associated_op_regex': ['MatMul$']
     },
+    'LSTM_TimeMajor_True': {
+        'input_shape': (3, 100),
+        'op_type': 'LSTM',
+        'constructor': "tf.keras.layers.LSTM(10, time_major=True)(inputs)",
+        'module_regex': ['(.+)/while/MatMul$'],
+        'associated_op_regex': ['MatMul$']
+    },
     'LSTM_Sigmoid': {
         'input_shape': (3, 100),
         'op_type': 'LSTM',
         'constructor': "tf.keras.layers.LSTM(10, recurrent_activation='sigmoid')(inputs)",
+        'module_regex': ['(.+)/while/MatMul$'],
+        'associated_op_regex': ['MatMul$']
+    },
+    'LSTM_Stacked_TimeMajor_True': {
+        'input_shape': (3, 100),
+        'op_type': 'LSTM',
+        'constructor': "tf.keras.layers.LSTM(10, time_major=True, "
+                       "return_sequences=True)(inputs)",
+        'module_regex': ['(.+)/while/MatMul$'],
+        'associated_op_regex': ['MatMul$']
+    },
+    'LSTM_Stacked': {
+        'input_shape': (3, 100),
+        'op_type': 'LSTM',
+        'constructor': "tf.keras.layers.LSTM(10,"
+                       "return_sequences=True)(inputs)",
         'module_regex': ['(.+)/while/MatMul$'],
         'associated_op_regex': ['MatMul$']
     }
