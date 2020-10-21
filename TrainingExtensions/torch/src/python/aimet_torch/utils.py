@@ -38,10 +38,12 @@
 """ Utilities that are used for different AIMET PyTorch features """
 
 from typing import List, Tuple, Union
+import os
+import pickle
 import numpy as np
 import torch.nn
 import torch
-
+from torch.utils.data import DataLoader, Dataset
 from torchvision import datasets, transforms
 from aimet_common.utils import AimetLogger
 
@@ -138,6 +140,61 @@ class ModuleData:
             out_data = out_data_list[0].detach()
 
         return inp_data, out_data
+
+
+class CachedDataset(Dataset):
+    """
+    Cache number of batches from the data loader at given path location and
+    provide interface to fetch single batch of model inputs.
+    """
+    def __init__(self, data_loader: DataLoader, num_batches: int, path: str):
+        """
+        :param data_loader: Data loader
+        :param num_batches: Number of batches to fetch from data loader
+        :param path: Path to save model inputs
+        """
+        self._data_loader = data_loader
+        self._num_batches = num_batches
+        self._path = path
+
+        self._cache_model_inputs()
+
+    def __len__(self):
+        return self._num_batches
+
+    def __getitem__(self, index: int):
+        path = os.path.join(self._path, 'model_inputs_' + str(index))
+
+        with open(path, 'rb') as file:
+            batch = pickle.load(file)
+
+        return batch
+
+    def _cache_model_inputs(self):
+        """
+        Function to cache number of batches individually in separate file at provided path location
+        """
+        if not os.path.exists(self._path):
+            os.makedirs(self._path)
+
+        iterator = iter(self._data_loader)
+
+        for batch_index in range(self._num_batches):
+            try:
+                batch = next(iterator)
+
+                # batch is of shape (model_inputs, labels)
+                if isinstance(batch, (tuple, list)):
+                    batch, _ = batch
+
+                path = os.path.join(self._path, 'model_inputs_' + str(batch_index))
+                with open(path, 'wb') as file:
+                    pickle.dump(batch, file)
+
+            except StopIteration:
+                raise ValueError('Can not fetch {} batches from data loader.'.format(self._num_batches))
+
+        logger.info('Caching %d batches from data loader at path location: %s', self._num_batches, self._path)
 
 
 def run_hook_for_layers(model: torch.nn.Module, input_shapes: Union[Tuple, List[Tuple]], hook,
