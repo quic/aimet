@@ -39,14 +39,14 @@
 import pytest
 import unittest.mock
 import numpy as np
-
+import shutil
 import torch
 import torchvision
 
 from aimet_common.utils import round_up_to_multiplicity, round_down_to_multiplicity
 from aimet_torch.utils import replace_modules_of_type1_with_type2, replace_modules_with_instances_of_new_type, \
     get_ordered_list_of_modules, get_ordered_list_of_conv_modules, get_reused_modules, change_tensor_device_placement,\
-    ModuleData, to_numpy, create_rand_tensors_given_shapes
+    ModuleData, to_numpy, create_rand_tensors_given_shapes, create_fake_data_loader, CachedDataset
 
 from aimet_torch.quantsim import QuantizationSimModel
 from aimet_torch.defs import PassThroughOp
@@ -356,3 +356,22 @@ class TestTrainingExtensionsUtils(unittest.TestCase):
             module_data = ModuleData(model, model.conv1)
             inp, out = module_data.collect_inp_out_data(model_input, collect_input=True, collect_output=False)
             self.assertTrue(np.array_equal(to_numpy(inp), to_numpy(model_input)))
+
+    def test_cached_dataset(self):
+        """ Test cache data loader splitting into train and validation """
+        dataset_size = 256
+        batch_size = 16
+
+        # create fake data loader with image size (1, 2, 2)
+        data_loader = create_fake_data_loader(dataset_size=dataset_size, batch_size=batch_size, image_size=(1, 2, 2))
+        num_batches = 6
+        path = '/tmp/test_cached_dataset/'
+        cached_dataset = CachedDataset(data_loader, num_batches, path)
+        self.assertEqual(len(cached_dataset), 6)
+
+        # Try creating cached data loader by more than possible batches from data loader and expect ValueError
+        possible_batches = int(dataset_size / batch_size)
+        with pytest.raises(ValueError):
+            CachedDataset(data_loader, possible_batches + 1, path)
+
+        shutil.rmtree('/tmp/test_cached_dataset/')
