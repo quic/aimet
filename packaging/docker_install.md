@@ -51,7 +51,7 @@ git clone https://github.com/google/googletest.git -b release-1.8.0 googletest-r
 popd
 ```
 ## Setup the environment
-In order to build and run AIMET code, several dependencies are required (such as python, cmake, tensorflow, pytorch, etc). A docker file with all prerequisites and dependencies is available [here](Jenkins/Dockerfile). Either install the dependencies on your machine using [this Dockerfile](Jenkins/Dockerfile) as a guide, or just build and launch the docker using the instructions [here](#docker-information).
+In order to build and run AIMET code, several dependencies are required (such as python, cmake, tensorflow, pytorch, etc). A docker file with all prerequisites and dependencies is available [here](../Jenkins/Dockerfile). Either install the dependencies on your machine using [this Dockerfile](../Jenkins/Dockerfile) as a guide, or just build and launch the docker using the instructions [here](#docker-information).
 
 Set the *common* environment variables as follows:
 ```bash
@@ -95,7 +95,7 @@ make doc
 To begin navigating the documentation, open the page `$WORKSPACE/build/staging/Docs/user_guide/index.html` on any browser.
 
 ## Docker information
-Code may *optionally* be developed inside a development docker container. This section describes how to build a docker image and launch a container using the provided [Dockerfile](Jenkins/Dockerfile).
+Code may *optionally* be developed inside a development docker container. This section describes how to build a docker image and launch a container using the provided [Dockerfile](../Jenkins/Dockerfile).
 
 ### Build docker image manually
 Follow these instructions to build the docker:
