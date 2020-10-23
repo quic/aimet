@@ -104,7 +104,7 @@ class QuantizationSimModel:
     def __init__(self, model: torch.nn.Module, input_shapes: Union[Tuple, List[Tuple]],
                  quant_scheme: Union[str, QuantScheme] = QuantScheme.post_training_tf_enhanced,
                  rounding_mode: str = 'nearest', default_output_bw: int = 8, default_param_bw: int = 8,
-                 in_place: bool = False, config_file: str = None):
+                 in_place: bool = False, config_file: str = None, inputs: Tuple = None):
         """
         Constructor
 
@@ -118,7 +118,8 @@ class QuantizationSimModel:
         :param in_place: If True, then the given 'model' is modified in-place to add quant-sim nodes.
                 Only suggested use of this option is when the user wants to avoid creating a copy of the model
         :param config_file: Path to Configuration file for model quantizers
-
+        :param inputs: Inputs to model. If this is given, input_shapes will be ignored during ConnectedGraph
+                construction
         """
 
         # sanity checks
@@ -143,7 +144,10 @@ class QuantizationSimModel:
             self.model = copy.deepcopy(model)
 
         try:
-            connected_graph = create_connected_graph_with_input_shapes(self.model, input_shapes)
+            if inputs:
+                connected_graph = ConnectedGraph(self.model, inputs)
+            else:
+                connected_graph = create_connected_graph_with_input_shapes(self.model, input_shapes)
         except (torch.jit.TracingCheckError, AssertionError):
             connected_graph = None
 

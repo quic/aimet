@@ -237,6 +237,43 @@ def run_hook_for_layers(model: torch.nn.Module, input_shapes: Union[Tuple, List[
         h.remove()
 
 
+def run_hook_for_layers_with_given_input(model: torch.nn.Module, inputs: Tuple, hook,
+                                         module_type_for_attaching_hook=None, leaf_node_only=True):
+    """
+    Register the given hook function for all layers in the model
+    :param model: Model
+    :param inputs: Shape of inputs to pass to the model
+    :param hook: Hook function to register
+    :param module_type_for_attaching_hook: Tuple of torch.nn module types for which hook has to be attached
+    :param leaf_node_only: Set to False if all modules are required
+    :return: None
+    """
+
+    # ------------------------
+    # Register hook function
+    # ------------------------
+    hooks = []
+    # All leaf modules
+    modules = [module for module in model.modules() if not leaf_node_only or is_leaf_module(module)]
+    if module_type_for_attaching_hook:
+        # if needed, filter by module types specified by caller
+        modules = [module for module in modules if isinstance(module, module_type_for_attaching_hook)]
+    for module in modules:
+        hooks.append(module.register_forward_hook(hook))
+
+    # ------------------------------------------------
+    # Run forward pass to execute the hook functions
+    # ------------------------------------------------
+    with torch.no_grad():
+        _ = model(*inputs)
+
+    # --------------------------
+    # Remove all hooks we added
+    # --------------------------
+    for h in hooks:
+        h.remove()
+
+
 def to_numpy(tensor: torch.Tensor):
     """
      Helper function that turns the given tensor into a numpy array
