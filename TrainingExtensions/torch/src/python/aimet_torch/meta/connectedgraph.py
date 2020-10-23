@@ -54,7 +54,7 @@ from aimet_common.connected_graph.product import Product
 from aimet_common.connected_graph.operation import Op, determine_preceding_op_input_product_index_in_multi_input_op
 from aimet_common.model_module import PytorchModelModule
 from aimet_common.utils import AimetLogger, ModelApi, api_channel_index_dict
-from aimet_torch.utils import run_hook_for_layers, is_leaf_module
+from aimet_torch.utils import is_leaf_module, run_hook_for_layers_with_given_input
 from aimet_torch.defs import PassThroughOp
 
 logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Winnow)
@@ -212,8 +212,7 @@ class ConnectedGraph(AimetCommonConnectedGraph):
             # Currently, we assume that multiple input tensors have the same shape, and likewise for output tensors.
             module_tensor_tuples_map[curr_module] = (input_tensor_tuple, output_tensor_tuple)
 
-        input_shapes = [inp.shape for inp in model_input]
-        run_hook_for_layers(model, input_shapes, forward_hook, leaf_node_only=False)
+        run_hook_for_layers_with_given_input(model, model_input, forward_hook, leaf_node_only=False)
 
         return module_tensor_tuples_map
 
