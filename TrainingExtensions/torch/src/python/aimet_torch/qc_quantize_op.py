@@ -168,7 +168,7 @@ class QcQuantizeStandAloneBase(nn.Module):
                     round_mode = tensor_quantizer.round_mode
                 else:
                     round_mode = libpymo.RoundingMode.ROUND_NEAREST
-                output = tensor_quantizer.quantize_dequantize(input_tensor, round_mode)
+                output = tensor_quantizer.quantize_dequantize(input_tensor, round_mode, self, 'output')
 
             else:
                 output = input_tensor
@@ -293,7 +293,7 @@ class QcPostTrainingWrapper(QcQuantizeWrapper):
         """
 
         # Quantize the inputs
-        quantized_inputs = self._quantize_activation(self.input_quantizer, inputs)
+        quantized_inputs = self._quantize_activation(self.input_quantizer, inputs, 'input')
         if not isinstance(quantized_inputs, list):
             quantized_inputs = [quantized_inputs]
 
@@ -306,12 +306,13 @@ class QcPostTrainingWrapper(QcQuantizeWrapper):
         self._restore_shadow_params(shadow_params)
 
         # Quantize the outputs
-        if not self._is_output_quantized:
+
+        if not self.output_quantizer.enabled:
             output = wrapped_output
         else:
             if not isinstance(wrapped_output, list):
                 wrapped_output = [wrapped_output]
-            output = self._quantize_activation(self.output_quantizer, wrapped_output)
+            output = self._quantize_activation(self.output_quantizer, wrapped_output, 'output')
 
         return output
 
@@ -351,7 +352,7 @@ class QcPostTrainingWrapper(QcQuantizeWrapper):
                     round_mode = param_quantizer.round_mode
                 else:
                     round_mode = libpymo.RoundingMode.ROUND_NEAREST
-                param.data = param_quantizer.quantize_dequantize(param.data, round_mode)
+                param.data = param_quantizer.quantize_dequantize(param.data, round_mode, self, None)
 
         return shadow_params
 
@@ -374,12 +375,13 @@ class QcPostTrainingWrapper(QcQuantizeWrapper):
         self.input_quantizer.compute_encoding()
         self.output_quantizer.compute_encoding()
 
-    def _quantize_activation(self, tensor_quantizer, tensors_to_quantize):
+    def _quantize_activation(self, tensor_quantizer, tensors_to_quantize, tensor_name):
         """
         Forward-pass routine. This quantizes the weights before delegating to the wrapped module and
         then quantizes the output before returning the same
         :param tensor_quantizer: Tensor quantizer to use for updating stats or quantizing
         :param tensors_to_quantize: Inputs passed to the module in the forward pass
+        :param tensor_name: If tensor is input tensor or output tensor
         :return: Quantized output from the wrapped module
         """
 
@@ -398,7 +400,7 @@ class QcPostTrainingWrapper(QcQuantizeWrapper):
                     round_mode = tensor_quantizer.round_mode
                 else:
                     round_mode = libpymo.RoundingMode.ROUND_NEAREST
-                output = tensor_quantizer.quantize_dequantize(input_tensor, round_mode)
+                output = tensor_quantizer.quantize_dequantize(input_tensor, round_mode, self, tensor_name)
 
             else:
                 output = input_tensor

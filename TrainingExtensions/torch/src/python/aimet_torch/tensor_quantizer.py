@@ -40,7 +40,10 @@
 import io
 from typing import Union
 
+import torch
+
 from aimet_common.defs import QuantScheme
+import aimet_torch.quantsim_straight_through_grad as ste
 import libpymo
 import AimetTensorQuantizer
 
@@ -170,19 +173,17 @@ class PostTrainingTensorQuantizer(TensorQuantizer):
             if is_encoding_valid:
                 self.encoding = encoding
 
-    def quantize_dequantize(self, tensor, round_mode):
+    def quantize_dequantize(self, tensor, round_mode, wrapper_ref, tensor_name):
         """
         Quantize-dequantize the tensor, using the saved encoding for this tensor
         :param tensor: Tensor to quantize-dequantize
         :param round_mode: Rounding mode
+        :param wrapper_ref: Reference to quantization wrapper
+        :param tensor_name: Name of tensor to be quantized-dequantized
         :return: Resulting tensor
         """
-        if self.enabled:
-            quantized_tensor = self._cppOp.quantizeDequantize(tensor, self.encoding, round_mode, tensor.is_cuda)
-        else:
-            quantized_tensor = tensor
-
-        return quantized_tensor
+        output = QuantizeDequantize.apply(tensor, self, round_mode, wrapper_ref, tensor_name)
+        return output
 
     def reset_encoding_stats(self):
         """
@@ -190,3 +191,55 @@ class PostTrainingTensorQuantizer(TensorQuantizer):
         :return: None
         """
         self._cppOp.resetEncodingStats()
+
+
+class QuantizeDequantize(torch.autograd.Function):
+    """
+    Custom gradient function for STE
+    """
+    # pylint:disable = arguments-differ
+    @staticmethod
+    def forward(ctx, tensor, tensor_quantizer, round_mode, quant_wrapper_ref, tensor_name=None):
+        """
+        Quantize-dequantize the tensor, using the saved encoding for this tensor
+        :param tensor: Tensor to quantize-dequantize
+        :param tensor_quantizer: Reference to the tensor quantizer
+        :param round_mode: Rounding mode
+        :param wrapper_ref: Reference to quantization wrapper
+        :param tensor_name: Name of tensor to be quantized-dequantized
+        :return: Resulting tensor
+        """
+        if tensor_quantizer.enabled:
+            # pylint:disable = protected-access
+            quantized_tensor = tensor_quantizer._cppOp.quantizeDequantize(tensor, tensor_quantizer.encoding,
+                                                                          round_mode, tensor.is_cuda)
+        else:
+            quantized_tensor = tensor
+
+        ctx.save_for_backward(quantized_tensor)
+
+        ctx.tensor_quantizer = tensor_quantizer
+        ctx.quantization_wrapper_ref = quant_wrapper_ref
+        ctx.tensor_name = tensor_name
+        return quantized_tensor
+
+    @staticmethod
+    def backward(ctx, output_grad):
+        tensor = ctx.saved_tensors
+        tensor_quantizer = ctx.tensor_quantizer
+        tensor_name = ctx.tensor_name
+        quant_wrapper_ref = ctx.quantization_wrapper_ref
+        if tensor_quantizer.enabled:
+            grad = ste.compute_dloss_by_dx(tensor[0], output_grad, tensor_quantizer.encoding.min,
+                                           tensor_quantizer.encoding.max)
+        else:
+            grad = output_grad
+
+        # pylint:disable = protected-access
+        for name, param in quant_wrapper_ref._module_to_wrap.named_parameters():
+            if tensor_name == 'input' and quant_wrapper_ref.param_quantizers[name].enabled and param.grad is not None:
+                param_quantizer = quant_wrapper_ref.param_quantizers[name]
+                param.grad = ste.compute_dloss_by_dx(param, param.grad, param_quantizer.encoding.min,
+                                                     param_quantizer.encoding.max)
+
+        return grad, None, None, None, None
