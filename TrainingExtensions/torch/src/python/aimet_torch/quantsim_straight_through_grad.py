@@ -35,7 +35,7 @@
 #
 #  @@-COPYRIGHT-END-@@
 # =============================================================================
-""" implements straight through gradient computation for Quant op"""
+""" Implements straight through gradient computation for Quant op"""
 
 import torch
 
