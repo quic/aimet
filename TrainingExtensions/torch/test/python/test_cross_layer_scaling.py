@@ -344,7 +344,7 @@ class TestTrainingExtensionsCrossLayerScaling(unittest.TestCase):
         self.assertEqual(10, len(scale_factors[0].cls_pair_info_list[0].scale_factor))
 
     def test_auto_depthwise_transposed_conv_model(self):
-
+        torch.manual_seed(0)
         model = torch.nn.Sequential(
             torch.nn.Conv2d(5, 10, 3),
             torch.nn.ReLU(),
@@ -361,6 +361,8 @@ class TestTrainingExtensionsCrossLayerScaling(unittest.TestCase):
         scale_factors = CrossLayerScaling.scale_model(model, (1, 5, 32, 32))
 
         output_after_scaling = model(random_input).detach().numpy()
-        self.assertTrue(np.allclose(baseline_output, output_after_scaling, rtol=1.e-2))
+        output_diff = abs(baseline_output - output_after_scaling)
+
+        self.assertTrue(np.all(max(output_diff) < 1e-6))
         self.assertEqual(2, len(scale_factors))
         self.assertEqual(2, len(scale_factors[0].cls_pair_info_list))
