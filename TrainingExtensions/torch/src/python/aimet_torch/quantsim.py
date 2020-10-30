@@ -246,24 +246,13 @@ class QuantizationSimModel:
         for name, layer in quantized_layers:
             layer.compute_encoding()
 
-            # Before we return we set the mode to active - meaning ready for quantize/de-quantize
-            # for layers with valid_encoding, otherwise we set to pass through
-            if layer.output_quantizer.enabled and layer.output_quantizer.encoding:
-                layer.set_mode(QcQuantizeOpMode.ACTIVE)
-                encoding = layer.output_quantizer.encoding
-                logger.debug("Encoding for %s: min=%f, max=%f, offset=%f. delta=%f, bw=%f",
-                             name, encoding.min, encoding.max, encoding.delta, encoding.offset, encoding.bw)
-            elif layer.output_quantizer.enabled:
-                layers_with_invalid_encodings.append((name, 'output'))
-                layer.set_mode(QcQuantizeOpMode.PASSTHROUGH)
+            # By default we want to set the Quantization wrappers to ACTIVE mode
+            layer.set_mode(QcQuantizeOpMode.ACTIVE)
 
-            if layer.input_quantizer.enabled and layer.input_quantizer.encoding:
-                layer.set_mode(QcQuantizeOpMode.ACTIVE)
-                encoding = layer.input_quantizer.encoding
-                logger.debug("Encoding for %s: min=%f, max=%f, offset=%f. delta=%f, bw=%f",
-                             name, encoding.min, encoding.max, encoding.delta, encoding.offset, encoding.bw)
-            elif layer.input_quantizer.enabled:
-                layers_with_invalid_encodings.append((name, 'input'))
+            # Unless we have invalid encodings
+            if (layer.output_quantizer.enabled and not layer.output_quantizer.encoding) or \
+                    (layer.input_quantizer.enabled and not layer.input_quantizer.encoding):
+                layers_with_invalid_encodings.append(name)
                 layer.set_mode(QcQuantizeOpMode.PASSTHROUGH)
 
         if layers_with_invalid_encodings:
