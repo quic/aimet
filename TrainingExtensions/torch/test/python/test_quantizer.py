@@ -296,6 +296,7 @@ class TestQuantizationSim(unittest.TestCase):
         self.verify_quantization_wrappers(model, sim.model)
 
     # ------------------------------------------------------
+    @unittest.skip
     def test_add_quantization_wrappers_with_preexisting_quantization_layers(self):
         """With a one-deep model"""
         class Net(nn.Module):
@@ -648,91 +649,6 @@ class TestQuantizationSim(unittest.TestCase):
 
         print(sim.model.conv1.input_quantizer)
         print(sim.model.conv1.output_quantizer)
-
-    def test_super_node_creation(self):
-        """"""
-        model = SmallMnistNoDropout()
-        print(model)
-
-        sim = QuantizationSimModel(model, quant_scheme=QuantScheme.post_training_tf, input_shapes=(1, 1, 28, 28))
-        sim.create_super_nodes_of_layers_and_activation_functions((1, 1, 28, 28))
-
-        # Find encodings
-        sim.compute_encodings(dummy_forward_pass, None)
-
-        # try one forward pass
-        output = dummy_forward_pass(sim.model, None)
-
-        print(sim)
-
-        # Checks
-        for module in sim.model.modules():
-            if isinstance(module, QcQuantizeWrapper):
-                if isinstance(module._module_to_wrap, torch.nn.Conv2d):
-                    self.assertFalse(module.output_quantizer.enabled)
-                    self.assertFalse(module.input_quantizer.enabled)
-                    self.assertTrue(module.param_quantizers['weight'].enabled)
-
-                if isinstance(module._module_to_wrap, torch.nn.ReLU):
-                    self.assertTrue(module.output_quantizer.enabled)
-                    self.assertFalse(module.input_quantizer.enabled)
-
-    def test_super_node_creation_with_passthrough(self):
-        """"""
-        model = SmallMnistNoDropoutWithPassThrough().eval()
-        print(model)
-
-        sim = QuantizationSimModel(model, quant_scheme=QuantScheme.post_training_tf, input_shapes=(1, 1, 28, 28))
-        sim.create_super_nodes_of_layers_and_activation_functions((1, 1, 28, 28))
-
-        # Find encodings
-        sim.compute_encodings(dummy_forward_pass, None)
-
-        # try one forward pass
-        output = dummy_forward_pass(sim.model, None)
-
-        print(sim)
-
-        # Checks
-        for module in sim.model.modules():
-            if isinstance(module, QcQuantizeWrapper):
-                if isinstance(module._module_to_wrap, torch.nn.Conv2d):
-                    self.assertFalse(module.output_quantizer.enabled)
-                    self.assertFalse(module.input_quantizer.enabled)
-                    self.assertTrue(module.param_quantizers['weight'].enabled)
-
-                if isinstance(module._module_to_wrap, torch.nn.ReLU):
-                    self.assertTrue(module.output_quantizer.enabled)
-                    self.assertFalse(module.input_quantizer.enabled)
-
-    def test_super_node_creation_with_dropout(self):
-        """"""
-        model = SmallMnist().eval()
-        print(model)
-
-        sim = QuantizationSimModel(model, quant_scheme=QuantScheme.post_training_tf, input_shapes=(1, 1, 28, 28))
-        sim.create_super_nodes_of_layers_and_activation_functions((1, 1, 28, 28))
-
-        # Find encodings
-        sim.compute_encodings(dummy_forward_pass, None)
-
-        # try one forward pass
-        output = dummy_forward_pass(sim.model, None)
-
-        print(sim)
-
-        # Checks
-        for module in sim.model.modules():
-            if isinstance(module, QcQuantizeWrapper):
-                # sim.model.conv2 is followed by a dropout
-                if isinstance(module._module_to_wrap, torch.nn.Conv2d) and module != sim.model.conv2:
-                    self.assertFalse(module.output_quantizer.enabled)
-                    self.assertFalse(module.input_quantizer.enabled)
-                    self.assertTrue(module.param_quantizers['weight'].enabled)
-
-                if isinstance(module._module_to_wrap, torch.nn.ReLU):
-                    self.assertTrue(module.output_quantizer.enabled)
-                    self.assertFalse(module.input_quantizer.enabled)
 
     def test_quantizing_models_with_add_ops(self):
         """
