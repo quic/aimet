@@ -302,7 +302,7 @@ class QcPostTrainingWrapper(QcQuantizeWrapper):
         shadow_params = self._quantize_dequantize_params()
 
         # Save quantized parameters tensors for backward pass and perform custom bakward pass for gating parameters grad during backward pass
-        quantized_inputs = BakwardPassForParameters.apply(self, *quantized_inputs)
+        quantized_inputs = SteGatingFuncForParameters.apply(self, *quantized_inputs)
         # Call the forward of the wrapped module
         wrapped_output = self._module_to_wrap(*quantized_inputs)
 
@@ -439,7 +439,7 @@ class QcQuantizeStandalone(QcQuantizeStandAloneBase):
         self.output_quantizer.compute_encoding()
 
 
-class BakwardPassForParameters(torch.autograd.Function):
+class SteGatingFuncForParameters(torch.autograd.Function):
     """
     Custom gradient function for STE
     """
@@ -455,24 +455,18 @@ class BakwardPassForParameters(torch.autograd.Function):
         :param tensor_name: Name of tensor to be quantized-dequantized
         :return: Resulting tensor
         """
-        tensor_dict = {}
-        # pylint:disable = protected-access
-        for name, param in quant_wrapper_ref._module_to_wrap.named_parameters():
-            if quant_wrapper_ref.param_quantizers[name].enabled:
-                tensor_dict[name] = param
+
         ctx.quantization_wrapper_ref = quant_wrapper_ref
-        ctx.tensor_dict = tensor_dict
         return quantized_input
 
     @staticmethod
     def backward(ctx, *output_grad):
-        tensor_dict = ctx.tensor_dict
         quant_wrapper_ref = ctx.quantization_wrapper_ref
 
         # pylint:disable = protected-access
         for name, param in quant_wrapper_ref._module_to_wrap.named_parameters():
             if quant_wrapper_ref.param_quantizers[name].enabled and param.grad is not None:
                 param_quantizer = quant_wrapper_ref.param_quantizers[name]
-                param.grad = ste.compute_dloss_by_dx(tensor_dict[name], param.grad, param_quantizer.encoding.min,
+                param.grad = ste.compute_dloss_by_dx(param, param.grad, param_quantizer.encoding.min,
                                                      param_quantizer.encoding.max)
         return (None, *output_grad)
