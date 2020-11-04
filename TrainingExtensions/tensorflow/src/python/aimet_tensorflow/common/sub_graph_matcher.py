@@ -49,438 +49,67 @@ import tensorflow as tf
 from tensorflow_core.contrib import slim # pylint: disable=unused-import
 from tensorflow_core.contrib.quantize.python import graph_matcher
 from aimet_tensorflow.utils.common import get_valid_ops
+from aimet_tensorflow.common.sub_graph_matcher_op_templates import op_type_templates
 from aimet_common.utils import AimetLogger
 
 logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.ConnectedGraph)
 
-# Dictionary mapping names of ops to a tuple of input shape into the op, and the constructor for the op.
-# Note that 'inputs' is the name of an input op that is instantiated with shape of the input shape.
-# 'Constants' is the name of a constant op that is instantiated with shape of the input shape.
-subgraph_constructors = {
-    'Conv2D': {
-        'input_shape': (1, 10, 10, 3),
-        'op_type': 'Conv2D',
-        'constructor': "tf.keras.layers.Conv2D(10, (1, 1), use_bias=False)(constants)",
-        'module_regex': ['(.+/Conv2D)$', '(.+/separable_conv2d)$', '(.+/convolution)$'],
-        'associated_op_regex': ['Conv2D$', 'separable_conv2d$', 'convolution$']
-    },
-    'Conv2D_with_bias': {
-        'input_shape': (1, 10, 10, 3),
-        'op_type': 'Conv2D',
-        'constructor': "tf.keras.layers.Conv2D(10, (1, 1), use_bias=True)(constants)",
-        'module_regex': ['(.+/Conv2D)$', '(.+/separable_conv2d)$', '(.+/convolution)$'],
-        'associated_op_regex': ['Conv2D$', 'separable_conv2d$', 'convolution$']
-    },
-    'DepthwiseConv2dNative': {
-        'input_shape': (1, 10, 10, 3),
-        'op_type': 'DepthwiseConv2dNative',
-        'constructor': "tf.keras.layers.DepthwiseConv2D(3, (1, 1))(constants)",
-        'module_regex': ['(.+/depthwise)$', '(.+/DepthwiseConv2dNative)$'],
-        'associated_op_regex': ['depthwise$', 'DepthwiseConv2dNative$']
-    },
-    'Dense': {
-        'input_shape': (1, 10),
-        'op_type': 'Dense',
-        'constructor': "tf.keras.layers.Dense(10, activation=None)(constants)",
-        'module_regex': ['(.+/MatMul)$'],
-        'associated_op_regex': ['MatMul$']
-    },
-    'BN_keras_with_training_tensor': {
-        'input_shape': (10, 10, 3,),
-        'op_type': 'FusedBatchNormV3',
-        'constructor': "tf.keras.layers.BatchNormalization()(inputs)",
-        'module_regex': ['(.+)/cond/FusedBatchNormV3_1$'],
-        'associated_op_regex': ['FusedBatchNormV3_1$']
-    },
-    'BN_keras_with_training_True': {
-        'input_shape': (10, 10, 3,),
-        'op_type': 'FusedBatchNormV3',
-        'constructor': "tf.keras.layers.BatchNormalization()(inputs, training=True)",
-        'module_regex': ['(.+)/FusedBatchNormV3$'],
-        'associated_op_regex': ['FusedBatchNormV3$']
-    },
-    'BN_keras_with_training_False': {
-        'input_shape': (10, 10, 3,),
-        'op_type': 'FusedBatchNormV3',
-        'constructor': "tf.keras.layers.BatchNormalization()(inputs, training=False)",
-        'module_regex': ['(.+)/FusedBatchNormV3$'],
-        'associated_op_regex': ['FusedBatchNormV3$']
-    },
-    'BN_non_fused_keras_with_training_tensor': {
-        'input_shape': (10, 10, 3,),
-        'op_type': 'BatchNorm',
-        'constructor': "tf.keras.layers.BatchNormalization(fused=False)(inputs)",
-        'module_regex': ['(.+)/batchnorm/mul_1$'],
-        'associated_op_regex': ['batchnorm/mul_1$']
-    },
-    'BN_non_fused_keras_with_training_True': {
-        'input_shape': (10, 10, 3,),
-        'op_type': 'BatchNorm',
-        'constructor': "tf.keras.layers.BatchNormalization(fused=False)(inputs, training=True)",
-        'module_regex': ['(.+)/batchnorm/mul_1$'],
-        'associated_op_regex': ['batchnorm/mul_1$']
-    },
-    'BN_non_fused_keras_with_training_False': {
-        'input_shape': (10, 10, 3,),
-        'op_type': 'BatchNorm',
-        'constructor': "tf.keras.layers.BatchNormalization(fused=False)(inputs, training=False)",
-        'module_regex': ['(.+)/batchnorm/mul_1$'],
-        'associated_op_regex': ['batchnorm/mul_1$'],
-        'additional_starting_ops': ['batch_normalization/batchnorm/mul']
-    },
-    'BN_slim_with_training_tensor': {
-        'input_shape': (10, 10, 3,),
-        'op_type': 'FusedBatchNormV3',
-        'constructor': "slim.batch_norm(inputs, is_training=is_training)",
-        'module_regex': ['(.+)/cond/FusedBatchNormV3_1$'],
-        'associated_op_regex': ['FusedBatchNormV3_1$']
-    },
-    'BN_slim_with_training_True': {
-        'input_shape': (10, 10, 3,),
-        'op_type': 'FusedBatchNormV3',
-        'constructor': "slim.batch_norm(inputs, is_training=True)",
-        'module_regex': ['(.+)/FusedBatchNormV3$'],
-        'associated_op_regex': ['FusedBatchNormV3$']
-    },
-    'BN_slim_with_training_False': {
-        'input_shape': (10, 10, 3,),
-        'op_type': 'FusedBatchNormV3',
-        'constructor': "slim.batch_norm(inputs, is_training=False)",
-        'module_regex': ['(.+)/FusedBatchNormV3$'],
-        'associated_op_regex': ['FusedBatchNormV3$']
-    },
-    'Softmax_slim': {
-        'input_shape': (1, 10),
-        'op_type': 'Softmax',
-        'constructor': "slim.softmax(constants)",
-        'module_regex': ['(.+)/Softmax$'],
-        'associated_op_regex': ['Softmax$']
-    },
-    'Softmax_slim_with_unknown_shape': {
-        'input_shape': (10,),
-        'op_type': 'Softmax',
-        'constructor': "slim.softmax(inputs)",
-        'module_regex': ['(.+)/Softmax$'],
-        'associated_op_regex': ['Softmax$']
-    },
-    'Dropout_with_training_tensor': {
-        'input_shape': (1, 10, 10, 3),
-        'op_type': 'Dropout',
-        'constructor': "tf.keras.layers.Dropout(rate=.4)(inputs)",
-        'module_regex': ['(.+)/cond/dropout/mul_1$'],
-        'associated_op_regex': ['cond/dropout/mul_1$']
-    },
-    'Dropout_training_True': {
-        'input_shape': (1, 10, 10, 3),
-        'op_type': 'Dropout',
-        'constructor': "tf.keras.layers.Dropout(rate=.4)(inputs, training=True)",
-        'module_regex': ['(.+)/.+/mul_1$'],
-        'associated_op_regex': ['/.+/mul_1$']
-    },
-    'Dropout_with_training_tensor_unknown_shape': {
-        'input_shape': (1, 10, 10, 3),
-        'op_type': 'Dropout',
-        'constructor': "tf.keras.layers.Dropout(rate=.4)(constants)",
-        'module_regex': ['(.+)/cond/dropout/mul_1$'],
-        'associated_op_regex': ['cond/dropout/mul_1$']
-    },
-    'Dropout_training_True_unknown_shape': {
-        'input_shape': (1, 10, 10, 3),
-        'op_type': 'Dropout',
-        'constructor': "tf.keras.layers.Dropout(rate=.4)(constants, training=True)",
-        'module_regex': ['(.+)/.+/mul_1$'],
-        'associated_op_regex': ['/.+/mul_1$']
-    },
-    'Flatten': {
-        'input_shape': (10, 10, 3,),
-        'op_type': 'Flatten',
-        'constructor': "tf.keras.layers.Flatten()(inputs)",
-        'module_regex': ['(.+/Reshape)$'],
-        'associated_op_regex': ['Reshape$']
-    },
-    'Reshape_to_3D': {
-        'input_shape': (300,),
-        'op_type': 'Reshape',
-        'constructor': "tf.keras.layers.Reshape(target_shape=[10, 10, 3])(inputs)",
-        'module_regex': ['(.+)/Reshape$'],
-        'associated_op_regex': ['Reshape$']
-    },
-    'Upsample2D': {
-        'input_shape': (10, 10, 3,),
-        'op_type': 'Upsample2D',
-        'constructor': "tf.keras.layers.UpSampling2D(size=(2, 3))(inputs)",
-        'module_regex': ['(.+)/Shape$'],
-        'associated_op_regex': ['Shape$']
-    },
-    'GlobalMaxPool2D': {
-        'input_shape': (10, 10, 3,),
-        'op_type': 'GlobalMaxPool2D',
-        'constructor': "tf.keras.layers.GlobalMaxPool2D()(inputs)",
-        'module_regex': ['(.+)/Max$'],
-        'associated_op_regex': ['Max$']
-    },
-    'SimpleRNN': {
-        'input_shape': (3, 100),
-        'op_type': 'SimpleRNN',
-        'constructor': "tf.keras.layers.SimpleRNN(10)(inputs)",
-        'module_regex': ['(.+)/while/MatMul$'],
-        'associated_op_regex': ['MatMul$']
-    },
-    'SimpleRNNWithRelu': {
-        'input_shape': (3, 100),
-        'op_type': 'SimpleRNN',
-        'constructor': "tf.keras.layers.SimpleRNN(10, activation='relu')(inputs)",
-        'module_regex': ['(.+)/while/MatMul$'],
-        'associated_op_regex': ['MatMul$']
-    },
-    'SimpleRNNWithSequencesReturned': {
-        'input_shape': (3, 100),
-        'op_type': 'SimpleRNN',
-        'constructor': "tf.keras.layers.SimpleRNN(10, return_sequences=True)(inputs)",
-        'module_regex': ['(.+)/while/MatMul$'],
-        'associated_op_regex': ['MatMul$']
-    },
-    'SimpleRNNWithSequencesReturnedRelu': {
-        'input_shape': (3, 100),
-        'op_type': 'SimpleRNN',
-        'constructor': "tf.keras.layers.SimpleRNN(10, activation='relu', return_sequences=True)(inputs)",
-        'module_regex': ['(.+)/while/MatMul$'],
-        'associated_op_regex': ['MatMul$']
-    },
-    'LSTM': {
-        'input_shape': (3, 100),
-        'op_type': 'LSTM',
-        'constructor': "tf.keras.layers.LSTM(10)(inputs)",
-        'module_regex': ['(.+)/while/MatMul$'],
-        'associated_op_regex': ['MatMul$']
-    },
-    'LSTM_TimeMajor_True': {
-        'input_shape': (3, 100),
-        'op_type': 'LSTM',
-        'constructor': "tf.keras.layers.LSTM(10, time_major=True)(inputs)",
-        'module_regex': ['(.+)/while/MatMul$'],
-        'associated_op_regex': ['MatMul$']
-    },
-    'LSTM_Sigmoid': {
-        'input_shape': (3, 100),
-        'op_type': 'LSTM',
-        'constructor': "tf.keras.layers.LSTM(10, recurrent_activation='sigmoid')(inputs)",
-        'module_regex': ['(.+)/while/MatMul$'],
-        'associated_op_regex': ['MatMul$']
-    },
-    'LSTM_Stacked_TimeMajor_True': {
-        'input_shape': (3, 100),
-        'op_type': 'LSTM',
-        'constructor': "tf.keras.layers.LSTM(10, time_major=True, "
-                       "return_sequences=True)(inputs)",
-        'module_regex': ['(.+)/while/MatMul$'],
-        'associated_op_regex': ['MatMul$']
-    },
-    'LSTM_Stacked': {
-        'input_shape': (3, 100),
-        'op_type': 'LSTM',
-        'constructor': "tf.keras.layers.LSTM(10,"
-                       "return_sequences=True)(inputs)",
-        'module_regex': ['(.+)/while/MatMul$'],
-        'associated_op_regex': ['MatMul$']
-    }
 
-}
+# ------------------------------------------------------------------------------------------ #
+# Code below is for import time generation of OpTypePattern and sub-graphs corresponding
+# to reference_op_templates.
+# These are used by SubGraphMatcher to perform module detection that helps generate an
+# intermediate representation of TF graph.
+#  -- Begin--
+# ------------------------------------------------------------------------------------------- #
 
-
-class ModuleIdentifierOpInfo:
-    """ Class for summarizing information regarding a tf operation """
-    def __init__(self, module_name, op_type, tf_op, pattern_type: str = None, internal_ops: List[tf.Operation] = None):
-        """
-        Initialize the ModuleIdentifierOpInfo class.
-
-        :param module_name: Module name associated with the module
-        :param op_type: Op type associated with the module (this will be the type shown in ConnectedGraph)
-        :param tf_op: Main op associated with the module (may be different than the op corresponding to this object
-            in the op_to_module_dict)
-        :param pattern_type: Pattern used to generate the graph that matched the op corresponding to the
-            ModuleIdentifierOpInfo object. Only used in subgraph matcher
-        :param internal_ops : List of internal tf operations associated with the module
-        """
-        self._module_name = module_name
-        self._op_type = op_type
-        self._tf_op = tf_op
-        # Pattern type is only used in subgraph matcher, and contains info about which pattern (Conv2D_keras,
-        # Conv2D_keras_with_bias, etc. was used to match the op for this op info class.
-        self._pattern_type = pattern_type
-        self._attributes = {}
-        self._internal_ops = internal_ops
-
-    @property
-    def module_name(self):
-        """ Returns the module name corresponding to this operation. """
-        return self._module_name
-
-    @module_name.setter
-    def module_name(self, module_name):
-        """ Sets the module name of an Operation. """
-        self._module_name = module_name
-
-    @property
-    def op_type(self):
-        """ Returns the op type of the module corresponding to this operation. """
-        return self._op_type
-
-    @op_type.setter
-    def op_type(self, op_type):
-        """ Sets the op type """
-        self._op_type = op_type
-
-    @property
-    def tf_op(self):
-        """ Returns the tf op for the module corresponding to this operation. """
-        return self._tf_op
-
-    @property
-    def pattern_type(self):
-        """ Returns the pattern type corresponding to this operation. """
-        return self._pattern_type
-
-    @property
-    def internal_ops(self):
-        """ Returns the internal ops for the module corresponding to this operation. """
-        return self._internal_ops
-
-    def add_attribute(self, attribute_name: str, attribute):
-        """ Set an attribute of the module identifier op info """
-        self._attributes[attribute_name] = attribute
-
-    def get_attributes(self):
-        """ Return the attributes dictionary """
-        return self._attributes
-
-
-class SubGraphMatcher:
+def store_op_type_pattern_info(subgraph: tf.Graph, additional_starting_ops: List,
+                               pattern_op_type: str, info_dict: Dict):
+    """
+    utility to dynamically create op type patterns based on template types in sub_graph_op_templates
+    and update pattern to op type dict.
+    :param subgraph: subgraph with op pattern
+    :param additional_starting_ops: Additional starting points for identifying valid ops to match with.
+    Valid ops are defined as ops which can be traversed with both a dfs any input op as well as dfs backwards from
+    any output op.Additional starting ops can be used when simply using default input and output ops gives a
+    pattern easily matched by individual ops that are not actually of the desired matched type
+    (BN_non_fused_keras_with_training_False would be matched with only a mul -> add, for example)
+    :param op_type: string name for op pattern represented by sub-graph
+    :return:
     """
 
-    The SubGraphMatcher class encapsulates the functionality associated with individual Op level subgraphs.
-    It creates OpTypePattern for those Ops in a model that have multiple associated internal Ops in the Session Graph.
-    It uses these OpTypePattern objects to detect Ops in the Session Graph. It holds the detected Ops and their
-    associated internal Ops. This association is ued when the ConnectedGraph is constructed for a model.
+    patterns = create_op_type_patterns_from_subgraph(subgraph, additional_starting_ops)
+    reference_op_pattern_info_dict[pattern_op_type] = {'pattern': patterns[-1], 'subgraph': subgraph,
+                                                       'length': len(patterns),
+                                                       'op_type': info_dict['op_type'],
+                                                       'module_regex': info_dict['module_regex'],
+                                                       'associated_op_regex': info_dict['associated_op_regex']}
+    for pattern in patterns:
+        pattern_to_op_type[pattern] = pattern_op_type
+
+
+def create_patterns_for_ops():
+    """
+    Create OpTypePattern for all the required Ops and store them in Pattern-Subgraph dictionary.
     """
 
-    def __init__(self, graph: tf.Graph, op_to_module_dict: Dict[tf.Operation, ModuleIdentifierOpInfo],
-                 valid_ops: Set[tf.Operation]):
-        """
-        Initialize the SubGraphMatcher.
+    for pattern_op_type, info_dict in op_type_templates.items():
+        input_shape = info_dict['input_shape']
+        constructor_string = info_dict['constructor']
+        additional_starting_ops = info_dict.get('additional_starting_ops', [])
+        op_type = info_dict['op_type']
+        # generate two  sub-graphs patterns for recurrent ops one with keras input and
+        # the other with placeholder type
+        subgraph_keras_input = create_subgraph_for_op_default(input_shape, constructor_string)
+        store_op_type_pattern_info(subgraph_keras_input, additional_starting_ops, pattern_op_type, info_dict)
 
-        :param graph: Session Graph associated with the model
-        :param op_to_module_dict: Dictionary mapping op to module op info, to be filled in by SubGraphMatcher
-        :param valid_ops: Ops that will be considered during module detection
-        """
-
-        self._graph = graph
-        self._valid_ops = valid_ops
-
-        # The  self._pattern_subgraph is a Dictionary of Dictionary that is applicable to all models and
-        # NOT specific to a particular model. The outer Dictionary's key is the Op Type. Examples of "Op Type" are
-        # 'Conv-2D', 'Dense" 'BN-1' and 'BN-2'. 'BN-1', 'BN-2' represent two of the multiple different variations of
-        # the BatchNormalization Op. The inner Dictionary's keys are 'pattern' and 'subgraph'. The inner Dictionary
-        # holds the OpTypePattern and the linear sequence of Op for each Op Type.
-        self._pattern_subgraph = OrderedDict()
-
-        self._pattern_to_op_type = {}
-
-        self.detect_ops_in_graph(op_to_module_dict)
-
-    # The functions below access protected members of TF classes.
-    # pylint: disable=protected-access
-
-    def detect_ops_in_graph(self, op_to_module_dict: Dict[tf.Operation, ModuleIdentifierOpInfo]):
-        """
-        Create OpTypePattern objects for individual Ops. Use the OpTypePattern objects to detect Ops in a
-        specific Session Graph. Keep the detected Ops and their associated internal Ops.
-
-        :param op_to_module_dict: Dictionary mapping op to module op info, to be filled in by SubGraphMatcher
-        """
-
-        self.create_patterns_for_ops()
-        all_op_patterns_list = [op_dict['pattern'] for op_dict in list(self._pattern_subgraph.values())]
-        for pattern in all_op_patterns_list:
-            layer_matcher = graph_matcher.GraphMatcher(pattern)
-
-            # Graph Match
-            for match_result in layer_matcher.match_graph(self._graph):
-                matched_patterns = list(match_result._pattern_to_op_tensor.keys())
-                op = match_result.get_op(matched_patterns[0])
-                # For ops like FusedBatchNorm, there are multiple output ops of the model which may be matched (Merge,
-                # Merge_1, Merge_2. In these cases, Merge is the one that should be matched because if either of the
-                # other two are matched, Merge will not make it into the op_to_module_dict.
-                if op not in self._valid_ops:
-                    continue
-                current_pattern = self._pattern_to_op_type[matched_patterns[0]]
-                if op in op_to_module_dict:
-                    # op was already matched with a different pattern previously. Compare lengths of the previous
-                    # pattern with current pattern, and replace the previous op type with the current op type if more
-                    # ops were matched.
-                    # This can happen if one pattern is a subset of another (Conv2D without bias vs Conv2D with bias for
-                    # example. If the same op is matched with both patterns, we will pick Conv2D with bias to be the one
-                    # to use.
-                    op_info = op_to_module_dict[op]
-                    if self._pattern_subgraph[op_info.pattern_type]['length'] >= \
-                            self._pattern_subgraph[current_pattern]['length']:
-                        # op was already matched with a larger pattern set
-                        continue
-
-                ops_list = [op for op in get_internal_ops_for_pattern(match_result) if op in self._valid_ops]
-                # ops_list should not be empty since there was an earlier check that the current match_result has ops
-                # in self._valid_ops.
-                if not ops_list:
-                    logger.error('Valid matched ops list should not be empty')
-                    raise AssertionError
-                # Check if any ops in ops_list were already matched with a larger pattern. If so, no need to change
-                # existing entries in op_to_module_dict.
-                if not self.is_subset_of_already_matched_op(current_pattern, ops_list, op_to_module_dict):
-                    module_name = get_module_name(subgraph_constructors[current_pattern]['module_regex'], ops_list)
-                    associated_op = get_associated_op(subgraph_constructors[current_pattern]['associated_op_regex'],
-                                                      ops_list)
-                    op_type = subgraph_constructors[current_pattern]['op_type']
-                    op_info = ModuleIdentifierOpInfo(module_name, op_type, associated_op, pattern_type=current_pattern,
-                                                     internal_ops=ops_list)
-                    for op in ops_list:
-                        op_to_module_dict[op] = op_info
-
-    # pylint: enable=protected-access
-    def create_patterns_for_ops(self):
-        """
-        Create OpTypePattern for all the required Ops and store them in Pattern-Subgraph dictionary.
-        """
-        for op_type, info_dict in subgraph_constructors.items():
-            input_shape = info_dict['input_shape']
-            constructor_string = info_dict['constructor']
-            additional_starting_ops = info_dict.get('additional_starting_ops', [])
-            subgraph = create_subgraph_for_op(input_shape, constructor_string)
-            patterns = create_op_type_patterns_from_subgraph(subgraph, additional_starting_ops)
-            self._pattern_subgraph[op_type] = {'pattern': patterns[-1], 'subgraph': subgraph, 'length': len(patterns)}
-            for pattern in patterns:
-                self._pattern_to_op_type[pattern] = op_type
-
-    def is_subset_of_already_matched_op(self, current_pattern: str, ops_list: List[tf.Operation],
-                                        op_to_module_dict: Dict[tf.Operation, ModuleIdentifierOpInfo]):
-        """
-        For each op in ops_list, check if it has already been associated with a module. If so, check if the length
-        of the pattern for the module is longer or shorter than the pattern for the currently matched type.
-        :param current_pattern: Currently matched pattern
-        :param ops_list: List of ops that are currently matched together
-        :param op_to_module_dict: Dictionary mapping previously matched ops to ModuleIdentifierOpInfo objects
-        :return: True if the currently matched ops are a subset of a previously matched set of ops.
-        """
-        for op in ops_list:
-            if op in op_to_module_dict:
-                op_info = op_to_module_dict[op]
-                if self._pattern_subgraph[op_info.pattern_type]['length'] > \
-                        self._pattern_subgraph[current_pattern]['length']:
-                    # op was already matched with a larger pattern set
-                    # Below assertion is to make sure that all ops in ops_list are op_to_module_dict already
-                    for an_op in ops_list:
-                        assert an_op in op_to_module_dict
-                    return True
-        return False
+        # we need a unique key for pattern with placeholder type input
+        # skip BNs for placeholder input types
+        if op_type not in ['FusedBatchNormV3', 'BatchNorm']:
+            pattern_op_type = pattern_op_type+'_placeholder'
+            subgraph_placeholder = create_subgraph_for_op_with_placeholder(input_shape, constructor_string,
+                                                                           op_type)
+            store_op_type_pattern_info(subgraph_placeholder, additional_starting_ops, pattern_op_type, info_dict)
 
 
 def get_module_name(module_regex_list: List[str], ops_list: List[tf.Operation]) -> str:
@@ -541,7 +170,7 @@ def get_internal_ops_for_pattern(match_result: graph_matcher.MatchResult) -> Lis
     return internal_ops_list
 
 
-def create_op_type_patterns_from_subgraph(subgraph: tf.Graph, additional_starting_ops: List[str]) ->\
+def create_op_type_patterns_from_subgraph(subgraph: tf.Graph, additional_starting_ops: List[str]) -> \
         List[graph_matcher.OpTypePattern]:
     """
     Create and return a list of TensorFlow OpTypePattern objects for the given subgraph.
@@ -614,9 +243,47 @@ def get_op_type_patterns(op_list: List[tf.Operation]) -> List[graph_matcher.OpTy
     return sub_patterns
 
 
-def create_subgraph_for_op(input_shape: tuple, op_string: str) -> tf.Graph:
+def create_subgraph_for_op_with_placeholder(input_shape: tuple, op_string: str, op_type: str) -> tf.Graph:
     """
-    Create and return the TensorFlow session graph for a single Op.
+    Create and return the TensorFlow session graph for a single Op either with placeholder input type
+    A well known input named "aimet_input" and a well known output named "aimet_identity" are used
+    along with the Op for the purposes of traversing the graph for the Op.
+    :param input_shape: Input shape to be used for the input to the Op.
+    :param op_string: The string that contains the TensorFlow syntax for the Op
+    :param op_type: string description of op type
+    :return: The subgraph for the Op.
+    """
+
+    sub_graph = tf.Graph()
+    with sub_graph.as_default():
+        with tf.device('/cpu:0'):
+            # Use inputs when the batch size can be unknown. Otherwise use constant for an input with known shape.
+            # Use is_training when the op requires a boolean tensor to be passed in to toggle training mode.
+            # pylint: disable=unused-variable
+            # convert tuple of input_shape  provided for Op into a list of shape for placeholder type
+
+            input_shape_list = list(input_shape)
+
+            # Also, if we have only one dimension input shape, we need to make it a 2D shape for placeholder input
+            # unlike other modules, below op types expect 3D shape for placeholder input
+            if len(input_shape) == 1 or op_type in ['SimpleRNN', 'LSTM', 'Upsample2D', 'GlobalMaxPool2D']:
+                input_shape_list.insert(0, 1)
+                input_shape = tuple(input_shape_list)
+                inputs = tf.compat.v1.placeholder(tf.float32, input_shape, name='aimet_input')
+            else:
+                inputs = tf.compat.v1.placeholder(tf.float32, input_shape, name='aimet_input')
+
+            constants = tf.compat.v1.placeholder(tf.float32, input_shape, name='aimet_constant')
+            is_training = tf.compat.v1.placeholder_with_default(tf.constant(True), shape=(), name='is_training')
+            x = eval(op_string)  # pylint: disable=eval-used
+            x = tf.identity(x, name='aimet_identity')
+
+    return sub_graph
+
+
+def create_subgraph_for_op_default(input_shape: tuple, op_string: str) -> tf.Graph:
+    """
+    Create and return the TensorFlow session graph for a single Op with keras or constant input types.
     A well known input named "aimet_input" and a well known output named "aimet_identity" are used
     along with the Op for the purposes of traversing the graph for the Op.
 
@@ -625,8 +292,9 @@ def create_subgraph_for_op(input_shape: tuple, op_string: str) -> tf.Graph:
     :param bn_training_flag: True of False. Applies only to BatchNormalization Ops.
     :return: The subgraph for the Op.
     """
-    sess = tf.Session(graph=tf.Graph())
-    with sess.graph.as_default():
+
+    sub_graph = tf.Graph()
+    with sub_graph.as_default():
         with tf.device('/cpu:0'):
             # Use inputs when the batch size can be unknown. Otherwise use constant for an input with known shape.
             # Use is_training when the op requires a boolean tensor to be passed in to toggle training mode.
@@ -636,10 +304,8 @@ def create_subgraph_for_op(input_shape: tuple, op_string: str) -> tf.Graph:
             is_training = tf.compat.v1.placeholder_with_default(tf.constant(True), shape=(), name='is_training')
             x = eval(op_string)  # pylint: disable=eval-used
             x = tf.identity(x, name='aimet_identity')
-        init = tf.compat.v1.global_variables_initializer()
-    sess.run(init)
 
-    return sess.graph
+    return sub_graph
 
 
 def get_op_type_patterns_for_input_ops(op: tf.Operation, op_list_index: int,
@@ -705,6 +371,73 @@ def find_input_op_index_in_list_of_op_type_patterns(op: tf.Operation, starting_i
         m = m - 1
 
 
+class ModuleIdentifierOpInfo:
+    """ Class for summarizing information regarding a tf operation """
+    def __init__(self, module_name, op_type, tf_op, pattern_type: str = None, internal_ops: List[tf.Operation] = None):
+        """
+        Initialize the ModuleIdentifierOpInfo class.
+
+        :param module_name: Module name associated with the module
+        :param op_type: Op type associated with the module (this will be the type shown in ConnectedGraph)
+        :param tf_op: Main op associated with the module (may be different than the op corresponding to this object
+            in the op_to_module_dict)
+        :param pattern_type: Pattern used to generate the graph that matched the op corresponding to the
+            ModuleIdentifierOpInfo object. Only used in subgraph matcher
+        :param internal_ops : List of internal tf operations associated with the module
+        """
+        self._module_name = module_name
+        self._op_type = op_type
+        self._tf_op = tf_op
+        # Pattern type is only used in subgraph matcher, and contains info about which pattern (Conv2D_keras,
+        # Conv2D_keras_with_bias, etc. was used to match the op for this op info class.
+        self._pattern_type = pattern_type
+        self._attributes = {}
+        self._internal_ops = internal_ops
+
+    @property
+    def module_name(self):
+        """ Returns the module name corresponding to this operation. """
+        return self._module_name
+
+    @module_name.setter
+    def module_name(self, module_name):
+        """ Sets the module name of an Operation. """
+        self._module_name = module_name
+
+    @property
+    def op_type(self):
+        """ Returns the op type of the module corresponding to this operation. """
+        return self._op_type
+
+    @op_type.setter
+    def op_type(self, op_type):
+        """ Sets the op type """
+        self._op_type = op_type
+
+    @property
+    def tf_op(self):
+        """ Returns the tf op for the module corresponding to this operation. """
+        return self._tf_op
+
+    @property
+    def pattern_type(self):
+        """ Returns the pattern type corresponding to this operation. """
+        return self._pattern_type
+
+    @property
+    def internal_ops(self):
+        """ Returns the internal ops for the module corresponding to this operation. """
+        return self._internal_ops
+
+    def add_attribute(self, attribute_name: str, attribute):
+        """ Set an attribute of the module identifier op info """
+        self._attributes[attribute_name] = attribute
+
+    def get_attributes(self):
+        """ Return the attributes dictionary """
+        return self._attributes
+
+
 def fill_batch_norm_pattern1_info(op_info: ModuleIdentifierOpInfo, op_sub_graph: List[tf.Operation]):
     """
     Fill in additional information associated with FusedBatchNorm of pattern 1.
@@ -720,3 +453,132 @@ def fill_batch_norm_pattern1_info(op_info: ModuleIdentifierOpInfo, op_sub_graph:
         if pred_id_op[0].inputs:
             training_tensor = pred_id_op[0].inputs[0]
             op_info.add_attribute('training', training_tensor.name)
+
+
+# The reference_op_pattern_info_dict is a nested Dictionary that is applicable to all models and
+# NOT specific to a particular model. The Dictionary's outer key is the Op Pattern Type identifier string
+# (derived from template dictionary keys,reference_op_templates).
+# Examples are
+# 'Conv-2D', 'Dense" 'BN-1' and 'BN-2'. 'BN-1', 'BN-2' represent two of the multiple different variations of
+# the BatchNormalization Op.
+# The values are key-value pairs of info related to pattern like required by module identifier:
+# 'pattern', 'subgraph', 'op_type', 'module_regex' so on.
+# 'pattern' is OpTypePattern and 'subgraph' is the linear sequence of Op for each Op Type.
+reference_op_pattern_info_dict = OrderedDict()
+
+# Dictionary below is used to optimize reverse look-up on matched pattern during module detection
+# maps pattern to it's op type
+pattern_to_op_type = {}
+
+# create patterns / sub-graphs for module detection corresponding to op templates types
+create_patterns_for_ops()
+
+# ---------------------------------------------------------------------------------------------------------- #
+# import time generation of TF OpTypePattern and sub-graphs used for module identification
+# -- End --
+# ---------------------------------------------------------------------------------------------------------- #
+
+
+class SubGraphMatcher:
+    """
+
+    The SubGraphMatcher class encapsulates the functionality associated with individual Op level subgraphs.
+    It creates OpTypePattern for those Ops in a model that have multiple associated internal Ops in the Session Graph.
+    It uses these OpTypePattern objects to detect Ops in the Session Graph. It holds the detected Ops and their
+    associated internal Ops. This association is ued when the ConnectedGraph is constructed for a model.
+    """
+
+    def __init__(self, graph: tf.Graph, op_to_module_dict: Dict[tf.Operation, ModuleIdentifierOpInfo],
+                 valid_ops: Set[tf.Operation]):
+        """
+        Initialize the SubGraphMatcher.
+
+        :param graph: Session Graph associated with the model
+        :param op_to_module_dict: Dictionary mapping op to module op info, to be filled in by SubGraphMatcher
+        :param valid_ops: Ops that will be considered during module detection
+        """
+
+        self._graph = graph
+        self._valid_ops = valid_ops
+        self.detect_ops_in_graph(op_to_module_dict)
+
+    # The functions below access protected members of TF classes.
+    # pylint: disable=protected-access
+    def detect_ops_in_graph(self, op_to_module_dict: Dict[tf.Operation, ModuleIdentifierOpInfo]):
+        """
+        Use the OpTypePattern objects to detect Ops in a
+        specific Session Graph. Keep the detected Ops and their associated internal Ops.
+
+        :param op_to_module_dict: Dictionary mapping op to module op info, to be filled in by SubGraphMatcher
+        """
+
+        all_op_patterns_list = [op_dict['pattern'] for op_dict in list(reference_op_pattern_info_dict.values())]
+        for pattern in all_op_patterns_list:
+            layer_matcher = graph_matcher.GraphMatcher(pattern)
+
+            # Graph Match
+            for match_result in layer_matcher.match_graph(self._graph):
+                matched_patterns = list(match_result._pattern_to_op_tensor.keys())
+                op = match_result.get_op(matched_patterns[0])
+                # For ops like FusedBatchNorm, there are multiple output ops of the model which may be matched (Merge,
+                # Merge_1, Merge_2. In these cases, Merge is the one that should be matched because if either of the
+                # other two are matched, Merge will not make it into the op_to_module_dict.
+                if op not in self._valid_ops:
+                    continue
+                template_pattern_type = pattern_to_op_type[matched_patterns[0]]
+                if op in op_to_module_dict:
+                    # op was already matched with a different pattern previously. Compare lengths of the previous
+                    # pattern with current pattern, and replace the previous op type with the current op type if more
+                    # ops were matched.
+                    # This can happen if one pattern is a subset of another (Conv2D without bias vs Conv2D with bias for
+                    # example. If the same op is matched with both patterns, we will pick Conv2D with bias to be the one
+                    # to use.
+                    op_info = op_to_module_dict[op]
+                    if reference_op_pattern_info_dict[op_info.pattern_type]['length'] >= \
+                            reference_op_pattern_info_dict[template_pattern_type]['length']:
+                        # op was already matched with a larger pattern set
+                        continue
+
+                ops_list = [op for op in get_internal_ops_for_pattern(match_result) if op in self._valid_ops]
+                # ops_list should not be empty since there was an earlier check that the current match_result has ops
+                # in self._valid_ops.
+                if not ops_list:
+                    logger.error('Valid matched ops list should not be empty')
+                    raise AssertionError
+                # Check if any ops in ops_list were already matched with a larger pattern. If so, no need to change
+                # existing entries in op_to_module_dict.
+                if not SubGraphMatcher._is_subset_of_already_matched_op(template_pattern_type, ops_list,
+                                                                        op_to_module_dict):
+                    op_type = reference_op_pattern_info_dict[template_pattern_type]['op_type']
+                    module_name = get_module_name(reference_op_pattern_info_dict[template_pattern_type]['module_regex'],
+                                                  ops_list)
+                    associated_op = get_associated_op(reference_op_pattern_info_dict[template_pattern_type]
+                                                      ['associated_op_regex'], ops_list)
+                    op_info = ModuleIdentifierOpInfo(module_name, op_type, associated_op,
+                                                     pattern_type=template_pattern_type,
+                                                     internal_ops=ops_list)
+                    for op in ops_list:
+                        op_to_module_dict[op] = op_info
+
+    @staticmethod
+    def _is_subset_of_already_matched_op(current_pattern: str, ops_list: List[tf.Operation],
+                                         op_to_module_dict: Dict[tf.Operation, ModuleIdentifierOpInfo]):
+        """
+        For each op in ops_list, check if it has already been associated with a module. If so, check if the length
+        of the pattern for the module is longer or shorter than the pattern for the currently matched type.
+        :param current_pattern: Currently matched pattern
+        :param ops_list: List of ops that are currently matched together
+        :param op_to_module_dict: Dictionary mapping previously matched ops to ModuleIdentifierOpInfo objects
+        :return: True if the currently matched ops are a subset of a previously matched set of ops.
+        """
+        for op in ops_list:
+            if op in op_to_module_dict:
+                op_info = op_to_module_dict[op]
+                if reference_op_pattern_info_dict[op_info.pattern_type]['length'] > \
+                        reference_op_pattern_info_dict[current_pattern]['length']:
+                    # op was already matched with a larger pattern set
+                    # Below assertion is to make sure that all ops in ops_list are op_to_module_dict already
+                    for an_op in ops_list:
+                        assert an_op in op_to_module_dict
+                    return True
+        return False

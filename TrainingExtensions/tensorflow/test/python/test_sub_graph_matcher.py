@@ -43,8 +43,9 @@ import tensorflow as tf
 from tensorflow_core.contrib.quantize.python import graph_matcher
 
 from aimet_common.utils import AimetLogger
-from aimet_tensorflow.common.sub_graph_matcher import create_subgraph_for_op, create_op_type_patterns_from_subgraph, \
-    subgraph_constructors
+from aimet_tensorflow.common.sub_graph_matcher_op_templates import op_type_templates
+from aimet_tensorflow.common.sub_graph_matcher import create_subgraph_for_op_default,\
+    create_op_type_patterns_from_subgraph
 from aimet_tensorflow.examples.test_models import keras_model_functional
 
 
@@ -52,6 +53,8 @@ logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Test)
 AimetLogger.set_area_logger_level(AimetLogger.LogAreas.Test, logging.DEBUG)
 AimetLogger.set_area_logger_level(AimetLogger.LogAreas.ConnectedGraph, logging.DEBUG)
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
+
+subgraph_constructors = op_type_templates
 
 
 class TestSubGraph(unittest.TestCase):
@@ -62,9 +65,9 @@ class TestSubGraph(unittest.TestCase):
 
         input_shape = subgraph_constructors['Conv2D']['input_shape']
         constructor_string = subgraph_constructors['Conv2D']['constructor']
-        conv_subgraph = create_subgraph_for_op(input_shape, constructor_string)
+        conv_subgraph = create_subgraph_for_op_default(input_shape, constructor_string)
 
-        logger.debug("The OPs created by create_subgraph_for_op()")
+        logger.debug("The OPs created by create_subgraph_for_op_default()")
         for op in conv_subgraph.get_operations():
             logger.debug("OP: %s", op.name)
 
@@ -82,9 +85,9 @@ class TestSubGraph(unittest.TestCase):
 
         input_shape = subgraph_constructors['Conv2D_with_bias']['input_shape']
         constructor_string = subgraph_constructors['Conv2D_with_bias']['constructor']
-        conv_subgraph = create_subgraph_for_op(input_shape, constructor_string)
+        conv_subgraph = create_subgraph_for_op_default(input_shape, constructor_string)
 
-        logger.debug("The OPs created by create_subgraph_for_op()")
+        logger.debug("The OPs created by create_subgraph_for_op_default()")
         for op in conv_subgraph.get_operations():
             logger.debug("OP: %s", op.name)
 
@@ -102,9 +105,9 @@ class TestSubGraph(unittest.TestCase):
 
         input_shape = subgraph_constructors['BN_keras_with_training_tensor']['input_shape']
         constructor_string = subgraph_constructors['BN_keras_with_training_tensor']['constructor']
-        bn_subgraph = create_subgraph_for_op(input_shape, constructor_string)
+        bn_subgraph = create_subgraph_for_op_default(input_shape, constructor_string)
 
-        logger.debug("Step: I The OPs created by create_subgraph_for_op()")
+        logger.debug("Step: I The OPs created by create_subgraph_for_op_default()")
         for op in bn_subgraph.get_operations():
             logger.debug("OP 1: %s", op.name)
 
@@ -122,9 +125,9 @@ class TestSubGraph(unittest.TestCase):
 
         input_shape = subgraph_constructors['BN_keras_with_training_False']['input_shape']
         constructor_string = subgraph_constructors['BN_keras_with_training_False']['constructor']
-        bn_subgraph = create_subgraph_for_op(input_shape, constructor_string)
+        bn_subgraph = create_subgraph_for_op_default(input_shape, constructor_string)
 
-        logger.debug("Step: I The OPs created by create_subgraph_for_op()")
+        logger.debug("Step: I The OPs created by create_subgraph_for_op_default()")
         for op in bn_subgraph.get_operations():
             logger.debug("OP 1: %s", op.name)
 
@@ -142,7 +145,7 @@ class TestSubGraph(unittest.TestCase):
 
         input_shape = subgraph_constructors['Dense']['input_shape']
         constructor_string = subgraph_constructors['Dense']['constructor']
-        dense_subgraph = create_subgraph_for_op(input_shape, constructor_string)
+        dense_subgraph = create_subgraph_for_op_default(input_shape, constructor_string)
 
         logger.debug("Step: I The OPs created by create_subgraph_for Dense Op()")
         for op in dense_subgraph.get_operations():
@@ -167,7 +170,7 @@ class TestSubGraph(unittest.TestCase):
             input_shape = subgraph_constructor['input_shape']
             constructor_string = subgraph_constructor['constructor']
             logger.debug(pattern_name)
-            subgraph = create_subgraph_for_op(input_shape, constructor_string)
+            subgraph = create_subgraph_for_op_default(input_shape, constructor_string)
             patterns = create_op_type_patterns_from_subgraph(subgraph, additional_starting_ops=[])
             patterns_to_match.append(patterns[-1])
             op_to_pattern_dict[pattern_name] = patterns[-1]
