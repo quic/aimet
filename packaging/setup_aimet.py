@@ -34,36 +34,24 @@
 #  @@-COPYRIGHT-END-@@
 #==============================================================================
 
-from setuptools import setup
+""" Package generation file for top-level aimet package """
 
-# List of pre-requisite PyPi packages
-# TODO: This list is not used at present due to installation issues in non-virtual environments
-# It needs to fixed later
-prereq_pypi_packages = [
-    'numpy==1.16.4',
-    'protobuf==3.7.1',
-    'pytest==4.6.5',
-    'scikit-learn==0.19.1',
-    'tensorboardX==1.7',
-    'tensorflow-gpu==1.15.0',
-    'tensorboard==1.14'
-    'https://download.pytorch.org/whl/cu100/torchvision-0.5.0%2Bcu100-cp36-cp36m-linux_x86_64.whl',
-    'https://download.pytorch.org/whl/cu100/torch-1.4.0%2Bcu100-cp36-cp36m-linux_x86_64.whl',
-]
+from setuptools import setup
+import setup_cfg # pylint: disable=import-error
 
 setup(
     name='Aimet',
-    version='1.12.0.0.107.0',
+    version=str(setup_cfg.version),
     author='Qualcomm Innovation Center, Inc.',
     author_email='',
-    url='',
+    url=setup_cfg.remote_url + '/Aimet',
     license='NOTICE.txt',
     description='AIMET',
     long_description=open('README.txt').read(),
-    # TODO: The non-crd-artifactory dependency URLs below are not used yet due to issues.
-    dependency_links=["$PYPI_ENDPOINT_URL$/AimetTorch/1.12.0.0.107.0"],
-    install_requires=['AimetTorch==1.12.0.0.107.0'],
+    dependency_links=[setup_cfg.remote_url + "/releases/download/"+str(setup_cfg.version)+"/AimetTorch/" + str(setup_cfg.version) + "/", 
+    setup_cfg.remote_url + "/releases/download/"+str(setup_cfg.version)+"/AimetTensorflow/" + str(setup_cfg.version) + "/"],
+    install_requires=["AimetTorch==" + str(setup_cfg.version), "AimetTensorflow==" + str(setup_cfg.version)],
     zip_safe=True,
-    platforms='any',
-    python_requires='>=2.7,!=3.0.*,!=3.1.*,!=3.2.*,!=3.3.*',
+    platforms='x86',
+    python_requires='>=3.6',
 )

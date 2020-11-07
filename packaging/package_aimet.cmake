@@ -41,6 +41,7 @@ cmake_minimum_required(VERSION 3.5)
 configure_file("${SOURCE_DIR}/packaging/NOTICE.txt" "${CMAKE_BINARY_DIR}/packaging/NOTICE.txt" COPYONLY)
 configure_file("${SOURCE_DIR}/packaging/README.txt" "${CMAKE_BINARY_DIR}/packaging/README.txt" COPYONLY)
 configure_file("${SOURCE_DIR}/packaging/INSTALL.txt" "${CMAKE_BINARY_DIR}/packaging/INSTALL.txt" COPYONLY)
+configure_file("${SOURCE_DIR}/packaging/setup_cfg.py" "${CMAKE_BINARY_DIR}/packaging/setup_cfg.py" COPYONLY)
 
 set(package_name_list aimet aimet_common aimet_torch aimet_tensorflow)
 

@@ -109,6 +109,22 @@ set_target_properties(TensorFlow PROPERTIES
         "${TENSORFLOW_INCLUDES}"
       )
 
+# -------------------------------
+# Generate pip packages
+# -------------------------------
+execute_process(COMMAND git config --get remote.origin.url  OUTPUT_VARIABLE remote_url)
+message(STATUS "remote_url ${remote_url}")
+string(REGEX REPLACE "\n$" "" remote_url "${remote_url}")
+
+set(remote_url_cfg  "\"${remote_url}\"")
+
+file(WRITE "${CMAKE_CURRENT_SOURCE_DIR}/packaging/setup_cfg.py" "version=${SW_VERSION}\n")
+file(APPEND "${CMAKE_CURRENT_SOURCE_DIR}/packaging/setup_cfg.py" "remote_url=${remote_url_cfg}")
+
+add_custom_target(packageaimet
+    COMMAND ${CMAKE_COMMAND} -DAIMET_PACKAGE_PATH=${AIMET_PACKAGE_PATH} -DSOURCE_DIR=${CMAKE_CURRENT_SOURCE_DIR} -P ${CMAKE_CURRENT_SOURCE_DIR}/packaging/package_aimet.cmake
+)
+
 
 enable_testing()
 

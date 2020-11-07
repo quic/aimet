@@ -34,25 +34,28 @@
 #  @@-COPYRIGHT-END-@@
 #==============================================================================
 
+""" Package generation file for aimet torch package """
+
 from setuptools import setup, find_packages, find_namespace_packages
+import setup_cfg # pylint: disable=import-error
 
 packages_found = find_packages() + find_namespace_packages(exclude=['*bin', 'pyenv3*', 'build', 'dist', '*bin', '*x86*'])
 
 setup(
     name='AimetTorch',
-    version='1.12.0.0.107.0',
+    version=str(setup_cfg.version),
     author='Qualcomm Innovation Center, Inc.',
     author_email='',
     packages=packages_found,
-    url='',
+    url=setup_cfg.remote_url + '/AimetTorch',
     license='NOTICE.txt',
     description='AIMET',
     long_description=open('README.txt').read(),
     package_data={'aimet_torch':['acceptance_tests/*.*']},
-    dependency_links=["$PYPI_ENDPOINT_URL$/AimetCommon/1.12.0.0.107.0/"],
-    install_requires=["AimetCommon==1.12.0.0.107.0"],
+    dependency_links=[setup_cfg.remote_url + "/releases/download/"+str(setup_cfg.version)+"/AimetCommon/" + str(setup_cfg.version) + "/"],
+    install_requires=["AimetCommon==" + str(setup_cfg.version)],
     include_package_data=True,
     zip_safe=True,
-    platforms='any',
-    python_requires='>=2.7,!=3.0.*,!=3.1.*,!=3.2.*,!=3.3.*',
+    platforms='x86',
+    python_requires='>=3.6',
 )
