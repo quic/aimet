@@ -296,7 +296,6 @@ class TestQuantizationSim(unittest.TestCase):
         self.verify_quantization_wrappers(model, sim.model)
 
     # ------------------------------------------------------
-    @unittest.skip
     def test_add_quantization_wrappers_with_preexisting_quantization_layers(self):
         """With a one-deep model"""
         class Net(nn.Module):
