@@ -45,19 +45,37 @@ operations represent a module or a function that generates a tensor, while produ
 the tensors that are either input to the model (input, constant or parameter) or the
 result of an operation. Furthermore the graph representation is bi-directional."""
 
-import re
 from typing import Tuple, Union, List, Dict
 import torch
 
-from aimet_common.connected_graph.connectedgraph import ConnectedGraph as AimetCommonConnectedGraph, get_ordered_ops
+from aimet_common.connected_graph.connectedgraph import ConnectedGraph as AimetCommonConnectedGraph
 from aimet_common.connected_graph.product import Product
 from aimet_common.connected_graph.operation import Op, determine_preceding_op_input_product_index_in_multi_input_op
 from aimet_common.model_module import PytorchModelModule
-from aimet_common.utils import AimetLogger, ModelApi, api_channel_index_dict
+from aimet_common.utils import AimetLogger
 from aimet_torch.utils import is_leaf_module, run_hook_for_layers_with_given_input
 from aimet_torch.defs import PassThroughOp
 
 logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Winnow)
+
+
+# pylint: disable=too-many-lines
+# pylint: disable=protected-access
+class IRNode:
+    """
+    Representation for a module in torch graph.
+    """
+    def __init__(self, node_type, inputs, outputs, module):
+        self.node_type = node_type
+        self.inputs = inputs
+        self.outputs = outputs
+        self.module = module
+
+    def __str__(self):
+        return self.node_type
+
+
+ConnectionsToIRDictType = Dict[torch._C.TensorType, List[Union[IRNode, List[IRNode]]]]
 
 
 class ConnectedGraph(AimetCommonConnectedGraph):
@@ -78,17 +96,7 @@ class ConnectedGraph(AimetCommonConnectedGraph):
         self._name_to_module = {}
         # Maps pytorch modules to module names
         self._module_to_name = {}
-        # Maps pytorch modules to connected graph ops
-        self._module_to_op_dict = {}
 
-        # Parameters dict to hold parameters identified from trace code, to be made into Products
-        # Maps parameter name as found in trace code to tuple of (corresponding module, parameter type, parameter shape)
-        self._parameters = {}
-
-        # Ops dict to map names of ops as found in trace code to corresponding Ops that are created
-        self._named_ops = {}
-
-        self._op_count = 0
         self._split_count = 0  # Use it in the name of split Ops getting added to the connected graph.
 
         # List of ops in the order they are traversed using the forward function
@@ -97,6 +105,8 @@ class ConnectedGraph(AimetCommonConnectedGraph):
         self._generate_module_lookup_table(model)
         self._construct_graph(model, model_input)
         self._validate_op_modules()
+        # Maps pytorch modules to connected graph ops
+        self._module_to_op_dict = _create_module_to_op_dict(self.ordered_ops)
 
     # Map torch module types to normalized names to provide backward compatibility to
     # trace code based construction
@@ -136,14 +146,17 @@ class ConnectedGraph(AimetCommonConnectedGraph):
         'Split'
     }
 
-    # Graph nodes for which which we will completely ignore and skip processing
-    ignore_graph_nodes = [
-        "prim::Constant",
-        "prim::ListConstruct",
-        "aten::Int",
-        "aten::t",
-        "aten::to",
-        "aten::detach"
+    # Graph nodes for which which we will treat as passthrough and not represent with an Op
+    passthrough_graph_nodes = [
+        "Int",       # aten::Int
+        "t",         # aten::t
+        "to",        # aten::to
+        "detach",    # aten::detach
+    ]
+
+    # Input graph nodes to ignore
+    input_graph_nodes_to_ignore = [
+        "Constant",     # prim::Constant
     ]
 
     def __del__(self):
@@ -192,10 +205,13 @@ class ConnectedGraph(AimetCommonConnectedGraph):
 
     @staticmethod
     def _generate_module_tensors_lookup_table(model: torch.nn.Module, model_input: Tuple[torch.Tensor]) -> \
-            Dict[str, Tuple[Tuple[torch.Tensor]]]:
+            Dict[torch.nn.Module,
+                 Tuple[Union[torch.Tensor, Tuple[torch.Tensor]],
+                       Union[torch.Tensor, Tuple[torch.Tensor]]]]:
         """
         Generates a look up dictionary for getting modules from their names.
         :param model: Pytorch model
+        :param model_input: Input to run through forward pass
         :return: Map of modules and input and output tensor obtained from a forward pass
         """
         module_tensor_tuples_map = {}
@@ -224,8 +240,15 @@ class ConnectedGraph(AimetCommonConnectedGraph):
         """
         module_tensor_tuples_map = ConnectedGraph._generate_module_tensors_lookup_table(model, model_input)
         trace = torch.jit.trace(model, model_input)
-        _ = self._parse_trace_graph(trace, model, model_input, module_tensor_tuples_map)
-        self._remove_tuple_ops()
+        ir_nodes_list = []
+        output_map = {}
+        _ = self._parse_trace_graph(trace, model, ir_nodes_list=ir_nodes_list, output_map=output_map)
+        self._construct_ops_and_products(ir_nodes_list,
+                                         module_tensor_tuples_map,
+                                         self.passthrough_graph_nodes,
+                                         self.input_graph_nodes_to_ignore,
+                                         output_map)
+
         # Create parameters for ops such as conv, batchnorm, etc.
         self._fill_op_params()
 
@@ -234,120 +257,68 @@ class ConnectedGraph(AimetCommonConnectedGraph):
         for op in ops_list:
             self._determine_split_behavior_for_op_and_insert_split_op_in_connected_graph(op)
 
-        self._fill_empty_shapes()
-
-    def _parse_trace_graph(self, trace: Union[torch.jit.TopLevelTracedModule, torch.jit.TracedModule],
-                           model: torch.nn.Module, model_input: Union[Tuple[torch.Tensor], List[Union[Op, Product]]],
-                           module_tensor_tuples_map: Dict[str, Tuple[Tuple[torch.Tensor]]]) -> Op:
-        # pylint: disable=protected-access
+    def _parse_trace_graph(self,
+                           trace: Union[torch.jit.TopLevelTracedModule, torch.jit.TracedModule],
+                           model: torch.nn.Module,
+                           ir_nodes_list: List[IRNode],
+                           output_map: Dict[torch._C.TensorType, torch._C.TensorType],
+                           higher_level_inputs: Union[List, None] = None,
+                           inputs_map: Union[Dict, None] = None) -> IRNode:
         """
-        Implements a depth-first graph extraction to create an equivalent connected graph representation
-        with Ops and Products. depth-first extraction is realized using recursion.
+        Implements a depth-first graph extraction to obtain connectivity information in the form of an IRNodes list.
+        Depth-first extraction is realized using recursion.
 
         :param trace: Pytorch JIT trace for model or a submodule
         :param model: Pytorch model to create connected graph from
-        :param model_input: Example input to model.  Can be a single tensor or a list/tuple of input tensors
-        :param module_tensor_tuples_map: Map of modules and input and output tensor obtained from a forward pass
+        :param ir_nodes_list: List of IRNodes created from traversing the trace graph
+        :param output_map: Dictionary mapping high recursion level outputs to lower level equivalent outputs
+        :param higher_level_inputs: Corresponding inputs from a higher graph level
+        :param inputs_map: Dictionary mapping low recursion level inputs to higher level equivalent inputs
         :return: the last created Op in the model or submodule
         """
-
-        # graph node equivalent Ops or Products locally constructed or populated via recursive invocation
-        # initialized with input products
-        model_debug_name, ops = self._create_input_products(model_input, trace.graph)
-
         if is_leaf_module(model):
-            return self._parse_single_module_model(model, module_tensor_tuples_map, ops, trace.graph)
+            return self._parse_single_module_model(model, trace.graph, ir_nodes_list)
+        if inputs_map is None:
+            inputs_map = {}
+        curr_inputs = [inp for inp in trace.graph.inputs()]
+        if higher_level_inputs is not None:
+            _update_inputs_map(curr_inputs, higher_level_inputs, inputs_map)
 
         # A map of sub-graph models and node name that requires recursive parsing
         node_name_to_subgraph_model = {}
         # modules that are being referenced within the sub-graph
-        node_name_to_module = {model_debug_name: model}
+        node_name_to_module = {curr_inputs[0].debugName(): model}
         for node in trace.graph.nodes():
+            outputs = [output for output in node.outputs()]
 
-            if 'prim::TupleUnpack' in node.kind():
-                # 'TupleUnpack' node generates multiple 'named' output tensor which is referenced in the current
-                # sub-graph and is currently the only known way a multi-output op manifests in PyTorch model.
-                #
-                #  A TupleUnpack node has the following construct:
-                #       %X : nn.Module = prim::GetAttr[...]
-                #       %Y : (Tensor, Tensor) = prim::CallMethod[name="forward"](%X, ...)
-                #       %Z.1 : Tensor, %Z.2 : Tensor = prim::TupleUnpack(%Y)
-                #
-                # the current workaround is to introduce a TupleUnpack 'functional' op per output tensor
-                # i.e. %Z.1 and %Z.2 as consumer for the module referenced in %Y( & %Z) above.
-                # when support is added for multiple output Op and Product tracking of consumer and producer w/ indexed
-                # output tensor then %Z.* will be subsumed into handling of %Y.
-                self._create_tuple_ops(node, module_tensor_tuples_map, node_name_to_module, ops)
+            # retrieving a module reference
+            if 'GetAttr' in node.kind():
+                # For GetAttr lines, the output name will be referring to the module, and not the module's output(s)
+                assert len(outputs) == 1
+                node_name = outputs[0].debugName()
+                subgraph_model = ConnectedGraph._get_module_instance(node, node_name_to_module)
+                if node_name not in node_name_to_module:
+                    node_name_to_module[node_name] = subgraph_model
+                else:
+                    raise ValueError("duplicate model for {0} -> {1} and {2}".format(
+                        node_name, node_name_to_module[node_name], subgraph_model))
+                if not is_leaf_module(subgraph_model):
+                    node_name_to_subgraph_model[node_name] = subgraph_model
+
+            # invoking forward method
+            elif 'CallMethod' in node.kind():
+                self.parse_callmethod_node(node, model, trace, node_name_to_module, node_name_to_subgraph_model,
+                                           ir_nodes_list, inputs_map, output_map)
+
+            # functional operations e.g. cat, size etc
             else:
-                if node.outputsSize() != 1:
-                    logger.error("multiple output Ops are not supported %s", str(node))
-                    raise NotImplementedError
-
-                output_name: str = node.output().debugName()
-
-                # retrieving a module reference
-                if 'GetAttr' in node.kind():
-                    subgraph_model = ConnectedGraph._get_module_instance(node, node_name_to_module)
-                    if output_name not in node_name_to_module:
-                        node_name_to_module[output_name] = subgraph_model
-                    else:
-                        raise ValueError("duplicate model for {0} -> {1} and {2}".format(
-                            output_name, node_name_to_module[output_name], subgraph_model))
-                    if not is_leaf_module(subgraph_model):
-                        node_name_to_subgraph_model[output_name] = subgraph_model
-
-                # invoking forward method
-                elif 'CallMethod' in node.kind():
-                    self.parse_callmethod_node(node, model, trace, module_tensor_tuples_map,
-                                               node_name_to_module, ops, node_name_to_subgraph_model)
-
-                # functional operations e.g. cat, size etc
-                elif node.kind() not in self.ignore_graph_nodes:
-                    ops[output_name] = self._create_functional_op(node, ops)
+                ir_nodes_list.append(_create_functional_ir_node(node, inputs_map))
 
         # return the last op enqueued in the sub-graph forward pass
-        return self.ordered_ops[-1]
-
-    def _create_tuple_ops(self, node: torch._C.Node,
-                          module_tensor_tuples_map: Dict[str, Tuple[Tuple[torch.Tensor]]],
-                          node_name_to_module: Dict[str, torch.nn.Module],
-                          ops: Dict[str, Union[Op, Product]]):
-        # pylint: disable=protected-access
-        """
-        parses a 'TupleUnpack' node and generates multiple TupleUnpack functional ops to account for each output tensor
-        :param node: trace graph node representing the i.e. 'TupleUnpack' node
-        :param module_tensor_tuples_map: Map of modules and input and output tensor obtained from a forward pass
-        :param node_name_to_module: dictionary of module indexed by output_name referenced in the sub-graph
-        :param ops: dictionary of Ops and Products indexed by output names referenced in the graph
-        """
-
-        # Traverse the graph back to the module get instance
-        node_name = next(node.input().node().inputs()).debugName()
-        _, output_tensor_tuple = module_tensor_tuples_map[node_name_to_module[node_name]]
-
-        # flatten the output tensors which may contain tuple of tuple to a list
-        output_tensors = []
-        for output_tensor in output_tensor_tuple:
-            if isinstance(output_tensor, torch.Tensor):
-                output_tensors.append(output_tensor)
-            else:
-                output_tensors.extend(list(output_tensor))
-
-        for i, output in enumerate(node.outputs()):
-            inputs = self._resolve_input_nodes(node)
-
-            op = self._create_op_and_products(ConnectedGraph._parse_op_type(node), inputs, ops)
-
-            # first input tensor is assumed to define the shape of the input tensor(s)
-            inp_op = ops[inputs[0].debugName()]
-            _fill_and_check_op_product_shapes(op,
-                                              inp_op.shape if isinstance(inp_op, Product) else inp_op.output_shape,
-                                              list(output_tensors[i].shape))
-            ops[output.debugName()] = op
+        return ir_nodes_list[-1]
 
     @staticmethod
     def _parse_op_type(node: torch._C.Node) -> str:
-        # pylint: disable=protected-access
         """
         Helper method to extract op type from node info
         :param node: trace graph node
@@ -357,52 +328,35 @@ class ConnectedGraph(AimetCommonConnectedGraph):
         op_type = node.kind().split("::")[-1].lstrip('_').rstrip('_')
         return op_type
 
-    def _parse_single_module_model(self, module: torch.nn.Module,
-                                   module_tensor_tuples_map: Dict[str, Tuple[Tuple[torch.Tensor]]],
-                                   ops: Dict[str, Union[Op, Product]],
-                                   graph: torch._C.Graph) -> Op:
-        # pylint: disable=protected-access
-        """
-        Creates a fully populated Op and along with associated products representing inputs for the model
-        :param module:  Pytorch model composed on single module
-        :param module_tensor_tuples_map: Map of modules and input and output tensor obtained from a forward pass
-        :param ops: dictionary of Ops and Products indexed by output names referenced in the graph
-        :param graph: trace graph representing the model
-        :return: Ops
-        """
-        inputs = []
-        for inp in graph.inputs():
-            inputs.append(inp)
-        return self._create_leaf_module_op(module, inputs, ops, module_tensor_tuples_map)
-
+    # pylint: disable=too-many-arguments
     def parse_callmethod_node(self, node: torch._C.Node,
                               model: torch.nn.Module,
                               trace: Union[torch.jit.TopLevelTracedModule, torch.jit.TracedModule],
-                              module_tensor_tuples_map: Dict[str, Tuple[Tuple[torch.Tensor]]],
                               node_name_to_module: Dict[str, torch.nn.Module],
-                              ops: Dict[str, Union[Op, Product]],
-                              node_name_to_subgraph_model: Dict[str, torch._C.Node]):
-        # pylint: disable=protected-access
+                              node_name_to_subgraph_model: Dict[str, torch._C.Node],
+                              ir_nodes_list: List[IRNode],
+                              inputs_map: Dict[torch._C.TensorType, torch._C.TensorType],
+                              output_map: Dict[torch._C.TensorType, torch._C.TensorType]):
         # pylint: disable=too-many-locals
         """
-        The call method node signifies invocation of the forward method, this method extracts an Op representation of
-        the module or alist of Ops in case of module representing a sub-graph. Typically the node has the following construct:
+        The call method node signifies invocation of the forward method, this method extracts an IRNode representation
+        of the module. Typically the node has the following construct:
             %output_N : Tensor = prim::CallMethod[name="forward"](%output_L, %output_M)
         :param node: trace graph node i.e. 'CallMethod' node
         :param model: Pytorch model to create connected graph from
         :param trace: trace of model or submodule
-        :param module_tensor_tuples_map: Map of modules and input and output tensor obtained from a forward pass
         :param node_name_to_module: dictionary of module indexed by output_name referenced in the sub-graph
-        :param ops: dictionary of Ops and Products indexed by output names referenced in the graph
-        :param node_name_to_subgraph_model: dictionary of torch graph nodes index of output_name that have not been resolved.
+        :param node_name_to_subgraph_model: dictionary of torch graph nodes index of output_name that have not been
+            resolved
+        :param ir_nodes_list: List of IRNodes created from traversing the trace graph
+        :param inputs_map: Dictionary mapping low recursion level inputs to higher level equivalent inputs
+        :param output_map: Dictionary mapping high recursion level outputs to lower level equivalent outputs
         """
-        output_name: str = node.output().debugName()
-        inputs = self._resolve_input_nodes(node)
+        inputs = [inp for inp in node.inputs()]
         # 1st input is a reference on which the call method is being invoked.
         input_name: str = inputs[0].debugName()
+        outputs = [output for output in node.outputs()]
         if input_name in node_name_to_subgraph_model:
-            input_ops = [ops[i.debugName()] for i in inputs[1:]]
-
             subgraph_model = node_name_to_subgraph_model[input_name]
             # The trace and subgraph_model might not be at the same depth depending on the number of indirection
             # used in the form of ModuleList or Sequential,
@@ -413,50 +367,55 @@ class ConnectedGraph(AimetCommonConnectedGraph):
                 subgraph_trace = getattr(subgraph_trace, level)
 
             # the op returned on parsing the sub-graph shall be last op in the sub-graph forward pass
-            ops[output_name] = self._parse_trace_graph(subgraph_trace, subgraph_model, input_ops,
-                                                       module_tensor_tuples_map)
-        if input_name in node_name_to_module and is_leaf_module(node_name_to_module[input_name]):
+            ir_node = self._parse_trace_graph(subgraph_trace, subgraph_model, ir_nodes_list, higher_level_inputs=inputs[1:],
+                                              inputs_map=inputs_map, output_map=output_map)
+            # Current node is a subgraph. The returned op should have been added to ir_nodes_list when
+            # it was created in a lower recursion level. The outputs identified for the op at that time should be the
+            # same as the outputs of this node. Replace the output names from the lower level with the output names from
+            # this level.
+            assert ir_node == ir_nodes_list[-1]
+            assert len(ir_nodes_list[-1].outputs) == len(outputs)
+            for idx, output in enumerate(outputs):
+                if ir_nodes_list[-1].outputs[idx] in output_map:
+                    output_map[output] = output_map[ir_nodes_list[-1].outputs[idx]]
+                else:
+                    output_map[output] = ir_nodes_list[-1].outputs[idx]
+            ir_nodes_list[-1].outputs = outputs
+
+        elif input_name in node_name_to_module and is_leaf_module(node_name_to_module[input_name]):
             # the graph is fully represented by a directional graph of leaf torch modules so the recursion is
             # stopped at this level. PassThroughOp are being ignored because in graph node representation
             # the passthrough op generate no output and are not part of inputs for downstream op
             if not isinstance(node_name_to_module[input_name], PassThroughOp):
-                ops[output_name] = self._create_leaf_module_op(node_name_to_module[input_name],
-                                                               inputs, ops, module_tensor_tuples_map)
+                op_type = self._get_op_type(node_name_to_module[input_name])
+                node_inputs = [inp for inp in node.inputs()]
+                ir_node = IRNode(node_type=op_type,
+                                 inputs=[inputs_map.get(inp, inp) for inp in node_inputs[1:]],
+                                 outputs=outputs,
+                                 module=node_name_to_module[input_name])
+                ir_nodes_list.append(ir_node)
 
-    def _create_input_products(self, model_input: Tuple[torch.Tensor], graph: torch._C.Graph) -> \
-            Tuple[str, Dict[str, Union[Op, Product]]]:
-        # pylint: disable=protected-access
+    def _parse_single_module_model(self, module: torch.nn.Module,
+                                   graph: torch._C.Graph,
+                                   ir_nodes_list: List[IRNode]) -> IRNode:
         """
-        Creates a dictionary of input products index by input name referenced in the sub-graph
-        :param model_input: Example input to model.  Can be a single tensor or a list/tuple of input tensors
-        :param graph: trace graph representing the model or sub-set of the model
-        :return: model input name , dictionary of input products
+        Create a node for the single module model.
+        :param module:  Pytorch model composed on single module
+        :param graph: trace graph representing the model
+        :param ir_nodes_list: List of IRNodes created from traversing the trace graph
+        :return: Node created for the module
         """
-        products = {}
-        model_debug_name = None
-        for input_index, inp in enumerate(graph.inputs()):
-            input_name: str = inp.debugName()
-            if input_index == 0:
-                model_debug_name = input_name
-            else:
-                inp_op = model_input[input_index - 1]
-                if isinstance(inp_op, torch.Tensor):
-                    shape = list(inp_op.shape)
-                    self._parameters[input_name] = (None, 'input', shape)
-                    product = Product(input_name, shape)
-                    product.is_model_input = True
-                    self._products[product.name] = product
-                    products[input_name] = product
-                elif isinstance(inp_op, tuple([Product, Op])):
-                    products[input_name] = inp_op
-                else:
-                    logger.warning("ignoring input %s of unknown type %s", str(inp_op), type(inp_op))
-        assert model_debug_name is not None
-        return model_debug_name, products
+        op_type = self._get_op_type(module)
+        node_inputs = [inp for inp in graph.inputs()]
+        ir_node = IRNode(node_type=op_type,
+                         inputs=node_inputs[1:],
+                         outputs=[output for output in graph.outputs()],
+                         module=module)
+        ir_nodes_list.append(ir_node)
+        return ir_node
 
     @staticmethod
     def _get_attribute_name(node: torch._C.Node) -> Dict[str, str]:
-        # pylint: disable=protected-access
         """
         Retrieve the attributes associated with the graph node
         :param node: trace graph node
@@ -475,12 +434,11 @@ class ConnectedGraph(AimetCommonConnectedGraph):
     @staticmethod
     def _get_module_instance(node: torch._C.Node,
                              node_name_to_module: Dict[str, torch.nn.Module]) -> torch.nn.Module:
-        # pylint: disable=protected-access
         """
         Get the torch.nn.Module referenced by the node.
         :param node: trace graph node
         :param node_name_to_module: dictionary of module index by output_name referenced in the sub-graph
-        :return: list of attributes defined with the node
+        :return: torch module corresponding to the node
         """
         input_name: str = node.input().debugName()
         attributes = ConnectedGraph._get_attribute_name(node)
@@ -488,32 +446,11 @@ class ConnectedGraph(AimetCommonConnectedGraph):
         sub_model = getattr(model, attributes['name'])
         return sub_model
 
-    def _resolve_input_nodes(self, node: torch._C.Node) -> List[torch._C.Node]:
-        # pylint: disable=protected-access
+    def _get_op_type(self, model: torch.nn.Module) -> str:
         """
-        recursively aggregate inputs nodes that produce inputs consumed by the node
-        recursion is used to aggregate inputs feeding into the input_node if the node belongs to a ignored node list.
-        :param node: trace graph node
-        :return: list of producer nodes that feed the node
-        """
-        inputs = []
-        for _, inp in enumerate(node.inputs()):
-            if inp.node().kind() in self.ignore_graph_nodes:
-                inputs.extend(self._resolve_input_nodes(inp.node()))
-            else:
-                inputs.append(inp)
-        return inputs
-
-    def _create_leaf_module_op(self, model: torch.nn.Module,
-                               inputs: List[Union[torch._C.Node, torch._C.Value]], ops: Dict[str, Union[Op, Product]],
-                               module_tensor_tuples_map: Dict[str, Tuple[Tuple[torch.Tensor]]]) -> Op:
-        # pylint: disable=protected-access
-        """
-        Creates a fully populated Op and along with associated products representing inputs
-        :param model: PyTorch Module representing the model or a sub-set of the model
-        :param inputs: list of producer graph nodes or graph input values
-        :param ops: dictionary of Ops and Products indexed by output names referenced in the graph
-        :return: Op
+        Get connected graph op type for a pytorch module
+        :param model: Pytorch module to get op type for
+        :return: Connected graph op type
         """
         # use nominal Op type if its a known type else use torch defined Module name
         if isinstance(model, tuple(self.op_type_map.keys())):
@@ -521,194 +458,113 @@ class ConnectedGraph(AimetCommonConnectedGraph):
         else:
             op_type = type(model).__name__
             logger.info("unknown op_type -- defaulting to class name %s", op_type)
+        return op_type
 
-        # inputs[0] refers to the module instance, the tensor inputs starts from 1.
-        op = self._create_op_and_products(op_type, inputs[1:], ops)
-
-        # populating module info associated with Op
-        op.model_module = PytorchModelModule(model)
-        self._module_to_op_dict[model] = op
-        op.dotted_name = self._module_to_name[op.get_module()]
-        _fill_conv_op_info(op, model)
-
-        # populating input and output shapes from xxx_tensor_tuple obtained via hook and forward pass
-        input_tensor_tuple, output_tensor_tuple = module_tensor_tuples_map[model]
-        # xxx_tensor_tuple is a union(Tensor, tuple(Tensor)), obtain the shape of the Tensor (or first Tensor if Tuple)
-        output_shape = list(
-            output_tensor_tuple[0].shape if isinstance(output_tensor_tuple, tuple) else output_tensor_tuple.shape)
-        input_shape = list(
-            input_tensor_tuple[0].shape if isinstance(input_tensor_tuple, tuple) else input_tensor_tuple.shape)
-        _fill_and_check_op_product_shapes(op, input_shape, output_shape)
-        return op
-
-    def _create_functional_op(self, node: torch._C.Node, ops: Dict[str, Union[Op, Product]]) -> Op:
-        # pylint: disable=protected-access
+    def _construct_ops_and_products(self,
+                                    ir_nodes_list: List[IRNode],
+                                    module_tensor_tuples_map: Dict[torch.nn.Module,
+                                                                   Tuple[Union[torch.Tensor, Tuple[torch.Tensor]],
+                                                                         Union[torch.Tensor, Tuple[torch.Tensor]]]],
+                                    passthrough_types: List[str],
+                                    input_types_to_ignore: List[str],
+                                    output_map: Dict[torch._C.TensorType, torch._C.TensorType]):
         """
-        Creates an Op and along with associated products representing inputs. If output shape is available then shapes
-        attribute are populated as well.
-        :param node: trace graph node
-        :param ops: dictionary of Ops and Products indexed by output names referenced in the graph
-        :return: Op
+        Create ops and products from nodes and connections.
+        :param ir_nodes_list: List of ir_nodes to create ops for
+        :param module_tensor_tuples_map: Dictionary mapping modules to input and output tensors obtained from a forward
+            pass
+        :param passthrough_types: IRNode types to treat as passthrough (ops will not be created for these ir_nodes)
+        :param input_types_to_ignore: Input node types to ignore (do not create products for output connections from
+            these ir_nodes)
+        :param output_map: Mapping between higher level connections with corresponding lower level recursive
+            connections. Only the base level connections carry shape information.
         """
-        inputs = self._resolve_input_nodes(node)
+        _handle_ir_nodes_of_interest(ir_nodes_list, passthrough_types, input_types_to_ignore)
+        filtered_ir_nodes = [ir_node for ir_node in ir_nodes_list if ir_node.node_type not in ['TupleConstruct',
+                                                                                               'TupleUnpack',
+                                                                                               'ListConstruct']
+                             and ir_node.node_type not in input_types_to_ignore
+                             and ir_node.node_type not in passthrough_types]
+        connections_to_nodes_dict = _create_connections_to_ir_nodes_dict(filtered_ir_nodes)
+        ir_node_to_op_dict = self._create_ops_from_ir_nodes_list(filtered_ir_nodes, module_tensor_tuples_map)
+        self._create_products_from_connections(connections_to_nodes_dict, ir_node_to_op_dict, output_map,
+                                               input_types_to_ignore)
 
-        op_type = ConnectedGraph._parse_op_type(node)
-        op = self._create_op_and_products(op_type, inputs, ops)
-
-        # Determine the output_shape based on output_type
-        output_type = node.output().type()
-        if isinstance(output_type, torch._C.TensorType):
-            output_shape = list(output_type.sizes())
-        elif isinstance(output_type, torch._C.TupleType) and \
-                isinstance(output_type.elements()[0], torch._C.TensorType) and \
-                output_type.elements()[0].sizes() is not None:
-            # the first output_shape is assumed to define the shape of the output tensor
-            output_shape = list(output_type.elements()[0].sizes())
-        else:
-            # output is not of a Tensor type e.g. Int, skip setting shape fpr this op
-            return op
-
-        # first input tensor is assumed to define the shape of the input tensor(s)
-        inp_op = ops[inputs[0].debugName()]
-        if isinstance(inp_op, Product):
-            input_shape = inp_op.shape
-        else:
-            input_shape = inp_op.output_shape
-        _fill_and_check_op_product_shapes(op, input_shape, output_shape)
-        return op
-
-    def _create_op_and_products(self, op_type: str, inputs: List[Union[torch._C.Node, torch._C.Value]],
-                                ops: Dict[str, Union[Op, Product]]) -> Op:
-        # pylint: disable=protected-access
+    def _create_ops_from_ir_nodes_list(self, ir_nodes_list: List[IRNode],
+                                       module_tensor_tuples_map: Dict[torch.nn.Module,
+                                                                      Tuple[Union[torch.Tensor, Tuple[torch.Tensor]],
+                                                                            Union[torch.Tensor, Tuple[torch.Tensor]]]])\
+            -> Dict[IRNode, Op]:
         """
-        Creates an Op and along with associated products representing inputs.
-        :param op_type: string representation fo Op type could be one of the following:-
-            > normalized name if mapping exists in op_type_map
-            > class name if associated with an instance of torch.nn.Module
-            > string extracted from graph node description in case of functional Op
-        :param inputs: list of producer graph nodes or graph input values
-        :param ops: dictionary of Ops and Products indexed by output names referenced in the graph
-        :return: Op
+        Given a list of nodes, create ops for each one.
+        :param ir_nodes_list: List of nodes to create ops for
+        :param module_tensor_tuples_map: Dictionary mapping modules to input and output tensors obtained from a forward
+            pass
+        :return: Dictionary mapping nodes to corresponding ops that were created
         """
-        unique_op_name = self._make_unique_op_name(op_type)
-        op = Op(name=unique_op_name, dotted_name=unique_op_name, output_shape=None, is_anonymous=False, op_type=op_type)
-        self.ordered_ops.append(op)
-        self._ops[unique_op_name] = op
-        for inp in inputs:
-            input_name = inp.debugName()
-            resolved_inp = ops[input_name]
-            if isinstance(resolved_inp, Op):
-                # Create a product linking the identified Operation with the current Operation.
-                self._create_and_link_inter_op_product(resolved_inp, op)
-            elif isinstance(resolved_inp, Product):
-                self._associate_op_with_parameter_product(op, resolved_inp)
-        return op
+        node_to_op_dict = {}
+        for idx, node in enumerate(ir_nodes_list):
+            op_name = node.node_type + '_' + str(idx)
+            op = Op(op_name, op_name, None, node.module is None, node.node_type)
+            if node.module is not None:
+                op.model_module = PytorchModelModule(node.module)
+                _, output_tensor_tuple = module_tensor_tuples_map[node.module]
+                # Obtain the shape of the output Tensor (or first Tensor if Tuple)
+                output_shape = list(
+                    output_tensor_tuple[0].shape if isinstance(output_tensor_tuple, tuple)
+                    else output_tensor_tuple.shape)
+                op.output_shape = output_shape
+                op.dotted_name = self._module_to_name[node.module]
+                _fill_groups_info(op, node.module)
+            node_to_op_dict[node] = op
+            self._ops[op_name] = op
+            self.ordered_ops.append(op)
+        return node_to_op_dict
 
-    def _make_unique_op_name(self, op_name: str) -> str:
+    def _create_products_from_connections(self, connections_to_nodes_dict: ConnectionsToIRDictType,
+                                          node_to_op_dict: Dict[IRNode, Op],
+                                          output_map: Dict[torch._C.TensorType, torch._C.TensorType],
+                                          input_types_to_ignore: List[str]):
         """
-        Given an op name, combine it with the self._op_count member to create a unique op name.  Increment
-        self._op_count each time.
-        :param op_name: Name of the operation to create a unique op name from.
-        :return: The unique op name.
+        Given connections in a dictionary, create products for each connection if it is not one to ignore.
+        :param connections_to_nodes_dict: Dictionary mapping connections to input IRNode and output IRNodes
+        :param node_to_op_dict: Dictionary mapping nodes to corresponding ops
+        :param output_map: Mapping between higher level connections with corresponding lower level recursive
+            connections. Only the base level connections carry shape information.
+        :param input_types_to_ignore: Input node types to ignore (do not create products for output connections from
+            these nodes)
         """
-        unique_op_name = op_name + '_' + str(self._op_count)
-        self._op_count += 1
-        return unique_op_name
-
-    def _create_and_link_inter_op_product(self, parent_op: Op, current_op: Op):
-        """
-        Given a parent op and child op, create a product to link the two if it doesn't yet exist.
-        :param parent_op: The parent op.
-        :param current_op: The child op.
-        """
-        product_name = parent_op.name + '_to_' + current_op.name
-        input_product = self.get_product(product_name)
-        if not input_product:
-            input_product = Product(product_name, parent_op.output_shape)
-            self._products[input_product.name] = input_product
-        parent_op.output = input_product
-        input_product.producer = parent_op
-        input_product.add_consumer(current_op)
-        current_op.add_input(input_product)
-
-    def _associate_op_with_parameter_product(self, op: Op, parameter_product: Product):
-        """
-        Given an op and a Product that represents a parameter of the op, link the op to the product.
-        :param op: The op to link the parameter product to.
-        :param parameter_product: The parameter product associated with the op.
-        """
-        if not op.model_module:
-            param_tuple = self._parameters[parameter_product.name]
-            if param_tuple[0]:
-                op.model_module = PytorchModelModule(param_tuple[0])
-        parameter_product.add_consumer(op)
-        op.add_input(parameter_product)
-
-    def _remove_tuple_ops(self):
-        """
-        Removes Op and Products related to TupleConstruct and TupleUnpack and creates new products to directly
-        bind TupleConstruct producers  with TupleUnpack consumers
-        """
-        # TODO remove the below pylint suppression
-        # pylint: disable=too-many-locals
-        remove_ops = []
-        remove_products = []
-        for op in self.ordered_ops:
-            if op.type == 'TupleConstruct':
-                remove_ops.append(op)
-                pack_producers = [p.name for p in op.inputs]
-                pack_consumers = [k for k, v in self._products.items() if v.producer == op]
-
-                # sorting TupleConstruct_X_to_TupleUnpack_Y1, TupleConstruct_X_to_TupleUnpack_Y2 etc
-                # Y1, Y2, .. are in the order of TupleUnpack Ops construction i.e. in the order of tuple tensor
-                # TODO use an alternate scheme to order the consumer products instead of names
-                pack_consumers.sort(key=lambda name: int(re.findall(r'\d+', name)[-1]))
-
-                # no consumer for TupleConstruct Op, likely due to being the final output of the model
-                if not pack_consumers:
-                    remove_products.extend(pack_producers)
-                    continue
-
-                assert len(pack_consumers) == len(pack_producers)
-                for pack_producer, pack_consumer in zip(pack_producers, pack_consumers):
-
-                    unpack_op = self._products[pack_consumer].consumers
-                    assert len(unpack_op) == 1
-                    assert unpack_op[0].type == 'TupleUnpack'
-                    unpack_op = unpack_op[0]
-
-                    remove_products.extend([pack_producer, pack_consumer])
-                    remove_ops.append(unpack_op)
-
-                    producer_product = self._products[pack_producer]
-                    producer_op = producer_product.producer
-                    unpack_consumers_product = [k for k, v in self._products.items() if v.producer == unpack_op]
-
-                    # unpack_consumers is empty if the unpacked tensor is not part of subsequent forward pass
-                    if not unpack_consumers_product:
-                        producer_op.output = None
-                        continue
-
-                    remove_products.extend(unpack_consumers_product)
-                    for unpack_consumer_product in unpack_consumers_product:
-                        for unpack_consumer in self._products[unpack_consumer_product].consumers:
-                            # Create a new product to replace the 'unpack' product
-                            product_name = producer_op.name + '_to_' + unpack_consumer.name
-                            input_product = Product(product_name, producer_op.output_shape)
-                            self._products[input_product.name] = input_product
-                            producer_op.output = input_product
-                            input_product.producer = producer_op
-                            input_product.add_consumer(unpack_consumer)
-
-                            # replace 'unpack' product with new product
-                            unpack_consumer.inputs = [input_product if unpack_op == inp.producer else inp
-                                                      for inp in unpack_consumer.inputs]
-
-        for k in remove_products:
-            self._products.pop(k)
-        for op in remove_ops:
-            self.ordered_ops.remove(op)
-            self._ops.pop(op.name)
+        for connection, (producer, consumer_list) in connections_to_nodes_dict.items():
+            if producer is None:
+                # Case of input connection to model
+                assert consumer_list
+                for consumer in consumer_list:
+                    consumer_op = node_to_op_dict[consumer]
+                    product_name = 'input_to_' + consumer_op.name
+                    if product_name not in self._products:
+                        product = _create_product_from_connection(product_name, connection, output_map)
+                        product.is_model_input = True
+                        product.add_consumer(consumer_op)
+                        consumer_op.add_input(product)
+                        self._products[product_name] = product
+            elif producer.node_type in input_types_to_ignore:
+                continue
+            else:
+                producer_op = node_to_op_dict[producer]
+                for consumer in consumer_list:
+                    consumer_op = node_to_op_dict[consumer]
+                    product_name = producer_op.name + '_to_' + consumer_op.name
+                    if product_name not in self._products:
+                        product = _create_product_from_connection(product_name, connection, output_map)
+                        product.producer = producer_op
+                        self._products[product_name] = product
+                    else:
+                        product = self._products[product_name]
+                    # If an op has multiple output products, only the first one will be listed as the op's output here
+                    if producer_op.output is None:
+                        _update_op_output_with_product(producer_op, product)
+                    product.add_consumer(consumer_op)
+                    consumer_op.add_input(product)
 
     def _fill_op_params(self):
         """
@@ -734,7 +590,7 @@ class ConnectedGraph(AimetCommonConnectedGraph):
                     product_name = name + '.running_var'
                     self._create_and_add_param_product_if_not_exists(op, product_name, list(module.running_var.shape))
 
-    def _create_and_add_param_product_if_not_exists(self, op: Op, product_name: str, shape):
+    def _create_and_add_param_product_if_not_exists(self, op: Op, product_name: str, shape: List[int]):
         """
         Given a name of a product, create it if it doesn't exist, and attach it to the specified op as a parameter.
         :param op: Op to connect the parameter product to.
@@ -958,48 +814,6 @@ class ConnectedGraph(AimetCommonConnectedGraph):
                              split_op_product.name, input_product_index)
             consumer_index += 1
 
-    def _fill_empty_shapes(self):
-        """ Anonymous ops like add or concat do not have shapes associated with them when their ops are created.
-        Traverse through ops in the graph in order and use existing product shape information to try to infer what the
-        shapes of ops and products with missing shapes are.  This may not be completely accurate in the face of reshape
-        and unknown ops. """
-
-        starting_ops = []
-        for product in self.get_all_products().values():
-            if product.is_model_input:
-                for consumer in product.consumers:
-                    if consumer not in starting_ops:
-                        starting_ops.append(consumer)
-
-        ops_in_order = get_ordered_ops(starting_ops)
-        for op in ops_in_order:
-            for inp in op.inputs:
-                assert inp.shape is not None
-
-            # If op's output product has a shape already, simply use that shape as op's output_shape as well.
-            if op.output_shape is None:
-                if op.output and op.output.shape is not None:
-                    op.output_shape = op.output.shape
-                    continue
-
-                # If op is of type cat, add the number of channels of incoming products and declare that is the number
-                # of out channels in the outgoing product.
-                if op.type == 'cat':
-                    num_channels = 0
-                    for inp in op.inputs:
-                        num_channels += inp.shape[api_channel_index_dict[ModelApi.pytorch]]
-                    concat_shape = op.inputs[0].shape
-                    concat_shape[api_channel_index_dict[ModelApi.pytorch]] = num_channels
-                    op.output_shape = concat_shape
-
-                # Otherwise, assume that the input shape is unchanged (this may be wrong, but hopefully should not
-                # matter in the scheme of mask propagation since ops that matter should not be anonymous).
-                else:
-                    op.output_shape = op.inputs[0].shape
-                if op.output:
-                    op.output.shape = op.output_shape
-
-    # pylint: disable=too-many-lines
     def _validate_op_modules(self):
         """
         Utility function to ensure that all connected graph ops of a certain type have associated modules
@@ -1022,34 +836,265 @@ class ConnectedGraph(AimetCommonConnectedGraph):
                            , missing_modules)
 
 
-def _fill_and_check_op_product_shapes(op: Op, input_shape: List, output_shape: List):
+def _create_module_to_op_dict(ops: List[Op]) -> Dict[torch.nn.Module, Op]:
     """
-    Given an Op and input and output shapes obtained from forward pass, fill in the shapes for the op and its input and
-    output products.  If these products already have shapes associated with them, check that they match with the given
-    shapes; if not, log an error.
-    :param op: Current op to fill shape parameter
-    :param input_shape: Input shape obtained from forward pass
-    :param output_shape: Output shape obtained from forward pass
+    Utility to create dictionary mapping pytorch modules to connected graph Ops
+    :param ops: List of connected graph Ops
+    :return: Dictionary mapping pytorch modules to connected graph Ops
     """
-    op.output_shape = output_shape
-    for inp in op.inputs:
-        if not inp.is_parm:
-            if inp.shape and inp.shape[1:] != input_shape[1:]:
-                logger.warning(
-                    '[Deprecate?] Mismatch btw shape %s for product %s and input shape %s for input of op %s',
-                    inp.shape, inp, input_shape, op)
-            elif not inp.shape:
-                inp.shape = input_shape
-    if op.output:
-        if op.output.shape and op.output.shape[1:] != output_shape[1:]:
-            logger.error('Mismatch between existing shape %s for product %s and output shape %s for output of op %s',
-                         op.output.shape, output_shape, input_shape, op)
-        elif not op.output.shape:
-            op.output.shape = op.output_shape
+    module_to_op_dict = {}
+    for op in ops:
+        if op.get_module():
+            module_to_op_dict[op.get_module()] = op
+    return module_to_op_dict
 
 
-def _fill_conv_op_info(op: Op, module: torch.nn.Module):
-    """ Fill in groups info """
+def _fill_groups_info(op: Op, module: torch.nn.Module):
+    """
+    Fill in groups info for convolution ops. If op is not a conv op, groups is unchanged.
+    :param op: Connected graph op to fill groups info for
+    :param module: Pytorch module to check for groups
+    """
 
     if op.type in 'convolution':
         op.groups = module.groups
+
+
+def _create_connections_to_ir_nodes_dict(ir_nodes_list: List[IRNode]) -> ConnectionsToIRDictType:
+    """
+    Create a mapping from connections found in torch graph to input and output IRNodes. Each connection will have one
+    input and zero or more outputs IRNodes.
+    :param ir_nodes_list: List of IRNodes to extract connections information from
+    :return: Dictionary mapping connections to input ir_node and output ir_nodes
+    """
+    connections_to_ir_nodes_dict = {}
+    for ir_node in ir_nodes_list:
+        node_inputs = _flatten_lists_of_connections(ir_node.inputs)
+        node_outputs = _flatten_lists_of_connections(ir_node.outputs)
+        for inp in node_inputs:
+            if inp in connections_to_ir_nodes_dict:
+                connections_to_ir_nodes_dict[inp][1].append(ir_node)
+            else:
+                connections_to_ir_nodes_dict[inp] = [None, [ir_node]]
+        for output in node_outputs:
+            if output in connections_to_ir_nodes_dict:
+                assert connections_to_ir_nodes_dict[output][0] is None
+                connections_to_ir_nodes_dict[output][0] = ir_node
+            else:
+                connections_to_ir_nodes_dict[output] = [ir_node, []]
+    return connections_to_ir_nodes_dict
+
+
+def _handle_ir_nodes_of_interest(ir_nodes_list: List[IRNode], passthrough_ops: List[str],
+                                 input_ops_to_ignore: List[str]):
+    """
+    Update input and output connections of certain ir_nodes in ir_nodes_list (Tuple/ListConstructs, passthrough,
+    input ops)
+    :param ir_nodes_list: List of ir_nodes to update connections for
+    :param passthrough_ops: List of op types to treat as passthrough
+    :param input_ops_to_ignore: List of input op types to ignore
+    """
+    connections_to_ir_nodes_dict = _create_connections_to_ir_nodes_dict(ir_nodes_list)
+    for ir_node in ir_nodes_list:
+        if ir_node.node_type in ['TupleConstruct', 'ListConstruct']:
+            _handle_tuple_and_list_construct_ir_node(ir_node, connections_to_ir_nodes_dict)
+        elif ir_node.node_type == 'TupleUnpack':
+            _handle_tuple_unpack_ir_node(ir_node, connections_to_ir_nodes_dict)
+        elif ir_node.node_type in passthrough_ops:
+            _handle_passthrough_ir_node(ir_node, connections_to_ir_nodes_dict)
+        elif ir_node.node_type in input_ops_to_ignore:
+            _handle_input_ir_node_to_ignore(ir_node, connections_to_ir_nodes_dict)
+
+
+def _handle_tuple_and_list_construct_ir_node(ir_node: IRNode, connections_to_ir_nodes_dict: ConnectionsToIRDictType):
+    """
+    Update connections of tuple and list construct ir_nodes, as well as connections to children of the ir_node.
+    :param ir_node: Tuple or list construct ir_node
+    :param connections_to_ir_nodes_dict: Dictionary mapping connections to input ir_node and output ir_nodes
+    """
+    # Identify the output connection and consumers of that connection
+    assert len(ir_node.outputs) == 1
+    output = ir_node.outputs[0]
+    consumers = connections_to_ir_nodes_dict[output][1]
+
+    # For each consumer, update their inputs by replacing the connection from Tuple/ListConstruct to the inputs
+    # of Tuple/ListConstruct instead
+    for consumer in consumers:
+        connection_index = consumer.inputs.index(output)
+        consumer.inputs[connection_index] = ir_node.inputs
+
+    # Replace the output connection of Tuple/ListConstruct with its input connections
+    ir_node.outputs[0] = ir_node.inputs
+    del connections_to_ir_nodes_dict[output]
+
+
+def _handle_tuple_unpack_ir_node(ir_node: IRNode, connections_to_ir_nodes_dict: ConnectionsToIRDictType):
+    """
+    Update connections of tuple unpack nodes, as well as connections to children of the node.
+    :param ir_node: Tuple or list construct node
+    :param connections_to_ir_nodes_dict: Dictionary mapping connections to input node and output nodes
+    """
+    # For tuple unpack, either input came from tuple pack, or an op that had multiple outputs
+    assert len(ir_node.inputs) == 1
+    tuple_unpack_input = ir_node.inputs[0]
+    if isinstance(tuple_unpack_input, List):
+        # Case where input came from tuple pack
+        # Length of unpacked output should be same as length of input to tuple pack
+        assert len(tuple_unpack_input) == len(ir_node.outputs)
+        # For each output, find consumers of the output. For the input connection to the consumer that matches
+        # the output, replace it with the corresponding input connection to tuple_unpack.
+        # Also replace the output of tuple unpack with the corresponding input connection.
+        for idx, output in enumerate(ir_node.outputs):
+            consumers = connections_to_ir_nodes_dict[output][1]
+            for consumer in consumers:
+                connection_index = consumer.inputs.index(output)
+                consumer.inputs[connection_index] = tuple_unpack_input[idx]
+            ir_node.outputs[idx] = tuple_unpack_input[idx]
+            del connections_to_ir_nodes_dict[output]
+    else:
+        # Case where input came from op with multiple outputs
+        # Replace the output connection of the op with the outputs of TupleUnpack
+        producer = connections_to_ir_nodes_dict[tuple_unpack_input][0]
+        producer.outputs = ir_node.outputs
+        ir_node.inputs = ir_node.outputs
+        # Remove what used to be the input to the tuple unpack node from connections_to_ir_nodes_dict
+        del connections_to_ir_nodes_dict[tuple_unpack_input]
+
+
+def _handle_passthrough_ir_node(ir_node: IRNode, connections_to_ir_nodes_dict: ConnectionsToIRDictType):
+    """
+    Update connections of ir_nodes feeding into and following the passthrough ir_node to effectively skip the
+    passthrough ir_node.
+    :param ir_node: Tuple or list construct ir_node
+    :param connections_to_ir_nodes_dict: Dictionary mapping connections to input ir_node and output ir_nodes
+
+    """
+    # For passthrough ops, simply set the input of the consumer ir_nodes of the op's output to be the input of the
+    # passthrough op itself.
+    # Also clear the inputs and outputs of the passthrough Op to disconnect it from the graph.
+    # Below check is not strictly necessary but current logic assumes so. Easy to change in the future if so.
+    assert len(ir_node.inputs) == 1
+    assert len(ir_node.outputs) == 1
+    input_connection = ir_node.inputs[0]
+    output_connection = ir_node.outputs[0]
+    consumers = connections_to_ir_nodes_dict[output_connection][1]
+    for consumer in consumers:
+        connection_index = consumer.inputs.index(output_connection)
+        consumer.inputs[connection_index] = input_connection
+    ir_node.inputs = []
+    ir_node.outputs = []
+    del connections_to_ir_nodes_dict[output_connection]
+
+
+def _handle_input_ir_node_to_ignore(ir_node: IRNode, connections_to_ir_nodes_dict: ConnectionsToIRDictType):
+    """
+    Update the consumers of input ir_nodes to ignore to remove thoe incoming connections.
+    :param ir_node: Tuple or list construct ir_node
+    :param connections_to_ir_nodes_dict: Dictionary mapping connections to input ir_node and output ir_nodes
+    """
+    # For input ops like prim::Constant, disconnect it from the graph so it is not represented by ConnectedGraph.
+    # For consumers of the input op, remove the input connection corresponding to the input from the input op.
+    assert not ir_node.inputs
+    for output in ir_node.outputs:
+        consumers = connections_to_ir_nodes_dict[output][1]
+        for consumer in consumers:
+            consumer.inputs.remove(output)
+        del connections_to_ir_nodes_dict[output]
+    ir_node.outputs = []
+
+
+def _create_product_from_connection(product_name: str, connection: torch._C.TensorType,
+                                    output_map: Dict[torch._C.TensorType, torch._C.TensorType]) -> Product:
+    """
+    Create connected graph product given a connection.
+    :param product_name: Name of product to create
+    :param connection: Connection to extract shape information from
+    :param output_map: Mapping between higher level connections with corresponding lower level recursive connections.
+        Only the base level connections carry shape information.
+    :return: Product that was created
+    """
+    # Create product if it doesn't already exist. There is a limitation here, where two ops with multiple
+    # unique connections linking the two will only result in one product being created. (For example, LSTM
+    # with output, h, and c feeding into a second LSTM would show 3 unique connections). This behavior
+    # matches the existing connected graph behavior, but is an item of possible rework in the future.
+
+    # Get product shape
+    shape = None
+    if isinstance(connection.type(), torch._C.TensorType):
+        shape = connection.type().sizes()
+        if shape is None and connection in output_map:
+            # Shape may be none if this is an output connection that was replaced from the output of a lower level
+            # module. Look up the corresponding lowest level connection in output_map.
+            shape = output_map[connection].type().sizes()
+
+    product = Product(product_name, shape)
+    return product
+
+
+def _update_op_output_with_product(op: Op, product: Product):
+    """
+    Update the output of an op with the given product if there is not already an associated product. Also reconcile
+    shapes of the op and product if possible.
+    :param op: Op to update output for
+    :param product: Output product of the op
+    """
+    op.output = product
+    if op.output_shape is None:
+        # Possible for product's shape to be None here as well. If so, they will both remain None.
+        op.output_shape = product.shape
+    elif product.shape is None:
+        product.shape = op.output_shape
+    elif product.shape and op.output_shape != product.shape:
+        logger.debug('Mismatch between existing shape %s for product %s and output shape %s for '
+                     'output of op %s', product.shape, product.name, op.output_shape,
+                     op.name)
+
+
+def _create_functional_ir_node(node: torch._C.Node, inputs_map: Dict[torch._C.TensorType, torch._C.TensorType]) \
+        -> IRNode:
+    """
+    Create an IRNode containing input and output connections information given a torch graph node.
+    :param node: trace graph node
+    :param inputs_map: Mapping
+    :return: IRNode created from information in the trace graph node
+    """
+    outputs = [output for output in node.outputs()]
+    op_type = ConnectedGraph._parse_op_type(node)
+    ir_node = IRNode(node_type=op_type,
+                     inputs=[inputs_map.get(inp, inp) for inp in node.inputs()],
+                     outputs=outputs,
+                     module=None)
+    return ir_node
+
+
+def _flatten_lists_of_connections(connections: List[Union[List, torch._C.TensorType]]) -> List[torch._C.TensorType]:
+    """
+    Given a list which may contain either a torch Tensor connection or a further list of connections, generate a list
+    that only contains connections by bringing all elements of nested lists into the top level list.
+    :param connections: List containing connections and/or lists of connections
+    :return: List containing only connections (no nested lists)
+    """
+    connection_list = []
+    for connection in connections:
+        if not isinstance(connection, List):
+            connection_list.append(connection)
+        else:
+            connection_list.extend(_flatten_lists_of_connections(connection))
+    return connection_list
+
+
+def _update_inputs_map(curr_inputs: List[torch._C.TensorType], higher_level_inputs: List[torch._C.TensorType],
+                       inputs_map: Dict[torch._C.TensorType, torch._C.TensorType]):
+    """
+    Update inputs_map with additional entries mapping higher_level_inputs to inputs of the current graph.
+    :param curr_inputs: Inputs to the current graph level
+    :param higher_level_inputs: Corresponding inputs from a higher graph level
+    :param inputs_map: Dictionary mapping low recursion level inputs to higher level equivalent inputs
+    """
+    # First index of curr_inputs refers to the current module itself, and not any actual input
+    assert len(higher_level_inputs) == len(curr_inputs) - 1
+    for idx, inp in enumerate(higher_level_inputs):
+        if inp in inputs_map:
+            inputs_map[curr_inputs[idx + 1]] = inputs_map[inp]
+        else:
+            inputs_map[curr_inputs[idx + 1]] = inp

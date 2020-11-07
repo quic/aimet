@@ -255,12 +255,12 @@ class TestConnectedGraph(unittest.TestCase):
 
         expected_products = [
             # layer #1 to conv1,conv2
-            'convolution_0_to_convolution_6',
-            'convolution_2_to_convolution_7',
+            'convolution_0_to_convolution_3',
+            'convolution_2_to_convolution_4',
 
             # conv1,conv2 to cat
-            'convolution_6_to_cat_8',
-            'convolution_7_to_cat_8']
+            'convolution_3_to_cat_5',
+            'convolution_4_to_cat_5']
 
         products = conn_graph.get_all_products()
         for product_name in product_names:
@@ -301,19 +301,19 @@ class TestConnectedGraph(unittest.TestCase):
 
         expected_products = [
             # layer #1 to layer #2
-            'convolution_0_to_convolution_7',
-            'convolution_1_to_convolution_8',
-            'convolution_2_to_convolution_9',
+            'convolution_0_to_convolution_3',
+            'convolution_1_to_convolution_4',
+            'convolution_2_to_convolution_5',
 
             # layer #2 to layer #3
-            'convolution_7_to_convolution_14',
-            'convolution_8_to_convolution_15',
-            'convolution_9_to_convolution_16',
+            'convolution_3_to_convolution_6',
+            'convolution_4_to_convolution_7',
+            'convolution_5_to_convolution_8',
 
             # layer #3 to cat
-            'convolution_14_to_cat_21',
-            'convolution_15_to_cat_21',
-            'convolution_16_to_cat_21']
+            'convolution_6_to_cat_9',
+            'convolution_7_to_cat_9',
+            'convolution_8_to_cat_9']
 
         products = conn_graph.get_all_products()
         for product_name in product_names:
@@ -357,18 +357,18 @@ class TestConnectedGraph(unittest.TestCase):
 
             # layer #1 to layer #2
             'convolution_0__to__Split_0',
-            'convolution_1_to_convolution_7',
-            'convolution_2_to_convolution_8',
+            'convolution_1_to_convolution_3',
+            'convolution_2_to_convolution_4',
 
             # layer #2 to layer #3
-            'convolution_7_to_convolution_16',
-            'convolution_8_to_convolution_14',
-            'convolution_9_to_convolution_15',
+            'convolution_3_to_convolution_8',
+            'convolution_4_to_convolution_6',
+            'convolution_5_to_convolution_7',
 
             # layer #3, layer#1.conv1 to cat
-            'convolution_14_to_cat_21',
-            'convolution_15_to_cat_21',
-            'convolution_16_to_cat_21']
+            'convolution_6_to_cat_9',
+            'convolution_7_to_cat_9',
+            'convolution_8_to_cat_9']
 
         products = conn_graph.get_all_products()
         for product_name in product_names:
@@ -377,9 +377,9 @@ class TestConnectedGraph(unittest.TestCase):
                 self.assertEqual(product.shape, product.producer.output_shape)
                 expected_products.remove(product_name)
         self.assertEqual(0, len(expected_products))
-        Split_product = conn_graph.get_all_products()['Split_0__to__multiple_ops']
-        self.assertTrue(conn_graph.get_all_ops()['convolution_9'] in Split_product.consumers)
-        self.assertTrue(conn_graph.get_all_ops()['cat_21'] in Split_product.consumers)
+        split_product = conn_graph.get_all_products()['Split_0__to__multiple_ops']
+        self.assertTrue(conn_graph.get_all_ops()['convolution_5'] in split_product.consumers)
+        self.assertTrue(conn_graph.get_all_ops()['cat_9'] in split_product.consumers)
 
     def test_submodules_with_sequence_and_module_list(self):
         """ Test building ConnectedGraph on a model with sequence and module list """
