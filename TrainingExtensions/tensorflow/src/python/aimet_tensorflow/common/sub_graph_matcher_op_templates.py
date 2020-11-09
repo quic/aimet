@@ -265,6 +265,15 @@ op_type_templates = {
         'module_regex': ['(.+)/while/MatMul$'],
         'associated_op_regex': ['MatMul$']
     },
+    'LSTM_Stacked_TimeMajor_True_Sigmoid': {
+        'input_shape': (3, 100),
+        'op_type': 'LSTM',
+        'constructor': "tf.keras.layers.LSTM(10, recurrent_activation='sigmoid',"
+                       "time_major=True, "
+                       "return_sequences=True)(inputs)",
+        'module_regex': ['(.+)/while/MatMul$'],
+        'associated_op_regex': ['MatMul$']
+    },
     'LSTM_Stacked': {
         'input_shape': (3, 100),
         'op_type': 'LSTM',
