@@ -41,11 +41,12 @@ import abc
 from enum import Enum
 from typing import Union
 
+import torch
 from torch import nn
 from aimet_common.utils import AimetLogger
 from aimet_common.defs import QuantScheme
 from aimet_torch.tensor_quantizer import PostTrainingTensorQuantizer
-
+import aimet_torch.quantsim_straight_through_grad as ste
 import libpymo
 
 
@@ -168,7 +169,7 @@ class QcQuantizeStandAloneBase(nn.Module):
                     round_mode = tensor_quantizer.round_mode
                 else:
                     round_mode = libpymo.RoundingMode.ROUND_NEAREST
-                output = tensor_quantizer.quantize_dequantize(input_tensor, round_mode)
+                output = tensor_quantizer.quantize_dequantize(input_tensor, round_mode, self, 'output')
 
             else:
                 output = input_tensor
@@ -300,13 +301,16 @@ class QcPostTrainingWrapper(QcQuantizeWrapper):
         # Quantize the parameters
         shadow_params = self._quantize_dequantize_params()
 
+        # Save quantized parameters tensors for backward pass and perform custom bakward pass for gating parameters grad during backward pass
+        quantized_inputs = SteGatingFuncForParameters.apply(self, *quantized_inputs)
         # Call the forward of the wrapped module
         wrapped_output = self._module_to_wrap(*quantized_inputs)
 
         self._restore_shadow_params(shadow_params)
 
         # Quantize the outputs
-        if not self._is_output_quantized:
+
+        if not self.output_quantizer.enabled:
             output = wrapped_output
         else:
             if not isinstance(wrapped_output, list):
@@ -433,3 +437,36 @@ class QcQuantizeStandalone(QcQuantizeStandAloneBase):
         :return: None
         """
         self.output_quantizer.compute_encoding()
+
+
+class SteGatingFuncForParameters(torch.autograd.Function):
+    """
+    Custom gradient function for STE
+    """
+    # pylint:disable = arguments-differ
+    @staticmethod
+    def forward(ctx, quant_wrapper_ref, *quantized_input):
+        """
+        Quantize-dequantize the tensor, using the saved encoding for this tensor
+        :param tensor: Tensor to quantize-dequantize
+        :param tensor_quantizer: Reference to the tensor quantizer
+        :param round_mode: Rounding mode
+        :param wrapper_ref: Reference to quantization wrapper
+        :param tensor_name: Name of tensor to be quantized-dequantized
+        :return: Resulting tensor
+        """
+
+        ctx.quantization_wrapper_ref = quant_wrapper_ref
+        return quantized_input
+
+    @staticmethod
+    def backward(ctx, *output_grad):
+        quant_wrapper_ref = ctx.quantization_wrapper_ref
+
+        # pylint:disable = protected-access
+        for name, param in quant_wrapper_ref._module_to_wrap.named_parameters():
+            if quant_wrapper_ref.param_quantizers[name].enabled and param.grad is not None:
+                param_quantizer = quant_wrapper_ref.param_quantizers[name]
+                param.grad = ste.compute_dloss_by_dx(param, param.grad, param_quantizer.encoding.min,
+                                                     param_quantizer.encoding.max)
+        return (None, *output_grad)

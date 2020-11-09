@@ -333,53 +333,6 @@ class QuantizationSimModel:
                 if param_name_to_exclude in module.param_quantizers:
                     module.param_quantizers[param_name_to_exclude].enabled = False
 
-    def create_super_nodes_of_layers_and_activation_functions(self, input_shape: Tuple):
-        """
-        Creates a super-node from a quantization perspective of a layer followed by an activation.
-        For example, a conv and a relu
-        :param input_shape: Shapes of the input to the model
-        :return: None
-        """
-
-        random_inputs = utils.create_rand_tensors_given_shapes(input_shape)
-        graph = ConnectedGraph(self.model, random_inputs)
-
-        conv_modules = [(name, module) for name, module in self.model.named_modules(prefix=type(self.model).__name__)
-                        if isinstance(module, QcQuantizeWrapper) and
-                        isinstance(module._module_to_wrap, torch.nn.Conv2d)]  # pylint: disable=protected-access
-
-        conv_ops = [(graph.get_op_from_module_name(conv_name + '._module_to_wrap'), module)
-                    for conv_name, module in conv_modules]
-
-        for op, quantized_wrapper in conv_ops:
-            if self._is_following_module_relu(op):
-                quantized_wrapper.output_quantizer.enabled = False
-
-    def handle_element_wise_ops(self, input_shape: Tuple):
-        """
-        Special handling for element-wise ops
-        :param input_shape: Shape of the input to the model
-        :return: None
-        """
-        random_inputs = utils.create_rand_tensors_given_shapes(input_shape)
-        graph = ConnectedGraph(self.model, random_inputs)
-
-        element_wise_ops = []
-        # Find all add ops
-        for op in graph.get_all_ops().values():
-            if op.type in ['add', 'mul', 'div', 'cat']:
-                element_wise_ops.append(op)
-
-        modules_downstream_from_elementwise_ops = []
-        for op in element_wise_ops:
-            modules_downstream_from_elementwise_ops += self._find_next_downstream_modules(op)
-
-        # pylint: disable=protected-access
-        for module in self.model.modules():
-            if isinstance(module, QcQuantizeWrapper) and \
-                    (module._module_to_wrap in modules_downstream_from_elementwise_ops):
-                module.input_quantizer.enabled = True
-
     def _replace_wrappers_for_quantize_dequantize(self):
         pass
 
@@ -394,24 +347,6 @@ class QuantizationSimModel:
                 downstream_modules += QuantizationSimModel._find_next_downstream_modules(succeeding_op)
 
         return downstream_modules
-
-    @staticmethod
-    def _is_following_module_relu(op):
-        succeeding_modules = list(op.output.consumers)
-
-        # Cannot fold into more than one downstream ops
-        if len(succeeding_modules) > 1:
-            return False
-
-        # No downstream op to fold into
-        if not succeeding_modules:
-            return False
-
-        if succeeding_modules[0].type == 'relu':
-            return True
-
-        # Downstream op not the right type
-        return False
 
     def _export_encodings_to_json(self, path: str, filename_prefix: str, onnx_node_to_io_tensor_map: Dict,
                                   valid_param_set: set):
