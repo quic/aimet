@@ -35,7 +35,7 @@
 #
 #  @@-COPYRIGHT-END-@@
 # =============================================================================
-""" implements straight through gradient computation for Quant op"""
+""" Implements straight through gradient computation for Quant op"""
 
 import torch
 
@@ -54,7 +54,7 @@ def compute_dloss_by_dx(x, grad, encoding_min, encoding_max):
                              torch.ones_like(x),  # execute if true
                              torch.zeros_like(x))  # execute if false
 
-    dloss_by_dx = (torch.where(torch.le(encoding_min, x),  # condition to check per value
+    dloss_by_dx = (torch.where(torch.le(torch.Tensor([encoding_min]), x),  # condition to check per value
                                inner_cond,  # execute if true
                                torch.zeros_like(x))) * grad
 
