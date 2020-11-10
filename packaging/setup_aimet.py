@@ -43,7 +43,7 @@ setup(
     name='Aimet',
     version=str(setup_cfg.version),
     author='Qualcomm Innovation Center, Inc.',
-    author_email='',
+    author_email='aimet@noreply.github.com',
     url=setup_cfg.remote_url + '/Aimet',
     license='NOTICE.txt',
     description='AIMET',
