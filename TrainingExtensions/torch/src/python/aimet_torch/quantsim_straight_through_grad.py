@@ -50,11 +50,12 @@ def compute_dloss_by_dx(x, grad, encoding_min, encoding_max):
     """
 
     # compute dloss_by_dx = dq_by_dx * grad
+    device = x.device
     inner_cond = torch.where(torch.le(x, encoding_max),  # condition to check per value
                              torch.ones_like(x),  # execute if true
                              torch.zeros_like(x))  # execute if false
 
-    dloss_by_dx = (torch.where(torch.le(torch.Tensor([encoding_min]), x),  # condition to check per value
+    dloss_by_dx = (torch.where(torch.le(torch.Tensor([encoding_min]).to(device), x),  # condition to check per value
                                inner_cond,  # execute if true
                                torch.zeros_like(x))) * grad
 
