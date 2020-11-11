@@ -307,6 +307,18 @@ if [ $run_build -eq 1 ]; then
 
     make -j 8
     check_stage $? "Build" "true"
+
+    echo -e "\n********** Stage 2a: Generate Docs **********\n"
+    make doc
+    check_stage $? "Generate Doc" "true"
+
+    echo -e "\n********** Stage 2b: Install **********\n"
+    make install
+    check_stage $? "Install" "true"
+
+    echo -e "\n********** Stage 2c: Package **********\n"
+    make packageaimet
+    check_stage $? "Package" "true"
 fi
 
 if [ $run_unit_tests -eq 1 ]; then
@@ -420,6 +432,7 @@ if [ $run_code_coverage -eq 1 ]; then
     check_stage $coverage_test_rc "Code coverage" "false"
 fi
 
+echo -e "\n outputFolder = ${outputFolder}"
 if grep -q FAIL "${outputFolder}/summary.txt"; then
     EXIT_CODE=3
 fi
