@@ -65,7 +65,8 @@ class IRNode:
     """
     Representation for a module in torch graph.
     """
-    def __init__(self, node_type, inputs, outputs, module):
+    def __init__(self, node_type: str, inputs: List[Union[List, torch._C.TensorType]],
+                 outputs: List[Union[List, torch._C.TensorType]], module: torch.nn.Module):
         self.node_type = node_type
         self.inputs = inputs
         self.outputs = outputs
@@ -274,7 +275,7 @@ class ConnectedGraph(AimetCommonConnectedGraph):
         :param output_map: Dictionary mapping high recursion level outputs to lower level equivalent outputs
         :param higher_level_inputs: Corresponding inputs from a higher graph level
         :param inputs_map: Dictionary mapping low recursion level inputs to higher level equivalent inputs
-        :return: the last created Op in the model or submodule
+        :return: the last created IRNode in the model or submodule
         """
         if is_leaf_module(model):
             return self._parse_single_module_model(model, trace.graph, ir_nodes_list)
@@ -505,7 +506,8 @@ class ConnectedGraph(AimetCommonConnectedGraph):
         node_to_op_dict = {}
         for idx, node in enumerate(ir_nodes_list):
             op_name = node.node_type + '_' + str(idx)
-            op = Op(op_name, op_name, None, node.module is None, node.node_type)
+            op = Op(name=op_name, dotted_name=op_name, output_shape=None, is_anonymous=node.module is None,
+                    op_type=node.node_type)
             if node.module is not None:
                 op.model_module = PytorchModelModule(node.module)
                 _, output_tensor_tuple = module_tensor_tuples_map[node.module]
