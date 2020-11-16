@@ -56,7 +56,7 @@ foreach(package ${package_name_list})
     #MANIFEST file is different for different packages 
     file(WRITE "${CMAKE_BINARY_DIR}/packaging/MANIFEST.ini" "graft ${package}/x86_64-linux-gnu")
     file(COPY ${AIMET_PACKAGE_PATH}/lib/python/${package} DESTINATION ${CMAKE_BINARY_DIR}/packaging/)
-    file(COPY ${AIMET_PACKAGE_PATH}/lib/x86_64-linux-gnu/ DESTINATION ${CMAKE_BINARY_DIR}/packaging/)
+    file(COPY ${AIMET_PACKAGE_PATH}/lib/x86_64-linux-gnu/ DESTINATION ${CMAKE_BINARY_DIR}/packaging/${package}/x86_64-linux-gnu/)
   elseif("${package}" STREQUAL "aimet")
     file(WRITE "${CMAKE_BINARY_DIR}/packaging/MANIFEST.ini" "include README.txt NOTICE.txt")
   else()

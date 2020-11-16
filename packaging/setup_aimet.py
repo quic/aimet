@@ -39,6 +39,9 @@
 from setuptools import setup
 import setup_cfg # pylint: disable=import-error
 
+torch_dep_whl = setup_cfg.remote_url + "/releases/download/"+str(setup_cfg.version)+"/AimetTorch-"+ str(setup_cfg.version) + "-py3-none-any.whl"
+tf_dep_whl = setup_cfg.remote_url + "/releases/download/"+str(setup_cfg.version)+"/AimetTensorflow-"+ str(setup_cfg.version) + "-py3-none-any.whl"
+
 setup(
     name='Aimet',
     version=str(setup_cfg.version),
@@ -48,8 +51,7 @@ setup(
     license='NOTICE.txt',
     description='AIMET',
     long_description=open('README.txt').read(),
-    dependency_links=[setup_cfg.remote_url + "/releases/download/"+str(setup_cfg.version)+"/AimetTorch/" + str(setup_cfg.version) + "/", 
-    setup_cfg.remote_url + "/releases/download/"+str(setup_cfg.version)+"/AimetTensorflow/" + str(setup_cfg.version) + "/"],
+    dependency_links=[torch_dep_whl, tf_dep_whl],
     install_requires=["AimetTorch==" + str(setup_cfg.version), "AimetTensorflow==" + str(setup_cfg.version)],
     zip_safe=True,
     platforms='x86',

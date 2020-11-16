@@ -301,9 +301,14 @@ if [ $run_build -eq 1 ]; then
 
     mkdir -p build
     cd build
+
+    extra_opts=""
+    if [ -n "$SW_VERSION" ]; then
+        extra_opts+="-DSW_VERSION=${SW_VERSION}"
+    fi
     # Do not exit on failure by default from this point forward
     set +e
-    cmake -DCMAKE_EXPORT_COMPILE_COMMANDS=ON ..
+    cmake -DCMAKE_EXPORT_COMPILE_COMMANDS=ON ${extra_opts} ..
 
     make -j 8
     check_stage $? "Build" "true"

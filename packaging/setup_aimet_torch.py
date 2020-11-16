@@ -40,6 +40,7 @@ from setuptools import setup, find_packages, find_namespace_packages
 import setup_cfg # pylint: disable=import-error
 
 packages_found = find_packages() + find_namespace_packages(exclude=['*bin', 'pyenv3*', 'build', 'dist', '*bin', '*x86*'])
+common_dep_whl = setup_cfg.remote_url + "/releases/download/"+str(setup_cfg.version)+"/AimetCommon-" + str(setup_cfg.version) + "-py3-none-any.whl"
 
 setup(
     name='AimetTorch',
@@ -52,7 +53,7 @@ setup(
     description='AIMET',
     long_description=open('README.txt').read(),
     package_data={'aimet_torch':['acceptance_tests/*.*']},
-    dependency_links=[setup_cfg.remote_url + "/releases/download/"+str(setup_cfg.version)+"/AimetCommon/" + str(setup_cfg.version) + "/"],
+    dependency_links=[common_dep_whl],
     install_requires=["AimetCommon==" + str(setup_cfg.version)],
     include_package_data=True,
     zip_safe=True,

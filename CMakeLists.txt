@@ -52,7 +52,9 @@ set(AIMET_LD_LIBRARY_PATH
 if(NOT DEFINED SW_VERSION)
   file(STRINGS "packaging/version.txt" SW_VERSION)
   message(STATUS "Set SW_VERSION = ${SW_VERSION} from ${CMAKE_CURRENT_SOURCE_DIR}/packaging/version.txt")
-endif(NOT DEFINED SW_VERSION)
+else()
+  message(STATUS "SW_VERSION already set to ${SW_VERSION}.")
+endif()
 
 find_package(Threads)
 # Disabling openMP since statically linked OpenMP in PyTorch (v1.5.0) seems to conflict with aimet usage
@@ -121,6 +123,8 @@ endif(NOT DEFINED AIMET_PACKAGE_PATH)
 execute_process(COMMAND git config --get remote.origin.url  OUTPUT_VARIABLE remote_url)
 message(STATUS "remote_url ${remote_url}")
 string(REGEX REPLACE "\n$" "" remote_url "${remote_url}")
+# Remove the ".git" suffix from the remote repo URL
+string(REGEX REPLACE "\\.[^.]*$" "" remote_url ${remote_url})
 
 set(remote_url_cfg "\"${remote_url}\"")
 set(sw_version_cfg "\"${SW_VERSION}\"")
