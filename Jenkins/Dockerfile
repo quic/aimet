@@ -207,7 +207,7 @@ RUN sed 's@session\s*required\s*pam_loginuid.so@session optional pam_loginuid.so
 # Turn this into a development image
 RUN cd / && git clone https://github.com/tensorflow/tensorflow.git && cd tensorflow && git checkout v1.15.0
 
-RUN pip install git-pylint-commit-hook osqp onnx==1.6.0
+RUN pip install git-pylint-commit-hook osqp==0.6.1 onnx==1.7.0
 
 # bokeh requires Pillow while Pillow-SIMD is being used everywhere in Morpheus.
 # To install bokeh, we are installing all dependencies of bokeh other than Pillow.
@@ -216,7 +216,7 @@ RUN pip download bokeh==1.2.0 hvplot==0.4.0 -d /var/tmp/bokeh_hvplot_download | 
 RUN pip install --no-deps -r /var/tmp/bokeh_hvplot_requirements.txt
 # NOTE: We need to pin the holoviews version to this since the latest version has a circular dependency on bokeh 2.0.0 through the panel package
 RUN pip install holoviews==1.12.7 \
-                netron
+                netron==4.5.5
 
 RUN pip install --no-deps bokeh==1.2.0 hvplot==0.4.0
 RUN rm -rf /var/tmp/bokeh_hvplot_download /var/tmp/bokeh_hvplot_requirements.txt
