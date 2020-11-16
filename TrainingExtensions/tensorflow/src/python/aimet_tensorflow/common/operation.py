@@ -125,10 +125,14 @@ class Op(aimet_common.connected_graph.operation.Op):
         # get product/link/tensor
         output = self.output
 
-        assert len(output.consumers) == 1
+        if output.consumers[0].type in ['branch']:
+            output = self.output.consumers[0].output
+
+        tensor_consumer = output.consumers[0]
+
         # product goes to this consumer
         # get output tensor
-        out_tensor = output.tensor_dict[output.consumers[0]]
+        out_tensor = output.tensor_dict[tensor_consumer]
 
         return OpWithMetaInfoType(self, in_tensor, out_tensor)
 
