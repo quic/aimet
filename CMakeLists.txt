@@ -120,8 +120,8 @@ if(NOT DEFINED AIMET_PACKAGE_PATH)
   message(STATUS "Set AIMET_PACKAGE_PATH = ${AIMET_PACKAGE_PATH}")
 endif(NOT DEFINED AIMET_PACKAGE_PATH)
 
-execute_process(COMMAND git config --get remote.origin.url  OUTPUT_VARIABLE remote_url)
-message(STATUS "remote_url ${remote_url}")
+execute_process(COMMAND git config --get remote.origin.url WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR} OUTPUT_VARIABLE remote_url)
+message(STATUS "Repo Remote URL = ${remote_url}")
 string(REGEX REPLACE "\n$" "" remote_url "${remote_url}")
 # Remove the ".git" suffix from the remote repo URL
 string(REGEX REPLACE "\\.[^.]*$" "" remote_url ${remote_url})
