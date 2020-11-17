@@ -394,12 +394,32 @@ class TestBatchNormFold(unittest.TestCase):
         x = tf.keras.layers.BatchNormalization()(x)
         z = tf.keras.layers.Add()([inputs, x])
         x = tf.nn.relu(z)
+        
+        init = tf.global_variables_initializer()
+        sess = tf.Session()
+        sess.run(init)
+        
+        new_sess, folded_bn_conv_pairs = fold_all_batch_norms(sess, "inputs", 'Relu_1')
+        self.assertEqual(len(folded_bn_conv_pairs), 2)
+
+    def test_bn_fold_model_zoo_sr_gan(self):
+        """
+        create a smaller network with connections as in SR-GAN model
+        """
+        tf.reset_default_graph()
+        inputs = tf.keras.Input(shape=(None, None, 2), name="inputs")
+        y = tf.keras.layers.PReLU(shared_axes=[1, 2])(x)
+        x = tf.keras.layers.Conv2D(2, kernel_size=3, padding='same')(y)
+        x = tf.keras.layers.BatchNormalization()(x)
+        x = tf.keras.layers.Add()([y, x])
+        _ = tf.nn.relu(x)
+
 
         init = tf.global_variables_initializer()
         sess = tf.Session()
         sess.run(init)
-
-        new_sess, folded_bn_conv_pairs = fold_all_batch_norms(sess, "inputs", 'Relu_1')
+        
+        new_sess, folded_bn_conv_pairs = fold_all_batch_norms(sess, "inputs", 'Relu')
 
         # there should be two pairs of BN- Conv picked for fold
         self.assertEqual(len(folded_bn_conv_pairs), 2)
