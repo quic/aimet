@@ -317,13 +317,14 @@ if [ $run_build -eq 1 ]; then
     make doc
     check_stage $? "Generate Doc" "true"
 
-    echo -e "\n********** Stage 2b: Install **********\n"
-    make install
-    check_stage $? "Install" "true"
+    #TODO We temporarily disable this install step
+    ## echo -e "\n********** Stage 2b: Install **********\n"
+    ## make install
+    ## check_stage $? "Install" "true"
 
-    echo -e "\n********** Stage 2c: Package **********\n"
-    make packageaimet
-    #TODO We temporarily disable failure on this pip package generation step
+    #TODO We temporarily disable this pip package generation step
+    ## echo -e "\n********** Stage 2c: Package **********\n"
+    ## make packageaimet
     ## check_stage $? "Package" "true"
 fi
 
