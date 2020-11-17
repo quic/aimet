@@ -61,7 +61,7 @@ logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Winnow)
 
 # pylint: disable=too-many-lines
 # pylint: disable=protected-access
-class IRNode:
+class IrNode:
     """
     Representation for a module in torch graph.
     """
@@ -76,7 +76,7 @@ class IRNode:
         return self.node_type
 
 
-ConnectionsToIRDictType = Dict[torch._C.TensorType, List[Union[IRNode, List[IRNode]]]]
+ConnectionsToIrDictType = Dict[torch._C.TensorType, List[Union[IrNode, List[IrNode]]]]
 
 
 class ConnectedGraph(AimetCommonConnectedGraph):
@@ -241,9 +241,7 @@ class ConnectedGraph(AimetCommonConnectedGraph):
         """
         module_tensor_tuples_map = ConnectedGraph._generate_module_tensors_lookup_table(model, model_input)
         trace = torch.jit.trace(model, model_input)
-        ir_nodes_list = []
-        output_map = {}
-        _ = self._parse_trace_graph(trace, model, ir_nodes_list=ir_nodes_list, output_map=output_map)
+        ir_nodes_list, output_map = self._parse_top_level_trace(trace, model)
         self._construct_ops_and_products(ir_nodes_list,
                                          module_tensor_tuples_map,
                                          self.passthrough_graph_nodes,
@@ -258,24 +256,40 @@ class ConnectedGraph(AimetCommonConnectedGraph):
         for op in ops_list:
             self._determine_split_behavior_for_op_and_insert_split_op_in_connected_graph(op)
 
+    def _parse_top_level_trace(self, trace: Union[torch.jit.TopLevelTracedModule, torch.jit.TracedModule],
+                               model: torch.nn.Module) -> Tuple[List[IrNode], Dict[torch._C.TensorType,
+                                                                                   torch._C.TensorType]]:
+        """
+        Parse the top level trace and return a list of IrNodes and a dictionary mapping equivalent output tensors found
+        during trace parsing.
+        :param trace: Pytorch JIT trace for model or a submodule
+        :param model: Pytorch model to create connected graph from
+        :return: Tuple containing a list of IrNodes and a dictionary mapping equivalent output tensors found during
+        trace parsing.
+        """
+        ir_nodes_list = []
+        output_map = {}
+        _ = self._parse_trace_graph(trace, model, ir_nodes_list=ir_nodes_list, output_map=output_map)
+        return ir_nodes_list, output_map
+
     def _parse_trace_graph(self,
                            trace: Union[torch.jit.TopLevelTracedModule, torch.jit.TracedModule],
                            model: torch.nn.Module,
-                           ir_nodes_list: List[IRNode],
+                           ir_nodes_list: List[IrNode],
                            output_map: Dict[torch._C.TensorType, torch._C.TensorType],
                            higher_level_inputs: Union[List, None] = None,
-                           inputs_map: Union[Dict, None] = None) -> IRNode:
+                           inputs_map: Union[Dict, None] = None) -> IrNode:
         """
-        Implements a depth-first graph extraction to obtain connectivity information in the form of an IRNodes list.
+        Implements a depth-first graph extraction to obtain connectivity information in the form of an IrNodes list.
         Depth-first extraction is realized using recursion.
 
         :param trace: Pytorch JIT trace for model or a submodule
         :param model: Pytorch model to create connected graph from
-        :param ir_nodes_list: List of IRNodes created from traversing the trace graph
+        :param ir_nodes_list: List of IrNodes created from traversing the trace graph
         :param output_map: Dictionary mapping high recursion level outputs to lower level equivalent outputs
         :param higher_level_inputs: Corresponding inputs from a higher graph level
         :param inputs_map: Dictionary mapping low recursion level inputs to higher level equivalent inputs
-        :return: the last created IRNode in the model or submodule
+        :return: the last created IrNode in the model or submodule
         """
         if is_leaf_module(model):
             return self._parse_single_module_model(model, trace.graph, ir_nodes_list)
@@ -335,12 +349,12 @@ class ConnectedGraph(AimetCommonConnectedGraph):
                               trace: Union[torch.jit.TopLevelTracedModule, torch.jit.TracedModule],
                               node_name_to_module: Dict[str, torch.nn.Module],
                               node_name_to_subgraph_model: Dict[str, torch._C.Node],
-                              ir_nodes_list: List[IRNode],
+                              ir_nodes_list: List[IrNode],
                               inputs_map: Dict[torch._C.TensorType, torch._C.TensorType],
                               output_map: Dict[torch._C.TensorType, torch._C.TensorType]):
         # pylint: disable=too-many-locals
         """
-        The call method node signifies invocation of the forward method, this method extracts an IRNode representation
+        The call method node signifies invocation of the forward method, this method extracts an IrNode representation
         of the module. Typically the node has the following construct:
             %output_N : Tensor = prim::CallMethod[name="forward"](%output_L, %output_M)
         :param node: trace graph node i.e. 'CallMethod' node
@@ -349,7 +363,7 @@ class ConnectedGraph(AimetCommonConnectedGraph):
         :param node_name_to_module: dictionary of module indexed by output_name referenced in the sub-graph
         :param node_name_to_subgraph_model: dictionary of torch graph nodes index of output_name that have not been
             resolved
-        :param ir_nodes_list: List of IRNodes created from traversing the trace graph
+        :param ir_nodes_list: List of IrNodes created from traversing the trace graph
         :param inputs_map: Dictionary mapping low recursion level inputs to higher level equivalent inputs
         :param output_map: Dictionary mapping high recursion level outputs to lower level equivalent outputs
         """
@@ -390,7 +404,7 @@ class ConnectedGraph(AimetCommonConnectedGraph):
             if not isinstance(node_name_to_module[input_name], PassThroughOp):
                 op_type = self._get_op_type(node_name_to_module[input_name])
                 node_inputs = [inp for inp in node.inputs()]
-                ir_node = IRNode(node_type=op_type,
+                ir_node = IrNode(node_type=op_type,
                                  inputs=[inputs_map.get(inp, inp) for inp in node_inputs[1:]],
                                  outputs=outputs,
                                  module=node_name_to_module[input_name])
@@ -398,17 +412,17 @@ class ConnectedGraph(AimetCommonConnectedGraph):
 
     def _parse_single_module_model(self, module: torch.nn.Module,
                                    graph: torch._C.Graph,
-                                   ir_nodes_list: List[IRNode]) -> IRNode:
+                                   ir_nodes_list: List[IrNode]) -> IrNode:
         """
         Create a node for the single module model.
         :param module:  Pytorch model composed on single module
         :param graph: trace graph representing the model
-        :param ir_nodes_list: List of IRNodes created from traversing the trace graph
+        :param ir_nodes_list: List of IrNodes created from traversing the trace graph
         :return: Node created for the module
         """
         op_type = self._get_op_type(module)
         node_inputs = [inp for inp in graph.inputs()]
-        ir_node = IRNode(node_type=op_type,
+        ir_node = IrNode(node_type=op_type,
                          inputs=node_inputs[1:],
                          outputs=[output for output in graph.outputs()],
                          module=module)
@@ -462,7 +476,7 @@ class ConnectedGraph(AimetCommonConnectedGraph):
         return op_type
 
     def _construct_ops_and_products(self,
-                                    ir_nodes_list: List[IRNode],
+                                    ir_nodes_list: List[IrNode],
                                     module_tensor_tuples_map: Dict[torch.nn.Module,
                                                                    Tuple[Union[torch.Tensor, Tuple[torch.Tensor]],
                                                                          Union[torch.Tensor, Tuple[torch.Tensor]]]],
@@ -474,7 +488,7 @@ class ConnectedGraph(AimetCommonConnectedGraph):
         :param ir_nodes_list: List of ir_nodes to create ops for
         :param module_tensor_tuples_map: Dictionary mapping modules to input and output tensors obtained from a forward
             pass
-        :param passthrough_types: IRNode types to treat as passthrough (ops will not be created for these ir_nodes)
+        :param passthrough_types: IrNode types to treat as passthrough (ops will not be created for these ir_nodes)
         :param input_types_to_ignore: Input node types to ignore (do not create products for output connections from
             these ir_nodes)
         :param output_map: Mapping between higher level connections with corresponding lower level recursive
@@ -491,11 +505,11 @@ class ConnectedGraph(AimetCommonConnectedGraph):
         self._create_products_from_connections(connections_to_nodes_dict, ir_node_to_op_dict, output_map,
                                                input_types_to_ignore)
 
-    def _create_ops_from_ir_nodes_list(self, ir_nodes_list: List[IRNode],
+    def _create_ops_from_ir_nodes_list(self, ir_nodes_list: List[IrNode],
                                        module_tensor_tuples_map: Dict[torch.nn.Module,
                                                                       Tuple[Union[torch.Tensor, Tuple[torch.Tensor]],
                                                                             Union[torch.Tensor, Tuple[torch.Tensor]]]])\
-            -> Dict[IRNode, Op]:
+            -> Dict[IrNode, Op]:
         """
         Given a list of nodes, create ops for each one.
         :param ir_nodes_list: List of nodes to create ops for
@@ -523,13 +537,13 @@ class ConnectedGraph(AimetCommonConnectedGraph):
             self.ordered_ops.append(op)
         return node_to_op_dict
 
-    def _create_products_from_connections(self, connections_to_nodes_dict: ConnectionsToIRDictType,
-                                          node_to_op_dict: Dict[IRNode, Op],
+    def _create_products_from_connections(self, connections_to_nodes_dict: ConnectionsToIrDictType,
+                                          node_to_op_dict: Dict[IrNode, Op],
                                           output_map: Dict[torch._C.TensorType, torch._C.TensorType],
                                           input_types_to_ignore: List[str]):
         """
         Given connections in a dictionary, create products for each connection if it is not one to ignore.
-        :param connections_to_nodes_dict: Dictionary mapping connections to input IRNode and output IRNodes
+        :param connections_to_nodes_dict: Dictionary mapping connections to input IrNode and output IrNodes
         :param node_to_op_dict: Dictionary mapping nodes to corresponding ops
         :param output_map: Mapping between higher level connections with corresponding lower level recursive
             connections. Only the base level connections carry shape information.
@@ -862,11 +876,11 @@ def _fill_groups_info(op: Op, module: torch.nn.Module):
         op.groups = module.groups
 
 
-def _create_connections_to_ir_nodes_dict(ir_nodes_list: List[IRNode]) -> ConnectionsToIRDictType:
+def _create_connections_to_ir_nodes_dict(ir_nodes_list: List[IrNode]) -> ConnectionsToIrDictType:
     """
-    Create a mapping from connections found in torch graph to input and output IRNodes. Each connection will have one
-    input and zero or more outputs IRNodes.
-    :param ir_nodes_list: List of IRNodes to extract connections information from
+    Create a mapping from connections found in torch graph to input and output IrNodes. Each connection will have one
+    input and zero or more outputs IrNodes.
+    :param ir_nodes_list: List of IrNodes to extract connections information from
     :return: Dictionary mapping connections to input ir_node and output ir_nodes
     """
     connections_to_ir_nodes_dict = {}
@@ -887,7 +901,7 @@ def _create_connections_to_ir_nodes_dict(ir_nodes_list: List[IRNode]) -> Connect
     return connections_to_ir_nodes_dict
 
 
-def _handle_ir_nodes_of_interest(ir_nodes_list: List[IRNode], passthrough_ops: List[str],
+def _handle_ir_nodes_of_interest(ir_nodes_list: List[IrNode], passthrough_ops: List[str],
                                  input_ops_to_ignore: List[str]):
     """
     Update input and output connections of certain ir_nodes in ir_nodes_list (Tuple/ListConstructs, passthrough,
@@ -908,7 +922,7 @@ def _handle_ir_nodes_of_interest(ir_nodes_list: List[IRNode], passthrough_ops: L
             _handle_input_ir_node_to_ignore(ir_node, connections_to_ir_nodes_dict)
 
 
-def _handle_tuple_and_list_construct_ir_node(ir_node: IRNode, connections_to_ir_nodes_dict: ConnectionsToIRDictType):
+def _handle_tuple_and_list_construct_ir_node(ir_node: IrNode, connections_to_ir_nodes_dict: ConnectionsToIrDictType):
     """
     Update connections of tuple and list construct ir_nodes, as well as connections to children of the ir_node.
     :param ir_node: Tuple or list construct ir_node
@@ -930,7 +944,7 @@ def _handle_tuple_and_list_construct_ir_node(ir_node: IRNode, connections_to_ir_
     del connections_to_ir_nodes_dict[output]
 
 
-def _handle_tuple_unpack_ir_node(ir_node: IRNode, connections_to_ir_nodes_dict: ConnectionsToIRDictType):
+def _handle_tuple_unpack_ir_node(ir_node: IrNode, connections_to_ir_nodes_dict: ConnectionsToIrDictType):
     """
     Update connections of tuple unpack nodes, as well as connections to children of the node.
     :param ir_node: Tuple or list construct node
@@ -963,7 +977,7 @@ def _handle_tuple_unpack_ir_node(ir_node: IRNode, connections_to_ir_nodes_dict: 
         del connections_to_ir_nodes_dict[tuple_unpack_input]
 
 
-def _handle_passthrough_ir_node(ir_node: IRNode, connections_to_ir_nodes_dict: ConnectionsToIRDictType):
+def _handle_passthrough_ir_node(ir_node: IrNode, connections_to_ir_nodes_dict: ConnectionsToIrDictType):
     """
     Update connections of ir_nodes feeding into and following the passthrough ir_node to effectively skip the
     passthrough ir_node.
@@ -988,7 +1002,7 @@ def _handle_passthrough_ir_node(ir_node: IRNode, connections_to_ir_nodes_dict: C
     del connections_to_ir_nodes_dict[output_connection]
 
 
-def _handle_input_ir_node_to_ignore(ir_node: IRNode, connections_to_ir_nodes_dict: ConnectionsToIRDictType):
+def _handle_input_ir_node_to_ignore(ir_node: IrNode, connections_to_ir_nodes_dict: ConnectionsToIrDictType):
     """
     Update the consumers of input ir_nodes to ignore to remove thoe incoming connections.
     :param ir_node: Tuple or list construct ir_node
@@ -1053,16 +1067,16 @@ def _update_op_output_with_product(op: Op, product: Product):
 
 
 def _create_functional_ir_node(node: torch._C.Node, inputs_map: Dict[torch._C.TensorType, torch._C.TensorType]) \
-        -> IRNode:
+        -> IrNode:
     """
-    Create an IRNode containing input and output connections information given a torch graph node.
+    Create an IrNode containing input and output connections information given a torch graph node.
     :param node: trace graph node
     :param inputs_map: Mapping
-    :return: IRNode created from information in the trace graph node
+    :return: IrNode created from information in the trace graph node
     """
     outputs = [output for output in node.outputs()]
     op_type = ConnectedGraph._parse_op_type(node)
-    ir_node = IRNode(node_type=op_type,
+    ir_node = IrNode(node_type=op_type,
                      inputs=[inputs_map.get(inp, inp) for inp in node.inputs()],
                      outputs=outputs,
                      module=None)
