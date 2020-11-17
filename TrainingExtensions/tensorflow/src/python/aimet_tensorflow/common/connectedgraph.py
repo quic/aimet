@@ -243,12 +243,17 @@ class ConnectedGraph(aimetCommonConnectedGraph):
 
         for op in product_producer_dict:
             if len(product_producer_dict[op]) > 1:
+                # check if this has an input node
+                is_model_input = False
+                for product in product_producer_dict[op]:
+                    if product.is_model_input:
+                        is_model_input = True
                 # Create branch op directly under op
                 branch_op = self._create_branch_op(op.output_shape)
                 # Create product to link op and branch_op
                 self._link_previous_op_to_branch_op(op, branch_op, op.output_shape)
                 # Create product to link branch op with multiple children modules
-                self._link_branch_op_to_multiple_ops(branch_op, product_producer_dict[op])
+                self._link_branch_op_to_multiple_ops(branch_op, product_producer_dict[op], is_model_input)
 
     def _create_branch_op(self, output_shape: tf.TensorShape):
         """ Create a new branch op in self._ops """
@@ -275,10 +280,12 @@ class ConnectedGraph(aimetCommonConnectedGraph):
         branch_op.add_input(product)
         self._products[product.name] = product
 
-    def _link_branch_op_to_multiple_ops(self, branch_op: Op, product_list: list):
+    def _link_branch_op_to_multiple_ops(self, branch_op: Op, product_list: list,
+                                        is_model_input: bool = False):
         """ Create new product with multiple consumers, linking branch op with children ops"""
 
         branch_op_product = Product(branch_op.name + '_to_' + 'multiple_ops', branch_op.output_shape)
+        branch_op_product.is_model_input = is_model_input
         branch_op_product.producer = branch_op
         branch_op.output = branch_op_product
 

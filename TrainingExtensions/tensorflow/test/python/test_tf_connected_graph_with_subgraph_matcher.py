@@ -390,6 +390,43 @@ class TestTfConnectedGraph(unittest.TestCase):
 
         tf.compat.v1.reset_default_graph()
 
+    def test_model_zoo_videnn_pose_estimation_model_with_input_split(self):
+        """
+        create a smaller network with connections as in pose estimation model and ViDeNN model
+        Testwhen input is split and fed into two different ops
+        :return:
+        """
+
+        tf.reset_default_graph()
+        inputs = tf.keras.Input(shape=(None, None, 2), name="inputs")
+
+        x = tf.keras.layers.Conv2D(2, kernel_size=3, padding='same')(inputs)
+        x = tf.keras.layers.BatchNormalization()(x)
+        x = tf.nn.relu(x)
+        x = tf.keras.layers.Conv2D(2, kernel_size=3, padding='same')(x)
+        x = tf.keras.layers.BatchNormalization()(x)
+        z = tf.keras.layers.Add()([inputs, x])
+        x = tf.nn.relu(z)
+
+        init = tf.global_variables_initializer()
+        sess = tf.Session()
+        sess.run(init)
+
+        conn_graph = ConnectedGraph(tf.get_default_graph(), starting_op_names=['inputs'],
+                                    output_op_names=['Relu_1'])
+
+        # get input ops
+        # Find the input node(s) in the graph
+        input_nodes = []
+        for op in conn_graph.get_all_ops().values():
+            if op.inputs and op.inputs[0].is_model_input:
+                input_nodes.append(op)
+
+        # there should be two ops marked as inputs in this model
+        self.assertEqual(len(input_nodes), 2)
+        self.assertEqual(input_nodes[0].name, 'add/add')
+        self.assertEqual(input_nodes[1].name, "conv2d/Conv2D")
+
     def test_model_with_simple_rnn_layer(self):
         """ Test connected graph construction on a model with simple RNN op """
         tf.compat.v1.reset_default_graph()

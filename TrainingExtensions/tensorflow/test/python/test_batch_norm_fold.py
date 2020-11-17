@@ -376,3 +376,30 @@ class TestBatchNormFold(unittest.TestCase):
         self.assertTrue(np.allclose(baseline_output, output_after_fold, atol=1.e-4))
         # New connected graph should have one less op since bn was removed
         self.assertTrue(len(old_conn_graph.get_all_ops()), len(new_conn_graph.get_all_ops()) - 1)
+
+    def test_bn_fold_model_zoo_videnn_pose_estimation(self):
+        """
+        create a smaller network with connections as in pose estimation model and ViDeNN model
+        Test BN fold
+        :return:
+        """
+
+        tf.reset_default_graph()
+        inputs = tf.keras.Input(shape=(None, None, 2), name="inputs")
+
+        x = tf.keras.layers.Conv2D(2, kernel_size=3, padding='same')(inputs)
+        x = tf.keras.layers.BatchNormalization()(x)
+        x = tf.nn.relu(x)
+        x = tf.keras.layers.Conv2D(2, kernel_size=3, padding='same')(x)
+        x = tf.keras.layers.BatchNormalization()(x)
+        z = tf.keras.layers.Add()([inputs, x])
+        x = tf.nn.relu(z)
+
+        init = tf.global_variables_initializer()
+        sess = tf.Session()
+        sess.run(init)
+
+        new_sess, folded_bn_conv_pairs = fold_all_batch_norms(sess, "inputs", 'Relu_1')
+
+        # there should be two pairs of BN- Conv picked for fold
+        self.assertEqual(len(folded_bn_conv_pairs), 2)
