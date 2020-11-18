@@ -56,7 +56,7 @@ from aimet_common.utils import AimetLogger
 from aimet_torch.utils import is_leaf_module, run_hook_for_layers_with_given_input
 from aimet_torch.defs import PassThroughOp
 
-logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Winnow)
+logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.ConnectedGraph)
 
 
 # pylint: disable=too-many-lines
@@ -278,7 +278,7 @@ class ConnectedGraph(AimetCommonConnectedGraph):
                            ir_nodes_list: List[IrNode],
                            output_map: Dict[torch._C.TensorType, torch._C.TensorType],
                            higher_level_inputs: Union[List, None] = None,
-                           inputs_map: Union[Dict, None] = None) -> IrNode:
+                           inputs_map: Union[Dict, None] = None) -> List[torch._C.TensorType]:
         """
         Implements a depth-first graph extraction to obtain connectivity information in the form of an IrNodes list.
         Depth-first extraction is realized using recursion.
@@ -289,7 +289,7 @@ class ConnectedGraph(AimetCommonConnectedGraph):
         :param output_map: Dictionary mapping high recursion level outputs to lower level equivalent outputs
         :param higher_level_inputs: Corresponding inputs from a higher graph level
         :param inputs_map: Dictionary mapping low recursion level inputs to higher level equivalent inputs
-        :return: the last created IrNode in the model or submodule
+        :return: the outputs of the traced module
         """
         if is_leaf_module(model):
             return self._parse_single_module_model(model, trace.graph, ir_nodes_list)
@@ -329,8 +329,8 @@ class ConnectedGraph(AimetCommonConnectedGraph):
             else:
                 ir_nodes_list.append(_create_functional_ir_node(node, inputs_map))
 
-        # return the last op enqueued in the sub-graph forward pass
-        return ir_nodes_list[-1]
+        # return output connections
+        return [output for output in trace.graph.return_node().inputs()]
 
     @staticmethod
     def _parse_op_type(node: torch._C.Node) -> str:
@@ -381,22 +381,24 @@ class ConnectedGraph(AimetCommonConnectedGraph):
             for level in trace_level:
                 subgraph_trace = getattr(subgraph_trace, level)
 
-            # the op returned on parsing the sub-graph shall be last op in the sub-graph forward pass
-            ir_node = self._parse_trace_graph(subgraph_trace, subgraph_model, ir_nodes_list,
-                                              higher_level_inputs=inputs[1:], inputs_map=inputs_map,
-                                              output_map=output_map)
-            # Current node is a subgraph. The returned op should have been added to ir_nodes_list when
-            # it was created in a lower recursion level. The outputs identified for the op at that time should be the
-            # same as the outputs of this node. Replace the output names from the lower level with the output names from
-            # this level.
-            assert ir_node == ir_nodes_list[-1]
-            assert len(ir_nodes_list[-1].outputs) == len(outputs)
+            submodule_outputs = self._parse_trace_graph(subgraph_trace, subgraph_model, ir_nodes_list,
+                                                        higher_level_inputs=inputs[1:], inputs_map=inputs_map,
+                                                        output_map=output_map)
+            # Current node is a subgraph. The outputs of the subgraph at this level will correspond to the outputs of
+            # the subgraph in the inner recursion level. Update output_map to contain this new mapping.
+            assert len(submodule_outputs) == len(outputs)
             for idx, output in enumerate(outputs):
-                if ir_nodes_list[-1].outputs[idx] in output_map:
-                    output_map[output] = output_map[ir_nodes_list[-1].outputs[idx]]
+                if submodule_outputs[idx] in output_map:
+                    output_map[output] = output_map[submodule_outputs[idx]]
                 else:
-                    output_map[output] = ir_nodes_list[-1].outputs[idx]
-            ir_nodes_list[-1].outputs = outputs
+                    output_map[output] = submodule_outputs[idx]
+
+                # Go through each ir_node and examine the outputs. For any output that was returned from an inner
+                # recursion level, replace it with the corresponding output from this level.
+                for ir_node in ir_nodes_list:
+                    for ir_node_idx, ir_node_output in enumerate(ir_node.outputs):
+                        if ir_node_output == submodule_outputs[idx]:
+                            ir_node.outputs[ir_node_idx] = outputs[idx]
 
         elif input_name in node_name_to_module and is_leaf_module(node_name_to_module[input_name]):
             # the graph is fully represented by a directional graph of leaf torch modules so the recursion is
@@ -413,7 +415,7 @@ class ConnectedGraph(AimetCommonConnectedGraph):
 
     def _parse_single_module_model(self, module: torch.nn.Module,
                                    graph: torch._C.Graph,
-                                   ir_nodes_list: List[IrNode]) -> IrNode:
+                                   ir_nodes_list: List[IrNode]) -> List[torch._C.TensorType]:
         """
         Create a node for the single module model.
         :param module:  Pytorch model composed on single module
@@ -423,12 +425,13 @@ class ConnectedGraph(AimetCommonConnectedGraph):
         """
         op_type = self._get_op_type(module)
         node_inputs = [inp for inp in graph.inputs()]
+        outputs = [output for output in graph.return_node().inputs()]
         ir_node = IrNode(node_type=op_type,
                          inputs=node_inputs[1:],
                          outputs=[output for output in graph.outputs()],
                          module=module)
         ir_nodes_list.append(ir_node)
-        return ir_node
+        return outputs
 
     @staticmethod
     def _get_attribute_name(node: torch._C.Node) -> Dict[str, str]:
@@ -814,21 +817,13 @@ class ConnectedGraph(AimetCommonConnectedGraph):
             split_op_product.consumers.append(a_consumer)
             logger.debug("Insert Split Op: Step 2a. Consumer Op: %s, a_product_index: %s",
                          a_consumer.dotted_name, a_product_index)
-            if a_consumer.type in ('cat', 'add'):
-                # Need to insert the newly created split_op product in the correct input index of the cat Op :)
-                logger.debug("Insert Split Op: Step 2b. Op has multiple input products: %s", a_consumer.inputs)
-                input_product_index = determine_preceding_op_input_product_index_in_multi_input_op(preceding_op,
-                                                                                                   a_consumer)
-                a_consumer.inputs[input_product_index] = split_op_product
-                logger.debug("Insert Split Op: Step 2c. For product: %s, split_op input_product_index: %s",
-                             split_op_product.name, input_product_index)
-            else:
-                # There is only one input to this consumer. Add it to the 0th index of inputs.
-                logger.debug("Insert Split Op: Step 2d. Op has single input product: %s", a_consumer.inputs)
-                input_product_index = 0
-                a_consumer.inputs[input_product_index] = split_op_product
-                logger.debug("Insert Split Op: Step 2e. For split_op product: %s, input_product_index: %s",
-                             split_op_product.name, input_product_index)
+            # Need to insert the newly created split_op product in the correct input index of the op
+            logger.debug("Insert Split Op: Step 2b. Op has multiple input products: %s", a_consumer.inputs)
+            input_product_index = determine_preceding_op_input_product_index_in_multi_input_op(preceding_op,
+                                                                                               a_consumer)
+            a_consumer.inputs[input_product_index] = split_op_product
+            logger.debug("Insert Split Op: Step 2c. For product: %s, split_op input_product_index: %s",
+                         split_op_product.name, input_product_index)
             consumer_index += 1
 
     def _validate_op_modules(self):
