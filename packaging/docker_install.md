@@ -74,25 +74,25 @@ After a successful build, install the package using the following instructions:
 cd $WORKSPACE/build
 make install
 ```
-Once the installation step is complete, the AIMET package is created at `$WORKSPACE/build/staging/lib/`.
+Once the installation step is complete, the AIMET package is created at `$WORKSPACE/build/staging/universal/lib/`.
 
 ## Setup paths
 Setup the package and library paths as follows:
 ```bash
-export PYTHONPATH=$WORKSPACE/build/staging/lib/x86_64-linux-gnu:$WORKSPACE/build/staging/lib/python:$PYTHONPATH
-export LD_LIBRARY_PATH=$WORKSPACE/build/staging/lib/x86_64-linux-gnu:$WORKSPACE/build/staging/lib/python:$LD_LIBRARY_PATH
+export PYTHONPATH=$WORKSPACE/build/staging/universal/lib/x86_64-linux-gnu:$WORKSPACE/build/staging/universal/lib/python:$PYTHONPATH
+export LD_LIBRARY_PATH=$WORKSPACE/build/staging/universal/lib/x86_64-linux-gnu:$WORKSPACE/build/staging/universal/lib/python:$LD_LIBRARY_PATH
 ```
 At this point, we are all set to use AIMET!
 
 ## Usage examples and documentation
-The following steps would generate AIMET documentation including the user guide, examples and API documentation at `$WORKSPACE/build/staging/Docs`:
+The following steps would generate AIMET documentation including the user guide, examples and API documentation at `$WORKSPACE/build/staging/universal/Docs`:
 
 ```bash
 cd $WORKSPACE/build
 make doc
 ```
 
-To begin navigating the documentation, open the page `$WORKSPACE/build/staging/Docs/user_guide/index.html` on any browser.
+To begin navigating the documentation, open the page `$WORKSPACE/build/staging/universal/Docs/user_guide/index.html` on any browser.
 
 ## Docker information
 Code may *optionally* be developed inside a development docker container. This section describes how to build a docker image and launch a container using the provided [Dockerfile](../Jenkins/Dockerfile).
