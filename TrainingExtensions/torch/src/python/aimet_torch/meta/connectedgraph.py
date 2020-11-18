@@ -382,8 +382,9 @@ class ConnectedGraph(AimetCommonConnectedGraph):
                 subgraph_trace = getattr(subgraph_trace, level)
 
             # the op returned on parsing the sub-graph shall be last op in the sub-graph forward pass
-            ir_node = self._parse_trace_graph(subgraph_trace, subgraph_model, ir_nodes_list, higher_level_inputs=inputs[1:],
-                                              inputs_map=inputs_map, output_map=output_map)
+            ir_node = self._parse_trace_graph(subgraph_trace, subgraph_model, ir_nodes_list,
+                                              higher_level_inputs=inputs[1:], inputs_map=inputs_map,
+                                              output_map=output_map)
             # Current node is a subgraph. The returned op should have been added to ir_nodes_list when
             # it was created in a lower recursion level. The outputs identified for the op at that time should be the
             # same as the outputs of this node. Replace the output names from the lower level with the output names from
@@ -985,21 +986,26 @@ def _handle_passthrough_ir_node(ir_node: IrNode, connections_to_ir_nodes_dict: C
     :param connections_to_ir_nodes_dict: Dictionary mapping connections to input ir_node and output ir_nodes
 
     """
-    # For passthrough ops, simply set the input of the consumer ir_nodes of the op's output to be the input of the
-    # passthrough op itself.
-    # Also clear the inputs and outputs of the passthrough Op to disconnect it from the graph.
-    # Below check is not strictly necessary but current logic assumes so. Easy to change in the future if so.
-    assert len(ir_node.inputs) == 1
-    assert len(ir_node.outputs) == 1
-    input_connection = ir_node.inputs[0]
-    output_connection = ir_node.outputs[0]
-    consumers = connections_to_ir_nodes_dict[output_connection][1]
-    for consumer in consumers:
-        connection_index = consumer.inputs.index(output_connection)
-        consumer.inputs[connection_index] = input_connection
-    ir_node.inputs = []
-    ir_node.outputs = []
-    del connections_to_ir_nodes_dict[output_connection]
+    if not ir_node.inputs:
+        # This will be the case when input to passthrough node is an input to ignore. In this case, the input connection
+        # will have been removed earlier. Treat this node as an input to ignore as well.
+        _handle_input_ir_node_to_ignore(ir_node, connections_to_ir_nodes_dict)
+    else:
+        # For passthrough ops, simply set the input of the consumer ir_nodes of the op's output to be the input of the
+        # passthrough op itself.
+        # Also clear the inputs and outputs of the passthrough Op to disconnect it from the graph.
+        # Below check is not strictly necessary but current logic assumes so. Easy to change in the future if so.
+        assert len(ir_node.inputs) == 1
+        assert len(ir_node.outputs) == 1
+        input_connection = ir_node.inputs[0]
+        output_connection = ir_node.outputs[0]
+        consumers = connections_to_ir_nodes_dict[output_connection][1]
+        for consumer in consumers:
+            connection_index = consumer.inputs.index(output_connection)
+            consumer.inputs[connection_index] = input_connection
+        ir_node.inputs = []
+        ir_node.outputs = []
+        del connections_to_ir_nodes_dict[output_connection]
 
 
 def _handle_input_ir_node_to_ignore(ir_node: IrNode, connections_to_ir_nodes_dict: ConnectionsToIrDictType):
@@ -1041,7 +1047,8 @@ def _create_product_from_connection(product_name: str, connection: torch._C.Tens
         if shape is None and connection in output_map:
             # Shape may be none if this is an output connection that was replaced from the output of a lower level
             # module. Look up the corresponding lowest level connection in output_map.
-            shape = output_map[connection].type().sizes()
+            if isinstance(output_map[connection].type(), torch._C.TensorType):
+                shape = output_map[connection].type().sizes()
 
     product = Product(product_name, shape)
     return product
