@@ -301,12 +301,31 @@ if [ $run_build -eq 1 ]; then
 
     mkdir -p build
     cd build
+
+    extra_opts=""
+    if [ -n "$SW_VERSION" ]; then
+        extra_opts+="-DSW_VERSION=${SW_VERSION}"
+    fi
     # Do not exit on failure by default from this point forward
     set +e
-    cmake -DCMAKE_EXPORT_COMPILE_COMMANDS=ON ..
+    cmake -DCMAKE_EXPORT_COMPILE_COMMANDS=ON ${extra_opts} ..
 
     make -j 8
     check_stage $? "Build" "true"
+
+    echo -e "\n********** Stage 2a: Generate Docs **********\n"
+    make doc
+    check_stage $? "Generate Doc" "true"
+
+    #TODO We temporarily disable this install step
+    ## echo -e "\n********** Stage 2b: Install **********\n"
+    ## make install
+    ## check_stage $? "Install" "true"
+
+    #TODO We temporarily disable this pip package generation step
+    ## echo -e "\n********** Stage 2c: Package **********\n"
+    ## make packageaimet
+    ## check_stage $? "Package" "true"
 fi
 
 if [ $run_unit_tests -eq 1 ]; then
@@ -420,6 +439,7 @@ if [ $run_code_coverage -eq 1 ]; then
     check_stage $coverage_test_rc "Code coverage" "false"
 fi
 
+echo -e "\n outputFolder = ${outputFolder}"
 if grep -q FAIL "${outputFolder}/summary.txt"; then
     EXIT_CODE=3
 fi

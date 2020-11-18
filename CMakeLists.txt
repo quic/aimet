@@ -52,7 +52,9 @@ set(AIMET_LD_LIBRARY_PATH
 if(NOT DEFINED SW_VERSION)
   file(STRINGS "packaging/version.txt" SW_VERSION)
   message(STATUS "Set SW_VERSION = ${SW_VERSION} from ${CMAKE_CURRENT_SOURCE_DIR}/packaging/version.txt")
-endif(NOT DEFINED SW_VERSION)
+else()
+  message(STATUS "SW_VERSION already set to ${SW_VERSION}.")
+endif()
 
 find_package(Threads)
 # Disabling openMP since statically linked OpenMP in PyTorch (v1.5.0) seems to conflict with aimet usage
@@ -109,6 +111,37 @@ set_target_properties(TensorFlow PROPERTIES
         "${TENSORFLOW_INCLUDES}"
       )
 
+# -------------------------------
+# Generate pip packages
+# -------------------------------
+# Set the packaging path (if not already set)
+if(NOT DEFINED AIMET_PACKAGE_PATH)
+  set(AIMET_PACKAGE_PATH "\"${AIMET_INSTALL_DIR}\"")
+  message(STATUS "Set AIMET_PACKAGE_PATH = ${AIMET_PACKAGE_PATH}")
+endif(NOT DEFINED AIMET_PACKAGE_PATH)
+
+execute_process(COMMAND git config --get remote.origin.url WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR} OUTPUT_VARIABLE remote_url)
+if(NOT remote_url STREQUAL "")
+  message(STATUS "Repo Remote URL = ${remote_url}")
+  string(REGEX REPLACE "\n$" "" remote_url "${remote_url}")
+  # Remove the ".git" suffix from the remote repo URL
+  string(REGEX REPLACE "\\.[^.]*$" "" remote_url ${remote_url})
+
+  set(remote_url_cfg "\"${remote_url}\"")
+  set(sw_version_cfg "\"${SW_VERSION}\"")
+
+  file(WRITE "${CMAKE_CURRENT_SOURCE_DIR}/packaging/setup_cfg.py" "version=${sw_version_cfg}\n")
+  file(APPEND "${CMAKE_CURRENT_SOURCE_DIR}/packaging/setup_cfg.py" "remote_url=${remote_url_cfg}")
+
+  add_custom_target(packageaimet
+    # Run the install target first
+    COMMAND "${CMAKE_COMMAND}" --build . --target install
+    # Now run the packaging target to generate wheel files
+    COMMAND ${CMAKE_COMMAND} -DAIMET_PACKAGE_PATH=${AIMET_PACKAGE_PATH} -DSOURCE_DIR=${CMAKE_CURRENT_SOURCE_DIR} -P ${CMAKE_CURRENT_SOURCE_DIR}/packaging/package_aimet.cmake
+  )
+else()
+  message(STATUS "Repo Remote URL is blank. Skipping packageaimet target")
+endif()
 
 enable_testing()
 

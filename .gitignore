@@ -28,4 +28,6 @@ __pycache__/
 buildntest_results
 unit_test_results
 
+# Other generated files
 *.swp
+packaging/setup_cfg.py
