@@ -277,10 +277,16 @@ op_type_templates = {
     'LSTM_Stacked': {
         'input_shape': (3, 100),
         'op_type': 'LSTM',
-        'constructor': "tf.keras.layers.LSTM(10,"
-                       "return_sequences=True)(inputs)",
+        'constructor': "tf.keras.layers.LSTM(10, return_sequences=True)(inputs)",
         'module_regex': ['(.+)/while/MatMul$'],
         'associated_op_regex': ['MatMul$']
+    },
+    'PreLU': {
+        'input_shape': (1, 10),
+        'op_type': 'PReLU',
+        'constructor': "tf.keras.layers.PReLU()(inputs)",
+        'module_regex': ['(.+/Relu)$'],
+        'associated_op_regex': ['Relu$']
     }
 
 }
