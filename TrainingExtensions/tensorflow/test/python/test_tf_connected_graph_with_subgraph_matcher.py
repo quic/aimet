@@ -427,6 +427,27 @@ class TestTfConnectedGraph(unittest.TestCase):
         self.assertEqual(input_nodes[0].name, 'add/add')
         self.assertEqual(input_nodes[1].name, "conv2d/Conv2D")
 
+    def test_model_with_PReLU(self):
+        """
+        PreLU
+        """
+
+        tf.reset_default_graph()
+        inputs = tf.keras.Input(shape=(1, 10, 10), name="inputs")
+
+        x = tf.keras.layers.PReLU()(inputs)
+        x = tf.keras.layers.ReLU()(x)
+
+        init = tf.global_variables_initializer()
+        sess = tf.Session()
+        sess.run(init)
+
+        conn_graph = ConnectedGraph(tf.get_default_graph(), starting_op_names=['inputs'],
+                                    output_op_names=['re_lu/Relu'])
+
+        self.assertEqual(3, len(conn_graph.get_all_ops()))
+        self.assertEqual(5, len(conn_graph.get_all_ops()['p_re_lu/Relu'].internal_ops))
+
     def test_model_with_simple_rnn_layer(self):
         """ Test connected graph construction on a model with simple RNN op """
         tf.compat.v1.reset_default_graph()
