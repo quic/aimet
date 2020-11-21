@@ -59,11 +59,46 @@ class TestCrossLayerEqualization(unittest.TestCase):
         """
         tf.reset_default_graph()
         inputs = tf.keras.Input(shape=(32, 32, 3,), name="inputs")
-        conv1_op = tf.keras.layers.Conv2D(32, (3, 3))(inputs)
-        conv2_op = tf.keras.layers.Conv2D(32, (3, 3))(conv1_op)
-        model = tf.nn.relu(conv2_op)
+        x = tf.keras.layers.Conv2D(32, (3, 3))(inputs)
+        x = tf.nn.relu(x, name='ReluInTheMiddle')
+        x = tf.keras.layers.Conv2D(32, (3, 3))(x)
+        x = tf.nn.relu(x, name='Relu')
 
-        return model
+        return x
+
+    @staticmethod
+    def _custom_three_layer_model_keras():
+        """
+        Builds a custom model with three conv layers
+        :return:
+        """
+        tf.reset_default_graph()
+        inputs = tf.keras.Input(shape=(32, 32, 3,), name="inputs")
+        x = tf.keras.layers.Conv2D(32, (3, 3))(inputs)
+        x = tf.nn.relu(x, name='ReluInTheMiddle')
+        x = tf.keras.layers.Conv2D(32, (3, 3))(x)
+        x = tf.keras.layers.ReLU(name='AnotherRelu')(x)
+        x = tf.keras.layers.Conv2D(32, (3, 3))(x)
+        x = tf.nn.relu(x, name='Relu')
+
+        return x
+
+    @staticmethod
+    def _custom_three_layer_model_keras_prelu():
+        """
+        Builds a custom model with three conv layers
+        :return:
+        """
+        tf.reset_default_graph()
+        inputs = tf.keras.Input(shape=(32, 32, 3,), name="inputs")
+        x = tf.keras.layers.Conv2D(32, (3, 3))(inputs)
+        x = tf.nn.relu(x, name='ReluInTheMiddle')
+        x = tf.keras.layers.Conv2D(32, (3, 3))(x)
+        x = tf.keras.layers.PReLU(name='prelu')(x)
+        x = tf.keras.layers.Conv2D(32, (3, 3))(x)
+        x = tf.nn.relu(x, name='Relu')
+
+        return x
 
     def test_find_layer_groups_to_scale_custom_model_with_candidate_layers(self):
         """ Test find_layer_groups_to_scale() on a custom model """
@@ -76,7 +111,7 @@ class TestCrossLayerEqualization(unittest.TestCase):
         start_op = "inputs"
 
         graph_util = GraphSearchUtils(tf.get_default_graph(), start_op, 'Relu')
-        layer_groups = graph_util.find_layer_groups_to_scale()
+        _ , layer_groups = graph_util.find_layer_groups_to_scale()
         self.assertEqual(1, len(layer_groups))
 
     def test_find_layers_groups_tp_scale_custom_model_without_candidate_layers(self):
@@ -93,7 +128,7 @@ class TestCrossLayerEqualization(unittest.TestCase):
         sess.run(init)
 
         graph_util = GraphSearchUtils(tf.get_default_graph(), "inputs", 'Relu')
-        layer_groups = graph_util.find_layer_groups_to_scale()
+        _ , layer_groups = graph_util.find_layer_groups_to_scale()
         self.assertEqual(0, len(layer_groups))
 
     def test_update_weight_tensor_for_op(self):
@@ -138,7 +173,7 @@ class TestCrossLayerEqualization(unittest.TestCase):
         sess.run(init)
 
         graph_util = GraphSearchUtils(tf.get_default_graph(), "inputs", 'Relu')
-        layer_groups_as_tf_ops = graph_util.find_layer_groups_to_scale()
+        _ , layer_groups_as_tf_ops = graph_util.find_layer_groups_to_scale()
         scaling_factors = CrossLayerScaling.scale_cls_set_with_conv_layers(sess, layer_groups_as_tf_ops[0])
         self.assertEqual(32, len(scaling_factors))
 
@@ -166,7 +201,7 @@ class TestCrossLayerEqualization(unittest.TestCase):
         sess.run(init)
 
         graph_util = GraphSearchUtils(tf.get_default_graph(), "input_1", 'Relu')
-        layer_groups_as_tf_ops = graph_util.find_layer_groups_to_scale()
+        _ , layer_groups_as_tf_ops = graph_util.find_layer_groups_to_scale()
         scaling_matrix12, scaling_matrix23 = CrossLayerScaling.scale_cls_set_with_depthwise_layers(
             sess, layer_groups_as_tf_ops[0])
         self.assertEqual(10, len(scaling_matrix12))
@@ -182,6 +217,33 @@ class TestCrossLayerEqualization(unittest.TestCase):
         new_sess, scaling_factors = CrossLayerScaling.scale_model(sess, "inputs", 'Relu')
         # scaling factors for number of groups selected for scaling returned
         self.assertEqual(1, len(scaling_factors))
+        self.assertTrue(scaling_factors[0].cls_pair_info_list[0].relu_activation_between_layers)
+
+    def test_scale_three_layer_model(self):
+        """ Test scale_model on a custom 3-layer model """
+
+        _ = TestCrossLayerEqualization._custom_three_layer_model_keras()
+        init = tf.global_variables_initializer()
+        sess = tf.Session()
+        sess.run(init)
+        new_sess, scaling_factors = CrossLayerScaling.scale_model(sess, "inputs", 'Relu')
+        # scaling factors for number of groups selected for scaling returned
+        self.assertEqual(2, len(scaling_factors))
+        self.assertTrue(scaling_factors[0].cls_pair_info_list[0].relu_activation_between_layers)
+        self.assertTrue(scaling_factors[1].cls_pair_info_list[0].relu_activation_between_layers)
+
+    def test_scale_three_layer_model_with_prelu(self):
+        """ Test scale_model on a custom 3-layer model with prelu """
+
+        _ = TestCrossLayerEqualization._custom_three_layer_model_keras_prelu()
+        init = tf.global_variables_initializer()
+        sess = tf.Session()
+        sess.run(init)
+        new_sess, scaling_factors = CrossLayerScaling.scale_model(sess, "inputs", 'Relu')
+        # scaling factors for number of groups selected for scaling returned
+        self.assertEqual(2, len(scaling_factors))
+        self.assertTrue(scaling_factors[0].cls_pair_info_list[0].relu_activation_between_layers)
+        self.assertTrue(scaling_factors[1].cls_pair_info_list[0].relu_activation_between_layers)
 
     def test_relu6_replaced_with_relu(self):
         """
@@ -301,7 +363,7 @@ class TestCrossLayerEqualization(unittest.TestCase):
         output_op = 'Relu_1'
 
         graph_search = GraphSearchUtils(sess.graph, start_op, output_op)
-        layer_groups_as_tf_ops = graph_search.find_layer_groups_to_scale()
+        _ , layer_groups_as_tf_ops = graph_search.find_layer_groups_to_scale()
 
         assert len(layer_groups_as_tf_ops) == 1
 

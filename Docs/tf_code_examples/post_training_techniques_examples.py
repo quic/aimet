@@ -162,9 +162,9 @@ def format_info_for_high_bias_fold(sess, layer_pairs, consecutive_layer_list, sc
     for (conv_op, bn_op_with_meta, _fold_upstream_flag) in layer_pairs:
         folded_pairs.append((conv_op, bn_op_with_meta.op))
 
-    # Find if there were relu activations between layers of each cross layer scaling set
-    graph_search = GraphSearchUtils(sess.graph, "input_1", "fc1000/Softmax")
-    is_relu_activation_in_cls_sets = graph_search.is_relu_activation_present_in_cls_sets(consecutive_layer_list)
+    # List that hold a boolean for if there were relu activations between layers of each cross layer scaling set
+    is_relu_activation_in_cls_sets = []
+    # Note the user is expected to fill in this list manually
 
     # Convert to a list of cls-set-info elements
     cls_set_info_list = CrossLayerScaling.create_cls_set_info_list(consecutive_layer_list,
