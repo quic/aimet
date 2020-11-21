@@ -39,6 +39,7 @@
 
 import tensorflow as tf
 from tensorflow.contrib import graph_editor as ge
+from aimet_tensorflow.common.operation import Op
 from aimet_common.utils import AimetLogger
 logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Utils)
 
@@ -64,11 +65,11 @@ def replace_relu6_with_relu(sess: tf.Session, relu6_op: tf.Operation):
 
         ge.detach_inputs(relu6_op)
 
-def does_conv_have_relu_activation(input_op: tf.Operation)-> bool:
+def does_conv_have_relu_activation(input_op: Op)-> bool:
     """
     check if a given operation of type conv2d or depthwise conv2d
     has Relu activations or not.
-    :param module: Conv or Depthwise conv 2D ops
+    :param input_op: Conv or Depthwise conv 2D ops
     :return: True if Relu activation present - False otherwise.
     """
 
@@ -76,10 +77,8 @@ def does_conv_have_relu_activation(input_op: tf.Operation)-> bool:
         raise ValueError('Op type: '+input_op.type+' is not CONV2D!')
 
     # conv --> bias add / add --> relu
-    for consumer in input_op.outputs[0].consumers():
-        if consumer.type in ['Add', 'BiasAdd']:
-            for output_ops in consumer.outputs[0].consumers():
-                if output_ops.type in ['Relu']:
-                    return True
+    if (len(input_op.output.consumers) == 1) and \
+        (input_op.output.consumers[0].type == 'Relu' or input_op.output.consumers[0].type == 'PReLU'):
+        return True
 
     return False
