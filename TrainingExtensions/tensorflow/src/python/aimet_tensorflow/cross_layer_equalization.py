@@ -113,7 +113,7 @@ class GraphSearchUtils:
             current_group.append(op)
 
         # Terminating condition for current group
-        if not (op.type in ['Conv2D', 'DepthwiseConv2dNative', 'Relu', 'Pad', 'Identity']):
+        if not (op.type in ['Conv2D', 'DepthwiseConv2dNative', 'Relu', 'PReLU', 'Pad', 'Identity']):
             if (len(current_group) > 1) and (current_group not in layer_groups):
                 layer_groups.append(current_group)
                 node_set = [op.dotted_name for op in current_group]
@@ -158,9 +158,9 @@ class GraphSearchUtils:
         """
 
         layer_groups_as_conn_graph_ops = self.find_layer_groups_to_scale_as_conn_ops()
-        layer_groups_as_tf_ops = self.convert_conn_graph_ops_to_tf_op(layer_groups_as_conn_graph_ops)
+        layer_groups_as_tf_ops, tf_op_to_conn_graph_op_map = self.convert_conn_graph_ops_to_tf_op(layer_groups_as_conn_graph_ops)
 
-        return layer_groups_as_tf_ops
+        return tf_op_to_conn_graph_op_map, layer_groups_as_tf_ops
 
     @staticmethod
     def convert_conn_graph_ops_to_tf_op(op_groups: List[List[Op]]) -> \
@@ -171,14 +171,16 @@ class GraphSearchUtils:
         :param op_groups: list of op groups as TfOperation type of used by Connected Graph
         :return: lis of op groups as tf.Operation  (standard TF op type)
         """
+        tf_op_to_conn_graph_op_map = {}
         layer_groups_as_tf_ops = []
         for ops in op_groups:
             curr_group = []
             for op in ops:
+                tf_op_to_conn_graph_op_map[op.get_module()] = op
                 curr_group.append(op.get_module())
             layer_groups_as_tf_ops.append(curr_group)
 
-        return layer_groups_as_tf_ops
+        return layer_groups_as_tf_ops, tf_op_to_conn_graph_op_map
 
     @staticmethod
     def convert_layer_group_to_cls_sets(layer_group):
@@ -205,10 +207,12 @@ class GraphSearchUtils:
         return cls_sets
 
     @staticmethod
-    def is_relu_activation_present_in_cls_sets(cls_sets: List[ClsSet]) -> List[bool]:
+    def is_relu_activation_present_in_cls_sets(cls_sets: List[ClsSet],
+                                               tf_op_to_conn_graph_op_map: Dict) -> List[bool]:
         """
         check if there is Relu activations between cls sets
         :param cls_sets: cls conv op pairs
+        :param tf_op_to_conn_graph_op_map: Map of tf-op => connected graph op
         :return: list of relu activation preset flags(True or False)
         corresponding to input cls_sets list
         """
@@ -220,7 +224,8 @@ class GraphSearchUtils:
 
             is_relu_activation_in_cls_set = ()
             for conv_op in cls_set:
-                is_relu_activation_in_cls_set += (ReluUtils.does_conv_have_relu_activation(conv_op), )
+                conn_graph_conv_op = tf_op_to_conn_graph_op_map[conv_op]
+                is_relu_activation_in_cls_set += (ReluUtils.does_conv_have_relu_activation(conn_graph_conv_op), )
 
             if len(is_relu_activation_in_cls_set) == 1:
                 is_relu_activation_in_cls_set = is_relu_activation_in_cls_set[0]
@@ -533,7 +538,7 @@ class CrossLayerScaling:
 
         # Find layer groups
         graph_search = GraphSearchUtils(sess.graph, input_op_names, output_op_names)
-        layer_groups_as_tf_ops = graph_search.find_layer_groups_to_scale()
+        tf_op_to_conn_graph_op_map, layer_groups_as_tf_ops = graph_search.find_layer_groups_to_scale()
 
         # Find cls sets from the layer groups
         cls_sets = []
@@ -545,7 +550,8 @@ class CrossLayerScaling:
         scale_factors = CrossLayerScaling.scale_cls_sets(sess, cls_sets)
 
         # Find if there were relu activations between layers of each cls set
-        is_relu_activation_in_cls_sets = graph_search.is_relu_activation_present_in_cls_sets(cls_sets)
+        is_relu_activation_in_cls_sets = graph_search.is_relu_activation_present_in_cls_sets(cls_sets,
+                                                                                             tf_op_to_conn_graph_op_map)
 
         # Convert to a list of cls-set-info elements
         cls_set_info_list = CrossLayerScaling.create_cls_set_info_list(cls_sets, scale_factors,

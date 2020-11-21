@@ -281,7 +281,7 @@ op_type_templates = {
         'module_regex': ['(.+)/while/MatMul$'],
         'associated_op_regex': ['MatMul$']
     },
-    'PreLU': {
+    'PReLU': {
         'input_shape': (1, 10),
         'op_type': 'PReLU',
         'constructor': "tf.keras.layers.PReLU()(inputs)",
