@@ -58,13 +58,11 @@ class MyModel(torch.nn.Module):
         self.relu1 = torch.nn.ReLU()
 
         self.conv2 = torch.nn.Conv2d(20, 20, 3)
-        self.relu2 = torch.nn.ReLU()
+        self.relu2 = torch.nn.PReLU()
 
         self.conv3 = torch.nn.Conv2d(20, 20, 3)
 
         self.conv4 = torch.nn.Conv2d(20, 20, 3)
-
-        self.conv5 = torch.nn.Conv2d(20, 20, 3)
 
         self.fc1 = torch.nn.Linear(5120, 10)
 
@@ -329,6 +327,21 @@ class TestTrainingExtensionsCrossLayerScaling(unittest.TestCase):
 
         scale_factors = CrossLayerScaling.scale_model(model, (1, 3, 224, 224))
         self.assertEqual(8, len(scale_factors))
+
+    def test_auto_custom_model(self):
+
+        torch.manual_seed(10)
+        model = MyModel()
+        model.eval()
+
+        # BN fold
+        fold_all_batch_norms(model, (2, 10, 24, 24))
+
+        scale_factors = CrossLayerScaling.scale_model(model, (2, 10, 24, 24))
+        self.assertEqual(3, len(scale_factors))
+        self.assertTrue(scale_factors[0].cls_pair_info_list[0].relu_activation_between_layers)
+        self.assertTrue(scale_factors[1].cls_pair_info_list[0].relu_activation_between_layers)
+        self.assertFalse(scale_factors[2].cls_pair_info_list[0].relu_activation_between_layers)
 
     def test_auto_transposed_conv2d_model(self):
         torch.manual_seed(10)
