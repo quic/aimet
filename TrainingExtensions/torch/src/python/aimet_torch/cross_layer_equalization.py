@@ -138,6 +138,7 @@ class GraphSearchUtils:
 
         # Terminating condition for current group
         if not op.model_module or not isinstance(op.model_module.get_module(), (torch.nn.Conv2d, torch.nn.ReLU,
+                                                                                torch.nn.PReLU,
                                                                                 torch.nn.ConvTranspose2d)):
             if (len(current_group) > 1) and (current_group not in layer_groups):
                 layer_groups.append(current_group)
@@ -216,7 +217,7 @@ class GraphSearchUtils:
             if op.model_module and op.model_module.get_module() is module:
                 assert len(op.output.consumers) == 1
                 is_relu_activation = isinstance(op.output.consumers[0].model_module.get_module(),
-                                                torch.nn.ReLU)
+                                                (torch.nn.ReLU, torch.nn.PReLU))
                 return is_relu_activation
 
         return False
