@@ -203,9 +203,9 @@ class QuantizationSimModel:
                     stream.write('        {}: Unquantized\n'.format(param_name))
 
             # Outputs
-            if wrapper.output_quantizer.enabled:
-                stream.write('    Output: bw={}, encoding-present={}\n'.format(wrapper.output_quantizer.bitwidth,
-                                                                               bool(wrapper.output_quantizer.encoding)))
+            if wrapper.output_quantizers[0].enabled:
+                stream.write('    Output: bw={}, encoding-present={}\n'.format(wrapper.output_quantizers[0].bitwidth,
+                                                                               bool(wrapper.output_quantizers[0].encoding)))
             else:
                 stream.write('    Output: Unquantized\n')
 
@@ -250,7 +250,7 @@ class QuantizationSimModel:
             layer.set_mode(QcQuantizeOpMode.ACTIVE)
 
             # Unless we have invalid encodings
-            if (layer.output_quantizer.enabled and not layer.output_quantizer.encoding) or \
+            if (layer.output_quantizers[0].enabled and not layer.output_quantizers[0].encoding) or \
                     (layer.input_quantizer.enabled and not layer.input_quantizer.encoding):
                 layers_with_invalid_encodings.append(name)
                 layer.set_mode(QcQuantizeOpMode.PASSTHROUGH)
@@ -426,10 +426,10 @@ class QuantizationSimModel:
                         if input_tensor not in param_inputs:
                             tensor_encoding = self._create_encoding_dict_for_quantizer(layer.input_quantizer)
                             activation_encodings[input_tensor] = [tensor_encoding]
-            if layer.output_quantizer.enabled:
+            if layer.output_quantizers[0].enabled:
                 if onnx_node_to_io_tensor_map[layer_name].outputs:
                     for output_tensor in onnx_node_to_io_tensor_map[layer_name].outputs:
-                        tensor_encoding = self._create_encoding_dict_for_quantizer(layer.output_quantizer)
+                        tensor_encoding = self._create_encoding_dict_for_quantizer(layer.output_quantizers[0])
                         activation_encodings[output_tensor] = [tensor_encoding]
 
             # get param quantizers

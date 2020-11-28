@@ -294,7 +294,7 @@ def correct_bias(model: torch.nn.Module, quant_params: qsim.QuantParams,
     for name, module in model.named_modules():
         # Skip all layer's output quantization
         if isinstance(module, QcQuantizeWrapper):
-            module.output_quantizer.enabled = False
+            module.output_quantizers[0].enabled = False
 
     q.compute_encodings(pass_data_through_model, None)
 

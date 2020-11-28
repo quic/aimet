@@ -569,7 +569,7 @@ class TestQuantizationSim(unittest.TestCase):
         sim.compute_encodings(forward_pass, None)
 
         sim.model.conv1_a.param_quantizers['weight'].encoding.max = 10
-        sim.model.conv1_a.output_quantizer.encoding.max = 30
+        sim.model.conv1_a.output_quantizers[0].encoding.max = 30
 
         # save encodings
         sim.export('./data/', 'two_input_model', input_shape=[(1, 1, 28, 28), (1, 1, 28, 28)])
@@ -611,7 +611,7 @@ class TestQuantizationSim(unittest.TestCase):
         sim = QuantizationSimModel(model, quant_scheme=QuantScheme.post_training_tf, input_shapes=(1, 1, 12, 12))
         for module in sim.model.modules():
             if isinstance(module, QcQuantizeWrapper):
-                module.output_quantizer.enabled = False
+                module.output_quantizers[0].enabled = False
                 module.input_quantizer.enabled = True
 
         # Find encodings
@@ -620,11 +620,11 @@ class TestQuantizationSim(unittest.TestCase):
         # try one forward pass
         output = dummy_forward_pass(sim.model, None)
 
-        self.assertFalse(sim.model.conv1.output_quantizer.encoding)
+        self.assertFalse(sim.model.conv1.output_quantizers[0].encoding)
         self.assertTrue(sim.model.conv1.input_quantizer.encoding)
 
         print(sim.model.conv1.input_quantizer)
-        print(sim.model.conv1.output_quantizer)
+        print(sim.model.conv1.output_quantizers[0])
 
     # -------------------------------------------
     def test_input_and_output_quantization(self):
@@ -634,7 +634,7 @@ class TestQuantizationSim(unittest.TestCase):
         sim = QuantizationSimModel(model, quant_scheme=QuantScheme.post_training_tf, input_shapes=(1, 1, 12, 12))
         for module in sim.model.modules():
             if isinstance(module, QcQuantizeWrapper):
-                module.output_quantizer.enabled = True
+                module.output_quantizers[0].enabled = True
                 module.input_quantizer.enabled = True
 
         # Find encodings
@@ -643,11 +643,11 @@ class TestQuantizationSim(unittest.TestCase):
         # try one forward pass
         output = dummy_forward_pass(sim.model, None)
 
-        self.assertTrue(sim.model.conv1.output_quantizer.encoding)
+        self.assertTrue(sim.model.conv1.output_quantizers[0].encoding)
         self.assertTrue(sim.model.conv1.input_quantizer.encoding)
 
         print(sim.model.conv1.input_quantizer)
-        print(sim.model.conv1.output_quantizer)
+        print(sim.model.conv1.output_quantizers[0])
 
     def test_quantizing_models_with_add_ops(self):
         """
@@ -933,8 +933,8 @@ class TestQuantizationSim(unittest.TestCase):
         # try one forward pass
         dummy_forward_pass(model, None)
 
-        self.assertEqual(16, sim.model.conv1.output_quantizer.bitwidth)
-        self.assertEqual(8, sim.model.conv2.output_quantizer.bitwidth)
+        self.assertEqual(16, sim.model.conv1.output_quantizers[0].bitwidth)
+        self.assertEqual(8, sim.model.conv2.output_quantizers[0].bitwidth)
 
     # -------------------------------------------
     def test_with_standalone_ops(self):
@@ -972,10 +972,10 @@ class TestQuantizationSim(unittest.TestCase):
         self.assertTrue(isinstance(sim.model.fc2, nn.Linear))
 
     def check_quant_params(self, model_layer, loaded_model_layer, check_weights):
-        output_encoding1 = model_layer.output_quantizer.encoding
-        output_encoding2 = loaded_model_layer.output_quantizer.encoding
+        output_encoding1 = model_layer.output_quantizers[0].encoding
+        output_encoding2 = loaded_model_layer.output_quantizers[0].encoding
 
-        self.assertEqual(model_layer.output_quantizer.bitwidth, loaded_model_layer.output_quantizer.bitwidth)
+        self.assertEqual(model_layer.output_quantizers[0].bitwidth, loaded_model_layer.output_quantizers[0].bitwidth)
         self.assertEqual(output_encoding1.max, output_encoding2.max)
         self.assertEqual(output_encoding1.min, output_encoding2.min)
         self.assertEqual(output_encoding1.delta, output_encoding2.delta)
@@ -985,8 +985,8 @@ class TestQuantizationSim(unittest.TestCase):
             self.assertEqual(next(iter(model_layer.param_quantizers.values())).bitwidth,
                              next(iter(loaded_model_layer.param_quantizers.values())).bitwidth)
 
-        self.assertEqual(model_layer.output_quantizer.round_mode, loaded_model_layer.output_quantizer.round_mode)
-        self.assertEqual(model_layer.output_quantizer.quant_scheme, loaded_model_layer.output_quantizer.quant_scheme)
+        self.assertEqual(model_layer.output_quantizers[0].round_mode, loaded_model_layer.output_quantizers[0].round_mode)
+        self.assertEqual(model_layer.output_quantizers[0].quant_scheme, loaded_model_layer.output_quantizers[0].quant_scheme)
 
         if check_weights:
             self.assertTrue(np.allclose(model_layer._module_to_wrap.weight.detach().numpy(),
@@ -1100,10 +1100,10 @@ class TestQuantizationSim(unittest.TestCase):
         for name, module in sim.model.named_modules():
             if isinstance(module, QcPostTrainingWrapper):
                 if name == 'relu1':
-                    self.assertTrue(module.output_quantizer.enabled)
+                    self.assertTrue(module.output_quantizers[0].enabled)
                     self.assertEqual(QcQuantizeOpMode.ACTIVE, module._mode)
                 elif name in ['conv2', 'conv2_drop', 'relu2', 'relu3', 'dropout', 'fc2', 'log_softmax']:
-                    self.assertTrue(module.output_quantizer.enabled)
+                    self.assertTrue(module.output_quantizers[0].enabled)
                     self.assertEqual(QcQuantizeOpMode.PASSTHROUGH, module._mode)
 
     def test_connected_graph_is_none(self):

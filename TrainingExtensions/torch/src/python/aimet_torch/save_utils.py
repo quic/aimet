@@ -103,12 +103,12 @@ class SaveUtils:
         for layer_name, layer in model.named_modules():
 
             if isinstance(layer, QcQuantizeStandalone):
-                value = (layer.output_quantizer.encoding.max,
-                         layer.output_quantizer.encoding.min,
-                         layer.output_quantizer.encoding.delta,
-                         layer.output_quantizer.encoding.offset,
-                         layer.output_quantizer.bitwidth,               # hack - standalone layers have no parameters
-                         layer.output_quantizer.bitwidth)
+                value = (layer.output_quantizers[0].encoding.max,
+                         layer.output_quantizers[0].encoding.min,
+                         layer.output_quantizers[0].encoding.delta,
+                         layer.output_quantizers[0].encoding.offset,
+                         layer.output_quantizers[0].bitwidth,  # hack - standalone layers have no parameters
+                         layer.output_quantizers[0].bitwidth)
                 encoding_dict_with_onnx_names[layer_name] = value
                 encoding_dict_with_pytorch_names[layer_name] = value
 
@@ -120,14 +120,14 @@ class SaveUtils:
                 if layer.param_quantizers:
                     param_bw = next(iter(layer.param_quantizers.values())).bitwidth
                 else:
-                    param_bw = layer.output_quantizer.bitwidth
+                    param_bw = layer.output_quantizers[0].bitwidth
 
-                value = (layer.output_quantizer.encoding.max,
-                         layer.output_quantizer.encoding.min,
-                         layer.output_quantizer.encoding.delta,
-                         layer.output_quantizer.encoding.offset,
+                value = (layer.output_quantizers[0].encoding.max,
+                         layer.output_quantizers[0].encoding.min,
+                         layer.output_quantizers[0].encoding.delta,
+                         layer.output_quantizers[0].encoding.offset,
                          param_bw,
-                         layer.output_quantizer.encoding.bw)
+                         layer.output_quantizers[0].encoding.bw)
                 if layer_name in pytorch_onnx_names_dict:
                     encoding_dict_with_onnx_names[pytorch_onnx_names_dict[layer_name]] = value
                     encoding_dict_with_pytorch_names[layer_name] = value
