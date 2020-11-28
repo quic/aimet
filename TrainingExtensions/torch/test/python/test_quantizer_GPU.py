@@ -93,20 +93,20 @@ class QuantizerCpuGpu(unittest.TestCase):
         # (i.e. like the round() function) and not significant digits
         # excluding fc1 since it is part of Matmul->Relu supergroup
         # can't use assertEqual for FC2, so using assertAlmostEquals for FC2
-        self.assertAlmostEqual(model_gpu.conv1.output_quantizer.encoding.min,
-                               model_cpu.conv1.output_quantizer.encoding.min, delta=0.001)
-        self.assertAlmostEqual(model_gpu.conv1.output_quantizer.encoding.max,
-                               model_cpu.conv1.output_quantizer.encoding.max, delta=0.001)
+        self.assertAlmostEqual(model_gpu.conv1.output_quantizers[0].encoding.min,
+                               model_cpu.conv1.output_quantizers[0].encoding.min, delta=0.001)
+        self.assertAlmostEqual(model_gpu.conv1.output_quantizers[0].encoding.max,
+                               model_cpu.conv1.output_quantizers[0].encoding.max, delta=0.001)
 
-        self.assertAlmostEqual(model_gpu.conv2.output_quantizer.encoding.min,
-                               model_cpu.conv2.output_quantizer.encoding.min, delta=0.001)
-        self.assertAlmostEqual(model_gpu.conv2.output_quantizer.encoding.max,
-                               model_cpu.conv2.output_quantizer.encoding.max, delta=0.001)
+        self.assertAlmostEqual(model_gpu.conv2.output_quantizers[0].encoding.min,
+                               model_cpu.conv2.output_quantizers[0].encoding.min, delta=0.001)
+        self.assertAlmostEqual(model_gpu.conv2.output_quantizers[0].encoding.max,
+                               model_cpu.conv2.output_quantizers[0].encoding.max, delta=0.001)
 
-        self.assertAlmostEqual(model_gpu.fc2.output_quantizer.encoding.min,
-                               model_cpu.fc2.output_quantizer.encoding.min, delta=0.001)
-        self.assertAlmostEqual(model_gpu.fc2.output_quantizer.encoding.max,
-                               model_cpu.fc2.output_quantizer.encoding.max, delta=0.001)
+        self.assertAlmostEqual(model_gpu.fc2.output_quantizers[0].encoding.min,
+                               model_cpu.fc2.output_quantizers[0].encoding.min, delta=0.001)
+        self.assertAlmostEqual(model_gpu.fc2.output_quantizers[0].encoding.max,
+                               model_cpu.fc2.output_quantizers[0].encoding.max, delta=0.001)
 
         gpu_sim_model.export("./data/", "quantizer_no_fine_tuning__GPU", (1, 1, 28, 28))
         cpu_sim_model.export("./data/", "quantizer_no_fine_tuning__CPU", (1, 1, 28, 28))

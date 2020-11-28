@@ -114,10 +114,10 @@ class QcQuantizeStandAloneBase(nn.Module):
         :param is_symmetric: Symmetric or asymmetric quantization
         """
         super(QcQuantizeStandAloneBase, self).__init__()
-        self.output_quantizer = tensor_quantizer_factory(activation_bw, round_mode,
-                                                         quant_scheme,
-                                                         is_symmetric,
-                                                         enabled_by_default=True)
+        self.output_quantizers = [tensor_quantizer_factory(activation_bw, round_mode,
+                                                           quant_scheme,
+                                                           is_symmetric,
+                                                           enabled_by_default=True)]
         self._mode = QcQuantizeOpMode.PASSTHROUGH
 
     @abc.abstractmethod
@@ -135,7 +135,7 @@ class QcQuantizeStandAloneBase(nn.Module):
         :param output_bw: Bitwidth from (4-32)
         :return: None
         """
-        self.output_quantizer.bitwidth = output_bw
+        self.output_quantizers[0].bitwidth = output_bw
 
     def set_mode(self, mode):
         """
@@ -201,10 +201,10 @@ class QcQuantizeWrapper(nn.Module):
         :param is_symmetric: True if symmetric encoding is used.  False otherwise.
         """
         super(QcQuantizeWrapper, self).__init__()
-        self.output_quantizer = tensor_quantizer_factory(activation_bw, round_mode,
-                                                         quant_scheme,
-                                                         is_symmetric,
-                                                         enabled_by_default=is_output_quantized)
+        self.output_quantizers = [tensor_quantizer_factory(activation_bw, round_mode,
+                                                           quant_scheme,
+                                                           is_symmetric,
+                                                           enabled_by_default=is_output_quantized)]
         self._mode = QcQuantizeOpMode.PASSTHROUGH
         self._module_to_wrap = module_to_wrap
         # Using a _is_output_quantized variable instead of directly setting enabled_by_default for QcQuantizeBase since
@@ -241,7 +241,7 @@ class QcQuantizeWrapper(nn.Module):
         :param output_bw: Bitwidth from (4-32)
         :return: None
         """
-        self.output_quantizer.bitwidth = output_bw
+        self.output_quantizers[0].bitwidth = output_bw
 
     def set_mode(self, mode):
         """
@@ -256,8 +256,8 @@ class QcQuantizeWrapper(nn.Module):
         """
         self.input_quantizer.reset_encoding_stats()
         self.input_quantizer.encoding = None
-        self.output_quantizer.reset_encoding_stats()
-        self.output_quantizer.encoding = None
+        self.output_quantizers[0].reset_encoding_stats()
+        self.output_quantizers[0].encoding = None
         for param_quantizer in self.param_quantizers.values():
             param_quantizer.reset_encoding_stats()
             param_quantizer.encoding = None
@@ -310,12 +310,12 @@ class QcPostTrainingWrapper(QcQuantizeWrapper):
 
         # Quantize the outputs
 
-        if not self.output_quantizer.enabled:
+        if not self.output_quantizers[0].enabled:
             output = wrapped_output
         else:
             if not isinstance(wrapped_output, list):
                 wrapped_output = [wrapped_output]
-            output = self._quantize_activation(self.output_quantizer, wrapped_output)
+            output = self._quantize_activation(self.output_quantizers[0], wrapped_output)
 
         return output
 
@@ -376,7 +376,7 @@ class QcPostTrainingWrapper(QcQuantizeWrapper):
         :return: None
         """
         self.input_quantizer.compute_encoding()
-        self.output_quantizer.compute_encoding()
+        self.output_quantizers[0].compute_encoding()
 
     def _quantize_activation(self, tensor_quantizer, tensors_to_quantize):
         """
@@ -427,7 +427,7 @@ class QcQuantizeStandalone(QcQuantizeStandAloneBase):
         :return: Quantized output from the wrapped module
         """
 
-        output = self._quantize_activation(self.output_quantizer, list(inputs))
+        output = self._quantize_activation(self.output_quantizers[0], list(inputs))
 
         return output
 
@@ -436,7 +436,7 @@ class QcQuantizeStandalone(QcQuantizeStandAloneBase):
         Compute the quantization encoding for this op
         :return: None
         """
-        self.output_quantizer.compute_encoding()
+        self.output_quantizers[0].compute_encoding()
 
 
 class SteGatingFuncForParameters(torch.autograd.Function):

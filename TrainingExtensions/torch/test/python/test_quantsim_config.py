@@ -87,9 +87,9 @@ class TestQuantsimConfig:
                     assert module.input_quantizer.enabled
                 else:
                     assert not module.input_quantizer.enabled
-                assert module.output_quantizer.enabled
+                assert module.output_quantizers[0].enabled
                 assert not module.input_quantizer.use_symmetric_encodings
-                assert not module.output_quantizer.use_symmetric_encodings
+                assert not module.output_quantizers[0].use_symmetric_encodings
                 if module.param_quantizers:
                     for _, param_quantizer in module.param_quantizers.items():
                         assert not param_quantizer.enabled
@@ -186,16 +186,16 @@ class TestQuantsimConfig:
                 if isinstance(module._module_to_wrap, torch.nn.Conv2d):
                     assert module.input_quantizer.enabled
                     assert not module.input_quantizer.use_symmetric_encodings
-                    assert not module.output_quantizer.use_symmetric_encodings
+                    assert not module.output_quantizers[0].use_symmetric_encodings
                 else:
                     # Output of add op is input quantized
                     if name == 'relu3':
                         assert module.input_quantizer.enabled
                     else:
                         assert not module.input_quantizer.enabled
-                    assert module.output_quantizer.enabled
+                    assert module.output_quantizers[0].enabled
                     assert not module.input_quantizer.use_symmetric_encodings
-                    assert not module.output_quantizer.use_symmetric_encodings
+                    assert not module.output_quantizers[0].use_symmetric_encodings
                 if module.param_quantizers:
                     for param_name, param_quantizer in module.param_quantizers.items():
                         if isinstance(module._module_to_wrap, torch.nn.Conv2d) and param_name == 'bias':
@@ -249,18 +249,18 @@ class TestQuantsimConfig:
             if isinstance(module, QcQuantizeWrapper):
                 # Check configs for starts of supergroups
                 if module in [model.conv1, model.relu1, model.conv2, model.conv3]:
-                    assert not module.output_quantizer.enabled
+                    assert not module.output_quantizers[0].enabled
                 # Check configs for middle ops in supergroups
                 elif module == model.relu3:
                     assert not module.input_quantizer.enabled
-                    assert not module.output_quantizer.enabled
+                    assert not module.output_quantizers[0].enabled
                 # Check configs for ends of supergroups
                 elif module in [model.bn1, model.maxpool, model.bn2, model.avgpool]:
                     assert not module.input_quantizer.enabled
-                    assert module.output_quantizer.enabled
+                    assert module.output_quantizers[0].enabled
                 else:
                     assert not module.input_quantizer.enabled
-                    assert module.output_quantizer.enabled
+                    assert module.output_quantizers[0].enabled
 
         if os.path.exists('./data/quantsim_config.json'):
             os.remove('./data/quantsim_config.json')
@@ -294,9 +294,9 @@ class TestQuantsimConfig:
             if isinstance(module, QcQuantizeWrapper):
                 if name in ['conv3', 'ada']:
                     # model.conv3 and model.ada are inputs to add
-                    assert module.output_quantizer.enabled
+                    assert module.output_quantizers[0].enabled
                 else:
-                    assert not module.output_quantizer.enabled
+                    assert not module.output_quantizers[0].enabled
                 assert not module.input_quantizer.enabled
         if os.path.exists('./data/quantsim_config.json'):
             os.remove('./data/quantsim_config.json')
@@ -331,9 +331,9 @@ class TestQuantsimConfig:
                     assert module.input_quantizer.enabled
                 else:
                     assert not module.input_quantizer.enabled
-                assert not module.output_quantizer.enabled
+                assert not module.output_quantizers[0].enabled
                 assert not module.input_quantizer.use_symmetric_encodings
-                assert not module.output_quantizer.use_symmetric_encodings
+                assert not module.output_quantizers[0].use_symmetric_encodings
 
         if os.path.exists('./data/quantsim_config.json'):
             os.remove('./data/quantsim_config.json')
@@ -364,9 +364,9 @@ class TestQuantsimConfig:
             if isinstance(module, QcQuantizeWrapper):
                 if name == 'fc':
                     # model.conv3 and model.ada are inputs to add
-                    assert module.output_quantizer.enabled
+                    assert module.output_quantizers[0].enabled
                 else:
-                    assert not module.output_quantizer.enabled
+                    assert not module.output_quantizers[0].enabled
                 assert not module.input_quantizer.enabled
         if os.path.exists('./data/quantsim_config.json'):
             os.remove('./data/quantsim_config.json')
@@ -461,9 +461,9 @@ class TestQuantsimConfig:
                     assert module.input_quantizer.enabled
                 else:
                     assert not module.input_quantizer.enabled
-                assert module.output_quantizer.enabled
+                assert module.output_quantizers[0].enabled
                 assert not module.input_quantizer.use_symmetric_encodings
-                assert not module.output_quantizer.use_symmetric_encodings
+                assert not module.output_quantizers[0].use_symmetric_encodings
                 if module.param_quantizers:
                     for _, param_quantizer in module.param_quantizers.items():
                         assert not param_quantizer.enabled
