@@ -60,7 +60,7 @@ class TestQcQuantizeOp(unittest.TestCase):
 
         output = quantize.forward(input_var)
         quantize.compute_encoding()
-        actual_encoding = quantize.output_quantizer.encoding
+        actual_encoding = quantize.output_quantizers[0].encoding
         print("Encoding returned: min={}, max={}, offset={}. delta={}, bw={}"
               .format(actual_encoding.min, actual_encoding.max,
                       actual_encoding.offset, actual_encoding.delta, actual_encoding.bw))
@@ -77,14 +77,14 @@ class TestQcQuantizeOp(unittest.TestCase):
         quantize.set_mode(QcQuantizeOpMode.ANALYSIS)
         output = quantize.forward(input_var)
         quantize.compute_encoding()
-        actual_encoding = quantize.output_quantizer.encoding
+        actual_encoding = quantize.output_quantizers[0].encoding
 
         print("Encoding returned: min={}, max={}, offset={}. delta={}, bw={}"
-              .format(quantize.output_quantizer.encoding.min,
-                      quantize.output_quantizer.encoding.max,
-                      quantize.output_quantizer.encoding.offset,
-                      quantize.output_quantizer.encoding.delta,
-                      quantize.output_quantizer.encoding.bw))
+              .format(quantize.output_quantizers[0].encoding.min,
+                      quantize.output_quantizers[0].encoding.max,
+                      quantize.output_quantizers[0].encoding.offset,
+                      quantize.output_quantizers[0].encoding.delta,
+                      quantize.output_quantizers[0].encoding.bw))
 
         quantize.set_mode(QcQuantizeOpMode.ACTIVE)
         output = quantize.forward(input_var)
@@ -114,16 +114,16 @@ class TestQcQuantizeOp(unittest.TestCase):
         quantize._module_to_wrap.register_backward_hook(hook_fn)
 
         quantize.input_quantizer.enabled = True
-        quantize.output_quantizer.enabled = True
+        quantize.output_quantizers[0].enabled = True
         quantize.input_quantizer.encoding = encodings
-        quantize.output_quantizer.encoding = encodings
+        quantize.output_quantizers[0].encoding = encodings
 
         new_input = torch.autograd.Variable(torch.tensor([[[[0.6469]]], [[[-0.9]]]]), requires_grad=True)
         quantize.set_mode(QcQuantizeOpMode.ACTIVE)
         out = quantize(new_input)
 
         quantize.input_quantizer.encoding = encodings_new
-        quantize.output_quantizer.encoding = encodings_new
+        quantize.output_quantizers[0].encoding = encodings_new
         quantize.param_quantizers['weight'].encoding = encodings_new
 
         loss = out.flatten().sum()

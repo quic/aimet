@@ -281,9 +281,9 @@ class Quantizer:
 
             # Before we return we set the mode to active - meaning ready for quantize/de-quantize
             # for layers with valid_encoding, otherwise we set to pass through
-            if layer.output_quantizer.encoding:
+            if layer.output_quantizers[0].encoding:
                 layer.set_mode(QcQuantizeOpMode.ACTIVE)
-                encoding = layer.output_quantizer.encoding
+                encoding = layer.output_quantizers[0].encoding
                 self._logger.debug("Encoding for %s: min=%f, max=%f, offset=%f. delta=%f, bw=%f",
                                    name, encoding.min, encoding.max, encoding.delta, encoding.offset, encoding.bw)
             else:
