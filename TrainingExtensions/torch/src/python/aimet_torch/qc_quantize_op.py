@@ -118,6 +118,10 @@ class QcQuantizeStandAloneBase(nn.Module):
                                                            quant_scheme,
                                                            is_symmetric,
                                                            enabled_by_default=True)]
+        # Temporary to satisfy dependent code
+        # Todo: remove this once all dependent code has been cleaned up
+        self.output_quantizer = self.output_quantizers[0]
+
         self._mode = QcQuantizeOpMode.PASSTHROUGH
 
     @abc.abstractmethod
@@ -205,6 +209,11 @@ class QcQuantizeWrapper(nn.Module):
                                                            quant_scheme,
                                                            is_symmetric,
                                                            enabled_by_default=is_output_quantized)]
+
+        # Temporary to satisfy dependent code
+        # Todo: remove this once all dependent code has been cleaned up
+        self.output_quantizer = self.output_quantizers[0]
+
         self._mode = QcQuantizeOpMode.PASSTHROUGH
         self._module_to_wrap = module_to_wrap
         # Using a _is_output_quantized variable instead of directly setting enabled_by_default for QcQuantizeBase since
