@@ -38,7 +38,12 @@
 """ This file contains unit tests for testing bias correction """
 
 import unittest
+
+import os
 import tensorflow as tf
+tf.compat.v1.logging.set_verbosity(tf.logging.WARN)
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
+
 import numpy as np
 from unittest.mock import MagicMock
 
@@ -60,14 +65,14 @@ class TestBiasCorrection(unittest.TestCase):
         Test get_output_data method
         """
 
-        tf.reset_default_graph()
+        tf.compat.v1.reset_default_graph()
 
-        sess = tf.Session(graph=tf.Graph())
+        sess = tf.compat.v1.Session(graph=tf.Graph())
         input_op_names = ['input_1']
         output_op_name = 'scope_1/conv2d_2/Conv2D'
         with sess.graph.as_default():
             _ = keras_model_functional()
-            init = tf.global_variables_initializer()
+            init = tf.compat.v1.global_variables_initializer()
             sess.run(init)
 
         data = np.random.rand(1, 32, 32, 3)
@@ -80,8 +85,8 @@ class TestBiasCorrection(unittest.TestCase):
         Test bias correction for a single layer api
         """
 
-        tf.reset_default_graph()
-        config = tf.ConfigProto()
+        tf.compat.v1.reset_default_graph()
+        config = tf.compat.v1.ConfigProto()
         config.gpu_options.allow_growth = True
 
         # create a custom model
@@ -92,8 +97,8 @@ class TestBiasCorrection(unittest.TestCase):
         relu_2 = tf.nn.relu(conv2_op)
 
         # global initializer
-        init = tf.global_variables_initializer()
-        sess = tf.Session(config=config, graph=tf.get_default_graph())
+        init = tf.compat.v1.global_variables_initializer()
+        sess = tf.compat.v1.Session(config=config, graph=tf.compat.v1.get_default_graph())
         sess.run(init)
 
         # populate conv with dummy bias and weights
@@ -150,7 +155,7 @@ class TestBiasCorrection(unittest.TestCase):
         """
         Test bias correction for custom model
         """
-        tf.reset_default_graph()
+        tf.compat.v1.reset_default_graph()
         inputs = tf.keras.Input(shape=(32, 32, 3,))
 
         conv_op = tf.keras.layers.Conv2D(32, (3, 3))(inputs)
@@ -162,8 +167,8 @@ class TestBiasCorrection(unittest.TestCase):
         conv3_op = tf.keras.layers.Conv2D(32, (3, 3))(relu_2)
         relu_3 = tf.nn.relu(conv3_op)
 
-        init = tf.global_variables_initializer()
-        sess = tf.Session()
+        init = tf.compat.v1.global_variables_initializer()
+        sess = tf.compat.v1.Session()
         sess.run(init)
 
         # updating random bias and weight for one conv
@@ -222,7 +227,7 @@ class TestBiasCorrection(unittest.TestCase):
         """
         Test bias correction for custom model
         """
-        tf.reset_default_graph()
+        tf.compat.v1.reset_default_graph()
         inputs = tf.keras.Input(shape=(32, 32, 3,))
 
         conv_op = tf.keras.layers.Conv2D(32, (3, 3))(inputs)
@@ -234,8 +239,8 @@ class TestBiasCorrection(unittest.TestCase):
         conv3_op = tf.keras.layers.Conv2D(32, (3, 3))(relu_2)
         relu_3 = tf.nn.relu(conv3_op)
 
-        init = tf.global_variables_initializer()
-        sess = tf.Session()
+        init = tf.compat.v1.global_variables_initializer()
+        sess = tf.compat.v1.Session()
         sess.run(init)
 
         # updating random bias and weight for one conv
@@ -294,15 +299,15 @@ class TestBiasCorrection(unittest.TestCase):
         test bias correction on matmul layer
         :return:
         """
-        tf.reset_default_graph()
+        tf.compat.v1.reset_default_graph()
 
         inputs = tf.keras.Input(shape=(32, 32, 3,))
         x = tf.keras.layers.Flatten()(inputs)
         dense = tf.keras.layers.Dense(2, use_bias=False, activation=tf.nn.softmax, name="single_residual")(x)
         _ = tf.nn.relu(dense)
 
-        init = tf.global_variables_initializer()
-        sess = tf.Session(graph = tf.get_default_graph())
+        init = tf.compat.v1.global_variables_initializer()
+        sess = tf.compat.v1.Session(graph = tf.compat.v1.get_default_graph())
         sess.run(init)
 
         op_list = sess.graph.get_operations()
@@ -346,19 +351,19 @@ class TestBiasCorrection(unittest.TestCase):
     def test_depthwise_custom(self):
         """ test depthwise conv2d layer withput bias """
 
-        tf.reset_default_graph()
+        tf.compat.v1.reset_default_graph()
         inputs = tf.keras.Input(shape=(10, 10, 3,))
         x = tf.keras.layers.Conv2D(10, (1, 1))(inputs)
-        with tf.variable_scope("standalone_depthwise"):
-            x = tf.nn.depthwise_conv2d_native(x,
-                                              tf.get_variable(initializer=tf.truncated_normal(shape=(3, 3, 10, 1)),
+        with tf.compat.v1.variable_scope("standalone_depthwise"):
+            x = tf.compat.v1.nn.depthwise_conv2d_native(x,
+                                              tf.compat.v1.get_variable(initializer=tf.random.truncated_normal(shape=(3, 3, 10, 1)),
                                                               name="depthwise_kernel"),
                                               [1, 1, 1, 1],
                                               'VALID')
         _ = tf.nn.relu(x)
 
-        init = tf.global_variables_initializer()
-        sess = tf.Session(graph = tf.get_default_graph())
+        init = tf.compat.v1.global_variables_initializer()
+        sess = tf.compat.v1.Session(graph = tf.compat.v1.get_default_graph())
         sess.run(init)
 
         op_list = sess.graph.get_operations()
@@ -404,7 +409,7 @@ class TestBiasCorrection(unittest.TestCase):
         BN -> Conv
         """
 
-        tf.reset_default_graph()
+        tf.compat.v1.reset_default_graph()
         inputs = tf.keras.Input(shape=(32, 32, 3,), name="inputs")
         conv_op = tf.keras.layers.Conv2D(32, (3, 3))(inputs)
         bn_op = tf.keras.layers.BatchNormalization(fused=True)(conv_op)
@@ -413,8 +418,8 @@ class TestBiasCorrection(unittest.TestCase):
         conv2_op = tf.keras.layers.Conv2D(32, (3, 3))(conv1_op)
         _ = tf.nn.relu(conv2_op)
 
-        init = tf.global_variables_initializer()
-        sess = tf.Session()
+        init = tf.compat.v1.global_variables_initializer()
+        sess = tf.compat.v1.Session()
         sess.run(init)
 
         start_op = "inputs"
@@ -430,22 +435,22 @@ class TestBiasCorrection(unittest.TestCase):
         patterns:
         BN -> Depthwise conv
         """
-        tf.reset_default_graph()
+        tf.compat.v1.reset_default_graph()
         inputs = tf.keras.Input(shape=(10, 10, 3,))
         x = tf.keras.layers.Conv2D(10, (1, 1))(inputs)
         bn_op = tf.keras.layers.BatchNormalization(fused=True)(x, training=False)
 
         # x = tf.keras.layers.Conv2D(10, (1, 1))(inputs)
-        with tf.variable_scope("standalone_depthwise"):
-            x = tf.nn.depthwise_conv2d_native(bn_op,
-                                              tf.get_variable(initializer=tf.truncated_normal(shape=(3, 3, 10, 1)),
+        with tf.compat.v1.variable_scope("standalone_depthwise"):
+            x = tf.compat.v1.nn.depthwise_conv2d_native(bn_op,
+                                              tf.compat.v1.get_variable(initializer=tf.random.truncated_normal(shape=(3, 3, 10, 1)),
                                                               name="depthwise_kernel"),
                                               [1, 1, 1, 1],
                                               'VALID')
         _ = tf.nn.relu(x)
 
-        init = tf.global_variables_initializer()
-        sess = tf.Session(graph = tf.get_default_graph())
+        init = tf.compat.v1.global_variables_initializer()
+        sess = tf.compat.v1.Session(graph = tf.compat.v1.get_default_graph())
         sess.run(init)
 
         start_op = "input_1"
@@ -464,7 +469,7 @@ class TestBiasCorrection(unittest.TestCase):
         BN -> (no activation) -> Conv
         """
 
-        tf.reset_default_graph()
+        tf.compat.v1.reset_default_graph()
         inputs = tf.keras.Input(shape=(32, 32, 3,), name="inputs")
 
         conv_op = tf.keras.layers.Conv2D(32, (3, 3))(inputs)
@@ -479,8 +484,8 @@ class TestBiasCorrection(unittest.TestCase):
 
         _ = tf.nn.relu(conv2_op)
 
-        init = tf.global_variables_initializer()
-        sess = tf.Session()
+        init = tf.compat.v1.global_variables_initializer()
+        sess = tf.compat.v1.Session()
         sess.run(init)
         start_op = "inputs"
 
@@ -501,7 +506,7 @@ class TestBiasCorrection(unittest.TestCase):
         """
 
         # create a custom model
-        tf.reset_default_graph()
+        tf.compat.v1.reset_default_graph()
         inputs = tf.keras.Input(shape=(32, 32, 3,), name="inputs")
         conv1_op = tf.keras.layers.Conv2D(32, (3, 3),
                                           kernel_initializer=tf.random_uniform_initializer(-1, 1),
@@ -509,8 +514,8 @@ class TestBiasCorrection(unittest.TestCase):
         conv2_op = tf.keras.layers.Conv2D(32, (3, 3))(conv1_op)
         _ = tf.nn.relu(conv2_op)
 
-        init = tf.global_variables_initializer()
-        sess = tf.Session(graph=tf.get_default_graph())
+        init = tf.compat.v1.global_variables_initializer()
+        sess = tf.compat.v1.Session(graph=tf.compat.v1.get_default_graph())
         sess.run(init)
 
         conv_op = sess.graph.get_operation_by_name('conv2d/Conv2D')
@@ -554,7 +559,7 @@ class TestBiasCorrection(unittest.TestCase):
         """
 
         # create a custom model
-        tf.reset_default_graph()
+        tf.compat.v1.reset_default_graph()
         inputs = tf.keras.Input(shape=(32, 32, 3,), name="inputs")
 
         conv1_op = tf.keras.layers.Conv2D(32, (3, 3),
@@ -580,8 +585,8 @@ class TestBiasCorrection(unittest.TestCase):
 
         _ = tf.nn.relu(conv6_op)
 
-        init = tf.global_variables_initializer()
-        sess = tf.Session(graph=tf.get_default_graph())
+        init = tf.compat.v1.global_variables_initializer()
+        sess = tf.compat.v1.Session(graph=tf.compat.v1.get_default_graph())
         sess.run(init)
 
         output_op = sess.graph.get_operation_by_name('Relu_1')
@@ -620,7 +625,7 @@ class TestBiasCorrection(unittest.TestCase):
         """
         Test bias correction for custom model
         """
-        tf.reset_default_graph()
+        tf.compat.v1.reset_default_graph()
         inputs = tf.keras.Input(shape=(32, 32, 3,))
 
         conv_op = tf.keras.layers.Conv2D(32, (3, 3), use_bias=False)(inputs)
@@ -632,8 +637,8 @@ class TestBiasCorrection(unittest.TestCase):
         conv3_op = tf.keras.layers.Conv2D(32, (3, 3), use_bias=False)(relu_2)
         _ = tf.nn.relu(conv3_op)
 
-        init = tf.global_variables_initializer()
-        sess = tf.Session()
+        init = tf.compat.v1.global_variables_initializer()
+        sess = tf.compat.v1.Session()
         sess.run(init)
 
         # updating random bias and weight for one conv
@@ -688,7 +693,7 @@ class TestBiasCorrection(unittest.TestCase):
         """
 
         # create a custom model
-        tf.reset_default_graph()
+        tf.compat.v1.reset_default_graph()
         inputs = tf.keras.Input(shape=(32, 32, 3,), name="inputs")
 
         conv_op = tf.keras.layers.Conv2D(32, (3, 3),
@@ -717,8 +722,8 @@ class TestBiasCorrection(unittest.TestCase):
 
         _ = tf.nn.relu(conv6_op)
 
-        init = tf.global_variables_initializer()
-        sess = tf.Session(graph=tf.get_default_graph())
+        init = tf.compat.v1.global_variables_initializer()
+        sess = tf.compat.v1.Session(graph=tf.compat.v1.get_default_graph())
         sess.run(init)
 
         output_op = sess.graph.get_operation_by_name('Relu_1')

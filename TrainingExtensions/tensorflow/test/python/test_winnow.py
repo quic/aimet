@@ -46,6 +46,9 @@ import os
 import numpy as np
 import tensorflow as tf
 
+tf.compat.v1.logging.set_verbosity(tf.logging.WARN)
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
+
 from aimet_common.winnow.mask import Mask
 from aimet_common.utils import AimetLogger
 from aimet_tensorflow.common.connectedgraph import ConnectedGraph
@@ -61,7 +64,6 @@ from aimet_tensorflow.utils.graph_saver import save_and_load_graph
 logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Test)
 AimetLogger.set_area_logger_level(AimetLogger.LogAreas.Test, logging.DEBUG)
 AimetLogger.set_area_logger_level(AimetLogger.LogAreas.Winnow, logging.DEBUG)
-os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 
 
 # pylint: disable=too-many-locals
@@ -72,30 +74,30 @@ class TestTfModuleReducer(unittest.TestCase):
 
     def test_reducing_tf_slim_model(self):
         """ Test mask propagation on a conv module in tf slim model """
-        tf.reset_default_graph()
-        sess = tf.Session()
+        tf.compat.v1.reset_default_graph()
+        sess = tf.compat.v1.Session()
         module_zero_channels_list = []
 
-        x = tf.placeholder(tf.float32, [1, 32, 32, 3])
+        x = tf.compat.v1.placeholder(tf.float32, [1, 32, 32, 3])
         _ = tf_slim_basic_model(x)
-        init = tf.global_variables_initializer()
+        init = tf.compat.v1.global_variables_initializer()
         sess.run(init)
 
         # check that update_ops list is not empty
-        update_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS)
+        update_ops = tf.compat.v1.get_collection(tf.compat.v1.GraphKeys.UPDATE_OPS)
         self.assertEqual(4, len(update_ops))
 
-        tf_op = tf.get_default_graph().get_operation_by_name("Conv_1/Conv2D")
+        tf_op = tf.compat.v1.get_default_graph().get_operation_by_name("Conv_1/Conv2D")
         input_channels_to_winnow = [1, 2, 3]
         module_mask_pair = (tf_op, input_channels_to_winnow)
         module_zero_channels_list.append(module_mask_pair)
 
-        tf_op = tf.get_default_graph().get_operation_by_name("Conv_2/Conv2D")
+        tf_op = tf.compat.v1.get_default_graph().get_operation_by_name("Conv_2/Conv2D")
         input_channels_to_winnow = [3, 5, 7]
         module_mask_pair = (tf_op, input_channels_to_winnow)
         module_zero_channels_list.append(module_mask_pair)
 
-        tf_op = tf.get_default_graph().get_operation_by_name("Conv_3/Conv2D")
+        tf_op = tf.compat.v1.get_default_graph().get_operation_by_name("Conv_3/Conv2D")
         input_channels_to_winnow = [2, 4, 6]
         module_mask_pair = (tf_op, input_channels_to_winnow)
         module_zero_channels_list.append(module_mask_pair)
@@ -154,16 +156,16 @@ class TestTfModuleReducer(unittest.TestCase):
         self.assertEqual(10, len(ordered_modules_list))
 
         # check that update_ops list is empty
-        update_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS)
+        update_ops = tf.compat.v1.get_collection(tf.compat.v1.GraphKeys.UPDATE_OPS)
         self.assertEqual(0, len(update_ops))
 
         # check that update_ops is still empty after saving and reloading graph
         with new_sess.graph.as_default():
-            init = tf.global_variables_initializer()
+            init = tf.compat.v1.global_variables_initializer()
             new_sess.run(init)
         new_sess_2 = save_and_load_graph('.', new_sess)
         with new_sess_2.graph.as_default():
-            update_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS)
+            update_ops = tf.compat.v1.get_collection(tf.compat.v1.GraphKeys.UPDATE_OPS)
         self.assertEqual(0, len(update_ops))
 
         new_sess_2.close()
@@ -172,23 +174,23 @@ class TestTfModuleReducer(unittest.TestCase):
 
     def test_reducing_with_downsample(self):
         """ Test reducing a single_residual model with downsampling layers """
-        tf.reset_default_graph()
-        sess = tf.Session()
+        tf.compat.v1.reset_default_graph()
+        sess = tf.compat.v1.Session()
         module_zero_channels_list = []
 
         _ = single_residual()
-        init = tf.global_variables_initializer()
+        init = tf.compat.v1.global_variables_initializer()
         sess.run(init)
 
         input_op_names = ["input_1"]
         output_op_names = ['Relu_2']
 
-        tf_op = tf.get_default_graph().get_operation_by_name("conv2d_1/Conv2D")
+        tf_op = tf.compat.v1.get_default_graph().get_operation_by_name("conv2d_1/Conv2D")
         input_channels_to_winnow = [3, 5, 7]
         module_mask_pair = (tf_op, input_channels_to_winnow)
         module_zero_channels_list.append(module_mask_pair)
 
-        tf_op = tf.get_default_graph().get_operation_by_name("conv2d_2/Conv2D")
+        tf_op = tf.compat.v1.get_default_graph().get_operation_by_name("conv2d_2/Conv2D")
         input_channels_to_winnow_2 = [7, 12, 13, 14]
         module_mask_pair = (tf_op, input_channels_to_winnow_2)
         module_zero_channels_list.append(module_mask_pair)
@@ -212,18 +214,18 @@ class TestTfModuleReducer(unittest.TestCase):
 
     def test_reducing_inserting_downsample_upsample(self):
         """ Test reducing a single_residual model with inserting downsampling and upsampling layers """
-        tf.reset_default_graph()
-        sess = tf.Session()
+        tf.compat.v1.reset_default_graph()
+        sess = tf.compat.v1.Session()
 
         _ = upsample_model()
-        init = tf.global_variables_initializer()
+        init = tf.compat.v1.global_variables_initializer()
         sess.run(init)
 
         input_op_names = ["input_1"]
         output_op_names = ['upsample_model/Softmax']
 
         module_zero_channels_list = []
-        tf_op = tf.get_default_graph().get_operation_by_name("conv2d_3/Conv2D")
+        tf_op = tf.compat.v1.get_default_graph().get_operation_by_name("conv2d_3/Conv2D")
         input_channels_to_winnow = [3, 5, 7]
         module_mask_pair = (tf_op, input_channels_to_winnow)
         module_zero_channels_list.append(module_mask_pair)
@@ -268,23 +270,23 @@ class TestTfModuleReducer(unittest.TestCase):
 
     def test_reducing_with_concat(self):
         """ Test reducing a model with concat """
-        tf.reset_default_graph()
-        sess = tf.Session()
+        tf.compat.v1.reset_default_graph()
+        sess = tf.compat.v1.Session()
         module_zero_channels_list = []
 
         _ = concat_model()
-        init = tf.global_variables_initializer()
+        init = tf.compat.v1.global_variables_initializer()
         sess.run(init)
 
         input_op_names = ["input_1"]
         output_op_names = ['concat_model/Softmax']
 
-        tf_op = tf.get_default_graph().get_operation_by_name("conv2d_3/Conv2D")
+        tf_op = tf.compat.v1.get_default_graph().get_operation_by_name("conv2d_3/Conv2D")
         input_channels_to_winnow = [2, 3, 6, 7, 17]
         module_mask_pair = (tf_op, input_channels_to_winnow)
         module_zero_channels_list.append(module_mask_pair)
 
-        tf_op = tf.get_default_graph().get_operation_by_name("conv2d_4/Conv2D")
+        tf_op = tf.compat.v1.get_default_graph().get_operation_by_name("conv2d_4/Conv2D")
         input_channels_to_winnow_1 = [2, 3, 6, 7, 8, 17]
         module_mask_pair = (tf_op, input_channels_to_winnow_1)
         module_zero_channels_list.append(module_mask_pair)
@@ -328,16 +330,16 @@ class TestTfModuleReducer(unittest.TestCase):
     def test_reducing_pad_in_module_reducer(self):
         """ Test calling module reducer reduce modules for conv op """
 
-        tf.reset_default_graph()
-        sess = tf.Session()
+        tf.compat.v1.reset_default_graph()
+        sess = tf.compat.v1.Session()
         module_zero_channels_list = []
 
         _ = pad_model()
-        # _ = tf.summary.FileWriter('./pad_model', tf.get_default_graph())
-        init = tf.global_variables_initializer()
+        # _ = tf.compat.v1.summary.FileWriter('./pad_model', tf.compat.v1.get_default_graph())
+        init = tf.compat.v1.global_variables_initializer()
         sess.run(init)
 
-        tf_op = tf.get_default_graph().get_operation_by_name("conv2d_1/Conv2D")
+        tf_op = tf.compat.v1.get_default_graph().get_operation_by_name("conv2d_1/Conv2D")
         input_channels_to_winnow = [1, 2, 3]
         input_op_names = ["input_1"]
         output_op_names = ['pad_model/Softmax']
@@ -351,15 +353,15 @@ class TestTfModuleReducer(unittest.TestCase):
         new_sess.close()
         sess.close()
 
-        tf.reset_default_graph()
-        sess = tf.Session()
+        tf.compat.v1.reset_default_graph()
+        sess = tf.compat.v1.Session()
         module_zero_channels_list = []
 
         _ = pad_model()
-        init = tf.global_variables_initializer()
+        init = tf.compat.v1.global_variables_initializer()
         sess.run(init)
 
-        tf_op = tf.get_default_graph().get_operation_by_name("conv2d_2/Conv2D")
+        tf_op = tf.compat.v1.get_default_graph().get_operation_by_name("conv2d_2/Conv2D")
         input_channels_to_winnow = [1, 2, 3]
         module_mask_pair = (tf_op, input_channels_to_winnow)
         module_zero_channels_list.append(module_mask_pair)
@@ -370,15 +372,15 @@ class TestTfModuleReducer(unittest.TestCase):
                                                              reshape=True, in_place=True, verbose=True)
         sess.close()
 
-        tf.reset_default_graph()
-        sess = tf.Session()
+        tf.compat.v1.reset_default_graph()
+        sess = tf.compat.v1.Session()
         module_zero_channels_list = []
 
         _ = pad_model()
-        init = tf.global_variables_initializer()
+        init = tf.compat.v1.global_variables_initializer()
         sess.run(init)
 
-        tf_op = tf.get_default_graph().get_operation_by_name("conv2d_3/Conv2D")
+        tf_op = tf.compat.v1.get_default_graph().get_operation_by_name("conv2d_3/Conv2D")
         input_channels_to_winnow = [1, 2, 3]
         module_mask_pair = (tf_op, input_channels_to_winnow)
         module_zero_channels_list.append(module_mask_pair)
@@ -395,15 +397,15 @@ class TestTfModuleReducer(unittest.TestCase):
         new_sess.close()
         sess.close()
 
-        tf.reset_default_graph()
-        sess = tf.Session()
+        tf.compat.v1.reset_default_graph()
+        sess = tf.compat.v1.Session()
         module_zero_channels_list = []
 
         _ = pad_model()
-        init = tf.global_variables_initializer()
+        init = tf.compat.v1.global_variables_initializer()
         sess.run(init)
 
-        tf_op = tf.get_default_graph().get_operation_by_name("conv2d_4/Conv2D")
+        tf_op = tf.compat.v1.get_default_graph().get_operation_by_name("conv2d_4/Conv2D")
         input_channels_to_winnow = [1, 2, 3]
         module_mask_pair = (tf_op, input_channels_to_winnow)
         module_zero_channels_list.append(module_mask_pair)
@@ -422,15 +424,15 @@ class TestTfModuleReducer(unittest.TestCase):
     def test_reducing_conv_with_l2_loss(self):
         """ Test that reducing conv ops with l2 regularization is able to keep the regularization parameter """
 
-        tf.reset_default_graph()
-        sess = tf.Session()
+        tf.compat.v1.reset_default_graph()
+        sess = tf.compat.v1.Session()
         module_zero_channels_list = []
 
         _ = keras_model()
-        init = tf.global_variables_initializer()
+        init = tf.compat.v1.global_variables_initializer()
         sess.run(init)
 
-        tf_op = tf.get_default_graph().get_operation_by_name("conv2d_1/Conv2D")
+        tf_op = tf.compat.v1.get_default_graph().get_operation_by_name("conv2d_1/Conv2D")
         input_channels_to_winnow = [1, 2, 3]
         input_op_names = ["conv2d_input"]
         output_op_names = ['keras_model/Softmax']
@@ -450,20 +452,20 @@ class TestTfModuleReducer(unittest.TestCase):
     def test_reducing_depthwise_conv2d(self):
         """ Test reducing depthwise conv2d """
 
-        tf.reset_default_graph()
-        sess = tf.Session()
+        tf.compat.v1.reset_default_graph()
+        sess = tf.compat.v1.Session()
         module_zero_channels_list = []
 
         _ = depthwise_conv2d_model()
-        init = tf.global_variables_initializer()
+        init = tf.compat.v1.global_variables_initializer()
         sess.run(init)
 
-        tf_op = tf.get_default_graph().get_operation_by_name("separable_conv2d/separable_conv2d")
+        tf_op = tf.compat.v1.get_default_graph().get_operation_by_name("separable_conv2d/separable_conv2d")
         input_channels_to_winnow = [1, 2, 3]
         module_mask_pair = (tf_op, input_channels_to_winnow)
         module_zero_channels_list.append(module_mask_pair)
 
-        tf_op = tf.get_default_graph().get_operation_by_name("conv2d_1/Conv2D")
+        tf_op = tf.compat.v1.get_default_graph().get_operation_by_name("conv2d_1/Conv2D")
         input_channels_to_winnow = [0, 5, 7]
         module_mask_pair = (tf_op, input_channels_to_winnow)
         module_zero_channels_list.append(module_mask_pair)
@@ -486,18 +488,18 @@ class TestTfModuleReducer(unittest.TestCase):
 
     def test_reducing_with_dropout_and_identity_keras(self):
         """ Test reducing a keras model with dropout and identity modules """
-        tf.reset_default_graph()
-        sess = tf.Session()
+        tf.compat.v1.reset_default_graph()
+        sess = tf.compat.v1.Session()
         module_zero_channels_list = []
 
         _ = dropout_keras_model()
-        init = tf.global_variables_initializer()
+        init = tf.compat.v1.global_variables_initializer()
         sess.run(init)
 
         input_op_names = ["input_1"]
         output_op_names = ['dropout_keras_model/Softmax']
 
-        tf_op = tf.get_default_graph().get_operation_by_name("conv2d_1/Conv2D")
+        tf_op = tf.compat.v1.get_default_graph().get_operation_by_name("conv2d_1/Conv2D")
         input_channels_to_winnow = [2, 3, 4]
         module_mask_pair = (tf_op, input_channels_to_winnow)
         module_zero_channels_list.append(module_mask_pair)
@@ -521,18 +523,18 @@ class TestTfModuleReducer(unittest.TestCase):
 
     def test_reducing_with_dropout_and_identity_slim(self):
         """ Test reducing a keras model with dropout and identity modules """
-        tf.reset_default_graph()
-        sess = tf.Session()
+        tf.compat.v1.reset_default_graph()
+        sess = tf.compat.v1.Session()
         module_zero_channels_list = []
 
         _ = dropout_slim_model()
-        init = tf.global_variables_initializer()
+        init = tf.compat.v1.global_variables_initializer()
         sess.run(init)
 
         input_op_names = ["input_1"]
         output_op_names = ['dropout_slim_model/Softmax']
 
-        tf_op = tf.get_default_graph().get_operation_by_name("Conv_1/Conv2D")
+        tf_op = tf.compat.v1.get_default_graph().get_operation_by_name("Conv_1/Conv2D")
         input_channels_to_winnow = [2, 3, 4]
         module_mask_pair = (tf_op, input_channels_to_winnow)
         module_zero_channels_list.append(module_mask_pair)
@@ -558,25 +560,25 @@ class TestTfModuleReducer(unittest.TestCase):
     def test_reducing_keras_fused_bn_training_true_and_false(self):
         """ Test for reducing keras type fused bn ops, both for training true and false """
 
-        tf.reset_default_graph()
-        sess = tf.Session()
+        tf.compat.v1.reset_default_graph()
+        sess = tf.compat.v1.Session()
         module_zero_channels_list = []
 
         _ = keras_model_functional()
-        init = tf.global_variables_initializer()
+        init = tf.compat.v1.global_variables_initializer()
         sess.run(init)
 
-        tf_op = tf.get_default_graph().get_operation_by_name("scope_1/conv2d_2/Conv2D")
+        tf_op = tf.compat.v1.get_default_graph().get_operation_by_name("scope_1/conv2d_2/Conv2D")
         input_channels_to_winnow = [1, 2, 3]
         module_mask_pair = (tf_op, input_channels_to_winnow)
         module_zero_channels_list.append(module_mask_pair)
 
-        tf_op = tf.get_default_graph().get_operation_by_name("scope_1/conv2d_1/Conv2D")
+        tf_op = tf.compat.v1.get_default_graph().get_operation_by_name("scope_1/conv2d_1/Conv2D")
         input_channels_to_winnow = [3, 5, 7]
         module_mask_pair = (tf_op, input_channels_to_winnow)
         module_zero_channels_list.append(module_mask_pair)
 
-        tf_op = tf.get_default_graph().get_operation_by_name("scope_1/conv2d_3/Conv2D")
+        tf_op = tf.compat.v1.get_default_graph().get_operation_by_name("scope_1/conv2d_3/Conv2D")
         input_channels_to_winnow = [2, 4, 6]
         module_mask_pair = (tf_op, input_channels_to_winnow)
         module_zero_channels_list.append(module_mask_pair)
@@ -643,25 +645,25 @@ class TestTfModuleReducer(unittest.TestCase):
     def test_reducing_keras_non_fused_bn_training_true_and_false(self):
         """ Test for reducing keras type non fused bn ops, both for training true and false """
 
-        tf.reset_default_graph()
-        sess = tf.Session()
+        tf.compat.v1.reset_default_graph()
+        sess = tf.compat.v1.Session()
         module_zero_channels_list = []
 
         _ = keras_model_functional_with_non_fused_batchnorms()
-        init = tf.global_variables_initializer()
+        init = tf.compat.v1.global_variables_initializer()
         sess.run(init)
 
-        tf_op = tf.get_default_graph().get_operation_by_name("scope_1/conv2d_2/Conv2D")
+        tf_op = tf.compat.v1.get_default_graph().get_operation_by_name("scope_1/conv2d_2/Conv2D")
         input_channels_to_winnow = [1, 2, 3]
         module_mask_pair = (tf_op, input_channels_to_winnow)
         module_zero_channels_list.append(module_mask_pair)
 
-        tf_op = tf.get_default_graph().get_operation_by_name("scope_1/conv2d_1/Conv2D")
+        tf_op = tf.compat.v1.get_default_graph().get_operation_by_name("scope_1/conv2d_1/Conv2D")
         input_channels_to_winnow = [3, 5, 7]
         module_mask_pair = (tf_op, input_channels_to_winnow)
         module_zero_channels_list.append(module_mask_pair)
 
-        tf_op = tf.get_default_graph().get_operation_by_name("scope_1/conv2d_3/Conv2D")
+        tf_op = tf.compat.v1.get_default_graph().get_operation_by_name("scope_1/conv2d_3/Conv2D")
         input_channels_to_winnow = [2, 4, 6]
         module_mask_pair = (tf_op, input_channels_to_winnow)
         module_zero_channels_list.append(module_mask_pair)
@@ -717,15 +719,15 @@ class TestTfModuleReducer(unittest.TestCase):
     def test_reducing_multiple_input_model(self):
         """ Test for reducing a model with multiple inputs"""
 
-        tf.reset_default_graph()
-        sess = tf.Session()
+        tf.compat.v1.reset_default_graph()
+        sess = tf.compat.v1.Session()
         module_zero_channels_list = []
 
         _ = multiple_input_model()
-        init = tf.global_variables_initializer()
+        init = tf.compat.v1.global_variables_initializer()
         sess.run(init)
 
-        tf_op = tf.get_default_graph().get_operation_by_name("conv2/Conv2D")
+        tf_op = tf.compat.v1.get_default_graph().get_operation_by_name("conv2/Conv2D")
         input_channels_to_winnow = [1, 2, 3]
         module_mask_pair = (tf_op, input_channels_to_winnow)
         module_zero_channels_list.append(module_mask_pair)
@@ -747,15 +749,15 @@ class TestTfModuleReducer(unittest.TestCase):
     def test_reducing_minimum_maximum_ops(self):
         """ Test for reducing a model with minimum and maximum ops """
 
-        tf.reset_default_graph()
-        sess = tf.Session()
+        tf.compat.v1.reset_default_graph()
+        sess = tf.compat.v1.Session()
         module_zero_channels_list = []
 
         _ = minimum_maximum_model()
-        init = tf.global_variables_initializer()
+        init = tf.compat.v1.global_variables_initializer()
         sess.run(init)
 
-        tf_op = tf.get_default_graph().get_operation_by_name("conv2d_1/Conv2D")
+        tf_op = tf.compat.v1.get_default_graph().get_operation_by_name("conv2d_1/Conv2D")
         input_channels_to_winnow = [1, 2, 3]
         module_mask_pair = (tf_op, input_channels_to_winnow)
         module_zero_channels_list.append(module_mask_pair)
@@ -787,15 +789,15 @@ class TestTfModuleReducer(unittest.TestCase):
     def test_reducing_upsample(self):
         """ Test for reducing a model with upsample """
 
-        tf.reset_default_graph()
-        sess = tf.Session()
+        tf.compat.v1.reset_default_graph()
+        sess = tf.compat.v1.Session()
         module_zero_channels_list = []
 
         _ = model_with_upsample_already_present()
-        init = tf.global_variables_initializer()
+        init = tf.compat.v1.global_variables_initializer()
         sess.run(init)
 
-        tf_op = tf.get_default_graph().get_operation_by_name("conv2d_1/Conv2D")
+        tf_op = tf.compat.v1.get_default_graph().get_operation_by_name("conv2d_1/Conv2D")
         input_channels_to_winnow = [1, 2, 3]
         module_mask_pair = (tf_op, input_channels_to_winnow)
         module_zero_channels_list.append(module_mask_pair)
@@ -823,25 +825,25 @@ class TestTfModuleReducer(unittest.TestCase):
 
     def test_reducing_downsample(self):
         """ Test for reducing a model with multiple downsample nodes """
-        tf.reset_default_graph()
-        sess = tf.Session()
+        tf.compat.v1.reset_default_graph()
+        sess = tf.compat.v1.Session()
         module_zero_channels_list = []
 
         _ = model_with_multiple_downsamples()
-        init = tf.global_variables_initializer()
+        init = tf.compat.v1.global_variables_initializer()
         sess.run(init)
 
-        conv2d = tf.get_default_graph().get_operation_by_name("downsample/conv2d/Conv2D")
+        conv2d = tf.compat.v1.get_default_graph().get_operation_by_name("downsample/conv2d/Conv2D")
         input_channels_to_winnow = [1, 2, 3]
         module_mask_pair = (conv2d, input_channels_to_winnow)
         module_zero_channels_list.append(module_mask_pair)
 
-        conv2d_1 = tf.get_default_graph().get_operation_by_name("downsample_1/conv2d_1/Conv2D")
+        conv2d_1 = tf.compat.v1.get_default_graph().get_operation_by_name("downsample_1/conv2d_1/Conv2D")
         input_channels_to_winnow = [1, 2, 3]
         module_mask_pair = (conv2d_1, input_channels_to_winnow)
         module_zero_channels_list.append(module_mask_pair)
 
-        conv2d_2 = tf.get_default_graph().get_operation_by_name("downsample_1/conv2d_2/Conv2D")
+        conv2d_2 = tf.compat.v1.get_default_graph().get_operation_by_name("downsample_1/conv2d_2/Conv2D")
         input_channels_to_winnow = [1, 2, 3]
         module_mask_pair = (conv2d_2, input_channels_to_winnow)
         module_zero_channels_list.append(module_mask_pair)
@@ -857,15 +859,15 @@ class TestTfModuleReducer(unittest.TestCase):
 
     def test_reducing_upsample2d(self):
         """ Test for reducing a model with upsample2D op """
-        tf.reset_default_graph()
-        sess = tf.Session()
+        tf.compat.v1.reset_default_graph()
+        sess = tf.compat.v1.Session()
         module_zero_channels_list = []
 
         _ = model_with_upsample2d()
-        init = tf.global_variables_initializer()
+        init = tf.compat.v1.global_variables_initializer()
         sess.run(init)
 
-        conv2d = tf.get_default_graph().get_operation_by_name("conv2d_1/Conv2D")
+        conv2d = tf.compat.v1.get_default_graph().get_operation_by_name("conv2d_1/Conv2D")
         input_channels_to_winnow = [1, 2, 3]
         module_mask_pair = (conv2d, input_channels_to_winnow)
         module_zero_channels_list.append(module_mask_pair)
@@ -894,15 +896,15 @@ class TestTfModuleReducer(unittest.TestCase):
 
     def test_reducing_leakyrelu(self):
         """ Test for reducing a model with leaky_relu op """
-        tf.reset_default_graph()
-        sess = tf.Session()
+        tf.compat.v1.reset_default_graph()
+        sess = tf.compat.v1.Session()
         module_zero_channels_list = []
 
         _ = model_with_leaky_relu()
-        init = tf.global_variables_initializer()
+        init = tf.compat.v1.global_variables_initializer()
         sess.run(init)
 
-        conv2d = tf.get_default_graph().get_operation_by_name("conv2d_1/Conv2D")
+        conv2d = tf.compat.v1.get_default_graph().get_operation_by_name("conv2d_1/Conv2D")
         input_channels_to_winnow = [1, 2, 3]
         module_mask_pair = (conv2d, input_channels_to_winnow)
         module_zero_channels_list.append(module_mask_pair)
@@ -929,15 +931,15 @@ class TestTfWinnower(unittest.TestCase):
 
     def test_mask_propagation_on_keras_model(self):
         """ Test mask propagation on a conv module in keras_model """
-        tf.reset_default_graph()
-        sess = tf.Session()
+        tf.compat.v1.reset_default_graph()
+        sess = tf.compat.v1.Session()
         module_zero_channels_list = []
 
         _ = keras_model()
-        init = tf.global_variables_initializer()
+        init = tf.compat.v1.global_variables_initializer()
         sess.run(init)
 
-        tf_op = tf.get_default_graph().get_operation_by_name("conv2d_1/Conv2D")
+        tf_op = tf.compat.v1.get_default_graph().get_operation_by_name("conv2d_1/Conv2D")
         input_channels_to_winnow = [3, 5, 7]
         input_op_names = ["conv2d_input"]
         output_op_names = ['keras_model/Softmax']
@@ -966,28 +968,28 @@ class TestTfWinnower(unittest.TestCase):
 
     def test_mask_propagation_on_single_residual_model(self):
         """ Test mask propagation on a conv module in keras_model """
-        tf.reset_default_graph()
-        sess = tf.Session()
+        tf.compat.v1.reset_default_graph()
+        sess = tf.compat.v1.Session()
         module_zero_channels_list = []
 
         _ = single_residual()
-        init = tf.global_variables_initializer()
+        init = tf.compat.v1.global_variables_initializer()
         sess.run(init)
 
         input_op_names = ["input_1"]
         output_op_names = ['Relu_2']
 
-        tf_op = tf.get_default_graph().get_operation_by_name("conv2d_3/Conv2D")
+        tf_op = tf.compat.v1.get_default_graph().get_operation_by_name("conv2d_3/Conv2D")
         input_channels_to_winnow = [3, 5, 7]
         module_mask_pair = (tf_op, input_channels_to_winnow)
         module_zero_channels_list.append(module_mask_pair)
 
-        tf_op = tf.get_default_graph().get_operation_by_name("conv2d_2/Conv2D")
+        tf_op = tf.compat.v1.get_default_graph().get_operation_by_name("conv2d_2/Conv2D")
         input_channels_to_winnow_2 = [13, 15]
         module_mask_pair = (tf_op, input_channels_to_winnow_2)
         module_zero_channels_list.append(module_mask_pair)
 
-        tf_op = tf.get_default_graph().get_operation_by_name("conv2d_1/Conv2D")
+        tf_op = tf.compat.v1.get_default_graph().get_operation_by_name("conv2d_1/Conv2D")
         input_channels_to_winnow_3 = [13, 15]
         module_mask_pair = (tf_op, input_channels_to_winnow_3)
         module_zero_channels_list.append(module_mask_pair)
@@ -1015,8 +1017,8 @@ class TestTfWinnower(unittest.TestCase):
     def test_mask_propagation_with_maxpool_as_last_layer(self):
         """ Test mask propagation on a model with a direct connectivity op as the last layer. """
 
-        tf.reset_default_graph()
-        sess = tf.Session()
+        tf.compat.v1.reset_default_graph()
+        sess = tf.compat.v1.Session()
         module_zero_channels_list = []
 
         inputs = tf.keras.Input(shape=(64, 32, 3,))
@@ -1024,10 +1026,10 @@ class TestTfWinnower(unittest.TestCase):
         x = tf.keras.layers.Conv2D(16, (3, 3))(x)
         _ = tf.keras.layers.MaxPool2D()(x)
 
-        init = tf.global_variables_initializer()
+        init = tf.compat.v1.global_variables_initializer()
         sess.run(init)
 
-        tf_op = tf.get_default_graph().get_operation_by_name("conv2d_1/Conv2D")
+        tf_op = tf.compat.v1.get_default_graph().get_operation_by_name("conv2d_1/Conv2D")
         input_channels_to_winnow = [1]
         module_mask_pair = (tf_op, input_channels_to_winnow)
         module_zero_channels_list.append(module_mask_pair)
@@ -1043,18 +1045,18 @@ class TestTfWinnower(unittest.TestCase):
     def test_mask_propagation_with_conv_as_last_layer(self):
         """ Test mask propagation on a model with a conv op as the last layer. """
 
-        tf.reset_default_graph()
-        sess = tf.Session()
+        tf.compat.v1.reset_default_graph()
+        sess = tf.compat.v1.Session()
         module_zero_channels_list = []
 
         inputs = tf.keras.Input(shape=(8, 8, 3,))
         x = tf.keras.layers.Conv2D(4, (2, 2))(inputs)
         _ = tf.keras.layers.Conv2D(2, (1, 1))(x)
 
-        init = tf.global_variables_initializer()
+        init = tf.compat.v1.global_variables_initializer()
         sess.run(init)
 
-        tf_op = tf.get_default_graph().get_operation_by_name("conv2d_1/Conv2D")
+        tf_op = tf.compat.v1.get_default_graph().get_operation_by_name("conv2d_1/Conv2D")
         input_channels_to_winnow = [1]
         module_mask_pair = (tf_op, input_channels_to_winnow)
         module_zero_channels_list.append(module_mask_pair)
@@ -1070,8 +1072,8 @@ class TestTfWinnower(unittest.TestCase):
     def test_mask_propagation_with_dense_as_last_layer(self):
         """ Test mask propagation on a model with a dense op as the last layer. """
 
-        tf.reset_default_graph()
-        sess = tf.Session()
+        tf.compat.v1.reset_default_graph()
+        sess = tf.compat.v1.Session()
         module_zero_channels_list = []
 
         inputs = tf.keras.Input(shape=(8, 8, 3,))
@@ -1080,10 +1082,10 @@ class TestTfWinnower(unittest.TestCase):
         x = tf.keras.layers.Flatten()(x)
         _ = tf.keras.layers.Dense(2)(x)
 
-        init = tf.global_variables_initializer()
+        init = tf.compat.v1.global_variables_initializer()
         sess.run(init)
 
-        tf_op = tf.get_default_graph().get_operation_by_name("conv2d_1/Conv2D")
+        tf_op = tf.compat.v1.get_default_graph().get_operation_by_name("conv2d_1/Conv2D")
         input_channels_to_winnow = [1]
         module_mask_pair = (tf_op, input_channels_to_winnow)
         module_zero_channels_list.append(module_mask_pair)
@@ -1099,20 +1101,20 @@ class TestTfWinnower(unittest.TestCase):
     def test_mask_propagation_with_concat(self):
         """ Test mask propagation on a model with concat layer. """
 
-        tf.reset_default_graph()
-        sess = tf.Session()
+        tf.compat.v1.reset_default_graph()
+        sess = tf.compat.v1.Session()
         module_zero_channels_list = []
 
         _ = concat_model()
-        init = tf.global_variables_initializer()
+        init = tf.compat.v1.global_variables_initializer()
         sess.run(init)
 
-        tf_op = tf.get_default_graph().get_operation_by_name("conv2d_3/Conv2D")
+        tf_op = tf.compat.v1.get_default_graph().get_operation_by_name("conv2d_3/Conv2D")
         input_channels_to_winnow = [2, 3, 6, 7, 17]
         module_mask_pair = (tf_op, input_channels_to_winnow)
         module_zero_channels_list.append(module_mask_pair)
 
-        tf_op = tf.get_default_graph().get_operation_by_name("conv2d_4/Conv2D")
+        tf_op = tf.compat.v1.get_default_graph().get_operation_by_name("conv2d_4/Conv2D")
         input_channels_to_winnow_1 = [2, 3, 6, 7, 8, 17]
         module_mask_pair = (tf_op, input_channels_to_winnow_1)
         module_zero_channels_list.append(module_mask_pair)
@@ -1146,11 +1148,11 @@ class TestTfWinnower(unittest.TestCase):
 
     def test_mask_propagation_for_add_with_split_parent(self):
         """ Test mask propagation on a model with add that has a split parent """
-        tf.reset_default_graph()
-        sess = tf.Session()
+        tf.compat.v1.reset_default_graph()
+        sess = tf.compat.v1.Session()
 
         _ = upsample_model()
-        init = tf.global_variables_initializer()
+        init = tf.compat.v1.global_variables_initializer()
         sess.run(init)
 
         input_op_names = ["input_1"]
@@ -1160,7 +1162,7 @@ class TestTfWinnower(unittest.TestCase):
         # propagate only through the parent that is not a split.  Additionally, due to special handling for add ops at
         # the end of mask propagation, we expect add's input and output masks to be all ones.
         module_zero_channels_list = []
-        tf_op = tf.get_default_graph().get_operation_by_name("conv2d_3/Conv2D")
+        tf_op = tf.compat.v1.get_default_graph().get_operation_by_name("conv2d_3/Conv2D")
         input_channels_to_winnow = [3, 5, 7]
         module_mask_pair = (tf_op, input_channels_to_winnow)
         module_zero_channels_list.append(module_mask_pair)
@@ -1181,11 +1183,11 @@ class TestTfWinnower(unittest.TestCase):
 
     def test_mask_propagation_for_add_with_non_split_parents(self):
         """ Test mask propagation on a model with add that does not have a split parent """
-        tf.reset_default_graph()
-        sess = tf.Session()
+        tf.compat.v1.reset_default_graph()
+        sess = tf.compat.v1.Session()
 
         _ = single_residual()
-        init = tf.global_variables_initializer()
+        init = tf.compat.v1.global_variables_initializer()
         sess.run(init)
 
         input_op_names = ["input_1"]
@@ -1195,7 +1197,7 @@ class TestTfWinnower(unittest.TestCase):
         # propagate through both parents of the add.  At the end of mask propagation, we expect add's input and output
         # masks to have channels 3, 5, and 7 marked for winnowing.
         module_zero_channels_list = []
-        tf_op = tf.get_default_graph().get_operation_by_name("conv2d_4/Conv2D")
+        tf_op = tf.compat.v1.get_default_graph().get_operation_by_name("conv2d_4/Conv2D")
         input_channels_to_winnow = [3, 5, 7]
         module_mask_pair = (tf_op, input_channels_to_winnow)
         module_zero_channels_list.append(module_mask_pair)
@@ -1219,11 +1221,11 @@ class TestTfWinnower(unittest.TestCase):
 
     def test_mask_propagation_set_downstream_masks(self):
         """ Test setting downstream masks """
-        tf.reset_default_graph()
-        sess = tf.Session()
+        tf.compat.v1.reset_default_graph()
+        sess = tf.compat.v1.Session()
 
         _ = model_to_test_downstream_masks()
-        init = tf.global_variables_initializer()
+        init = tf.compat.v1.global_variables_initializer()
         sess.run(init)
 
         input_op_names = ["input_1"]
@@ -1233,12 +1235,12 @@ class TestTfWinnower(unittest.TestCase):
         # propagate through both parents of the add.  At the end of mask propagation, we expect add's input and output
         # masks to have channels 3, 5, and 7 marked for winnowing.
         module_zero_channels_list = []
-        tf_op = tf.get_default_graph().get_operation_by_name("conv2d_2/Conv2D")
+        tf_op = tf.compat.v1.get_default_graph().get_operation_by_name("conv2d_2/Conv2D")
         input_channels_to_winnow = [3, 5, 7]
         module_mask_pair = (tf_op, input_channels_to_winnow)
         module_zero_channels_list.append(module_mask_pair)
 
-        tf_op = tf.get_default_graph().get_operation_by_name("conv2d_3/Conv2D")
+        tf_op = tf.compat.v1.get_default_graph().get_operation_by_name("conv2d_3/Conv2D")
         input_channels_to_winnow = [3, 5, 7]
         module_mask_pair = (tf_op, input_channels_to_winnow)
         module_zero_channels_list.append(module_mask_pair)
@@ -1258,13 +1260,13 @@ class TestTfWinnower(unittest.TestCase):
     def test_create_masks_with_postprocessing_ops(self):
         """ Test that create_masks() is able to handle models with postprocessing nodes """
 
-        tf.reset_default_graph()
-        sess = tf.Session()
+        tf.compat.v1.reset_default_graph()
+        sess = tf.compat.v1.Session()
         module_zero_channels_list = []
         model_with_postprocessing_nodes()
-        init = tf.global_variables_initializer()
+        init = tf.compat.v1.global_variables_initializer()
         sess.run(init)
-        # _ = tf.summary.FileWriter('./model_with_postprocessing_nodes', tf.get_default_graph())
+        # _ = tf.compat.v1.summary.FileWriter('./model_with_postprocessing_nodes', tf.compat.v1.get_default_graph())
         input_op_names = ["input_1"]
         output_op_names = ['top1-acc', 'top5-acc']
         mask_winnower = MaskPropagationWinnower(sess, input_op_names, output_op_names, module_zero_channels_list,

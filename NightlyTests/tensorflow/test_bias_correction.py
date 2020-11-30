@@ -70,7 +70,7 @@ class TestBiasCorrection(unittest.TestCase):
 
             return image
 
-        tf.reset_default_graph()
+        tf.compat.v1.reset_default_graph()
         batch_size = 2
         num_samples = 10
         dataset = tf.data.TFRecordDataset([os.path.join('data', 'mnist', 'validation.tfrecords')]).repeat(1)
@@ -111,7 +111,7 @@ class TestBiasCorrection(unittest.TestCase):
 
             return image
 
-        tf.reset_default_graph()
+        tf.compat.v1.reset_default_graph()
         batch_size = 2
         num_samples = 10
         dataset = tf.data.TFRecordDataset([os.path.join('data', 'mnist', 'validation.tfrecords')]).repeat(1)

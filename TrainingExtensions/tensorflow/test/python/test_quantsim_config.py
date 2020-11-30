@@ -40,7 +40,11 @@
 import json
 import os
 import unittest
+
 import tensorflow as tf
+tf.compat.v1.logging.set_verbosity(tf.logging.WARN)
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
+
 from aimet_common.connected_graph.connectedgraph_utils import get_all_input_ops
 from aimet_tensorflow.examples.test_models import single_residual
 from aimet_tensorflow.quantsim import QuantizationSimModel
@@ -57,11 +61,11 @@ class TestQuantsimConfig(unittest.TestCase):
     def test_empty_config_file(self):
         """ Check that with an empty config file, all op modes and use symmetric encoding settings are set to
         passThrough and False respectively. """
-        tf.reset_default_graph()
-        sess = tf.Session()
+        tf.compat.v1.reset_default_graph()
+        sess = tf.compat.v1.Session()
         with sess.graph.as_default():
             _ = single_residual()
-            init = tf.global_variables_initializer()
+            init = tf.compat.v1.global_variables_initializer()
             sess.run(init)
 
         quantsim_config = {
@@ -91,15 +95,15 @@ class TestQuantsimConfig(unittest.TestCase):
             os.remove('./quantsim_config.json')
         sess.close()
         sim.session.close()
-        tf.reset_default_graph()
+        tf.compat.v1.reset_default_graph()
 
     def test_parse_config_file_defaults(self):
         """ Test that default quantization parameters are set correctly when using json config file """
-        tf.reset_default_graph()
-        sess = tf.Session()
+        tf.compat.v1.reset_default_graph()
+        sess = tf.compat.v1.Session()
         with sess.graph.as_default():
             _ = single_residual()
-            init = tf.global_variables_initializer()
+            init = tf.compat.v1.global_variables_initializer()
             sess.run(init)
 
         quantsim_config = {
@@ -177,15 +181,15 @@ class TestQuantsimConfig(unittest.TestCase):
             os.remove('./quantsim_config.json')
         sess.close()
         sim.session.close()
-        tf.reset_default_graph()
+        tf.compat.v1.reset_default_graph()
 
     def test_parse_config_file_params(self):
         """ Test that param specific quantization parameters are set correctly when using json config file """
-        tf.reset_default_graph()
-        sess = tf.Session()
+        tf.compat.v1.reset_default_graph()
+        sess = tf.compat.v1.Session()
         with sess.graph.as_default():
             _ = single_residual()
-            init = tf.global_variables_initializer()
+            init = tf.compat.v1.global_variables_initializer()
             sess.run(init)
 
         quantsim_config = {
@@ -245,15 +249,15 @@ class TestQuantsimConfig(unittest.TestCase):
 
         sess.close()
         sim.session.close()
-        tf.reset_default_graph()
+        tf.compat.v1.reset_default_graph()
 
     def test_parse_config_file_op_type(self):
         """ Test that op specific quantization parameters are set correctly when using json config file """
-        tf.reset_default_graph()
-        sess = tf.Session()
+        tf.compat.v1.reset_default_graph()
+        sess = tf.compat.v1.Session()
         with sess.graph.as_default():
             _ = single_residual()
-            init = tf.global_variables_initializer()
+            init = tf.compat.v1.global_variables_initializer()
             sess.run(init)
 
         quantsim_config = {
@@ -362,15 +366,15 @@ class TestQuantsimConfig(unittest.TestCase):
             os.remove('./quantsim_config.json')
         sess.close()
         sim.session.close()
-        tf.reset_default_graph()
+        tf.compat.v1.reset_default_graph()
 
     def test_parse_config_file_supergroups(self):
         """ Test that supergroup quantization parameters are set correctly when using json config file """
-        tf.reset_default_graph()
-        sess = tf.Session()
+        tf.compat.v1.reset_default_graph()
+        sess = tf.compat.v1.Session()
         with sess.graph.as_default():
             _ = single_residual()
-            init = tf.global_variables_initializer()
+            init = tf.compat.v1.global_variables_initializer()
             sess.run(init)
 
         quantsim_config = {
@@ -435,15 +439,15 @@ class TestQuantsimConfig(unittest.TestCase):
             os.remove('./quantsim_config.json')
         sess.close()
         sim.session.close()
-        tf.reset_default_graph()
+        tf.compat.v1.reset_default_graph()
 
     def test_parse_config_file_model_inputs(self):
         """ Test that model input quantization parameters are set correctly when using json config file """
-        tf.reset_default_graph()
-        sess = tf.Session()
+        tf.compat.v1.reset_default_graph()
+        sess = tf.compat.v1.Session()
         with sess.graph.as_default():
             _ = single_residual()
-            init = tf.global_variables_initializer()
+            init = tf.compat.v1.global_variables_initializer()
             sess.run(init)
 
         quantsim_config = {
@@ -471,15 +475,15 @@ class TestQuantsimConfig(unittest.TestCase):
             os.remove('./quantsim_config.json')
         sess.close()
         sim.session.close()
-        tf.reset_default_graph()
+        tf.compat.v1.reset_default_graph()
 
     def test_parse_config_file_model_outputs(self):
         """ Test that model output quantization parameters are set correctly when using json config file """
-        tf.reset_default_graph()
-        sess = tf.Session()
+        tf.compat.v1.reset_default_graph()
+        sess = tf.compat.v1.Session()
         with sess.graph.as_default():
             _ = single_residual()
-            init = tf.global_variables_initializer()
+            init = tf.compat.v1.global_variables_initializer()
             sess.run(init)
 
         quantsim_config = {
@@ -508,4 +512,4 @@ class TestQuantsimConfig(unittest.TestCase):
             os.remove('./quantsim_config.json')
         sess.close()
         sim.session.close()
-        tf.reset_default_graph()
+        tf.compat.v1.reset_default_graph()

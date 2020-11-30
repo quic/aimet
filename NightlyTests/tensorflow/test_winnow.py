@@ -66,30 +66,30 @@ class TestTfWinnower(unittest.TestCase):
     def test_reducing_vgg16(self):
         """ This test winnows a VGG16 model"""
 
-        tf.reset_default_graph()
-        sess = tf.Session()
+        tf.compat.v1.reset_default_graph()
+        sess = tf.compat.v1.Session()
         module_zero_channels_list = []
 
         _ = VGG16(weights=None)
-        init = tf.global_variables_initializer()
+        init = tf.compat.v1.global_variables_initializer()
         sess.run(init)
 
-        tf_op = tf.get_default_graph().get_operation_by_name("block5_conv1/Conv2D")
+        tf_op = tf.compat.v1.get_default_graph().get_operation_by_name("block5_conv1/Conv2D")
         input_channels_to_winnow = [3, 5, 7]
         module_mask_pair = (tf_op, input_channels_to_winnow)
         module_zero_channels_list.append(module_mask_pair)
 
-        tf_op_2 = tf.get_default_graph().get_operation_by_name("block3_conv1/Conv2D")
+        tf_op_2 = tf.compat.v1.get_default_graph().get_operation_by_name("block3_conv1/Conv2D")
         input_channels_to_winnow_2 = [11, 13, 15, 17]
         module_mask_pair_2 = (tf_op_2, input_channels_to_winnow_2)
         module_zero_channels_list.append(module_mask_pair_2)
 
-        tf_op_3 = tf.get_default_graph().get_operation_by_name("block2_conv2/Conv2D")
+        tf_op_3 = tf.compat.v1.get_default_graph().get_operation_by_name("block2_conv2/Conv2D")
         input_channels_to_winnow_3 = [1, 2, 3, 4, 5]
         module_mask_pair_3 = (tf_op_3, input_channels_to_winnow_3)
         module_zero_channels_list.append(module_mask_pair_3)
 
-        tf_op_4 = tf.get_default_graph().get_operation_by_name("block2_conv1/Conv2D")
+        tf_op_4 = tf.compat.v1.get_default_graph().get_operation_by_name("block2_conv1/Conv2D")
         input_channels_to_winnow_4 = [20, 21, 22, 23]
         module_mask_pair_4 = (tf_op_4, input_channels_to_winnow_4)
         module_zero_channels_list.append(module_mask_pair_4)
@@ -103,7 +103,7 @@ class TestTfWinnower(unittest.TestCase):
         new_sess = save_and_load_graph('./saver', new_sess)
 
         # uncomment the following to generate tensorboard viewable file
-        # _ = tf.summary.FileWriter('./reduced_graph', new_sess.graph)
+        # _ = tf.compat.v1.summary.FileWriter('./reduced_graph', new_sess.graph)
 
         # Check certain weight indices to ensure that weights were reduced correctly
         b4c3_kernel = new_sess.graph.get_tensor_by_name("block4_conv3/kernel/Read/"
@@ -123,7 +123,7 @@ class TestTfWinnower(unittest.TestCase):
         # Finally reevaluate the same tensor as before.  This time, we expect to see the result be zero.
 
         with new_sess.graph.as_default():
-            inp = tf.random_uniform(shape=(1, 224, 224, 3))
+            inp = tf.random.uniform(shape=(1, 224, 224, 3))
             inp_array = inp.eval(session=new_sess)
             model_input = new_sess.graph.get_tensor_by_name("input_1:0")
 
@@ -137,30 +137,30 @@ class TestTfWinnower(unittest.TestCase):
 
     def test_reducing_resnet_50(self):
         """ Test module reduction in resnet_50 """
-        tf.reset_default_graph()
-        sess = tf.Session()
+        tf.compat.v1.reset_default_graph()
+        sess = tf.compat.v1.Session()
         module_zero_channels_list = []
 
         _ = ResNet50(weights=None)
-        init = tf.global_variables_initializer()
+        init = tf.compat.v1.global_variables_initializer()
         sess.run(init)
 
-        tf_op = tf.get_default_graph().get_operation_by_name("conv2_block1_1_conv/Conv2D")
+        tf_op = tf.compat.v1.get_default_graph().get_operation_by_name("conv2_block1_1_conv/Conv2D")
         input_channels_to_winnow_1 = [3, 5, 7]
         module_mask_pair = (tf_op, input_channels_to_winnow_1)
         module_zero_channels_list.append(module_mask_pair)
 
-        tf_op = tf.get_default_graph().get_operation_by_name("conv2_block1_0_conv/Conv2D")
+        tf_op = tf.compat.v1.get_default_graph().get_operation_by_name("conv2_block1_0_conv/Conv2D")
         input_channels_to_winnow_2 = [3, 5, 7, 8]
         module_mask_pair = (tf_op, input_channels_to_winnow_2)
         module_zero_channels_list.append(module_mask_pair)
 
-        tf_op = tf.get_default_graph().get_operation_by_name("conv3_block1_1_conv/Conv2D")
+        tf_op = tf.compat.v1.get_default_graph().get_operation_by_name("conv3_block1_1_conv/Conv2D")
         input_channels_to_winnow_3 = [3, 5, 7]
         module_mask_pair = (tf_op, input_channels_to_winnow_3)
         module_zero_channels_list.append(module_mask_pair)
 
-        tf_op = tf.get_default_graph().get_operation_by_name("conv3_block1_0_conv/Conv2D")
+        tf_op = tf.compat.v1.get_default_graph().get_operation_by_name("conv3_block1_0_conv/Conv2D")
         input_channels_to_winnow_4 = [3, 5, 7, 8]
         module_mask_pair = (tf_op, input_channels_to_winnow_4)
         module_zero_channels_list.append(module_mask_pair)
@@ -177,9 +177,9 @@ class TestTfWinnower(unittest.TestCase):
             initialize_uninitialized_vars(new_sess)
         new_sess = save_and_load_graph('./saver', new_sess)
 
-        # _ = tf.summary.FileWriter('./reduced_graph', new_sess.graph)
+        # _ = tf.compat.v1.summary.FileWriter('./reduced_graph', new_sess.graph)
         with new_sess.graph.as_default():
-            inp = tf.random_uniform(shape=(1, 224, 224, 3))
+            inp = tf.random.uniform(shape=(1, 224, 224, 3))
             inp_array = inp.eval(session=new_sess)
         model_input = new_sess.graph.get_tensor_by_name("input_1:0")
         model_output = new_sess.graph.get_tensor_by_name("probs/Softmax:0")
@@ -211,30 +211,30 @@ class TestTfWinnower(unittest.TestCase):
 
     def test_reducing_inceptionV3(self):
         """ Test module reduction in inceptionV3 """
-        tf.reset_default_graph()
-        sess = tf.Session()
+        tf.compat.v1.reset_default_graph()
+        sess = tf.compat.v1.Session()
         module_zero_channels_list = []
 
         _ = InceptionV3(weights=None)
-        init = tf.global_variables_initializer()
+        init = tf.compat.v1.global_variables_initializer()
         sess.run(init)
 
-        tf_op = tf.get_default_graph().get_operation_by_name("conv2d_12/Conv2D")
+        tf_op = tf.compat.v1.get_default_graph().get_operation_by_name("conv2d_12/Conv2D")
         input_channels_to_winnow = [0, 1, 64, 128, 224]
         module_mask_pair = (tf_op, input_channels_to_winnow)
         module_zero_channels_list.append(module_mask_pair)
 
-        tf_op = tf.get_default_graph().get_operation_by_name("conv2d_13/Conv2D")
+        tf_op = tf.compat.v1.get_default_graph().get_operation_by_name("conv2d_13/Conv2D")
         input_channels_to_winnow_1 = [0, 64, 65, 66, 128, 224]
         module_mask_pair = (tf_op, input_channels_to_winnow_1)
         module_zero_channels_list.append(module_mask_pair)
 
-        tf_op = tf.get_default_graph().get_operation_by_name("conv2d_15/Conv2D")
+        tf_op = tf.compat.v1.get_default_graph().get_operation_by_name("conv2d_15/Conv2D")
         input_channels_to_winnow_2 = [0, 64, 128, 129, 130, 131, 224]
         module_mask_pair = (tf_op, input_channels_to_winnow_2)
         module_zero_channels_list.append(module_mask_pair)
 
-        tf_op = tf.get_default_graph().get_operation_by_name("conv2d_18/Conv2D")
+        tf_op = tf.compat.v1.get_default_graph().get_operation_by_name("conv2d_18/Conv2D")
         input_channels_to_winnow_3 = [0, 64, 128, 224, 225, 226, 227, 228]
         module_mask_pair = (tf_op, input_channels_to_winnow_3)
         module_zero_channels_list.append(module_mask_pair)
@@ -251,10 +251,10 @@ class TestTfWinnower(unittest.TestCase):
             initialize_uninitialized_vars(new_sess)
         new_sess = save_and_load_graph('./saver', new_sess)
 
-        # _ = tf.summary.FileWriter('./reduced_graph', new_sess.graph)
+        # _ = tf.compat.v1.summary.FileWriter('./reduced_graph', new_sess.graph)
 
         with new_sess.graph.as_default():
-            inp = tf.random_uniform(shape=(1, 299, 299, 3))
+            inp = tf.random.uniform(shape=(1, 299, 299, 3))
             inp_array = inp.eval(session=new_sess)
             model_input = new_sess.graph.get_tensor_by_name("input_1:0")
             model_output = new_sess.graph.get_tensor_by_name("predictions/Softmax:0")
@@ -285,19 +285,19 @@ class TestTfWinnower(unittest.TestCase):
 
     def test_reducing_vgg16_slim(self):
         """ Test reducing vgg16 slim model """
-        tf.reset_default_graph()
-        sess = tf.Session()
+        tf.compat.v1.reset_default_graph()
+        sess = tf.compat.v1.Session()
         module_zero_channels_list = []
 
-        inp = tf.placeholder(tf.float32, [1, 224, 224, 3])
+        inp = tf.compat.v1.placeholder(tf.float32, [1, 224, 224, 3])
         _ = vgg.vgg_16(inp)
-        init = tf.global_variables_initializer()
+        init = tf.compat.v1.global_variables_initializer()
         sess.run(init)
 
         input_op_names = ["Placeholder"]
         output_op_names = ['vgg_16/fc8/squeezed']
 
-        tf_op = tf.get_default_graph().get_operation_by_name("vgg_16/fc7/Conv2D")
+        tf_op = tf.compat.v1.get_default_graph().get_operation_by_name("vgg_16/fc7/Conv2D")
         input_channels_to_winnow = [2, 3, 4]
         module_mask_pair = (tf_op, input_channels_to_winnow)
         module_zero_channels_list.append(module_mask_pair)
@@ -308,10 +308,10 @@ class TestTfWinnower(unittest.TestCase):
         # Save and reload modified graph to allow changes to take effect
         new_sess = save_and_load_graph('./saver', new_sess)
 
-        # _ = tf.summary.FileWriter('./reduced_graph', new_sess.graph)
+        # _ = tf.compat.v1.summary.FileWriter('./reduced_graph', new_sess.graph)
 
         with new_sess.graph.as_default():
-            inp = tf.random_uniform(shape=(1, 224, 224, 3))
+            inp = tf.random.uniform(shape=(1, 224, 224, 3))
             inp_array = inp.eval(session=new_sess)
             model_input = new_sess.graph.get_tensor_by_name("Placeholder:0")
             model_output = new_sess.graph.get_tensor_by_name("vgg_16/fc8/squeezed:0")

@@ -90,11 +90,11 @@ def keras_model():
 
 def keras_model_functional():
     """ Function for returning basic keras model defined functionally """
-    is_training = tf.placeholder_with_default(tf.constant(True), shape=(), name='is_training')
+    is_training = tf.compat.v1.placeholder_with_default(tf.constant(True), shape=(), name='is_training')
     inputs = tf.keras.Input(shape=(32, 32, 3,))
     x = tf.keras.layers.Conv2D(32, (3, 3))(inputs)
     x = tf.keras.layers.BatchNormalization(momentum=.3, epsilon=.65)(x, training=True)
-    with tf.variable_scope("scope_1"):
+    with tf.compat.v1.variable_scope("scope_1"):
         x = tf.keras.layers.Conv2D(16, (2, 2), activation=tf.nn.tanh)(x)
         x = tf.keras.layers.BatchNormalization(momentum=.4, epsilon=.25)(x, training=is_training)
         x = tf.keras.layers.Conv2D(8, (2, 2), activation=tf.nn.tanh)(x)
@@ -108,11 +108,11 @@ def keras_model_functional():
 
 def keras_model_functional_with_non_fused_batchnorms():
     """ Function for returning basic keras model defined functionally using non fused batchnorms"""
-    is_training = tf.placeholder_with_default(tf.constant(True), shape=(), name='is_training')
+    is_training = tf.compat.v1.placeholder_with_default(tf.constant(True), shape=(), name='is_training')
     inputs = tf.keras.Input(shape=(32, 32, 3,))
     x = tf.keras.layers.Conv2D(32, (3, 3))(inputs)
     x = tf.keras.layers.BatchNormalization(momentum=.3, epsilon=.65, fused=False)(x, training=True)
-    with tf.variable_scope("scope_1"):
+    with tf.compat.v1.variable_scope("scope_1"):
         x = tf.keras.layers.Conv2D(16, (2, 2), activation=tf.nn.tanh)(x)
         x = tf.keras.layers.BatchNormalization(momentum=.4, epsilon=.25, fused=False)(x, training=is_training)
         x = tf.keras.layers.Conv2D(8, (2, 2), activation=tf.nn.tanh)(x)
@@ -127,7 +127,7 @@ def keras_model_functional_with_non_fused_batchnorms():
 
 def tf_slim_basic_model(inp):
     """ Function for returning basic tf slim model """
-    is_training = tf.placeholder_with_default(tf.constant(True), shape=(), name='is_training')
+    is_training = tf.compat.v1.placeholder_with_default(tf.constant(True), shape=(), name='is_training')
     net = slim.conv2d(inp, 32, [3, 3])
     net = slim.batch_norm(net, decay=.7, epsilon=.65, is_training=True)
     net = slim.conv2d(net, 16, [2, 2])
@@ -242,7 +242,7 @@ def model_with_postprocessing_nodes():
     x = tf.keras.layers.Flatten()(x)
     x = tf.keras.layers.Dense(10, activation=tf.nn.softmax, name="model_with_postprocessing_nodes")(x)
 
-    labels_placeholder = tf.placeholder_with_default(tf.constant(1, shape=(1, 10)),
+    labels_placeholder = tf.compat.v1.placeholder_with_default(tf.constant(1, shape=(1, 10)),
                                                      shape=[None, 10],
                                                      name='labels')
 
@@ -362,10 +362,10 @@ def model_with_multiple_training_tensors():
     inputs = tf.keras.Input(shape=(32, 32, 3,))
     # Should create a keras learning phase tensor
     x = tf.keras.layers.BatchNormalization(momentum=.3, epsilon=.65)(inputs)
-    is_training = tf.placeholder_with_default(False, [], name='is_training')
+    is_training = tf.compat.v1.placeholder_with_default(False, [], name='is_training')
     # Should attach to second is_training tensor
     x = tf.keras.layers.BatchNormalization(momentum=.3, epsilon=.65)(x, training=is_training)
-    is_training_2 = tf.placeholder_with_default(False, [], name='is_training_2')
+    is_training_2 = tf.compat.v1.placeholder_with_default(False, [], name='is_training_2')
     # Should attach to third is_training_2 tensor
     x = tf.keras.layers.BatchNormalization(momentum=.3, epsilon=.65)(x, training=is_training_2)
     # Should not have a training tensor

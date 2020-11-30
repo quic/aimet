@@ -181,16 +181,16 @@ class TestSubGraph(unittest.TestCase):
         layer_matcher = graph_matcher.GraphMatcher(all_patterns)
 
         # Use the keras_model_functional.
-        sess = tf.Session(graph=tf.Graph())
+        sess = tf.compat.v1.Session(graph=tf.Graph())
         with sess.graph.as_default():
             with tf.device('/cpu:0'):
                 model = keras_model_functional()
                 model.summary()
-            init = tf.global_variables_initializer()
+            init = tf.compat.v1.global_variables_initializer()
         sess.run(init)
 
         # Uncomment to use Tensorboard
-        # _ = tf.summary.FileWriter('./subgraph', sess.graph)
+        # _ = tf.compat.v1.summary.FileWriter('./subgraph', sess.graph)
 
         # Graph Match
         matched_op_set = set()  # Set to keep track of Ops that have been detected already.

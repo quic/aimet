@@ -37,7 +37,12 @@
 import pytest
 import unittest
 import shutil
+
+import os
 import tensorflow as tf
+tf.compat.v1.logging.set_verbosity(tf.logging.WARN)
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
+
 import numpy as np
 import json
 import libpymo
@@ -57,7 +62,7 @@ class TestQuantSim(unittest.TestCase):
         Create QuantSim for a CPU model and check that quantizers have been added to the graph
         """
 
-        tf.reset_default_graph()
+        tf.compat.v1.reset_default_graph()
         with tf.device('/cpu:0'):
             model = tf.keras.Sequential()
             model.add(tf.keras.layers.Conv2D(32, kernel_size=3, input_shape=(28, 28, 3), activation='relu'))
@@ -65,7 +70,7 @@ class TestQuantSim(unittest.TestCase):
             model.add(tf.keras.layers.Conv2D(64, kernel_size=3, activation='relu'))
             model.summary()
 
-        sess = tf.Session()
+        sess = tf.compat.v1.Session()
         initialize_uninitialized_vars(sess)
         sim = QuantizationSimModel(sess, ['conv2d_input'], ['conv2d_1/Relu'], use_cuda=False)
 
@@ -97,7 +102,7 @@ class TestQuantSim(unittest.TestCase):
         """
         Create QuantSim for a GPU model and check that quantizers have been added to the graph
         """
-        tf.reset_default_graph()
+        tf.compat.v1.reset_default_graph()
         with tf.device('/gpu:0'):
             model = tf.keras.Sequential()
             model.add(tf.keras.layers.Conv2D(32, kernel_size=3, input_shape=(28, 28, 3), activation='relu'))
@@ -105,7 +110,7 @@ class TestQuantSim(unittest.TestCase):
             model.add(tf.keras.layers.Conv2D(64, kernel_size=3, activation='relu'))
             model.summary()
 
-        sess = tf.Session()
+        sess = tf.compat.v1.Session()
         initialize_uninitialized_vars(sess)
         sim = QuantizationSimModel(sess, ['conv2d_input'], ['conv2d_1/Relu'], use_cuda=True)
 
@@ -137,7 +142,7 @@ class TestQuantSim(unittest.TestCase):
         Create QuantSim for a CPU model and test that activation encodings are computed
         """
 
-        tf.reset_default_graph()
+        tf.compat.v1.reset_default_graph()
         with tf.device('/cpu:0'):
             model = tf.keras.Sequential()
             model.add(tf.keras.layers.Conv2D(32, kernel_size=3, input_shape=(28, 28, 3), activation='relu'))
@@ -145,7 +150,7 @@ class TestQuantSim(unittest.TestCase):
             model.add(tf.keras.layers.Conv2D(64, kernel_size=3, activation='relu'))
             model.summary()
 
-        sess = tf.Session()
+        sess = tf.compat.v1.Session()
         initialize_uninitialized_vars(sess)
         sim = QuantizationSimModel(sess, ['conv2d_input'], ['conv2d_1/Relu'], use_cuda=False)
 
@@ -190,7 +195,7 @@ class TestQuantSim(unittest.TestCase):
                          sim.session.run(conv2d_output_quant_op.inputs[1]))
 
     def _save_to_keras_common_test_code(self, use_cuda):
-        tf.reset_default_graph()
+        tf.compat.v1.reset_default_graph()
         if not use_cuda:
             model = tf.keras.Sequential()
             model.add(tf.keras.layers.Conv2D(32, kernel_size=3, input_shape=(28, 28, 3), activation='relu'))
@@ -205,7 +210,7 @@ class TestQuantSim(unittest.TestCase):
                 model.add(tf.keras.layers.Conv2D(64, kernel_size=3, activation='relu'))
                 model.summary()
 
-        sess = tf.Session()
+        sess = tf.compat.v1.Session()
         initialize_uninitialized_vars(sess)
         sim = QuantizationSimModel(sess, ['conv2d_input'], ['conv2d_1/Relu'], use_cuda=use_cuda)
 
@@ -275,7 +280,7 @@ class TestQuantSim(unittest.TestCase):
         Create QuantSim for a CPU model and test that activation encodings are computed
         """
 
-        tf.reset_default_graph()
+        tf.compat.v1.reset_default_graph()
         with tf.device('/gpu:0'):
             model = tf.keras.Sequential()
             model.add(tf.keras.layers.Conv2D(32, kernel_size=3, input_shape=(28, 28, 3), activation='relu'))
@@ -283,7 +288,7 @@ class TestQuantSim(unittest.TestCase):
             model.add(tf.keras.layers.Conv2D(64, kernel_size=3, activation='relu'))
             model.summary()
 
-        sess = tf.Session()
+        sess = tf.compat.v1.Session()
         initialize_uninitialized_vars(sess)
         sim = QuantizationSimModel(sess, ['conv2d_input'], ['conv2d_1/Relu'], use_cuda=True)
 
@@ -334,9 +339,9 @@ class TestQuantSim(unittest.TestCase):
         """
 
 
-        tf.reset_default_graph()
+        tf.compat.v1.reset_default_graph()
         np.random.seed(0)
-        tf.set_random_seed(0)
+        tf.compat.v1.set_random_seed(0)
 
         with tf.device('/gpu:0'):
             model = tf.keras.Sequential()
@@ -345,7 +350,7 @@ class TestQuantSim(unittest.TestCase):
             model.add(tf.keras.layers.Conv2D(64, kernel_size=3, activation='relu'))
             model.summary()
 
-        sess = tf.Session()
+        sess = tf.compat.v1.Session()
         initialize_uninitialized_vars(sess)
         sim = QuantizationSimModel(sess, ['conv2d_input'], ['conv2d_1/Relu'], use_cuda=True)
 
@@ -357,7 +362,7 @@ class TestQuantSim(unittest.TestCase):
 
         def dummy_forward_pass(sess, args):
             np.random.seed(0)
-            tf.set_random_seed(0)
+            tf.compat.v1.set_random_seed(0)
             model_output = sess.graph.get_tensor_by_name('conv2d_1/Relu_quantized:0')
             model_input = sess.graph.get_tensor_by_name('conv2d_input:0')
             dummy_input = np.random.randn(20, 28, 28, 3)
@@ -387,7 +392,7 @@ class TestQuantSim(unittest.TestCase):
         """
         Create QuantSim for a CPU model, compute encodings and export out a resulting model
         """
-        tf.reset_default_graph()
+        tf.compat.v1.reset_default_graph()
         with tf.device('/cpu:0'):
             model = tf.keras.Sequential()
             model.add(tf.keras.layers.Conv2D(32, kernel_size=3, input_shape=(28, 28, 3), activation='relu'))
@@ -395,7 +400,7 @@ class TestQuantSim(unittest.TestCase):
             model.add(tf.keras.layers.Conv2D(64, kernel_size=3, activation='relu'))
             model.summary()
 
-        sess = tf.Session()
+        sess = tf.compat.v1.Session()
         initialize_uninitialized_vars(sess)
         sim = QuantizationSimModel(sess, [model.input.op.name], [model.output.op.name], use_cuda=False)
 
@@ -413,7 +418,7 @@ class TestQuantSim(unittest.TestCase):
             first_bias_tensor = sim.session.graph.get_tensor_by_name('conv2d/BiasAdd/ReadVariableOp:0')
             first_bias_tensor_val = sim.session.run(first_bias_tensor)
             self.assertTrue(np.any(first_bias_tensor_val == 0))
-            first_bias_tensor_var = [var for var in tf.global_variables() if var.name == 'conv2d/bias:0'][0]
+            first_bias_tensor_var = [var for var in tf.compat.v1.global_variables() if var.name == 'conv2d/bias:0'][0]
             first_bias_tensor_var.load(np.ones(32), sim.session)
 
         all_op_types = [op.type for op in sim.session.graph.get_operations()]
@@ -459,7 +464,7 @@ class TestQuantSim(unittest.TestCase):
         """
         Create QuantSim for a CPU model, test save and load on a quantsim model.
         """
-        tf.reset_default_graph()
+        tf.compat.v1.reset_default_graph()
         with tf.device('/cpu:0'):
             model = tf.keras.Sequential()
             model.add(tf.keras.layers.Conv2D(32, kernel_size=3, input_shape=(28, 28, 3), activation='relu'))
@@ -467,7 +472,7 @@ class TestQuantSim(unittest.TestCase):
             model.add(tf.keras.layers.Conv2D(64, kernel_size=3, activation='relu'))
             model.summary()
 
-        sess = tf.Session()
+        sess = tf.compat.v1.Session()
         initialize_uninitialized_vars(sess)
         sim = QuantizationSimModel(sess, [model.input.op.name], [model.output.op.name], use_cuda=False)
 
@@ -521,7 +526,7 @@ class TestQuantSim(unittest.TestCase):
         Create QuantSim for a CPU model, test save and load on a quantsim model
         when encodings have been computed on original quantsim object
         """
-        tf.reset_default_graph()
+        tf.compat.v1.reset_default_graph()
         with tf.device('/cpu:0'):
             model = tf.keras.Sequential()
             model.add(tf.keras.layers.Conv2D(32, kernel_size=3, input_shape=(28, 28, 3), activation='relu'))
@@ -529,7 +534,7 @@ class TestQuantSim(unittest.TestCase):
             model.add(tf.keras.layers.Conv2D(64, kernel_size=3, activation='relu'))
             model.summary()
 
-        sess = tf.Session()
+        sess = tf.compat.v1.Session()
         initialize_uninitialized_vars(sess)
         sim = QuantizationSimModel(sess, [model.input.op.name], [model.output.op.name], use_cuda=False)
 
@@ -590,7 +595,7 @@ class TestQuantSim(unittest.TestCase):
         Create QuantSim for a CPU model, test param read and write using properties
         """
 
-        tf.reset_default_graph()
+        tf.compat.v1.reset_default_graph()
         with tf.device('/cpu:0'):
             model = tf.keras.Sequential()
             model.add(tf.keras.layers.Conv2D(32, kernel_size=3, input_shape=(28, 28, 3), activation='relu'))
@@ -598,7 +603,7 @@ class TestQuantSim(unittest.TestCase):
             model.add(tf.keras.layers.Conv2D(64, kernel_size=3, activation='relu'))
             model.summary()
 
-        sess = tf.Session()
+        sess = tf.compat.v1.Session()
         initialize_uninitialized_vars(sess)
         sim = QuantizationSimModel(sess, [model.input.op.name], [model.output.op.name], use_cuda=False)
 
@@ -685,7 +690,7 @@ class TestQuantSim(unittest.TestCase):
             conv2d_1_weight_quant_info.enabled = False
             conv2d_1_weight_quant_info.enabled = True
 
-        tf.reset_default_graph()
+        tf.compat.v1.reset_default_graph()
         with tf.device('/cpu:0'):
             model = tf.keras.Sequential()
             model.add(tf.keras.layers.Conv2D(32, kernel_size=3, input_shape=(28, 28, 3), activation='relu'))
@@ -693,7 +698,7 @@ class TestQuantSim(unittest.TestCase):
             model.add(tf.keras.layers.Conv2D(64, kernel_size=3, activation='relu'))
             model.summary()
 
-        sess = tf.Session()
+        sess = tf.compat.v1.Session()
         initialize_uninitialized_vars(sess)
 
         orig_get_ops_to_quantize_activations_for = QuantizationSimModel._get_ops_to_quantize_activations_for
@@ -713,8 +718,8 @@ class TestQuantSim(unittest.TestCase):
 
     def test_skip_quantizing_dtype_int(self):
         """ Test that op with dtype int32 is skipped during quantization """
-        tf.reset_default_graph()
-        with tf.Session() as sess:
+        tf.compat.v1.reset_default_graph()
+        with tf.compat.v1.Session() as sess:
             _ = model_with_dtype_int()
             initialize_uninitialized_vars(sess)
             sim = QuantizationSimModel(sess, ['input_1', 'input_2'], ['model_with_dtype_int/Softmax'], use_cuda=False)
@@ -726,8 +731,8 @@ class TestQuantSim(unittest.TestCase):
 
         """ test insertion of quant ops to recurrent layer with conditional blocks """
 
-        tf.reset_default_graph()
-        sess = tf.Session()
+        tf.compat.v1.reset_default_graph()
+        sess = tf.compat.v1.Session()
 
         with sess.graph.as_default():
             inputs = tf.keras.Input(shape=(3, 100))
@@ -738,7 +743,7 @@ class TestQuantSim(unittest.TestCase):
             _ = tf.keras.layers.Dense(12, activation=tf.nn.softmax,
                                       name="simplernn_model")(x)
 
-        init = tf.global_variables_initializer()
+        init = tf.compat.v1.global_variables_initializer()
         sess.run(init)
         ops = sess.graph.get_operations()
         quant_op_inside_while_block_name = "simple_rnn/while/MatMul/ReadVariableOp_quantized"
@@ -768,8 +773,8 @@ class TestQuantSim(unittest.TestCase):
 
     def test_compute_encodings(self):
         """ Test that ops not evaluated during compute encodings are set to passThrough mode. """
-        tf.reset_default_graph()
-        sess = tf.Session()
+        tf.compat.v1.reset_default_graph()
+        sess = tf.compat.v1.Session()
         test_inp = np.ndarray((1, 32, 32, 3))
 
         def dummy_forward_func(sess, _):
@@ -779,7 +784,7 @@ class TestQuantSim(unittest.TestCase):
 
         with sess.as_default():
             _ = keras_model_functional()
-            init = tf.global_variables_initializer()
+            init = tf.compat.v1.global_variables_initializer()
             sess.run(init)
             sim = QuantizationSimModel(sess, ['input_1'], ['keras_model_functional/Softmax'])
             sim.compute_encodings(dummy_forward_func, None)
@@ -804,8 +809,8 @@ class TestQuantSim(unittest.TestCase):
 
     def test_matmul_param_selection_lstm(self):
         """ Test apis to select input params to MatMuls within LSTM for quantization """
-        tf.reset_default_graph()
-        sess = tf.Session()
+        tf.compat.v1.reset_default_graph()
+        sess = tf.compat.v1.Session()
         with sess.graph.as_default():
             inputs = tf.keras.Input(shape=(3, 100))
 
@@ -814,9 +819,9 @@ class TestQuantSim(unittest.TestCase):
             _ = tf.keras.layers.Dense(12, activation=tf.nn.softmax,
                                       name="matmul0")(x)
 
-            init = tf.global_variables_initializer()
+            init = tf.compat.v1.global_variables_initializer()
             sess.run(init)
-            # _ = tf.summary.FileWriter('./lstm', sess.graph)
+            # _ = tf.compat.v1.summary.FileWriter('./lstm', sess.graph)
 
             matmul_with_split_inside_lstm = "lstm0/while/MatMul"
             tf_split_op_in = sess.graph.get_operation_by_name("lstm0/while/split")

@@ -80,20 +80,20 @@ def train_mnist(output_dir, script_dir='/tensorflow/tensorflow/examples/how_tos/
     x = model.input
     y_hat = model.output
     tf.add_to_collection('data', x)
-    y = tf.placeholder(tf.float32, [None, 10], 'labels')
+    y = tf.compat.v1.placeholder(tf.float32, [None, 10], 'labels')
     tf.add_to_collection('labels', y)
 
     # calculate loss
     cross_entropy = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(labels=y, logits=y_hat), name='xent')
     tf.add_to_collection('loss', cross_entropy)
-    train_step = tf.train.AdamOptimizer(1e-3).minimize(cross_entropy)
+    train_step = tf.compat.v1.train.AdamOptimizer(1e-3).minimize(cross_entropy)
     correct_prediction = tf.equal(tf.argmax(y, 1), tf.argmax(y_hat, 1))
     acc = tf.reduce_mean(tf.cast(correct_prediction, tf.float32), name='accuracy')
     tf.add_to_collection('accuracy', acc)
 
-    # create tf.Session and initialize the weights
-    sess = tf.Session()
-    sess.run(tf.global_variables_initializer())
+    # create tf.compat.v1.Session and initialize the weights
+    sess = tf.compat.v1.Session()
+    sess.run(tf.compat.v1.global_variables_initializer())
 
     # do training: learn weights and architecture simultaneously
     for i in range(1000):
@@ -103,15 +103,15 @@ def train_mnist(output_dir, script_dir='/tensorflow/tensorflow/examples/how_tos/
             acc_val = sess.run(acc, feed_dict={x: mnist.test.images, y: mnist.test.labels})
             print('step {0:4d}, test accuracy {1:0.2f}, loss {2:0.4f}'.format(i, acc_val, loss_val))
 
-    saver = tf.train.Saver()
+    saver = tf.compat.v1.train.Saver()
     saver.save(sess, os.path.join(output_dir, 'models', 'mnist_save'))
-    writer = tf.summary.FileWriter(os.path.join(output_dir, "models"), sess.graph)
+    writer = tf.compat.v1.summary.FileWriter(os.path.join(output_dir, "models"), sess.graph)
 
 
 def conv(x, shape, scope):
     # initialize conv weights, if not done yet
-    W = tf.get_variable(scope + '_w', initializer=tf.truncated_normal(shape, stddev=0.1, seed=0))
-    b = tf.get_variable(scope + '_b', initializer=tf.constant(0.1, shape=shape[3:]))
+    W = tf.compat.v1.get_variable(scope + '_w', initializer=tf.random.truncated_normal(shape, stddev=0.1, seed=0))
+    b = tf.compat.v1.get_variable(scope + '_b', initializer=tf.constant(0.1, shape=shape[3:]))
     # do CONV forward path
     acts = tf.nn.relu(tf.nn.conv2d(x, W, strides=[1, 1, 1, 1], padding='SAME') + b)
     return acts
@@ -119,8 +119,8 @@ def conv(x, shape, scope):
 
 def fc(x, shape, scope):
     # initialize fc weights, if not done yet
-    W = tf.get_variable(scope + '_w', initializer=tf.truncated_normal(shape, stddev=0.1, seed=0))
-    b = tf.get_variable(scope + '_b', initializer=tf.constant(0.1, shape=shape[1:2]))
+    W = tf.compat.v1.get_variable(scope + '_w', initializer=tf.random.truncated_normal(shape, stddev=0.1, seed=0))
+    b = tf.compat.v1.get_variable(scope + '_b', initializer=tf.constant(0.1, shape=shape[1:2]))
     # do FC forward path
     y = tf.matmul(x, W) + b
     return y

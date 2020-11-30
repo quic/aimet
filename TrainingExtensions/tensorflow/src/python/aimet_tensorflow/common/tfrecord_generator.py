@@ -98,7 +98,7 @@ class MnistParser:
         """
 
         data, labels = iterator.get_next()
-        with tf.Session(graph=data.graph) as sess:
+        with tf.compat.v1.Session(graph=data.graph) as sess:
             np_images, np_labels = sess.run([data, labels])
         return {self._data_inputs[0]: np_images, self._validation_inputs[0]: np_labels}
 
@@ -184,7 +184,7 @@ class ImagenetParser:
         :return: Input images and labels in feed_dict form
         """
         data, labels = iterator.get_next()
-        with tf.Session(graph=data.graph) as sess:
+        with tf.compat.v1.Session(graph=data.graph) as sess:
             np_images, np_labels = sess.run([data, labels])
         return {self._data_inputs[0]: np_images, self._validation_inputs[0]: np_labels}
 
