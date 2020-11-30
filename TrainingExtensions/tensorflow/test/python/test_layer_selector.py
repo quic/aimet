@@ -39,7 +39,11 @@
 import unittest
 from unittest.mock import MagicMock
 
+import os
 import tensorflow as tf
+tf.compat.v1.logging.set_verbosity(tf.logging.WARN)
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
+
 from aimet_tensorflow.layer_database import Layer
 from aimet_tensorflow.layer_selector import ConvFcLayerSelector, ConvNoDepthwiseLayerSelector
 
@@ -49,7 +53,7 @@ class TestLayerSelector(unittest.TestCase):
     def test_select_all_conv_layers(self):
 
         # Two regular conv layers
-        sess = tf.Session(graph=tf.Graph())
+        sess = tf.compat.v1.Session(graph=tf.Graph())
         with sess.graph.as_default():
             model = tf.keras.Sequential([
                 tf.keras.layers.Reshape(target_shape=(28, 28, 1), input_shape=(28 * 28,)),
@@ -91,7 +95,7 @@ class TestLayerSelector(unittest.TestCase):
     def test_select_all_conv_and_fc_layers(self):
 
         # Two regular conv layers
-        sess = tf.Session(graph=tf.Graph())
+        sess = tf.compat.v1.Session(graph=tf.Graph())
         with sess.graph.as_default():
             model = tf.keras.Sequential([
                 tf.keras.layers.Reshape(target_shape=(28, 28, 1), input_shape=(28 * 28,)),

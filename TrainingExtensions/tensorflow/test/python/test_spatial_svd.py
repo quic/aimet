@@ -43,7 +43,10 @@ import shutil
 from decimal import Decimal
 import numpy as np
 
+import os
 import tensorflow as tf
+tf.compat.v1.logging.set_verbosity(tf.logging.WARN)
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
 
 from aimet_torch.winnow.winnow_utils import to_numpy
 from aimet_common.utils import AimetLogger
@@ -72,19 +75,19 @@ class TestSpatialSvdLayerSplit(unittest.TestCase):
 
         with g.as_default():
 
-            inp_tensor = tf.get_variable('inp_tensor', shape=[num_examples, 5, 5, 20],
+            inp_tensor = tf.compat.v1.get_variable('inp_tensor', shape=[num_examples, 5, 5, 20],
                                          initializer=tf.random_normal_initializer())
-            filter_tensor = tf.get_variable('filter_tensor', shape=[5, 5, 20, 50],
+            filter_tensor = tf.compat.v1.get_variable('filter_tensor', shape=[5, 5, 20, 50],
                                             initializer=tf.random_normal_initializer())
 
             conv1 = tf.nn.conv2d(input=inp_tensor, filter=filter_tensor, strides=[1, 1, 1, 1], padding='VALID',
                                  data_format="NHWC", name='Conv2D_1')
 
-            bias_tensor = tf.get_variable('bias_tensor', shape=[50], initializer=tf.random_normal_initializer())
+            bias_tensor = tf.compat.v1.get_variable('bias_tensor', shape=[50], initializer=tf.random_normal_initializer())
 
             bias = tf.nn.bias_add(value=conv1, bias=bias_tensor, data_format="NHWC")
 
-            init = tf.global_variables_initializer()
+            init = tf.compat.v1.global_variables_initializer()
 
         orig_conv_op = g.get_operation_by_name('Conv2D_1')
 
@@ -92,7 +95,7 @@ class TestSpatialSvdLayerSplit(unittest.TestCase):
         shape = orig_conv_op.outputs[0].get_shape().as_list()
         self.assertEqual(shape, [num_examples, 1, 1, 50])
 
-        sess = tf.Session(graph=g)
+        sess = tf.compat.v1.Session(graph=g)
 
         # initialize all the variables in the graph
         sess.run(init)
@@ -116,7 +119,7 @@ class TestSpatialSvdLayerSplit(unittest.TestCase):
 
         self.assertTrue(np.allclose(orig_bias_out, split_bias_out, atol=1e-4))
 
-        tf.reset_default_graph()
+        tf.compat.v1.reset_default_graph()
         sess.close()
 
     def test_split_layer_channels_last(self):
@@ -127,26 +130,26 @@ class TestSpatialSvdLayerSplit(unittest.TestCase):
 
         with g.as_default():
 
-            inp_tensor = tf.get_variable('inp_tensor', shape=[num_examples, 5, 5, 20],
+            inp_tensor = tf.compat.v1.get_variable('inp_tensor', shape=[num_examples, 5, 5, 20],
                                          initializer=tf.random_normal_initializer())
-            filter_tensor = tf.get_variable('filter_tensor', shape=[5, 5, 20, 50],
+            filter_tensor = tf.compat.v1.get_variable('filter_tensor', shape=[5, 5, 20, 50],
                                             initializer=tf.random_normal_initializer())
 
             conv1 = tf.nn.conv2d(input=inp_tensor, filter=filter_tensor, strides=[1, 1, 1, 1], padding='VALID',
                                  data_format="NHWC", name='Conv2D_1')
 
-            bias_tensor = tf.get_variable('bias_tensor', shape=[50], initializer=tf.random_normal_initializer())
+            bias_tensor = tf.compat.v1.get_variable('bias_tensor', shape=[50], initializer=tf.random_normal_initializer())
 
             bias = tf.nn.bias_add(value=conv1, bias=bias_tensor, data_format="NHWC")
 
-            init = tf.global_variables_initializer()
+            init = tf.compat.v1.global_variables_initializer()
 
         orig_conv_op = g.get_operation_by_name('Conv2D_1')
 
         shape = orig_conv_op.outputs[0].get_shape().as_list()
         self.assertEqual(shape, [num_examples, 1, 1, 50])
 
-        sess = tf.Session(graph=g)
+        sess = tf.compat.v1.Session(graph=g)
 
         # initialize all the variables in the graph
         sess.run(init)
@@ -171,7 +174,7 @@ class TestSpatialSvdLayerSplit(unittest.TestCase):
 
         self.assertTrue(np.allclose(orig_bias_out, split_bias_out, atol=1e-4))
 
-        tf.reset_default_graph()
+        tf.compat.v1.reset_default_graph()
         sess.close()
 
     @pytest.mark.cuda
@@ -184,20 +187,20 @@ class TestSpatialSvdLayerSplit(unittest.TestCase):
 
         with g.as_default():
 
-            inp_tensor = tf.get_variable('inp_tensor', shape=[num_examples, 20, 5 + 2, 5 + 2],
+            inp_tensor = tf.compat.v1.get_variable('inp_tensor', shape=[num_examples, 20, 5 + 2, 5 + 2],
                                          initializer=tf.random_normal_initializer())
 
-            filter_tensor = tf.get_variable('filter_tensor', shape=[5, 5, 20, 50],
+            filter_tensor = tf.compat.v1.get_variable('filter_tensor', shape=[5, 5, 20, 50],
                                             initializer=tf.random_normal_initializer())
 
             conv1 = tf.nn.conv2d(input=inp_tensor, filter=filter_tensor, strides=[1, 1, 2, 2], padding='VALID',
                                  data_format="NCHW", name='Conv2D_1')
 
-            bias_tensor = tf.get_variable('bias_tensor', shape=[50], initializer=tf.random_normal_initializer())
+            bias_tensor = tf.compat.v1.get_variable('bias_tensor', shape=[50], initializer=tf.random_normal_initializer())
 
             bias = tf.nn.bias_add(value=conv1, bias=bias_tensor, data_format="NCHW")
 
-            init = tf.global_variables_initializer()
+            init = tf.compat.v1.global_variables_initializer()
 
         orig_conv_op = g.get_operation_by_name('Conv2D_1')
 
@@ -206,7 +209,7 @@ class TestSpatialSvdLayerSplit(unittest.TestCase):
 
         self.assertEqual(shape, [num_examples, 50, 2, 2])
 
-        sess = tf.Session(graph=g)
+        sess = tf.compat.v1.Session(graph=g)
 
         # initialize all the variables in the graph
         sess.run(init)
@@ -230,7 +233,7 @@ class TestSpatialSvdLayerSplit(unittest.TestCase):
 
         self.assertTrue(np.allclose(orig_bias_out, split_bias_out, atol=1e-4))
 
-        tf.reset_default_graph()
+        tf.compat.v1.reset_default_graph()
         sess.close()
 
     def test_split_layer_with_stirde_channels_last(self):
@@ -241,27 +244,27 @@ class TestSpatialSvdLayerSplit(unittest.TestCase):
 
         with g.as_default():
 
-            inp_tensor = tf.get_variable('inp_tensor', shape=[num_examples, 5 + 2, 5 + 2, 20],
+            inp_tensor = tf.compat.v1.get_variable('inp_tensor', shape=[num_examples, 5 + 2, 5 + 2, 20],
                                          initializer=tf.random_normal_initializer())
 
-            filter_tensor = tf.get_variable('filter_tensor', shape=[5, 5, 20, 50],
+            filter_tensor = tf.compat.v1.get_variable('filter_tensor', shape=[5, 5, 20, 50],
                                             initializer=tf.random_normal_initializer())
 
             conv1 = tf.nn.conv2d(input=inp_tensor, filter=filter_tensor, strides=[1, 2, 2, 1], padding='VALID',
                                  data_format="NHWC", name='Conv2D_1')
 
-            bias_tensor = tf.get_variable('bias_tensor', shape=[50], initializer=tf.random_normal_initializer())
+            bias_tensor = tf.compat.v1.get_variable('bias_tensor', shape=[50], initializer=tf.random_normal_initializer())
 
             bias = tf.nn.bias_add(value=conv1, bias=bias_tensor, data_format="NHWC")
 
-            init = tf.global_variables_initializer()
+            init = tf.compat.v1.global_variables_initializer()
 
         orig_conv_op = g.get_operation_by_name('Conv2D_1')
 
         shape = orig_conv_op.outputs[0].get_shape().as_list()
         self.assertEqual(shape, [num_examples, 2, 2, 50])
 
-        sess = tf.Session(graph=g)
+        sess = tf.compat.v1.Session(graph=g)
 
         # initialize all the variables in the graph
         sess.run(init)
@@ -288,7 +291,7 @@ class TestSpatialSvdLayerSplit(unittest.TestCase):
 
         self.assertTrue(np.allclose(orig_bias_out, split_bias_out, atol=1e-4))
 
-        tf.reset_default_graph()
+        tf.compat.v1.reset_default_graph()
         sess.close()
 
     def test_split_layer_rank_reduced(self):
@@ -298,27 +301,27 @@ class TestSpatialSvdLayerSplit(unittest.TestCase):
         g = tf.Graph()
         with g.as_default():
 
-            inp_tensor = tf.get_variable('inp_tensor', shape=[num_examples, 5, 5, 20],
+            inp_tensor = tf.compat.v1.get_variable('inp_tensor', shape=[num_examples, 5, 5, 20],
                                          initializer=tf.random_normal_initializer())
 
-            filter_tensor = tf.get_variable('filter_tensor', shape=[5, 5, 20, 50],
+            filter_tensor = tf.compat.v1.get_variable('filter_tensor', shape=[5, 5, 20, 50],
                                             initializer=tf.random_normal_initializer())
 
             conv1 = tf.nn.conv2d(input=inp_tensor, filter=filter_tensor, strides=[1, 1, 1, 1], padding='VALID',
                                  data_format="NHWC", name='Conv2D_1')
 
-            bias_tensor = tf.get_variable('bias_tensor', shape=[50], initializer=tf.random_normal_initializer())
+            bias_tensor = tf.compat.v1.get_variable('bias_tensor', shape=[50], initializer=tf.random_normal_initializer())
 
             bias = tf.nn.bias_add(value=conv1, bias=bias_tensor, data_format="NHWC")
 
-            init = tf.global_variables_initializer()
+            init = tf.compat.v1.global_variables_initializer()
 
         orig_conv_op = g.get_operation_by_name('Conv2D_1')
 
         shape = orig_conv_op.outputs[0].get_shape().as_list()
         self.assertEqual(shape, [num_examples, 1, 1, 50])
 
-        sess = tf.Session(graph=g)
+        sess = tf.compat.v1.Session(graph=g)
 
         # initialize all the variables in the graph
         sess.run(init)
@@ -344,7 +347,7 @@ class TestSpatialSvdLayerSplit(unittest.TestCase):
         # relaxed absolute tolerance
         self.assertTrue(np.allclose(orig_bias_out, split_bias_out, atol=1e+2))
 
-        tf.reset_default_graph()
+        tf.compat.v1.reset_default_graph()
         sess.close()
 
 
@@ -353,17 +356,17 @@ class TestSpatialSvdPruning(unittest.TestCase):
     def test_prune_layer(self):
         """ Pruning single layer with 0.5 comp-ratio in MNIST"""
 
-        # create tf.Session and initialize the weights and biases with zeros
-        config = tf.ConfigProto()
+        # create tf.compat.v1.Session and initialize the weights and biases with zeros
+        config = tf.compat.v1.ConfigProto()
         config.gpu_options.allow_growth = True
 
         # create session with graph
-        sess = tf.Session(graph=tf.Graph(), config=config)
+        sess = tf.compat.v1.Session(graph=tf.Graph(), config=config)
 
         with sess.graph.as_default():
             # by default, model will be constructed in default graph
             _ = mnist_tf_model.create_model(data_format='channels_last')
-            sess.run(tf.global_variables_initializer())
+            sess.run(tf.compat.v1.global_variables_initializer())
 
         # Create a layer database
         orig_layer_db = LayerDatabase(model=sess, input_shape=(1, 28, 28, 1), working_dir=None)
@@ -416,7 +419,7 @@ class TestSpatialSvdPruning(unittest.TestCase):
         self.assertTrue(np.array_equal(conv2d_a_weight, conv2d_a_weight_after_save_load))
         self.assertTrue(np.array_equal(conv2d_b_weight, conv2d_b_weight_after_save_load))
 
-        tf.reset_default_graph()
+        tf.compat.v1.reset_default_graph()
         sess.close()
         new_sess.close()
         # delete temp directory
@@ -425,17 +428,17 @@ class TestSpatialSvdPruning(unittest.TestCase):
     def test_prune_model_2_layers(self):
         """ Punning two layers with 0.5 comp-ratio in MNIST"""
 
-        # create tf.Session and initialize the weights and biases with zeros
-        config = tf.ConfigProto()
+        # create tf.compat.v1.Session and initialize the weights and biases with zeros
+        config = tf.compat.v1.ConfigProto()
         config.gpu_options.allow_growth = True
 
         # create session with graph
-        sess = tf.Session(graph=tf.Graph(), config=config)
+        sess = tf.compat.v1.Session(graph=tf.Graph(), config=config)
 
         with sess.graph.as_default():
             # by default, model will be constructed in default graph
             _ = mnist_tf_model.create_model(data_format='channels_last')
-            sess.run(tf.global_variables_initializer())
+            sess.run(tf.compat.v1.global_variables_initializer())
 
         # Create a layer database
         orig_layer_db = LayerDatabase(model=sess, input_shape=(1, 28, 28, 1), working_dir=None)
@@ -466,7 +469,7 @@ class TestSpatialSvdPruning(unittest.TestCase):
             print("Layer: " + layer.name)
             print("   Module: " + str(layer.module.name))
 
-        tf.reset_default_graph()
+        tf.compat.v1.reset_default_graph()
         sess.close()
         # delete temp directory
         shutil.rmtree(str('./temp_meta/'))
@@ -474,18 +477,18 @@ class TestSpatialSvdPruning(unittest.TestCase):
     def test_prune_model_tf_slim(self):
         """ Punning a model with tf slim api """
 
-        # create tf.Session and initialize the weights and biases with zeros
-        config = tf.ConfigProto()
+        # create tf.compat.v1.Session and initialize the weights and biases with zeros
+        config = tf.compat.v1.ConfigProto()
         config.gpu_options.allow_growth = True
 
         # create session with graph
-        sess = tf.Session(graph=tf.Graph(), config=config)
+        sess = tf.compat.v1.Session(graph=tf.Graph(), config=config)
 
         with sess.graph.as_default():
             # by default, model will be constructed in default graph
-            x = tf.placeholder(tf.float32, [1, 32, 32, 3])
+            x = tf.compat.v1.placeholder(tf.float32, [1, 32, 32, 3])
             _ = tf_slim_basic_model(x)
-            sess.run(tf.global_variables_initializer())
+            sess.run(tf.compat.v1.global_variables_initializer())
 
         conn_graph_orig = ConnectedGraph(sess.graph, ['Placeholder'], ['tf_slim_model/Softmax'])
         num_ops_orig = len(conn_graph_orig.get_all_ops())
@@ -515,19 +518,19 @@ class TestSpatialSvdPruning(unittest.TestCase):
 
     def test_prune_conv_no_bias(self):
         """ Test spatial svd on a conv layer with no bias """
-        # create tf.Session and initialize the weights and biases with zeros
-        config = tf.ConfigProto()
+        # create tf.compat.v1.Session and initialize the weights and biases with zeros
+        config = tf.compat.v1.ConfigProto()
         config.gpu_options.allow_growth = True
 
         # create session with graph
-        sess = tf.Session(graph=tf.Graph(), config=config)
+        sess = tf.compat.v1.Session(graph=tf.Graph(), config=config)
 
         with sess.graph.as_default():
             # by default, model will be constructed in default graph
             inputs = tf.keras.Input(shape=(32, 32, 3,))
             x = tf.keras.layers.Conv2D(32, (3, 3), use_bias=False)(inputs)
             _ = tf.keras.layers.Flatten()(x)
-            sess.run(tf.global_variables_initializer())
+            sess.run(tf.compat.v1.global_variables_initializer())
 
         # Create a layer database
         orig_layer_db = LayerDatabase(model=sess, input_shape=(1, 32, 32, 3), working_dir=None)

@@ -132,7 +132,7 @@ class TestTrainingExtensionsChannelPruning(unittest.TestCase):
         g = tf.Graph()
         with g.as_default():
             _ = VGG16(weights=None, input_shape=(224, 224, 3))
-            init = tf.global_variables_initializer()
+            init = tf.compat.v1.global_variables_initializer()
 
         inp_op_names = ['input_1']
         conv = g.get_operation_by_name('block1_conv1/convolution')
@@ -144,7 +144,7 @@ class TestTrainingExtensionsChannelPruning(unittest.TestCase):
         dataset = dataset.batch(batch_size=batch_size)
 
         # create sess with graph
-        sess = tf.Session(graph=g)
+        sess = tf.compat.v1.Session(graph=g)
 
         # initialize all the variables in VGG16
         sess.run(init)
@@ -165,7 +165,7 @@ class TestTrainingExtensionsChannelPruning(unittest.TestCase):
         g = tf.Graph()
         with g.as_default():
             _ = VGG16(weights=None, input_shape=(224, 224, 3))
-            init = tf.global_variables_initializer()
+            init = tf.compat.v1.global_variables_initializer()
 
         inp_op_names = ['input_1']
         conv = g.get_operation_by_name('block1_conv1/convolution')
@@ -177,7 +177,7 @@ class TestTrainingExtensionsChannelPruning(unittest.TestCase):
         dataset = dataset.batch(batch_size=batch_size)
 
         # create sess with graph
-        sess = tf.Session(graph=g)
+        sess = tf.compat.v1.Session(graph=g)
 
         # initialize all the variables in VGG16
         sess.run(init)
@@ -215,13 +215,13 @@ class TestTrainingExtensionsChannelPruning(unittest.TestCase):
         g = tf.Graph()
         with g.as_default():
             mnist_tf_model.create_model(data_format='channels_first')
-            init = tf.global_variables_initializer()
+            init = tf.compat.v1.global_variables_initializer()
 
         inp_op_names = ['reshape_1_input']
         conv = g.get_operation_by_name('conv2d_1/Conv2D')
 
         # create sess with graph
-        sess = tf.Session(graph=g)
+        sess = tf.compat.v1.Session(graph=g)
 
         # initialize all the variables in VGG16
         sess.run(init)
@@ -259,13 +259,13 @@ class TestTrainingExtensionsChannelPruning(unittest.TestCase):
         g = tf.Graph()
         with g.as_default():
             mnist_tf_model.create_model(data_format='channels_first')
-            init = tf.global_variables_initializer()
+            init = tf.compat.v1.global_variables_initializer()
 
         inp_op_names = ['reshape_1_input']
         conv = g.get_operation_by_name('conv2d_1/Conv2D')
 
         # create sess with graph
-        sess = tf.Session(graph=g)
+        sess = tf.compat.v1.Session(graph=g)
 
         # initialize all the variables in VGG16
         sess.run(init)
@@ -325,7 +325,7 @@ class TestTrainingExtensionsChannelPruning(unittest.TestCase):
                 conv1 = tf.nn.conv2d(input=inp_tensor, filter=filter_tensor, strides=[1, 1, stride[0], stride[1]],
                                      padding=padding, data_format="NCHW", name='Conv2D_1')
 
-                init = tf.global_variables_initializer()
+                init = tf.compat.v1.global_variables_initializer()
 
             conv1_op = g.get_operation_by_name('Conv2D_1')
 
@@ -336,7 +336,7 @@ class TestTrainingExtensionsChannelPruning(unittest.TestCase):
             input_match = InputMatchSearch._find_input_match_for_output_pixel(input_data[0], layer_attributes,
                                                                               output_data_pixel)
 
-            sess = tf.Session(graph=g)
+            sess = tf.compat.v1.Session(graph=g)
             sess.run(init)
 
             conv2d_out = sess.run(conv1_op.outputs[0])
@@ -347,7 +347,7 @@ class TestTrainingExtensionsChannelPruning(unittest.TestCase):
             self.assertTrue(generated_output == predicted_output)
             self.assertTrue(np.prod(input_match.shape) == kernel_size[0] * kernel_size[1])
 
-            tf.reset_default_graph()
+            tf.compat.v1.reset_default_graph()
             sess.close()
 
     def test_find_input_match_for_pixel_from_output_data_baseline_channels_last(self):
@@ -389,7 +389,7 @@ class TestTrainingExtensionsChannelPruning(unittest.TestCase):
                 conv1 = tf.nn.conv2d(input=inp_tensor, filter=filter_tensor, strides=[1, stride[0], stride[1], 1],
                                      padding=padding, data_format="NHWC", name='Conv2D_1')
 
-                init = tf.global_variables_initializer()
+                init = tf.compat.v1.global_variables_initializer()
 
             conv1_op = g.get_operation_by_name('Conv2D_1')
 
@@ -403,7 +403,7 @@ class TestTrainingExtensionsChannelPruning(unittest.TestCase):
             input_match = InputMatchSearch._find_input_match_for_output_pixel(input_data[0], layer_attributes,
                                                                               output_data_pixel)
 
-            sess = tf.Session(graph=g)
+            sess = tf.compat.v1.Session(graph=g)
             sess.run(init)
 
             conv2d_out = sess.run(conv1_op.outputs[0])
@@ -414,7 +414,7 @@ class TestTrainingExtensionsChannelPruning(unittest.TestCase):
             self.assertTrue(generated_output == predicted_output)
             self.assertTrue(np.prod(input_match.shape) == kernel_size[0] * kernel_size[1])
 
-            tf.reset_default_graph()
+            tf.compat.v1.reset_default_graph()
             sess.close()
 
     @unittest.mock.patch('numpy.random.choice')
@@ -435,7 +435,7 @@ class TestTrainingExtensionsChannelPruning(unittest.TestCase):
 
             inp_tensor = tf.Variable(initial_value=input_data, name='inp_tensor', dtype=tf.float32)
 
-            filter_tensor = tf.get_variable('filter_tensor', shape=[5, 5, 5, 10],
+            filter_tensor = tf.compat.v1.get_variable('filter_tensor', shape=[5, 5, 5, 10],
                                             initializer=tf.random_normal_initializer())
 
             conv1 = tf.nn.conv2d(input=inp_tensor, filter=filter_tensor, strides=[1, 1, 1, 1], padding='VALID',
@@ -479,17 +479,17 @@ class TestTrainingExtensionsChannelPruning(unittest.TestCase):
 
         with g.as_default():
 
-            inp_tensor = tf.placeholder(tf.float32, [None, None, None, None], 'inp_tensor')
+            inp_tensor = tf.compat.v1.placeholder(tf.float32, [None, None, None, None], 'inp_tensor')
 
-            filter_tensor = tf.get_variable('filter_tensor', shape=[5, 5, 5, 10],
+            filter_tensor = tf.compat.v1.get_variable('filter_tensor', shape=[5, 5, 5, 10],
                                             initializer=tf.random_normal_initializer())
 
             conv1 = tf.nn.conv2d(input=inp_tensor, filter=filter_tensor, strides=[1, 1, 1, 1], padding='VALID',
                                  data_format="NCHW", name='Conv2D_1')
 
-            init = tf.global_variables_initializer()
+            init = tf.compat.v1.global_variables_initializer()
 
-        sess = tf.Session(graph=g)
+        sess = tf.compat.v1.Session(graph=g)
         sess.run(init)
 
         conv1_op = g.get_operation_by_name('Conv2D_1')
@@ -530,7 +530,7 @@ class TestTrainingExtensionsChannelPruning(unittest.TestCase):
 
             inp_tensor = tf.Variable(initial_value=input_data, name='inp_tensor', dtype=tf.float32)
 
-            filter_tensor = tf.get_variable('filter_tensor', shape=[5, 5, 5, 10],
+            filter_tensor = tf.compat.v1.get_variable('filter_tensor', shape=[5, 5, 5, 10],
                                             initializer=tf.random_normal_initializer())
 
             conv1 = tf.nn.conv2d(input=inp_tensor, filter=filter_tensor, strides=[1, 1, 1, 1], padding='VALID',
@@ -578,17 +578,17 @@ class TestTrainingExtensionsChannelPruning(unittest.TestCase):
 
         with g.as_default():
 
-            inp_tensor = tf.placeholder(tf.float32, [None, None, None, None], 'inp_tensor')
+            inp_tensor = tf.compat.v1.placeholder(tf.float32, [None, None, None, None], 'inp_tensor')
 
-            filter_tensor = tf.get_variable('filter_tensor', shape=[5, 5, 5, 10],
+            filter_tensor = tf.compat.v1.get_variable('filter_tensor', shape=[5, 5, 5, 10],
                                             initializer=tf.random_normal_initializer())
 
             conv1 = tf.nn.conv2d(input=inp_tensor, filter=filter_tensor, strides=[1, 1, 1, 1], padding='VALID',
                                  data_format="NHWC", name='Conv2D_1')
 
-            init = tf.global_variables_initializer()
+            init = tf.compat.v1.global_variables_initializer()
 
-        sess = tf.Session(graph=g)
+        sess = tf.compat.v1.Session(graph=g)
         sess.run(init)
         conv1_op = g.get_operation_by_name('Conv2D_1')
 
@@ -633,18 +633,18 @@ class TestTrainingExtensionsChannelPruning(unittest.TestCase):
             x2 = tf.reshape(tensor=x1, shape=(5, 5, 32, 64))
             print("x2 shape", x2.shape)
 
-            inp_tensor = tf.get_variable('inp_tensor', shape=[num_examples, 32, 5, 5],
+            inp_tensor = tf.compat.v1.get_variable('inp_tensor', shape=[num_examples, 32, 5, 5],
                                          initializer=tf.random_normal_initializer())
-            filter_tensor = tf.get_variable('filter_tensor', initializer=x2)
+            filter_tensor = tf.compat.v1.get_variable('filter_tensor', initializer=x2)
 
             conv1 = tf.nn.conv2d(input=inp_tensor, filter=filter_tensor, strides=[1, 1, 1, 1], padding='VALID',
                                  data_format="NCHW", name='Conv2D_1')
 
-            bias_tensor = tf.get_variable('bias_tensor', shape=[64], initializer=tf.random_normal_initializer())
+            bias_tensor = tf.compat.v1.get_variable('bias_tensor', shape=[64], initializer=tf.random_normal_initializer())
 
             bias = tf.nn.bias_add(value=conv1, bias=bias_tensor, data_format="NCHW")
 
-            init = tf.global_variables_initializer()
+            init = tf.compat.v1.global_variables_initializer()
 
         conv1_op = g.get_operation_by_name('Conv2D_1')
         # output shape in NCHW format
@@ -653,7 +653,7 @@ class TestTrainingExtensionsChannelPruning(unittest.TestCase):
         shape = conv1_op.outputs[0].get_shape().as_list()
         self.assertEqual(shape, [num_examples, 64, 1, 1])
 
-        sess = tf.Session(graph=g)
+        sess = tf.compat.v1.Session(graph=g)
         # initialize all the variables in the graph
         sess.run(init)
         conv_layer = Layer(model=sess, op=conv1_op, output_shape=output_shape)
@@ -682,7 +682,7 @@ class TestTrainingExtensionsChannelPruning(unittest.TestCase):
             self.assertEqual(len(prune_indices), len(expected_indices))
             self.assertEqual(prune_indices, expected_indices)
 
-        tf.reset_default_graph()
+        tf.compat.v1.reset_default_graph()
         sess.close()
 
     # Need to mark this for CUDA because TF CPU Conv does not support NCHW
@@ -702,16 +702,16 @@ class TestTrainingExtensionsChannelPruning(unittest.TestCase):
 
             inp_tensor = tf.Variable(initial_value=input_data, name='inp_tensor', dtype=tf.float32)
 
-            filter_tensor = tf.get_variable('filter_tensor', shape=[5, 5, num_in_channels, num_out_channels],
+            filter_tensor = tf.compat.v1.get_variable('filter_tensor', shape=[5, 5, num_in_channels, num_out_channels],
                                             initializer=tf.random_normal_initializer())
 
             conv = tf.nn.conv2d(input=inp_tensor, filter=filter_tensor, strides=[1, 1, 1, 1], padding='VALID',
                                 data_format="NCHW", name='Conv2D_1')
 
-            init = tf.global_variables_initializer()
+            init = tf.compat.v1.global_variables_initializer()
 
         conv_op = g.get_operation_by_name('Conv2D_1')
-        sess = tf.Session(graph=g)
+        sess = tf.compat.v1.Session(graph=g)
         sess.run(init)
 
         conv_out = sess.run(conv_op.outputs[0])
@@ -744,7 +744,7 @@ class TestTrainingExtensionsChannelPruning(unittest.TestCase):
         # delete the directory
         shutil.rmtree(meta_path)
 
-        tf.reset_default_graph()
+        tf.compat.v1.reset_default_graph()
         sess.close()
 
     # Need to mark this for CUDA because TF CPU Conv does not support NCHW
@@ -764,20 +764,20 @@ class TestTrainingExtensionsChannelPruning(unittest.TestCase):
 
             inp_tensor = tf.Variable(initial_value=input_data, name='inp_tensor', dtype=tf.float32)
 
-            filter_tensor = tf.get_variable('filter_tensor', shape=[5, 5, num_in_channels, num_out_channels],
+            filter_tensor = tf.compat.v1.get_variable('filter_tensor', shape=[5, 5, num_in_channels, num_out_channels],
                                             initializer=tf.random_normal_initializer())
 
             conv = tf.nn.conv2d(input=inp_tensor, filter=filter_tensor, strides=[1, 1, 1, 1], padding='VALID',
                                 data_format="NCHW", name='Conv2D_1')
 
-            bias_tensor = tf.get_variable('bias_tensor', shape=[num_out_channels],
+            bias_tensor = tf.compat.v1.get_variable('bias_tensor', shape=[num_out_channels],
                                           initializer=tf.random_normal_initializer())
 
             tf.nn.bias_add(conv, bias_tensor, data_format="NCHW")
 
-            init = tf.global_variables_initializer()
+            init = tf.compat.v1.global_variables_initializer()
 
-        sess = tf.Session(graph=g)
+        sess = tf.compat.v1.Session(graph=g)
         sess.run(init)
 
         conv_op = g.get_operation_by_name('Conv2D_1')
@@ -815,7 +815,7 @@ class TestTrainingExtensionsChannelPruning(unittest.TestCase):
         # delete the directory
         shutil.rmtree(meta_path)
 
-        tf.reset_default_graph()
+        tf.compat.v1.reset_default_graph()
         sess.close()
 
     def test_datasampling_and_reconstruction(self):
@@ -832,12 +832,12 @@ class TestTrainingExtensionsChannelPruning(unittest.TestCase):
         with orig_g.as_default():
 
             _ = VGG16(weights=None, input_shape=(224, 224, 3), include_top=False)
-            orig_init = tf.global_variables_initializer()
+            orig_init = tf.compat.v1.global_variables_initializer()
 
         input_op_names = ['input_1']
         output_op_names = ['block5_pool/MaxPool']
         # create sess with graph
-        orig_sess = tf.Session(graph=orig_g)
+        orig_sess = tf.compat.v1.Session(graph=orig_g)
         # initialize all the variables in VGG16
         orig_sess.run(orig_init)
 
@@ -893,12 +893,12 @@ class TestTrainingExtensionsChannelPruning(unittest.TestCase):
         with orig_g.as_default():
 
             _ = VGG16(weights=None, input_shape=(224, 224, 3), include_top=False)
-            orig_init = tf.global_variables_initializer()
+            orig_init = tf.compat.v1.global_variables_initializer()
 
         input_op_names = ['input_1']
         output_op_names = ['block5_pool/MaxPool']
         # create sess with graph
-        orig_sess = tf.Session(graph=orig_g)
+        orig_sess = tf.compat.v1.Session(graph=orig_g)
         # initialize all the variables in VGG16
         orig_sess.run(orig_init)
 
@@ -964,10 +964,10 @@ class TestTrainingExtensionsChannelPruning(unittest.TestCase):
         with orig_g.as_default():
 
             _ = VGG16(weights=None, input_shape=(224, 224, 3), include_top=False)
-            orig_init = tf.global_variables_initializer()
+            orig_init = tf.compat.v1.global_variables_initializer()
 
         # create sess with graph
-        orig_sess = tf.Session(graph=orig_g)
+        orig_sess = tf.compat.v1.Session(graph=orig_g)
 
         # initialize all the variables in VGG16
         orig_sess.run(orig_init)
@@ -1031,10 +1031,10 @@ class TestTrainingExtensionsChannelPruning(unittest.TestCase):
         with orig_g.as_default():
 
             _ = ResNet50(weights=None, input_shape=(224, 224, 3), include_top=False)
-            orig_init = tf.global_variables_initializer()
+            orig_init = tf.compat.v1.global_variables_initializer()
 
         # create sess with graph
-        orig_sess = tf.Session(graph=orig_g)
+        orig_sess = tf.compat.v1.Session(graph=orig_g)
 
         # initialize all the variables in VGG16
         orig_sess.run(orig_init)

@@ -45,14 +45,14 @@ import tensorflow as tf
 from aimet_tensorflow.winnow.mask_propagation_winnower import MaskPropagationWinnower
 
 
-def winnow_tf_model(sess: tf.Session, input_op_names: List[str], output_op_names: List[str],
+def winnow_tf_model(sess: tf.compat.v1.Session, input_op_names: List[str], output_op_names: List[str],
                     list_of_modules_to_winnow: List[Tuple[tf.Operation, List]] = None,
                     reshape=True, in_place=False, verbose=False):
 
     """ This API is used to winnow a model with Conv2d modules that each have a list of channels to be winnowed.
     There is no need to zero out the modules' input channels before calling this API.
 
-    :param sess: The tf session to be winnowed.
+    :param sess: The tf.compat.v1.Session to be winnowed.
     :param input_op_names: Names of input ops to the model.
     :param output_op_names: List of output op names of the model, used to help ConnectedGraph determine valid ops
     (to ignore training ops for example).

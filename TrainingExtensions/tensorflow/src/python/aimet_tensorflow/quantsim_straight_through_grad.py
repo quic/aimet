@@ -57,11 +57,11 @@ def _qc_straight_through_estimator_grad(op, grad):
     encoding_max = tf.cast(op.inputs[int(QuantizeOpIndices.encoding_max)], tf.float32)
     op_mode = tf.cast(op.inputs[int(QuantizeOpIndices.op_mode)], tf.int8)
 
-    inner_cond = tf.where_v2(tf.less_equal(x, encoding_max),  # condition to check per value
+    inner_cond = tf.compat.v2.where(tf.less_equal(x, encoding_max),  # condition to check per value
                              1.0,  # execute if true
                              0.0)  # execute if false
 
-    dloss_by_dx = (tf.where_v2(tf.less_equal(encoding_min, x),  # condition to check per value
+    dloss_by_dx = (tf.compat.v2.where(tf.less_equal(encoding_min, x),  # condition to check per value
                                inner_cond,  # execute if true
                                0.0)) * grad
 

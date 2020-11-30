@@ -40,6 +40,10 @@ import os
 import signal
 import unittest
 import tensorflow as tf
+
+tf.compat.v1.logging.set_verbosity(tf.logging.WARN)
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
+
 import numpy as np
 from aimet_common.utils import start_bokeh_server_session
 from tensorflow.keras.applications.resnet50 import ResNet50
@@ -51,12 +55,12 @@ class TFVisualization(unittest.TestCase):
     """ Test methods for BatchNormFold"""
 
     def test_visualize_weight_ranges_single_layer(self):
-        tf.reset_default_graph()
+        tf.compat.v1.reset_default_graph()
         _ = ResNet50(weights=None)
 
-        model = tf.get_default_graph()
-        init = tf.global_variables_initializer()
-        sess = tf.Session(graph=model)
+        model = tf.compat.v1.get_default_graph()
+        init = tf.compat.v1.global_variables_initializer()
+        sess = tf.compat.v1.Session(graph=model)
         sess.run(init)
 
         conv_op = sess.graph.get_operation_by_name('conv1_conv/Conv2D')
@@ -69,12 +73,12 @@ class TFVisualization(unittest.TestCase):
 
     def test_visualize_relative_weight_ranges_single_layer(self):
 
-        tf.reset_default_graph()
+        tf.compat.v1.reset_default_graph()
         _ = ResNet50(weights=None)
 
-        model = tf.get_default_graph()
-        init = tf.global_variables_initializer()
-        sess = tf.Session(graph=model)
+        model = tf.compat.v1.get_default_graph()
+        init = tf.compat.v1.global_variables_initializer()
+        sess = tf.compat.v1.Session(graph=model)
         sess.run(init)
 
         conv_op = sess.graph.get_operation_by_name('conv1_conv/Conv2D')

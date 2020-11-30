@@ -60,13 +60,13 @@ class CompressionFactory:
     """ Factory to construct various aimet model compression classes based on a scheme """
 
     @classmethod
-    def create_spatial_svd_algo(cls, sess: tf.Session, working_dir: str, eval_callback: EvalFunction, eval_iterations,
+    def create_spatial_svd_algo(cls, sess: tf.compat.v1.Session, working_dir: str, eval_callback: EvalFunction, eval_iterations,
                                 input_shape: Union[Tuple, List[Tuple]], cost_metric: CostMetric,
                                 params: SpatialSvdParameters, bokeh_session=None) -> CompressionAlgo:
         """
         Factory method to construct SpatialSvdCompressionAlgo
 
-        :param sess: Model, represented by a TF session, to compress
+        :param sess: Model, represented by a tf.compat.v1.Session, to compress
         :param working_dir: path to store temp meta and checkpoint files
         :param eval_callback: Evaluation callback for the model
         :param eval_iterations: Evaluation iterations
@@ -123,13 +123,13 @@ class CompressionFactory:
         return spatial_svd_algo
 
     @classmethod
-    def create_channel_pruning_algo(cls, sess: tf.Session, working_dir: str, eval_callback: EvalFunction,
+    def create_channel_pruning_algo(cls, sess: tf.compat.v1.Session, working_dir: str, eval_callback: EvalFunction,
                                     input_shape: Union[Tuple, List[Tuple]], eval_iterations, cost_metric: CostMetric,
                                     params: ChannelPruningParameters, bokeh_session: BokehServerSession) -> \
             CompressionAlgo:
         """
         Factory method to construct ChannelPruningCompressionAlgo
-        :param sess: Model, represented by a TF session, to compress
+        :param sess: Model, represented by a tf.compat.v1.Session, to compress
         :param working_dir: path to store temp meta and checkpoint files
         :param eval_callback: Evaluation callback for the model
         :param eval_iterations: Evaluation iterations

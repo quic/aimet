@@ -84,13 +84,13 @@ class DataSubSampler:
         """
 
         # Grow GPU memory as needed at the cost of fragmentation.
-        config = tf.ConfigProto()
+        config = tf.compat.v1.ConfigProto()
         config.gpu_options.allow_growth = True  # pylint: disable=no-member
 
         # create an iterator and iterator.get_next() Op in the same graph as dataset
         # TODO: currently dataset (user provided) and iterator are in the same graph, and the iterator is
         #  being created every time this function is called. Use re-initialize iterator
-        sess = tf.Session(graph=data_set._graph, config=config)  # pylint: disable=protected-access
+        sess = tf.compat.v1.Session(graph=data_set._graph, config=config)  # pylint: disable=protected-access
 
         with sess.graph.as_default():
 

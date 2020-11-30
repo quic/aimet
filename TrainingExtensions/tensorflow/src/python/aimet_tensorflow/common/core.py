@@ -98,7 +98,7 @@ class OpQuery:
         else:
             self._ops_to_ignore = []
 
-        self._trained_vars = graph.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES)
+        self._trained_vars = graph.get_collection(tf.compat.v1.GraphKeys.TRAINABLE_VARIABLES)
 
     @staticmethod
     def _is_op_with_weights(op):

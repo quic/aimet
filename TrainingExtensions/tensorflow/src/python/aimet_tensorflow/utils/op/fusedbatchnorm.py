@@ -53,7 +53,7 @@ class BNUtils:
     """ Batch Norm/ fused Batch Norm op related utils"""
 
     @staticmethod
-    def skip_bn_op(sess: tf.Session, bn_op: tf.Operation, in_tensor: tf.Tensor, out_tensor: tf.Tensor):
+    def skip_bn_op(sess: tf.compat.v1.Session, bn_op: tf.Operation, in_tensor: tf.Tensor, out_tensor: tf.Tensor):
         """
         Skip given bn op specified (fused batch norm op).
         Note: supports only Fused bn op types.
@@ -159,7 +159,7 @@ class BNUtils:
         return beta_read_tensor
 
     @staticmethod
-    def get_beta_as_numpy_data(sess: tf.Session, bn_op: tf.Operation) -> np.ndarray:
+    def get_beta_as_numpy_data(sess: tf.compat.v1.Session, bn_op: tf.Operation) -> np.ndarray:
         """
         Get beta param from BN op specified.
 
@@ -226,7 +226,7 @@ class BNUtils:
         return gamma_read_tensor
 
     @staticmethod
-    def get_gamma_as_numpy_data(sess: tf.Session, bn_op: tf.Operation) -> np.ndarray:
+    def get_gamma_as_numpy_data(sess: tf.compat.v1.Session, bn_op: tf.Operation) -> np.ndarray:
         """
         Get gamma param from BN op specified.
 
@@ -391,7 +391,7 @@ class BNUtils:
         return moving_var_read_tensor
 
     @staticmethod
-    def get_moving_variance_as_numpy_data(sess: tf.Session, bn_op: tf.Operation) -> np.ndarray:
+    def get_moving_variance_as_numpy_data(sess: tf.compat.v1.Session, bn_op: tf.Operation) -> np.ndarray:
         """
         Get moving variance param from BN op specified.
 
@@ -554,7 +554,7 @@ class BNUtils:
         return moving_mean_read_tensor
 
     @staticmethod
-    def get_moving_mean_as_numpy_data(sess: tf.Session, bn_op: tf.Operation) -> np.ndarray:
+    def get_moving_mean_as_numpy_data(sess: tf.compat.v1.Session, bn_op: tf.Operation) -> np.ndarray:
         """
         Get moving mean param from BN op specified.
 
@@ -653,15 +653,15 @@ class BNUtils:
         return None
 
     @staticmethod
-    def remove_bn_op_from_update_ops(sess: tf.Session, bn_op: tf.Operation):
+    def remove_bn_op_from_update_ops(sess: tf.compat.v1.Session, bn_op: tf.Operation):
         """
         Remove batchnorm assign_moving_avg and assign_moving_avg_1 ops from update ops.
 
-        :param sess: tf Session
+        :param sess: tf.compat.v1.Session
         :param bn_op: BatchNorm operation whose assign_moving_avg and assign_moving_avg_1 ops should be removed.
         """
         with sess.graph.as_default():
-            update_ops = tf.get_collection_ref(tf.GraphKeys.UPDATE_OPS)
+            update_ops = tf.compat.v1.get_collection_ref(tf.compat.v1.GraphKeys.UPDATE_OPS)
             assign_moving_avg_op = BNUtils.get_assign_moving_avg_op(bn_op)
             assign_moving_avg_op_1 = BNUtils.get_assign_moving_avg_1_op(bn_op)
             if assign_moving_avg_op and assign_moving_avg_op in update_ops:
@@ -672,11 +672,11 @@ class BNUtils:
                 logger.debug('Removed %s from update ops', assign_moving_avg_op_1.name)
 
     @staticmethod
-    def _get_bn_param_tensor_using_name(sess: tf.Session, bn_op: tf.Operation, param_type: constants.BNOpParamType):
+    def _get_bn_param_tensor_using_name(sess: tf.compat.v1.Session, bn_op: tf.Operation, param_type: constants.BNOpParamType):
         """
         Helper to get BN op param read tensor.
 
-        :param sess: TensorFlow session tf.Session
+        :param sess: TensorFlow session tf.compat.v1.Session
         :param bn_op: BN op from which param read tensor is to be extracted
         :param param_type: param type for which param tensor is to be extracted, as constants.BNOpParamType (supported
             types are beta, gamma, moving_mean or moving_variance)

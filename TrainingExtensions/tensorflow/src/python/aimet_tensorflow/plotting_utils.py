@@ -60,7 +60,7 @@ def get_weights(conv_module, sess):
     """
     Returns the weights of a conv_module in a 2d matrix, where each column is an output channel.
 
-    :param sess: TF session
+    :param sess: tf.compat.v1.Session
     :param conv_module: convNd module
     :return: 2d numpy array
     """
@@ -462,7 +462,7 @@ def visualize_weight_ranges_single_layer(sess, layer, visualization_url):
     """
     Given a layer, visualizes weight ranges with scatter plots and line plots
 
-    :param sess: TF session
+    :param sess: tf.compat.v1.Session
     :param layer: layer with weights
     :param visualization_url: user inputted url with session id set as optimization for the visualizations
     :return: bokeh_session, so that user can close the session
@@ -498,7 +498,7 @@ def visualize_relative_weight_ranges_single_layer(sess, layer, visualization_url
     Publishes a line plot showing  weight ranges for each layer, summary statistics
     for relative weight ranges, and a histogram showing weight ranges of output channels
 
-    :param sess: TF session
+    :param sess: tf.compat.v1.Session
     :param layer: layer with weights
     :param visualization_url: user inputted url with session id set as optimization for the visualizations
     :return: bokeh_session, so that user can close the session

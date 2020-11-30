@@ -40,7 +40,11 @@
 
 import unittest
 import numpy as np
+
+import os
 import tensorflow as tf
+tf.compat.v1.logging.set_verbosity(tf.logging.WARN)
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
 
 import aimet_tensorflow.utils.graph_saver
 from aimet_tensorflow.cross_layer_equalization import CrossLayerScaling, GraphSearchUtils, equalize_model
@@ -57,7 +61,7 @@ class TestCrossLayerEqualization(unittest.TestCase):
         Builds a custom model with two conv layers
         :return:
         """
-        tf.reset_default_graph()
+        tf.compat.v1.reset_default_graph()
         inputs = tf.keras.Input(shape=(32, 32, 3,), name="inputs")
         x = tf.keras.layers.Conv2D(32, (3, 3))(inputs)
         x = tf.nn.relu(x, name='ReluInTheMiddle')
@@ -72,7 +76,7 @@ class TestCrossLayerEqualization(unittest.TestCase):
         Builds a custom model with three conv layers
         :return:
         """
-        tf.reset_default_graph()
+        tf.compat.v1.reset_default_graph()
         inputs = tf.keras.Input(shape=(32, 32, 3,), name="inputs")
         x = tf.keras.layers.Conv2D(32, (3, 3))(inputs)
         x = tf.nn.relu(x, name='ReluInTheMiddle')
@@ -89,7 +93,7 @@ class TestCrossLayerEqualization(unittest.TestCase):
         Builds a custom model with three conv layers
         :return:
         """
-        tf.reset_default_graph()
+        tf.compat.v1.reset_default_graph()
         inputs = tf.keras.Input(shape=(32, 32, 3,), name="inputs")
         x = tf.keras.layers.Conv2D(32, (3, 3))(inputs)
         x = tf.nn.relu(x, name='ReluInTheMiddle')
@@ -105,29 +109,29 @@ class TestCrossLayerEqualization(unittest.TestCase):
 
         _ = TestCrossLayerEqualization._custom_two_conv_layer_model()
 
-        init = tf.global_variables_initializer()
-        sess = tf.Session()
+        init = tf.compat.v1.global_variables_initializer()
+        sess = tf.compat.v1.Session()
         sess.run(init)
         start_op = "inputs"
 
-        graph_util = GraphSearchUtils(tf.get_default_graph(), start_op, 'Relu')
+        graph_util = GraphSearchUtils(tf.compat.v1.get_default_graph(), start_op, 'Relu')
         _ , layer_groups = graph_util.find_layer_groups_to_scale()
         self.assertEqual(1, len(layer_groups))
 
     def test_find_layers_groups_tp_scale_custom_model_without_candidate_layers(self):
         """ Test find_layer_groups_to_scale() on a model without potential layers for scaling """
 
-        tf.reset_default_graph()
+        tf.compat.v1.reset_default_graph()
         inputs = tf.keras.Input(shape=(32, 32, 3,), name="inputs")
         conv_op = tf.keras.layers.Conv2D(32, (3, 3))(inputs)
         bn_op = tf.keras.layers.BatchNormalization(fused=True)(conv_op)
         _ = tf.nn.relu(bn_op)
 
-        init = tf.global_variables_initializer()
-        sess = tf.Session()
+        init = tf.compat.v1.global_variables_initializer()
+        sess = tf.compat.v1.Session()
         sess.run(init)
 
-        graph_util = GraphSearchUtils(tf.get_default_graph(), "inputs", 'Relu')
+        graph_util = GraphSearchUtils(tf.compat.v1.get_default_graph(), "inputs", 'Relu')
         _ , layer_groups = graph_util.find_layer_groups_to_scale()
         self.assertEqual(0, len(layer_groups))
 
@@ -135,13 +139,13 @@ class TestCrossLayerEqualization(unittest.TestCase):
         """ Test update_weight_tensor_for_op() on custom conv op """
 
         # get VGG16 model
-        tf.reset_default_graph()
+        tf.compat.v1.reset_default_graph()
         inputs = tf.keras.Input(shape=(32, 32, 3,), name="inputs")
         conv_op = tf.keras.layers.Conv2D(32, (3, 3))(inputs)
         _ = tf.nn.relu(conv_op)
 
-        init = tf.global_variables_initializer()
-        sess = tf.Session()
+        init = tf.compat.v1.global_variables_initializer()
+        sess = tf.compat.v1.Session()
         sess.run(init)
 
         conv_op = sess.graph.get_operation_by_name('conv2d/Conv2D')
@@ -168,11 +172,11 @@ class TestCrossLayerEqualization(unittest.TestCase):
 
         _ = TestCrossLayerEqualization._custom_two_conv_layer_model()
 
-        init = tf.global_variables_initializer()
-        sess = tf.Session()
+        init = tf.compat.v1.global_variables_initializer()
+        sess = tf.compat.v1.Session()
         sess.run(init)
 
-        graph_util = GraphSearchUtils(tf.get_default_graph(), "inputs", 'Relu')
+        graph_util = GraphSearchUtils(tf.compat.v1.get_default_graph(), "inputs", 'Relu')
         _ , layer_groups_as_tf_ops = graph_util.find_layer_groups_to_scale()
         scaling_factors = CrossLayerScaling.scale_cls_set_with_conv_layers(sess, layer_groups_as_tf_ops[0])
         self.assertEqual(32, len(scaling_factors))
@@ -189,18 +193,18 @@ class TestCrossLayerEqualization(unittest.TestCase):
         Test test_scale_cls_set_with_depthwise_layers() on a custom model
         """
 
-        tf.reset_default_graph()
+        tf.compat.v1.reset_default_graph()
         inputs = tf.keras.Input(shape=(10, 10, 3,))
         x = tf.keras.layers.Conv2D(10, (1, 1))(inputs)
         y = tf.keras.layers.DepthwiseConv2D((3, 3), padding='valid',depth_multiplier=1, strides=(1,1), use_bias=False)(x)
         z = tf.keras.layers.Conv2D(10, (1, 1))(y)
         _ = tf.nn.relu(z)
 
-        init = tf.global_variables_initializer()
-        sess = tf.Session(graph = tf.get_default_graph())
+        init = tf.compat.v1.global_variables_initializer()
+        sess = tf.compat.v1.Session(graph = tf.compat.v1.get_default_graph())
         sess.run(init)
 
-        graph_util = GraphSearchUtils(tf.get_default_graph(), "input_1", 'Relu')
+        graph_util = GraphSearchUtils(tf.compat.v1.get_default_graph(), "input_1", 'Relu')
         _ , layer_groups_as_tf_ops = graph_util.find_layer_groups_to_scale()
         scaling_matrix12, scaling_matrix23 = CrossLayerScaling.scale_cls_set_with_depthwise_layers(
             sess, layer_groups_as_tf_ops[0])
@@ -211,8 +215,8 @@ class TestCrossLayerEqualization(unittest.TestCase):
         """ Test scale_model on a custom model """
 
         _ = TestCrossLayerEqualization._custom_two_conv_layer_model()
-        init = tf.global_variables_initializer()
-        sess = tf.Session()
+        init = tf.compat.v1.global_variables_initializer()
+        sess = tf.compat.v1.Session()
         sess.run(init)
         new_sess, scaling_factors = CrossLayerScaling.scale_model(sess, "inputs", 'Relu')
         # scaling factors for number of groups selected for scaling returned
@@ -223,8 +227,8 @@ class TestCrossLayerEqualization(unittest.TestCase):
         """ Test scale_model on a custom 3-layer model """
 
         _ = TestCrossLayerEqualization._custom_three_layer_model_keras()
-        init = tf.global_variables_initializer()
-        sess = tf.Session()
+        init = tf.compat.v1.global_variables_initializer()
+        sess = tf.compat.v1.Session()
         sess.run(init)
         new_sess, scaling_factors = CrossLayerScaling.scale_model(sess, "inputs", 'Relu')
         # scaling factors for number of groups selected for scaling returned
@@ -236,8 +240,8 @@ class TestCrossLayerEqualization(unittest.TestCase):
         """ Test scale_model on a custom 3-layer model with prelu """
 
         _ = TestCrossLayerEqualization._custom_three_layer_model_keras_prelu()
-        init = tf.global_variables_initializer()
-        sess = tf.Session()
+        init = tf.compat.v1.global_variables_initializer()
+        sess = tf.compat.v1.Session()
         sess.run(init)
         new_sess, scaling_factors = CrossLayerScaling.scale_model(sess, "inputs", 'Relu')
         # scaling factors for number of groups selected for scaling returned
@@ -249,13 +253,13 @@ class TestCrossLayerEqualization(unittest.TestCase):
         """
         Test replacing Relu6 wth Relu
         """
-        tf.reset_default_graph()
+        tf.compat.v1.reset_default_graph()
         inputs = tf.keras.Input(shape=(32, 32, 3,))
         conv_op = tf.keras.layers.Conv2D(32, (3, 3))(inputs)
         _ = tf.nn.relu6(conv_op)
 
-        init = tf.global_variables_initializer()
-        sess = tf.Session()
+        init = tf.compat.v1.global_variables_initializer()
+        sess = tf.compat.v1.Session()
         sess.run(init)
 
         bias_add = sess.graph.get_operation_by_name('conv2d/BiasAdd')
@@ -274,7 +278,7 @@ class TestCrossLayerEqualization(unittest.TestCase):
         """
         Test high bias fold with a custom model
         """
-        tf.reset_default_graph()
+        tf.compat.v1.reset_default_graph()
         inputs = tf.keras.Input(shape=(32, 32, 3,))
 
         conv_op = tf.keras.layers.Conv2D(32, (3, 3))(inputs)
@@ -285,8 +289,8 @@ class TestCrossLayerEqualization(unittest.TestCase):
         bn_op_2 = tf.keras.layers.BatchNormalization(fused=True)(conv2_op)
         relu_2 = tf.nn.relu(bn_op_2)
 
-        init = tf.global_variables_initializer()
-        sess = tf.Session()
+        init = tf.compat.v1.global_variables_initializer()
+        sess = tf.compat.v1.Session()
         sess.run(init)
         np.random.seed(0)
 
@@ -314,7 +318,7 @@ class TestCrossLayerEqualization(unittest.TestCase):
     def test_bias_add_custom_model(self):
         """ test update bias when no bias present """
 
-        tf.reset_default_graph()
+        tf.compat.v1.reset_default_graph()
         inputs = tf.keras.Input(shape=(32, 32, 3,))
 
         conv_op = tf.keras.layers.Conv2D(32, (3, 3), use_bias=False)(inputs)
@@ -325,8 +329,8 @@ class TestCrossLayerEqualization(unittest.TestCase):
         add = tf.keras.layers.add([conv_op, relu2])
         relu= tf.nn.relu(add)
 
-        init = tf.global_variables_initializer()
-        sess = tf.Session()
+        init = tf.compat.v1.global_variables_initializer()
+        sess = tf.compat.v1.Session()
         sess.run(init)
 
         shape = WeightTensorUtils.get_tensor_shape(conv_op.op)
@@ -347,7 +351,7 @@ class TestCrossLayerEqualization(unittest.TestCase):
         test cross layer scaling layer selection code when convs have identity nodes in-btw.
         This was observed with TF Slim Mobilenetv2 model
         """
-        tf.reset_default_graph()
+        tf.compat.v1.reset_default_graph()
         inputs = tf.keras.Input(shape=(32, 32, 3,), name="inputs")
         conv1_op = tf.keras.layers.Conv2D(32, (3, 3))(inputs)
         relu_op = tf.nn.relu(conv1_op)
@@ -355,8 +359,8 @@ class TestCrossLayerEqualization(unittest.TestCase):
         conv2_op = tf.keras.layers.Conv2D(32, (3, 3))(identity)
         relu2_op = tf.nn.relu(conv2_op)
 
-        init = tf.global_variables_initializer()
-        sess = tf.Session()
+        init = tf.compat.v1.global_variables_initializer()
+        sess = tf.compat.v1.Session()
         sess.run(init)
 
         start_op = "inputs"
@@ -371,7 +375,7 @@ class TestCrossLayerEqualization(unittest.TestCase):
         """
         Test high bias fold with a custom model
         """
-        tf.reset_default_graph()
+        tf.compat.v1.reset_default_graph()
         inputs = tf.keras.Input(shape=(32, 32, 3,))
 
         conv_op = tf.keras.layers.Conv2D(32, (3, 3))(inputs)
@@ -383,8 +387,8 @@ class TestCrossLayerEqualization(unittest.TestCase):
         bn_op_2 = tf.keras.layers.BatchNormalization(fused=True)(conv2_op)
         relu_2 = tf.nn.relu(bn_op_2)
 
-        init = tf.global_variables_initializer()
-        sess = tf.Session()
+        init = tf.compat.v1.global_variables_initializer()
+        sess = tf.compat.v1.Session()
         sess.run(init)
         np.random.seed(0)
 
@@ -415,7 +419,7 @@ class TestCrossLayerEqualization(unittest.TestCase):
         Test bn fold with multiple input nodes
         """
 
-        tf.reset_default_graph()
+        tf.compat.v1.reset_default_graph()
         input1 = tf.keras.Input(name='input1', shape=(10, 10, 3))
         input2 = tf.keras.Input(name='input2', shape=(12, 12, 3))
         x1 = tf.keras.layers.Conv2D(8, (1, 1), name='conv1a',
@@ -435,8 +439,8 @@ class TestCrossLayerEqualization(unittest.TestCase):
         bn_op = tf.keras.layers.BatchNormalization(fused=True)(conv2_op)
         _ = tf.nn.relu(bn_op)
 
-        init = tf.global_variables_initializer()
-        sess = tf.Session()
+        init = tf.compat.v1.global_variables_initializer()
+        sess = tf.compat.v1.Session()
         sess.run(init)
 
         conv_1b_before_equalize = sess.graph.get_operation_by_name('conv1b/Conv2D')
@@ -461,9 +465,9 @@ class TestCrossLayerEqualization(unittest.TestCase):
         """
         Test equalize with a custom model with conv without bias param
         """
-        tf.reset_default_graph()
+        tf.compat.v1.reset_default_graph()
 
-        sess = tf.Session(graph=tf.get_default_graph())
+        sess = tf.compat.v1.Session(graph=tf.compat.v1.get_default_graph())
 
         with sess.as_default():
             inputs = tf.keras.Input(shape=(32, 32, 3,))
@@ -476,7 +480,7 @@ class TestCrossLayerEqualization(unittest.TestCase):
             bn_op_2 = tf.keras.layers.BatchNormalization(fused=True)(conv2_op, training=False)
             relu_2 = tf.nn.relu(bn_op_2)
 
-            init = tf.global_variables_initializer()
+            init = tf.compat.v1.global_variables_initializer()
             sess.run(init)
 
             old_conv_op = sess.graph.get_operation_by_name('conv2d/Conv2D')
@@ -493,7 +497,7 @@ class TestCrossLayerEqualization(unittest.TestCase):
         """
         Test equalize on a model with a forward bn fold
         """
-        tf.reset_default_graph()
+        tf.compat.v1.reset_default_graph()
         inputs = tf.keras.Input(shape=(32, 32, 3,), name="inputs")
         conv_op = tf.keras.layers.Conv2D(32, (3, 3))(inputs)
         r_op = tf.nn.relu(conv_op)
@@ -502,8 +506,8 @@ class TestCrossLayerEqualization(unittest.TestCase):
         conv3_op = tf.keras.layers.Conv2D(32, (3, 3))(conv2_op)
         _ = tf.nn.relu(conv3_op)
 
-        init = tf.global_variables_initializer()
-        sess = tf.Session(graph = tf.get_default_graph())
+        init = tf.compat.v1.global_variables_initializer()
+        sess = tf.compat.v1.Session(graph = tf.compat.v1.get_default_graph())
         sess.run(init)
         old_conv_op = sess.graph.get_operation_by_name('conv2d/Conv2D')
         conv_bias_data_before_fold = BiasUtils.get_bias_as_numpy_data(sess, old_conv_op)

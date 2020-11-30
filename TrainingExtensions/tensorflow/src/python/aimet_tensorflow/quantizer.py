@@ -96,11 +96,11 @@ def _qc_dummy_quantized_grad(op, grad, a, b):
 
 def _reset_session(sess):
     """
-    Helper to reset a TF session
-    :param sess: TF session
+    Helper to reset a tf.compat.v1.Session
+    :param sess: tf.compat.v1.Session
     :return: None
     """
-    tf.reset_default_graph()
+    tf.compat.v1.reset_default_graph()
     sess.close()
 
 
@@ -110,13 +110,13 @@ def _load_graph(graph, meta_graph, checkpoint):
     :param graph: Graph to load into
     :param meta_graph: Meta file
     :param checkpoint: Checkpoint file
-    :return: Newly created TF session
+    :return: Newly created tf.compat.v1.Session
     """
     _log.info('Loading graph: %s', meta_graph)
-    sess = tf.Session(graph=graph)
+    sess = tf.compat.v1.Session(graph=graph)
 
     # Open the graph and restore the parameters
-    saver = tf.train.import_meta_graph(meta_graph)
+    saver = tf.compat.v1.train.import_meta_graph(meta_graph)
     saver.restore(sess, checkpoint)
 
     # Initialize any uninitialized variables
@@ -162,7 +162,7 @@ def load_quantized_graph(meta_graph, checkpoint, encodings, graph=None, gpu=True
     :param encodings: Path to encodings file
     :param graph: Graph to load into
     :param gpu: If True, use GPU ops
-    :return: Newly created TF session
+    :return: Newly created tf.compat.v1.Session
     """
     comp_mode = libpymo.ComputationMode.COMP_MODE_GPU if gpu else libpymo.ComputationMode.COMP_MODE_CPU
 
@@ -182,7 +182,7 @@ def load_quantized_graph(meta_graph, checkpoint, encodings, graph=None, gpu=True
 
     g = tf.Graph()
     with g.as_default():
-        sess = tf.Session(graph=g)
+        sess = tf.compat.v1.Session(graph=g)
         _set_activation_encodings(sess, encodings, gpu=gpu)
 
     # Use the provided graph, if it exists
@@ -390,7 +390,7 @@ class Quantizer:
     def _retrieve_activation_encodings(self, sess):
         """
         Retrieve activation encodings from PyMo library
-        :param sess: TF session
+        :param sess: tf.compat.v1.Session
         :return:
         """
         for op_name in self._quant_act_ops:
@@ -518,7 +518,7 @@ class Quantizer:
         """
         self._log.info('Saving quantized graph: %s', output_graph)
         self._saver.save(self._sess, output_graph)
-        _ = tf.summary.FileWriter(os.path.dirname(output_graph)+"/summary", self._sess.graph)
+        _ = tf.compat.v1.summary.FileWriter(os.path.dirname(output_graph)+"/summary", self._sess.graph)
 
         # Check to see if encodings are saved and save the entire dictionary
         encodings = self._activation_encodings['encodings']

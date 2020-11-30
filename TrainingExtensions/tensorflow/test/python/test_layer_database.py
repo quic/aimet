@@ -41,7 +41,10 @@ import copy
 import shutil
 import unittest
 import numpy as np
+
 import tensorflow as tf
+tf.compat.v1.logging.set_verbosity(tf.logging.WARN)
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
 
 from aimet_common.utils import AimetLogger
 from aimet_tensorflow.layer_database import LayerDatabase
@@ -56,17 +59,17 @@ class TestTensorFlowLayerDatabase(unittest.TestCase):
 
     def test_layer_database_with_mnist(self):
 
-        config = tf.ConfigProto()
+        config = tf.compat.v1.ConfigProto()
         config.gpu_options.allow_growth = True
 
         # create session with graph
-        sess = tf.Session(graph=tf.Graph(), config=config)
+        sess = tf.compat.v1.Session(graph=tf.Graph(), config=config)
 
         with sess.graph.as_default():
             # model will be constructed in default graph
             _ = mnist_tf_model.create_model(data_format='channels_last')
             # initialize the weights and biases with appropriate initializer
-            sess.run(tf.global_variables_initializer())
+            sess.run(tf.compat.v1.global_variables_initializer())
 
         layer_db = LayerDatabase(model=sess, input_shape=(1, 28, 28, 1), working_dir=None)
 
@@ -91,24 +94,24 @@ class TestTensorFlowLayerDatabase(unittest.TestCase):
         self.assertEqual(layers[2].module.inputs[1].eval(session=layer_db.model).shape, (3136, 1024))
         self.assertEqual(layers[3].module.inputs[1].eval(session=layer_db.model).shape, (1024, 10))
 
-        tf.reset_default_graph()
+        tf.compat.v1.reset_default_graph()
         sess.close()
         # delete temp directory
         shutil.rmtree(str('./temp_meta/'))
 
     def test_layer_database_deepcopy(self):
 
-        # create tf.Session and initialize the weights and biases with zeros
-        config = tf.ConfigProto()
+        # create tf.compat.v1.Session and initialize the weights and biases with zeros
+        config = tf.compat.v1.ConfigProto()
         config.gpu_options.allow_growth = True
 
         # create session with graph
-        sess = tf.Session(graph=tf.Graph(), config=config)
+        sess = tf.compat.v1.Session(graph=tf.Graph(), config=config)
 
         with sess.graph.as_default():
             # by default, model will be constructed in default graph
             _ = mnist_tf_model.create_model(data_format='channels_last')
-            sess.run(tf.global_variables_initializer())
+            sess.run(tf.compat.v1.global_variables_initializer())
 
         layer_db = LayerDatabase(model=sess, input_shape=(1, 28, 28, 1), working_dir=None)
         layers = list(layer_db._compressible_layers.values())
@@ -171,24 +174,24 @@ class TestTensorFlowLayerDatabase(unittest.TestCase):
         self.assertTrue(np.array_equal(layers[3].module.inputs[1].eval(session=layer_db.model),
                                        layers_copy[3].module.inputs[1].eval(session=layer_db_copy.model)))
 
-        tf.reset_default_graph()
+        tf.compat.v1.reset_default_graph()
         sess.close()
         # delete temp directory
         shutil.rmtree(str('./temp_meta/'))
 
     def test_layer_database_working_dir(self):
 
-        # create tf.Session and initialize the weights and biases with zeros
-        config = tf.ConfigProto()
+        # create tf.compat.v1.Session and initialize the weights and biases with zeros
+        config = tf.compat.v1.ConfigProto()
         config.gpu_options.allow_growth = True
 
         # create session with graph
-        sess = tf.Session(graph=tf.Graph(), config=config)
+        sess = tf.compat.v1.Session(graph=tf.Graph(), config=config)
 
         with sess.graph.as_default():
             # by default, model will be constructed in default graph
             _ = mnist_tf_model.create_model(data_format='channels_last')
-            sess.run(tf.global_variables_initializer())
+            sess.run(tf.compat.v1.global_variables_initializer())
 
         meta_path = str('./temp_working_dir/')
 
@@ -200,7 +203,7 @@ class TestTensorFlowLayerDatabase(unittest.TestCase):
 
         shutil.rmtree(meta_path)
 
-        tf.reset_default_graph()
+        tf.compat.v1.reset_default_graph()
 
         layer_db.model.close()
         copy_layer_db.model.close()
@@ -208,18 +211,18 @@ class TestTensorFlowLayerDatabase(unittest.TestCase):
     @unittest.skip
     def test_layer_database_cpu_memory_Leak(self):
 
-        # create tf.Session and initialize the weights and biases with zeros
+        # create tf.compat.v1.Session and initialize the weights and biases with zeros
         import psutil
-        config = tf.ConfigProto()
+        config = tf.compat.v1.ConfigProto()
         config.gpu_options.allow_growth = True
 
         # create session with graph
-        sess = tf.Session(graph=tf.Graph(), config=config)
+        sess = tf.compat.v1.Session(graph=tf.Graph(), config=config)
 
         with sess.graph.as_default():
             # by default, model will be constructed in default graph
             _ = ResNet50(weights=None)
-            init = tf.global_variables_initializer()
+            init = tf.compat.v1.global_variables_initializer()
 
         sess.run(init)
         layer_db = LayerDatabase(model=sess, input_shape=(1, 28, 28, 1), working_dir=None)
@@ -242,17 +245,17 @@ class TestTensorFlowLayerDatabase(unittest.TestCase):
 
     def test_layer_database_destroy(self):
 
-        # create tf.Session and initialize the weights and biases with zeros
-        config = tf.ConfigProto()
+        # create tf.compat.v1.Session and initialize the weights and biases with zeros
+        config = tf.compat.v1.ConfigProto()
         config.gpu_options.allow_growth = True
 
         # create session with graph
-        sess = tf.Session(graph=tf.Graph(), config=config)
+        sess = tf.compat.v1.Session(graph=tf.Graph(), config=config)
 
         with sess.graph.as_default():
             # by default, model will be constructed in default graph
             _ = mnist_tf_model.create_model(data_format='channels_last')
-            init = tf.global_variables_initializer()
+            init = tf.compat.v1.global_variables_initializer()
 
         sess.run(init)
         layer_db = LayerDatabase(model=sess, input_shape=(1, 28, 28, 1), working_dir=None)
@@ -265,23 +268,23 @@ class TestTensorFlowLayerDatabase(unittest.TestCase):
 
     def test_layer_database_with_dynamic_shape(self):
         """ test layer database creation with different input shapes"""
-        # create tf.Session and initialize the weights and biases with zeros
-        config = tf.ConfigProto()
+        # create tf.compat.v1.Session and initialize the weights and biases with zeros
+        config = tf.compat.v1.ConfigProto()
         config.gpu_options.allow_growth = True
 
         graph = tf.Graph()
 
         with graph.as_default():
             # by default, model will be constructed in default graph
-            input_placeholder = tf.placeholder(tf.float32, [None, None, None, 3], 'input')
+            input_placeholder = tf.compat.v1.placeholder(tf.float32, [None, None, None, 3], 'input')
             x = tf.keras.layers.Conv2D(8, (2, 2), padding='SAME')(input_placeholder)
             x = tf.keras.layers.BatchNormalization(momentum=.3, epsilon=.65)(x)
             x = tf.keras.layers.Conv2D(8, (1, 1), padding='SAME', activation=tf.nn.tanh)(x)
             x = tf.keras.layers.BatchNormalization(momentum=.4, epsilon=.25)(x)
-            init = tf.global_variables_initializer()
+            init = tf.compat.v1.global_variables_initializer()
 
         # create session with graph
-        sess = tf.Session(graph=graph, config=config)
+        sess = tf.compat.v1.Session(graph=graph, config=config)
         sess.run(init)
 
         layer_db = LayerDatabase(model=sess, input_shape=(1, 224, 224, 3), working_dir=None, starting_ops=['input'],
@@ -298,7 +301,7 @@ class TestTensorFlowLayerDatabase(unittest.TestCase):
         # 2) try with different input shape
 
         # create another session with graph
-        sess = tf.Session(graph=graph, config=config)
+        sess = tf.compat.v1.Session(graph=graph, config=config)
         sess.run(init)
 
         batch_size = 32

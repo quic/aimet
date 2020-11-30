@@ -90,7 +90,7 @@ def iter_first_x(dataset: tf.data.Dataset, num_batches: int):
         next_element = iterator.get_next()
 
     # creating session with graph that has dataset and iterator ops
-    with tf.Session(graph=dataset._graph) as sess:
+    with tf.compat.v1.Session(graph=dataset._graph) as sess:
 
         while counter < num_batches:
             try:
@@ -277,11 +277,11 @@ def get_ordered_ops(graph: tf.Graph, starting_op_names: List[str], output_op_nam
     return ordered_ops
 
 
-def get_ordered_conv_linears(sess: tf.Session, input_op_names: List[str], output_op_names: List[str]) \
+def get_ordered_conv_linears(sess: tf.compat.v1.Session, input_op_names: List[str], output_op_names: List[str]) \
         -> List[tf.Operation]:
     """
     helper to select a list of candidate layers for bias correction
-    :param sess: active tensorflow session as tf.Session type
+    :param sess: active tensorflow session as tf.compat.v1.Session type
     :param input_op_names: list of input op names
     :param output_op_names: List of output op names of the model, used to help determine valid ops
     :return: List of conv/linear layer names
@@ -360,17 +360,17 @@ def get_training_tensors(graph: tf.Graph):
     return training_tensors
 
 
-def update_variables_with_values(sess: tf.Session, vars_with_values: Dict)->None:
+def update_variables_with_values(sess: tf.compat.v1.Session, vars_with_values: Dict)->None:
     """
     update a given variable with the value provided
-    :param sess: current tf Session
+    :param sess: current tf.compat.v1.Session
     :param vars_with_values: Dictionary of variable names and their values
     :return: None, assert if variable not found.
     """
 
     with sess.graph.as_default():
         for var_name in vars_with_values.keys():
-            vars_with_given_name = [var for var in tf.global_variables()
+            vars_with_given_name = [var for var in tf.compat.v1.global_variables()
                                     if var.op.name == var_name]
 
             # could not find variable

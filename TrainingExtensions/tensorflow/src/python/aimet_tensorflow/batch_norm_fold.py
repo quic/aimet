@@ -103,7 +103,7 @@ def _find_conv_bn_pairs(model, start_op_names: Union[List[str], str],
                         output_op_names: Union[List[str], str]):
     """
     uses searcher to choose convs/ linears with bn and activation info.
-    :param model: tf.Session type
+    :param model: tf.compat.v1.Session type
     :param start_op_names: list of strings with names of starting ops in the model
     :param output_op_names: List of output op names of the model, used to help ConnectedGraph determine valid ops
     (to ignore training ops for example).
@@ -133,11 +133,11 @@ def _find_conv_bn_pairs(model, start_op_names: Union[List[str], str],
     return convs_linears_bn_activation_info_dict
 
 
-def find_all_batch_norms_to_fold(sess: tf.Session, start_op_names: Union[List[str], str],
+def find_all_batch_norms_to_fold(sess: tf.compat.v1.Session, start_op_names: Union[List[str], str],
                                  output_op_names: Union[List[str], str]) -> List[PairType]:
     """
     uses searcher to choose layers for bias correction
-    :param sess: tf.Session type
+    :param sess: tf.compat.v1.Session type
     :param start_op_names: list of strings with names of starting ops in the model
     :param output_op_names: List of output op names of the model, used to help ConnectedGraph determine valid ops
     (to ignore training ops for example).  If None, all ops in the model are considered valid.
@@ -171,7 +171,7 @@ def find_all_batch_norms_to_fold(sess: tf.Session, start_op_names: Union[List[st
     return bn_conv_linear_pairs
 
 
-def _get_bias_tensor(sess: tf.Session, conv: tf.Operation) -> libpymo.TensorParams():
+def _get_bias_tensor(sess: tf.compat.v1.Session, conv: tf.Operation) -> libpymo.TensorParams():
     """
     Get bias tensor in given conv op.
     Packs bias in the format required for BN fold
@@ -191,7 +191,7 @@ def _get_bias_tensor(sess: tf.Session, conv: tf.Operation) -> libpymo.TensorPara
     return bias_tensor
 
 
-def _get_weight_tensor_transpose_reshape(sess: tf.Session, conv: tf.Operation) -> libpymo.TensorParams():
+def _get_weight_tensor_transpose_reshape(sess: tf.compat.v1.Session, conv: tf.Operation) -> libpymo.TensorParams():
     """
     Get weight tensor from conv op
     Converts to right format - performs transpose and reshape.
@@ -213,10 +213,10 @@ def _get_weight_tensor_transpose_reshape(sess: tf.Session, conv: tf.Operation) -
     return weight_tensor
 
 
-def _get_bn_params(sess: tf.Session, bn: tf.Operation) -> libpymo.BNParams():
+def _get_bn_params(sess: tf.compat.v1.Session, bn: tf.Operation) -> libpymo.BNParams():
     """
     helper to populate BN params from given BN op, required for fold
-    :param sess: tf Session type
+    :param sess: tf.compat.v1.Session type
     :param bn: BatchNorm or a FusedBatch Norm op
     :return: bn_params
     """
@@ -238,11 +238,11 @@ def _get_bn_params(sess: tf.Session, bn: tf.Operation) -> libpymo.BNParams():
     return bn_params
 
 
-def _fold_given_auto_selected_batch_norms(sess: tf.Session, layer_pairs: List[PairType]) -> tf.Session:
+def _fold_given_auto_selected_batch_norms(sess: tf.compat.v1.Session, layer_pairs: List[PairType]) -> tf.compat.v1.Session:
     """
     Fold a given set of batch_norm layers into conv layers
 
-    :param sess: tf.Session
+    :param sess: tf.compat.v1.Session
     :param layer_pairs: pair of conv and bn layers
     :return: new session with updated graph
     """
@@ -297,9 +297,9 @@ def _fold_given_auto_selected_batch_norms(sess: tf.Session, layer_pairs: List[Pa
     return after_bn_fold_sess
 
 
-def fold_given_batch_norms(sess: tf.Session, input_op_names: Union[str, List[str]],
+def fold_given_batch_norms(sess: tf.compat.v1.Session, input_op_names: Union[str, List[str]],
                            output_op_names: Union[str, List[str]],
-                           layer_pairs: List[Tuple[tf.Operation, tf.Operation, bool]]) -> tf.Session:
+                           layer_pairs: List[Tuple[tf.Operation, tf.Operation, bool]]) -> tf.compat.v1.Session:
 
     """
     Api to fold custom set of bn layers in a model
@@ -343,13 +343,13 @@ def fold_given_batch_norms(sess: tf.Session, input_op_names: Union[str, List[str
     return after_fold_sess
 
 
-def fold_all_batch_norms(sess: tf.Session, input_op_names: Union[str, List[str]],
+def fold_all_batch_norms(sess: tf.compat.v1.Session, input_op_names: Union[str, List[str]],
                          output_op_names: Union[str, List[str]])\
-        -> (tf.Session, List[Tuple[tf.Operation, tf.Operation]]):
+        -> (tf.compat.v1.Session, List[Tuple[tf.Operation, tf.Operation]]):
     """
     Fold all batch_norm layers in a model into corresponding conv layers
 
-    :param sess: active tf.Session
+    :param sess: active tf.compat.v1.Session
     :param input_op_names: Name of the starting op in the given graph or a list of names in case of multi-input model
     :param output_op_names: List of output op names of the model, used to help ConnectedGraph determine valid ops
            (to ignore training ops for example).  If None, all ops in the model are considered valid.

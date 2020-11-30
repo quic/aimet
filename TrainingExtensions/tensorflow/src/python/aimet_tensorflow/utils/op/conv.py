@@ -119,7 +119,7 @@ class WeightTensorUtils:
         return get_wt_as_read_var_tensor
 
     @staticmethod
-    def get_tensor_as_numpy_data(sess: tf.Session, op: tf.Operation) -> np.array:
+    def get_tensor_as_numpy_data(sess: tf.compat.v1.Session, op: tf.Operation) -> np.array:
         """
         return weight kernel in the op as numpy data
         :param sess: TensorFlow session
@@ -132,10 +132,10 @@ class WeightTensorUtils:
         return numpy_data
 
     @staticmethod
-    def update_tensor_for_op(sess: tf.Session, op: tf.Operation, tensor_as_numpy_array):
+    def update_tensor_for_op(sess: tf.compat.v1.Session, op: tf.Operation, tensor_as_numpy_array):
         """
         updated existing weight tensor variable in given op with new value.
-        :param sess: active tf.Session
+        :param sess: active tf.compat.v1.Session
         :param op: op for which the weight tensor is to be updated
         :param tensor_as_numpy_array: new weight tensor as numpy array
         :return: None
@@ -149,7 +149,7 @@ class WeightTensorUtils:
             wt_tensor = WeightTensorUtils.get_wt_tensor(op)
             assert wt_tensor is not None, ('Error, no weight tensor found for this op', op.name)
             # use tensor name to lookup var type associated with it
-            wt_as_var = [var for var in tf.global_variables() if var.name == wt_tensor.name][0]
+            wt_as_var = [var for var in tf.compat.v1.global_variables() if var.name == wt_tensor.name][0]
             wt_as_var.load(tensor_as_numpy_array, sess)
 
 
@@ -170,11 +170,11 @@ class BiasUtils:
         return w_shape[b_index]
 
     @ staticmethod
-    def insert_bias_add_op(sess: tf.Session, conv_op_out_tensor: tf.Tensor,
+    def insert_bias_add_op(sess: tf.compat.v1.Session, conv_op_out_tensor: tf.Tensor,
                            new_bias_tensor: tf.Variable, bias_name="bias_value") -> None:
         """
         Insert bias-add op to given conv op.
-        :param sess: model as tf.Session
+        :param sess: model as tf.compat.v1.Session
         :param conv_op_out_tensor: output of conv op that should feed into the new bias op as tf.Tensor
         :param new_bias_tensor:  bias tensor to be added as tf.Variable
         :param bias_name: name string for the bias op
@@ -197,16 +197,16 @@ class BiasUtils:
                 ge.reroute_ts(bias_add_op, conv_op_out_tensor, can_modify=consumer_list)
 
                 # initialize tensor once it's added
-                sess.run(tf.variables_initializer([new_bias_tensor]))
+                sess.run(tf.compat.v1.variables_initializer([new_bias_tensor]))
 
     @staticmethod
-    def initialize_model_with_bias(sess: tf.Session, input_op_names: List[str], output_op_names: List[str]) \
-            -> tf.Session:
+    def initialize_model_with_bias(sess: tf.compat.v1.Session, input_op_names: List[str], output_op_names: List[str]) \
+            -> tf.compat.v1.Session:
         """
         Initializes given model with bias.
         Adds zero bias to conv/linear layers without bias param, in given model.
-        :param sess: model to be updated as tf.Session
-        :return: updated session as tf.Session
+        :param sess: model to be updated as tf.compat.v1.Session
+        :return: updated session as tf.compat.v1.Session
         """
 
         assert sess is not None
@@ -230,11 +230,11 @@ class BiasUtils:
         return new_sess
 
     @staticmethod
-    def _create_bias_add_op_and_insert(sess: tf.Session, conv_op: tf.Operation, new_bias_var: tf.Variable,
+    def _create_bias_add_op_and_insert(sess: tf.compat.v1.Session, conv_op: tf.Operation, new_bias_var: tf.Variable,
                                        bias_name="bias_value") -> None:
         """
         creates and adds a bias_add op to conv op
-        :param sess: active tf session
+        :param sess: active tf.compat.v1.Session
         :param conv_op: Convolution op
         :param new_bias_var: bias variable
         :param bias_name: an optional string for bias name
@@ -247,7 +247,7 @@ class BiasUtils:
             if conv_op.outputs:
                 bias_index_in_op = BiasUtils.get_bias_index_in_given_op(conv_op)
                 conv_op_out_tensor = conv_op.outputs[bias_index_in_op]
-                sess.run(tf.variables_initializer([new_bias_var]))
+                sess.run(tf.compat.v1.variables_initializer([new_bias_var]))
                 BiasUtils.insert_bias_add_op(sess, conv_op_out_tensor, new_bias_var,
                                              bias_name)
 
@@ -355,7 +355,7 @@ class BiasUtils:
         return bias_add_op
 
     @staticmethod
-    def get_bias_as_numpy_data(sess: tf.Session, op: tf.Operation) -> tf.Variable:
+    def get_bias_as_numpy_data(sess: tf.compat.v1.Session, op: tf.Operation) -> tf.Variable:
         """
         return bias in the op as a tf variable type
         :param sess: TensorFlow session
@@ -371,7 +371,7 @@ class BiasUtils:
         return numpy_data
 
     @staticmethod
-    def update_bias_for_op(sess: tf.Session, op: tf.Operation, bias_as_numpy_array,
+    def update_bias_for_op(sess: tf.compat.v1.Session, op: tf.Operation, bias_as_numpy_array,
                            bias_name="bias_value"):
         """
         update existing bias in given op with new bias value
@@ -394,7 +394,7 @@ class BiasUtils:
                 assert BiasUtils.get_shape(op)[0] == bias_as_numpy_array.size
                 # use tensor name to lookup var type associated with it
                 assert bias_tensor is not None, ('Error, bias tensor lookup failed for op ', op.name)
-                bias_as_var = [var for var in tf.global_variables() if var.name == bias_tensor.name][0]
+                bias_as_var = [var for var in tf.compat.v1.global_variables() if var.name == bias_tensor.name][0]
                 bias_as_var.load(bias_as_numpy_array, sess)
             else:
                 # _create_bias_add_op_and_insert
@@ -483,7 +483,7 @@ def get_weight_shape(op: tf.Operation) -> List:
     return weight_shape
 
 
-def get_output_activation_shape(sess: tf.Session, op: tf.Operation, input_op_names: List[str],
+def get_output_activation_shape(sess: tf.compat.v1.Session, op: tf.Operation, input_op_names: List[str],
                                 input_shape: Union[Tuple, List[Tuple]]) -> List:
     """
      Output activation shape in the Common format [NCHW]
@@ -505,7 +505,7 @@ def get_output_activation_shape(sess: tf.Session, op: tf.Operation, input_op_nam
     return output_shape
 
 
-def get_conv2d_activation_shape(sess: tf.Session, op: tf.Operation, input_op_names: List[str],
+def get_conv2d_activation_shape(sess: tf.compat.v1.Session, op: tf.Operation, input_op_names: List[str],
                                 input_shape: Union[Tuple, List[Tuple]], input_activation: bool) -> List:
     """
     :param sess: TensorFlow Session
@@ -574,7 +574,7 @@ def get_matmul_activation_shape(op: tf.Operation, input_activation: bool) -> Lis
     return activation_shape
 
 
-def get_layer_attributes(sess: tf.Session, op: tf.Operation, input_op_names: List[str],
+def get_layer_attributes(sess: tf.compat.v1.Session, op: tf.Operation, input_op_names: List[str],
                          input_shape: Union[Tuple, List[Tuple]]) -> (Tuple, Tuple, Tuple):
     """
     Get attributes (kernel_size, stride, padding) of tf.nn.Conv2d Op
@@ -626,10 +626,10 @@ def get_layer_attributes(sess: tf.Session, op: tf.Operation, input_op_names: Lis
     return kernel_size, stride, padding
 
 
-def get_weight_tensor_with_shape(model: tf.Session, input_op: tf.Operation):
+def get_weight_tensor_with_shape(model: tf.compat.v1.Session, input_op: tf.Operation):
     """
      generic function to extract weight tensor of a given conv/linear op
-    :param model: tf.Session type
+    :param model: tf.compat.v1.Session type
     :param input_op: input op as tf.Operation type
     :return: weight and shape of tensor extracted from given op
     """

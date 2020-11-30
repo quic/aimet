@@ -79,7 +79,7 @@ class Layer(aimet_common.layer_database.Layer):
             params = aimet_common.layer_database.Conv2dTypeSpecificParams(strides, padding, groups)
             self.type_specific_params = params
 
-    def __init__(self, model: tf.Session, op: tf.Operation, output_shape: List):
+    def __init__(self, model: tf.compat.v1.Session, op: tf.Operation, output_shape: List):
         """
         :param model: TensorFlow Session
         :param op: TensorFlow Op
@@ -101,7 +101,7 @@ class LayerDatabase(aimet_common.layer_database.LayerDatabase):
     Also stores compressible layers to model optimization.
     """
 
-    def __init__(self, model: tf.Session, input_shape: Union[Tuple, List[Tuple]], working_dir: str,
+    def __init__(self, model: tf.compat.v1.Session, input_shape: Union[Tuple, List[Tuple]], working_dir: str,
                  starting_ops: List[str] = None, ending_ops: List[str] = None):
         """
         :param model: TensorFlow Session
@@ -227,7 +227,7 @@ class LayerDatabase(aimet_common.layer_database.LayerDatabase):
         # Remove the the layer being replaced from the database
         del self._compressible_layers[id(layer_to_replace.module)]
 
-    def update_database(self, model: tf.Session, detached_op_names: Set, update_model=False):
+    def update_database(self, model: tf.compat.v1.Session, detached_op_names: Set, update_model=False):
         """
         Update layer database with new provided session and exclude detached ops.
 
@@ -238,7 +238,7 @@ class LayerDatabase(aimet_common.layer_database.LayerDatabase):
         if update_model:
             # close the existing session
             self._model.close()
-            # update the model (session) with new provided tf.Session
+            # update the model (session) with new provided tf.compat.v1.Session
             self._model = model
 
         # clear the dictionary
@@ -270,4 +270,4 @@ class LayerDatabase(aimet_common.layer_database.LayerDatabase):
         self._compressible_layers.clear()
         # close the session
         self._model.close()
-        tf.reset_default_graph()
+        tf.compat.v1.reset_default_graph()

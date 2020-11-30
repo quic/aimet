@@ -51,7 +51,7 @@ from aimet_tensorflow.defs import SpatialSvdParameters, ChannelPruningParameters
 from aimet_tensorflow.compress import ModelCompressor
 
 
-def evaluate_model(sess: tf.Session, eval_iterations: int, use_cuda: bool) -> float:
+def evaluate_model(sess: tf.compat.v1.Session, eval_iterations: int, use_cuda: bool) -> float:
     """
     This is intended to be the user-defined model evaluation function.
     AIMET requires the above signature. So if the user's eval function does not
@@ -75,11 +75,11 @@ def evaluate_model(sess: tf.Session, eval_iterations: int, use_cuda: bool) -> fl
 
 def spatial_svd_auto_mode():
 
-    sess = tf.Session()
+    sess = tf.compat.v1.Session()
     # Construct graph
     with sess.graph.as_default():
         _ = VGG16(weights=None, input_shape=(224, 224, 3))
-        init = tf.global_variables_initializer()
+        init = tf.compat.v1.global_variables_initializer()
     sess.run(init)
 
     # ignore first Conv2D op
@@ -114,11 +114,11 @@ def spatial_svd_auto_mode():
 
 def spatial_svd_manual_mode():
 
-    sess = tf.Session()
+    sess = tf.compat.v1.Session()
     # Construct graph
     with sess.graph.as_default():
         _ = VGG16(weights=None, input_shape=(224, 224, 3))
-        init = tf.global_variables_initializer()
+        init = tf.compat.v1.global_variables_initializer()
     sess.run(init)
 
     # Pick two convs to compress as examples
@@ -150,11 +150,11 @@ def spatial_svd_manual_mode():
 
 def channel_pruning_auto_mode():
 
-    sess = tf.Session()
+    sess = tf.compat.v1.Session()
     # Construct graph
     with sess.graph.as_default():
         _ = VGG16(weights=None, input_shape=(224, 224, 3))
-        init = tf.global_variables_initializer()
+        init = tf.compat.v1.global_variables_initializer()
     sess.run(init)
 
     # ignore first Conv2D op
@@ -202,12 +202,12 @@ def channel_pruning_auto_mode():
 
 def channel_pruning_manual_mode():
 
-    sess = tf.Session()
+    sess = tf.compat.v1.Session()
 
     # Construct graph
     with sess.graph.as_default():
         _ = VGG16(weights=None, input_shape=(224, 224, 3))
-        init = tf.global_variables_initializer()
+        init = tf.compat.v1.global_variables_initializer()
     sess.run(init)
 
     # Create random dataset

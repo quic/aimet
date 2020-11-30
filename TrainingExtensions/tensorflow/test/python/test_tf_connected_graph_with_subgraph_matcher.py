@@ -42,7 +42,11 @@ import os
 import numpy as np
 import unittest
 import logging
+
 import tensorflow as tf
+tf.compat.v1.logging.set_verbosity(tf.logging.WARN)
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
+
 from tensorflow.contrib.graph_editor.edit import detach_inputs
 from tensorflow.contrib.slim.nets import vgg
 
@@ -57,9 +61,8 @@ from aimet_tensorflow.examples.test_models import keras_model, keras_model_funct
 import aimet_tensorflow.winnow.winnow as winnow
 
 logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Test)
-AimetLogger.set_area_logger_level(AimetLogger.LogAreas.Test, logging.DEBUG)
-AimetLogger.set_area_logger_level(AimetLogger.LogAreas.ConnectedGraph, logging.DEBUG)
-os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
+# AimetLogger.set_area_logger_level(AimetLogger.LogAreas.Test, logging.DEBUG)
+# AimetLogger.set_area_logger_level(AimetLogger.LogAreas.ConnectedGraph, logging.DEBUG)
 
 
 class TestTfConnectedGraph(unittest.TestCase):
@@ -70,7 +73,7 @@ class TestTfConnectedGraph(unittest.TestCase):
         tf.compat.v1.reset_default_graph()
 
         _ = keras_model()
-        conn_graph = ConnectedGraph(tf.get_default_graph(), ['conv2d_input'], ['keras_model/Softmax'])
+        conn_graph = ConnectedGraph(tf.compat.v1.get_default_graph(), ['conv2d_input'], ['keras_model/Softmax'])
         self.assertTrue(validate_branch_ops(conn_graph))
         self.assertTrue(validate_product_tensor_lists(conn_graph))
         self.assertEqual(0, conn_graph.branch_count)
@@ -85,7 +88,7 @@ class TestTfConnectedGraph(unittest.TestCase):
         tf.compat.v1.reset_default_graph()
 
         _ = keras_model_functional()
-        conn_graph = ConnectedGraph(tf.get_default_graph(), ['input_1'], ['keras_model_functional/Softmax'])
+        conn_graph = ConnectedGraph(tf.compat.v1.get_default_graph(), ['input_1'], ['keras_model_functional/Softmax'])
         self.assertTrue(validate_branch_ops(conn_graph))
         self.assertTrue(validate_product_tensor_lists(conn_graph))
         self.assertEqual(0, conn_graph.branch_count)
@@ -100,7 +103,7 @@ class TestTfConnectedGraph(unittest.TestCase):
         tf.compat.v1.reset_default_graph()
 
         _ = keras_model_functional_with_non_fused_batchnorms()
-        conn_graph = ConnectedGraph(tf.get_default_graph(), ['input_1'],
+        conn_graph = ConnectedGraph(tf.compat.v1.get_default_graph(), ['input_1'],
                                     ['keras_model_functional_with_non_fused_batchnorms/Softmax'])
         self.assertTrue(validate_branch_ops(conn_graph))
         self.assertTrue(validate_product_tensor_lists(conn_graph))
@@ -119,9 +122,9 @@ class TestTfConnectedGraph(unittest.TestCase):
 
         tf.compat.v1.reset_default_graph()
 
-        x = tf.placeholder(tf.float32, [1, 32, 32, 3])
+        x = tf.compat.v1.placeholder(tf.float32, [1, 32, 32, 3])
         _ = tf_slim_basic_model(x)
-        conn_graph = ConnectedGraph(tf.get_default_graph(), ['Placeholder'], ['tf_slim_model/Softmax'])
+        conn_graph = ConnectedGraph(tf.compat.v1.get_default_graph(), ['Placeholder'], ['tf_slim_model/Softmax'])
         self.assertTrue(validate_branch_ops(conn_graph))
         self.assertTrue(validate_product_tensor_lists(conn_graph))
         self.assertEqual(0, conn_graph.branch_count)
@@ -129,7 +132,7 @@ class TestTfConnectedGraph(unittest.TestCase):
         # 14 products from interop connections
         # need to add 1 since gamma is treated as a parameter for the training = True bn, even though it is a constant
         # in the graph
-        self.assertEqual(14 + len(tf.get_default_graph().get_collection('variables')) + 1,
+        self.assertEqual(14 + len(tf.compat.v1.get_default_graph().get_collection('variables')) + 1,
                          len(conn_graph.get_all_products()))
 
     def test_tf_slim_with_softmax_model_get_op_product_graph(self):
@@ -137,16 +140,16 @@ class TestTfConnectedGraph(unittest.TestCase):
 
         tf.compat.v1.reset_default_graph()
 
-        x = tf.placeholder(tf.float32, [1, 32, 32, 3])
+        x = tf.compat.v1.placeholder(tf.float32, [1, 32, 32, 3])
         _ = tf_slim_with_softmax(x)
-        conn_graph = ConnectedGraph(tf.get_default_graph(), ['Placeholder'], ['softmax/Reshape_1'])
+        conn_graph = ConnectedGraph(tf.compat.v1.get_default_graph(), ['Placeholder'], ['softmax/Reshape_1'])
         self.assertTrue(validate_branch_ops(conn_graph))
         self.assertTrue(validate_product_tensor_lists(conn_graph))
         self.assertEqual(0, conn_graph.branch_count)
         self.assertEqual(8, len(conn_graph.get_all_ops()))
         # 7 products from interop connections
         # need to add 2 since gamma is treated as a parameter, even though it is a constant in this graph
-        self.assertEqual(7 + len(tf.get_default_graph().get_collection('variables')) + 2,
+        self.assertEqual(7 + len(tf.compat.v1.get_default_graph().get_collection('variables')) + 2,
                          len(conn_graph.get_all_products()))
 
     def test_single_residual_get_op_product_graph(self):
@@ -154,7 +157,7 @@ class TestTfConnectedGraph(unittest.TestCase):
 
         tf.compat.v1.reset_default_graph()
         _ = single_residual()
-        conn_graph = ConnectedGraph(tf.get_default_graph(), ['input_1'], ['single_residual/Softmax'])
+        conn_graph = ConnectedGraph(tf.compat.v1.get_default_graph(), ['input_1'], ['single_residual/Softmax'])
         self.assertTrue(validate_branch_ops(conn_graph))
         self.assertTrue(validate_product_tensor_lists(conn_graph))
         self.assertEqual(1, conn_graph.branch_count)
@@ -168,12 +171,12 @@ class TestTfConnectedGraph(unittest.TestCase):
         tf.compat.v1.reset_default_graph()
 
         _ = split_and_concat_model()
-        conn_graph = ConnectedGraph(tf.get_default_graph(), ['input_1'], ['split_and_concat_model/Softmax'])
+        conn_graph = ConnectedGraph(tf.compat.v1.get_default_graph(), ['input_1'], ['split_and_concat_model/Softmax'])
         self.assertTrue(validate_branch_ops(conn_graph))
         self.assertTrue(validate_product_tensor_lists(conn_graph))
         self.assertEqual(1, conn_graph.branch_count)
         self.assertEqual(9, len(conn_graph.get_all_ops()))
-        self.assertEqual(8 + len(tf.get_default_graph().get_collection('variables')),
+        self.assertEqual(8 + len(tf.compat.v1.get_default_graph().get_collection('variables')),
                          len(conn_graph.get_all_products()))
 
     def test_concat_get_op_product_graph(self):
@@ -182,16 +185,16 @@ class TestTfConnectedGraph(unittest.TestCase):
         tf.compat.v1.reset_default_graph()
 
         _ = concat_model()
-        conn_graph = ConnectedGraph(tf.get_default_graph(), ['input_1'], ['concat_model/Softmax'])
+        conn_graph = ConnectedGraph(tf.compat.v1.get_default_graph(), ['input_1'], ['concat_model/Softmax'])
         self.assertTrue(validate_branch_ops(conn_graph))
         self.assertTrue(validate_product_tensor_lists(conn_graph))
         self.assertEqual(2, conn_graph.branch_count)
         self.assertEqual(13, len(conn_graph.get_all_ops()))
-        self.assertEqual(12 + len(tf.get_default_graph().get_collection('variables')),
+        self.assertEqual(12 + len(tf.compat.v1.get_default_graph().get_collection('variables')),
                          len(conn_graph.get_all_products()))
 
         # Check that the order of input products to the concat op matches the order of input tensors in the tf graph
-        concat_tf_op = tf.get_default_graph().get_operation_by_name("concatenate/concat")
+        concat_tf_op = tf.compat.v1.get_default_graph().get_operation_by_name("concatenate/concat")
         concat_op = conn_graph.get_all_ops()['concatenate/concat']
         for index, product in enumerate(concat_op.get_input_products()):
             self.assertTrue(len(product.consumers) == 1)
@@ -202,12 +205,12 @@ class TestTfConnectedGraph(unittest.TestCase):
 
         tf.compat.v1.reset_default_graph()
         _ = dropout_keras_model()
-        conn_graph = ConnectedGraph(tf.get_default_graph(), ['input_1'], ['dropout_keras_model/Softmax'])
+        conn_graph = ConnectedGraph(tf.compat.v1.get_default_graph(), ['input_1'], ['dropout_keras_model/Softmax'])
         self.assertTrue(validate_branch_ops(conn_graph))
         self.assertTrue(validate_product_tensor_lists(conn_graph))
         self.assertEqual(0, conn_graph.branch_count)
         self.assertEqual(8, len(conn_graph.get_all_ops()))
-        self.assertEqual(7 + len(tf.get_default_graph().get_collection('variables')),
+        self.assertEqual(7 + len(tf.compat.v1.get_default_graph().get_collection('variables')),
                          len(conn_graph.get_all_products()))
         self.assertTrue(conn_graph.get_all_ops()['dropout'], 'Dropout_with_training_tensor')
 
@@ -216,12 +219,12 @@ class TestTfConnectedGraph(unittest.TestCase):
 
         tf.compat.v1.reset_default_graph()
         _ = dropout_slim_model()
-        conn_graph = ConnectedGraph(tf.get_default_graph(), ['input_1'], ['dropout_slim_model/Softmax'])
+        conn_graph = ConnectedGraph(tf.compat.v1.get_default_graph(), ['input_1'], ['dropout_slim_model/Softmax'])
         self.assertTrue(validate_branch_ops(conn_graph))
         self.assertTrue(validate_product_tensor_lists(conn_graph))
         self.assertEqual(0, conn_graph.branch_count)
         self.assertEqual(10, len(conn_graph.get_all_ops()))
-        self.assertEqual(9 + len(tf.get_default_graph().get_collection('variables')),
+        self.assertEqual(9 + len(tf.compat.v1.get_default_graph().get_collection('variables')),
                          len(conn_graph.get_all_products()))
         self.assertTrue(conn_graph.get_all_ops()['Dropout'], 'Dropout_training_True')
 
@@ -232,14 +235,14 @@ class TestTfConnectedGraph(unittest.TestCase):
         """
 
         tf.compat.v1.reset_default_graph()
-        inp = tf.placeholder(tf.float32, [1, 224, 224, 3])
+        inp = tf.compat.v1.placeholder(tf.float32, [1, 224, 224, 3])
         _ = vgg.vgg_16(inp)
-        conn_graph = ConnectedGraph(tf.get_default_graph(), ['Placeholder'], ['vgg_16/fc8/squeezed'])
+        conn_graph = ConnectedGraph(tf.compat.v1.get_default_graph(), ['Placeholder'], ['vgg_16/fc8/squeezed'])
         self.assertTrue(validate_branch_ops(conn_graph))
         self.assertTrue(validate_product_tensor_lists(conn_graph))
         self.assertEqual(0, conn_graph.branch_count)
         self.assertEqual(40, len(conn_graph.get_all_ops()))
-        self.assertEqual(39 + len(tf.get_default_graph().get_collection('variables')),
+        self.assertEqual(39 + len(tf.compat.v1.get_default_graph().get_collection('variables')),
                          len(conn_graph.get_all_products()))
         self.assertTrue(conn_graph.get_all_ops()['vgg_16/dropout6'], 'Dropout_training_True_unknown_shape')
         self.assertTrue(conn_graph.get_all_ops()['vgg_16/dropout7'], 'Dropout_training_True_unknown_shape')
@@ -249,12 +252,12 @@ class TestTfConnectedGraph(unittest.TestCase):
 
         tf.compat.v1.reset_default_graph()
         _ = multiple_input_model()
-        conn_graph = ConnectedGraph(tf.get_default_graph(), ['input1', 'input2'], ['multiple_input_model/Softmax'])
+        conn_graph = ConnectedGraph(tf.compat.v1.get_default_graph(), ['input1', 'input2'], ['multiple_input_model/Softmax'])
         self.assertTrue(validate_branch_ops(conn_graph))
         self.assertTrue(validate_product_tensor_lists(conn_graph))
         self.assertEqual(0, conn_graph.branch_count)
         self.assertEqual(9, len(conn_graph.get_all_ops()))
-        self.assertEqual(8 + len(tf.get_default_graph().get_collection('variables')),
+        self.assertEqual(8 + len(tf.compat.v1.get_default_graph().get_collection('variables')),
                          len(conn_graph.get_all_products()))
         self.assertTrue(conn_graph.get_all_ops()['input1'].output.is_model_input)
         self.assertTrue(conn_graph.get_all_ops()['input2'].output.is_model_input)
@@ -265,8 +268,8 @@ class TestTfConnectedGraph(unittest.TestCase):
         _ = single_residual()
 
         # Detach everything starting from conv2d_4/Conv2D and below
-        detach_inputs(tf.get_default_graph().get_operation_by_name('conv2d_4/Conv2D'))
-        conn_graph = ConnectedGraph(tf.get_default_graph(), ['input_1'], ['Relu_2'])
+        detach_inputs(tf.compat.v1.get_default_graph().get_operation_by_name('conv2d_4/Conv2D'))
+        conn_graph = ConnectedGraph(tf.compat.v1.get_default_graph(), ['input_1'], ['Relu_2'])
         self.assertTrue(validate_branch_ops(conn_graph))
         self.assertTrue(validate_product_tensor_lists(conn_graph))
         self.assertEqual(1, conn_graph.branch_count)
@@ -279,7 +282,7 @@ class TestTfConnectedGraph(unittest.TestCase):
         """ Test connected graph construction on a graph with upsample op
         Need to perform one round of winnowing first to insert the upsample op """
         tf.compat.v1.reset_default_graph()
-        sess = tf.Session()
+        sess = tf.compat.v1.Session()
         module_zero_channels_list = []
 
         _ = upsample_model()
@@ -289,7 +292,7 @@ class TestTfConnectedGraph(unittest.TestCase):
         input_op_names = ['input_1']
         output_op_names = ['upsample_model/Softmax']
 
-        tf_op = tf.get_default_graph().get_operation_by_name("conv2d_3/Conv2D")
+        tf_op = tf.compat.v1.get_default_graph().get_operation_by_name("conv2d_3/Conv2D")
         input_channels_to_winnow = [3, 5, 7]
         module_mask_pair = (tf_op, input_channels_to_winnow)
         module_zero_channels_list.append(module_mask_pair)
@@ -298,7 +301,7 @@ class TestTfConnectedGraph(unittest.TestCase):
                                              list_of_modules_to_winnow=module_zero_channels_list,
                                              reshape=True, in_place=True, verbose=True)
 
-        conn_graph = ConnectedGraph(tf.get_default_graph(), input_op_names, output_op_names)
+        conn_graph = ConnectedGraph(tf.compat.v1.get_default_graph(), input_op_names, output_op_names)
         self.assertEqual(18, len(conn_graph.get_all_ops()))
         reduced_bn_1_op = conn_graph.get_op_from_module_name('reduced_batch_normalization_1/cond/FusedBatchNormV3_1')
         self.assertTrue(reduced_bn_1_op.output.consumers[0].type == 'Upsample')
@@ -310,10 +313,10 @@ class TestTfConnectedGraph(unittest.TestCase):
         _ = keras_model_functional()
 
         # add training ops
-        optimizer = tf.train.AdamOptimizer(learning_rate=1e-3, name='Adam_new')
-        _ = optimizer.minimize(loss=tf.get_default_graph().get_tensor_by_name('keras_model_functional/Softmax:0'),
+        optimizer = tf.compat.v1.train.AdamOptimizer(learning_rate=1e-3, name='Adam_new')
+        _ = optimizer.minimize(loss=tf.compat.v1.get_default_graph().get_tensor_by_name('keras_model_functional/Softmax:0'),
                                name='train_step_new')
-        conn_graph = ConnectedGraph(tf.get_default_graph(), ["input_1"],
+        conn_graph = ConnectedGraph(tf.compat.v1.get_default_graph(), ["input_1"],
                                     output_op_names=['keras_model_functional/Softmax'])
         self.assertTrue(validate_branch_ops(conn_graph))
         self.assertTrue(validate_product_tensor_lists(conn_graph))
@@ -328,7 +331,7 @@ class TestTfConnectedGraph(unittest.TestCase):
         """ Test connected graph construction on model with upsample2D op """
         tf.compat.v1.reset_default_graph()
         _ = model_with_upsample2d()
-        conn_graph = ConnectedGraph(tf.get_default_graph(), starting_op_names=['input_1'],
+        conn_graph = ConnectedGraph(tf.compat.v1.get_default_graph(), starting_op_names=['input_1'],
                                     output_op_names=['model_with_upsample2d/Softmax'])
         self.assertTrue(validate_branch_ops(conn_graph))
         self.assertTrue(validate_product_tensor_lists(conn_graph))
@@ -350,7 +353,7 @@ class TestTfConnectedGraph(unittest.TestCase):
         """ Test connected graph construction on model with leaky relu op """
         tf.compat.v1.reset_default_graph()
         _ = model_with_leaky_relu()
-        conn_graph = ConnectedGraph(tf.get_default_graph(), starting_op_names=['input_1'],
+        conn_graph = ConnectedGraph(tf.compat.v1.get_default_graph(), starting_op_names=['input_1'],
                                     output_op_names=['model_with_leaky_relu/Softmax'])
         self.assertTrue(validate_branch_ops(conn_graph))
         self.assertTrue(validate_product_tensor_lists(conn_graph))
@@ -372,7 +375,7 @@ class TestTfConnectedGraph(unittest.TestCase):
         """ Test connected graph construction on model with leaky relu op """
         tf.compat.v1.reset_default_graph()
         _ = model_with_global_max_pool2d()
-        conn_graph = ConnectedGraph(tf.get_default_graph(), starting_op_names=['input_1'],
+        conn_graph = ConnectedGraph(tf.compat.v1.get_default_graph(), starting_op_names=['input_1'],
                                     output_op_names=['model_with_global_max_pool2d/Softmax'])
         self.assertTrue(validate_branch_ops(conn_graph))
         self.assertTrue(validate_product_tensor_lists(conn_graph))
@@ -397,7 +400,7 @@ class TestTfConnectedGraph(unittest.TestCase):
         :return:
         """
 
-        tf.reset_default_graph()
+        tf.compat.v1.reset_default_graph()
         inputs = tf.keras.Input(shape=(None, None, 2), name="inputs")
 
         x = tf.keras.layers.Conv2D(2, kernel_size=3, padding='same')(inputs)
@@ -408,11 +411,11 @@ class TestTfConnectedGraph(unittest.TestCase):
         z = tf.keras.layers.Add()([inputs, x])
         x = tf.nn.relu(z)
 
-        init = tf.global_variables_initializer()
-        sess = tf.Session()
+        init = tf.compat.v1.global_variables_initializer()
+        sess = tf.compat.v1.Session()
         sess.run(init)
 
-        conn_graph = ConnectedGraph(tf.get_default_graph(), starting_op_names=['inputs'],
+        conn_graph = ConnectedGraph(tf.compat.v1.get_default_graph(), starting_op_names=['inputs'],
                                     output_op_names=['Relu_1'])
 
         # get input ops
@@ -432,17 +435,17 @@ class TestTfConnectedGraph(unittest.TestCase):
         PreLU
         """
 
-        tf.reset_default_graph()
+        tf.compat.v1.reset_default_graph()
         inputs = tf.keras.Input(shape=(1, 10, 10), name="inputs")
 
         x = tf.keras.layers.PReLU()(inputs)
         x = tf.keras.layers.ReLU()(x)
 
-        init = tf.global_variables_initializer()
-        sess = tf.Session()
+        init = tf.compat.v1.global_variables_initializer()
+        sess = tf.compat.v1.Session()
         sess.run(init)
 
-        conn_graph = ConnectedGraph(tf.get_default_graph(), starting_op_names=['inputs'],
+        conn_graph = ConnectedGraph(tf.compat.v1.get_default_graph(), starting_op_names=['inputs'],
                                     output_op_names=['re_lu/Relu'])
 
         self.assertEqual(3, len(conn_graph.get_all_ops()))
@@ -451,7 +454,7 @@ class TestTfConnectedGraph(unittest.TestCase):
     def test_model_with_simple_rnn_layer(self):
         """ Test connected graph construction on a model with simple RNN op """
         tf.compat.v1.reset_default_graph()
-        sess = tf.Session()
+        sess = tf.compat.v1.Session()
         with sess.graph.as_default():
             inputs = tf.keras.Input(shape=(3, 100))
 
@@ -462,7 +465,7 @@ class TestTfConnectedGraph(unittest.TestCase):
 
             init = tf.compat.v1.global_variables_initializer()
             sess.run(init)
-            # _ = tf.summary.FileWriter('./simple_rnn', sess.graph)
+            # _ = tf.compat.v1.summary.FileWriter('./simple_rnn', sess.graph)
 
         # construct a connected graph
         conn_graph = ConnectedGraph(sess.graph, ['input_1'], ['matmul0/Softmax'])
@@ -498,7 +501,7 @@ class TestTfConnectedGraph(unittest.TestCase):
     def test_model_with_simple_rnn_layer_relu(self):
         """ Test connected graph construction on a model with simple RNN op with relu activation """
         tf.compat.v1.reset_default_graph()
-        sess = tf.Session()
+        sess = tf.compat.v1.Session()
         with sess.graph.as_default():
             inputs = tf.keras.Input(shape=(3, 100))
 
@@ -508,7 +511,7 @@ class TestTfConnectedGraph(unittest.TestCase):
 
             init = tf.compat.v1.global_variables_initializer()
             sess.run(init)
-            # _ = tf.summary.FileWriter('./simple_rnn', sess.graph)
+            # _ = tf.compat.v1.summary.FileWriter('./simple_rnn', sess.graph)
 
         # construct a connected graph
         conn_graph = ConnectedGraph(sess.graph, ['input_1'], ['matmul0/Softmax'])
@@ -544,7 +547,7 @@ class TestTfConnectedGraph(unittest.TestCase):
     def test_model_with_simple_rnn_multiple_layers(self):
         """ Test connected graph construction on a model with multiple simple RNN layers """
         tf.compat.v1.reset_default_graph()
-        sess = tf.Session()
+        sess = tf.compat.v1.Session()
         with sess.graph.as_default():
             inputs = tf.keras.Input(shape=(3, 100))
 
@@ -556,7 +559,7 @@ class TestTfConnectedGraph(unittest.TestCase):
 
             init = tf.compat.v1.global_variables_initializer()
             sess.run(init)
-            # _ = tf.summary.FileWriter('./simple_rnn', sess.graph)
+            # _ = tf.compat.v1.summary.FileWriter('./simple_rnn', sess.graph)
 
         # construct a connected graph
         conn_graph = ConnectedGraph(sess.graph, ['input_1'], ['matmul0/Softmax'])
@@ -574,8 +577,8 @@ class TestTfConnectedGraph(unittest.TestCase):
     def test_model_with_lstm_layer_sigmoid(self):
         """ Test connected graph construction on a model with LSTM op with sigmoid activation """
 
-        tf.reset_default_graph()
-        sess = tf.Session()
+        tf.compat.v1.reset_default_graph()
+        sess = tf.compat.v1.Session()
         with sess.graph.as_default():
             inputs = tf.keras.Input(shape=(3, 100))
 
@@ -584,9 +587,9 @@ class TestTfConnectedGraph(unittest.TestCase):
             _ = tf.keras.layers.Dense(12, activation=tf.nn.softmax,
                                       name="matmul0")(x)
 
-            init = tf.global_variables_initializer()
+            init = tf.compat.v1.global_variables_initializer()
             sess.run(init)
-            # _ = tf.summary.FileWriter('./lstm_sigmoid', sess.graph)
+            # _ = tf.compat.v1.summary.FileWriter('./lstm_sigmoid', sess.graph)
 
         # construct a connected graph
         conn_graph = ConnectedGraph(sess.graph, ['input_1'], ['matmul0/Softmax'])
@@ -624,8 +627,8 @@ class TestTfConnectedGraph(unittest.TestCase):
 
     def test_model_with_basic_lstm_layer(self):
         """ Test connected graph construction on a model with LSTM op """
-        tf.reset_default_graph()
-        sess = tf.Session()
+        tf.compat.v1.reset_default_graph()
+        sess = tf.compat.v1.Session()
         with sess.graph.as_default():
             inputs = tf.keras.Input(shape=(3, 100))
 
@@ -634,9 +637,9 @@ class TestTfConnectedGraph(unittest.TestCase):
             _ = tf.keras.layers.Dense(12, activation=tf.nn.softmax,
                                       name="matmul0")(x)
 
-            init = tf.global_variables_initializer()
+            init = tf.compat.v1.global_variables_initializer()
             sess.run(init)
-            # _ = tf.summary.FileWriter('./lstm', sess.graph)
+            # _ = tf.compat.v1.summary.FileWriter('./lstm', sess.graph)
 
         # construct a connected graph
         conn_graph = ConnectedGraph(sess.graph, ['input_1'], ['matmul0/Softmax'])
@@ -700,8 +703,8 @@ class TestTfConnectedGraph(unittest.TestCase):
     def test_model_with_lstm_layer_time_major_true(self):
         """ Test connected graph construction on a model with LSTM time major true option"""
 
-        tf.reset_default_graph()
-        sess = tf.Session()
+        tf.compat.v1.reset_default_graph()
+        sess = tf.compat.v1.Session()
         with sess.graph.as_default():
             inputs = tf.keras.Input(shape=(3, 100))
 
@@ -715,9 +718,9 @@ class TestTfConnectedGraph(unittest.TestCase):
             _ = tf.keras.layers.Dense(12, activation=tf.nn.softmax,
                                       name="matmul0")(x)
 
-            init = tf.global_variables_initializer()
+            init = tf.compat.v1.global_variables_initializer()
             sess.run(init)
-            # _ = tf.summary.FileWriter('./lstm_time_major_true', sess.graph)
+            # _ = tf.compat.v1.summary.FileWriter('./lstm_time_major_true', sess.graph)
 
         # construct a connected graph
         conn_graph = ConnectedGraph(sess.graph, ['input_1'], ['matmul0/Softmax'])
@@ -737,8 +740,8 @@ class TestTfConnectedGraph(unittest.TestCase):
     def test_model_with_lstm_layer_deepspeech_time_major_true(self):
         """ Test connected graph construction on a model with stacked LSTM op """
 
-        tf.reset_default_graph()
-        sess = tf.Session()
+        tf.compat.v1.reset_default_graph()
+        sess = tf.compat.v1.Session()
         with sess.graph.as_default():
             inputs = tf.keras.Input(shape=(3, 100))
 
@@ -756,9 +759,9 @@ class TestTfConnectedGraph(unittest.TestCase):
             _ = tf.keras.layers.Dense(12, activation=tf.nn.softmax,
                                       name="matmul0")(x2)
 
-            init = tf.global_variables_initializer()
+            init = tf.compat.v1.global_variables_initializer()
             sess.run(init)
-            # _ = tf.summary.FileWriter('./lstm_deepspeech', sess.graph)
+            # _ = tf.compat.v1.summary.FileWriter('./lstm_deepspeech', sess.graph)
 
         # construct a connected graph
         conn_graph = ConnectedGraph(sess.graph, ['input_1'], ['matmul0/Softmax'])
@@ -778,8 +781,8 @@ class TestTfConnectedGraph(unittest.TestCase):
     def test_model_with_lstm_layer_deepspeech_time_major_true_sigmoid(self):
         """ Test connected graph construction on a model with stacked LSTM op in DeepSpeech model"""
 
-        tf.reset_default_graph()
-        sess = tf.Session()
+        tf.compat.v1.reset_default_graph()
+        sess = tf.compat.v1.Session()
         with sess.graph.as_default():
             inputs = tf.keras.Input(shape=(3, 100))
 
@@ -798,9 +801,9 @@ class TestTfConnectedGraph(unittest.TestCase):
             _ = tf.keras.layers.Dense(12, activation=tf.nn.softmax,
                                       name="matmul0")(x2)
 
-            init = tf.global_variables_initializer()
+            init = tf.compat.v1.global_variables_initializer()
             sess.run(init)
-            # _ = tf.summary.FileWriter('./lstm_deepspeech', sess.graph)
+            # _ = tf.compat.v1.summary.FileWriter('./lstm_deepspeech', sess.graph)
 
         # construct a connected graph
         conn_graph = ConnectedGraph(sess.graph, ['input_1'], ['matmul0/Softmax'])
@@ -819,8 +822,8 @@ class TestTfConnectedGraph(unittest.TestCase):
     def test_model_with_lstm_layer_deepspeech_time_major_false(self):
         """ Test connected graph construction on a model with LSTM op in DeepSpeech model"""
 
-        tf.reset_default_graph()
-        sess = tf.Session()
+        tf.compat.v1.reset_default_graph()
+        sess = tf.compat.v1.Session()
         with sess.graph.as_default():
             inputs = tf.keras.Input(shape=(3, 100))
 
@@ -837,9 +840,9 @@ class TestTfConnectedGraph(unittest.TestCase):
             _ = tf.keras.layers.Dense(12, activation=tf.nn.softmax,
                                       name="matmul0")(x2)
 
-            init = tf.global_variables_initializer()
+            init = tf.compat.v1.global_variables_initializer()
             sess.run(init)
-            # _ = tf.summary.FileWriter('./lstm_deepspeech', sess.graph)
+            # _ = tf.compat.v1.summary.FileWriter('./lstm_deepspeech', sess.graph)
 
         # construct a connected graph
         conn_graph = ConnectedGraph(sess.graph, ['input_1'], ['matmul0/Softmax'])
@@ -859,20 +862,20 @@ class TestTfConnectedGraph(unittest.TestCase):
     def test_simple_rnn_keras_single_timestep_with_placeholder_input(self):
         """ simple RNN layer with placeholder input type """
 
-        tf.reset_default_graph()
-        sess = tf.Session()
+        tf.compat.v1.reset_default_graph()
+        sess = tf.compat.v1.Session()
 
         with sess.graph.as_default():
             X_batch = np.random.random([32, 1, 8]).astype(np.float32)
-            X = tf.placeholder(tf.float32, [32, 1, 8], name='input')
+            X = tf.compat.v1.placeholder(tf.float32, [32, 1, 8], name='input')
             simple_rnn = tf.keras.layers.SimpleRNN(1)
             output = simple_rnn(X)
             _ = tf.keras.layers.Dense(12, activation=tf.nn.softmax,
                                       name="matmul0")(output)
 
-            init = tf.global_variables_initializer()
+            init = tf.compat.v1.global_variables_initializer()
             sess.run(init)
-            # _ = tf.summary.FileWriter('./test_simple_rnn_keras_single_timestep_with_placeholder_input', sess.graph)
+            # _ = tf.compat.v1.summary.FileWriter('./test_simple_rnn_keras_single_timestep_with_placeholder_input', sess.graph)
             sess.run(output, feed_dict={X: X_batch})
 
         # construct a connected graph
