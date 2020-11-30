@@ -39,7 +39,11 @@
 
 import unittest
 import numpy as np
+
+import os
 import tensorflow as tf
+tf.compat.v1.logging.set_verbosity(tf.logging.WARN)
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
 
 from aimet_common.connected_graph.connectedgraph import get_ordered_ops
 from aimet_tensorflow.examples.test_models import single_residual
@@ -53,15 +57,15 @@ class TestModuleReducer(unittest.TestCase):
     def test_downsample(self):
         """ Test utility for inserting downsample op """
 
-        tf.reset_default_graph()
+        tf.compat.v1.reset_default_graph()
         inputs = tf.keras.Input(shape=(2, 2, 3,))
 
         # Remove middle channel
         output = _insert_downsample_or_upsample_ops_if_needed(inputs, [1, 1, 1], [1, 0, 1])
         self.assertEqual([None, 2, 2, 2], output.shape.as_list())
 
-        with tf.Session() as sess:
-            random_input = tf.random_uniform(shape=(1, 2, 2, 3))
+        with tf.compat.v1.Session() as sess:
+            random_input = tf.random.uniform(shape=(1, 2, 2, 3))
             inp = random_input.eval(session=sess)
             inputs_eval = sess.run(inputs, feed_dict={inputs: inp})
             output_eval = sess.run(output, feed_dict={inputs: inp})
@@ -76,15 +80,15 @@ class TestModuleReducer(unittest.TestCase):
     def test_upsample(self):
         """ Test utility for inserting upsample op """
 
-        tf.reset_default_graph()
+        tf.compat.v1.reset_default_graph()
         inputs = tf.keras.Input(shape=(2, 2, 3,))
 
         # Insert channel in index position 1
         output = _insert_downsample_or_upsample_ops_if_needed(inputs, [1, 0, 1, 1], [1, 1, 1, 1])
         self.assertEqual([None, 2, 2, 4], output.shape.as_list())
 
-        with tf.Session() as sess:
-            random_input = tf.random_uniform(shape=(1, 2, 2, 3))
+        with tf.compat.v1.Session() as sess:
+            random_input = tf.random.uniform(shape=(1, 2, 2, 3))
             inp = random_input.eval(session=sess)
             inputs_eval = sess.run(inputs, feed_dict={inputs: inp})
             output_eval = sess.run(output, feed_dict={inputs: inp})
@@ -101,7 +105,7 @@ class TestModuleReducer(unittest.TestCase):
     def test_downsample_upsample_checks(self):
         """ Test various assert conditions in downsample/upsample utility """
 
-        tf.reset_default_graph()
+        tf.compat.v1.reset_default_graph()
         inputs = tf.keras.Input(shape=(2, 2, 4,))
 
         # Assert if parent mask and child mask are not the same sizes
@@ -122,8 +126,8 @@ class TestModuleReducer(unittest.TestCase):
 
     def test_get_ordered_operations(self):
         """ Test the creation of the ordered operations list """
-        tf.reset_default_graph()
-        sess = tf.Session()
+        tf.compat.v1.reset_default_graph()
+        sess = tf.compat.v1.Session()
         with sess.graph.as_default():
             _ = single_residual()
             conn_graph = ConnectedGraph(sess.graph, ["input_1"], ['Relu_2'])

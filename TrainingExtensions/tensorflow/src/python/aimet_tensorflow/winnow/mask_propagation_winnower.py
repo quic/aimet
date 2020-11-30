@@ -59,7 +59,7 @@ class MaskPropagationWinnower(aimetCommonMaskPropagationWinnower):
     each module's input channels identified to be winnowed.
     """
 
-    def __init__(self, sess: tf.Session, input_op_names: List[str], output_op_names: List[str],
+    def __init__(self, sess: tf.compat.v1.Session, input_op_names: List[str], output_op_names: List[str],
                  list_of_modules_to_winnow: List[Tuple[tf.Operation, List]] = None, reshape=True,
                  in_place=False, verbose=False):
         """

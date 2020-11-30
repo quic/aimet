@@ -55,16 +55,16 @@ class ModelCompressor:
     # pylint: disable=too-many-arguments
 
     @staticmethod
-    def compress_model(sess: tf.Session, working_dir: str, eval_callback: EvalFunction, eval_iterations,
+    def compress_model(sess: tf.compat.v1.Session, working_dir: str, eval_callback: EvalFunction, eval_iterations,
                        input_shape: Union[Tuple, List[Tuple]],
                        compress_scheme: CompressionScheme, cost_metric: CostMetric,
                        parameters: Union[SpatialSvdParameters,
                                          ChannelPruningParameters],
-                       trainer=None, visualization_url=None) -> Tuple[tf.Session, CompressionStats]:
+                       trainer=None, visualization_url=None) -> Tuple[tf.compat.v1.Session, CompressionStats]:
         """
         Compress a given model using the specified parameters
 
-        :param sess: Model, represented by a TF session, to compress
+        :param sess: Model, represented by a tf.compat.v1.Session, to compress
         :param working_dir: File path to save compressed TensorFlow meta file
         :param eval_callback:  Evaluation callback. Expected signature is evaluate(model, iterations, use_cuda).
                                Expected to return an accuracy metric.

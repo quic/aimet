@@ -120,11 +120,11 @@ class BiasCorrection:
     """
 
     @staticmethod
-    def _get_output_data(sess: tf.Session, input_op_names: List[str], output_op_name: str,
+    def _get_output_data(sess: tf.compat.v1.Session, input_op_names: List[str], output_op_name: str,
                          batch_data: Union[np.ndarray, Tuple[np.ndarray], List[np.ndarray]]) -> np.ndarray:
         """
         Function to get output values of a layer
-        :param sess: Tf session containing the layer to evaluate
+        :param sess: tf.compat.v1.Session containing the layer to evaluate
         :param input_op_names: List of names of input ops to the session graph
         :param output_op_name: Name of the output layer to evaluate
         :param batch_data: Batch of data to feed into model input
@@ -141,12 +141,12 @@ class BiasCorrection:
         return output_data
 
     @staticmethod
-    def _call_mo_correct_bias(corrected_model: tf.Session, layer_name: str,
+    def _call_mo_correct_bias(corrected_model: tf.compat.v1.Session, layer_name: str,
                               bias_correction: libpymo.BiasCorrection,
                               bias_shape: int):
         """
          helper to perform bias correction using cpp backend
-        :param corrected_model: active tensorflow session with corrected model as tf.Session
+        :param corrected_model: active tensorflow session with corrected model as tf.compat.v1.Session
         :param layer_name: name of the layer to be bias corrected
         :param bias_correction: bias correction inputs
         :param bias_shape: shape of bias associated with the layer
@@ -174,12 +174,12 @@ class BiasCorrection:
 
 
     @staticmethod
-    def _get_quantized_model(corrected_model: tf.Session, quant_params: QuantParams, input_op_names: List[str],
+    def _get_quantized_model(corrected_model: tf.compat.v1.Session, quant_params: QuantParams, input_op_names: List[str],
                              output_op_names: List[str], num_quant_samples: int, batch_size: int,
-                             data_set: tf.data.Dataset) -> tf.Session:
+                             data_set: tf.data.Dataset) -> tf.compat.v1.Session:
         """
          api to get quantized session
-        :param corrected_model: active tensorflow session with corrected model as tf.Session
+        :param corrected_model: active tensorflow session with corrected model as tf.compat.v1.Session
         :param quant_params: quantization params from user
         :param input_op_names: names of the input nodes of the given model
         :param output_op_names: names of the output nodes of the given model
@@ -188,7 +188,7 @@ class BiasCorrection:
         :return: session containing quantized model
         """
 
-        def bias_correction_callback(session: tf.Session, iterations: int):
+        def bias_correction_callback(session: tf.compat.v1.Session, iterations: int):
             dataset_samples_quant_itr = iter_first_x(data_set, iterations)
             output_ops = []
             for output_op_name in output_op_names:
@@ -219,12 +219,12 @@ class BiasCorrection:
 
     # pylint: disable=too-many-locals
     @staticmethod
-    def bias_correction_per_layer(reference_model: tf.Session,
-                                  corrected_model: tf.Session,
+    def bias_correction_per_layer(reference_model: tf.compat.v1.Session,
+                                  corrected_model: tf.compat.v1.Session,
                                   bias_correct_params: BiasCorrectionParams,
                                   layer_name_to_be_corrected: str,
                                   quant_params: QuantParams,
-                                  data_set: tf.data.Dataset) -> tf.Session:
+                                  data_set: tf.data.Dataset) -> tf.compat.v1.Session:
         """
          Helper function to perform empirical bias correction per layer.
 
@@ -330,7 +330,7 @@ class BiasCorrection:
     def _get_conv_linear_params(model, layer_to_be_corrected):
         """
         Extract weights and bias of given conv/linear layer
-        :param model: tf.Session type
+        :param model: tf.compat.v1.Session type
         :param layer_to_be_corrected: conv/linear layer as tf.Operation
         :return: bias, weight and quantized weights as TensorParamBiasCorrection types
         """
@@ -355,7 +355,7 @@ class BiasCorrection:
     def _get_bn_params(model, bn_layer) -> libpymo.BnParamsBiasCorr():
         """
         get bn params for bn based bias correction
-        :param model: tf.Session type
+        :param model: tf.compat.v1.Session type
         :param bn_layer: tf.Operation type
         :return: bn params as libpymo.BnParamsBiasCorr() type
         """
@@ -367,9 +367,9 @@ class BiasCorrection:
         return bn_params
 
     @staticmethod
-    def analytical_bias_correction_per_layer(corrected_model: tf.Session, layer: tf.Operation,
+    def analytical_bias_correction_per_layer(corrected_model: tf.compat.v1.Session, layer: tf.Operation,
                                              preceeding_bn_layer_info: ConvBnInfoType, quant_params: QuantParams,
-                                             is_first_conv: bool = False) -> tf.Session:
+                                             is_first_conv: bool = False) -> tf.compat.v1.Session:
         """
         Perform bn based bias correction (analytical bc).
 
@@ -454,7 +454,7 @@ class BiasCorrection:
                                           output_op_names: Union[List[str], str]):
         """
         uses searcher to choose convs/ linears with bn and activation info.
-        :param model: tf.Session type
+        :param model: tf.compat.v1.Session type
         :param start_op_names: list of strings with names of starting ops in the model
         :param output_op_names: List of output op names of the model, used to help ConnectedGraph determine valid ops
         (to ignore training ops for example).
@@ -488,7 +488,7 @@ class BiasCorrection:
         """
         Updates the conv op references saved in user passed in conv bn dictionary.
 
-        :param reference_model: active tf session for the model.
+        :param reference_model: active tf.compat.v1.Session for the model.
         :param conv_bn_dict: Dict of conv and bn with activation info
         :return: dict of conv and bn with updated conv references
 
@@ -502,14 +502,14 @@ class BiasCorrection:
         return conv_linears_with_bn_dict
 
     @staticmethod
-    def correct_bias(reference_model: tf.Session, bias_correct_params: BiasCorrectionParams,
+    def correct_bias(reference_model: tf.compat.v1.Session, bias_correct_params: BiasCorrectionParams,
                      quant_params: QuantParams, data_set: tf.data.Dataset,
                      conv_bn_dict: Union[Dict[tf.Operation, ConvBnInfoType], None] = None,
                      perform_only_empirical_bias_corr: bool = True):
         """
          Top level function for bias correction
 
-        :param reference_model: active tf session for the model to be corrected.
+        :param reference_model: active tf.compat.v1.Session for the model to be corrected.
         :param bias_correct_params: input params for bias correction
         :param quant_params: QuantParams type with params for quantization simulation for bias correction.
         :param data_set: input data set

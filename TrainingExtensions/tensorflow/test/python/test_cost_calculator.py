@@ -44,6 +44,9 @@ import shutil
 from decimal import Decimal
 
 import tensorflow as tf
+tf.compat.v1.logging.set_verbosity(tf.logging.WARN)
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
+
 from tensorflow.python.keras.models import Sequential
 from tensorflow.python.keras.layers import Reshape, MaxPool2D, Conv2D, Flatten, Dense
 
@@ -90,15 +93,15 @@ class TestTrainingExtensionsCostCalculator(unittest.TestCase):
         logger.debug(self.id())
 
         # data format NCHW
-        inp_tensor = tf.Variable(tf.random_normal([1, 1, 28, 28]))
-        filter_tensor = tf.Variable(tf.random_normal([5, 5, 1, 32]))
+        inp_tensor = tf.Variable(tf.random.normal([1, 1, 28, 28]))
+        filter_tensor = tf.Variable(tf.random.normal([5, 5, 1, 32]))
         conv1 = tf.nn.conv2d(input=inp_tensor, filter=filter_tensor, strides=[1, 1, 1, 1], padding='SAME',
                              data_format="NCHW", name='Conv2D_1')
 
-        conv_op1 = tf.get_default_graph().get_operation_by_name('Conv2D_1')
+        conv_op1 = tf.compat.v1.get_default_graph().get_operation_by_name('Conv2D_1')
 
-        sess = tf.Session()
-        sess.run(tf.global_variables_initializer())
+        sess = tf.compat.v1.Session()
+        sess.run(tf.compat.v1.global_variables_initializer())
 
         shape = conv_op1.outputs[0].get_shape().as_list()
         # data format NCHW
@@ -111,21 +114,21 @@ class TestTrainingExtensionsCostCalculator(unittest.TestCase):
         self.assertEqual(32 * 1 * 5 * 5, cost1.memory)
         self.assertEqual(32 * 1 * 5 * 5 * 28 * 28, cost1.mac)
 
-        tf.reset_default_graph()
+        tf.compat.v1.reset_default_graph()
         sess.close()
 
         # second conv2 op with strides
         # data format NCHW
-        inp_tensor = tf.Variable(tf.random_normal([1, 32, 28, 28]))
-        filter_tensor = tf.Variable(tf.random_normal([5, 5, 32, 64]))
+        inp_tensor = tf.Variable(tf.random.normal([1, 32, 28, 28]))
+        filter_tensor = tf.Variable(tf.random.normal([5, 5, 32, 64]))
 
         conv2 = tf.nn.conv2d(input=inp_tensor, filter=filter_tensor, strides=[1, 1, 2, 2], padding='SAME',
                              data_format="NCHW", name='Conv2D_2')
 
-        conv_op2 = tf.get_default_graph().get_operation_by_name('Conv2D_2')
+        conv_op2 = tf.compat.v1.get_default_graph().get_operation_by_name('Conv2D_2')
 
-        sess = tf.Session()
-        sess.run(tf.global_variables_initializer())
+        sess = tf.compat.v1.Session()
+        sess.run(tf.compat.v1.global_variables_initializer())
 
         shape = conv_op2.outputs[0].get_shape().as_list()
         # data format NCHW
@@ -138,22 +141,22 @@ class TestTrainingExtensionsCostCalculator(unittest.TestCase):
         self.assertEqual(64 * 32 * 5 * 5, cost1.memory)
         self.assertEqual(64 * 32 * 5 * 5 * 14 * 14, cost1.mac)
 
-        tf.reset_default_graph()
+        tf.compat.v1.reset_default_graph()
         sess.close()
 
     def test_total_model_cost(self):
 
-        # create tf.Session and initialize the weights and biases with zeros
-        config = tf.ConfigProto()
+        # create tf.compat.v1.Session and initialize the weights and biases with zeros
+        config = tf.compat.v1.ConfigProto()
         config.gpu_options.allow_growth = True
 
         # create session with graph
-        sess = tf.Session(graph=tf.Graph(), config=config)
+        sess = tf.compat.v1.Session(graph=tf.Graph(), config=config)
 
         with sess.graph.as_default():
             # by default, model will be constructed in default graph
             _ = mnist_tf_model.create_model(data_format='channels_last')
-            sess.run(tf.global_variables_initializer())
+            sess.run(tf.compat.v1.global_variables_initializer())
 
         layer_database = LayerDatabase(model=sess, input_shape=(1, 28, 28, 1), working_dir=None)
 
@@ -163,7 +166,7 @@ class TestTrainingExtensionsCostCalculator(unittest.TestCase):
         self.assertEqual(800 + 51200 + 3211264 + 10240, network_cost.memory)
         self.assertEqual(627200 + 10035200 + 3211264 + 10240, network_cost.mac)
 
-        tf.reset_default_graph()
+        tf.compat.v1.reset_default_graph()
         sess.close()
         # delete temp directory
         shutil.rmtree(str('./temp_meta/'))
@@ -174,15 +177,15 @@ class TestTrainingExtensionsSpatialSvdCostCalculator(unittest.TestCase):
     def test_calculate_spatial_svd_cost(self):
 
         # data format NCHW
-        inp_tensor = tf.Variable(tf.random_normal([1, 32, 28, 28]))
-        filter_tensor = tf.Variable(tf.random_normal([5, 5, 32, 64]))
+        inp_tensor = tf.Variable(tf.random.normal([1, 32, 28, 28]))
+        filter_tensor = tf.Variable(tf.random.normal([5, 5, 32, 64]))
         conv = tf.nn.conv2d(input=inp_tensor, filter=filter_tensor, strides=[1, 1, 1, 1], padding='SAME',
                             data_format="NCHW", name='Conv2D')
 
-        conv_op = tf.get_default_graph().get_operation_by_name('Conv2D')
+        conv_op = tf.compat.v1.get_default_graph().get_operation_by_name('Conv2D')
 
-        sess = tf.Session()
-        sess.run(tf.global_variables_initializer())
+        sess = tf.compat.v1.Session()
+        sess.run(tf.compat.v1.global_variables_initializer())
 
         shape = conv_op.outputs[0].get_shape().as_list()
         # data format NCHW
@@ -212,21 +215,21 @@ class TestTrainingExtensionsSpatialSvdCostCalculator(unittest.TestCase):
 
             self.assertTrue(math.isclose(compressed_cost.mac/original_cost.mac, comp_ratio, abs_tol=0.01))
 
-        tf.reset_default_graph()
+        tf.compat.v1.reset_default_graph()
         sess.close()
 
     def test_calculate_spatial_svd_cost_with_stride(self):
 
         # data format : NHWC
-        inp_tensor = tf.Variable(tf.random_normal([1, 28, 28, 32]))
-        filter_tensor = tf.Variable(tf.random_normal([5, 5, 32, 64]))
+        inp_tensor = tf.Variable(tf.random.normal([1, 28, 28, 32]))
+        filter_tensor = tf.Variable(tf.random.normal([5, 5, 32, 64]))
         conv = tf.nn.conv2d(input=inp_tensor, filter=filter_tensor, strides=[1, 2, 2, 1], padding='SAME',
                             data_format="NHWC", name='Conv2D')
 
-        conv_op = tf.get_default_graph().get_operation_by_name('Conv2D')
+        conv_op = tf.compat.v1.get_default_graph().get_operation_by_name('Conv2D')
 
-        sess = tf.Session()
-        sess.run(tf.global_variables_initializer())
+        sess = tf.compat.v1.Session()
+        sess.run(tf.compat.v1.global_variables_initializer())
 
         shape = conv_op.outputs[0].get_shape().as_list()
         # data format : NHWC
@@ -242,22 +245,22 @@ class TestTrainingExtensionsSpatialSvdCostCalculator(unittest.TestCase):
         self.assertEqual(10035200, original_cost.mac)
         self.assertEqual(5017600, compressed_cost.mac)
 
-        tf.reset_default_graph()
+        tf.compat.v1.reset_default_graph()
         sess.close()
 
     def test_calculate_spatial_svd_cost_all_layers(self):
 
-        # create tf.Session and initialize the weights and biases with zeros
-        config = tf.ConfigProto()
+        # create tf.compat.v1.Session and initialize the weights and biases with zeros
+        config = tf.compat.v1.ConfigProto()
         config.gpu_options.allow_growth = True
 
         # create session with graph
-        sess = tf.Session(graph=tf.Graph(), config=config)
+        sess = tf.compat.v1.Session(graph=tf.Graph(), config=config)
 
         with sess.graph.as_default():
             # by default, model will be constructed in default graph
             _ = mnist_tf_model.create_model(data_format='channels_last')
-            sess.run(tf.global_variables_initializer())
+            sess.run(tf.compat.v1.global_variables_initializer())
 
         layer_database = LayerDatabase(model=sess, input_shape=(1, 28, 28, 1), working_dir=None)
 
@@ -278,7 +281,7 @@ class TestTrainingExtensionsSpatialSvdCostCalculator(unittest.TestCase):
 
         self.assertEqual(8466464, compressed_cost.mac)
 
-        tf.reset_default_graph()
+        tf.compat.v1.reset_default_graph()
         sess.close()
         # delete temp directory
         shutil.rmtree(str('./temp_meta/'))
@@ -288,17 +291,17 @@ class TestTrainingExtensionsChannelPruningCostCalculator(unittest.TestCase):
 
     def test_calculate_channel_pruning_cost_all_layers(self):
 
-        config = tf.ConfigProto()
+        config = tf.compat.v1.ConfigProto()
         config.gpu_options.allow_growth = True
 
         # create session with graph
-        sess = tf.Session(graph=tf.Graph(), config=config)
+        sess = tf.compat.v1.Session(graph=tf.Graph(), config=config)
 
         with sess.graph.as_default():
             # model will be constructed in default graph
             _ = mnist(data_format='channels_last')
             # initialize the weights and biases with appropriate initializer
-            sess.run(tf.global_variables_initializer())
+            sess.run(tf.compat.v1.global_variables_initializer())
 
         meta_path = str('./temp_working_dir/')
         if not os.path.exists(meta_path):
@@ -347,16 +350,16 @@ class TestTrainingExtensionsChannelPruningCostCalculator(unittest.TestCase):
         test compressed model cost using two layers
         :return:
         """
-        config = tf.ConfigProto()
+        config = tf.compat.v1.ConfigProto()
         config.gpu_options.allow_growth = True
 
         # create session with graph
-        sess = tf.Session(graph=tf.Graph(), config=config)
+        sess = tf.compat.v1.Session(graph=tf.Graph(), config=config)
 
         with sess.graph.as_default():
             # model will be constructed in default graph
             test_models.single_residual()
-            init = tf.global_variables_initializer()
+            init = tf.compat.v1.global_variables_initializer()
 
         # initialize the weights and biases with appropriate initializer
         sess.run(init)

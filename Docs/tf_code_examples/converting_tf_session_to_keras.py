@@ -77,7 +77,7 @@ def get_sess_from_keras_model():
     tf.keras.backend.clear_session()
     tf.keras.backend.set_learning_phase(1)
     _ = MobileNet(weights=None, input_shape=(224, 224, 3))
-    sess = tf.keras.backend.get_session()
+    sess = tf.compat.v1.keras.backend.get_session()
     return sess
 
 

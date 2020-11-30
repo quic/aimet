@@ -36,7 +36,11 @@
 import pytest
 import unittest
 import numpy as np
+
+import os
 import tensorflow as tf
+tf.compat.v1.logging.set_verbosity(tf.logging.WARN)
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
 
 import libpymo
 
@@ -49,15 +53,15 @@ class TestTrainingExtensionsQcQuantizeOp(unittest.TestCase):
         """
         zero_out_module = tf.load_op_library('libaimet_tf_ops.so')
         graph = tf.Graph()
-        config = tf.ConfigProto(log_device_placement=False)
-        sess = tf.Session(graph=graph, config=config)
+        config = tf.compat.v1.ConfigProto(log_device_placement=False)
+        sess = tf.compat.v1.Session(graph=graph, config=config)
         bitwidth = 8
         use_symm_encoding = True
 
         with graph.as_default():
             # place holder for the input
             with tf.device("/device:CPU:0"):
-                inp = tf.placeholder(tf.float32, shape=[10], name='input')
+                inp = tf.compat.v1.placeholder(tf.float32, shape=[10], name='input')
                 tensor_quantizer = libpymo.TensorQuantizer(libpymo.QuantizationMode.QUANTIZATION_TF_ENHANCED,
                                                            libpymo.RoundingMode.ROUND_NEAREST)
                 tensor_quantizer_val = libpymo.PtrToInt64(tensor_quantizer)
@@ -117,14 +121,14 @@ class TestTrainingExtensionsQcQuantizeOp(unittest.TestCase):
         """
         zero_out_module = tf.load_op_library('libaimet_tf_ops.so')
         graph = tf.Graph()
-        config = tf.ConfigProto(log_device_placement=False)
-        sess = tf.Session(graph=graph, config=config)
+        config = tf.compat.v1.ConfigProto(log_device_placement=False)
+        sess = tf.compat.v1.Session(graph=graph, config=config)
         bitwidth = 8
         use_symm_encoding = False
         with graph.as_default():
             # place holder for the input
             with tf.device("/device:CPU:0"):
-                inp = tf.placeholder(tf.float32, shape=[10], name='input')
+                inp = tf.compat.v1.placeholder(tf.float32, shape=[10], name='input')
                 tensor_quantizer = libpymo.TensorQuantizer(libpymo.QuantizationMode.QUANTIZATION_TF_ENHANCED,
                                                            libpymo.RoundingMode.ROUND_NEAREST)
                 tensor_quantizer_val = libpymo.PtrToInt64(tensor_quantizer)
@@ -174,13 +178,13 @@ class TestTrainingExtensionsQcQuantizeOp(unittest.TestCase):
         """
         zero_out_module = tf.load_op_library('libaimet_tf_ops.so')
         graph = tf.Graph()
-        config = tf.ConfigProto(log_device_placement=False)
-        sess = tf.Session(graph=graph, config=config)
+        config = tf.compat.v1.ConfigProto(log_device_placement=False)
+        sess = tf.compat.v1.Session(graph=graph, config=config)
         bitwidth = 8
         use_symm_encoding = False
         with graph.as_default():
 
-            inp = tf.placeholder(tf.float32, shape=[10], name='input')
+            inp = tf.compat.v1.placeholder(tf.float32, shape=[10], name='input')
             tensor_quantizer = libpymo.TensorQuantizer(libpymo.QuantizationMode.QUANTIZATION_TF_ENHANCED,
                                                        libpymo.RoundingMode.ROUND_NEAREST)
             tensor_quantizer_val = libpymo.PtrToInt64(tensor_quantizer)
@@ -435,10 +439,10 @@ class TestTrainingExtensionsQcQuantizeOp(unittest.TestCase):
 
         zero_out_module = tf.load_op_library('libaimet_tf_ops.so')
         graph = tf.Graph()
-        config = tf.ConfigProto(log_device_placement=False)
-        sess = tf.Session(graph=graph, config=config)
+        config = tf.compat.v1.ConfigProto(log_device_placement=False)
+        sess = tf.compat.v1.Session(graph=graph, config=config)
         with graph.as_default():
-            inp = tf.placeholder(tf.float32, shape=[2, 2], name='input')
+            inp = tf.compat.v1.placeholder(tf.float32, shape=[2, 2], name='input')
             tensor_quantizer = libpymo.TensorQuantizer(libpymo.QuantizationMode.QUANTIZATION_TF_ENHANCED,
                                                        libpymo.RoundingMode.ROUND_NEAREST)
             tensor_quantizer_val = libpymo.PtrToInt64(tensor_quantizer)

@@ -44,6 +44,8 @@ import os
 import signal
 
 import tensorflow as tf
+tf.compat.v1.logging.set_verbosity(tf.logging.WARN)
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
 
 from aimet_common.defs import CostMetric, LayerCompRatioPair
 from aimet_common.cost_calculator import SpatialSvdCostCalculator
@@ -64,17 +66,17 @@ class TestTrainingExtensionsCompRatioSelect(unittest.TestCase):
         pruner = unittest.mock.MagicMock()
         eval_func = unittest.mock.MagicMock()
 
-        # create tf.Session and initialize the weights and biases with zeros
-        config = tf.ConfigProto()
+        # create tf.compat.v1.Session and initialize the weights and biases with zeros
+        config = tf.compat.v1.ConfigProto()
         config.gpu_options.allow_growth = True
 
         # create session with graph
-        sess = tf.Session(graph=tf.Graph(), config=config)
+        sess = tf.compat.v1.Session(graph=tf.Graph(), config=config)
 
         with sess.graph.as_default():
             # by default, model will be constructed in default graph
             _ = mnist_tf_model.create_model(data_format='channels_last')
-            sess.run(tf.global_variables_initializer())
+            sess.run(tf.compat.v1.global_variables_initializer())
 
         # Create a layer database
         layer_db = LayerDatabase(model=sess, input_shape=(1, 28, 28, 1), working_dir=None)
@@ -105,7 +107,7 @@ class TestTrainingExtensionsCompRatioSelect(unittest.TestCase):
 
         self.assertEqual(90, eval_dict[Decimal('0.1')])
 
-        tf.reset_default_graph()
+        tf.compat.v1.reset_default_graph()
         sess.close()
 
         bokeh_session.server_session.close("test complete")
@@ -118,17 +120,17 @@ class TestTrainingExtensionsCompRatioSelect(unittest.TestCase):
         eval_func.side_effect = [90, 80, 70, 60, 50, 40, 30, 20, 10,
                                  91, 81, 71, 61, 51, 41, 31, 21, 11]
 
-        # create tf.Session and initialize the weights and biases with zeros
-        config = tf.ConfigProto()
+        # create tf.compat.v1.Session and initialize the weights and biases with zeros
+        config = tf.compat.v1.ConfigProto()
         config.gpu_options.allow_growth = True
 
         # create session with graph
-        sess = tf.Session(graph=tf.Graph(), config=config)
+        sess = tf.compat.v1.Session(graph=tf.Graph(), config=config)
 
         with sess.graph.as_default():
             # by default, model will be constructed in default graph
             _ = mnist_tf_model.create_model(data_format='channels_last')
-            sess.run(tf.global_variables_initializer())
+            sess.run(tf.compat.v1.global_variables_initializer())
 
         # Create a layer database
         layer_db = LayerDatabase(model=sess, input_shape=(1, 28, 28, 1), working_dir=None)
@@ -157,7 +159,7 @@ class TestTrainingExtensionsCompRatioSelect(unittest.TestCase):
 
         self.assertEqual(11, eval_dict['conv2d_1/Conv2D'][Decimal('0.9')])
 
-        tf.reset_default_graph()
+        tf.compat.v1.reset_default_graph()
         sess.close()
 
         bokeh_session.server_session.close("test complete")
@@ -170,17 +172,17 @@ class TestTrainingExtensionsCompRatioSelect(unittest.TestCase):
         eval_func.side_effect = [90, 80, 70, 60, 50, 40, 30, 20, 10,
                                  91, 81, 71, 61, 51, 41, 31, 21, 11]
 
-        # create tf.Session and initialize the weights and biases with zeros
-        config = tf.ConfigProto()
+        # create tf.compat.v1.Session and initialize the weights and biases with zeros
+        config = tf.compat.v1.ConfigProto()
         config.gpu_options.allow_growth = True
 
         # create session with graph
-        sess = tf.Session(graph=tf.Graph(), config=config)
+        sess = tf.compat.v1.Session(graph=tf.Graph(), config=config)
 
         with sess.graph.as_default():
             # by default, model will be constructed in default graph
             _ = mnist_tf_model.create_model(data_format='channels_last')
-            sess.run(tf.global_variables_initializer())
+            sess.run(tf.compat.v1.global_variables_initializer())
 
         # Create a layer database
         layer_db = LayerDatabase(model=sess, input_shape=(1, 28, 28, 1), working_dir=None)
@@ -211,7 +213,7 @@ class TestTrainingExtensionsCompRatioSelect(unittest.TestCase):
         self.assertEqual(51, dict['conv2d_1/Conv2D'][Decimal('0.5')])
         self.assertEqual(21, dict['conv2d_1/Conv2D'][Decimal('0.8')])
 
-        tf.reset_default_graph()
+        tf.compat.v1.reset_default_graph()
         sess.close()
 
         bokeh_session.server_session.close("test complete")
@@ -247,15 +249,15 @@ class TestTrainingExtensionsCompRatioSelect(unittest.TestCase):
                             }
 
         # data format : NHWC
-        inp_tensor = tf.Variable(tf.random_normal([1, 28, 28, 32]))
-        filter_tensor = tf.Variable(tf.random_normal([5, 5, 32, 64]))
+        inp_tensor = tf.Variable(tf.random.normal([1, 28, 28, 32]))
+        filter_tensor = tf.Variable(tf.random.normal([5, 5, 32, 64]))
         conv = tf.nn.conv2d(input=inp_tensor, filter=filter_tensor, strides=[1, 2, 2, 1], padding='SAME',
                             data_format="NHWC", name='layer2')
 
-        conv_op = tf.get_default_graph().get_operation_by_name('layer2')
+        conv_op = tf.compat.v1.get_default_graph().get_operation_by_name('layer2')
 
-        sess = tf.Session()
-        sess.run(tf.global_variables_initializer())
+        sess = tf.compat.v1.Session()
+        sess.run(tf.compat.v1.global_variables_initializer())
 
         # output shape in NCHW format
         output_shape = conv_op.outputs[0].shape
@@ -278,7 +280,7 @@ class TestTrainingExtensionsCompRatioSelect(unittest.TestCase):
                                                                          layer2)
         self.assertEqual(None, comp_ratio)
 
-        tf.reset_default_graph()
+        tf.compat.v1.reset_default_graph()
         sess.close()
 
     def test_select_per_layer_comp_ratios(self):
@@ -292,17 +294,17 @@ class TestTrainingExtensionsCompRatioSelect(unittest.TestCase):
         eval_func.side_effect = [10, 20, 30, 40, 50, 60, 70, 80, 90,
                                  11, 21, 31, 35, 40, 45, 50, 55, 60]
 
-        # create tf.Session and initialize the weights and biases with zeros
-        config = tf.ConfigProto()
+        # create tf.compat.v1.Session and initialize the weights and biases with zeros
+        config = tf.compat.v1.ConfigProto()
         config.gpu_options.allow_growth = True
 
         # create session with graph
-        sess = tf.Session(graph=tf.Graph(), config=config)
+        sess = tf.compat.v1.Session(graph=tf.Graph(), config=config)
 
         with sess.graph.as_default():
             # by default, model will be constructed in default graph
             _ = mnist_tf_model.create_model(data_format='channels_last')
-            sess.run(tf.global_variables_initializer())
+            sess.run(tf.compat.v1.global_variables_initializer())
 
         # Create a layer database
         layer_db = LayerDatabase(model=sess, input_shape=(1, 28, 28, 1), working_dir=None)
@@ -379,7 +381,7 @@ class TestTrainingExtensionsCompRatioSelect(unittest.TestCase):
         for pair in layer_comp_ratio_list:
             print(pair)
 
-        tf.reset_default_graph()
+        tf.compat.v1.reset_default_graph()
         sess.close()
 
         bokeh_session.server_session.close("test complete")
@@ -395,17 +397,17 @@ class TestTrainingExtensionsCompRatioSelect(unittest.TestCase):
         rounding_algo.round.side_effect = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9,
                                            0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]
 
-        # create tf.Session and initialize the weights and biases with zeros
-        config = tf.ConfigProto()
+        # create tf.compat.v1.Session and initialize the weights and biases with zeros
+        config = tf.compat.v1.ConfigProto()
         config.gpu_options.allow_growth = True
 
         # create session with graph
-        sess = tf.Session(graph=tf.Graph(), config=config)
+        sess = tf.compat.v1.Session(graph=tf.Graph(), config=config)
 
         with sess.graph.as_default():
             # by default, model will be constructed in default graph
             _ = mnist_tf_model.create_model(data_format='channels_last')
-            sess.run(tf.global_variables_initializer())
+            sess.run(tf.compat.v1.global_variables_initializer())
 
         # Create a layer database
         layer_db = LayerDatabase(model=sess, input_shape=(1, 28, 28, 1), working_dir=None)
@@ -444,7 +446,7 @@ class TestTrainingExtensionsCompRatioSelect(unittest.TestCase):
         for pair in layer_comp_ratio_list:
             print(pair)
 
-        tf.reset_default_graph()
+        tf.compat.v1.reset_default_graph()
         sess.close()
 
         bokeh_session.server_session.close("test complete")

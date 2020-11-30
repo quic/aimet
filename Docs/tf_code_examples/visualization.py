@@ -49,7 +49,7 @@ def visualizing_weight_ranges_for_single_layer():
     # load a model
     tf.keras.backend.clear_session()
     _ = ResNet50(weights='imagenet', input_shape=(224, 224, 3))
-    sess = tf.keras.backend.get_session()
+    sess = tf.compat.v1.keras.backend.get_session()
 
     with sess.as_default():
         # Getting a layer for visualizaing its weight ranges
@@ -66,7 +66,7 @@ def visualizing_relative_weight_ranges_for_single_layer():
     # load a model
     tf.keras.backend.clear_session()
     _ = ResNet50(weights='imagenet', input_shape=(224, 224, 3))
-    sess = tf.keras.backend.get_session()
+    sess = tf.compat.v1.keras.backend.get_session()
 
     with sess.as_default():
         # Getting a layer for visualizaing its weight ranges

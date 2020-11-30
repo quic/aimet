@@ -46,25 +46,25 @@ import tensorflow as tf
 from aimet_common.defs import EvalFunction
 
 
-def save_model_to_meta(model: tf.Session, meta_path: str):
+def save_model_to_meta(model: tf.compat.v1.Session, meta_path: str):
     """
     Utility function to save a graph
-    :param model: TF session
+    :param model: tf.compat.v1.Session
     :param meta_path: path to meta file
     :return:
     """
 
     with model.graph.as_default():
-        saver = tf.train.Saver()
+        saver = tf.compat.v1.train.Saver()
 
     saver.save(sess=model, save_path=meta_path)
 
 
-def load_model_from_meta(meta_path, checkpoint_path=None) -> tf.Session:
+def load_model_from_meta(meta_path, checkpoint_path=None) -> tf.compat.v1.Session:
     """
     Utility function to load graph from meta file
     :param meta_path: path to meta file
-    :return: tf.Session
+    :return: tf.compat.v1.Session
     """
 
     if not checkpoint_path:
@@ -72,20 +72,20 @@ def load_model_from_meta(meta_path, checkpoint_path=None) -> tf.Session:
 
     # Grow GPU memory as needed at the cost of fragmentation.
 
-    config = tf.ConfigProto()
+    config = tf.compat.v1.ConfigProto()
     config.gpu_options.allow_growth = True  # pylint: disable=no-member
 
-    sess = tf.Session(graph=tf.Graph(), config=config)
+    sess = tf.compat.v1.Session(graph=tf.Graph(), config=config)
 
     with sess.graph.as_default():
         # open the graph and restore the parameters
-        saver = tf.train.import_meta_graph(meta_path)
+        saver = tf.compat.v1.train.import_meta_graph(meta_path)
 
     saver.restore(sess, checkpoint_path)
     return sess
 
 
-def save_and_load_graph(meta_path: str, sess: tf.Session) -> tf.Session:
+def save_and_load_graph(meta_path: str, sess: tf.compat.v1.Session) -> tf.compat.v1.Session:
     """
     saves and loads a graph and returns the new session obtained.
     :param meta_path: path to save the file
@@ -147,8 +147,8 @@ def wrapper_func(eval_func: EvalFunction):
         # convert to list to update arg
         args = list(args)
 
-        # if it's empty or first arg not of type tf.Session, raise error message
-        if not args or not isinstance(args[0], tf.Session):
+        # if it's empty or first arg not of type tf.compat.v1.Session, raise error message
+        if not args or not isinstance(args[0], tf.compat.v1.Session):
             raise ValueError('First argument to eval function should be Session!')
 
         # In TF after making changes to the graph you must save and reload, then evaluate

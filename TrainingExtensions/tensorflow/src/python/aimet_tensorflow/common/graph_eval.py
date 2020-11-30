@@ -53,17 +53,17 @@ def initialize_uninitialized_vars(sess):
     However, in pre-trained graphs we don't want to reinitialize variables that are already
     which would overwrite the values obtained during training. Therefore search for all
     uninitialized variables and initialize ONLY those variables.
-    :param sess: TF session
+    :param sess: tf.compat.v1.Session
     :return:
     """
     from itertools import compress
-    global_vars = tf.global_variables()
-    is_not_initialized = sess.run([~(tf.is_variable_initialized(var)) for var in global_vars])
+    global_vars = tf.compat.v1.global_variables()
+    is_not_initialized = sess.run([~(tf.compat.v1.is_variable_initialized(var)) for var in global_vars])
     uninitialized_vars = list(compress(global_vars, is_not_initialized))
 
     if uninitialized_vars:
         log.info('Initializing uninitialized variables')
-        sess.run(tf.variables_initializer(uninitialized_vars))
+        sess.run(tf.compat.v1.variables_initializer(uninitialized_vars))
 
 
 def default_eval_func(data):

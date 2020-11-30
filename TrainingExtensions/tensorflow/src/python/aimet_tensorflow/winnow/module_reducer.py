@@ -71,7 +71,7 @@ class ReducedInfo:
 class ModuleReducer(aimet_common.winnow.module_reducer.ModuleReducer):
     """ Class responsible for reducing TensorFlow modules. """
 
-    def __init__(self, conn_graph: ConnectedGraph, sess: tf.Session, using_cuda: bool, reshape: bool,
+    def __init__(self, conn_graph: ConnectedGraph, sess: tf.compat.v1.Session, using_cuda: bool, reshape: bool,
                  op_to_mask_dict: dict):
         """
         ModuleReducer initialization.
@@ -89,7 +89,7 @@ class ModuleReducer(aimet_common.winnow.module_reducer.ModuleReducer):
         self._reduced_modules = {}
         self._reduced_op_info = {}
 
-    def reduce_modules(self, _=None) -> (tf.Session, Dict[str, Tuple[tf.Operation, Mask]]):
+    def reduce_modules(self, _=None) -> (tf.compat.v1.Session, Dict[str, Tuple[tf.Operation, Mask]]):
         """
         For the Ops in the list,  reduce the corresponding modules.
         Reduce includes reducing the parameter tensors associated with the module

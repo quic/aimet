@@ -47,19 +47,19 @@ from aimet_tensorflow.common import tfrecord_generator as tf_gen
 class Generator_Example(unittest.TestCase):
 
     def test_generator(self):
-        # create tf.Session and initialize the weights
-        config = tf.ConfigProto()
+        # create tf.compat.v1.Session and initialize the weights
+        config = tf.compat.v1.ConfigProto()
         config.gpu_options.allow_growth = True
-        sess = tf.Session(config=config)
+        sess = tf.compat.v1.Session(config=config)
 
         # Allocate the generator you wish to use to provide the network with data
         parser = tf_gen.MnistParser(batch_size=100, data_inputs=['reshape_input'])
         generator = tf_gen.TfRecordGenerator(tfrecords=[os.path.join('data', 'mnist', 'test.tfrecords')],
                                              parser=parser)
 
-        saver = tf.train.import_meta_graph(os.path.join('models', 'mnist_save.meta'))
+        saver = tf.compat.v1.train.import_meta_graph(os.path.join('models', 'mnist_save.meta'))
         saver.restore(sess, os.path.join('models', 'mnist_save'))
-        graph = tf.get_default_graph()
+        graph = tf.compat.v1.get_default_graph()
 
         # Get the input nodes
         data_names = generator.get_data_inputs()

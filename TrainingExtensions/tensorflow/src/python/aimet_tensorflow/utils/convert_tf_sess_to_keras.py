@@ -41,11 +41,11 @@ from typing import List, Tuple
 import tensorflow as tf
 
 
-def save_tf_session_single_gpu(sess: tf.Session(), path: 'str', input_tensor: 'str', output_tensor: 'str'):
+def save_tf_session_single_gpu(sess: tf.compat.v1.Session(), path: 'str', input_tensor: 'str', output_tensor: 'str'):
     """
     Saves TF session, meta graph and variables in the provided path
 
-    :param sess: Input: tf.Session
+    :param sess: Input: tf.compat.v1.Session
     :param path: Path to save the session
     :param input_tensor: Name of starting op to the given graph
     :param output_tensor: Name of output op of the graph
@@ -55,7 +55,7 @@ def save_tf_session_single_gpu(sess: tf.Session(), path: 'str', input_tensor: 's
 
     # Initilzing the given Tensorflow session
     with sess.graph.as_default():
-        init = tf.global_variables_initializer()
+        init = tf.compat.v1.global_variables_initializer()
         sess.run(init)
 
     # Getting the input and output tensors of the graph using provided names
@@ -135,14 +135,14 @@ def save_as_tf_module_multi_gpu(loading_path: 'str', saving_path: 'str', compres
 
     def export():
         tf.keras.backend.clear_session()
-        with tf.keras.backend.get_session() as sess:
+        with tf.compat.v1.keras.backend.get_session() as sess:
 
             fn = tf.wrap_function(trace_model, signature=[tf.TensorSpec((None, input_shape[0], input_shape[1],
                                                                          input_shape[2]), tf.float32)])
             train_fn = fn.prune(feeds=fn.inputs[0], fetches=fn.outputs[0])
             obj = tf.Module()
             obj.variables_list = list(fn.graph.variables)
-            sess.run(tf.global_variables_initializer())
+            sess.run(tf.compat.v1.global_variables_initializer())
             tf.saved_model.save(obj, saving_path, {'train': train_fn, 'serving_default': train_fn})
 
     export()

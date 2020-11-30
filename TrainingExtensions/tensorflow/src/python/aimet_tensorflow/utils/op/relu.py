@@ -44,10 +44,10 @@ from aimet_common.utils import AimetLogger
 logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Utils)
 
 
-def replace_relu6_with_relu(sess: tf.Session, relu6_op: tf.Operation):
+def replace_relu6_with_relu(sess: tf.compat.v1.Session, relu6_op: tf.Operation):
     """
     replaces existing Relu6 op with a Relu.
-    :param sess : active TF session
+    :param sess : active tf.compat.v1.Session
     :param relu6_op: Relu6 op to be replaced with Relu
     :return:
     """

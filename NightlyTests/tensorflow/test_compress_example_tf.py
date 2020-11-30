@@ -123,11 +123,11 @@ def imagenet_parse(serialized_example):
     return image
 
 
-def evaluate(model: tf.Session, iterations: int, use_cuda: bool):
+def evaluate(model: tf.compat.v1.Session, iterations: int, use_cuda: bool):
 
     """
     eval function for MNIST LeNet model
-    :param model: tf.Session
+    :param model: tf.compat.v1.Session
     :param iterations: iterations
     :param use_cuda: use_cuda
     :return:
@@ -187,7 +187,7 @@ class SvdAcceptanceTests(unittest.TestCase):
         End to end test with MNIST model following fine tuning
         :return:
         """
-        tf.set_random_seed(10)
+        tf.compat.v1.set_random_seed(10)
         AimetLogger.set_level_for_all_areas(logging.DEBUG)
 
         # load the meta file
@@ -247,7 +247,7 @@ class SvdAcceptanceTests(unittest.TestCase):
         with compr_model_sess.graph.as_default():
 
             # new optimizer and back propagation Op
-            optimizer = tf.train.AdamOptimizer(learning_rate=1e-3, name='Adam_new')
+            optimizer = tf.compat.v1.train.AdamOptimizer(learning_rate=1e-3, name='Adam_new')
             train_step = optimizer.minimize(loss=cross_entropy, name='train_step_new')
 
             # initialize only uninitialized variables
@@ -290,27 +290,27 @@ class SvdAcceptanceTests(unittest.TestCase):
         with graph.as_default():
 
             _ = ResNet50(weights=None, input_shape=(224, 224, 3))
-            init = tf.global_variables_initializer()
+            init = tf.compat.v1.global_variables_initializer()
 
         # Grow GPU memory as needed at the cost of fragmentation.
-        config = tf.ConfigProto()
+        config = tf.compat.v1.ConfigProto()
         config.gpu_options.allow_growth = True  # pylint: disable=no-member
 
-        sess = tf.Session(graph=graph, config=config)
+        sess = tf.compat.v1.Session(graph=graph, config=config)
 
         with sess.graph.as_default():
 
             # predicted value of the model
             y_hat = sess.graph.get_tensor_by_name('probs/Softmax:0')
             # place holder for the labels
-            y = tf.placeholder(tf.int64, shape=[None, 1000], name='labels')
+            y = tf.compat.v1.placeholder(tf.int64, shape=[None, 1000], name='labels')
             # prediction Op
             correct_prediction = tf.equal(tf.argmax(y_hat, axis=1), tf.argmax(y, axis=1))
             # accuracy Op
             accuracy = tf.reduce_mean(tf.cast(correct_prediction, tf.float32), name='accuracy')
 
         sess.run(init)
-        writer = tf.summary.FileWriter('./', sess.graph)
+        writer = tf.compat.v1.summary.FileWriter('./', sess.graph)
         # make sure the learning_phase flag is False (inference mode)
         learning_phase = sess.graph.get_tensor_by_name('keras_learning_phase/input:0')
         self.assertFalse(sess.run(learning_phase))
@@ -393,13 +393,13 @@ class SvdAcceptanceTests(unittest.TestCase):
         with graph.as_default():
 
             _ = ResNet50(weights=None, input_shape=(224, 224, 3))
-            init = tf.global_variables_initializer()
+            init = tf.compat.v1.global_variables_initializer()
 
         # Grow GPU memory as needed at the cost of fragmentation.
-        config = tf.ConfigProto()
+        config = tf.compat.v1.ConfigProto()
         config.gpu_options.allow_growth = True  # pylint: disable=no-member
 
-        sess = tf.Session(graph=graph, config=config)
+        sess = tf.compat.v1.Session(graph=graph, config=config)
         all_ops = sess.graph.get_operations()
         for op in all_ops:
             print(op.name)
@@ -409,7 +409,7 @@ class SvdAcceptanceTests(unittest.TestCase):
             # predicted value of the model
             y_hat = sess.graph.get_tensor_by_name('probs/Softmax:0')
             # place holder for the labels
-            y = tf.placeholder(tf.int64, shape=[None, 1000], name='labels')
+            y = tf.compat.v1.placeholder(tf.int64, shape=[None, 1000], name='labels')
             # prediction Op
             correct_prediction = tf.equal(tf.argmax(y_hat, axis=1), tf.argmax(y, axis=1))
             # accuracy Op
@@ -500,20 +500,20 @@ class ChannelPruningAcceptanceTests(unittest.TestCase):
         with graph.as_default():
 
             _ = VGG16(weights=None, input_shape=(224, 224, 3))
-            init = tf.global_variables_initializer()
+            init = tf.compat.v1.global_variables_initializer()
 
         # Grow GPU memory as needed at the cost of fragmentation.
-        config = tf.ConfigProto()
+        config = tf.compat.v1.ConfigProto()
         config.gpu_options.allow_growth = True  # pylint: disable=no-member
 
-        sess = tf.Session(graph=graph, config=config)
+        sess = tf.compat.v1.Session(graph=graph, config=config)
 
         with sess.graph.as_default():
 
             # predicted value of the model
             y_hat = sess.graph.get_tensor_by_name('predictions/Softmax:0')
             # place holder for the labels
-            y = tf.placeholder(tf.int64, shape=[None, 1000], name='labels')
+            y = tf.compat.v1.placeholder(tf.int64, shape=[None, 1000], name='labels')
             # prediction Op
             correct_prediction = tf.equal(tf.argmax(y_hat, axis=1), tf.argmax(y, axis=1))
             # accuracy Op
@@ -609,20 +609,20 @@ class ChannelPruningAcceptanceTests(unittest.TestCase):
         with graph.as_default():
 
             _ = MobileNet(weights=None, input_shape=(224, 224, 3))
-            init = tf.global_variables_initializer()
+            init = tf.compat.v1.global_variables_initializer()
 
         # Grow GPU memory as needed at the cost of fragmentation.
-        config = tf.ConfigProto()
+        config = tf.compat.v1.ConfigProto()
         config.gpu_options.allow_growth = True  # pylint: disable=no-member
 
-        sess = tf.Session(graph=graph, config=config)
+        sess = tf.compat.v1.Session(graph=graph, config=config)
 
         with sess.graph.as_default():
 
             # predicted value of the model
             y_hat = sess.graph.get_tensor_by_name('reshape_2/Reshape:0')
             # place holder for the labels
-            y = tf.placeholder(tf.int64, shape=[None, 1000], name='labels')
+            y = tf.compat.v1.placeholder(tf.int64, shape=[None, 1000], name='labels')
             # prediction Op
             correct_prediction = tf.equal(tf.argmax(y_hat, axis=1), tf.argmax(y, axis=1))
             # accuracy Op
@@ -724,20 +724,20 @@ class ChannelPruningAcceptanceTests(unittest.TestCase):
         with graph.as_default():
 
             _ = ResNet50(weights=None, input_shape=(224, 224, 3))
-            init = tf.global_variables_initializer()
+            init = tf.compat.v1.global_variables_initializer()
 
         # Grow GPU memory as needed at the cost of fragmentation.
-        config = tf.ConfigProto()
+        config = tf.compat.v1.ConfigProto()
         config.gpu_options.allow_growth = True  # pylint: disable=no-member
 
-        sess = tf.Session(graph=graph, config=config)
+        sess = tf.compat.v1.Session(graph=graph, config=config)
 
         # predicted value of the model
         y_hat = sess.graph.get_tensor_by_name('probs/Softmax:0')
 
         with sess.graph.as_default():
             # place holder for the labels
-            y = tf.placeholder(tf.int64, shape=[None, 1000], name='labels')
+            y = tf.compat.v1.placeholder(tf.int64, shape=[None, 1000], name='labels')
             # prediction Op
             correct_prediction = tf.equal(tf.argmax(y_hat, axis=1), tf.argmax(y, axis=1))
             # accuracy Op
@@ -847,20 +847,20 @@ class ChannelPruningAcceptanceTests(unittest.TestCase):
         with graph.as_default():
 
             _ = ResNet50(weights=None, input_shape=(224, 224, 3))
-            init = tf.global_variables_initializer()
+            init = tf.compat.v1.global_variables_initializer()
 
         # Grow GPU memory as needed at the cost of fragmentation.
-        config = tf.ConfigProto()
+        config = tf.compat.v1.ConfigProto()
         config.gpu_options.allow_growth = True  # pylint: disable=no-member
 
-        sess = tf.Session(graph=graph, config=config)
+        sess = tf.compat.v1.Session(graph=graph, config=config)
 
         # predicted value of the model
         y_hat = sess.graph.get_tensor_by_name('probs/Softmax:0')
 
         with sess.graph.as_default():
             # place holder for the labels
-            y = tf.placeholder(tf.int64, shape=[None, 1000], name='labels')
+            y = tf.compat.v1.placeholder(tf.int64, shape=[None, 1000], name='labels')
             # prediction Op
             correct_prediction = tf.equal(tf.argmax(y_hat, axis=1), tf.argmax(y, axis=1))
             # accuracy Op
@@ -954,10 +954,10 @@ class SvdAndChannelPruningAcceptanceTests(unittest.TestCase):
 
     def test_svd_followed_by_channel_pruning(self):
         """ Test that a model can be run through spatial svd and then channel pruning """
-        sess = tf.Session()
+        sess = tf.compat.v1.Session()
         with sess.graph.as_default():
             _ = model_with_three_convs()
-            init = tf.global_variables_initializer()
+            init = tf.compat.v1.global_variables_initializer()
         sess.run(init)
 
         conv2d_1 = sess.graph.get_operation_by_name('conv2d_1/Conv2D')

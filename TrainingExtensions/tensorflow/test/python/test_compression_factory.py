@@ -43,6 +43,8 @@ import unittest
 from unittest.mock import MagicMock
 
 import tensorflow as tf
+tf.compat.v1.logging.set_verbosity(tf.logging.WARN)
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
 
 from aimet_common.utils import start_bokeh_server_session
 from aimet_common.defs import CostMetric, EvalFunction, LayerCompRatioPair
@@ -59,7 +61,7 @@ class TestTfCompressionFactory(unittest.TestCase):
         Bokeh session is not used.
         :return: None
         """
-        sess = tf.Session(graph=tf.Graph())
+        sess = tf.compat.v1.Session(graph=tf.Graph())
         with sess.graph.as_default():
             model = tf.keras.Sequential([
                 tf.keras.layers.Reshape(target_shape=(28, 28, 1), input_shape=(28 * 28,)),
@@ -69,7 +71,7 @@ class TestTfCompressionFactory(unittest.TestCase):
                 tf.keras.layers.Flatten(),
                 tf.keras.layers.Dense(10, name='linear')
             ])
-            init = tf.global_variables_initializer()
+            init = tf.compat.v1.global_variables_initializer()
 
         sess.run(init)
 
@@ -93,7 +95,7 @@ class TestTfCompressionFactory(unittest.TestCase):
         Tests spatial svd factory creates the right algo. Bokeh session is used.
         :return: None
         """
-        sess = tf.Session(graph=tf.Graph())
+        sess = tf.compat.v1.Session(graph=tf.Graph())
         with sess.graph.as_default():
             model = tf.keras.Sequential([
                 tf.keras.layers.Reshape(target_shape=(28, 28, 1), input_shape=(28 * 28,)),
@@ -103,7 +105,7 @@ class TestTfCompressionFactory(unittest.TestCase):
                 tf.keras.layers.Flatten(),
                 tf.keras.layers.Dense(10, name='linear')
             ])
-            init = tf.global_variables_initializer()
+            init = tf.compat.v1.global_variables_initializer()
 
         sess.run(init)
 

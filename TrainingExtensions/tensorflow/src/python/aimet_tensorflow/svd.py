@@ -233,27 +233,27 @@ class Svd:
     @staticmethod
     def _reset_session(sess):
         """
-        Reset the given TF session
-        :param sess: TF session
+        Reset the given tf.compat.v1.Session
+        :param sess: tf.compat.v1.Session
         :return: None
         """
-        tf.reset_default_graph()
+        tf.compat.v1.reset_default_graph()
         sess.close()
 
     @staticmethod
     def _load_graph(graph, meta_graph, checkpoint):
         """
-        Load a graph and checkpoint and create a new TF session
+        Load a graph and checkpoint and create a new tf.compat.v1.Session
         :param graph: TF graph
         :param meta_graph: Meta file
         :param checkpoint: Checkpoint file
         :return: Newly created session
         """
         logger.info('Loading graph: %s', meta_graph)
-        sess = tf.Session(graph=graph)
+        sess = tf.compat.v1.Session(graph=graph)
 
         # Open the graph and retore the parameters
-        saver = tf.train.import_meta_graph(meta_graph)
+        saver = tf.compat.v1.train.import_meta_graph(meta_graph)
         saver.restore(sess, checkpoint)
         return sess, saver
 
@@ -278,7 +278,7 @@ class Svd:
     def _pick_compression_layers(sess, cost_metric, layer_select_scheme, **kwargs):
         """
         Pick layers for SVD compression given parameters
-        :param sess: TF session
+        :param sess: tf.compat.v1.Session
         :param cost_metric: Metric to use for evaluating layer cost (either in terms of memory or mac)
         :param layer_select_scheme: Layer selection scheme to use
         :param kwargs: Keyword arguments that depend on which layer selection scheme is specified
@@ -355,7 +355,7 @@ class Svd:
         """
         Creates list of layer attributes given a set of TF ops
         :param ops_to_use: TF ops to collect layer attributes for
-        :param sess: TF session to use
+        :param sess: tf.compat.v1.Session to use
         :return: Created list of layer attributes
         """
         query = core.OpQuery(sess.graph)
@@ -413,7 +413,7 @@ class Svd:
     def _compute_compression_ratio(self, sess, cost_metric):
         """
         Compute compression ratio
-        :param sess: TF session
+        :param sess: tf.compat.v1.Session
         :return: Computed compression ratio
         """
         query = core.OpQuery(sess.graph)
@@ -438,7 +438,7 @@ class Svd:
     def _store_net_stats(self, sess):
         """
         Store layer attributes in the PyMo library instance
-        :param sess: TF session
+        :param sess: tf.compat.v1.Session
         :return: None
         """
         # pylint: disable=too-many-locals,too-many-branches,too-many-statements
@@ -552,7 +552,7 @@ class Svd:
     def _split_conv_layer(self, sess, svd_ranks, attr, op_name, bias_op_name=None):
         """
         Split a given conv layer given a rank
-        :param sess: TF session
+        :param sess: tf.compat.v1.Session
         :param svd_ranks: Rank to split the layer with (two ranks in case of SSVD)
         :param attr: Reference to the corresponding layer attribute
         :param op_name: Name of the op to split
@@ -678,7 +678,7 @@ class Svd:
     def _split_fc_layer(self, sess, svd_ranks, op_name, bias_op_name=None):
         """
         Split a given conv layer given a rank
-        :param sess: TF session
+        :param sess: tf.compat.v1.Session
         :param svd_ranks: Rank to split the layer with (two ranks in case of SSVD)
         :param op_name: Name of the op to split
         :param bias_op_name: Name of the corresponding bias op (if any)
@@ -761,7 +761,7 @@ class Svd:
     def _split_layers(self, sess, rank_index, use_best_ranks):
         """
         Split all the selected layers given a rank index
-        :param sess: TF session
+        :param sess: tf.compat.v1.Session
         :param rank_index: Rank index to use for finding the ranks
         :param use_best_ranks: Use the best rank index (for final compressed network)
         :return: None
@@ -802,7 +802,7 @@ class Svd:
     def _create_compressed_network(self, sess, rank_index, use_best_ranks):
         """
         Create a compressed network for a given rank index
-        :param sess: TF session
+        :param sess: tf.compat.v1.Session
         :param rank_index: Rank index to use for finding the ranks
         :param use_best_ranks: Use the best rank index (for final compressed network)
         :return: None
@@ -931,14 +931,14 @@ class Svd:
     def _save_graph(sess, saver, output_graph):
         """
         Utility function to save a graph
-        :param sess: TF session
+        :param sess: tf.compat.v1.Session
         :param saver: TF save
         :param output_graph: Filename and path for saving the output
         :return:
         """
         logger.info('Saving graph: %s', output_graph)
         saver.save(sess, output_graph)
-        _ = tf.summary.FileWriter(os.path.dirname(output_graph)+"/models", sess.graph)
+        _ = tf.compat.v1.summary.FileWriter(os.path.dirname(output_graph)+"/models", sess.graph)
 
     def _save_compressed_network(self):
         """

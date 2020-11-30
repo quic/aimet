@@ -37,7 +37,11 @@
 
 import os
 import pytest
+
 import tensorflow as tf
+tf.compat.v1.logging.set_verbosity(tf.logging.WARN)
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
+
 import numpy as np
 from tensorflow.python.framework import ops
 from tensorflow.python.framework import constant_op
@@ -71,7 +75,7 @@ class QCQuantizeTest(tf.test.TestCase):
     _log.info('running testQCQuantize_Params')
     for use_gpu in [False, True]:
       _log.info('GPU mode is selected') if use_gpu else _log.info('CPU mode is selected')
-      with self.test_session(use_gpu=use_gpu):
+      with self.session(use_gpu=use_gpu):
         bw = 8
         PARAM_MIN = -50.0
         PARAM_MAX = 80.0
@@ -124,7 +128,7 @@ class QCQuantizeTest(tf.test.TestCase):
     _log.info('running testQCQuantize_SingleActivation')
     for use_gpu in [False, True]:
       _log.info('GPU mode is selected') if use_gpu else _log.info('CPU mode is selected')
-      with self.test_session(use_gpu=use_gpu):
+      with self.session(use_gpu=use_gpu):
         bw = 8
         # Instantiate DlQuantization object
         comp_mode = libpymo.ComputationMode.COMP_MODE_GPU if use_gpu else libpymo.ComputationMode.COMP_MODE_CPU
@@ -196,7 +200,7 @@ class QCQuantizeTest(tf.test.TestCase):
     _log.info('running testQCQuantize_MultipleActivations')
     for use_gpu in [False]:
       _log.info('GPU mode is selected') if use_gpu else _log.info('CPU mode is selected')
-      with self.test_session(use_gpu=use_gpu):
+      with self.session(use_gpu=use_gpu):
         bw = 8
         actvn_stats_0 = actvn_stats_1 = actvn_stats_2 = actvn_stats_3 = constant_op.constant(
           np.arange(0, 100).astype(np.float32))
@@ -267,7 +271,7 @@ class QCQuantizeTest(tf.test.TestCase):
     _log.info('running testQCQuantize_GetEncodings')
     for use_gpu in [False]:
       _log.info('GPU mode is selected') if use_gpu else _log.info('CPU mode is selected')
-      with self.test_session(use_gpu=use_gpu):
+      with self.session(use_gpu=use_gpu):
         bw = 8
         # Prepare activation tensors
         ACT_MIN = -20.0
@@ -312,7 +316,7 @@ class QCQuantizeTest(tf.test.TestCase):
       _log.info('running testQCQuantize_GetEncodings')
       for use_gpu in [True]:
           _log.info('GPU mode is selected') if use_gpu else _log.info('CPU mode is selected')
-          with self.test_session(use_gpu=use_gpu):
+          with self.session(use_gpu=use_gpu):
               bw = 8
               # Prepare activation tensors
               ACT_MIN = -20.0
@@ -356,7 +360,7 @@ class QCQuantizeTest(tf.test.TestCase):
     _log.info('running testQCQuantize_SetEncodings')
     for use_gpu in [False]:
       _log.info('GPU mode is selected') if use_gpu else _log.info('CPU mode is selected')
-      with self.test_session(use_gpu=use_gpu):
+      with self.session(use_gpu=use_gpu):
         bw = 8
         # Instantiate DlQuantization object
         comp_mode = libpymo.ComputationMode.COMP_MODE_CPU if use_gpu else libpymo.ComputationMode.COMP_MODE_GPU
@@ -403,7 +407,7 @@ class QCQuantizeTest(tf.test.TestCase):
     _log.info('running testQCQuantize_CheckZeroRepresentation')
     for use_gpu in [False]:
       _log.info('GPU mode is selected') if use_gpu else _log.info('CPU mode is selected')
-      with self.test_session(use_gpu=use_gpu):
+      with self.session(use_gpu=use_gpu):
         bw = 8
         # Test all negative ranges
         act_min = -8.0
@@ -462,7 +466,7 @@ class QCQuantizeTest(tf.test.TestCase):
     _log.info('running test_QCQuantize_CheckInvalidConfig')
     for use_gpu in [False]:
       _log.info('GPU mode is selected') if use_gpu else _log.info('CPU mode is selected')
-      with self.test_session(use_gpu = use_gpu):
+      with self.session(use_gpu = use_gpu):
         bw = 8
 
         # Instantiate DlQuantization object
@@ -484,7 +488,7 @@ class QCQuantizeTest(tf.test.TestCase):
         _log.info('running testQCQuantize_CheckInvalidEncodings')
         for use_gpu in [False]:
             _log.info('GPU mode is selected') if use_gpu else _log.info('CPU mode is selected')
-            with self.test_session(use_gpu=use_gpu):
+            with self.session(use_gpu=use_gpu):
                 bw = 8
                 # Instantiate DlQuantization object
                 comp_mode = libpymo.ComputationMode.COMP_MODE_GPU if use_gpu else libpymo.ComputationMode.COMP_MODE_CPU
@@ -511,7 +515,7 @@ class QCQuantizeTest(tf.test.TestCase):
         _log.info('running testQCQuantize_CheckInvalidEncodings')
         for use_gpu in [True]:
             _log.info('GPU mode is selected') if use_gpu else _log.info('CPU mode is selected')
-            with self.test_session(use_gpu=use_gpu):
+            with self.session(use_gpu=use_gpu):
                 bw = 8
                 # Instantiate DlQuantization object
                 comp_mode = libpymo.ComputationMode.COMP_MODE_GPU if use_gpu else libpymo.ComputationMode.COMP_MODE_CPU

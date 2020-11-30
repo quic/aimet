@@ -120,7 +120,7 @@ class QuantizerInfo:
 
     __slots__ = ['session', 'tensor_quantizer', 'quant_op_name', 'quantizer_type']
 
-    def __init__(self, session: tf.Session, tensor_quantizer: libpymo.TensorQuantizer,
+    def __init__(self, session: tf.compat.v1.Session, tensor_quantizer: libpymo.TensorQuantizer,
                  quant_op_name: str, quantizer_type: QuantizerType):
         self.session = session
         self.tensor_quantizer = tensor_quantizer
@@ -136,7 +136,7 @@ class QuantizerInfo:
         """
 
         with self.session.graph.as_default():
-            vars_with_given_name = [var for var in tf.global_variables()
+            vars_with_given_name = [var for var in tf.compat.v1.global_variables()
                                     if var.op.name == var_name]
         var_to_be_updated = vars_with_given_name[0]
         var_to_be_updated.load(value, self.session)
@@ -358,7 +358,7 @@ class QuantizationSimModel:
 
     """
     # pylint: disable=too-many-arguments
-    def __init__(self, session: tf.Session, starting_op_names: List[str], output_op_names: List[str],
+    def __init__(self, session: tf.compat.v1.Session, starting_op_names: List[str], output_op_names: List[str],
                  quant_scheme: Union[str, QuantScheme] = 'tf_enhanced', rounding_mode: str = 'nearest',
                  default_output_bw: int = 8, default_param_bw: int = 8, use_cuda: bool = True, config_file: str = None):
         """
@@ -405,7 +405,7 @@ class QuantizationSimModel:
 
         # We save a copy of the original model (to be used during export later)
         with self.session.graph.as_default():
-            saver = tf.train.Saver()
+            saver = tf.compat.v1.train.Saver()
         saver.save(self.session, save_path=WORKING_DIR+'orig_model_before_quantsim')
 
         self._add_and_configure_quant_nodes(starting_op_names, output_op_names, default_param_bw, default_output_bw,
@@ -507,7 +507,7 @@ class QuantizationSimModel:
                                                            activation_op_names)
         QuantSimConfigurator(self.session, conn_graph, op_to_quant_ops_dict, config_file)
 
-    def compute_encodings(self, forward_pass_callback: Callable[[tf.Session, Any], None],
+    def compute_encodings(self, forward_pass_callback: Callable[[tf.compat.v1.Session, Any], None],
                           forward_pass_callback_args):
         """
         Computes encodings for all quantization sim nodes in the model.
@@ -570,7 +570,7 @@ class QuantizationSimModel:
                          'If this is not desired, amend the forward pass to evaluate tensors which require these ops '
                          'to be evaluated, and recompute encodings.')
 
-    def export(self, path: str, filename_prefix: str, orig_sess: tf.Session = None):
+    def export(self, path: str, filename_prefix: str, orig_sess: tf.compat.v1.Session = None):
         """
         This method exports out the quant-sim model so it is ready to be run on-target.
 
@@ -591,27 +591,27 @@ class QuantizationSimModel:
         # save session without quant nodes
         if orig_sess is not None:
             with orig_sess.graph.as_default():
-                saver = tf.train.Saver()
+                saver = tf.compat.v1.train.Saver()
             saver.save(orig_sess, save_path=WORKING_DIR+'orig_model_before_quantsim')
         else:
             _logger.info('Original session is not provided, use orig_model_before_quantsim.meta to export')
 
         vars_to_save = []
         with self.session.graph.as_default():
-            for var in tf.global_variables():
+            for var in tf.compat.v1.global_variables():
                 if not var.name[:-2].endswith(('_quantized', '_quantized_op_mode', '_quantized_quant_ref',
                                                '_quantized_encoding_min', '_quantized_encoding_max',
                                                '_quantized_bit_width', '_quantized_use_symmetric_encoding')):
                     vars_to_save.append(var)
 
-            saver = tf.train.Saver(vars_to_save)
+            saver = tf.compat.v1.train.Saver(vars_to_save)
             saver.save(self.session, save_path=os.path.join(path, filename_prefix))
             shutil.copyfile(WORKING_DIR+'orig_model_before_quantsim.meta',
                             os.path.join(path, filename_prefix) + '.meta')
 
         self._export_encodings(os.path.join(path, filename_prefix) + '.encodings')
 
-    def save_to_keras(self, temp_dir_path: str = "/tmp/") -> tf.Session:
+    def save_to_keras(self, temp_dir_path: str = "/tmp/") -> tf.compat.v1.Session:
         """
         This method exports out the quant-sim model so it is ready to be eval/trained using a Keras pipeline
 
@@ -673,7 +673,7 @@ class QuantizationSimModel:
         """
         variable_dict = {}
         with self.session.graph.as_default():
-            for var in tf.global_variables():
+            for var in tf.compat.v1.global_variables():
                 if var.name.endswith('_encoding_min:0') or var.name.endswith('_encoding_max:0'):
                     variable_dict[var.name] = var
 
@@ -1070,7 +1070,7 @@ class QuantizationSimModel:
 
 
 # load and save utilities
-def update_tensor_quantizer_references(quant_sim_sess: tf.Session, quantizer_dict: Dict[str, QuantizerInfo]):
+def update_tensor_quantizer_references(quant_sim_sess: tf.compat.v1.Session, quantizer_dict: Dict[str, QuantizerInfo]):
     """
     updates the param / activation quant ops in the passed-in session with new tensor quantizer references.
     :param quant_sim_sess: tensorflow session held by quantsim object

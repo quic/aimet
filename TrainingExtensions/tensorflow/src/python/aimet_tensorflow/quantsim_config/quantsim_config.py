@@ -76,7 +76,7 @@ OpToQuantOpsDictType = Dict[Op, ParamSetAndOutputOpListType]
 class SupergroupConfigCallback(AimetCommonSupergroupConfigCallback):
     """ Class acting as a callback for when supergroups are found """
 
-    def __init__(self, sess: tf.Session, op_to_quant_ops_dict: OpToQuantOpsDictType):
+    def __init__(self, sess: tf.compat.v1.Session, op_to_quant_ops_dict: OpToQuantOpsDictType):
         super().__init__()
         self._sess = sess
         self._op_to_quant_ops_dict = op_to_quant_ops_dict
@@ -94,7 +94,7 @@ class SupergroupConfigCallback(AimetCommonSupergroupConfigCallback):
 class QuantSimConfigurator(AimetCommonQuantSimConfigurator):
     """ Class for parsing and applying
     quantsim configurations from json config file """
-    def __init__(self, sess: tf.Session, conn_graph: ConnectedGraph, op_to_quant_ops_dict: OpToQuantOpsDictType,
+    def __init__(self, sess: tf.compat.v1.Session, conn_graph: ConnectedGraph, op_to_quant_ops_dict: OpToQuantOpsDictType,
                  config_file: str):
         super().__init__(config_file)
 

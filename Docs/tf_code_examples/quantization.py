@@ -47,7 +47,7 @@ from tensorflow.examples.tutorials.mnist import input_data
 
 
 def quantize_model(generator):
-    tf.reset_default_graph()
+    tf.compat.v1.reset_default_graph()
 
     # load graph
     sess = graph_saver.load_model_from_meta('models/mnist_save.meta', 'models/mnist_save')
@@ -79,7 +79,7 @@ def training_helper(sim, generator):
 
         ce = g.get_tensor_by_name("xent:0")
         # Using Adam optimizer
-        train_step = tf.train.AdamOptimizer(1e-3, name="TempAdam").minimize(ce)
+        train_step = tf.compat.v1.train.AdamOptimizer(1e-3, name="TempAdam").minimize(ce)
         graph_eval.initialize_uninitialized_vars(sess)
         # Input data for MNIST
         mnist = input_data.read_data_sets('./data', one_hot=True)
