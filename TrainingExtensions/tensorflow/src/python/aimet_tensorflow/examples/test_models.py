@@ -243,8 +243,8 @@ def model_with_postprocessing_nodes():
     x = tf.keras.layers.Dense(10, activation=tf.nn.softmax, name="model_with_postprocessing_nodes")(x)
 
     labels_placeholder = tf.compat.v1.placeholder_with_default(tf.constant(1, shape=(1, 10)),
-                                                     shape=[None, 10],
-                                                     name='labels')
+                                                               shape=[None, 10],
+                                                               name='labels')
 
     confidences = tf.nn.softmax(x, axis=1, name='confidences')
     categorical_preds = tf.argmax(confidences, axis=1, name='categorical_preds')

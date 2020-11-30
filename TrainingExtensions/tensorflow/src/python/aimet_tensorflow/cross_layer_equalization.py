@@ -394,10 +394,10 @@ class CrossLayerScaling:
         return scaling_factor
 
     @staticmethod
-    def scale_cls_set_with_depthwise_layers(model: tf.compat.v1.Session, cls_set: Tuple[tf.Operation,
-                                                                              tf.Operation,
-                                                                              tf.Operation]) ->\
-            [np.ndarray, np.ndarray]:
+    def scale_cls_set_with_depthwise_layers(model: tf.compat.v1.Session,
+                                            cls_set: Tuple[tf.Operation,
+                                                           tf.Operation,
+                                                           tf.Operation]) -> [np.ndarray, np.ndarray]:
         """
         API to invoke equalize layer params for depth wise separable layers(update for weights and bias is in place)
         :param model: active tf.compat.v1.Session
