@@ -57,8 +57,8 @@ logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Winnow)
 
 
 # pylint: disable=too-many-locals
-def reduce_conv2d(sess: tf.compat.v1.Session, op_tensor_tuple: Tuple[Op, List[tf.Tensor]], op_mask) -> (str, tf.Operation,
-                                                                                              tf.Operation):
+def reduce_conv2d(sess: tf.compat.v1.Session,
+                  op_tensor_tuple: Tuple[Op, List[tf.Tensor]], op_mask) -> (str, tf.Operation, tf.Operation):
     """
     Conv2D module reducer
     :param sess: current tf.compat.v1.Session
@@ -144,8 +144,8 @@ def reduce_conv2d(sess: tf.compat.v1.Session, op_tensor_tuple: Tuple[Op, List[tf
     return name, new_tensor.op, module
 
 
-def reduce_maxpool(sess: tf.compat.v1.Session, op_tensor_tuple: Tuple[Op, List[tf.Tensor]], _) -> (str, tf.Operation,
-                                                                                         tf.Operation):
+def reduce_maxpool(sess: tf.compat.v1.Session,
+                   op_tensor_tuple: Tuple[Op, List[tf.Tensor]], _) -> (str, tf.Operation, tf.Operation):
     """
     Maxpool module reducer
     :param sess: current tf.compat.v1.Session
@@ -169,8 +169,8 @@ def reduce_maxpool(sess: tf.compat.v1.Session, op_tensor_tuple: Tuple[Op, List[t
     return name, new_tensor.op, module
 
 
-def reduce_avgpool(sess: tf.compat.v1.Session, op_tensor_tuple: Tuple[Op, List[tf.Tensor]], _) -> (str, tf.Operation,
-                                                                                         tf.Operation):
+def reduce_avgpool(sess: tf.compat.v1.Session,
+                   op_tensor_tuple: Tuple[Op, List[tf.Tensor]], _) -> (str, tf.Operation, tf.Operation):
     """
     Avgpool module reducer
     :param sess: current tf.compat.v1.Session
@@ -194,8 +194,8 @@ def reduce_avgpool(sess: tf.compat.v1.Session, op_tensor_tuple: Tuple[Op, List[t
     return name, new_tensor.op, module
 
 
-def reduce_batchnorm(sess: tf.compat.v1.Session, op_tensor_tuple: Tuple[Op, List[tf.Tensor]], op_mask) -> (str, tf.Operation,
-                                                                                                 tf.Operation):
+def reduce_batchnorm(sess: tf.compat.v1.Session,
+                     op_tensor_tuple: Tuple[Op, List[tf.Tensor]], op_mask) -> (str, tf.Operation, tf.Operation):
     """
     Fused and non fused batchnorm module reducer
     :param sess: current tf.compat.v1.Session
@@ -278,7 +278,8 @@ def reduce_batchnorm(sess: tf.compat.v1.Session, op_tensor_tuple: Tuple[Op, List
     return name, new_tensor.op, module
 
 
-def reduce_relu(sess: tf.compat.v1.Session, op_tensor_tuple: Tuple[Op, List[tf.Tensor]], _) -> (str, tf.Operation, tf.Operation):
+def reduce_relu(sess: tf.compat.v1.Session,
+                op_tensor_tuple: Tuple[Op, List[tf.Tensor]], _) -> (str, tf.Operation, tf.Operation):
     """
     Relu module reducer
     :param sess: current tf.compat.v1.Session
@@ -300,7 +301,8 @@ def reduce_relu(sess: tf.compat.v1.Session, op_tensor_tuple: Tuple[Op, List[tf.T
     return name, new_tensor.op, module
 
 
-def reduce_tanh(sess: tf.compat.v1.Session, op_tensor_tuple: Tuple[Op, List[tf.Tensor]], _) -> (str, tf.Operation, tf.Operation):
+def reduce_tanh(sess: tf.compat.v1.Session,
+                op_tensor_tuple: Tuple[Op, List[tf.Tensor]], _) -> (str, tf.Operation, tf.Operation):
     """
     Tanh module reducer
     :param sess: current tf.compat.v1.Session
@@ -339,8 +341,8 @@ def reduce_dropout(_, op_tensor_tuple: Tuple[Op, List[tf.Tensor]], _op_mask) -> 
     return name, new_tensor.op, module
 
 
-def reduce_identity(sess: tf.compat.v1.Session, op_tensor_tuple: Tuple[Op, List[tf.Tensor]], _) -> (str, tf.Operation,
-                                                                                          tf.Operation):
+def reduce_identity(sess: tf.compat.v1.Session,
+                    op_tensor_tuple: Tuple[Op, List[tf.Tensor]], _) -> (str, tf.Operation, tf.Operation):
     """
     Identity module reducer
     :param sess: current tf.compat.v1.Session
@@ -355,7 +357,8 @@ def reduce_identity(sess: tf.compat.v1.Session, op_tensor_tuple: Tuple[Op, List[
     return name, new_tensor.op, module
 
 
-def reduce_pad(sess: tf.compat.v1.Session, op_tensor_tuple: Tuple[Op, List[tf.Tensor]], _) -> (str, tf.Operation, tf.Operation):
+def reduce_pad(sess: tf.compat.v1.Session,
+               op_tensor_tuple: Tuple[Op, List[tf.Tensor]], _) -> (str, tf.Operation, tf.Operation):
     """
     Pad module reducer
     :param sess: current tf.compat.v1.Session
@@ -402,8 +405,8 @@ def reduce_pad(sess: tf.compat.v1.Session, op_tensor_tuple: Tuple[Op, List[tf.Te
     return name, new_tensor.op, module
 
 
-def reduce_min_max(sess: tf.compat.v1.Session, op_tensor_tuple: Tuple[Op, List[tf.Tensor]], _) -> (str, tf.Operation,
-                                                                                         tf.Operation):
+def reduce_min_max(sess: tf.compat.v1.Session,
+                   op_tensor_tuple: Tuple[Op, List[tf.Tensor]], _) -> (str, tf.Operation, tf.Operation):
     """
     Minimum and maximum module reducer
     :param sess: current tf.compat.v1.Session
@@ -426,7 +429,8 @@ def reduce_min_max(sess: tf.compat.v1.Session, op_tensor_tuple: Tuple[Op, List[t
     return name, new_tensor.op, module
 
 
-def reduce_add(sess: tf.compat.v1.Session, op_tensor_tuple: Tuple[Op, List[tf.Tensor]], _) -> (str, tf.Operation, tf.Operation):
+def reduce_add(sess: tf.compat.v1.Session,
+               op_tensor_tuple: Tuple[Op, List[tf.Tensor]], _) -> (str, tf.Operation, tf.Operation):
     """
     Add module reducer
     :param sess: current tf.compat.v1.Session
