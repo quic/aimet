@@ -57,6 +57,13 @@ foreach(package ${package_name_list})
     file(WRITE "${CMAKE_BINARY_DIR}/packaging/MANIFEST.ini" "graft ${package}/x86_64-linux-gnu")
     file(COPY ${AIMET_PACKAGE_PATH}/lib/python/${package} DESTINATION ${CMAKE_BINARY_DIR}/packaging/)
     file(COPY ${AIMET_PACKAGE_PATH}/lib/x86_64-linux-gnu/ DESTINATION ${CMAKE_BINARY_DIR}/packaging/${package}/x86_64-linux-gnu/)
+
+    # Copy over dependency installation files
+    configure_file("${SOURCE_DIR}/packaging/requirements.txt" "${CMAKE_BINARY_DIR}/packaging/${package}/bin/" COPYONLY)
+    configure_file("${SOURCE_DIR}/packaging/packages_common.txt" "${CMAKE_BINARY_DIR}/packaging/${package}/bin/" COPYONLY)
+    configure_file("${SOURCE_DIR}/packaging/packages_gpu.txt" "${CMAKE_BINARY_DIR}/packaging/${package}/bin/" COPYONLY)
+    configure_file("${SOURCE_DIR}/packaging/INSTALL.txt" "${CMAKE_BINARY_DIR}/packaging/${package}/bin/" COPYONLY)
+    configure_file("${SOURCE_DIR}/packaging/envsetup.sh" "${CMAKE_BINARY_DIR}/packaging/${package}/bin/" COPYONLY)
   elseif("${package}" STREQUAL "aimet")
     file(WRITE "${CMAKE_BINARY_DIR}/packaging/MANIFEST.ini" "include README.txt NOTICE.txt")
   else()
@@ -67,4 +74,3 @@ foreach(package ${package_name_list})
   execute_process(COMMAND python3 setup.py sdist bdist_wheel WORKING_DIRECTORY ${CMAKE_BINARY_DIR}/packaging OUTPUT_VARIABLE output_var)
 
 endforeach()
-

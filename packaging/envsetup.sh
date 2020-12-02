@@ -38,9 +38,12 @@
 # This script sets up the various environment variables needed to use various modules and scripts
 
 #====================================
-Configuration of ENV variables
+# Configuration of ENV variables
 #===================================
 export PATH=/usr/local/nvidia/bin:/usr/local/cuda/bin:$PATH
+if [ -z "${LD_LIBRARY_PATH}" ]; then
+LD_LIBRARY_PATH=""
+fi
 export LD_LIBRARY_PATH=/usr/local/nvidia/lib:/usr/local/nvidia/lib64:/usr/local/cuda/lib64:/usr/local/cuda/extras/CUPTI/lib64:$LD_LIBRARY_PATH
 export CUDA_TOOLKIT_PATH=/usr/local/cuda
 export CUDNN_INSTALL_PATH=/usr/local/cuda
