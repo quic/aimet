@@ -39,20 +39,22 @@
 from setuptools import setup
 import setup_cfg # pylint: disable=import-error
 
-torch_dep_whl = setup_cfg.remote_url + "/releases/download/"+str(setup_cfg.version)+"/AimetTorch-"+ str(setup_cfg.version) + "-py3-none-any.whl"
-tf_dep_whl = setup_cfg.remote_url + "/releases/download/"+str(setup_cfg.version)+"/AimetTensorflow-"+ str(setup_cfg.version) + "-py3-none-any.whl"
+package_url_base = setup_cfg.remote_url + "/releases/download/" + str(setup_cfg.version)
+
+torch_dep_whl = package_url_base + "/AimetTorch-" + str(setup_cfg.version) + "-py3-none-any.whl"
+tf_dep_whl = package_url_base + "/AimetTensorflow-" + str(setup_cfg.version) + "-py3-none-any.whl"
 
 setup(
     name='Aimet',
     version=str(setup_cfg.version),
     author='Qualcomm Innovation Center, Inc.',
     author_email='aimet@noreply.github.com',
-    url=setup_cfg.remote_url + '/Aimet',
+    url=package_url_base,
     license='NOTICE.txt',
     description='AIMET',
     long_description=open('README.txt').read(),
+    install_requires=[],
     dependency_links=[torch_dep_whl, tf_dep_whl],
-    install_requires=["AimetTorch==" + str(setup_cfg.version), "AimetTensorflow==" + str(setup_cfg.version)],
     zip_safe=True,
     platforms='x86',
     python_requires='>=3.6',

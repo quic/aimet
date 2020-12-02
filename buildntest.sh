@@ -66,6 +66,7 @@ usage() {
   
   echo "${0} [-o <output_folder>]"
   echo "    -b --> build the code"
+  echo "    -p --> generate pip packages"
   echo "    -u --> run unit tests"
   echo "    -v --> run code violation checks (using pylint tool)"
   echo "    -g --> run code coverage checks (using pycov tool)"
@@ -80,7 +81,7 @@ usage() {
 }
 
 
-while getopts "o:abce:im:nghsuvy:" opt;
+while getopts "o:abce:im:npghsuvy:" opt;
    do
       case $opt in
          a)
@@ -94,6 +95,9 @@ while getopts "o:abce:im:nghsuvy:" opt;
              ;;
          g)
              options_string+=" -g"
+             ;;
+         p)
+             options_string+=" -p"
              ;;
          u)
              options_string+=" -u"
