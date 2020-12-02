@@ -40,13 +40,19 @@ import os
 import setup_cfg # pylint: disable=import-error
 from setuptools import setup, find_packages, find_namespace_packages
 
+package_url_base = setup_cfg.remote_url + "/releases/download/"+str(setup_cfg.version)
+
 # get all packages , discard build files etc.
-packages_found = find_packages() + find_namespace_packages(exclude=['*bin', 'pyenv3*', 'build', 'dist', '*bin', '*x86*'])
+packages_found = find_packages() + find_namespace_packages(exclude=['pyenv3*', 'build', 'dist', '*bin', '*x86*', '*aimet_tensorflow*', '*aimet_torch*'])
 
 required_package_data=[]
 
+package_dependency_files = ['requirements.txt', 'packages_common.txt', 'packages_gpu.txt', 'INSTALL.txt', 'envsetup.sh']
+
 for path, _, filenames in os.walk('aimet_common'):
-    required_package_data += [os.path.join(path, filename) for filename in filenames if filename.endswith('.json') or path.startswith('aimet_common/x86_64-linux-gnu')]
+    required_package_data += [os.path.join(path, filename) for filename in filenames if 
+    filename.endswith('.json') or path.startswith('aimet_common/x86_64-linux-gnu') or 
+    filename.endswith(tuple(package_dependency_files))]
 required_package_data = ['/'.join(files.split('/')[1:]) for files in required_package_data]
 
 setup(
@@ -55,13 +61,11 @@ setup(
     author='Qualcomm Innovation Center, Inc.',
     author_email='aimet@noreply.github.com',
     packages=packages_found,
-    url=setup_cfg.remote_url + '/AimetCommon',
+    url=package_url_base,
     license='NOTICE.txt',
     description='AIMET',
     long_description=open('README.txt').read(),
     package_data={'aimet_common':required_package_data},
-    scripts=['aimet_common/bin/update_snpe_out_encoding_onnx_model',
-            'aimet_common/bin/update_snpe_out_encoding_tf_model'],
     zip_safe=True,
     platforms='x86',
     python_requires='>=3.6',

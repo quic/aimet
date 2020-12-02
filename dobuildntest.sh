@@ -49,6 +49,7 @@ set -e
 run_prep=1
 run_clean=0
 run_build=0
+run_package_gen=0
 run_unit_tests=0
 run_code_violation=0
 run_code_coverage=0
@@ -120,6 +121,7 @@ usage() {
   echo -e "NOTE: This script must be executed within the docker container (or in a machine with all dependencies installed). It will NOT start a docker container.\n"
   echo "${0} [-o <output_folder>]"
   echo "    -b --> build the code"
+  echo "    -p --> generate pip packages"
   echo "    -u --> run unit tests"
   echo "    -v --> run code violation checks (using pylint tool)"
   echo "    -g --> run code coverage checks (using pycov tool)"
@@ -129,7 +131,7 @@ usage() {
   echo "    -w --> path to AIMET workspace. Default is current directory"
 }
 
-while getopts "o:w:abcghsuv" opt;
+while getopts "o:w:abcghpsuv" opt;
    do
       case $opt in
          a)
@@ -143,6 +145,9 @@ while getopts "o:w:abcghsuv" opt;
              ;;
          g)
              run_code_coverage=1
+             ;;
+         p)
+             run_package_gen=1
              ;;
          u)
              run_unit_tests=1
@@ -174,13 +179,14 @@ while getopts "o:w:abcghsuv" opt;
       esac
 done
 
-# If no modes are enabled by user, then enable all modes by default
+# If no modes are enabled by user, then enable most modes by default
 if [ $run_clean -eq 0 ] && [ $run_acceptance_tests -eq 0 ] && [ $run_build -eq 0 ] && \
     [ $run_unit_tests -eq 0 ] && [ $run_code_violation -eq 0 ] && [ $run_code_coverage -eq 0 ] && \
     [ $run_static_analysis -eq 0 ]; then
     run_prep=1
     run_clean=1
     run_build=1
+    run_package_gen=0
     run_unit_tests=1
     run_code_violation=1
     run_code_coverage=1
@@ -316,16 +322,18 @@ if [ $run_build -eq 1 ]; then
     echo -e "\n********** Stage 2a: Generate Docs **********\n"
     make doc
     check_stage $? "Generate Doc" "true"
+fi
 
-    #TODO We temporarily disable this install step
-    ## echo -e "\n********** Stage 2b: Install **********\n"
-    ## make install
-    ## check_stage $? "Install" "true"
+if [ $run_package_gen -eq 1 ]; then
+    cd build
 
-    #TODO We temporarily disable this pip package generation step
-    ## echo -e "\n********** Stage 2c: Package **********\n"
-    ## make packageaimet
-    ## check_stage $? "Package" "true"
+    echo -e "\n********** Stage 2b: Install **********\n"
+    make install
+    check_stage $? "Install" "true"
+
+    echo -e "\n********** Stage 2c: Package **********\n"
+    make packageaimet
+    check_stage $? "Package" "true"
 fi
 
 if [ $run_unit_tests -eq 1 ]; then

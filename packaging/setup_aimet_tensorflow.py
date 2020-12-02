@@ -39,9 +39,12 @@
 from setuptools import setup, find_packages, find_namespace_packages
 import setup_cfg # pylint: disable=import-error
 
+package_url_base = setup_cfg.remote_url + "/releases/download/" + str(setup_cfg.version)
+
+common_dep_whl = package_url_base + "/AimetCommon-" + str(setup_cfg.version) + "-py3-none-any.whl"
+
 # get all packages , discard build files etc.
 packages_found = find_packages() + find_namespace_packages(exclude=['*bin', 'pyenv3*', 'build', 'dist', '*bin', '*x86*'])
-common_dep_whl = setup_cfg.remote_url + "/releases/download/"+str(setup_cfg.version)+"/AimetCommon-" + str(setup_cfg.version) + "-py3-none-any.whl"
 
 setup(
     name='AimetTensorflow',
@@ -49,13 +52,13 @@ setup(
     author='Qualcomm Innovation Center, Inc.',
     author_email='aimet@noreply.github.com',
     packages=packages_found,
-    url=setup_cfg.remote_url + '/AimetTensorflow',
+    url=package_url_base,
     license='NOTICE.txt',
     description='AIMET',
     long_description=open('README.txt').read(),
     package_data={'aimet_tensorflow':['acceptance_tests/*.*']},
+    install_requires=[],
     dependency_links=[common_dep_whl],
-    install_requires=["AimetCommon==" + str(setup_cfg.version)],
     include_package_data=True,
     zip_safe=True,
     platforms='x86',

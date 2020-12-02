@@ -70,8 +70,8 @@ pipeline {
 
                         stage('Build') {
                             steps {
-                                echo 'Building code...'
-                                sh 'bash -l -c "cd ${REPO_NAME} && ./buildntest.sh -b"'
+                                echo 'Building code (and generating Docs and pip packages)...'
+                                sh 'bash -l -c "cd ${REPO_NAME} && ./buildntest.sh -bp"'
                             }
                         }
 
