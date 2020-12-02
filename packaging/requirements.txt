@@ -7,7 +7,7 @@ tensorboard==1.15.0
 tensorboardX==1.7
 https://download.pytorch.org/whl/cu100/torchvision-0.5.0%2Bcu100-cp36-cp36m-linux_x86_64.whl
 https://download.pytorch.org/whl/cu100/torch-1.4.0%2Bcu100-cp36-cp36m-linux_x86_64.whl
-tensorflow-gpu==1.15.0
+tensorflow-gpu==2.3.1
 future==0.17.1
 bokeh==1.2.0
 pandas==1.1.1
