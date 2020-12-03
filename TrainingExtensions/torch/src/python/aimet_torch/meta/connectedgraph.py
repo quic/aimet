@@ -77,6 +77,7 @@ class IrNode:
 
 
 ConnectionsToIrDictType = Dict[torch._C.TensorType, List[Union[IrNode, List[IrNode]]]]
+ModuleTensorShapeMapType = Dict[torch.nn.Module, Tuple[List[Union[List, torch.Size]], List[Union[List, torch.Size]]]]
 
 
 class ConnectedGraph(AimetCommonConnectedGraph):
@@ -205,33 +206,36 @@ class ConnectedGraph(AimetCommonConnectedGraph):
             self._module_to_name[module] = name
 
     @staticmethod
-    def _generate_module_tensors_lookup_table(model: torch.nn.Module, model_input: Tuple[torch.Tensor]) -> \
-            Dict[torch.nn.Module,
-                 Tuple[Union[torch.Tensor, Tuple[torch.Tensor]],
-                       Union[torch.Tensor, Tuple[torch.Tensor]]]]:
+    def _generate_module_tensor_shapes_lookup_table(model: torch.nn.Module, model_input: Tuple[torch.Tensor]) -> \
+            ModuleTensorShapeMapType:
         """
-        Generates a look up dictionary for getting modules from their names.
+        Generates a look up dictionary for getting module input and output shapes from the module.
         :param model: Pytorch model
         :param model_input: Input to run through forward pass
-        :return: Map of modules and input and output tensor obtained from a forward pass
+        :return: Map of modules and input and output tensor shapes obtained from a forward pass
         """
-        module_tensor_tuples_map = {}
+        module_tensor_shapes_map = {}
 
         def forward_hook(curr_module: torch.nn.Module,
-                         input_tensor_tuple: Tuple[torch.Tensor],
-                         output_tensor_tuple: Tuple[torch.Tensor]):
+                         input_tensor_tuple: Union[torch.Tensor, List, None],
+                         output_tensor_tuple: Union[torch.Tensor, List, None]):
             """
-            Custom forward hook function to add every module to module-to-tensor dict.
+            Custom forward hook function to add every module to module-to-tensor shapes dict.
             :param curr_module: Current module being traversed during forward pass.
             :param input_tensor_tuple: tuple of input tensors to the current module
             :param output_tensor_tuple: tuple of output tensors of the current module
             """
-            # Currently, we assume that multiple input tensors have the same shape, and likewise for output tensors.
-            module_tensor_tuples_map[curr_module] = (input_tensor_tuple, output_tensor_tuple)
+            input_shapes = _get_module_tensor_shapes_entry(input_tensor_tuple)
+            output_shapes = _get_module_tensor_shapes_entry(output_tensor_tuple)
+            if not isinstance(input_shapes, List):
+                input_shapes = [input_shapes]
+            if not isinstance(output_shapes, List):
+                output_shapes = [output_shapes]
+            module_tensor_shapes_map[curr_module] = (input_shapes, output_shapes)
 
         run_hook_for_layers_with_given_input(model, model_input, forward_hook, leaf_node_only=False)
 
-        return module_tensor_tuples_map
+        return module_tensor_shapes_map
 
     def _construct_graph(self, model: torch.nn.Module, model_input: Tuple[torch.Tensor]):
         """
@@ -239,11 +243,11 @@ class ConnectedGraph(AimetCommonConnectedGraph):
         :param model: Pytorch model to create connected graph from
         :param model_input: Example input to model.  Can be a single tensor or a list/tuple of input tensors
         """
-        module_tensor_tuples_map = ConnectedGraph._generate_module_tensors_lookup_table(model, model_input)
+        module_tensor_shapes_map = ConnectedGraph._generate_module_tensor_shapes_lookup_table(model, model_input)
         trace = torch.jit.trace(model, model_input)
         ir_nodes_list, output_map = self._parse_top_level_trace(trace, model)
         self._construct_ops_and_products(ir_nodes_list,
-                                         module_tensor_tuples_map,
+                                         module_tensor_shapes_map,
                                          self.passthrough_graph_nodes,
                                          self.input_graph_nodes_to_ignore,
                                          output_map)
@@ -481,17 +485,15 @@ class ConnectedGraph(AimetCommonConnectedGraph):
 
     def _construct_ops_and_products(self,
                                     ir_nodes_list: List[IrNode],
-                                    module_tensor_tuples_map: Dict[torch.nn.Module,
-                                                                   Tuple[Union[torch.Tensor, Tuple[torch.Tensor]],
-                                                                         Union[torch.Tensor, Tuple[torch.Tensor]]]],
+                                    module_tensor_shapes_map: ModuleTensorShapeMapType,
                                     passthrough_types: List[str],
                                     input_types_to_ignore: List[str],
                                     output_map: Dict[torch._C.TensorType, torch._C.TensorType]):
         """
         Create ops and products from nodes and connections.
         :param ir_nodes_list: List of ir_nodes to create ops for
-        :param module_tensor_tuples_map: Dictionary mapping modules to input and output tensors obtained from a forward
-            pass
+        :param module_tensor_shapes_map: Dictionary mapping modules to input and output tensor shapes obtained from a
+            forward pass
         :param passthrough_types: IrNode types to treat as passthrough (ops will not be created for these ir_nodes)
         :param input_types_to_ignore: Input node types to ignore (do not create products for output connections from
             these ir_nodes)
@@ -505,20 +507,18 @@ class ConnectedGraph(AimetCommonConnectedGraph):
                              and ir_node.node_type not in input_types_to_ignore
                              and ir_node.node_type not in passthrough_types]
         connections_to_nodes_dict = _create_connections_to_ir_nodes_dict(filtered_ir_nodes)
-        ir_node_to_op_dict = self._create_ops_from_ir_nodes_list(filtered_ir_nodes, module_tensor_tuples_map)
+        ir_node_to_op_dict = self._create_ops_from_ir_nodes_list(filtered_ir_nodes, module_tensor_shapes_map)
         self._create_products_from_connections(connections_to_nodes_dict, ir_node_to_op_dict, output_map,
                                                input_types_to_ignore)
 
     def _create_ops_from_ir_nodes_list(self, ir_nodes_list: List[IrNode],
-                                       module_tensor_tuples_map: Dict[torch.nn.Module,
-                                                                      Tuple[Union[torch.Tensor, Tuple[torch.Tensor]],
-                                                                            Union[torch.Tensor, Tuple[torch.Tensor]]]])\
+                                       module_tensor_shapes_map: ModuleTensorShapeMapType)\
             -> Dict[IrNode, Op]:
         """
         Given a list of nodes, create ops for each one.
         :param ir_nodes_list: List of nodes to create ops for
-        :param module_tensor_tuples_map: Dictionary mapping modules to input and output tensors obtained from a forward
-            pass
+        :param module_tensor_shapes_map: Dictionary mapping modules to input and output tensor shapes obtained from a
+            forward pass
         :return: Dictionary mapping nodes to corresponding ops that were created
         """
         node_to_op_dict = {}
@@ -528,12 +528,10 @@ class ConnectedGraph(AimetCommonConnectedGraph):
                     op_type=node.node_type)
             if node.module is not None:
                 op.model_module = PytorchModelModule(node.module)
-                _, output_tensor_tuple = module_tensor_tuples_map[node.module]
-                # Obtain the shape of the output Tensor (or first Tensor if Tuple)
-                output_shape = list(
-                    output_tensor_tuple[0].shape if isinstance(output_tensor_tuple, tuple)
-                    else output_tensor_tuple.shape)
-                op.output_shape = output_shape
+                _, output_tensor_shapes = module_tensor_shapes_map[node.module]
+                # For now, treat only the first output shape as the shape of the node if there is more than one entry
+                flattened_shapes = _flatten_lists(output_tensor_shapes)
+                op.output_shape = flattened_shapes[0]
                 op.dotted_name = self._module_to_name[node.module]
                 _fill_groups_info(op, node.module)
             node_to_op_dict[node] = op
@@ -881,8 +879,8 @@ def _create_connections_to_ir_nodes_dict(ir_nodes_list: List[IrNode]) -> Connect
     """
     connections_to_ir_nodes_dict = {}
     for ir_node in ir_nodes_list:
-        node_inputs = _flatten_lists_of_connections(ir_node.inputs)
-        node_outputs = _flatten_lists_of_connections(ir_node.outputs)
+        node_inputs = _flatten_lists(ir_node.inputs)
+        node_outputs = _flatten_lists(ir_node.outputs)
         for inp in node_inputs:
             if inp in connections_to_ir_nodes_dict:
                 connections_to_ir_nodes_dict[inp][1].append(ir_node)
@@ -1085,20 +1083,20 @@ def _create_functional_ir_node(node: torch._C.Node, inputs_map: Dict[torch._C.Te
     return ir_node
 
 
-def _flatten_lists_of_connections(connections: List[Union[List, torch._C.TensorType]]) -> List[torch._C.TensorType]:
+def _flatten_lists(nested_list: List[List]) -> List:
     """
-    Given a list which may contain either a torch Tensor connection or a further list of connections, generate a list
-    that only contains connections by bringing all elements of nested lists into the top level list.
-    :param connections: List containing connections and/or lists of connections
-    :return: List containing only connections (no nested lists)
+    Given a list which may contain either an item or a further list of items, generate a list that only contains items
+    by bringing all elements of nested lists into the top level list.
+    :param nested_list: List containing items or lists of items
+    :return: List containing only items (no nested lists)
     """
-    connection_list = []
-    for connection in connections:
-        if not isinstance(connection, List):
-            connection_list.append(connection)
+    flattened_list = []
+    for item in nested_list:
+        if not isinstance(item, List):
+            flattened_list.append(item)
         else:
-            connection_list.extend(_flatten_lists_of_connections(connection))
-    return connection_list
+            flattened_list.extend(_flatten_lists(item))
+    return flattened_list
 
 
 def _update_inputs_map(curr_inputs: List[torch._C.TensorType], higher_level_inputs: List[torch._C.TensorType],
@@ -1116,3 +1114,19 @@ def _update_inputs_map(curr_inputs: List[torch._C.TensorType], higher_level_inpu
             inputs_map[curr_inputs[idx + 1]] = inputs_map[inp]
         else:
             inputs_map[curr_inputs[idx + 1]] = inp
+
+
+def _get_module_tensor_shapes_entry(tensors: Union[torch.Tensor, List, None]):
+    """
+    Given the tensor input or output for a module, extract their shapes and return the shapes in the same list structure
+    as the given tensor.
+    :param tensors: Input or output tensors for a module
+    :return: Shapes of the constituent tensors in tensors
+    """
+    if tensors is None:
+        return None
+    if isinstance(tensors, torch.Tensor):
+        return tensors.shape
+    # Tensors must then be a nested list of tensors, so recursively get the shapes for each item in the list
+    assert isinstance(tensors, (List, Tuple))
+    return [_get_module_tensor_shapes_entry(entry) for entry in tensors]
