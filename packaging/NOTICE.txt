@@ -1,38 +1,36 @@
-# =============================================================================
-#  @@-COPYRIGHT-START-@@
-#
-#  Copyright (c) 2020, Qualcomm Innovation Center, Inc. All rights reserved.
-#
-#  Redistribution and use in source and binary forms, with or without
-#  modification, are permitted provided that the following conditions are met:
-#
-#  1. Redistributions of source code must retain the above copyright notice,
-#     this list of conditions and the following disclaimer.
-#
-#  2. Redistributions in binary form must reproduce the above copyright notice,
-#     this list of conditions and the following disclaimer in the documentation
-#     and/or other materials provided with the distribution.
-#
-#  3. Neither the name of the copyright holder nor the names of its contributors
-#     may be used to endorse or promote products derived from this software
-#     without specific prior written permission.
-#
-#  THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
-#  AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
-#  IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
-#  ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE
-#  LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
-#  CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
-#  SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
-#  INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
-#  CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
-#  ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
-#  POSSIBILITY OF SUCH DAMAGE.
-#
-#  SPDX-License-Identifier: BSD-3-Clause
-#
-#  @@-COPYRIGHT-END-@@
-# =============================================================================
+===============================================================================
+
+This file contains certain notices of software components included with the 
+software that Qualcomm Innovation Center, Inc. ("QuIC") and/or its subsidiaries
+are required to provide you. Except where prohibited by the open source license,
+the content of this file is provided solely to satisfy QuIC's and/or its 
+subsidiariesâ€™ attribution and notice requirements, and your use of these 
+software components together with the software of QuIC and/or its subsidiaries
+("Software") is subject to the terms of your license from QuIC and/or its 
+subsidiaries, as the case may be. Compliance with all copyright laws and software
+license agreements included in the notice section of this file are the 
+responsibility of the user. Except as may be granted by separate express written
+agreement, this file provides no license to any patents, trademarks, copyrights,
+or other intellectual property of Qualcomm Incorporated or any of its 
+subsidiaries.
+
+Software provided with this notice is NOT A CONTRIBUTION to any open source 
+project. If alternative licensing is available for any of the components with 
+licenses or attributions provided below, a license choice is made for receiving
+such code by QuIC and/or its subsidiaries, as the case may be.
+
+Copyright (c) 2020 of Qualcomm Innovation Center, Inc.  All rights reserved.
+
+Qualcomm is a trademark of Qualcomm Incorporated, registered in the United States
+and other countries. All Qualcomm Incorporated trademarks are used with 
+permission. Other products and brand names may be trademarks or registered 
+trademarks of their respective owners.
+
+This software may be subject to U.S. and international export, re-export or 
+transfer (export) laws.  Diversion contrary to U.S. and international law is 
+strictly prohibited.
+
+===================================================================
 
 # Copyright (c) 2006, Laurent Montel, <montel@kde.org>
 #
