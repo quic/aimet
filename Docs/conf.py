@@ -126,7 +126,7 @@ autosectionlabel_prefix_document = True
 # a list of builtin themes.
 #
 html_theme = 'bizstyle'
-html_title = 'AI Model Efficiency Toolkit Documentation: ver 1.11.0'
+html_title = 'AI Model Efficiency Toolkit Documentation: ver ' + release
 html_logo = 'images/brain_logo.png'
 
 # Theme options are theme-specific and customize the look and feel of a theme
