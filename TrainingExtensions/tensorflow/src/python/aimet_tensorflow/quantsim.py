@@ -60,6 +60,8 @@ from aimet_tensorflow.utils.graph import updated_graph_flow_context_to_loop_cont
     op_not_in_loop_control_flow_context
 from aimet_tensorflow.common.connectedgraph import ConnectedGraph
 from aimet_tensorflow.quantsim_config.quantsim_config import QuantSimConfigurator
+from aimet_tensorflow.quantsim_recurrent import _select_simple_rnn_internal_ops_to_quantize, \
+    _select_lstm_internal_ops_to_quantize, SUPPORTED_RECURRENT_TYPES
 
 # this is required to associate gradient with QcQuantize op
 from aimet_tensorflow import quantsim_straight_through_grad      # pylint: disable=unused-import
@@ -738,6 +740,61 @@ class QuantizationSimModel:
         update_tensor_quantizer_references(self.session, self._activation_quantizers)
         update_tensor_quantizer_references(self.session, self._param_quantizers)
 
+    def _add_quant_nodes_recurrent(self, graph, starting_op_names: List[str], output_op_names: List[str],
+                                   default_param_bw: int, default_output_bw: int) \
+            -> Tuple[List[str], List[int], List[str]]:
+        """
+        Utility to add quant nodes to recurrent module
+        :param graph: TensorFlow graph
+        :param starting_op_names: List of starting op names of the model
+        :param output_op_names: List of output op names of the model
+        :param default_param_bw: default param bitwidth
+        :param default_output_bw: default output bitwidth
+        :return: Tuple[List[str], List[int], List[str]], param op names, input indices and activation op names
+        """
+
+        # pylint: disable=protected-access
+        # pylint: disable=too-many-locals
+
+        # Register custom handlers to select internal ops to quantize in a given recurrent module type
+        switcher = {
+            "SimpleRNN": _select_simple_rnn_internal_ops_to_quantize,
+            "LSTM": _select_lstm_internal_ops_to_quantize
+        }
+
+        ops_with_param_names = []
+        input_indices = []
+        activation_op_names = []
+
+        conn_graph = ConnectedGraph(graph, starting_op_names, output_op_names)
+        for op in conn_graph.get_all_ops().values():
+            #  we can configure custom layer selectors per recurrent type or use default one
+            if op.type in SUPPORTED_RECURRENT_TYPES:
+
+                internal_ops = op.internal_ops
+
+                # select internal ops to quantize in this recurrent type
+                select_internal_ops_to_quantize = switcher.get(op.type)
+                module_ops_with_param_names, module_op_input_indices, module_activation_op_names = \
+                    select_internal_ops_to_quantize(self.session.graph, internal_ops)
+
+                # insert the quant nodes
+                self._insert_param_quantization_ops(module_ops_with_param_names, module_op_input_indices,
+                                                    default_param_bw, in_loop_context=True)
+
+                self._insert_activation_quantization_ops(module_activation_op_names, default_output_bw,
+                                                         in_loop_context=True)
+
+                # if there are multiple recurrent modules, we want a list containing all the param
+                # and activation info
+                if module_ops_with_param_names and module_op_input_indices:
+                    ops_with_param_names.extend(module_ops_with_param_names)
+                    input_indices.extend(module_op_input_indices)
+                if module_activation_op_names:
+                    activation_op_names.extend(module_activation_op_names)
+
+        return ops_with_param_names, input_indices, activation_op_names
+
     def _add_and_configure_quant_nodes(self, starting_op_names: List[str], output_op_names: List[str],
                                        default_param_bw: int, default_output_bw: int, config_file: str):
         """
@@ -761,6 +818,17 @@ class QuantizationSimModel:
 
         self._insert_param_quantization_ops(ops_with_param_names, input_indices, default_param_bw)
         self._insert_activation_quantization_ops(activation_op_names, default_output_bw)
+
+        # this takes care of quant node insertion in loop context of recurrent layer, which makes a cell
+        recurrent_ops_with_param_names, recurrent_input_indices, recurrent_activation_op_names = \
+            self._add_quant_nodes_recurrent(self.session.graph, starting_op_names, output_op_names,
+                                            default_param_bw, default_output_bw)
+
+        if recurrent_ops_with_param_names and recurrent_input_indices:
+            ops_with_param_names.extend(recurrent_ops_with_param_names)
+            input_indices.extend(recurrent_input_indices)
+        if recurrent_activation_op_names:
+            activation_op_names.extend(recurrent_activation_op_names)
 
         # Note: at this point, the session used to construct conn_graph is different than the current
         # self.session, however we still use the connected graph to traverse the graph structure.
