@@ -574,3 +574,21 @@ def change_tensor_device_placement(tensor_data: Union[torch.tensor, List, Tuple]
             tensor_data[index] = change_tensor_device_placement(item, device=device)
 
     return tensor_data
+
+
+def find_num_output_tensors_per_module(model: torch.nn.Module, input_tensors):
+    """
+    Returns a map of module -> number of output tensors, for all the children modules of the
+    provided module
+    :param model: Torch module to find children modules for
+    :param input_tensors: Input tensor to use to run forward pass for the model
+    :return: map of module -> number of output tensors
+    """
+
+    num_outputs_map = {}
+
+    def record_num_outputs(module, _, outputs):
+        num_outputs_map[module] = len(outputs)
+
+    run_hook_for_layers_with_given_input(model, input_tensors, record_num_outputs)
+    return num_outputs_map
