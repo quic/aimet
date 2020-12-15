@@ -53,7 +53,6 @@ TensorQuantizer::TensorQuantizer(QuantizationMode quantScheme, RoundingMode roun
     _tensorQuantizationSim = getTensorQuantizationSim<float>();
 }
 
-
 QuantizationMode TensorQuantizer::getQuantScheme()
 {
     return _quantScheme;

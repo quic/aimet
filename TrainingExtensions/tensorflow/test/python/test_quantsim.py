@@ -835,7 +835,6 @@ class TestQuantSim(unittest.TestCase):
             self.assertEqual(can_modify_op, tf_strided_slice_op_in)
             self.assertEqual(param_in, param_in_through_strided_slice)
 
-
     def validate_simple_rnn_auto_insertion_and_forward_pass(self, sess):
         """
         common api to validate auto quant node insertion and forward pass for simple rnn layer
@@ -871,8 +870,7 @@ class TestQuantSim(unittest.TestCase):
         activation_matmul_2_op_inside_while_block_name = "simple_rnn/while/MatMul_1_quantized"
 
         # get ops and make sure we have a quantized op added to the conditional block
-        ops = sim.session.graph.get_operations()
-        quantized_graph_op_names = [op.name for op in ops if op.type == "QcQuantize"]
+        quantized_graph_op_names = self._get_quant_ops_from_tf_graph(sim.session.graph)
 
         # while block ops
         # bias and kernel quantizers
@@ -915,6 +913,12 @@ class TestQuantSim(unittest.TestCase):
                                                                         QuantizeOpIndices.encoding_min])
             matmul_1_weight_quant_op_encoding_max = sim.session.run(matmul_1_weight_quant_op.inputs[
                                                                         QuantizeOpIndices.encoding_max])
+
+        # check weight encodings are set correctly (we have fixed the TF seed above)
+        # self.assertEqual(matmul_weight_quant_op_encoding_min, -0.22920194268226624)
+        # self.assertEqual(matmul_weight_quant_op_encoding_max, 0.2310066819190979)
+        # self.assertEqual(matmul_1_weight_quant_op_encoding_min, -0.73015958070755)
+        # self.assertEqual(matmul_1_weight_quant_op_encoding_max, 0.7359088063240051)
 
         # close tf sessions
         sess.close()
@@ -1001,6 +1005,98 @@ class TestQuantSim(unittest.TestCase):
 
         sess.close()
 
+    def test_backward_pass_time_taken_simple_rnn(self, is_quantized=True, iterations=10, time_steps=1):
+        """ perform backward pass with quantized simple RNN block"""
+
+        tf.reset_default_graph()
+
+        sess = tf.Session()
+        np.random.seed(0)
+        tf.set_random_seed(0)
+
+        batches = 16
+
+        with sess.graph.as_default():
+            inputs = tf.keras.Input(shape=(1, 100))
+
+            # Add an RNN layer with 12 internal units.
+            x = tf.keras.layers.SimpleRNN(12, kernel_initializer='glorot_uniform',
+                                          recurrent_initializer='orthogonal')(inputs)
+
+            _ = tf.keras.layers.Dense(10, activation=tf.nn.softmax,
+                                      name="simplernn_model")(x)
+
+            init = tf.global_variables_initializer()
+            sess.run(init)
+        curr_sess = sess
+        var = tf.compat.v1.global_variables()
+        ops = sess.graph.get_operations()
+
+        if is_quantized:
+            sim = QuantizationSimModel(sess, ['input_1'], ['simplernn_model/Softmax'], use_cuda=False)
+            # sim = QuantizationSimModel(sess, ['input_1'], ['matmul0/Softmax'], use_cuda=False)
+            #
+            def dummy_forward_pass(sess, args):
+                model_output = sess.graph.get_tensor_by_name('simplernn_model/Softmax:0')
+                # model_output = sess.graph.get_tensor_by_name('matmul0/Softmax:0')
+                model_input = sess.graph.get_tensor_by_name('input_1:0')
+                dummy_input = np.random.randn(batches, 1, 100)
+                sess.run(model_output, feed_dict={model_input: dummy_input})
+
+            sim.compute_encodings(dummy_forward_pass, None)
+
+            curr_sess = sim.session
+
+        inp_tensor = curr_sess.graph.get_tensor_by_name('input_1:0')
+        np.random.seed(0)
+        w_shape = inp_tensor.shape
+
+        inp_data = np.random.rand(batches, w_shape[1], w_shape[2])
+        logits = curr_sess.graph.get_tensor_by_name('simplernn_model/MatMul:0')
+        # logits = curr_sess.graph.get_tensor_by_name('matmul0/MatMul:0')
+
+        labels = np.random.randint(10, size=batches)
+        one_hot_labels = np.eye(10)[labels]
+
+        with curr_sess.graph.as_default():
+            var_list = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES)
+            labels_placeholder = tf.placeholder(tf.float32, [None, 10], name='labels')
+            loss = tf.losses.softmax_cross_entropy(onehot_labels=labels_placeholder, logits=logits)
+
+            update_ops = []
+            global_step = tf.train.create_global_step()
+            optimizer = tf.train.GradientDescentOptimizer(learning_rate=1e-3)
+            gradients = optimizer.compute_gradients(loss, var_list)
+
+            init_global = tf.global_variables_initializer()
+            init_local = tf.local_variables_initializer()
+            init = tf.group(init_global, init_local)
+            curr_sess.run(init)
+
+            grad_updates = optimizer.apply_gradients(gradients, global_step=global_step)
+            update_ops.append(grad_updates)
+            update_op = tf.group(*update_ops)
+
+            with tf.control_dependencies([update_op]):
+                train_op = tf.identity(loss, name='train_op')
+
+            # start training
+            time_taken_by_default_grad = 0
+            for i in range(iterations):
+                start_time = time.perf_counter()
+                _ = curr_sess.run(train_op, feed_dict={inp_tensor: inp_data, labels_placeholder: one_hot_labels})
+                exec_time = time.perf_counter() - start_time
+                time_taken_by_default_grad = time_taken_by_default_grad + exec_time
+
+            default_grad_avg_time = time_taken_by_default_grad / iterations
+
+        # close session
+        sess.close()
+        if is_quantized:
+            sim.session.close()
+
+        return default_grad_avg_time
+
     # Keeping this disabled, this is for study purpose
     def _test_compare_simple_rnn_training_processing_time_increase(self):
         """
@@ -1010,7 +1106,7 @@ class TestQuantSim(unittest.TestCase):
         """
 
         # compare with and without quantize nodes
-        itr = 10000
+        itr = 1
         no_quant_simple_rnn_train_avg_time = self.test_backward_pass_time_taken_simple_rnn(is_quantized=False,
                                                                                            iterations=itr)
         quantized_simple_rnn_train_avg_time = self.test_backward_pass_time_taken_simple_rnn(is_quantized=True,
@@ -1187,6 +1283,42 @@ class TestQuantSim(unittest.TestCase):
             recurrent_kenel_param_quant_op_cp4_encoding_max = sim.session.run(recurrent_kenel_param_quant_op_cp4.inputs[
                                                                                   QuantizeOpIndices.encoding_max])
 
+        # check weight encodings are set correctly (we have fixed the TF seed above)
+        # if is_stacked_last_lstm:
+        #     if is_time_major:
+        #         self.assertEqual(kernel_param_quant_op_encoding_min, -0.3130139708518982)
+        #         self.assertEqual(kernel_param_quant_op_encoding_max, 0.31547868251800537)
+        #         self.assertEqual(recurrent_kenel_param_quant_op_cp1_encoding_min, -0.39643698930740356)
+        #         self.assertEqual(recurrent_kenel_param_quant_op_cp1_encoding_max, 0.39955854415893555)
+        #         self.assertEqual(recurrent_kenel_param_quant_op_cp2_encoding_min, -0.39643698930740356)
+        #         self.assertEqual(recurrent_kenel_param_quant_op_cp2_encoding_max, 0.39955854415893555)
+        #         self.assertEqual(recurrent_kenel_param_quant_op_cp3_encoding_min, -0.39643698930740356)
+        #         self.assertEqual(recurrent_kenel_param_quant_op_cp3_encoding_max, 0.39955854415893555)
+        #         self.assertEqual(recurrent_kenel_param_quant_op_cp4_encoding_min, -0.39643698930740356)
+        #         self.assertEqual(recurrent_kenel_param_quant_op_cp4_encoding_max, 0.39955854415893555)
+        #     else:
+        #         self.assertEqual(kernel_param_quant_op_encoding_min, -0.3133370876312256)
+        #         self.assertEqual(kernel_param_quant_op_encoding_max, 0.31580430269241333)
+        #         self.assertEqual(recurrent_kenel_param_quant_op_cp1_encoding_min, -0.4347202777862549)
+        #         self.assertEqual(recurrent_kenel_param_quant_op_cp1_encoding_max, 0.4381433129310608)
+        #         self.assertEqual(recurrent_kenel_param_quant_op_cp2_encoding_min, -0.4347202777862549)
+        #         self.assertEqual(recurrent_kenel_param_quant_op_cp2_encoding_max, 0.4381433129310608)
+        #         self.assertEqual(recurrent_kenel_param_quant_op_cp3_encoding_min, -0.4347202777862549)
+        #         self.assertEqual(recurrent_kenel_param_quant_op_cp3_encoding_max, 0.4381433129310608)
+        #         self.assertEqual(recurrent_kenel_param_quant_op_cp4_encoding_min, -0.4347202777862549)
+        #         self.assertEqual(recurrent_kenel_param_quant_op_cp4_encoding_max, 0.4381433129310608)
+        # else:
+        #     self.assertEqual(kernel_param_quant_op_encoding_min, -0.19972173869609833)
+        #     self.assertEqual(kernel_param_quant_op_encoding_max, 0.20129434764385223)
+        #     self.assertEqual(recurrent_kenel_param_quant_op_cp1_encoding_min, -0.43212029337882996)
+        #     self.assertEqual(recurrent_kenel_param_quant_op_cp1_encoding_max, 0.43552282452583313)
+        #     self.assertEqual(recurrent_kenel_param_quant_op_cp2_encoding_min, -0.43212029337882996)
+        #     self.assertEqual(recurrent_kenel_param_quant_op_cp2_encoding_max, 0.43552282452583313)
+        #     self.assertEqual(recurrent_kenel_param_quant_op_cp3_encoding_min, -0.43212029337882996)
+        #     self.assertEqual(recurrent_kenel_param_quant_op_cp3_encoding_max, 0.43552282452583313)
+        #     self.assertEqual(recurrent_kenel_param_quant_op_cp4_encoding_min, -0.43212029337882996)
+        #     self.assertEqual(recurrent_kenel_param_quant_op_cp4_encoding_max, 0.43552282452583313)
+
     def test_quantize_lstm_default_quantsim_and_forward_pass(self):
         """ Test connected graph construction on a model with lstm op """
         tf.reset_default_graph()
@@ -1212,8 +1344,7 @@ class TestQuantSim(unittest.TestCase):
 
         # validate quantsim
         # get ops and make sure we have a quantized op added to the conditional block
-        ops = sim.session.graph.get_operations()
-        quantized_graph_op_names = [op.name for op in ops if op.type == "QcQuantize"]
+        quantized_graph_op_names = self._get_quant_ops_from_tf_graph(sim.session.graph)
 
         self.validate_internal_lstm_quantisim_nodes(quantized_graph_op_names)
 
@@ -1273,6 +1404,17 @@ class TestQuantSim(unittest.TestCase):
         # close tf sessions
         sess.close()
         sim.session.close()
+
+    def _get_quant_ops_from_tf_graph(self, gr: tf.Graph):
+        """
+        utility to get quant op names in given graph
+        :param graph: tf.Graph
+        :return:
+        """
+        ops = gr.get_operations()
+        quantized_graph_op_names = [op.name for op in ops if op.type in ["QcQuantize", "QcQuantizeRecurrentParam"]]
+
+        return quantized_graph_op_names
 
     def test_quantize_simple_rnn_save_and_load_checkpoint(self):
         """ Test model export for recurrent models """
@@ -1348,8 +1490,7 @@ class TestQuantSim(unittest.TestCase):
 
         # validate quantsim
         # get ops and make sure we have a quantized op added to the conditional block
-        ops = sim.session.graph.get_operations()
-        quantized_graph_op_names = [op.name for op in ops if op.type == "QcQuantize"]
+        quantized_graph_op_names = self._get_quant_ops_from_tf_graph(sim.session.graph)
 
         self.validate_internal_lstm_quantisim_nodes(quantized_graph_op_names)
 
@@ -1384,9 +1525,8 @@ class TestQuantSim(unittest.TestCase):
                                    use_cuda=False)
 
         # validate quantsim
-        # get ops and make sure we have a quantized op added to the conditional block
-        ops = sim.session.graph.get_operations()
-        quantized_graph_op_names = [op.name for op in ops if op.type == "QcQuantize"]
+        # get ops and make sure we have a quantized op added to the conditional blocks
+        quantized_graph_op_names = self._get_quant_ops_from_tf_graph(sim.session.graph)
 
         batches = 32
         def dummy_forward_pass(sess, args):
@@ -1434,8 +1574,7 @@ class TestQuantSim(unittest.TestCase):
 
         # validate quantsim
         # get ops and make sure we have a quantized op added to the conditional block
-        ops = sim.session.graph.get_operations()
-        quantized_graph_op_names = [op.name for op in ops if op.type == "QcQuantize"]
+        quantized_graph_op_names = self._get_quant_ops_from_tf_graph(sim.session.graph)
 
         # _ = tf.summary.FileWriter('./lstm_tm', sess.graph)
         self.validate_internal_lstm_quantisim_nodes(quantized_graph_op_names, 'lstm_stacked', True, True)
@@ -1470,15 +1609,13 @@ class TestQuantSim(unittest.TestCase):
 
         init = tf.global_variables_initializer()
         sess.run(init)
-        # _ = tf.summary.FileWriter('./lstm', sess.graph)
 
         sim = QuantizationSimModel(sess, ['input_1'], ['lstm_model/Softmax'],
                                    use_cuda=False)
 
         # validate quantsim
         # get ops and make sure we have a quantized op added to the conditional block
-        ops = sim.session.graph.get_operations()
-        quantized_graph_op_names = [op.name for op in ops if op.type == "QcQuantize"]
+        quantized_graph_op_names = self._get_quant_ops_from_tf_graph(sim.session.graph)
 
         # _ = tf.summary.FileWriter('./lstm_tm', sess.graph)
         self.validate_internal_lstm_quantisim_nodes(quantized_graph_op_names, 'lstm_stacked', True, False)
@@ -1500,9 +1637,9 @@ class TestQuantSim(unittest.TestCase):
         sess = tf.Session()
         np.random.seed(0)
         tf.set_random_seed(0)
-
+        timesteps = 5
         with sess.graph.as_default():
-            inputs = tf.keras.Input(shape=(3, 100))
+            inputs = tf.keras.Input(shape=(timesteps, 100))
 
             # Add a lstm layer with 12 internal units.
             x = tf.keras.layers.LSTM(12)(inputs)
@@ -1519,7 +1656,7 @@ class TestQuantSim(unittest.TestCase):
             def dummy_forward_pass(sess, args):
                 model_output = sess.graph.get_tensor_by_name('lstm_model/Softmax:0')
                 model_input = sess.graph.get_tensor_by_name('input_1:0')
-                dummy_input = np.random.randn(32, 3, 100)
+                dummy_input = np.random.randn(32, 5, 100)  # time_steps = 5
                 sess.run(model_output, feed_dict={model_input: dummy_input})
 
             sim.compute_encodings(dummy_forward_pass, None)
@@ -1584,7 +1721,7 @@ class TestQuantSim(unittest.TestCase):
         """
 
         # compare with and without quantize nodes
-        itr = 1000
+        itr = 10000
         no_quant_lstm_train_avg_time = self.test_backward_pass_time_taken_lstm(is_quantized=False,
                                                                                iterations=itr)
         quantized_lstm_train_avg_time = self.test_backward_pass_time_taken_lstm(is_quantized=True,

@@ -85,7 +85,7 @@ class QuantizeOpIndices():
     encoding_max = 4
     bit_width = 5
     use_symmetric_encoding = 6
-
+    time_steps = 7
 
 class BNOpParamType():
     """ BN OP Param types """
