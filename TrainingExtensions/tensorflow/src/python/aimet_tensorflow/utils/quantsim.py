@@ -69,7 +69,7 @@ def get_param_quantizer(op: tf.Operation, index: int) -> tf.Operation:
         matmul_input_op = op.inputs[index].op
         # get quantized readVarOp
         for inp in matmul_input_op.inputs:
-            if inp.op.type in ['QcQuantize']:
+            if inp.op.type in ['QcQuantize', 'QcQuantizeRecurrentParam']:
                 quantized_op = inp.op
 
     return quantized_op
@@ -97,7 +97,7 @@ def create_op_to_quant_ops_dict(graph: tf.Graph, conn_graph: ConnectedGraph, ops
         if op_with_param.type == 'BiasAdd':
             param_type = 'bias'
         param_quantizer = get_param_quantizer(op_with_param, index)
-        assert param_quantizer.type == 'QcQuantize'
+        assert param_quantizer.type in ['QcQuantize', 'QcQuantizeRecurrentParam']
         add_op_to_quant_ops_dict_entry(param_quantizer, conn_graph_op, True, param_type, op_to_quant_ops_dict)
     for activation_op_name in activation_op_names:
         activation_op = graph.get_operation_by_name(activation_op_name)
@@ -168,3 +168,20 @@ def is_op_quantizable(op: tf.Operation) -> bool:
             return True
 
     return False
+
+
+def get_time_steps_tensor_from_rnn_inner_ops(inner_ops: List[tf.Operation]) -> tf.Tensor:
+    """
+    returns the time steps tensor from RNN inner op list
+    :param inner_ops: list of tf.Operations inside a RNN op
+    :return: tf.Tensor corresponding to time_steps param
+    """
+    for op in inner_ops:
+        if op.type in ['LoopCond']:
+            tf_less_op = op.inputs[0].op
+            assert tf_less_op.type == 'Less'
+            less_enter_op = tf_less_op.inputs[1].op
+            assert less_enter_op.type == 'Enter'
+            time_steps_tensor = less_enter_op.inputs[0]
+
+    return time_steps_tensor

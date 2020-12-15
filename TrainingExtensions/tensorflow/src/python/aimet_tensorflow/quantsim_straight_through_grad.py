@@ -42,16 +42,7 @@ from tensorflow.python.framework import ops as tf_ops
 from aimet_tensorflow.utils.constants import QuantizeOpIndices
 
 
-# by default we will have this registered for Qc Quantize op.
-@tf_ops.RegisterGradient("QcQuantize")
-def _qc_straight_through_estimator_grad(op, grad):
-    # pylint: disable=unused-argument
-    """
-    straight through estimator logic used to compute gradient for Quantize Op.
-    :param op: quantize op
-    :param grad: gradient
-    :return: gradients computed per input
-    """
+def _compute_dloss_by_dx(op, grad):
     x = tf.cast(op.inputs[0], tf.float32)
     encoding_min = tf.cast(op.inputs[int(QuantizeOpIndices.encoding_min)], tf.float32)
     encoding_max = tf.cast(op.inputs[int(QuantizeOpIndices.encoding_max)], tf.float32)
@@ -68,4 +59,33 @@ def _qc_straight_through_estimator_grad(op, grad):
     # Pass through gradient for skipped ops
     dloss_by_dx = tf.cond(tf.equal(op_mode, 3), lambda: grad, lambda: dloss_by_dx)
 
+    return dloss_by_dx
+
+
+# by default we will have this registered for Qc Quantize op.
+@tf_ops.RegisterGradient("QcQuantize")
+def _qc_straight_through_estimator_grad(op, grad):
+    # pylint: disable=unused-argument
+    """
+    straight through estimator logic used to compute gradient for Quantize Op.
+    :param op: quantize op
+    :param grad: gradient
+    :return: gradients computed per input
+    """
+
+    dloss_by_dx = _compute_dloss_by_dx(op, grad)
     return dloss_by_dx, None, None, None, None, None, None
+
+
+@tf_ops.RegisterGradient("QcQuantizeRecurrentParam")
+def _qc_recurrent_param_straight_through_estimator_grad(op, grad):
+    # pylint: disable=unused-argument
+    """
+    straight through estimator logic used to compute gradient for Quantize Op.
+    :param op: quantize op
+    :param grad: gradient
+    :return: gradients computed per input
+    """
+    dloss_by_dx = _compute_dloss_by_dx(op, grad)
+
+    return dloss_by_dx, None, None, None, None, None, None, None

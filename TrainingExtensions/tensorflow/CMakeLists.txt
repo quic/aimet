@@ -42,6 +42,8 @@ add_library(TrainingExtensionsTf SHARED
         src/QcQuantizeOpDeprecated.hpp
         src/AimetOpUtils.h
         src/AimetOpUtils.cpp
+        src/QcQuantizeRecurrentParamOp.hpp
+        src/QcQuantizeRecurrentParamOp.cpp
         src/QcQuantizeOp.hpp
         src/QcQuantizeOp.cpp
         )
