@@ -1129,18 +1129,17 @@ class TestQuantizationSim(unittest.TestCase):
         # Use model with one input
         model = SmallMnist()
         model.eval()
-        dummy_input = torch.randn((1, 1, 28, 28))
 
         orig_configure_quantization_ops = QuantizationSimModel.configure_quantization_ops
         QuantizationSimModel.configure_quantization_ops = check_valid_connected_graph_in_configure_quantization_ops
 
         # Pass in None for input shapes to induce an error if input_shapes is being used.
-        _ = QuantizationSimModel(model, input_shapes=None, inputs=(dummy_input,))
+        _ = QuantizationSimModel(model, input_shapes=None, dummy_input=torch.rand(1, 1, 28, 28))
 
         # Use model with two inputs
         model = ModelWithTwoInputs()
         model.eval()
         _ = QuantizationSimModel(model, input_shapes=None,
-                                 inputs=(torch.randn((32, 1, 28, 28)), torch.randn(32, 1, 28, 28)))
+                                 dummy_input=(torch.rand((1, 1, 28, 28)), torch.rand(1, 1, 28, 28)))
 
         QuantizationSimModel.configure_quantization_ops = orig_configure_quantization_ops

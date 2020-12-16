@@ -86,7 +86,7 @@ class ConnectedGraph(AimetCommonConnectedGraph):
         either module or functional) as producers and consumers of tensors.
         Note that the graph has two kinds of nodes: operations and products."""
 
-    def __init__(self, model: torch.nn.Module, model_input: Tuple[torch.Tensor]):
+    def __init__(self, model: torch.nn.Module, model_input: Union[torch.Tensor, Tuple]):
         """
         Init function for connected graph
         :param model: Pytorch model to create connected graph from
@@ -206,7 +206,8 @@ class ConnectedGraph(AimetCommonConnectedGraph):
             self._module_to_name[module] = name
 
     @staticmethod
-    def _generate_module_tensor_shapes_lookup_table(model: torch.nn.Module, model_input: Tuple[torch.Tensor]) -> \
+    def _generate_module_tensor_shapes_lookup_table(model: torch.nn.Module,
+                                                    model_input: Union[torch.Tensor, Tuple]) -> \
             ModuleTensorShapeMapType:
         """
         Generates a look up dictionary for getting module input and output shapes from the module.
@@ -237,7 +238,7 @@ class ConnectedGraph(AimetCommonConnectedGraph):
 
         return module_tensor_shapes_map
 
-    def _construct_graph(self, model: torch.nn.Module, model_input: Tuple[torch.Tensor]):
+    def _construct_graph(self, model: torch.nn.Module, model_input: Union[torch.Tensor, Tuple]):
         """
         Construct connected graph from model and example inputs.
         :param model: Pytorch model to create connected graph from
