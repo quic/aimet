@@ -37,7 +37,7 @@
 # =============================================================================
 """ Utilities that are used for different AIMET PyTorch features """
 
-from typing import List, Tuple, Union
+from typing import List, Tuple, Union, Dict
 import os
 import pickle
 import numpy as np
@@ -237,12 +237,12 @@ def run_hook_for_layers(model: torch.nn.Module, input_shapes: Union[Tuple, List[
         h.remove()
 
 
-def run_hook_for_layers_with_given_input(model: torch.nn.Module, inputs: Tuple, hook,
-                                         module_type_for_attaching_hook=None, leaf_node_only=True):
+def run_hook_for_layers_with_given_input(model: torch.nn.Module, input_tensor: Union[torch.Tensor, Tuple],
+                                         hook, module_type_for_attaching_hook=None, leaf_node_only=True):
     """
     Register the given hook function for all layers in the model
     :param model: Model
-    :param inputs: Shape of inputs to pass to the model
+    :param input_tensor: Input tensor to the model. If more than one model inputs, use a tuple
     :param hook: Hook function to register
     :param module_type_for_attaching_hook: Tuple of torch.nn module types for which hook has to be attached
     :param leaf_node_only: Set to False if all modules are required
@@ -265,7 +265,10 @@ def run_hook_for_layers_with_given_input(model: torch.nn.Module, inputs: Tuple, 
     # Run forward pass to execute the hook functions
     # ------------------------------------------------
     with torch.no_grad():
-        _ = model(*inputs)
+        if isinstance(input_tensor, (list, tuple)):
+            _ = model(*input_tensor)
+        else:
+            _ = model(input_tensor)
 
     # --------------------------
     # Remove all hooks we added
@@ -551,6 +554,7 @@ def get_reused_modules(model: torch.nn.Module, input_shapes: Tuple) -> List[Tupl
 def change_tensor_device_placement(tensor_data: Union[torch.tensor, List, Tuple], device: torch.device):
     """
     Change the tensor_data's device placement
+
     :param tensor_data: torch.tensor , list of torch.tensors, or tuple of torch.tensors
     :param device: device information
     :return: tensor_data with modified device placement
@@ -576,12 +580,14 @@ def change_tensor_device_placement(tensor_data: Union[torch.tensor, List, Tuple]
     return tensor_data
 
 
-def find_num_output_tensors_per_module(model: torch.nn.Module, input_tensors):
+def find_num_output_tensors_per_module(model: torch.nn.Module, input_tensor) -> Dict:
     """
     Returns a map of module -> number of output tensors, for all the children modules of the
     provided module
+
     :param model: Torch module to find children modules for
-    :param input_tensors: Input tensor to use to run forward pass for the model
+    :param input_tensor: Input tensor to use to run forward pass for the model. If model needs more than one input
+                         tensor, pass a tuple
     :return: map of module -> number of output tensors
     """
 
@@ -590,5 +596,5 @@ def find_num_output_tensors_per_module(model: torch.nn.Module, input_tensors):
     def record_num_outputs(module, _, outputs):
         num_outputs_map[module] = len(outputs)
 
-    run_hook_for_layers_with_given_input(model, input_tensors, record_num_outputs)
+    run_hook_for_layers_with_given_input(model, input_tensor, record_num_outputs)
     return num_outputs_map
