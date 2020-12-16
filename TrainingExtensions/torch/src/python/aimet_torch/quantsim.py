@@ -101,7 +101,7 @@ class QuantizationSimModel:
     """
 
     # pylint: disable=too-many-arguments
-    def __init__(self, model: torch.nn.Module, input_shapes: Union[Tuple, List[Tuple]],
+    def __init__(self, model: torch.nn.Module, input_shapes: Union[Tuple, List[Tuple]] = None,
                  quant_scheme: Union[str, QuantScheme] = QuantScheme.post_training_tf_enhanced,
                  rounding_mode: str = 'nearest', default_output_bw: int = 8, default_param_bw: int = 8,
                  in_place: bool = False, config_file: str = None,
@@ -119,7 +119,8 @@ class QuantizationSimModel:
         :param in_place: If True, then the given 'model' is modified in-place to add quant-sim nodes.
                 Only suggested use of this option is when the user wants to avoid creating a copy of the model
         :param config_file: Path to Configuration file for model quantizers
-        :param dummy_input: Dummy input to the model. Used to parse model graph.
+        :param dummy_input: Dummy input to the model. Used to parse model graph. If the model has more than one input,
+                            pass a tuple. User is expected to place the tensors on the appropriate device.
         """
 
         # sanity checks

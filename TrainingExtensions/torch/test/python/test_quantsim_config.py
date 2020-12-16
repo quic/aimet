@@ -79,7 +79,7 @@ class TestQuantsimConfig:
 
         sim = QuantizationSimModel(model, quant_scheme=QuantScheme.post_training_tf_enhanced,
                                    config_file='./data/quantsim_config.json',
-                                   input_shapes=(1, 3, 32, 32), in_place=True)
+                                   dummy_input=torch.rand(1, 3, 32, 32), in_place=True)
         for name, module in sim.model.named_modules():
             if isinstance(module, QcQuantizeWrapper):
                 # Output of add op is input quantized
@@ -129,7 +129,7 @@ class TestQuantsimConfig:
             json.dump(quantsim_config, f)
         sim = QuantizationSimModel(model, quant_scheme=QuantScheme.post_training_tf_enhanced,
                                    config_file='./data/quantsim_config.json',
-                                   input_shapes=(1, 3, 32, 32))
+                                   dummy_input=torch.rand(1, 3, 32, 32))
         for _, module in sim.model.named_modules():
             if isinstance(module, QcQuantizeWrapper):
                 if module.param_quantizers:
@@ -180,7 +180,7 @@ class TestQuantsimConfig:
             json.dump(quantsim_config, f)
         sim = QuantizationSimModel(model, quant_scheme=QuantScheme.post_training_tf_enhanced,
                                    config_file='./data/quantsim_config.json',
-                                   input_shapes=(1, 3, 32, 32))
+                                   dummy_input=torch.rand(1, 3, 32, 32))
         for name, module in sim.model.named_modules():
             if isinstance(module, QcQuantizeWrapper):
                 if isinstance(module._module_to_wrap, torch.nn.Conv2d):
@@ -244,7 +244,7 @@ class TestQuantsimConfig:
         # Use in_place=True here for easy access to modules through model instance variables
         sim = QuantizationSimModel(model, quant_scheme=QuantScheme.post_training_tf_enhanced,
                                    config_file='./data/quantsim_config.json',
-                                   in_place=True, input_shapes=(1, 3, 32, 32))
+                                   in_place=True, dummy_input=torch.rand(1, 3, 32, 32))
         for _, module in sim.model.named_modules():
             if isinstance(module, QcQuantizeWrapper):
                 # Check configs for starts of supergroups
@@ -289,7 +289,7 @@ class TestQuantsimConfig:
             json.dump(quantsim_config, f)
         sim = QuantizationSimModel(model, quant_scheme=QuantScheme.post_training_tf_enhanced,
                                    config_file='./data/quantsim_config.json',
-                                   input_shapes=(1, 3, 32, 32))
+                                   dummy_input=torch.rand(1, 3, 32, 32))
         for name, module in sim.model.named_modules():
             if isinstance(module, QcQuantizeWrapper):
                 if name in ['conv3', 'ada']:
@@ -323,7 +323,7 @@ class TestQuantsimConfig:
             json.dump(quantsim_config, f)
 
         sim = QuantizationSimModel(model, quant_scheme=QuantScheme.post_training_tf_enhanced, config_file='./data/quantsim_config.json',
-                                   input_shapes=[(1, 3, 32, 32), (1, 3, 20, 20)], in_place=True)
+                                   dummy_input=(torch.rand(1, 3, 32, 32), torch.rand(1, 3, 20, 20)), in_place=True)
         for name, module in sim.model.named_modules():
             if isinstance(module, QcQuantizeWrapper):
                 # Output of add op is input quantized
@@ -359,7 +359,7 @@ class TestQuantsimConfig:
         with open('./data/quantsim_config.json', 'w') as f:
             json.dump(quantsim_config, f)
         sim = QuantizationSimModel(model, quant_scheme=QuantScheme.post_training_tf_enhanced, config_file='./data/quantsim_config.json',
-                                   input_shapes=(1, 3, 32, 32))
+                                   dummy_input=torch.rand(1, 3, 32, 32))
         for name, module in sim.model.named_modules():
             if isinstance(module, QcQuantizeWrapper):
                 if name == 'fc':
@@ -397,7 +397,7 @@ class TestQuantsimConfig:
             json.dump(quantsim_config, f)
         # Use in_place=True here for easy access to modules through model instance variables
         sim = QuantizationSimModel(model, quant_scheme=QuantScheme.post_training_tf_enhanced, config_file='./data/quantsim_config.json',
-                                   in_place=True, input_shapes=(1, 3, 32, 32))
+                                   in_place=True, dummy_input=torch.rand(1, 3, 32, 32))
         for _, module in sim.model.named_modules():
             if isinstance(module, QcQuantizeWrapper):
                 # Check configs for starts of supergroups
@@ -453,7 +453,7 @@ class TestQuantsimConfig:
             json.dump(quantsim_config, f)
 
         sim = QuantizationSimModel(model, quant_scheme=QuantScheme.post_training_tf_enhanced, config_file='./data/quantsim_config.json',
-                                   input_shapes=(1, 3, 32, 32), in_place=True)
+                                   dummy_input=torch.rand(1, 3, 32, 32).cuda(), in_place=True)
         for name, module in sim.model.named_modules():
             if isinstance(module, QcQuantizeWrapper):
                 # Output of add op is input quantized
