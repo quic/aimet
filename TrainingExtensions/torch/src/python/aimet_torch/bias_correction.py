@@ -281,12 +281,15 @@ def correct_bias(model: torch.nn.Module, quant_params: qsim.QuantParams,
             module.bias.data = module.bias.data.to(device=module.weight.device)
 
     # Quantize full model
+    dummy_tensors = utils.create_rand_tensors_given_shapes(input_shape)
+    dummy_tensors = [tensor.to(utils.get_device(model)) for tensor in dummy_tensors]
     q = qsim.QuantizationSimModel(model=model, quant_scheme=quant_params.quant_scheme,
                                   rounding_mode=quant_params.round_mode,
                                   default_output_bw=quant_params.act_bw,
                                   default_param_bw=quant_params.weight_bw,
                                   in_place=True,
-                                  input_shapes=input_shape, config_file=quant_params.config_file)
+                                  dummy_input=dummy_tensors, config_file=quant_params.config_file)
+
     # make sure  model got updated in-place before we use it for bc updates
     assert(q.model is model)
 

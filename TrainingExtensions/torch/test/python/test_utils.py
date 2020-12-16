@@ -322,7 +322,7 @@ class TestTrainingExtensionsUtils(unittest.TestCase):
         for device in device_list:
             model = TinyModel().to(device=device)
             model_input = torch.randn(1, 3, 32, 32).to(device=device)
-            sim = QuantizationSimModel(model, input_shapes=(1, 3, 32, 32))
+            sim = QuantizationSimModel(model, dummy_input=torch.rand(1, 3, 32, 32))
 
             module_data = utils.ModuleData(model, model.fc)
             inp, out = module_data.collect_inp_out_data(model_input, collect_input=False, collect_output=True)
@@ -342,7 +342,7 @@ class TestTrainingExtensionsUtils(unittest.TestCase):
         for device in device_list:
             model = TinyModel().to(device=device)
             model_input = torch.randn(1, 3, 32, 32).to(device=device)
-            sim = QuantizationSimModel(model, input_shapes=(1, 3, 32, 32))
+            sim = QuantizationSimModel(model, dummy_input=torch.rand(1, 3, 32, 32).to(device=device))
 
             module_data = utils.ModuleData(model, model.fc)
             inp, out = module_data.collect_inp_out_data(model_input, collect_input=False, collect_output=True)

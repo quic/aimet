@@ -69,7 +69,8 @@ class QuantizerCpuGpu(unittest.TestCase):
         # create model on CPU
         model_cpu = mnist_model.Net().to('cpu')
         model_gpu = copy.deepcopy(model_cpu).to('cuda')
-        cpu_sim_model = QuantizationSimModel(model_cpu, quant_scheme='tf', in_place=True, input_shapes=(1, 1, 28, 28))
+        cpu_sim_model = QuantizationSimModel(model_cpu, quant_scheme='tf', in_place=True,
+                                             dummy_input=torch.rand(1, 1, 28, 28))
         # Quantize
         cpu_sim_model.compute_encodings(forward_pass, None)
 
@@ -78,7 +79,8 @@ class QuantizerCpuGpu(unittest.TestCase):
         start_time = time.time()
 
         # create model on GPU
-        gpu_sim_model = QuantizationSimModel(model_gpu, quant_scheme='tf', in_place=True, input_shapes=(1, 1, 28, 28))
+        gpu_sim_model = QuantizationSimModel(model_gpu, quant_scheme='tf', in_place=True,
+                                             dummy_input=torch.rand(1, 1, 28, 28).cuda())
         # Quantize
         gpu_sim_model.compute_encodings(forward_pass, None)
 
