@@ -106,8 +106,9 @@ class TestTrainingExtensionsUtils(unittest.TestCase):
         model = torchvision.models.resnet18(pretrained=False)
         model.eval()
 
-        all_ops = utils.get_ordered_list_of_modules(model, (1, 3, 224, 224))
-        conv_ops = utils.get_ordered_list_of_conv_modules(model, (1, 3, 224, 224))
+        dummy_input = torch.randn(1, 3, 224, 224)
+        all_ops = utils.get_ordered_list_of_modules(model, dummy_input)
+        conv_ops = utils.get_ordered_list_of_conv_modules(model, dummy_input)
 
         self.assertEqual(60, len(all_ops))
         self.assertEqual(20, len(conv_ops))

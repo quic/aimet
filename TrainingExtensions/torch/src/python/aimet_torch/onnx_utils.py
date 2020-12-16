@@ -110,14 +110,13 @@ class OnnxSaver:
 
     @classmethod
     def set_node_names(cls, onnx_model_path: str, pytorch_model: torch.nn.Module,
-                       input_shape: Union[Tuple, List[Tuple]]):
+                       dummy_input: Union[torch.Tensor, Tuple]):
         """
         This utility loads a given onnx model file and set the names of all the nodes (ops) to equivalent
         pytorch module names given the corresponding pytorch model.
         :param onnx_model_path: Path to the ONNX model file
         :param pytorch_model: Equivalent PyTorch model instance
-        :param input_shape: Shape of the input to the model
-                            (a tuple for 1 input and a list of tuples for multiple inputs)
+        :param dummy_input: Dummy input to the model. Used to parse model graph.
         :return:
         """
 
@@ -131,7 +130,7 @@ class OnnxSaver:
 
         # Find corresponding pytorch nodes for every ONNX node
         # and set the name of the ONNX nodes to the names of the corresponding PyTorch modules
-        cls.map_onnx_nodes_to_pytorch(pytorch_model, input_shape, ordered_list_of_nodes)
+        cls.map_onnx_nodes_to_pytorch(pytorch_model, dummy_input, ordered_list_of_nodes)
 
         # Save back the onnx model file
         onnx.save(onnx_model, onnx_model_path)
@@ -199,17 +198,17 @@ class OnnxSaver:
         return 1
 
     @staticmethod
-    def map_onnx_nodes_to_pytorch(torch_model: nn.Module, input_shape: Union[Tuple, List[Tuple]],
+    def map_onnx_nodes_to_pytorch(torch_model: nn.Module, dummy_input: Union[torch.Tensor, Tuple],
                                   onnx_ordered_list: List[onnx.NodeProto]):
         """
         Find the ONNX node that corresponds to each PyTorch module. And sets the name of the ONNX mode to that of the
         PyTorch module
         :param torch_model: PyTorch model instance
-        :param input_shape: Shape of input(s) to the model
+        :param dummy_input: Dummy input to the model. Used to parse model graph.
         :param onnx_ordered_list: An ordinally-ordered list of ONNX nodes
         :return:
         """
-        torch_ordered_list = aimet_torch.utils.get_ordered_list_of_modules(torch_model, input_shape)
+        torch_ordered_list = aimet_torch.utils.get_ordered_list_of_modules(torch_model, dummy_input)
 
         torch_index = 0
         onnx_index = 0
