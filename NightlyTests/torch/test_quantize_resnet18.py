@@ -141,7 +141,7 @@ class QuantizeAcceptanceTests(unittest.TestCase):
 
         # layers_to_ignore = [model.conv1]
         sim = QuantizationSimModel(model, quant_scheme=QuantScheme.post_training_tf, default_param_bw=8,
-                                   default_output_bw=8, dummy_input=torch.rand(1, 3, 224, 224))
+                                   default_output_bw=8, dummy_input=torch.rand(1, 3, 224, 224).cuda())
 
         print(sim.model)
 
@@ -180,7 +180,7 @@ class QuantizeAcceptanceTests(unittest.TestCase):
         # # Now use AIMET
         sim = QuantizationSimModel(model, quant_scheme=QuantScheme.post_training_tf_enhanced,
                                    default_param_bw=8, default_output_bw=4,
-                                   dummy_input=torch.rand(1, 3, 224, 224))
+                                   dummy_input=torch.rand(1, 3, 224, 224).cuda())
         sim.compute_encodings(model_eval, forward_pass_callback_args=1)
 
         print(sim.model)
@@ -234,7 +234,7 @@ class QuantizeAcceptanceTests(unittest.TestCase):
         # Now use AIMET
         sim = QuantizationSimModel(model, quant_scheme=QuantScheme.post_training_tf_enhanced,
                                    default_param_bw=8, default_output_bw=4,
-                                   dummy_input=torch.rand(1, 3, 224, 224))
+                                   dummy_input=torch.rand(1, 3, 224, 224).cuda())
         sim.compute_encodings(model_eval, forward_pass_callback_args=1)
 
         aimet_model_quantize_mark = torch.cuda.memory_allocated()
