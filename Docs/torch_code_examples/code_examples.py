@@ -294,9 +294,8 @@ def channel_pruning_manual_mode():
 def quantize_model(trainer_function):
 
     model = mnist_torch_model.Net().to(torch.device('cuda'))
-    input_shape = (1, 1, 28, 28)
 
-    sim = QuantizationSimModel(model, default_output_bw=8, default_param_bw=8, input_shapes=input_shape,
+    sim = QuantizationSimModel(model, default_output_bw=8, default_param_bw=8, dummy_input=torch.rand(1, 1, 28, 28),
                                config_file='../../../TrainingExtensions/common/src/python/aimet_common/quantsim_config/'
                                            'default_config.json')
 

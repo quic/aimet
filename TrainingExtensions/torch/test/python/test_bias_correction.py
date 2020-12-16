@@ -124,7 +124,7 @@ class TestTrainingExtensionBnFold(unittest.TestCase):
                                              default_output_bw=params.act_bw,
                                              default_param_bw=params.weight_bw,
                                              in_place=False,
-                                             input_shapes=(1, 1, 28, 28))
+                                             dummy_input=torch.rand(1, 1, 28, 28))
         quantsim.compute_encodings(pass_data_through_model, None)
         layer = quantsim.model.conv2
         quant_dequant_weights = bias_correction.get_quantized_dequantized_weight(layer, use_cuda)
