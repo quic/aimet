@@ -157,8 +157,25 @@ void TfEnhancedEncodingAnalyzer<DTYPE>::_pickTestCandidatesSymmetric(
 {
     // Compute the largest TF delta which would make sense, based on the range
     // [min_val ... max_val] we just calculated.
-    DTYPE absolute_max = std::max(std::abs(max_val), std::abs(min_val));
-    DTYPE delta_max    = (2 * absolute_max) / num_steps;
+
+    DTYPE delta_max = 0.0;
+    int test_offset = 0;
+
+    if (min_val == 0.0)
+    {
+        // Special case for symmetric encodings. If all values are positive or 0, we can treat the
+        // symmetric encodings as unsigned
+        delta_max = max_val / num_steps;
+        test_offset = 0;        // Indicates all positive values
+    }
+    else
+    {
+        DTYPE absolute_max = std::max(std::abs(max_val), std::abs(min_val));
+        delta_max    = (2 * absolute_max) / num_steps;
+
+        // Compute the offset - since we are finding symmetric candidates, offset can be computed given the delta
+        test_offset = -(num_steps / 2);
+    }
 
     // Compute the deltas we will test.
     // We test 101 deltas, equally spaced between 1*delta_max/100 and
@@ -168,10 +185,6 @@ void TfEnhancedEncodingAnalyzer<DTYPE>::_pickTestCandidatesSymmetric(
     for (DTYPE f = 1.0 / 100; f <= 1 + 1.0 / 100; f += 1.0 / 100)
     {
         DTYPE test_delta = f * delta_max;
-
-        // Compute the offset - since we are finding symmetric candidates, offset can be computed given the delta
-        int test_offset = -(num_steps / 2);
-
         test_candidates.push_back(std::tuple<DTYPE, int>(test_delta, test_offset));
     }
 }
