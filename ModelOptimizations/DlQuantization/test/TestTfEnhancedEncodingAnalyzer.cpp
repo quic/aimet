@@ -174,6 +174,55 @@ TYPED_TEST(TestTfEnhancedEncodingAnalyzer, SanityTestSymmetric)
     EXPECT_EQ(encoding.bw, 8);
 }
 
+TYPED_TEST(TestTfEnhancedEncodingAnalyzer, SanityTestSymmetricUnsigned)
+{
+    typedef typename TypeParam::dataType dataType;
+
+    // Instantiate TfEnhancedEncodingAnalyzer
+    DlQuantization::TfEnhancedEncodingAnalyzer<dataType> analyzer;
+
+    float mean   = -2;
+    float stddev = 1;
+    std::normal_distribution<dataType> distribution(mean, stddev);
+    std::mt19937 generator(1);
+
+    unsigned int tensorCount = 6000;
+    std::vector<dataType> tensor(tensorCount);
+
+    for (unsigned int i = 0; i < tensorCount; i++)
+    {
+        tensor[i] = distribution(generator);
+        tensor[i] = std::max(tensor[i], (dataType) 0.0);
+    }
+    Blob<TypeParam> tensorBlob(tensor.data(), tensorCount);
+
+    // Update the stats using these tensor values
+    analyzer.updateStats(tensorBlob.getDataPtrOnDevice(), tensorCount, TypeParam::modeCpuGpu);
+
+    // Get the encodings
+    DlQuantization::TfEncoding encoding = analyzer.computeEncoding(8, true);
+
+    dataType absoluteMin = *std::min_element(tensor.begin(), tensor.end());
+    dataType absoluteMax = *std::max_element(tensor.begin(), tensor.end());
+
+    std::cout << "Absolute Min: " << absoluteMin << std::endl;
+    std::cout << "Absolute Max: " << absoluteMax << std::endl;
+    std::cout << "Encoding Min: " << encoding.min << std::endl;
+    std::cout << "Encoding Max: " << encoding.max << std::endl;
+    std::cout << "Encoding Delta: " << encoding.delta << std::endl;
+    std::cout << "Encoding Offset: " << encoding.offset << std::endl;
+
+    absoluteMax = std::max(std::abs(absoluteMax), std::abs(absoluteMin));
+    absoluteMin = -absoluteMax;
+
+    EXPECT_EQ(encoding.min, 0);
+    EXPECT_NEAR(encoding.max, absoluteMax, 0.015);
+
+    EXPECT_FLOAT_EQ(encoding.delta, (encoding.max - encoding.min) / 255);
+    EXPECT_FLOAT_EQ(encoding.offset, encoding.min / encoding.delta);
+    EXPECT_EQ(encoding.bw, 8);
+}
+
 int main(int argc, char** argv)
 {
     ::testing::InitGoogleTest(&argc, argv);
