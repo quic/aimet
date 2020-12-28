@@ -77,8 +77,11 @@ TfEncoding TfEncodingAnalyzer<DTYPE>::computeEncoding(uint8_t bw, bool useSymmet
     new_max = std::max(new_max, new_min + MIN_RANGE);
     encoding.bw  = bw;
 
-    if (useSymmetricEncodings)
+    // Special case for symmetric encodings. If all values are positive or 0, we can treat the
+    // symmetric encodings as unsigned, which essentially translates to asymmetric
+    if (useSymmetricEncodings && (new_min < 0.0))
     {
+
         // If we desire symmetric encodings then we need to expand either the min or max to be mirrors of each other
         // centered around 0
         new_max = std::max(std::abs(new_max), std::abs(new_min));
