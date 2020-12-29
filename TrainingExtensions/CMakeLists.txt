@@ -35,6 +35,12 @@
 #==============================================================================
 cmake_minimum_required(VERSION 3.5)
 
-add_subdirectory(tensorflow)
-add_subdirectory(torch)
+if (ENABLE_TENSORFLOW)
+    add_subdirectory(tensorflow)
+endif(ENABLE_TENSORFLOW)
+
+if (ENABLE_TORCH)
+    add_subdirectory(torch)
+endif(ENABLE_TORCH)
+
 add_subdirectory(common)

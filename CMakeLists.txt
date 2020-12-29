@@ -61,6 +61,9 @@ find_package(Threads)
 #find_package(OpenMP REQUIRED)
 #set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${OpenMP_CXX_FLAGS}")
 
+# -------------------------------
+# Conditional build for CUDA
+# -------------------------------
 if (NOT (DEFINED ENABLE_CUDA))
   message("Compiling with CUDA not explicitly disabled. Enabling implicitly")
   set(ENABLE_CUDA ON CACHE BOOL "")
@@ -92,24 +95,65 @@ set(LAPACKE_LIBRARY "/usr/lib/x86_64-linux-gnu/liblapacke.so.3.7.1")
 find_package(OpenCV REQUIRED)
 set(OPENCV_LIBRARY /usr/local/lib/libopencv_core.a)
 
+# ----------------------------------
+# Conditional build for PyTorch
+# ----------------------------------
+
+if (NOT (DEFINED ENABLE_TORCH))
+  message("AIMET Torch build not explicitly disabled. Enabling implicitly")
+  set(ENABLE_TORCH ON CACHE BOOL "")
+
+endif(NOT (DEFINED ENABLE_TORCH))
+
+if (ENABLE_TORCH)
+  # If we enable PyTorch builds then use the pybind11 headers that are part of the torch pip install
+  # So we don't have a version mismatch - between PyTorch custom C++ op code and PyMO
+  list(APPEND PYBIND11_INC_DIRS "/usr/local/lib/python3.6/dist-packages/torch/include")
+  list(APPEND PYBIND11_INC_DIRS "/usr/include/python3.6/")
+
+else (ENABLE_TORCH)
+  list(APPEND PYBIND11_INC_DIRS "/usr/local/lib/python3.6/dist-packages/pybind11/include/")
+  list(APPEND PYBIND11_INC_DIRS "/usr/include/python3.6/")
+
+  message("AIMET Torch build disabled")
+
+endif (ENABLE_TORCH)
+
+# ----------------------------------
+# PyBind11
+# ----------------------------------
+
 add_library(PYBIND11 SHARED IMPORTED)
 
-list(APPEND PYBIND11_INC_DIRS "/usr/local/lib/python3.6/dist-packages/torch/include")
-list(APPEND PYBIND11_INC_DIRS "/usr/include/python3.6/")
-
 set_target_properties(PYBIND11 PROPERTIES
-      IMPORTED_LOCATION "/usr/lib/x86_64-linux-gnu/libpython3.6m.so"
-      INTERFACE_INCLUDE_DIRECTORIES "${PYBIND11_INC_DIRS}"
-      )
+        IMPORTED_LOCATION "/usr/lib/x86_64-linux-gnu/libpython3.6m.so"
+        INTERFACE_INCLUDE_DIRECTORIES "${PYBIND11_INC_DIRS}"
+        )
 
-list(APPEND TENSORFLOW_INCLUDES "/usr/local/lib/python3.6/dist-packages/tensorflow_core/include")
-add_library(TensorFlow SHARED IMPORTED)
-set_target_properties(TensorFlow PROPERTIES
-      IMPORTED_LOCATION
-        "/usr/local/lib/python3.6/dist-packages/tensorflow_core/libtensorflow_framework.so.1"
-      INTERFACE_INCLUDE_DIRECTORIES
-        "${TENSORFLOW_INCLUDES}"
-      )
+# ----------------------------------
+# Conditional build for TensorFlow
+# ----------------------------------
+
+if (NOT (DEFINED ENABLE_TENSORFLOW))
+  message("AIMET TensorFlow build not explicitly disabled. Enabling implicitly")
+  set(ENABLE_TENSORFLOW ON CACHE BOOL "")
+
+endif(NOT (DEFINED ENABLE_TENSORFLOW))
+
+if (ENABLE_TENSORFLOW)
+  list(APPEND TENSORFLOW_INCLUDES "/usr/local/lib/python3.6/dist-packages/tensorflow_core/include")
+  add_library(TensorFlow SHARED IMPORTED)
+  set_target_properties(TensorFlow PROPERTIES
+        IMPORTED_LOCATION
+          "/usr/local/lib/python3.6/dist-packages/tensorflow_core/libtensorflow_framework.so.1"
+        INTERFACE_INCLUDE_DIRECTORIES
+          "${TENSORFLOW_INCLUDES}"
+        )
+
+else (ENABLE_TENSORFLOW)
+  message("AIMET TensorFlow build disabled")
+
+endif (ENABLE_TENSORFLOW)
 
 # -------------------------------
 # Generate pip packages
@@ -155,7 +199,7 @@ if(IS_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/Benchmarks")
 endif()
 
 # -------------------------------
-# Packaging
+# Packaging - deprecated
 # -------------------------------
 set(CPACK_PACKAGE_NAME "aimet")
 set(CPACK_PACKAGE_VERSION_MAJOR 0)
