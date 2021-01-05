@@ -580,3 +580,40 @@ class TestTrainingExtensionBnFold(unittest.TestCase):
         self.assertFalse(isinstance(model.bn1, torch.nn.BatchNorm2d))
         self.assertTrue(np.allclose(baseline_output, output_after_fold, rtol=1.e-2))
         self.assertEqual(len(folded_pairs), 2)
+
+    def test_fold_auto_mode_with_linear_layer(self):
+        class MyModel(torch.nn.Module):
+            def __init__(self):
+
+                super(MyModel, self).__init__()
+                self.fc1 = torch.nn.Linear(10, 20)
+                self.bn1 = torch.nn.BatchNorm1d(20)
+
+            def forward(self, x):
+                x = self.fc1(x)
+                x = self.bn1(x)
+
+                return x
+
+        model = MyModel()
+        model.eval()
+
+        random_input = torch.randn((32, 10))
+
+        # Set the batch norm params to something non-zero with a random batch
+        model.train()
+        model(torch.randn((32, 10)))
+        model.eval()
+
+        baseline_output = model(random_input).detach().numpy()
+
+        orig_bn = model.bn1
+        bn_pairs = fold_all_batch_norms(model, (32, 10))
+
+        output_after_fold = model(random_input).detach().numpy()
+
+        self.assertFalse(isinstance(model.bn1, torch.nn.BatchNorm1d))
+        self.assertTrue(np.allclose(baseline_output, output_after_fold, rtol=1.e-2))
+
+        self.assertEqual(1, len(bn_pairs))
+        self.assertTrue((model.fc1, orig_bn) in bn_pairs)

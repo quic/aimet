@@ -66,7 +66,8 @@ map_torch_types_to_onnx = {
     nn.RNN:  ['RNN'],
     nn.LSTM: ['LSTM'],
     nn.GRU: ['GRU'],
-    nn.ConvTranspose2d: ['ConvTranpose']
+    nn.ConvTranspose2d: ['ConvTranpose'],
+    nn.Sigmoid: ['Sigmoid']
 }
 
 torch_types_to_ignore = (nn.Dropout, nn.Dropout2d, PassThroughOp)

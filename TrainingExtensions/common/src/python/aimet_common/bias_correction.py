@@ -93,13 +93,16 @@ class ConvBnPatternHandler:
         activation_type = ActivationType.no_activation
         conv_op = None
         bn_op = None
+        convolution_types = ['Conv2D', 'DepthwiseConv2dNative', 'convolution']
+        linear_types = ['Dense', 'addmm', 'matmul']
+        bn_types = ['FusedBatchNormV3', 'batch_norm']
 
         for op in op_subset:
-            if op.type in ['Conv2D', 'DepthwiseConv2dNative', 'Dense', 'convolution', 'addmm', 'matmul']:
+            if op.type in convolution_types + linear_types:
                 conv_op = op
                 if conv_op.get_module() in self.conv_linears_with_bn_dict.keys():
                     bn_activation_info = self.conv_linears_with_bn_dict[conv_op.get_module()]
-            elif op.type in ['FusedBatchNormV3', 'batch_norm']:
+            elif op.type in bn_types:
                 bn_op = op
             elif op.type in ['Relu6', 'hardtanh']:
                 activation_type = ActivationType.relu6
@@ -107,11 +110,11 @@ class ConvBnPatternHandler:
                 activation_type = ActivationType.relu
 
         if len(op_subset) >= 2:
-            if op_subset[0].type in ['FusedBatchNormV3', 'batch_norm']:
+            if op_subset[0].type in bn_types:
                 bn_activation_info.input_bn = bn_op
                 bn_activation_info.in_activation_type = activation_type
             # we do not match linear layers with preceding bn for bias correction
-            elif op_subset[0].type in ['Conv2D', 'DepthwiseConv2dNative', 'convolution']:
+            elif op_subset[0].type in convolution_types + linear_types:
                 bn_activation_info.output_bn = bn_op
                 bn_activation_info.out_activation_type = activation_type
             # in tf linear layer has two ops together [flatten/reshape -- dense] , check for len 3
