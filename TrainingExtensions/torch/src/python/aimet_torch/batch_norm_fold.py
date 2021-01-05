@@ -238,10 +238,12 @@ def find_all_conv_bn_with_activation(model: torch.nn.Module, input_shape: Tuple)
                                                action=layer_select_handler))
     patterns_with_callbacks.append(PatternType(pattern=['convolution', 'batch_norm'],
                                                action=layer_select_handler))
-    patterns_with_callbacks.append(PatternType(pattern=['batch_norm', 'addmm'],
-                                               action=layer_select_handler))
-    patterns_with_callbacks.append(PatternType(pattern=['addmm', 'batch_norm'],
-                                               action=layer_select_handler))
+    linear_types = ['addmm', 'matmul']
+    for linear_type in linear_types:
+        patterns_with_callbacks.append(PatternType(pattern=['batch_norm', linear_type],
+                                                   action=layer_select_handler))
+        patterns_with_callbacks.append(PatternType(pattern=[linear_type, 'batch_norm'],
+                                                   action=layer_select_handler))
 
     inp_tensor_list = utils.create_rand_tensors_given_shapes(input_shape)
     connected_graph = ConnectedGraph(model, inp_tensor_list)
