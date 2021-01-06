@@ -63,12 +63,16 @@ TYPED_TEST(TestTfEnhancedEncodingAnalyzer, SanityTestAsymmetric)
     std::normal_distribution<dataType> distribution(mean, stddev);
     std::mt19937 generator(1);
 
+    double min = std::numeric_limits<double>::max();
+    double max = std::numeric_limits<double>::min();
     unsigned int tensorCount = 6000;
     std::vector<dataType> tensor(tensorCount);
 
     for (unsigned int i = 0; i < tensorCount; i++)
     {
         tensor[i] = distribution(generator);
+        min = std::min(min, double(tensor[i]));
+        max = std::max(max, double(tensor[i]));
     }
     Blob<TypeParam> tensorBlob(tensor.data(), tensorCount);
 
@@ -77,6 +81,9 @@ TYPED_TEST(TestTfEnhancedEncodingAnalyzer, SanityTestAsymmetric)
 
     // Get the encodings
     DlQuantization::TfEncoding encoding = analyzer.computeEncoding(8, false);
+
+    std::cout << "Absolute Min: " << min << std::endl;
+    std::cout << "Absolute Max: " << max << std::endl;
 
     std::cout << encoding.min << std::endl;
     std::cout << encoding.max << std::endl;
