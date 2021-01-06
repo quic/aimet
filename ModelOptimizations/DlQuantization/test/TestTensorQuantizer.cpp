@@ -78,14 +78,14 @@ TEST(TestTensorQuantizer, SanityTestCpu)
 
     std::cout << "Encoding min=" << encoding.min << ", max=" << encoding.max
               << std::endl;
-    EXPECT_NEAR(encoding.min, -7.32033, 0.001);
-    EXPECT_NEAR(encoding.max, 9.0541, 0.001);
+    EXPECT_NEAR(encoding.min, -6.52711, 0.001);
+    EXPECT_NEAR(encoding.max, 8.88412, 0.001);
 
     std::cout << "input-data=" << inputTensor.data()[0] << ", quantized-data=" << quantizedTensor.data()[0]
               << std::endl;
 
     EXPECT_NE(inputTensor.data()[0], quantizedTensor.data()[0]);
-    EXPECT_NEAR(quantizedTensor.data()[0], 5.008, 0.001);
+    EXPECT_NEAR(quantizedTensor.data()[0], 5.0162, 0.001);
 }
 
 #ifdef GPU_QUANTIZATION_ENABLED
@@ -120,13 +120,13 @@ TEST(TestTensorQuantizer, SanityTestGpu)
 
     std::cout << "Encoding min=" << encoding.min << ", max=" <<
     encoding.max << std::endl;
-    EXPECT_NEAR(encoding.min, -7.32033, 0.001);
-    EXPECT_NEAR(encoding.max, 9.0541, 0.001);
+    EXPECT_NEAR(encoding.min, -6.52711, 0.001);
+    EXPECT_NEAR(encoding.max, 8.88412, 0.001);
 
     std::cout << "input-data=" << inputTensor.data()[0] << ", quantized-data=" <<
     quantizedTensor.data()[0]<< std::endl;
     EXPECT_NE(inputTensor.data()[0], quantizedTensor.data()[0]);
-    EXPECT_NEAR(quantizedTensor.data()[0], 5.008, 0.001);
+    EXPECT_NEAR(quantizedTensor.data()[0], 5.0162, 0.001);
 }
 
 #endif
