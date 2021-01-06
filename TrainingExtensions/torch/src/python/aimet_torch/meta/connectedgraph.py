@@ -58,6 +58,9 @@ from aimet_torch.defs import PassThroughOp
 
 logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.ConnectedGraph)
 
+# Check trace parameter for torch jit trace
+check_trace = False
+
 
 # pylint: disable=too-many-lines
 # pylint: disable=protected-access
@@ -105,7 +108,9 @@ class ConnectedGraph(AimetCommonConnectedGraph):
         self.ordered_ops = []
 
         self._generate_module_lookup_table(model)
-        self._construct_graph(model, model_input)
+        with torch.no_grad():
+            self._construct_graph(model, model_input)
+
         self._validate_op_modules()
         # Maps pytorch modules to connected graph ops
         self._module_to_op_dict = _create_module_to_op_dict(self.ordered_ops)
@@ -245,7 +250,7 @@ class ConnectedGraph(AimetCommonConnectedGraph):
         :param model_input: Example input to model.  Can be a single tensor or a list/tuple of input tensors
         """
         module_tensor_shapes_map = ConnectedGraph._generate_module_tensor_shapes_lookup_table(model, model_input)
-        trace = torch.jit.trace(model, model_input)
+        trace = torch.jit.trace(model, model_input, check_trace=check_trace)
         ir_nodes_list, output_map = self._parse_top_level_trace(trace, model)
         self._construct_ops_and_products(ir_nodes_list,
                                          module_tensor_shapes_map,
