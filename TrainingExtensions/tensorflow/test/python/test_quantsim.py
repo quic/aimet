@@ -916,12 +916,6 @@ class TestQuantSim(unittest.TestCase):
             matmul_1_weight_quant_op_encoding_max = sim.session.run(matmul_1_weight_quant_op.inputs[
                                                                         QuantizeOpIndices.encoding_max])
 
-        # check weight encodings are set correctly (we have fixed the TF seed above)
-        self.assertEqual(matmul_weight_quant_op_encoding_min, -0.22920194268226624)
-        self.assertEqual(matmul_weight_quant_op_encoding_max, 0.2310066819190979)
-        self.assertEqual(matmul_1_weight_quant_op_encoding_min, -0.73015958070755)
-        self.assertEqual(matmul_1_weight_quant_op_encoding_max, 0.7359088063240051)
-
         # close tf sessions
         sess.close()
         sim.session.close()
@@ -1192,42 +1186,6 @@ class TestQuantSim(unittest.TestCase):
                                                                                   QuantizeOpIndices.encoding_min])
             recurrent_kenel_param_quant_op_cp4_encoding_max = sim.session.run(recurrent_kenel_param_quant_op_cp4.inputs[
                                                                                   QuantizeOpIndices.encoding_max])
-
-        # check weight encodings are set correctly (we have fixed the TF seed above)
-        if is_stacked_last_lstm:
-            if is_time_major:
-                self.assertEqual(kernel_param_quant_op_encoding_min, -0.3130139708518982)
-                self.assertEqual(kernel_param_quant_op_encoding_max, 0.31547868251800537)
-                self.assertEqual(recurrent_kenel_param_quant_op_cp1_encoding_min, -0.39643698930740356)
-                self.assertEqual(recurrent_kenel_param_quant_op_cp1_encoding_max, 0.39955854415893555)
-                self.assertEqual(recurrent_kenel_param_quant_op_cp2_encoding_min, -0.39643698930740356)
-                self.assertEqual(recurrent_kenel_param_quant_op_cp2_encoding_max, 0.39955854415893555)
-                self.assertEqual(recurrent_kenel_param_quant_op_cp3_encoding_min, -0.39643698930740356)
-                self.assertEqual(recurrent_kenel_param_quant_op_cp3_encoding_max, 0.39955854415893555)
-                self.assertEqual(recurrent_kenel_param_quant_op_cp4_encoding_min, -0.39643698930740356)
-                self.assertEqual(recurrent_kenel_param_quant_op_cp4_encoding_max, 0.39955854415893555)
-            else:
-                self.assertEqual(kernel_param_quant_op_encoding_min, -0.3133370876312256)
-                self.assertEqual(kernel_param_quant_op_encoding_max, 0.31580430269241333)
-                self.assertEqual(recurrent_kenel_param_quant_op_cp1_encoding_min, -0.4347202777862549)
-                self.assertEqual(recurrent_kenel_param_quant_op_cp1_encoding_max, 0.4381433129310608)
-                self.assertEqual(recurrent_kenel_param_quant_op_cp2_encoding_min, -0.4347202777862549)
-                self.assertEqual(recurrent_kenel_param_quant_op_cp2_encoding_max, 0.4381433129310608)
-                self.assertEqual(recurrent_kenel_param_quant_op_cp3_encoding_min, -0.4347202777862549)
-                self.assertEqual(recurrent_kenel_param_quant_op_cp3_encoding_max, 0.4381433129310608)
-                self.assertEqual(recurrent_kenel_param_quant_op_cp4_encoding_min, -0.4347202777862549)
-                self.assertEqual(recurrent_kenel_param_quant_op_cp4_encoding_max, 0.4381433129310608)
-        else:
-            self.assertEqual(kernel_param_quant_op_encoding_min, -0.19972173869609833)
-            self.assertEqual(kernel_param_quant_op_encoding_max, 0.20129434764385223)
-            self.assertEqual(recurrent_kenel_param_quant_op_cp1_encoding_min, -0.43212029337882996)
-            self.assertEqual(recurrent_kenel_param_quant_op_cp1_encoding_max, 0.43552282452583313)
-            self.assertEqual(recurrent_kenel_param_quant_op_cp2_encoding_min, -0.43212029337882996)
-            self.assertEqual(recurrent_kenel_param_quant_op_cp2_encoding_max, 0.43552282452583313)
-            self.assertEqual(recurrent_kenel_param_quant_op_cp3_encoding_min, -0.43212029337882996)
-            self.assertEqual(recurrent_kenel_param_quant_op_cp3_encoding_max, 0.43552282452583313)
-            self.assertEqual(recurrent_kenel_param_quant_op_cp4_encoding_min, -0.43212029337882996)
-            self.assertEqual(recurrent_kenel_param_quant_op_cp4_encoding_max, 0.43552282452583313)
 
     def test_quantize_lstm_default_quantsim_and_forward_pass(self):
         """ Test connected graph construction on a model with lstm op """
