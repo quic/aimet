@@ -39,6 +39,7 @@
 #include <cassert>
 #include <cstddef>
 #include <vector>
+#include <iostream>
 
 #include "DlQuantization/Quantization.hpp"
 #include "math_functions.hpp"
@@ -112,6 +113,7 @@ TfEnhancedEncodingAnalyzer<DTYPE>::_findBestCandidate(uint8_t bw,
         std::tie(test_delta, test_offset) = candidate;
 
         DTYPE cost = _quantAndSatCost(_stats, bw, test_delta, test_offset);
+
         // Remember the best encoding.
         if (cost < best_cost)
         {
@@ -125,12 +127,41 @@ TfEnhancedEncodingAnalyzer<DTYPE>::_findBestCandidate(uint8_t bw,
 }
 
 template <typename DTYPE>
-void TfEnhancedEncodingAnalyzer<DTYPE>::_pickTestCandidatesAsymmetric(
-    DTYPE min_val, DTYPE max_val, DTYPE num_steps, std::vector<std::tuple<DTYPE, int>>& test_candidates) const
+bool TfEnhancedEncodingAnalyzer<DTYPE>::_clampToObservedMinMax(DTYPE observedMin, DTYPE observedMax, DTYPE numSteps,
+                                                               DTYPE& testDelta, int& testOffset) const
 {
+    // Calculate observed delta and offset
+    DTYPE testMin = testDelta * testOffset;
+    DTYPE testMax = testMin + testDelta * numSteps;
+
+    if ((testMin < observedMin) && (testMax > observedMax))
+    {
+        return false;
+    }
+
+    testMin = std::max(observedMin, testMin);
+    testMax = std::min(observedMax, testMax);
+
+    // Recalculate the test delta and offset
+    testDelta = (testMax - testMin) / numSteps;
+    testOffset = round(testMin / testDelta);
+
+    return true;
+}
+
+template <typename DTYPE>
+void TfEnhancedEncodingAnalyzer<DTYPE>::_pickTestCandidatesAsymmetric(
+    DTYPE observedMin, DTYPE observedMax, DTYPE numSteps, std::vector<std::tuple<DTYPE, int>>& test_candidates) const
+{
+    // Map observedMin and observedMax to grid points
+    DTYPE observedDelta = (observedMax - observedMin) / numSteps;
+    int observedOffset = round(observedMin / observedDelta);
+    observedMin = observedDelta * observedOffset;
+    observedMax = observedMin + observedDelta * numSteps;
+
     // Compute the largest TF delta which would make sense, based on the range
-    // [min_val ... max_val] we just calculated.
-    DTYPE delta_max = (max_val - min_val) / num_steps;
+    // [observedMin ... observedMax] we just calculated.
+    DTYPE delta_max = observedDelta;
 
     // Compute the deltas we will test.
     // We test 17 deltas, equally spaced between 1*delta_max/16 and
@@ -139,16 +170,23 @@ void TfEnhancedEncodingAnalyzer<DTYPE>::_pickTestCandidatesAsymmetric(
     // delta_max might not be able to fully cover the whole range.
     for (DTYPE f = 1.0 / 16; f <= 1 + 1.0 / 16; f += 1.0 / 16)
     {
-        DTYPE test_delta = f * delta_max;
+        DTYPE testDelta = f * delta_max;
 
         // Compute the offsets we will test.
         // We consider 20 different offsets, equally spaced from -255 to 0.
         for (int i = 0; i <= 20; ++i)
         {
-            int test_offset = -num_steps + num_steps / 20.0 * i;
-            test_candidates.push_back(std::tuple<DTYPE, int>(test_delta, test_offset));
+            int testOffset = -numSteps + numSteps / 20.0 * i;
+
+            // Clamp test candidates to the observedMin and observedMax range.
+            if (!_clampToObservedMinMax(observedMin, observedMax, numSteps, testDelta, testOffset))
+                continue;
+            test_candidates.push_back(std::tuple<DTYPE, int>(testDelta, testOffset));
         }
     }
+
+    // Add one candidate corresponding to the observed max and min
+    test_candidates.push_back(std::tuple<DTYPE, int>(observedDelta, observedOffset));
 }
 
 template <typename DTYPE>

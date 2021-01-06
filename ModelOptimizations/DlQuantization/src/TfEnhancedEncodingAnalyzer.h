@@ -103,13 +103,13 @@ private:
     /**
      * Pick asymmetric test candidates to use for searching the lowest quantized cost. Each candidates is expressed
      * in terms of its delta and offset
-     * @param min_val Minimum value of the stats
-     * @param max_val Max value of the stats
-     * @param num_steps Number of delta steps (based on the bitwidth)
+     * @param observedMin Minimum value of the stats
+     * @param observedMax Max value of the stats
+     * @param numSteps Number of delta steps (based on the bitwidth)
      * @param test_deltas Vector of deltas (test candidate returned)
      * @param test_offsets Vector of offsets (test candidate returned)
      */
-    void _pickTestCandidatesAsymmetric(DTYPE min_val, DTYPE max_val, DTYPE num_steps,
+    void _pickTestCandidatesAsymmetric(DTYPE observedMin, DTYPE observedMax, DTYPE numSteps,
                                        std::vector<std::tuple<DTYPE, int>>& test_candidates) const;
 
     /**
@@ -125,10 +125,20 @@ private:
                                       std::vector<std::tuple<DTYPE, int>>& test_candidates) const;
 
     /**
+     * Clamp given test delta and test offset based on observed min and max
+     * @param observedMin Minimum value of the stats
+     * @param observedMax Max value of the stats
+     * @param numSteps Number of delta steps (based on the bitwidth)
+     * @param testDelta test delta
+     * @param testOffset test offset
+     * @return False if the test candidate is outside both the observed min and max
+     */
+    bool _clampToObservedMinMax(DTYPE observedMin, DTYPE observedMax, DTYPE numSteps,
+                                DTYPE& testDelta, int& testOffset) const;
+    /**
      * Given a set of test candidates (delta x offsets), find the best candidate with the lowest cost
      * @param bw Bitwidth
-     * @param test_deltas Vector of deltas to test
-     * @param test_offsets Vector of offsets to test
+     * @param test_candidates Vector of tuples (test-delta and test-offset)
      * @return Tuple of <best delta, best offset>
      */
     std::tuple<DTYPE, int> _findBestCandidate(uint8_t bw,
