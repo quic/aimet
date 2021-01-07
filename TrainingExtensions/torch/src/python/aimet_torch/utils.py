@@ -489,10 +489,12 @@ def replace_modules_with_instances_of_new_type(model: torch.nn.Module, modules_t
             replace_modules_with_instances_of_new_type(module_ref, modules_to_replace_list, new_type)
 
 
-def create_rand_tensors_given_shapes(input_shape: Union[Tuple, List[Tuple]]) -> List[torch.Tensor]:
+def create_rand_tensors_given_shapes(input_shape: Union[Tuple, List[Tuple]], device: torch.device = None) \
+        -> List[torch.Tensor]:
     """
     Given shapes of some tensors, create one or more random tensors and return them as a list of tensors
     :param input_shape: Shapes of tensors to create
+    :param device: Device to create tensors on
     :return: Created list of tensors
     """
     if isinstance(input_shape, List):
@@ -502,7 +504,10 @@ def create_rand_tensors_given_shapes(input_shape: Union[Tuple, List[Tuple]]) -> 
 
     rand_tensors = []
     for shape in input_shapes:
-        rand_tensors.append(torch.rand(shape))
+        if device is not None:
+            rand_tensors.append(torch.rand(shape).to(device))
+        else:
+            rand_tensors.append(torch.rand(shape))
 
     return rand_tensors
 

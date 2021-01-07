@@ -342,7 +342,7 @@ class QuantizationSimModel:
         model_path = os.path.join(path, model_filename)
 
         # Create a version of the model without any quantization ops
-        model_to_export = copy.deepcopy(self.model).cpu()
+        model_to_export = copy.deepcopy(self.model)
         all_modules_in_model_to_export = [module for module in model_to_export.modules()]
         self._remove_quantization_wrappers(model_to_export, all_modules_in_model_to_export)
         torch.save(model_to_export, model_path)
@@ -352,7 +352,8 @@ class QuantizationSimModel:
         if not dummy_input:
             if input_shape is None:
                 raise AssertionError('Must provide either input shape or a dummy input for export')
-            dummy_input = tuple(utils.create_rand_tensors_given_shapes(input_shape))
+            dummy_input = tuple(utils.create_rand_tensors_given_shapes(input_shape,
+                                                                       device=utils.get_device(model_to_export)))
         torch.onnx.export(model_to_export, dummy_input, onnx_path)
         #  Set the onnx layer names
         if set_onnx_layer_names:

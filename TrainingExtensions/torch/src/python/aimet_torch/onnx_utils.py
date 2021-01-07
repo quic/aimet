@@ -70,7 +70,8 @@ map_torch_types_to_onnx = {
     nn.Sigmoid: ['Sigmoid']
 }
 
-torch_types_to_ignore = (nn.Dropout, nn.Dropout2d, PassThroughOp)
+# Define this as a list instead of tuple to allow for users to modify
+torch_types_to_ignore = [nn.Dropout, nn.Dropout2d, PassThroughOp]
 torch_recurrent_modules = (nn.RNN, nn.LSTM, nn.GRU)
 
 # List of associations between onnx types and pytorch connected graph types.
@@ -222,7 +223,7 @@ class OnnxSaver:
                 break
             name, module = torch_ordered_list[torch_index]
 
-            if isinstance(module, torch_types_to_ignore):
+            if isinstance(module, tuple(torch_types_to_ignore)):
                 torch_index += 1
                 continue
 
