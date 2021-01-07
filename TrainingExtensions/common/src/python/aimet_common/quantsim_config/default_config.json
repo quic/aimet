@@ -23,5 +23,7 @@
 		"op_list": ["Gemm", "Relu"]
 	}
 ],
-"model_input": {},
+"model_input": {
+	"is_input_quantized": "True"
+},
 "model_output": {}}
