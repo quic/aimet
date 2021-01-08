@@ -183,7 +183,8 @@ class QuantSimConfigurator(AimetCommonQuantSimConfigurator):
                 if current_op.inputs:
                     input_ops = [inp.producer for inp in current_op.inputs if not inp.is_model_input]
                     for input_op in input_ops:
-                        if input_op.get_module() is not None:
+                        if input_op.get_module() is not None and input_op.get_module() in \
+                                self._module_to_quantsim_wrapper_dict:
                             qc_quantize_wrapper = self._module_to_quantsim_wrapper_dict[input_op.get_module()]
                             tensor_quantizers_for_input_true.append(qc_quantize_wrapper.output_quantizers[0])
                         elif input_op.type == 'Split':
@@ -209,7 +210,8 @@ class QuantSimConfigurator(AimetCommonQuantSimConfigurator):
                 if current_op.output:
                     output_ops = [consumer for consumer in current_op.output.consumers]
                     for output_op in output_ops:
-                        if output_op.get_module() is not None:
+                        if output_op.get_module() is not None and output_op.get_module() in \
+                                self._module_to_quantsim_wrapper_dict:
                             qc_quantize_wrapper = self._module_to_quantsim_wrapper_dict[output_op.get_module()]
                             tensor_quantizers_for_output_true.append(qc_quantize_wrapper.input_quantizer)
                         elif output_op.type == 'Split':
@@ -227,7 +229,8 @@ class QuantSimConfigurator(AimetCommonQuantSimConfigurator):
         tensor_quantizers_for_input_false = []
         neighboring_input_ops = _get_all_ops_in_neighborhood(op, 'input')
         for input_op in neighboring_input_ops:
-            if input_op.type != 'Split' and input_op.get_module() is not None:
+            if input_op.type != 'Split' and input_op.get_module() is not None and input_op.get_module() in \
+                    self._module_to_quantsim_wrapper_dict:
                 qc_quantize_wrapper = self._module_to_quantsim_wrapper_dict[input_op.get_module()]
                 if neighboring_input_ops[input_op] == 'input':
                     tensor_quantizers_for_input_false.append(qc_quantize_wrapper.input_quantizer)
@@ -246,7 +249,8 @@ class QuantSimConfigurator(AimetCommonQuantSimConfigurator):
         tensor_quantizers_for_output_false = []
         neighboring_output_ops = _get_all_ops_in_neighborhood(op, 'output')
         for output_op in neighboring_output_ops:
-            if output_op.type != 'Split' and output_op.get_module() is not None:
+            if output_op.type != 'Split' and output_op.get_module() is not None and output_op.get_module() in \
+                    self._module_to_quantsim_wrapper_dict:
                 qc_quantize_wrapper = self._module_to_quantsim_wrapper_dict[output_op.get_module()]
                 if neighboring_output_ops[output_op] == 'input':
                     tensor_quantizers_for_output_false.append(qc_quantize_wrapper.input_quantizer)
