@@ -784,7 +784,7 @@ class TestQuantSim(unittest.TestCase):
                     # Check that quantizers after op evaluated in compute_encodings are in passThrough (3) mode
                     self.assertEqual(quant_info.get_op_mode(), 3)
                     self.assertFalse(quant_info.tensor_quantizer.isEncodingValid)
-                elif name in ['input_1_quantized', 'scope_1/conv2d_3/BiasAdd_quantized']:
+                elif name in ['scope_1/conv2d_3/BiasAdd_quantized']:
                     # Check that passThrough quantizers remain as passThrough (3)
                     self.assertEqual(quant_info.get_op_mode(), 3)
                     self.assertFalse(quant_info.tensor_quantizer.isEncodingValid)
@@ -1267,7 +1267,7 @@ class TestQuantSim(unittest.TestCase):
         # Load the encodings file to check if the encodings were exported correctly
         with open("./data/rnn_quantsim.encodings", "r") as encodings_file:
             encodings = json.load(encodings_file)
-            self.assertEqual(7, len(encodings['activation_encodings']))
+            self.assertEqual(8, len(encodings['activation_encodings']))
             self.assertEqual(5, len(encodings['param_encodings']))
 
         # close tf sessions

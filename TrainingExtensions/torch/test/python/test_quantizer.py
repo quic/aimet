@@ -580,7 +580,7 @@ class TestQuantizationSim(unittest.TestCase):
 
             activation_encodings = encodings['activation_encodings']
             param_encodings = encodings['param_encodings']
-            self.assertEqual(13, len(activation_encodings))
+            self.assertEqual(15, len(activation_encodings))
             self.assertNotIn('conv1_a.bias', param_encodings)
             self.assertEqual(6, len(param_encodings['conv1_a.weight'][0]))
             self.assertEqual(10, param_encodings['conv1_a.weight'][0]['max'])
