@@ -460,9 +460,8 @@ class QuantizationSimModel:
         with self.session.graph.as_default():
             vars_with_value = {}
             quant_op = self.session.graph.get_operation_by_name(op_name)
-            if quant_op.type == 'QcQuantize':
-                vars_with_value[quant_op.name + '_encoding_min'] = encoding.min
-                vars_with_value[quant_op.name + '_encoding_max'] = encoding.max
+            vars_with_value[quant_op.name + '_encoding_min'] = encoding.min
+            vars_with_value[quant_op.name + '_encoding_max'] = encoding.max
 
             vars_with_value[quant_op.name + '_op_mode'] = int(op_mode)
             update_variables_with_values(self.session, vars_with_value)
@@ -486,13 +485,10 @@ class QuantizationSimModel:
         """
 
         op = self.session.graph.get_operation_by_name(quant_op_name)
-        bitwidth_input_index = int(QuantizeOpIndices.bit_width)
-        sym_enc_input_index = int(QuantizeOpIndices.use_symmetric_encoding)
-
         op_bitwidth = self._get_op_variable_value(op,
-                                                  bitwidth_input_index)
+                                                  QuantizeOpIndices.bit_width)
         op_use_symmetric_encodings = self._get_op_variable_value(op,
-                                                                 sym_enc_input_index)
+                                                                 QuantizeOpIndices.use_symmetric_encoding)
 
         return op_bitwidth, op_use_symmetric_encodings
 
@@ -632,7 +628,7 @@ class QuantizationSimModel:
         with current_graph.as_default():
             ops = current_graph.get_operations()
             for op in ops:
-                if op.type == 'QcQuantize':
+                if op.type in ['QcQuantize', 'QcQuantizeRecurrentParam']:
 
                     # Read the config
                     # -----------------
@@ -711,15 +707,13 @@ class QuantizationSimModel:
                                        quant_op_name: str):
 
             quant_op = self.session.graph.get_operation_by_name(quant_op_name)
-            bw_input_index = int(QuantizeOpIndices.bit_width)
-            sym_enc_input_index = int(QuantizeOpIndices.use_symmetric_encoding)
             min_val, max_val = self.read_min_max(quant_op_name, variable_dict)
 
             min_val, max_val = gate_min_max(min_val, max_val)
-            op_bitwidth = int(self._get_op_variable_value(quant_op, bw_input_index))
+            op_bitwidth = int(self._get_op_variable_value(quant_op, QuantizeOpIndices.bit_width))
             delta, offset = calculate_delta_offset(min_val, max_val, op_bitwidth)
             is_symmetric = str(self._get_op_variable_value(quant_op,
-                                                           sym_enc_input_index))
+                                                           QuantizeOpIndices.use_symmetric_encoding))
 
             tensor_name = quant_op.inputs[0].name
             encoding_dict[tensor_name] = [{'min': min_val,
