@@ -59,6 +59,15 @@ void TfEnhancedEncodingAnalyzer<DTYPE>::updateStats(const DTYPE* tensor, const s
 template <typename DTYPE>
 TfEncoding TfEnhancedEncodingAnalyzer<DTYPE>::computeEncoding(uint8_t bw, bool useSymmetricEncodings) const
 {
+    TfEncoding encoding = {0, 0, 0, 0, 0};
+
+    if (this->_stats.x_left.size() == 0)
+    {
+        // Histogram has not been initialized yet
+        // We return a zero encoding
+        return encoding;
+    }
+
     // Find the range of our collected stats
     DTYPE min_val, max_val;
     std::tie(min_val, max_val) = _findRangeOfAggregateStats();
@@ -82,7 +91,6 @@ TfEncoding TfEnhancedEncodingAnalyzer<DTYPE>::computeEncoding(uint8_t bw, bool u
     std::tie(best_delta, best_offset) = _findBestCandidate(bw, test_candidates);
 
     // Using the best delta and offset, calculate the encoding.
-    TfEncoding encoding;
     encoding.delta  = best_delta;
     encoding.offset = best_offset;
     encoding.bw     = bw;
