@@ -294,6 +294,14 @@ void UpdatePdfSigned_cpu(const DTYPE* data, int cnt, PDF& pdf)
         // Define the range over which we want to calculate the PDF.
         DTYPE min_val = GetMin(data, cnt, COMP_MODE_CPU);
         DTYPE max_val = GetMax(data, cnt, COMP_MODE_CPU);
+
+        if ((min_val == 0) && (max_val == 0))
+        {
+            // Special case, we don't have a histogram initialized, but we have a zero tensor here
+            // No point in trying to initialize the histogram using this
+            return;
+        }
+
         // Make sure we have a non-zero range.
         if (min_val == max_val)
         {
@@ -354,6 +362,14 @@ void UpdatePdfUnsigned_cpu(const DTYPE* data, int cnt, PDF& pdf)
         // Define the range over which we want to calculate the PDF.
         DTYPE min_val = GetMin(data, cnt, COMP_MODE_CPU);
         DTYPE max_val = GetMax(data, cnt, COMP_MODE_CPU);
+
+        if ((min_val == 0) && (max_val == 0))
+        {
+            // Special case, we don't have a histogram initialized, but we have a zero tensor here
+            // No point in trying to initialize the histogram using this
+            return;
+        }
+
         // Make sure we have a non-zero range.
         if (min_val == max_val)
         {
