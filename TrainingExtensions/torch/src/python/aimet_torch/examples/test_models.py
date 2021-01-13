@@ -456,3 +456,89 @@ class ConfigurableTupleOutputModel(torch.nn.Module):
         c2 = self.conv2(inputs[1])
         c3 = self.conv3(inputs[2])
         return c1, c2, c3
+class SingleLayerRNNModel(nn.Module):
+    """
+    Model using torch.nn.RNN module
+    Expected input shape = (SEQ_LENGTH, BATCH_SIZE, INPUT_SIZE=3)
+    """
+    def __init__(self):
+        super(SingleLayerRNNModel, self).__init__()
+        self.rnn = torch.nn.RNN(input_size=3, hidden_size=5, num_layers=1)
+
+    # pylint: disable=arguments-differ
+    def forward(self, x, hx=None):
+        return self.rnn(x, hx)
+
+
+class SingleLayerBidirectionalLstmModel(nn.Module):
+    """
+    Model using torch.nn.LSTM module
+    Expected input shape = (SEQ_LENGTH, BATCH_SIZE, INPUT_SIZE=3)
+    """
+    def __init__(self):
+        super(SingleLayerBidirectionalLstmModel, self).__init__()
+        self.lstm = torch.nn.LSTM(input_size=3, hidden_size=5, num_layers=1, bidirectional=True)
+
+    # pylint: disable=arguments-differ
+    def forward(self, x, hx=None):
+        return self.lstm(x, hx)
+
+
+class TwoLayerBidirectionalLstmModel(nn.Module):
+    """
+    Model using torch.nn.LSTM module
+    Expected input shape = (SEQ_LENGTH, BATCH_SIZE, INPUT_SIZE=3)
+    """
+    def __init__(self):
+        super(TwoLayerBidirectionalLstmModel, self).__init__()
+        self.lstm = torch.nn.LSTM(input_size=3, hidden_size=5, num_layers=2, bidirectional=True)
+
+    # pylint: disable=arguments-differ
+    def forward(self, x, hx=None):
+        return self.lstm(x, hx)
+
+
+class MultiLayerRNNModel(nn.Module):
+    """
+    Model using torch.nn.RNN module with multiple layers
+    Expected input shape = (SEQ_LENGTH, BATCH_SIZE, INPUT_SIZE=3)
+    """
+    def __init__(self):
+        super(MultiLayerRNNModel, self).__init__()
+        self.rnn = torch.nn.RNN(input_size=3, hidden_size=5, num_layers=2)
+
+    # pylint: disable=arguments-differ
+    def forward(self, x, hx=None):
+        return self.rnn(x, hx)
+
+
+class RNNCellModel(nn.Module):
+    """
+    Model using torch.nn.RNNCell module
+    Expected input shape = (SEQ_LENGTH=10, BATCH_SIZE, INPUT_SIZE=3)
+    """
+    def __init__(self):
+        super(RNNCellModel, self).__init__()
+        self.rnn_cell = torch.nn.RNNCell(input_size=3, hidden_size=5)
+
+    # pylint: disable=arguments-differ
+    def forward(self, x, hx0=None):
+        output = []
+        for i in range(x.shape[0]):
+            hx0 = self.rnn_cell(x[i], hx0)
+            output.append(hx0)
+        return tuple(output), hx0
+
+
+class LSTMModel(nn.Module):
+    """
+    Model using torch.nn.LSTM module
+    Expected input shape = (SEQ_LENGTH, BATCH_SIZE, INPUT_SIZE=3)
+    """
+    def __init__(self):
+        super(LSTMModel, self).__init__()
+        self.rnn = torch.nn.LSTM(input_size=3, hidden_size=5, num_layers=1)
+
+    # pylint: disable=arguments-differ
+    def forward(self, x, hx_cx=None):
+        return self.rnn(x, hx_cx)

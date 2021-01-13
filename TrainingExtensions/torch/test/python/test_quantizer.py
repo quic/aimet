@@ -41,12 +41,15 @@ import numpy as np
 import torch
 import torch.nn as nn
 import json as json
+import os
 
 
 from torchvision import models
 from aimet_common.defs import QuantScheme
+from aimet_torch.examples.test_models import TwoLayerBidirectionalLstmModel, SingleLayerRNNModel
 
 from aimet_torch.meta.connectedgraph import ConnectedGraph
+from aimet_torch.qc_quantize_recurrent import QcQuantizeRecurrent
 from aimet_torch.quantsim import QuantizationSimModel
 from aimet_torch.quantsim_straight_through_grad import compute_dloss_by_dx
 from aimet_torch.defs import PassThroughOp
@@ -1129,3 +1132,64 @@ class TestQuantizationSim(unittest.TestCase):
             with unittest.mock.patch.object(ConnectedGraph, '__del__', lambda _self: None):
                 with self.assertRaises(AssertionError):
                     _ = QuantizationSimModel(model, dummy_input=torch.rand(1, 1, 28, 28))
+
+    def test_rnn_quantization(self):
+        """ Test quantizing a model with rnn layer """
+        model = SingleLayerRNNModel()
+        input_shape = (10, 1, 3)
+
+        # TODO: remove this when multiple output nodes are supported in pytorch CG
+        orig_config_function = QuantizationSimModel.configure_quantization_ops
+        QuantizationSimModel.configure_quantization_ops = lambda _1, _2, _3: None
+
+        sim = QuantizationSimModel(model, input_shape)
+        self.assertTrue(isinstance(sim.model.rnn, QcQuantizeRecurrent))
+
+        QuantizationSimModel.configure_quantization_ops = orig_config_function
+
+    def test_quantizing_qc_quantize_module(self):
+        """ Test that qc_quantize_module is identified as not quantizable """
+        qc_quantize_module = QcQuantizeRecurrent(torch.nn.RNN(input_size=3, hidden_size=5, num_layers=1),
+                                                 weight_bw=16, activation_bw=16,
+                                                 quant_scheme=QuantScheme.post_training_tf, round_mode='nearest')
+        self.assertFalse(QuantizationSimModel._is_quantizable_module(qc_quantize_module))
+
+    def test_export_lstm_model(self):
+        """ Test export functionality with lstm model """
+        model = TwoLayerBidirectionalLstmModel()
+        input_shape = (10, 1, 3)
+
+        sim = QuantizationSimModel(model, input_shape)
+
+        def forward_pass(model, args):
+            model.eval()
+            model(torch.randn(input_shape))
+
+        # Quantize
+        sim.compute_encodings(forward_pass, None)
+
+        # Edit part of weights tensor to compare with original model before and after removal of quantize module
+        sim.model.lstm.weight_ih_l0[0][0] = 1
+        edited_weight = sim.model.lstm.weight_ih_l0.detach().clone()
+
+        # Check that edited weight is different than original weight in module_to_quantize
+        self.assertTrue(not torch.equal(edited_weight, sim.model.lstm.module_to_quantize.weight_ih_l0))
+
+        sim.export('./data', 'rnn_save', input_shape)
+        exported_model = torch.load('./data/rnn_save.pth')
+
+        # Check that weight from quantized module was copied to original module successfully
+        self.assertTrue(isinstance(exported_model.lstm, torch.nn.LSTM))
+        self.assertTrue(torch.equal(edited_weight, exported_model.lstm.weight_ih_l0))
+
+        with open('./data/rnn_save.encodings') as f:
+            encodings = json.load(f)
+            # verifying the encoding against default eAI HW cfg
+            # activation encoding (input only w/o cell state) -- x_l0, h_l0, x_l1 & h_l1
+            self.assertEqual(8, len(encodings['activation_encodings']))
+            # param encoding (weight only w/o bias)  -- W_l0, R_l0, W_l1 & R_l1
+            self.assertEqual(4, len(encodings['param_encodings']))
+
+        os.remove('./data/rnn_save.pth')
+        os.remove('./data/rnn_save.onnx')
+        os.remove('./data/rnn_save.encodings')
