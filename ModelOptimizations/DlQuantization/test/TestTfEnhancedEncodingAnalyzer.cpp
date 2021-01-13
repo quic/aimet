@@ -230,6 +230,68 @@ TYPED_TEST(TestTfEnhancedEncodingAnalyzer, SanityTestSymmetricUnsigned)
     EXPECT_EQ(encoding.bw, 8);
 }
 
+TYPED_TEST(TestTfEnhancedEncodingAnalyzer, InitialZeroTensor)
+{
+    typedef typename TypeParam::dataType dataType;
+
+    // Instantiate TfEnhancedEncodingAnalyzer
+    DlQuantization::TfEnhancedEncodingAnalyzer<dataType> analyzer;
+
+    unsigned int tensorCount = 6000;
+    std::vector<dataType> tensor(tensorCount);
+
+    for (unsigned int i = 0; i < tensorCount; i++)
+    {
+        tensor[i] = 0;
+    }
+    Blob<TypeParam> tensorBlob(tensor.data(), tensorCount);
+
+    // Update the stats using these tensor values
+    analyzer.updateStats(tensorBlob.getDataPtrOnDevice(), tensorCount, TypeParam::modeCpuGpu);
+
+    // Get the encodings
+    DlQuantization::TfEncoding encoding = analyzer.computeEncoding(8, false);
+
+    std::cout << encoding.min << std::endl;
+    std::cout << encoding.max << std::endl;
+    std::cout << encoding.delta << std::endl;
+    std::cout << encoding.offset << std::endl;
+
+    EXPECT_EQ(encoding.min, 0);
+    EXPECT_EQ(encoding.max, 0);
+
+    // Now update stats with a regular tensor
+    float mean   = -2;
+    float stddev = 1;
+    std::normal_distribution<dataType> distribution(mean, stddev);
+    std::mt19937 generator(1);
+
+    for (unsigned int i = 0; i < tensorCount; i++)
+    {
+        tensor[i] = distribution(generator);
+    }
+
+    Blob<TypeParam> tensorBlob1(tensor.data(), tensorCount);
+
+    // Update the stats using these tensor values
+    analyzer.updateStats(tensorBlob1.getDataPtrOnDevice(), tensorCount, TypeParam::modeCpuGpu);
+
+    // Get the encodings
+    encoding = analyzer.computeEncoding(8, false);
+
+    std::cout << encoding.min << std::endl;
+    std::cout << encoding.max << std::endl;
+    std::cout << encoding.delta << std::endl;
+    std::cout << encoding.offset << std::endl;
+
+    // We know we have a normal distribution. We expect the encoding to cover
+    // at least 2 standard deviations, and at most 6.
+    EXPECT_GT(encoding.min, mean - 6 * stddev);
+    EXPECT_LT(encoding.min, mean - 2 * stddev);
+    EXPECT_GT(encoding.max, mean + 2 * stddev);
+    EXPECT_LT(encoding.max, mean + 6 * stddev);
+}
+
 int main(int argc, char** argv)
 {
     ::testing::InitGoogleTest(&argc, argv);
