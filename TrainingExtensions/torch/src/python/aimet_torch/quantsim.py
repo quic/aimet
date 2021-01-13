@@ -58,12 +58,21 @@ from aimet_torch import utils
 from aimet_torch import onnx_utils
 from aimet_torch.meta.connectedgraph_utils import create_connected_graph_with_input_shapes
 from aimet_torch.meta.connectedgraph import ConnectedGraph
+from aimet_torch.qc_quantize_recurrent import QcQuantizeRecurrent
 
 logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Quant)
 
 
 # Types of modules which cannot be quantized
-unquantizable_modules = (QcQuantizeWrapper, QcQuantizeStandAloneBase, PassThroughOp)
+unquantizable_modules = (QcQuantizeWrapper, QcQuantizeStandAloneBase, QcQuantizeRecurrent, PassThroughOp)
+
+# If a torch module type is in this dictionary, call the corresponding quantized module constructor instead of wrapping
+# it with QcQuantizeWrapper.
+qc_quantize_modules_dict = {
+    torch.nn.RNN: QcQuantizeRecurrent,
+    torch.nn.LSTM: QcQuantizeRecurrent,
+    torch.nn.GRU: QcQuantizeRecurrent
+}
 
 
 class QuantParams:
@@ -248,14 +257,22 @@ class QuantizationSimModel:
         for name, layer in quantized_layers:
             layer.compute_encoding()
 
-            # By default we want to set the Quantization wrappers to ACTIVE mode
-            layer.set_mode(QcQuantizeOpMode.ACTIVE)
+            # Before we return we set the mode to active - meaning ready for quantize/de-quantize
+            # for layers with valid_encoding, otherwise we set to pass through
+            if isinstance(layer, QcQuantizeRecurrent):
+                has_invalid_encoding = self.set_mode_for_recurrent_module(layer, name)
+                if has_invalid_encoding is True:
+                    layers_with_invalid_encodings.append(name)
 
-            # Unless we have invalid encodings
-            if (layer.output_quantizers[0].enabled and not layer.output_quantizers[0].encoding) or \
-                    (layer.input_quantizer.enabled and not layer.input_quantizer.encoding):
-                layers_with_invalid_encodings.append(name)
-                layer.set_mode(QcQuantizeOpMode.PASSTHROUGH)
+            else:
+                # By default we want to set the Quantization wrappers to ACTIVE mode
+                layer.set_mode(QcQuantizeOpMode.ACTIVE)
+
+                # Unless we have invalid encodings
+                if (layer.output_quantizers[0].enabled and not layer.output_quantizers[0].encoding) or \
+                        (layer.input_quantizer.enabled and not layer.input_quantizer.encoding):
+                    layers_with_invalid_encodings.append(name)
+                    layer.set_mode(QcQuantizeOpMode.PASSTHROUGH)
 
         if layers_with_invalid_encodings:
             logger.info('The following modules (name, input|output quantizer) did not have valid encodings and have '
@@ -269,6 +286,45 @@ class QuantizationSimModel:
                         'encodings.')
 
         self._replace_wrappers_for_quantize_dequantize()
+
+    @classmethod
+    def set_mode_for_recurrent_module(cls, layer: QcQuantizeRecurrent, name: str):
+        """
+        Sets Recurrent module to active or pass through mode based on quantizer state
+
+        :param layer:  Qc Quantizer layer for recurrent module
+        :param name:  layer name
+        :return: True if the encoding is invalid
+
+        """
+        is_quantizer_enabled = False
+        has_invalid_encoding = False
+        for quantizer_name, output_quantizer in layer.output_quantizers.items():
+            if output_quantizer.enabled:
+                if output_quantizer.encoding:
+                    encoding = output_quantizer.encoding
+                    logger.debug("Encoding for %s-%s: min=%f, max=%f, offset=%f. delta=%f, bw=%f",
+                                 name, quantizer_name, encoding.min, encoding.max,
+                                 encoding.delta, encoding.offset, encoding.bw)
+                    is_quantizer_enabled = True
+                else:
+                    has_invalid_encoding = True
+        for quantizer_name, input_quantizer in layer.input_quantizers.items():
+            if input_quantizer.enabled:
+                if input_quantizer.encoding:
+                    encoding = input_quantizer.encoding
+                    logger.debug("Encoding for %s-%s: min=%f, max=%f, offset=%f. delta=%f, bw=%f",
+                                 name, quantizer_name, encoding.min, encoding.max,
+                                 encoding.delta, encoding.offset, encoding.bw)
+                    is_quantizer_enabled = True
+                else:
+                    has_invalid_encoding = True
+
+        if is_quantizer_enabled is False or has_invalid_encoding is True:
+            layer.set_mode(QcQuantizeOpMode.PASSTHROUGH)
+        else:
+            layer.set_mode(QcQuantizeOpMode.ACTIVE)
+        return has_invalid_encoding
 
     def export(self, path: str, filename_prefix: str, input_shape: Union[Tuple, List[Tuple]],
                set_onnx_layer_names: bool = True):
@@ -331,7 +387,7 @@ class QuantizationSimModel:
         :return: None
         """
         for module in self.model.modules():
-            if isinstance(module, QcQuantizeWrapper):
+            if isinstance(module, (QcQuantizeWrapper, QcQuantizeRecurrent)):
                 if param_name_to_exclude in module.param_quantizers:
                     module.param_quantizers[param_name_to_exclude].enabled = False
 
@@ -415,28 +471,41 @@ class QuantizationSimModel:
         :return:
         """
 
+        # pylint: disable = too-many-branches
+        # pylint: disable = too-many-nested-blocks
         if layer_name not in onnx_node_to_io_tensor_map:
             logger.info("layer with name {%s} not found in onnx model, not an issue; "
                         "skip and continue ", layer_name)
 
-        if isinstance(layer, QcQuantizeWrapper) and layer_name in onnx_node_to_io_tensor_map:
-            # get activation quantizers
-            if layer.input_quantizer.enabled:
-                param_inputs = [layer_name + '.' + param_name for param_name in layer.param_quantizers]
-                if onnx_node_to_io_tensor_map[layer_name].inputs:
-                    for input_tensor in onnx_node_to_io_tensor_map[layer_name].inputs:
-                        if input_tensor not in param_inputs:
-                            tensor_encoding = self._create_encoding_dict_for_quantizer(layer.input_quantizer)
-                            activation_encodings[input_tensor] = [tensor_encoding]
-            if layer.output_quantizers[0].enabled:
-                if onnx_node_to_io_tensor_map[layer_name].outputs:
-                    for output_tensor in onnx_node_to_io_tensor_map[layer_name].outputs:
-                        tensor_encoding = self._create_encoding_dict_for_quantizer(layer.output_quantizers[0])
-                        activation_encodings[output_tensor] = [tensor_encoding]
+        if layer_name in onnx_node_to_io_tensor_map:
 
-            # get param quantizers
-            self._update_param_encodings_dict_for_layer(layer, layer_name, param_encodings, valid_param_set)
+            if isinstance(layer, QcQuantizeWrapper):
+                # get activation quantizers
+                if layer.input_quantizer.enabled:
+                    param_inputs = [layer_name + '.' + param_name for param_name in layer.param_quantizers]
+                    if onnx_node_to_io_tensor_map[layer_name].inputs:
+                        for input_tensor in onnx_node_to_io_tensor_map[layer_name].inputs:
+                            if input_tensor not in param_inputs:
+                                tensor_encoding = self._create_encoding_dict_for_quantizer(layer.input_quantizer)
+                                activation_encodings[input_tensor] = [tensor_encoding]
+                if layer.output_quantizer.enabled:
+                    if onnx_node_to_io_tensor_map[layer_name].outputs:
+                        for output_tensor in onnx_node_to_io_tensor_map[layer_name].outputs:
+                            tensor_encoding = self._create_encoding_dict_for_quantizer(layer.output_quantizer)
+                            activation_encodings[output_tensor] = [tensor_encoding]
 
+                # get param quantizers
+                self._update_param_encodings_dict_for_layer(layer, layer_name, param_encodings, valid_param_set)
+
+            if isinstance(layer, QcQuantizeRecurrent):
+                onnx_activations_to_quantizers, onnx_params_to_quantizers = \
+                    layer.get_activation_param_quantizers_for_onnx_tensors(onnx_node_to_io_tensor_map[layer_name])
+                for tensor, quantizer in onnx_activations_to_quantizers.items():
+                    tensor_encoding = self._create_encoding_dict_for_quantizer(quantizer)
+                    activation_encodings[tensor] = [tensor_encoding]
+                for tensor, quantizer in onnx_params_to_quantizers.items():
+                    tensor_encoding = self._create_encoding_dict_for_quantizer(quantizer)
+                    param_encodings[tensor] = [tensor_encoding]
 
     @staticmethod
     def _create_encoding_dict_for_quantizer(quantizer: TensorQuantizer) -> Dict:
@@ -455,7 +524,7 @@ class QuantizationSimModel:
     def _get_qc_quantized_layers(model) -> List[Tuple[str, QcQuantizeWrapper]]:
         quantized_layers = []
         for name, module in model.named_modules():
-            if isinstance(module, QcQuantizeWrapper):
+            if isinstance(module, (QcQuantizeWrapper, QcQuantizeRecurrent)):
                 quantized_layers.append((name, module))
         return quantized_layers
 
@@ -482,13 +551,16 @@ class QuantizationSimModel:
         logger.debug("Module %s is quantizable", module_ref)
         return True
 
-    def _create_quantizer_module(self, module_to_wrap: torch.nn.Module) -> torch.nn.Module:
+    def _create_quantizer_module(self, module_to_quantize: torch.nn.Module) -> torch.nn.Module:
         """Instantiates wrapper based on quant scheme
         """
         assert self._quant_scheme in [QuantScheme.post_training_tf, QuantScheme.post_training_tf_enhanced]
 
-        quantized_module = QcPostTrainingWrapper(module_to_wrap, self._default_param_bw, self._default_output_bw,
-                                                 self._rounding_mode, self._quant_scheme)
+        # Set quantizer to be a module replacer if it is in qc_quantize_modules_dict, otherwise set as
+        # QcPostTrainingWrapper.
+        quantizer = qc_quantize_modules_dict.get(type(module_to_quantize), QcPostTrainingWrapper)
+        quantized_module = quantizer(module_to_quantize, self._default_param_bw, self._default_output_bw,
+                                     self._rounding_mode, self._quant_scheme)
 
         return quantized_module
 
@@ -515,7 +587,6 @@ class QuantizationSimModel:
             else:
                 self._add_quantization_wrappers(module_ref)
 
-
     @classmethod
     def _remove_quantization_wrappers(cls, starting_module, list_of_modules_to_exclude):
         """
@@ -536,6 +607,10 @@ class QuantizationSimModel:
 
                 elif isinstance(module_ref, QcQuantizeStandAloneBase):
                     setattr(starting_module, module_name, PassThroughOp())
+
+                elif isinstance(module_ref, QcQuantizeRecurrent):
+                    module_ref.update_params()
+                    setattr(starting_module, module_name, module_ref.module_to_quantize)
 
             # Recursively call children modules if present
             if not cls._is_leaf_module(module_ref):
