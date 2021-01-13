@@ -314,8 +314,8 @@ class QuantizationSimModel:
             layer.set_mode(QcQuantizeOpMode.ACTIVE)
         return has_invalid_encoding
 
-        def export(self, path: str, filename_prefix: str, input_shape: Union[Tuple, List[Tuple]] = None,
-                   set_onnx_layer_names: bool = True, dummy_input: Union[torch.Tensor, Tuple] = None):
+    def export(self, path: str, filename_prefix: str, input_shape: Union[Tuple, List[Tuple]] = None,
+               set_onnx_layer_names: bool = True, dummy_input: Union[torch.Tensor, Tuple] = None):
         """
         This method exports out the quant-sim model so it is ready to be run on-target.
 
