@@ -157,32 +157,22 @@ TYPED_TEST(TestQuantizationLibTfEnhancedCpuGpu, SANITY_AllSameValue)
     if (!CheckRunTest<TypeParam>())
         return;
     typedef typename TypeParam::dataType DataType;
+
     // Create quantizer object
     vector<string> layer_names;
     vector<int> bw_activations;
     int bw                              = 8;
     unique_ptr<IQuantizer<DataType>> iq = unique_ptr<IQuantizer<DataType>>(
         GetQuantizerInstance<DataType>(layer_names, TypeParam::modeCpuGpu, bw_activations, QUANTIZATION_TF_ENHANCED));
+
     // Prepare data for gathering statistics.
     const int cnt = 8;
-    // First test: all zero values.
-    vector<DataType> params0(8, 0);
-    vector<DataType> expected0(8, 0);
+    TfEncoding encoding;
+
     // Second test: all data points are 10.
     vector<DataType> params1(8, 10);
     vector<DataType> expected1(8, 10);
-    // Third test: all data points are -7.
-    vector<DataType> params2(8, -7);
-    vector<DataType> expected2(8, -7);
-    // Do first test.
-    Blob<TypeParam> blob0(params0.data(), cnt);
-    TfEncoding encoding;
-    iq->QuantizeDequantizeParams(bw, blob0.getDataPtrOnDevice(), cnt, ROUND_NEAREST, blob0.getDataPtrOnDevice(),
-                                 encoding);
-    for (int i = 0; i < cnt; ++i)
-    {
-        EXPECT_NEAR(blob0.getDataPtrOnCpu()[i], expected0[i], 1e-3);
-    }
+
     // Do second test.
     Blob<TypeParam> blob1(params1.data(), cnt);
     iq->QuantizeDequantizeParams(bw, blob1.getDataPtrOnDevice(), cnt, ROUND_NEAREST, blob1.getDataPtrOnDevice(),
@@ -193,6 +183,11 @@ TYPED_TEST(TestQuantizationLibTfEnhancedCpuGpu, SANITY_AllSameValue)
     {
         EXPECT_NEAR(blob1.getDataPtrOnCpu()[i], expected1[i], 1e-3);
     }
+
+    // Third test: all data points are -7.
+    vector<DataType> params2(8, -7);
+    vector<DataType> expected2(8, -7);
+
     // Do third test.
     Blob<TypeParam> blob2(params2.data(), cnt);
     iq->QuantizeDequantizeParams(bw, blob2.getDataPtrOnDevice(), cnt, ROUND_NEAREST, blob2.getDataPtrOnDevice(),
