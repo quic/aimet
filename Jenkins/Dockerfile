@@ -216,18 +216,17 @@ RUN pip download bokeh==1.2.0 hvplot==0.4.0 -d /var/tmp/bokeh_hvplot_download | 
 RUN pip install --no-deps -r /var/tmp/bokeh_hvplot_requirements.txt
 # NOTE: We need to pin the holoviews version to this since the latest version has a circular dependency on bokeh 2.0.0 through the panel package
 RUN pip install holoviews==1.12.7 \
-                netron==4.5.5
+                netron==4.7.0
 
 RUN pip install --no-deps bokeh==1.2.0 hvplot==0.4.0
 RUN rm -rf /var/tmp/bokeh_hvplot_download /var/tmp/bokeh_hvplot_requirements.txt
 
-# Adding clang-format and clang-tidy
-RUN wget -O - http://llvm.org/apt/llvm-snapshot.gpg.key|sudo apt-key add - && echo "deb http://llvm.org/apt/xenial/ llvm-toolchain-xenial-3.8 main" >> /etc/apt/sources.list
-RUN apt-get update && apt-get install -y clang-3.8 clang-format clang-tidy-6.0 cuda-cublas-dev-10-0 cuda-curand-dev-10-0 && \
-    rm -rf /var/lib/apt/lists/*
+RUN wget -O - http://llvm.org/apt/llvm-snapshot.gpg.key|sudo apt-key add - && echo "deb http://apt.llvm.org/bionic/ llvm-toolchain-bionic-11 main" >> /etc/apt/sources.list
+RUN apt-get update && apt-get install -y clang-11 clang-format clang-tidy-11 cuda-cublas-dev-10-0 cuda-curand-dev-10-0 && \
+   rm -rf /var/lib/apt/lists/*
 
 # Create a version-less symbolic link for clang-tidy
-RUN ln -s /usr/bin/run-clang-tidy-6.0.py /usr/bin/run-clang-tidy.py
+RUN ln -s /usr/bin/run-clang-tidy-11.0.py /usr/bin/run-clang-tidy.py
 
 RUN curl -s https://packagecloud.io/install/repositories/github/git-lfs/script.deb.sh | sudo bash
 RUN sudo apt-get install git-lfs
