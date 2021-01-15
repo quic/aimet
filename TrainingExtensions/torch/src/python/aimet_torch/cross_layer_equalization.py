@@ -47,7 +47,7 @@ from typing import Tuple, List, Union, Dict
 import numpy as np
 import torch
 
-import libpymo
+import libpymo      # pylint: disable=import-error
 
 from aimet_torch import utils
 from aimet_torch.meta.connectedgraph import ConnectedGraph
@@ -107,9 +107,9 @@ class GraphSearchUtils:
     """
 
     def __init__(self, model: torch.nn.Module, input_shapes: Union[Tuple, List[Tuple]]):
-        inp_tensor_list = utils.create_rand_tensors_given_shapes(input_shapes)
+        inp_tensor_list = tuple(utils.create_rand_tensors_given_shapes(input_shapes))
         self._connected_graph = ConnectedGraph(model, inp_tensor_list)
-        self._ordered_module_list = utils.get_ordered_list_of_conv_modules(model, input_shapes)
+        self._ordered_module_list = utils.get_ordered_list_of_conv_modules(model, inp_tensor_list)
 
     @staticmethod
     def find_downstream_layer_groups_to_scale(op, layer_groups, current_group=None, visited_nodes=None):

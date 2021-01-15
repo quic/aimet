@@ -106,8 +106,9 @@ class TestTrainingExtensionsUtils(unittest.TestCase):
         model = torchvision.models.resnet18(pretrained=False)
         model.eval()
 
-        all_ops = utils.get_ordered_list_of_modules(model, (1, 3, 224, 224))
-        conv_ops = utils.get_ordered_list_of_conv_modules(model, (1, 3, 224, 224))
+        dummy_input = torch.randn(1, 3, 224, 224)
+        all_ops = utils.get_ordered_list_of_modules(model, dummy_input)
+        conv_ops = utils.get_ordered_list_of_conv_modules(model, dummy_input)
 
         self.assertEqual(60, len(all_ops))
         self.assertEqual(20, len(conv_ops))
@@ -121,6 +122,19 @@ class TestTrainingExtensionsUtils(unittest.TestCase):
         reused_modules = utils.get_reused_modules(model, inp_shape)
         self.assertEqual(1, len(reused_modules))
         self.assertEqual(reused_modules[0][1], model.relu1)
+
+    @pytest.mark.cuda
+    def test_create_rand_tensors_given_shapes(self):
+        shape_1 = (1, 32)
+        shape_2 = (3, 3)
+        rand_tensors = utils.create_rand_tensors_given_shapes([shape_1, shape_2], device=torch.device('cpu'))
+        self.assertEqual(2, len(rand_tensors))
+        self.assertEqual(shape_1, rand_tensors[0].shape)
+        self.assertEqual(shape_2, rand_tensors[1].shape)
+        self.assertEqual(torch.device('cpu'), rand_tensors[0].device)
+
+        rand_tensors = utils.create_rand_tensors_given_shapes([shape_1, shape_2], device=torch.device('cuda:0'))
+        self.assertEqual(torch.device('cuda:0'), rand_tensors[0].device)
 
     @pytest.mark.cuda
     def test_change_tensor_device(self):

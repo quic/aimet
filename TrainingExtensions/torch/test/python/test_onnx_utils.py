@@ -87,10 +87,10 @@ class TestOnnxUtils(unittest.TestCase):
 
         model_name = 'resnet18'
         model = models.resnet18(pretrained=False)
-        input_shape = (1, 3, 224, 224)
+        dummy_input = torch.randn(1, 3, 224, 224)
 
-        torch.onnx.export(model, torch.rand(*input_shape), './data/' + model_name + '.onnx')
-        onnx_utils.OnnxSaver.set_node_names('./data/' + model_name + '.onnx', model, input_shape)
+        torch.onnx.export(model, dummy_input, './data/' + model_name + '.onnx')
+        onnx_utils.OnnxSaver.set_node_names('./data/' + model_name + '.onnx', model, dummy_input)
 
         onnx_model = onnx.load('./data/' + model_name + '.onnx')
         for node in onnx_model.graph.node:
@@ -108,10 +108,10 @@ class TestOnnxUtils(unittest.TestCase):
 
         model_name = 'out_of_order'
         model = OutOfOrderModel()
-        input_shape = (1, 16, 20, 20)
+        dummy_input = torch.randn(1, 16, 20, 20)
 
-        torch.onnx.export(model, torch.rand(*input_shape), './data/' + model_name + '.onnx')
-        onnx_utils.OnnxSaver.set_node_names('./data/' + model_name + '.onnx', model, input_shape)
+        torch.onnx.export(model, dummy_input, './data/' + model_name + '.onnx')
+        onnx_utils.OnnxSaver.set_node_names('./data/' + model_name + '.onnx', model, dummy_input)
 
         onnx_model = onnx.load('./data/' + model_name + '.onnx')
         for node in onnx_model.graph.node:
@@ -126,9 +126,9 @@ class TestOnnxUtils(unittest.TestCase):
     def test_onnx_node_name_to_input_output_names_util(self):
         """ test onxx based utility to find mapping between onnx node names and io tensors"""
         model = models.resnet18(pretrained=False)
-        input_shape = (1, 3, 224, 224)
-        torch.onnx.export(model, torch.rand(*input_shape), './data/resnet18.onnx')
-        onnx_utils.OnnxSaver.set_node_names('./data/resnet18.onnx', model, input_shape)
+        dummy_input = torch.randn(1, 3, 224, 224)
+        torch.onnx.export(model, dummy_input, './data/resnet18.onnx')
+        onnx_utils.OnnxSaver.set_node_names('./data/resnet18.onnx', model, dummy_input)
         onnx_model = onnx.load('./data/resnet18.onnx')
 
         # Get Dict mapping node name to the input and output names
@@ -158,10 +158,10 @@ class TestOnnxUtils(unittest.TestCase):
 
         model_name = 'multilayer_lstm'
         model = TwoLayerLstmModel()
-        input_shape = (10, 1, 3)
+        dummy_input = torch.randn(10, 1, 3)
 
-        torch.onnx.export(model, torch.rand(*input_shape), './data/' + model_name + '.onnx')
-        onnx_utils.OnnxSaver.set_node_names('./data/' + model_name + '.onnx', model, input_shape)
+        torch.onnx.export(model, dummy_input, './data/' + model_name + '.onnx')
+        onnx_utils.OnnxSaver.set_node_names('./data/' + model_name + '.onnx', model, dummy_input)
         onnx_model = onnx.load('./data/' + model_name + '.onnx')
 
         lstm_nodes = [node for node in onnx_model.graph.node if node.op_type == 'LSTM']

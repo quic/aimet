@@ -412,11 +412,11 @@ def get_one_positions_in_binary_mask(mask):
     return mask_one_positions
 
 
-def get_ordered_list_of_modules(model: torch.nn.Module, input_shapes: Union[Tuple, List[Tuple]]) -> List:
+def get_ordered_list_of_modules(model: torch.nn.Module, dummy_input: Union[torch.Tensor, Tuple]) -> List:
     """
     Finds order of nodes in graph
     :param model: model
-    :param input_shapes: input shape to model (can be one or multiple inputs)
+    :param dummy_input: Dummy input to the model. Used to parse model graph.
     :return: List of names in graph in order
     """
     def _hook_to_collect_name_of_module(module, _, __):
@@ -427,19 +427,19 @@ def get_ordered_list_of_modules(model: torch.nn.Module, input_shapes: Union[Tupl
             if module is module_ref:
                 list_modules.append([name, module])
     list_modules = []
-    run_hook_for_layers(model, input_shapes, hook=_hook_to_collect_name_of_module)
+    run_hook_for_layers_with_given_input(model, dummy_input, hook=_hook_to_collect_name_of_module)
 
     return list_modules
 
 
-def get_ordered_list_of_conv_modules(model: torch.nn.Module, input_shapes: Union[Tuple, List[Tuple]]) -> List:
+def get_ordered_list_of_conv_modules(model: torch.nn.Module, dummy_input: Union[torch.Tensor, Tuple]) -> List:
     """
     Finds order of nodes in graph
     :param model: model
-    :param input_shapes: input shape to model (can be one or multiple inputs)
+    :param dummy_input: Dummy input to the model. Used to parse model graph.
     :return: List of names in graph in order
     """
-    module_list = get_ordered_list_of_modules(model, input_shapes)
+    module_list = get_ordered_list_of_modules(model, dummy_input)
     module_list = [[name, module] for name, module in module_list if isinstance(module, (torch.nn.Conv2d,
                                                                                          torch.nn.ConvTranspose2d))]
     return module_list
@@ -489,10 +489,12 @@ def replace_modules_with_instances_of_new_type(model: torch.nn.Module, modules_t
             replace_modules_with_instances_of_new_type(module_ref, modules_to_replace_list, new_type)
 
 
-def create_rand_tensors_given_shapes(input_shape: Union[Tuple, List[Tuple]]) -> List[torch.Tensor]:
+def create_rand_tensors_given_shapes(input_shape: Union[Tuple, List[Tuple]], device: torch.device = None) \
+        -> List[torch.Tensor]:
     """
     Given shapes of some tensors, create one or more random tensors and return them as a list of tensors
     :param input_shape: Shapes of tensors to create
+    :param device: Device to create tensors on
     :return: Created list of tensors
     """
     if isinstance(input_shape, List):
@@ -502,7 +504,10 @@ def create_rand_tensors_given_shapes(input_shape: Union[Tuple, List[Tuple]]) -> 
 
     rand_tensors = []
     for shape in input_shapes:
-        rand_tensors.append(torch.rand(shape))
+        if device is not None:
+            rand_tensors.append(torch.rand(shape).to(device))
+        else:
+            rand_tensors.append(torch.rand(shape))
 
     return rand_tensors
 
@@ -515,7 +520,10 @@ def get_ordered_lists_of_conv_fc(model: torch.nn.Module, input_shapes: Tuple) ->
     :return: List of names in graph in order
     """
 
-    module_list = get_ordered_list_of_modules(model, input_shapes)
+    device = get_device(model)
+    dummy_input = create_rand_tensors_given_shapes(input_shapes)
+    dummy_input = [tensor.to(device) for tensor in dummy_input]
+    module_list = get_ordered_list_of_modules(model, dummy_input)
     module_list = [[name, module] for name, module in module_list if
                    isinstance(module, (torch.nn.Conv2d, torch.nn.Linear, torch.nn.ConvTranspose2d))]
     return module_list
