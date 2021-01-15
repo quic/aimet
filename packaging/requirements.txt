@@ -5,8 +5,8 @@ protobuf==3.7.1
 scikit-learn==0.19.1
 tensorboard==1.15.0
 tensorboardX==1.7
-https://download.pytorch.org/whl/cu100/torchvision-0.5.0%2Bcu100-cp36-cp36m-linux_x86_64.whl
-https://download.pytorch.org/whl/cu100/torch-1.4.0%2Bcu100-cp36-cp36m-linux_x86_64.whl
+torch==1.4+cu100
+torchvision==0.5+cu100
 tensorflow-gpu==1.15.0
 future==0.17.1
 bokeh==1.2.0
