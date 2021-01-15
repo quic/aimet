@@ -391,16 +391,17 @@ if [ $run_static_analysis -eq 1 ]; then
     static_analysis_result=0
     clangtidy_results_dir=$outputFolder
     mkdir -p ${clangtidy_results_dir}
-    cd $workspaceFolder/build; python2.7 /usr/bin/run-clang-tidy.py >| ${clangtidy_results_dir}/clang-tidy_results.out
+    #TODO: Do not fail from the static analysis command since there are many unresolved errors
+    set +e
+    cd $workspaceFolder/build; python3 /usr/bin/run-clang-tidy.py >| ${clangtidy_results_dir}/clang-tidy_results.out
     static_analysis_result=$?
-    if [ $static_analysis_result -eq 0 ]; then
-        if grep -q "error:" "${clangtidy_results_dir}/clang-tidy_results.out"; then
-            #Let static analysis pass for warnings, uncomment next line to enfore analysis again
-            #static_analysis_result=1
-            echo -e "\n********** Static analysis results START **********\n"
-            cat ${clangtidy_results_dir}/clang-tidy_results.out
-            echo -e "\n********** Static analysis results END **********\n"
-        fi
+    set -e
+    # Check for errors in static analysis log file and if found, display the log.
+    if grep -q "error:" "${clangtidy_results_dir}/clang-tidy_results.out"; then
+        static_analysis_result=1
+        echo -e "\n********** Static analysis results START **********\n"
+        cat ${clangtidy_results_dir}/clang-tidy_results.out
+        echo -e "\n********** Static analysis results END **********\n"
     fi
     check_stage $static_analysis_result "Static analysis" "false"
 fi
