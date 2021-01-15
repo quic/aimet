@@ -66,6 +66,7 @@ setup(
     description='AIMET',
     long_description=open('README.txt').read(),
     package_data={'aimet_common':required_package_data},
+    install_requires=[open('requirements.txt').read()],
     zip_safe=True,
     platforms='x86',
     python_requires='>=3.6',

@@ -40,6 +40,7 @@ cmake_minimum_required(VERSION 3.5)
 #copying NOTICE, README, INSTALL files to build folder for Aimet whl package creation
 configure_file("${SOURCE_DIR}/packaging/NOTICE.txt" "${CMAKE_BINARY_DIR}/packaging/NOTICE.txt" COPYONLY)
 configure_file("${SOURCE_DIR}/packaging/README.txt" "${CMAKE_BINARY_DIR}/packaging/README.txt" COPYONLY)
+configure_file("${SOURCE_DIR}/packaging/requirements.txt" "${CMAKE_BINARY_DIR}/packaging/requirements.txt" COPYONLY)
 configure_file("${SOURCE_DIR}/packaging/INSTALL.txt" "${CMAKE_BINARY_DIR}/packaging/INSTALL.txt" COPYONLY)
 configure_file("${SOURCE_DIR}/packaging/setup_cfg.py" "${CMAKE_BINARY_DIR}/packaging/setup_cfg.py" COPYONLY)
 
