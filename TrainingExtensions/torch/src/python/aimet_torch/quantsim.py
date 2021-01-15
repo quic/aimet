@@ -131,22 +131,8 @@ class QuantizationSimModel:
         :param dummy_input: Dummy input to the model. Used to parse model graph. If the model has more than one input,
                             pass a tuple. User is expected to place the tensors on the appropriate device.
         """
-
-        # sanity checks
-        if quant_scheme not in ('tf_enhanced', 'tf') and not isinstance(quant_scheme, QuantScheme):
-            raise ValueError('Parameter quantization mode is not a valid selection. Valid selections are tf, '
-                             'tf_enhanced, QuantScheme.post_training_tf, QuantScheme.post_training_tf_enhanced')
-
-        if rounding_mode not in ('nearest', 'stochastic'):
-            raise ValueError('Parameter round mode is not a valid selection. Valid selections are nearest or '
-                             'stochastic')
-
-        if default_param_bw < 4 or default_param_bw > 32:
-            raise ValueError('Default bitwidth for parameters must be between 4 and 32, not '+str(default_param_bw))
-
-        if default_output_bw < 4 or default_output_bw > 32:
-            raise ValueError('Activation bitwidth must be between 4 and 32, not '+str(default_output_bw))
-
+        # Perform sanity checks on inputs
+        QuantizationSimModel._validate_quantsim_inputs(quant_scheme, rounding_mode, default_output_bw, default_param_bw)
         # save some parameters
         if in_place:
             self.model = model
@@ -157,6 +143,8 @@ class QuantizationSimModel:
             if dummy_input is not None:
                 connected_graph = ConnectedGraph(self.model, dummy_input)
             else:
+                if input_shapes is None:
+                    raise AssertionError('Must provide either input shapes or a dummy input for export')
                 connected_graph = create_connected_graph_with_input_shapes(self.model, input_shapes)
 
         except (torch.jit.TracingCheckError, AssertionError):
@@ -326,8 +314,8 @@ class QuantizationSimModel:
             layer.set_mode(QcQuantizeOpMode.ACTIVE)
         return has_invalid_encoding
 
-    def export(self, path: str, filename_prefix: str, input_shape: Union[Tuple, List[Tuple]],
-               set_onnx_layer_names: bool = True):
+    def export(self, path: str, filename_prefix: str, input_shape: Union[Tuple, List[Tuple]] = None,
+               set_onnx_layer_names: bool = True, dummy_input: Union[torch.Tensor, Tuple] = None):
         """
         This method exports out the quant-sim model so it is ready to be run on-target.
 
@@ -345,6 +333,7 @@ class QuantizationSimModel:
         :param input_shape: shape of the model input as a tuple. If the model takes more than one input, specify this as
                a list of shapes.
         :param set_onnx_layer_names: If ONNX layer names should be set while exporting the model. Default is True
+        :param dummy_input: Dummy input to the model. Used to parse model graph.
         :return: None
 
         """
@@ -353,21 +342,25 @@ class QuantizationSimModel:
         model_path = os.path.join(path, model_filename)
 
         # Create a version of the model without any quantization ops
-        model_to_export = copy.deepcopy(self.model).cpu()
+        model_to_export = copy.deepcopy(self.model)
         all_modules_in_model_to_export = [module for module in model_to_export.modules()]
         self._remove_quantization_wrappers(model_to_export, all_modules_in_model_to_export)
         torch.save(model_to_export, model_path)
 
         # Save model to onnx
         onnx_path = os.path.join(path, filename_prefix + '.onnx')
-        dummy_input = utils.create_rand_tensors_given_shapes(input_shape)
-        torch.onnx.export(model_to_export, tuple(dummy_input), onnx_path)
-
+        if not dummy_input:
+            if input_shape is None:
+                raise AssertionError('Must provide either input shape or a dummy input for export')
+            dummy_input = tuple(utils.create_rand_tensors_given_shapes(input_shape,
+                                                                       device=utils.get_device(model_to_export)))
+        torch.onnx.export(model_to_export, dummy_input, onnx_path)
         #  Set the onnx layer names
         if set_onnx_layer_names:
-            onnx_utils.OnnxSaver.set_node_names(onnx_path, model_to_export, input_shape)
+            onnx_utils.OnnxSaver.set_node_names(onnx_path, model_to_export, dummy_input)
         onnx_model = onnx.load(onnx_path)
-        onnx_node_to_io_tensor_map, valid_param_set = onnx_utils.OnnxSaver.get_onnx_node_to_io_tensor_names_map(onnx_model)
+        onnx_node_to_io_tensor_map, valid_param_set = \
+            onnx_utils.OnnxSaver.get_onnx_node_to_io_tensor_names_map(onnx_model)
 
         # Export encodings
         self._export_encodings_to_json(path, filename_prefix, onnx_node_to_io_tensor_map, valid_param_set)
@@ -393,6 +386,33 @@ class QuantizationSimModel:
 
     def _replace_wrappers_for_quantize_dequantize(self):
         pass
+
+    @staticmethod
+    def _validate_quantsim_inputs(quant_scheme: Union[str, QuantScheme], rounding_mode: str, default_output_bw: int,
+                                  default_param_bw: int):
+        """
+        Perform sanity checks on inputs to QuantSim
+        :param quant_scheme: Quantization scheme. Supported options are 'tf_enhanced' or 'tf' or using Quant Scheme Enum
+                             QuantScheme.post_training_tf or QuantScheme.post_training_tf_enhanced
+        :param rounding_mode: Rounding mode. Supported options are 'nearest' or 'stochastic'
+        :param default_output_bw: Default bitwidth (4-31) to use for quantizing layer inputs and outputs
+        :param default_param_bw: Default bitwidth (4-31) to use for quantizing layer parameters
+        :return:
+        """
+        # sanity checks
+        if quant_scheme not in ('tf_enhanced', 'tf') and not isinstance(quant_scheme, QuantScheme):
+            raise ValueError('Parameter quantization mode is not a valid selection. Valid selections are tf, '
+                             'tf_enhanced, QuantScheme.post_training_tf, QuantScheme.post_training_tf_enhanced')
+
+        if rounding_mode not in ('nearest', 'stochastic'):
+            raise ValueError('Parameter round mode is not a valid selection. Valid selections are nearest or '
+                             'stochastic')
+
+        if default_param_bw < 4 or default_param_bw > 32:
+            raise ValueError('Default bitwidth for parameters must be between 4 and 32, not '+str(default_param_bw))
+
+        if default_output_bw < 4 or default_output_bw > 32:
+            raise ValueError('Activation bitwidth must be between 4 and 32, not '+str(default_output_bw))
 
     @staticmethod
     def _find_next_downstream_modules(op):

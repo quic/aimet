@@ -100,7 +100,8 @@ class TestTrainingExtensionBnFold(unittest.TestCase):
 
     def test_get_ordering_of_nodes_in_model(self):
         model = mnist_model.ExtendedNet()
-        list_modules = get_ordered_list_of_conv_modules(model, input_shapes=(1, 1, 28, 28))
+        dummy_input = torch.randn(1, 1, 28, 28)
+        list_modules = get_ordered_list_of_conv_modules(model, dummy_input)
         self.assertEqual(list_modules[0][0], 'conv1')
         self.assertEqual(list_modules[1][0], 'conv2')
 
