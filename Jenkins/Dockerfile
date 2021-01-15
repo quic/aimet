@@ -226,7 +226,7 @@ RUN apt-get update && apt-get install -y clang-11 clang-format clang-tidy-11 cud
    rm -rf /var/lib/apt/lists/*
 
 # Create a version-less symbolic link for clang-tidy
-RUN ln -s /usr/bin/run-clang-tidy-11.0.py /usr/bin/run-clang-tidy.py
+RUN ln -s /usr/bin/run-clang-tidy-11.py /usr/bin/run-clang-tidy.py
 
 RUN curl -s https://packagecloud.io/install/repositories/github/git-lfs/script.deb.sh | sudo bash
 RUN sudo apt-get install git-lfs
