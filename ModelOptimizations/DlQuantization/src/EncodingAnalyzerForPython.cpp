@@ -59,12 +59,13 @@ EncodingAnalyzerForPython::EncodingAnalyzerForPython(DlQuantization::Quantizatio
 
 void EncodingAnalyzerForPython::updateStats(py::array_t<float> input, bool use_cuda)
 {
-    auto npArr = input.mutable_unchecked<4>();
+    auto npArr = input.mutable_unchecked<>();
+    std::cout << "Num Dimensions=" << npArr.ndim() << "\n";
 
     // Set encoding as valid
     _isEncodingValid = true;
 
-    size_t inputTensorSize = npArr.shape(0) * npArr.shape(1) * npArr.shape(2) * npArr.shape(3);
+    size_t inputTensorSize = npArr.size();
 
     // Get a pointer to the tensor data
     auto inputDataPtr = (float*) npArr.mutable_data(0, 0, 0, 0);
@@ -75,13 +76,14 @@ void EncodingAnalyzerForPython::updateStats(py::array_t<float> input, bool use_c
 }
 
 
-std::tuple<DlQuantization::TfEncoding, bool> EncodingAnalyzerForPython::computeEncoding(unsigned int bitwidth)
+std::tuple<DlQuantization::TfEncoding, bool> EncodingAnalyzerForPython::computeEncoding(unsigned int bitwidth,
+                                                                                        bool isSymmetric)
 {
     DlQuantization::TfEncoding out_encoding;
 
     if (_isEncodingValid)
     {
-        out_encoding = _encodingAnalyzer->computeEncoding(bitwidth, false);
+        out_encoding = _encodingAnalyzer->computeEncoding(bitwidth, isSymmetric);
     }
 
     return std::make_tuple(out_encoding, _isEncodingValid);

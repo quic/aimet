@@ -241,3 +241,106 @@ class TestTensorQuantizer(unittest.TestCase):
 
         # compare qc quantize output and qat asymmetric quantizer output
         self.assertTrue(np.allclose(x_quant, output_tensor))
+
+    def test_encoding_analyzer_with_numpy_interface(self):
+        """
+        compare qat asymmetric quantization with  qc quantize implementation
+        :return:
+        """
+
+        np.random.seed(10)
+        random_input = 5 * (np.random.normal(size=[1, 3, 224, 224])) + 2
+
+        # Full range min, max  (no scaling input)
+        x_min = np.min([0., random_input.min()])
+        x_max = np.max([0., random_input.max()])
+        delta = (x_max - x_min) / 255
+        offset = np.round(x_min/delta)
+        x_min = offset * delta
+        x_max = x_min + 255 * delta
+
+
+        enc_analyzer = libpymo.EncodingAnalyzerForPython(libpymo.QuantizationMode.QUANTIZATION_TF)
+        enc_analyzer.updateStats(random_input, False)
+        encoding, is_valid = enc_analyzer.computeEncoding(8, False)
+
+        print("Encoding.min=", encoding.min)
+        print("Encoding.max=", encoding.max)
+
+        self.assertTrue(is_valid)
+        self.assertAlmostEqual(x_min, encoding.min, places=5)
+        self.assertAlmostEqual(x_max, encoding.max, places=5)
+
+
+    def test_encoding_analyzer_with_numpy_interface_other_dimensions(self):
+        """
+        compare qat asymmetric quantization with  qc quantize implementation
+        :return:
+        """
+
+        np.random.seed(10)
+        random_input = 5 * (np.random.normal(size=[1, 3, 224, 224])) + 2
+
+        # Full range min, max  (no scaling input)
+        x_min = np.min([0., random_input.min()])
+        x_max = np.max([0., random_input.max()])
+        delta = (x_max - x_min) / 255
+        offset = np.round(x_min/delta)
+        x_min = offset * delta
+        x_max = x_min + 255 * delta
+
+        # 2-dimensional tensor
+        random_input = random_input.reshape(3, -1)
+
+        enc_analyzer = libpymo.EncodingAnalyzerForPython(libpymo.QuantizationMode.QUANTIZATION_TF)
+        enc_analyzer.updateStats(random_input, False)
+        encoding, is_valid = enc_analyzer.computeEncoding(8, False)
+
+        print("Encoding.min=", encoding.min)
+        print("Encoding.max=", encoding.max)
+
+        self.assertTrue(is_valid)
+        self.assertAlmostEqual(x_min, encoding.min, places=5)
+        self.assertAlmostEqual(x_max, encoding.max, places=5)
+
+        # 3-dimensional tensor
+        random_input = random_input.reshape(3, 2, -1)
+
+        enc_analyzer = libpymo.EncodingAnalyzerForPython(libpymo.QuantizationMode.QUANTIZATION_TF)
+        enc_analyzer.updateStats(random_input, False)
+        encoding, is_valid = enc_analyzer.computeEncoding(8, False)
+
+        print("Encoding.min=", encoding.min)
+        print("Encoding.max=", encoding.max)
+
+        self.assertTrue(is_valid)
+        self.assertAlmostEqual(x_min, encoding.min, places=5)
+        self.assertAlmostEqual(x_max, encoding.max, places=5)
+
+        # 1-dimensional tensor
+        random_input = random_input.flatten()
+
+        enc_analyzer = libpymo.EncodingAnalyzerForPython(libpymo.QuantizationMode.QUANTIZATION_TF)
+        enc_analyzer.updateStats(random_input, False)
+        encoding, is_valid = enc_analyzer.computeEncoding(8, False)
+
+        print("Encoding.min=", encoding.min)
+        print("Encoding.max=", encoding.max)
+
+        self.assertTrue(is_valid)
+        self.assertAlmostEqual(x_min, encoding.min, places=5)
+        self.assertAlmostEqual(x_max, encoding.max, places=5)
+
+        # 1-dimensional tensor
+        random_input = random_input.reshape(2, 2, 2, 2, -1)
+
+        enc_analyzer = libpymo.EncodingAnalyzerForPython(libpymo.QuantizationMode.QUANTIZATION_TF)
+        enc_analyzer.updateStats(random_input, False)
+        encoding, is_valid = enc_analyzer.computeEncoding(8, False)
+
+        print("Encoding.min=", encoding.min)
+        print("Encoding.max=", encoding.max)
+
+        self.assertTrue(is_valid)
+        self.assertAlmostEqual(x_min, encoding.min, places=5)
+        self.assertAlmostEqual(x_max, encoding.max, places=5)
