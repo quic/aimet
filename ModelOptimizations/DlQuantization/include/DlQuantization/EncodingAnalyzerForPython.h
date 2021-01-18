@@ -60,7 +60,7 @@ public:
 
     void updateStats(py::array_t<float> input, bool use_cuda);
 
-    std::tuple<DlQuantization::TfEncoding, bool> computeEncoding(unsigned int bitwidth);
+    std::tuple<DlQuantization::TfEncoding, bool> computeEncoding(unsigned int bitwidth, bool isSymmetric);
 
 
 private:
