@@ -60,7 +60,6 @@ EncodingAnalyzerForPython::EncodingAnalyzerForPython(DlQuantization::Quantizatio
 void EncodingAnalyzerForPython::updateStats(py::array_t<float> input, bool use_cuda)
 {
     auto npArr = input.mutable_unchecked<>();
-    std::cout << "Num Dimensions=" << npArr.ndim() << "\n";
 
     // Set encoding as valid
     _isEncodingValid = true;
@@ -68,7 +67,7 @@ void EncodingAnalyzerForPython::updateStats(py::array_t<float> input, bool use_c
     size_t inputTensorSize = npArr.size();
 
     // Get a pointer to the tensor data
-    auto inputDataPtr = (float*) npArr.mutable_data(0, 0, 0, 0);
+    auto inputDataPtr = (float*) npArr.mutable_data();
 
     DlQuantization::ComputationMode cpu_gpu_mode =
         use_cuda ? DlQuantization::ComputationMode::COMP_MODE_GPU : DlQuantization::ComputationMode::COMP_MODE_CPU;
