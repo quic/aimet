@@ -159,6 +159,7 @@ class ConnectedGraph(AimetCommonConnectedGraph):
         "t",         # aten::t
         "to",        # aten::to
         "detach",    # aten::detach
+        "values"     # aten::values
     ]
 
     # Input graph nodes to ignore
@@ -223,16 +224,16 @@ class ConnectedGraph(AimetCommonConnectedGraph):
         module_tensor_shapes_map = {}
 
         def forward_hook(curr_module: torch.nn.Module,
-                         input_tensor_tuple: Union[torch.Tensor, List, None],
-                         output_tensor_tuple: Union[torch.Tensor, List, None]):
+                         inputs: Union[torch.Tensor, List, Dict, None],
+                         outputs: Union[torch.Tensor, List, Dict, None]):
             """
             Custom forward hook function to add every module to module-to-tensor shapes dict.
             :param curr_module: Current module being traversed during forward pass.
-            :param input_tensor_tuple: tuple of input tensors to the current module
-            :param output_tensor_tuple: tuple of output tensors of the current module
+            :param inputs: tuple of input tensors to the current module
+            :param outputs: tuple of output tensors of the current module
             """
-            input_shapes = _get_module_tensor_shapes_entry(input_tensor_tuple)
-            output_shapes = _get_module_tensor_shapes_entry(output_tensor_tuple)
+            input_shapes = _get_module_tensor_shapes_entry(inputs)
+            output_shapes = _get_module_tensor_shapes_entry(outputs)
             if not isinstance(input_shapes, List):
                 input_shapes = [input_shapes]
             if not isinstance(output_shapes, List):
@@ -509,6 +510,7 @@ class ConnectedGraph(AimetCommonConnectedGraph):
         _handle_ir_nodes_of_interest(ir_nodes_list, passthrough_types, input_types_to_ignore)
         filtered_ir_nodes = [ir_node for ir_node in ir_nodes_list if ir_node.node_type not in ['TupleConstruct',
                                                                                                'TupleUnpack',
+                                                                                               'ListUnpack',
                                                                                                'ListConstruct']
                              and ir_node.node_type not in input_types_to_ignore
                              and ir_node.node_type not in passthrough_types]
@@ -534,12 +536,17 @@ class ConnectedGraph(AimetCommonConnectedGraph):
                     op_type=node.node_type)
             if node.module is not None:
                 op.model_module = PytorchModelModule(node.module)
-                _, output_tensor_shapes = module_tensor_shapes_map[node.module]
-                # For now, treat only the first output shape as the shape of the node if there is more than one entry
-                flattened_shapes = _flatten_lists(output_tensor_shapes)
-                op.output_shape = flattened_shapes[0]
-                op.dotted_name = self._module_to_name[node.module]
-                _fill_groups_info(op, node.module)
+                if node.module in module_tensor_shapes_map:
+                    _, output_tensor_shapes = module_tensor_shapes_map[node.module]
+                    # Temporarily not handling dict types for output tensors.
+                    if isinstance(output_tensor_shapes, Dict):
+                        output_tensor_shapes = None
+                    # For now, treat only the first output shape as the shape of the node if there is more than one
+                    # entry
+                    flattened_shapes = _flatten_lists(output_tensor_shapes)
+                    op.output_shape = flattened_shapes[0]
+                    op.dotted_name = self._module_to_name[node.module]
+                    _fill_groups_info(op, node.module)
             node_to_op_dict[node] = op
             self._ops[op_name] = op
             self.ordered_ops.append(op)
@@ -914,7 +921,7 @@ def _handle_ir_nodes_of_interest(ir_nodes_list: List[IrNode], passthrough_ops: L
     for ir_node in ir_nodes_list:
         if ir_node.node_type in ['TupleConstruct', 'ListConstruct']:
             _handle_tuple_and_list_construct_ir_node(ir_node, connections_to_ir_nodes_dict)
-        elif ir_node.node_type == 'TupleUnpack':
+        elif ir_node.node_type in ['TupleUnpack', 'ListUnpack']:
             _handle_tuple_unpack_ir_node(ir_node, connections_to_ir_nodes_dict)
         elif ir_node.node_type in passthrough_ops:
             _handle_passthrough_ir_node(ir_node, connections_to_ir_nodes_dict)
@@ -971,7 +978,10 @@ def _handle_tuple_unpack_ir_node(ir_node: IrNode, connections_to_ir_nodes_dict: 
         # Case where input came from op with multiple outputs
         # Replace the output connection of the op with the outputs of TupleUnpack
         producer = connections_to_ir_nodes_dict[tuple_unpack_input][0]
-        producer.outputs = ir_node.outputs
+
+        # Producer can be None if a ListUnpack follows a values passthrough op for processing dict inputs
+        if producer is not None:
+            producer.outputs = ir_node.outputs
         ir_node.inputs = ir_node.outputs
         # Remove what used to be the input to the tuple unpack node from connections_to_ir_nodes_dict
         del connections_to_ir_nodes_dict[tuple_unpack_input]
@@ -1122,7 +1132,7 @@ def _update_inputs_map(curr_inputs: List[torch._C.TensorType], higher_level_inpu
             inputs_map[curr_inputs[idx + 1]] = inp
 
 
-def _get_module_tensor_shapes_entry(tensors: Union[torch.Tensor, List, None]):
+def _get_module_tensor_shapes_entry(tensors: Union[torch.Tensor, List, Dict, None]):
     """
     Given the tensor input or output for a module, extract their shapes and return the shapes in the same list structure
     as the given tensor.
@@ -1134,5 +1144,13 @@ def _get_module_tensor_shapes_entry(tensors: Union[torch.Tensor, List, None]):
     if isinstance(tensors, torch.Tensor):
         return tensors.shape
     # Tensors must then be a nested list of tensors, so recursively get the shapes for each item in the list
-    assert isinstance(tensors, (List, Tuple))
-    return [_get_module_tensor_shapes_entry(entry) for entry in tensors]
+    if isinstance(tensors, (List, Tuple)):
+        return [_get_module_tensor_shapes_entry(entry) for entry in tensors]
+    if isinstance(tensors, Dict):
+        shapes_dict = {}
+        for k, v in tensors.items():
+            shapes_dict[k] = _get_module_tensor_shapes_entry(v)
+        return shapes_dict
+    logger.error('Unexpected data type for tensor. Supported types include tensors, or Lists, Tuples, and Dicts of '
+                 'tensors.')
+    raise AssertionError

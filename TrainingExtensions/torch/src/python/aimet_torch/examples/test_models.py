@@ -125,6 +125,30 @@ class MultiInput(nn.Module):
         return x
 
 
+class DictInputModel(nn.Module):
+    """ Model with dictionary as input. """
+    def __init__(self, num_classes=3):
+        super(DictInputModel, self).__init__()
+        self.conv1 = nn.Conv2d(3, 16, kernel_size=2, stride=2, padding=3, bias=False)
+        self.conv2 = nn.Conv2d(16, 8, kernel_size=3, stride=2, padding=2)
+        self.conv3 = nn.Conv2d(3, 8, kernel_size=3, stride=2, padding=2)
+        self.bn1 = nn.BatchNorm2d(8)
+        self.relu1 = nn.ReLU(inplace=True)
+        self.maxpool = nn.MaxPool2d(kernel_size=2, stride=2, padding=1)
+        self.fc = nn.Linear(288, num_classes)
+
+    def forward(self, inputs):
+        x1 = self.conv1(inputs['inp_1'])
+        x1 = self.conv2(x1)
+        x2 = self.conv3(inputs['inp_2'])
+        x = x1 + x2
+        x = self.bn1(x)
+        x = self.relu1(x)
+        x = self.maxpool(x)
+        x = x.view(x.size(0), -1)
+        x = self.fc(x)
+        return x
+
 class ConcatModel(nn.Module):
     """ A model with concat op.
         Use this model for unit testing purposes.
