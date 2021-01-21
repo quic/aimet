@@ -323,6 +323,8 @@ class ConnectedGraph(AimetCommonConnectedGraph):
                 assert len(outputs) == 1
                 node_name = outputs[0].debugName()
                 subgraph_model = ConnectedGraph._get_module_instance(node, node_name_to_module)
+                if isinstance(subgraph_model, torch.Tensor):
+                    continue
                 if node_name not in node_name_to_module:
                     node_name_to_module[node_name] = subgraph_model
                 else:
@@ -545,8 +547,8 @@ class ConnectedGraph(AimetCommonConnectedGraph):
                     # entry
                     flattened_shapes = _flatten_lists(output_tensor_shapes)
                     op.output_shape = flattened_shapes[0]
-                    op.dotted_name = self._module_to_name[node.module]
-                    _fill_groups_info(op, node.module)
+                op.dotted_name = self._module_to_name[node.module]
+                _fill_groups_info(op, node.module)
             node_to_op_dict[node] = op
             self._ops[op_name] = op
             self.ordered_ops.append(op)
@@ -1151,6 +1153,6 @@ def _get_module_tensor_shapes_entry(tensors: Union[torch.Tensor, List, Dict, Non
         for k, v in tensors.items():
             shapes_dict[k] = _get_module_tensor_shapes_entry(v)
         return shapes_dict
-    logger.error('Unexpected data type for tensor. Supported types include tensors, or Lists, Tuples, and Dicts of '
-                 'tensors.')
-    raise AssertionError
+    logger.warning('Unexpected data type for tensor. Supported types include tensors, or Lists, Tuples, and Dicts of '
+                   'tensors.')
+    return None
