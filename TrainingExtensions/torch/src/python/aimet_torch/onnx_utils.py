@@ -46,6 +46,7 @@ import onnx
 
 from aimet_common.utils import AimetLogger
 import aimet_torch.utils
+import aimet_torch.elementwise_ops as elementwise_ops
 from aimet_torch.defs import PassThroughOp
 
 
@@ -67,7 +68,13 @@ map_torch_types_to_onnx = {
     nn.LSTM: ['LSTM'],
     nn.GRU: ['GRU'],
     nn.ConvTranspose2d: ['ConvTranpose'],
-    nn.Sigmoid: ['Sigmoid']
+    nn.Sigmoid: ['Sigmoid'],
+    elementwise_ops.Add: ['Add'],
+    elementwise_ops.Subtract: ['Subtract'],
+    elementwise_ops.Multiply: ['Multiply'],
+    elementwise_ops.Divide: ['Divide'],
+    elementwise_ops.Concat: ['Concat']
+
 }
 
 # Define this as a list instead of tuple to allow for users to modify
