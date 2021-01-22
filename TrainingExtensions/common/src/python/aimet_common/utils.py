@@ -222,7 +222,7 @@ def start_bokeh_server_session(port: int):
 
     host_name = socket.gethostname()
     bokeh_serve_command = "bokeh serve  --allow-websocket-origin=" + \
-                          host_name + ":" + str(port) + " --port=" + str(port) + " &"
+                          host_name + ":" + str(port) + " --allow-websocket-origin=localhost:" + str(port) + " --port=" + str(port) + " &"
     process = subprocess.Popen(bokeh_serve_command,  # pylint: disable=subprocess-popen-preexec-fn
                                shell=True,
                                preexec_fn=os.setsid)
