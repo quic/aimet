@@ -36,68 +36,106 @@
 #  @@-COPYRIGHT-END-@@
 # =============================================================================
 
-import os
+import json
 import unittest.mock
 import torch
 import torch.nn as nn
-from aimet_torch.elementwise_ops import AddOp, SubtractOp, MultiplyOp, DivideOp, ConcatOp
-from aimet_torch import utils
+import numpy as np
+from aimet_torch.elementwise_ops import Add, Subtract, Multiply, Divide, Concat
+from aimet_torch.quantsim import QuantizationSimModel
+import libpymo
 
 
 class Model(nn.Module):
     def __init__(self, op):
         super(Model, self).__init__()
-        self.relu1 = nn.ReLU()
+        self.op1 = op
+
+    def forward(self, input1, input2):
+        x = self.op1(input1, input2)
+        return x
+
+
+class Model2(nn.Module):
+    def __init__(self, op):
+        super(Model2, self).__init__()
+        self.conv1 = nn.Conv2d(10, 10, 5, padding=2)
         self.op1 = op
 
     def forward(self, input):
-        x = self.relu1(input)
+        x = self.conv1(input)
         x = self.op1(x, input)
         return x
 
 
+def forward_pass(model, iterations):
+    return torch.rand(1)
+
 class TestTrainingExtensionElementwiseOps(unittest.TestCase):
     def test_add_op(self):
-        model = Model(AddOp())
+        torch.manual_seed(10)
+        model = Model(Add())
+        input1 = torch.rand((5, 10, 10, 20))
+        input2 = torch.rand((5, 10, 10, 20))
+        out = model(input1, input2)
+        out1 = input1 + input2
+        self.assertTrue(np.allclose(out, out1))
+
+    def test_quantsim_export(self):
+        torch.manual_seed(10)
+        model = Model2(Add())
         input_shape = (5, 10, 10, 20)
-        input = torch.rand((5, 10, 10, 20))
-        model(input)
-        onnx_path = os.path.join( 'data/add_model'+ '.onnx')
-        dummy_input = utils.create_rand_tensors_given_shapes(input_shape)
-        torch.onnx.export(model, tuple(dummy_input), onnx_path)
+        sim = QuantizationSimModel(model, input_shape)
+        encodings = libpymo.TfEncoding()
+        encodings.bw = 8
+        encodings.max = 5
+        encodings.min = -5
+        encodings.delta = 1
+        encodings.offset = 0.2
+        sim.model.op1.output_quantizer.encoding = encodings
+        sim.model.conv1.output_quantizer.encoding = encodings
+        sim.model.conv1.param_quantizers['weight'].encoding = encodings
+        sim.export(path='./data', filename_prefix='quant_model', input_shape=input_shape)
+
+        with open('./data/quant_model.encodings') as f:
+            data = json.load(f)
+
+        self.assertTrue(isinstance(data['activation_encodings']['3'], list))
+        self.assertTrue(isinstance(data['activation_encodings']['4'], list))
+
 
     def test_subtract_op(self):
-        model = Model(SubtractOp())
-        input_shape = (5, 10, 10, 20)
-        input = torch.rand((5, 10, 10, 20))
-        model(input)
-        onnx_path = os.path.join( 'data/subtract_model'+ '.onnx')
-        dummy_input = utils.create_rand_tensors_given_shapes(input_shape)
-        torch.onnx.export(model, tuple(dummy_input), onnx_path)
+        torch.manual_seed(10)
+        model = Model(Subtract())
+        input1 = torch.rand((5, 10, 10, 20))
+        input2 = torch.rand((5, 10, 10, 20))
+        out = model(input1, input2)
+        out1 = input1 - input2
+        self.assertTrue(np.allclose(out, out1))
 
     def test_multiply_op(self):
-        model = Model(MultiplyOp())
-        input_shape = (5, 10, 10, 20)
-        input = torch.rand((5, 10, 10, 20))
-        model(input)
-        onnx_path = os.path.join( 'data/multiply_model'+ '.onnx')
-        dummy_input = utils.create_rand_tensors_given_shapes(input_shape)
-        torch.onnx.export(model, tuple(dummy_input), onnx_path)
+        torch.manual_seed(10)
+        model = Model(Multiply())
+        input1 = torch.rand((5, 10, 10, 20))
+        input2 = torch.rand((5, 10, 10, 20))
+        out = model(input1, input2)
+        out1 = input1 * input2
+        self.assertTrue(np.allclose(out, out1))
 
     def test_divide_op(self):
-        model = Model(DivideOp())
-        input_shape = (5, 10, 10, 20)
-        input = torch.rand((5, 10, 10, 20))
-        model(input)
-        onnx_path = os.path.join( 'data/divide_model'+ '.onnx')
-        dummy_input = utils.create_rand_tensors_given_shapes(input_shape)
-        torch.onnx.export(model, tuple(dummy_input), onnx_path)
+        torch.manual_seed(10)
+        model = Model(Divide())
+        input1 = torch.rand((5, 10, 10, 20))
+        input2 = torch.rand((5, 10, 10, 20))
+        out = model(input1, input2)
+        out1 = torch.div(input1, input2)
+        self.assertTrue(np.allclose(out, out1))
 
     def test_concat_op(self):
-        model = Model(ConcatOp(axis=0))
-        input_shape = (5, 10, 10, 20)
-        input = torch.rand((5, 10, 10, 20))
-        model(input)
-        onnx_path = os.path.join( 'data/concat_model'+ '.onnx')
-        dummy_input = utils.create_rand_tensors_given_shapes(input_shape)
-        torch.onnx.export(model, tuple(dummy_input), onnx_path)
+        torch.manual_seed(10)
+        model = Model(Concat(axis=0))
+        input1 = torch.rand((5, 10, 10, 20))
+        input2 = torch.rand((5, 10, 10, 20))
+        out = model(input1, input2)
+        out1 = torch.cat((input1, input2), 0)
+        self.assertTrue(np.allclose(out, out1))

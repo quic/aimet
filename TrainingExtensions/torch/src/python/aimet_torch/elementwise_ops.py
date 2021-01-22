@@ -41,7 +41,7 @@ import torch
 import torch.nn
 
 
-class AddOp(torch.nn.Module):
+class Add(torch.nn.Module):
     """ Add module for a functional add"""
 
     # pylint:disable=arguments-differ
@@ -52,7 +52,7 @@ class AddOp(torch.nn.Module):
         return x + y
 
 
-class SubtractOp(torch.nn.Module):
+class Subtract(torch.nn.Module):
     """ Subtract module for a functional subtract"""
 
     # pylint:disable=arguments-differ
@@ -63,7 +63,7 @@ class SubtractOp(torch.nn.Module):
         return x - y
 
 
-class MultiplyOp(torch.nn.Module):
+class Multiply(torch.nn.Module):
     """ Multiply module for a functional multiply"""
 
     # pylint:disable=arguments-differ
@@ -74,7 +74,7 @@ class MultiplyOp(torch.nn.Module):
         return x * y
 
 
-class DivideOp(torch.nn.Module):
+class Divide(torch.nn.Module):
     """ Divide module for a functional divide"""
 
     # pylint:disable=arguments-differ
@@ -85,10 +85,10 @@ class DivideOp(torch.nn.Module):
         return torch.div(x, y)
 
 
-class ConcatOp(torch.nn.Module):
+class Concat(torch.nn.Module):
     """ Concat module for a functional concat"""
     def __init__(self, axis: int = 0):
-        super(ConcatOp, self).__init__()
+        super(Concat, self).__init__()
         self.axis = axis
 
     # pylint:disable=arguments-differ
