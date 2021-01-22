@@ -42,7 +42,7 @@ import torch
 from aimet_common.connected_graph.connectedgraph_utils import get_all_input_ops, get_all_output_ops
 from aimet_torch.examples.test_models import TinyModel, SingleResidual, MultiInput, ConcatModel, ModuleListModel,\
     ModelWithDropouts, SequentialModel, HierarchicalModel, PassThroughOpLastLayerModel, MultiOutputModel,\
-    TupleOutputModel, ConfigurableTupleOutputModel, BasicConv2d, DictInputModel
+    TupleOutputModel, ConfigurableTupleOutputModel, BasicConv2d, DictInputModel, NestedSequentialModel
 
 from aimet_torch.meta.connectedgraph import ConnectedGraph
 from aimet_torch.meta.connectedgraph_utils import get_module_act_func_pair
@@ -504,3 +504,14 @@ class TestConnectedGraph(unittest.TestCase):
         output_ops = get_all_output_ops(conn_graph)
         self.assertEqual(1, len(output_ops))
         self.assertEqual(model.fc, output_ops[0].get_module())
+
+    def test_nested_sequential(self):
+        # pylint: disable=protected-access
+        """ Test building ConnectedGraph on a model constructed with nested nn.Sequential Module """
+        model = NestedSequentialModel()
+        model.eval()
+        inp_data_1 = torch.rand(1, 3, 8, 8)
+        conn_graph = ConnectedGraph(model, (inp_data_1,))
+        self.assertEqual(10, len(conn_graph.ordered_ops))
+        # Expect 1 split for the reshape operation
+        self.assertEqual(1, conn_graph._split_count)

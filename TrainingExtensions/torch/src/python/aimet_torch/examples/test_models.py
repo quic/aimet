@@ -566,3 +566,26 @@ class LSTMModel(nn.Module):
     # pylint: disable=arguments-differ
     def forward(self, x, hx_cx=None):
         return self.rnn(x, hx_cx)
+
+
+class NestedSequentialModel(nn.Module):
+    def __init__(self, num_classes=3):
+        super(NestedSequentialModel, self).__init__()
+        self.inner_seq = nn.Sequential(
+            nn.Conv2d(3, 16, kernel_size=2, stride=2, padding=2, bias=False),
+            nn.BatchNorm2d(16)
+        )
+        self.seq_list = nn.Sequential(
+            self.inner_seq,
+            nn.ReLU(inplace=True),
+            nn.MaxPool2d(kernel_size=2, stride=2, padding=1),
+            nn.Conv2d(16, 8, kernel_size=2, stride=2, padding=2),
+            nn.Conv2d(8, 4, kernel_size=2, stride=2, padding=2)
+        )
+        self.fc = nn.Linear(64, num_classes)
+
+    def forward(self, *inputs):
+        x = self.seq_list(inputs[0])
+        x = x.view(x.size(0), -1)
+        x = self.fc(x)
+        return x
