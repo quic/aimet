@@ -83,8 +83,9 @@ class SupergroupConfigCallback(AimetCommonSupergroupConfigCallback):
                 # if op is an elementwise op, it does not have wrappers.  Thus nothing needs to be done, since previous
                 # and subsequent ops with wrappers will be set correctly anyway.
                 continue
-            else:
-                assert op.get_module() is not None
+            if op.get_module() is None:
+                logger.debug("Op %s has no associated module. Skipping processing for this op.", op)
+                continue
             if index == 0:
                 # turn off only output quantization of first op in the list
                 first_quantsim_wrapper = self._module_to_quantsim_wrapper_dict[op_list[0].get_module()]

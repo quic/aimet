@@ -73,7 +73,7 @@ class Product:
 
     def __repr__(self):
         """ Printable representation of the object. """
-        return self._name + ' (%s)' % self._shape
+        return self._name
 
     @property
     def name(self):
