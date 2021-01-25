@@ -1138,14 +1138,8 @@ class TestQuantizationSim(unittest.TestCase):
         model = SingleLayerRNNModel()
         input_shape = (10, 1, 3)
 
-        # TODO: remove this when multiple output nodes are supported in pytorch CG
-        orig_config_function = QuantizationSimModel.configure_quantization_ops
-        QuantizationSimModel.configure_quantization_ops = lambda _1, _2, _3: None
-
         sim = QuantizationSimModel(model, input_shape)
         self.assertTrue(isinstance(sim.model.rnn, QcQuantizeRecurrent))
-
-        QuantizationSimModel.configure_quantization_ops = orig_config_function
 
     def test_quantizing_qc_quantize_module(self):
         """ Test that qc_quantize_module is identified as not quantizable """
