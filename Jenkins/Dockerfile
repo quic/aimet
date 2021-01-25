@@ -150,8 +150,12 @@ RUN pip3 --no-cache-dir install \
         pillow==6.2.1 \
         pluggy==0.12.0 \
         protobuf==3.7.1 \
+        psutil==5.8.0 \
+        ptflops==0.6.4 \
         pybind11==2.2.3 \
+        pyDOE2==1.3.0 \
         pylint==2.3.1 \
+        pymoo==0.4.1 \
         pytest==4.6.5 \
         pytest-cov==2.6.1 \
         pytorch-ignite==0.1.0 \
@@ -165,6 +169,7 @@ RUN pip3 --no-cache-dir install \
         tensorboard==1.14 \
         tensorboardX==1.7 \
         tensorlayer==2.1.0 \
+        timm==0.3.1 \
         torchtext==0.3.1 \
         tqdm==4.32.2 \
         wget==3.2 && \
