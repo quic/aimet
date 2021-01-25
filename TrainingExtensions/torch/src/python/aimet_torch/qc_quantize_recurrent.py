@@ -42,10 +42,10 @@ import torch
 from torch.nn.utils.rnn import PackedSequence, pad_packed_sequence, pack_padded_sequence
 from aimet_common.defs import QuantScheme
 from aimet_common.utils import AimetLogger
+from aimet_torch.defs import OpToIOTensors
 from aimet_torch.qc_quantize_op import MAP_ROUND_MODE_TO_PYMO, MAP_QUANT_SCHEME_TO_PYMO
 from aimet_torch.qc_quantize_op import QcQuantizeOpMode, tensor_quantizer_factory
 from aimet_torch.tensor_quantizer import PostTrainingTensorQuantizer
-from aimet_torch.onnx_utils import OnnxNodeIOTensors
 
 import libpymo
 
@@ -437,7 +437,7 @@ class QcQuantizeRecurrent(torch.nn.Module):
             output_quantizer.compute_encoding()
 
     def get_activation_param_quantizers_for_onnx_tensors(
-            self, io_tensor_map: Union[OnnxNodeIOTensors, List[OnnxNodeIOTensors]]) -> \
+            self, io_tensor_map: Union[OpToIOTensors, List[OpToIOTensors]]) -> \
             Dict[str, PostTrainingTensorQuantizer]:
         """
         Retrieve mapping from onnx tensor names and quantizers

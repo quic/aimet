@@ -555,9 +555,37 @@ class TestQuantizationSim(unittest.TestCase):
         self.assertTrue(param_keys[1] == "conv1.weight")
         self.assertTrue(isinstance(encoding_data["param_encodings"]["conv1.weight"], list))
 
+    def test_export_to_torch_script(self):
+        """ test export functionality on ResNet18 """
+
+        resnet50 = models.resnet50(pretrained=True)
+        resnet50.eval()
+
+        # Get Dict mapping node name to the input and output names
+        sim = QuantizationSimModel(resnet50, input_shapes=(1, 3, 224, 224))
+
+        def forward_pass(model, args):
+            model.eval()
+            with torch.no_grad():
+                model(torch.randn(1, 3, 224, 224))
+
+        # Quantize
+        sim.compute_encodings(forward_pass, None)
+
+        sim.export('./data/', 'resnet50', input_shape=(1, 3, 224, 224), use_torch_script_graph=True)
+        with open('./data/resnet50.encodings') as json_file:
+            encoding_data = json.load(json_file)
+
+        activation_keys = list(encoding_data["activation_encodings"].keys())
+        self.assertEqual(activation_keys[0], "1067")
+        self.assertTrue(isinstance(encoding_data["activation_encodings"]["1067"], list))
+
+        param_keys = list(encoding_data["param_encodings"].keys())
+        self.assertTrue(param_keys[1] == "conv1.weight")
+        self.assertTrue(isinstance(encoding_data["param_encodings"]["conv1.weight"], list))
     # -------------------------------------------
 
-    def test_export(self):
+    def test_export_to_onnx(self):
         """Exporting encodings and model"""
 
         def forward_pass(model, args):
