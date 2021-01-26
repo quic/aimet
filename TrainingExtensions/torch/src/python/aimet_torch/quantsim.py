@@ -60,6 +60,7 @@ from aimet_torch import onnx_utils
 from aimet_torch.meta.connectedgraph_utils import create_connected_graph_with_input_shapes
 from aimet_torch.meta.connectedgraph import ConnectedGraph
 from aimet_torch.qc_quantize_recurrent import QcQuantizeRecurrent
+import libpymo
 
 logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Quant)
 
@@ -513,6 +514,7 @@ class QuantizationSimModel:
         :return:
         """
 
+        disabled_param_quantizers = []
         for orig_param_name, param_quantizer in layer.param_quantizers.items():
             param_name = layer_name + '.' + orig_param_name
             if param_quantizer.enabled:
@@ -521,6 +523,44 @@ class QuantizationSimModel:
                     param_encodings[param_name] = [tensor_encoding]
                 else:
                     logger.error('Param tensor {%s} not found in valid param set', param_name)
+            else:
+                disabled_param_quantizers.append(orig_param_name)
+
+        # retrieve the appropriate param generator
+        if isinstance(layer, QcQuantizeWrapper):
+            # pylint: disable=protected-access
+            named_parameters = layer._module_to_wrap.named_parameters()
+        else:
+            named_parameters = layer.named_parameters(recurse=False)
+
+        for name, param in named_parameters:
+            # if the param quantizer was disabled generate encoding assuming bitwidth of 32
+            if name in disabled_param_quantizers:
+                param_name = layer_name + '.' + name
+                tensor_encoding = self.compute_encoding_for_given_bitwidth(layer.param_quantizers[name], param, 32)
+                param_encodings[param_name] = [tensor_encoding]
+
+    @staticmethod
+    def compute_encoding_for_given_bitwidth(quantizer: TensorQuantizer, tensor, bitwidth) -> Dict:
+        """
+        Utility function to compute encoding for a given bitwidth
+        :param quantizer: quantizer to use for configuration
+        :param tensor: tensor to quantize
+        :param bitwidth: bitwidth for generating the encoding
+        """
+        encoding_analyzer = libpymo.EncodingAnalyzerForPython(quantizer.quant_scheme)
+        encoding_analyzer.updateStats(tensor.cpu().detach().numpy(), False)
+        encoding, is_encoding_valid = \
+            encoding_analyzer.computeEncoding(bitwidth, quantizer.use_symmetric_encodings)
+        if is_encoding_valid:
+            return {'min': encoding.min,
+                    'max': encoding.max,
+                    'scale': encoding.delta,
+                    'offset': encoding.offset,
+                    'bitwidth': encoding.bw,
+                    'is_symmetric': str(quantizer.use_symmetric_encodings)}
+
+        return {}
 
     def _update_encoding_dicts_for_layer(self, layer: torch.nn.Module, layer_name: str, activation_encodings: Dict,
                                          param_encodings: Dict, op_to_io_tensor_map: Dict,
