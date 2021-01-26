@@ -250,7 +250,8 @@ def determine_preceding_op_input_product_index_in_multi_input_op(preceding_op, m
     preceding_op_dotted_name = preceding_op.dotted_name
 
     for index in range(len(multi_input_op.inputs)):
-        if multi_input_op.inputs[index].producer.dotted_name == preceding_op_dotted_name:
+        if multi_input_op.inputs[index].producer is not None and \
+                multi_input_op.inputs[index].producer.dotted_name == preceding_op_dotted_name:
             logger.debug("Preceding Op: %s, product index: %s, multi input Op: %s",
                          preceding_op.dotted_name, index, multi_input_op.dotted_name)
             return index

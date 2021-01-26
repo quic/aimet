@@ -125,6 +125,31 @@ class MultiInput(nn.Module):
         return x
 
 
+class DictInputModel(nn.Module):
+    """ Model with dictionary as input. """
+    def __init__(self, num_classes=3):
+        super(DictInputModel, self).__init__()
+        self.conv1 = nn.Conv2d(3, 16, kernel_size=2, stride=2, padding=3, bias=False)
+        self.conv2 = nn.Conv2d(16, 8, kernel_size=3, stride=2, padding=2)
+        self.conv3 = nn.Conv2d(3, 8, kernel_size=3, stride=2, padding=2)
+        self.bn1 = nn.BatchNorm2d(8)
+        self.relu1 = nn.ReLU(inplace=True)
+        self.maxpool = nn.MaxPool2d(kernel_size=2, stride=2, padding=1)
+        self.fc = nn.Linear(288, num_classes)
+
+    def forward(self, *inputs):
+        x1 = self.conv1(inputs[0]['inp_1'])
+        x1 = self.conv2(x1)
+        x2 = self.conv3(inputs[0]['inp_2'])
+        x = x1 + x2
+        x = self.bn1(x)
+        x = self.relu1(x)
+        x = self.maxpool(x)
+        x = x.view(x.size(0), -1)
+        x = self.fc(x)
+        return x
+
+
 class ConcatModel(nn.Module):
     """ A model with concat op.
         Use this model for unit testing purposes.
@@ -542,3 +567,30 @@ class LSTMModel(nn.Module):
     # pylint: disable=arguments-differ
     def forward(self, x, hx_cx=None):
         return self.rnn(x, hx_cx)
+
+
+class NestedSequentialModel(nn.Module):
+    """
+    Model using nested Sequential modules
+    Expected input shape = (1, 3, 8, 8)
+    """
+    def __init__(self, num_classes=3):
+        super(NestedSequentialModel, self).__init__()
+        self.inner_seq = nn.Sequential(
+            nn.Conv2d(3, 16, kernel_size=2, stride=2, padding=2, bias=False),
+            nn.BatchNorm2d(16)
+        )
+        self.seq_list = nn.Sequential(
+            self.inner_seq,
+            nn.ReLU(inplace=True),
+            nn.MaxPool2d(kernel_size=2, stride=2, padding=1),
+            nn.Conv2d(16, 8, kernel_size=2, stride=2, padding=2),
+            nn.Conv2d(8, 4, kernel_size=2, stride=2, padding=2)
+        )
+        self.fc = nn.Linear(64, num_classes)
+
+    def forward(self, *inputs):
+        x = self.seq_list(inputs[0])
+        x = x.view(x.size(0), -1)
+        x = self.fc(x)
+        return x

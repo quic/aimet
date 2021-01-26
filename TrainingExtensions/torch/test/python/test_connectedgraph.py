@@ -42,7 +42,7 @@ import torch
 from aimet_common.connected_graph.connectedgraph_utils import get_all_input_ops, get_all_output_ops
 from aimet_torch.examples.test_models import TinyModel, SingleResidual, MultiInput, ConcatModel, ModuleListModel,\
     ModelWithDropouts, SequentialModel, HierarchicalModel, PassThroughOpLastLayerModel, MultiOutputModel,\
-    TupleOutputModel, ConfigurableTupleOutputModel, BasicConv2d
+    TupleOutputModel, ConfigurableTupleOutputModel, BasicConv2d, DictInputModel, NestedSequentialModel
 
 from aimet_torch.meta.connectedgraph import ConnectedGraph
 from aimet_torch.meta.connectedgraph_utils import get_module_act_func_pair
@@ -82,7 +82,7 @@ class TestConnectedGraph(unittest.TestCase):
         inp_tensor_list = create_rand_tensors_given_shapes([inp_shape_1, inp_shape_2])
         conn_graph = ConnectedGraph(model, inp_tensor_list)
         self.assertEqual(11, len(conn_graph.ordered_ops))
-        # Split count of 2 due to residual as well as reshape having a split
+        # Split count of 1 due to reshape having a split
         self.assertEqual(1, conn_graph._split_count)
         conv1 = conn_graph.get_op_from_module_name('MultiInput.conv1')
         self.assertEqual(model.conv1, conv1.get_module())
@@ -471,3 +471,47 @@ class TestConnectedGraph(unittest.TestCase):
         self.assertEqual(2, len([op for name, op in conn_graph.get_all_ops().items()
                                  if 'relu' in name and
                                  op.get_module() == layer_model.layer.relu]))
+
+    def test_dict_input(self):
+        """ Test building ConnectedGraph on a model with multiple inputs """
+        # pylint: disable=protected-access
+        model = DictInputModel()
+        model.eval()
+        inp_shape_1 = (1, 3, 32, 32)
+        inp_shape_2 = (1, 3, 20, 20)
+        inp_tensor_list = create_rand_tensors_given_shapes([inp_shape_1, inp_shape_2])
+        dict_input = {'inp_1': inp_tensor_list[0], 'inp_2': inp_tensor_list[1]}
+        conn_graph = ConnectedGraph(model, dict_input)
+        self.assertEqual(11, len(conn_graph.ordered_ops))
+
+        # Split count of 1 due to reshape having a split
+        self.assertEqual(1, conn_graph._split_count)
+        conv1 = conn_graph.get_op_from_module_name('DictInputModel.conv1')
+        self.assertEqual(model.conv1, conv1.get_module())
+        self.assertEqual(2, len(conv1.inputs))
+        conv2 = conn_graph.get_op_from_module_name('DictInputModel.conv2')
+        self.assertEqual(model.conv2, conv2.get_module())
+        self.assertEqual(3, len(conv2.inputs))
+        conv3 = conn_graph.get_op_from_module_name('DictInputModel.conv3')
+        self.assertEqual(model.conv3, conv3.get_module())
+        self.assertEqual(3, len(conv3.inputs))
+
+        input_ops = get_all_input_ops(conn_graph)
+        input_modules = [op.get_module() for op in input_ops]
+        self.assertEqual(2, len(input_ops))
+        self.assertTrue(model.conv1 in input_modules)
+        self.assertTrue(model.conv3 in input_modules)
+        output_ops = get_all_output_ops(conn_graph)
+        self.assertEqual(1, len(output_ops))
+        self.assertEqual(model.fc, output_ops[0].get_module())
+
+    def test_nested_sequential(self):
+        # pylint: disable=protected-access
+        """ Test building ConnectedGraph on a model constructed with nested nn.Sequential Module """
+        model = NestedSequentialModel()
+        model.eval()
+        inp_data_1 = torch.rand(1, 3, 8, 8)
+        conn_graph = ConnectedGraph(model, (inp_data_1,))
+        self.assertEqual(10, len(conn_graph.ordered_ops))
+        # Expect 1 split for the reshape operation
+        self.assertEqual(1, conn_graph._split_count)
