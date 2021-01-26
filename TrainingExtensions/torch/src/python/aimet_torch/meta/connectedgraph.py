@@ -79,6 +79,26 @@ class IrNode:
         return self.node_type
 
 
+class GetAttrNodeInfo:
+    """
+    Holds information for GetAttr node types.
+    """
+    def __init__(self, node_alias: str, node_name: str, node_input: Union[None, str]):
+        """
+        Ex. GetAttr node: %1 : ... prim::GetAttr[name="model"](%self.1)
+        node_alias: %1, node_name: model, node_input: %self.1
+        :param node_alias: String representing an alias for this node (used as input in other nodes)
+        :param node_name: Name of this node as it is referred to in trace attributes
+        :param node_input: Inputs to this node. Will be node aliases of other nodes. If this node is a direct descendant
+            of the current trace graph being parsed, node_input will point to the current module. Otherwise, it points
+            to the direct parent of this node in the trace (following parents upwards will eventually lead to the
+            current module).
+        """
+        self.node_alias = node_alias
+        self.node_name = node_name
+        self.node_input = node_input
+
+
 ConnectionsToIrDictType = Dict[torch._C.TensorType, List[Union[IrNode, List[IrNode]]]]
 ModuleTensorShapeMapType = Dict[torch.nn.Module, Tuple[List[Union[List, torch.Size]], List[Union[List, torch.Size]]]]
 
@@ -159,6 +179,7 @@ class ConnectedGraph(AimetCommonConnectedGraph):
         "t",         # aten::t
         "to",        # aten::to
         "detach",    # aten::detach
+        "values"     # aten::values
     ]
 
     # Input graph nodes to ignore
@@ -223,16 +244,16 @@ class ConnectedGraph(AimetCommonConnectedGraph):
         module_tensor_shapes_map = {}
 
         def forward_hook(curr_module: torch.nn.Module,
-                         input_tensor_tuple: Union[torch.Tensor, List, None],
-                         output_tensor_tuple: Union[torch.Tensor, List, None]):
+                         inputs: Union[torch.Tensor, List, Dict, None],
+                         outputs: Union[torch.Tensor, List, Dict, None]):
             """
             Custom forward hook function to add every module to module-to-tensor shapes dict.
             :param curr_module: Current module being traversed during forward pass.
-            :param input_tensor_tuple: tuple of input tensors to the current module
-            :param output_tensor_tuple: tuple of output tensors of the current module
+            :param inputs: tuple of input tensors to the current module
+            :param outputs: tuple of output tensors of the current module
             """
-            input_shapes = _get_module_tensor_shapes_entry(input_tensor_tuple)
-            output_shapes = _get_module_tensor_shapes_entry(output_tensor_tuple)
+            input_shapes = _get_module_tensor_shapes_entry(inputs)
+            output_shapes = _get_module_tensor_shapes_entry(outputs)
             if not isinstance(input_shapes, List):
                 input_shapes = [input_shapes]
             if not isinstance(output_shapes, List):
@@ -320,19 +341,25 @@ class ConnectedGraph(AimetCommonConnectedGraph):
             if 'GetAttr' in node.kind():
                 # For GetAttr lines, the output name will be referring to the module, and not the module's output(s)
                 assert len(outputs) == 1
-                node_name = outputs[0].debugName()
+                getattr_node_info = ConnectedGraph._get_getattr_node_info(node)
+                if getattr_node_info.node_input == curr_inputs[0].debugName():
+                    getattr_node_info.node_input = None
+
                 subgraph_model = ConnectedGraph._get_module_instance(node, node_name_to_module)
-                if node_name not in node_name_to_module:
-                    node_name_to_module[node_name] = subgraph_model
+                if isinstance(subgraph_model, torch.Tensor):
+                    continue
+                if getattr_node_info.node_alias not in node_name_to_module:
+                    node_name_to_module[getattr_node_info.node_alias] = subgraph_model
                 else:
                     raise ValueError("duplicate model for {0} -> {1} and {2}".format(
-                        node_name, node_name_to_module[node_name], subgraph_model))
+                        getattr_node_info.node_alias, node_name_to_module[getattr_node_info.node_alias],
+                        subgraph_model))
                 if not is_leaf_module(subgraph_model):
-                    node_name_to_subgraph_model[node_name] = subgraph_model
+                    node_name_to_subgraph_model[getattr_node_info.node_alias] = (subgraph_model, getattr_node_info)
 
             # invoking forward method
             elif 'CallMethod' in node.kind():
-                self.parse_callmethod_node(node, model, trace, node_name_to_module, node_name_to_subgraph_model,
+                self.parse_callmethod_node(node, trace, node_name_to_module, node_name_to_subgraph_model,
                                            ir_nodes_list, inputs_map, output_map)
 
             # functional operations e.g. cat, size etc
@@ -355,10 +382,9 @@ class ConnectedGraph(AimetCommonConnectedGraph):
 
     # pylint: disable=too-many-arguments
     def parse_callmethod_node(self, node: torch._C.Node,
-                              model: torch.nn.Module,
                               trace: Union[torch.jit.TopLevelTracedModule, torch.jit.TracedModule],
                               node_name_to_module: Dict[str, torch.nn.Module],
-                              node_name_to_subgraph_model: Dict[str, torch._C.Node],
+                              node_name_to_subgraph_model: Dict[str, Tuple[torch.jit.TracedModule, torch._C.Node]],
                               ir_nodes_list: List[IrNode],
                               inputs_map: Dict[torch._C.TensorType, torch._C.TensorType],
                               output_map: Dict[torch._C.TensorType, torch._C.TensorType]):
@@ -368,7 +394,6 @@ class ConnectedGraph(AimetCommonConnectedGraph):
         of the module. Typically the node has the following construct:
             %output_N : Tensor = prim::CallMethod[name="forward"](%output_L, %output_M)
         :param node: trace graph node i.e. 'CallMethod' node
-        :param model: Pytorch model to create connected graph from
         :param trace: trace of model or submodule
         :param node_name_to_module: dictionary of module indexed by output_name referenced in the sub-graph
         :param node_name_to_subgraph_model: dictionary of torch graph nodes index of output_name that have not been
@@ -382,13 +407,17 @@ class ConnectedGraph(AimetCommonConnectedGraph):
         input_name: str = inputs[0].debugName()
         outputs = [output for output in node.outputs()]
         if input_name in node_name_to_subgraph_model:
-            subgraph_model = node_name_to_subgraph_model[input_name]
-            # The trace and subgraph_model might not be at the same depth depending on the number of indirection
-            # used in the form of ModuleList or Sequential,
-            # the trace is traversed one level at a time to allow for accessing the instance at each level.
-            trace_level = self._module_to_name[subgraph_model].replace(self._module_to_name[model], '')[1:].split('.')
+            subgraph_model, getattr_node_info = node_name_to_subgraph_model[input_name]
+            trace_levels = [getattr_node_info.node_name]
+            # If node_input (input to the current GetAttr node) is None, we are at the topmost level, and can call
+            # trace.<current node name> to get the trace for the subgraph. Otherwise, compile a list of node names to
+            # call into by following the subgraph_input entries up the chain.
+            while getattr_node_info.node_input is not None:
+                _, getattr_node_info = node_name_to_subgraph_model[getattr_node_info.node_input]
+                # Later on trace levels will be processed with most recent level first, so insert each one at the front.
+                trace_levels.insert(0, getattr_node_info.node_name)
             subgraph_trace = trace
-            for level in trace_level:
+            for level in trace_levels:
                 subgraph_trace = getattr(subgraph_trace, level)
 
             submodule_outputs = self._parse_trace_graph(subgraph_trace, subgraph_model, ir_nodes_list,
@@ -475,6 +504,26 @@ class ConnectedGraph(AimetCommonConnectedGraph):
         sub_model = getattr(model, attributes['name'])
         return sub_model
 
+    @staticmethod
+    def _get_getattr_node_info(node: torch._C.Node) -> GetAttrNodeInfo:
+        """
+        Obtain node_alias, node_name, and node_input for the given node.
+        :param node: GetAttr node to obtain information for
+        :return: GetAttrNodeInfo object containing node information
+        """
+        # Obtain the input node to the GetAttr node. This will usually refer to the current level module.
+        # However, in certain cases such as Sequentials, the index level will also show up as a separate GetAttr
+        # node.
+        # Ex.
+        # %1 : ... prim::GetAttr[name="model"](%self.1)
+        # %2 : ... prim::GetAttr[name="_layer0"](%1)
+        # Here, to call into %2 from the current trace, we must call .model._layer0. Tracking inputs to
+        # the GetAttr nodes tells us this path (%2 comes from %1 which comes from %self.1, the current module)
+        node_input = [inp for inp in node.inputs()][0].debugName()
+        node_alias = [output for output in node.outputs()][0].debugName()
+        node_name = ConnectedGraph._get_attribute_name(node).get('name')
+        return GetAttrNodeInfo(node_alias, node_name, node_input)
+
     def _get_op_type(self, model: torch.nn.Module) -> str:
         """
         Get connected graph op type for a pytorch module
@@ -486,7 +535,7 @@ class ConnectedGraph(AimetCommonConnectedGraph):
             op_type = self.op_type_map[type(model)]
         else:
             op_type = type(model).__name__
-            logger.info("unknown op_type -- defaulting to class name %s", op_type)
+            logger.debug("unknown op_type -- defaulting to class name %s", op_type)
         return op_type
 
     def _construct_ops_and_products(self,
@@ -509,6 +558,7 @@ class ConnectedGraph(AimetCommonConnectedGraph):
         _handle_ir_nodes_of_interest(ir_nodes_list, passthrough_types, input_types_to_ignore)
         filtered_ir_nodes = [ir_node for ir_node in ir_nodes_list if ir_node.node_type not in ['TupleConstruct',
                                                                                                'TupleUnpack',
+                                                                                               'ListUnpack',
                                                                                                'ListConstruct']
                              and ir_node.node_type not in input_types_to_ignore
                              and ir_node.node_type not in passthrough_types]
@@ -534,10 +584,15 @@ class ConnectedGraph(AimetCommonConnectedGraph):
                     op_type=node.node_type)
             if node.module is not None:
                 op.model_module = PytorchModelModule(node.module)
-                _, output_tensor_shapes = module_tensor_shapes_map[node.module]
-                # For now, treat only the first output shape as the shape of the node if there is more than one entry
-                flattened_shapes = _flatten_lists(output_tensor_shapes)
-                op.output_shape = flattened_shapes[0]
+                if node.module in module_tensor_shapes_map:
+                    _, output_tensor_shapes = module_tensor_shapes_map[node.module]
+                    # Temporarily not handling dict types for output tensors.
+                    if isinstance(output_tensor_shapes, Dict):
+                        output_tensor_shapes = None
+                    # For now, treat only the first output shape as the shape of the node if there is more than one
+                    # entry
+                    flattened_shapes = _flatten_lists(output_tensor_shapes)
+                    op.output_shape = flattened_shapes[0]
                 op.dotted_name = self._module_to_name[node.module]
                 _fill_groups_info(op, node.module)
             node_to_op_dict[node] = op
@@ -914,7 +969,7 @@ def _handle_ir_nodes_of_interest(ir_nodes_list: List[IrNode], passthrough_ops: L
     for ir_node in ir_nodes_list:
         if ir_node.node_type in ['TupleConstruct', 'ListConstruct']:
             _handle_tuple_and_list_construct_ir_node(ir_node, connections_to_ir_nodes_dict)
-        elif ir_node.node_type == 'TupleUnpack':
+        elif ir_node.node_type in ['TupleUnpack', 'ListUnpack']:
             _handle_tuple_unpack_ir_node(ir_node, connections_to_ir_nodes_dict)
         elif ir_node.node_type in passthrough_ops:
             _handle_passthrough_ir_node(ir_node, connections_to_ir_nodes_dict)
@@ -971,7 +1026,10 @@ def _handle_tuple_unpack_ir_node(ir_node: IrNode, connections_to_ir_nodes_dict: 
         # Case where input came from op with multiple outputs
         # Replace the output connection of the op with the outputs of TupleUnpack
         producer = connections_to_ir_nodes_dict[tuple_unpack_input][0]
-        producer.outputs = ir_node.outputs
+
+        # Producer can be None if a ListUnpack follows a values passthrough op for processing dict inputs
+        if producer is not None:
+            producer.outputs = ir_node.outputs
         ir_node.inputs = ir_node.outputs
         # Remove what used to be the input to the tuple unpack node from connections_to_ir_nodes_dict
         del connections_to_ir_nodes_dict[tuple_unpack_input]
@@ -1122,7 +1180,7 @@ def _update_inputs_map(curr_inputs: List[torch._C.TensorType], higher_level_inpu
             inputs_map[curr_inputs[idx + 1]] = inp
 
 
-def _get_module_tensor_shapes_entry(tensors: Union[torch.Tensor, List, None]):
+def _get_module_tensor_shapes_entry(tensors: Union[torch.Tensor, List, Dict, None]):
     """
     Given the tensor input or output for a module, extract their shapes and return the shapes in the same list structure
     as the given tensor.
@@ -1134,5 +1192,13 @@ def _get_module_tensor_shapes_entry(tensors: Union[torch.Tensor, List, None]):
     if isinstance(tensors, torch.Tensor):
         return tensors.shape
     # Tensors must then be a nested list of tensors, so recursively get the shapes for each item in the list
-    assert isinstance(tensors, (List, Tuple))
-    return [_get_module_tensor_shapes_entry(entry) for entry in tensors]
+    if isinstance(tensors, (List, Tuple)):
+        return [_get_module_tensor_shapes_entry(entry) for entry in tensors]
+    if isinstance(tensors, Dict):
+        shapes_dict = {}
+        for k, v in tensors.items():
+            shapes_dict[k] = _get_module_tensor_shapes_entry(v)
+        return shapes_dict
+    logger.debug('Unexpected data type for tensor %s. Supported types include tensors, or Lists, Tuples, and Dicts of '
+                 'tensors.', type(tensors))
+    return None
