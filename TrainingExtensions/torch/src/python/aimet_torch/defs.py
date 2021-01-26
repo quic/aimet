@@ -60,6 +60,20 @@ class ModuleCompRatioPair:
         self.comp_ratio = comp_ratio
 
 
+class OpToIOTensors:
+    """
+    Data class to store the input and output tensor names of an operation as a lists.
+    """
+    def __init__(self, node_inputs: List[str], node_outputs: List[str]):
+        """
+        :param node_inputs: name of inputs to the node
+        :param node_outputs: name of output from the node
+        """
+
+        self.inputs = node_inputs
+        self.outputs = node_outputs
+
+
 class SpatialSvdParameters:
     """ Configuration parameters for spatial svd compression """
 
