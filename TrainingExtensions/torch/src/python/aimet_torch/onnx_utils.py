@@ -47,8 +47,7 @@ import onnx
 from aimet_common.utils import AimetLogger
 import aimet_torch.utils
 import aimet_torch.elementwise_ops as elementwise_ops
-from aimet_torch.defs import PassThroughOp
-
+from aimet_torch.defs import PassThroughOp, OpToIOTensors
 
 _logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Utils)
 
@@ -98,18 +97,6 @@ onnx_pytorch_conn_graph_type_pairs = [
 ]
 
 
-class OnnxNodeIOTensors:
-    """
-    Data class to store the input and output tensor names of an ONNX node as a lists.
-    """
-    def __init__(self, node_inputs: List[str], node_outputs: List[str]):
-        """
-        :param node_inputs: name of inputs to the node
-        :param node_outputs: name of output from the node
-        """
-
-        self.inputs = node_inputs
-        self.outputs = node_outputs
 
 class OnnxSaver:
     """
@@ -299,7 +286,7 @@ class OnnxSaver:
 
     @staticmethod
     def get_onnx_node_to_io_tensor_names_map(onnx_model: onnx.NodeProto) -> \
-            (Dict[str, Union[OnnxNodeIOTensors, List[OnnxNodeIOTensors]]], set):
+            (Dict[str, Union[OpToIOTensors, List[OpToIOTensors]]], set):
         """
         Given an ONNX model, gets the inputs and output tensor names for each node in the model.
         if multiple onnx nodes have the same name then the nodes are provided as a list of inputs and output tensor
@@ -314,7 +301,7 @@ class OnnxSaver:
 
         for node in onnx_model.graph.node:
             if node.name:
-                onnx_node_io_tensors = OnnxNodeIOTensors(list(node.input), list(node.output))
+                onnx_node_io_tensors = OpToIOTensors(list(node.input), list(node.output))
                 if node.name not in node_to_io_tensor_name_map:
                     node_to_io_tensor_name_map[node.name] = onnx_node_io_tensors
                 else:
