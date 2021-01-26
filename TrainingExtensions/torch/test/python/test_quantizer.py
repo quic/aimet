@@ -552,13 +552,13 @@ class TestQuantizationSim(unittest.TestCase):
         self.assertTrue(isinstance(encoding_data["activation_encodings"]["123"], list))
 
         param_keys = list(encoding_data["param_encodings"].keys())
-        self.assertTrue(param_keys[1] == "conv1.weight")
+        self.assertTrue(param_keys[2] == "conv1.weight")
         self.assertTrue(isinstance(encoding_data["param_encodings"]["conv1.weight"], list))
 
     def test_export_to_torch_script(self):
         """ test export functionality on ResNet18 """
 
-        resnet50 = models.resnet50(pretrained=True)
+        resnet50 = models.resnet50()
         resnet50.eval()
 
         # Get Dict mapping node name to the input and output names
@@ -581,7 +581,7 @@ class TestQuantizationSim(unittest.TestCase):
         self.assertTrue(isinstance(encoding_data["activation_encodings"]["1067"], list))
 
         param_keys = list(encoding_data["param_encodings"].keys())
-        self.assertTrue(param_keys[1] == "conv1.weight")
+        self.assertTrue(param_keys[2] == "conv1.weight")
         self.assertTrue(isinstance(encoding_data["param_encodings"]["conv1.weight"], list))
     # -------------------------------------------
 
@@ -612,7 +612,8 @@ class TestQuantizationSim(unittest.TestCase):
             activation_encodings = encodings['activation_encodings']
             param_encodings = encodings['param_encodings']
             self.assertEqual(15, len(activation_encodings))
-            self.assertNotIn('conv1_a.bias', param_encodings)
+            self.assertIn('conv1_a.bias', param_encodings)
+            self.assertEqual(param_encodings['conv1_a.bias'][0]['bitwidth'], 32)
             self.assertEqual(6, len(param_encodings['conv1_a.weight'][0]))
             self.assertEqual(10, param_encodings['conv1_a.weight'][0]['max'])
 
