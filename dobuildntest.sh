@@ -256,7 +256,7 @@ if [ $run_prep -eq 1 ]; then
 
     # Clone the google test repo if not already present
     google_test_path="${workspaceFolder}/ThirdParty/googletest/googletest-release-1.8.0"
-    if [ ! -d ${google_test_path} && ! -L ${google_test_path} ]; then
+    if [ ! -e ${google_test_path} ]; then
         mkdir -p $workspaceFolder/ThirdParty/googletest
         pushd $workspaceFolder/ThirdParty/googletest
         git clone https://github.com/google/googletest.git -b release-1.8.0 googletest-release-1.8.0
