@@ -84,12 +84,18 @@ function pre_exit {
     summaryFile=${outputFolder}/summary.txt
 
     if [[ -f ${summaryFile} ]]; then
-       echo -e "----------------------------------------------------------------------------------------------------------\n" | tee -a ${summaryFile}
-       echo -e "\nResults are in location:\n${outputFolder}\n" | tee -a ${summaryFile}
-       cat ${summaryFile}
-       if grep -q FAIL "${summaryFile}"; then
-           EXIT_CODE=3
-       fi
+        # In case there is non-zero exit code, then add a FAILED tag to the summary file.
+        if [ $EXIT_CODE -ne 0 ]; then
+            echo -e "One or more Stages \t\t FAILED " | tee -a ${outputFolder}/summary.txt
+        fi
+
+        echo -e "----------------------------------------------------------------------------------------------------------\n" |tee -a ${summaryFile}
+        echo -e "\nResults are in location:\n${outputFolder}\n" | tee -a ${summaryFile}
+        cat ${summaryFile}
+
+        if grep -q FAIL "${summaryFile}"; then
+            EXIT_CODE=3
+        fi
     fi
 
     # Return the exit code
@@ -249,7 +255,8 @@ if [ $run_prep -eq 1 ]; then
     ## wget -N https://download.pytorch.org/models/inception_v3_google-1a9a5a14.pth -P ${AIMET_TORCH_HOME}/checkpoints
 
     # Clone the google test repo if not already present
-    if [ ! -d $workspaceFolder/ThirdParty/googletest/googletest-release-1.8.0 ]; then
+    google_test_path="${workspaceFolder}/ThirdParty/googletest/googletest-release-1.8.0"
+    if [ ! -d ${google_test_path} && ! -L ${google_test_path} ]; then
         mkdir -p $workspaceFolder/ThirdParty/googletest
         pushd $workspaceFolder/ThirdParty/googletest
         git clone https://github.com/google/googletest.git -b release-1.8.0 googletest-release-1.8.0
@@ -258,9 +265,28 @@ if [ $run_prep -eq 1 ]; then
     fi
 
     # Array of python src file path endings
-    declare -a python_src_path_endings=("TrainingExtensions/tensorflow/src/python/aimet_tensorflow"
-        "TrainingExtensions/torch/src/python/aimet_torch"
-        "TrainingExtensions/common/src/python/aimet_common")
+    declare -a python_src_path_endings=("TrainingExtensions/common/src/python/aimet_common")
+    # Array of path endings of interest for code coverage and their corresponding test folders
+    declare -a pycov_dir_endings=("TrainingExtensions/common/src/python:TrainingExtensions/common/test")
+
+    if [ -n "$AIMET_VARIANT" ]; then
+        # Add tensorflow and/or torch paths based on the variant
+        if [[ "$AIMET_VARIANT" == *"tf"* ]]; then
+            python_src_path_endings+=("TrainingExtensions/tensorflow/src/python/aimet_tensorflow")
+            pycov_dir_endings+=("TrainingExtensions/tensorflow/src/python:TrainingExtensions/tensorflow/test")
+        fi
+        if [[ "$AIMET_VARIANT" == *"torch"* ]]; then
+            python_src_path_endings+=("TrainingExtensions/tensorflow/src/python/aimet_torch")
+            pycov_dir_endings+=("TrainingExtensions/torch/src/python:TrainingExtensions/torch/test")
+        fi
+    else
+        # For default variant, add both tensorflow and/or torch paths
+        python_src_path_endings+=("TrainingExtensions/tensorflow/src/python/aimet_tensorflow")
+        pycov_dir_endings+=("TrainingExtensions/tensorflow/src/python:TrainingExtensions/tensorflow/test")
+
+        python_src_path_endings+=("TrainingExtensions/tensorflow/src/python/aimet_torch")
+        pycov_dir_endings+=("TrainingExtensions/torch/src/python:TrainingExtensions/torch/test")
+    fi
 
     # Populate an array of python src paths for use in later stages
     for python_src_path_ending in "${python_src_path_endings[@]}"; do
@@ -281,10 +307,6 @@ if [ $run_prep -eq 1 ]; then
     done
     echo "PYTHONPATH value = $PYTHONPATH_VALUE"
 
-    # list of path endings of interest for code coverage and their corresponding test folders
-    pycov_dir_endings=("TrainingExtensions/tensorflow/src/python:TrainingExtensions/tensorflow/test"
-                   "TrainingExtensions/torch/src/python:TrainingExtensions/torch/test" 
-                   "TrainingExtensions/common/src/python:TrainingExtensions/common/test")
     # Loop over the directory endings
     for pycov_dir_ending in "${pycov_dir_endings[@]}"; do
         pycov_src_path_ending=${pycov_dir_ending%%:*}
@@ -310,7 +332,28 @@ if [ $run_build -eq 1 ]; then
 
     extra_opts=""
     if [ -n "$SW_VERSION" ]; then
-        extra_opts+="-DSW_VERSION=${SW_VERSION}"
+        extra_opts+=" -DSW_VERSION=${SW_VERSION}"
+    fi
+    # Add build options based on variant
+    if [ -n "$AIMET_VARIANT" ]; then
+        if [[ "$AIMET_VARIANT" == *"gpu"* ]]; then
+            extra_opts+=" -DENABLE_CUDA=ON"
+        fi
+        if [[ "$AIMET_VARIANT" == *"cpu"* ]]; then
+            extra_opts+=" -DENABLE_CUDA=OFF"
+        fi
+        if [[ "$AIMET_VARIANT" == *"tf"* ]]; then
+            extra_opts+=" -DENABLE_TENSORFLOW=ON"
+        fi
+        if [[ "$AIMET_VARIANT" == *"torch"* ]]; then
+            extra_opts+=" -DENABLE_TORCH=ON"
+        fi
+        if [[ "$AIMET_VARIANT" != *"tf"* ]]; then
+            extra_opts+=" -DENABLE_TENSORFLOW=OFF"
+        fi
+        if [[ "$AIMET_VARIANT" != *"torch"* ]]; then
+            extra_opts+=" -DENABLE_TORCH=OFF"
+        fi
     fi
     # Do not exit on failure by default from this point forward
     set +e

@@ -37,12 +37,19 @@
 """ Package generation file for top-level aimet package """
 
 from setuptools import setup
+import os.path
 import setup_cfg # pylint: disable=import-error
 
 package_url_base = setup_cfg.remote_url + "/releases/download/" + str(setup_cfg.version)
 
 torch_dep_whl = package_url_base + "/AimetTorch-" + str(setup_cfg.version) + "-py3-none-any.whl"
 tf_dep_whl = package_url_base + "/AimetTensorflow-" + str(setup_cfg.version) + "-py3-none-any.whl"
+
+dependency_list = []
+if os.path.isfile(torch_dep_whl):
+    dependency_list.append(torch_dep_whl)
+if os.path.isfile(tf_dep_whl):
+    dependency_list.append(tf_dep_whl)
 
 setup(
     name='Aimet',
@@ -54,7 +61,7 @@ setup(
     description='AIMET',
     long_description=open('README.txt').read(),
     install_requires=[],
-    dependency_links=[torch_dep_whl, tf_dep_whl],
+    dependency_links=dependency_list,
     zip_safe=True,
     platforms='x86',
     python_requires='>=3.6',
