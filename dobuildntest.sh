@@ -276,7 +276,7 @@ if [ $run_prep -eq 1 ]; then
             pycov_dir_endings+=("TrainingExtensions/tensorflow/src/python:TrainingExtensions/tensorflow/test")
         fi
         if [[ "$AIMET_VARIANT" == *"torch"* ]]; then
-            python_src_path_endings+=("TrainingExtensions/tensorflow/src/python/aimet_torch")
+            python_src_path_endings+=("TrainingExtensions/torch/src/python/aimet_torch")
             pycov_dir_endings+=("TrainingExtensions/torch/src/python:TrainingExtensions/torch/test")
         fi
     else
@@ -284,7 +284,7 @@ if [ $run_prep -eq 1 ]; then
         python_src_path_endings+=("TrainingExtensions/tensorflow/src/python/aimet_tensorflow")
         pycov_dir_endings+=("TrainingExtensions/tensorflow/src/python:TrainingExtensions/tensorflow/test")
 
-        python_src_path_endings+=("TrainingExtensions/tensorflow/src/python/aimet_torch")
+        python_src_path_endings+=("TrainingExtensions/torch/src/python/aimet_torch")
         pycov_dir_endings+=("TrainingExtensions/torch/src/python:TrainingExtensions/torch/test")
     fi
 
@@ -414,6 +414,7 @@ if [ $run_code_violation -eq 1 ]; then
 
         LD_LIBRARY_PATH=$artifactsFolder:$LD_LIBRARY_PATH \
         PYTHONPATH=$PYTHONPATH_VALUE \
+        PYLINTHOME=${buildFolder} \
         pylint --rcfile=${workspaceFolder}/.pylintrc -r n --msg-template='{path}:{line}: [{msg_id}({symbol}), {obj}] {msg}' ${python_src_path} 2>&1 \
         | tee ${pylint_results_dir}/${pylint_results_file_name}
         code_violation_result=$?
