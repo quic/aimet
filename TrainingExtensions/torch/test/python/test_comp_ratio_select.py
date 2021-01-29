@@ -47,17 +47,19 @@ import signal
 from torch import nn
 import torch.nn.functional as functional
 import libpymo as pymo
+
 from aimet_common.defs import CostMetric, LayerCompRatioPair
 from aimet_common.cost_calculator import SpatialSvdCostCalculator,WeightSvdCostCalculator
 from aimet_common import comp_ratio_select
-from aimet_torch.examples import mnist_torch_model
-from aimet_torch.layer_database import Layer, LayerDatabase
-from aimet_torch.svd.svd_pruner import SpatialSvdPruner
 from aimet_common.bokeh_plots import BokehServerSession
 from aimet_common.bokeh_plots import DataTable
 from aimet_common.bokeh_plots import ProgressBar
 from aimet_common.utils import start_bokeh_server_session, kill_process_with_name_and_port_number
 
+from aimet_torch.examples import mnist_torch_model
+from aimet_torch.layer_database import Layer, LayerDatabase
+from aimet_torch.svd.svd_pruner import SpatialSvdPruner
+from aimet_torch import pymo_utils
 
 class MnistModel(nn.Module):
     def __init__(self):
@@ -347,7 +349,7 @@ class TestTrainingExtensionsCompRatioSelect(unittest.TestCase):
         tar_algo = comp_ratio_select.TarRankSelectAlgo(layer_db=layer_db, pruner=pruner, cost_calculator=WeightSvdCostCalculator(),
                                                         eval_func=eval_func, eval_iterations=20,
                                                         cost_metric=CostMetric.mac, num_rank_indices=20,
-                                                        use_cuda=False)
+                                                        use_cuda=False, pymo_utils_lib=pymo_utils)
 
         tar_algo._svd_lib_ref = create_autospec(pymo.Svd, instance=True)
 
