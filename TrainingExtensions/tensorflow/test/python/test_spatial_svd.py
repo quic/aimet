@@ -48,7 +48,6 @@ import tensorflow as tf
 tf.compat.v1.logging.set_verbosity(tf.logging.WARN)
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
 
-from aimet_torch.winnow.winnow_utils import to_numpy
 from aimet_common.utils import AimetLogger
 from aimet_common.defs import CostMetric, LayerCompRatioPair
 
@@ -100,22 +99,22 @@ class TestSpatialSvdLayerSplit(unittest.TestCase):
         # initialize all the variables in the graph
         sess.run(init)
 
-        orig_conv_output = to_numpy(sess.run(orig_conv_op.outputs[0]))
+        orig_conv_output = sess.run(orig_conv_op.outputs[0])
 
         layer1 = lad.Layer(model=sess, op=orig_conv_op, output_shape=shape)
 
         split_conv_op1, split_conv_op2 = SpatialSvdModuleSplitter.split_module(layer=layer1, rank=100)
 
-        split_conv_output = to_numpy(sess.run(split_conv_op2.outputs[0]))
+        split_conv_output = sess.run(split_conv_op2.outputs[0])
 
         self.assertTrue(np.allclose(split_conv_output, orig_conv_output, atol=1e-4))
 
         # check the output after bias
         for consumer in orig_conv_op.outputs[0].consumers():
-            orig_bias_out = to_numpy(sess.run(consumer.outputs[0]))
+            orig_bias_out = sess.run(consumer.outputs[0])
 
         for consumer in split_conv_op2.outputs[0].consumers():
-            split_bias_out = to_numpy(sess.run(consumer.outputs[0]))
+            split_bias_out = sess.run(consumer.outputs[0])
 
         self.assertTrue(np.allclose(orig_bias_out, split_bias_out, atol=1e-4))
 
@@ -153,7 +152,7 @@ class TestSpatialSvdLayerSplit(unittest.TestCase):
 
         # initialize all the variables in the graph
         sess.run(init)
-        orig_conv_output = to_numpy(sess.run(orig_conv_op.outputs[0]))
+        orig_conv_output = sess.run(orig_conv_op.outputs[0])
 
         # but layer  expects output shape in NCHW format similar to PyTorch
         shape = (shape[0], shape[3], shape[1], shape[2])
@@ -161,16 +160,16 @@ class TestSpatialSvdLayerSplit(unittest.TestCase):
 
         split_conv_op1, split_conv_op2 = SpatialSvdModuleSplitter.split_module(layer=layer1, rank=100)
 
-        split_conv_output = to_numpy(sess.run(split_conv_op2.outputs[0]))
+        split_conv_output = sess.run(split_conv_op2.outputs[0])
 
         self.assertTrue(np.allclose(split_conv_output, orig_conv_output, atol=1e-4))
 
         # check the output after bias
         for consumer in orig_conv_op.outputs[0].consumers():
-            orig_bias_out = to_numpy(sess.run(consumer.outputs[0]))
+            orig_bias_out = sess.run(consumer.outputs[0])
 
         for consumer in split_conv_op2.outputs[0].consumers():
-            split_bias_out = to_numpy(sess.run(consumer.outputs[0]))
+            split_bias_out = sess.run(consumer.outputs[0])
 
         self.assertTrue(np.allclose(orig_bias_out, split_bias_out, atol=1e-4))
 
@@ -214,22 +213,22 @@ class TestSpatialSvdLayerSplit(unittest.TestCase):
         # initialize all the variables in the graph
         sess.run(init)
 
-        orig_conv_output = to_numpy(sess.run(orig_conv_op.outputs[0]))
+        orig_conv_output = sess.run(orig_conv_op.outputs[0])
 
         layer1 = lad.Layer(model=sess, op=orig_conv_op, output_shape=shape)
 
         split_conv_op1, split_conv_op2 = SpatialSvdModuleSplitter.split_module(layer=layer1, rank=100)
 
-        split_conv_output = to_numpy(sess.run(split_conv_op2.outputs[0]))
+        split_conv_output = sess.run(split_conv_op2.outputs[0])
 
         self.assertTrue(np.allclose(split_conv_output, orig_conv_output, atol=1e-4))
 
         # check the output after bias
         for consumer in orig_conv_op.outputs[0].consumers():
-            orig_bias_out = to_numpy(sess.run(consumer.outputs[0]))
+            orig_bias_out = sess.run(consumer.outputs[0])
 
         for consumer in split_conv_op2.outputs[0].consumers():
-            split_bias_out = to_numpy(sess.run(consumer.outputs[0]))
+            split_bias_out = sess.run(consumer.outputs[0])
 
         self.assertTrue(np.allclose(orig_bias_out, split_bias_out, atol=1e-4))
 
@@ -269,7 +268,7 @@ class TestSpatialSvdLayerSplit(unittest.TestCase):
         # initialize all the variables in the graph
         sess.run(init)
 
-        orig_conv_output = to_numpy(sess.run(orig_conv_op.outputs[0]))
+        orig_conv_output = sess.run(orig_conv_op.outputs[0])
 
         # but layer  expects output shape in NCHW format similar to PyTorch
         shape = (shape[0], shape[3], shape[1], shape[2])
@@ -278,16 +277,16 @@ class TestSpatialSvdLayerSplit(unittest.TestCase):
 
         split_conv_op1, split_conv_op2 = SpatialSvdModuleSplitter.split_module(layer=layer1, rank=100)
 
-        split_conv_output = to_numpy(sess.run(split_conv_op2.outputs[0]))
+        split_conv_output = sess.run(split_conv_op2.outputs[0])
 
         self.assertTrue(np.allclose(split_conv_output, orig_conv_output, atol=1e-4))
 
         # check the output after bias
         for consumer in orig_conv_op.outputs[0].consumers():
-            orig_bias_out = to_numpy(sess.run(consumer.outputs[0]))
+            orig_bias_out = sess.run(consumer.outputs[0])
 
         for consumer in split_conv_op2.outputs[0].consumers():
-            split_bias_out = to_numpy(sess.run(consumer.outputs[0]))
+            split_bias_out = sess.run(consumer.outputs[0])
 
         self.assertTrue(np.allclose(orig_bias_out, split_bias_out, atol=1e-4))
 
@@ -326,23 +325,23 @@ class TestSpatialSvdLayerSplit(unittest.TestCase):
         # initialize all the variables in the graph
         sess.run(init)
 
-        orig_conv_output = to_numpy(sess.run(orig_conv_op.outputs[0]))
+        orig_conv_output = sess.run(orig_conv_op.outputs[0])
 
         layer1 = lad.Layer(model=sess, op=orig_conv_op, output_shape=shape)
 
         split_conv_op1, split_conv_op2 = SpatialSvdModuleSplitter.split_module(layer=layer1, rank=96)
 
-        split_conv_output = to_numpy(sess.run(split_conv_op2.outputs[0]))
+        split_conv_output = sess.run(split_conv_op2.outputs[0])
 
         # relaxed absolute tolerance
         self.assertTrue(np.allclose(split_conv_output, orig_conv_output, atol=1e+2))
 
         # check the output after bias
         for consumer in orig_conv_op.outputs[0].consumers():
-            orig_bias_out = to_numpy(sess.run(consumer.outputs[0]))
+            orig_bias_out = sess.run(consumer.outputs[0])
 
         for consumer in split_conv_op2.outputs[0].consumers():
-            split_bias_out = to_numpy(sess.run(consumer.outputs[0]))
+            split_bias_out = sess.run(consumer.outputs[0])
 
         # relaxed absolute tolerance
         self.assertTrue(np.allclose(orig_bias_out, split_bias_out, atol=1e+2))

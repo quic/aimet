@@ -57,7 +57,6 @@ import aimet_tensorflow.utils.graph_saver
 import aimet_tensorflow.utils.op.conv
 from aimet_common.defs import CostMetric, LayerCompRatioPair
 from aimet_common.utils import AimetLogger
-from aimet_torch.winnow.winnow_utils import to_numpy
 from aimet_common.input_match_search import InputMatchSearch
 
 from aimet_tensorflow.channel_pruning.data_subsampler import DataSubSampler
@@ -342,7 +341,7 @@ class TestTrainingExtensionsChannelPruning(unittest.TestCase):
             conv2d_out = sess.run(conv1_op.outputs[0])
 
             predicted_output = np.sum(input_match)
-            generated_output = to_numpy(conv2d_out[0, 0, height, width])
+            generated_output = conv2d_out[0, 0, height, width]
 
             self.assertTrue(generated_output == predicted_output)
             self.assertTrue(np.prod(input_match.shape) == kernel_size[0] * kernel_size[1])
@@ -409,8 +408,7 @@ class TestTrainingExtensionsChannelPruning(unittest.TestCase):
             conv2d_out = sess.run(conv1_op.outputs[0])
 
             predicted_output = np.sum(input_match)
-            generated_output = to_numpy(conv2d_out[0, height, width, 0])
-
+            generated_output = conv2d_out[0, height, width, 0]
             self.assertTrue(generated_output == predicted_output)
             self.assertTrue(np.prod(input_match.shape) == kernel_size[0] * kernel_size[1])
 
