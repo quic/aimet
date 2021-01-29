@@ -54,6 +54,7 @@ from aimet_torch.layer_selector import ConvFcLayerSelector, ConvNoDepthwiseLayer
 from aimet_torch.layer_database import LayerDatabase
 from aimet_torch.svd.svd_pruner import SpatialSvdPruner, WeightSvdPruner
 from aimet_torch.channel_pruning.channel_pruner import InputChannelPruner, ChannelPruningCostCalculator
+from aimet_torch import pymo_utils
 
 
 class CompressionFactory:
@@ -237,7 +238,7 @@ class CompressionFactory:
                                                            eval_iterations=eval_iterations,
                                                            cost_metric=cost_metric,
                                                            num_rank_indices=tar_params.num_rank_indices,
-                                                           use_cuda=use_cuda)
+                                                           use_cuda=use_cuda, pymo_utils_lib=pymo_utils)
             else:
                 raise ValueError("Unknown Rank selection scheme: {}".format(params.AutoModeParams.rank_select_scheme))
 

@@ -47,7 +47,6 @@ import statistics
 import os
 import libpymo as pymo
 
-from aimet_torch import pymo_utils
 from aimet_common.bokeh_plots import DataTable
 from aimet_common.bokeh_plots import LinePlot
 from aimet_common.bokeh_plots import ProgressBar
@@ -481,7 +480,7 @@ class TarRankSelectAlgo(CompRatioSelectAlgo):
 
     def __init__(self, layer_db: LayerDatabase, pruner: Pruner, cost_calculator: cc.CostCalculator,
                  eval_func: EvalFunction, eval_iterations, cost_metric: CostMetric,
-                 num_rank_indices: int, use_cuda: bool):
+                 num_rank_indices: int, use_cuda: bool, pymo_utils_lib):
 
         # pylint: disable=too-many-arguments
         CompRatioSelectAlgo.__init__(self, layer_db, cost_calculator, cost_metric,
@@ -493,6 +492,7 @@ class TarRankSelectAlgo(CompRatioSelectAlgo):
         self._pruner = pruner
         self._num_rank_indices = num_rank_indices
         self._svd_lib_ref = pymo.GetSVDInstance()
+        self._pymo_utils_lib = pymo_utils_lib
 
     def _compute_compressed_model_cost(self, layer_ratio_list, original_model_cost):
         """
@@ -561,9 +561,9 @@ class TarRankSelectAlgo(CompRatioSelectAlgo):
         # pylint: disable=too-many-arguments, too-many-locals
 
         # Initialize layer database values on pymo
-        pymo_utils.PymoSvdUtils.configure_layers_in_pymo_svd(self._layer_db.get_selected_layers(),
-                                                             self._cost_metric,
-                                                             self._svd_lib_ref)
+        self._pymo_utils_lib.PymoSvdUtils.configure_layers_in_pymo_svd(self._layer_db.get_selected_layers(),
+                                                                       self._cost_metric,
+                                                                       self._svd_lib_ref)
 
         num_rank_indices = self._svd_lib_ref.SetCandidateRanks(self._num_rank_indices)
 
