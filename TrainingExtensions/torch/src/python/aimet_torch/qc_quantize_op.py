@@ -47,6 +47,7 @@ from aimet_common.utils import AimetLogger
 from aimet_common.defs import QuantScheme
 from aimet_torch.tensor_quantizer import PostTrainingTensorQuantizer
 import aimet_torch.quantsim_straight_through_grad as ste
+from aimet_torch.utils import torch_integer_dtypes
 import libpymo
 
 
@@ -304,13 +305,14 @@ class QcPostTrainingWrapper(QcQuantizeWrapper):
 
         # Quantize the inputs
         quantized_inputs = self._quantize_activation(self.input_quantizer, inputs)
-        if not isinstance(quantized_inputs, list):
+        if isinstance(quantized_inputs, torch.Tensor):
             quantized_inputs = [quantized_inputs]
 
         # Quantize the parameters
         shadow_params = self._quantize_dequantize_params()
 
-        # Save quantized parameters tensors for backward pass and perform custom bakward pass for gating parameters grad during backward pass
+        # Save quantized parameters tensors for backward pass and perform custom bakward pass for gating parameters grad
+        # during backward pass
         quantized_inputs = SteGatingFuncForParameters.apply(self, *quantized_inputs)
         # Call the forward of the wrapped module
         wrapped_output = self._module_to_wrap(*quantized_inputs)
@@ -322,7 +324,7 @@ class QcPostTrainingWrapper(QcQuantizeWrapper):
         if not self.output_quantizers[0].enabled:
             output = wrapped_output
         else:
-            if not isinstance(wrapped_output, list):
+            if isinstance(wrapped_output, torch.Tensor):
                 wrapped_output = [wrapped_output]
             output = self._quantize_activation(self.output_quantizers[0], wrapped_output)
 
@@ -398,7 +400,13 @@ class QcPostTrainingWrapper(QcQuantizeWrapper):
 
         outputs = []
         for input_tensor in tensors_to_quantize:
-
+            if not isinstance(input_tensor, torch.Tensor):
+                _logger.error('Expecting quantize activation input of type torch.Tensor but got %s', type(input_tensor))
+                raise AssertionError
+            if input_tensor.dtype in torch_integer_dtypes:
+                # Do not quantize integer tensors
+                outputs.append(input_tensor)
+                continue
             if self._mode is QcQuantizeOpMode.ANALYSIS:
 
                 tensor_quantizer.update_encoding_stats(input_tensor)

@@ -50,6 +50,9 @@ from aimet_common.utils import AimetLogger
 logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Utils)
 
 
+torch_integer_dtypes = [torch.int, torch.int8, torch.int16, torch.int32, torch.int64]
+
+
 class IterFirstX:
     """ Iterator for the first x samples in a given data-loader """
 

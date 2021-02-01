@@ -147,3 +147,19 @@ class TestQcQuantizeOp(unittest.TestCase):
         for i, val in enumerate(weight_tensor):
             if encodings_new.min > val or val > encodings_new.max:
                 self.assertTrue(weight_tensor_grad[i] == 0.0)
+
+    def test_quantize_maxpool_with_indices(self):
+        """ Test that maxpool2d returning int tensor can be quantized """
+        maxpool = torch.nn.MaxPool2d(2, return_indices=True)
+        quantize_op = QcPostTrainingWrapper(maxpool, weight_bw=8, activation_bw=8, round_mode='nearest',
+                                         quant_scheme=QuantScheme.post_training_tf_enhanced)
+        inp = torch.rand((1, 3, 8, 8))
+        quantize_op.set_mode(QcQuantizeOpMode.ANALYSIS)
+        quantize_op(inp)
+        quantize_op.compute_encoding()
+        quantize_op.set_mode(QcQuantizeOpMode.ACTIVE)
+        out, indices = quantize_op(inp)
+
+        # Check that one of the outputs of quantize_op is the indices with dtype int64
+        self.assertEqual(indices.dtype, torch.int64)
+        self.assertTrue(quantize_op.output_quantizers[0] is not None)
