@@ -191,6 +191,7 @@ RUN mkdir /var/run/sshd
 
 RUN apt-get update && apt-get install -y liblapacke liblapacke-dev && rm -rf /var/lib/apt/lists/*
 
+RUN echo "deb https://mirrors.aliyun.com/nvidia-cuda/ubuntu1804/x86_64/ ./" >> /etc/apt/sources.list.d/cuda.list
 # install pillow-simd.
 RUN apt-get update && apt-get install -y libjpeg8-dev \
     cuda-cusparse-dev-10-0 \
