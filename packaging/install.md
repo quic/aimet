@@ -1,5 +1,5 @@
 # AIMET Installation and Setup
-This page provides instructions to install AIMET package on ***Ubuntu 18.04 LTS with Nividia GPU***. Please follow the instructions in the order provided, unless specified otherwise. 
+This page provides instructions to install AIMET package on ***Ubuntu 18.04 LTS with Nvidia GPU*** (see [system requirements]( docker_install.md#requirements)). Please follow the instructions in the order provided, unless specified otherwise.
 
 - [Installation](#installation)
     - [Install prerequisite packages](#install-prerequisite-packages)
@@ -12,7 +12,7 @@ This page provides instructions to install AIMET package on ***Ubuntu 18.04 LTS 
 ## Installation
 
 > **_NOTE:_**  
- 1. Please pre-pend the "apt-get install" and "pip3 install" commands with "sudo -H" as appropriate
+ 1. Please pre-pend the "apt-get install" and "pip3 install" commands with "sudo -H" as appropriate.
  2. These instructions assume that pip packages will be installed in the path: /usr/local/lib/python3.6/dist-packages. If that is not the case, please modify it accordingly.
 
 ### Install prerequisite packages
