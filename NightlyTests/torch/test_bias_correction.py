@@ -36,6 +36,7 @@
 #  @@-COPYRIGHT-END-@@
 # =============================================================================
 
+import pytest
 import copy
 import unittest
 import numpy as np
@@ -63,8 +64,9 @@ def evaluate(model, early_stopping_iterations, use_cuda):
     return model(random_input)
 
 
-class TestBiasCorrection(unittest.TestCase):
+class TestBiasCorrection():
 
+    @pytest.mark.cuda
     def test_bias_correction_empirical(self):
 
         torch.manual_seed(10)
@@ -85,15 +87,16 @@ class TestBiasCorrection(unittest.TestCase):
                              quant_scheme=QuantScheme.post_training_tf)
         bias_correction.correct_bias(model.to(device="cuda"), params, 1, data_loader.train_loader, 1, layers_to_ignore=[model.features[0][0]])
 
-        self.assertTrue(np.allclose(model.features[0][0].bias.detach().cpu().numpy(),
+        assert(np.allclose(model.features[0][0].bias.detach().cpu().numpy(),
                                     model_copy.features[0][0].bias.detach().cpu().numpy()))
 
-        self.assertFalse(np.allclose(model.features[1].conv[0].bias.detach().cpu().numpy(),
+        assert(not np.allclose(model.features[1].conv[0].bias.detach().cpu().numpy(),
                                      model_copy.features[1].conv[0].bias.detach().cpu().numpy()))
 
         # To check if wrappers got removed
-        self.assertTrue(isinstance(model.features[11].conv[0], nn.Conv2d))
+        assert (isinstance(model.features[11].conv[0], nn.Conv2d))
 
+    @pytest.mark.cuda
     def test_bias_correction_hybrid(self):
 
         torch.manual_seed(10)
@@ -121,12 +124,18 @@ class TestBiasCorrection(unittest.TestCase):
                                      module_prop_list,
                                      False)
 
-        self.assertTrue(np.allclose(model.features[0][0].bias.detach().cpu().numpy(),
+        assert (np.allclose(model.features[0][0].bias.detach().cpu().numpy(),
                                     model_copy.features[0][0].bias.detach().cpu().numpy()))
 
-        self.assertTrue(np.allclose(model.features[1].conv[0].bias.detach().cpu().numpy(),
+        assert (np.allclose(model.features[1].conv[0].bias.detach().cpu().numpy(),
                                      model_copy.features[1].conv[0].bias.detach().cpu().numpy()))
 
         # To check if wrappers got removed
-        self.assertTrue(isinstance(model.features[11].conv[0], nn.Conv2d))
+        assert (isinstance(model.features[11].conv[0], nn.Conv2d))
+
+    def test_dummy(self):
+        # pytest has a 'feature' that returns an error code when all tests for a given suite are not selected
+        # to be executed
+        # So adding a dummy test to satisfy pytest
+        pass
 

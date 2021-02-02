@@ -43,6 +43,12 @@ add_custom_target(AcceptanceTests.TensorflowTrainer
       "${AIMET_PYTHONPATH}"
       python3 ${CMAKE_CURRENT_SOURCE_DIR}/train_mnist.py /tensorflow/tensorflow/examples/how_tos/reading_data/convert_to_records.py)
 
+if (ENABLE_CUDA)
+    set(CUDA_FLAG -m "not blah")
+else (ENABLE_CUDA)
+    set(CUDA_FLAG -m "not cuda")
+endif (ENABLE_CUDA)
+
 add_custom_target(AcceptanceTests.TensorflowDependencies
         COMMAND ${CMAKE_COMMAND} -E env
         "${AIMET_LD_LIBRARY_PATH}"
@@ -50,9 +56,9 @@ add_custom_target(AcceptanceTests.TensorflowDependencies
         python3 ${CMAKE_CURRENT_SOURCE_DIR}/dependencies.py ${CMAKE_CURRENT_SOURCE_DIR}/resnet50_eval_scores.csv)
 
 add_custom_target(AcceptanceTests.Tensorflow
-      COMMAND ${CMAKE_COMMAND} -E env
+      VERBATIM COMMAND ${CMAKE_COMMAND} -E env
       "${AIMET_LD_LIBRARY_PATH}"
       "${AIMET_PYTHONPATH}"
-      pytest -s ${CMAKE_CURRENT_SOURCE_DIR} --junitxml=${CMAKE_CURRENT_BINARY_DIR}/py_test_output.xml)
+      pytest -s ${CMAKE_CURRENT_SOURCE_DIR} ${CUDA_FLAG} --junitxml=${CMAKE_CURRENT_BINARY_DIR}/py_test_output.xml)
 
 add_dependencies(AcceptanceTests.Tensorflow  AcceptanceTests.TensorflowTrainer AcceptanceTests.TensorflowDependencies)

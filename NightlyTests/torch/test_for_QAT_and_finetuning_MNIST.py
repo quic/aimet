@@ -36,6 +36,7 @@
 #  @@-COPYRIGHT-END-@@
 # =============================================================================
 
+import pytest
 import unittest
 import os
 import copy
@@ -79,6 +80,7 @@ class QuantizationSimAcceptanceTests(unittest.TestCase):
     def forward_pass(model, iterations):
         mnist_torch_model.evaluate(model=model, iterations=iterations, use_cuda=True)
 
+    @pytest.mark.cuda
     def test_with_finetuning(self):
 
         torch.cuda.empty_cache()
@@ -98,6 +100,7 @@ class QuantizationSimAcceptanceTests(unittest.TestCase):
         mnist_model.train(sim.model, epochs=1, num_batches=3,
                           batch_callback=check_if_layer_weights_are_updating, use_cuda=True)
 
+    @pytest.mark.cuda
     def test_retraining_on_quantized_model_first_step(self):
 
         torch.cuda.empty_cache()
@@ -119,6 +122,7 @@ class QuantizationSimAcceptanceTests(unittest.TestCase):
         # Checkpoint the model
         save_checkpoint(sim, os.path.join(path, 'checkpoint.pt'))
 
+    @pytest.mark.cuda
     def test_retraining_on_quantized_model_second_step(self):
 
         torch.cuda.empty_cache()
@@ -156,3 +160,9 @@ class QuantizationSimAcceptanceTests(unittest.TestCase):
         # train the model again
         mnist_model.train(model=sim.model, epochs=1, num_batches=3,
                           batch_callback=check_if_layer_weights_are_updating, use_cuda=True)
+
+    def test_dummy(self):
+        # pytest has a 'feature' that returns an error code when all tests for a given suite are not selected
+        # to be executed
+        # So adding a dummy test to satisfy pytest
+        pass

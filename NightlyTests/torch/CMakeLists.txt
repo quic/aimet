@@ -45,14 +45,21 @@ add_custom_target(AcceptanceTests.TorchTrainer
 
 add_custom_target( AcceptanceTests.Torch )
 
+if (ENABLE_CUDA)
+    set(CUDA_FLAG -m "not blah")
+else (ENABLE_CUDA)
+    set(CUDA_FLAG -m "not cuda")
+endif (ENABLE_CUDA)
+
 file(GLOB files "${CMAKE_CURRENT_SOURCE_DIR}/test_*.py")
     foreach(filename ${files})
         get_filename_component( testname "${filename}" NAME_WE )
         add_custom_target(AcceptanceTests.Torch.${testname}
-            COMMAND ${CMAKE_COMMAND} -E env
+            VERBATIM COMMAND ${CMAKE_COMMAND} -E env
              "${AIMET_LD_LIBRARY_PATH}"
              "${AIMET_PYTHONPATH}"
-             pytest -s ${filename} --junitxml=${CMAKE_CURRENT_BINARY_DIR}/py_test_output_${testname}.xml)
+             pytest -s ${filename} ${CUDA_FLAG} --junitxml=${CMAKE_CURRENT_BINARY_DIR}/py_test_output_${testname}.xml)
+
         add_dependencies(  AcceptanceTests.Torch.${testname} AcceptanceTests.TorchTrainer )
         add_dependencies( AcceptanceTests.Torch AcceptanceTests.Torch.${testname} )
     endforeach( filename )
