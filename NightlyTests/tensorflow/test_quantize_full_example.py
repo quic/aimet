@@ -37,8 +37,8 @@
 # =============================================================================
 
 import json
+import pytest
 import unittest
-import shutil
 import os
 import numpy as np
 import tensorflow as tf
@@ -58,6 +58,7 @@ import libpymo as pymo
 
 class Quantization(unittest.TestCase):
 
+    @pytest.mark.cuda
     def test_gpu_quantize_mnist(self):
         """
         Running Quantize Test with GPU ops
@@ -118,6 +119,7 @@ class Quantization(unittest.TestCase):
         # close session
         sess.close()
 
+    @pytest.mark.cuda
     def test_gpu_quantize_resnet50(self):
 
         print('Running Quantize Test with GPU ops')
@@ -234,7 +236,8 @@ class Quantization(unittest.TestCase):
         sess = graph_saver.load_model_from_meta('models/mnist_save.meta', 'models/mnist_save')
 
         # Allocate the quantizer and quantize the network using the default 8 bit params/activations
-        sim = quantsim.QuantizationSimModel(sess, ['reshape_input'], ['dense_1/BiasAdd'], quant_scheme='tf')
+        sim = quantsim.QuantizationSimModel(sess, ['reshape_input'], ['dense_1/BiasAdd'], quant_scheme='tf',
+                                            use_cuda=False)
 
         def forward_callback(session, iterations):
             graph_eval.evaluate_graph(session, generator, ['accuracy'], graph_eval.default_eval_func, iterations)
@@ -282,7 +285,8 @@ class Quantization(unittest.TestCase):
         sess = graph_saver.load_model_from_meta('models/mnist_save.meta', 'models/mnist_save')
 
         # Allocate the quantizer and quantize the network using the default 8 bit params/activations
-        sim = quantsim.QuantizationSimModel(sess, ['reshape_input'], ['dense_1/BiasAdd'], quant_scheme='tf')
+        sim = quantsim.QuantizationSimModel(sess, ['reshape_input'], ['dense_1/BiasAdd'], quant_scheme='tf',
+                                            use_cuda=False)
 
         def forward_callback(session, iterations):
             graph_eval.evaluate_graph(session, generator, ['accuracy'], graph_eval.default_eval_func, iterations)
@@ -311,7 +315,8 @@ class Quantization(unittest.TestCase):
         graph_eval.initialize_uninitialized_vars(sess)
 
         sim = quantsim.QuantizationSimModel(sess, starting_op_names=['input1', 'input2'],
-                                            output_op_names=['multiple_input_model/Softmax'])
+                                            output_op_names=['multiple_input_model/Softmax'],
+                                            use_cuda=False)
 
         def forward_callback(session: tf.compat.v1.Session, iterations):
             input_tensor1 = np.random.rand(32, 10, 10, 3)

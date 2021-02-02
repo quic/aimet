@@ -37,6 +37,7 @@
 # =============================================================================
 
 import os
+import pytest
 import unittest
 import tensorflow as tf
 
@@ -46,6 +47,7 @@ from aimet_tensorflow.utils.graph_saver import load_model_from_meta
 
 class TestBiasCorrection(unittest.TestCase):
 
+    @pytest.mark.cuda
     def test_correct_bias_on_mnist(self):
         """  Test correct bias using mnist model and data """
 
@@ -87,6 +89,7 @@ class TestBiasCorrection(unittest.TestCase):
         BiasCorrection.correct_bias(sess, bias_correction_params, quant_params, dataset)
         self.assertTrue(1)      # Add some actual error check
 
+    @pytest.mark.cuda
     def test_correct_bias_on_mnist_with_analytical_bc(self):
         """  Test correct bias using mnist model and data (analytical bias correction)"""
 
@@ -128,3 +131,9 @@ class TestBiasCorrection(unittest.TestCase):
         BiasCorrection.correct_bias(sess, bias_correction_params, quant_params, dataset,
                                     perform_only_empirical_bias_corr=False)
         self.assertTrue(1)      # Add some actual error check
+
+    def test_dummy(self):
+        # pytest has a 'feature' that returns an error code when all tests for a given suite are not selected
+        # to be executed
+        # So adding a dummy test to satisfy pytest
+        pass

@@ -38,6 +38,7 @@
 
 import logging
 import os
+import pytest
 import unittest
 from unittest.mock import MagicMock
 from decimal import Decimal
@@ -340,6 +341,7 @@ class SvdAcceptanceTests(unittest.TestCase):
         self.assertEqual((3, 1), compressed_model.layer2[0].conv2[0].kernel_size)
         self.assertTrue(math.isclose(float(stats.mac_compression_ratio), 0.87, abs_tol=0.01))
 
+    @pytest.mark.cuda
     def test_weight_svd_compress_manual(self):
 
         torch.cuda.empty_cache()
@@ -374,6 +376,7 @@ class SvdAcceptanceTests(unittest.TestCase):
         self.assertTrue(isinstance(compressed_model.fc, torch.nn.Sequential))
         self.assertEqual(math.floor(512 * 1000 * 0.4 / (512 + 1000)), compressed_model.fc[0].out_features)
 
+    @pytest.mark.cuda
     def test_weight_svd_compress_auto_greedy(self):
 
         torch.cuda.empty_cache()
@@ -416,6 +419,7 @@ class SvdAcceptanceTests(unittest.TestCase):
         self.assertFalse(isinstance(compressed_model.conv1, torch.nn.Sequential))
         self.assertFalse(isinstance(compressed_model.fc, torch.nn.Sequential))
 
+    @pytest.mark.cuda
     def test_weight_svd_compress_auto_tar(self):
 
         torch.cuda.empty_cache()
@@ -456,6 +460,7 @@ class SvdAcceptanceTests(unittest.TestCase):
         self.assertFalse(isinstance(compressed_model.conv1, torch.nn.Sequential))
         self.assertFalse(isinstance(compressed_model.fc, torch.nn.Sequential))
 
+    @pytest.mark.cuda
     def test_weight_svd_compress_auto_high_multiplicity(self):
 
         torch.cuda.empty_cache()
@@ -517,6 +522,7 @@ class SvdAcceptanceTests(unittest.TestCase):
         compressed_best_model_accuracy = stats.compressed_model_accuracy
         self.assertTrue(baseline_model_accuracy >= compressed_best_model_accuracy)
 
+    @pytest.mark.cuda
     def test_spatial_svd_with_fine_tuning(self):
         torch.cuda.empty_cache()
         torch.manual_seed(1)
@@ -595,6 +601,7 @@ class SvdAcceptanceTests(unittest.TestCase):
 
 class ChannelPruningAcceptanceTests(unittest.TestCase):
 
+    @pytest.mark.cuda
     def test_channel_pruning_manual(self):
 
         torch.cuda.empty_cache()
@@ -623,6 +630,7 @@ class ChannelPruningAcceptanceTests(unittest.TestCase):
         self.assertTrue(baseline_model_accuracy >= compressed_best_model_accuracy)
         self.assertEqual(24, compressed_model.layer1[0].conv2.in_channels)
 
+    @pytest.mark.cuda
     def test_channel_pruning_compress_auto_resnet(self):
 
         torch.cuda.empty_cache()
@@ -675,6 +683,7 @@ class ChannelPruningAcceptanceTests(unittest.TestCase):
         self.assertNotEqual(model, compressed_model)
         self.assertTrue(0.6 < float(stats.mac_compression_ratio) < 0.65)
 
+    @pytest.mark.cuda
     def test_channel_pruning_compress_auto_resnet_custom_downsample_ops_not_allowed(self):
 
         torch.cuda.empty_cache()
@@ -726,6 +735,7 @@ class ChannelPruningAcceptanceTests(unittest.TestCase):
         self.assertNotEqual(model, compressed_model)
         self.assertTrue(0.5 < float(stats.mac_compression_ratio) < 0.65)
 
+    @pytest.mark.cuda
     def test_channel_pruning_compress_auto_resnet_with_very_high_multiplicity(self):
         torch.cuda.empty_cache()
         torch.manual_seed(1)
