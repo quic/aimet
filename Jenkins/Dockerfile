@@ -111,7 +111,6 @@ RUN dpkg --add-architecture i386
 RUN apt-get update > /dev/null && \
     apt-get install --no-install-recommends -y \
         build-essential \
-        cmake \
         emacs \
         environment-modules \
         less \
@@ -174,6 +173,14 @@ RUN pip3 --no-cache-dir install \
         tqdm==4.32.2 \
         wget==3.2 && \
     python3 -m ipykernel.kernelspec
+
+RUN cd /tmp && \
+    wget https://github.com/Kitware/CMake/releases/download/v3.19.3/cmake-3.19.3-Linux-x86_64.sh && \
+    mkdir /opt/cmake && \
+    sh cmake-3.19.3-Linux-x86_64.sh --prefix=/opt/cmake --skip-license
+
+RUN ln -s /opt/cmake/bin/cmake /usr/local/cmake
+ENV PATH=/usr/local/:$PATH
 
 # Opencv
 # Ref: https://docs.opencv.org/3.1.0/d7/d9f/tutorial_linux_install.html
