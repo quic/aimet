@@ -181,7 +181,7 @@ if(NOT remote_url STREQUAL "")
     # Run the install target first
     COMMAND "${CMAKE_COMMAND}" --build . --target install
     # Now run the packaging target to generate wheel files
-    COMMAND ${CMAKE_COMMAND} -DAIMET_PACKAGE_PATH=${AIMET_PACKAGE_PATH} -DSOURCE_DIR=${CMAKE_CURRENT_SOURCE_DIR} -P ${CMAKE_CURRENT_SOURCE_DIR}/packaging/package_aimet.cmake
+    COMMAND ${CMAKE_COMMAND} -DAIMET_PACKAGE_PATH=${AIMET_PACKAGE_PATH} -DSOURCE_DIR=${CMAKE_CURRENT_SOURCE_DIR} -DENABLE_TENSORFLOW=${ENABLE_TENSORFLOW} -DENABLE_TORCH=${ENABLE_TORCH} -P ${CMAKE_CURRENT_SOURCE_DIR}/packaging/package_aimet.cmake
   )
 else()
   message(STATUS "Repo Remote URL is blank. Skipping packageaimet target")
