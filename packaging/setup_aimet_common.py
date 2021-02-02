@@ -47,7 +47,7 @@ packages_found = find_packages() + find_namespace_packages(exclude=['pyenv3*', '
 
 required_package_data=[]
 
-package_dependency_files = ['requirements.txt', 'packages_common.txt', 'packages_gpu.txt', 'INSTALL.txt', 'envsetup.sh']
+package_dependency_files = ['requirements.txt', 'packages_common.txt', 'packages_gpu.txt', 'INSTALL.txt', 'envsetup.sh', 'LICENSE.pdf']
 
 for path, _, filenames in os.walk('aimet_common'):
     required_package_data += [os.path.join(path, filename) for filename in filenames if 
