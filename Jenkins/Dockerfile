@@ -179,8 +179,10 @@ RUN cd /tmp && \
     mkdir /opt/cmake && \
     sh cmake-3.19.3-Linux-x86_64.sh --prefix=/opt/cmake --skip-license
 
-RUN ln -s /opt/cmake/bin/cmake /usr/local/cmake
-ENV PATH=/usr/local/:$PATH
+RUN ln -s /opt/cmake/bin/cmake /usr/local/bin/cmake
+RUN ln -s /opt/cmake/bin/ctest /usr/local/bin/ctest
+RUN ln -s /opt/cmake/bin/cpack /usr/local/bin/cpack
+ENV PATH=/usr/local/bin:$PATH
 
 # Opencv
 # Ref: https://docs.opencv.org/3.1.0/d7/d9f/tutorial_linux_install.html
