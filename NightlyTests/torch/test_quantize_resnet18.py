@@ -37,6 +37,8 @@
 # =============================================================================
 
 from __future__ import print_function
+
+import pytest
 import torch
 import torch.nn as nn
 import unittest
@@ -130,6 +132,7 @@ def check_if_layer_weights_are_updating(trainer, model):
 
 class QuantizeAcceptanceTests(unittest.TestCase):
 
+    @pytest.mark.cuda
     def test_quantize_resnet18(self):
 
         torch.cuda.empty_cache()
@@ -152,6 +155,7 @@ class QuantizeAcceptanceTests(unittest.TestCase):
         print("Quantized model accuracy=", quantized_model_accuracy)
         self.assertGreaterEqual(quantized_model_accuracy, 0.5)
 
+    @pytest.mark.cuda
     def test_memory_leak_during_quantization_train(self):
 
         # First get baseline numbers
@@ -207,6 +211,7 @@ class QuantizeAcceptanceTests(unittest.TestCase):
         # The tolerance is bumped up to take care of the situation where all tests are run.
         self.assertLessEqual(leaked_memory, 2000000)
 
+    @pytest.mark.cuda
     def test_memory_leak_during_quantization_eval(self):
 
         # First get baseline numbers
@@ -253,6 +258,12 @@ class QuantizeAcceptanceTests(unittest.TestCase):
         print("AIMET eval delta = {}".format(aimet_model_eval_delta))
 
         self.assertEqual(0, aimet_model_eval_delta)
+
+    def test_dummy(self):
+        # pytest has a 'feature' that returns an error code when all tests for a given suite are not selected
+        # to be executed
+        # So adding a dummy test to satisfy pytest
+        pass
 
 
 

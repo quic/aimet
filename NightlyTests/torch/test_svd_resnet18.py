@@ -78,6 +78,7 @@ def model_eval(model, early_stopping_iterations, use_cuda):
 
 
 class SvdAcceptanceTest(unittest.TestCase):
+    @unittest.skip
     def test_resnet_compression_using_svd(self):
 
         torch.cuda.empty_cache()
