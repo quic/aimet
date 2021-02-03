@@ -85,8 +85,8 @@ target_include_directories(MoDlQuantization
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/include)
 
 if (ENABLE_CUDA)
-add_library(MoDlQuantizationCuda
 
+    add_library(MoDlQuantizationCuda
       src/math_functions.cu
       src/cuda_util.cu
       src/trim_functions.cu
@@ -94,9 +94,13 @@ add_library(MoDlQuantizationCuda
       src/trim_functions.cuh
       )
 
-target_compile_options(MoDlQuantizationCuda
-      PRIVATE
-         -Xcompiler -fPIC)
+    target_compile_options(MoDlQuantizationCuda
+            PRIVATE $<$<COMPILE_LANGUAGE:CUDA>:
+            --generate-line-info
+            --use_fast_math>
+            -Xcompiler -fPIC
+            )
+
 endif (ENABLE_CUDA)
 
 add_subdirectory(test)

@@ -62,9 +62,7 @@ if (ENABLE_CUDA)
     target_link_libraries(MoDlQuantizationTest
             MoDlQuantization
             MoDlQuantizationCuda
-            ${CUDA_LIBRARIES}
-            ${CUDA_CUBLAS_LIBRARIES}
-            "/usr/local/cuda-10.0/targets/x86_64-linux/lib/libcublas.so"
+            CUDA::cublas
             gtest gtest_main
             )
 
