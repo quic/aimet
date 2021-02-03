@@ -159,7 +159,7 @@ class PostTrainingTensorQuantizer(TensorQuantizer):
         Update the stats for computing encoding
         :param tensor: Tensor to use for updating the encodings stats
         """
-        if self.enabled:
+        if self.enabled and not self.is_encoding_frozen:
             self._cppOp.updateStats(tensor, tensor.is_cuda)
 
     def compute_encoding(self):
