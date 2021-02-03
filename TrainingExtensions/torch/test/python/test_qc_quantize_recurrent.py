@@ -133,7 +133,7 @@ class TestQcQuantizeRecurrentOp(unittest.TestCase):
         TestCase(test_name="lstm_bidirectional",
                  model=torch.nn.LSTM(input_size=4, hidden_size=5, num_layers=1, bidirectional=True),
                  input_shape=(5, 3, 4),
-                 sequence_lens=[1, 5, 3], device='cuda:0'),
+                 sequence_lens=[1, 5, 3]),
 
         TestCase(test_name="lstm_multilayer",
                  model=torch.nn.LSTM(input_size=4, hidden_size=5, num_layers=2),
@@ -402,7 +402,6 @@ class TestQcQuantizeRecurrentOp(unittest.TestCase):
         for tc in TestQcQuantizeRecurrentOp.testcases:
             self.verify_custom_op(tc)
 
-    @pytest.mark.cuda
     def test_qc_recurrent_backward(self):
         """
         Unit test to validate Quantize Recurrent Op backward pass
@@ -411,7 +410,6 @@ class TestQcQuantizeRecurrentOp(unittest.TestCase):
         for tc in TestQcQuantizeRecurrentOp.testcases:
             self.validate_backward_pass(tc)
 
-    @pytest.mark.cuda
     def test_save_and_load_rnn(self):
         """
         Unit test to validate Recurrent Op serialize/des-serialize functionality
