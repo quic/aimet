@@ -35,6 +35,7 @@
 #  @@-COPYRIGHT-END-@@
 # =============================================================================
 
+import pytest
 import unittest
 
 import copy
@@ -401,6 +402,7 @@ class TestQcQuantizeRecurrentOp(unittest.TestCase):
         for tc in TestQcQuantizeRecurrentOp.testcases:
             self.verify_custom_op(tc)
 
+    @pytest.mark.cuda
     def test_qc_recurrent_backward(self):
         """
         Unit test to validate Quantize Recurrent Op backward pass
@@ -409,6 +411,7 @@ class TestQcQuantizeRecurrentOp(unittest.TestCase):
         for tc in TestQcQuantizeRecurrentOp.testcases:
             self.validate_backward_pass(tc)
 
+    @pytest.mark.cuda
     def test_save_and_load_rnn(self):
         """
         Unit test to validate Recurrent Op serialize/des-serialize functionality
