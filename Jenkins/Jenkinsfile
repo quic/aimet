@@ -1,10 +1,11 @@
 pipeline {
     parameters {
         string(name: 'PROJECT_NAME', defaultValue: 'aimet', description: 'project name')
-        string(name: 'BUILD_LABEL', defaultValue: 'docker-build-aimet-pr', description: 'Jenkins node host name or label')
+        string(name: 'BUILD_LABEL_GPU', defaultValue: 'docker-build-aimet-pr-gpu', description: 'Jenkins node host name or label for GPU variants')
+        string(name: 'BUILD_LABEL_CPU', defaultValue: 'docker-build-aimet-pr-cpu', description: 'Jenkins node host name or label for CPU variants')
         string(name: 'BUILD_TIMEOUT', defaultValue: '1', description: 'Build timeout in hours')
     }
-    agent { label "${params.BUILD_LABEL}" }
+    agent { label "${params.BUILD_LABEL_GPU}" }
     options {
         timestamps()
         timeout( time: 1, unit: 'HOURS' )
@@ -29,7 +30,7 @@ pipeline {
                 sh 'bash -l -c "mkdir ${REPO_NAME}"'
                 // moving all files and folders except current and parent into ${REPO_NAME} folder
                 sh 'mv `ls -1a | grep -v "^${REPO_NAME}$" | grep -v "^\\.$" | grep -v "^\\.\\.$" ` ${REPO_NAME}'
-                script{
+                script {
                     // load threshold file to be used for unit test and code quality reporting
                     def THRESHOLD_FILE = "${PROJECT_ROOT}/Jenkins/jenkins_threshold_configs.json"
                     if (!fileExists("${THRESHOLD_FILE}")) {
@@ -177,7 +178,7 @@ pipeline {
                     }
                 }
                 stage("CPU") {
-                    agent { label "${params.BUILD_LABEL}" }
+                    agent { label "${params.BUILD_LABEL_CPU}" }
                     stages {
                         stage('Setup') {
                             steps {
