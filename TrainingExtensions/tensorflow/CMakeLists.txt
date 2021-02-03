@@ -93,14 +93,11 @@ if (ENABLE_CUDA)
 
     target_compile_options(TrainingExtensionsTfCuda
             PRIVATE
-            -Xcompiler -fPIC -D_GLIBCXX_USE_CXX11_ABI=0 -DGOOGLE_CUDA=1 -I /usr/local/lib/python3.6/dist-packages/tensorflow_core/include --expt-relaxed-constexpr
+            -Xcompiler -fPIC -D_GLIBCXX_USE_CXX11_ABI=0
+            -DGOOGLE_CUDA=1
+            -I /usr/local/lib/python3.6/dist-packages/tensorflow_core/include --expt-relaxed-constexpr
             )
 
-    set(CUDA_NVCC_FLAGS ${CUDA_NVCC_FLAGS}
-            -DGOOGLE_CUDA=1
-            -I /usr/local/lib/python3.6/dist-packages/tensorflow_core/include
-            --expt-relaxed-constexpr
-            )
 endif(ENABLE_CUDA)
 
 

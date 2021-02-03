@@ -50,9 +50,7 @@ if (ENABLE_CUDA)
              MoDlQuantizationCuda
              MoDlCompression
 
-             ${CUDA_LIBRARIES}
-             ${CUDA_CUBLAS_LIBRARIES}
-             "/usr/local/cuda-10.0/targets/x86_64-linux/lib/libcublas.so"
+            CUDA::cublas
              ${LAPACKE_LIBRARY}
              ${OPENCV_LIBRARY}
              z
