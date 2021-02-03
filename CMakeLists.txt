@@ -72,18 +72,13 @@ endif(NOT (DEFINED ENABLE_CUDA))
 
 if (ENABLE_CUDA)
   message("Compiling with CUDA enabled")
-  enable_language(CUDA)
-  set(CUDA_NVCC_FLAGS
-        -O3 -std=c++11 -I /usr/local -I /usr/local/cuda-10.0/include -x cu -Xcompiler -fPIC -D_GLIBCXX_USE_CXX11_ABI=0
 
-        -gencode arch=compute_35,code=sm_35
-        -gencode arch=compute_50,code=sm_50
-        -gencode arch=compute_52,code=sm_52
-        -gencode arch=compute_60,code=sm_60
-        -gencode arch=compute_61,code=sm_61
-        -gencode arch=compute_61,code=compute_61
-        -gencode arch=compute_70,code=compute_70
-     )
+  find_package(CUDAToolkit)
+  if(NOT DEFINED CMAKE_CUDA_ARCHITECTURES)
+    set(CMAKE_CUDA_ARCHITECTURES 52 60 61 70 72)
+  endif()
+
+  enable_language(CUDA)
 
 else(ENABLE_CUDA)
   message("Compiling with CUDA disabled")

@@ -47,9 +47,7 @@ if (ENABLE_CUDA)
             PYBIND11
             MoDlQuantization
             MoDlQuantizationCuda
-            ${CUDA_LIBRARIES}
-            ${CUDA_CUBLAS_LIBRARIES}
-            "/usr/local/cuda-10.0/targets/x86_64-linux/lib/libcublas.so"
+            CUDA::cublas
             )
 
 else (ENABLE_CUDA)
