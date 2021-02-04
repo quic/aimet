@@ -735,6 +735,19 @@ class QuantizationSimModel:
             raise AssertionError
         QuantSimConfigurator(self.model, connected_graph, config_file)
 
+    def set_and_freeze_param_encodings(self, encoding_path: str):
+        """
+        Set and freeze parameter encodings from encodings JSON file
+        :param encoding_path: path from where to load parameter encodings file
+        """
+        # Load parameter encodings file
+        with open(encoding_path) as json_file:
+            param_encodings = json.load(json_file)
+
+        for name, quant_module in self.model.named_modules():
+            if isinstance(quant_module, QcPostTrainingWrapper):
+                quant_module.set_and_freeze_param_encoding(name, param_encodings)
+
 
 def save_checkpoint(quant_sim_model: QuantizationSimModel, file_path: str):
     """

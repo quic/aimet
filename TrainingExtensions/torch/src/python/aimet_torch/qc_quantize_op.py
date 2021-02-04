@@ -39,7 +39,7 @@
 
 import abc
 from enum import Enum
-from typing import Union
+from typing import Union, Dict
 
 import torch
 from torch import nn
@@ -265,12 +265,9 @@ class QcQuantizeWrapper(nn.Module):
         Reset encoding stats and set encodings to None for all quantizers
         """
         self.input_quantizer.reset_encoding_stats()
-        self.input_quantizer.encoding = None
         self.output_quantizers[0].reset_encoding_stats()
-        self.output_quantizers[0].encoding = None
         for param_quantizer in self.param_quantizers.values():
             param_quantizer.reset_encoding_stats()
-            param_quantizer.encoding = None
 
 
 class QcPostTrainingWrapper(QcQuantizeWrapper):
@@ -384,7 +381,6 @@ class QcPostTrainingWrapper(QcQuantizeWrapper):
     def compute_encoding(self):
         """
         Compute the quantization encoding for this layer
-        :return: None
         """
         self.input_quantizer.compute_encoding()
         self.output_quantizers[0].compute_encoding()
@@ -431,6 +427,38 @@ class QcPostTrainingWrapper(QcQuantizeWrapper):
             outputs = outputs[0]
 
         return outputs
+
+    def set_and_freeze_param_encoding(self, module_name: str, param_encodings: Dict):
+        """
+        Set and freeze encoding for parameter from encodings dictionary
+        :param module_name: name of module
+        :param param_encodings: parameter encodings dictionary
+        """
+        for orig_param_name, param_quantizer in self.param_quantizers.items():
+            param_name = module_name + '.' + orig_param_name
+            if param_name in param_encodings:
+                encoding_dict = param_encodings[param_name][0]
+                encoding, is_symmetric = self._create_encoding_from_dict(encoding_dict)
+                param_quantizer.set_encoding(encoding)
+                param_quantizer.use_symmetric_encodings = is_symmetric
+                param_quantizer.freeze_encoding()
+                _logger.info("Setting and freezing quantization encodings for parameter: %s", param_name)
+
+    @staticmethod
+    def _create_encoding_from_dict(encoding_dict: dict) -> (libpymo.TfEncoding, bool):
+        """
+        Create encoding object from encoding dictionary
+        :param encoding_dict: Dictionary containing encodings
+        :return: Encoding object, is_symmetric
+        """
+        encoding = libpymo.TfEncoding()
+        encoding.bw = encoding_dict.get('bitwidth')
+        encoding.max = encoding_dict.get('max')
+        encoding.min = encoding_dict.get('min')
+        encoding.delta = encoding_dict.get('scale')
+        encoding.offset = encoding_dict.get('offset')
+        is_symmetric = eval(encoding_dict.get('is_symmetric'))  # pylint: disable=eval-used
+        return encoding, is_symmetric
 
 
 class QcQuantizeStandalone(QcQuantizeStandAloneBase):
