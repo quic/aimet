@@ -528,19 +528,15 @@ class QcQuantizeRecurrent(torch.nn.Module):
         group_quantizers = self._grouped_quantizers.values()
         for quantizer in group_quantizers:
             quantizer.reset_encoding_stats()
-            quantizer.encoding = None
         for param_quantizer in self._param_quantizers.values():
             if param_quantizer not in group_quantizers:
                 param_quantizer.reset_encoding_stats()
-                param_quantizer.encoding = None
         for input_quantizer in self._input_quantizers.values():
             if input_quantizer not in group_quantizers:
                 input_quantizer.reset_encoding_stats()
-                input_quantizer.encoding = None
         for output_quantizer in self._output_quantizers.values():
             if output_quantizer not in group_quantizers:
                 output_quantizer.reset_encoding_stats()
-                output_quantizer.encoding = None
 
     def update_params(self):
         """
