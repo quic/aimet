@@ -48,19 +48,16 @@ import onnx
 
 from aimet_common.utils import AimetLogger
 from aimet_common.defs import QuantScheme
-from aimet_common.quantsim import calculate_delta_offset
 from aimet_torch.quantsim_config.quantsim_config import QuantSimConfigurator
 from aimet_torch.qc_quantize_op import QcQuantizeStandAloneBase, QcQuantizeWrapper, QcQuantizeOpMode, \
     QcPostTrainingWrapper
 from aimet_torch import torchscript_utils
-from aimet_torch.tensor_quantizer import TensorQuantizer
 from aimet_torch.batch_norm_fold import PassThroughOp
 from aimet_torch import utils
 from aimet_torch import onnx_utils
 from aimet_torch.meta.connectedgraph_utils import create_connected_graph_with_input_shapes
 from aimet_torch.meta.connectedgraph import ConnectedGraph
 from aimet_torch.qc_quantize_recurrent import QcQuantizeRecurrent
-import libpymo
 
 logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Quant)
 
@@ -445,7 +442,6 @@ class QuantizationSimModel:
         :param rounding_mode: Rounding mode. Supported options are 'nearest' or 'stochastic'
         :param default_output_bw: Default bitwidth (4-31) to use for quantizing layer inputs and outputs
         :param default_param_bw: Default bitwidth (4-31) to use for quantizing layer parameters
-        :return:
         """
         # sanity checks
         if quant_scheme not in ('tf_enhanced', 'tf') and not isinstance(quant_scheme, QuantScheme):
@@ -483,7 +479,6 @@ class QuantizationSimModel:
         :param filename_prefix: filename to store exported weight encodings in json format
         :param op_to_io_tensor_map: Dictionary of layer to I/O tensor mapping from onnx or torch script model
         :param valid_param_set: a set of valid param input names in model
-        :return: None
         """
 
         # Create a dictionary to export to JSON
@@ -504,15 +499,14 @@ class QuantizationSimModel:
         with open(encoding_file_path, 'w') as encoding_fp:
             json.dump(encodings_dict, encoding_fp, sort_keys=True, indent=4)
 
-    def _update_param_encodings_dict_for_layer(self, layer: torch.nn.Module, layer_name: str,
+    @staticmethod
+    def _update_param_encodings_dict_for_layer(layer: torch.nn.Module, layer_name: str,
                                                param_encodings: Dict, valid_param_set: set):
         """
-
         :param layer: layer as torch.nn.Module
         :param layer_name : Name of the layer
         :param param_encodings: dictionary of param encodings
         :param valid_param_set: a set of valid param input names in model
-        :return:
         """
 
         disabled_param_quantizers = []
@@ -520,8 +514,9 @@ class QuantizationSimModel:
             param_name = layer_name + '.' + orig_param_name
             if param_quantizer.enabled:
                 if param_name in valid_param_set:
-                    tensor_encoding = self._create_encoding_dict_for_quantizer(param_quantizer)
-                    param_encodings[param_name] = [tensor_encoding]
+                    encoding = utils.create_encoding_dict(param_quantizer.encoding,
+                                                          param_quantizer.use_symmetric_encodings)
+                    param_encodings[param_name] = [encoding]
                 else:
                     logger.error('Param tensor {%s} not found in valid param set', param_name)
             else:
@@ -538,35 +533,15 @@ class QuantizationSimModel:
             # if the param quantizer was disabled generate encoding assuming bitwidth of 32
             if name in disabled_param_quantizers:
                 param_name = layer_name + '.' + name
-                tensor_encoding = self.compute_encoding_for_given_bitwidth(layer.param_quantizers[name], param, 32)
-                param_encodings[param_name] = [tensor_encoding]
-
-    @staticmethod
-    def compute_encoding_for_given_bitwidth(quantizer: TensorQuantizer, tensor, bitwidth) -> Dict:
-        """
-        Utility function to compute encoding for a given bitwidth
-        :param quantizer: quantizer to use for configuration
-        :param tensor: tensor to quantize
-        :param bitwidth: bitwidth for generating the encoding
-        """
-        encoding_analyzer = libpymo.EncodingAnalyzerForPython(quantizer.quant_scheme)
-        encoding_analyzer.updateStats(tensor.cpu().detach().numpy(), False)
-        encoding, is_encoding_valid = \
-            encoding_analyzer.computeEncoding(bitwidth, quantizer.use_symmetric_encodings)
-        if is_encoding_valid:
-            return {'min': encoding.min,
-                    'max': encoding.max,
-                    'scale': encoding.delta,
-                    'offset': encoding.offset,
-                    'bitwidth': encoding.bw,
-                    'is_symmetric': str(quantizer.use_symmetric_encodings)}
-
-        return {}
+                param_quantizer = layer.param_quantizers[name]
+                param_data = param.cpu().detach().numpy()
+                encoding = utils.compute_encoding_for_given_bitwidth(param_data, 32, param_quantizer.quant_scheme,
+                                                                     param_quantizer.use_symmetric_encodings)
+                param_encodings[param_name] = [encoding]
 
     def _update_encoding_dicts_for_layer(self, layer: torch.nn.Module, layer_name: str, activation_encodings: Dict,
                                          param_encodings: Dict, op_to_io_tensor_map: Dict,
                                          valid_param_set: set):
-
         """
         Add given layer param and activation encodings to respective dictionaries to be used for exporting encodings
         :param layer: layer as torch.nn.Module
@@ -575,7 +550,6 @@ class QuantizationSimModel:
         :param param_encodings: dictionary of param encodings
         :param op_to_io_tensor_map: ONNX or Torch Script map of layer name to it's input/output tensors
         :param valid_param_set: a set of valid param input names in model
-        :return:
         """
 
         # pylint: disable=too-many-nested-blocks
@@ -591,13 +565,15 @@ class QuantizationSimModel:
                     if op_to_io_tensor_map[layer_name].inputs:
                         for input_tensor in op_to_io_tensor_map[layer_name].inputs:
                             if input_tensor not in param_inputs:
-                                tensor_encoding = self._create_encoding_dict_for_quantizer(layer.input_quantizer)
-                                activation_encodings[input_tensor] = [tensor_encoding]
+                                encoding = utils.create_encoding_dict(layer.input_quantizer.encoding,
+                                                                      layer.input_quantizer.use_symmetric_encodings)
+                                activation_encodings[input_tensor] = [encoding]
                 if layer.output_quantizers[0].enabled:
                     if op_to_io_tensor_map[layer_name].outputs:
                         for output_tensor in op_to_io_tensor_map[layer_name].outputs:
-                            tensor_encoding = self._create_encoding_dict_for_quantizer(layer.output_quantizers[0])
-                            activation_encodings[output_tensor] = [tensor_encoding]
+                            encoding = utils.create_encoding_dict(layer.output_quantizers[0].encoding,
+                                                                  layer.output_quantizers[0].use_symmetric_encodings)
+                            activation_encodings[output_tensor] = [encoding]
 
                 # get param quantizers
                 self._update_param_encodings_dict_for_layer(layer, layer_name, param_encodings, valid_param_set)
@@ -606,24 +582,11 @@ class QuantizationSimModel:
                 onnx_activations_to_quantizers, onnx_params_to_quantizers = \
                     layer.get_activation_param_quantizers_for_onnx_tensors(op_to_io_tensor_map[layer_name])
                 for tensor, quantizer in onnx_activations_to_quantizers.items():
-                    tensor_encoding = self._create_encoding_dict_for_quantizer(quantizer)
-                    activation_encodings[tensor] = [tensor_encoding]
+                    encoding = utils.create_encoding_dict(quantizer.encoding, quantizer.use_symmetric_encodings)
+                    activation_encodings[tensor] = [encoding]
                 for tensor, quantizer in onnx_params_to_quantizers.items():
-                    tensor_encoding = self._create_encoding_dict_for_quantizer(quantizer)
-                    param_encodings[tensor] = [tensor_encoding]
-
-    @staticmethod
-    def _create_encoding_dict_for_quantizer(quantizer: TensorQuantizer) -> Dict:
-        if quantizer.encoding:
-            encoding_min, encoding_max, bw = quantizer.encoding.min, quantizer.encoding.max, quantizer.encoding.bw
-            scale, offset = calculate_delta_offset(encoding_min, encoding_max, bw)
-            return {'min': encoding_min,
-                    'max': encoding_max,
-                    'scale': scale,
-                    'offset': offset,
-                    'bitwidth': bw,
-                    'is_symmetric': str(quantizer.use_symmetric_encodings)}
-        return None
+                    encoding = utils.create_encoding_dict(quantizer.encoding, quantizer.use_symmetric_encodings)
+                    param_encodings[tensor] = [encoding]
 
     @staticmethod
     def _get_qc_quantized_layers(model) -> List[Tuple[str, QcQuantizeWrapper]]:
