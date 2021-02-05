@@ -6,6 +6,7 @@ This page provides instructions to install AIMET package in Google colab environ
 - [Install AIMET packages](#Install-AIMET-packages)
 - [Configure](#Configure)
 - [Usage](#Usage)
+- [Validation](#Validation)
 
 ## Google colab set up
 
@@ -47,6 +48,7 @@ Runtime -> Restart runtime
 ```python
 import sys
 sys.path.append('/usr/local/lib/python3.6/dist-packages/aimet_common/x86_64-linux-gnu')
+sys.path.append('/usr/local/lib/python3.6/dist-packages/aimet_common/x86_64-linux-gnu/aimet_tensor_quantizer-0.0.0-py3.6-linux-x86_64.egg/')
 
 import os
 os.environ['LD_LIBRARY_PATH'] +=':/usr/local/lib/python3.6/dist-packages/aimet_common/x86_64-linux-gnu'
@@ -54,3 +56,47 @@ os.environ['LD_LIBRARY_PATH'] +=':/usr/local/lib/python3.6/dist-packages/aimet_c
 
 ## Usage
 You should be able to import the required packages from aimet_common, aimet_torch and aimet_tensorflow to incorporate aimet packages, for additional usage suggestion please refer to the examples from the documentation.
+
+
+## Validation
+The install could be validated by executing a snippet of code that instantiates a AIMET quantization simulator
+```
+import torch
+from torchvision import models
+from aimet_torch.quantsim import QuantizationSimModel
+m = models.resnet18()
+sim = QuantizationSimModel(m, (1, 3, 224, 224))
+```
+**Sample output**
+```
+print(sim)
+-------------------------
+Quantized Model Report
+-------------------------
+Layer: conv1
+    Input: bw=8, encoding-present=False
+    Params:
+        weight: bw=8, encoding-present=False
+    Output: bw=8, encoding-present=False
+Layer: bn1
+    Input: Unquantized
+    Params:
+        weight: bw=8, encoding-present=False
+        bias: Unquantized
+    Output: bw=8, encoding-present=False
+Layer: relu
+    Input: Unquantized
+    Params:
+    Output: bw=8, encoding-present=False
+Layer: maxpool
+    Input: Unquantized
+    Params:
+    Output: bw=8, encoding-present=False
+Layer: layer1.0.conv1
+    Input: Unquantized
+    Params:
+        weight: bw=8, encoding-present=False
+    Output: bw=8, encoding-present=False
+Layer: layer1.0.bn1
+...
+```
