@@ -104,7 +104,7 @@ class TestCrossLayerEqualization(unittest.TestCase):
 
     def test_cross_layer_equalization_vgg(self):
         torch.manual_seed(10)
-        model = models.vgg16(pretrained=True).to(torch.device('cpu'))
+        model = models.vgg16().to(torch.device('cpu'))
         model = model.eval()
         equalize_model(model, (1, 3, 224, 224))
 
@@ -127,13 +127,14 @@ class TestCrossLayerEqualization(unittest.TestCase):
     def test_cross_layer_equalization_resnet18_visualize_to_identify_problem_layers(self):
         bokeh_visualizations_url, process = start_bokeh_server_session(6008)
         torch.manual_seed(10)
-        model = models.resnet18(pretrained=True)
+        model = models.resnet18()
         model = model.eval()
 
         batch_norm_fold.fold_all_batch_norms(model, (1, 3, 224, 224))
 
-        bokeh_server_session = visualize_model.visualize_relative_weight_ranges_to_identify_problematic_layers(model,
-                                                                                                               bokeh_visualizations_url)
+        bokeh_server_session = \
+            visualize_model.visualize_relative_weight_ranges_to_identify_problematic_layers(model,
+                                                                                            bokeh_visualizations_url)
         bokeh_server_session.server_session.close("test complete")
         os.killpg(os.getpgid(process.pid), signal.SIGTERM)
 
