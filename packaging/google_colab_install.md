@@ -2,9 +2,10 @@
 This page provides instructions to install AIMET package in Google colab environment. Please follow the instructions in the order provided, unless specified otherwise. 
 
 - [Google colab set up](#google-colab-set-up)
+- [Install Dependencies](#Install-Dependency-packages)
 - [Install AIMET packages](#Install-AIMET-packages)
-    - [Install Dependencies](#Install-Dependency-packages)
 - [Configure](#Configure)
+- [Usage](#Usage)
 
 ## Google colab set up
 
@@ -13,22 +14,28 @@ This page provides instructions to install AIMET package in Google colab environ
 - Select Hardware Accelerator as GPU in below Google Colab Menu option:
   Runtime -> Change runtime -> Hardware Accelerator(GPU)
 
+### Install Dependency packages
+```bash
+import os
+os.environ['SRC_URL'] = 'https://raw.githubusercontent.com/quic/aimet/develop/packaging/'
+!curl ${SRC_URL}packages_common.txt | xargs apt-get --assume-yes install
+!curl ${SRC_URL}packages_gpu.txt | xargs apt-get --assume-yes --allow-change-held-packages install 
+!wget ${SRC_URL}requirements.txt
+!pip3 install -r requirements.txt -f https://download.pytorch.org/whl/torch_stable.html
+```
 
 ## Install AIMET packages
 Please run below commands to install dependencies to build AIMET:
 
+Note: verified with <RELEASE_TAG> set to 1.13.0
 ```bash
-release_tag=<release_tag>
-!pip3 install https://github.com/quic/aimet/releases/download/${release_tag}/AimetCommon-${release_tag}-py3-none-any.whl -f https://download.pytorch.org/whl/torch_stable.html
+import os
+os.environ['release_tag']=<RELEASE_TAG>
+!pip3 install https://github.com/quic/aimet/releases/download/${release_tag}/AimetCommon-${release_tag}-py3-none-any.whl 
 !pip3 install https://github.com/quic/aimet/releases/download/${release_tag}/AimetTorch-${release_tag}-py3-none-any.whl
 !pip3 install https://github.com/quic/aimet/releases/download/${release_tag}/AimetTensorflow-${release_tag}-py3-none-any.whl
 ```
 
-### Install Dependency packages
-```bash
-!cat /usr/local/lib/python3.6/dist-packages/aimet_common/bin/packages_common.txt | xargs apt-get --assume-yes install
-!cat /usr/local/lib/python3.6/dist-packages/aimet_common/bin/packages_gpu.txt | xargs apt-get --assume-yes install 
-```
 
 Please **restart** Google runtime environment when prompted or from below menu option:
 
@@ -39,9 +46,6 @@ Runtime -> Restart runtime
 
 ```python
 import sys
-sys.path.append('/usr/local/lib/python3.6/dist-packages/aimet_common')
-sys.path.append('/usr/local/lib/python3.6/dist-packages/aimet_torch')
-sys.path.append('/usr/local/lib/python3.6/dist-packages/aimet_tensorflow')
 sys.path.append('/usr/local/lib/python3.6/dist-packages/aimet_common/x86_64-linux-gnu')
 
 import os

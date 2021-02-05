@@ -47,7 +47,19 @@ Please run below commands to install dependencies to build AIMET:
 
 !pip3 install numpy==1.16.4
 
-!apt-get install libgtest-dev build-essential cmake
+!apt-get install libgtest-dev build-essential
+
+%cd /content/
+!wget https://github.com/Kitware/CMake/releases/download/v3.19.3/cmake-3.19.3-Linux-x86_64.sh
+!sh cmake-3.19.3-Linux-x86_64.sh  --skip-license
+%rm -rf /usr/local/bin/cmake
+%rm -rf /usr/local/bin/cpack
+%rm -rf /usr/local/bin/ctest
+
+
+!ln -s /content/bin/cmake /usr/local/bin/cmake
+!ln -s /content/bin/ctest /usr/local/bin/ctest
+!ln -s /content/bin/cpack /usr/local/bin/cpack
 
 !pip3 --no-cache-dir install opencv-python==4.1.0.25
 
@@ -151,7 +163,7 @@ Please restart Google runtime environment from below menu option:
 Runtime -> Restart runtime
 
 ## AIMET build and installation
-Please run below commands to fetch AIMET, and googletest from github repo, and compile, and install AIMET.
+Please run below commands to fetch AIMET, and googletest from github repo, and compile AIMET.
 
 ```
 %cd /content/
@@ -181,8 +193,14 @@ Please run below commands to fetch AIMET, and googletest from github repo, and c
 !cmake -DCMAKE_EXPORT_COMPILE_COMMANDS=ON ../aimet
 
 !make -j 8
-
+```
+### To install locally
+```
 !make install
+```
+### To create whl packages
+```
+!make packageaimet
 ```
 
 
