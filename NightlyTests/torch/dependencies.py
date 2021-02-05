@@ -54,27 +54,36 @@ import subprocess
 logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Test)
 
 eval_scores_csv_file = sys.argv[1]
+use_cuda = eval(sys.argv[2]) # pylint: disable=eval-used
 
 # ##############################################################################################
 # Dependency #1
 #
 # Some Acceptance tests depend on a trained MNIST model.
 #
-# Check if we need to generate the .pth for GPU. If not, return
+# Check if we need to generate the .pth for CPU or GPU. If not, return
 cpu_output_files = os.path.join('./', 'data', 'mnist_trained_on_CPU.pth')
 gpu_output_files = os.path.join('./', 'data', 'mnist_trained_on_GPU.pth')
 
-if os.path.isfile(cpu_output_files) and os.path.isfile(gpu_output_files):
+if os.path.isfile(cpu_output_files) or os.path.isfile(gpu_output_files):
     logger.info('Mnist model .pth generation not needed')
 else:
     torch.manual_seed(1)
     torch.backends.cudnn.deterministic = True
-    model = mnist_torch_model.Net().to("cuda")
-    mnist_torch_model.train(model, epochs=1, use_cuda=True, batch_size=50, batch_callback=None)
+
+    if use_cuda:
+        model = mnist_torch_model.Net().to("cuda")
+    else:
+        model = mnist_torch_model.Net().to("cpu")
+    mnist_torch_model.train(model, epochs=1, use_cuda=use_cuda, batch_size=50, batch_callback=None)
+
     # create directory
     if not os.path.isdir('./data'):
         os.mkdir('./data')
-    torch.save(model, gpu_output_files)
+
+    if use_cuda:
+        torch.save(model, gpu_output_files)
+
     model = model.to("cpu")
     torch.save(model, cpu_output_files)
 
