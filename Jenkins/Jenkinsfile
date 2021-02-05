@@ -1,10 +1,11 @@
 pipeline {
     parameters {
         string(name: 'PROJECT_NAME', defaultValue: 'aimet', description: 'project name')
-        string(name: 'BUILD_LABEL', defaultValue: 'docker-build-aimet-pr', description: 'Jenkins node host name or label')
+        string(name: 'BUILD_LABEL_GPU', defaultValue: 'docker-build-aimet-pr-gpu', description: 'Jenkins node host name or label for GPU variants')
+        string(name: 'BUILD_LABEL_CPU', defaultValue: 'docker-build-aimet-pr-cpu', description: 'Jenkins node host name or label for CPU variants')
         string(name: 'BUILD_TIMEOUT', defaultValue: '1', description: 'Build timeout in hours')
     }
-    agent { label "${params.BUILD_LABEL}" }
+    agent { label "${params.BUILD_LABEL_GPU}" }
     options {
         timestamps()
         timeout( time: 1, unit: 'HOURS' )
@@ -22,31 +23,39 @@ pipeline {
         XUNIT_XSL_FILE  = "${PROJECT_ROOT}/Jenkins/to-junit.xsl"
     }
     stages {
+        stage('Setup') {
+            steps {
+                echo 'moving all files and folders!'
+                sh 'bash -l -c "rm -rf ./${REPO_NAME} | true"'
+                sh 'bash -l -c "mkdir ${REPO_NAME}"'
+                // moving all files and folders except current and parent into ${REPO_NAME} folder
+                sh 'mv `ls -1a | grep -v "^${REPO_NAME}$" | grep -v "^\\.$" | grep -v "^\\.\\.$" ` ${REPO_NAME}'
+                script {
+                    // load threshold file to be used for unit test and code quality reporting
+                    def THRESHOLD_FILE = "${PROJECT_ROOT}/Jenkins/jenkins_threshold_configs.json"
+                    if (!fileExists("${THRESHOLD_FILE}")) {
+                        error("Error: Threshold file must be specified for project. ${THRESHOLD_FILE} does not exist.")
+                   }
+
+                    echo "Loading Thresholds Config  file"
+                    THRESHOLD_OBJ = readJSON file: "${PROJECT_ROOT}/Jenkins/jenkins_threshold_configs.json";
+                }
+                sh "pwd; hostname; ls -la; ls -la *; echo ${REPO_NAME}"
+                stash name: 'AIMETBuildTree', useDefaultExcludes: false
+            }
+        }
         stage('Pipelines start') {
             parallel {
                 // Start the AIMET pipeline
-                stage("AIMET start") {
+                stage("GPU") {
                     stages {
                         stage('Setup') {
-                            steps {
-                                echo 'moving all files and folders!'
-                                sh 'bash -l -c "rm -rf ./${REPO_NAME} | true"'
-                                sh 'bash -l -c "mkdir ${REPO_NAME}"'
-                                // moving all files and folders except current and parent into ${REPO_NAME} folder
-                                sh 'mv `ls -1a | grep -v "^${REPO_NAME}$" | grep -v "^\\.$" | grep -v "^\\.\\.$" ` ${REPO_NAME}'
+                            steps {   
                                 script{
-                                    // load threshold file to be used for unit test and code quality reporting
-                                    def THRESHOLD_FILE = "${PROJECT_ROOT}/Jenkins/jenkins_threshold_configs.json"
-                                    if (!fileExists("${THRESHOLD_FILE}")) {
-                                        error("Error: Threshold file must be specified for project. ${THRESHOLD_FILE} does not exist.")
-                                    }
-
-                                    echo "Loading Thresholds Config  file"
-                                    THRESHOLD_OBJ = readJSON file: "${PROJECT_ROOT}/Jenkins/jenkins_threshold_configs.json";
+                                    env.AIMET_VARIANT = "default"
                                }
                             }
                         }
-
                         stage('Check commits') {
                             steps {
                                 echo 'Running commit checks...'
@@ -71,14 +80,19 @@ pipeline {
                         stage('Build') {
                             steps {
                                 echo 'Building code (and generating Docs and pip packages)...'
-                                sh 'bash -l -c "cd ${REPO_NAME} && ./buildntest.sh -bp"'
+                                script {
+                                    //TODO Change option back to "-bp" as soon as issue is fixed
+                                    runStage(AIMET_VARIANT, "-b")
+                                }
                             }
                         }
 
                         stage('Code violations') {
                             steps {
                                 echo 'Running code violations...'
-                                sh 'bash -l -c "cd ${REPO_NAME} && ./buildntest.sh -v"'
+                                script {
+                                    runStage(AIMET_VARIANT, "-v")
+                                }
                             }
                             post {
                                 always {
@@ -109,7 +123,141 @@ pipeline {
                                 script {
                                     if ("${env.QCInternalValidation}" == "false") {
                                         echo 'Building code and running tests...'
-                                        sh 'bash -l -c "cd ${REPO_NAME} && ./buildntest.sh -u"'
+                                        runStage(AIMET_VARIANT, "-u")
+                                    }
+                                }
+                            }
+                            post {
+                                always {
+                                    script {
+                                        if ("${env.QCInternalValidation}" == "false") {
+                                            // Parse CTest, Junit, or GoogleTest results
+                                            step([$class: 'XUnitBuilder', testTimeMargin: '3000', thresholdMode: THRESHOLD_OBJ.unittests_thresholds.threshold_mode,
+                                                thresholds: [
+                                                        [$class: 'FailedThreshold',
+                                                            failureNewThreshold: THRESHOLD_OBJ.unittests_thresholds.failed_thresholds.new_tests,
+                                                            failureThreshold: THRESHOLD_OBJ.unittests_thresholds.failed_thresholds.total_tests,
+                                                            unstableNewThreshold: '',
+                                                            unstableThreshold: ''],
+                                                        [$class: 'SkippedThreshold',
+                                                            failureNewThreshold: THRESHOLD_OBJ.unittests_thresholds.skipped_thresholds.new_tests,
+                                                            failureThreshold: THRESHOLD_OBJ.unittests_thresholds.skipped_thresholds.total_tests,
+                                                            unstableNewThreshold: '',
+                                                            unstableThreshold: '']],
+                                                tools: [
+                                                        [$class: 'CustomType',
+                                                            customXSL: "${XUNIT_XSL_FILE}",
+                                                            deleteOutputFiles: false,
+                                                            failIfNotNew: false,
+                                                            pattern: "**/unit_test_results/**/*.xml",
+                                                            skipNoTestFiles: true,
+                                                            stopProcessingIfError: false]
+                                                ]
+                                            ])
+                                            if (currentBuild.currentResult.equals("FAILURE")) {
+                                                // the plugin won't fail the stage.  it only sets
+                                                // the build status, so we have to fail it manually
+                                                sh "exit 1"
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        stage('Static analysis') {
+                            steps {
+                                echo 'Running static analysis...'
+                                script {
+                                    echo 'WARNING: Currently NOT failing on static analysis errors!'
+                                    //TODO Remove the '| true' from the below invocation when errors are fixed
+                                    runStage(AIMET_VARIANT, "-s | true")
+                                }
+                            }
+                        }
+                    }
+                }
+                stage("CPU") {
+                    agent { label "${params.BUILD_LABEL_CPU}" }
+                    stages {
+                        stage('Setup') {
+                            steps {
+                                cleanWs()
+                                unstash 'AIMETBuildTree'
+                                script {
+                                    env.AIMET_VARIANT = "tf-torch-cpu"
+                               }
+                            }
+                        }
+
+                        stage('Check commits') {
+                            steps {
+                                echo 'Running commit checks...'
+                                script{
+                                    env.REPO_OR_FORK_URL = "${REPO_URL}"
+                                    if (env.CHANGE_FORK != null) {
+                                        env.REPO_OR_FORK_URL = "https://github.com/${env.CHANGE_FORK}/aimet"
+                                    }
+                                    sh "bash -l -c \"git clone ${env.REPO_OR_FORK_URL} -b ${env.CHANGE_BRANCH} commit_checks_repo\""
+                                    if ("${env.QCInternalValidation}" == "true") {
+                                        withCredentials([usernameColonPassword(credentialsId: 'neoci-pat', variable: 'USERPASS')]) {
+                                            sh "bash -l -c \"cd ${REPO_NAME} && ${env.DEPENDENCY_DATA_PATH}/commit_check/commit-checks.sh \""
+                                        }
+                                    } else {
+                                        sh "bash -l -c \"cd ${REPO_NAME} && ${env.DEPENDENCY_DATA_PATH}/commit_check/commit-checks.sh \""
+                                    }
+                                }
+                                sh "bash -l -c \"rm -rf commit_checks_repo\""
+                            }
+                        }
+
+                        stage('Build') {
+                            steps {
+                                echo 'Building code (and generating Docs and pip packages)...'
+                                script {
+                                    //TODO Change option back to "-bp" as soon as issue is fixed
+                                    runStage(AIMET_VARIANT, "-b")
+                                }
+                            }
+                        }
+
+                        stage('Code violations') {
+                            steps {
+                                echo 'Running code violations...'
+                                script {
+                                    runStage(AIMET_VARIANT, "-v")
+                                }
+                            }
+                            post {
+                                always {
+                                    step([
+                                            $class                      : 'WarningsPublisher',
+                                            parserConfigurations        : [[
+                                                                            parserName: 'PYLint',
+                                                                            pattern   : "**/**/**/*pylint_results.out"
+                                                                          ]],
+                                            failedTotalHigh             : THRESHOLD_OBJ.pylint_fail_thresholds.high_priority,
+                                            failedTotalNormal           : THRESHOLD_OBJ.pylint_fail_thresholds.normal_priority,
+                                            failedTotalLow              : THRESHOLD_OBJ.pylint_fail_thresholds.low_priority,
+                                            usePreviousBuildAsReference : true
+                                    ])
+                                    script {
+                                        if (currentBuild.currentResult.equals("FAILURE")) {
+                                            // the plugin won't fail the stage.  it only sets the build status, so we have to fail it
+                                            // manually
+                                            sh "exit 1"
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        stage('Unit tests') {
+                            steps {
+                                script {
+                                    if ("${env.QCInternalValidation}" == "false") {
+                                        echo 'Building code and running tests...'
+                                        runStage(AIMET_VARIANT, "-u")
                                     }
                                 }
                             }
@@ -154,15 +302,17 @@ pipeline {
                         stage('Static analysis') {
                             steps {
                                 echo 'Running static analysis...'
-                                echo 'WARNING: Currently NOT failing on static analysis errors!'
-                                //TODO Remove the '| true' from the below invocation when errors are fixed
-                                sh 'bash -l -c "cd ${REPO_NAME} && ./buildntest.sh -s | true"'
+                                script {
+                                    echo 'WARNING: Currently NOT failing on static analysis errors!'
+                                    //TODO Remove the '| true' from the below invocation when errors are fixed
+                                    runStage(AIMET_VARIANT, "-s | true")
+                                }
                             }
                         }
                     }
                 }
                 //Start an optional pipeline to perform additional testing
-                stage("AIMET extra start") {
+                stage("extra") {
                     stages {
                         stage('AIMET extra ALL STAGES') {
                             steps {
@@ -187,5 +337,25 @@ pipeline {
                 }
             }
         }
+    }
+}
+
+def runStage(AIMET_VARIANT, options) {
+
+    if (AIMET_VARIANT == "default") {
+        echo 'Building code (and generating Docs and pip packages)...'
+        echo 'Build default'
+        sh """
+            hostname; pwd
+            bash -l -c "cd ${REPO_NAME} && ./buildntest.sh ${options}"
+        """
+
+    }
+    else {
+        echo "Building ${AIMET_VARIANT} ..."
+        sh """
+            hostname; pwd
+            AIMET_VARIANT=${AIMET_VARIANT} bash -l -c "cd ${REPO_NAME} && ./buildntest.sh -e AIMET_VARIANT ${options}"
+        """
     }
 }
