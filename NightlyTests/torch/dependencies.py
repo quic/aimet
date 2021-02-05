@@ -75,7 +75,6 @@ else:
         model = mnist_torch_model.Net().to("cuda")
     else:
         model = mnist_torch_model.Net().to("cpu")
-
     mnist_torch_model.train(model, epochs=1, use_cuda=use_cuda, batch_size=50, batch_callback=None)
 
     # create directory
@@ -84,8 +83,9 @@ else:
 
     if use_cuda:
         torch.save(model, gpu_output_files)
-    else:
-        torch.save(model, cpu_output_files)
+
+    model = model.to("cpu")
+    torch.save(model, cpu_output_files)
 
 
 # ##############################################################################################
