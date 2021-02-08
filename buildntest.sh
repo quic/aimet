@@ -143,10 +143,7 @@ if [ ${dry_run} -eq 0 ]; then
 	set -x
 fi
 
-
-
 timestamp=$(date +%Y-%m-%d_%H-%M-%S)
-
 
 if [ ! -d "../aimet" ] && [ ! -d "../aimet-main" ]; then
    echo -e "ERROR: Not in the correct directory!"
@@ -163,13 +160,9 @@ else
 	eval ${DOCKER_BUILD_CMD}
 fi
 
-if [[ -z "${BUILD_NUMBER}" ]]; then
-     results_path=${outputRootFolder}/buildntest_results/$timestamp
-     docker_container_name=aimet-dev_${USER}_${timestamp}
-else
-     results_path=${outputRootFolder}/buildntest_results
-     docker_container_name=aimet-dev_${USER}
-fi
+results_path=${outputRootFolder}/buildntest_results/$timestamp
+docker_container_name=aimet-dev_${USER}_${timestamp}
+
 rm -rf {results_path} | true
 mkdir -p ${results_path}
 
@@ -185,7 +178,7 @@ else
    docker_add_vol_mount+=${scriptPath}
 fi
 
-#Check if and which version of nvidia docker is present
+# Check if and which version of nvidia docker is present
 set +e
 DOCKER_RUN_PREFIX="docker run"
 dpkg -s nvidia-container-toolkit > /dev/null 2>&1
@@ -194,14 +187,16 @@ dpkg -s nvidia-docker > /dev/null 2>&1
 NVIDIA_DOCKER_RC=$?
 set -e
 
-if [ $NVIDIA_CONTAINER_TOOKIT_RC -eq 0 ]
+if [ -n "$AIMET_VARIANT" ] && [[ "$AIMET_VARIANT" == *"cpu"* ]]; then
+    DOCKER_RUN_PREFIX="docker run"
+elif [ $NVIDIA_CONTAINER_TOOKIT_RC -eq 0 ]
 then
     DOCKER_RUN_PREFIX="docker run --gpus all"
 elif [ $NVIDIA_DOCKER_RC -eq 0 ]
 then
     DOCKER_RUN_PREFIX="nvidia-docker run"
 else
-    echo "WARNING: No nvidia support detected! Unit tests might fail due to GPU dependencies."
+    echo "WARNING: You requested GPU mode, but no nvidia support was detected! Unit tests might fail due to GPU dependencies."
 fi
 
 echo -e "Starting docker container${loading_symbol} \n"
