@@ -40,23 +40,21 @@
 import abc
 from enum import Enum
 from typing import Union, Dict
-
 import torch
 from torch import nn
+
+import libpymo
 from aimet_common.utils import AimetLogger
 from aimet_common.defs import QuantScheme
+from aimet_torch import utils
 from aimet_torch.tensor_quantizer import PostTrainingTensorQuantizer
 import aimet_torch.quantsim_straight_through_grad as ste
-from aimet_torch.utils import torch_integer_dtypes
-import libpymo
-
 
 MAP_ROUND_MODE_TO_PYMO = {'nearest':     libpymo.RoundingMode.ROUND_NEAREST,
                           'stochastic':  libpymo.RoundingMode.ROUND_STOCHASTIC}
 
 MAP_QUANT_SCHEME_TO_PYMO = {QuantScheme.post_training_tf_enhanced: libpymo.QuantizationMode.QUANTIZATION_TF_ENHANCED,
                             QuantScheme.post_training_tf: libpymo.QuantizationMode.QUANTIZATION_TF}
-
 
 _logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Quant)
 
@@ -399,7 +397,7 @@ class QcPostTrainingWrapper(QcQuantizeWrapper):
             if not isinstance(input_tensor, torch.Tensor):
                 _logger.error('Expecting quantize activation input of type torch.Tensor but got %s', type(input_tensor))
                 raise AssertionError
-            if input_tensor.dtype in torch_integer_dtypes:
+            if input_tensor.dtype in utils.torch_integer_dtypes:
                 # Do not quantize integer tensors
                 outputs.append(input_tensor)
                 continue
@@ -438,27 +436,11 @@ class QcPostTrainingWrapper(QcQuantizeWrapper):
             param_name = module_name + '.' + orig_param_name
             if param_name in param_encodings:
                 encoding_dict = param_encodings[param_name][0]
-                encoding, is_symmetric = self._create_encoding_from_dict(encoding_dict)
+                encoding, is_symmetric = utils.create_encoding_from_dict(encoding_dict)
                 param_quantizer.set_encoding(encoding)
                 param_quantizer.use_symmetric_encodings = is_symmetric
                 param_quantizer.freeze_encoding()
                 _logger.info("Setting and freezing quantization encodings for parameter: %s", param_name)
-
-    @staticmethod
-    def _create_encoding_from_dict(encoding_dict: dict) -> (libpymo.TfEncoding, bool):
-        """
-        Create encoding object from encoding dictionary
-        :param encoding_dict: Dictionary containing encodings
-        :return: Encoding object, is_symmetric
-        """
-        encoding = libpymo.TfEncoding()
-        encoding.bw = encoding_dict.get('bitwidth')
-        encoding.max = encoding_dict.get('max')
-        encoding.min = encoding_dict.get('min')
-        encoding.delta = encoding_dict.get('scale')
-        encoding.offset = encoding_dict.get('offset')
-        is_symmetric = eval(encoding_dict.get('is_symmetric'))  # pylint: disable=eval-used
-        return encoding, is_symmetric
 
 
 class QcQuantizeStandalone(QcQuantizeStandAloneBase):
