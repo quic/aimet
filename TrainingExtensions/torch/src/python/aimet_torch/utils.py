@@ -535,11 +535,12 @@ def get_ordered_lists_of_conv_fc(model: torch.nn.Module, input_shapes: Tuple) ->
     return module_list
 
 
-def get_reused_modules(model: torch.nn.Module, input_shapes: Tuple) -> List[Tuple[str, torch.nn.Module]]:
+def get_reused_modules(model: torch.nn.Module, model_input: Union[torch.Tensor, Tuple]) -> \
+        List[Tuple[str, torch.nn.Module]]:
     """
     Identify modules which are used more than once in the model
     :param model: Model to check for modules used more than once
-    :param input_shapes: Input shapes of the model
+    :param model_input: Input to the model
     :return: List of tuples of name and module for modules in the model which are used more than once
     """
     module_set = set()
@@ -556,7 +557,7 @@ def get_reused_modules(model: torch.nn.Module, input_shapes: Tuple) -> List[Tupl
         else:
             module_set.add(curr_module)
 
-    run_hook_for_layers(model, input_shapes, forward_hook)
+    run_hook_for_layers_with_given_input(model, model_input, forward_hook)
 
     reused_modules_list = []
     for name, module in model.named_modules():
