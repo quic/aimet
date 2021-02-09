@@ -45,10 +45,13 @@ import torch.nn
 import torch
 from torch.utils.data import DataLoader, Dataset
 from torchvision import datasets, transforms
+
+import libpymo
 from aimet_common.utils import AimetLogger
+from aimet_common.quantsim import calculate_delta_offset
+from aimet_common.defs import QuantScheme
 
 logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Utils)
-
 
 torch_integer_dtypes = [torch.int, torch.int8, torch.int16, torch.int32, torch.int64]
 
@@ -609,3 +612,66 @@ def find_num_output_tensors_per_module(model: torch.nn.Module, input_tensor) -> 
 
     run_hook_for_layers_with_given_input(model, input_tensor, record_num_outputs)
     return num_outputs_map
+
+
+def create_encoding_from_dict(encoding_dict: dict) -> (libpymo.TfEncoding, bool):
+    """
+    Create encoding object from encoding dictionary
+    :param encoding_dict: Dictionary containing encodings
+    :return: Encoding object, is_symmetric
+    """
+    encoding = libpymo.TfEncoding()
+    encoding.bw = encoding_dict.get('bitwidth')
+    encoding.max = encoding_dict.get('max')
+    encoding.min = encoding_dict.get('min')
+    encoding.delta = encoding_dict.get('scale')
+    encoding.offset = encoding_dict.get('offset')
+    is_symmetric = eval(encoding_dict.get('is_symmetric'))  # pylint: disable=eval-used
+    return encoding, is_symmetric
+
+
+def create_encoding_dict(encoding: libpymo.TfEncoding, is_symmetric: bool) -> Union[Dict, None]:
+    """
+    Create encoding dictionary from encoding object
+    :param encoding: Encoding object
+    :param is_symmetric: Symmetric vs asymmetric boolean
+    :return: Encoding Dictionary
+    """
+    if encoding:
+        encoding_min, encoding_max, bw = encoding.min, encoding.max, encoding.bw
+        scale, offset = calculate_delta_offset(encoding_min, encoding_max, bw)
+        return {'min': encoding_min,
+                'max': encoding_max,
+                'scale': scale,
+                'offset': offset,
+                'bitwidth': bw,
+                'is_symmetric': str(is_symmetric)}
+    return None
+
+
+def compute_encoding_for_given_bitwidth(data: np.ndarray, bitwidth: int, quant_scheme: QuantScheme,
+                                        is_symmetric: bool) -> Dict:
+    """
+    Return encoding dictionary for given bitwidth
+    :param data: Numpy data
+    :param bitwidth: bitwidth (4-31) to use for quantizing data
+    :param quant_scheme: Quantization scheme
+    :param is_symmetric: True if symmetric encodings is used, False otherwise
+    :return: Encoding Dictionary
+    """
+    # Create Encodings Analyzer and collect statistical data to compute encodings
+    # Since the data is numpy array and on CPU memory, useCuda is False
+    encoding_analyzer = libpymo.EncodingAnalyzerForPython(quant_scheme)
+    encoding_analyzer.updateStats(data, False)
+
+    encoding, is_encoding_valid = encoding_analyzer.computeEncoding(bitwidth, is_symmetric)
+
+    if is_encoding_valid:
+        return {'min': encoding.min,
+                'max': encoding.max,
+                'scale': encoding.delta,
+                'offset': encoding.offset,
+                'bitwidth': encoding.bw,
+                'is_symmetric': str(is_symmetric)}
+
+    return {}
