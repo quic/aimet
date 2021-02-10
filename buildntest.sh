@@ -160,8 +160,17 @@ else
 	eval ${DOCKER_BUILD_CMD}
 fi
 
-results_path=${outputRootFolder}/buildntest_results/$timestamp
-docker_container_name=aimet-dev_${USER}_${timestamp}
+if [[ -z "${BUILD_NUMBER}" ]]; then
+     results_path=${outputRootFolder}/buildntest_results/$timestamp
+     docker_container_name=aimet-dev_${USER}_${timestamp}
+else
+     results_path=${outputRootFolder}/buildntest_results
+     docker_container_name=aimet-dev_${USER}
+fi
+
+if [ -n "$AIMET_VARIANT" ]; then
+    docker_container_name="${docker_container_name}_${AIMET_VARIANT}"
+fi
 
 rm -rf {results_path} | true
 mkdir -p ${results_path}
@@ -188,15 +197,17 @@ NVIDIA_DOCKER_RC=$?
 set -e
 
 if [ -n "$AIMET_VARIANT" ] && [[ "$AIMET_VARIANT" == *"cpu"* ]]; then
+    echo "Running docker in CPU mode..."
     DOCKER_RUN_PREFIX="docker run"
-elif [ $NVIDIA_CONTAINER_TOOKIT_RC -eq 0 ]
-then
+elif [ $NVIDIA_CONTAINER_TOOKIT_RC -eq 0 ]; then
+    echo "Running docker in GPU mode using nvidia-container-toolkit..."
     DOCKER_RUN_PREFIX="docker run --gpus all"
-elif [ $NVIDIA_DOCKER_RC -eq 0 ]
-then
+elif [ $NVIDIA_DOCKER_RC -eq 0 ]; then
+    echo "Running docker in GPU mode using nvidia-docker..."
     DOCKER_RUN_PREFIX="nvidia-docker run"
 else
-    echo "WARNING: You requested GPU mode, but no nvidia support was detected! Unit tests might fail due to GPU dependencies."
+    echo "ERROR: You requested GPU mode, but no nvidia support was detected!"
+    exit 3
 fi
 
 echo -e "Starting docker container${loading_symbol} \n"
