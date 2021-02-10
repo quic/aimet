@@ -1288,6 +1288,7 @@ class TestQuantSim(unittest.TestCase):
         sess.close()
         sim.session.close()
 
+    @unittest.skip
     def test_quantize_simple_rnn_export(self):
         """ Test model export for recurrent models """
         tf.reset_default_graph()
