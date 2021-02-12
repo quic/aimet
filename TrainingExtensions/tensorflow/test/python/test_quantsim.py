@@ -97,6 +97,8 @@ class TestQuantSim(unittest.TestCase):
                          sess.run(quant_ops[0].inputs[1]))
 
         sess.close()
+        sim.session.close()
+        del sim
 
     @pytest.mark.cuda
     def test_construction_gpu_model(self):
@@ -136,6 +138,8 @@ class TestQuantSim(unittest.TestCase):
                          sess.run(quant_ops[0].inputs[1]))
 
         sess.close()
+        sim.session.close()
+        del sim
 
     def test_compute_encodings_cpu_model(self):
 
@@ -263,6 +267,10 @@ class TestQuantSim(unittest.TestCase):
         self.assertEqual(1, op.get_attr("quant_scheme"))  # TF-Enhanced
         self.assertEqual(2, op.get_attr("op_mode"))  # quantizeDequantize
 
+        sess.close()
+        sim.session.close()
+        del sim
+
     def test_save_to_keras_cpu_model(self):
         """
         Create sim model for a keras pipeline
@@ -333,12 +341,15 @@ class TestQuantSim(unittest.TestCase):
         self.assertEqual(int(libpymo.TensorQuantizerOpMode.quantizeDequantize),
                          sim.session.run(conv2d_output_quant_op.inputs[1]))
 
+        sess.close()
+        sim.session.close()
+        del sim
+
     @pytest.mark.cuda
     def test_compute_encodings_quant_scheme_update(self):
         """
         Create QuantSim model and update quantScheme using property interface
         """
-
 
         tf.compat.v1.reset_default_graph()
         np.random.seed(0)
@@ -387,6 +398,10 @@ class TestQuantSim(unittest.TestCase):
         # validate
         self.assertNotEqual(old_p_encoding_min, new_p_encoding_min)
         self.assertNotEqual(old_p_encoding_max, new_p_encoding_max)
+
+        sess.close()
+        sim.session.close()
+        del sim
 
     def test_export_cpu_model(self):
 
@@ -459,6 +474,8 @@ class TestQuantSim(unittest.TestCase):
         all_op_types = [op.type for op in new_sess.graph.get_operations()]
         self.assertNotIn('QcQuantize', all_op_types)
         sess.close()
+        sim.session.close()
+        del sim
 
     def test_save_load_ckpt_cpu_model(self):
 
@@ -521,6 +538,7 @@ class TestQuantSim(unittest.TestCase):
         sess.close()
         new_quantsim.session.close()
         del new_quantsim
+
 
     def test_save_load_ckpt_after_compute_encoding_on_orig_object(self):
         """
@@ -590,6 +608,7 @@ class TestQuantSim(unittest.TestCase):
         del sim
         del new_quantsim
 
+
     def test_set_get_quantizer_params_using_properties(self):
 
         """
@@ -650,6 +669,9 @@ class TestQuantSim(unittest.TestCase):
         p_quantizer.enabled = False
         is_enabled = p_quantizer.enabled
         self.assertFalse(is_enabled)
+
+        sim.session.close()
+        del sim
 
     def test_manual_quantize(self):
         """ Test quantizing a model by manually specifying ops to quantize """
@@ -717,6 +739,9 @@ class TestQuantSim(unittest.TestCase):
         QuantizationSimModel._get_ops_to_quantize_params_for = orig_get_ops_to_quantize_weights_for
         QuantizationSimModel.configure_quantization_ops = orig_configure_quantization_ops
 
+        sim.session.close()
+        del sim
+
     def test_skip_quantizing_dtype_int(self):
         """ Test that op with dtype int32 is skipped during quantization """
         tf.compat.v1.reset_default_graph()
@@ -727,6 +752,8 @@ class TestQuantSim(unittest.TestCase):
             self.assertEqual(6, len(sim._activation_quantizers))
             self.assertTrue('input_1_quantized' not in sim._activation_quantizers)
             self.assertTrue('input_2_quantized' in sim._activation_quantizers)
+            sim.session.close()
+            del sim
 
     def test_insert_quant_op_recurrent(self):
 
@@ -756,6 +783,8 @@ class TestQuantSim(unittest.TestCase):
         # get ops and make sure we have a quantized op added to the conditional block
         ops = sim.session.graph.get_operations()
         self.assertTrue(quant_op_inside_while_block_name in [op.name for op in ops])
+        sim.session.close()
+        del sim
 
     def test_compute_encodings(self):
         """ Test that ops not evaluated during compute encodings are set to passThrough mode. """
@@ -792,6 +821,8 @@ class TestQuantSim(unittest.TestCase):
             input_tensor = sim.session.graph.get_tensor_by_name('input_1:0')
             output_tensor = sim.session.graph.get_tensor_by_name('keras_model_functional/Softmax:0')
             sim.session.run(output_tensor, feed_dict={input_tensor: test_inp})
+            sim.session.close()
+            del sim
 
     def test_matmul_param_selection_lstm(self):
         """ Test apis to select input params to MatMuls within LSTM for quantization """
@@ -830,6 +861,8 @@ class TestQuantSim(unittest.TestCase):
 
             self.assertEqual(can_modify_op, tf_strided_slice_op_in)
             self.assertEqual(param_in, param_in_through_strided_slice)
+
+            sess.close()
 
     def validate_simple_rnn_auto_insertion_and_forward_pass(self, sess):
         """
@@ -916,7 +949,7 @@ class TestQuantSim(unittest.TestCase):
         # close tf sessions
         sess.close()
         sim.session.close()
-        sim.session.close()
+        del sim
 
     def test_insert_quant_op_forward_pass_simple_rnn(self):
 
@@ -1082,6 +1115,7 @@ class TestQuantSim(unittest.TestCase):
         sess.close()
         if is_quantized:
             sim.session.close()
+            del sim
 
         return default_grad_avg_time
 
@@ -1287,8 +1321,9 @@ class TestQuantSim(unittest.TestCase):
         # close tf sessions
         sess.close()
         sim.session.close()
+        del sim
 
-    @unittest.skip
+    #
     def test_quantize_simple_rnn_export(self):
         """ Test model export for recurrent models """
         tf.reset_default_graph()
@@ -1339,6 +1374,7 @@ class TestQuantSim(unittest.TestCase):
         # close tf sessions
         sess.close()
         sim.session.close()
+        del sim
 
     def _get_quant_ops_from_tf_graph(self, gr: tf.Graph):
         """
@@ -1398,7 +1434,8 @@ class TestQuantSim(unittest.TestCase):
         # restored correctly etc.)
         new_out = eval(new_sim.session, random_tensor)
         self.assertTrue(np.allclose(old_out, new_out))
-        print(new_sim)
+        sim.session.close()
+        del sim
 
     def test_quantize_lstm_sigmoid_quantsim_and_forward_pass(self):
         """ Test connected graph construction on a model with lstm op """
@@ -1435,6 +1472,7 @@ class TestQuantSim(unittest.TestCase):
         # close tf sessions
         sess.close()
         sim.session.close()
+        del sim
 
     def test_quantize_lstm_time_major_true_quantsim_and_forward_pass(self):
         """ Test connected graph construction on a model with lstm op """
@@ -1478,6 +1516,7 @@ class TestQuantSim(unittest.TestCase):
         # close tf sessions
         sess.close()
         sim.session.close()
+        del sim
 
     def test_quantize_lstm_deepspeech_time_major_true_quantsim_and_forward_pass(self):
         """ Test connected graph construction on a model with lstm op """
@@ -1522,6 +1561,7 @@ class TestQuantSim(unittest.TestCase):
         # close tf sessions
         sess.close()
         sim.session.close()
+        del sim
 
     def test_quantize_lstm_deepspeech_time_major_false_quantsim_and_forward_pass(self):
         """ Test connected graph construction on a model with lstm op """
@@ -1563,6 +1603,7 @@ class TestQuantSim(unittest.TestCase):
         # close tf sessions
         sess.close()
         sim.session.close()
+        del sim
 
     def test_backward_pass_time_taken_lstm(self, is_quantized=True, iterations=1):
         """ perform backward pass with quantized lstm block"""
@@ -1644,6 +1685,7 @@ class TestQuantSim(unittest.TestCase):
         sess.close()
         if is_quantized:
             sim.session.close()
+            del sim
 
         return default_grad_avg_time
 
