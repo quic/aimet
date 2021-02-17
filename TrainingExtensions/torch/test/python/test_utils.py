@@ -118,8 +118,8 @@ class TestTrainingExtensionsUtils(unittest.TestCase):
     def test_get_reused_modules(self):
         """ Test get_reused_modules utility """
         model = ModelWithReusedNodes()
-        inp_shape = (1, 3, 32, 32)
-        reused_modules = utils.get_reused_modules(model, inp_shape)
+        model_input = torch.randn((1, 3, 32, 32))
+        reused_modules = utils.get_reused_modules(model, model_input)
         self.assertEqual(1, len(reused_modules))
         self.assertEqual(reused_modules[0][1], model.relu1)
 
