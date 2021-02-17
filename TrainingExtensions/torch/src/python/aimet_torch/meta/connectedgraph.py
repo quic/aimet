@@ -53,7 +53,7 @@ from aimet_common.connected_graph.product import Product
 from aimet_common.connected_graph.operation import Op, determine_preceding_op_input_product_index_in_multi_input_op
 from aimet_common.model_module import PytorchModelModule
 from aimet_common.utils import AimetLogger
-from aimet_torch.utils import is_leaf_module, run_hook_for_layers_with_given_input
+from aimet_torch.utils import is_leaf_module, run_hook_for_layers_with_given_input, get_reused_modules
 from aimet_torch.defs import PassThroughOp
 
 logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.ConnectedGraph)
@@ -126,6 +126,12 @@ class ConnectedGraph(AimetCommonConnectedGraph):
 
         # List of ops in the order they are traversed using the forward function
         self.ordered_ops = []
+
+        reused_modules = get_reused_modules(model, model_input)
+        if reused_modules:
+            logger.warning('The following modules are used more than once in the model: %s\n'
+                           'AIMET features are not designed to work with reused modules. Please redefine your model '
+                           'to use distinct modules for each instance.', [name for (name, _) in reused_modules])
 
         self._generate_module_lookup_table(model)
         with torch.no_grad():
