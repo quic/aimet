@@ -153,7 +153,7 @@ RUN pip3 --no-cache-dir install \
         ptflops==0.6.4 \
         pybind11==2.2.3 \
         pyDOE2==1.3.0 \
-        pylint==2.3.1 \
+        pylint==2.6.2 \
         pymoo==0.4.1 \
         pytest==4.6.5 \
         pytest-cov==2.6.1 \
