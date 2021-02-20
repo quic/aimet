@@ -124,7 +124,9 @@ class AimetLogger(metaclass=SingletonType):
         logging.config.dictConfig(config_dict)
 
         # Validate JSON  file default_logging_config.json for correct Logging Areas
-        configured_items = list(logging.root.manager.loggerDict.items())
+        #TODO This results in a pylint error: Instance of 'RootLogger' has no 'loggerDict' member.
+        # Need to fix this issue and then remove the pylint disablement.
+        configured_items = list(logging.root.manager.loggerDict.items()) # pylint: disable=no-member
 
         log_areas_list = list()
         for x in AimetLogger.LogAreas:
