@@ -70,7 +70,8 @@ public:
      * @param useSymmetricEncodings If true, compute symmetric encodings
      * @return Computed encoding
      */
-    TfEncoding computeEncoding(uint8_t bw, bool useSymmetricEncodings) const override;
+    TfEncoding computeEncoding(uint8_t bw, bool useSymmetricEncodings, bool useStrictSymmetric,
+                               bool useUnsignedSymmetric) const override;
 
 
 private:

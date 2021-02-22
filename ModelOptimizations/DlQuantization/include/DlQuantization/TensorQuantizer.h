@@ -93,7 +93,8 @@ public:
      * @param bitwidth to be used
      * @param flag to indicate symmetric/asymmetric encoding is to be used
      */
-    TfEncoding computeEncoding(unsigned int bitwidth, bool useSymmetricEncoding) override;
+    TfEncoding computeEncoding(unsigned int bitwidth, bool useSymmetricEncoding,
+                               bool useStrictSymmetric, bool useUnsignedSymmetric) override;
 
     /**
      * Convert a tensor from float to quantized int and back to float

@@ -109,7 +109,7 @@ public:
 
         if (_isEncodingValid)
         {
-            out_encoding = _encodingAnalyzer->computeEncoding(bitwidth, useSymmetricEncodings);
+            out_encoding = _encodingAnalyzer->computeEncoding(bitwidth, useSymmetricEncodings, false, false);
         }
 
         return std::make_tuple(out_encoding, _isEncodingValid);

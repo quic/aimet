@@ -96,7 +96,7 @@ void modeSpecificAction(const D& d, const T* inTensor, size_t count, T* outTenso
             // updateStats and encoding computations performed.
             // Instead of every time step we compute encoidngs only at h0.
             tensorQuantizer->updateStats(inTensor, count, useCuda);
-            cachedEncoding = tensorQuantizer->computeEncoding(bitwidth, useSymmetricEncoding);
+            cachedEncoding = tensorQuantizer->computeEncoding(bitwidth, useSymmetricEncoding, false, false);
             tensorQuantizer->quantizeDequantize(inTensor, count, outTensor, cachedEncoding.min, cachedEncoding.max,
                                                 bitwidth, useCuda);
             isEncodingValid = true;

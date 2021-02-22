@@ -317,7 +317,7 @@ class BiasCorrection:
         # use tensorQuantizerForPython to get quantizeDequantize weights
         encoding_analyzer = libpymo.EncodingAnalyzerForPython(quant_mode)
         encoding_analyzer.updateStats(weight_tensor, quant_params.use_cuda)
-        encoding, is_encoding_valid = encoding_analyzer.computeEncoding(bitwidth, False)
+        encoding, is_encoding_valid = encoding_analyzer.computeEncoding(bitwidth, False, False, False)
 
         if is_encoding_valid:
             tensor_quantizer = libpymo.TensorQuantizationSimForPython()

@@ -76,13 +76,16 @@ void EncodingAnalyzerForPython::updateStats(py::array_t<float> input, bool use_c
 
 
 std::tuple<DlQuantization::TfEncoding, bool> EncodingAnalyzerForPython::computeEncoding(unsigned int bitwidth,
-                                                                                        bool isSymmetric)
+                                                                                        bool isSymmetric,
+                                                                                        bool useStrictSymmetric,
+                                                                                        bool useUnsignedSymmetric)
 {
     DlQuantization::TfEncoding out_encoding;
 
     if (_isEncodingValid)
     {
-        out_encoding = _encodingAnalyzer->computeEncoding(bitwidth, isSymmetric);
+        out_encoding = _encodingAnalyzer->computeEncoding(bitwidth, isSymmetric, useStrictSymmetric,
+                                                          useUnsignedSymmetric);
     }
 
     return std::make_tuple(out_encoding, _isEncodingValid);

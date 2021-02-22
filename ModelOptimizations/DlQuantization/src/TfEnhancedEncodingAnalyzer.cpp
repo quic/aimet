@@ -57,7 +57,8 @@ void TfEnhancedEncodingAnalyzer<DTYPE>::updateStats(const DTYPE* tensor, const s
 
 
 template <typename DTYPE>
-TfEncoding TfEnhancedEncodingAnalyzer<DTYPE>::computeEncoding(uint8_t bw, bool useSymmetricEncodings) const
+TfEncoding TfEnhancedEncodingAnalyzer<DTYPE>::computeEncoding(uint8_t bw, bool useSymmetricEncodings,
+                                                              bool useStrictSymmetric, bool useUnsignedSymmetric) const
 {
     TfEncoding encoding = {0, 0, 0, 0, 0};
 

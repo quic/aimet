@@ -77,7 +77,7 @@ TYPED_TEST(TestTfEncodingAnalyzer, SanityTestAsymmetric)
     analyzer.updateStats(tensorBlob.getDataPtrOnDevice(), tensorCount, TypeParam::modeCpuGpu);
 
     // Get the encodings
-    DlQuantization::TfEncoding encoding = analyzer.computeEncoding(8, false);
+    DlQuantization::TfEncoding encoding = analyzer.computeEncoding(8, false, false, false);
 
     std::cout << "Encoding Min: " << encoding.min << std::endl;
     std::cout << "Encoding Max: " << encoding.max << std::endl;
@@ -116,7 +116,7 @@ TYPED_TEST(TestTfEncodingAnalyzer, SanityTestSymmetric)
     analyzer.updateStats(tensorBlob.getDataPtrOnDevice(), tensorCount, TypeParam::modeCpuGpu);
 
     // Get the encodings
-    DlQuantization::TfEncoding encoding = analyzer.computeEncoding(8, true);
+    DlQuantization::TfEncoding encoding = analyzer.computeEncoding(8, true, false, false);
 
     std::cout << "Encoding Min: " << encoding.min << std::endl;
     std::cout << "Encoding Max: " << encoding.max << std::endl;
@@ -168,7 +168,7 @@ TYPED_TEST(TestTfEncodingAnalyzer, SanityTestSymmetricUnsigned)
     analyzer.updateStats(tensorBlob.getDataPtrOnDevice(), tensorCount, TypeParam::modeCpuGpu);
 
     // Get the encodings
-    DlQuantization::TfEncoding encoding = analyzer.computeEncoding(8, true);
+    DlQuantization::TfEncoding encoding = analyzer.computeEncoding(8, true, false, false);
 
     std::cout << "Encoding Min: " << encoding.min << std::endl;
     std::cout << "Encoding Max: " << encoding.max << std::endl;

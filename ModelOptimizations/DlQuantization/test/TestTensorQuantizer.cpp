@@ -67,7 +67,7 @@ TEST(TestTensorQuantizer, SanityTestCpu)
 
     tensorQuantizer.updateStats(statsTensor.data(), statsTensor.size(), false);
     EXPECT_FALSE(tensorQuantizer.isEncodingValid);
-    TfEncoding encoding = tensorQuantizer.computeEncoding(8, false);
+    TfEncoding encoding = tensorQuantizer.computeEncoding(8, false, false, false);
     EXPECT_TRUE(tensorQuantizer.isEncodingValid);
 
     std::vector<float> inputTensor(tensorCount, 5);
@@ -110,7 +110,7 @@ TEST(TestTensorQuantizer, SanityTestGpu)
 
     tensorQuantizer.updateStats(statsTensorBlob.getDataPtrOnDevice(), statsTensor.size(), true);
     EXPECT_FALSE(tensorQuantizer.isEncodingValid);
-    TfEncoding encoding = tensorQuantizer.computeEncoding(8, false);
+    TfEncoding encoding = tensorQuantizer.computeEncoding(8, false, false, false);
     EXPECT_TRUE(tensorQuantizer.isEncodingValid);
 
     std::vector<float> inputTensor(tensorCount, 5);
