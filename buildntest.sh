@@ -41,6 +41,8 @@
 ## For help and usage information: buildntest.sh -h
 ###############################################################################
 
+# test edit no merge
+
 # enable exit on error.
 set -e
 
