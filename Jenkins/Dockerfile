@@ -157,7 +157,7 @@ RUN pip3 --no-cache-dir install \
         pymoo==0.4.1 \
         pytest==4.6.5 \
         pytest-cov==2.6.1 \
-        pytorch-ignite==0.1.0 \
+        pytorch-ignite==0.4.3 \
         https://download.pytorch.org/whl/cu100/torchvision-0.5.0%2Bcu100-cp36-cp36m-linux_x86_64.whl \
         https://download.pytorch.org/whl/cu100/torch-1.4.0%2Bcu100-cp36-cp36m-linux_x86_64.whl \
         scikit-image==0.15.0 \
@@ -230,7 +230,7 @@ RUN pip download bokeh==1.2.0 hvplot==0.4.0 -d /var/tmp/bokeh_hvplot_download | 
 RUN pip install --no-deps -r /var/tmp/bokeh_hvplot_requirements.txt
 # NOTE: We need to pin the holoviews version to this since the latest version has a circular dependency on bokeh 2.0.0 through the panel package
 RUN pip install holoviews==1.12.7 \
-                netron==4.7.0
+                netron==4.7.8
 
 RUN pip install --no-deps bokeh==1.2.0 hvplot==0.4.0
 RUN rm -rf /var/tmp/bokeh_hvplot_download /var/tmp/bokeh_hvplot_requirements.txt
