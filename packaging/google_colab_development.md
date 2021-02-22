@@ -65,7 +65,7 @@ Please run below commands to install dependencies to build AIMET:
 
 !pip3 --no-cache-dir install pillow==6.2.1
 
-!pip3 install pytorch-ignite==0.1.0
+!pip3 install pytorch-ignite==0.4.3
 
 !wget -q https://github.com/Itseez/opencv/archive/3.1.0.tar.gz -O /tmp/3.1.0.tar.gz > /dev/null
 
