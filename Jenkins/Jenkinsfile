@@ -52,7 +52,7 @@ pipeline {
                         stage('Setup') {
                             steps {   
                                 script{
-                                    env.AIMET_VARIANT = "default"
+                                    env.AIMET_VARIANT = "tf-torch-gpu"
                                }
                             }
                         }
