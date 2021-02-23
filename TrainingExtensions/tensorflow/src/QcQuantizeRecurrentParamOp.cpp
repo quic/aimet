@@ -64,7 +64,7 @@ template <typename D, typename T>
 void modeSpecificAction(const D& d, const T* inTensor, size_t count, T* outTensor,
                         const uint64* tensorQuantizerRef, const int32* opMode, const double* min, const double* max,
                         const int8* bw, const bool* useSymEncoding, const int32* timeStepInOp,
-                        int &computeEncodingCounter)
+                       int &computeEncodingCounter, DlQuantization::TfEncoding &cachedEncoding, bool &isEncodingValid)
 {
     bool useCuda = false;
     if (std::is_same<D, GPUDevice>::value)
@@ -77,6 +77,7 @@ void modeSpecificAction(const D& d, const T* inTensor, size_t count, T* outTenso
     auto tensorQuantizerRefHost = copyLiteralToHost<uint64>(d, tensorQuantizerRef);
     auto opModeHost = copyLiteralToHost<int32>(d, opMode);
     auto tensorQuantizer = reinterpret_cast<DlQuantization::TensorQuantizerOpFacade*>(tensorQuantizerRefHost);
+    // these are needed by QAT 2.0
     auto encodingMin = copyLiteralToHost<double>(d, min);
     auto encodingMax = copyLiteralToHost<double>(d, max);
     auto opModeEnum = static_cast<const DlQuantization::TensorQuantizerOpMode>(opModeHost);
@@ -91,14 +92,23 @@ void modeSpecificAction(const D& d, const T* inTensor, size_t count, T* outTenso
 
         if(computeEncodingCounter % (int32)timesteps == 0)
         {
+            // a recurrent param quantizer has special handling below to reduce the number of
+            // updateStats and encoding computations performed.
+            // Instead of every time step we compute encoidngs only at h0.
             tensorQuantizer->updateStats(inTensor, count, useCuda);
-            DlQuantization::TfEncoding initial_encoding = tensorQuantizer->computeEncoding(bitwidth, useSymmetricEncoding);
-            tensorQuantizer->quantizeDequantize(inTensor, count, outTensor, initial_encoding.min, initial_encoding.max,
+            cachedEncoding = tensorQuantizer->computeEncoding(bitwidth, useSymmetricEncoding);
+            tensorQuantizer->quantizeDequantize(inTensor, count, outTensor, cachedEncoding.min, cachedEncoding.max,
                                                 bitwidth, useCuda);
+            isEncodingValid = true;
+            // finished one set of time_steps reset the counter to zero
+            computeEncodingCounter = 0;
         }
         else
         {
-            tensorQuantizer->quantizeDequantize(inTensor, count, outTensor, encodingMin, encodingMax,
+            // check if the encodings have been cached before usage
+            assert(isEncodingValid);
+            // use cached encoding for param quantizer in decimated oneShot mode
+            tensorQuantizer->quantizeDequantize(inTensor, count, outTensor, cachedEncoding.min, cachedEncoding.max,
                                                 bitwidth, useCuda);
         }
 
@@ -127,10 +137,18 @@ class QcQuantizeRecurrentParamOp : public OpKernel
 {
 private:
     int _computeEncodingCounter;
+    DlQuantization::TfEncoding _cachedEncoding;
+    bool _isEncodingValid;
 public:
     explicit QcQuantizeRecurrentParamOp(OpKernelConstruction* context) : OpKernel(context)
     {
         _computeEncodingCounter = 0;
+        _cachedEncoding.min = 0.0;
+        _cachedEncoding.max = 0.0;
+        _cachedEncoding.offset = 0.0;
+        _cachedEncoding.delta = 0.0;
+        _cachedEncoding.bw = 0.0;
+        _isEncodingValid = false;
     }
 
     void Compute(OpKernelContext* context) override
@@ -181,7 +199,7 @@ public:
 
         modeSpecificAction(context->eigen_device<Device>(), inTensorFlat, inTensor.NumElements(), outTensorFlat,
                            quantizerAddr, opMode,  encodingMin, encodingMax, bitwidth, useSymmetricEncoding,
-                           time_steps, _computeEncodingCounter);
+                           time_steps, _computeEncodingCounter, _cachedEncoding, _isEncodingValid);
     }
 };
 
