@@ -518,3 +518,61 @@ class TestTrainingExtensionsQcQuantizeOp(unittest.TestCase):
         self.assertTrue(input_gradient[0][0][1] == 1.0)
         self.assertTrue(input_gradient[0][1][0] == 1.0)
         self.assertTrue(input_gradient[0][1][1] == 1.0)
+
+    def test_qc_quantize_recurrent_param_op(self):
+        """
+        test custom recurrent param quantize op with CPU
+        """
+        zero_out_module = tf.load_op_library('libaimet_tf_ops.so')
+        graph = tf.Graph()
+        config = tf.compat.v1.ConfigProto(log_device_placement=False)
+        sess = tf.compat.v1.Session(graph=graph, config=config)
+        bitwidth = 8
+        use_symm_encoding = True
+
+        with graph.as_default():
+            # place holder for the input
+            with tf.device("/device:CPU:0"):
+                inp = tf.compat.v1.placeholder(tf.float32, shape=[10], name='input')
+                tensor_quantizer = libpymo.TensorQuantizer(libpymo.QuantizationMode.QUANTIZATION_TF,
+                                                           libpymo.RoundingMode.ROUND_NEAREST)
+                tensor_quantizer_val = libpymo.PtrToInt64(tensor_quantizer)
+                tensor_quant_ref = tf.Variable(initial_value=tensor_quantizer_val, trainable=False, dtype=tf.int64)
+
+                time_step_tensor = tf.constant(1, dtype=tf.int32)
+
+                encoding_min = tf.Variable(initial_value=-0.5, trainable=True, dtype=tf.double)
+                encoding_max = tf.Variable(initial_value=0.5, trainable=True, dtype=tf.double)
+                bit_width = tf.Variable(initial_value=bitwidth, trainable=False, dtype=tf.int8)
+                use_symmetric_encoding = tf.Variable(initial_value=use_symm_encoding, trainable=False, dtype=tf.bool)
+
+                mode_var = tf.Variable(initial_value=int(libpymo.TensorQuantizerOpMode.oneShotQuantizeDequantize),
+                                       trainable=False, dtype=tf.int32)
+
+                sess.run([mode_var.initializer, tensor_quant_ref.initializer, encoding_min.initializer,
+                          encoding_max.initializer, bit_width.initializer, use_symmetric_encoding.initializer])
+
+                pass_through_op_output = zero_out_module.qc_quantize_recurrent_param(name='quant_op', in_tensor=inp,
+                                                                                     op_mode=mode_var,
+                                                                                     tensor_quantizer_reference=tensor_quant_ref,
+                                                                                     encoding_min=encoding_min,
+                                                                                     encoding_max=encoding_max,
+                                                                                     bit_width=bit_width,
+                                                                                     use_symmetric_encoding=use_symmetric_encoding,
+                                                                                     time_steps=time_step_tensor)
+
+        inp_tensor = sess.graph.get_tensor_by_name('input:0')
+        # inp_data = np.random.rand(10).astype(np.float32)
+        np.random.seed(18)
+        inp_data = np.random.randint(low=-1, high=2, size=10).astype(np.float32)
+
+        # get the output
+        print(inp_data)
+        out_data = sess.run(pass_through_op_output, feed_dict={inp_tensor: inp_data})
+        print(out_data)
+
+        # compare qc_quantize op's output with input
+        # encodings being set to -0.5 and 0.5 should not have a bearing on this quantized output
+        # we should not observe truncation if op's encoding min/max input values are used instead of cached values
+        self.assertTrue(np.allclose(out_data, inp_data, atol=1e-6))
+        sess.close()
