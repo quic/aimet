@@ -150,9 +150,16 @@ if [ ! -d "../aimet" ] && [ ! -d "../aimet-main" ]; then
    exit 3
 fi
 
+# Select the docker file based on the build variant
+if [ -n "$AIMET_VARIANT" ] && [[ "$AIMET_VARIANT" == *"cpu"* ]]; then
+    docker_file="${scriptPath}/Jenkins/DockerfileCPU"
+else
+    docker_file="${scriptPath}/Jenkins/Dockerfile"
+fi
+
 echo -e "Building docker image${loading_symbol} \n"
 docker_image_name="aimet-dev-docker:latest"
-DOCKER_BUILD_CMD="docker build -t ${docker_image_name} -f ${scriptPath}/Jenkins/Dockerfile ."
+DOCKER_BUILD_CMD="docker build -t ${docker_image_name} -f ${docker_file} ."
 if [ $interactive_mode -eq 1 ] && [ $dry_run -eq 1 ]; then
 	echo ${DOCKER_BUILD_CMD}
 	echo
