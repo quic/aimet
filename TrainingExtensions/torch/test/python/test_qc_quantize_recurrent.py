@@ -203,9 +203,9 @@ class TestQcQuantizeRecurrentOp(unittest.TestCase):
             h_qc_rnn = [h_qc_rnn]
             h_rnn = [h_rnn]
         for h, h_qc in zip(h_rnn, h_qc_rnn):
-            self.assertTrue(torch.allclose(h, h_qc, atol=1e-07),
+            self.assertTrue(torch.allclose(h, h_qc, atol=1e-05),
                             msg="h/c mismatched, Failed TestCase:{}".format(tc.test_name))
-        self.assertTrue(torch.allclose(o_rnn, o_qc_rnn, atol=1e-07),
+        self.assertTrue(torch.allclose(o_rnn, o_qc_rnn, atol=1e-05),
                         msg="output mismatched, Failed TestCase:{}".format(tc.test_name))
 
     def validate_backward_pass(self, tc: TestCase):
@@ -381,9 +381,9 @@ class TestQcQuantizeRecurrentOp(unittest.TestCase):
             h_qc_rnn = [h_qc_rnn]
             h_rnn = [h_rnn]
         for h, h_qc in zip(h_rnn, h_qc_rnn):
-            self.assertTrue(torch.allclose(h, h_qc, atol=1e-07),
+            self.assertTrue(torch.allclose(h, h_qc, atol=1e-05),
                             msg="h/c mismatched, Failed TestCase:{}".format(tc.test_name))
-        self.assertTrue(torch.allclose(o_rnn.data, o_qc_rnn.data, atol=1e-07),
+        self.assertTrue(torch.allclose(o_rnn.data, o_qc_rnn.data, atol=1e-05),
                         msg="output data mismatched, Failed TestCase:{}".format(tc.test_name))
         self.assertTrue(torch.equal(o_rnn.batch_sizes, o_qc_rnn.batch_sizes),
                         msg="output batch_sizes mismatched, Failed TestCase:{}".format(tc.test_name))
