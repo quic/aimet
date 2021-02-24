@@ -70,7 +70,7 @@
 import collections
 
 from ignite.engine import Engine, Events, create_supervised_evaluator
-from ignite.metrics import Accuracy, Loss, TopKCategoricalAccuracy
+from ignite.metrics import CategoricalAccuracy, Loss, TopKCategoricalAccuracy
 import torch
 import torch.nn as nn
 from torch._six import string_classes
@@ -146,7 +146,7 @@ def create_supervised_classification_trainer(model, loss_fn, optimizer, val_load
         device = torch.device('cpu')
 
     trainer = create_trainer(model=model, optimizer=optimizer, loss_fn=loss_fn,
-                             metrics={'top_1_accuracy': Accuracy(),
+                             metrics={'top_1_accuracy': CategoricalAccuracy(),
                                       'top_5_accuracy': TopKCategoricalAccuracy(),
                                       'loss': Loss(loss_fn),
                                       },
@@ -218,7 +218,7 @@ def create_supervised_classification_evaluator(model, loss_fn, use_cuda):
         device = torch.device('cpu')
 
     evaluator = create_supervised_evaluator(model,
-                                            metrics={'top_1_accuracy': Accuracy(),
+                                            metrics={'top_1_accuracy': CategoricalAccuracy(),
                                                      'top_5_accuracy': TopKCategoricalAccuracy(),
                                                      'loss': Loss(loss_fn)},
                                             device=device)
