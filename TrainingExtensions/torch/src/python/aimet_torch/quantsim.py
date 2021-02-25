@@ -141,14 +141,14 @@ class QuantizationSimModel:
 
         try:
             if dummy_input is not None:
-                connected_graph = ConnectedGraph(self.model, dummy_input)
+                self.connected_graph = ConnectedGraph(self.model, dummy_input)
             else:
                 if input_shapes is None:
                     raise AssertionError('Must provide either input shapes or a dummy input for export')
-                connected_graph = create_connected_graph_with_input_shapes(self.model, input_shapes)
+                self.connected_graph = create_connected_graph_with_input_shapes(self.model, input_shapes)
 
         except (torch.jit.TracingCheckError, AssertionError):
-            connected_graph = None
+            self.connected_graph = None
 
         if isinstance(quant_scheme, str):
             if quant_scheme == 'tf':
@@ -166,7 +166,7 @@ class QuantizationSimModel:
         # Disable bias quantization
         self.exclude_param_from_quantization("bias")
 
-        self.configure_quantization_ops(connected_graph, config_file)
+        self.configure_quantization_ops(config_file)
 
     def __str__(self):
         """
@@ -684,19 +684,18 @@ class QuantizationSimModel:
             if not cls._is_leaf_module(module_ref):
                 cls._remove_quantization_wrappers(module_ref, list_of_modules_to_exclude)
 
-    def configure_quantization_ops(self, connected_graph: Union[None, ConnectedGraph], config_file: str):
+    def configure_quantization_ops(self, config_file: str):
         """
         Configure inserted quantize ops using config file
-        :param connected_graph: Connected graph representation of the model
         :param config_file: Configuration file to use
         """
-        if connected_graph is None:
+        if self.connected_graph is None:
             logger.error('A connected graph failed to be built.\n'
                          'Unable to proceed with automatically configuring quantization ops using the config file.\n'
                          'Please configure quantization ops manually by redefining '
                          'QuantizationSimModel.configure_quantization_ops()')
             raise AssertionError
-        QuantSimConfigurator(self.model, connected_graph, config_file)
+        QuantSimConfigurator(self.model, self.connected_graph, config_file)
 
     def set_and_freeze_param_encodings(self, encoding_path: str):
         """
