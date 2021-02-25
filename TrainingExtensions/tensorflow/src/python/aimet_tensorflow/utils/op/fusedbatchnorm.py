@@ -69,7 +69,7 @@ class BNUtils:
             assert False
         else:
             with sess.graph.as_default():
-                if bn_op.type in ['FusedBatchNormV3']:
+                if bn_op.type in ['FusedBatchNormV3', 'FusedBatchNorm']:
                     ge.detach_outputs(in_tensor.op)
                     ge.reroute_ts(in_tensor, out_tensor)
                     BNUtils.remove_bn_op_from_update_ops(sess, bn_op)
@@ -126,7 +126,7 @@ class BNUtils:
             sub = add_1.inputs[1].op
             assert len(sub.inputs) >= 1, _BN_STRUCTURE_ERROR_MSG
             beta_read = sub.inputs[0].op
-        elif bn_op.type in ['FusedBatchNormV3']:
+        elif bn_op.type in ['FusedBatchNormV3', 'FusedBatchNorm']:
             assert len(bn_op.inputs) == 5
             beta_read = bn_op.inputs[constants.BN_OP_PARAM_INDICES['beta']].op
             if beta_read.type == 'Switch':      # tf slim bn using training tensor form
@@ -147,7 +147,7 @@ class BNUtils:
         :param bn_op: FusedBatchNorm as tf.Operation
         :return: tensor associated with bn op beta readVariableOp type, as tf.Tensor
         """
-        assert bn_op.type in ['FusedBatchNormV3', 'Mul']
+        assert bn_op.type in ['FusedBatchNormV3', 'FusedBatchNorm', 'Mul']
         beta_read_tensor = BNUtils.get_beta_read_op(bn_op).outputs[0]
 
         assert beta_read_tensor is not None
@@ -195,7 +195,7 @@ class BNUtils:
             mul = bn_op.inputs[1].op
             assert len(mul.inputs) >= 2, _BN_STRUCTURE_ERROR_MSG
             gamma_read = mul.inputs[1].op
-        elif bn_op.type in ['FusedBatchNormV3']:
+        elif bn_op.type in ['FusedBatchNormV3', 'FusedBatchNorm']:
             assert len(bn_op.inputs) == 5
             gamma_read = bn_op.inputs[constants.BN_OP_PARAM_INDICES['gamma']].op
             if gamma_read.type == 'Switch':      # tf slim bn using training tensor form
@@ -215,7 +215,7 @@ class BNUtils:
         :param bn_op: Batchnorm op to get gamma read var op tensor from
         :return: Gamma read var op tensor associated with bn_op
         """
-        assert bn_op.type in ['FusedBatchNormV3', 'Mul']
+        assert bn_op.type in ['FusedBatchNormV3', 'FusedBatchNorm', 'Mul']
         gamma_read_tensor = BNUtils.get_gamma_as_read_op(bn_op).outputs[0]
         assert gamma_read_tensor is not None
 
@@ -330,7 +330,7 @@ class BNUtils:
                                               BNUtils._bn_op_var_struct_2,
                                               BNUtils._bn_op_var_struct_3]
 
-        if bn_op.type in ['FusedBatchNormV3']:
+        if bn_op.type in ['FusedBatchNormV3', 'FusedBatchNorm']:
             assert len(bn_op.inputs) == 5
             moving_var_read = bn_op.inputs[constants.BN_OP_PARAM_INDICES['movingvariance']].op
             if moving_var_read.type == 'Switch':      # tf slim bn using training tensor form
@@ -365,7 +365,7 @@ class BNUtils:
         :return: tensor associated with bn op moving variance readVariableOp type, as tf.Tensor
         """
         # only support fused BN
-        assert bn_op.type in ['FusedBatchNormV3', 'Mul']
+        assert bn_op.type in ['FusedBatchNormV3', 'FusedBatchNorm', 'Mul']
         moving_var_read_tensor = BNUtils.get_moving_variance_as_read_op(bn_op).outputs[0]
         assert moving_var_read_tensor is not None
 
@@ -485,7 +485,7 @@ class BNUtils:
         :param bn_op: bn_op obtained from connected graph using get_modules a mul_1 op inside BN scope.
         :return: moving mean read op
         """
-        if bn_op.type in ['FusedBatchNormV3']:
+        if bn_op.type in ['FusedBatchNormV3', 'FusedBatchNorm']:
             assert len(bn_op.inputs) == 5
             moving_mean_read = bn_op.inputs[constants.BN_OP_PARAM_INDICES['movingmean']].op
             if moving_mean_read.type == 'Switch':      # tf slim bn using training tensor form
@@ -528,7 +528,7 @@ class BNUtils:
         :return: tensor associated with bn op moving mean readVariableOp type, as tf.Tensor
         """
         # only support fused BN
-        assert bn_op.type in ['FusedBatchNormV3', 'Mul']
+        assert bn_op.type in ['FusedBatchNormV3', 'FusedBatchNorm', 'Mul']
         moving_mean_read_tensor = BNUtils.get_moving_mean_as_read_op(bn_op).outputs[0]
         assert moving_mean_read_tensor is not None
 
@@ -595,7 +595,7 @@ class BNUtils:
             assert len(add.inputs) >= 2, _BN_STRUCTURE_ERROR_MSG
             epsilon = add.inputs[1].op
             numpy_epsilon = epsilon.get_attr('value').float_val[0]
-        elif bn_op.type in ['FusedBatchNormV3']:
+        elif bn_op.type in ['FusedBatchNormV3', 'FusedBatchNorm']:
             # epsilon can be derived as attribute value
             numpy_epsilon = bn_op.get_attr("epsilon")
         else:
@@ -612,8 +612,8 @@ class BNUtils:
         :param bn_op: Batchnorm op to search for corresponding assign_moving_avg op
         :return: assign_moving_op corresponding with the bn op, or None if it does not exist.
         """
-        assert bn_op.type == 'FusedBatchNormV3'
-        assert len(bn_op.outputs) == 6
+        assert bn_op.type in ['FusedBatchNormV3', 'FusedBatchNorm']
+        assert len(bn_op.outputs) == 6 or len(bn_op.outputs) == 5
         if bn_op.outputs[1].consumers():
             child_op = bn_op.outputs[1].consumers()[0]
             if child_op.type == 'Merge':
@@ -636,8 +636,8 @@ class BNUtils:
         :param bn_op: Batchnorm op to search for corresponding assign_moving_avg_1 op
         :return: assign_moving_avg_1 corresponding with the bn op, or None if it does not exist.
         """
-        assert bn_op.type == 'FusedBatchNormV3'
-        assert len(bn_op.outputs) == 6
+        assert bn_op.type in ['FusedBatchNormV3', 'FusedBatchNorm']
+        assert len(bn_op.outputs) == 6 or len(bn_op.outputs) == 5
         if bn_op.outputs[2].consumers():
             child_op = bn_op.outputs[2].consumers()[0]
             if child_op.type == 'Merge':
@@ -820,7 +820,7 @@ class BNUtils:
                 else:
                     break
 
-        elif bn_op.type in ['FusedBatchNormV3']:
+        elif bn_op.type in ['FusedBatchNormV3', 'FusedBatchNorm']:
             # try all handlers available
             for handler in fused_bn_op_struct_for_momentum_handlers:
                 if decay is None:
@@ -840,8 +840,8 @@ class BNUtils:
         :param bn_op: bn_op obtained in the connected graph
         :return: True or False for training mode, or tf.Tensor that determines the mode dynamically.
         """
-        assert bn_op.type in ['FusedBatchNormV3', 'Mul']
-        if bn_op.type == 'FusedBatchNormV3':
+        assert bn_op.type in ['FusedBatchNormV3', 'FusedBatchNorm', 'Mul']
+        if bn_op.type == 'FusedBatchNormV3' or bn_op.type == 'FusedBatchNorm':
             if 'FusedBatchNormV3_1' in bn_op.name:
                 switch_op = bn_op.inputs[0].op
                 pred_id_op = switch_op.inputs[1].op
