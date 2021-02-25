@@ -36,8 +36,9 @@
 
 import pytest
 import unittest
+import unittest.mock
 import shutil
-
+import json
 import os
 import tensorflow as tf
 tf.compat.v1.logging.set_verbosity(tf.logging.WARN)
@@ -49,7 +50,7 @@ import libpymo
 from aimet_tensorflow.quantsim import QuantizationSimModel
 from aimet_tensorflow.utils.graph_saver import load_model_from_meta
 from aimet_tensorflow.common.graph_eval import initialize_uninitialized_vars
-from aimet_tensorflow.examples.test_models import model_with_dtype_int, keras_model_functional
+from aimet_tensorflow.examples.test_models import model_with_dtype_int, keras_model, keras_model_functional
 from aimet_common.defs import QuantScheme
 from aimet_tensorflow.quantsim import save_checkpoint, load_checkpoint
 from aimet_tensorflow.utils.constants import QuantizeOpIndices
@@ -538,7 +539,6 @@ class TestQuantSim(unittest.TestCase):
         new_quantsim.session.close()
         del new_quantsim
 
-
     def test_save_load_ckpt_after_compute_encoding_on_orig_object(self):
         """
         Create QuantSim for a CPU model, test save and load on a quantsim model
@@ -606,7 +606,6 @@ class TestQuantSim(unittest.TestCase):
         new_quantsim.session.close()
         del sim
         del new_quantsim
-
 
     def test_set_get_quantizer_params_using_properties(self):
 
@@ -792,3 +791,40 @@ class TestQuantSim(unittest.TestCase):
             sim.session.close()
             del sim
 
+    def test_set_and_freeze_param_encodings(self):
+        """ Test set and freeze parameter encodings functionality """
+        tf.compat.v1.reset_default_graph()
+        with tf.device('/cpu:0'):
+            _ = keras_model()
+            init = tf.compat.v1.global_variables_initializer()
+
+        session = tf.compat.v1.Session()
+        session.run(init)
+
+        sim = QuantizationSimModel(session, ['conv2d_input'], ['keras_model/Softmax'], use_cuda=False)
+        param_encodings = {'conv2d/Conv2D/ReadVariableOp:0': [{'bitwidth': 4, 'is_symmetric': False,
+                                                               'max': 0.14584073424339294,
+                                                               'min': -0.12761062383651733,
+                                                               'offset': -7.0, 'scale': 0.01823008991777897}]}
+        # export encodings to JSON file
+        encoding_file_path = os.path.join('./', 'dummy.encodings')
+        with open(encoding_file_path, 'w') as encoding_fp:
+            json.dump(param_encodings, encoding_fp, sort_keys=True, indent=4)
+
+        sim.set_and_freeze_param_encodings(encoding_path='./dummy.encodings')
+
+        quantizer = sim.quantizer_config('conv2d/Conv2D/ReadVariableOp_quantized')
+        encoding = param_encodings['conv2d/Conv2D/ReadVariableOp:0'][0]
+
+        encoding_max = quantizer.get_variable_from_op(QuantizeOpIndices.encoding_max)
+        encoding_min = quantizer.get_variable_from_op(QuantizeOpIndices.encoding_min)
+
+        self.assertEqual(encoding_min, encoding.get('min'))
+        self.assertEqual(encoding_max, encoding.get('max'))
+        self.assertEqual(int(libpymo.TensorQuantizerOpMode.quantizeDequantize), quantizer.get_op_mode())
+
+        session.close()
+
+        # Delete encodings JSON file
+        if os.path.exists("./dummy.encodings"):
+            os.remove("./dummy.encodings")
