@@ -95,7 +95,7 @@ class ConvBnPatternHandler:
         bn_op = None
         convolution_types = ['Conv2D', 'DepthwiseConv2dNative', 'convolution']
         linear_types = ['Dense', 'addmm', 'matmul']
-        bn_types = ['FusedBatchNormV3', 'batch_norm']
+        bn_types = ['FusedBatchNormV3', 'FusedBatchNorm', 'batch_norm']
 
         for op in op_subset:
             if op.type in convolution_types + linear_types:
