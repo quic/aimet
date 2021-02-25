@@ -84,6 +84,9 @@ def _conv_bn_select_custom_pattern_init():
         # BN -> Linear
         patterns_with_callbacks.append(PatternType(pattern=['FusedBatchNormV3', preceeding_linear_op_type, 'Dense'],
                                                    action=layer_select_handler))
+
+        patterns_with_callbacks.append(PatternType(pattern=['FusedBatchNorm', preceeding_linear_op_type, 'Dense'],
+                                                   action=layer_select_handler))
         # note: we cannot perform linear -> BN on TF
 
     # conv layer combinations
@@ -94,6 +97,12 @@ def _conv_bn_select_custom_pattern_init():
                                                    action=layer_select_handler))
 
         patterns_with_callbacks.append(PatternType(pattern=['FusedBatchNormV3', conv],
+                                                   action=layer_select_handler))
+
+        patterns_with_callbacks.append(PatternType(pattern=[conv, 'FusedBatchNorm'],
+                                                   action=layer_select_handler))
+
+        patterns_with_callbacks.append(PatternType(pattern=['FusedBatchNorm', conv],
                                                    action=layer_select_handler))
 
     return patterns_with_callbacks, layer_select_handler
@@ -326,7 +335,7 @@ def fold_given_batch_norms(sess: tf.compat.v1.Session, input_op_names: Union[str
 
     conn_tf_n_op_map = {}
     for op in connected_graph.get_all_ops().values():
-        if op.type in ['FusedBatchNormV3']:
+        if op.type in ['FusedBatchNormV3', 'FusedBatchNorm']:
             conn_tf_n_op_map[op.get_module()] = op
 
     layer_pairs_internal_format = []
