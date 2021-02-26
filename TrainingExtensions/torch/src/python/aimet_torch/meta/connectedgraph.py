@@ -561,14 +561,14 @@ class ConnectedGraph(AimetCommonConnectedGraph):
         :param output_map: Mapping between higher level connections with corresponding lower level recursive
             connections. Only the base level connections carry shape information.
         """
-        _handle_ir_nodes_of_interest(ir_nodes_list, passthrough_types, input_types_to_ignore)
+        self._handle_ir_nodes_of_interest(ir_nodes_list, passthrough_types, input_types_to_ignore)
         filtered_ir_nodes = [ir_node for ir_node in ir_nodes_list if ir_node.node_type not in ['TupleConstruct',
                                                                                                'TupleUnpack',
                                                                                                'ListUnpack',
                                                                                                'ListConstruct']
                              and ir_node.node_type not in input_types_to_ignore
                              and ir_node.node_type not in passthrough_types]
-        connections_to_nodes_dict = _create_connections_to_ir_nodes_dict(filtered_ir_nodes)
+        connections_to_nodes_dict = self._create_connections_to_ir_nodes_dict(filtered_ir_nodes)
         ir_node_to_op_dict = self._create_ops_from_ir_nodes_list(filtered_ir_nodes, module_tensor_shapes_map)
         self._create_products_from_connections(connections_to_nodes_dict, ir_node_to_op_dict, output_map,
                                                input_types_to_ignore)
@@ -912,6 +912,56 @@ class ConnectedGraph(AimetCommonConnectedGraph):
                            'ConnectedGraph.functional_ops. Add to continue.'
                            , missing_modules)
 
+    def _create_connections_to_ir_nodes_dict(self, ir_nodes_list: List[IrNode]) -> ConnectionsToIrDictType:
+        """
+        Create a mapping from connections found in torch graph to input and output IrNodes. Each connection will have one
+        input and zero or more outputs IrNodes.
+        :param ir_nodes_list: List of IrNodes to extract connections information from
+        :return: Dictionary mapping connections to input ir_node and output ir_nodes
+        """
+        connections_to_ir_nodes_dict = {}
+        for ir_node in ir_nodes_list:
+            node_inputs = _flatten_lists(ir_node.inputs)
+            node_outputs = _flatten_lists(ir_node.outputs)
+            for inp in node_inputs:
+                if inp in connections_to_ir_nodes_dict:
+                    connections_to_ir_nodes_dict[inp][1].append(ir_node)
+                else:
+                    connections_to_ir_nodes_dict[inp] = [None, [ir_node]]
+            for output in node_outputs:
+                if output in connections_to_ir_nodes_dict:
+                    if connections_to_ir_nodes_dict[output][0] is not None:
+                        inp_op_name = None
+                        if connections_to_ir_nodes_dict[output][0].module is not None:
+                            inp_op_name = self._module_to_name[connections_to_ir_nodes_dict[output][0].module]
+                        logger.error('Input of %s with name %s already exists. Ensure that no modules are being reused '
+                                     'in the model.', output, inp_op_name)
+                        raise AssertionError
+                    connections_to_ir_nodes_dict[output][0] = ir_node
+                else:
+                    connections_to_ir_nodes_dict[output] = [ir_node, []]
+        return connections_to_ir_nodes_dict
+
+    def _handle_ir_nodes_of_interest(self, ir_nodes_list: List[IrNode], passthrough_ops: List[str],
+                                     input_ops_to_ignore: List[str]):
+        """
+        Update input and output connections of certain ir_nodes in ir_nodes_list (Tuple/ListConstructs, passthrough,
+        input ops)
+        :param ir_nodes_list: List of ir_nodes to update connections for
+        :param passthrough_ops: List of op types to treat as passthrough
+        :param input_ops_to_ignore: List of input op types to ignore
+        """
+        connections_to_ir_nodes_dict = self._create_connections_to_ir_nodes_dict(ir_nodes_list)
+        for ir_node in ir_nodes_list:
+            if ir_node.node_type in ['TupleConstruct', 'ListConstruct']:
+                _handle_tuple_and_list_construct_ir_node(ir_node, connections_to_ir_nodes_dict)
+            elif ir_node.node_type in ['TupleUnpack', 'ListUnpack']:
+                _handle_tuple_unpack_ir_node(ir_node, connections_to_ir_nodes_dict)
+            elif ir_node.node_type in passthrough_ops:
+                _handle_passthrough_ir_node(ir_node, connections_to_ir_nodes_dict)
+            elif ir_node.node_type in input_ops_to_ignore:
+                _handle_input_ir_node_to_ignore(ir_node, connections_to_ir_nodes_dict)
+
 
 def _create_module_to_op_dict(ops: List[Op]) -> Dict[torch.nn.Module, Op]:
     """
@@ -935,52 +985,6 @@ def _fill_groups_info(op: Op, module: torch.nn.Module):
 
     if op.type in 'convolution':
         op.groups = module.groups
-
-
-def _create_connections_to_ir_nodes_dict(ir_nodes_list: List[IrNode]) -> ConnectionsToIrDictType:
-    """
-    Create a mapping from connections found in torch graph to input and output IrNodes. Each connection will have one
-    input and zero or more outputs IrNodes.
-    :param ir_nodes_list: List of IrNodes to extract connections information from
-    :return: Dictionary mapping connections to input ir_node and output ir_nodes
-    """
-    connections_to_ir_nodes_dict = {}
-    for ir_node in ir_nodes_list:
-        node_inputs = _flatten_lists(ir_node.inputs)
-        node_outputs = _flatten_lists(ir_node.outputs)
-        for inp in node_inputs:
-            if inp in connections_to_ir_nodes_dict:
-                connections_to_ir_nodes_dict[inp][1].append(ir_node)
-            else:
-                connections_to_ir_nodes_dict[inp] = [None, [ir_node]]
-        for output in node_outputs:
-            if output in connections_to_ir_nodes_dict:
-                assert connections_to_ir_nodes_dict[output][0] is None
-                connections_to_ir_nodes_dict[output][0] = ir_node
-            else:
-                connections_to_ir_nodes_dict[output] = [ir_node, []]
-    return connections_to_ir_nodes_dict
-
-
-def _handle_ir_nodes_of_interest(ir_nodes_list: List[IrNode], passthrough_ops: List[str],
-                                 input_ops_to_ignore: List[str]):
-    """
-    Update input and output connections of certain ir_nodes in ir_nodes_list (Tuple/ListConstructs, passthrough,
-    input ops)
-    :param ir_nodes_list: List of ir_nodes to update connections for
-    :param passthrough_ops: List of op types to treat as passthrough
-    :param input_ops_to_ignore: List of input op types to ignore
-    """
-    connections_to_ir_nodes_dict = _create_connections_to_ir_nodes_dict(ir_nodes_list)
-    for ir_node in ir_nodes_list:
-        if ir_node.node_type in ['TupleConstruct', 'ListConstruct']:
-            _handle_tuple_and_list_construct_ir_node(ir_node, connections_to_ir_nodes_dict)
-        elif ir_node.node_type in ['TupleUnpack', 'ListUnpack']:
-            _handle_tuple_unpack_ir_node(ir_node, connections_to_ir_nodes_dict)
-        elif ir_node.node_type in passthrough_ops:
-            _handle_passthrough_ir_node(ir_node, connections_to_ir_nodes_dict)
-        elif ir_node.node_type in input_ops_to_ignore:
-            _handle_input_ir_node_to_ignore(ir_node, connections_to_ir_nodes_dict)
 
 
 def _handle_tuple_and_list_construct_ir_node(ir_node: IrNode, connections_to_ir_nodes_dict: ConnectionsToIrDictType):
