@@ -66,13 +66,13 @@ map_torch_types_to_onnx = {
     nn.RNN:  ['RNN'],
     nn.LSTM: ['LSTM'],
     nn.GRU: ['GRU'],
-    nn.ConvTranspose2d: ['ConvTranpose'],
+    nn.ConvTranspose2d: ['ConvTranspose'],
     nn.Sigmoid: ['Sigmoid'],
     nn.Upsample: ['Upsample'],
     elementwise_ops.Add: ['Add'],
-    elementwise_ops.Subtract: ['Subtract'],
-    elementwise_ops.Multiply: ['Multiply'],
-    elementwise_ops.Divide: ['Divide'],
+    elementwise_ops.Subtract: ['Sub'],
+    elementwise_ops.Multiply: ['Mul'],
+    elementwise_ops.Divide: ['Div'],
     elementwise_ops.Concat: ['Concat']
 
 }
