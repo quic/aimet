@@ -419,9 +419,8 @@ class QuantizationSimModel:
             if tensor_name in param_encodings:
                 encoding_dict = param_encodings[tensor_name][0]
                 encoding, is_symmetric = create_encoding_from_dict(encoding_dict)
-                quantizer_info.set_and_freeze_encoding(encoding)
-                quantizer_info.set_and_freeze_op_mode(op_mode)
                 quantizer_info.use_symmetric_encoding = is_symmetric
+                quantizer_info.set_and_freeze_encoding_and_op_mode(encoding, op_mode)
                 _logger.info("Setting and freezing quantization encodings for parameter: %s", tensor_name)
 
     @staticmethod

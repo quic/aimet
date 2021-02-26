@@ -2,7 +2,7 @@
 # =============================================================================
 #  @@-COPYRIGHT-START-@@
 #
-#  Copyright (c) 2020, Qualcomm Innovation Center, Inc. All rights reserved.
+#  Copyright (c) 2021, Qualcomm Innovation Center, Inc. All rights reserved.
 #
 #  Redistribution and use in source and binary forms, with or without
 #  modification, are permitted provided that the following conditions are met:
@@ -42,6 +42,7 @@ from enum import Enum
 import tensorflow as tf
 
 from aimet_common.defs import QuantScheme
+from aimet_common.quantsim import calculate_delta_offset
 from aimet_tensorflow.utils.constants import QuantizeOpIndices
 import libpymo
 
@@ -84,8 +85,7 @@ class QuantizerInfo:
     """
     Holds information about a given MO Quantizer object and active session
     """
-    __slots__ = ['session', 'tensor_quantizer', 'quant_op_name', 'quantizer_type', 'is_encoding_frozen',
-                 'is_op_mode_frozen']
+    __slots__ = ['session', 'tensor_quantizer', 'quant_op_name', 'quantizer_type', '_is_encoding_frozen']
 
     def __init__(self, session: tf.compat.v1.Session, tensor_quantizer: libpymo.TensorQuantizer,
                  quant_op_name: str, quantizer_type: QuantizerType):
@@ -93,8 +93,7 @@ class QuantizerInfo:
         self.tensor_quantizer = tensor_quantizer
         self.quant_op_name = quant_op_name
         self.quantizer_type = quantizer_type
-        self.is_encoding_frozen = False
-        self.is_op_mode_frozen = False
+        self._is_encoding_frozen = False
 
     def set_variable(self, var_name, value):
         """
@@ -202,23 +201,9 @@ class QuantizerInfo:
         Set op mode for Quantize op
         :param op_mode: Op mode as pymo.TensorQuantizerOpMode type
         """
-        if not self.is_op_mode_frozen:
+        if not self._is_encoding_frozen:
             var_name = self.quant_op_name + '_op_mode'
             self.set_variable(var_name, int(op_mode))
-
-    def freeze_op_mode(self):
-        """
-        Freeze the op mode for Quantize op
-        """
-        self.is_op_mode_frozen = True
-
-    def set_and_freeze_op_mode(self, op_mode: libpymo.TensorQuantizerOpMode):
-        """
-        Set op mode for Qunatize op and freezes it
-        :param op_mode: Op mode as pymo.TensorQuantizerOpMode type
-        """
-        self.set_op_mode(op_mode)
-        self.freeze_op_mode()
 
     @property
     def enabled(self) -> bool:
@@ -264,33 +249,62 @@ class QuantizerInfo:
         :param use_symmetric_encodings: True if symmetric encoding is used. False otherwise.
         :return: Encoding
         """
-        encoding = self.tensor_quantizer.computeEncoding(bitwidth, use_symmetric_encodings)
+        if not self._is_encoding_frozen:
+            encoding = self.tensor_quantizer.computeEncoding(bitwidth, use_symmetric_encodings)
+        else:
+            encoding = self.get_encoding()
+
         return encoding
 
     def set_encoding(self, encoding: libpymo.TfEncoding):
         """
-        Set encoding min and max variable
+        Set encoding min and max variable and update isEncodingValid state to True
         :param encoding: Encoding
         """
-        if not self.is_encoding_frozen:
+        if not self._is_encoding_frozen:
             var_name = self.quant_op_name + '_encoding_min'
             self.set_variable(var_name, encoding.min)
-
             var_name = self.quant_op_name + '_encoding_max'
             self.set_variable(var_name, encoding.max)
 
+            # update the isEncodingValid state to True
+            self.tensor_quantizer.isEncodingValid = True
+
+    def get_encoding(self) -> libpymo.TfEncoding:
+        """
+        Get encoding if valid else raise error
+        :return: encoding
+        """
+        if self.is_encoding_valid():
+            encoding_min = self.get_variable_from_op(QuantizeOpIndices.encoding_min)
+            encoding_max = self.get_variable_from_op(QuantizeOpIndices.encoding_max)
+            bitwidth = self.bitwidth
+
+            # Create Encoding object
+            encoding = libpymo.TfEncoding()
+            encoding.min = encoding_min
+            encoding.max = encoding_max
+            encoding.bw = bitwidth
+            encoding.delta, encoding.offset = calculate_delta_offset(encoding_min, encoding_max, bitwidth)
+        else:
+            raise AssertionError('Compute encoding or Set encoding must be invoked before')
+
+        return encoding
+
     def freeze_encoding(self):
         """
-        Freeze the encoding
+        Set is_encoding_frozen flag to True
         """
-        self.is_encoding_frozen = True
+        self._is_encoding_frozen = True
 
-    def set_and_freeze_encoding(self, encoding: libpymo.TfEncoding):
+    def set_and_freeze_encoding_and_op_mode(self, encoding: libpymo.TfEncoding, op_mode: libpymo.TensorQuantizerOpMode):
         """
-        Set encoding min and max variable and freezes it
-        :param encoding:
+        Set encoding min and max variable, op_mode and freezes it
+        :param encoding: Encoding
+        :param op_mode: Op mode as pymo.TensorQuantizerOpMode type
         """
         self.set_encoding(encoding)
+        self.set_op_mode(op_mode)
         self.freeze_encoding()
 
     def is_encoding_valid(self) -> bool:

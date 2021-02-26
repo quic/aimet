@@ -822,6 +822,7 @@ class TestQuantSim(unittest.TestCase):
         self.assertEqual(encoding_min, encoding.get('min'))
         self.assertEqual(encoding_max, encoding.get('max'))
         self.assertEqual(int(libpymo.TensorQuantizerOpMode.quantizeDequantize), quantizer.get_op_mode())
+        self.assertEqual(quantizer.is_encoding_valid(), True)
 
         session.close()
 

@@ -1,7 +1,7 @@
 # =============================================================================
 #  @@-COPYRIGHT-START-@@
 #
-#  Copyright (c) 2020, Qualcomm Innovation Center, Inc. All rights reserved.
+#  Copyright (c) 2021, Qualcomm Innovation Center, Inc. All rights reserved.
 #
 #  Redistribution and use in source and binary forms, with or without
 #  modification, are permitted provided that the following conditions are met:
@@ -69,23 +69,24 @@ class TestQuantizerInfo(unittest.TestCase):
 
         encoding = quantizer.compute_encoding(8, False)
         print(encoding.max, encoding.min)
+        # Set and freeze encoding
+        quantizer.set_encoding(encoding)
+        quantizer.freeze_encoding()
 
-        quantizer.set_and_freeze_encoding(encoding)
-        encoding_max = quantizer.get_variable_from_op(QuantizeOpIndices.encoding_max)
-        encoding_min = quantizer.get_variable_from_op(QuantizeOpIndices.encoding_min)
+        old_encoding_min = quantizer.get_variable_from_op(QuantizeOpIndices.encoding_min)
+        old_encoding_max = quantizer.get_variable_from_op(QuantizeOpIndices.encoding_max)
 
-        self.assertEqual(encoding_min, encoding.min)
-        self.assertEqual(encoding_max, encoding.max)
+        self.assertEqual(encoding.min, old_encoding_min)
+        self.assertEqual(encoding.max, old_encoding_max)
+        self.assertEqual(quantizer.is_encoding_valid(), True)
 
-        # Update encoding min and max value
-        encoding.max = 0.3
-        encoding.min = -0.2
+        # Try updating encoding min and max with new values, but values can not be changed
+        encoding.min = -0.4
+        encoding.max = 0.6
         quantizer.set_encoding(encoding)
 
-        new_encoding_max = quantizer.get_variable_from_op(QuantizeOpIndices.encoding_max)
-        new_encoding_min = quantizer.get_variable_from_op(QuantizeOpIndices.encoding_min)
-        self.assertEqual(encoding_min, new_encoding_min)
-        self.assertEqual(encoding_max, new_encoding_max)
+        self.assertEqual(old_encoding_min, quantizer.get_variable_from_op(QuantizeOpIndices.encoding_min))
+        self.assertEqual(old_encoding_max, quantizer.get_variable_from_op(QuantizeOpIndices.encoding_max))
 
         session.close()
 
@@ -103,12 +104,49 @@ class TestQuantizerInfo(unittest.TestCase):
         quantizer = sim.quantizer_config('conv2d/Conv2D/ReadVariableOp_quantized')
 
         op_mode = int(libpymo.TensorQuantizerOpMode.oneShotQuantizeDequantize)
-        quantizer.set_and_freeze_op_mode(op_mode)
+        quantizer.set_op_mode(op_mode)
+        quantizer.freeze_encoding()
         self.assertEqual(op_mode, quantizer.get_op_mode())
 
         new_op_mode = int(libpymo.TensorQuantizerOpMode.passThrough)
         quantizer.set_op_mode(new_op_mode)
         self.assertNotEqual(new_op_mode, quantizer.get_op_mode())
         self.assertEqual(op_mode, quantizer.get_op_mode())
+
+        session.close()
+
+    def test_compute_encoding(self):
+        """ Create QuantSim for a CPU model, test compute encoding """
+        tf.compat.v1.reset_default_graph()
+        with tf.device('/cpu:0'):
+            _ = keras_model()
+            init = tf.compat.v1.global_variables_initializer()
+
+        session = tf.compat.v1.Session()
+        session.run(init)
+
+        sim = QuantizationSimModel(session, ['conv2d_input'], ['keras_model/Softmax'], use_cuda=False)
+        quantizer = sim.quantizer_config('conv2d/Conv2D/ReadVariableOp_quantized')
+
+        # Freeze encoding before computing it
+        quantizer.freeze_encoding()
+        self.assertRaises(AssertionError, lambda: quantizer.compute_encoding(8, False))
+
+        session.close()
+
+    def test_get_encoding(self):
+        """ Create QuantSim for a CPU model, test get encoding """
+        tf.compat.v1.reset_default_graph()
+        with tf.device('/cpu:0'):
+            _ = keras_model()
+            init = tf.compat.v1.global_variables_initializer()
+
+        session = tf.compat.v1.Session()
+        session.run(init)
+
+        sim = QuantizationSimModel(session, ['conv2d_input'], ['keras_model/Softmax'], use_cuda=False)
+        quantizer = sim.quantizer_config('conv2d/Conv2D/ReadVariableOp_quantized')
+
+        self.assertRaises(AssertionError, lambda: quantizer.get_encoding())
 
         session.close()
