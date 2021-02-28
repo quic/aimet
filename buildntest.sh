@@ -151,14 +151,15 @@ if [ ! -d "../aimet" ] && [ ! -d "../aimet-main" ]; then
 fi
 
 # Select the docker file based on the build variant
-if [ -n "$AIMET_VARIANT" ] && [[ "$AIMET_VARIANT" == *"cpu"* ]]; then
-    docker_file="${scriptPath}/Jenkins/DockerfileCPU"
+if [ -n "$AIMET_VARIANT" ]; then
+    docker_file="${scriptPath}/Jenkins/Dockerfile.${AIMET_VARIANT}"
+    docker_image_name="aimet-dev-docker:${AIMET_VARIANT}"
 else
     docker_file="${scriptPath}/Jenkins/Dockerfile"
+    docker_image_name="aimet-dev-docker:latest"
 fi
 
 echo -e "Building docker image${loading_symbol} \n"
-docker_image_name="aimet-dev-docker:latest"
 DOCKER_BUILD_CMD="docker build -t ${docker_image_name} -f ${docker_file} ."
 if [ $interactive_mode -eq 1 ] && [ $dry_run -eq 1 ]; then
 	echo ${DOCKER_BUILD_CMD}
@@ -177,6 +178,7 @@ fi
 
 if [ -n "$AIMET_VARIANT" ]; then
     docker_container_name="${docker_container_name}_${AIMET_VARIANT}"
+    results_path=${outputRootFolder}/buildntest_results_${AIMET_VARIANT}
 fi
 
 rm -rf {results_path} | true
