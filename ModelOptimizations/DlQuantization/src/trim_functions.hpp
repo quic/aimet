@@ -57,7 +57,7 @@ void QuantizeToFxp(const DTYPE* in, int cnt, const TfEncoding& encoding, DTYPE* 
 template <typename DTYPE>
 void QuantizeToFxp_CPU(const DTYPE* in, int cnt, const TfEncoding& encoding, DTYPE* out, RoundingMode rounding_mode);
 
-double computeDelta(double encodingMin, double encodingMax, uint8_t bw);
+double computeDelta(double encodingMin, double encodingMax, double numSteps);
 double computeOffset(double encodingMin, double delta);
 
 
