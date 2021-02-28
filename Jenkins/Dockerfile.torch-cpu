@@ -149,6 +149,7 @@ RUN pip3 --no-cache-dir install \
         scipy==1.2.1 \
         sphinx==2.1.1 \
         sphinx-autodoc-typehints==1.6.0 \
+        tensorboard==1.15 \
         tensorboardX==1.7 \
         timm==0.3.1 \
         torchtext==0.3.1 \

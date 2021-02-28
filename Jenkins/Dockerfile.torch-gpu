@@ -111,6 +111,7 @@ RUN pip3 --no-cache-dir install \
         scipy==1.2.1 \
         sphinx==2.1.1 \
         sphinx-autodoc-typehints==1.6.0 \
+        tensorboard==1.15 \
         tensorboardX==1.7 \
         timm==0.3.1 \
         torchtext==0.3.1 \
@@ -144,7 +145,7 @@ RUN mkdir /var/run/sshd
 
 RUN apt-get update && apt-get install -y liblapacke liblapacke-dev && rm -rf /var/lib/apt/lists/*
 
-# Remove pillow and replace with pillow-simd. (MORPH-5461)
+# Remove pillow and replace with pillow-simd
 RUN apt-get update && apt-get install -y libjpeg8-dev && \
     rm -rf /var/lib/apt/lists/*
 

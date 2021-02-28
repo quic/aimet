@@ -169,17 +169,22 @@ else
 fi
 
 if [[ -z "${BUILD_NUMBER}" ]]; then
-     results_path=${outputRootFolder}/buildntest_results/$timestamp
-     docker_container_name=aimet-dev_${USER}_${timestamp}
+    # If invoked from command line by user, use a timestamp suffix
+    results_path=${outputRootFolder}/buildntest_results/$timestamp
+    docker_container_name=aimet-dev_${USER}_${timestamp}
 else
-     results_path=${outputRootFolder}/buildntest_results
-     docker_container_name=aimet-dev_${USER}
+    # If invoked from jenkins, then do NOT add a timestamp suffix
+    results_path=${outputRootFolder}/buildntest_results
+    docker_container_name=aimet-dev_${USER}
 fi
 
+# If this is a variant, then append the variant string as suffix
 if [ -n "$AIMET_VARIANT" ]; then
     docker_container_name="${docker_container_name}_${AIMET_VARIANT}"
-    results_path=${outputRootFolder}/buildntest_results_${AIMET_VARIANT}
+    results_path=${results_path}_${AIMET_VARIANT}
 fi
+# Add desired output folder to the options string
+options_string+=" -o ${results_path}"
 
 rm -rf {results_path} | true
 mkdir -p ${results_path}
