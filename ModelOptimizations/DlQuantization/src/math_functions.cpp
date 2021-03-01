@@ -2,7 +2,7 @@
 //
 //  @@-COPYRIGHT-START-@@
 //
-//  Copyright (c) 2016-2017, Qualcomm Innovation Center, Inc. All rights reserved.
+//  Copyright (c) 2016-2021, Qualcomm Innovation Center, Inc. All rights reserved.
 //
 //  Redistribution and use in source and binary forms, with or without
 //  modification, are permitted provided that the following conditions are met:
@@ -57,9 +57,9 @@ namespace DlQuantization
 using namespace std;
 
 template <typename DTYPE>
-DTYPE GetMax(const DTYPE* data, int cnt, ComputationMode mode_cpu_gpu)
+DTYPE GetMax(const DTYPE* data, int cnt, ComputationMode cpuGpuMode)
 {
-    switch (mode_cpu_gpu)
+    switch (cpuGpuMode)
     {
     case COMP_MODE_CPU:
         return GetMax_cpu(data, cnt);
@@ -79,9 +79,9 @@ DTYPE GetMax(const DTYPE* data, int cnt, ComputationMode mode_cpu_gpu)
 }
 
 template <typename DTYPE>
-DTYPE GetMin(const DTYPE* data, int cnt, ComputationMode mode_cpu_gpu)
+DTYPE GetMin(const DTYPE* data, int cnt, ComputationMode cpuGpuMode)
 {
-    switch (mode_cpu_gpu)
+    switch (cpuGpuMode)
     {
     case COMP_MODE_CPU:
         return GetMin_cpu(data, cnt);
@@ -289,7 +289,7 @@ template <typename DTYPE>
 void UpdatePdfSigned_cpu(const DTYPE* data, int cnt, PDF& pdf)
 {
     // Check if we need to initialize the PDF
-    if (0 == pdf.x_left.size())
+    if (0 == pdf.xLeft.size())
     {
         // Define the range over which we want to calculate the PDF.
         DTYPE min_val = GetMin(data, cnt, COMP_MODE_CPU);
@@ -313,10 +313,10 @@ void UpdatePdfSigned_cpu(const DTYPE* data, int cnt, PDF& pdf)
         max_val      = center + 3 * (max_val - center);
         // Initialize the PDF's buckets.
         DTYPE bucket_size = (max_val - min_val) / PDF_SIZE;
-        pdf.x_left.resize(PDF_SIZE);
+        pdf.xLeft.resize(PDF_SIZE);
         for (int i = 0; i < PDF_SIZE; ++i)
         {
-            pdf.x_left[i] = min_val + i * bucket_size;
+            pdf.xLeft[i] = min_val + i * bucket_size;
         }
         // Initialize the rest of the PDF structure.
         pdf.pdf.resize(PDF_SIZE);
@@ -325,8 +325,8 @@ void UpdatePdfSigned_cpu(const DTYPE* data, int cnt, PDF& pdf)
 
     // Create the histogram of this number distribution.
     // The histogram's range is min_val to max_val.
-    DTYPE min_val     = pdf.x_left[0];
-    DTYPE bucket_size = pdf.x_left[1] - pdf.x_left[0];
+    DTYPE min_val     = pdf.xLeft[0];
+    DTYPE bucket_size = pdf.xLeft[1] - pdf.xLeft[0];
     vector<DTYPE> pdf_this_iter(PDF_SIZE, 0);
     // This offset is used to help map numbers to histogram buckets.
     DTYPE pdf_offset = min_val / bucket_size;
@@ -357,7 +357,7 @@ template <typename DTYPE>
 void UpdatePdfUnsigned_cpu(const DTYPE* data, int cnt, PDF& pdf)
 {
     // Check if we need to initialize the PDF.
-    if (0 == pdf.x_left.size())
+    if (0 == pdf.xLeft.size())
     {
         // Define the range over which we want to calculate the PDF.
         DTYPE min_val = GetMin(data, cnt, COMP_MODE_CPU);
@@ -382,10 +382,10 @@ void UpdatePdfUnsigned_cpu(const DTYPE* data, int cnt, PDF& pdf)
         // Initialize the PDF's buckets.
         DTYPE max_abs_val = std::max(std::abs(max_val), std::abs(min_val));
         DTYPE bucket_size = max_abs_val / PDF_SIZE;
-        pdf.x_left.resize(PDF_SIZE);
+        pdf.xLeft.resize(PDF_SIZE);
         for (int i = 0; i < PDF_SIZE; ++i)
         {
-            pdf.x_left[i] = i * bucket_size;
+            pdf.xLeft[i] = i * bucket_size;
         }
         // Initialize the rest of the PDF structure.
         pdf.pdf.resize(PDF_SIZE);
@@ -393,7 +393,7 @@ void UpdatePdfUnsigned_cpu(const DTYPE* data, int cnt, PDF& pdf)
     }
 
     // Create the histogram of this number distribution.
-    DTYPE bucket_size = pdf.x_left[1] - pdf.x_left[0];
+    DTYPE bucket_size = pdf.xLeft[1] - pdf.xLeft[0];
     vector<DTYPE> pdf_this_iter(PDF_SIZE, 0);
     // Go through all data points and add them to the histogram.
     for (int i = 0; i < cnt; ++i)
