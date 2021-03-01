@@ -37,6 +37,7 @@
 //==============================================================================
 
 #include <cstddef>
+#include <cassert>
 #include <vector>
 
 #include "DlQuantization/Quantization.hpp"
@@ -64,6 +65,10 @@ template <typename DTYPE>
 TfEncoding TfEncodingAnalyzer<DTYPE>::computeEncoding(uint8_t bw, bool useSymmetricEncodings,
                                                       bool useStrictSymmetric, bool useUnsignedSymmetric) const
 {
+    // If symmetric encodings are requested then strictSymmetric and unsignedSymmetric are exclusive modes
+    if (useSymmetricEncodings)
+        assert(!(useStrictSymmetric && useUnsignedSymmetric));
+
     TfEncoding encoding;
 
     // Make sure zero value is within the range
@@ -84,7 +89,11 @@ TfEncoding TfEncodingAnalyzer<DTYPE>::computeEncoding(uint8_t bw, bool useSymmet
 
     // Special case for symmetric encodings. If all values are positive or 0, we can treat the
     // symmetric encodings as unsigned, which essentially translates to asymmetric
-    if (useSymmetricEncodings && (newMin < 0.0))
+
+    // This is a complex check: here is the explanation
+    // If min < 0, then unsigned symmetric mode is immaterial
+    // Also if user can explicitly requested to disable unsigned-symmetric mode, then we use regular symmetric
+    if (useSymmetricEncodings && ((newMin < 0.0) || (!useUnsignedSymmetric)))
     {
 
         // If we desire symmetric encodings then we need to expand either the min or max to be mirrors of each other
@@ -98,6 +107,8 @@ TfEncoding TfEncodingAnalyzer<DTYPE>::computeEncoding(uint8_t bw, bool useSymmet
     }
     else
     {
+        // Unsigned symmetric handling is the same as asymmetric from this point forward
+
         encoding.delta = (newMax - newMin) / numSteps;
         if (newMin < 0 && newMax > 0)
         {
