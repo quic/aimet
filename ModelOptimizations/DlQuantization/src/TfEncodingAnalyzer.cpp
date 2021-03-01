@@ -66,8 +66,6 @@ TfEncoding TfEncodingAnalyzer<DTYPE>::computeEncoding(uint8_t bw, bool useSymmet
 {
     TfEncoding encoding;
 
-    double numSteps = pow(2, bw) - 1;
-
     // Make sure zero value is within the range
     double newMin  = std::min(0.0, _accumulatedStats.min);
     double newMax  = std::max(0.0, _accumulatedStats.max);
@@ -78,6 +76,12 @@ TfEncoding TfEncodingAnalyzer<DTYPE>::computeEncoding(uint8_t bw, bool useSymmet
     newMax       = std::max(newMax, newMin + MIN_RANGE);
     encoding.bw  = bw;
 
+    double numSteps = pow(2, bw) - 1;
+    if (useSymmetricEncodings && useStrictSymmetric)
+    {
+        numSteps -= 1;
+    }
+
     // Special case for symmetric encodings. If all values are positive or 0, we can treat the
     // symmetric encodings as unsigned, which essentially translates to asymmetric
     if (useSymmetricEncodings && (newMin < 0.0))
@@ -86,9 +90,9 @@ TfEncoding TfEncodingAnalyzer<DTYPE>::computeEncoding(uint8_t bw, bool useSymmet
         // If we desire symmetric encodings then we need to expand either the min or max to be mirrors of each other
         // centered around 0
         newMax                          = std::max(std::abs(newMax), std::abs(newMin));
-        unsigned int numPositiveSteps   = pow(2, bw - 1) - 1;
+        unsigned int numPositiveSteps   = std::floor(numSteps / 2);
         encoding.delta = newMax / numPositiveSteps;
-        encoding.offset = - (double)(numPositiveSteps + 1);
+        encoding.offset = -std::ceil(numSteps / 2);
         encoding.min = encoding.offset * encoding.delta;
         encoding.max = encoding.delta * numPositiveSteps;
     }
