@@ -2,7 +2,7 @@
 //
 //  @@-COPYRIGHT-START-@@
 //
-//  Copyright (c) 2019, Qualcomm Innovation Center, Inc. All rights reserved.
+//  Copyright (c) 2019-2021, Qualcomm Innovation Center, Inc. All rights reserved.
 //
 //  Redistribution and use in source and binary forms, with or without
 //  modification, are permitted provided that the following conditions are met:
@@ -51,7 +51,7 @@ class TestTfEnhancedEncodingAnalyzer : public ::testing::Test
 // Test on CPU and GPU with float and double
 TYPED_TEST_CASE(TestTfEnhancedEncodingAnalyzer, TestDataTypesAndDevices);
 
-TYPED_TEST(TestTfEnhancedEncodingAnalyzer, SanityTestAsymmetric)
+TYPED_TEST(TestTfEnhancedEncodingAnalyzer, Asymmetric)
 {
     typedef typename TypeParam::dataType dataType;
 
@@ -133,7 +133,7 @@ TYPED_TEST(TestTfEnhancedEncodingAnalyzer, AllSameValuesAsymmetric)
     EXPECT_GE(encoding2.max, 0);   // 0 is included
 }
 
-TYPED_TEST(TestTfEnhancedEncodingAnalyzer, SanityTestSymmetric)
+TYPED_TEST(TestTfEnhancedEncodingAnalyzer, Symmetric)
 {
     typedef typename TypeParam::dataType dataType;
 
@@ -178,10 +178,61 @@ TYPED_TEST(TestTfEnhancedEncodingAnalyzer, SanityTestSymmetric)
 
     EXPECT_FLOAT_EQ(encoding.delta, (encoding.max - encoding.min) / 255);
     EXPECT_FLOAT_EQ(encoding.offset, encoding.min / encoding.delta);
+    EXPECT_EQ(encoding.offset, -128);
     EXPECT_EQ(encoding.bw, 8);
 }
 
-TYPED_TEST(TestTfEnhancedEncodingAnalyzer, SanityTestSymmetricUnsigned)
+TYPED_TEST(TestTfEnhancedEncodingAnalyzer, StrictSymmetric)
+{
+    typedef typename TypeParam::dataType dataType;
+
+    // Instantiate TfEnhancedEncodingAnalyzer
+    DlQuantization::TfEnhancedEncodingAnalyzer<dataType> analyzer;
+
+    float mean   = -2;
+    float stddev = 1;
+    std::normal_distribution<dataType> distribution(mean, stddev);
+    std::mt19937 generator(1);
+
+    unsigned int tensorCount = 6000;
+    std::vector<dataType> tensor(tensorCount);
+
+    for (unsigned int i = 0; i < tensorCount; i++)
+    {
+        tensor[i] = distribution(generator);
+    }
+    Blob<TypeParam> tensorBlob(tensor.data(), tensorCount);
+
+    // Update the stats using these tensor values
+    analyzer.updateStats(tensorBlob.getDataPtrOnDevice(), tensorCount, TypeParam::modeCpuGpu);
+
+    // Get the encodings
+    DlQuantization::TfEncoding encoding = analyzer.computeEncoding(8, true, true, false);
+
+    dataType absoluteMin = *std::min_element(tensor.begin(), tensor.end());
+    dataType absoluteMax = *std::max_element(tensor.begin(), tensor.end());
+
+    std::cout << "Absolute Min: " << absoluteMin << std::endl;
+    std::cout << "Absolute Max: " << absoluteMax << std::endl;
+    std::cout << encoding.min << std::endl;
+    std::cout << encoding.max << std::endl;
+    std::cout << encoding.delta << std::endl;
+    std::cout << encoding.offset << std::endl;
+
+    absoluteMax = std::max(std::abs(absoluteMax), std::abs(absoluteMin));
+    absoluteMin = -absoluteMax;
+
+    EXPECT_GT(encoding.min, absoluteMin);
+    EXPECT_LT(encoding.max, absoluteMax);
+
+    EXPECT_FLOAT_EQ(encoding.delta, (encoding.max - encoding.min) / 254);
+    EXPECT_FLOAT_EQ(encoding.offset, encoding.min / encoding.delta);
+    EXPECT_EQ(encoding.offset, -127);
+    EXPECT_EQ(encoding.bw, 8);
+    EXPECT_EQ(encoding.min, -encoding.max);
+}
+
+TYPED_TEST(TestTfEnhancedEncodingAnalyzer, SymmetricUnsigned)
 {
     typedef typename TypeParam::dataType dataType;
 

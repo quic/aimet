@@ -39,6 +39,7 @@
 #include <cassert>
 #include <cstddef>
 #include <vector>
+#include <cmath>
 
 #include "DlQuantization/Quantization.hpp"
 #include "math_functions.hpp"
@@ -78,6 +79,10 @@ TfEncoding TfEnhancedEncodingAnalyzer<DTYPE>::computeEncoding(uint8_t bw, bool u
 
     if (useSymmetricEncodings)
     {
+        // For strict symmetric mode, we make even number of buckets
+        if (useStrictSymmetric)
+            numSteps -= 1;
+
         _pickTestCandidatesSymmetric(minVal, maxVal, numSteps, testCandidates);
     }
     else
@@ -220,7 +225,7 @@ void TfEnhancedEncodingAnalyzer<DTYPE>::_pickTestCandidatesSymmetric(
         deltaMax           = (2 * absoluteMax) / numSteps;
 
         // Compute the offset - since we are finding symmetric candidates, offset can be computed given the delta
-        testOffset = -(numSteps / 2);
+        testOffset = floor(-numSteps / 2);
     }
 
     // Compute the deltas we will test.
