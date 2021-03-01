@@ -123,7 +123,7 @@ private:
      * @param test_offsets Vector of offsets (test candidate returned)
      */
     void _pickTestCandidatesSymmetric(DTYPE minVal, DTYPE maxVal, DTYPE numSteps,
-                                      std::vector<std::tuple<DTYPE, int>>& testCandidates) const;
+                                      std::vector<std::tuple<DTYPE, int>>& testCandidates, bool useUnsignedSymmetric) const;
 
     /**
      * Clamp given test delta and test offset based on observed min and max

@@ -258,7 +258,7 @@ TYPED_TEST(TestTfEnhancedEncodingAnalyzer, SymmetricUnsigned)
     analyzer.updateStats(tensorBlob.getDataPtrOnDevice(), tensorCount, TypeParam::modeCpuGpu);
 
     // Get the encodings
-    DlQuantization::TfEncoding encoding = analyzer.computeEncoding(8, true, false, false);
+    DlQuantization::TfEncoding encoding = analyzer.computeEncoding(8, true, false, true);
 
     dataType absoluteMin = *std::min_element(tensor.begin(), tensor.end());
     dataType absoluteMax = *std::max_element(tensor.begin(), tensor.end());

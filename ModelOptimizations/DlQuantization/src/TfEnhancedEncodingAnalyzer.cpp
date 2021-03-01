@@ -83,7 +83,7 @@ TfEncoding TfEnhancedEncodingAnalyzer<DTYPE>::computeEncoding(uint8_t bw, bool u
         if (useStrictSymmetric)
             numSteps -= 1;
 
-        _pickTestCandidatesSymmetric(minVal, maxVal, numSteps, testCandidates);
+        _pickTestCandidatesSymmetric(minVal, maxVal, numSteps, testCandidates, useUnsignedSymmetric);
     }
     else
     {
@@ -203,8 +203,9 @@ void TfEnhancedEncodingAnalyzer<DTYPE>::_pickTestCandidatesAsymmetric(
 }
 
 template <typename DTYPE>
-void TfEnhancedEncodingAnalyzer<DTYPE>::_pickTestCandidatesSymmetric(
-    DTYPE minVal, DTYPE maxVal, DTYPE numSteps, std::vector<std::tuple<DTYPE, int>>& testCandidates) const
+void TfEnhancedEncodingAnalyzer<DTYPE>::_pickTestCandidatesSymmetric(DTYPE minVal, DTYPE maxVal, DTYPE numSteps,
+                                                                     std::vector<std::tuple<DTYPE, int>>& testCandidates,
+                                                                     bool useUnsignedSymmetric) const
 {
     // Compute the largest TF delta which would make sense, based on the range
     // [minVal ... maxVal] we just calculated.
@@ -212,7 +213,7 @@ void TfEnhancedEncodingAnalyzer<DTYPE>::_pickTestCandidatesSymmetric(
     DTYPE deltaMax  = 0.0;
     int testOffset  = 0;
 
-    if (minVal == 0.0)
+    if ((minVal == 0.0) && (useUnsignedSymmetric))
     {
         // Special case for symmetric encodings. If all values are positive or 0, we can treat the
         // symmetric encodings as unsigned
