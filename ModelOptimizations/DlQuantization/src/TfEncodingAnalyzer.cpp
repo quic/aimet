@@ -37,6 +37,7 @@
 //==============================================================================
 
 #include <cstddef>
+#include <cassert>
 #include <vector>
 
 #include "DlQuantization/Quantization.hpp"
@@ -51,50 +52,65 @@ void TfEncodingAnalyzer<DTYPE>::updateStats(const DTYPE* tensor, const size_t te
                                             ComputationMode tensorCpuGpuMode)
 {
     // Compute stats for the tensor being passed in
-    auto current_min = (double) GetMin(tensor, tensorSize, tensorCpuGpuMode);
-    auto current_max = (double) GetMax(tensor, tensorSize, tensorCpuGpuMode);
+    auto currentMin  = (double) GetMin(tensor, tensorSize, tensorCpuGpuMode);
+    auto currentMax  = (double) GetMax(tensor, tensorSize, tensorCpuGpuMode);
 
     // Update accumulated stats
-    _accumulatedStats.min = std::min(_accumulatedStats.min, current_min);
-    _accumulatedStats.max = std::max(_accumulatedStats.max, current_max);
+    _accumulatedStats.min = std::min(_accumulatedStats.min, currentMin);
+    _accumulatedStats.max = std::max(_accumulatedStats.max, currentMax);
 }
 
 
 template <typename DTYPE>
-TfEncoding TfEncodingAnalyzer<DTYPE>::computeEncoding(uint8_t bw, bool useSymmetricEncodings) const
+TfEncoding TfEncodingAnalyzer<DTYPE>::computeEncoding(uint8_t bw, bool useSymmetricEncodings,
+                                                      bool useStrictSymmetric, bool useUnsignedSymmetric) const
 {
+    // If symmetric encodings are requested then strictSymmetric and unsignedSymmetric are exclusive modes
+    if (useSymmetricEncodings)
+        assert(!(useStrictSymmetric && useUnsignedSymmetric));
+
     TfEncoding encoding;
 
-    double num_steps = pow(2, bw) - 1;
-
     // Make sure zero value is within the range
-    double new_min = std::min(0.0, _accumulatedStats.min);
-    double new_max = std::max(0.0, _accumulatedStats.max);
+    double newMin  = std::min(0.0, _accumulatedStats.min);
+    double newMax  = std::max(0.0, _accumulatedStats.max);
 
     // When the min and max are too close together, nudge the maximum to meet the
     // minimum range requirement
     // This also handles the case where min==max==0 to avoid division by zero
-    new_max = std::max(new_max, new_min + MIN_RANGE);
+    newMax       = std::max(newMax, newMin + MIN_RANGE);
     encoding.bw  = bw;
+
+    double numSteps = pow(2, bw) - 1;
+    if (useSymmetricEncodings && useStrictSymmetric)
+    {
+        numSteps -= 1;
+    }
 
     // Special case for symmetric encodings. If all values are positive or 0, we can treat the
     // symmetric encodings as unsigned, which essentially translates to asymmetric
-    if (useSymmetricEncodings && (new_min < 0.0))
+
+    // This is a complex check: here is the explanation
+    // If min < 0, then unsigned symmetric mode is immaterial
+    // Also if user can explicitly requested to disable unsigned-symmetric mode, then we use regular symmetric
+    if (useSymmetricEncodings && ((newMin < 0.0) || (!useUnsignedSymmetric)))
     {
 
         // If we desire symmetric encodings then we need to expand either the min or max to be mirrors of each other
         // centered around 0
-        new_max = std::max(std::abs(new_max), std::abs(new_min));
-        unsigned int num_positive_steps = pow(2, bw - 1) - 1;
-        encoding.delta = new_max / num_positive_steps;
-        encoding.offset = - (double)(num_positive_steps + 1);
+        newMax                          = std::max(std::abs(newMax), std::abs(newMin));
+        unsigned int numPositiveSteps   = std::floor(numSteps / 2);
+        encoding.delta = newMax / numPositiveSteps;
+        encoding.offset = -std::ceil(numSteps / 2);
         encoding.min = encoding.offset * encoding.delta;
-        encoding.max = encoding.delta * num_positive_steps;
+        encoding.max = encoding.delta * numPositiveSteps;
     }
     else
     {
-        encoding.delta = (new_max - new_min) / num_steps;
-        if (new_min < 0 && new_max > 0)
+        // Unsigned symmetric handling is the same as asymmetric from this point forward
+
+        encoding.delta = (newMax - newMin) / numSteps;
+        if (newMin < 0 && newMax > 0)
         {
             // Need to make sure 0-value is exactly quantizable
             // Quantization of q into b is given by:
@@ -103,23 +119,23 @@ TfEncoding TfEncodingAnalyzer<DTYPE>::computeEncoding(uint8_t bw, bool useSymmet
             //                             offset = min / delta
             // For q = 0: b = -min / delta
             // Find the closest round b, and set q=0 for it
-            double b_zero   = round(-new_min / encoding.delta);
-            b_zero          = std::min(num_steps, std::max(0.0, b_zero));   // just to be safe
-            encoding.offset = -b_zero;
+            double bZero    = round(-newMin / encoding.delta);
+            bZero           = std::min(numSteps, std::max(0.0, bZero));   // just to be safe
+            encoding.offset = -bZero;
         }
         else
         {
             // One of min or max is guaranteed to be zero, so 0 is exactly quantizable already
-            encoding.offset = round(new_min / encoding.delta);
+            encoding.offset = round(newMin / encoding.delta);
         }
 
         // Calculate 'min' and 'max' based on 'delta' and 'offset'.
         // Note this min and max can vary from the one in 'stats'. This min and max
         // can really be represented with the integer offset.
         encoding.min = encoding.delta * encoding.offset;
-        // We want to calculate: max = delta * num_steps + min.
+        // We want to calculate: max = delta * numSteps + min.
         // To avoid numerical accuracy issues on Linaro, we simplify the math.
-        encoding.max = new_max - new_min + encoding.min;
+        encoding.max = newMax - newMin + encoding.min;
     }
 
 

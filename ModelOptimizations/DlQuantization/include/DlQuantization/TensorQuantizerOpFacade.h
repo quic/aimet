@@ -87,7 +87,8 @@ public:
     /**
      * Compute the encoding for this tensor using stats collected so far
      */
-    virtual TfEncoding computeEncoding(unsigned int bitwidth, bool useSymmetricEncoding) = 0;
+    virtual TfEncoding computeEncoding(unsigned int bitwidth, bool useSymmetricEncoding,
+                                       bool useStrictSymmetric, bool useUnsignedSymmetric) = 0;
 
 };
 

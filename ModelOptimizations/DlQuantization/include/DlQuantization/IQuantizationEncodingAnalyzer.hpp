@@ -48,6 +48,12 @@ template <typename DTYPE>
 class IQuantizationEncodingAnalyzer
 {
 public:
+    /**
+     * @brief Given a tensor update running stats for this encoding analyzer
+     * @param tensor The tensor to use for updating stats
+     * @param tensorSize Number of elements in the tensor
+     * @param tensorCpuGpuMode Enum indicating whether the tensor is placed in CPU or GPU memory
+     */
     virtual void updateStats(const DTYPE* tensor, const std::size_t tensorSize, ComputationMode tensorCpuGpuMode) = 0;
 
     /**
@@ -58,8 +64,19 @@ public:
      * This grid search optimizes the encoding to reduce the cost of quantization.
      * In this cost function, saturation errors are weighted higher than
      * quantization errors.
+     *
+     * @param bw Bitwidth to use for computing encodings
+     * @param useSymmetricEncodings If true, compute symmetric encodings (with a zero-point of absolute 0)
+     * @param useStrictSymmetric If true, and if useSymmetricEncodings is true, calculate encodings exactly centered
+     *                           around 0. E.g. if bw==8, then this results in quantized int values (-127:127). If this
+     *                           is not set, then quantized int values would be (-128:127) to use the entire range.
+     * @param useUnsignedSymmetric If true, and if useSymmetricEncodings is true, check if the entire statistics we have
+     *                          collected are for +ve numbers. If yes, use quantized int values (0:255). This is a
+     *                          special case, where we have double the resolution for the computed encodings while
+     *                          still preserving the zero-point to be absolute 0.
      */
-    virtual TfEncoding computeEncoding(uint8_t bw, bool useSymmetricEncodings) const = 0;
+    virtual TfEncoding computeEncoding(uint8_t bw, bool useSymmetricEncodings,
+                                       bool useStrictSymmetric, bool useUnsignedSymmetric) const = 0;
 };
 
 

@@ -543,7 +543,8 @@ class QuantizationSimModel:
             if quantizer_info.get_op_mode() != int(libpymo.TensorQuantizerOpMode.passThrough):
                 op_bitwidth, op_use_symmetric_encodings = self._get_bitwidth_and_symmetric_flag(
                     quantizer_info.quant_op_name)
-                encoding = quantizer_info.tensor_quantizer.computeEncoding(op_bitwidth, op_use_symmetric_encodings)
+                encoding = quantizer_info.tensor_quantizer.computeEncoding(op_bitwidth, op_use_symmetric_encodings,
+                                                                           False, False)
                 if quantizer_info.tensor_quantizer.isEncodingValid:
                     self._set_op_input_variables(op_name, encoding, libpymo.TensorQuantizerOpMode.quantizeDequantize)
                 else:
@@ -557,7 +558,8 @@ class QuantizationSimModel:
             if quantizer_info.get_op_mode() != int(libpymo.TensorQuantizerOpMode.passThrough):
                 op_bitwidth, op_use_symmetric_encodings = self._get_bitwidth_and_symmetric_flag(
                     quantizer_info.quant_op_name)
-                encoding = quantizer_info.tensor_quantizer.computeEncoding(op_bitwidth, op_use_symmetric_encodings)
+                encoding = quantizer_info.tensor_quantizer.computeEncoding(op_bitwidth, op_use_symmetric_encodings,
+                                                                           False, False)
                 if quantizer_info.tensor_quantizer.isEncodingValid:
                     self._set_op_input_variables(op_name, encoding, op_mode)
                 else:

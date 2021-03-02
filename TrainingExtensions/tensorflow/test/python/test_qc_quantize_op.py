@@ -99,7 +99,7 @@ class TestTrainingExtensionsQcQuantizeOp(unittest.TestCase):
 
         # compute encodings
         self.assertFalse(tensor_quantizer.isEncodingValid)
-        encoding = tensor_quantizer.computeEncoding(bitwidth, use_symm_encoding)
+        encoding = tensor_quantizer.computeEncoding(bitwidth, use_symm_encoding, False, False)
         self.assertTrue(tensor_quantizer.isEncodingValid)
         print('min=', encoding.min, ', max=', encoding.max)
 
@@ -162,7 +162,7 @@ class TestTrainingExtensionsQcQuantizeOp(unittest.TestCase):
         print(out_data)
 
         self.assertTrue(tensor_quantizer.isEncodingValid)
-        encoding = tensor_quantizer.computeEncoding(bitwidth, use_symm_encoding)
+        encoding = tensor_quantizer.computeEncoding(bitwidth, use_symm_encoding, False, False)
 
         print('min=', encoding.min, ', max=', encoding.max)
 
@@ -226,7 +226,7 @@ class TestTrainingExtensionsQcQuantizeOp(unittest.TestCase):
 
         # compute encodings
         self.assertFalse(tensor_quantizer.isEncodingValid)
-        encoding = tensor_quantizer.computeEncoding(bitwidth, use_symm_encoding)
+        encoding = tensor_quantizer.computeEncoding(bitwidth, use_symm_encoding, False, False)
         self.assertTrue(tensor_quantizer.isEncodingValid)
         print('min=', encoding.min, ', max=', encoding.max)
 

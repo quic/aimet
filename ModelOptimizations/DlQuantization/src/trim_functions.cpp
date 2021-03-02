@@ -57,12 +57,9 @@ inline double RandUniform_cpu()
     return rand() / (RAND_MAX + 1.0);
 }
 
-double computeDelta(double encodingMin, double encodingMax, uint8_t bw)
+double computeDelta(double encodingMin, double encodingMax, double numSteps)
 {
-    double num_steps = pow(2, bw) - 1;
-
-    double delta = (encodingMax - encodingMin) / num_steps;
-
+    double delta = (encodingMax - encodingMin) / numSteps;
     return delta;
 }
 

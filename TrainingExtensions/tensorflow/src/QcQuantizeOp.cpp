@@ -89,7 +89,8 @@ void modeSpecificAction(const D& d, const T* inTensor, size_t count, T* outTenso
     {
 
         tensorQuantizer->updateStats(inTensor, count, useCuda);
-        DlQuantization::TfEncoding initial_encoding = tensorQuantizer->computeEncoding(bitwidth, useSymmetricEncoding);
+        DlQuantization::TfEncoding initial_encoding = tensorQuantizer->computeEncoding(bitwidth, useSymmetricEncoding,
+                                                                                       false, true);
         tensorQuantizer->quantizeDequantize(inTensor, count, outTensor, initial_encoding.min, initial_encoding.max,
                                             bitwidth, useCuda);
 

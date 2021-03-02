@@ -665,7 +665,7 @@ def compute_encoding_for_given_bitwidth(data: np.ndarray, bitwidth: int, quant_s
     encoding_analyzer = libpymo.EncodingAnalyzerForPython(quant_scheme)
     encoding_analyzer.updateStats(data, False)
 
-    encoding, is_encoding_valid = encoding_analyzer.computeEncoding(bitwidth, is_symmetric)
+    encoding, is_encoding_valid = encoding_analyzer.computeEncoding(bitwidth, is_symmetric, False, False)
 
     if is_encoding_valid:
         return {'min': encoding.min,

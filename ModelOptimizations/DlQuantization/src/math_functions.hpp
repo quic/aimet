@@ -2,7 +2,7 @@
 //
 //  @@-COPYRIGHT-START-@@
 //
-//  Copyright (c) 2016-2017, Qualcomm Innovation Center, Inc. All rights reserved.
+//  Copyright (c) 2016-2021, Qualcomm Innovation Center, Inc. All rights reserved.
 //
 //  Redistribution and use in source and binary forms, with or without
 //  modification, are permitted provided that the following conditions are met:
@@ -59,7 +59,7 @@ namespace DlQuantization
 struct PDF
 {
     // The left sides of the buckets.
-    std::vector<double> x_left;
+    std::vector<double> xLeft;
     // The probability for each bucket.
     std::vector<double> pdf;
     // This PDF holds the average data for this many iterations.
@@ -78,10 +78,10 @@ struct StatsLayerPdf
 };
 
 template <typename DTYPE>
-DTYPE GetMax(const DTYPE* data, int cnt, ComputationMode mode_cpu_gpu);
+DTYPE GetMax(const DTYPE* data, int cnt, ComputationMode cpuGpuMode);
 
 template <typename DTYPE>
-DTYPE GetMin(const DTYPE* data, int cnt, ComputationMode mode_cpu_gpu);
+DTYPE GetMin(const DTYPE* data, int cnt, ComputationMode cpuGpuMode);
 
 // Android compiler doesn't have std::log2, so define it here
 double logBase2(double d);

@@ -1,7 +1,7 @@
 //
 //  @@-COPYRIGHT-START-@@
 //
-//  Copyright (c) 2019, Qualcomm Innovation Center, Inc. All rights reserved.
+//  Copyright (c) 2019-2021, Qualcomm Innovation Center, Inc. All rights reserved.
 //
 //  Redistribution and use in source and binary forms, with or without
 //  modification, are permitted provided that the following conditions are met:
@@ -70,7 +70,8 @@ public:
      * @param useSymmetricEncodings If true, compute symmetric encodings
      * @return Computed encoding
      */
-    TfEncoding computeEncoding(uint8_t bw, bool useSymmetricEncodings) const override;
+    TfEncoding computeEncoding(uint8_t bw, bool useSymmetricEncodings, bool useStrictSymmetric,
+                               bool useUnsignedSymmetric) const override;
 
 
 private:
@@ -110,19 +111,19 @@ private:
      * @param test_offsets Vector of offsets (test candidate returned)
      */
     void _pickTestCandidatesAsymmetric(DTYPE observedMin, DTYPE observedMax, DTYPE numSteps,
-                                       std::vector<std::tuple<DTYPE, int>>& test_candidates) const;
+                                       std::vector<std::tuple<DTYPE, int>>& testCandidates) const;
 
     /**
      * Pick symmetric test candidates to use for searching the lowest quantized cost. Each candidates is expressed
      * in terms of its delta and offset
-     * @param min_val Minimum value of the stats
-     * @param max_val Max value of the stats
-     * @param num_steps Number of delta steps (based on the bitwidth)
+     * @param minVal Minimum value of the stats
+     * @param maxVal Max value of the stats
+     * @param numSteps Number of delta steps (based on the bitwidth)
      * @param test_deltas Vector of deltas (test candidate returned)
      * @param test_offsets Vector of offsets (test candidate returned)
      */
-    void _pickTestCandidatesSymmetric(DTYPE min_val, DTYPE max_val, DTYPE num_steps,
-                                      std::vector<std::tuple<DTYPE, int>>& test_candidates) const;
+    void _pickTestCandidatesSymmetric(DTYPE minVal, DTYPE maxVal, DTYPE numSteps,
+                                      std::vector<std::tuple<DTYPE, int>>& testCandidates, bool useUnsignedSymmetric) const;
 
     /**
      * Clamp given test delta and test offset based on observed min and max
@@ -142,7 +143,7 @@ private:
      * @return Tuple of <best delta, best offset>
      */
     std::tuple<DTYPE, int> _findBestCandidate(uint8_t bw,
-                                              const std::vector<std::tuple<DTYPE, int>>& test_candidates) const;
+                                              const std::vector<std::tuple<DTYPE, int>>& testCandidates) const;
 };
 
 }   // namespace DlQuantization

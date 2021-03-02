@@ -62,7 +62,8 @@ public:
      * In this cost function, saturation errors are weighted higher than
      * quantization errors.
      */
-    TfEncoding computeEncoding(uint8_t bw, bool useSymmetricEncodings) const override;
+    TfEncoding computeEncoding(uint8_t bw, bool useSymmetricEncodings,
+                               bool useStrictSymmetric, bool useUnsignedSymmetric) const override;
 
     // Minimum range of quantization
     static constexpr double MIN_RANGE = 0.01;

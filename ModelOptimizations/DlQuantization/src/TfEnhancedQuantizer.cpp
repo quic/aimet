@@ -117,7 +117,7 @@ void TfEnhancedQuantizer<DTYPE>::StatsToFxpFormat(const std::string& layer, Laye
     encoding.clear();
     for (const TfEnhancedEncodingAnalyzer<DTYPE>& analyzer: analyzers)
     {
-        TfEncoding current_encoding = analyzer.computeEncoding(bw, false);
+        TfEncoding current_encoding = analyzer.computeEncoding(bw, false, false, false);
         encoding.push_back(current_encoding);
     }
 }
@@ -129,7 +129,7 @@ void TfEnhancedQuantizer<DTYPE>::NumberDistributionToFxpFormat(int bw, const DTY
     TfEnhancedEncodingAnalyzer<DTYPE> analyzer;
 
     analyzer.updateStats(data, count, m_ModeCpuGpu);
-    encoding = analyzer.computeEncoding(bw, false);
+    encoding = analyzer.computeEncoding(bw, false, false, false);
 }
 
 template <typename DTYPE>
