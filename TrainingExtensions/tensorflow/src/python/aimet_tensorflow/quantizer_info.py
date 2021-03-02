@@ -250,7 +250,7 @@ class QuantizerInfo:
         :return: Encoding
         """
         if not self._is_encoding_frozen:
-            encoding = self.tensor_quantizer.computeEncoding(bitwidth, use_symmetric_encodings)
+            encoding = self.tensor_quantizer.computeEncoding(bitwidth, use_symmetric_encodings, False, False)
         else:
             encoding = self.get_encoding()
 
