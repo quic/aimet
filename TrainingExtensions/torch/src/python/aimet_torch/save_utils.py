@@ -41,9 +41,9 @@
 import os
 from typing import Tuple
 
-import json
 import torch
 
+from aimet_common.utils import save_json_yaml
 from aimet_torch.qc_quantize_op import QcQuantizeStandalone, QcQuantizeWrapper
 from aimet_torch.meta.old_connectedgraph import trace_and_parse
 from aimet_torch import utils
@@ -78,7 +78,7 @@ class SaveUtils:
                 pytorch_onnx_names_dict[dotted_name] = xname
         return pytorch_onnx_names_dict
 
-    def save_encodings_to_json(self, model, path, filename_prefix, input_shape):
+    def save_encodings_to_files(self, model, path, filename_prefix, input_shape):
         """
         Save quantization encodings for the given model in json format
         :param model: Model to save
@@ -93,6 +93,7 @@ class SaveUtils:
 
         encodings_path_onnx_names = os.path.join(path, filename_prefix + '_onnx_names' + '.encodings')
         encodings_path_python_names = os.path.join(path, filename_prefix + '_pytorch_names' + '.encodings')
+
         encoding_dict_with_pytorch_names = {}
         encoding_dict_with_onnx_names = {}
 
@@ -135,16 +136,13 @@ class SaveUtils:
         if not encoding_dict_with_onnx_names:
             raise RuntimeError('Could not find any QcQuantizeOps in the model for saving encodings!')
 
-        with open(encodings_path_onnx_names, 'w') as fp:
-            json.dump(encoding_dict_with_onnx_names, fp, sort_keys=True, indent=4)
-
-        with open(encodings_path_python_names, 'w') as fp:
-            json.dump(encoding_dict_with_pytorch_names, fp, sort_keys=True, indent=4)
+        save_json_yaml(encodings_path_onnx_names, encoding_dict_with_onnx_names)
+        save_json_yaml(encodings_path_python_names, encoding_dict_with_pytorch_names)
 
         model.to(device)
 
     @staticmethod
-    def save_weight_encodings_to_json(path, filename_prefix, weight_encoding_dict, weight_encoding_dict_with_onnx_names):
+    def save_weight_encodings_to_files(path, filename_prefix, weight_encoding_dict, weight_encoding_dict_with_onnx_names):
         """
         Save quantization encodings for the given model in json format
         :param model: Model to save
@@ -156,14 +154,13 @@ class SaveUtils:
         """
 
         weight_encoding_path = os.path.join(path, filename_prefix + '_pytorch_names_weight.encodings')
-        weight_encoding_onxx_path = os.path.join(path, filename_prefix + '_onxx_names_weight.encodings')
+        weight_encoding_onnx_path = os.path.join(path, filename_prefix + '_onxx_names_weight.encodings')
 
         if not weight_encoding_dict:
             raise RuntimeError('Could not find any QcQuantizeOps in the model for saving encodings!')
 
-        with open(weight_encoding_path, 'w') as wt_fp, open(weight_encoding_onxx_path, 'w') as wt_onxx_fp:
-            json.dump(weight_encoding_dict, wt_fp, sort_keys=True, indent=4)
-            json.dump(weight_encoding_dict_with_onnx_names, wt_onxx_fp, sort_keys=True, indent=4)
+        save_json_yaml(weight_encoding_path, weight_encoding_path)
+        save_json_yaml(weight_encoding_onnx_path, weight_encoding_dict_with_onnx_names)
 
     @staticmethod
     def save_weights(quantized_model, model, path, filename, save_as_onnx, common="_module_to_wrap.",

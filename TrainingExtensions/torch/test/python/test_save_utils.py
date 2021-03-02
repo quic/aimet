@@ -96,7 +96,7 @@ class CommonCode:
 class TestSaveUtils(unittest.TestCase):
 
     @unittest.skip
-    def test_save_encodings_to_json(self):
+    def test_save_encodings_to_files(self):
         """
         Test for old deprecated code. Please delete
         """
@@ -108,8 +108,9 @@ class TestSaveUtils(unittest.TestCase):
         if not os.path.exists(path):
             os.makedirs(path)
 
-        save_encodings.save_encodings_to_json(model=quantized_model, path=path, filename_prefix=filename_prefix,
+        save_encodings.save_encodings_to_files(model=quantized_model, path=path, filename_prefix=filename_prefix,
                                               input_shape=(1, 1, 28, 28))
+
 
     def test_save_weights_as_onnx(self):
         sw = su.SaveUtils

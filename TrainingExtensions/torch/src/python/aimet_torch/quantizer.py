@@ -323,10 +323,10 @@ class Quantizer:
                     if layer_name in pytorch_onnx_names_dict:
                         weight_encoding_dict_with_onnx_names[pytorch_onnx_names_dict[layer_name]] = value
         # export weight encodings to output json file
-        su.SaveUtils.save_weight_encodings_to_json(path=path, filename_prefix=filename_prefix,
-                                                   weight_encoding_dict=weight_encoding_dict,
-                                                   weight_encoding_dict_with_onnx_names=
-                                                   weight_encoding_dict_with_onnx_names)
+        su.SaveUtils.save_weight_encodings_to_files(path=path, filename_prefix=filename_prefix,
+                                                    weight_encoding_dict=weight_encoding_dict,
+                                                    weight_encoding_dict_with_onnx_names=
+                                                    weight_encoding_dict_with_onnx_names)
 
         self._model.to(device)
 
@@ -347,8 +347,8 @@ class Quantizer:
         torch.save(self._model, model_path)
 
         # save the encodings
-        su.SaveUtils().save_encodings_to_json(model=self._model, path=path, filename_prefix=filename_prefix,
-                                              input_shape=input_shape)
+        su.SaveUtils().save_encodings_to_files(model=self._model, path=path, filename_prefix=filename_prefix,
+                                               input_shape=input_shape)
         # save the weight encodings
         self.compute_and_save_weight_encodings(path=path, filename_prefix=filename_prefix,
                                                input_shape=input_shape)

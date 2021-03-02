@@ -42,6 +42,7 @@ import torch
 import torch.nn as nn
 import json as json
 import os
+import yaml
 
 
 from torchvision import models
@@ -583,6 +584,19 @@ class TestQuantizationSim(unittest.TestCase):
         param_keys = list(encoding_data["param_encodings"].keys())
         self.assertTrue(param_keys[2] == "conv1.weight")
         self.assertTrue(isinstance(encoding_data["param_encodings"]["conv1.weight"], list))
+    
+        with open('./data/resnet50.encodings.yaml') as yaml_file:
+             encoding_data = yaml.load(yaml_file, Loader=yaml.FullLoader)
+ 
+        activation_keys = list(encoding_data["activation_encodings"].keys())
+        self.assertEqual(activation_keys[0], "1067")
+        self.assertTrue(isinstance(encoding_data["activation_encodings"]["1067"], list))
+ 
+        param_keys = list(encoding_data["param_encodings"].keys())
+        self.assertTrue(param_keys[2] == "conv1.weight")
+        self.assertTrue(isinstance(encoding_data["param_encodings"]["conv1.weight"], list))
+
+    
     # -------------------------------------------
 
     def test_export_to_onnx(self):
@@ -608,6 +622,17 @@ class TestQuantizationSim(unittest.TestCase):
         # check the encodings
         with open('./data/two_input_model.encodings', 'r') as fp:
             encodings = json.load(fp)
+
+            activation_encodings = encodings['activation_encodings']
+            param_encodings = encodings['param_encodings']
+            self.assertEqual(15, len(activation_encodings))
+            self.assertIn('conv1_a.bias', param_encodings)
+            self.assertEqual(param_encodings['conv1_a.bias'][0]['bitwidth'], 32)
+            self.assertEqual(6, len(param_encodings['conv1_a.weight'][0]))
+            self.assertEqual(10, param_encodings['conv1_a.weight'][0]['max'])
+
+        with open('./data/two_input_model.encodings.yaml', 'r') as fp_yaml:
+            encodings = yaml.load(fp_yaml, Loader=yaml.FullLoader)
 
             activation_encodings = encodings['activation_encodings']
             param_encodings = encodings['param_encodings']

@@ -51,10 +51,11 @@ from tensorflow.python.framework import ops as tf_ops
 # Import aimet specific modules
 import libpytrext
 import libpymo
-from aimet_common.utils import AimetLogger
+from aimet_common.utils import AimetLogger, save_json_yaml
 from aimet_tensorflow.common import core
 from aimet_tensorflow.common import graph_eval
 from aimet_tensorflow.common import op_defs
+
 
 _QUANT_MODES = {'tf_enhanced': libpymo.QuantizationMode.QUANTIZATION_TF_ENHANCED,
                 'tf': libpymo.QuantizationMode.QUANTIZATION_TF}
@@ -63,6 +64,7 @@ _ROUNDING_MODES = {'nearest': libpymo.RoundingMode.ROUND_NEAREST,
                    'stochastic': libpymo.RoundingMode.ROUND_STOCHASTIC}
 
 _log = AimetLogger.get_area_logger(AimetLogger.LogAreas.Quant)
+
 
 
 def _load_ops():
@@ -525,8 +527,7 @@ class Quantizer:
         if encodings:
             encoding_output = output_graph+'.encodings'
             self._log.info('Saving activation encodings to: %s', encoding_output)
-            with open(encoding_output, 'w') as f:
-                json.dump(self._activation_encodings, f, sort_keys=True, indent=4)
+            save_json_yaml(encoding_output, self._activation_encodings)
 
     def quantize_net(self, input_tensor_names: List[str], forward_callback, bw_params=8, bw_acts=8, iterations=100):
         """
