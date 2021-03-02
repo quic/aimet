@@ -38,7 +38,6 @@
 """ utilities for quantsim """
 
 from typing import List
-
 import tensorflow as tf
 
 from aimet_common.utils import AimetLogger
@@ -46,6 +45,7 @@ from aimet_tensorflow.common.connectedgraph import ConnectedGraph
 from aimet_tensorflow.common.operation import Op
 from aimet_tensorflow.common import core
 from aimet_tensorflow.quantsim_config.quantsim_config import OpToQuantOpsDictType
+import libpymo
 
 _logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Quant)
 
@@ -185,3 +185,19 @@ def get_time_steps_tensor_from_rnn_inner_ops(inner_ops: List[tf.Operation]) -> t
             time_steps_tensor = less_enter_op.inputs[0]
 
     return time_steps_tensor
+
+
+def create_encoding_from_dict(encoding_dict: dict) -> (libpymo.TfEncoding, bool):
+    """
+    Create encoding object from encoding dictionary
+    :param encoding_dict: Dictionary containing encodings
+    :return: Encoding object, is_symmetric
+    """
+    encoding = libpymo.TfEncoding()
+    encoding.bw = encoding_dict.get('bitwidth')
+    encoding.max = encoding_dict.get('max')
+    encoding.min = encoding_dict.get('min')
+    encoding.delta = encoding_dict.get('scale')
+    encoding.offset = encoding_dict.get('offset')
+    is_symmetric = encoding_dict.get('is_symmetric')
+    return encoding, is_symmetric
