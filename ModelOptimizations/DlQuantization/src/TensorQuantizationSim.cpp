@@ -36,8 +36,10 @@
 //
 //==============================================================================
 
-#include "TensorQuantizationSim.h"
+#include <math.h>
+
 #include "trim_functions.hpp"
+#include "TensorQuantizationSim.h"
 
 namespace DlQuantization
 {
@@ -74,8 +76,16 @@ void TensorQuantizationSim<DTYPE>::quantizeDequantizeTensor(const DTYPE* inputTe
     gateMinMax(encodingMin, encodingMax);
     encoding.min = encodingMin;
     encoding.max = encodingMax;
+
+    // Detect if we are in strict-symmetric mode
+    double numSteps = pow(2, bw) - 1;
+    if (encodingMin == -encodingMax)
+    {
+        numSteps -= 1;  // in case of 8-bits, strict symmetric means we use 254 int values, instead of 255
+    }
+
     // compute offset and delta on the fly
-    encoding.delta = computeDelta(encodingMin, encodingMax, bw);
+    encoding.delta = computeDelta(encodingMin, encodingMax, numSteps);
     encoding.offset = computeOffset(encodingMin, encoding.delta);
 
     if (use_cuda)

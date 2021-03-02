@@ -103,13 +103,15 @@ void TensorQuantizer::updateStats(py::array_t<float> tensor, bool useCuda)
     _validStats = true;
 }
 
-TfEncoding TensorQuantizer::computeEncoding(unsigned int bitwidth, bool useSymmetricEncoding)
+TfEncoding TensorQuantizer::computeEncoding(unsigned int bitwidth, bool useSymmetricEncoding, bool useStrictSymmetric,
+                                            bool useUnsignedSymmetric)
 {
     TfEncoding encoding;
 
     if (_validStats)
     {
-        encoding        = _encodingAnalyzer->computeEncoding(bitwidth, useSymmetricEncoding);
+        encoding        = _encodingAnalyzer->computeEncoding(bitwidth, useSymmetricEncoding, useStrictSymmetric,
+                                                      useUnsignedSymmetric);
         isEncodingValid = true;
     }
 

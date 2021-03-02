@@ -116,7 +116,7 @@ class TestTensorQuantizer(unittest.TestCase):
         quantizer.updateStats(random_input, False)
         self.assertFalse(quantizer.isEncodingValid)
 
-        encoding = quantizer.computeEncoding(8, False)
+        encoding = quantizer.computeEncoding(8, False, False, False)
         print(quantizer.encoding.min, quantizer.encoding.max, quantizer.encoding.delta, quantizer.encoding.offset)
         self.assertTrue(quantizer.isEncodingValid)
 
@@ -262,7 +262,7 @@ class TestTensorQuantizer(unittest.TestCase):
 
         enc_analyzer = libpymo.EncodingAnalyzerForPython(libpymo.QuantizationMode.QUANTIZATION_TF)
         enc_analyzer.updateStats(random_input, False)
-        encoding, is_valid = enc_analyzer.computeEncoding(8, False)
+        encoding, is_valid = enc_analyzer.computeEncoding(8, False, False, False)
 
         print("Encoding.min=", encoding.min)
         print("Encoding.max=", encoding.max)
@@ -294,7 +294,7 @@ class TestTensorQuantizer(unittest.TestCase):
 
         enc_analyzer = libpymo.EncodingAnalyzerForPython(libpymo.QuantizationMode.QUANTIZATION_TF)
         enc_analyzer.updateStats(random_input, False)
-        encoding, is_valid = enc_analyzer.computeEncoding(8, False)
+        encoding, is_valid = enc_analyzer.computeEncoding(8, False, False, False)
 
         print("Encoding.min=", encoding.min)
         print("Encoding.max=", encoding.max)
@@ -308,7 +308,7 @@ class TestTensorQuantizer(unittest.TestCase):
 
         enc_analyzer = libpymo.EncodingAnalyzerForPython(libpymo.QuantizationMode.QUANTIZATION_TF)
         enc_analyzer.updateStats(random_input, False)
-        encoding, is_valid = enc_analyzer.computeEncoding(8, False)
+        encoding, is_valid = enc_analyzer.computeEncoding(8, False, False, False)
 
         print("Encoding.min=", encoding.min)
         print("Encoding.max=", encoding.max)
@@ -322,7 +322,7 @@ class TestTensorQuantizer(unittest.TestCase):
 
         enc_analyzer = libpymo.EncodingAnalyzerForPython(libpymo.QuantizationMode.QUANTIZATION_TF)
         enc_analyzer.updateStats(random_input, False)
-        encoding, is_valid = enc_analyzer.computeEncoding(8, False)
+        encoding, is_valid = enc_analyzer.computeEncoding(8, False, False, False)
 
         print("Encoding.min=", encoding.min)
         print("Encoding.max=", encoding.max)
@@ -336,7 +336,7 @@ class TestTensorQuantizer(unittest.TestCase):
 
         enc_analyzer = libpymo.EncodingAnalyzerForPython(libpymo.QuantizationMode.QUANTIZATION_TF)
         enc_analyzer.updateStats(random_input, False)
-        encoding, is_valid = enc_analyzer.computeEncoding(8, False)
+        encoding, is_valid = enc_analyzer.computeEncoding(8, False, False, False)
 
         print("Encoding.min=", encoding.min)
         print("Encoding.max=", encoding.max)
