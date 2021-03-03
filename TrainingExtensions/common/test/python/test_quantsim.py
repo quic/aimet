@@ -40,12 +40,14 @@
 import unittest
 import numpy as np
 
+from aimet_common.quantsim import calculate_delta_offset
+
 
 class TestCommonQuantSim(unittest.TestCase):
 
     def test_offset_delta_compute(self):
         """ test computation of delta and offset for export """
-        from aimet_tensorflow.quantsim import calculate_delta_offset
+
         max = 1.700559472933134
         min = -2.1006477158567995
         bitwidth = 8

@@ -41,8 +41,6 @@
 import abc
 from typing import List
 
-import torch
-
 from aimet_common.layer_database import LayerDatabase
 
 
@@ -51,7 +49,7 @@ class LayerSelector(abc.ABC):
     Enables layers to be selected for compression
     """
 
-    def select(self, layer_db: LayerDatabase, modules_to_ignore: List[torch.nn.Module]):
+    def select(self, layer_db: LayerDatabase, modules_to_ignore: List):
         """
         Marks certain layers as selected in a given layerDatabase according to a selection criteria
         :param layer_db: Layer database

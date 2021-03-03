@@ -42,14 +42,13 @@ from decimal import Decimal
 from typing import List, Tuple
 import pickle
 import os
-import torch
 from aimet_common.comp_ratio_select import GreedyCompRatioSelectAlgo
 from aimet_common.defs import CostMetric, LayerCompRatioPair, EvalFunction, CompressionStats
 from aimet_common import cost_calculator as cc
 from aimet_common.pruner import Pruner
 from aimet_common.comp_ratio_select import CompRatioSelectAlgo
 from aimet_common.layer_database import LayerDatabase
-from aimet_torch import plotting_utils
+from aimet_common import plotting_utils
 
 
 class CompressionAlgo:
@@ -60,7 +59,7 @@ class CompressionAlgo:
     PICKLE_FILE_COMP_RATIO_LIST = './data/greedy_selection_comp_ratios_list.pkl'
 
     def __init__(self, layer_db: LayerDatabase, comp_ratio_select_algo: CompRatioSelectAlgo, pruner: Pruner,
-                 eval_func: EvalFunction, layer_selector, modules_to_ignore: List[torch.nn.Module],
+                 eval_func: EvalFunction, layer_selector, modules_to_ignore: List,
                  cost_calculator: cc.CostCalculator, use_cuda: bool):
         # pylint: disable=too-many-arguments
 
