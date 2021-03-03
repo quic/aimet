@@ -284,38 +284,6 @@ def identify_max_range_columns(data_frame, described_df, num_columns=50):
     return output_channels_needed
 
 
-def plot_optimal_compression_ratios(comp_ratios, layer_names):
-    """
-    Makes a plot for compression ratios and layers, such that you can hover over the point and see the layer and its comp ratio
-    :param comp_ratios: python list of compression ratios
-    :param layer_names: python list of string layer names
-    :return: bokeh figure object
-    """
-    df = pd.DataFrame.from_dict(
-        {"layers": layer_names, "comp_ratios": comp_ratios, "index": [i + 1 for i in range(len(comp_ratios))]})
-
-    # None means that the layer was not compressed at all, which is equivalent to a compression ratio of 1.
-    df.replace({None: 1}, inplace=True)
-    source = ColumnDataSource(data=df)
-
-    plot = figure(x_axis_label="Layers", y_axis_label="Compression Ratios",
-                  title="Optimal Compression Ratios For Each Layer",
-                  tools="pan, box_zoom, crosshair, reset, save",
-                  sizing_mode="stretch_width")
-
-    plot.line(x="index", y="comp_ratios", line_width=2, line_color="green", source=source)
-    plot.circle(x="index", y="comp_ratios", color="black", alpha=0.7, size=10, source=source)
-
-    plot.add_tools(HoverTool(tooltips=[("Layer", "@layers"),
-                                       ("Comp Ratio", "@comp_ratios")],
-                             # display a tooltip whenever the cursor is vertically in line with a glyph
-                             mode='vline'
-                             ))
-    style(plot)
-    plot.xaxis.major_label_text_color = None  # note that this leaves space between the axis and the axis label
-    return plot
-
-
 def line_plot_summary_statistics_model(layer_name, layer_weights_data_frame, height, width):
     """
     Given a layer
