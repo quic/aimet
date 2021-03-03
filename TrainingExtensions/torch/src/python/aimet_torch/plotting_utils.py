@@ -43,7 +43,7 @@ import numpy as np
 import pandas as pd
 import torch
 from bokeh.layouts import row
-from bokeh.models import HoverTool, WheelZoomTool, ColumnDataSource, Span, TableColumn, DataTable
+from bokeh.models import HoverTool, ColumnDataSource, Span, TableColumn, DataTable
 from bokeh.plotting import figure
 from bokeh.layouts import column
 from bokeh.models import Div

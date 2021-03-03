@@ -38,7 +38,7 @@
 
 """ Create visualizations on the weights in each conv and linear layer in a model"""
 import pandas as pd
-from bokeh.models import HoverTool, WheelZoomTool, ColumnDataSource, Span, TableColumn, DataTable
+from bokeh.models import HoverTool, WheelZoomTool, ColumnDataSource
 from bokeh.plotting import figure
 
 # Some magic stuff happening during import that ties pandas dataframe to hvplot
@@ -102,4 +102,3 @@ def plot_optimal_compression_ratios(comp_ratios, layer_names):
     style(plot)
     plot.xaxis.major_label_text_color = None  # note that this leaves space between the axis and the axis label
     return plot
-
