@@ -42,7 +42,7 @@ import pandas as pd
 from bokeh.models import ColumnDataSource, DataTable, TableColumn
 from aimet_common.compression_algo import CompressionAlgo
 from aimet_common.bokeh_plots import BokehServerSession
-from aimet_torch import plotting_utils
+from aimet_common import plotting_utils
 
 
 class VisualizeCompression:
