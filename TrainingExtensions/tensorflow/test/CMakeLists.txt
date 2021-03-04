@@ -52,4 +52,7 @@ set_property(TEST TfTrainingExtensionTest
 set_property(TEST TfTrainingExtensionTest
       APPEND PROPERTY ENVIRONMENT "${AIMET_PYTHONPATH}")
 
-
+if(DEFINED ENV{DEPENDENCY_DATA_PATH})
+set_property(TEST TorchTrainingExtensionTest
+      APPEND PROPERTY ENVIRONMENT "${DEPENDENCY_DATA_PATH}")
+endif(DEFINED ENV{DEPENDENCY_DATA_PATH})
