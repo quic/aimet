@@ -47,7 +47,7 @@ from tensorflow.python.framework import ops as tf_ops
 from tensorflow.contrib import graph_editor
 from aimet_common.defs import QuantScheme
 from aimet_common.quantsim import gate_min_max, calculate_delta_offset
-from aimet_common.utils import AimetLogger
+from aimet_common.utils import AimetLogger, save_json_yaml
 from aimet_tensorflow.common import core
 from aimet_tensorflow.utils.common import update_variables_with_values, save_data_to_pickle_file, \
     load_data_from_pickle_file, get_valid_ops
@@ -80,7 +80,6 @@ op_types_to_ignore = {'branch', 'Flatten', 'Shape'}
 DTYPES_QUANTIZE_NOT_REQUIRED = [tf.dtypes.int8, tf.dtypes.uint8, tf.dtypes.int16, tf.dtypes.uint16,
                                 tf.dtypes.int32, tf.dtypes.uint32, tf.dtypes.int64, tf.dtypes.uint64,
                                 tf.bool, tf.dtypes.string]
-
 
 def _load_ops():
     """
@@ -498,8 +497,7 @@ class QuantizationSimModel:
         encodings_dict = {'param_encodings': param_encodings,
                           'activation_encodings': activation_encodings}
 
-        with open(encoding_file_path, 'w') as encoding_fp:
-            json.dump(encodings_dict, encoding_fp, sort_keys=True, indent=4)
+        save_json_yaml(encoding_file_path, encodings_dict)
 
     def _save_and_load_sim_model(self):
         self.session = graph_saver.save_and_load_graph(WORKING_DIR, self.session)

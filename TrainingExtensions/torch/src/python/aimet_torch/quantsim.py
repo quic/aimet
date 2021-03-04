@@ -46,7 +46,7 @@ import json
 import torch
 import onnx
 
-from aimet_common.utils import AimetLogger
+from aimet_common.utils import AimetLogger, save_json_yaml
 from aimet_common.defs import QuantScheme
 from aimet_torch.quantsim_config.quantsim_config import QuantSimConfigurator
 from aimet_torch.qc_quantize_op import QcQuantizeStandAloneBase, QcQuantizeWrapper, QcQuantizeOpMode, \
@@ -382,7 +382,7 @@ class QuantizationSimModel:
                 torchscript_utils.get_node_to_io_tensor_names_map(model, trace, dummy_input)
 
         # Export encodings
-        self._export_encodings_to_json(path, filename_prefix, torch_script_node_io_tensor_map, valid_param_set)
+        self._export_encodings_to_files(path, filename_prefix, torch_script_node_io_tensor_map, valid_param_set)
 
     def export_onnx_model_and_encodings(self, path: str, filename_prefix: str, model: torch.nn.Module,
                                         dummy_input: Union[torch.Tensor, Tuple], set_onnx_layer_names):
@@ -408,7 +408,7 @@ class QuantizationSimModel:
             onnx_utils.OnnxSaver.get_onnx_node_to_io_tensor_names_map(onnx_model)
 
         # Export encodings
-        self._export_encodings_to_json(path, filename_prefix, onnx_node_to_io_tensor_map, valid_param_set)
+        self._export_encodings_to_files(path, filename_prefix, onnx_node_to_io_tensor_map, valid_param_set)
 
     def exclude_layers_from_quantization(self, layers_to_exclude: List[torch.nn.Module]):
         """
@@ -470,8 +470,8 @@ class QuantizationSimModel:
 
         return downstream_modules
 
-    def _export_encodings_to_json(self, path: str, filename_prefix: str, op_to_io_tensor_map: Dict,
-                                  valid_param_set: set):
+    def _export_encodings_to_files(self, path: str, filename_prefix: str, op_to_io_tensor_map: Dict,
+                                   valid_param_set: set):
         """
         Save the quantized model weight encodings
 
@@ -496,8 +496,7 @@ class QuantizationSimModel:
 
         # export weight encodings to output json file
         encoding_file_path = os.path.join(path, filename_prefix + '.encodings')
-        with open(encoding_file_path, 'w') as encoding_fp:
-            json.dump(encodings_dict, encoding_fp, sort_keys=True, indent=4)
+        save_json_yaml(encoding_file_path, encodings_dict)
 
     @staticmethod
     def _update_param_encodings_dict_for_layer(layer: torch.nn.Module, layer_name: str,
