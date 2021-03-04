@@ -2,9 +2,9 @@ pipeline {
     parameters {
         string(name: 'PROJECT_NAME', defaultValue: 'aimet', description: 'project name')
         string(name: 'BUILD_LABEL_GPU_TF', defaultValue: 'docker-build-aimet-pr-gpu-tf', description: 'Jenkins node host name or label for GPU TF-only variants')
-        string(name: 'BUILD_LABEL_CPU_TF', defaultValue: 'docker-build-aimet-pr-cpu-tf', description: 'Jenkins node host name or label for CPU TF-only variants')
+        string(name: 'BUILD_LABEL_CPU_TF', defaultValue: 'docker-build-aimet-pr-cpu', description: 'Jenkins node host name or label for CPU TF-only variants')
         string(name: 'BUILD_LABEL_GPU_TORCH', defaultValue: 'docker-build-aimet-pr-gpu-torch', description: 'Jenkins node host name or label for GPU Torch-only variants')
-        string(name: 'BUILD_LABEL_CPU_TORCH', defaultValue: 'docker-build-aimet-pr-cpu-torch', description: 'Jenkins node host name or label for CPU Torch-only variants')
+        string(name: 'BUILD_LABEL_CPU_TORCH', defaultValue: 'docker-build-aimet-pr-cpu', description: 'Jenkins node host name or label for CPU Torch-only variants')
         string(name: 'BUILD_TIMEOUT', defaultValue: '1', description: 'Build timeout in hours')
     }
     agent { label "${params.BUILD_LABEL_CPU_TORCH}" }
