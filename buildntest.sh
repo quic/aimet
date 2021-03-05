@@ -41,6 +41,9 @@
 ## For help and usage information: buildntest.sh -h
 ###############################################################################
 
+# verbose mode
+set -x
+
 # enable exit on error.
 set -e
 
