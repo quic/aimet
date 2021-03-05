@@ -34,7 +34,7 @@
 #  @@-COPYRIGHT-END-@@
 # =============================================================================
 
-# Docker image file to build and test AIMET in a CPU environment
+# Docker image file to build and test AIMET for both Tensorflow and PyTorch in a CPU environment
 
 FROM ubuntu:bionic 
 
@@ -198,6 +198,10 @@ RUN sed -i 's/PermitRootLogin prohibit-password/PermitRootLogin yes/' /etc/ssh/s
 
 # SSH login fix. Otherwise user is kicked off after login
 RUN sed 's@session\s*required\s*pam_loginuid.so@session optional pam_loginuid.so@g' -i /etc/pam.d/sshd
+
+# Turn this into a development image
+##TODO: This seems to be needed for convert_to_records.py used in acceptance tests. Anything else?
+RUN cd / && git clone https://github.com/tensorflow/tensorflow.git && cd tensorflow && git checkout v1.15.0
 
 RUN pip install setuptools_rust git-pylint-commit-hook osqp==0.6.1 onnx==1.7.0
 
