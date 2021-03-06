@@ -156,7 +156,7 @@ RUN pip3 --no-cache-dir install \
         pymoo==0.4.1 \
         pytest==4.6.5 \
         pytest-cov==2.6.1 \
-        pytorch-ignite==0.1.0 \
+        pytorch-ignite==0.1.2 \
         https://download.pytorch.org/whl/cu100/torchvision-0.5.0%2Bcu100-cp36-cp36m-linux_x86_64.whl \
         https://download.pytorch.org/whl/cu100/torch-1.4.0%2Bcu100-cp36-cp36m-linux_x86_64.whl \
         scikit-image==0.15.0 \
