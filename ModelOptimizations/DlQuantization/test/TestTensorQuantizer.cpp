@@ -114,19 +114,24 @@ TEST(TestTensorQuantizer, SanityTestGpu)
     EXPECT_TRUE(tensorQuantizer.isEncodingValid);
 
     std::vector<float> inputTensor(tensorCount, 5);
-    std::vector<float> quantizedTensor(tensorCount);
-    tensorQuantizer.quantizeDequantize(inputTensor.data(), inputTensor.size(), quantizedTensor.data(),
-                                       encoding.min, encoding.max, 8, false);
+    Blob<GpuDevice<float>> inputTensorBlob(inputTensor.data(), tensorCount);
+
+    std::vector<float> quantizedTensor(tensorCount, 0);
+    Blob<GpuDevice<float>> quantTensorBlob(quantizedTensor.data(), tensorCount);
+
+    tensorQuantizer.quantizeDequantize(inputTensorBlob.getDataPtrOnDevice(), inputTensor.size(),
+                                       quantTensorBlob.getDataPtrOnDevice(),
+                                       encoding.min, encoding.max, 8, true);
 
     std::cout << "Encoding min=" << encoding.min << ", max=" <<
     encoding.max << std::endl;
     EXPECT_NEAR(encoding.min, -6.52711, 0.001);
     EXPECT_NEAR(encoding.max, 8.88412, 0.001);
 
-    std::cout << "input-data=" << inputTensor.data()[0] << ", quantized-data=" <<
-    quantizedTensor.data()[0]<< std::endl;
-    EXPECT_NE(inputTensor.data()[0], quantizedTensor.data()[0]);
-    EXPECT_NEAR(quantizedTensor.data()[0], 5.0162, 0.001);
+    std::cout << "input-data=" << inputTensorBlob.getDataPtrOnCpu()[0] << ", quantized-data=" <<
+    quantTensorBlob.getDataPtrOnCpu()[0]<< std::endl;
+    EXPECT_NE(inputTensorBlob.getDataPtrOnCpu()[0], quantTensorBlob.getDataPtrOnCpu()[0]);
+    EXPECT_NEAR(quantTensorBlob.getDataPtrOnCpu()[0], 5.0162, 0.001);
 }
 
 #endif

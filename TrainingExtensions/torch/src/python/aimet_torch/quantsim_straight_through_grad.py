@@ -42,7 +42,7 @@ import torch
 
 def compute_dloss_by_dx(x, grad, encoding_min, encoding_max):
     """
-    compute derivative w.r.t input uing straiht through estimator.
+    compute derivative w.r.t input using straight through estimator.
     :param grad: gradient flowing
     :param encoding_min: encoding min grid param used on forward pass
     :param encoding_max: encoding max grid param used on forward pass

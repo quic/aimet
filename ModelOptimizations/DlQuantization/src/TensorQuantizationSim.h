@@ -56,9 +56,14 @@ class TensorQuantizationSim : public ITensorQuantizationSim<DTYPE>
 public:
     explicit TensorQuantizationSim();
     void gateMinMax(double& encodingMin, double& encodingMax);
+    void fillQuantizeInfo(TfEncoding& encoding, DlQuantization::ComputationMode& cpuGpuMode, uint8_t bw,
+                          double encodingMin, double encodingMax, bool use_cuda);
     void quantizeDequantizeTensor(const DTYPE* inputTensorData, size_t inputTensorCount, DTYPE* outputTensorData,
                                   double encodingMin, double encodingMax, uint8_t bw, RoundingMode roundMode,
                                   bool use_cuda) override;
+    void quantizeTensor(const DTYPE* inputTensorData, size_t inputTensorCount, DTYPE* outputTensorData,
+                        double encodingMin, double encodingMax, uint8_t bw, RoundingMode roundMode, bool use_cuda)
+                        override;
 };
 
 }   // namespace DlQuantization

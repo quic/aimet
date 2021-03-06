@@ -103,6 +103,23 @@ public:
         return output;
     }
 
+    at::Tensor quantize(at::Tensor input, DlQuantization::TfEncoding& encoding,
+                        DlQuantization::RoundingMode roundingMode, bool use_cuda)
+    {
+        // Allocate an output tensor as the same shape as the input
+        at::Tensor output = input;
+
+        at::IntArrayRef sizes  = input.sizes();
+        size_t inputTensorSize = 1;
+        for (auto size: sizes)
+            inputTensorSize *= size;
+
+        _tensorQuantizationSim->quantizeTensor(input.data<float>(), inputTensorSize, output.data<float>(), encoding.min,
+                                               encoding.max, encoding.bw, roundingMode, use_cuda);
+
+        return output;
+    }
+
     std::tuple<DlQuantization::TfEncoding, bool> getEncoding(unsigned int bitwidth, bool useSymmetricEncodings)
     {
         DlQuantization::TfEncoding out_encoding;
@@ -129,6 +146,7 @@ PYBIND11_MODULE(TORCH_EXTENSION_NAME, m)
         .def(pybind11::init<DlQuantization::QuantizationMode>())
         .def("updateStats", &AimetTensorQuantizer::updateStats)
         .def("quantizeDequantize", &AimetTensorQuantizer::quantizeDequantize)
+        .def("quantize", &AimetTensorQuantizer::quantize)
         .def("getEncoding", &AimetTensorQuantizer::getEncoding)
         .def("resetEncodingStats", &AimetTensorQuantizer::resetEncodingStats);
 }

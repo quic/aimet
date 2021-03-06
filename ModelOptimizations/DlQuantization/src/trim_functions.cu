@@ -45,8 +45,19 @@
 namespace DlQuantization
 {
 template <typename DTYPE>
-__global__ void QuantizeToFxp_kernel(const DTYPE* in, int cnt, const TfEncoding encoding, DTYPE* out,
+__global__ void QuantizeDequantize_kernel(const DTYPE* in, int cnt, const TfEncoding encoding, DTYPE* out,
                                      RoundingMode rounding_mode)
+{
+    CUDA_KERNEL_LOOP(i, cnt)
+    {
+        QuantizeToFxp_device<DTYPE>(in + i, i, encoding, out + i, rounding_mode);
+        DequantizeFromFxp_device<DTYPE>(encoding, out + i);
+    }
+}
+
+template <typename DTYPE>
+__global__ void QuantizeToFxp_kernel(const DTYPE* in, int cnt, const TfEncoding encoding, DTYPE* out,
+                                          RoundingMode rounding_mode)
 {
     CUDA_KERNEL_LOOP(i, cnt)
     {
@@ -55,17 +66,29 @@ __global__ void QuantizeToFxp_kernel(const DTYPE* in, int cnt, const TfEncoding 
 }
 
 template <typename DTYPE>
+void QuantizeDequantize_GPU(const DTYPE* in, int cnt, const TfEncoding& encoding, DTYPE* out,
+                            RoundingMode rounding_mode)
+{
+    QuantizeDequantize_kernel<<<CUDA_NUM_BLOCKS(cnt), CUDA_NUM_THREADS>>>(in, cnt, encoding, out, rounding_mode);
+}
+
+template <typename DTYPE>
 void QuantizeToFxp_GPU(const DTYPE* in, int cnt, const TfEncoding& encoding, DTYPE* out, RoundingMode rounding_mode)
 {
     QuantizeToFxp_kernel<<<CUDA_NUM_BLOCKS(cnt), CUDA_NUM_THREADS>>>(in, cnt, encoding, out, rounding_mode);
 }
 
-
 // Explicit instantiations
+template void QuantizeDequantize_GPU(const double* in, int cnt, const TfEncoding& encoding, double* out,
+                                     RoundingMode rounding_mode);
+
+template void QuantizeDequantize_GPU(const float* in, int cnt, const TfEncoding& encoding, float* out,
+                                     RoundingMode rounding_mode);
+
 template void QuantizeToFxp_GPU(const double* in, int cnt, const TfEncoding& encoding, double* out,
                                 RoundingMode rounding_mode);
 
+
 template void QuantizeToFxp_GPU(const float* in, int cnt, const TfEncoding& encoding, float* out,
                                 RoundingMode rounding_mode);
-
 }   // End of namespace DlQuantization

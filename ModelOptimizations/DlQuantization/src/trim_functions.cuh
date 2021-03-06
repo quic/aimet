@@ -59,13 +59,12 @@ double RandUniform_device(int seed)
 }
 
 /**
- * @brief Quantize a floating point number to fixed point, and dequantize the
- * number again.
+ * @brief Quantize a floating point number to fixed point.
  * @param in Pointer to the floating point number to be quantized.
  * @param seed This number is solely used to generate random numbers in
  * stochastic rounding mode.
  * @param encoding The fixed point format.
- * @param out Compute the result of quantization and dequantization.
+ * @param out Compute the result of quantization.
  * @param rounding_mode The rounding mode to use for quantization to fixed
  * point.
  */
@@ -95,6 +94,16 @@ __device__ void QuantizeToFxp_device(const DTYPE* in, int seed, TfEncoding encod
         break;
     }
     }
+}
+
+/**
+ * @brief Dequantize a fixed point number to floating point.
+ * @param encoding The fixed point format.
+ * @param out Compute the result of dequantization.
+ */
+template <typename DTYPE>
+__device__ void DequantizeFromFxp_device(TfEncoding encoding, DTYPE* out)
+{
     // De-quantize
     *out = encoding.delta * (*out + encoding.offset);
 }

@@ -43,10 +43,13 @@ from typing import Union
 import torch
 
 from aimet_common.defs import QuantScheme
+from aimet_common.utils import AimetLogger
 import aimet_torch.quantsim_straight_through_grad as ste
 import libpymo
 #TODO Pylint fails due an unknown import issue. We need to debug this later.
 import AimetTensorQuantizer # pylint: disable=import-error
+
+_logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Quant)
 
 
 class TensorQuantizer:
@@ -183,6 +186,16 @@ class PostTrainingTensorQuantizer(TensorQuantizer):
         output = QuantizeDequantize.apply(tensor, self, round_mode)
         return output
 
+    def quantize(self, tensor, round_mode):
+        """
+        Quantize the tensor, using the saved encoding for this tensor
+        :param tensor: Tensor to quantize
+        :param round_mode: Rounding mode
+        :return: Resulting tensor
+        """
+        output = Quantize.apply(tensor, self, round_mode)
+        return output
+
     def reset_encoding_stats(self):
         """
         Resets the encodings stats and set encoding to None
@@ -243,3 +256,35 @@ class QuantizeDequantize(torch.autograd.Function):
             grad = output_grad
 
         return grad, None, None
+
+
+class Quantize(torch.autograd.Function):
+    """
+    Custom gradient function for STE
+    """
+    # pylint:disable = arguments-differ
+    @staticmethod
+    def forward(ctx, tensor, tensor_quantizer, round_mode):
+        """
+        Quantize-dequantize the tensor, using the saved encoding for this tensor
+        :param tensor: Tensor to quantize
+        :param tensor_quantizer: Reference to the tensor quantizer
+        :param round_mode: Rounding mode
+        :return: Resulting tensor
+        """
+        if tensor_quantizer.enabled:
+            # pylint:disable = protected-access
+            quantized_tensor = tensor_quantizer._cppOp.quantize(tensor, tensor_quantizer.encoding, round_mode,
+                                                                tensor.is_cuda)
+        else:
+            quantized_tensor = tensor
+
+        ctx.save_for_backward(quantized_tensor)
+
+        ctx.tensor_quantizer = tensor_quantizer
+        return quantized_tensor
+
+    @staticmethod
+    def backward(ctx, output_grad):
+        _logger.error('Backward pass for quantize only not implemented')
+        raise AssertionError
