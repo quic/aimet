@@ -596,15 +596,6 @@ class QuantizationSimModel:
         return quantized_layers
 
     @staticmethod
-    def _is_leaf_module(module):
-        """Utility function to determine if the given module is a leaf module - that is, does not have children modules
-        :return:
-            True if the module is a leaf, False otherwise
-        """
-        module_list = list(module.modules())
-        return bool(len(module_list) == 1)
-
-    @staticmethod
     def _is_quantizable_module(module_ref):
         """ Function to check if a module is eligible for quantization.
             If the module is NOT an PyTorch module type or if the module was already
@@ -643,7 +634,7 @@ class QuantizationSimModel:
                 continue
 
             # check if the module is leaf or not
-            if self._is_leaf_module(module_ref):
+            if utils.is_leaf_module(module_ref):
 
                 # Create a new QcQuantize wrapper module
                 quantized_module = self._create_quantizer_module(module_ref)
@@ -680,7 +671,7 @@ class QuantizationSimModel:
                     setattr(starting_module, module_name, module_ref.module_to_quantize)
 
             # Recursively call children modules if present
-            if not cls._is_leaf_module(module_ref):
+            if not utils.is_leaf_module(module_ref):
                 cls._remove_quantization_wrappers(module_ref, list_of_modules_to_exclude)
 
     def configure_quantization_ops(self, config_file: str):

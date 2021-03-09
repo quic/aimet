@@ -220,16 +220,6 @@ class LayerDatabase(aimet_common.layer_database.LayerDatabase):
 
         self._compressible_layers[id(module)] = Layer(module, module_name, output_activation_shape)
 
-    @staticmethod
-    def _is_leaf_module(module):
-        """Utility function to determine if the given module is a leaf module - that is, does not have children modules
-        :return:
-            True if the module is a leaf, False otherwise
-        """
-        module_list = list(module.modules())
-
-        return bool(len(module_list) == 1)
-
     @classmethod
     def set_reference_to_parent_module(cls, module, layers):
         """
@@ -241,7 +231,7 @@ class LayerDatabase(aimet_common.layer_database.LayerDatabase):
 
         for module_name, module_ref in module.named_children():
             # first check if the module is leaf module or not
-            if cls._is_leaf_module(module_ref):
+            if utils.is_leaf_module(module_ref):
                 # iterate over all the layer attributes and if the match is found
                 # then set the parent class and module name for that module
                 if id(module_ref) in layers:
