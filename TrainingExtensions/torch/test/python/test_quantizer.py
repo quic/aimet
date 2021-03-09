@@ -54,6 +54,7 @@ from aimet_torch.qc_quantize_recurrent import QcQuantizeRecurrent
 from aimet_torch.quantsim import QuantizationSimModel
 from aimet_torch.quantsim_straight_through_grad import compute_dloss_by_dx
 from aimet_torch.defs import PassThroughOp
+from aimet_torch import utils
 
 from aimet_torch.qc_quantize_op import QcQuantizeWrapper, QcQuantizeStandalone, MAP_ROUND_MODE_TO_PYMO, \
     MAP_QUANT_SCHEME_TO_PYMO, QcPostTrainingWrapper, QcQuantizeOpMode
@@ -210,7 +211,7 @@ class TestQuantizationSim(unittest.TestCase):
     def test_is_leaf_module_positive(self):
         """With an actual leaf module"""
         conv1 = nn.Conv2d(1, 10, 5)
-        self.assertTrue(QuantizationSimModel._is_leaf_module(conv1))
+        self.assertTrue(utils.is_leaf_module(conv1))
 
     # -------------------------------------------
     def test_is_leaf_module_negative(self):
@@ -225,7 +226,7 @@ class TestQuantizationSim(unittest.TestCase):
         net = Net()
         model = net.to(torch.device('cpu'))
 
-        self.assertFalse(QuantizationSimModel._is_leaf_module(model))
+        self.assertFalse(utils.is_leaf_module(model))
 
     # -------------------------------------------------------------
     def test_is_quantizable_module_positive(self):
