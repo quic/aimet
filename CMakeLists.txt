@@ -42,11 +42,15 @@ project(aimet)
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11 -O0 -ggdb -fPIC -D_GLIBCXX_USE_CXX11_ABI=0")
 set(AIMET_INSTALL_DIR ${CMAKE_BINARY_DIR}/staging/universal)
 
-set(AIMET_PYTHONPATH
-      "PYTHONPATH=${CMAKE_BINARY_DIR}/artifacts:${CMAKE_CURRENT_SOURCE_DIR}/TrainingExtensions/torch/src/python/:${CMAKE_CURRENT_SOURCE_DIR}/TrainingExtensions/tensorflow/src/python/:${CMAKE_CURRENT_SOURCE_DIR}/TrainingExtensions/common/src/python/" CACHE STRING "python path")
+if(NOT DEFINED AIMET_PYTHONPATH)
+  set(AIMET_PYTHONPATH "PYTHONPATH=${CMAKE_BINARY_DIR}/artifacts" CACHE STRING "python path")
+endif()
+set(AIMET_PYTHONPATH "${AIMET_PYTHONPATH}:${CMAKE_CURRENT_SOURCE_DIR}/TrainingExtensions/common/src/python")
 
-set(AIMET_LD_LIBRARY_PATH
-      "LD_LIBRARY_PATH=${CMAKE_BINARY_DIR}/artifacts:$ENV{LD_LIBRARY_PATH}")
+if(NOT DEFINED AIMET_LD_LIBRARY_PATH)
+  set(AIMET_LD_LIBRARY_PATH "LD_LIBRARY_PATH=${CMAKE_BINARY_DIR}/artifacts")
+  message(STATUS "Set ${AIMET_LD_LIBRARY_PATH} in ${CMAKE_CURRENT_SOURCE_DIR}")
+endif()
 
 # Set the software version from version.txt file (if not already set)
 if(NOT DEFINED SW_VERSION)
@@ -101,6 +105,7 @@ if (NOT (DEFINED ENABLE_TORCH))
 endif(NOT (DEFINED ENABLE_TORCH))
 
 if (ENABLE_TORCH)
+  set(AIMET_PYTHONPATH "${AIMET_PYTHONPATH}:${CMAKE_CURRENT_SOURCE_DIR}/TrainingExtensions/torch/src/python")
   # If we enable PyTorch builds then use the pybind11 headers that are part of the torch pip install
   # So we don't have a version mismatch - between PyTorch custom C++ op code and PyMO
   list(APPEND PYBIND11_INC_DIRS "/usr/local/lib/python3.6/dist-packages/torch/include")
@@ -136,6 +141,7 @@ if (NOT (DEFINED ENABLE_TENSORFLOW))
 endif(NOT (DEFINED ENABLE_TENSORFLOW))
 
 if (ENABLE_TENSORFLOW)
+  set(AIMET_PYTHONPATH "${AIMET_PYTHONPATH}:${CMAKE_CURRENT_SOURCE_DIR}/TrainingExtensions/tensorflow/src/python")
   list(APPEND TENSORFLOW_INCLUDES "/usr/local/lib/python3.6/dist-packages/tensorflow_core/include")
   add_library(TensorFlow SHARED IMPORTED)
   set_target_properties(TensorFlow PROPERTIES
@@ -149,6 +155,14 @@ else (ENABLE_TENSORFLOW)
   message("AIMET TensorFlow build disabled")
 
 endif (ENABLE_TENSORFLOW)
+
+# Export PYTHONPATH to the parent cmake scope (if present)
+get_directory_property(hasParent PARENT_DIRECTORY)
+if(hasParent)
+  set(AIMET_PYTHONPATH "${AIMET_PYTHONPATH}" PARENT_SCOPE)
+else()
+  message(STATUS "Set ${AIMET_PYTHONPATH} in ${CMAKE_CURRENT_SOURCE_DIR}")
+endif()
 
 # -------------------------------
 # Generate pip packages
