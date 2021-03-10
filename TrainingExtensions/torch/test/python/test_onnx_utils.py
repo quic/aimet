@@ -171,3 +171,68 @@ class TestOnnxUtils(unittest.TestCase):
         self.assertEqual(1, len(node_to_io_dict))
         self.assertTrue(isinstance(node_to_io_dict['lstm'], list))
         self.assertEqual(3, len(node_to_io_dict['lstm']))
+
+    def test_onnx_export(self):
+
+        from aimet_torch.elementwise_ops import Add
+
+        class TwoLevelLayer(torch.nn.Module):
+            def __init__(self):
+                super(TwoLevelLayer, self).__init__()
+                self.conv1 = torch.nn.Conv2d(20, 20, 3)
+                self.relu1 = torch.nn.ReLU()
+                self.conv2 = torch.nn.Conv2d(20, 20, 3)
+
+            def forward(self, x):
+                x = self.conv1(x)
+                x = self.relu1(x)
+                x = self.conv2(x)
+                return x
+
+        class CustomLayer(torch.nn.Module):
+            def __init__(self):
+                super(CustomLayer, self).__init__()
+
+            def forward(self, x):
+                x = x * 10
+                x = torch.nn.functional.relu(x)
+                return x
+
+        class MyModel(torch.nn.Module):
+            def __init__(self):
+                super(MyModel, self).__init__()
+                self.conv1 = torch.nn.Conv2d(10, 20, 3)
+                self.custom = CustomLayer()
+                self.conv2 = torch.nn.Conv2d(20, 20, 3)
+                self.block1 = TwoLevelLayer()
+                self.add = Add()
+                self.relu1 = torch.nn.ReLU()
+
+            def forward(self, x):
+                x = self.conv1(x)
+                x = torch.nn.functional.relu(x)
+                x = self.custom(x)
+                x = self.conv2(x)
+                x = self.block1(x)
+                x = self.add(x, x)
+                x = x[:, :, 0, 0]
+                x = x.reshape(x.shape[0], x.shape[1], 1, 1)
+                x = self.relu1(x)
+                return x
+
+        model = MyModel()
+
+        torch.onnx.export(model, torch.rand(1, 10, 24, 24), './data/MyModel.onnx')
+
+        # Load the model
+        onnx_model = onnx.load('./data/MyModel.onnx')
+
+        # Parse the ONNX model and create mapping from input and output tensors to corresponding nodes
+        map_output_tensor_to_node, _ = onnx_utils.OnnxSaver.create_map_of_tensor_to_node(onnx_model)
+        ordered_list_of_nodes = onnx_utils.OnnxSaver.find_ordered_list_of_onnx_nodes(map_output_tensor_to_node)
+
+        filtered_nodes = onnx_utils.OnnxSaver._filter_out_uninteresting_onnx_nodes(model, torch.rand(1, 10, 24, 24),
+                                                                                   ordered_list_of_nodes, './data')
+
+        for node in filtered_nodes:
+            print(node.op_type)
