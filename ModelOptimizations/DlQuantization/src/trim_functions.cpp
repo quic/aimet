@@ -157,7 +157,7 @@ void QuantizeToFxp_CPU(const DTYPE* in, int cnt, const TfEncoding& encoding, DTY
 }
 
 template <typename DTYPE>
-void QuantizeValue_CPU(const DTYPE* in, const TfEncoding& encoding, DTYPE* out, RoundingMode rounding_mode)
+inline void QuantizeValue_CPU(const DTYPE* in, const TfEncoding& encoding, DTYPE* out, RoundingMode rounding_mode)
 {
     *out = (DTYPE) max(min((double) *in, encoding.max), encoding.min);
     // Scale and add offset to get something in the range [0,2^bw-1]
@@ -182,7 +182,7 @@ void QuantizeValue_CPU(const DTYPE* in, const TfEncoding& encoding, DTYPE* out, 
 }
 
 template <typename DTYPE>
-void DequantizeValue_CPU(const TfEncoding& encoding, DTYPE* out)
+inline void DequantizeValue_CPU(const TfEncoding& encoding, DTYPE* out)
 {
     *out = encoding.delta * (*out + encoding.offset);
 }
