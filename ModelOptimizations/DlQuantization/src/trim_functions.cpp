@@ -52,7 +52,7 @@ namespace DlQuantization
 {
 using namespace std;
 
-inline double RandUniform_cpu()
+inline double randUniformCpu()
 {
     return rand() / (RAND_MAX + 1.0);
 }
@@ -73,7 +73,7 @@ double computeOffset(double encodingMin, double delta)
 
 
 template <class Lambda>
-Lambda Parallelize(const uint32_t number_of_threads, Lambda lambda)
+Lambda parallelize(const uint32_t number_of_threads, Lambda lambda)
 {
     std::vector<std::thread> threads(number_of_threads);
     for (uint32_t i = 0; i < number_of_threads; ++i)
@@ -90,17 +90,17 @@ Lambda Parallelize(const uint32_t number_of_threads, Lambda lambda)
 
 // encoding: TF: rounded
 template <typename DTYPE>
-void QuantizeDequantize(const DTYPE* in, int cnt, const TfEncoding& encoding, DTYPE* out,
-                           ComputationMode mode_cpu_gpu, RoundingMode rounding_mode)
+void quantizeDequantize(const DTYPE* in, int cnt, const TfEncoding& encoding, DTYPE* out,
+                        ComputationMode mode_cpu_gpu, RoundingMode rounding_mode)
 {
     switch (mode_cpu_gpu)
     {
     case COMP_MODE_CPU:
-        QuantizeDequantize_CPU(in, cnt, encoding, out, rounding_mode);
+        quantizeDequantizeCpu(in, cnt, encoding, out, rounding_mode);
         break;
     case COMP_MODE_GPU:
 #ifdef GPU_QUANTIZATION_ENABLED
-        QuantizeDequantize_GPU(in, cnt, encoding, out, rounding_mode);
+            quantizeDequantizeGpu(in, cnt, encoding, out, rounding_mode);
 #else
         throw runtime_error("Not compiled for GPU mode.");
 #endif
@@ -113,17 +113,17 @@ void QuantizeDequantize(const DTYPE* in, int cnt, const TfEncoding& encoding, DT
 
 // encoding: TF: rounded
 template <typename DTYPE>
-void QuantizeToFxp(const DTYPE* in, int cnt, const TfEncoding& encoding, DTYPE* out, ComputationMode mode_cpu_gpu,
+void quantizeToFxp(const DTYPE* in, int cnt, const TfEncoding& encoding, DTYPE* out, ComputationMode mode_cpu_gpu,
                    RoundingMode rounding_mode)
 {
     switch (mode_cpu_gpu)
     {
         case COMP_MODE_CPU:
-            QuantizeToFxp_CPU(in, cnt, encoding, out, rounding_mode);
+            quantizeToFxpCpu(in, cnt, encoding, out, rounding_mode);
             break;
         case COMP_MODE_GPU:
 #ifdef GPU_QUANTIZATION_ENABLED
-            QuantizeToFxp_GPU(in, cnt, encoding, out, rounding_mode);
+            quantizeToFxpGpu(in, cnt, encoding, out, rounding_mode);
 #else
             throw runtime_error("Not compiled for GPU mode.");
 #endif
@@ -137,27 +137,27 @@ void QuantizeToFxp(const DTYPE* in, int cnt, const TfEncoding& encoding, DTYPE* 
 // CPU implementations
 
 template <typename DTYPE>
-void QuantizeDequantize_CPU(const DTYPE* in, int cnt, const TfEncoding& encoding, DTYPE* out,
-                            RoundingMode rounding_mode)
+void quantizeDequantizeCpu(const DTYPE* in, int cnt, const TfEncoding& encoding, DTYPE* out,
+                           RoundingMode rounding_mode)
 {
     for (int i = 0; i < cnt; ++i)
     {
-        QuantizeValue_CPU(&in[i], encoding, &out[i], rounding_mode);
-        DequantizeValue_CPU(encoding, &out[i]);
+        quantizeValueCpu(&in[i], encoding, &out[i], rounding_mode);
+        dequantizeValueCpu(encoding, &out[i]);
     }
 }
 
 template <typename DTYPE>
-void QuantizeToFxp_CPU(const DTYPE* in, int cnt, const TfEncoding& encoding, DTYPE* out, RoundingMode rounding_mode)
+void quantizeToFxpCpu(const DTYPE* in, int cnt, const TfEncoding& encoding, DTYPE* out, RoundingMode rounding_mode)
 {
     for (int i = 0; i < cnt; ++i)
     {
-        QuantizeValue_CPU(&in[i], encoding, &out[i], rounding_mode);
+        quantizeValueCpu(&in[i], encoding, &out[i], rounding_mode);
     }
 }
 
 template <typename DTYPE>
-inline void QuantizeValue_CPU(const DTYPE* in, const TfEncoding& encoding, DTYPE* out, RoundingMode rounding_mode)
+inline void quantizeValueCpu(const DTYPE* in, const TfEncoding& encoding, DTYPE* out, RoundingMode rounding_mode)
 {
     *out = (DTYPE) max(min((double) *in, encoding.max), encoding.min);
     // Scale and add offset to get something in the range [0,2^bw-1]
@@ -171,7 +171,7 @@ inline void QuantizeValue_CPU(const DTYPE* in, const TfEncoding& encoding, DTYPE
         }
         case ROUND_STOCHASTIC:
         {
-            *out = floor(*out + RandUniform_cpu());
+            *out = floor(*out + randUniformCpu());
             break;
         }
         default:
@@ -182,23 +182,23 @@ inline void QuantizeValue_CPU(const DTYPE* in, const TfEncoding& encoding, DTYPE
 }
 
 template <typename DTYPE>
-inline void DequantizeValue_CPU(const TfEncoding& encoding, DTYPE* out)
+inline void dequantizeValueCpu(const TfEncoding& encoding, DTYPE* out)
 {
     *out = encoding.delta * (*out + encoding.offset);
 }
 
 
 // Explicit instantiations
-template void QuantizeDequantize(const double* in, int cnt, const TfEncoding& encoding, double* out,
+template void quantizeDequantize(const double* in, int cnt, const TfEncoding& encoding, double* out,
                                  ComputationMode mode_cpu_gpu, RoundingMode rounding_mode);
 
-template void QuantizeDequantize(const float* in, int cnt, const TfEncoding& encoding, float* out,
+template void quantizeDequantize(const float* in, int cnt, const TfEncoding& encoding, float* out,
                                  ComputationMode mode_cpu_gpu, RoundingMode rounding_mode);
 
-template void QuantizeToFxp(const double* in, int cnt, const TfEncoding& encoding, double* out,
+template void quantizeToFxp(const double* in, int cnt, const TfEncoding& encoding, double* out,
                             ComputationMode mode_cpu_gpu, RoundingMode rounding_mode);
 
-template void QuantizeToFxp(const float* in, int cnt, const TfEncoding& encoding, float* out,
+template void quantizeToFxp(const float* in, int cnt, const TfEncoding& encoding, float* out,
                             ComputationMode mode_cpu_gpu, RoundingMode rounding_mode);
 
 }   // End of namespace DlQuantization

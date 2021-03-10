@@ -115,8 +115,8 @@ void MainQuantizationClass<DTYPE>::QuantizeDequantizeActs(const string& layer, L
     // Call quantization routine
     for (unsigned int blob_id = 0; blob_id < acts.size(); ++blob_id)
     {
-        QuantizeDequantize(acts[blob_id], count[blob_id], encoding[blob_id], acts_quantized[blob_id], m_ModeCpuGpu,
-                      ROUND_NEAREST);
+        quantizeDequantize(acts[blob_id], count[blob_id], encoding[blob_id], acts_quantized[blob_id], m_ModeCpuGpu,
+                           ROUND_NEAREST);
     }
 }
 
@@ -126,7 +126,7 @@ void MainQuantizationClass<DTYPE>::QuantizeDequantizeParams(int bw, DTYPE* param
                                                             TfEncoding& encoding)
 {
     m_QuantAlgo->NumberDistributionToFxpFormat(bw, params, count, encoding);
-    QuantizeDequantize(params, count, encoding, params_quantized, m_ModeCpuGpu, mode_rounding);
+    quantizeDequantize(params, count, encoding, params_quantized, m_ModeCpuGpu, mode_rounding);
 }
 
 template <typename DTYPE>
