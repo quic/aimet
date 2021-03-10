@@ -44,6 +44,7 @@ import copy
 
 import torch
 import torch.nn as nn
+import torch.onnx.symbolic_caffe2
 import onnx
 
 from aimet_common.utils import AimetLogger
@@ -237,9 +238,10 @@ class OnnxSaver:
         model = copy.deepcopy(pt_model)
         cls._add_markers(model)
 
+        torch.onnx.symbolic_caffe2.register_quantized_ops('caffe2', 9)
+
         temp_file = os.path.join(working_dir, 'temp_onnx_model_with_markers.onnx')
-        torch.onnx.export(model, dummy_input, temp_file,
-                          operator_export_type=torch.onnx.OperatorExportTypes.ONNX_ATEN_FALLBACK)
+        torch.onnx.export(model, dummy_input, temp_file)
 
         # Load the model
         onnx_marker_model = onnx.load(temp_file)
