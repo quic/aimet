@@ -163,7 +163,12 @@ RUN cd /tmp && \
 RUN ln -s /opt/cmake/bin/cmake /usr/local/bin/cmake
 RUN ln -s /opt/cmake/bin/ctest /usr/local/bin/ctest
 RUN ln -s /opt/cmake/bin/cpack /usr/local/bin/cpack
+
 ENV PATH=/usr/local/bin:$PATH
+ENV LD_LIBRARY_PATH=/usr/local/cuda-10.0/lib64:/usr/local/cuda-10.0/extras/CUPTI/lib64:$LD_LIBRARY_PATH
+ENV CUDA_TOOLKIT_PATH=/usr/local/cuda
+ENV CUDNN_INSTALL_PATH=/usr/local/cuda
+ENV CUDA_HOME=/usr/local/cuda
 
 # Opencv
 # Ref: https://docs.opencv.org/3.1.0/d7/d9f/tutorial_linux_install.html
