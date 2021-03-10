@@ -39,6 +39,8 @@
 """ Utilities to load and save onnx models """
 
 from typing import Union, List, Tuple, Dict
+import os
+import copy
 
 import torch
 import torch.nn as nn
@@ -124,6 +126,10 @@ class OnnxSaver:
 
         ordered_list_of_nodes = cls.find_ordered_list_of_onnx_nodes(map_output_tensor_to_node)
 
+        ordered_list_of_nodes = cls._filter_out_uninteresting_onnx_nodes(pytorch_model, dummy_input,
+                                                                         ordered_list_of_nodes,
+                                                                         os.path.dirname(onnx_model_path))
+
         # Find corresponding pytorch nodes for every ONNX node
         # and set the name of the ONNX nodes to the names of the corresponding PyTorch modules
         cls.map_onnx_nodes_to_pytorch(pytorch_model, dummy_input, ordered_list_of_nodes)
@@ -181,6 +187,107 @@ class OnnxSaver:
                 ordered_nodes_no_duplicates.append(node)
 
         return ordered_nodes_no_duplicates
+
+    @classmethod
+    def _add_markers(cls, starting_module):
+        """Recursively add marker layers
+        """
+
+        class MarkerLayer(torch.nn.Module):
+            def __init__(self, module):
+                super(MarkerLayer, self).__init__()
+                self.module = module
+
+            def forward(self, *x):
+                o = []
+                for i, t in enumerate(x):
+                    if i == 0:
+                        t = torch.quantize_per_tensor(t, 1, 0, torch.qint32)
+                        t = torch.dequantize(t)
+                    o.append(t)
+
+                x = self.module(*o)
+                if isinstance(x, torch.Tensor):
+                    x = torch.quantize_per_tensor(x, 2, 0, torch.qint32)
+                    x = torch.dequantize(x)
+                else:
+                    o = []
+                    for i, t in enumerate(x):
+                        if i == 0:
+                            t = torch.quantize_per_tensor(t, 1, 0, torch.qint32)
+                            t = torch.dequantize(t)
+                        o.append(t)
+                    x = tuple(o)
+
+                return x
+
+        for module_name, module_ref in starting_module.named_children():
+
+            if aimet_torch.utils.is_leaf_module(module_ref):
+                marker_layer = MarkerLayer(module_ref)
+                setattr(starting_module, module_name, marker_layer)
+
+            # recursively call children modules
+            else:
+                cls._add_markers(module_ref)
+
+    @classmethod
+    def _filter_out_uninteresting_onnx_nodes(cls, pt_model, dummy_input, onnx_ordered_node_list, working_dir):
+
+        model = copy.deepcopy(pt_model)
+        cls._add_markers(model)
+
+        temp_file = os.path.join(working_dir, 'temp_onnx_model_with_markers.onnx')
+        torch.onnx.export(model, dummy_input, temp_file,
+                          operator_export_type=torch.onnx.OperatorExportTypes.ONNX_ATEN_FALLBACK)
+
+        # Load the model
+        onnx_marker_model = onnx.load(temp_file)
+
+        # Parse the ONNX model and create mapping from input and output tensors to corresponding nodes
+        map_output_tensor_to_node_marker_model, _ = cls.create_map_of_tensor_to_node(onnx_marker_model)
+        ordered_list_of_nodes_marker_model = cls.find_ordered_list_of_onnx_nodes(
+            map_output_tensor_to_node_marker_model)
+
+        skip_info = []
+        node_iter = iter(ordered_list_of_nodes_marker_model)
+        while node_iter:
+
+            # Find the next block of interest
+            node = next(node_iter, None)
+            if node is None:
+                break
+            while node.op_type != 'Int8Quantize':
+                skip_info.append((node.op_type, True))
+                node = next(node_iter, None)
+                if node is None:
+                    break
+            if node is None:
+                break
+
+            # Skip the marker nodes
+            node = next(node_iter)
+            assert node.op_type == 'Int8Dequantize'
+
+            # Glob the block of nodes (these are the nodes corresponding to the pytorch modules)
+            node = next(node_iter)
+            while node.op_type != 'Int8Quantize':
+                skip_info.append((node.op_type, False))
+                node = next(node_iter)
+
+            # Skip the marker nodes
+            node = next(node_iter)
+            assert node.op_type == 'Int8Dequantize'
+
+        # Use the skip list to filter out the original list of onnx nodes
+        assert len(skip_info) == len(onnx_ordered_node_list)
+        filtered_node_list = []
+        for index, node in enumerate(onnx_ordered_node_list):
+            assert node.op_type == skip_info[index][0]
+            if not skip_info[index][1]:
+                filtered_node_list.append(node)
+
+        return filtered_node_list
 
     @staticmethod
     def get_num_onnx_nodes_to_map(module: nn.Module):
