@@ -208,17 +208,19 @@ dpkg -s nvidia-container-toolkit > /dev/null 2>&1
 NVIDIA_CONTAINER_TOOKIT_RC=$?
 dpkg -s nvidia-docker > /dev/null 2>&1
 NVIDIA_DOCKER_RC=$?
+dpkg -s nvidia-docker2 > /dev/null 2>&1
+NVIDIA_DOCKER_RC2=$?
 set -e
 
 if [ -n "$AIMET_VARIANT" ] && [[ "$AIMET_VARIANT" == *"cpu"* ]]; then
     echo "Running docker in CPU mode..."
     DOCKER_RUN_PREFIX="docker run"
+elif [ $NVIDIA_DOCKER_RC -eq 0 ] || [ $NVIDIA_DOCKER_RC2 -eq 0 ]; then
+    echo "Running docker in GPU mode using nvidia-docker..."
+    DOCKER_RUN_PREFIX="nvidia-docker run"
 elif [ $NVIDIA_CONTAINER_TOOKIT_RC -eq 0 ]; then
     echo "Running docker in GPU mode using nvidia-container-toolkit..."
     DOCKER_RUN_PREFIX="docker run --gpus all"
-elif [ $NVIDIA_DOCKER_RC -eq 0 ]; then
-    echo "Running docker in GPU mode using nvidia-docker..."
-    DOCKER_RUN_PREFIX="nvidia-docker run"
 else
     echo "ERROR: You requested GPU mode, but no nvidia support was detected!"
     exit 3
