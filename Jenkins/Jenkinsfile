@@ -18,14 +18,13 @@ pipeline {
         PROJECT_ROOT    = "${workspace}/${REPO_NAME}"
         PROJECT_NAME    = "${params.PROJECT_NAME}"
         PROJECT_BRANCH  = "${params.PROJECT_BRANCH}"
-        STAGE_EXE       = "pwd; PYTHONPATH=`pwd`/$PYTHONPATH"
         WORKSPACE_ROOT  = "${workspace}"
         XUNIT_XSL_FILE  = "${PROJECT_ROOT}/Jenkins/to-junit.xsl"
     }
     stages {
         stage('Setup') {
             steps {
-                echo 'moving all files and folders!'
+                echo "*** Running SETUP stage on ${env.NODE_NAME} in workspace ${env.WORKSPACE_ROOT} ***"
                 sh 'bash -l -c "rm -rf ${PROJECT_ROOT} | true"'
                 sh 'bash -l -c "mkdir ${PROJECT_ROOT}"'
                 // moving all files and folders except current and parent into ${REPO_NAME} folder
@@ -40,7 +39,6 @@ pipeline {
                     echo "Loading Thresholds Config  file"
                     THRESHOLD_OBJ = readJSON file: "${PROJECT_ROOT}/Jenkins/jenkins_threshold_configs.json";
                 }
-                sh "pwd; hostname; ls -la; ls -la *; echo ${REPO_NAME}"
                 stash name: 'AIMETBuildTree', useDefaultExcludes: false
             }
         }
@@ -56,7 +54,8 @@ pipeline {
                                 unstash 'AIMETBuildTree'
                                 script{
                                     env.AIMET_VARIANT_TF_GPU = "tf-gpu"
-                               }
+                                }
+                                echo "*** Running SETUP stage for ${env.AIMET_VARIANT_TF_GPU} variant on ${env.NODE_NAME} in workspace ${env.WORKSPACE_ROOT} ***"
                             }
                         }
 
@@ -69,7 +68,6 @@ pipeline {
                                     if (env.CHANGE_FORK != null) {
                                         env.REPO_OR_FORK_URL = "https://github.com/${env.CHANGE_FORK}/aimet"
                                     }
-                                    sh "bash -l -c \"hostname\""
                                     sh "bash -l -c \"git clone ${env.REPO_OR_FORK_URL} -b ${env.CHANGE_BRANCH} commit_checks_repo\""
                                     if ("${env.QCInternalValidation}" == "true") {
                                         withCredentials([usernameColonPassword(credentialsId: 'neoci-pat', variable: 'USERPASS')]) {
@@ -194,7 +192,8 @@ pipeline {
                                 unstash 'AIMETBuildTree'                                
                                 script{
                                     env.AIMET_VARIANT_TORCH_GPU = "torch-gpu"
-                               }
+                                }
+                                echo "*** Running SETUP stage for ${env.AIMET_VARIANT_TORCH_GPU} variant on ${env.NODE_NAME} in workspace ${env.WORKSPACE_ROOT} ***"
                             }
                         }
 
@@ -309,7 +308,8 @@ pipeline {
                                 unstash 'AIMETBuildTree'
                                 script {
                                     env.AIMET_VARIANT_TF_CPU = "tf-cpu"
-                               }
+                                }
+                                echo "*** Running SETUP stage for ${env.AIMET_VARIANT_TF_CPU} variant on ${env.NODE_NAME} in workspace ${env.WORKSPACE_ROOT} ***"
                             }
                         }
 
@@ -424,7 +424,8 @@ pipeline {
                                 unstash 'AIMETBuildTree'
                                 script {
                                     env.AIMET_VARIANT_TORCH_CPU = "torch-cpu"
-                               }
+                                }
+                                echo "*** Running SETUP stage for ${env.AIMET_VARIANT_TORCH_CPU} variant on ${env.NODE_NAME} in workspace ${env.WORKSPACE_ROOT} ***"
                             }
                         }
 
@@ -561,19 +562,16 @@ pipeline {
 
 def runStage(aimet_variant, options) {
 
+    echo "*** Running stage ${options} for ${aimet_variant} variant on ${env.NODE_NAME} in workspace ${env.WORKSPACE_ROOT} ***"
+
     if (aimet_variant == "default") {
-        echo 'Building code (and generating Docs and pip packages)...'
-        echo 'Build default'
         sh """
-            hostname; pwd
             bash -l -c "cd ${REPO_NAME} && ./buildntest.sh ${options}"
         """
 
     }
     else {
-        echo "Building ${aimet_variant} ..."
         sh """
-            hostname; pwd
             AIMET_VARIANT=${aimet_variant} bash -l -c "cd ${REPO_NAME} && ./buildntest.sh -e AIMET_VARIANT ${options}"
         """
     }

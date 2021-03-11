@@ -98,7 +98,7 @@ LABEL com.nvidia.volumes.needed="nvidia_driver"
 
 # Update all paths
 ENV PATH=/usr/local/nvidia/bin:/usr/local/cuda/bin:$PATH
-ENV LD_LIBRARY_PATH=/usr/local/nvidia/lib:/usr/local/nvidia/lib64:/usr/local/cuda-10.0/lib64/:/usr/local/cuda-10.0/extras/CUPTI/lib64:$LD_LIBRARY_PATH
+ENV LD_LIBRARY_PATH=/usr/local/cuda-10.0/lib64/:/usr/local/cuda-10.0/extras/CUPTI/lib64:$LD_LIBRARY_PATH
 ENV CUDA_TOOLKIT_PATH=/usr/local/cuda
 ENV CUDNN_INSTALL_PATH=/usr/local/cuda
 ENV CUDA_HOME=/usr/local/cuda

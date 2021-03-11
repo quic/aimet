@@ -45,7 +45,8 @@ import torch
 from aimet_common.defs import QuantScheme
 import aimet_torch.quantsim_straight_through_grad as ste
 import libpymo
-import AimetTensorQuantizer
+#TODO Pylint fails due an unknown import issue. We need to debug this later.
+import AimetTensorQuantizer # pylint: disable=import-error
 
 
 class TensorQuantizer:
