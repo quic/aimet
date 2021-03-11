@@ -163,7 +163,12 @@ RUN cd /tmp && \
 RUN ln -s /opt/cmake/bin/cmake /usr/local/bin/cmake
 RUN ln -s /opt/cmake/bin/ctest /usr/local/bin/ctest
 RUN ln -s /opt/cmake/bin/cpack /usr/local/bin/cpack
+
 ENV PATH=/usr/local/bin:$PATH
+ENV LD_LIBRARY_PATH=/usr/local/cuda-10.0/lib64:/usr/local/cuda-10.0/extras/CUPTI/lib64:$LD_LIBRARY_PATH
+ENV CUDA_TOOLKIT_PATH=/usr/local/cuda
+ENV CUDNN_INSTALL_PATH=/usr/local/cuda
+ENV CUDA_HOME=/usr/local/cuda
 
 # Opencv
 # Ref: https://docs.opencv.org/3.1.0/d7/d9f/tutorial_linux_install.html
@@ -199,7 +204,7 @@ RUN sed 's@session\s*required\s*pam_loginuid.so@session optional pam_loginuid.so
 # Turn this into a development image
 RUN cd / && git clone https://github.com/tensorflow/tensorflow.git && cd tensorflow && git checkout v1.15.0
 
-RUN pip install setuptools_rust git-pylint-commit-hook osqp==0.6.1 onnx==1.7.0
+RUN pip install git-pylint-commit-hook osqp==0.6.1 onnx==1.7.0
 
 # bokeh requires Pillow while Pillow-SIMD is being used everywhere in Morpheus.
 # To install bokeh, we are installing all dependencies of bokeh other than Pillow.

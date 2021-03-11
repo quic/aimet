@@ -199,7 +199,7 @@ RUN sed 's@session\s*required\s*pam_loginuid.so@session optional pam_loginuid.so
 ##TODO: This seems to be needed for convert_to_records.py used in acceptance tests. Anything else?
 RUN cd / && git clone https://github.com/tensorflow/tensorflow.git && cd tensorflow && git checkout v1.15.0
 
-RUN pip install setuptools_rust git-pylint-commit-hook osqp==0.6.1 onnx==1.7.0
+RUN pip install git-pylint-commit-hook osqp==0.6.1 onnx==1.7.0
 
 # NOTE: We need to pin the holoviews version to this since the latest version has a circular dependency on bokeh 2.0.0 through the panel package
 RUN pip install holoviews==1.12.7 netron==4.7.8 jsonschema pandas
