@@ -166,7 +166,7 @@ RUN sed -i 's/PermitRootLogin prohibit-password/PermitRootLogin yes/' /etc/ssh/s
 # SSH login fix. Otherwise user is kicked off after login
 RUN sed 's@session\s*required\s*pam_loginuid.so@session optional pam_loginuid.so@g' -i /etc/pam.d/sshd
 
-RUN pip install setuptools_rust git-pylint-commit-hook osqp==0.6.1 onnx==1.7.0 
+RUN pip install git-pylint-commit-hook osqp==0.6.1 onnx==1.7.0 
 
 # bokeh requires Pillow while Pillow-SIMD is being used everywhere in Morpheus.
 # To install bokeh, we are installing all dependencies of bokeh other than Pillow.

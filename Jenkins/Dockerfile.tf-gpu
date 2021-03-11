@@ -204,7 +204,7 @@ RUN sed 's@session\s*required\s*pam_loginuid.so@session optional pam_loginuid.so
 # Turn this into a development image
 RUN cd / && git clone https://github.com/tensorflow/tensorflow.git && cd tensorflow && git checkout v1.15.0
 
-RUN pip install setuptools_rust git-pylint-commit-hook osqp==0.6.1 onnx==1.7.0
+RUN pip install git-pylint-commit-hook osqp==0.6.1 onnx==1.7.0
 
 # bokeh requires Pillow while Pillow-SIMD is being used everywhere in Morpheus.
 # To install bokeh, we are installing all dependencies of bokeh other than Pillow.
