@@ -286,6 +286,7 @@ class TestTrainingExtensionsChannelPruning(unittest.TestCase):
 
     # Need to mark this for CUDA because TF CPU Conv does not support NCHW
     @pytest.mark.cuda
+    @unittest.skip
     def test_find_input_match_for_pixel_from_output_data_baseline_channels_first(self):
         """
         baseline test code from Qrunchy to compare against aimet TF implementation with channels_first (NCHW)
@@ -349,6 +350,7 @@ class TestTrainingExtensionsChannelPruning(unittest.TestCase):
             tf.compat.v1.reset_default_graph()
             sess.close()
 
+    @unittest.skip
     def test_find_input_match_for_pixel_from_output_data_baseline_channels_last(self):
         """
         baseline test code from Qrunchy to compare against aimet TF implementation with channels_last (NHWC)
