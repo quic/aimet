@@ -438,7 +438,10 @@ class QcPostTrainingWrapper(QcQuantizeWrapper):
                 encoding_dict = param_encodings[param_name][0]
                 encoding, is_symmetric = utils.create_encoding_from_dict(encoding_dict)
                 param_quantizer.set_encoding(encoding)
+
+                param_quantizer.bitwidth = encoding.bw
                 param_quantizer.use_symmetric_encodings = is_symmetric
+
                 param_quantizer.freeze_encoding()
                 _logger.info("Setting and freezing quantization encodings for parameter: %s", param_name)
 
