@@ -1066,9 +1066,15 @@ class TestQuantizationSim(unittest.TestCase):
 
         sim = QuantizationSimModel(model=model, dummy_input=dummy_input)
 
-        # Quantize
+        # Quantizeo
+        standalone_op = sim.model.myquant
+        standalone_op.output_quantizers[0].reset_encoding_stats()
+        standalone_op.set_mode(QcQuantizeOpMode.ANALYSIS)
         sim.compute_encodings(dummy_forward_pass, None)
         dummy_forward_pass(sim.model, None)
+
+        standalone_op.compute_encoding()
+        standalone_op.set_mode(QcQuantizeOpMode.ACTIVE)
 
         # Save encodings
         sim.export("./data/", "encodings_with_standalone_ops", dummy_input)
@@ -1076,6 +1082,9 @@ class TestQuantizationSim(unittest.TestCase):
             encoding_data = json.load(json_file)
         # in onnx definition tensor 16 is output of Reshape, to be ignored
         self.assertTrue("16" not in encoding_data["activation_encodings"].keys())
+
+        # eval model
+        _ = sim.model(torch.rand(1, 1, 28, 28))
 
     # -------------------------------------------------------------------------------
     def test_layers_to_ignore(self):

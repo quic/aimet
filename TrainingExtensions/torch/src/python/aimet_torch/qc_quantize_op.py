@@ -172,7 +172,7 @@ class QcQuantizeStandAloneBase(nn.Module):
                     round_mode = tensor_quantizers[index].round_mode
                 else:
                     round_mode = libpymo.RoundingMode.ROUND_NEAREST
-                output = tensor_quantizers[index].quantize_dequantize(input_tensor, round_mode, self, 'output')
+                output = tensor_quantizer.quantize_dequantize(input_tensor, round_mode)
 
             else:
                 output = input_tensor
