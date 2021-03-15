@@ -334,7 +334,8 @@ class QuantizationSimModel:
         :param input_shape: shape of the model input as a tuple. If the model takes more than one input, specify this as
                a list of shapes.
         :param set_onnx_layer_names: If ONNX layer names should be set while exporting the model. Default is True
-        :param dummy_input: Dummy input to the model. Used to parse model graph.
+        :param dummy_input: Dummy input to the model. Used to parse model graph. It is required for the dummy_input to
+                be placed on CPU.
         :param use_torch_script_graph: if exporting of encoding should use torch script tensor names. Default is False
         :return: None
 
@@ -344,7 +345,7 @@ class QuantizationSimModel:
         model_path = os.path.join(path, model_filename)
 
         # Create a version of the model without any quantization ops
-        model_to_export = copy.deepcopy(self.model)
+        model_to_export = copy.deepcopy(self.model).cpu()
         all_modules_in_model_to_export = [module for module in model_to_export.modules()]
         self._remove_quantization_wrappers(model_to_export, all_modules_in_model_to_export)
         torch.save(model_to_export, model_path)
@@ -352,8 +353,7 @@ class QuantizationSimModel:
         if not dummy_input:
             if input_shape is None:
                 raise AssertionError('Must provide either input shape or a dummy input for export')
-            dummy_input = tuple(utils.create_rand_tensors_given_shapes(input_shape,
-                                                                       device=utils.get_device(model_to_export)))
+            dummy_input = tuple(utils.create_rand_tensors_given_shapes(input_shape, device=torch.device('cpu')))
         if use_torch_script_graph:
             self.export_torch_script_model_and_encodings(path, filename_prefix, model_to_export, dummy_input)
         else:
