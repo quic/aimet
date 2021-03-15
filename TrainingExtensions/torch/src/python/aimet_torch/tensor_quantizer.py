@@ -107,7 +107,7 @@ class PostTrainingTensorQuantizer(TensorQuantizer):
                                                           enabled_by_default)
         self._cppOp = AimetTensorQuantizer.AimetTensorQuantizer(quant_scheme)
         self.encoding = None
-        self.is_encoding_frozen = False
+        self._is_encoding_frozen = False
 
     def __str__(self):
         stream = io.StringIO(newline='\n')
@@ -160,14 +160,14 @@ class PostTrainingTensorQuantizer(TensorQuantizer):
         Update the stats for computing encoding
         :param tensor: Tensor to use for updating the encodings stats
         """
-        if self.enabled and not self.is_encoding_frozen:
+        if self.enabled and not self._is_encoding_frozen:
             self._cppOp.updateStats(tensor, tensor.is_cuda)
 
     def compute_encoding(self):
         """
         Compute the quantization encoding for this tensor
         """
-        if self.enabled and not self.is_encoding_frozen:
+        if self.enabled and not self._is_encoding_frozen:
             encoding, is_encoding_valid = self._cppOp.getEncoding(self.bitwidth, self.use_symmetric_encodings)
 
             if is_encoding_valid:
@@ -187,7 +187,7 @@ class PostTrainingTensorQuantizer(TensorQuantizer):
         """
         Resets the encodings stats and set encoding to None
         """
-        if not self.is_encoding_frozen:
+        if not self._is_encoding_frozen:
             self._cppOp.resetEncodingStats()
             self.encoding = None
 
@@ -195,14 +195,15 @@ class PostTrainingTensorQuantizer(TensorQuantizer):
         """
         Freeze the encoding
         """
-        self.is_encoding_frozen = True
+        self._is_encoding_frozen = True
 
     def set_encoding(self, encoding: libpymo.TfEncoding):
         """
         Set the encoding
         :param encoding: Encoding to be set
         """
-        self.encoding = encoding
+        if not self._is_encoding_frozen:
+            self.encoding = encoding
 
 
 class QuantizeDequantize(torch.autograd.Function):

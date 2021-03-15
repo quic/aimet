@@ -1257,6 +1257,7 @@ class TestQuantizationSim(unittest.TestCase):
         self.assertEqual(quant_module.param_quantizers['weight'].encoding.offset, -7.0)
         self.assertEqual(quant_module.param_quantizers['weight'].encoding.delta, 0.038)
         self.assertEqual(quant_module.param_quantizers['weight'].use_symmetric_encodings, False)
+        self.assertEqual(quant_module.param_quantizers['weight'].bitwidth, 4)
 
         # Reset encoding, Since encoding are frozen they should not be None after reset encoding
         quant_module.reset_encodings()
@@ -1265,3 +1266,4 @@ class TestQuantizationSim(unittest.TestCase):
         self.assertEqual(quant_module.param_quantizers['weight'].encoding.offset, -7.0)
         self.assertEqual(quant_module.param_quantizers['weight'].encoding.delta, 0.038)
         self.assertEqual(quant_module.param_quantizers['weight'].use_symmetric_encodings, False)
+        self.assertEqual(quant_module.param_quantizers['weight'].bitwidth, 4)
