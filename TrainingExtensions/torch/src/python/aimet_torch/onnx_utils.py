@@ -239,7 +239,7 @@ class OnnxSaver:
     @classmethod
     def _filter_out_uninteresting_onnx_nodes(cls, pt_model, dummy_input, onnx_ordered_node_list, working_dir):
 
-        model = copy.deepcopy(pt_model)
+        model = copy.deepcopy(pt_model).cpu()
         cls._add_markers(model)
 
         torch.onnx.symbolic_caffe2.register_quantized_ops('caffe2', 9)
