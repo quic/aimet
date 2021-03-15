@@ -195,6 +195,10 @@ class OnnxSaver:
         """
 
         class MarkerLayer(torch.nn.Module):
+            """
+            This is a temporary layer that in inserted next to a real layer to distinguish the real layer in the
+            exported ONNX format
+            """
             def __init__(self, module):
                 super(MarkerLayer, self).__init__()
                 self.module = module
@@ -243,11 +247,8 @@ class OnnxSaver:
         temp_file = os.path.join(working_dir, 'temp_onnx_model_with_markers.onnx')
         torch.onnx.export(model, dummy_input, temp_file)
 
-        # Load the model
-        onnx_marker_model = onnx.load(temp_file)
-
         # Parse the ONNX model and create mapping from input and output tensors to corresponding nodes
-        map_output_tensor_to_node_marker_model, _ = cls.create_map_of_tensor_to_node(onnx_marker_model)
+        map_output_tensor_to_node_marker_model, _ = cls.create_map_of_tensor_to_node(onnx.load(temp_file))
         ordered_list_of_nodes_marker_model = cls.find_ordered_list_of_onnx_nodes(
             map_output_tensor_to_node_marker_model)
 
