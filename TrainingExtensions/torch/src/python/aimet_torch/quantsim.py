@@ -455,7 +455,31 @@ class QuantizationSimModel:
         save_json_yaml(encoding_file_path, encodings_dict)
 
     @staticmethod
-    def _update_param_encodings_dict_for_layer(layer: torch.nn.Module, layer_name: str,
+    def generate_symmetric_encoding_dict(data: torch.Tensor, bitwidth: int) -> Dict:
+        """
+        Return encoding dictionary for given bitwidth
+        :param data: torch Tensor
+        :param bitwidth: bitwidth (4-32) to use for quantizing data
+        :return: Encoding Dictionary
+        """
+
+        # forcing a conversion from float32 to python float which should have 64bit resolution.
+        min_val = float(min(0, data.min()))
+        max_val = float(max(0, data.max(), (min_val + 1e-5)))
+
+        abs_max_val = max(abs(max_val), abs(min_val))
+        num_positive_steps = 2 ** (bitwidth - 1) - 1
+        scale = abs_max_val / num_positive_steps
+        offset = - (num_positive_steps + 1)
+        return {'min': min_val,
+                'max': max_val,
+                'scale': scale,
+                'offset': offset,
+                'bitwidth': bitwidth,
+                'is_symmetric': str(True)}
+
+    @classmethod
+    def _update_param_encodings_dict_for_layer(cls, layer: torch.nn.Module, layer_name: str,
                                                param_encodings: Dict, valid_param_set: set):
         """
         :param layer: layer as torch.nn.Module
@@ -488,10 +512,7 @@ class QuantizationSimModel:
             # if the param quantizer was disabled generate encoding assuming bitwidth of 32
             if name in disabled_param_quantizers:
                 param_name = layer_name + '.' + name
-                param_quantizer = layer.param_quantizers[name]
-                param_data = param.cpu().detach().numpy()
-                encoding = utils.compute_encoding_for_given_bitwidth(param_data, 32, param_quantizer.quant_scheme,
-                                                                     param_quantizer.use_symmetric_encodings)
+                encoding = cls.generate_symmetric_encoding_dict(param, 32)
                 param_encodings[param_name] = [encoding]
 
     def _update_encoding_dicts_for_layer(self, layer: torch.nn.Module, layer_name: str, activation_encodings: Dict,
