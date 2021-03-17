@@ -44,7 +44,7 @@ import torch
 import torchvision
 
 from aimet_common.utils import round_up_to_multiplicity, round_down_to_multiplicity
-from aimet_torch import utils
+from aimet_torch import utils, elementwise_ops
 
 from aimet_torch.quantsim import QuantizationSimModel
 from aimet_torch.defs import PassThroughOp
@@ -387,15 +387,15 @@ class TestTrainingExtensionsUtils(unittest.TestCase):
 
         shutil.rmtree('/tmp/test_cached_dataset/')
 
-    def test_find_num_outputs_map(self):
+    def test_find_num_inout_map(self):
         """
-        Test functionality to find cardinality of the outputs for each module
+        Test functionality to find cardinality of the inputs, outputs for each leaf module
         """
         model = SingleResidual()
-        outputs_map = utils.find_num_output_tensors_per_module(model, [torch.rand(1, 3, 32, 32)])
-        outputs_counts_check = [num_outputs == 1 for num_outputs in outputs_map.values()]
+        inout_map = utils.find_num_inout_tensors_per_module(model, [torch.rand(1, 3, 32, 32)])
 
-        self.assertTrue(all(outputs_counts_check))
+        inout_counts_check = [num_outputs == (1, 1) for num_outputs in inout_map.values()]
+        self.assertTrue(all(inout_counts_check))
 
         # Create a model with a layer with multi-outputs
         class MyLayer(torch.nn.Module):
@@ -413,6 +413,7 @@ class TestTrainingExtensionsUtils(unittest.TestCase):
                 self.layer1 = MyLayer()
                 self.conv2 = torch.nn.Conv2d(32, 32, 3)
                 self.conv3 = torch.nn.Conv2d(32, 32, 3)
+                self.add = elementwise_ops.Add()
 
             def forward(self, x):
                 x = self.conv1(x)
@@ -420,12 +421,14 @@ class TestTrainingExtensionsUtils(unittest.TestCase):
                 x1, x2 = self.layer1(x)
                 x1 = self.conv2(x1)
                 x2 = self.conv2(x2)
-                return x1 + x2
+                x = self.add(x1, x2)
+                return x
 
         model = MyModel()
-        outputs_map = utils.find_num_output_tensors_per_module(model, [torch.rand(1, 3, 32, 32)])
-        outputs_counts_check = [num_outputs == 1 for num_outputs in outputs_map.values()]
+        inout_map = utils.find_num_inout_tensors_per_module(model, [torch.rand(1, 3, 32, 32)])
+        inout_counts_check = [num_outputs == (1, 1) for num_outputs in inout_map.values()]
 
-        self.assertFalse(all(outputs_counts_check))
-        self.assertEqual(1, outputs_counts_check.count(False))
-        self.assertEqual(2, outputs_map[model.layer1])
+        self.assertFalse(all(inout_counts_check))
+        self.assertEqual(2, inout_counts_check.count(False))
+        self.assertEqual((1, 2), inout_map[model.layer1])
+        self.assertEqual((2, 1), inout_map[model.add])

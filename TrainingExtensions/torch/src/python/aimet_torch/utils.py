@@ -595,7 +595,7 @@ def change_tensor_device_placement(tensor_data: Union[torch.tensor, List, Tuple]
     return tensor_data
 
 
-def find_num_output_tensors_per_module(model: torch.nn.Module, input_tensor) -> Dict:
+def find_num_inout_tensors_per_module(model: torch.nn.Module, input_tensor) -> Dict:
     """
     Returns a map of module -> number of output tensors, for all the children modules of the
     provided module
@@ -608,8 +608,8 @@ def find_num_output_tensors_per_module(model: torch.nn.Module, input_tensor) -> 
 
     num_outputs_map = {}
 
-    def record_num_outputs(module, _, outputs):
-        num_outputs_map[module] = len(outputs)
+    def record_num_outputs(module, inputs, outputs):
+        num_outputs_map[module] = (len(inputs), len(outputs))
 
     run_hook_for_layers_with_given_input(model, input_tensor, record_num_outputs)
     return num_outputs_map
