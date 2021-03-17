@@ -55,7 +55,6 @@ from aimet_torch import torchscript_utils
 from aimet_torch.batch_norm_fold import PassThroughOp
 from aimet_torch import utils
 from aimet_torch import onnx_utils
-from aimet_torch.meta.connectedgraph_utils import create_connected_graph_with_input_shapes
 from aimet_torch.meta.connectedgraph import ConnectedGraph
 from aimet_torch.qc_quantize_recurrent import QcQuantizeRecurrent
 
