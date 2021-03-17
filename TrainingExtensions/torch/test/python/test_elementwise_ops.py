@@ -84,8 +84,8 @@ class TestTrainingExtensionElementwiseOps(unittest.TestCase):
     def test_quantsim_export(self):
         torch.manual_seed(10)
         model = Model2(Add())
-        input_shape = (5, 10, 10, 20)
-        sim = QuantizationSimModel(model, dummy_input=torch.rand(input_shape))
+        dummy_input = torch.randn(5, 10, 10, 20)
+        sim = QuantizationSimModel(model, dummy_input)
         encodings = libpymo.TfEncoding()
         encodings.bw = 8
         encodings.max = 5
@@ -95,7 +95,7 @@ class TestTrainingExtensionElementwiseOps(unittest.TestCase):
         sim.model.op1.output_quantizer.encoding = encodings
         sim.model.conv1.output_quantizer.encoding = encodings
         sim.model.conv1.param_quantizers['weight'].encoding = encodings
-        sim.export(path='./data', filename_prefix='quant_model', input_shape=input_shape)
+        sim.export(path='./data', filename_prefix='quant_model', dummy_input=dummy_input)
 
         with open('./data/quant_model.encodings') as f:
             data = json.load(f)

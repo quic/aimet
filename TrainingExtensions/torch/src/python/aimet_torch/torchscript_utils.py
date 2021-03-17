@@ -190,7 +190,10 @@ def get_node_to_io_tensor_names_map(model: torch.nn.Module,
     module_to_name = {}
     for name, module in model.named_modules(prefix=model_name):
         module_to_name[module] = name
-    graph = trace.graph_for(*inputs)
+    if isinstance(inputs, tuple):
+        graph = trace.graph_for(*inputs)
+    else:
+        graph = trace.graph_for(inputs)
     ir_nodes_list = _parse_graph(graph, model)
     _coalesce_add_and_mm_nodes(ir_nodes_list)
 
@@ -215,6 +218,8 @@ def get_node_to_io_tensor_names_map(model: torch.nn.Module,
         if node.module is None:
             if node.node_type in module_types:
                 node.module = modules[index]
+                if not ConnectedGraph.op_type_map[type(node.module)] == node.node_type:
+                    print('here')
                 assert ConnectedGraph.op_type_map[type(node.module)] == node.node_type
             else:
                 continue
