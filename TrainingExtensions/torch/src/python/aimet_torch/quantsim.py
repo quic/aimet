@@ -293,11 +293,9 @@ class QuantizationSimModel:
 
         :param path: path where to store model pth and encodings
         :param filename_prefix: Prefix to use for filenames of the model pth and encodings files
-        :param input_shape: shape of the model input as a tuple. If the model takes more than one input, specify this as
-               a list of shapes.
-        :param set_onnx_layer_names: If ONNX layer names should be set while exporting the model. Default is True
         :param dummy_input: Dummy input to the model. Used to parse model graph. It is required for the dummy_input to
                 be placed on CPU.
+        :param set_onnx_layer_names: If ONNX layer names should be set while exporting the model. Default is True
         :param use_torch_script_graph: if exporting of encoding should use torch script tensor names. Default is False
         :return: None
 

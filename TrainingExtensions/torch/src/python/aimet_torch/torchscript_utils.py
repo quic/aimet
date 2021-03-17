@@ -218,8 +218,6 @@ def get_node_to_io_tensor_names_map(model: torch.nn.Module,
         if node.module is None:
             if node.node_type in module_types:
                 node.module = modules[index]
-                if not ConnectedGraph.op_type_map[type(node.module)] == node.node_type:
-                    print('here')
                 assert ConnectedGraph.op_type_map[type(node.module)] == node.node_type
             else:
                 continue
