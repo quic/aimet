@@ -39,17 +39,13 @@
 import pytest
 import unittest
 import unittest.mock
-import subprocess
 import os
-import sys
 import shutil
 import itertools
 import copy
 import logging
-
 import tensorflow as tf
 import numpy as np
-
 from tensorflow.keras.applications.vgg16 import VGG16
 from tensorflow.keras.applications.resnet50 import ResNet50
 
@@ -58,75 +54,22 @@ import aimet_tensorflow.utils.op.conv
 from aimet_common.defs import CostMetric, LayerCompRatioPair
 from aimet_common.utils import AimetLogger
 from aimet_common.input_match_search import InputMatchSearch
-
 from aimet_tensorflow.channel_pruning.data_subsampler import DataSubSampler
 from aimet_tensorflow.channel_pruning.channel_pruner import InputChannelPruner
 from aimet_tensorflow.channel_pruning.weight_reconstruction import WeightReconstructor
 from aimet_tensorflow.layer_database import Layer, LayerDatabase
-from aimet_tensorflow.examples import mnist_tf_model
 
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
 logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Test)
 
 
-def mnist_parse(serialized_example):
-    """
-    Parser for MNIST model, reads the tfRecords file
-    :param serialized_example:
-    :return: Input image and labels
-    """
-
-    dim = 28
-    features = tf.parse_single_example(serialized_example,
-                                       features={'label': tf.FixedLenFeature([], tf.int64),
-                                                 'image_raw': tf.FixedLenFeature([], tf.string)})
-
-    # Mnist examples are flattened. Since we aren't performing an augmentations
-    # these can remain flattened.
-    image = tf.decode_raw(features['image_raw'], tf.uint8)
-    image.set_shape([dim * dim])
-
-    # Convert from bytes to floats 0 -> 1.
-    image = tf.cast(image, tf.float32) / 255
-    label = tf.cast(features['label'], tf.int32)
-    labels = tf.one_hot(indices=label, depth=10)
-
-    return image, labels
-
-
-def imagenet_parse(serialized_example):
-    """
-    Parser for IMAGENET models, reads the tfRecords file
-    :param serialized_example:
-    :return: Input image and labels
-    """
-    dim = 224
-
-    features = tf.parse_single_example(serialized_example,
-                                       features={
-                                           'image/class/label': tf.FixedLenFeature([], tf.int64),
-                                           'image/encoded': tf.FixedLenFeature([], tf.string)})
-    image_data = features['image/encoded']
-
-    # Decode the jpeg
-    with tf.name_scope('prep_image', None, None):
-        # decode and reshape to default 224x224
-        # pylint: disable=no-member
-        image = tf.image.decode_jpeg(image_data, channels=3)
-        image = tf.image.convert_image_dtype(image, dtype=tf.float32)
-        image = tf.image.resize_images(image, [dim, dim])
-
-    return image
-
-
 class TestTrainingExtensionsChannelPruning(unittest.TestCase):
 
-    @unittest.skip
     def test_get_activation_data_keras_vgg16(self):
-
         """
         Test to collect activations and compare for Keras model
         """
+        tf.compat.v1.reset_default_graph()
 
         g = tf.Graph()
         with g.as_default():
@@ -134,7 +77,7 @@ class TestTrainingExtensionsChannelPruning(unittest.TestCase):
             init = tf.compat.v1.global_variables_initializer()
 
         inp_op_names = ['input_1']
-        conv = g.get_operation_by_name('block1_conv1/convolution')
+        conv = g.get_operation_by_name('block1_conv1/Conv2D')
 
         batch_size = 2
         input_data = np.random.rand(100, 224, 224, 3)
@@ -142,24 +85,29 @@ class TestTrainingExtensionsChannelPruning(unittest.TestCase):
         dataset = tf.data.Dataset.from_tensor_slices(input_data)
         dataset = dataset.batch(batch_size=batch_size)
 
-        # create sess with graph
         sess = tf.compat.v1.Session(graph=g)
-
-        # initialize all the variables in VGG16
         sess.run(init)
 
-        DataSubSampler.get_sub_sampled_data(orig_layer=conv, pruned_layer=conv, inp_op_names=inp_op_names,
-                                            orig_layer_db=sess, comp_layer_db=sess, data_set=dataset,
-                                            batch_size=batch_size, num_reconstruction_samples=1000)
+        # Mock out layer_db and layer
+        layer_db_mock = unittest.mock.MagicMock()
+        layer_db_mock.model = sess
+        layer_mock = unittest.mock.MagicMock()
+        layer_mock.module = conv
+
+        inp_data, out_data = DataSubSampler.get_sub_sampled_data(layer_mock, layer_mock, inp_op_names,
+                                                                 layer_db_mock, layer_db_mock, dataset, batch_size,
+                                                                 num_reconstruction_samples=1000)
+
+        self.assertEqual(list(inp_data.shape), [1000, 3, 3, 3])
+        self.assertEqual(list(out_data.shape), [1000, 64])
 
         sess.close()
 
-    @unittest.skip
     def test_get_activation_data_keras_vgg16_with_additional_samples(self):
-
         """
         Test to collect activations and compare for Keras model with additional num_reconstruction_samples
         """
+        tf.compat.v1.reset_default_graph()
 
         g = tf.Graph()
         with g.as_default():
@@ -167,7 +115,7 @@ class TestTrainingExtensionsChannelPruning(unittest.TestCase):
             init = tf.compat.v1.global_variables_initializer()
 
         inp_op_names = ['input_1']
-        conv = g.get_operation_by_name('block1_conv1/convolution')
+        conv = g.get_operation_by_name('block1_conv1/Conv2D')
 
         batch_size = 2
         input_data = np.random.rand(100, 224, 224, 3)
@@ -175,122 +123,31 @@ class TestTrainingExtensionsChannelPruning(unittest.TestCase):
         dataset = tf.data.Dataset.from_tensor_slices(input_data)
         dataset = dataset.batch(batch_size=batch_size)
 
-        # create sess with graph
         sess = tf.compat.v1.Session(graph=g)
-
-        # initialize all the variables in VGG16
         sess.run(init)
 
-        self.assertRaises(StopIteration, lambda: DataSubSampler.get_sub_sampled_data(orig_layer=conv, pruned_layer=conv,
-                                                                                     inp_op_names=inp_op_names,
-                                                                                     orig_layer_db=sess,
-                                                                                     comp_layer_db=sess,
-                                                                                     data_set=dataset,
-                                                                                     batch_size=batch_size,
-                                                                                     num_reconstruction_samples=1010))
+        # Mock out layer_db and layer
+        layer_db_mock = unittest.mock.MagicMock()
+        layer_db_mock.model = sess
+        layer_mock = unittest.mock.MagicMock()
+        layer_mock.module = conv
 
-        sess.close()
-
-    @unittest.skip
-    def test_get_activation_data_keras_vgg16_tfrecord_dataset(self):
-
-        """
-        Test to collect activations with tfrecord dataset
-        """
-        output_dir = str('./')
-        script_dir = str('/tensorflow/tensorflow/examples/how_tos/reading_data/convert_to_records.py')
-
-        # run the script to ownload data and convert into tfrecords
-        tf.logging.set_verbosity(tf.logging.ERROR)
-        subprocess.call([sys.executable, script_dir, '--directory', os.path.join(output_dir, 'data/mnist/')])
-
-        tfrecords = os.path.join('data', 'mnist', 'validation.tfrecords')
-        batch_size = 64
-
-        dataset = tf.data.TFRecordDataset(tfrecords).repeat(count=1)
-        dataset = dataset.map(mnist_parse, num_parallel_calls=1)
-        dataset = dataset.batch(batch_size=batch_size)
-
-        g = tf.Graph()
-        with g.as_default():
-            mnist_tf_model.create_model(data_format='channels_first')
-            init = tf.compat.v1.global_variables_initializer()
-
-        inp_op_names = ['reshape_1_input']
-        conv = g.get_operation_by_name('conv2d_1/Conv2D')
-
-        # create sess with graph
-        sess = tf.compat.v1.Session(graph=g)
-
-        # initialize all the variables in VGG16
-        sess.run(init)
-
-        # validation tfrecords has 5000 images
-        # samples_per_image = 10
-        # 5000 * 10 = 50000 possible reconstruction samples
-
-        DataSubSampler.get_sub_sampled_data(orig_layer=conv, pruned_layer=conv, inp_op_names=inp_op_names,
-                                            orig_layer_db=sess, comp_layer_db=sess, data_set=dataset,
-                                            batch_size=batch_size, num_reconstruction_samples=50000)
-
-        shutil.rmtree(os.path.join(output_dir, 'data'))
-        sess.close()
-
-    @unittest.skip
-    def test_get_activation_data_keras_vgg16_tfrecord_dataset_additional_samples(self):
-
-        """
-        Test to collect activations with tfrecord dataset
-        """
-        output_dir = str('./')
-        script_dir = str('/tensorflow/tensorflow/examples/how_tos/reading_data/convert_to_records.py')
-
-        # run the script to ownload data and convert into tfrecords
-        subprocess.call([sys.executable, script_dir, '--directory', os.path.join(output_dir, 'data/mnist/')])
-
-        tfrecords = os.path.join('data', 'mnist', 'validation.tfrecords')
-        batch_size = 64
-
-        dataset = tf.data.TFRecordDataset(tfrecords).repeat(count=1)
-        dataset = dataset.map(mnist_parse, num_parallel_calls=1)
-        dataset = dataset.batch(batch_size=batch_size)
-
-        g = tf.Graph()
-        with g.as_default():
-            mnist_tf_model.create_model(data_format='channels_first')
-            init = tf.compat.v1.global_variables_initializer()
-
-        inp_op_names = ['reshape_1_input']
-        conv = g.get_operation_by_name('conv2d_1/Conv2D')
-
-        # create sess with graph
-        sess = tf.compat.v1.Session(graph=g)
-
-        # initialize all the variables in VGG16
-        sess.run(init)
-
-        # validation tfrecords has 5000 images
-        # samples_per_image = 10
-        # 5000 * 10 = 50000 possible reconstruction samples
-
-        self.assertRaises(StopIteration, lambda: DataSubSampler.get_sub_sampled_data(orig_layer=conv, pruned_layer=conv,
-                                                                                     inp_op_names=inp_op_names,
-                                                                                     orig_layer_db=sess,
-                                                                                     comp_layer_db=sess,
-                                                                                     data_set=dataset,
-                                                                                     batch_size=batch_size,
-                                                                                     num_reconstruction_samples=50600))
-
-        shutil.rmtree(os.path.join(output_dir, 'data'))
+        # num_reconstruction_samples=1010 > possible samples (100 * 10)
+        self.assertRaises(StopIteration,
+                          lambda: DataSubSampler.get_sub_sampled_data(layer_mock, layer_mock,
+                                                                      inp_op_names, layer_db_mock,
+                                                                      layer_db_mock, dataset,
+                                                                      batch_size, num_reconstruction_samples=1010))
         sess.close()
 
     # Need to mark this for CUDA because TF CPU Conv does not support NCHW
     @pytest.mark.cuda
-    @unittest.skip
     def test_find_input_match_for_pixel_from_output_data_baseline_channels_first(self):
         """
-        baseline test code from Qrunchy to compare against aimet TF implementation with channels_first (NCHW)
+        Test find input match for output pixel implementation with channels_first (NCHW) format
         """
+        tf.compat.v1.reset_default_graph()
+
         strides = [[1, 1], [2, 2], [1, 2], [2, 1]]
         kernel_size_options = [[1, 1], [2, 2], [3, 3], [1, 3], [3, 1]]
         padding_options = ['SAME', 'VALID']
@@ -317,18 +174,13 @@ class TestTrainingExtensionsChannelPruning(unittest.TestCase):
 
             g = tf.Graph()
             with g.as_default():
-
                 inp_tensor = tf.Variable(initial_value=input_data, name='inp_tensor', dtype=tf.float32)
-
                 filter_tensor = tf.Variable(initial_value=filter_data, name='filter_tensor', dtype=tf.float32)
-
-                conv1 = tf.nn.conv2d(input=inp_tensor, filter=filter_tensor, strides=[1, 1, stride[0], stride[1]],
-                                     padding=padding, data_format="NCHW", name='Conv2D_1')
-
+                _ = tf.nn.conv2d(input=inp_tensor, filter=filter_tensor, strides=[1, 1, stride[0], stride[1]],
+                                 padding=padding, data_format="NCHW", name='Conv2D_1')
                 init = tf.compat.v1.global_variables_initializer()
 
             conv1_op = g.get_operation_by_name('Conv2D_1')
-
             layer_attributes = aimet_tensorflow.utils.op.conv.get_layer_attributes(sess=None, op=conv1_op,
                                                                                    input_op_names=None,
                                                                                    input_shape=None)
@@ -341,21 +193,22 @@ class TestTrainingExtensionsChannelPruning(unittest.TestCase):
 
             conv2d_out = sess.run(conv1_op.outputs[0])
 
-            predicted_output = np.sum(input_match)
+            predicted_output = np.sum(input_match).astype(dtype='float32')
             generated_output = conv2d_out[0, 0, height, width]
+            print('generated output: ', generated_output)
+            print('predicted output: ', predicted_output)
 
-            self.assertTrue(generated_output == predicted_output)
+            self.assertEqual(generated_output, predicted_output)
             self.assertTrue(np.prod(input_match.shape) == kernel_size[0] * kernel_size[1])
 
-            tf.compat.v1.reset_default_graph()
             sess.close()
 
-    @unittest.skip
     def test_find_input_match_for_pixel_from_output_data_baseline_channels_last(self):
         """
-        baseline test code from Qrunchy to compare against aimet TF implementation with channels_last (NHWC)
-        NHWC - channels_last format
+        Test find input match for output pixel implementation with channels_last (NHWC) format
         """
+        tf.compat.v1.reset_default_graph()
+
         strides = [[1, 1], [2, 2], [1, 2], [2, 1]]
         kernel_size_options = [[1, 1], [2, 2], [3, 3], [1, 3], [3, 1]]
         padding_options = ['SAME', 'VALID']
@@ -382,25 +235,19 @@ class TestTrainingExtensionsChannelPruning(unittest.TestCase):
 
             g = tf.Graph()
             with g.as_default():
-
                 inp_tensor = tf.Variable(initial_value=input_data, name='inp_tensor', dtype=tf.float32)
-
                 filter_tensor = tf.Variable(initial_value=filter_data, name='filter_tensor', dtype=tf.float32)
-
-                conv1 = tf.nn.conv2d(input=inp_tensor, filter=filter_tensor, strides=[1, stride[0], stride[1], 1],
-                                     padding=padding, data_format="NHWC", name='Conv2D_1')
-
+                _ = tf.nn.conv2d(input=inp_tensor, filter=filter_tensor, strides=[1, stride[0], stride[1], 1],
+                                 padding=padding, data_format="NHWC", name='Conv2D_1')
                 init = tf.compat.v1.global_variables_initializer()
 
             conv1_op = g.get_operation_by_name('Conv2D_1')
-
             layer_attributes = aimet_tensorflow.utils.op.conv.get_layer_attributes(sess=None, op=conv1_op,
                                                                                    input_op_names=None,
                                                                                    input_shape=None)
 
             # reshape input_data, output_data function expects activations in channels_first format
             input_data = input_data.reshape(1, 1, 8, 8)
-
             input_match = InputMatchSearch._find_input_match_for_output_pixel(input_data[0], layer_attributes,
                                                                               output_data_pixel)
 
@@ -409,12 +256,14 @@ class TestTrainingExtensionsChannelPruning(unittest.TestCase):
 
             conv2d_out = sess.run(conv1_op.outputs[0])
 
-            predicted_output = np.sum(input_match)
+            predicted_output = np.sum(input_match).astype(dtype='float32')
             generated_output = conv2d_out[0, height, width, 0]
-            self.assertTrue(generated_output == predicted_output)
+            print('generated output: ', generated_output)
+            print('predicted output: ', predicted_output)
+
+            self.assertEqual(generated_output, predicted_output)
             self.assertTrue(np.prod(input_match.shape) == kernel_size[0] * kernel_size[1])
 
-            tf.compat.v1.reset_default_graph()
             sess.close()
 
     @unittest.mock.patch('numpy.random.choice')
@@ -422,6 +271,8 @@ class TestTrainingExtensionsChannelPruning(unittest.TestCase):
         """
         Test to subsample input match for random output pixel (1, 1) and corresponding input match
         """
+        tf.compat.v1.reset_default_graph()
+
         # randomly selected output pixel (height, width) is fixed here and it is (1, 1)
         np_choice_function.return_value = [1]
 
@@ -432,12 +283,9 @@ class TestTrainingExtensionsChannelPruning(unittest.TestCase):
         g = tf.Graph()
 
         with g.as_default():
-
             inp_tensor = tf.Variable(initial_value=input_data, name='inp_tensor', dtype=tf.float32)
-
             filter_tensor = tf.compat.v1.get_variable('filter_tensor', shape=[5, 5, 5, 10],
                                             initializer=tf.random_normal_initializer())
-
             conv1 = tf.nn.conv2d(input=inp_tensor, filter=filter_tensor, strides=[1, 1, 1, 1], padding='VALID',
                                  data_format="NCHW", name='Conv2D_1')
 
@@ -468,6 +316,8 @@ class TestTrainingExtensionsChannelPruning(unittest.TestCase):
         Test to subsample input match for random output pixel (1, 1) and corresponding input match
         using dynamic input shape
         """
+        tf.compat.v1.reset_default_graph()
+
         # randomly selected output pixel (height, width) is fixed here and it is (1, 1)
         np_choice_function.return_value = [1]
 
@@ -478,15 +328,11 @@ class TestTrainingExtensionsChannelPruning(unittest.TestCase):
         g = tf.Graph()
 
         with g.as_default():
-
             inp_tensor = tf.compat.v1.placeholder(tf.float32, [None, None, None, None], 'inp_tensor')
-
             filter_tensor = tf.compat.v1.get_variable('filter_tensor', shape=[5, 5, 5, 10],
                                             initializer=tf.random_normal_initializer())
-
             conv1 = tf.nn.conv2d(input=inp_tensor, filter=filter_tensor, strides=[1, 1, 1, 1], padding='VALID',
                                  data_format="NCHW", name='Conv2D_1')
-
             init = tf.compat.v1.global_variables_initializer()
 
         sess = tf.compat.v1.Session(graph=g)
@@ -501,7 +347,6 @@ class TestTrainingExtensionsChannelPruning(unittest.TestCase):
                                                                               input_data=input_data,
                                                                               output_data=output_data,
                                                                               samples_per_image=1)
-
         # compare the inputs for both batches
         self.assertEqual(sub_sample_input.shape, (2, 5, 5, 5))
         self.assertTrue(np.array_equal(sub_sample_input[0, :, :, :], input_data[0, :, 1:6, 1:6]))
@@ -512,11 +357,15 @@ class TestTrainingExtensionsChannelPruning(unittest.TestCase):
         self.assertEqual(sub_sample_output.shape, (2, 10))
         self.assertTrue(np.array_equal(sub_sample_output, output_data[:, :, output_pixel[0], output_pixel[1]]))
 
+        sess.close()
+
     @unittest.mock.patch('numpy.random.choice')
     def test_subsample_data_channels_last(self, np_choice_function):
         """
         Test to subsample input match for random output pixel (1, 1) and corresponding input match
         """
+        tf.compat.v1.reset_default_graph()
+
         # randomly selected output pixel (height, width) is fixed here and it is (1, 1)
         np_choice_function.return_value = [1]
 
@@ -525,19 +374,14 @@ class TestTrainingExtensionsChannelPruning(unittest.TestCase):
         output_data = np.arange(0, 1280).reshape((2, 8, 8, 10))
 
         g = tf.Graph()
-
         with g.as_default():
-
             inp_tensor = tf.Variable(initial_value=input_data, name='inp_tensor', dtype=tf.float32)
-
             filter_tensor = tf.compat.v1.get_variable('filter_tensor', shape=[5, 5, 5, 10],
                                             initializer=tf.random_normal_initializer())
-
             conv1 = tf.nn.conv2d(input=inp_tensor, filter=filter_tensor, strides=[1, 1, 1, 1], padding='VALID',
                                  data_format="NHWC", name='Conv2D_1')
 
         conv1_op = g.get_operation_by_name('Conv2D_1')
-
         layer_attributes = aimet_tensorflow.utils.op.conv.get_layer_attributes(sess=None, op=conv1_op,
                                                                                input_op_names=None,
                                                                                input_shape=None)
@@ -550,7 +394,6 @@ class TestTrainingExtensionsChannelPruning(unittest.TestCase):
                                                                               input_data=input_data,
                                                                               output_data=output_data,
                                                                               samples_per_image=1)
-
         # compare the inputs for both batches
         self.assertEqual(sub_sample_input.shape, (2, 5, 5, 5))
         self.assertTrue(np.array_equal(sub_sample_input[0, :, :, :], input_data[0, :, 1:6, 1:6]))
@@ -567,6 +410,8 @@ class TestTrainingExtensionsChannelPruning(unittest.TestCase):
         Test to subsample input match for random output pixel (1, 1) and corresponding input match
         using dynamic input shape
         """
+        tf.compat.v1.reset_default_graph()
+
         # randomly selected output pixel (height, width) is fixed here and it is (1, 1)
         np_choice_function.return_value = [1]
 
@@ -575,17 +420,12 @@ class TestTrainingExtensionsChannelPruning(unittest.TestCase):
         output_data = np.arange(0, 1280).reshape((2, 8, 8, 10))
 
         g = tf.Graph()
-
         with g.as_default():
-
             inp_tensor = tf.compat.v1.placeholder(tf.float32, [None, None, None, None], 'inp_tensor')
-
             filter_tensor = tf.compat.v1.get_variable('filter_tensor', shape=[5, 5, 5, 10],
                                             initializer=tf.random_normal_initializer())
-
             conv1 = tf.nn.conv2d(input=inp_tensor, filter=filter_tensor, strides=[1, 1, 1, 1], padding='VALID',
                                  data_format="NHWC", name='Conv2D_1')
-
             init = tf.compat.v1.global_variables_initializer()
 
         sess = tf.compat.v1.Session(graph=g)
@@ -615,7 +455,13 @@ class TestTrainingExtensionsChannelPruning(unittest.TestCase):
         self.assertEqual(sub_sample_output.shape, (2, 10))
         self.assertTrue(np.array_equal(sub_sample_output, output_data[:, :, output_pixel[0], output_pixel[1]]))
 
+        sess.close()
+
     def test_select_inp_channels(self):
+        """
+        Test select input channels
+        """
+        tf.compat.v1.reset_default_graph()
 
         data_set = unittest.mock.MagicMock()
         number_of_batches = unittest.mock.MagicMock()
@@ -625,25 +471,19 @@ class TestTrainingExtensionsChannelPruning(unittest.TestCase):
         num_examples = 2000
 
         g = tf.Graph()
-
         with g.as_default():
-
-            x1 = tf.range(5.0*5.0*32.0*64.0)
+            x1 = tf.range(5.0 * 5.0 * 32.0 * 64.0)
             print("X1", x1)
             x2 = tf.reshape(tensor=x1, shape=(5, 5, 32, 64))
             print("x2 shape", x2.shape)
-
             inp_tensor = tf.compat.v1.get_variable('inp_tensor', shape=[num_examples, 32, 5, 5],
                                          initializer=tf.random_normal_initializer())
             filter_tensor = tf.compat.v1.get_variable('filter_tensor', initializer=x2)
-
             conv1 = tf.nn.conv2d(input=inp_tensor, filter=filter_tensor, strides=[1, 1, 1, 1], padding='VALID',
                                  data_format="NCHW", name='Conv2D_1')
-
-            bias_tensor = tf.compat.v1.get_variable('bias_tensor', shape=[64], initializer=tf.random_normal_initializer())
-
+            bias_tensor = tf.compat.v1.get_variable('bias_tensor', shape=[64],
+                                                    initializer=tf.random_normal_initializer())
             bias = tf.nn.bias_add(value=conv1, bias=bias_tensor, data_format="NCHW")
-
             init = tf.compat.v1.global_variables_initializer()
 
         conv1_op = g.get_operation_by_name('Conv2D_1')
@@ -654,8 +494,8 @@ class TestTrainingExtensionsChannelPruning(unittest.TestCase):
         self.assertEqual(shape, [num_examples, 64, 1, 1])
 
         sess = tf.compat.v1.Session(graph=g)
-        # initialize all the variables in the graph
         sess.run(init)
+
         conv_layer = Layer(model=sess, op=conv1_op, output_shape=output_shape)
 
         cp = InputChannelPruner(input_op_names=input_op_names, output_op_names=output_op_names, data_set=data_set,
@@ -682,7 +522,6 @@ class TestTrainingExtensionsChannelPruning(unittest.TestCase):
             self.assertEqual(len(prune_indices), len(expected_indices))
             self.assertEqual(prune_indices, expected_indices)
 
-        tf.compat.v1.reset_default_graph()
         sess.close()
 
     # Need to mark this for CUDA because TF CPU Conv does not support NCHW
@@ -691,6 +530,8 @@ class TestTrainingExtensionsChannelPruning(unittest.TestCase):
         """
         Test the reconstruction of weight
         """
+        tf.compat.v1.reset_default_graph()
+
         # input shape should be [Ns, Nic, k_h, k_w]
         number_of_images = 500
         num_in_channels = 5
@@ -699,15 +540,11 @@ class TestTrainingExtensionsChannelPruning(unittest.TestCase):
         g = tf.Graph()
 
         with g.as_default():
-
             inp_tensor = tf.Variable(initial_value=input_data, name='inp_tensor', dtype=tf.float32)
-
             filter_tensor = tf.compat.v1.get_variable('filter_tensor', shape=[5, 5, num_in_channels, num_out_channels],
                                             initializer=tf.random_normal_initializer())
-
             conv = tf.nn.conv2d(input=inp_tensor, filter=filter_tensor, strides=[1, 1, 1, 1], padding='VALID',
                                 data_format="NCHW", name='Conv2D_1')
-
             init = tf.compat.v1.global_variables_initializer()
 
         conv_op = g.get_operation_by_name('Conv2D_1')
@@ -744,7 +581,6 @@ class TestTrainingExtensionsChannelPruning(unittest.TestCase):
         # delete the directory
         shutil.rmtree(meta_path)
 
-        tf.compat.v1.reset_default_graph()
         sess.close()
 
     # Need to mark this for CUDA because TF CPU Conv does not support NCHW
@@ -753,6 +589,7 @@ class TestTrainingExtensionsChannelPruning(unittest.TestCase):
         """
         Test the reconstruction of weight and bias
         """
+        tf.compat.v1.reset_default_graph()
         # input shape should be [Ns, Nic, k_h, k_w]
         number_of_images = 500
         num_in_channels = 5
@@ -761,18 +598,13 @@ class TestTrainingExtensionsChannelPruning(unittest.TestCase):
         g = tf.Graph()
 
         with g.as_default():
-
             inp_tensor = tf.Variable(initial_value=input_data, name='inp_tensor', dtype=tf.float32)
-
             filter_tensor = tf.compat.v1.get_variable('filter_tensor', shape=[5, 5, num_in_channels, num_out_channels],
                                             initializer=tf.random_normal_initializer())
-
             conv = tf.nn.conv2d(input=inp_tensor, filter=filter_tensor, strides=[1, 1, 1, 1], padding='VALID',
                                 data_format="NCHW", name='Conv2D_1')
-
             bias_tensor = tf.compat.v1.get_variable('bias_tensor', shape=[num_out_channels],
                                           initializer=tf.random_normal_initializer())
-
             tf.nn.bias_add(conv, bias_tensor, data_format="NCHW")
 
             init = tf.compat.v1.global_variables_initializer()
@@ -815,13 +647,13 @@ class TestTrainingExtensionsChannelPruning(unittest.TestCase):
         # delete the directory
         shutil.rmtree(meta_path)
 
-        tf.compat.v1.reset_default_graph()
         sess.close()
 
     def test_datasampling_and_reconstruction(self):
         """
-        Test to collect activations with tfrecord dataset
+        Test data sampling and reconstruction logic
         """
+        tf.compat.v1.reset_default_graph()
         batch_size = 1
         input_data = np.random.rand(100, 224, 224, 3)
         dataset = tf.data.Dataset.from_tensor_slices(input_data)
@@ -880,8 +712,8 @@ class TestTrainingExtensionsChannelPruning(unittest.TestCase):
         """
         Test end-to-end prune_model with VGG16-imagenet
         """
-
         AimetLogger.set_area_logger_level(AimetLogger.LogAreas.Winnow, logging.INFO)
+        tf.compat.v1.reset_default_graph()
 
         batch_size = 1
         input_data = np.random.rand(100, 224, 224, 3)
@@ -891,7 +723,6 @@ class TestTrainingExtensionsChannelPruning(unittest.TestCase):
         orig_g = tf.Graph()
 
         with orig_g.as_default():
-
             _ = VGG16(weights=None, input_shape=(224, 224, 3), include_top=False)
             orig_init = tf.compat.v1.global_variables_initializer()
 
@@ -958,18 +789,15 @@ class TestTrainingExtensionsChannelPruning(unittest.TestCase):
         Test sorting of ops based on occurrence
         """
         AimetLogger.set_area_logger_level(AimetLogger.LogAreas.Winnow, logging.INFO)
+        tf.compat.v1.reset_default_graph()
 
         orig_g = tf.Graph()
-
         with orig_g.as_default():
-
             _ = VGG16(weights=None, input_shape=(224, 224, 3), include_top=False)
             orig_init = tf.compat.v1.global_variables_initializer()
 
         # create sess with graph
         orig_sess = tf.compat.v1.Session(graph=orig_g)
-
-        # initialize all the variables in VGG16
         orig_sess.run(orig_init)
 
         # create layer database
@@ -1025,18 +853,15 @@ class TestTrainingExtensionsChannelPruning(unittest.TestCase):
         Test sorting of ops based on occurrence
         """
         AimetLogger.set_area_logger_level(AimetLogger.LogAreas.Winnow, logging.INFO)
+        tf.compat.v1.reset_default_graph()
 
         orig_g = tf.Graph()
-
         with orig_g.as_default():
-
             _ = ResNet50(weights=None, input_shape=(224, 224, 3), include_top=False)
             orig_init = tf.compat.v1.global_variables_initializer()
 
         # create sess with graph
         orig_sess = tf.compat.v1.Session(graph=orig_g)
-
-        # initialize all the variables in VGG16
         orig_sess.run(orig_init)
 
         # create layer database
@@ -1084,6 +909,6 @@ class TestTrainingExtensionsChannelPruning(unittest.TestCase):
 
         self.assertEqual(len(sorted_layer_comp_ratio_list), 4)
         layer_db.model.close()
+
         # delete temp directory
         shutil.rmtree(str('./temp_meta/'))
-
