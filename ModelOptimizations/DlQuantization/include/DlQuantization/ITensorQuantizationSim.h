@@ -52,6 +52,9 @@ public:
                                           double encodingMin, double encodingMax,
                                           uint8_t bw, RoundingMode roundMode,
                                           bool use_cuda) = 0;
+    virtual void quantizeTensor(const DTYPE* inputTensorData, size_t inputTensorCount, DTYPE* outputTensorData,
+                                double encodingMin, double encodingMax, uint8_t bw, RoundingMode roundMode,
+                                bool use_cuda) = 0;
 };
 
 }   // namespace DlQuantization

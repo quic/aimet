@@ -35,12 +35,13 @@
 #  @@-COPYRIGHT-END-@@
 # =============================================================================
 
-import unittest
+import pytest
 import unittest.mock
 import torch
 
-from aimet_common.defs import QuantScheme
-from aimet_torch.qc_quantize_op import QcPostTrainingWrapper, QcQuantizeOpMode
+from aimet_torch.qc_quantize_op import QcPostTrainingWrapper, QcQuantizeOpMode, QuantScheme, MAP_QUANT_SCHEME_TO_PYMO, \
+    MAP_ROUND_MODE_TO_PYMO
+from aimet_torch.tensor_quantizer import PostTrainingTensorQuantizer
 import libpymo
 
 
@@ -163,3 +164,41 @@ class TestQcQuantizeOp(unittest.TestCase):
         # Check that one of the outputs of quantize_op is the indices with dtype int64
         self.assertEqual(indices.dtype, torch.int64)
         self.assertTrue(quantize_op.output_quantizers[0] is not None)
+
+    def test_quantize_only_cpu(self):
+        """ Test tensor quantizer quantize only functionality """
+
+        post_training_tensor_quantizer = \
+            PostTrainingTensorQuantizer(bitwidth=8, round_mode='nearest',
+                                        quant_scheme=MAP_QUANT_SCHEME_TO_PYMO[QuantScheme.post_training_tf],
+                                        use_symmetric_encodings=False, enabled_by_default=True)
+        encodings = libpymo.TfEncoding()
+        encodings.bw = 8
+        encodings.max = 2.23
+        encodings.min = -5.19
+        post_training_tensor_quantizer.encoding = encodings
+
+        inp_tensor = torch.tensor([-7, -5, -3, 0, .1, 2.5])
+        quant_out = post_training_tensor_quantizer.quantize(inp_tensor, MAP_ROUND_MODE_TO_PYMO['nearest'])
+        expected_out = torch.tensor([0, 6, 75, 178, 181, 255], dtype=torch.float32)
+        self.assertTrue(torch.equal(quant_out, expected_out))
+
+    @pytest.mark.cuda
+    def test_quantize_only_gpu(self):
+        """ Test tensor quantizer quantize only functionality on gpu """
+    
+        post_training_tensor_quantizer = \
+            PostTrainingTensorQuantizer(bitwidth=8, round_mode='nearest',
+                                        quant_scheme=MAP_QUANT_SCHEME_TO_PYMO[QuantScheme.post_training_tf],
+                                        use_symmetric_encodings=False, enabled_by_default=True)
+        encodings = libpymo.TfEncoding()
+        encodings.bw = 8
+        encodings.max = 2.23
+        encodings.min = -5.19
+        post_training_tensor_quantizer.encoding = encodings
+    
+        # Test quantize only on gpu
+        inp_tensor_gpu = torch.tensor([-7, -5, -3, 0, .1, 2.5], device=torch.device('cuda'))
+        quant_out = post_training_tensor_quantizer.quantize(inp_tensor_gpu, MAP_ROUND_MODE_TO_PYMO['nearest'])
+        expected_out = torch.tensor([0, 6, 75, 178, 181, 255], dtype=torch.float32, device=torch.device('cuda'))
+        self.assertTrue(torch.equal(quant_out, expected_out))

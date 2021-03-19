@@ -64,15 +64,10 @@ void TensorQuantizationSim<DTYPE>::gateMinMax(double& encodingMin, double& encod
         encodingMax = std::max(encodingMax, encodingMin + epsilon);
 }
 
-
 template <typename DTYPE>
-void TensorQuantizationSim<DTYPE>::quantizeDequantizeTensor(const DTYPE* inputTensorData, size_t inputTensorCount,
-                                                            DTYPE* outputTensorData, double encodingMin,
-                                                            double encodingMax, uint8_t bw, RoundingMode roundingMode,
-                                                            bool use_cuda)
+void TensorQuantizationSim<DTYPE>::_fillQuantizeInfo(TfEncoding& encoding, DlQuantization::ComputationMode& cpuGpuMode,
+                                                     uint8_t bw, double encodingMin, double encodingMax, bool use_cuda)
 {
-    DlQuantization::ComputationMode cpuGpuMode;
-    TfEncoding encoding;
     gateMinMax(encodingMin, encodingMax);
     encoding.min = encodingMin;
     encoding.max = encodingMax;
@@ -92,10 +87,32 @@ void TensorQuantizationSim<DTYPE>::quantizeDequantizeTensor(const DTYPE* inputTe
         cpuGpuMode = DlQuantization::ComputationMode::COMP_MODE_GPU;
     else
         cpuGpuMode = DlQuantization::ComputationMode::COMP_MODE_CPU;
-
-    QuantizeToFxp(inputTensorData, inputTensorCount, encoding, outputTensorData, cpuGpuMode, roundingMode);
 }
 
+template <typename DTYPE>
+void TensorQuantizationSim<DTYPE>::quantizeDequantizeTensor(const DTYPE* inputTensorData, size_t inputTensorCount,
+                                                            DTYPE* outputTensorData, double encodingMin,
+                                                            double encodingMax, uint8_t bw, RoundingMode roundingMode,
+                                                            bool use_cuda)
+{
+    DlQuantization::ComputationMode cpuGpuMode;
+    TfEncoding encoding;
+
+    _fillQuantizeInfo(encoding, cpuGpuMode, bw, encodingMin, encodingMax, use_cuda);
+    quantizeDequantize(inputTensorData, inputTensorCount, encoding, outputTensorData, cpuGpuMode, roundingMode);
+}
+
+template <typename DTYPE>
+void TensorQuantizationSim<DTYPE>::quantizeTensor(const DTYPE* inputTensorData, size_t inputTensorCount,
+                                                  DTYPE* outputTensorData, double encodingMin, double encodingMax,
+                                                  uint8_t bw, RoundingMode roundingMode, bool use_cuda)
+{
+    DlQuantization::ComputationMode cpuGpuMode;
+    TfEncoding encoding;
+
+    _fillQuantizeInfo(encoding, cpuGpuMode, bw, encodingMin, encodingMax, use_cuda);
+    quantizeToFxp(inputTensorData, inputTensorCount, encoding, outputTensorData, cpuGpuMode, roundingMode);
+}
 
 template class TensorQuantizationSim<float>;
 template class TensorQuantizationSim<double>;

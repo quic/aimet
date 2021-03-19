@@ -47,15 +47,22 @@
 
 namespace DlQuantization
 {
-inline double RandUniform_cpu();
+inline double randUniformCpu();
 
 template <typename DTYPE>
-void QuantizeToFxp(const DTYPE* in, int cnt, const TfEncoding& encoding, DTYPE* out, ComputationMode mode_cpu_gpu,
+void quantizeDequantize(const DTYPE* in, int cnt, const TfEncoding& encoding, DTYPE* out, ComputationMode mode_cpu_gpu,
+                        RoundingMode rounding_mode);
+
+template <typename DTYPE>
+void quantizeToFxp(const DTYPE* in, int cnt, const TfEncoding& encoding, DTYPE* out, ComputationMode mode_cpu_gpu,
                    RoundingMode rounding_mode);
 
+template <typename DTYPE>
+void quantizeDequantizeCpu(const DTYPE* in, int cnt, const TfEncoding& encoding, DTYPE* out,
+                           RoundingMode rounding_mode);
 
 template <typename DTYPE>
-void QuantizeToFxp_CPU(const DTYPE* in, int cnt, const TfEncoding& encoding, DTYPE* out, RoundingMode rounding_mode);
+void quantizeToFxpCpu(const DTYPE* in, int cnt, const TfEncoding& encoding, DTYPE* out, RoundingMode rounding_mode);
 
 double computeDelta(double encodingMin, double encodingMax, double numSteps);
 double computeOffset(double encodingMin, double delta);
@@ -65,7 +72,11 @@ double computeOffset(double encodingMin, double delta);
 #ifdef GPU_QUANTIZATION_ENABLED
 
 template <typename DTYPE>
-void QuantizeToFxp_GPU(const DTYPE* in, int cnt, const TfEncoding& encoding, DTYPE* out, RoundingMode rounding_mode);
+void quantizeToFxpGpu(const DTYPE* in, int cnt, const TfEncoding& encoding, DTYPE* out, RoundingMode rounding_mode);
+
+template <typename DTYPE>
+void quantizeDequantizeGpu(const DTYPE* in, int cnt, const TfEncoding& encoding, DTYPE* out,
+                           RoundingMode rounding_mode);
 
 #endif   // GPU_QUANTIZATION_ENABLED
 
