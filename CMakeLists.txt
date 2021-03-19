@@ -79,7 +79,7 @@ if (ENABLE_CUDA)
 
   find_package(CUDAToolkit)
   if(NOT DEFINED CMAKE_CUDA_ARCHITECTURES)
-    set(CMAKE_CUDA_ARCHITECTURES 52 60 61 70 72)
+    set(CMAKE_CUDA_ARCHITECTURES 35 52 60 61 70 72)
   endif()
 
   enable_language(CUDA)

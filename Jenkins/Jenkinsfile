@@ -45,7 +45,6 @@ pipeline {
         stage('Pipelines start') {
             parallel {
                 // Start the pipeline for Tensorflow GPU variant
-                //TODO Temporarily running the combined GPU variant instead
                 stage("TF GPU") {
                     agent { label "${params.BUILD_LABEL_GPU}" }
                     stages {
@@ -185,7 +184,6 @@ pipeline {
 
 
                 // Start the pipeline for Torch GPU variant
-                //TODO Temporarily skipping this variant
                 stage("TorchGPU") {
                     agent { label "${params.BUILD_LABEL_GPU}" }
                     stages {
