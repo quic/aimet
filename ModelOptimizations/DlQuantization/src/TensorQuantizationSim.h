@@ -53,12 +53,18 @@ namespace DlQuantization
 template <typename DTYPE>
 class TensorQuantizationSim : public ITensorQuantizationSim<DTYPE>
 {
+private:
+    void _fillQuantizeInfo(TfEncoding& encoding, DlQuantization::ComputationMode& cpuGpuMode, uint8_t bw,
+                           double encodingMin, double encodingMax, bool use_cuda);
 public:
     explicit TensorQuantizationSim();
     void gateMinMax(double& encodingMin, double& encodingMax);
     void quantizeDequantizeTensor(const DTYPE* inputTensorData, size_t inputTensorCount, DTYPE* outputTensorData,
                                   double encodingMin, double encodingMax, uint8_t bw, RoundingMode roundMode,
                                   bool use_cuda) override;
+    void quantizeTensor(const DTYPE* inputTensorData, size_t inputTensorCount, DTYPE* outputTensorData,
+                        double encodingMin, double encodingMax, uint8_t bw, RoundingMode roundMode, bool use_cuda)
+                        override;
 };
 
 }   // namespace DlQuantization

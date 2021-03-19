@@ -42,7 +42,7 @@
 
 namespace DlQuantization
 {
-// This file contains the definition of QuantizeToFxp_device(): a CUDA kernel
+// This file contains the definition of quantizeToFxpDevice(): a CUDA kernel
 // which we use from different .cu files.
 
 // Returns a random number in (0,1].
@@ -51,7 +51,7 @@ namespace DlQuantization
 // states.
 __device__ __forceinline__
 
-double RandUniform_device(int seed)
+double randUniformDevice(int seed)
 {
     curandState state;
     curand_init(static_cast<unsigned long long>(clock()) + seed, 0, 0, &state);
@@ -59,19 +59,18 @@ double RandUniform_device(int seed)
 }
 
 /**
- * @brief Quantize a floating point number to fixed point, and dequantize the
- * number again.
+ * @brief Quantize a floating point number to fixed point.
  * @param in Pointer to the floating point number to be quantized.
  * @param seed This number is solely used to generate random numbers in
  * stochastic rounding mode.
  * @param encoding The fixed point format.
- * @param out Compute the result of quantization and dequantization.
+ * @param out Compute the result of quantization.
  * @param rounding_mode The rounding mode to use for quantization to fixed
  * point.
  */
 template <typename DTYPE>
-__device__ void QuantizeToFxp_device(const DTYPE* in, int seed, TfEncoding encoding, DTYPE* out,
-                                     RoundingMode rounding_mode)
+__device__ void quantizeToFxpDevice(const DTYPE* in, int seed, TfEncoding encoding, DTYPE* out,
+                                    RoundingMode rounding_mode)
 {
     // Saturate
     *out = (DTYPE) fmax(fmin((double) *in, encoding.max), encoding.min);
@@ -87,7 +86,7 @@ __device__ void QuantizeToFxp_device(const DTYPE* in, int seed, TfEncoding encod
     }
     case ROUND_STOCHASTIC:
     {
-        *out = __float2int_rd(*out + RandUniform_device(seed));
+        *out = __float2int_rd(*out + randUniformDevice(seed));
         break;
     }
     default:
@@ -95,6 +94,16 @@ __device__ void QuantizeToFxp_device(const DTYPE* in, int seed, TfEncoding encod
         break;
     }
     }
+}
+
+/**
+ * @brief Dequantize a fixed point number to floating point.
+ * @param encoding The fixed point format.
+ * @param out Compute the result of dequantization.
+ */
+template <typename DTYPE>
+__device__ void dequantizeFromFxpDevice(TfEncoding encoding, DTYPE* out)
+{
     // De-quantize
     *out = encoding.delta * (*out + encoding.offset);
 }
