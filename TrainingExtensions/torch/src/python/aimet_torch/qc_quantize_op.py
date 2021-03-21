@@ -192,7 +192,7 @@ class QcQuantizeWrapper(nn.Module):
     """
 
     def __init__(self, module_to_wrap: nn.Module, weight_bw: int, activation_bw: int, round_mode, quant_scheme,
-                 is_output_quantized=True, is_symmetric=False):
+                 is_output_quantized=True, is_symmetric=False, num_inputs=1, num_outputs=1):
         """
         Constructor
         :param module_to_wrap: Module that will be wrapped with this custom op
@@ -207,7 +207,8 @@ class QcQuantizeWrapper(nn.Module):
         self.output_quantizers = [tensor_quantizer_factory(activation_bw, round_mode,
                                                            quant_scheme,
                                                            is_symmetric,
-                                                           enabled_by_default=is_output_quantized)]
+                                                           enabled_by_default=is_output_quantized)
+                                  for _ in range(num_outputs)]
 
         # Temporary to satisfy dependent code
         # Todo: remove this once all dependent code has been cleaned up
@@ -215,9 +216,6 @@ class QcQuantizeWrapper(nn.Module):
 
         self._mode = QcQuantizeOpMode.PASSTHROUGH
         self._module_to_wrap = module_to_wrap
-        # Using a _is_output_quantized variable instead of directly setting enabled_by_default for QcQuantizeBase since
-        # QcQuantizeStandalone shares the same output TensorQuantizer, so we always enable that by default.
-        self._is_output_quantized = is_output_quantized
 
         # Create quantizer for each parameter and compute encodings
         self.param_quantizers = {}
@@ -229,10 +227,12 @@ class QcQuantizeWrapper(nn.Module):
                                                                    enabled_by_default=True)
 
         # Create quantizer for layer input
-        self.input_quantizer = tensor_quantizer_factory(activation_bw, round_mode,
-                                                        quant_scheme,
-                                                        is_symmetric,
-                                                        enabled_by_default=False)
+        self.input_quantizers = [tensor_quantizer_factory(activation_bw, round_mode,
+                                                          quant_scheme,
+                                                          is_symmetric,
+                                                          enabled_by_default=False)
+                                 for _ in range(num_inputs)]
+        self.input_quantizer = self.input_quantizers[0]
 
     @abc.abstractmethod
     def forward(self, *inputs):
@@ -262,8 +262,12 @@ class QcQuantizeWrapper(nn.Module):
         """
         Reset encoding stats and set encodings to None for all quantizers
         """
-        self.input_quantizer.reset_encoding_stats()
-        self.output_quantizers[0].reset_encoding_stats()
+        for quantizer in self.input_quantizers:
+            quantizer.reset_encoding_stats()
+
+        for quantizer in self.output_quantizers:
+            quantizer.reset_encoding_stats()
+
         for param_quantizer in self.param_quantizers.values():
             param_quantizer.reset_encoding_stats()
 
@@ -299,7 +303,7 @@ class QcPostTrainingWrapper(QcQuantizeWrapper):
         """
 
         # Quantize the inputs
-        quantized_inputs = self._quantize_activation(self.input_quantizer, inputs)
+        quantized_inputs = self._quantize_activation(self.input_quantizers, inputs)
         if isinstance(quantized_inputs, torch.Tensor):
             quantized_inputs = [quantized_inputs]
 
@@ -321,7 +325,7 @@ class QcPostTrainingWrapper(QcQuantizeWrapper):
         else:
             if isinstance(wrapped_output, torch.Tensor):
                 wrapped_output = [wrapped_output]
-            output = self._quantize_activation(self.output_quantizers[0], wrapped_output)
+            output = self._quantize_activation(self.output_quantizers, wrapped_output)
 
         return output
 
@@ -380,20 +384,23 @@ class QcPostTrainingWrapper(QcQuantizeWrapper):
         """
         Compute the quantization encoding for this layer
         """
-        self.input_quantizer.compute_encoding()
-        self.output_quantizers[0].compute_encoding()
+        for quantizer in self.input_quantizers:
+            quantizer.compute_encoding()
 
-    def _quantize_activation(self, tensor_quantizer, tensors_to_quantize):
+        for quantizer in self.output_quantizers:
+            quantizer.compute_encoding()
+
+    def _quantize_activation(self, tensor_quantizers, tensors_to_quantize):
         """
         Forward-pass routine. This quantizes the weights before delegating to the wrapped module and
         then quantizes the output before returning the same
-        :param tensor_quantizer: Tensor quantizer to use for updating stats or quantizing
+        :param tensor_quantizers: Tensor quantizers to use for updating stats or quantizing
         :param tensors_to_quantize: Inputs passed to the module in the forward pass
         :return: Quantized output from the wrapped module
         """
 
         outputs = []
-        for input_tensor in tensors_to_quantize:
+        for index, input_tensor in enumerate(tensors_to_quantize):
             if not isinstance(input_tensor, torch.Tensor):
                 _logger.error('Expecting quantize activation input of type torch.Tensor but got %s', type(input_tensor))
                 raise AssertionError
@@ -401,19 +408,23 @@ class QcPostTrainingWrapper(QcQuantizeWrapper):
                 # Do not quantize integer tensors
                 outputs.append(input_tensor)
                 continue
+
+            assert len(tensor_quantizers) > index, \
+                f"Not enough tensor quantizers ({len(tensor_quantizers)}) allocated"
+
             if self._mode is QcQuantizeOpMode.ANALYSIS:
 
-                tensor_quantizer.update_encoding_stats(input_tensor)
+                tensor_quantizers[index].update_encoding_stats(input_tensor)
                 output = input_tensor
 
             elif self._mode is QcQuantizeOpMode.ACTIVE:
                 # if we are not in training, then only nearest rounding should be used
                 # else we should use whatever the user desires (i.e.. stochastic rounding is a valid option)
                 if self.training:
-                    round_mode = tensor_quantizer.round_mode
+                    round_mode = tensor_quantizers[index].round_mode
                 else:
                     round_mode = libpymo.RoundingMode.ROUND_NEAREST
-                output = tensor_quantizer.quantize_dequantize(input_tensor, round_mode)
+                output = tensor_quantizers[index].quantize_dequantize(input_tensor, round_mode)
 
             else:
                 output = input_tensor
@@ -457,7 +468,7 @@ class QcQuantizeStandalone(QcQuantizeStandAloneBase):
         :return: Quantized output from the wrapped module
         """
 
-        output = self._quantize_activation(self.output_quantizers[0], list(inputs))
+        output = self._quantize_activation(self.output_quantizers, list(inputs))
 
         return output
 
