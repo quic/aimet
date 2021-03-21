@@ -153,7 +153,7 @@ class TestQcQuantizeOp(unittest.TestCase):
         """ Test that maxpool2d returning int tensor can be quantized """
         maxpool = torch.nn.MaxPool2d(2, return_indices=True)
         quantize_op = QcPostTrainingWrapper(maxpool, weight_bw=8, activation_bw=8, round_mode='nearest',
-                                         quant_scheme=QuantScheme.post_training_tf_enhanced)
+                                            quant_scheme=QuantScheme.post_training_tf_enhanced)
         inp = torch.rand((1, 3, 8, 8))
         quantize_op.set_mode(QcQuantizeOpMode.ANALYSIS)
         quantize_op(inp)
