@@ -85,7 +85,7 @@ class TestTrainingExtensionElementwiseOps(unittest.TestCase):
         torch.manual_seed(10)
         model = Model2(Add())
         input_shape = (5, 10, 10, 20)
-        sim = QuantizationSimModel(model, input_shape)
+        sim = QuantizationSimModel(model, dummy_input=torch.rand(input_shape))
         encodings = libpymo.TfEncoding()
         encodings.bw = 8
         encodings.max = 5

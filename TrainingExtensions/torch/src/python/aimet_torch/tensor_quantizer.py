@@ -176,6 +176,10 @@ class PostTrainingTensorQuantizer(TensorQuantizer):
             if is_encoding_valid:
                 self.encoding = encoding
 
+            else:
+                self.encoding = None
+                self.enabled = False
+
     def quantize_dequantize(self, tensor, round_mode):
         """
         Quantize-dequantize the tensor, using the saved encoding for this tensor
