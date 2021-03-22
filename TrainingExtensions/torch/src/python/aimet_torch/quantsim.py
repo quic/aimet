@@ -55,7 +55,6 @@ from aimet_torch import torchscript_utils
 from aimet_torch.batch_norm_fold import PassThroughOp
 from aimet_torch import utils
 from aimet_torch import onnx_utils
-from aimet_torch.meta.connectedgraph_utils import create_connected_graph_with_input_shapes
 from aimet_torch.meta.connectedgraph import ConnectedGraph
 from aimet_torch.qc_quantize_recurrent import QcQuantizeRecurrent
 
@@ -110,16 +109,16 @@ class QuantizationSimModel:
     """
 
     # pylint: disable=too-many-arguments
-    def __init__(self, model: torch.nn.Module, input_shapes: Union[Tuple, List[Tuple]] = None,
+    def __init__(self, model: torch.nn.Module, dummy_input: Union[torch.Tensor, Tuple],
                  quant_scheme: Union[str, QuantScheme] = QuantScheme.post_training_tf_enhanced,
                  rounding_mode: str = 'nearest', default_output_bw: int = 8, default_param_bw: int = 8,
-                 in_place: bool = False, config_file: str = None,
-                 dummy_input: Union[torch.Tensor, Tuple] = None):
+                 in_place: bool = False, config_file: str = None):
         """
         Constructor
 
         :param model: Model to add simulation ops to
-        :param input_shapes: List of input shapes to the model
+        :param dummy_input: Dummy input to the model. Used to parse model graph. If the model has more than one input,
+                            pass a tuple. User is expected to place the tensors on the appropriate device.
         :param quant_scheme: Quantization scheme. Supported options are 'tf_enhanced' or 'tf' or using Quant Scheme Enum
                              QuantScheme.post_training_tf or QuantScheme.post_training_tf_enhanced
         :param rounding_mode: Rounding mode. Supported options are 'nearest' or 'stochastic'
@@ -128,8 +127,6 @@ class QuantizationSimModel:
         :param in_place: If True, then the given 'model' is modified in-place to add quant-sim nodes.
                 Only suggested use of this option is when the user wants to avoid creating a copy of the model
         :param config_file: Path to Configuration file for model quantizers
-        :param dummy_input: Dummy input to the model. Used to parse model graph. If the model has more than one input,
-                            pass a tuple. User is expected to place the tensors on the appropriate device.
         """
         # Perform sanity checks on inputs
         QuantizationSimModel._validate_quantsim_inputs(quant_scheme, rounding_mode, default_output_bw, default_param_bw)
@@ -140,13 +137,7 @@ class QuantizationSimModel:
             self.model = copy.deepcopy(model)
 
         try:
-            if dummy_input is not None:
-                self.connected_graph = ConnectedGraph(self.model, dummy_input)
-            else:
-                if input_shapes is None:
-                    raise AssertionError('Must provide either input shapes or a dummy input for export')
-                self.connected_graph = create_connected_graph_with_input_shapes(self.model, input_shapes)
-
+            self.connected_graph = ConnectedGraph(self.model, dummy_input)
         except (torch.jit.TracingCheckError, AssertionError):
             self.connected_graph = None
 
@@ -286,9 +277,8 @@ class QuantizationSimModel:
 
         layer.set_mode(QcQuantizeOpMode.ACTIVE)
 
-    def export(self, path: str, filename_prefix: str, input_shape: Union[Tuple, List[Tuple]],
-               set_onnx_layer_names: bool = True, dummy_input: Union[torch.Tensor, Tuple] = None,
-               use_torch_script_graph: bool = False, ):
+    def export(self, path: str, filename_prefix: str, dummy_input: Union[torch.Tensor, Tuple],
+               set_onnx_layer_names: bool = True, use_torch_script_graph: bool = False):
         """
         This method exports out the quant-sim model so it is ready to be run on-target.
 
@@ -303,11 +293,9 @@ class QuantizationSimModel:
 
         :param path: path where to store model pth and encodings
         :param filename_prefix: Prefix to use for filenames of the model pth and encodings files
-        :param input_shape: shape of the model input as a tuple. If the model takes more than one input, specify this as
-               a list of shapes.
-        :param set_onnx_layer_names: If ONNX layer names should be set while exporting the model. Default is True
         :param dummy_input: Dummy input to the model. Used to parse model graph. It is required for the dummy_input to
                 be placed on CPU.
+        :param set_onnx_layer_names: If ONNX layer names should be set while exporting the model. Default is True
         :param use_torch_script_graph: if exporting of encoding should use torch script tensor names. Default is False
         :return: None
 
@@ -322,10 +310,6 @@ class QuantizationSimModel:
         self._remove_quantization_wrappers(model_to_export, all_modules_in_model_to_export)
         torch.save(model_to_export, model_path)
 
-        if not dummy_input:
-            if input_shape is None:
-                raise AssertionError('Must provide either input shape or a dummy input for export')
-            dummy_input = tuple(utils.create_rand_tensors_given_shapes(input_shape, device=torch.device('cpu')))
         if use_torch_script_graph:
             self.export_torch_script_model_and_encodings(path, filename_prefix, model_to_export, dummy_input)
         else:

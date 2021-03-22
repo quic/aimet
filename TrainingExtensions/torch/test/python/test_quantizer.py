@@ -509,20 +509,22 @@ class TestQuantizationSim(unittest.TestCase):
     def test_model_with_two_inputs(self):
         """Model with more than 1 input"""
 
+        dummy_input=(torch.rand(32, 1, 28, 28), torch.rand(32, 1, 28, 28))
+
         def forward_pass(model, args):
             model.eval()
             with torch.no_grad():
-                model(torch.randn((32, 1, 28, 28)), torch.randn(32, 1, 28, 28))
+                model(*dummy_input)
 
         model = ModelWithTwoInputs()
 
-        sim = QuantizationSimModel(model, dummy_input=(torch.rand(32, 1, 28, 28), torch.rand(32, 1, 28, 28)))
+        sim = QuantizationSimModel(model, dummy_input=dummy_input)
 
         # Quantize
         sim.compute_encodings(forward_pass, None)
 
         # save encodings
-        sim.export('./data/', 'two_input_model', input_shape=[(1, 1, 28, 28), (1, 1, 28, 28)])
+        sim.export('./data/', 'two_input_model', dummy_input)
 
     # -------------------------------------------
 
@@ -531,20 +533,20 @@ class TestQuantizationSim(unittest.TestCase):
 
         resnet18 = models.resnet18()
         resnet18.eval()
-        input_shapes = (1, 3, 224, 224)
+        dummy_input = torch.randn(1, 3, 224, 224)
 
         # Get Dict mapping node name to the input and output names
-        sim = QuantizationSimModel(resnet18, dummy_input=torch.rand(1, 3, 224, 224))
+        sim = QuantizationSimModel(resnet18, dummy_input=dummy_input)
 
         def forward_pass(model, args):
             model.eval()
             with torch.no_grad():
-                model(torch.randn(1, 3, 224, 224))
+                model(dummy_input)
 
         # Quantize
         sim.compute_encodings(forward_pass, None)
 
-        sim.export('./data/', 'resnet18', input_shape=(1, 3, 224, 224))
+        sim.export('./data/', 'resnet18', dummy_input)
         with open('./data/resnet18.encodings') as json_file:
             encoding_data = json.load(json_file)
             print(encoding_data)
@@ -563,8 +565,10 @@ class TestQuantizationSim(unittest.TestCase):
         resnet50 = models.resnet50()
         resnet50.eval()
 
+        dummy_input = torch.randn(1, 3, 224, 224)
+
         # Get Dict mapping node name to the input and output names
-        sim = QuantizationSimModel(resnet50, dummy_input=torch.rand(1, 3, 224, 224))
+        sim = QuantizationSimModel(resnet50, dummy_input)
 
         def forward_pass(model, args):
             model.eval()
@@ -574,7 +578,7 @@ class TestQuantizationSim(unittest.TestCase):
         # Quantize
         sim.compute_encodings(forward_pass, None)
 
-        sim.export('./data/', 'resnet50', input_shape=(1, 3, 224, 224), use_torch_script_graph=True)
+        sim.export('./data/', 'resnet50', dummy_input, use_torch_script_graph=True)
         with open('./data/resnet50.encodings') as json_file:
             encoding_data = json.load(json_file)
 
@@ -603,13 +607,15 @@ class TestQuantizationSim(unittest.TestCase):
     def test_export_to_onnx(self):
         """Exporting encodings and model"""
 
+        dummy_input = (torch.rand(32, 1, 28, 28), torch.rand(32, 1, 28, 28))
+
         def forward_pass(model, args):
             model.eval()
             with torch.no_grad():
-                model(torch.randn((32, 1, 28, 28)), torch.randn(32, 1, 28, 28))
+                model(*dummy_input)
 
         model = ModelWithTwoInputs()
-        sim = QuantizationSimModel(model, dummy_input=(torch.rand(32, 1, 28, 28), torch.rand(32, 1, 28, 28)))
+        sim = QuantizationSimModel(model, dummy_input=dummy_input)
 
         # Quantize
         sim.compute_encodings(forward_pass, None)
@@ -618,7 +624,7 @@ class TestQuantizationSim(unittest.TestCase):
         sim.model.conv1_a.output_quantizers[0].encoding.max = 30
 
         # save encodings
-        sim.export('./data/', 'two_input_model', input_shape=[(1, 1, 28, 28), (1, 1, 28, 28)])
+        sim.export('./data/', 'two_input_model', dummy_input)
 
         # check the encodings
         with open('./data/two_input_model.encodings', 'r') as fp:
@@ -1056,14 +1062,16 @@ class TestQuantizationSim(unittest.TestCase):
     def test_with_standalone_ops(self):
 
         model = ModelWithStandaloneOps()
-        sim = QuantizationSimModel(model=model, dummy_input=torch.rand(1, 1, 28, 28))
+        dummy_input=torch.rand(1, 1, 28, 28)
+
+        sim = QuantizationSimModel(model=model, dummy_input=dummy_input)
 
         # Quantize
         sim.compute_encodings(dummy_forward_pass, None)
         dummy_forward_pass(sim.model, None)
 
         # Save encodings
-        sim.export("./data/", "encodings_with_standalone_ops", input_shape=(1, 1, 28, 28))
+        sim.export("./data/", "encodings_with_standalone_ops", dummy_input)
         with open('./data/encodings_with_standalone_ops.encodings') as json_file:
             encoding_data = json.load(json_file)
         # in onnx definition tensor 16 is output of Reshape, to be ignored
@@ -1236,9 +1244,9 @@ class TestQuantizationSim(unittest.TestCase):
     def test_rnn_quantization(self):
         """ Test quantizing a model with rnn layer """
         model = SingleLayerRNNModel()
-        input_shape = (10, 1, 3)
+        dummy_input = torch.randn(10, 1, 3)
 
-        sim = QuantizationSimModel(model, dummy_input=torch.rand(input_shape))
+        sim = QuantizationSimModel(model, dummy_input)
         self.assertTrue(isinstance(sim.model.rnn, QcQuantizeRecurrent))
 
     def test_quantizing_qc_quantize_module(self):
@@ -1251,13 +1259,13 @@ class TestQuantizationSim(unittest.TestCase):
     def test_export_lstm_model(self):
         """ Test export functionality with lstm model """
         model = TwoLayerBidirectionalLstmModel()
-        input_shape = (10, 1, 3)
+        dummy_input = torch.randn(10, 1, 3)
 
-        sim = QuantizationSimModel(model, dummy_input=torch.randn(input_shape))
+        sim = QuantizationSimModel(model, dummy_input)
 
         def forward_pass(model, args):
             model.eval()
-            model(torch.randn(input_shape))
+            model(dummy_input)
 
         # Quantize
         sim.compute_encodings(forward_pass, None)
@@ -1269,7 +1277,7 @@ class TestQuantizationSim(unittest.TestCase):
         # Check that edited weight is different than original weight in module_to_quantize
         self.assertTrue(not torch.equal(edited_weight, sim.model.lstm.module_to_quantize.weight_ih_l0))
 
-        sim.export('./data', 'rnn_save', input_shape)
+        sim.export('./data', 'rnn_save', dummy_input)
         exported_model = torch.load('./data/rnn_save.pth')
 
         # Check that weight from quantized module was copied to original module successfully
