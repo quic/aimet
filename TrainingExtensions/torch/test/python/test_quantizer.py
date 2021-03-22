@@ -54,7 +54,7 @@ from aimet_torch.qc_quantize_recurrent import QcQuantizeRecurrent
 from aimet_torch.quantsim import QuantizationSimModel
 from aimet_torch.quantsim_straight_through_grad import compute_dloss_by_dx
 from aimet_torch.defs import PassThroughOp
-from aimet_torch import utils
+from aimet_torch import utils, elementwise_ops
 
 from aimet_torch.qc_quantize_op import QcQuantizeWrapper, QcQuantizeStandalone, MAP_ROUND_MODE_TO_PYMO, \
     MAP_QUANT_SCHEME_TO_PYMO, QcPostTrainingWrapper, QcQuantizeOpMode
@@ -328,7 +328,7 @@ class TestQuantizationSim(unittest.TestCase):
         sim = QuantizationSimModel(model, dummy_input=torch.rand(1, 1, 12, 12))
 
         # Add wrappers again, expect to be a nop
-        sim._add_quantization_wrappers(model)
+        sim._add_quantization_wrappers(model, num_inout_tensors={})
 
         self.verify_quantization_wrappers(model, sim.model)
 
@@ -564,7 +564,7 @@ class TestQuantizationSim(unittest.TestCase):
         resnet50.eval()
 
         # Get Dict mapping node name to the input and output names
-        sim = QuantizationSimModel(resnet50, input_shapes=(1, 3, 224, 224))
+        sim = QuantizationSimModel(resnet50, dummy_input=torch.rand(1, 3, 224, 224))
 
         def forward_pass(model, args):
             model.eval()
@@ -710,7 +710,7 @@ class TestQuantizationSim(unittest.TestCase):
         print(sim.model.conv1.input_quantizer)
         print(sim.model.conv1.output_quantizers[0])
 
-    def test_quantizing_models_with_add_ops(self):
+    def test_quantizing_models_with_funtional_add_ops(self):
         """
         Testing models with add functional ops
         :return:
@@ -737,6 +737,7 @@ class TestQuantizationSim(unittest.TestCase):
 
                 ya = self.conv4a(x)
                 yb = self.conv4b(x)
+
                 x = ya + yb
                 x = self.conv5(x)
 
@@ -749,6 +750,51 @@ class TestQuantizationSim(unittest.TestCase):
 
         self.assertTrue(sim.model.conv3.input_quantizer.enabled)
         self.assertTrue(sim.model.conv5.input_quantizer.enabled)
+
+        print(sim)
+
+    def test_quantizing_models_with_module_add_ops(self):
+        """
+        Testing models with add functional ops
+        :return:
+        """
+        class Net(nn.Module):
+            def __init__(self):
+                super(Net, self).__init__()
+                self.conv1 = nn.Conv2d(3, 10, kernel_size=5)
+                self.conv2a = nn.Conv2d(10, 20, kernel_size=5)
+                self.conv2b = nn.Conv2d(10, 20, kernel_size=5)
+                self.conv3 = nn.Conv2d(20, 20, kernel_size=5)
+                self.conv4a = nn.Conv2d(20, 20, kernel_size=5)
+                self.conv4b = nn.Conv2d(20, 20, kernel_size=5)
+                self.conv5 = nn.Conv2d(20, 20, kernel_size=5)
+                self.add1 = elementwise_ops.Add()
+                self.add2 = elementwise_ops.Add()
+
+            def forward(self, input):
+                x = self.conv1(input)
+
+                ya = self.conv2a(x)
+                yb = self.conv2b(x)
+
+                x = self.add1(ya, yb)
+                x = self.conv3(x)
+
+                ya = self.conv4a(x)
+                yb = self.conv4b(x)
+
+                x = self.add2(ya, yb)
+                x = self.conv5(x)
+
+                return x
+
+        model = Net()
+        model(torch.rand(1, 3, 28, 28))
+        sim = QuantizationSimModel(model, quant_scheme=QuantScheme.post_training_tf,
+                                   dummy_input=torch.rand(1, 3, 28, 28))
+
+        self.assertFalse(sim.model.conv3.input_quantizer.enabled)
+        self.assertTrue(sim.model.add1.output_quantizer.enabled)
 
         print(sim)
 
@@ -1169,12 +1215,11 @@ class TestQuantizationSim(unittest.TestCase):
         sim.compute_encodings(dummy_forward_pass, None)
         for name, module in sim.model.named_modules():
             if isinstance(module, QcPostTrainingWrapper):
+                self.assertEqual(QcQuantizeOpMode.ACTIVE, module._mode)
                 if name == 'relu1':
                     self.assertTrue(module.output_quantizers[0].enabled)
-                    self.assertEqual(QcQuantizeOpMode.ACTIVE, module._mode)
                 elif name in ['conv2', 'conv2_drop', 'relu2', 'relu3', 'dropout', 'fc2', 'log_softmax']:
-                    self.assertTrue(module.output_quantizers[0].enabled)
-                    self.assertEqual(QcQuantizeOpMode.PASSTHROUGH, module._mode)
+                    self.assertFalse(module.output_quantizers[0].enabled)
 
     def test_connected_graph_is_none(self):
         """ Test that an assertion is thrown when connected graph is not able to be built. """
@@ -1193,7 +1238,7 @@ class TestQuantizationSim(unittest.TestCase):
         model = SingleLayerRNNModel()
         input_shape = (10, 1, 3)
 
-        sim = QuantizationSimModel(model, input_shape)
+        sim = QuantizationSimModel(model, dummy_input=torch.rand(input_shape))
         self.assertTrue(isinstance(sim.model.rnn, QcQuantizeRecurrent))
 
     def test_quantizing_qc_quantize_module(self):
@@ -1208,7 +1253,7 @@ class TestQuantizationSim(unittest.TestCase):
         model = TwoLayerBidirectionalLstmModel()
         input_shape = (10, 1, 3)
 
-        sim = QuantizationSimModel(model, input_shape)
+        sim = QuantizationSimModel(model, dummy_input=torch.randn(input_shape))
 
         def forward_pass(model, args):
             model.eval()

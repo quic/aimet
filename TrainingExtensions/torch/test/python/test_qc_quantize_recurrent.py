@@ -323,9 +323,11 @@ class TestQcQuantizeRecurrentOp(unittest.TestCase):
                             msg="original module mismatched, TestCase:{}".format(tc.test_name))
         # compare the quantizers
         for name, output_quantizer in quant_op.output_quantizers.items():
-            self.compare_quantizer(output_quantizer, loaded_model.output_quantizers[name])
+            if output_quantizer.enabled:
+                self.compare_quantizer(output_quantizer, loaded_model.output_quantizers[name])
         for name, quantizer in quant_op.param_quantizers.items():
-            self.compare_quantizer(quantizer, loaded_model.param_quantizers[name])
+            if quantizer.enabled:
+                self.compare_quantizer(quantizer, loaded_model.param_quantizers[name])
         # check if the loaded module generates the same output
         o_post, h_post = loaded_model(inp, hx=None)
         self.assertTrue(torch.equal(o_pre, o_post),
