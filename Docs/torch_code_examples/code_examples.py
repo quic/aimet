@@ -306,7 +306,7 @@ def quantize_model(trainer_function):
     trainer_function(model=sim.model, epochs=1, num_batches=100, use_cuda=True)
 
     # Export the model
-    sim.export(path='./', filename_prefix='quantized_mnist', input_shape=input_shape)
+    sim.export(path='./', filename_prefix='quantized_mnist', dummy_input=torch.rand(1, 1, 28, 28))
 
 
 if __name__ == '__main__':

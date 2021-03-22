@@ -63,6 +63,8 @@ class QuantizerCpuGpu(unittest.TestCase):
 
         torch.manual_seed(1)
         torch.backends.cudnn.deterministic = True
+        dummy_input = torch.rand(1, 1, 28, 28)
+        dummy_input_cuda = dummy_input.cuda()
 
         start_time = time.time()
 
@@ -70,7 +72,7 @@ class QuantizerCpuGpu(unittest.TestCase):
         model_cpu = mnist_model.Net().to('cpu')
         model_gpu = copy.deepcopy(model_cpu).to('cuda')
         cpu_sim_model = QuantizationSimModel(model_cpu, quant_scheme='tf', in_place=True,
-                                             dummy_input=torch.rand(1, 1, 28, 28))
+                                             dummy_input=dummy_input)
         # Quantize
         cpu_sim_model.compute_encodings(forward_pass, None)
 
@@ -80,7 +82,7 @@ class QuantizerCpuGpu(unittest.TestCase):
 
         # create model on GPU
         gpu_sim_model = QuantizationSimModel(model_gpu, quant_scheme='tf', in_place=True,
-                                             dummy_input=torch.rand(1, 1, 28, 28).cuda())
+                                             dummy_input=dummy_input_cuda)
         # Quantize
         gpu_sim_model.compute_encodings(forward_pass, None)
 
@@ -110,8 +112,8 @@ class QuantizerCpuGpu(unittest.TestCase):
         self.assertAlmostEqual(model_gpu.fc2.output_quantizers[0].encoding.max,
                                model_cpu.fc2.output_quantizers[0].encoding.max, delta=0.001)
 
-        gpu_sim_model.export("./data/", "quantizer_no_fine_tuning__GPU", (1, 1, 28, 28))
-        cpu_sim_model.export("./data/", "quantizer_no_fine_tuning__CPU", (1, 1, 28, 28))
+        gpu_sim_model.export("./data/", "quantizer_no_fine_tuning__GPU", dummy_input)
+        cpu_sim_model.export("./data/", "quantizer_no_fine_tuning__CPU", dummy_input)
 
         self.assertEqual(torch.device('cuda:0'), next(model_gpu.parameters()).device)
         self.assertEqual(torch.device('cpu'), next(model_cpu.parameters()).device)
