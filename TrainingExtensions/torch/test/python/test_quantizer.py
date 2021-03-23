@@ -1321,3 +1321,29 @@ class TestQuantizationSim(unittest.TestCase):
         self.assertEqual(quant_module.param_quantizers['weight'].encoding.delta, 0.038)
         self.assertEqual(quant_module.param_quantizers['weight'].use_symmetric_encodings, False)
         self.assertEqual(quant_module.param_quantizers['weight'].bitwidth, 4)
+
+    def test_compute_encoding_with_given_bitwidth(self):
+        """
+        Test functionality to compute encoding for given bitwidth
+        """
+        encoding_dict = QuantizationSimModel.generate_symmetric_encoding_dict(
+            torch.as_tensor(np.array([1.203197181224823, 0], dtype='float32')),  bitwidth=32)
+        self.assertEqual(-2147483648, encoding_dict['offset'])
+        self.assertEqual(0, encoding_dict['min'])
+        self.assertAlmostEqual(encoding_dict['scale'], 5.6028e-10, places=14)
+
+        encoding_dict = QuantizationSimModel.generate_symmetric_encoding_dict(
+            torch.as_tensor(np.array([-1.203197181224823, 0], dtype='float32')), bitwidth=32)
+        self.assertEqual(-2147483648, encoding_dict['offset'])
+        self.assertEqual(0, encoding_dict['max'])
+        self.assertAlmostEqual(encoding_dict['scale'], 5.6028e-10, places=14)
+
+        encoding_dict = QuantizationSimModel.generate_symmetric_encoding_dict(
+            torch.as_tensor(np.array([0.7796169519533523, -0.9791506528745285], dtype='float32')), bitwidth=32)
+        self.assertEqual(-2147483648, encoding_dict['offset'])
+        self.assertAlmostEqual(encoding_dict['scale'], 4.5595e-10, places=14)
+
+        encoding_dict = QuantizationSimModel.generate_symmetric_encoding_dict(
+            torch.as_tensor(np.array([0.7796169519533523, -0.9791506528745285], dtype='float32')), bitwidth=8)
+        self.assertEqual(-128, encoding_dict['offset'])
+        self.assertAlmostEqual(encoding_dict['scale'], 0.0077098476, places=7)
