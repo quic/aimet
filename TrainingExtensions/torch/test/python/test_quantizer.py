@@ -207,6 +207,45 @@ class ModelWithTwoInputs(nn.Module):
         return self.softmax(x)
 
 
+class ModelWithTwoInputsOneToAdd(nn.Module):
+
+    def __init__(self):
+        super(ModelWithTwoInputsOneToAdd, self).__init__()
+        self.conv1_a = nn.Conv2d(1, 10, kernel_size=5)
+        self.maxpool1_a = nn.MaxPool2d(2)
+        self.relu1_a = nn.ReLU()
+
+        self.conv1_b = nn.Conv2d(10, 10, kernel_size=5)
+        self.maxpool1_b = nn.MaxPool2d(2)
+        self.relu1_b = nn.ReLU()
+
+        self.add = elementwise_ops.Add()
+
+        self.conv2 = nn.Conv2d(10, 20, kernel_size=5)
+        self.maxpool2 = nn.MaxPool2d(2)
+        self.relu2 = nn.ReLU()
+
+        self.fc1 = nn.Linear(320, 50)
+        self.relu3 = nn.ReLU()
+        self.dropout = nn.Dropout()
+        self.fc2 = nn.Linear(50, 10)
+
+        self.softmax = nn.LogSoftmax(dim=1)
+
+    def forward(self, x1, x2):
+        x1 = self.relu1_a(self.maxpool1_a(self.conv1_a(x1)))
+        x1 = self.relu1_b(self.maxpool1_b(self.conv1_b(x1)))
+
+        x = self.add(x1, x2)
+
+        x = self.relu2(self.maxpool2(self.conv2(x)))
+        x = x.view(-1, 320)
+        x = self.relu3(self.fc1(x))
+        x = self.dropout(x)
+        x = self.fc2(x)
+        return self.softmax(x)
+
+
 class TestQuantizationSim(unittest.TestCase):
     def test_is_leaf_module_positive(self):
         """With an actual leaf module"""
@@ -527,6 +566,31 @@ class TestQuantizationSim(unittest.TestCase):
         sim.export('./data/', 'two_input_model', dummy_input)
 
     # -------------------------------------------
+
+    def test_model_with_two_inputs_one_to_add(self):
+        """Model with more than 1 input"""
+
+        dummy_input = (torch.rand(32, 1, 100, 100), torch.rand(32, 10, 22, 22))
+
+        def forward_pass(sim_model, _):
+            sim_model.eval()
+            with torch.no_grad():
+                sim_model(*dummy_input)
+
+        model = ModelWithTwoInputsOneToAdd()
+
+        sim = QuantizationSimModel(model, dummy_input=dummy_input)
+        print(sim)
+        self.assertEqual(2, len(sim.model.add.input_quantizers))
+        self.assertFalse(sim.model.add.input_quantizers[0].enabled)
+        self.assertFalse(sim.model.add.input_quantizers[1].enabled)
+
+        # Quantize
+        sim.compute_encodings(forward_pass, None)
+
+        # save encodings
+        sim.export('./data/', 'two_input_model_one_with_add', dummy_input)
+
 
     def test_export_unified_encoding_format(self):
         """ test export functionality on ResNet18 """
