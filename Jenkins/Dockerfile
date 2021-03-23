@@ -217,8 +217,8 @@ RUN sed -i 's/PermitRootLogin prohibit-password/PermitRootLogin yes/' /etc/ssh/s
 # SSH login fix. Otherwise user is kicked off after login
 RUN sed 's@session\s*required\s*pam_loginuid.so@session optional pam_loginuid.so@g' -i /etc/pam.d/sshd
 
-# Turn this into a development image
-RUN cd / && git clone https://github.com/tensorflow/tensorflow.git && cd tensorflow && git checkout v1.15.0
+# Clone the tensorflow repo to enable development
+RUN cd / && git clone --depth 1 --single-branch --branch v1.15.0 https://github.com/tensorflow/tensorflow.git
 
 RUN pip install git-pylint-commit-hook osqp==0.6.1 onnx==1.7.0
 
@@ -229,7 +229,7 @@ RUN pip download bokeh==1.2.0 hvplot==0.4.0 -d /var/tmp/bokeh_hvplot_download | 
 RUN pip install --no-deps -r /var/tmp/bokeh_hvplot_requirements.txt
 # NOTE: We need to pin the holoviews version to this since the latest version has a circular dependency on bokeh 2.0.0 through the panel package
 RUN pip install holoviews==1.12.7 \
-                netron==4.7.8
+                netron==4.8.4
 
 RUN pip install --no-deps bokeh==1.2.0 hvplot==0.4.0
 RUN rm -rf /var/tmp/bokeh_hvplot_download /var/tmp/bokeh_hvplot_requirements.txt
