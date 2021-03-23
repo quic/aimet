@@ -606,13 +606,15 @@ def find_num_inout_tensors_per_module(model: torch.nn.Module, input_tensor) -> D
     :return: map of module -> number of output tensors
     """
 
-    num_outputs_map = {}
+    num_inout_map = {}
 
     def record_num_outputs(module, inputs, outputs):
-        num_outputs_map[module] = (len(inputs), len(outputs))
+        num_inputs = len(inputs) if not isinstance(inputs, torch.Tensor) else 1
+        num_outputs = len(outputs) if not isinstance(outputs, torch.Tensor) else 1
+        num_inout_map[module] = (num_inputs, num_outputs)
 
     run_hook_for_layers_with_given_input(model, input_tensor, record_num_outputs)
-    return num_outputs_map
+    return num_inout_map
 
 
 def create_encoding_from_dict(encoding_dict: dict) -> (libpymo.TfEncoding, bool):
