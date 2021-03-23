@@ -43,6 +43,8 @@ import shutil
 import torch
 import torchvision
 
+import aimet_torch.model_validator.validation_checks
+import aimet_torch.utils
 from aimet_common.utils import round_up_to_multiplicity, round_down_to_multiplicity
 from aimet_torch import utils, elementwise_ops
 
@@ -119,7 +121,7 @@ class TestTrainingExtensionsUtils(unittest.TestCase):
         """ Test get_reused_modules utility """
         model = ModelWithReusedNodes()
         model_input = torch.randn((1, 3, 32, 32))
-        reused_modules = utils.get_reused_modules(model, model_input)
+        reused_modules = aimet_torch.utils.get_reused_modules(model, model_input)
         self.assertEqual(1, len(reused_modules))
         self.assertEqual(reused_modules[0][1], model.relu1)
 

@@ -535,37 +535,6 @@ def get_ordered_lists_of_conv_fc(model: torch.nn.Module, input_shapes: Tuple) ->
     return module_list
 
 
-def get_reused_modules(model: torch.nn.Module, model_input: Union[torch.Tensor, Tuple]) -> \
-        List[Tuple[str, torch.nn.Module]]:
-    """
-    Identify modules which are used more than once in the model
-    :param model: Model to check for modules used more than once
-    :param model_input: Input to the model
-    :return: List of tuples of name and module for modules in the model which are used more than once
-    """
-    module_set = set()
-    reused_modules_set = set()
-
-    def forward_hook(curr_module, _, _1):
-        """
-        Custom forward hook function to add modules to module_set and reused_module_set.
-        :param curr_module: Current module being traversed during forward pass.
-        :param _1: Unused param
-        """
-        if curr_module in module_set:
-            reused_modules_set.add(curr_module)
-        else:
-            module_set.add(curr_module)
-
-    run_hook_for_layers_with_given_input(model, model_input, forward_hook)
-
-    reused_modules_list = []
-    for name, module in model.named_modules():
-        if is_leaf_module(module) and module in reused_modules_set:
-            reused_modules_list.append((name, module))
-    return reused_modules_list
-
-
 def change_tensor_device_placement(tensor_data: Union[torch.tensor, List, Tuple], device: torch.device):
     """
     Change the tensor_data's device placement
@@ -678,3 +647,34 @@ def compute_encoding_for_given_bitwidth(data: np.ndarray, bitwidth: int, quant_s
                 'is_symmetric': str(is_symmetric)}
 
     return {}
+
+
+def get_reused_modules(model: torch.nn.Module, model_input: Union[torch.Tensor, Tuple]) -> \
+        List[Tuple[str, torch.nn.Module]]:
+    """
+    Identify modules which are used more than once in the model
+    :param model: Model to check for modules used more than once
+    :param model_input: Input to the model
+    :return: List of tuples of name and module for modules in the model which are used more than once
+    """
+    module_set = set()
+    reused_modules_set = set()
+
+    def forward_hook(curr_module, _, _1):
+        """
+        Custom forward hook function to add modules to module_set and reused_module_set.
+        :param curr_module: Current module being traversed during forward pass.
+        :param _1: Unused param
+        """
+        if curr_module in module_set:
+            reused_modules_set.add(curr_module)
+        else:
+            module_set.add(curr_module)
+
+    run_hook_for_layers_with_given_input(model, model_input, forward_hook)
+
+    reused_modules_list = []
+    for name, module in model.named_modules():
+        if is_leaf_module(module) and module in reused_modules_set:
+            reused_modules_list.append((name, module))
+    return reused_modules_list

@@ -40,12 +40,10 @@
 import unittest
 import torch
 from aimet_common.connected_graph.connectedgraph_utils import get_all_input_ops, get_all_output_ops
-from aimet_torch.examples.test_models import TinyModel, SingleResidual, MultiInput, ConcatModel, ModuleListModel,\
-    ModelWithDropouts, SequentialModel, HierarchicalModel, PassThroughOpLastLayerModel, MultiOutputModel,\
-    TupleOutputModel, ConfigurableTupleOutputModel, BasicConv2d, DictInputModel, NestedSequentialModel
+from aimet_torch.examples import test_models
 
 from aimet_torch.meta.connectedgraph import ConnectedGraph
-from aimet_torch.meta.connectedgraph_utils import get_module_act_func_pair
+from aimet_torch.meta import connectedgraph_utils
 from aimet_torch.utils import create_rand_tensors_given_shapes
 
 
@@ -55,7 +53,7 @@ class TestConnectedGraph(unittest.TestCase):
     def test_single_residual(self):
         """ Test building ConnectedGraph on single residual model """
         # pylint: disable=protected-access
-        model = SingleResidual()
+        model = test_models.SingleResidual()
         model.eval()
         inp_shape = (1, 3, 32, 32)
         inp_tensor_list = create_rand_tensors_given_shapes(inp_shape)
@@ -75,7 +73,7 @@ class TestConnectedGraph(unittest.TestCase):
     def test_multi_input(self):
         """ Test building ConnectedGraph on a model with multiple inputs """
         # pylint: disable=protected-access
-        model = MultiInput()
+        model = test_models.MultiInput()
         model.eval()
         inp_shape_1 = (1, 3, 32, 32)
         inp_shape_2 = (1, 3, 20, 20)
@@ -105,7 +103,7 @@ class TestConnectedGraph(unittest.TestCase):
 
     def test_module_list(self):
         """ Test building ConnectedGraph on a model with module list """
-        model = ModuleListModel()
+        model = test_models.ModuleListModel()
         model.eval()
         inp_data_1 = torch.rand(1, 3, 8, 8)
         conn_graph = ConnectedGraph(model, (inp_data_1,))
@@ -119,7 +117,7 @@ class TestConnectedGraph(unittest.TestCase):
 
     def test_concat(self):
         """ Test building ConnectedGraph on a model with concat """
-        model = ConcatModel()
+        model = test_models.ConcatModel()
         model.eval()
         inp_shape_1 = (1, 3, 8, 8)
         inp_shape_2 = (1, 3, 8, 8)
@@ -133,7 +131,7 @@ class TestConnectedGraph(unittest.TestCase):
     def test_dropouts(self):
         """ Test building ConnectedGraph on a model with dropouts """
         # pylint: disable=protected-access
-        model = ModelWithDropouts()
+        model = test_models.ModelWithDropouts()
         model.eval()
         inp_shape = (1, 3, 32, 32)
         inp_tensor_list = create_rand_tensors_given_shapes(inp_shape)
@@ -151,7 +149,7 @@ class TestConnectedGraph(unittest.TestCase):
     def test_sequential(self):
         # pylint: disable=protected-access
         """ Test building ConnectedGraph on a model constructed with nn.Sequential Module """
-        model = SequentialModel()
+        model = test_models.SequentialModel()
         model.eval()
         inp_data_1 = torch.rand(1, 3, 8, 8)
         conn_graph = ConnectedGraph(model, (inp_data_1,))
@@ -162,7 +160,7 @@ class TestConnectedGraph(unittest.TestCase):
     def test_hierarchial_model(self):
         """ Test building ConnectedGraph on model which multi-level aggregation of nn.Modules  """
         # pylint: disable=protected-access
-        model = HierarchicalModel()
+        model = test_models.HierarchicalModel()
         model.eval()
         conv_shape = (1, 64, 32, 32)
         inp_shape = (1, 3, 32, 32)
@@ -182,39 +180,16 @@ class TestConnectedGraph(unittest.TestCase):
 
     def test_passthrough_op_last_module(self):
         """ Test building a connected graph on a model where a PassThroughOp is the last module in the graph. """
-        model = PassThroughOpLastLayerModel()
+        model = test_models.PassThroughOpLastLayerModel()
         model.eval()
         inp_shape = (1, 3, 32, 32)
         inp_tensor_list = create_rand_tensors_given_shapes(inp_shape)
         conn_graph = ConnectedGraph(model, inp_tensor_list)
         self.assertEqual(1, len(conn_graph.ordered_ops))
 
-    def test_get_module_act_func_pair_with_modules(self):
-        """ Test get module activation function pair - activations are nn.Modules """
-
-        model = TinyModel().eval()
-        inp_tensor_list = [torch.randn(1, 3, 32, 32)]
-
-        module_act_func_pair = get_module_act_func_pair(model, inp_tensor_list)
-
-        # 12 modules
-        self.assertEqual(len(module_act_func_pair), 12)
-
-        # followed by relu case
-        self.assertTrue(isinstance(module_act_func_pair[model.bn1], torch.nn.ReLU))
-        self.assertTrue(isinstance(module_act_func_pair[model.bn2], torch.nn.ReLU))
-        self.assertTrue(isinstance(module_act_func_pair[model.conv3], torch.nn.ReLU))
-
-        # not followed by relu case
-        self.assertEqual(module_act_func_pair[model.conv1], None)
-        self.assertEqual(module_act_func_pair[model.conv2], None)
-
-        # final module case
-        self.assertEqual(module_act_func_pair[model.fc], None)
-
     def test_multi_output_model(self):
         """ Test multi-output model with Tuple Tensor as intermediate  output. """
-        model = MultiOutputModel()
+        model = test_models.MultiOutputModel()
         inp_data = torch.rand(1, 3, 8, 8)
         conn_graph = ConnectedGraph(model, (inp_data,))
         self.assertEqual(7, len(conn_graph.ordered_ops))
@@ -232,7 +207,7 @@ class TestConnectedGraph(unittest.TestCase):
             """
             def __init__(self):
                 super(MultiOutputWithUnuseModel, self).__init__()
-                self.layer = TupleOutputModel()
+                self.layer = test_models.TupleOutputModel()
                 self.conv1 = torch.nn.Conv2d(2, 4, kernel_size=3, padding=1)
                 self.conv2 = torch.nn.Conv2d(6, 4, kernel_size=3, padding=1)
 
@@ -278,9 +253,9 @@ class TestConnectedGraph(unittest.TestCase):
             """
             def __init__(self):
                 super(MultiOutputLayersModel, self).__init__()
-                self.layer1 = ConfigurableTupleOutputModel(channels=(1, 2, 3))
-                self.layer2 = ConfigurableTupleOutputModel(channels=(1, 2, 3))
-                self.layer3 = ConfigurableTupleOutputModel(channels=(1, 2, 3))
+                self.layer1 = test_models.ConfigurableTupleOutputModel(channels=(1, 2, 3))
+                self.layer2 = test_models.ConfigurableTupleOutputModel(channels=(1, 2, 3))
+                self.layer3 = test_models.ConfigurableTupleOutputModel(channels=(1, 2, 3))
 
             def forward(self, *inputs):
                 x1, x2, x3 = self.layer1(inputs[0], inputs[1], inputs[2])
@@ -331,9 +306,9 @@ class TestConnectedGraph(unittest.TestCase):
             """
             def __init__(self):
                 super(MultiOutputShuffledModel, self).__init__()
-                self.layer1 = ConfigurableTupleOutputModel(channels=(1, 2, 3))
-                self.layer2 = ConfigurableTupleOutputModel(channels=(2, 3, 1))
-                self.layer3 = ConfigurableTupleOutputModel(channels=(3, 1, 2))
+                self.layer1 = test_models.ConfigurableTupleOutputModel(channels=(1, 2, 3))
+                self.layer2 = test_models.ConfigurableTupleOutputModel(channels=(2, 3, 1))
+                self.layer3 = test_models.ConfigurableTupleOutputModel(channels=(3, 1, 2))
 
             def forward(self, *inputs):
                 x1, x2, x3 = self.layer1(inputs[0], inputs[1], inputs[2])
@@ -389,21 +364,21 @@ class TestConnectedGraph(unittest.TestCase):
                 super(ModuleListAndSequentialModel, self).__init__()
                 self.mod_list = torch.nn.ModuleList([
                     torch.nn.Sequential(
-                        BasicConv2d(kernel_size=3),
-                        BasicConv2d(kernel_size=3)
+                        test_models.BasicConv2d(kernel_size=3),
+                        test_models.BasicConv2d(kernel_size=3)
                     ),
                     torch.nn.Sequential(
                         torch.nn.Sequential(
-                            BasicConv2d(kernel_size=3),
-                            BasicConv2d(kernel_size=3)
+                            test_models.BasicConv2d(kernel_size=3),
+                            test_models.BasicConv2d(kernel_size=3)
                         ),
                     ),
                     torch.nn.ModuleList([
                         torch.nn.ModuleList([
-                       BasicConv2d(kernel_size=3)
+                       test_models.BasicConv2d(kernel_size=3)
                         ])
                     ]),
-                    ModuleListModel()]
+                    test_models.ModuleListModel()]
                 )
 
             def forward(self, *inputs):
@@ -475,7 +450,7 @@ class TestConnectedGraph(unittest.TestCase):
     def test_dict_input(self):
         """ Test building ConnectedGraph on a model with multiple inputs """
         # pylint: disable=protected-access
-        model = DictInputModel()
+        model = test_models.DictInputModel()
         model.eval()
         inp_shape_1 = (1, 3, 32, 32)
         inp_shape_2 = (1, 3, 20, 20)
@@ -508,10 +483,46 @@ class TestConnectedGraph(unittest.TestCase):
     def test_nested_sequential(self):
         # pylint: disable=protected-access
         """ Test building ConnectedGraph on a model constructed with nested nn.Sequential Module """
-        model = NestedSequentialModel()
+        model = test_models.NestedSequentialModel()
         model.eval()
         inp_data_1 = torch.rand(1, 3, 8, 8)
         conn_graph = ConnectedGraph(model, (inp_data_1,))
         self.assertEqual(10, len(conn_graph.ordered_ops))
         # Expect 1 split for the reshape operation
         self.assertEqual(1, conn_graph._split_count)
+
+class TestConnectedGraphUtils(unittest.TestCase):
+    """ Unit tests for testing connectedgraph_utils module"""
+
+    def test_get_module_act_func_pair_with_modules(self):
+        """ Test get module activation function pair - activations are nn.Modules """
+
+        model = test_models.TinyModel().eval()
+        inp_tensor_list = [torch.randn(1, 3, 32, 32)]
+
+        module_act_func_pair = connectedgraph_utils.get_module_act_func_pair(model, inp_tensor_list)
+
+        # 12 modules
+        self.assertEqual(len(module_act_func_pair), 12)
+
+        # followed by relu case
+        self.assertTrue(isinstance(module_act_func_pair[model.bn1], torch.nn.ReLU))
+        self.assertTrue(isinstance(module_act_func_pair[model.bn2], torch.nn.ReLU))
+        self.assertTrue(isinstance(module_act_func_pair[model.conv3], torch.nn.ReLU))
+
+        # not followed by relu case
+        self.assertEqual(module_act_func_pair[model.conv1], None)
+        self.assertEqual(module_act_func_pair[model.conv2], None)
+
+        # final module case
+        self.assertEqual(module_act_func_pair[model.fc], None)
+
+    def test_get_ops_with_missing_modules(self):
+        """ Check that get ops with missing modules reports ops with missing modules correctly """
+
+        model = test_models.ModelWithFunctionalOps()
+        rand_inp = torch.randn(1, 3, 32, 32)
+        ops_with_missing_modules = connectedgraph_utils.get_ops_with_missing_modules(model, rand_inp)
+        self.assertEqual(2, len(ops_with_missing_modules))
+        self.assertTrue('relu' in ops_with_missing_modules[0])
+        self.assertTrue('matmul' in ops_with_missing_modules[1])
