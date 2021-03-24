@@ -535,15 +535,16 @@ class QuantizationSimModel:
                         "skip and continue ", layer_name)
         else:
             if isinstance(layer, QcQuantizeWrapper):
+
                 # get activation quantizers
-                if layer.input_quantizer.enabled:
-                    param_inputs = [layer_name + '.' + param_name for param_name in layer.param_quantizers]
-                    if op_to_io_tensor_map[layer_name].inputs:
-                        for input_tensor in op_to_io_tensor_map[layer_name].inputs:
-                            if input_tensor not in param_inputs:
-                                encoding = utils.create_encoding_dict(layer.input_quantizer.encoding,
-                                                                      layer.input_quantizer.use_symmetric_encodings)
-                                activation_encodings[input_tensor] = [encoding]
+                param_inputs = [layer_name + '.' + param_name for param_name in layer.param_quantizers]
+                input_tensors = [t for t in op_to_io_tensor_map[layer_name].inputs if t not in param_inputs]
+                for index, input_tensor in enumerate(input_tensors):
+                    if (index < len(layer.input_quantizers)) and layer.input_quantizers[index].enabled:
+                        encoding = utils.create_encoding_dict(layer.input_quantizers[index].encoding,
+                                                              layer.input_quantizers[index].use_symmetric_encodings)
+                        activation_encodings[input_tensor] = [encoding]
+
                 if layer.output_quantizers[0].enabled:
                     if op_to_io_tensor_map[layer_name].outputs:
                         for output_tensor in op_to_io_tensor_map[layer_name].outputs:
