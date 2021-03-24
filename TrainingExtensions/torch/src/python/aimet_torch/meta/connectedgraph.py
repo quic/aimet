@@ -53,7 +53,7 @@ from aimet_common.connected_graph.product import Product
 from aimet_common.connected_graph.operation import Op, determine_preceding_op_input_product_index_in_multi_input_op
 from aimet_common.model_module import PytorchModelModule
 from aimet_common.utils import AimetLogger
-from aimet_torch.utils import is_leaf_module, run_hook_for_layers_with_given_input, get_reused_modules
+from aimet_torch.utils import is_leaf_module, run_hook_for_layers_with_given_input
 from aimet_torch.defs import PassThroughOp
 
 logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.ConnectedGraph)
@@ -127,17 +127,10 @@ class ConnectedGraph(AimetCommonConnectedGraph):
         # List of ops in the order they are traversed using the forward function
         self.ordered_ops = []
 
-        reused_modules = get_reused_modules(model, model_input)
-        if reused_modules:
-            logger.warning('The following modules are used more than once in the model: %s\n'
-                           'AIMET features are not designed to work with reused modules. Please redefine your model '
-                           'to use distinct modules for each instance.', [name for (name, _) in reused_modules])
-
         self._generate_module_lookup_table(model)
         with torch.no_grad():
             self._construct_graph(model, model_input)
 
-        self._validate_op_modules()
         # Maps pytorch modules to connected graph ops
         self._module_to_op_dict = _create_module_to_op_dict(self.ordered_ops)
 
@@ -176,6 +169,7 @@ class ConnectedGraph(AimetCommonConnectedGraph):
         'slice',
         'select',
         'unsqueeze',
+        'randn',
         'Split'
     }
 
@@ -658,22 +652,23 @@ class ConnectedGraph(AimetCommonConnectedGraph):
         """
         for op in self._ops.values():
             module = op.get_module()
-            name = self._module_to_name.get(module, None)
-            if op.type in ['convolution', 'batch_norm', 'addmm', 'matmul']:
-                if module.weight is not None:
-                    product_name = name + '.weight'
-                    self._create_and_add_param_product_if_not_exists(op, product_name, list(module.weight.shape))
-                if module.bias is not None:
-                    product_name = name + '.bias'
-                    self._create_and_add_param_product_if_not_exists(op, product_name, list(module.bias.shape))
-            if op.type == 'batch_norm':
-                # If batch_norm, fill in rest of bn params
-                if module.running_mean is not None:
-                    product_name = name + '.running_mean'
-                    self._create_and_add_param_product_if_not_exists(op, product_name, list(module.running_mean.shape))
-                if module.running_var is not None:
-                    product_name = name + '.running_var'
-                    self._create_and_add_param_product_if_not_exists(op, product_name, list(module.running_var.shape))
+            if module is not None:
+                name = self._module_to_name.get(module, None)
+                if op.type in ['convolution', 'batch_norm', 'addmm', 'matmul']:
+                    if module.weight is not None:
+                        product_name = name + '.weight'
+                        self._create_and_add_param_product_if_not_exists(op, product_name, list(module.weight.shape))
+                    if module.bias is not None:
+                        product_name = name + '.bias'
+                        self._create_and_add_param_product_if_not_exists(op, product_name, list(module.bias.shape))
+                if op.type == 'batch_norm':
+                    # If batch_norm, fill in rest of bn params
+                    if module.running_mean is not None:
+                        product_name = name + '.running_mean'
+                        self._create_and_add_param_product_if_not_exists(op, product_name, list(module.running_mean.shape))
+                    if module.running_var is not None:
+                        product_name = name + '.running_var'
+                        self._create_and_add_param_product_if_not_exists(op, product_name, list(module.running_var.shape))
 
     def _create_and_add_param_product_if_not_exists(self, op: Op, product_name: str, shape: List[int]):
         """
@@ -890,27 +885,6 @@ class ConnectedGraph(AimetCommonConnectedGraph):
             logger.debug("Insert Split Op: Step 2c. For product: %s, split_op input_product_index: %s",
                          split_op_product.name, input_product_index)
             consumer_index += 1
-
-    def _validate_op_modules(self):
-        """
-        Utility function to ensure that all connected graph ops of a certain type have associated modules
-        """
-        missing_modules = []
-        for op_name, op in self.get_all_ops().items():
-            if not op.get_module() and op.type not in self.functional_ops:
-                missing_modules.append(op_name)
-        if missing_modules:
-            # TODO: replace with logger.error and assertion after rewriting unit tests to avoid using built in vgg,
-            #  resnet, and inception models (since they use functionals in their models)
-            logger.warning('Ops with missing modules: %s\n'
-                           'This can be due to several reasons:\n'
-                           '1. There is no mapping for the op in ConnectedGraph.op_type_map. Add a mapping for '
-                           'ConnectedGraph to recognize and be able to map the op.\n'
-                           '2. The op is defined as a functional in the forward function, instead of as a class '
-                           'module. Redefine the op as a class module if possible. Else, check 3.\n'
-                           '3. This op is one that cannot be defined as a class module, but has not been added to '
-                           'ConnectedGraph.functional_ops. Add to continue.'
-                           , missing_modules)
 
     def _create_connections_to_ir_nodes_dict(self, ir_nodes_list: List[IrNode]) -> ConnectionsToIrDictType:
         """

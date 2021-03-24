@@ -39,6 +39,7 @@
 
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 from aimet_torch.defs import PassThroughOp
 
 
@@ -266,7 +267,7 @@ class ModelWithDropouts(nn.Module):
 
 
 class ModelWithReusedNodes(nn.Module):
-    """ Model that reuses a relu module """
+    """ Model that reuses a relu module. Expects input of shape (1, 3, 32, 32) """
 
     def __init__(self):
         super(ModelWithReusedNodes, self).__init__()
@@ -284,6 +285,27 @@ class ModelWithReusedNodes(nn.Module):
         x = self.relu2(x)
         x = x.view(x.size(0), -1)
         x = self.fc(x)
+        return x
+
+
+class ModelWithFunctionalOps(nn.Module):
+    """ Model that uses functional modules instead of nn.Modules. Expects input of shape (1, 3, 32, 32) """
+
+    def __init__(self):
+        super(ModelWithFunctionalOps, self).__init__()
+        self.conv1 = nn.Conv2d(3, 8, kernel_size=2, stride=2, padding=2, bias=False)
+        self.bn1 = nn.BatchNorm2d(8)
+        self.relu1 = nn.ReLU(inplace=True)
+        self.fc = nn.Linear(2592, 10)
+
+    def forward(self, *inputs):
+        x = self.conv1(inputs[0])
+        x = self.relu1(x)
+        x = self.bn1(x)
+        x = F.relu(x)
+        x = self.relu1(x)
+        x = x.view(x.size(0), -1)
+        x = F.linear(x, torch.randn(10, 2592))
         return x
 
 

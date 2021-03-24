@@ -72,6 +72,7 @@ map_torch_types_to_onnx = {
     nn.ConvTranspose2d: ['ConvTranspose'],
     nn.Sigmoid: ['Sigmoid'],
     nn.Upsample: ['Upsample'],
+    nn.PReLU: ['PRelu'],
     elementwise_ops.Add: ['Add'],
     elementwise_ops.Subtract: ['Sub'],
     elementwise_ops.Multiply: ['Mul'],
@@ -81,7 +82,7 @@ map_torch_types_to_onnx = {
 }
 
 # Define this as a list instead of tuple to allow for users to modify
-torch_types_to_ignore = [nn.Dropout, nn.Dropout2d, PassThroughOp]
+torch_types_to_ignore = [nn.Dropout, nn.Dropout2d, nn.Identity, PassThroughOp]
 torch_recurrent_modules = (nn.RNN, nn.LSTM, nn.GRU)
 
 # List of associations between onnx types and pytorch connected graph types.
