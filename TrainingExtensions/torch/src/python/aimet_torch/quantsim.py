@@ -530,6 +530,7 @@ class QuantizationSimModel:
 
         # pylint: disable=too-many-nested-blocks
         # pylint: disable=too-many-branches
+        # pylint: disable=too-many-locals
         if layer_name not in op_to_io_tensor_map:
             logger.info("layer with name {%s} not found in model, not an issue; "
                         "skip and continue ", layer_name)
