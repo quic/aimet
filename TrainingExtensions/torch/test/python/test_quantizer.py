@@ -43,6 +43,7 @@ import torch.nn as nn
 import json as json
 import os
 import yaml
+import onnx
 
 
 from torchvision import models
@@ -580,17 +581,31 @@ class TestQuantizationSim(unittest.TestCase):
         model = ModelWithTwoInputsOneToAdd()
 
         sim = QuantizationSimModel(model, dummy_input=dummy_input)
-        print(sim)
         self.assertEqual(2, len(sim.model.add.input_quantizers))
         self.assertFalse(sim.model.add.input_quantizers[0].enabled)
         self.assertFalse(sim.model.add.input_quantizers[1].enabled)
 
+        sim.model.add.input_quantizers[1].enabled = True
+
         # Quantize
         sim.compute_encodings(forward_pass, None)
+        print(sim)
 
         # save encodings
         sim.export('./data/', 'two_input_model_one_with_add', dummy_input)
+        onnx_model = onnx_model = onnx.load('./data/two_input_model_one_with_add.onnx')
+        for node in onnx_model.graph.node:
+            if node.name == 'add':
+                break
+        self.assertEqual(2, len(node.input))
+        model_input_tensor = node.input[1]
 
+        with open("./data/two_input_model_one_with_add.encodings", "r") as encodings_file:
+            encodings = json.load(encodings_file)
+
+        self.assertTrue(model_input_tensor in encodings['activation_encodings'])
+        enc = encodings['activation_encodings'][model_input_tensor]
+        print(enc)
 
     def test_export_unified_encoding_format(self):
         """ test export functionality on ResNet18 """
