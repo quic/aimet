@@ -89,7 +89,8 @@ class TestOnnxUtils(unittest.TestCase):
         model = models.resnet18(pretrained=False)
         dummy_input = torch.randn(1, 3, 224, 224)
 
-        torch.onnx.export(model, dummy_input, './data/' + model_name + '.onnx')
+        torch.onnx.export(model, dummy_input, './data/' + model_name + '.onnx',
+                          training=torch.onnx.TrainingMode.TRAINING)
         onnx_utils.OnnxSaver.set_node_names('./data/' + model_name + '.onnx', model, dummy_input)
 
         onnx_model = onnx.load('./data/' + model_name + '.onnx')
@@ -110,7 +111,8 @@ class TestOnnxUtils(unittest.TestCase):
         model = OutOfOrderModel()
         dummy_input = torch.randn(1, 16, 20, 20)
 
-        torch.onnx.export(model, dummy_input, './data/' + model_name + '.onnx')
+        torch.onnx.export(model, dummy_input, './data/' + model_name + '.onnx',
+                          training=torch.onnx.TrainingMode.TRAINING)
         onnx_utils.OnnxSaver.set_node_names('./data/' + model_name + '.onnx', model, dummy_input)
 
         onnx_model = onnx.load('./data/' + model_name + '.onnx')
@@ -127,7 +129,7 @@ class TestOnnxUtils(unittest.TestCase):
         """ test onxx based utility to find mapping between onnx node names and io tensors"""
         model = models.resnet18(pretrained=False)
         dummy_input = torch.randn(1, 3, 224, 224)
-        torch.onnx.export(model, dummy_input, './data/resnet18.onnx')
+        torch.onnx.export(model, dummy_input, './data/resnet18.onnx', training=torch.onnx.TrainingMode.TRAINING)
         onnx_utils.OnnxSaver.set_node_names('./data/resnet18.onnx', model, dummy_input)
         onnx_model = onnx.load('./data/resnet18.onnx')
 
@@ -160,7 +162,8 @@ class TestOnnxUtils(unittest.TestCase):
         model = TwoLayerLstmModel()
         dummy_input = torch.randn(10, 1, 3)
 
-        torch.onnx.export(model, dummy_input, './data/' + model_name + '.onnx')
+        torch.onnx.export(model, dummy_input, './data/' + model_name + '.onnx',
+                          training=torch.onnx.TrainingMode.EVAL)
         onnx_utils.OnnxSaver.set_node_names('./data/' + model_name + '.onnx', model, dummy_input)
         onnx_model = onnx.load('./data/' + model_name + '.onnx')
 
@@ -168,7 +171,6 @@ class TestOnnxUtils(unittest.TestCase):
         self.assertEqual(3, len(lstm_nodes))
 
         node_to_io_dict, _ = onnx_utils.OnnxSaver.get_onnx_node_to_io_tensor_names_map(onnx_model)
-        self.assertEqual(1, len(node_to_io_dict))
         self.assertTrue(isinstance(node_to_io_dict['lstm'], list))
         self.assertEqual(3, len(node_to_io_dict['lstm']))
 
@@ -222,7 +224,7 @@ class TestOnnxUtils(unittest.TestCase):
 
         model = MyModel()
 
-        torch.onnx.export(model, torch.rand(1, 10, 24, 24), './data/MyModel.onnx')
+        torch.onnx.export(model, torch.rand(1, 10, 24, 24), './data/MyModel.onnx', training=torch.onnx.TrainingMode.TRAINING)
 
         # Load the model
         onnx_model = onnx.load('./data/MyModel.onnx')

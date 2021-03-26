@@ -457,7 +457,7 @@ class TestConnectedGraph(unittest.TestCase):
         inp_tensor_list = create_rand_tensors_given_shapes([inp_shape_1, inp_shape_2])
         dict_input = {'inp_1': inp_tensor_list[0], 'inp_2': inp_tensor_list[1]}
         conn_graph = ConnectedGraph(model, dict_input)
-        self.assertEqual(11, len(conn_graph.ordered_ops))
+        self.assertEqual(13, len(conn_graph.ordered_ops))
 
         # Split count of 1 due to reshape having a split
         self.assertEqual(1, conn_graph._split_count)
@@ -472,10 +472,10 @@ class TestConnectedGraph(unittest.TestCase):
         self.assertEqual(3, len(conv3.inputs))
 
         input_ops = get_all_input_ops(conn_graph)
-        input_modules = [op.get_module() for op in input_ops]
         self.assertEqual(2, len(input_ops))
-        self.assertTrue(model.conv1 in input_modules)
-        self.assertTrue(model.conv3 in input_modules)
+
+        self.assertTrue(model.conv1 is input_ops[0].output.consumers[0].get_module())
+        self.assertTrue(model.conv3 is input_ops[1].output.consumers[0].get_module())
         output_ops = get_all_output_ops(conn_graph)
         self.assertEqual(1, len(output_ops))
         self.assertEqual(model.fc, output_ops[0].get_module())
