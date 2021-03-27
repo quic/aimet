@@ -131,7 +131,6 @@ class TestTrainingExtensionsChannelPruning(unittest.TestCase):
         layer_db_mock.model = sess
         layer_mock = unittest.mock.MagicMock()
         layer_mock.module = conv
-
         # num_reconstruction_samples=1010 > possible samples (100 * 10)
         self.assertRaises(StopIteration,
                           lambda: DataSubSampler.get_sub_sampled_data(layer_mock, layer_mock,
@@ -198,7 +197,7 @@ class TestTrainingExtensionsChannelPruning(unittest.TestCase):
             print('generated output: ', generated_output)
             print('predicted output: ', predicted_output)
 
-            self.assertEqual(generated_output, predicted_output)
+            self.assertAlmostEqual(generated_output, predicted_output, places=2)
             self.assertTrue(np.prod(input_match.shape) == kernel_size[0] * kernel_size[1])
 
             sess.close()
@@ -261,7 +260,7 @@ class TestTrainingExtensionsChannelPruning(unittest.TestCase):
             print('generated output: ', generated_output)
             print('predicted output: ', predicted_output)
 
-            self.assertEqual(generated_output, predicted_output)
+            self.assertAlmostEqual(generated_output, predicted_output, places=2)
             self.assertTrue(np.prod(input_match.shape) == kernel_size[0] * kernel_size[1])
 
             sess.close()
