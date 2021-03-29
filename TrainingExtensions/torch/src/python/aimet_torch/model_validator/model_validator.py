@@ -72,9 +72,18 @@ class ModelValidator:
         otherwise.
         """
         is_valid_model = True
+        failed_val_checks = set()
         for val_check in ModelValidator._validation_checks:
+            logger.info('Running validator check %s', val_check)
             val_check_result = val_check(model, model_input)
             if not val_check_result:
-                logger.info('Model validator %s check failed.', val_check)
-            is_valid_model = is_valid_model and val_check(model, model_input)
+                failed_val_checks.add(val_check)
+            is_valid_model = is_valid_model and val_check_result
+        if not is_valid_model:
+            logger.info('The following validator checks failed:')
+            for val_check in failed_val_checks:
+                logger.info('\t%s', val_check)
+            return is_valid_model
+
+        logger.info('All validation checks passed.')
         return is_valid_model
