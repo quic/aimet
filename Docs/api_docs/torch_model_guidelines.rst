@@ -72,3 +72,25 @@ Use only torch.Tensor or tuples of torch.Tensors as model/submodule inputs and o
 AIMET and Pytorch features being used within AIMET require that model inputs and outputs only contain torch.Tensor or
 tuples of torch.Tensors. This applies for both the top level model input and output, as well as inputs and outputs for
 all submodules in the model.
+
+Model Validator API
+===================
+AIMET provides a model validator function to help check whether AIMET feature can be applied on a Pytorch model. The
+model validator currently checks for the following conditions:
+
+- No modules are reused
+- Operations have modules associated with them and are not defined as Functionals (excluding a set of known operations)
+
+**Model Validator Code Example**
+
+**Required imports**
+
+.. literalinclude:: ../torch_code_examples/model_validator_code_example.py
+   :language: python
+   :lines: 47
+
+**Running the validator**
+
+.. literalinclude:: ../torch_code_examples/model_validator_code_example.py
+   :language: python
+   :pyobject: validate_mnist_model
