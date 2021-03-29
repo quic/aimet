@@ -44,7 +44,6 @@ import torch
 # Import AIMET specific modules
 from aimet_common.utils import AimetLogger
 from aimet_torch.meta.connectedgraph import ConnectedGraph
-from aimet_torch.model_validator.validation_checks import logger
 from aimet_torch.utils import create_rand_tensors_given_shapes, get_device
 
 logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Utils)

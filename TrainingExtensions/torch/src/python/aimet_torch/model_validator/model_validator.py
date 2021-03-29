@@ -51,27 +51,28 @@ class ModelValidator:
     """
     ModelValidator object for validating that AIMET features can be applied on the Pytorch model.
     """
-    def __init__(self):
-        self._validation_checks = [
-            val_checks.validate_for_reused_modules,
-            val_checks.validate_for_missing_modules
-        ]
+    _validation_checks = [
+        val_checks.validate_for_reused_modules,
+        val_checks.validate_for_missing_modules
+    ]
 
-    def add_check(self, validation_check: Callable):
+    @staticmethod
+    def add_check(validation_check: Callable):
         """
         Add a validation check function to be used for validating the model. Validation check functions must take the
         model and model inputs as inputs, and output True if the model passes the check, and False otherwise.
         :param validation_check: Validation check function for validating the model.
         """
-        self._validation_checks.append(validation_check)
+        ModelValidator._validation_checks.append(validation_check)
 
-    def validate_model(self, model: torch.nn.Module, model_input: Union[torch.Tensor, Tuple]) -> bool:
+    @staticmethod
+    def validate_model(model: torch.nn.Module, model_input: Union[torch.Tensor, Tuple]) -> bool:
         """
         Validate the pytorch model by running all validation check functions and returning True if all pass, False
         otherwise.
         """
         is_valid_model = True
-        for val_check in self._validation_checks:
+        for val_check in ModelValidator._validation_checks:
             val_check_result = val_check(model, model_input)
             if not val_check_result:
                 logger.info('Model validator %s check failed.', val_check)
