@@ -48,15 +48,14 @@ class TestValidateModel(unittest.TestCase):
 
     def test_model_validator(self):
         """ Check that model validator returns correct value """
-        model_validator = ModelValidator()
 
         model = test_models.SequentialModel()
         rand_inp = torch.randn(1, 3, 8, 8)
-        self.assertTrue(model_validator.validate_model(model, rand_inp))
+        self.assertTrue(ModelValidator.validate_model(model, rand_inp))
 
         model = test_models.ModelWithReusedNodes()
         rand_inp = torch.randn(1, 3, 32, 32)
-        self.assertFalse(model_validator.validate_model(model, rand_inp))
+        self.assertFalse(ModelValidator.validate_model(model, rand_inp))
 
 
 class TestValidationChecks(unittest.TestCase):
