@@ -6,8 +6,11 @@
 AIMET PyTorch Quantization SIM API
 ==================================
 
-**It is advised for users to validate models prior to applying Quantiztion Sim APIs. The model validator usage and
-example can be found** :ref:`here<api-torch-model-validator>`.
+AIMET Quantization Sim requires the model definitions to use certain constructs and avoid others. These constraints are
+described in detail :ref:`here<api-torch-model-validator>`.
+
+AIMET also includes a Model Validator tool to allow the users to check their model definition and find constructs that
+might need to be replaced. Please see the API and usage examples for this tool also on the same page.
 
 Top-level API
 =============
