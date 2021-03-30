@@ -18,20 +18,7 @@ The encodings from Quantization simulation can be exported for usage on run-time
 The file format is usable with both PyTorch and TensorFlow models, that maps tensor names with the encodings. 
 
 
-* `Versioning`_
-* `Version 0.4.0 (up to)`_
-
-  * `Encoding Specification`_
-  * `Encoding File Example for PyTorch`_
-  * `Encoding File Example for TensorFlow`_
-
-* `Version 0.5.0`_
-
-  * `Encoding Specification (Ver. 0.5.0)`_
-  * `Encoding File Example for PyTorch (Ver. 0.5.0)`_
-  * `Encoding File Example for TensorFlow (Ver. 0.5.0)`_
-
-Versioning
+1. Versioning
 ==========
 
 Encoding format will follow ``XX.YY.ZZ`` versioning format as describe below,
@@ -43,13 +30,13 @@ Encoding format will follow ``XX.YY.ZZ`` versioning format as describe below,
 
 Change in major revision should indicate substantial change to the format, updates to minor version indicates additional information element being added to encoding format and might require update to fully consume the encodings.  The patching version shall be updated to indicate minor updates to quantization simulation e.g. bug fix etc.
 
-Version 0.4.0 (up to)
-=====================
+2. Version 0.4.0 (up to)
+=======================
 
 The encoding format as defined below is backward compatible and shall applicable to all exported encoding up to version 0.4. In case, where versioning information is missing the encoding is assumed to follow version 0.4 format.
 
-Encoding Specification
-----------------------
+2.1. Encoding Specification
+---------------------------
 
 
 .. code-block::
@@ -91,8 +78,8 @@ Where,
 
 if a tensor is assigned **more than one** Encoding then the encoding is at per channel basis.\
 
-Encoding File Example for PyTorch
----------------------------------
+2.2. Encoding File Example for PyTorch
+--------------------------------------
 
 On PyTorch, the tensor names shall be derived from the ONNX named model representation as depicted below on a sample model.
 
@@ -158,8 +145,8 @@ Given below is the sample format with keys and values for encodings JSON output 
        }
    }
 
-Encoding File Example for TensorFlow
-------------------------------------
+2.3. Encoding File Example for TensorFlow
+-----------------------------------------
 
 Given below is a sample format with the keys and values for encodings on TensorFlow graph (in JSON format).
 
@@ -217,12 +204,12 @@ Given below is a sample format with the keys and values for encodings on TensorF
        }
    }
 
-Version 0.5.0
-=============
+3. Version 0.5.0
+================
 
 
-Encoding Specification (Ver. 0.5.0)
------------------------------------
+3.1. Encoding Specification
+---------------------------
 
 
 .. code-block::
@@ -273,8 +260,8 @@ when ``dtype`` is set to ``‘float’``\ , Encoding shall have the following fi
        bitwidth: integer 
    }
 
-Encoding File Example for PyTorch (Ver. 0.5.0)
-----------------------------------------------
+3.2. Encoding File Example for PyTorch
+--------------------------------------
 
 Given below is a snippet of the sample format with change highlighted.
 
@@ -306,8 +293,8 @@ Given below is a snippet of the sample format with change highlighted.
       }
    }
 
-Encoding File Example for TensorFlow (Ver. 0.5.0)
--------------------------------------------------
+3.3. Encoding File Example for TensorFlow
+-----------------------------------------
 
 Given below is a snippet of the sample format with change highlighted.
 
