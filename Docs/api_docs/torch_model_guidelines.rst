@@ -10,6 +10,15 @@ AIMET model dependencies
 In order to make full use of AIMET features, there are several guidelines users are encouraged to follow when defining
 PyTorch models.
 
+**Model should support conversion to onnx**
+
+The model definition should support conversion to onnx, user could check compatibility of model for onnx conversion as
+shown below::
+
+    ...
+    model = Model()
+    torch.onnx.export(model, <dummy_input>, <onnx_file_name>):
+
 **Define layers as modules instead of using torch.nn.functional equivalents**
 
 When using activation functions and other stateless layers, PyTorch will allow the user to either
@@ -66,7 +75,7 @@ Users should instead define their model as::
     def __init__(self,...):
         ...
         self.relu = torch.nn.ReLU()
-        self.relu2 = torch.nn.ReLU2()
+        self.relu2 = torch.nn.ReLU()
         ...
 
     def forward(...):
@@ -78,9 +87,34 @@ Users should instead define their model as::
 
 **Use only torch.Tensor or tuples of torch.Tensors as model/submodule inputs and outputs**
 
-AIMET and Pytorch features being used within AIMET require that model inputs and outputs only contain torch.Tensor or
-tuples of torch.Tensors. This applies for both the top level model input and output, as well as inputs and outputs for
-all submodules in the model.
+Modules should use tensor or tuples of tensor for inputs and output in order to support conversion of the model to onnx.
+For example, if the user had::
+
+    def __init__(self,...):
+    ...
+    def forward(self, inputs: Dict[str, torch.Tensor]):
+        ...
+        x = self.conv1(inputs[‘image_rgb’])
+        rgb_output = self.relu1(x)
+        ...
+        x = self.conv2(inputs[‘image_bw'])
+        bw_output = self.relu2(x)
+        ...
+        return { 'rgb': rgb_output, 'bw': bw_output }
+
+Users should instead define their model as::
+
+    def __init__(self,...):
+    ...
+    def forward(self, image_rgb, image_bw):
+        ...
+        x = self.conv1(image_rgb)
+        rgb_output = self.relu1(x)
+        ...
+        x = self.conv2(image_bw)
+        bw_output = self.relu2(x)
+        ...
+        return rgb_output, bw_output
 
 Model Validator Utility
 =======================
