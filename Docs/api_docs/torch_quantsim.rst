@@ -41,6 +41,10 @@ Top-level API
 
 |
 
+Encoding format is described in the :ref:`Quantization Encoding Specification<api-quantization-encoding-spec>`
+
+|
+
 
 Enum Definition
 ===============
