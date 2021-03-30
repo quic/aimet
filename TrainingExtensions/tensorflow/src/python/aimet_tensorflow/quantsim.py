@@ -46,7 +46,7 @@ import tensorflow as tf
 from tensorflow.python.framework import ops as tf_ops
 from tensorflow.contrib import graph_editor
 from aimet_common.defs import QuantScheme
-from aimet_common.quantsim import gate_min_max, calculate_delta_offset
+from aimet_common.quantsim import gate_min_max, calculate_delta_offset, encoding_version
 from aimet_common.utils import AimetLogger, save_json_yaml
 from aimet_tensorflow.common import core
 from aimet_tensorflow.utils.common import update_variables_with_values, save_data_to_pickle_file, \
@@ -494,8 +494,9 @@ class QuantizationSimModel:
                 continue
             update_encoding_dict_entry(activation_encodings, quant_op_name)
 
-        encodings_dict = {'param_encodings': param_encodings,
-                          'activation_encodings': activation_encodings}
+        encodings_dict = {'version': encoding_version,
+                          'activation_encodings': activation_encodings,
+                          'param_encodings': param_encodings}
 
         save_json_yaml(encoding_file_path, encodings_dict)
 
