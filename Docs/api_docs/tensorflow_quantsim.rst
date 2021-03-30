@@ -23,6 +23,10 @@ Top-level API
 **The following API can be used to Export the Model to target**
 
 .. automethod:: aimet_tensorflow.quantsim.QuantizationSimModel.export
+   
+|
+
+Encoding format is described in the :ref:`Quantization Encoding Specification<api-quantization-encoding-spec>`
 
 |
 
