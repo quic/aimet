@@ -10,7 +10,7 @@ AIMET model dependencies
 In order to make full use of AIMET features, there are several guidelines users are encouraged to follow when defining
 PyTorch models.
 
-**model should support conversion to onnx**
+**Model should support conversion to onnx**
 
 The model definition should support conversion to onnx, user could check compatibility of model for onnx conversion as
 shown below::
@@ -97,7 +97,7 @@ For example, if the user had::
         x = self.conv1(inputs[‘image_rgb’])
         rgb_output = self.relu1(x)
         ...
-        x = self.conv2(inputs[‘image_bw])
+        x = self.conv2(inputs[‘image_bw'])
         bw_output = self.relu2(x)
         ...
         return { 'rgb': rgb_output, 'bw': bw_output }
