@@ -10,10 +10,17 @@ AIMET model dependencies
 In order to make full use of AIMET features, there are several guidelines users are encouraged to follow when defining
 PyTorch models.
 
-**Define modules using class definitions instead of as functionals in the forward pass**
+**Define layers as modules instead of using torch.nn.functional equivalents**
 
-When possible, users should define neural network modules in the __init__ definition of the model, and not in the
-forward definition of the model.
+When using activation functions and other stateless layers, PyTorch will allow the user to either
+
+- define the layers as modules (instantiated in the constructor and used in the forward pass), or
+- use a torch.nn.functional equivalent purely in the forward pass
+
+For AIMET quantization simulation model to add simulation nodes, AIMET requires the former (layers defined as modules).
+Changing the model definition to use modules instead of functionals, is mathematically equivalent and does not require
+the model to be retrained.
+
 As an example, if the user had::
 
     def forward(...):
