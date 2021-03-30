@@ -192,12 +192,12 @@ class TestTrainingExtensionsChannelPruning(unittest.TestCase):
 
             conv2d_out = sess.run(conv1_op.outputs[0])
 
-            predicted_output = np.sum(input_match).astype(dtype='float32')
-            generated_output = conv2d_out[0, 0, height, width]
+            predicted_output = int(np.sum(input_match))
+            generated_output = int(conv2d_out[0, 0, height, width])
             print('generated output: ', generated_output)
             print('predicted output: ', predicted_output)
 
-            self.assertAlmostEqual(generated_output, predicted_output, places=2)
+            self.assertEqual(generated_output, predicted_output)
             self.assertTrue(np.prod(input_match.shape) == kernel_size[0] * kernel_size[1])
 
             sess.close()
@@ -255,12 +255,12 @@ class TestTrainingExtensionsChannelPruning(unittest.TestCase):
 
             conv2d_out = sess.run(conv1_op.outputs[0])
 
-            predicted_output = np.sum(input_match).astype(dtype='float32')
-            generated_output = conv2d_out[0, height, width, 0]
+            predicted_output = int(np.sum(input_match))
+            generated_output = int(conv2d_out[0, height, width, 0])
             print('generated output: ', generated_output)
             print('predicted output: ', predicted_output)
 
-            self.assertAlmostEqual(generated_output, predicted_output, places=2)
+            self.assertEqual(generated_output, predicted_output)
             self.assertTrue(np.prod(input_match.shape) == kernel_size[0] * kernel_size[1])
 
             sess.close()
