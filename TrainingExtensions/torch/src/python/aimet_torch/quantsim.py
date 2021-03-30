@@ -449,8 +449,8 @@ class QuantizationSimModel:
                                                   valid_param_set)
 
         encodings_dict = {'version': encoding_version,
-                           'activation_encodings': activation_encodings,
-                           'param_encodings': param_encodings}
+                          'activation_encodings': activation_encodings,
+                          'param_encodings': param_encodings}
 
         # export weight encodings to output json file
         encoding_file_path = os.path.join(path, filename_prefix + '.encodings')
