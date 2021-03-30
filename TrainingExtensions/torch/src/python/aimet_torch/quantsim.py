@@ -48,6 +48,7 @@ import onnx
 
 from aimet_common.utils import AimetLogger, save_json_yaml
 from aimet_common.defs import QuantScheme
+from aimet_common.quantsim import encoding_version
 from aimet_torch.quantsim_config.quantsim_config import QuantSimConfigurator
 from aimet_torch.qc_quantize_op import QcQuantizeStandAloneBase, QcQuantizeWrapper, QcQuantizeOpMode, \
     QcPostTrainingWrapper
@@ -447,7 +448,8 @@ class QuantizationSimModel:
                                                   param_encodings, op_to_io_tensor_map,
                                                   valid_param_set)
 
-        encodings_dict = {'activation_encodings': activation_encodings,
+        encodings_dict = {'version': encoding_version,
+                          'activation_encodings': activation_encodings,
                           'param_encodings': param_encodings}
 
         # export weight encodings to output json file
