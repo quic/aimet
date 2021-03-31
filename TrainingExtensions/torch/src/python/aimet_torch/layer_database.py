@@ -38,8 +38,9 @@
 
 """Stores and updates Layer Attributes"""
 import copy
-
+from typing import Tuple, Union
 import torch
+
 from aimet_torch import utils
 from aimet_common.utils import AimetLogger
 import aimet_common.layer_database
@@ -89,9 +90,15 @@ class LayerDatabase(aimet_common.layer_database.LayerDatabase):
     Also stores compressible layers to model optimization
     """
 
-    def __init__(self, model, input_shape):
+    def __init__(self, model: torch.nn.Module, dummy_input: Union[torch.Tensor, Tuple]):
+        """
+        LayerDatabase constructor
+        :param model: Model
+        :param dummy_input: Dummy input to the model. If the model has more than one input,
+                            pass a tuple.
+        """
         aimet_common.layer_database.LayerDatabase.__init__(self, model)
-        self._create_database(model, input_shape)
+        self._create_database(model, dummy_input)
 
     def __deepcopy__(self, memodict):
 
@@ -129,7 +136,6 @@ class LayerDatabase(aimet_common.layer_database.LayerDatabase):
         Replace given layer with a new layer in the LayerDatabase
         :param old_layer: Existing Layer
         :param new_layer: New Layer
-        :return: None
         """
 
         del self._compressible_layers[id(old_layer.module)]
@@ -146,10 +152,8 @@ class LayerDatabase(aimet_common.layer_database.LayerDatabase):
         Replaces a layer with a sequential of layer in the database
 
         :param layer_to_replace: Layer to be replaced
-        :param seq: Sequential of modules in layer_a and layer_b
         :param layer_a: 1st new layer
         :param layer_b: 2nd new layer
-        :return: Nothing
         """
 
         # Create a sequential of these modules
@@ -178,7 +182,6 @@ class LayerDatabase(aimet_common.layer_database.LayerDatabase):
 
         :param layer_to_update: Layer to be updated
         :param seq: Sequential of modules in DownSample and layer
-        :return: Nothing
         """
         # Remove the layer being updated from the database
         del self._compressible_layers[id(layer_to_update.module)]
@@ -226,9 +229,7 @@ class LayerDatabase(aimet_common.layer_database.LayerDatabase):
         Recursive function to set the parent references for each layer in the database
         :param module: Reference to the parent module
         :param layers: Layers to set reference for
-        :return:
         """
-
         for module_name, module_ref in module.named_children():
             # first check if the module is leaf module or not
             if utils.is_leaf_module(module_ref):
@@ -243,12 +244,18 @@ class LayerDatabase(aimet_common.layer_database.LayerDatabase):
             else:
                 cls.set_reference_to_parent_module(module_ref, layers)
 
-    def _create_database(self, model, input_shape):
-        # register custom hook for the model with run_graph provided by user
-        # if the user wants to experiment with custom hook, we can support that option by
-        # exposing the hook parameter to compress_net method
-        utils.run_hook_for_layers(model, input_shape, hook=self._custom_hook_to_collect_layer_attributes,
-                                  module_type_for_attaching_hook=(torch.nn.Conv2d, torch.nn.Linear))
+    def _create_database(self, model: torch.nn.Module, dummy_input: Union[torch.Tensor, Tuple]):
+        """
+        Register custom hook for the model with run_graph provided by user
+        if the user wants to experiment with custom hook, we can support that option by
+        exposing the hook parameter to compress_net method
+        :param model: Model
+        :param dummy_input: Dummy input to the model. If the model has more than one input,
+                            pass a tuple.
+        """
+        utils.run_hook_for_layers_with_given_input(model, dummy_input,
+                                                   hook=self._custom_hook_to_collect_layer_attributes,
+                                                   module_type_for_attaching_hook=(torch.nn.Conv2d, torch.nn.Linear))
 
         # set the parent_class reference
         self.set_reference_to_parent_module(self._model, self._compressible_layers)

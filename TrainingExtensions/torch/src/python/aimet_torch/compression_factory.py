@@ -49,6 +49,7 @@ from aimet_common.comp_ratio_rounder import RankRounder, ChannelRounder
 from aimet_common.compression_algo import CompressionAlgo
 from aimet_common.bokeh_plots import BokehServerSession
 
+from aimet_torch.utils import create_rand_tensors_given_shapes, get_device
 from aimet_torch.defs import SpatialSvdParameters, WeightSvdParameters, ChannelPruningParameters, ModuleCompRatioPair
 from aimet_torch.layer_selector import ConvFcLayerSelector, ConvNoDepthwiseLayerSelector, ManualLayerSelector
 from aimet_torch.layer_database import LayerDatabase
@@ -80,8 +81,12 @@ class CompressionFactory:
         # pylint: disable=too-many-locals
         # Rationale: Factory functions unfortunately need to deal with a lot of parameters
 
+        device = get_device(model)
+        dummy_input = create_rand_tensors_given_shapes(input_shape)
+        dummy_input = [tensor.to(device) for tensor in dummy_input]
+
         # Create a layer database
-        layer_db = LayerDatabase(model, input_shape)
+        layer_db = LayerDatabase(model, dummy_input)
         use_cuda = next(model.parameters()).is_cuda
 
         # Create a pruner
@@ -139,8 +144,12 @@ class CompressionFactory:
         # pylint: disable=too-many-locals
         # Rationale: Factory functions unfortunately need to deal with a lot of parameters
 
+        device = get_device(model)
+        dummy_input = create_rand_tensors_given_shapes(input_shape)
+        dummy_input = [tensor.to(device) for tensor in dummy_input]
+
         # Create a layer database
-        layer_db = LayerDatabase(model, input_shape)
+        layer_db = LayerDatabase(model, dummy_input)
         use_cuda = next(model.parameters()).is_cuda
 
         # Create a pruner
@@ -202,8 +211,12 @@ class CompressionFactory:
         # pylint: disable=too-many-locals
         # Rationale: Factory functions unfortunately need to deal with a lot of parameters
 
+        device = get_device(model)
+        dummy_input = create_rand_tensors_given_shapes(input_shape)
+        dummy_input = [tensor.to(device) for tensor in dummy_input]
+
         # Create a layer database
-        layer_db = LayerDatabase(model, input_shape)
+        layer_db = LayerDatabase(model, dummy_input)
         use_cuda = next(model.parameters()).is_cuda
 
         # Create a pruner
