@@ -98,6 +98,11 @@ set(OPENCV_LIBRARY /usr/local/lib/libopencv_core.a)
 # Conditional build for PyTorch
 # ----------------------------------
 
+find_package(Python COMPONENTS Interpreter Development)
+set(PYTHON_DIST_PACKAGES "/usr/local/lib/python${Python_VERSION_MAJOR}.${Python_VERSION_MINOR}/dist-packages/")
+
+
+
 if (NOT (DEFINED ENABLE_TORCH))
   message("AIMET Torch build not explicitly disabled. Enabling implicitly")
   set(ENABLE_TORCH ON CACHE BOOL "")
@@ -108,12 +113,12 @@ if (ENABLE_TORCH)
   set(AIMET_PYTHONPATH "${AIMET_PYTHONPATH}:${CMAKE_CURRENT_SOURCE_DIR}/TrainingExtensions/torch/src/python")
   # If we enable PyTorch builds then use the pybind11 headers that are part of the torch pip install
   # So we don't have a version mismatch - between PyTorch custom C++ op code and PyMO
-  list(APPEND PYBIND11_INC_DIRS "/usr/local/lib/python3.6/dist-packages/torch/include")
-  list(APPEND PYBIND11_INC_DIRS "/usr/include/python3.6/")
+  list(APPEND PYBIND11_INC_DIRS "${PYTHON_DIST_PACKAGES}/torch/include")
+  list(APPEND PYBIND11_INC_DIRS ${Python_INCLUDE_DIRS})
 
 else (ENABLE_TORCH)
-  list(APPEND PYBIND11_INC_DIRS "/usr/local/lib/python3.6/dist-packages/pybind11/include/")
-  list(APPEND PYBIND11_INC_DIRS "/usr/include/python3.6/")
+  list(APPEND PYBIND11_INC_DIRS "${PYTHON_DIST_PACKAGES}/pybind11/include/")
+  list(APPEND PYBIND11_INC_DIRS ${Python_INCLUDE_DIRS})
 
   message("AIMET Torch build disabled")
 
@@ -126,7 +131,7 @@ endif (ENABLE_TORCH)
 add_library(PYBIND11 SHARED IMPORTED)
 
 set_target_properties(PYBIND11 PROPERTIES
-        IMPORTED_LOCATION "/usr/lib/x86_64-linux-gnu/libpython3.6m.so"
+        IMPORTED_LOCATION ${Python_LIBRARIES}
         INTERFACE_INCLUDE_DIRECTORIES "${PYBIND11_INC_DIRS}"
         )
 
@@ -142,11 +147,11 @@ endif(NOT (DEFINED ENABLE_TENSORFLOW))
 
 if (ENABLE_TENSORFLOW)
   set(AIMET_PYTHONPATH "${AIMET_PYTHONPATH}:${CMAKE_CURRENT_SOURCE_DIR}/TrainingExtensions/tensorflow/src/python")
-  list(APPEND TENSORFLOW_INCLUDES "/usr/local/lib/python3.6/dist-packages/tensorflow_core/include")
+  list(APPEND TENSORFLOW_INCLUDES "${PYTHON_DIST_PACKAGES}/tensorflow_core/include")
   add_library(TensorFlow SHARED IMPORTED)
   set_target_properties(TensorFlow PROPERTIES
         IMPORTED_LOCATION
-          "/usr/local/lib/python3.6/dist-packages/tensorflow_core/libtensorflow_framework.so.1"
+          "${PYTHON_DIST_PACKAGES}/tensorflow_core/libtensorflow_framework.so.1"
         INTERFACE_INCLUDE_DIRECTORIES
           "${TENSORFLOW_INCLUDES}"
         )
