@@ -101,13 +101,11 @@ Please run below commands to install dependencies to build AIMET:
 
 !apt-get update && apt install cuda-cusparse-10-0 libcudnn7=7.6.2.24-1+cuda10.0 libnccl2=2.4.8-1+cuda10.0  cuda-command-line-tools-10.0
 
-!pip3 install scipy==1.1.0
+!pip3 install scipy==1.2.1
 
 !pip3 install protobuf==3.7.1
 
-!pip3 install scikit-learn==0.19.1
-
-!pip3 install tb-nightly==1.14.0a20190517
+!pip3 install scikit-learn==0.21.0
 
 !pip3 install tensorboardX==1.7
 
@@ -121,7 +119,7 @@ Please run below commands to install dependencies to build AIMET:
 
 !pip3 install future==0.17.1
 
-!pip3 install tensorboard==1.14
+!pip3 install tensorboard==1.15
 
 !pip3 install bokeh==1.2.0
 

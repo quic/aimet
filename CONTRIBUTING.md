@@ -89,7 +89,7 @@ Run unit tests
 ```
 make test
 # OR
-ctest
+ctest -V
 ```
 
 ### Commit

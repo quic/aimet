@@ -1,8 +1,8 @@
 ipython==7.16.1
 numpy==1.16.4
-scipy==1.1.0
+scipy==1.2.1
 protobuf==3.7.1
-scikit-learn==0.19.1
+scikit-learn==0.21.0
 tensorboard==1.15.0
 tensorboardX==1.7
 torch==1.7.1+cu110
