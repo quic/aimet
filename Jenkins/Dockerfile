@@ -140,6 +140,7 @@ RUN pip3 --no-cache-dir install \
         cffi==1.12.3 \
         click==7.0 \
         cython==0.29.10 \
+        docutils==0.16 \
         h5py==2.9.0 \
         ipykernel==4.8.2 \
         keras==2.2.4 \
