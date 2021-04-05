@@ -312,6 +312,9 @@ class OnnxSaver:
                 self.module = module
 
             def forward(self, *x):
+                """
+                Forward pass for Marker layer
+                """
                 o = []
                 for i, t in enumerate(x):
                     if i == 0:

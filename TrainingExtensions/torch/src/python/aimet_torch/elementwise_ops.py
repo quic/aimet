@@ -43,9 +43,9 @@ import torch.nn
 
 class Add(torch.nn.Module):
     """ Add module for a functional add"""
-
     # pylint:disable=arguments-differ
-    def forward(self, x, y):
+    @staticmethod
+    def forward(x, y):
         """
         Forward-pass routine for add op
         """
@@ -54,9 +54,9 @@ class Add(torch.nn.Module):
 
 class Subtract(torch.nn.Module):
     """ Subtract module for a functional subtract"""
-
     # pylint:disable=arguments-differ
-    def forward(self, x, y):
+    @staticmethod
+    def forward(x, y):
         """
         Forward-pass routine for subtact op
         """
@@ -65,9 +65,9 @@ class Subtract(torch.nn.Module):
 
 class Multiply(torch.nn.Module):
     """ Multiply module for a functional multiply"""
-
     # pylint:disable=arguments-differ
-    def forward(self, x, y):
+    @staticmethod
+    def forward(x, y):
         """
         Forward-pass routine for multiply op
         """
@@ -78,7 +78,8 @@ class Divide(torch.nn.Module):
     """ Divide module for a functional divide"""
 
     # pylint:disable=arguments-differ
-    def forward(self, x, y):
+    @staticmethod
+    def forward(x, y):
         """
         Forward-pass routine for divide op
         """
