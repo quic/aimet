@@ -82,8 +82,7 @@ class CompressionFactory:
         # Rationale: Factory functions unfortunately need to deal with a lot of parameters
 
         device = get_device(model)
-        dummy_input = create_rand_tensors_given_shapes(input_shape)
-        dummy_input = [tensor.to(device) for tensor in dummy_input]
+        dummy_input = create_rand_tensors_given_shapes(input_shape, device)
 
         # Create a layer database
         layer_db = LayerDatabase(model, dummy_input)
@@ -145,8 +144,7 @@ class CompressionFactory:
         # Rationale: Factory functions unfortunately need to deal with a lot of parameters
 
         device = get_device(model)
-        dummy_input = create_rand_tensors_given_shapes(input_shape)
-        dummy_input = [tensor.to(device) for tensor in dummy_input]
+        dummy_input = create_rand_tensors_given_shapes(input_shape, device)
 
         # Create a layer database
         layer_db = LayerDatabase(model, dummy_input)
@@ -203,8 +201,8 @@ class CompressionFactory:
         :param eval_iterations: Evaluation iterations
         :param input_shape: Shape of the input tensor for model
         :param cost_metric: Cost metric (mac or memory)
-        :param rank_select_scheme: rank selection scheme. Check enum for allowed values
         :param params: Weight SVD compression parameters
+        :param bokeh_session: The Bokeh session to display plots
         :return: An instance of WeightSvdCompressionAlgo
         """
 
@@ -212,8 +210,7 @@ class CompressionFactory:
         # Rationale: Factory functions unfortunately need to deal with a lot of parameters
 
         device = get_device(model)
-        dummy_input = create_rand_tensors_given_shapes(input_shape)
-        dummy_input = [tensor.to(device) for tensor in dummy_input]
+        dummy_input = create_rand_tensors_given_shapes(input_shape, device)
 
         # Create a layer database
         layer_db = LayerDatabase(model, dummy_input)

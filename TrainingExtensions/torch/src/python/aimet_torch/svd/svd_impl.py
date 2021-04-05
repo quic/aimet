@@ -121,8 +121,7 @@ class SvdImpl:
         # ------------------------------
         # Creating the layer attribute database
         device = get_device(model)
-        dummy_input = create_rand_tensors_given_shapes(input_shape)
-        dummy_input = [tensor.to(device) for tensor in dummy_input]
+        dummy_input = create_rand_tensors_given_shapes(input_shape, device)
         self._layer_database = database.LayerDatabase(model=self._model, dummy_input=dummy_input)
 
         # picking layers for compression based on the scheme
