@@ -227,7 +227,10 @@ class PassThroughOp(torch.nn.Module):
     """
     This is a pass-through op, used for purpose of making an op a no-op
     """
-
     # pylint:disable=arguments-differ
-    def forward(self, inputx):
+    @staticmethod
+    def forward(inputx):
+        """
+        Forward pass for passthrough op
+        """
         return inputx
