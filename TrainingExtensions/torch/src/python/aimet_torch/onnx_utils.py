@@ -120,10 +120,15 @@
 from typing import Union, List, Tuple, Dict
 import os
 import copy
+import importlib
+from inspect import getmembers, isfunction
 
 import torch
 import torch.nn as nn
 import torch.onnx.symbolic_caffe2
+
+import torch.onnx.symbolic_registry as sym_registry
+
 import onnx
 
 from aimet_common.utils import AimetLogger
@@ -180,16 +185,15 @@ onnx_pytorch_conn_graph_type_pairs = [
     [["Dropout"], ["dropout"]]
 ]
 
-import torch.onnx.symbolic_registry as sym_registry
-import importlib
-from inspect import getmembers, isfunction
 
-"""
-Copied and modified code for torch/onnx/symbolic_caffe2.py
-This is a temporary measure - Calling this function as-is was causing unexplained memory errors later on
-This can perhaps be replaced by registering the marker layers as custom ONNX ops
-"""
 def register_quantized_ops(domain, version):
+    """
+    Copied and modified code for torch/onnx/symbolic_caffe2.py
+    This is a temporary measure - Calling this function as-is was causing unexplained memory errors later on
+    This can perhaps be replaced by registering the marker layers as custom ONNX ops
+    """
+    # pylint: disable=protected-access
+
     # Register all the non-quantized ops
     sym_registry.register_version('', version)
     # Register all quantized ops
@@ -201,6 +205,7 @@ def register_quantized_ops(domain, version):
             aten_q_ops = ['dequantize', 'quantize_per_tensor']
             if op[0] in aten_q_ops:
                 sym_registry.register_op(op[0], op[1], '', version)
+
 
 register_quantized_ops('caffe2', 9)
 
