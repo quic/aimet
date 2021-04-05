@@ -42,6 +42,7 @@ import torch
 
 from aimet_common.utils import AimetLogger
 from aimet_common.graph_searcher import GraphSearcher
+from aimet_common.graph_pattern_matcher import PatternType
 from aimet_common.connected_graph.operation import Op
 from aimet_common.connected_graph.connectedgraph_utils import get_all_input_ops, get_all_output_ops
 from aimet_common.quantsim_config.json_config_importer import ConfigDictKeys, ConfigType, SupergroupType, OpType, \
@@ -418,9 +419,8 @@ class QuantSimConfigurator(AimetCommonQuantSimConfigurator):
         patterns_with_callbacks = []
         for supergroup_config in supergroups_configs:
             callback = SupergroupConfigCallback(self._module_to_quantsim_wrapper_dict)
-            patterns = self._build_supergroup_patterns(supergroup_config, callback, self._onnx_conn_graph_name_mapper)
-            for pattern in patterns:
-                patterns_with_callbacks.append(pattern)
+            op_list = supergroup_config[ConfigDictKeys.OP_LIST]
+            patterns_with_callbacks.append(PatternType(pattern=op_list, action=callback))
 
         if patterns_with_callbacks:
             graph_searcher = GraphSearcher(self._conn_graph, patterns_with_callbacks)
@@ -605,7 +605,10 @@ def _report_unsupported_ops(quantsim_config: ConfigDictType):
     supergroups = quantsim_config[ConfigDictKeys.SUPERGROUPS]
     for supergroup in supergroups:
         for op in supergroup[ConfigDictKeys.OP_LIST]:
-            if type_mapper.get_conn_graph_type_from_onnx_type(op) is None:
+            known_onnx_types = []
+            for val in map_torch_types_to_onnx.values():
+                known_onnx_types.extend(val)
+            if op not in known_onnx_types:
                 logger.error('Unsupported op type %s', op)
                 # Raising an error here since an unrecognized op will cause supergroup graph matching to fail
                 raise AssertionError

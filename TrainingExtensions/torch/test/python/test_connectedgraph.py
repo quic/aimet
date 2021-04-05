@@ -141,8 +141,8 @@ class TestConnectedGraph(unittest.TestCase):
         self.assertEqual(1, conn_graph._split_count)
         # All ops will include 2 inserted split ops
         self.assertEqual(10, len(conn_graph.get_all_ops().keys()))
-        dropout_1_op = conn_graph.get_all_ops()['dropout_3']
-        dropout_2_op = conn_graph.get_all_ops()['feature_dropout_4']
+        dropout_1_op = conn_graph.get_all_ops()['Dropout_3']
+        dropout_2_op = conn_graph.get_all_ops()['Dropout_4']
         self.assertEqual(model.dropout1, dropout_1_op.get_module())
         self.assertEqual(model.dropout2, dropout_2_op.get_module())
 
@@ -193,7 +193,7 @@ class TestConnectedGraph(unittest.TestCase):
         inp_data = torch.rand(1, 3, 8, 8)
         conn_graph = ConnectedGraph(model, (inp_data,))
         self.assertEqual(7, len(conn_graph.ordered_ops))
-        self.assertEqual(6, len([op for op in conn_graph.get_all_ops().keys() if 'convolution' in op]))
+        self.assertEqual(6, len([op for op in conn_graph.get_all_ops().keys() if 'Conv' in op]))
         self.assertEqual(0, len([op for op in conn_graph.get_all_ops().keys() if 'Tuple' in op]))
         self.assertEqual(0, len([product for product in conn_graph.get_all_products().keys() if 'Tuple' in product]))
         self.assertEqual('cat', conn_graph.ordered_ops[-1].type)
@@ -221,7 +221,7 @@ class TestConnectedGraph(unittest.TestCase):
         model = MultiOutputWithUnuseModel()
         conn_graph = ConnectedGraph(model, (inp_data,))
         self.assertEqual(6, len(conn_graph.ordered_ops))
-        self.assertEqual(5, len([op for op in conn_graph.get_all_ops().keys() if 'convolution' in op]))
+        self.assertEqual(5, len([op for op in conn_graph.get_all_ops().keys() if 'Conv' in op]))
         self.assertEqual(0, len([op for op in conn_graph.get_all_ops().keys() if 'Tuple' in op]))
         self.assertEqual('cat', conn_graph.ordered_ops[-1].type)
 
@@ -230,12 +230,12 @@ class TestConnectedGraph(unittest.TestCase):
 
         expected_products = [
             # layer #1 to conv1,conv2
-            'convolution_0_to_convolution_3',
-            'convolution_2_to_convolution_4',
+            'Conv_0_to_Conv_3',
+            'Conv_2_to_Conv_4',
 
             # conv1,conv2 to cat
-            'convolution_3_to_cat_5',
-            'convolution_4_to_cat_5']
+            'Conv_3_to_cat_5',
+            'Conv_4_to_cat_5']
 
         products = conn_graph.get_all_products()
         for product_name in product_names:
@@ -267,7 +267,7 @@ class TestConnectedGraph(unittest.TestCase):
         inp_tensor_list = create_rand_tensors_given_shapes([(1, 1, 8, 8), (1, 2, 8, 8), (1, 3, 8, 8)])
         conn_graph = ConnectedGraph(model, inp_tensor_list)
         self.assertEqual(10, len(conn_graph.ordered_ops))
-        self.assertEqual(9, len([op for op in conn_graph.get_all_ops().keys() if 'convolution' in op]))
+        self.assertEqual(9, len([op for op in conn_graph.get_all_ops().keys() if 'Conv' in op]))
         self.assertEqual(0, len([op for op in conn_graph.get_all_ops().keys() if 'Tuple' in op]))
         self.assertEqual('cat', conn_graph.ordered_ops[-1].type)
 
@@ -276,19 +276,19 @@ class TestConnectedGraph(unittest.TestCase):
 
         expected_products = [
             # layer #1 to layer #2
-            'convolution_0_to_convolution_3',
-            'convolution_1_to_convolution_4',
-            'convolution_2_to_convolution_5',
+            'Conv_0_to_Conv_3',
+            'Conv_1_to_Conv_4',
+            'Conv_2_to_Conv_5',
 
             # layer #2 to layer #3
-            'convolution_3_to_convolution_6',
-            'convolution_4_to_convolution_7',
-            'convolution_5_to_convolution_8',
+            'Conv_3_to_Conv_6',
+            'Conv_4_to_Conv_7',
+            'Conv_5_to_Conv_8',
 
             # layer #3 to cat
-            'convolution_6_to_cat_9',
-            'convolution_7_to_cat_9',
-            'convolution_8_to_cat_9']
+            'Conv_6_to_cat_9',
+            'Conv_7_to_cat_9',
+            'Conv_8_to_cat_9']
 
         products = conn_graph.get_all_products()
         for product_name in product_names:
@@ -320,7 +320,7 @@ class TestConnectedGraph(unittest.TestCase):
         inp_tensor_list = create_rand_tensors_given_shapes([(1, 1, 8, 8), (1, 2, 8, 8), (1, 3, 8, 8)])
         conn_graph = ConnectedGraph(model, inp_tensor_list)
         self.assertEqual(10, len(conn_graph.ordered_ops))
-        self.assertEqual(9, len([op for op in conn_graph.get_all_ops().keys() if 'convolution' in op]))
+        self.assertEqual(9, len([op for op in conn_graph.get_all_ops().keys() if 'Conv' in op]))
         self.assertEqual(0, len([op for op in conn_graph.get_all_ops().keys() if 'Tuple' in op]))
         self.assertEqual('cat', conn_graph.ordered_ops[-1].type)
 
@@ -331,19 +331,19 @@ class TestConnectedGraph(unittest.TestCase):
             # TODO fix order of products
 
             # layer #1 to layer #2
-            'convolution_0__to__Split_0',
-            'convolution_1_to_convolution_3',
-            'convolution_2_to_convolution_4',
+            'Conv_0__to__Split_0',
+            'Conv_1_to_Conv_3',
+            'Conv_2_to_Conv_4',
 
             # layer #2 to layer #3
-            'convolution_3_to_convolution_8',
-            'convolution_4_to_convolution_6',
-            'convolution_5_to_convolution_7',
+            'Conv_3_to_Conv_8',
+            'Conv_4_to_Conv_6',
+            'Conv_5_to_Conv_7',
 
             # layer #3, layer#1.conv1 to cat
-            'convolution_6_to_cat_9',
-            'convolution_7_to_cat_9',
-            'convolution_8_to_cat_9']
+            'Conv_6_to_cat_9',
+            'Conv_7_to_cat_9',
+            'Conv_8_to_cat_9']
 
         products = conn_graph.get_all_products()
         for product_name in product_names:
@@ -353,7 +353,7 @@ class TestConnectedGraph(unittest.TestCase):
                 expected_products.remove(product_name)
         self.assertEqual(0, len(expected_products))
         split_product = conn_graph.get_all_products()['Split_0__to__multiple_ops']
-        self.assertTrue(conn_graph.get_all_ops()['convolution_5'] in split_product.consumers)
+        self.assertTrue(conn_graph.get_all_ops()['Conv_5'] in split_product.consumers)
         self.assertTrue(conn_graph.get_all_ops()['cat_9'] in split_product.consumers)
 
     def test_submodules_with_sequence_and_module_list(self):
@@ -415,7 +415,7 @@ class TestConnectedGraph(unittest.TestCase):
         conn_graph = ConnectedGraph(model, (inp_data,))
         self.assertEqual(4, len(conn_graph.ordered_ops))
         self.assertEqual(2, len([op for name, op in conn_graph.get_all_ops().items()
-                                 if 'relu' in name and
+                                 if 'Relu' in name and
                                  op.get_module() == model.relu]))
 
         class ReluModel(torch.nn.Module):
@@ -444,7 +444,7 @@ class TestConnectedGraph(unittest.TestCase):
         conn_graph = ConnectedGraph(layer_model, (inp_data,))
         self.assertEqual(3, len(conn_graph.ordered_ops))
         self.assertEqual(2, len([op for name, op in conn_graph.get_all_ops().items()
-                                 if 'relu' in name and
+                                 if 'Relu' in name and
                                  op.get_module() == layer_model.layer.relu]))
 
     def test_dict_input(self):

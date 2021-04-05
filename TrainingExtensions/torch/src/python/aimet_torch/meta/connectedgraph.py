@@ -55,6 +55,7 @@ from aimet_common.model_module import PytorchModelModule
 from aimet_common.utils import AimetLogger
 from aimet_torch.utils import is_leaf_module, run_hook_for_layers_with_given_input
 from aimet_torch.defs import PassThroughOp
+from aimet_torch import onnx_utils
 
 logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.ConnectedGraph)
 
@@ -133,25 +134,6 @@ class ConnectedGraph(AimetCommonConnectedGraph):
 
         # Maps pytorch modules to connected graph ops
         self._module_to_op_dict = _create_module_to_op_dict(self.ordered_ops)
-
-    # Map torch module types to normalized names to provide backward compatibility to
-    # trace code based construction
-    op_type_map = {
-        torch.nn.Conv2d: 'convolution',
-        torch.nn.ConvTranspose2d: 'convolution',
-        torch.nn.BatchNorm1d: 'batch_norm',
-        torch.nn.BatchNorm2d: 'batch_norm',
-        torch.nn.ReLU: 'relu',
-        torch.nn.ReLU6: 'hardtanh',
-        torch.nn.MaxPool2d: 'max_pool2d',
-        torch.nn.AdaptiveAvgPool2d: 'adaptive_avg_pool2d',
-        torch.nn.AvgPool2d: 'avg_pool2d',
-        torch.nn.Linear: 'addmm',
-        torch.nn.Dropout: 'dropout',
-        torch.nn.Dropout2d: 'feature_dropout',
-        torch.nn.LogSoftmax: 'log_softmax',
-        torch.nn.Sigmoid: 'sigmoid'
-    }
 
     functional_ops = {
         'cat',
@@ -524,15 +506,18 @@ class ConnectedGraph(AimetCommonConnectedGraph):
         node_name = ConnectedGraph._get_attribute_name(node).get('name')
         return GetAttrNodeInfo(node_alias, node_name, node_input)
 
-    def _get_op_type(self, model: torch.nn.Module) -> str:
+    @staticmethod
+    def _get_op_type(model: torch.nn.Module) -> str:
         """
         Get connected graph op type for a pytorch module
         :param model: Pytorch module to get op type for
         :return: Connected graph op type
         """
         # use nominal Op type if its a known type else use torch defined Module name
-        if isinstance(model, tuple(self.op_type_map.keys())):
-            op_type = self.op_type_map[type(model)]
+        if isinstance(model, tuple(onnx_utils.map_torch_types_to_onnx.keys())):
+            # Currently always taking first element in the list. Check whether we need extra logic for using other
+            # elements in the list.
+            op_type = onnx_utils.map_torch_types_to_onnx[type(model)][0]
         else:
             op_type = type(model).__name__
             logger.debug("unknown op_type -- defaulting to class name %s", op_type)
@@ -654,14 +639,14 @@ class ConnectedGraph(AimetCommonConnectedGraph):
             module = op.get_module()
             if module is not None:
                 name = self._module_to_name.get(module, None)
-                if op.type in ['convolution', 'batch_norm', 'addmm', 'matmul']:
+                if op.type in ['Conv', 'BatchNormalization', 'Gemm']:
                     if module.weight is not None:
                         product_name = name + '.weight'
                         self._create_and_add_param_product_if_not_exists(op, product_name, list(module.weight.shape))
                     if module.bias is not None:
                         product_name = name + '.bias'
                         self._create_and_add_param_product_if_not_exists(op, product_name, list(module.bias.shape))
-                if op.type == 'batch_norm':
+                if op.type == 'BatchNormalization':
                     # If batch_norm, fill in rest of bn params
                     if module.running_mean is not None:
                         product_name = name + '.running_mean'
@@ -957,7 +942,7 @@ def _fill_groups_info(op: Op, module: torch.nn.Module):
     :param module: Pytorch module to check for groups
     """
 
-    if op.type in 'convolution':
+    if op.type in 'Conv':
         op.groups = module.groups
 
 

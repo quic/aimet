@@ -89,16 +89,13 @@ class OpConnectivity:
 
     # TODO: remove all types used in old connected graph when it is completely removed.
     pytorch_dict = {'Conv': ConnectivityType.null,
-                    'Conv2d': ConnectivityType.null,
                     'ConvTranspose': ConnectivityType.null,
-                    'ConvTranspose2d': ConnectivityType.null,
                     'Linear': ConnectivityType.null,
+                    'Gemm': ConnectivityType.null,
                     'DownsampleLayer': ConnectivityType.stop,
                     'Dropout': ConnectivityType.direct,
                     'Dropout2d': ConnectivityType.direct,
                     'Relu': ConnectivityType.direct,
-                    'ReLU': ConnectivityType.direct,
-                    'ReLU6': ConnectivityType.direct,
                     'MaxPool': ConnectivityType.direct,
                     'MaxPool2d': ConnectivityType.direct,
                     'AveragePool': ConnectivityType.direct,
@@ -115,31 +112,17 @@ class OpConnectivity:
                     'Add': ConnectivityType.add,
                     'Concat': ConnectivityType.concat,
                     'Split': ConnectivityType.split,
-                    'LogSoftmax': ConnectivityType.skip,
+                    'LogSoftmax': ConnectivityType.direct,
                     'Gather': ConnectivityType.skip,
                     'Reshape': ConnectivityType.skip,
                     'ListConstruct': ConnectivityType.skip,
                     'Pad': ConnectivityType.skip,
                     'Mul': ConnectivityType.skip,
-                    'Clip': ConnectivityType.skip,
+                    'Clip': ConnectivityType.direct,
                     'Upsample': ConnectivityType.skip,
-                    'convolution': ConnectivityType.null,       # Start of new connected graph ops
-                    'matmul': ConnectivityType.null,
-                    'addmm': ConnectivityType.null,
                     'index_select': ConnectivityType.null,
-                    'batch_norm': ConnectivityType.direct,
-                    'relu': ConnectivityType.direct,
-                    'log_softmax': ConnectivityType.direct,
-                    'max_pool2d': ConnectivityType.direct,
-                    'avg_pool2d': ConnectivityType.direct,
-                    'adaptive_avg_pool2d': ConnectivityType.direct,
-                    'feature_dropout': ConnectivityType.direct,
-                    'dropout': ConnectivityType.direct,
-                    'hardtanh': ConnectivityType.direct,
                     'mean': ConnectivityType.direct,
                     'floor': ConnectivityType.direct,
-                    'upsample_nearest2d': ConnectivityType.direct,
-                    'upsample_bilinear2d': ConnectivityType.direct,
                     'cat': ConnectivityType.concat,
                     'add': ConnectivityType.add,
                     'size': ConnectivityType.skip,
@@ -214,7 +197,7 @@ def get_conv_ops_for_api(model_api: ModelApi) -> Set:
     :param model_api: Enum for whether the api is pytorch or tensorflow
     """
     if model_api == ModelApi.pytorch:
-        return {'Conv', 'Conv2d', 'ConvTranspose', 'convolution'}   # 'convolution' used in new connected graph
+        return {'Conv', 'Conv2d', 'ConvTranspose'}
     return {'Conv2D', 'DepthwiseConv2dNative'}
 
 
@@ -225,7 +208,7 @@ def get_linear_ops_for_api(model_api: ModelApi) -> Set:
     :param model_api: Enum for whether the api is pytorch or tensorflow
     """
     if model_api == ModelApi.pytorch:
-        return {'Linear', 'addmm', 'matmul'}    # 'addmm' and 'matmul' used in new connected graph
+        return {'Gemm'}    # 'addmm' and 'matmul' used in new connected graph
     return {'Dense'}
 
 
