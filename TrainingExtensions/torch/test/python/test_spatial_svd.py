@@ -45,11 +45,12 @@ import torch
 import torch.nn.functional as F
 from torchvision import datasets, transforms
 
+from aimet_torch.utils import create_rand_tensors_given_shapes
 from aimet_torch.winnow.winnow_utils import to_numpy
 from aimet_torch.examples import mnist_torch_model
 from aimet_torch.svd.svd_splitter import SpatialSvdModuleSplitter
 from aimet_torch.svd.svd_pruner import SpatialSvdPruner
-from aimet_torch.layer_database import Layer, LayerDatabase
+from aimet_torch.layer_database import LayerDatabase
 from aimet_common.defs import CostMetric, LayerCompRatioPair
 
 
@@ -171,7 +172,10 @@ class TestSpatialSvdPruning(unittest.TestCase):
         model = mnist_torch_model.Net()
 
         # Create a layer database
-        orig_layer_db = LayerDatabase(model, input_shape=(1, 1, 28, 28))
+        input_shape = (1, 1, 28, 28)
+        dummy_input = create_rand_tensors_given_shapes(input_shape)
+        orig_layer_db = LayerDatabase(model, dummy_input)
+
         # Copy the db
         comp_layer_db = copy.deepcopy(orig_layer_db)
 
@@ -213,7 +217,10 @@ class TestSpatialSvdPruning(unittest.TestCase):
         model = mnist_torch_model.Net()
 
         # Create a layer database
-        orig_layer_db = LayerDatabase(model, input_shape=(1, 1, 28, 28))
+        input_shape = (1, 1, 28, 28)
+        dummy_input = create_rand_tensors_given_shapes(input_shape)
+        orig_layer_db = LayerDatabase(model, dummy_input)
+
         # Copy the db
         comp_layer_db = copy.deepcopy(orig_layer_db)
 
@@ -223,7 +230,7 @@ class TestSpatialSvdPruning(unittest.TestCase):
 
         layer_db = pruner.prune_model(orig_layer_db, [LayerCompRatioPair(conv1, Decimal(0.5)),
                                                       LayerCompRatioPair(conv2, Decimal(0.5))], CostMetric.mac,
-                                         trainer=None)
+                                      trainer=None)
 
         conv1_a = layer_db.find_layer_by_name('conv1.0')
         conv1_b = layer_db.find_layer_by_name('conv1.1')

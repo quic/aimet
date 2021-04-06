@@ -49,6 +49,7 @@ from aimet_common.comp_ratio_rounder import RankRounder, ChannelRounder
 from aimet_common.compression_algo import CompressionAlgo
 from aimet_common.bokeh_plots import BokehServerSession
 
+from aimet_torch.utils import create_rand_tensors_given_shapes, get_device
 from aimet_torch.defs import SpatialSvdParameters, WeightSvdParameters, ChannelPruningParameters, ModuleCompRatioPair
 from aimet_torch.layer_selector import ConvFcLayerSelector, ConvNoDepthwiseLayerSelector, ManualLayerSelector
 from aimet_torch.layer_database import LayerDatabase
@@ -80,8 +81,11 @@ class CompressionFactory:
         # pylint: disable=too-many-locals
         # Rationale: Factory functions unfortunately need to deal with a lot of parameters
 
+        device = get_device(model)
+        dummy_input = create_rand_tensors_given_shapes(input_shape, device)
+
         # Create a layer database
-        layer_db = LayerDatabase(model, input_shape)
+        layer_db = LayerDatabase(model, dummy_input)
         use_cuda = next(model.parameters()).is_cuda
 
         # Create a pruner
@@ -139,8 +143,11 @@ class CompressionFactory:
         # pylint: disable=too-many-locals
         # Rationale: Factory functions unfortunately need to deal with a lot of parameters
 
+        device = get_device(model)
+        dummy_input = create_rand_tensors_given_shapes(input_shape, device)
+
         # Create a layer database
-        layer_db = LayerDatabase(model, input_shape)
+        layer_db = LayerDatabase(model, dummy_input)
         use_cuda = next(model.parameters()).is_cuda
 
         # Create a pruner
@@ -194,16 +201,19 @@ class CompressionFactory:
         :param eval_iterations: Evaluation iterations
         :param input_shape: Shape of the input tensor for model
         :param cost_metric: Cost metric (mac or memory)
-        :param rank_select_scheme: rank selection scheme. Check enum for allowed values
         :param params: Weight SVD compression parameters
+        :param bokeh_session: The Bokeh session to display plots
         :return: An instance of WeightSvdCompressionAlgo
         """
 
         # pylint: disable=too-many-locals
         # Rationale: Factory functions unfortunately need to deal with a lot of parameters
 
+        device = get_device(model)
+        dummy_input = create_rand_tensors_given_shapes(input_shape, device)
+
         # Create a layer database
-        layer_db = LayerDatabase(model, input_shape)
+        layer_db = LayerDatabase(model, dummy_input)
         use_cuda = next(model.parameters()).is_cuda
 
         # Create a pruner

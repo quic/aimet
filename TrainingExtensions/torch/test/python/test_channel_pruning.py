@@ -57,7 +57,8 @@ from aimet_torch.data_subsampler import DataSubSampler
 from aimet_torch.channel_pruning.weight_reconstruction import WeightReconstructor
 from aimet_torch.channel_pruning.channel_pruner import InputChannelPruner
 from aimet_torch.examples.mnist_torch_model import Net as mnist_model
-from aimet_torch.utils import to_numpy, create_fake_data_loader, get_layer_name, get_layer_by_name
+from aimet_torch.utils import to_numpy, create_fake_data_loader, get_layer_name, get_layer_by_name,\
+    create_rand_tensors_given_shapes
 from aimet_torch.layer_database import Layer, LayerDatabase
 from aimet_torch.examples import mnist_torch_model
 
@@ -632,8 +633,12 @@ class TestTrainingExtensionsChannelPruning(unittest.TestCase):
 
         orig_model = mnist_torch_model.Net()
         orig_model.eval()
+
         # Create a layer database
-        orig_layer_db = LayerDatabase(orig_model, input_shape=(1, 1, 28, 28))
+        input_shape = (1, 1, 28, 28)
+        dummy_input = create_rand_tensors_given_shapes(input_shape)
+        orig_layer_db = LayerDatabase(orig_model, dummy_input)
+
         # Copy the db
         comp_layer_db = copy.deepcopy(orig_layer_db)
 
@@ -665,9 +670,13 @@ class TestTrainingExtensionsChannelPruning(unittest.TestCase):
         samples_per_image = 10
         num_reconstruction_samples = number_of_batches * batch_size * samples_per_image
 
-        resnet18_model = models.resnet18(pretrained=True)
+        model = models.resnet18().eval()
+
         # Create a layer database
-        orig_layer_db = LayerDatabase(resnet18_model, input_shape=(1, 3, 224, 224))
+        input_shape = (1, 3, 224, 224)
+        dummy_input = create_rand_tensors_given_shapes(input_shape)
+        orig_layer_db = LayerDatabase(model, dummy_input)
+
         # Copy the db
         comp_layer_db = copy.deepcopy(orig_layer_db)
 
@@ -717,8 +726,12 @@ class TestTrainingExtensionsChannelPruning(unittest.TestCase):
 
         orig_model = Net()
         orig_model.eval()
+
         # Create a layer database
-        orig_layer_db = LayerDatabase(orig_model, input_shape=(1, 1, 28, 28))
+        input_shape = (1, 1, 28, 28)
+        dummy_input = create_rand_tensors_given_shapes(input_shape)
+        orig_layer_db = LayerDatabase(orig_model, dummy_input)
+
         dataset_size = 1000
         batch_size = 10
         # max out number of batches
@@ -758,11 +771,13 @@ class TestTrainingExtensionsChannelPruning(unittest.TestCase):
         samples_per_image = 10
         num_reconstruction_samples = number_of_batches * batch_size * samples_per_image
 
-        resnet18_model = models.resnet18(pretrained=True)
-        resnet18_model.eval()
+        model = models.resnet18()
+        model.eval()
 
         # Create a layer database
-        orig_layer_db = LayerDatabase(resnet18_model, input_shape=(1, 3, 224, 224))
+        input_shape = (1, 3, 224, 224)
+        dummy_input = create_rand_tensors_given_shapes(input_shape)
+        orig_layer_db = LayerDatabase(model, dummy_input)
 
         data_loader = create_fake_data_loader(dataset_size=dataset_size, batch_size=batch_size,
                                               image_size=(3, 224, 224))
@@ -772,14 +787,14 @@ class TestTrainingExtensionsChannelPruning(unittest.TestCase):
                                                   allow_custom_downsample_ops=True)
 
         # keeping compression ratio = 0.5 for all layers
-        layer_comp_ratio_list = [LayerCompRatioPair(Layer(resnet18_model.layer4[1].conv1, 'layer4.1.conv1', None), 0.5),
-                                 LayerCompRatioPair(Layer(resnet18_model.layer3[1].conv1, 'layer3.1.conv1', None), 0.5),
-                                 LayerCompRatioPair(Layer(resnet18_model.layer2[1].conv1, 'layer2.1.conv1', None), 0.5),
-                                 LayerCompRatioPair(Layer(resnet18_model.layer1[1].conv1, 'layer1.1.conv1', None), 0.5),
-                                 LayerCompRatioPair(Layer(resnet18_model.layer1[0].conv2, 'layer1.0.conv2', None), 0.5)]
+        layer_comp_ratio_list = [LayerCompRatioPair(Layer(model.layer4[1].conv1, 'layer4.1.conv1', None), 0.5),
+                                 LayerCompRatioPair(Layer(model.layer3[1].conv1, 'layer3.1.conv1', None), 0.5),
+                                 LayerCompRatioPair(Layer(model.layer2[1].conv1, 'layer2.1.conv1', None), 0.5),
+                                 LayerCompRatioPair(Layer(model.layer1[1].conv1, 'layer1.1.conv1', None), 0.5),
+                                 LayerCompRatioPair(Layer(model.layer1[0].conv2, 'layer1.0.conv2', None), 0.5)]
 
         comp_layer_db = input_channel_pruner.prune_model(orig_layer_db, layer_comp_ratio_list, CostMetric.mac,
-                                                            trainer=None)
+                                                         trainer=None)
 
         # 1) not below split
         self.assertEqual(comp_layer_db.model.layer1[0].conv2.in_channels, 32)

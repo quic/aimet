@@ -46,12 +46,14 @@ import torch.nn.functional as functional
 import numpy as np
 import pytest
 import copy
+import libpymo as pymo
 
 import aimet_common.defs
 import aimet_torch.svd.svd_intf_defs_deprecated
 from aimet_torch.examples import mnist_torch_model as mnist_model
 from aimet_common.utils import AimetLogger
-import libpymo as pymo
+
+from aimet_torch.utils import create_rand_tensors_given_shapes
 from aimet_torch import pymo_utils
 from aimet_torch.svd import layer_selector_deprecated as ls, svd as svd_intf, svd_impl as s
 from aimet_torch.layer_database import LayerDatabase, Layer
@@ -117,11 +119,14 @@ class TestTrainingExtensionsSvd(unittest.TestCase):
         logger.debug(self.id())
         model = MnistModel().to("cpu")
 
-        layer_database = LayerDatabase(model=model, input_shape=(1, 1, 28, 28))
+        input_shape = (1, 1, 28, 28)
+        dummy_input = create_rand_tensors_given_shapes(input_shape)
+        layer_db = LayerDatabase(model, dummy_input)
 
         with unittest.mock.patch('aimet_torch.svd.layer_selector_deprecated.LayerSelectorDeprecated._perform_layer_selection'):
             layer_selector = ls.LayerSelectorDeprecated(
-                aimet_torch.svd.svd_intf_defs_deprecated.LayerSelectionScheme.top_x_percent, None, layer_database, percent_thresh=None)
+                aimet_torch.svd.svd_intf_defs_deprecated.LayerSelectionScheme.top_x_percent, None, layer_db,
+                percent_thresh=None)
 
         # 100 % threshold
         picked_layers = layer_selector._pick_compression_layers(run_model=mnist_model.evaluate, cost_metric=aimet_torch.svd.svd_intf_defs_deprecated.CostMetric.memory,
@@ -149,11 +154,13 @@ class TestTrainingExtensionsSvd(unittest.TestCase):
         logger.debug(self.id())
         model = MnistModel().to("cpu")
 
-        layer_database = LayerDatabase(model=model, input_shape=(1, 1, 28, 28))
+        input_shape = (1, 1, 28, 28)
+        dummy_input = create_rand_tensors_given_shapes(input_shape)
+        layer_db = LayerDatabase(model, dummy_input)
 
         with unittest.mock.patch('aimet_torch.svd.layer_selector_deprecated.LayerSelectorDeprecated._perform_layer_selection'):
             layer_selector = ls.LayerSelectorDeprecated(
-                aimet_torch.svd.svd_intf_defs_deprecated.LayerSelectionScheme.top_n_layers, None, layer_database,
+                aimet_torch.svd.svd_intf_defs_deprecated.LayerSelectionScheme.top_n_layers, None, layer_db,
                 num_layers=2)
 
         picked_layers = layer_selector._pick_compression_layers(run_model=mnist_model.evaluate,
@@ -179,11 +186,14 @@ class TestTrainingExtensionsSvd(unittest.TestCase):
         logger.debug(self.id())
         model = MnistModel().to("cpu")
 
-        layer_database = LayerDatabase(model=model, input_shape=(1, 1, 28, 28))
+        input_shape = (1, 1, 28, 28)
+        dummy_input = create_rand_tensors_given_shapes(input_shape)
+        layer_db = LayerDatabase(model, dummy_input)
 
         with unittest.mock.patch('aimet_torch.svd.layer_selector_deprecated.LayerSelectorDeprecated._perform_layer_selection'):
             layer_selector = ls.LayerSelectorDeprecated(
-                aimet_torch.svd.svd_intf_defs_deprecated.LayerSelectionScheme.manual, None, layer_database, layers_to_compress=[model.conv2])
+                aimet_torch.svd.svd_intf_defs_deprecated.LayerSelectionScheme.manual, None, layer_db,
+                layers_to_compress=[model.conv2])
 
         picked_layers = layer_selector._pick_compression_layers(run_model=mnist_model.evaluate, cost_metric=aimet_torch.svd.svd_intf_defs_deprecated.CostMetric.memory,
                                                                 layer_select_scheme=aimet_torch.svd.svd_intf_defs_deprecated.LayerSelectionScheme.manual,
@@ -196,15 +206,19 @@ class TestTrainingExtensionsSvd(unittest.TestCase):
         logger.debug(self.id())
         model = mnist_model.Net().to("cpu")
 
-        layer_database = LayerDatabase(model=model, input_shape=(1, 1, 28, 28))
+        input_shape = (1, 1, 28, 28)
+        dummy_input = create_rand_tensors_given_shapes(input_shape)
+        layer_db = LayerDatabase(model, dummy_input)
 
         with unittest.mock.patch('aimet_torch.svd.layer_selector_deprecated.LayerSelectorDeprecated'):
             svd = s.SvdImpl(model=model, run_model=mnist_model.evaluate, run_model_iterations=1,
                             input_shape=(1, 1, 28, 28),
-                            compression_type=aimet_torch.svd.svd_intf_defs_deprecated.CompressionTechnique.svd, cost_metric=aimet_torch.svd.svd_intf_defs_deprecated.CostMetric.memory,
-                            layer_selection_scheme=aimet_torch.svd.svd_intf_defs_deprecated.LayerSelectionScheme.top_n_layers, num_layers=2)
+                            compression_type=aimet_torch.svd.svd_intf_defs_deprecated.CompressionTechnique.svd,
+                            cost_metric=aimet_torch.svd.svd_intf_defs_deprecated.CostMetric.memory,
+                            layer_selection_scheme=aimet_torch.svd.svd_intf_defs_deprecated.LayerSelectionScheme.top_n_layers,
+                            num_layers=2)
 
-        conv2 = layer_database.find_layer_by_module(model.conv2)
+        conv2 = layer_db.find_layer_by_module(model.conv2)
         pymo_utils.PymoSvdUtils.configure_layers_in_pymo_svd([conv2], aimet_common.defs.CostMetric.mac, svd._svd_lib_ref)
 
         split_layer = svd_pruner_deprecated.DeprecatedSvdPruner
@@ -238,8 +252,10 @@ class TestTrainingExtensionsSvd(unittest.TestCase):
         with unittest.mock.patch('aimet_torch.layer_database.LayerDatabase'):
             with unittest.mock.patch('aimet_torch.svd.layer_selector_deprecated.LayerSelectorDeprecated'):
                 svd = s.SvdImpl(model=model, run_model=None, run_model_iterations=1, input_shape=(1, 1, 28, 28),
-                                compression_type=aimet_torch.svd.svd_intf_defs_deprecated.CompressionTechnique.svd, cost_metric=aimet_torch.svd.svd_intf_defs_deprecated.CostMetric.memory,
-                                layer_selection_scheme=aimet_torch.svd.svd_intf_defs_deprecated.LayerSelectionScheme.top_n_layers, num_layers=2)
+                                compression_type=aimet_torch.svd.svd_intf_defs_deprecated.CompressionTechnique.svd,
+                                cost_metric=aimet_torch.svd.svd_intf_defs_deprecated.CostMetric.memory,
+                                layer_selection_scheme=aimet_torch.svd.svd_intf_defs_deprecated.LayerSelectionScheme.top_n_layers,
+                                num_layers=2)
 
         layer_attr = Layer(model.fc1, id(model.fc1), [3136, 1024, 1, 1])
 
@@ -273,8 +289,10 @@ class TestTrainingExtensionsSvd(unittest.TestCase):
         with unittest.mock.patch('aimet_torch.svd.layer_database.LayerDatabase'):
             with unittest.mock.patch('aimet_torch.svd.layer_selector_deprecated.LayerSelectorDeprecated'):
                 svd = s.SvdImpl(model=model, run_model=None, run_model_iterations=1, input_shape=(1, 1, 28, 28),
-                                compression_type=aimet_torch.svd.svd_intf_defs_deprecated.CompressionTechnique.svd, cost_metric=aimet_torch.svd.svd_intf_defs_deprecated.CostMetric.memory,
-                                layer_selection_scheme=aimet_torch.svd.svd_intf_defs_deprecated.LayerSelectionScheme.top_n_layers, num_layers=2)
+                                compression_type=aimet_torch.svd.svd_intf_defs_deprecated.CompressionTechnique.svd,
+                                cost_metric=aimet_torch.svd.svd_intf_defs_deprecated.CostMetric.memory,
+                                layer_selection_scheme=aimet_torch.svd.svd_intf_defs_deprecated.LayerSelectionScheme.top_n_layers,
+                                num_layers=2)
 
         ls.LayerSelectorDeprecated._pick_compression_layers = create_autospec(ls.LayerSelectorDeprecated._pick_compression_layers)
         layer_attr1 = Layer(model.fc2, id(model.fc2), model.fc2.weight.shape)
@@ -327,8 +345,10 @@ class TestTrainingExtensionsSvd(unittest.TestCase):
         model = MnistModel().to("cpu")
 
         svd = s.SvdImpl(model=model, run_model=mnist_model.evaluate, run_model_iterations=1, input_shape=(1, 1, 28, 28),
-                        compression_type=aimet_torch.svd.svd_intf_defs_deprecated.CompressionTechnique.svd, cost_metric=aimet_torch.svd.svd_intf_defs_deprecated.CostMetric.memory,
-                        layer_selection_scheme=aimet_torch.svd.svd_intf_defs_deprecated.LayerSelectionScheme.top_x_percent, percent_thresh=60)
+                        compression_type=aimet_torch.svd.svd_intf_defs_deprecated.CompressionTechnique.svd,
+                        cost_metric=aimet_torch.svd.svd_intf_defs_deprecated.CostMetric.memory,
+                        layer_selection_scheme=aimet_torch.svd.svd_intf_defs_deprecated.LayerSelectionScheme.top_x_percent,
+                        percent_thresh=60)
 
         c_model, svd_stats = svd.compress_net(rank_selection_scheme=aimet_torch.svd.svd_intf_defs_deprecated.RankSelectionScheme.auto,
                                               num_rank_indices=20, error_margin=10)
@@ -343,8 +363,10 @@ class TestTrainingExtensionsSvd(unittest.TestCase):
         logger.debug(self.id())
         model = MnistSequentialModel().to("cpu")
         svd = s.SvdImpl(model=model, run_model=mnist_model.evaluate, run_model_iterations=1, input_shape=(1, 1, 28, 28),
-                        compression_type=aimet_torch.svd.svd_intf_defs_deprecated.CompressionTechnique.svd, cost_metric=aimet_torch.svd.svd_intf_defs_deprecated.CostMetric.memory,
-                        layer_selection_scheme=aimet_torch.svd.svd_intf_defs_deprecated.LayerSelectionScheme.top_x_percent, percent_thresh=60)
+                        compression_type=aimet_torch.svd.svd_intf_defs_deprecated.CompressionTechnique.svd,
+                        cost_metric=aimet_torch.svd.svd_intf_defs_deprecated.CostMetric.memory,
+                        layer_selection_scheme=aimet_torch.svd.svd_intf_defs_deprecated.LayerSelectionScheme.top_x_percent,
+                        percent_thresh=60)
 
         c_model, svd_stats = svd.compress_net(rank_selection_scheme=aimet_torch.svd.svd_intf_defs_deprecated.RankSelectionScheme.auto,
                                               num_rank_indices=20, error_margin=10)
@@ -492,15 +514,21 @@ class TestTrainingExtensionsSvd(unittest.TestCase):
     def test_choose_best_ranks(self):
 
         model = MnistModel().to("cpu")
-        layer_database = LayerDatabase(model=model, input_shape=(1, 1, 28, 28))
+
+        input_shape = (1, 1, 28, 28)
+        dummy_input = create_rand_tensors_given_shapes(input_shape)
+        layer_db = LayerDatabase(model, dummy_input)
+
         run_model_return_values = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20]
         run_model = unittest.mock.Mock(side_effect=run_model_return_values)
 
         with unittest.mock.patch('aimet_torch.layer_database.LayerDatabase'):
             with unittest.mock.patch('aimet_torch.svd.layer_selector_deprecated.LayerSelectorDeprecated'):
                 svd = s.SvdImpl(model=model, run_model=run_model, run_model_iterations=1, input_shape=(1, 1, 28, 28),
-                                compression_type=aimet_torch.svd.svd_intf_defs_deprecated.CompressionTechnique.svd, cost_metric=aimet_torch.svd.svd_intf_defs_deprecated.CostMetric.memory,
-                                layer_selection_scheme=aimet_torch.svd.svd_intf_defs_deprecated.LayerSelectionScheme.top_n_layers, num_layers=2)
+                                compression_type=aimet_torch.svd.svd_intf_defs_deprecated.CompressionTechnique.svd,
+                                cost_metric=aimet_torch.svd.svd_intf_defs_deprecated.CostMetric.memory,
+                                layer_selection_scheme=aimet_torch.svd.svd_intf_defs_deprecated.LayerSelectionScheme.top_n_layers,
+                                num_layers=2)
 
         svd._network_cost = (500, 500)
 
@@ -513,8 +541,9 @@ class TestTrainingExtensionsSvd(unittest.TestCase):
                     create_compressed_model.return_value = None, None, None
                     rank_selector = rank_select.RankSelector(svd_lib_ref=svd._svd_lib_ref)
                     rank_selector.choose_best_rank(model=model, run_model=run_model, run_model_iterations=1,
-                                                   use_cuda=False, metric=aimet_torch.svd.svd_intf_defs_deprecated.CostMetric.memory, error_margin=1,
-                                                   baseline_perf=0.5, num_rank_indices=20, database=layer_database)
+                                                   use_cuda=False, metric=aimet_torch.svd.svd_intf_defs_deprecated.CostMetric.memory,
+                                                   error_margin=1,
+                                                   baseline_perf=0.5, num_rank_indices=20, database=layer_db)
 
     def test_validate_params(self):
 
@@ -553,7 +582,8 @@ class TestTrainingExtensionsSvd(unittest.TestCase):
         # All the error possibilities
         with pytest.raises(ValueError):
             si.Svd._validate_layer_rank_params(model,
-                                               aimet_torch.svd.svd_intf_defs_deprecated.LayerSelectionScheme.manual, aimet_torch.svd.svd_intf_defs_deprecated.RankSelectionScheme.manual)
+                                               aimet_torch.svd.svd_intf_defs_deprecated.LayerSelectionScheme.manual,
+                                               aimet_torch.svd.svd_intf_defs_deprecated.RankSelectionScheme.manual)
 
         with pytest.raises(ValueError):
             si.Svd._validate_layer_rank_params(model,
@@ -747,8 +777,11 @@ class TestTrainingExtensionsSvd(unittest.TestCase):
 
         model = MnistModel().to("cuda")
         svd = s.SvdImpl(model=model, run_model=mnist_model.evaluate, run_model_iterations=1, input_shape=(1, 1, 28, 28),
-                        compression_type=aimet_torch.svd.svd_intf_defs_deprecated.CompressionTechnique.svd, cost_metric=aimet_torch.svd.svd_intf_defs_deprecated.CostMetric.memory,
-                        layer_selection_scheme=aimet_torch.svd.svd_intf_defs_deprecated.LayerSelectionScheme.top_n_layers, num_layers=2)
+                        compression_type=aimet_torch.svd.svd_intf_defs_deprecated.CompressionTechnique.svd,
+                        cost_metric=aimet_torch.svd.svd_intf_defs_deprecated.CostMetric.memory,
+                        layer_selection_scheme=aimet_torch.svd.svd_intf_defs_deprecated.LayerSelectionScheme.top_n_layers,
+                        num_layers=2)
+
         self.assertTrue(svd._is_model_on_gpu())
         # copy one layer to CPU
         model.conv1.to("cpu")
@@ -756,8 +789,11 @@ class TestTrainingExtensionsSvd(unittest.TestCase):
 
         model = MnistModel().to("cpu")
         svd = s.SvdImpl(model=model, run_model=mnist_model.evaluate, run_model_iterations=1, input_shape=(1, 1, 28, 28),
-                        compression_type=aimet_torch.svd.svd_intf_defs_deprecated.CompressionTechnique.svd, cost_metric=aimet_torch.svd.svd_intf_defs_deprecated.CostMetric.memory,
-                        layer_selection_scheme=aimet_torch.svd.svd_intf_defs_deprecated.LayerSelectionScheme.top_n_layers, num_layers=2)
+                        compression_type=aimet_torch.svd.svd_intf_defs_deprecated.CompressionTechnique.svd,
+                        cost_metric=aimet_torch.svd.svd_intf_defs_deprecated.CostMetric.memory,
+                        layer_selection_scheme=aimet_torch.svd.svd_intf_defs_deprecated.LayerSelectionScheme.top_n_layers,
+                        num_layers=2)
+
         self.assertFalse(svd._is_model_on_gpu())
         # copy entire model on GPU
         model.cuda()
@@ -770,7 +806,10 @@ class TestTrainingExtensionsSvd(unittest.TestCase):
 
         intf_defs = aimet_torch.svd.svd_intf_defs_deprecated
 
-        layer_database = LayerDatabase(model=model, input_shape=(1, 1, 28, 28))
+        input_shape = (1, 1, 28, 28)
+        dummy_input = create_rand_tensors_given_shapes(input_shape)
+        layer_db = LayerDatabase(model, dummy_input)
+
         with unittest.mock.patch('aimet_torch.layer_database.LayerDatabase'):
             with unittest.mock.patch('aimet_torch.svd.layer_selector_deprecated.LayerSelectorDeprecated'):
                 svd = s.SvdImpl(model=model, run_model=None, run_model_iterations=1, input_shape=(1, 1, 28, 28),
@@ -793,7 +832,7 @@ class TestTrainingExtensionsSvd(unittest.TestCase):
             rank_data_list, svd_rank_pair_dict = rank_selector.split_manual_rank(model=model, run_model=run_model,
                                                                                  run_model_iterations=1, use_cuda=False,
                                                                                  metric=aimet_torch.svd.svd_intf_defs_deprecated.CostMetric.memory,
-                                                                                 database=layer_database,
+                                                                                 database=layer_db,
                                                                                  layer_rank_list=layer_rank_list)
             self.assertEqual(len(svd_rank_pair_dict), 1)
 
@@ -805,7 +844,10 @@ class TestWeightSvdPruning(unittest.TestCase):
         model = mnist_model.Net()
 
         # Create a layer database
-        orig_layer_db = LayerDatabase(model, input_shape=(1, 1, 28, 28))
+        input_shape = (1, 1, 28, 28)
+        dummy_input = create_rand_tensors_given_shapes(input_shape)
+        orig_layer_db = LayerDatabase(model, dummy_input)
+
         # Copy the db
         comp_layer_db = copy.deepcopy(orig_layer_db)
 
@@ -837,7 +879,9 @@ class TestWeightSvdPruning(unittest.TestCase):
         model = mnist_model.Net()
 
         # Create a layer database
-        layer_db = LayerDatabase(model, input_shape=(1, 1, 28, 28))
+        input_shape = (1, 1, 28, 28)
+        dummy_input = create_rand_tensors_given_shapes(input_shape)
+        layer_db = LayerDatabase(model, dummy_input)
 
         fc1 = layer_db.find_layer_by_name('fc1')
         conv2 = layer_db.find_layer_by_name('conv2')
