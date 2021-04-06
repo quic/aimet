@@ -473,6 +473,10 @@ class QuantizationSimModel:
         num_positive_steps = 2 ** (bitwidth - 1) - 1
         scale = abs_max_val / num_positive_steps
         offset = - (num_positive_steps + 1)
+
+        # recompute min/max values
+        min_val = scale * offset
+        max_val = scale * num_positive_steps
         return {'min': min_val,
                 'max': max_val,
                 'scale': scale,
