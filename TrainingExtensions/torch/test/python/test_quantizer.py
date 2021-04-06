@@ -1408,18 +1408,15 @@ class TestQuantizationSim(unittest.TestCase):
         encoding_dict = QuantizationSimModel.generate_symmetric_encoding_dict(
             torch.as_tensor(np.array([1.203197181224823, 0], dtype='float32')),  bitwidth=32)
         self.assertEqual(-2147483648, encoding_dict['offset'])
-        self.assertEqual(0, encoding_dict['min'])
-        self.assertAlmostEqual(encoding_dict['scale'], 5.6028e-10, places=14)
-
-        encoding_dict = QuantizationSimModel.generate_symmetric_encoding_dict(
-            torch.as_tensor(np.array([-1.203197181224823, 0], dtype='float32')), bitwidth=32)
-        self.assertEqual(-2147483648, encoding_dict['offset'])
-        self.assertEqual(0, encoding_dict['max'])
+        self.assertAlmostEqual(-1.20319724138, encoding_dict['min'], places=10)
+        self.assertAlmostEqual(1.20319724082, encoding_dict['max'], places=10)
         self.assertAlmostEqual(encoding_dict['scale'], 5.6028e-10, places=14)
 
         encoding_dict = QuantizationSimModel.generate_symmetric_encoding_dict(
             torch.as_tensor(np.array([0.7796169519533523, -0.9791506528745285], dtype='float32')), bitwidth=32)
         self.assertEqual(-2147483648, encoding_dict['offset'])
+        self.assertAlmostEqual(-0.97915065334, encoding_dict['min'], places=10)
+        self.assertAlmostEqual(0.97915065288, encoding_dict['max'], places=10)
         self.assertAlmostEqual(encoding_dict['scale'], 4.5595e-10, places=14)
 
         encoding_dict = QuantizationSimModel.generate_symmetric_encoding_dict(
