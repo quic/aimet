@@ -47,6 +47,8 @@ import libpymo as pymo
 import aimet_common.defs
 from aimet_common.utils import AimetLogger
 from aimet_common import statistics_util as stats_u, cost_calculator as cc
+
+from aimet_torch.utils import create_rand_tensors_given_shapes, get_device
 from aimet_torch import pymo_utils
 from aimet_torch.svd.model_stats_calculator import ModelStats
 from aimet_torch.svd.svd_intf_defs_deprecated import CostMetric, RankSelectionScheme
@@ -118,7 +120,9 @@ class SvdImpl:
                 raise ValueError('CUDA use was expected but CUDA is not available!')
         # ------------------------------
         # Creating the layer attribute database
-        self._layer_database = database.LayerDatabase(model=self._model, input_shape=input_shape)
+        device = get_device(model)
+        dummy_input = create_rand_tensors_given_shapes(input_shape, device)
+        self._layer_database = database.LayerDatabase(model=self._model, dummy_input=dummy_input)
 
         # picking layers for compression based on the scheme
         ls.LayerSelectorDeprecated(layer_selection_scheme, cost_metric, self._layer_database,

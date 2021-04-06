@@ -54,8 +54,9 @@ from aimet_common import comp_ratio_select
 from aimet_common.bokeh_plots import BokehServerSession
 from aimet_common.bokeh_plots import DataTable
 from aimet_common.bokeh_plots import ProgressBar
-from aimet_common.utils import start_bokeh_server_session, kill_process_with_name_and_port_number
+from aimet_common.utils import start_bokeh_server_session
 
+from aimet_torch.utils import create_rand_tensors_given_shapes
 from aimet_torch.examples import mnist_torch_model
 from aimet_torch.layer_database import Layer, LayerDatabase
 from aimet_torch.svd.svd_pruner import SpatialSvdPruner
@@ -91,7 +92,10 @@ class TestTrainingExtensionsCompRatioSelect(unittest.TestCase):
 
         model = mnist_torch_model.Net().to('cpu')
 
-        layer_db = LayerDatabase(model, input_shape=(1, 1, 28, 28))
+        input_shape = (1, 1, 28, 28)
+        dummy_input = create_rand_tensors_given_shapes(input_shape)
+        layer_db = LayerDatabase(model, dummy_input)
+
         layer1 = layer_db.find_layer_by_name('conv1')
         layer_db.mark_picked_layers([layer1])
 
@@ -102,7 +106,9 @@ class TestTrainingExtensionsCompRatioSelect(unittest.TestCase):
                                                                   eval_func, 20, CostMetric.mac, 0.5, 10, True, None,
                                                                   None, False, bokeh_session=None)
         progress_bar = ProgressBar(1, "eval scores", "green", bokeh_session=bokeh_session)
-        data_table = DataTable(num_columns=3, num_rows=1, column_names=['0.1', '0.2', '0.3', '0.4', '0.5', '0.6', '0.7', '0.8', '0.9'], row_index_names= [layer1.name], bokeh_session=bokeh_session)
+        data_table = DataTable(num_columns=3, num_rows=1,
+                               column_names=['0.1', '0.2', '0.3', '0.4', '0.5', '0.6', '0.7', '0.8', '0.9'],
+                               row_index_names= [layer1.name], bokeh_session=bokeh_session)
         pruner.prune_model.return_value = layer_db
         eval_dict = greedy_algo._compute_layerwise_eval_score_per_comp_ratio_candidate(data_table, progress_bar, layer1)
 
@@ -119,7 +125,10 @@ class TestTrainingExtensionsCompRatioSelect(unittest.TestCase):
 
         model = mnist_torch_model.Net().to('cpu')
 
-        layer_db = LayerDatabase(model, input_shape=(1, 1, 28, 28))
+        input_shape = (1, 1, 28, 28)
+        dummy_input = create_rand_tensors_given_shapes(input_shape)
+        layer_db = LayerDatabase(model, dummy_input)
+
         layer1 = layer_db.find_layer_by_name('conv1')
         layer2 = layer_db.find_layer_by_name('conv2')
         layer_db.mark_picked_layers([layer1, layer2])
@@ -129,12 +138,12 @@ class TestTrainingExtensionsCompRatioSelect(unittest.TestCase):
                                                                   eval_func, 20, CostMetric.mac, 0.5, 10, True, None,
                                                                   None, False, bokeh_session=None)
 
-        dict = greedy_algo._compute_eval_scores_for_all_comp_ratio_candidates()
+        eval_dict = greedy_algo._compute_eval_scores_for_all_comp_ratio_candidates()
 
-        self.assertEqual(50, dict['conv1'][Decimal('0.5')])
-        self.assertEqual(60, dict['conv1'][Decimal('0.4')])
+        self.assertEqual(50, eval_dict['conv1'][Decimal('0.5')])
+        self.assertEqual(60, eval_dict['conv1'][Decimal('0.4')])
 
-        self.assertEqual(11, dict['conv2'][Decimal('0.9')])
+        self.assertEqual(11, eval_dict['conv2'][Decimal('0.9')])
 
     def test_eval_scores_with_spatial_svd_pruner(self):
 
@@ -146,7 +155,9 @@ class TestTrainingExtensionsCompRatioSelect(unittest.TestCase):
         model = mnist_torch_model.Net()
 
         # Create a layer database
-        layer_db = LayerDatabase(model, input_shape=(1, 1, 28, 28))
+        input_shape = (1, 1, 28, 28)
+        dummy_input = create_rand_tensors_given_shapes(input_shape)
+        layer_db = LayerDatabase(model, dummy_input)
 
         layer1 = layer_db.find_layer_by_name('conv1')
         layer2 = layer_db.find_layer_by_name('conv2')
@@ -156,14 +167,14 @@ class TestTrainingExtensionsCompRatioSelect(unittest.TestCase):
         greedy_algo = comp_ratio_select.GreedyCompRatioSelectAlgo(layer_db, pruner, SpatialSvdCostCalculator(),
                                                                   eval_func, 20, CostMetric.mac, 0.5, 10, True, None,
                                                                   None, True, bokeh_session=None)
-        dict = greedy_algo._compute_eval_scores_for_all_comp_ratio_candidates()
+        eval_dict = greedy_algo._compute_eval_scores_for_all_comp_ratio_candidates()
 
         print()
-        print(dict)
-        self.assertEqual(90, dict['conv1'][Decimal('0.1')])
+        print(eval_dict)
+        self.assertEqual(90, eval_dict['conv1'][Decimal('0.1')])
 
-        self.assertEqual(51, dict['conv2'][Decimal('0.5')])
-        self.assertEqual(21, dict['conv2'][Decimal('0.8')])
+        self.assertEqual(51, eval_dict['conv2'][Decimal('0.5')])
+        self.assertEqual(21, eval_dict['conv2'][Decimal('0.8')])
 
     def test_find_min_max_eval_scores(self):
 
@@ -222,7 +233,9 @@ class TestTrainingExtensionsCompRatioSelect(unittest.TestCase):
                                  11, 21, 31, 35, 40, 45, 50, 55, 60]
 
         model = mnist_torch_model.Net()
-        layer_db = LayerDatabase(model, input_shape=(1, 1, 28, 28))
+        input_shape = (1, 1, 28, 28)
+        dummy_input = create_rand_tensors_given_shapes(input_shape)
+        layer_db = LayerDatabase(model, dummy_input)
 
         layer1 = layer_db.find_layer_by_name('conv1')
         layer2 = layer_db.find_layer_by_name('conv2')
@@ -290,7 +303,9 @@ class TestTrainingExtensionsCompRatioSelect(unittest.TestCase):
         rounding_algo.round.side_effect = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9,
                                              0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]
         model = mnist_torch_model.Net()
-        layer_db = LayerDatabase(model, input_shape=(1, 1, 28, 28))
+        input_shape = (1, 1, 28, 28)
+        dummy_input = create_rand_tensors_given_shapes(input_shape)
+        layer_db = LayerDatabase(model, dummy_input)
 
         selected_layers = [layer for layer in layer_db if isinstance(layer.module, nn.Conv2d)]
         layer_db.mark_picked_layers(selected_layers)
@@ -316,7 +331,6 @@ class TestTrainingExtensionsCompRatioSelect(unittest.TestCase):
         for pair in layer_comp_ratio_list:
             print(pair)
 
-
     def test_comp_ratio_select_tar(self):
 
         compute_model_cost = unittest.mock.MagicMock()
@@ -328,16 +342,16 @@ class TestTrainingExtensionsCompRatioSelect(unittest.TestCase):
                                  0.1,0.15,0.2,0.25,0.3,0.35,0.4,0.45,0.5,0.55,0.6,0.65,0.7,0.75,0.8,0.85,0.9,0.95,0.97,1.0,
                                  0.1,0.15,0.2,0.25,0.3,0.35,0.4,0.45,0.5,0.55,0.6,0.65,0.7,0.75,0.8,0.85,0.9,0.95,0.97,1.0]
 
-
         compute_model_cost.return_value = (500,500)
 
         compute_network_cost = unittest.mock.MagicMock()
         compute_network_cost.return_value = (500,500)
 
-
         model = mnist_torch_model.Net().to('cpu')
+        input_shape = (1, 1, 28, 28)
+        dummy_input = create_rand_tensors_given_shapes(input_shape)
+        layer_db = LayerDatabase(model, dummy_input)
 
-        layer_db = LayerDatabase(model, input_shape=(1, 1, 28, 28))
         layer1 = layer_db.find_layer_by_name('conv2')
         layer_db.mark_picked_layers([layer1])
         layer2 = layer_db.find_layer_by_name('fc2')
@@ -346,10 +360,11 @@ class TestTrainingExtensionsCompRatioSelect(unittest.TestCase):
         layer_db.mark_picked_layers([layer3])
 
         # Instantiate child
-        tar_algo = comp_ratio_select.TarRankSelectAlgo(layer_db=layer_db, pruner=pruner, cost_calculator=WeightSvdCostCalculator(),
-                                                        eval_func=eval_func, eval_iterations=20,
-                                                        cost_metric=CostMetric.mac, num_rank_indices=20,
-                                                        use_cuda=False, pymo_utils_lib=pymo_utils)
+        tar_algo = comp_ratio_select.TarRankSelectAlgo(layer_db=layer_db, pruner=pruner,
+                                                       cost_calculator=WeightSvdCostCalculator(),
+                                                       eval_func=eval_func, eval_iterations=20,
+                                                       cost_metric=CostMetric.mac, num_rank_indices=20,
+                                                       use_cuda=False, pymo_utils_lib=pymo_utils)
 
         tar_algo._svd_lib_ref = create_autospec(pymo.Svd, instance=True)
 
@@ -366,6 +381,3 @@ class TestTrainingExtensionsCompRatioSelect(unittest.TestCase):
 
             self.assertEqual(layer_comp_ratio_list[2].eval_score, 0.97)
             self.assertEqual(layer_comp_ratio_list[2].comp_ratio, 1.0)
-
-
-

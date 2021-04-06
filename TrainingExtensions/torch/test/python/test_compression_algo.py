@@ -48,6 +48,7 @@ from aimet_common.defs import CostMetric
 from aimet_common.cost_calculator import SpatialSvdCostCalculator
 from aimet_common.compression_algo import CompressionAlgo
 
+from aimet_torch.utils import create_rand_tensors_given_shapes
 from aimet_torch.examples import mnist_torch_model
 from aimet_torch.layer_database import LayerDatabase
 from aimet_torch.svd.svd_pruner import SpatialSvdPruner
@@ -95,7 +96,10 @@ class TestTrainingExtensionsCompressionAlgo(unittest.TestCase):
                                  90, 80, 70, 60, 50, 40, 30, 20, 10,
                                  50]
 
-        layer_db = LayerDatabase(model, input_shape=(1, 1, 28, 28))
+        input_shape = (1, 1, 28, 28)
+        dummy_input = create_rand_tensors_given_shapes(input_shape)
+        layer_db = LayerDatabase(model, dummy_input)
+
         pruner = SpatialSvdPruner()
         comp_ratio_select_algo = GreedyCompRatioSelectAlgo(layer_db, pruner, SpatialSvdCostCalculator(),
                                                            mock_eval, 20, CostMetric.mac, Decimal(0.5),
@@ -138,7 +142,10 @@ class TestTrainingExtensionsCompressionAlgo(unittest.TestCase):
                                  90, 80, 70, 60, 50, 40, 30, 20, 10,
                                  50]
 
-        layer_db = LayerDatabase(model, input_shape=[(1, 1, 28, 28), (1, 1, 28, 28)])
+        input_shape=[(1, 1, 28, 28), (1, 1, 28, 28)]
+        dummy_input = create_rand_tensors_given_shapes(input_shape)
+        layer_db = LayerDatabase(model, dummy_input)
+
         pruner = SpatialSvdPruner()
         comp_ratio_select_algo = GreedyCompRatioSelectAlgo(layer_db, pruner, SpatialSvdCostCalculator(),
                                                            mock_eval, 20, CostMetric.mac, Decimal(0.5),
