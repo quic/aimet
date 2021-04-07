@@ -1,4 +1,4 @@
-# /usr/bin/env python3.5
+# /usr/bin/env python3.6
 # -*- mode: python -*-
 # =============================================================================
 #  @@-COPYRIGHT-START-@@
@@ -46,10 +46,11 @@ import torch
 from torch.utils.data import DataLoader, Dataset
 from torchvision import datasets, transforms
 
-import libpymo
+from aimet_common.defs import QuantScheme
 from aimet_common.utils import AimetLogger
 from aimet_common.quantsim import calculate_delta_offset
-from aimet_common.defs import QuantScheme
+import libpymo
+
 
 logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Utils)
 
@@ -153,6 +154,8 @@ class CachedDataset(Dataset):
     Cache number of batches from the data loader at given path location and
     provide interface to fetch single batch of model inputs.
     """
+
+    # pylint: disable=super-init-not-called
     def __init__(self, data_loader: DataLoader, num_batches: int, path: str):
         """
         :param data_loader: Data loader
