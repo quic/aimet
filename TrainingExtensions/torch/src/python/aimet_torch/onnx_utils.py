@@ -157,6 +157,8 @@ map_torch_types_to_onnx = {
     nn.Sigmoid: ['Sigmoid'],
     nn.Upsample: ['Upsample'],
     nn.PReLU: ['PRelu'],
+    nn.LeakyReLU: ['LeakyRelu'],
+    nn.Flatten: ['Flatten'],
     elementwise_ops.Add: ['Add'],
     elementwise_ops.Subtract: ['Sub'],
     elementwise_ops.Multiply: ['Mul'],
