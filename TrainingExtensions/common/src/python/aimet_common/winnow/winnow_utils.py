@@ -197,7 +197,7 @@ def get_conv_ops_for_api(model_api: ModelApi) -> Set:
     :param model_api: Enum for whether the api is pytorch or tensorflow
     """
     if model_api == ModelApi.pytorch:
-        return {'Conv', 'Conv2d', 'ConvTranspose'}
+        return {'Conv', 'ConvTranspose'}
     return {'Conv2D', 'DepthwiseConv2dNative'}
 
 
@@ -208,7 +208,7 @@ def get_linear_ops_for_api(model_api: ModelApi) -> Set:
     :param model_api: Enum for whether the api is pytorch or tensorflow
     """
     if model_api == ModelApi.pytorch:
-        return {'Gemm'}    # 'addmm' and 'matmul' used in new connected graph
+        return {'Gemm'}
     return {'Dense'}
 
 

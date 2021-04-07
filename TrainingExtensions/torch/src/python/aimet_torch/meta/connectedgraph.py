@@ -639,7 +639,7 @@ class ConnectedGraph(AimetCommonConnectedGraph):
             module = op.get_module()
             if module is not None:
                 name = self._module_to_name.get(module, None)
-                if op.type in ['Conv', 'BatchNormalization', 'Gemm']:
+                if op.type in ['Conv', 'ConvTranspose', 'BatchNormalization', 'Gemm']:
                     if module.weight is not None:
                         product_name = name + '.weight'
                         self._create_and_add_param_product_if_not_exists(op, product_name, list(module.weight.shape))
@@ -650,10 +650,12 @@ class ConnectedGraph(AimetCommonConnectedGraph):
                     # If batch_norm, fill in rest of bn params
                     if module.running_mean is not None:
                         product_name = name + '.running_mean'
-                        self._create_and_add_param_product_if_not_exists(op, product_name, list(module.running_mean.shape))
+                        self._create_and_add_param_product_if_not_exists(op, product_name,
+                                                                         list(module.running_mean.shape))
                     if module.running_var is not None:
                         product_name = name + '.running_var'
-                        self._create_and_add_param_product_if_not_exists(op, product_name, list(module.running_var.shape))
+                        self._create_and_add_param_product_if_not_exists(op, product_name,
+                                                                         list(module.running_var.shape))
 
     def _create_and_add_param_product_if_not_exists(self, op: Op, product_name: str, shape: List[int]):
         """
