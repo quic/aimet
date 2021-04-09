@@ -6,8 +6,8 @@
       "total_tests" : "0"
     },
     "skipped_thresholds" : {
-      "new_tests" : "",
-      "total_tests" : ""
+      "new_tests" : "50",
+      "total_tests" : "50"
     }
   },
 
