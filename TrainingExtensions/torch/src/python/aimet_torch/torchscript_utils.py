@@ -232,6 +232,6 @@ def get_node_to_io_tensor_names_map(model: torch.nn.Module,
         for param_name, _ in node.module.named_parameters():
             valid_param_set.add(module_name + '.' + param_name)
 
-    assert index == len(modules)
+    #assert index == len(modules)
 
     return node_to_io_tensor_name_map, valid_param_set

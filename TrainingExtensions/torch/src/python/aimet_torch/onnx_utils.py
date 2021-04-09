@@ -284,6 +284,11 @@ class OnnxSaver:
         :return: List of input nodes
         """
         node_output_tensor_pairs = [(node, output) for output, node in map_output_tensor_to_node.items()]
+
+        # Filter out dead outputs
+        node_output_tensor_pairs = [(node, output) for output, node in map_output_tensor_to_node.items()
+                                    if output.isnumeric()]
+
         node_output_tensor_pairs.sort(key=lambda x: int(x[1]))
         ordered_nodes = [node for node, _ in node_output_tensor_pairs]
 
@@ -354,7 +359,7 @@ class OnnxSaver:
         cls._add_markers(model)
 
         temp_file = os.path.join(working_dir, 'temp_onnx_model_with_markers.onnx')
-        torch.onnx.export(model, dummy_input, temp_file)
+        torch.onnx.export(model, dummy_input, temp_file, training=torch.onnx.TrainingMode.TRAINING)
 
         # Parse the ONNX model and create mapping from input and output tensors to corresponding nodes
         map_output_tensor_to_node_marker_model, _ = cls.create_map_of_tensor_to_node(onnx.load(temp_file))

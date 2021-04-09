@@ -69,7 +69,8 @@ class QuantizerCpuGpu(unittest.TestCase):
         start_time = time.time()
 
         # create model on CPU
-        model_cpu = mnist_model.Net().to('cpu')
+        model_cpu = mnist_model.Net().to('cpu').eval()
+
         model_gpu = copy.deepcopy(model_cpu).to('cuda')
         cpu_sim_model = QuantizationSimModel(model_cpu, quant_scheme='tf', in_place=True,
                                              dummy_input=dummy_input)
