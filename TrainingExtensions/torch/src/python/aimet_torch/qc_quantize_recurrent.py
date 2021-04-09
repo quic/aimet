@@ -571,10 +571,10 @@ class QcQuantizeRecurrent(torch.nn.Module):
     # mapping of Recurrent Type to functional op
     # pylint: disable=protected-access
     # pylint: disable=no-member
-    rnn_impl_map = {'RNN_TANH': torch.nn._VF.rnn_tanh_cell,
-                    'RNN_RELU': torch.nn._VF.rnn_relu_cell,
-                    'LSTM': torch.nn._VF.lstm_cell,
-                    'GRU': torch.nn._VF.gru_cell
+    rnn_impl_map = {'RNN_TANH': torch._VF.rnn_tanh_cell,
+                    'RNN_RELU': torch._VF.rnn_relu_cell,
+                    'LSTM': torch._VF.lstm_cell,
+                    'GRU': torch._VF.gru_cell
                     }
 
     @staticmethod

@@ -662,8 +662,8 @@ class TestQuantizationSim(unittest.TestCase):
             encoding_data = json.load(json_file)
 
         activation_keys = list(encoding_data["activation_encodings"].keys())
-        self.assertEqual(activation_keys[0], "1067")
-        self.assertTrue(isinstance(encoding_data["activation_encodings"]["1067"], list))
+        self.assertEqual(activation_keys[0], "103")
+        self.assertTrue(isinstance(encoding_data["activation_encodings"]["103"], list))
 
         param_keys = list(encoding_data["param_encodings"].keys())
         self.assertTrue(param_keys[2] == "conv1.weight")
@@ -673,8 +673,8 @@ class TestQuantizationSim(unittest.TestCase):
              encoding_data = yaml.load(yaml_file, Loader=yaml.FullLoader)
  
         activation_keys = list(encoding_data["activation_encodings"].keys())
-        self.assertEqual(activation_keys[0], "1067")
-        self.assertTrue(isinstance(encoding_data["activation_encodings"]["1067"], list))
+        self.assertEqual(activation_keys[0], "103")
+        self.assertTrue(isinstance(encoding_data["activation_encodings"]["103"], list))
  
         param_keys = list(encoding_data["param_encodings"].keys())
         self.assertTrue(param_keys[2] == "conv1.weight")
