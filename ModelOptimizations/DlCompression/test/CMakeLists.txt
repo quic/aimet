@@ -50,14 +50,17 @@ target_compile_options(MoDlCompressionTest
       )
 
 target_link_libraries(MoDlCompressionTest
-      ${OPENCV_LIBRARY}
-      Threads::Threads
+      ${OpenCV_LIBS}
       MoDlCompression
-      stdc++
       ${LAPACKE_LIBRARY}
-      z
-      dl
-      gtest gtest_main
+#      Threads::Threads
+#      stdc++
+      ${CUDA_LIBRARIES}
+      ${CUDA_CUBLAS_LIBRARIES}
+      $ENV{CONDA_PREFIX}/lib/libcublas.so
+#      dl
+      z m atomic
+      gtest_main
       )
 
 

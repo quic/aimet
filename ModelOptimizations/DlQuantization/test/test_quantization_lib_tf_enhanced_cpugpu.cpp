@@ -45,7 +45,7 @@
 #include <random>
 #include <vector>
 
-#include "gtest/gtest.h"
+//#include <gtest/gtest.h>
 
 #include "DlQuantization/QuantizerFactory.hpp"
 #include "test_quantization_lib.hpp"

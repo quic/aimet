@@ -50,7 +50,7 @@ if (ENABLE_CUDA)
              MoDlQuantizationCuda
              MoDlCompression
 
-            CUDA::cublas
+	     $ENV{CONDA_PREFIX}/lib/libcublas.so
              ${LAPACKE_LIBRARY}
              ${OPENCV_LIBRARY}
              z

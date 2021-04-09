@@ -35,7 +35,6 @@
 #==============================================================================
 cmake_minimum_required(VERSION 3.5)
 
-
 include_directories(BEFORE
         ${CMAKE_CURRENT_SOURCE_DIR}/../src
         ${gtest_SOURCE_DIR}/include
@@ -52,13 +51,16 @@ target_compile_options(MoDlEqualizationTest
         )
 
 target_link_libraries(MoDlEqualizationTest
+        ${OpenCV_LIBS}
         MoDlEqualization
-        stdc++
+#        stdc++
         PYBIND11
         ${LAPACKE_LIBRARY}
-        ${OPENCV_LIBRARY}
         z
-        dl
+        ${CUDA_LIBRARIES}
+        ${CUDA_CUBLAS_LIBRARIES}
+        $ENV{CONDA_PREFIX}/lib/libcublas.so
+#        dl
         gtest gtest_main
         )
 

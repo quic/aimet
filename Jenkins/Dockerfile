@@ -36,7 +36,7 @@
 
 # Docker image file to build and test AIMET in a GPU environment
 
-FROM tensorflow/tensorflow:1.15.0-gpu-py3-jupyter
+FROM tensorflow/tensorflow:2.2.0-gpu-jupyter
 
 ENTRYPOINT ["/bin/bash"]
 

@@ -47,7 +47,7 @@ if (ENABLE_CUDA)
             PYBIND11
             MoDlQuantization
             MoDlQuantizationCuda
-            CUDA::cublas
+	    $ENV{CONDA_PREFIX}/lib/libcublas.so
             )
 
 else (ENABLE_CUDA)
