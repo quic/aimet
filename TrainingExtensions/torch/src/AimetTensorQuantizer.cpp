@@ -120,13 +120,15 @@ public:
         return output;
     }
 
-    std::tuple<DlQuantization::TfEncoding, bool> getEncoding(unsigned int bitwidth, bool useSymmetricEncodings)
+    std::tuple<DlQuantization::TfEncoding, bool> getEncoding(unsigned int bitwidth, bool useSymmetricEncodings,
+                                                             bool useStrictSymmetric, bool useUnsignedSymmetric)
     {
         DlQuantization::TfEncoding out_encoding;
 
         if (_isEncodingValid)
         {
-            out_encoding = _encodingAnalyzer->computeEncoding(bitwidth, useSymmetricEncodings, false, true);
+            out_encoding = _encodingAnalyzer->computeEncoding(bitwidth, useSymmetricEncodings, useStrictSymmetric,
+                                                              useUnsignedSymmetric);
         }
 
         return std::make_tuple(out_encoding, _isEncodingValid);
