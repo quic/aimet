@@ -187,7 +187,8 @@ class ModelWithTwoInputs(nn.Module):
 
         self.conv2 = nn.Conv2d(10, 20, kernel_size=5)
         self.maxpool2 = nn.MaxPool2d(2)
-        self.relu2 = nn.ReLU()
+        self.relu2 = nn.LeakyReLU()
+        self.flatten = nn.Flatten()
 
         self.fc1 = nn.Linear(320, 50)
         self.relu3 = nn.ReLU()
@@ -201,7 +202,7 @@ class ModelWithTwoInputs(nn.Module):
         x2 = self.relu1_b(self.maxpool1_b(self.conv1_b(x2)))
         x = x1 + x2
         x = self.relu2(self.maxpool2(self.conv2(x)))
-        x = x.view(-1, 320)
+        x = self.flatten(x)
         x = self.relu3(self.fc1(x))
         x = self.dropout(x)
         x = self.fc2(x)
@@ -711,7 +712,7 @@ class TestQuantizationSim(unittest.TestCase):
 
             activation_encodings = encodings['activation_encodings']
             param_encodings = encodings['param_encodings']
-            self.assertEqual(15, len(activation_encodings))
+            self.assertEqual(16, len(activation_encodings))
             self.assertIn('conv1_a.bias', param_encodings)
             self.assertEqual(param_encodings['conv1_a.bias'][0]['bitwidth'], 32)
             self.assertEqual(6, len(param_encodings['conv1_a.weight'][0]))
@@ -722,7 +723,7 @@ class TestQuantizationSim(unittest.TestCase):
 
             activation_encodings = encodings['activation_encodings']
             param_encodings = encodings['param_encodings']
-            self.assertEqual(15, len(activation_encodings))
+            self.assertEqual(16, len(activation_encodings))
             self.assertIn('conv1_a.bias', param_encodings)
             self.assertEqual(param_encodings['conv1_a.bias'][0]['bitwidth'], 32)
             self.assertEqual(6, len(param_encodings['conv1_a.weight'][0]))
