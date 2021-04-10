@@ -72,6 +72,8 @@ class TensorQuantizer:
         self.round_mode = round_mode
         self.quant_scheme = quant_scheme
         self.use_symmetric_encodings = use_symmetric_encodings
+        self.use_strict_symmetric = False
+        self.use_unsigned_symmetric = True
         self.bitwidth = bitwidth
         self.enabled = enabled_by_default
 
@@ -171,7 +173,9 @@ class PostTrainingTensorQuantizer(TensorQuantizer):
         Compute the quantization encoding for this tensor
         """
         if self.enabled and not self._is_encoding_frozen:
-            encoding, is_encoding_valid = self._cppOp.getEncoding(self.bitwidth, self.use_symmetric_encodings)
+            encoding, is_encoding_valid = self._cppOp.getEncoding(self.bitwidth, self.use_symmetric_encodings,
+                                                                  self.use_strict_symmetric,
+                                                                  self.use_unsigned_symmetric)
 
             if is_encoding_valid:
                 self.encoding = encoding
