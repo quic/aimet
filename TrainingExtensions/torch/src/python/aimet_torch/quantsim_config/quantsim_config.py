@@ -280,6 +280,10 @@ class QuantSimConfigurator(AimetCommonQuantSimConfigurator):
         """
         self._set_default_configs_for_ops(default_configs[ConfigDictKeys.OPS])
         self._set_default_configs_for_params(default_configs[ConfigDictKeys.PARAMS])
+        if ConfigDictKeys.STRICT_SYMMETRIC in default_configs:
+            self._set_strict_symmetric(default_configs[ConfigDictKeys.STRICT_SYMMETRIC])
+        if ConfigDictKeys.UNSIGNED_SYMMETRIC in default_configs:
+            self._set_unsigned_symmetric(default_configs[ConfigDictKeys.UNSIGNED_SYMMETRIC])
 
     def _set_default_configs_for_ops(self, default_op_configs: ConfigType):
         """
@@ -305,6 +309,32 @@ class QuantSimConfigurator(AimetCommonQuantSimConfigurator):
             if quantsim_wrapper.param_quantizers:
                 for param_quantizer in quantsim_wrapper.param_quantizers.values():
                     _set_config_for_param(param_quantizer, default_param_configs)
+
+    def _set_strict_symmetric(self, strict_symmetric: bool):
+        """
+        Set strict symmetric configuration for all quantizers in the model.
+        :param strict_symmetric: True or False setting for using strict symmetric mode
+        """
+        for quantsim_wrapper in self._module_to_quantsim_wrapper_dict.values():
+            for input_quantizer in quantsim_wrapper.input_quantizers:
+                input_quantizer.use_strict_symmetric = strict_symmetric
+            for output_quantizer in quantsim_wrapper.output_quantizers:
+                output_quantizer.use_strict_symmetric = strict_symmetric
+            for param_quantizer in quantsim_wrapper.param_quantizers.values():
+                param_quantizer.use_strict_symmetric = strict_symmetric
+
+    def _set_unsigned_symmetric(self, unsigned_symmetric: bool):
+        """
+        Set unsigned symmetric configuration for all quantizers in the model.
+        :param unsigned_symmetric: True or False setting for using unsigned symmetric mode
+        """
+        for quantsim_wrapper in self._module_to_quantsim_wrapper_dict.values():
+            for input_quantizer in quantsim_wrapper.input_quantizers:
+                input_quantizer.use_unsigned_symmetric = unsigned_symmetric
+            for output_quantizer in quantsim_wrapper.output_quantizers:
+                output_quantizer.use_unsigned_symmetric = unsigned_symmetric
+            for param_quantizer in quantsim_wrapper.param_quantizers.values():
+                param_quantizer.use_unsigned_symmetric = unsigned_symmetric
 
     def _set_param_configs(self, param_configs: ParamType):
         """

@@ -408,6 +408,44 @@ class TestQuantsimConfig:
         if os.path.exists('./data/quantsim_config.json'):
             os.remove('./data/quantsim_config.json')
 
+    def test_parse_config_file_symmetric_modes(self):
+        """ Test that model output quantization parameters are set correctly when using json config file """
+        model = SingleResidual()
+        model.eval()
+
+        quantsim_config = {
+            "defaults": {
+                "ops": {},
+                "params": {},
+                "strict_symmetric": "True",
+                "unsigned_symmetric": "False"
+            },
+            "params": {},
+            "op_type": {},
+            "supergroups": [],
+            "model_input": {},
+            "model_output": {
+            }
+        }
+        with open('./data/quantsim_config.json', 'w') as f:
+            json.dump(quantsim_config, f)
+        sim = QuantizationSimModel(model, quant_scheme=QuantScheme.post_training_tf_enhanced,
+                                   config_file='./data/quantsim_config.json',
+                                   dummy_input=torch.rand(1, 3, 32, 32))
+        for name, module in sim.model.named_modules():
+            if isinstance(module, QcQuantizeWrapper):
+                for q in module.input_quantizers:
+                    assert q.use_strict_symmetric
+                    assert not q.use_unsigned_symmetric
+                for q in module.output_quantizers:
+                    assert q.use_strict_symmetric
+                    assert not q.use_unsigned_symmetric
+                for q in module.param_quantizers.values():
+                    assert q.use_strict_symmetric
+                    assert not q.use_unsigned_symmetric
+        if os.path.exists('./data/quantsim_config.json'):
+            os.remove('./data/quantsim_config.json')
+
     def test_get_all_ops_in_neighborhood(self):
         """ Test that default quantization parameters are set correctly when using json config file """
         model = SingleResidual()

@@ -74,6 +74,14 @@ QUANTSIM_CONFIG_SCHEMA = {
                         }
                     },
                     "additionalProperties": False
+                },
+                "strict_symmetric": {
+                    "type": "string",
+                    "pattern": "^True$|^False$"
+                },
+                "unsigned_symmetric": {
+                    "type": "string",
+                    "pattern": "^True$|^False$"
                 }
             },
             "required": ["ops", "params"],
