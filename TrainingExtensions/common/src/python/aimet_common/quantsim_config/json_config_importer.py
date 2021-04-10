@@ -69,6 +69,8 @@ class ConfigDictKeys:
     IS_OUTPUT_QUANTIZED = "is_output_quantized"
     IS_QUANTIZED = "is_quantized"
     IS_SYMMETRIC = "is_symmetric"
+    STRICT_SYMMETRIC = "strict_symmetric"
+    UNSIGNED_SYMMETRIC = "unsigned_symmetric"
 
 
 class JsonConfigImporter:

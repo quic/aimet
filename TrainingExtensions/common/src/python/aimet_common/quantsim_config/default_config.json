@@ -4,7 +4,9 @@
 	},
 	"params": {
 		"is_quantized": "True"
-	}
+	},
+	"strict_symmetric": "False",
+	"unsigned_symmetric": "True"
 },
 "params": {
 	"bias": {
