@@ -47,6 +47,25 @@ from aimet_torch.meta.connectedgraph import ConnectedGraph
 
 logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Quant)
 
+# Map torch module types to normalized names to provide backward compatibility to
+# trace code based construction
+op_type_map = {
+    torch.nn.Conv2d: 'convolution',
+    torch.nn.ConvTranspose2d: 'convolution',
+    torch.nn.BatchNorm1d: 'batch_norm',
+    torch.nn.BatchNorm2d: 'batch_norm',
+    torch.nn.ReLU: 'relu',
+    torch.nn.ReLU6: 'hardtanh',
+    torch.nn.MaxPool2d: 'max_pool2d',
+    torch.nn.AdaptiveAvgPool2d: 'adaptive_avg_pool2d',
+    torch.nn.AvgPool2d: 'avg_pool2d',
+    torch.nn.Linear: 'addmm',
+    torch.nn.Dropout: 'dropout',
+    torch.nn.Dropout2d: 'feature_dropout',
+    torch.nn.LogSoftmax: 'log_softmax',
+    torch.nn.Sigmoid: 'sigmoid'
+}
+
 
 # pylint: disable=protected-access
 class IrNode:
@@ -137,7 +156,7 @@ def _parse_graph(graph: torch._C.Graph, model: torch.nn.Module) -> List[IrNode]:
         inputs = []
         for inp in ir_node.inputs:
             if "GetAttr" in inp.node().kind():
-                if ir_node.node_type in ConnectedGraph.op_type_map.values():
+                if ir_node.node_type in op_type_map.values():
                     module = node_name_to_module[inp.node().input().debugName()]
                     assert is_leaf_module(module)
                     if ir_node.module is None:
@@ -213,12 +232,12 @@ def get_node_to_io_tensor_names_map(model: torch.nn.Module,
 
     run_hook_for_layers_with_given_input(model, inputs, forward_hook)
     index = 0
-    module_types = [types for types in ConnectedGraph.op_type_map.values()]
+    module_types = [types for types in op_type_map.values()]
     for node in ir_nodes_list:
         if node.module is None:
             if node.node_type in module_types:
                 node.module = modules[index]
-                assert ConnectedGraph.op_type_map[type(node.module)] == node.node_type
+                assert op_type_map[type(node.module)] == node.node_type
             else:
                 continue
         module_name = module_to_name[node.module][prefix_len:]

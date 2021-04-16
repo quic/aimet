@@ -285,8 +285,8 @@ class MaskPropagator:
             check_op = False
             if self._model_api == ModelApi.pytorch and op.type in ('Dropout', 'Relu', 'ReLU', 'MaxPool', 'MaxPool2d',
                                                                    'AveragePool', 'Neg', 'BatchNorm2d',
-                                                                   'Conv', 'Conv2d', 'Conv2D', 'convolution',
-                                                                   'batch_norm'):
+                                                                   'Conv', 'Conv2d', 'Conv2D', 'ConvTranspose',
+                                                                   'BatchNormalization'):
                 check_op = True
             elif self._model_api == ModelApi.tensorflow:
                 # marking any changed op as a modified op for tensorflow
@@ -340,7 +340,7 @@ class MaskPropagator:
             logger.debug("Op: %s, below: %s", op.dotted_name, input_op.dotted_name)
             return True
         # TODO: remove 'Conv2d' when old CG is gone
-        if (input_op.type in ['Conv2d', 'convolution'] and self._model_api == ModelApi.pytorch) or \
+        if (input_op.type in ['Conv', 'ConvTranspose'] and self._model_api == ModelApi.pytorch) or \
            (input_op.type in 'Conv2D' and self._model_api == ModelApi.tensorflow):
             logger.debug("Op: %s, below: %s", op.dotted_name, input_op.dotted_name)
             return False

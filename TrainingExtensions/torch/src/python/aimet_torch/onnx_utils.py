@@ -142,6 +142,9 @@ _logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Utils)
 # This is a dict that maps a PyTorch module type to the corresponding ONNX op type (as a string)
 map_torch_types_to_onnx = {
     nn.Conv2d: ['Conv'],
+    nn.Dropout: ['Dropout'],
+    nn.Dropout2d: ['Dropout'],
+    nn.BatchNorm1d: ['BatchNormalization'],
     nn.BatchNorm2d: ['BatchNormalization'],
     nn.ReLU: ['Relu'],
     nn.ReLU6: ['Clip'],
@@ -171,21 +174,13 @@ map_torch_types_to_onnx = {
 torch_types_to_ignore = [nn.Dropout, nn.Dropout2d, nn.Identity, PassThroughOp]
 torch_recurrent_modules = (nn.RNN, nn.LSTM, nn.GRU)
 
-# List of associations between onnx types and pytorch connected graph types.
-# Multiple onnx types may be associated with a pytorch connected graph type, and vice versa.
-onnx_pytorch_conn_graph_type_pairs = [
-    [["Conv"], ["convolution"]],
-    [["BatchNormalization"], ["batch_norm"]],
-    [["MaxPool"], ["max_pool2d"]],
-    [["AveragePool"], ["avg_pool2d"]],
-    [["Relu"], ["relu"]],
-    [["Gemm"], ["addmm", "matmul"]],
-    [["Add"], ["add"]],
-    [["Concat"], ["cat"]],
-    [["Mul"], ["mul"]],
-    [["Div"], ["div"]],
-    [["Dropout"], ["dropout"]]
-]
+# Maps pytorch functional op string names to corresponding onnx types.
+pytorch_functional_name_to_onnx_dict = {
+    'add': 'Add',
+    'cat': 'Concat',
+    'mul': 'Mul',
+    'div': 'Div'
+}
 
 
 def register_quantized_ops(domain, version):

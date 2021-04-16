@@ -367,22 +367,28 @@ def find_all_conv_bn_with_activation(model: torch.nn.Module, input_shape: Tuple)
     :return: dictionary of conv/linear layers with associated bn op / activation info
     """
 
-    activation_types = ['relu', 'hardtanh']
+    activation_types = ['Relu', 'Clip']
 
     # initialize all patterns to be matched and associated call back functions
     patterns_with_callbacks = []
     layer_select_handler = ConvBnPatternHandler()
-    patterns_with_callbacks.append(PatternType(pattern=['batch_norm', 'convolution'],
+    patterns_with_callbacks.append(PatternType(pattern=['BatchNormalization', 'Conv'],
                                                action=layer_select_handler))
 
-    patterns_with_callbacks.append(PatternType(pattern=['convolution'],
+    patterns_with_callbacks.append(PatternType(pattern=['BatchNormalization', 'ConvTranspose'],
                                                action=layer_select_handler))
 
-    patterns_with_callbacks.append(PatternType(pattern=['addmm'],
+    patterns_with_callbacks.append(PatternType(pattern=['Conv'],
+                                               action=layer_select_handler))
+
+    patterns_with_callbacks.append(PatternType(pattern=['Gemm'],
                                                action=layer_select_handler))
 
     for activation in activation_types:
-        patterns_with_callbacks.append(PatternType(pattern=['batch_norm', activation, 'convolution'],
+        patterns_with_callbacks.append(PatternType(pattern=['BatchNormalization', activation, 'Conv'],
+                                                   action=layer_select_handler))
+
+        patterns_with_callbacks.append(PatternType(pattern=['BatchNormalization', activation, 'ConvTranspose'],
                                                    action=layer_select_handler))
 
     device = utils.get_device(model)
