@@ -1111,6 +1111,9 @@ def _create_functional_ir_node(node: torch._C.Node, inputs_map: Dict[torch._C.Te
     """
     outputs = [output for output in node.outputs()]
     op_type = ConnectedGraph._parse_op_type(node)
+    # If there is a known mapping to an onnx type for this functional, use the onnx type as the op type
+    if op_type in onnx_utils.pytorch_functional_name_to_onnx_dict.keys():
+        op_type = onnx_utils.pytorch_functional_name_to_onnx_dict[op_type]
     ir_node = IrNode(node_type=op_type,
                      inputs=[inputs_map.get(inp, inp) for inp in node.inputs()],
                      outputs=outputs,

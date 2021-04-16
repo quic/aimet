@@ -49,11 +49,11 @@ from aimet_common.quantsim_config.json_config_importer import ConfigDictKeys, Co
     ParamType, DefaultsType, OpTypeType, ConfigDictType
 from aimet_common.quantsim_config.quantsim_config import QuantSimConfigurator as AimetCommonQuantSimConfigurator
 from aimet_common.quantsim_config.quantsim_config import SupergroupConfigCallback as AimetCommonSupergroupConfigCallback
-from aimet_common.quantsim_config.quantsim_config import get_setting_type, OnnxConnectedGraphTypeMapper
+from aimet_common.quantsim_config.quantsim_config import get_setting_type
 from aimet_torch.qc_quantize_op import QcQuantizeWrapper
 from aimet_torch.tensor_quantizer import TensorQuantizer
 from aimet_torch.meta.connectedgraph import ConnectedGraph
-from aimet_torch.onnx_utils import map_torch_types_to_onnx, onnx_pytorch_conn_graph_type_pairs
+from aimet_torch.onnx_utils import map_torch_types_to_onnx, pytorch_functional_name_to_onnx_dict
 
 logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Quant)
 
@@ -62,7 +62,7 @@ MAP_PYTORCH_PARAM_NAME_TO_QUANTSIM_NAME = {
     "weight": "weight"
 }
 
-ELEMENTWISE_OP_TYPES = ['add', 'mul', 'cat', 'div']
+ELEMENTWISE_OP_TYPES = ['Add', 'Mul', 'Concat', 'Div']
 
 TensorQuantizersTupleType = Tuple[List[TensorQuantizer], List[TensorQuantizer], List[TensorQuantizer],
                                   List[TensorQuantizer]]
@@ -109,7 +109,6 @@ class QuantSimConfigurator(AimetCommonQuantSimConfigurator):
 
         _report_unsupported_ops(self._quantsim_configs)
         self._conn_graph = connected_graph
-        self._onnx_conn_graph_name_mapper = OnnxConnectedGraphTypeMapper(onnx_pytorch_conn_graph_type_pairs)
         self._module_to_quantsim_wrapper_dict = _create_module_to_quantsim_wrapper_dict(model)
         self._named_modules_to_tensor_quantizers_dict = self._create_named_modules_to_tensor_quantizers_dict()
         self._elementwise_op_to_tensor_quantizers_dict = self._create_elementwise_op_to_tensor_quantizers_dict()
@@ -367,13 +366,9 @@ class QuantSimConfigurator(AimetCommonQuantSimConfigurator):
                                                 module)
         # Set op type configs for elementwise ops
         for op, input_output_tensor_quantizers in self._elementwise_op_to_tensor_quantizers_dict.items():
-            onnx_types = self._onnx_conn_graph_name_mapper.get_onnx_type_from_conn_graph_type(op.type)
-            if not onnx_types:
-                continue
-            for onnx_type in onnx_types:
-                if onnx_type in op_configs:
-                    op_config = op_configs[onnx_type]
-                    self._set_config_for_module(input_output_tensor_quantizers, op_config, modified_tensor_quantizers)
+            if op.type in op_configs:
+                op_config = op_configs[op.type]
+                self._set_config_for_module(input_output_tensor_quantizers, op_config, modified_tensor_quantizers)
 
     def _set_config_for_module(self, input_output_tensor_quantizers: TensorQuantizersTupleType, op_config: OpType,
                                modified_tensor_quantizers: Dict[TensorQuantizer, Set], module: torch.nn.Module = None):
@@ -586,7 +581,6 @@ def _get_tensor_quantizers_to_modify(input_output_tensor_quantizers: TensorQuant
 
 def _report_unsupported_ops(quantsim_config: ConfigDictType):
     """ Log unsupported op types found in the config """
-    type_mapper = OnnxConnectedGraphTypeMapper(onnx_pytorch_conn_graph_type_pairs)
 
     # Look for unsupported ops in op_type section
     op_type_configs = quantsim_config[ConfigDictKeys.OP_TYPE]
@@ -597,7 +591,7 @@ def _report_unsupported_ops(quantsim_config: ConfigDictType):
                 found_op = True
                 break
         # Need the below for elementwise ops which will use the type_mapper instead of map_torch_types_to_onnx
-        found_op = found_op or (type_mapper.get_conn_graph_type_from_onnx_type(op) is not None)
+        found_op = found_op or (op in pytorch_functional_name_to_onnx_dict.values())
         if not found_op:
             logger.info('Unsupported op type %s', op)
 

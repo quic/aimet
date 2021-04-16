@@ -124,7 +124,7 @@ class TestConnectedGraph(unittest.TestCase):
         inp_shape_3 = (1, 3, 8, 8)
         inp_tensor_list = create_rand_tensors_given_shapes([inp_shape_1, inp_shape_2, inp_shape_3])
         conn_graph = ConnectedGraph(model, inp_tensor_list)
-        concat_op = conn_graph.get_all_ops()['cat_3']
+        concat_op = conn_graph.get_all_ops()['Concat_3']
         self.assertEqual(3, len(concat_op.inputs))
         self.assertEqual(14, concat_op.output_shape[1])
 
@@ -196,7 +196,7 @@ class TestConnectedGraph(unittest.TestCase):
         self.assertEqual(6, len([op for op in conn_graph.get_all_ops().keys() if 'Conv' in op]))
         self.assertEqual(0, len([op for op in conn_graph.get_all_ops().keys() if 'Tuple' in op]))
         self.assertEqual(0, len([product for product in conn_graph.get_all_products().keys() if 'Tuple' in product]))
-        self.assertEqual('cat', conn_graph.ordered_ops[-1].type)
+        self.assertEqual('Concat', conn_graph.ordered_ops[-1].type)
 
     def test_multi_output_with_unuse_model(self):
         """ Test multi-output model with Tuple Tensor as intermediate output and with one of tuple tensor not used """
@@ -223,7 +223,7 @@ class TestConnectedGraph(unittest.TestCase):
         self.assertEqual(6, len(conn_graph.ordered_ops))
         self.assertEqual(5, len([op for op in conn_graph.get_all_ops().keys() if 'Conv' in op]))
         self.assertEqual(0, len([op for op in conn_graph.get_all_ops().keys() if 'Tuple' in op]))
-        self.assertEqual('cat', conn_graph.ordered_ops[-1].type)
+        self.assertEqual('Concat', conn_graph.ordered_ops[-1].type)
 
         product_names = conn_graph.get_all_products().keys()
         self.assertEqual(0, len([product for product in product_names if 'Tuple' in product]))
@@ -234,8 +234,8 @@ class TestConnectedGraph(unittest.TestCase):
             'Conv_2_to_Conv_4',
 
             # conv1,conv2 to cat
-            'Conv_3_to_cat_5',
-            'Conv_4_to_cat_5']
+            'Conv_3_to_Concat_5',
+            'Conv_4_to_Concat_5']
 
         products = conn_graph.get_all_products()
         for product_name in product_names:
@@ -269,7 +269,7 @@ class TestConnectedGraph(unittest.TestCase):
         self.assertEqual(10, len(conn_graph.ordered_ops))
         self.assertEqual(9, len([op for op in conn_graph.get_all_ops().keys() if 'Conv' in op]))
         self.assertEqual(0, len([op for op in conn_graph.get_all_ops().keys() if 'Tuple' in op]))
-        self.assertEqual('cat', conn_graph.ordered_ops[-1].type)
+        self.assertEqual('Concat', conn_graph.ordered_ops[-1].type)
 
         product_names = conn_graph.get_all_products().keys()
         self.assertEqual(0, len([product for product in product_names if 'Tuple' in product]))
@@ -286,9 +286,9 @@ class TestConnectedGraph(unittest.TestCase):
             'Conv_5_to_Conv_8',
 
             # layer #3 to cat
-            'Conv_6_to_cat_9',
-            'Conv_7_to_cat_9',
-            'Conv_8_to_cat_9']
+            'Conv_6_to_Concat_9',
+            'Conv_7_to_Concat_9',
+            'Conv_8_to_Concat_9']
 
         products = conn_graph.get_all_products()
         for product_name in product_names:
@@ -322,7 +322,7 @@ class TestConnectedGraph(unittest.TestCase):
         self.assertEqual(10, len(conn_graph.ordered_ops))
         self.assertEqual(9, len([op for op in conn_graph.get_all_ops().keys() if 'Conv' in op]))
         self.assertEqual(0, len([op for op in conn_graph.get_all_ops().keys() if 'Tuple' in op]))
-        self.assertEqual('cat', conn_graph.ordered_ops[-1].type)
+        self.assertEqual('Concat', conn_graph.ordered_ops[-1].type)
 
         product_names = conn_graph.get_all_products().keys()
         self.assertEqual(0, len([product for product in product_names if 'Tuple' in product]))
@@ -341,9 +341,9 @@ class TestConnectedGraph(unittest.TestCase):
             'Conv_5_to_Conv_7',
 
             # layer #3, layer#1.conv1 to cat
-            'Conv_6_to_cat_9',
-            'Conv_7_to_cat_9',
-            'Conv_8_to_cat_9']
+            'Conv_6_to_Concat_9',
+            'Conv_7_to_Concat_9',
+            'Conv_8_to_Concat_9']
 
         products = conn_graph.get_all_products()
         for product_name in product_names:
@@ -354,7 +354,7 @@ class TestConnectedGraph(unittest.TestCase):
         self.assertEqual(0, len(expected_products))
         split_product = conn_graph.get_all_products()['Split_0__to__multiple_ops']
         self.assertTrue(conn_graph.get_all_ops()['Conv_5'] in split_product.consumers)
-        self.assertTrue(conn_graph.get_all_ops()['cat_9'] in split_product.consumers)
+        self.assertTrue(conn_graph.get_all_ops()['Concat_9'] in split_product.consumers)
 
     def test_submodules_with_sequence_and_module_list(self):
         """ Test building ConnectedGraph on a model with sequence and module list """

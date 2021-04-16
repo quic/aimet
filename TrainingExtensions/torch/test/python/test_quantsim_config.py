@@ -454,9 +454,9 @@ class TestQuantsimConfig:
 
         random_inputs = utils.create_rand_tensors_given_shapes(input_shapes)
         conn_graph = ConnectedGraph(model, random_inputs)
-        starting_op = conn_graph.get_all_ops()['convolution_7']
-        add_10_op = conn_graph.get_all_ops()['add_10']
-        adaptive_avg_pool2d_9_op = conn_graph.get_all_ops()['adaptive_avg_pool2d_9']
+        starting_op = conn_graph.get_all_ops()['Conv_7']
+        add_10_op = conn_graph.get_all_ops()['Add_10']
+        adaptive_avg_pool2d_9_op = conn_graph.get_all_ops()['GlobalAveragePool_9']
         neighborhood = _get_all_ops_in_neighborhood(starting_op, 'output')
         assert len(neighborhood) == 3
         assert starting_op in neighborhood

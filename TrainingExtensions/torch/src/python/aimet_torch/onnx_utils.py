@@ -174,13 +174,13 @@ map_torch_types_to_onnx = {
 torch_types_to_ignore = [nn.Dropout, nn.Dropout2d, nn.Identity, PassThroughOp]
 torch_recurrent_modules = (nn.RNN, nn.LSTM, nn.GRU)
 
-# List of associations between onnx types and functional pytorch connected graph types.
-onnx_pytorch_conn_graph_type_pairs = [
-    [["Add"], ["add"]],
-    [["Concat"], ["cat"]],
-    [["Mul"], ["mul"]],
-    [["Div"], ["div"]]
-]
+# Maps pytorch functional op string names to corresponding onnx types.
+pytorch_functional_name_to_onnx_dict = {
+    'add': 'Add',
+    'cat': 'Concat',
+    'mul': 'Mul',
+    'div': 'Div'
+}
 
 
 def register_quantized_ops(domain, version):
