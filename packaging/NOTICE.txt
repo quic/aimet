@@ -4,7 +4,7 @@ This file contains certain notices of software components included with the
 software that Qualcomm Innovation Center, Inc. ("QuIC") and/or its subsidiaries
 are required to provide you. Except where prohibited by the open source license,
 the content of this file is provided solely to satisfy QuIC's and/or its 
-subsidiariesâ€™ attribution and notice requirements, and your use of these 
+subsidiaries attribution and notice requirements, and your use of these 
 software components together with the software of QuIC and/or its subsidiaries
 ("Software") is subject to the terms of your license from QuIC and/or its 
 subsidiaries, as the case may be. Compliance with all copyright laws and software
@@ -452,7 +452,7 @@ Redistributions in binary form must reproduce the above copyright notice, this l
 following disclaimer in the documentation and/or other materials provided with the distribution.
 Neither the names of the copyright holders nor the names of the contributors may be used to endorse or promote
 products derived from this software without specific prior written permission.
-This software is provided by the copyright holders and contributors “as is” and any express or implied warranties,
+This software is provided by the copyright holders and contributors "as is" and any express or implied warranties,
 including, but not limited to, the implied warranties of merchantability and fitness for a particular purpose are
 disclaimed. In no event shall copyright holders or contributors be liable for any direct, indirect, incidental,
 special, exemplary, or consequential damages (including, but not limited to, procurement of substitute goods or

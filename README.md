@@ -62,17 +62,13 @@ Please visit the [AIMET on Github Pages](https://quic.github.io/aimet-pages/inde
 
 #### Visualization
 
-* *Weight ranges*: Inspect visually if a model is a candidate for applying the Cross Layer Equalization technique. And the
-effect after applying the technique
-* *Per-layer compression sensitivity*: Visually get feedback about the sensitivity of any given layer in the model to
-compression
+* *Weight ranges*: Inspect visually if a model is a candidate for applying the Cross Layer Equalization technique. And the effect after applying the technique
+* *Per-layer compression sensitivity*: Visually get feedback about the sensitivity of any given layer in the model to compression
 
 ## Results
 
-AIMET can quantize an existing 32-bit floating-point model to an 8-bit fixed-point model without sacrificing much accuracy 
-and without model fine-tuning. As an example of accuracy maintained, the DFQ method applied to several popular networks, 
-such as MobileNet-v2 and ResNet-50, result in less than 0.9% loss in accuracy all the way down to 8-bit quantization — 
-in an automated way without any training data.
+AIMET can quantize an existing 32-bit floating-point model to an 8-bit fixed-point model without sacrificing much accuracy and without model fine-tuning. As an example of accuracy maintained, the DFQ method applied to several popular networks, such as MobileNet-v2 and ResNet-50, result in less than 0.9% loss in accuracy all the way down to 8-bit quantization, in an automated way without any training data.
+
 <table style="width:50%">
   <tr>
     <th style="width:80px">Models</th>
@@ -98,9 +94,7 @@ in an automated way without any training data.
 
 <br>  
 
-AIMET can also significantly compress models. For popular models, such as Resnet-50 and Resnet-18, compression with 
-spatial SVD plus channel pruning achieves 50% MAC (multiply-accumulate) reduction while retaining accuracy within 
-approx. 1% of the original uncompressed model.
+AIMET can also significantly compress models. For popular models, such as Resnet-50 and Resnet-18, compression with spatial SVD plus channel pruning achieves 50% MAC (multiply-accumulate) reduction while retaining accuracy within approx. 1% of the original uncompressed model.
 
 <table style="width:50%">
   <tr>
@@ -134,5 +128,4 @@ Thanks for your interest in contributing to AIMET! Please read our [Contribution
 AIMET aims to be a community-driven project maintained by Qualcomm Innovation Center, Inc.
 
 ## License
-AIMET is licensed under the BSD 3-clause “New” or “Revised” License. Check out the [LICENSE](LICENSE) for more details.
-
+AIMET is licensed under the BSD 3-clause "New" or "Revised" License. Check out the [LICENSE](LICENSE) for more details.
