@@ -26,9 +26,8 @@ os.environ['SRC_URL'] = 'https://raw.githubusercontent.com/quic/aimet/develop/pa
 ```
 
 ## Install AIMET packages
-Please run below commands to install dependencies to build AIMET:
+Go to https://github.com/quic/aimet/releases and identify the release tag of the packages you want to install. Replace `<RELEASE_TAG>` in the steps below with the appropriate tag (ex. "1.14.0"). Then run the below commands to install the AIMET packages:
 
-Note: verified with <RELEASE_TAG> set to 1.13.0
 ```bash
 import os
 os.environ['release_tag']=<RELEASE_TAG>
@@ -36,7 +35,6 @@ os.environ['release_tag']=<RELEASE_TAG>
 !pip3 install https://github.com/quic/aimet/releases/download/${release_tag}/AimetTorch-${release_tag}-py3-none-any.whl
 !pip3 install https://github.com/quic/aimet/releases/download/${release_tag}/AimetTensorflow-${release_tag}-py3-none-any.whl
 ```
-
 
 Please **restart** Google runtime environment when prompted or from below menu option:
 

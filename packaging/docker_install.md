@@ -18,7 +18,7 @@ This page provides instructions to build, install and use the AIMET software in 
 The AIMET package requires the following host platform setup:
 
 - 64-bit Intel x86-compatible processor
-- Nvidia GPU card
+- Nvidia GPU card (Compute capability 5.2 or later)
 - Linux Ubuntu: 16.04 LTS or later
 - nvidia-docker - Installation instructions: https://github.com/NVIDIA/nvidia-docker
 - bash command shell
@@ -28,7 +28,7 @@ To use the GPU accelerated training modules an Nvidia CUDA enabled GPU with a mi
 Recommended host system hardware requirements:
 
 - Intel i7 multicore CPU w/hyperthreading
-- GPU: Nvidia GeForce GTX 1080 or Tesla K80
+- GPU: Nvidia GeForce GTX 1080 or Tesla V100
 - 16+ GB RAM
 - 500GB+ SSD hard drive
 
@@ -65,7 +65,13 @@ Follow these instructions to build the AIMET code:
 ```bash
 cd $WORKSPACE 
 mkdir build && cd build
-cmake -DCMAKE_EXPORT_COMPILE_COMMANDS=ON ../aimet
+
+# Run cmake (be sure to set the flags in the below command depending on your variant)
+# To build for GPU, use -DENABLE_CUDA=ON. To build for CPU, use -DENABLE_CUDA=OFF.
+# To include torch, use -DENABLE_TORCH=ON. To exclude torch, use -DENABLE_TORCH=OFF.
+# To include tensorflow, use -DENABLE_TENSORFLOW=ON. To exclude tensorflow, use -DENABLE_TENSORFLOW=OFF.
+cmake .. -DCMAKE_EXPORT_COMPILE_COMMANDS=ON -DENABLE_CUDA=ON -DENABLE_TORCH=ON -DENABLE_TENSORFLOW=ON
+
 make -j8 
 ```
 

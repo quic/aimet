@@ -1,7 +1,7 @@
 #==============================================================================
 #  @@-COPYRIGHT-START-@@
 #
-#  Copyright (c) 2020, Qualcomm Innovation Center, Inc. All rights reserved.
+#  Copyright (c) 2021, Qualcomm Innovation Center, Inc. All rights reserved.
 #
 #  SPDX-License-Identifier: BSD-3-Clause
 #
@@ -41,7 +41,7 @@ AIMET supports the following features
 ============
 Dependencies
 ============
-See the INSTALL.txt file for details.
+See the https://github.com/quic/aimet/blob/develop/packaging/install.md for details.
 
 =============
 Documentation
