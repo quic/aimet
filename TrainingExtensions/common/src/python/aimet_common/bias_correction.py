@@ -93,9 +93,9 @@ class ConvBnPatternHandler:
         activation_type = ActivationType.no_activation
         conv_op = None
         bn_op = None
-        convolution_types = ['Conv2D', 'DepthwiseConv2dNative', 'convolution']
-        linear_types = ['Dense', 'addmm', 'matmul']
-        bn_types = ['FusedBatchNormV3', 'FusedBatchNorm', 'batch_norm']
+        convolution_types = ['Conv2D', 'DepthwiseConv2dNative', 'Conv', 'ConvTranspose']
+        linear_types = ['Dense', 'Gemm']
+        bn_types = ['FusedBatchNormV3', 'FusedBatchNorm', 'BatchNormalization']
 
         for op in op_subset:
             if op.type in convolution_types + linear_types:
@@ -104,9 +104,9 @@ class ConvBnPatternHandler:
                     bn_activation_info = self.conv_linears_with_bn_dict[conv_op.get_module()]
             elif op.type in bn_types:
                 bn_op = op
-            elif op.type in ['Relu6', 'hardtanh']:
+            elif op.type in ['Relu6', 'Clip']:
                 activation_type = ActivationType.relu6
-            elif op.type in ['Relu', 'relu']:
+            elif op.type in ['Relu']:
                 activation_type = ActivationType.relu
 
         if len(op_subset) >= 2:

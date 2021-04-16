@@ -56,6 +56,7 @@ import torch.nn as nn
 import torchvision
 from torchvision import models
 from aimet_common.utils import AimetLogger
+from aimet_common.winnow.winnow_utils import OpConnectivity, ConnectivityType
 from aimet_torch.examples.test_models import ModuleListModel, SingleResidual
 from aimet_torch.winnow.winnow import winnow_model
 from aimet_torch.winnow.mask_propagation_winnower import MaskPropagationWinnower
@@ -1334,6 +1335,14 @@ class TestTrainingExtensionsWinnow(unittest.TestCase):      # pylint: disable=to
     @pytest.mark.cuda
     def test_inception_model_conv_below_split_on_cuda(self):
         """ Test winnowing inception model for a conv module below a split """
+        # These modules are included as a hack to allow tests using inception model to pass,
+        # as the model uses functionals instead of modules.
+        OpConnectivity.pytorch_dict['relu'] = ConnectivityType.direct
+        OpConnectivity.pytorch_dict['max_pool2d'] = ConnectivityType.direct
+        OpConnectivity.pytorch_dict['avg_pool2d'] = ConnectivityType.direct
+        OpConnectivity.pytorch_dict['adaptive_avg_pool2d'] = ConnectivityType.direct
+        OpConnectivity.pytorch_dict['dropout'] = ConnectivityType.direct
+        OpConnectivity.pytorch_dict['flatten'] = ConnectivityType.skip
         model = models.inception_v3(pretrained=True)
         model.eval()
 
@@ -1365,6 +1374,14 @@ class TestTrainingExtensionsWinnow(unittest.TestCase):      # pylint: disable=to
 
     def test_inception_model_winnowing_multiple_modules(self):      # pylint: disable=too-many-locals
         """ Test winnowing multiple modules on inception model """
+        # These modules are included as a hack to allow tests using inception model to pass,
+        # as the model uses functionals instead of modules.
+        OpConnectivity.pytorch_dict['relu'] = ConnectivityType.direct
+        OpConnectivity.pytorch_dict['max_pool2d'] = ConnectivityType.direct
+        OpConnectivity.pytorch_dict['avg_pool2d'] = ConnectivityType.direct
+        OpConnectivity.pytorch_dict['adaptive_avg_pool2d'] = ConnectivityType.direct
+        OpConnectivity.pytorch_dict['dropout'] = ConnectivityType.direct
+        OpConnectivity.pytorch_dict['flatten'] = ConnectivityType.skip
         model = models.inception_v3()
         model.eval()
 
@@ -1426,6 +1443,14 @@ class TestTrainingExtensionsWinnow(unittest.TestCase):      # pylint: disable=to
         """
         Test winnow on inception model for conv module with concat above
         """
+        # These modules are included as a hack to allow tests using inception model to pass,
+        # as the model uses functionals instead of modules.
+        OpConnectivity.pytorch_dict['relu'] = ConnectivityType.direct
+        OpConnectivity.pytorch_dict['max_pool2d'] = ConnectivityType.direct
+        OpConnectivity.pytorch_dict['avg_pool2d'] = ConnectivityType.direct
+        OpConnectivity.pytorch_dict['adaptive_avg_pool2d'] = ConnectivityType.direct
+        OpConnectivity.pytorch_dict['dropout'] = ConnectivityType.direct
+        OpConnectivity.pytorch_dict['flatten'] = ConnectivityType.skip
         model = models.inception_v3()
         model.eval()
 

@@ -110,7 +110,7 @@ class ModuleReducer(AimetCommonModuleReducer):
             if an_op.type in get_conv_ops_for_api(ModelApi.pytorch):
                 a_conv_module = self._reduce_conv_module(an_op)
                 modified_modules[an_op.dotted_name] = a_conv_module
-            elif an_op.type in ['BatchNorm2d', 'batch_norm']:
+            elif an_op.type in ['BatchNorm2d', 'BatchNormalization']:
                 a_bn_module = self._reduce_batchnorm_module(an_op)
                 modified_modules[an_op.dotted_name] = a_bn_module
             else:

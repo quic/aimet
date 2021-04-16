@@ -41,6 +41,7 @@ import unittest
 import torch
 from torchvision import models
 from aimet_torch.winnow.winnow import winnow_model
+from aimet_common.winnow.winnow_utils import OpConnectivity, ConnectivityType
 
 
 class WinnowResNet18Test(unittest.TestCase):
@@ -420,6 +421,16 @@ class WinnowResNet18Test(unittest.TestCase):
 
     def test_inception_model_conv_below_conv(self):
         """ Test winnowing inception model conv below conv """
+
+        # These modules are included as a hack to allow tests using inception model to pass,
+        # as the model uses functionals instead of modules.
+        OpConnectivity.pytorch_dict['relu'] = ConnectivityType.direct
+        OpConnectivity.pytorch_dict['max_pool2d'] = ConnectivityType.direct
+        OpConnectivity.pytorch_dict['avg_pool2d'] = ConnectivityType.direct
+        OpConnectivity.pytorch_dict['adaptive_avg_pool2d'] = ConnectivityType.direct
+        OpConnectivity.pytorch_dict['dropout'] = ConnectivityType.direct
+        OpConnectivity.pytorch_dict['flatten'] = ConnectivityType.skip
+
         model = models.Inception3()
         model.eval()
         input_shape = [1, 3, 299, 299]
@@ -440,6 +451,16 @@ class WinnowResNet18Test(unittest.TestCase):
 
     def test_inception_model_conv_below_split(self):
         """ Test winnowing inception model with conv below split """
+
+        # These modules are included as a hack to allow tests using inception model to pass,
+        # as the model uses functionals instead of modules.
+        OpConnectivity.pytorch_dict['relu'] = ConnectivityType.direct
+        OpConnectivity.pytorch_dict['max_pool2d'] = ConnectivityType.direct
+        OpConnectivity.pytorch_dict['avg_pool2d'] = ConnectivityType.direct
+        OpConnectivity.pytorch_dict['adaptive_avg_pool2d'] = ConnectivityType.direct
+        OpConnectivity.pytorch_dict['dropout'] = ConnectivityType.direct
+        OpConnectivity.pytorch_dict['flatten'] = ConnectivityType.skip
+
         model = models.Inception3()
         model.eval()
         input_shape = [1, 3, 299, 299]
@@ -475,6 +496,14 @@ class WinnowResNet18Test(unittest.TestCase):
 
     def test_inception_model_conv_below_avgpool(self):
         """ Test winnowing inception model with conv below avgpool """
+        # These modules are included as a hack to allow tests using inception model to pass,
+        # as the model uses functionals instead of modules.
+        OpConnectivity.pytorch_dict['relu'] = ConnectivityType.direct
+        OpConnectivity.pytorch_dict['max_pool2d'] = ConnectivityType.direct
+        OpConnectivity.pytorch_dict['avg_pool2d'] = ConnectivityType.direct
+        OpConnectivity.pytorch_dict['adaptive_avg_pool2d'] = ConnectivityType.direct
+        OpConnectivity.pytorch_dict['dropout'] = ConnectivityType.direct
+        OpConnectivity.pytorch_dict['flatten'] = ConnectivityType.skip
         model = models.Inception3()
         model.eval()
         input_shape = [1, 3, 299, 299]

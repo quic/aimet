@@ -233,16 +233,13 @@ def find_all_conv_bn_with_activation(model: torch.nn.Module, input_shape: Tuple)
     # initialize all patterns to be matched and associated call back functions
     patterns_with_callbacks = []
     layer_select_handler = ConvBnPatternHandler()
+    conv_types = ['Conv', 'ConvTranspose']
+    linear_types = ['Gemm']
 
-    patterns_with_callbacks.append(PatternType(pattern=['batch_norm', 'convolution'],
-                                               action=layer_select_handler))
-    patterns_with_callbacks.append(PatternType(pattern=['convolution', 'batch_norm'],
-                                               action=layer_select_handler))
-    linear_types = ['addmm', 'matmul']
-    for linear_type in linear_types:
-        patterns_with_callbacks.append(PatternType(pattern=['batch_norm', linear_type],
+    for op_type in conv_types + linear_types:
+        patterns_with_callbacks.append(PatternType(pattern=['BatchNormalization', op_type],
                                                    action=layer_select_handler))
-        patterns_with_callbacks.append(PatternType(pattern=[linear_type, 'batch_norm'],
+        patterns_with_callbacks.append(PatternType(pattern=[op_type, 'BatchNormalization'],
                                                    action=layer_select_handler))
 
     inp_tensor_list = utils.create_rand_tensors_given_shapes(input_shape)
