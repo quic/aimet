@@ -50,7 +50,7 @@ float BnBasedBiasCorrection::_phiX(const float x)
     return 1.0 / (sqrt(2 * M_PI)) * exp(-0.5 * x * x);
 }
 
-float BnBasedBiasCorrection::_normalCDF(float x)   // Phi(-∞, x) aka N(x)
+float BnBasedBiasCorrection::_normalCDF(float x)   // Phi(-Infinity, x) aka N(x)
 {
     return std::erfc(-x / std::sqrt(2)) / 2;
 }

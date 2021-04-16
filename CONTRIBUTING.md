@@ -1,5 +1,5 @@
 # Contributing to AIMET
-We’re thrilled that you’d like to contribute to the AIMET project! Your support is essential for keeping this project great and for making it better.
+We're thrilled that you'd like to contribute to the AIMET project! Your support is essential for keeping this project great and for making it better.
 
 - [Before you begin](#before-you-begin)
 - [Guidelines](#guidelines)
