@@ -137,8 +137,7 @@ public:
         {
             auto tensorQuantizer = DlQuantization::TensorQuantizer(_quantScheme, _roundingMode);
             tensorQuantizer.updateStats(inTensor, count, useCuda);
-            DlQuantization::TfEncoding initial_encoding = tensorQuantizer.computeEncoding(_bitwidth, _isSymmetric,
-                                                                                          false, true);
+            DlQuantization::TfEncoding initial_encoding = tensorQuantizer.computeEncoding(_bitwidth, _isSymmetric);
             tensorQuantizer.quantizeDequantize(inTensor, count, outTensor, initial_encoding.min,
                                                initial_encoding.max, _bitwidth, useCuda);
             break;
