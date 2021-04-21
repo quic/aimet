@@ -93,8 +93,7 @@ public:
      * @param bitwidth to be used
      * @param flag to indicate symmetric/asymmetric encoding is to be used
      */
-    TfEncoding computeEncoding(unsigned int bitwidth, bool useSymmetricEncoding,
-                               bool useStrictSymmetric, bool useUnsignedSymmetric) override;
+    TfEncoding computeEncoding(unsigned int bitwidth, bool useSymmetricEncoding) override;
 
     /**
      * Convert a tensor from float to quantized int and back to float
@@ -133,11 +132,37 @@ public:
     */
     QuantizationMode getQuantScheme();
 
+    /**
+    * gets strict symmetric flag configured for this Tensor Quantizer
+    * @return quantScheme as QuantizationMode
+    */
+    bool getStrictSymmetric();
+
+   /**
+   * sets strict symmetric flag
+   * @param bool, True if strict symmetric, False otherwise
+   */
+    void setStrictSymmetric(bool strictSymmetric);
+
+    /**
+    * gets unsigned symmetric flag config for this Tensor Quantizer
+    * @return bool, True if unsigned symmetric mode, False otherwise
+    */
+    bool getUnsignedSymmetric();
+
+   /**
+   * sets unsigned symmetric flag
+   * @param bool, True or False
+   */
+    void setUnsignedSymmetric(bool unsignedsymmetric);
+
     RoundingMode roundingMode;      ///< Rounding mode to use during quantization
     bool isEncodingValid;           ///< Is encoding valid
 
 private:
     QuantizationMode _quantScheme;   ///< Quantization scheme (e.g TF-Enhanced)
+    bool _strictSymmetric;
+    bool _unsignedSymmetric;
     bool _validStats;
     std::unique_ptr<IQuantizationEncodingAnalyzer<float>> _encodingAnalyzer;
     std::unique_ptr<ITensorQuantizationSim<float>> _tensorQuantizationSim;
