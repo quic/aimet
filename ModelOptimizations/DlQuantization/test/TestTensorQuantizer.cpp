@@ -65,9 +65,11 @@ TEST(TestTensorQuantizer, SanityTestCpu)
         statsTensor[i] = distribution(generator);
     }
 
+    tensorQuantizer.setStrictSymmetric(false);
+    tensorQuantizer.setUnsignedSymmetric(false);
     tensorQuantizer.updateStats(statsTensor.data(), statsTensor.size(), false);
     EXPECT_FALSE(tensorQuantizer.isEncodingValid);
-    TfEncoding encoding = tensorQuantizer.computeEncoding(8, false, false, false);
+    TfEncoding encoding = tensorQuantizer.computeEncoding(8, false);
     EXPECT_TRUE(tensorQuantizer.isEncodingValid);
 
     std::vector<float> inputTensor(tensorCount, 5);
@@ -108,9 +110,11 @@ TEST(TestTensorQuantizer, SanityTestGpu)
     }
     Blob<GpuDevice<float>> statsTensorBlob(statsTensor.data(), tensorCount);
 
+    tensorQuantizer.setStrictSymmetric(false);
+    tensorQuantizer.setUnsignedSymmetric(false);
     tensorQuantizer.updateStats(statsTensorBlob.getDataPtrOnDevice(), statsTensor.size(), true);
     EXPECT_FALSE(tensorQuantizer.isEncodingValid);
-    TfEncoding encoding = tensorQuantizer.computeEncoding(8, false, false, false);
+    TfEncoding encoding = tensorQuantizer.computeEncoding(8, false);
     EXPECT_TRUE(tensorQuantizer.isEncodingValid);
 
     std::vector<float> inputTensor(tensorCount, 5);

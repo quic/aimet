@@ -47,6 +47,8 @@ TensorQuantizer::TensorQuantizer(QuantizationMode quantScheme, RoundingMode roun
         _quantScheme(quantScheme),
         roundingMode(roundingMode),
         isEncodingValid(false),
+        _strictSymmetric(false),
+        _unsignedSymmetric(true),
         _validStats(false)
 {
     _encodingAnalyzer      = getEncodingAnalyzerInstance<float>(quantScheme);
@@ -67,6 +69,35 @@ void TensorQuantizer::setQuantScheme(QuantizationMode quantScheme)
     // _validStats is tightly coupled with the encoding analyzer instance, needs reset
     resetEncodingStats();
 
+}
+
+bool TensorQuantizer::getStrictSymmetric()
+{
+    return _strictSymmetric;
+}
+
+void TensorQuantizer::setStrictSymmetric(bool strictSymmetric)
+{
+    // update strict symmetric flag held by Tensor Quantizer
+    _strictSymmetric = strictSymmetric;
+    // create new encoding analyzer instance and reset associated flags
+    // _validStats is tightly coupled with the encoding analyzer instance, needs reset
+    resetEncodingStats();
+
+}
+
+bool TensorQuantizer::getUnsignedSymmetric()
+{
+    return _unsignedSymmetric;
+}
+
+void TensorQuantizer::setUnsignedSymmetric(bool unsignedSymmetric)
+{
+    // update unsignedSymmetric flag held by Tensor Quantizer
+    _unsignedSymmetric = unsignedSymmetric;
+    // create new encoding analyzer instance and reset associated flags
+    // _validStats is tightly coupled with the encoding analyzer instance, needs reset
+    resetEncodingStats();
 }
 
 void TensorQuantizer::resetEncodingStats()
@@ -103,15 +134,14 @@ void TensorQuantizer::updateStats(py::array_t<float> tensor, bool useCuda)
     _validStats = true;
 }
 
-TfEncoding TensorQuantizer::computeEncoding(unsigned int bitwidth, bool useSymmetricEncoding, bool useStrictSymmetric,
-                                            bool useUnsignedSymmetric)
+TfEncoding TensorQuantizer::computeEncoding(unsigned int bitwidth, bool useSymmetricEncoding)
 {
     TfEncoding encoding;
 
     if (_validStats)
     {
-        encoding        = _encodingAnalyzer->computeEncoding(bitwidth, useSymmetricEncoding, useStrictSymmetric,
-                                                      useUnsignedSymmetric);
+        encoding = _encodingAnalyzer->computeEncoding(bitwidth, useSymmetricEncoding,
+                _strictSymmetric, _unsignedSymmetric);
         isEncodingValid = true;
     }
 
