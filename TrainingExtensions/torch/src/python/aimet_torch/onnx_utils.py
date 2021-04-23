@@ -120,24 +120,23 @@
 from typing import Union, List, Tuple, Dict
 import os
 import copy
-import importlib
-from inspect import getmembers, isfunction
+from collections import defaultdict
 
 import torch
 import torch.nn as nn
 import torch.onnx.symbolic_caffe2
-
-import torch.onnx.symbolic_registry as sym_registry
 
 import onnx
 
 from aimet_common.utils import AimetLogger
 import aimet_torch.utils
 import aimet_torch.elementwise_ops as elementwise_ops
-from aimet_torch.defs import PassThroughOp, OpToIOTensors
+from aimet_torch.defs import OpToIOTensors
 
 _logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Utils)
 
+
+recurrent_onnx_optypes = ['LSTM', 'GRU', 'RNN']
 
 # This is a dict that maps a PyTorch module type to the corresponding ONNX op type (as a string)
 map_torch_types_to_onnx = {
@@ -170,10 +169,6 @@ map_torch_types_to_onnx = {
 
 }
 
-# Define this as a list instead of tuple to allow for users to modify
-torch_types_to_ignore = [nn.Dropout, nn.Dropout2d, nn.Identity, PassThroughOp]
-torch_recurrent_modules = (nn.RNN, nn.LSTM, nn.GRU)
-
 # Maps pytorch functional op string names to corresponding onnx types.
 pytorch_functional_name_to_onnx_dict = {
     'add': 'Add',
@@ -181,30 +176,6 @@ pytorch_functional_name_to_onnx_dict = {
     'mul': 'Mul',
     'div': 'Div'
 }
-
-
-def register_quantized_ops(domain, version):
-    """
-    Copied and modified code for torch/onnx/symbolic_caffe2.py
-    This is a temporary measure - Calling this function as-is was causing unexplained memory errors later on
-    This can perhaps be replaced by registering the marker layers as custom ONNX ops
-    """
-    # pylint: disable=protected-access
-
-    # Register all the non-quantized ops
-    sym_registry.register_version('', version)
-    # Register all quantized ops
-    module = importlib.import_module('torch.onnx.symbolic_caffe2')
-    sym_registry._symbolic_versions['caffe2'] = module
-    quant_version_ops = getmembers(sym_registry._symbolic_versions['caffe2'])
-    for op in quant_version_ops:
-        if isfunction(op[1]) and not sym_registry.is_registered_op(op[0], domain, version):
-            aten_q_ops = ['dequantize', 'quantize_per_tensor']
-            if op[0] in aten_q_ops:
-                sym_registry.register_op(op[0], op[1], '', version)
-
-
-register_quantized_ops('caffe2', 9)
 
 
 class OnnxSaver:
@@ -224,28 +195,11 @@ class OnnxSaver:
         :return:
         """
 
-        # Load the model
-        onnx_model = onnx.load(onnx_model_path)
-
-        # Parse the ONNX model and create mapping from input and output tensors to corresponding nodes
-        map_output_tensor_to_node, _ = cls.create_map_of_tensor_to_node(onnx_model)
-
-        ordered_list_of_nodes = cls.find_ordered_list_of_onnx_nodes(map_output_tensor_to_node)
-
-        ordered_list_of_nodes = cls._filter_out_uninteresting_onnx_nodes(pytorch_model, dummy_input,
-                                                                         ordered_list_of_nodes,
-                                                                         os.path.dirname(onnx_model_path))
-
-        # Find corresponding pytorch nodes for every ONNX node
-        # and set the name of the ONNX nodes to the names of the corresponding PyTorch modules
-        cls.map_onnx_nodes_to_pytorch(pytorch_model, dummy_input, ordered_list_of_nodes)
-
-        # Save back the onnx model file
-        onnx.save(onnx_model, onnx_model_path)
+        cls._map_onnx_nodes_to_pytorch_modules(pytorch_model, dummy_input, onnx_model_path)
 
     @staticmethod
-    def create_map_of_tensor_to_node(onnx_model: onnx.ModelProto) -> Tuple[Dict[str, List[onnx.NodeProto]],
-                                                                           Dict[str, onnx.NodeProto]]:
+    def _create_map_of_tensor_to_node(onnx_model: onnx.ModelProto) -> Tuple[Dict[str, List[onnx.NodeProto]],
+                                                                            Dict[str, onnx.NodeProto]]:
         """
         Create and return two dicts
             1. Tensor -> list of nodes that consume this tensor
@@ -272,242 +226,263 @@ class OnnxSaver:
 
         return map_output_tensor_to_node, map_input_tensor_to_node
 
-    @staticmethod
-    def find_ordered_list_of_onnx_nodes(map_output_tensor_to_node: Dict[str, onnx.NodeProto]) -> List[onnx.NodeProto]:
-        """
-        Given a ONNX model find all the nodes that are inputs to the model - meaning nodes who have no
-        preceeding nodes
-        :param map_output_tensor_to_node: Map of tensor->node that produces this tensor
-        :return: List of input nodes
-        """
-        node_output_tensor_pairs = [(node, output) for output, node in map_output_tensor_to_node.items()]
-
-        # Filter out dead outputs
-        node_output_tensor_pairs = [(node, output) for output, node in map_output_tensor_to_node.items()
-                                    if output.isnumeric()]
-
-        node_output_tensor_pairs.sort(key=lambda x: int(x[1]))
-        ordered_nodes = [node for node, _ in node_output_tensor_pairs]
-
-        # Remove duplicates - multiple output nodes will be duplicates in the above list
-        ordered_nodes_no_duplicates = []
-        set_of_ordered_nodes = set()
-        for node in ordered_nodes:
-            if id(node) not in set_of_ordered_nodes:
-                set_of_ordered_nodes.add(id(node))
-                ordered_nodes_no_duplicates.append(node)
-
-        return ordered_nodes_no_duplicates
-
     @classmethod
-    def _add_markers(cls, starting_module):
+    def _add_markers(cls, starting_module, module_name_map):
         """Recursively add marker layers
         """
 
-        class MarkerLayer(torch.nn.Module):
+        class CustomMarkerFunc(torch.autograd.Function):
+            """
+            This function helps add a custom layer when exporting to ONNX
+            Note the input tensor has a trivial operation performed on it (clamp). This is needed to force
+            pytorch trace to not ignore the function.
+            """
+
+            @staticmethod
+            def symbolic(g, inp, identifier, start):
+                """
+                Magic method that helps with exporting a custom ONNX node
+                """
+                return g.op('CustomMarker', inp, id_s=identifier, start_s=start)
+
+            @staticmethod
+            def forward(ctx, inp, _identifier, _start):     # pylint: disable=arguments-differ
+                return inp.clamp(0)
+
+            @staticmethod
+            def backward(ctx, _grad):                       # pylint: disable=arguments-differ
+                raise NotImplementedError()
+
+        class CustomMarker(torch.nn.Module):
             """
             This is a temporary layer that in inserted next to a real layer to distinguish the real layer in the
             exported ONNX format
             """
-            def __init__(self, module):
-                super(MarkerLayer, self).__init__()
-                self.module = module
 
-            def forward(self, *x):
-                """
-                Forward pass for Marker layer
-                """
-                o = []
-                for i, t in enumerate(x):
-                    if i == 0:
-                        t = torch.quantize_per_tensor(t, 1, 0, torch.qint32)
-                        t = torch.dequantize(t)
-                    o.append(t)
+            def __init__(self, module, identifier):
+                super(CustomMarker, self).__init__()
+                self.marked_module = module
+                self.identifier = identifier
 
-                x = self.module(*o)
+            def forward(self, *inputs):
+                """
+                Forward method for this CustomMarker layer
+                """
+                output = []
+                for t in inputs:
+                    if isinstance(t, torch.Tensor):
+                        t = CustomMarkerFunc.apply(t, self.identifier, 'True')
+                    output.append(t)
+
+                x = self.marked_module(*output)
                 if isinstance(x, torch.Tensor):
-                    x = torch.quantize_per_tensor(x, 2, 0, torch.qint32)
-                    x = torch.dequantize(x)
-                else:
-                    o = []
-                    for i, t in enumerate(x):
-                        if i == 0:
-                            t = torch.quantize_per_tensor(t, 1, 0, torch.qint32)
-                            t = torch.dequantize(t)
-                        o.append(t)
-                    x = tuple(o)
+                    x = [x]
 
-                return x
+                output = []
+                for t in x:
+                    if isinstance(t, torch.Tensor):
+                        t = CustomMarkerFunc.apply(t, self.identifier, 'False')
+                    output.append(t)
+
+                if len(output) == 1:
+                    output = output[0]
+                else:
+                    output = tuple(output)
+
+                return output
 
         for module_name, module_ref in starting_module.named_children():
 
             if aimet_torch.utils.is_leaf_module(module_ref):
-                marker_layer = MarkerLayer(module_ref)
+                marker_layer = CustomMarker(module_ref, module_name_map[module_ref])
                 setattr(starting_module, module_name, marker_layer)
 
             # recursively call children modules
             else:
-                cls._add_markers(module_ref)
+                cls._add_markers(module_ref, module_name_map)
 
     @classmethod
-    def _filter_out_uninteresting_onnx_nodes(cls, pt_model, dummy_input, onnx_ordered_node_list, working_dir):
+    def _map_onnx_nodes_to_pytorch_modules(cls, pt_model, dummy_input, onnx_model_path):
 
-        model = copy.deepcopy(pt_model).cpu()
-        cls._add_markers(model)
+        working_dir = os.path.dirname(onnx_model_path)
 
-        temp_file = os.path.join(working_dir, 'temp_onnx_model_with_markers.onnx')
-        torch.onnx.export(model, dummy_input, temp_file, training=torch.onnx.TrainingMode.TRAINING)
+        onnx_model = cls._create_onnx_model_with_markers(dummy_input, pt_model, working_dir)
 
         # Parse the ONNX model and create mapping from input and output tensors to corresponding nodes
-        map_output_tensor_to_node_marker_model, _ = cls.create_map_of_tensor_to_node(onnx.load(temp_file))
-        ordered_list_of_nodes_marker_model = cls.find_ordered_list_of_onnx_nodes(
-            map_output_tensor_to_node_marker_model)
+        map_output_tensor_to_node, map_input_tensor_to_node = cls._create_map_of_tensor_to_node(onnx_model)
 
-        skip_info = []
-        node_iter = iter(ordered_list_of_nodes_marker_model)
-        while node_iter:
+        # Find all marker nodes
+        end_marker_map, start_marker_map = cls._create_map_of_marker_nodes(onnx_model)
 
-            # Find the next block of interest
-            node = next(node_iter, None)
-            if node is None:
-                break
-            while node.op_type != 'Int8Quantize':
-                skip_info.append((node.op_type, True))
-                node = next(node_iter, None)
-                if node is None:
-                    break
-            if node is None:
-                break
+        # Set names
+        cls._set_onnx_node_names(map_input_tensor_to_node, start_marker_map)
 
-            # Skip the marker nodes
-            node = next(node_iter)
-            assert node.op_type == 'Int8Dequantize'
+        # Remove markers
+        for _, markers in start_marker_map.items():
+            for marker in markers:
+                cls._detach_onnx_node(map_input_tensor_to_node, map_output_tensor_to_node, marker)
 
-            # Glob the block of nodes (these are the nodes corresponding to the pytorch modules)
-            node = next(node_iter)
-            while node.op_type != 'Int8Quantize':
-                skip_info.append((node.op_type, False))
-                node = next(node_iter)
+        for _, markers in end_marker_map.items():
+            for marker in markers:
+                cls._detach_onnx_node(map_input_tensor_to_node, map_output_tensor_to_node, marker)
 
-            # Skip the marker nodes
-            node = next(node_iter)
-            assert node.op_type == 'Int8Dequantize'
+        onnx_model = cls._remove_detached_nodes_from_onnx_graph(onnx_model)
 
-        # Use the skip list to filter out the original list of onnx nodes
-        assert len(skip_info) == len(onnx_ordered_node_list)
-        filtered_node_list = []
-        for index, node in enumerate(onnx_ordered_node_list):
-            assert node.op_type == skip_info[index][0]
-            if not skip_info[index][1]:
-                filtered_node_list.append(node)
+        cls._fix_param_names(onnx_model)
 
-        return filtered_node_list
-
-    @staticmethod
-    def get_num_onnx_nodes_to_map(module: nn.Module):
-        """
-        Get the number of onnx nodes that map to the same torch module
-        :param module: PyTorch model instance
-        :return: number of onnx nodes:
-        """
-        if isinstance(module, torch_recurrent_modules):
-            return module.num_layers
-        return 1
-
-    @staticmethod
-    def map_onnx_nodes_to_pytorch(torch_model: nn.Module, dummy_input: Union[torch.Tensor, Tuple],
-                                  onnx_ordered_list: List[onnx.NodeProto]):
-        """
-        Find the ONNX node that corresponds to each PyTorch module. And sets the name of the ONNX mode to that of the
-        PyTorch module
-        :param torch_model: PyTorch model instance
-        :param dummy_input: Dummy input to the model. Used to parse model graph.
-        :param onnx_ordered_list: An ordinally-ordered list of ONNX nodes
-        :return:
-        """
-        torch_ordered_list = aimet_torch.utils.get_ordered_list_of_modules(torch_model, dummy_input)
-
-        torch_index = 0
-        onnx_index = 0
-
-        num_onnx_nodes_to_map_to_same_torch_node = 0
-        while torch_index < len(torch_ordered_list):
-            # If few PyTorch ops are not mapped to ONNX ops
-            if onnx_index >= len(onnx_ordered_list):
-                _logger.warning('All ONNX ops were exhausted but few PyTorch ops did not get mapped to a '
-                                'corresponding ONNX op')
-                break
-            name, module = torch_ordered_list[torch_index]
-
-            if isinstance(module, tuple(torch_types_to_ignore)):
-                torch_index += 1
-                continue
-
-            if onnx_ordered_list[onnx_index].op_type in map_torch_types_to_onnx[type(module)]:
-                _logger.debug('Found a match: %r -> %r', onnx_ordered_list[onnx_index].op_type, name)
-                onnx_ordered_list[onnx_index].name = name
-
-                if num_onnx_nodes_to_map_to_same_torch_node == 0:
-                    num_onnx_nodes_to_map_to_same_torch_node = OnnxSaver.get_num_onnx_nodes_to_map(module)
-
-                num_onnx_nodes_to_map_to_same_torch_node = num_onnx_nodes_to_map_to_same_torch_node - 1
-                if num_onnx_nodes_to_map_to_same_torch_node == 0:
-                    torch_index += 1
-
-            onnx_index += 1
+        onnx.save(onnx_model, onnx_model_path)
 
     @classmethod
-    def find_model_input_nodes(cls, onnx_model: onnx.ModelProto,
-                               map_output_tensor_to_node: Dict[str, onnx.NodeProto]) -> List[onnx.NodeProto]:
-        """
-        Given a ONNX model find all the nodes that are inputs to the model - meaning nodes who have no
-        preceeding nodes
-        :param onnx_model: ONNX model instance
-        :param map_output_tensor_to_node: Map of tensor->node that produces this tensor
-        :return: List of input nodes
-        """
-        input_nodes = []
+    def _fix_param_names(cls, onnx_model):
+
+        # Rename initializers
+        for ini in onnx_model.graph.initializer:
+            if 'marked_module' in ini.name:
+                name = ini.name
+                name = name.replace('marked_module.', '')
+                ini.name = name
+
+        # Change the references to initializers in each node
         for node in onnx_model.graph.node:
-            preceeding_nodes = cls.find_preceeding_nodes(node, map_output_tensor_to_node)
-            if not preceeding_nodes:
-                input_nodes.append(node)
+            indices_to_replace = []
+            for index, inp_tensor in enumerate(node.input):
+                if 'marked_module' in inp_tensor:
+                    indices_to_replace.append(index)
 
-        return input_nodes
+            for index in indices_to_replace:
+                param_name = node.input[index]
+                node.input.remove(param_name)
+                node.input.insert(index, param_name.replace('marked_module.', ''))
+
+
+    @classmethod
+    def _remove_detached_nodes_from_onnx_graph(cls, onnx_model):
+        # Remove detached nodes from ONNX graph
+        e = onnx.utils.Extractor(onnx_model)
+        model_inputs = [inp.name for inp in onnx_model.graph.input]
+        model_outputs = [output.name for output in onnx_model.graph.output]
+        onnx_model = e.extract_model(model_inputs, model_outputs)
+        return onnx_model
+
+    @classmethod
+    def _set_onnx_node_names(cls, map_input_tensor_to_node, start_marker_map):
+
+        def set_name_for_downstream_nodes(starting_nodes, name, depth):
+            for node in starting_nodes:
+
+                if node.op_type == 'CustomMarker':      # Recursion end condition
+                    return
+
+                if depth == 0:
+                    node.name = name
+                else:
+                    node.name = name + "#" + str(depth)
+
+                for tensor in node.output:
+                    downstream_nodes = map_input_tensor_to_node.get(tensor, [])
+                    set_name_for_downstream_nodes(downstream_nodes, name, depth + 1)
+
+        for node_name, markers in start_marker_map.items():
+            for marker in markers:
+                out_tensor = marker.output[0]
+                downstream_nodes = map_input_tensor_to_node.get(out_tensor, [])
+                set_name_for_downstream_nodes(downstream_nodes, node_name, 0)
+
+    @classmethod
+    def _create_map_of_marker_nodes(cls, onnx_model):
+        start_marker_map = defaultdict(list)
+        end_marker_map = defaultdict(list)
+        for node in onnx_model.graph.node:
+            if node.op_type == 'CustomMarker':
+                identifier = node.attribute[0].s.decode()
+                is_start_marker = node.attribute[1].s.decode()
+
+                if is_start_marker == 'True':
+                    start_marker_map[identifier].append(node)
+                else:
+                    end_marker_map[identifier].append(node)
+        print(start_marker_map.keys())
+        print(end_marker_map.keys())
+        return end_marker_map, start_marker_map
+
+    @classmethod
+    def _create_onnx_model_with_markers(cls, dummy_input, pt_model, working_dir):
+        model = copy.deepcopy(pt_model).cpu()
+        module_name_map = {}
+        for module_name, module_ref in model.named_modules():
+            if aimet_torch.utils.is_leaf_module(module_ref):
+                module_name_map[module_ref] = module_name
+        cls._add_markers(model, module_name_map)
+        temp_file = os.path.join(working_dir, 'temp_onnx_model_with_markers.onnx')
+        torch.onnx.export(model, dummy_input, temp_file, enable_onnx_checker=False)
+        onnx_model = onnx.load(temp_file)
+        return onnx_model
+
+    @classmethod
+    def _detach_onnx_node(cls, map_input_tensor_to_node, map_output_tensor_to_node, node_to_detach):
+        input_tensor = node_to_detach.input[0]
+        output_tensor = node_to_detach.output[0]
+
+        if input_tensor in map_output_tensor_to_node:
+            prev_node = map_output_tensor_to_node[input_tensor]
+            index = list(prev_node.output).index(input_tensor)
+            prev_node.output.remove(input_tensor)
+            prev_node.output.insert(index, output_tensor)
+
+            map_output_tensor_to_node[output_tensor] = prev_node
+            map_output_tensor_to_node.pop(input_tensor)
+
+            for consumer in map_input_tensor_to_node[input_tensor]:
+                if consumer is node_to_detach:
+                    continue
+                index = list(consumer.input).index(input_tensor)
+                consumer.input.remove(input_tensor)
+                consumer.input.insert(index, output_tensor)
+
+            map_input_tensor_to_node.pop(input_tensor)
+
+        else:
+            for consumer in map_input_tensor_to_node[output_tensor]:
+                index = list(consumer.input).index(output_tensor)
+                consumer.input.remove(output_tensor)
+                consumer.input.insert(index, input_tensor)
+
+        node_to_detach.input.pop()
+        node_to_detach.output.pop()
 
     @staticmethod
-    def find_preceeding_nodes(node: onnx.NodeProto,
-                              map_output_tensor_to_node: Dict[str, onnx.NodeProto]) -> List[onnx.NodeProto]:
+    def _collate_io_tensors_for_multi_layer_recurrent_nodes(onnx_model: onnx.NodeProto,
+                                                            node_to_io_tensor_name_map: Dict):
         """
-        Given an ONNX node, find the nodes that directly feed into this node
-        :param node: ONNX node
-        :param map_output_tensor_to_node: Map of tensor->node that produces this tensor
-        :return:
+        Given an ONNX model and corresponding node-tensor map, consolidate multi-layer recurrent nodes
+        into single map entries
         """
+        recurrent_nodes = []
+        for node in onnx_model.graph.node:
+            if node.op_type in recurrent_onnx_optypes:
+                recurrent_nodes.append(node.name)
 
-        nodes = []
-        for in_tensor in node.input:
-            if in_tensor in map_output_tensor_to_node:
-                nodes.append(map_output_tensor_to_node[in_tensor])
+        # Collection of recurrent nodes that includes only the first layer nodes
+        recurrent_root_nodes = [node for node in recurrent_nodes if '#' not in node]
 
-        return nodes
+        for root_node in recurrent_root_nodes:
+            # Find nodes corresponding to all other layers of the recurrent node
+            other_layers = [node for node in recurrent_nodes if node.startswith(root_node + '#')]
 
-    @staticmethod
-    def is_onnx_tensor_valid_param(onnx_tensor_name: str):
-        """
-        This is based on the assumption that parameters have string names and not just numeric.
-        param names are non-numeric like "classifier.weight" etc, and not only numeric
-        ONNX tensor names that is used for tensors such as "123", "14" etc.
-        :param onnx_tensor_name: Name of the ONNX tensor
-        :return: True, if valid param, False otherwise.
-        """
+            # sort the other layers using the depth value following the '#'
+            other_layers = sorted(other_layers, key=lambda layer: layer.split('#')[1])
 
-        if onnx_tensor_name.isnumeric():
-            return False
+            # Append the io_tensors for all layers for the current root recurrent node, in order
+            io_tensor_list = [node_to_io_tensor_name_map[root_node]]
+            for layer in other_layers:
+                io_tensor_list.append(node_to_io_tensor_name_map[layer])
+                del node_to_io_tensor_name_map[layer]
+            node_to_io_tensor_name_map[root_node] = io_tensor_list
 
-        return True
+        print(recurrent_nodes)
 
-    @staticmethod
-    def get_onnx_node_to_io_tensor_names_map(onnx_model: onnx.NodeProto) -> \
+    @classmethod
+    def get_onnx_node_to_io_tensor_names_map(cls, onnx_model: onnx.NodeProto) -> \
             (Dict[str, Union[OpToIOTensors, List[OpToIOTensors]]], set):
         """
         Given an ONNX model, gets the inputs and output tensor names for each node in the model.
@@ -520,33 +495,19 @@ class OnnxSaver:
 
         node_to_io_tensor_name_map = {}
         valid_param_set = set()
+        initializer_names = {initializer.name for initializer in onnx_model.graph.initializer}
 
         for node in onnx_model.graph.node:
             if node.name:
                 onnx_node_io_tensors = OpToIOTensors(list(node.input), list(node.output))
-                if node.name not in node_to_io_tensor_name_map:
+                if (node.name not in node_to_io_tensor_name_map) or node.op_type in recurrent_onnx_optypes:
                     node_to_io_tensor_name_map[node.name] = onnx_node_io_tensors
-                else:
-                    # get the torch module associate with the onnx node
-                    torch_module = [module for module, onnx_nodes in map_torch_types_to_onnx.items()
-                                    if node.op_type in onnx_nodes]
-                    assert len(torch_module) == 1
-                    # Check if the torch module corresponding to tonnx node generates many to one mapping
-                    if torch_module[0] not in torch_recurrent_modules:
-                        # onnx module is being reused in the model pick the last entry
-                        node_to_io_tensor_name_map[node.name] = onnx_node_io_tensors
-                        continue
-
-                    # if an entry with a single IOTensors exists then convert the entry to a list
-                    if not isinstance(node_to_io_tensor_name_map[node.name], list):
-                        node_to_io_tensor_name_map[node.name] = [node_to_io_tensor_name_map[node.name],
-                                                                 onnx_node_io_tensors]
-                    else:
-                        node_to_io_tensor_name_map[node.name].append(onnx_node_io_tensors)
 
             # update valid params list
             for input_tensor in list(node.input):
-                if OnnxSaver.is_onnx_tensor_valid_param(input_tensor):
+                if input_tensor in initializer_names:
                     valid_param_set.add(input_tensor)
+
+        cls._collate_io_tensors_for_multi_layer_recurrent_nodes(onnx_model, node_to_io_tensor_name_map)
 
         return node_to_io_tensor_name_map, valid_param_set

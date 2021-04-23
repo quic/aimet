@@ -370,7 +370,7 @@ class QuantizationSimModel:
         utils.replace_modules_of_type1_with_type2(original_model, torch.nn.Dropout, torch.nn.Identity)
         utils.replace_modules_of_type1_with_type2(original_model, torch.nn.Dropout3d, torch.nn.Identity)
 
-        torch.onnx.export(original_model, dummy_input, onnx_path, training=torch.onnx.TrainingMode.TRAINING)
+        torch.onnx.export(original_model, dummy_input, onnx_path)
         #  Set the onnx layer names
         if set_onnx_layer_names:
             onnx_utils.OnnxSaver.set_node_names(onnx_path, original_model, dummy_input)
