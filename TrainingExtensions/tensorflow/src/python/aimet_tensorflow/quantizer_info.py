@@ -76,6 +76,8 @@ class PickleableTensorQuantizerState:
 
         self.quant_op_name = quant_op_name
         self.quant_scheme = tensor_quantizer_ref.getQuantScheme()
+        self.use_strict_symmetric = tensor_quantizer_ref.getStrictSymmetric()
+        self.use_unsigned_symmetric = tensor_quantizer_ref.getUnsignedSymmetric()
         self.rounding_mode = tensor_quantizer_ref.roundingMode
         self.is_encoding_valid = tensor_quantizer_ref.isEncodingValid
         self.quantizer_type = quantizer_type
@@ -186,6 +188,38 @@ class QuantizerInfo:
         """
         self.tensor_quantizer.isEncodingValid = False
         self.tensor_quantizer.roundingMode = rounding_mode
+
+    @property
+    def use_strict_symmetric(self) -> bool:
+        """
+        Reads useStrictSymmetric config from Tensor Quantizer
+        :return: True if strict symmetric mode is to be used, False otherwise
+        """
+        return self.tensor_quantizer.getStrictSymmetric()
+
+    @use_strict_symmetric.setter
+    def use_strict_symmetric(self, use_strict_symmetric: bool):
+        """
+        Sets the useStrictSymmetric associated with the Tensor Quantizer
+        :param use_strict_symmetric: True if strict symmetric mode is to be used, False otherwise
+        """
+        self.tensor_quantizer.setStrictSymmetric(use_strict_symmetric)
+
+    @property
+    def use_unsigned_symmetric(self) -> bool:
+        """
+        Reads useStrictSymmetric config from Tensor Quantizer
+        :return: True if unsigned symmetric mode is to be used, False otherwise
+        """
+        return self.tensor_quantizer.getUnsignedSymmetric()
+
+    @use_unsigned_symmetric.setter
+    def use_unsigned_symmetric(self, use_unsigned_symmetric: bool):
+        """
+        Sets the useUnsignedSymmetric associated with the Tensor Quantizer
+        :param use_unsigned_symmetric: True if unsigned symmetric mode is to be used, False otherwise
+        """
+        self.tensor_quantizer.setUnsignedSymmetric(use_unsigned_symmetric)
 
     def get_op_mode(self) -> libpymo.TensorQuantizerOpMode:
         """
@@ -328,18 +362,23 @@ class QuantizerInfo:
         self.quantizer_type = state.quantizer_type
         self.tensor_quantizer = libpymo.TensorQuantizer(state.quant_scheme,
                                                         state.rounding_mode)
+        self.tensor_quantizer.setStrictSymmetric(state.use_strict_symmetric)
+        self.tensor_quantizer.setUnsignedSymmetric(state.use_unsigned_symmetric)
         self.tensor_quantizer.isEncodingValid = state.is_encoding_valid
 
     def __str__(self):
         stream = io.StringIO(newline='\n')
         stream.write('Quantizer Info:\n')
         stream.write(' quantize_op_name:{}\n quantizer_type:{}\n bitwidth={}\n use_symmetric_encoding={}\n'
-                     ' round_mode={}\n quant_scheme={}\n enabled:{}\n'.format(self.quant_op_name,
-                                                                              self.quantizer_type,
-                                                                              self.bitwidth,
-                                                                              self.use_symmetric_encoding,
-                                                                              self.rounding_mode,
-                                                                              self.quant_scheme,
-                                                                              self.enabled))
+                     ' round_mode={}\n quant_scheme={}\n use_strict_symmetric={}\n use_unsigned_symmetric={}\n'
+                     ' enabled:{}\n'.format(self.quant_op_name,
+                                            self.quantizer_type,
+                                            self.bitwidth,
+                                            self.use_symmetric_encoding,
+                                            self.rounding_mode,
+                                            self.quant_scheme,
+                                            self.use_strict_symmetric,
+                                            self.use_unsigned_symmetric,
+                                            self.enabled))
 
         return stream.getvalue()
