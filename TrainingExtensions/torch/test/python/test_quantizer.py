@@ -632,8 +632,8 @@ class TestQuantizationSim(unittest.TestCase):
             print(encoding_data)
 
         activation_keys = list(encoding_data["activation_encodings"].keys())
-        self.assertTrue(activation_keys[0] == "123")
-        self.assertTrue(isinstance(encoding_data["activation_encodings"]["123"], list))
+        self.assertTrue(activation_keys[0] == "126")
+        self.assertTrue(isinstance(encoding_data["activation_encodings"]["126"], list))
 
         param_keys = list(encoding_data["param_encodings"].keys())
         self.assertTrue(param_keys[2] == "conv1.weight")

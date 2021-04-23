@@ -79,7 +79,7 @@ class OutOfOrderModel(torch.nn.Module):
         return x1 + y1
 
 
-class TestOnnxUtils(unittest.TestCase):
+class TestOnnxUtils:
 
     def test_add_pytorch_node_names_to_onnx_resnet(self):
 
@@ -89,19 +89,18 @@ class TestOnnxUtils(unittest.TestCase):
         model = models.resnet18(pretrained=False)
         dummy_input = torch.randn(1, 3, 224, 224)
 
-        torch.onnx.export(model, dummy_input, './data/' + model_name + '.onnx',
-                          training=torch.onnx.TrainingMode.TRAINING)
+        torch.onnx.export(model, dummy_input, './data/' + model_name + '.onnx')
         onnx_utils.OnnxSaver.set_node_names('./data/' + model_name + '.onnx', model, dummy_input)
 
         onnx_model = onnx.load('./data/' + model_name + '.onnx')
         for node in onnx_model.graph.node:
             if node.op_type in ('Conv', 'Gemm', 'MaxPool'):
-                self.assertTrue(node.name)
+                assert node.name
 
             for in_tensor in node.input:
                 if in_tensor.endswith('weight'):
                     print("Checking " + in_tensor)
-                    self.assertEqual(node.name, in_tensor[:-7])
+                    assert node.name == in_tensor[:-7]
 
     def test_add_pytorch_node_names_to_onnx_ooo(self):
 
@@ -111,25 +110,23 @@ class TestOnnxUtils(unittest.TestCase):
         model = OutOfOrderModel()
         dummy_input = torch.randn(1, 16, 20, 20)
 
-        torch.onnx.export(model, dummy_input, './data/' + model_name + '.onnx',
-                          training=torch.onnx.TrainingMode.TRAINING)
         onnx_utils.OnnxSaver.set_node_names('./data/' + model_name + '.onnx', model, dummy_input)
 
         onnx_model = onnx.load('./data/' + model_name + '.onnx')
         for node in onnx_model.graph.node:
             if node.op_type in ('Conv', 'Gemm', 'MaxPool'):
-                self.assertTrue(node.name)
+                assert node.name
 
             for in_tensor in node.input:
                 if in_tensor.endswith('weight'):
                     print("Checking " + in_tensor)
-                    self.assertEqual(node.name, in_tensor[:-7])
+                    assert node.name == in_tensor[:-7]
 
     def test_onnx_node_name_to_input_output_names_util(self):
         """ test onxx based utility to find mapping between onnx node names and io tensors"""
         model = models.resnet18(pretrained=False)
         dummy_input = torch.randn(1, 3, 224, 224)
-        torch.onnx.export(model, dummy_input, './data/resnet18.onnx', training=torch.onnx.TrainingMode.TRAINING)
+        torch.onnx.export(model, dummy_input, './data/resnet18.onnx')
         onnx_utils.OnnxSaver.set_node_names('./data/resnet18.onnx', model, dummy_input)
         onnx_model = onnx.load('./data/resnet18.onnx')
 
@@ -137,8 +134,8 @@ class TestOnnxUtils(unittest.TestCase):
         node_to_io_dict,_ = onnx_utils.OnnxSaver.get_onnx_node_to_io_tensor_names_map(onnx_model)
 
         node_0 = onnx_model.graph.node[0]
-        self.assertEqual(node_0.input, node_to_io_dict[node_0.name].inputs)
-        self.assertEqual(node_0.output, node_to_io_dict[node_0.name].outputs)
+        assert node_0.input == node_to_io_dict[node_0.name].inputs
+        assert node_0.output == node_to_io_dict[node_0.name].outputs
 
     def test_single_pytorch_module_mapping_to_many_onnx_nodes(self):
         """ test onxx based utility to find mapping between onnx node names and io tensors
@@ -162,21 +159,46 @@ class TestOnnxUtils(unittest.TestCase):
         model = TwoLayerLstmModel()
         dummy_input = torch.randn(10, 1, 3)
 
-        torch.onnx.export(model, dummy_input, './data/' + model_name + '.onnx',
-                          training=torch.onnx.TrainingMode.EVAL)
+        torch.onnx.export(model, dummy_input, './data/' + model_name + '.onnx')
         onnx_utils.OnnxSaver.set_node_names('./data/' + model_name + '.onnx', model, dummy_input)
         onnx_model = onnx.load('./data/' + model_name + '.onnx')
 
         lstm_nodes = [node for node in onnx_model.graph.node if node.op_type == 'LSTM']
-        self.assertEqual(3, len(lstm_nodes))
+        assert 3 == len(lstm_nodes)
 
         node_to_io_dict, _ = onnx_utils.OnnxSaver.get_onnx_node_to_io_tensor_names_map(onnx_model)
-        self.assertTrue(isinstance(node_to_io_dict['lstm'], list))
-        self.assertEqual(3, len(node_to_io_dict['lstm']))
+        assert isinstance(node_to_io_dict['lstm'], list)
+        assert 3 == len(node_to_io_dict['lstm'])
 
     def test_onnx_export(self):
 
         from aimet_torch.elementwise_ops import Add
+
+        class ResidualLayer(torch.nn.Module):
+            def __init__(self):
+                super(ResidualLayer, self).__init__()
+                self.conv1 = torch.nn.Conv2d(20, 20, 3)
+                self.relu1 = torch.nn.ReLU()
+                self.conv2 = torch.nn.Conv2d(20, 20, 3)
+                self.relu2 = torch.nn.ReLU()
+
+                self.conv3 = torch.nn.Conv2d(20, 20, 3)
+                self.relu3 = torch.nn.ReLU()
+                self.conv4 = torch.nn.Conv2d(20, 20, 3)
+                self.relu4 = torch.nn.ReLU()
+
+            def forward(self, x):
+                y1 = self.conv1(x)
+                y1 = self.relu1(y1)
+                y2 = self.conv2(x)
+                y2 = self.relu2(y2)
+
+                y1 = self.conv3(y1)
+                y1 = self.relu3(y1)
+                y2 = self.conv4(y2)
+                y2 = self.relu4(y2)
+
+                return y1 + y2
 
         class TwoLevelLayer(torch.nn.Module):
             def __init__(self):
@@ -203,19 +225,23 @@ class TestOnnxUtils(unittest.TestCase):
         class MyModel(torch.nn.Module):
             def __init__(self):
                 super(MyModel, self).__init__()
+                self.conv0 = torch.nn.Conv2d(10, 20, 3)
+                self.conv2 = torch.nn.Conv2d(20, 20, 3)
                 self.conv1 = torch.nn.Conv2d(10, 20, 3)
                 self.custom = CustomLayer()
-                self.conv2 = torch.nn.Conv2d(20, 20, 3)
                 self.block1 = TwoLevelLayer()
+                self.block2 = ResidualLayer()
                 self.add = Add()
                 self.relu1 = torch.nn.ReLU()
 
             def forward(self, x):
+                z = self.conv0(x)
                 x = self.conv1(x)
                 x = torch.nn.functional.relu(x)
                 x = self.custom(x)
                 x = self.conv2(x)
                 x = self.block1(x)
+                x = self.block2(x)
                 x = self.add(x, x)
                 x = x[:, :, 0, 0]
                 x = x.reshape(x.shape[0], x.shape[1], 1, 1)
@@ -224,17 +250,21 @@ class TestOnnxUtils(unittest.TestCase):
 
         model = MyModel()
 
-        torch.onnx.export(model, torch.rand(1, 10, 24, 24), './data/MyModel.onnx', training=torch.onnx.TrainingMode.TRAINING)
-
-        # Load the model
+        onnx_utils.OnnxSaver.set_node_names('./data/MyModel.onnx', model, dummy_input=torch.rand(1, 10, 24, 24))
         onnx_model = onnx.load('./data/MyModel.onnx')
+        expected_conv_names = ['conv1', 'conv2', 'block1.conv1', 'block1.conv2', 'block2.conv1', 'block2.conv2',
+                               'block2.conv3', 'block2.conv4']
+        expected_other_node_names = ['relu1', 'add', 'block1.relu1', 'block2.relu1', 'block2.relu2', 'block2.relu3',
+                                     'block2.relu4']
+        not_expected_names = ['conv0']
 
-        # Parse the ONNX model and create mapping from input and output tensors to corresponding nodes
-        map_output_tensor_to_node, _ = onnx_utils.OnnxSaver.create_map_of_tensor_to_node(onnx_model)
-        ordered_list_of_nodes = onnx_utils.OnnxSaver.find_ordered_list_of_onnx_nodes(map_output_tensor_to_node)
+        for node in onnx_model.graph.node:
+            if node.op_type == 'Conv':
+                assert node.name in expected_conv_names
 
-        filtered_nodes = onnx_utils.OnnxSaver._filter_out_uninteresting_onnx_nodes(model, torch.rand(1, 10, 24, 24),
-                                                                                   ordered_list_of_nodes, './data')
+        actual_node_names = [node.name for node in onnx_model.graph.node]
+        for name in expected_other_node_names:
+            assert name in actual_node_names
+        for name in not_expected_names:
+            assert name not in actual_node_names
 
-        for node in filtered_nodes:
-            print(node.op_type)
