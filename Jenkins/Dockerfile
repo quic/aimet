@@ -221,7 +221,7 @@ RUN sed 's@session\s*required\s*pam_loginuid.so@session optional pam_loginuid.so
 # Clone the tensorflow repo to enable development
 RUN cd / && git clone --depth 1 --single-branch --branch v1.15.0 https://github.com/tensorflow/tensorflow.git
 
-RUN pip install git-pylint-commit-hook osqp==0.6.1 onnx==1.7.0
+RUN pip install git-pylint-commit-hook osqp==0.6.1 onnx==1.8.1
 
 # bokeh requires Pillow while Pillow-SIMD is being used everywhere in Morpheus.
 # To install bokeh, we are installing all dependencies of bokeh other than Pillow.
