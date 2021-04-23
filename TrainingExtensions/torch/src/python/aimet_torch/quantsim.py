@@ -55,7 +55,7 @@ from aimet_torch.qc_quantize_op import QcQuantizeStandAloneBase, QcQuantizeWrapp
 from aimet_torch import torchscript_utils
 from aimet_torch.batch_norm_fold import PassThroughOp
 from aimet_torch import utils
-from aimet_torch import onnx_utils
+from aimet_torch.onnx_utils import OnnxSaver, OnnxExportApiArgs
 from aimet_torch.meta.connectedgraph import ConnectedGraph
 from aimet_torch.qc_quantize_recurrent import QcQuantizeRecurrent
 
@@ -279,7 +279,7 @@ class QuantizationSimModel:
         layer.set_mode(QcQuantizeOpMode.ACTIVE)
 
     def export(self, path: str, filename_prefix: str, dummy_input: Union[torch.Tensor, Tuple],
-               set_onnx_layer_names: bool = True, use_torch_script_graph: bool = False):
+               onnx_export_args: Union[OnnxExportApiArgs, None] = OnnxExportApiArgs()):
         """
         This method exports out the quant-sim model so it is ready to be run on-target.
 
@@ -296,8 +296,8 @@ class QuantizationSimModel:
         :param filename_prefix: Prefix to use for filenames of the model pth and encodings files
         :param dummy_input: Dummy input to the model. Used to parse model graph. It is required for the dummy_input to
                 be placed on CPU.
-        :param set_onnx_layer_names: If ONNX layer names should be set while exporting the model. Default is True
-        :param use_torch_script_graph: if exporting of encoding should use torch script tensor names. Default is False
+        :param onnx_export_args: optional export argument with onnx specific overrides if not provide export via
+        torchscript graph
         :return: None
 
         """
@@ -311,12 +311,15 @@ class QuantizationSimModel:
         self._remove_quantization_wrappers(model_to_export, all_modules_in_model_to_export)
         torch.save(model_to_export, model_path)
 
-        if use_torch_script_graph:
+        if onnx_export_args is None:
             self.export_torch_script_model_and_encodings(path, filename_prefix, model_to_export, self.model,
                                                          dummy_input)
-        else:
+        elif isinstance(onnx_export_args, OnnxExportApiArgs):
             self.export_onnx_model_and_encodings(path, filename_prefix, model_to_export, self.model,
-                                                 dummy_input, set_onnx_layer_names)
+                                                 dummy_input, onnx_export_args)
+        else:
+
+            raise ValueError(f'unsupported opt_args type={type(onnx_export_args)}')
 
     @staticmethod
     def export_torch_script_model_and_encodings(path: str, filename_prefix: str,
@@ -350,7 +353,7 @@ class QuantizationSimModel:
     @staticmethod
     def export_onnx_model_and_encodings(path: str, filename_prefix: str, original_model: torch.nn.Module,
                                         sim_model: torch.nn.Module, dummy_input: Union[torch.Tensor, Tuple],
-                                        set_onnx_layer_names):
+                                        onnx_export_args: OnnxExportApiArgs):
         """
         This method exports a onnx model and the corresponding encodings
 
@@ -359,7 +362,7 @@ class QuantizationSimModel:
         :param original_model: model without the quantsim wrappers
         :param sim_model: model with the quantsim wrappers
         :param dummy_input: Dummy input to the model. Used to parse model graph.
-        :param set_onnx_layer_names: If ONNX layer names should be set while exporting the model
+        :param onnx_export_args: Additional onnx export args including export api overrides
         :return: None
 
         """
@@ -370,13 +373,9 @@ class QuantizationSimModel:
         utils.replace_modules_of_type1_with_type2(original_model, torch.nn.Dropout, torch.nn.Identity)
         utils.replace_modules_of_type1_with_type2(original_model, torch.nn.Dropout3d, torch.nn.Identity)
 
-        torch.onnx.export(original_model, dummy_input, onnx_path)
-        #  Set the onnx layer names
-        if set_onnx_layer_names:
-            onnx_utils.OnnxSaver.set_node_names(onnx_path, original_model, dummy_input)
+        OnnxSaver.set_node_names(onnx_path, original_model, dummy_input, onnx_export_args)
         onnx_model = onnx.load(onnx_path)
-        onnx_node_to_io_tensor_map, valid_param_set = \
-            onnx_utils.OnnxSaver.get_onnx_node_to_io_tensor_names_map(onnx_model)
+        onnx_node_to_io_tensor_map, valid_param_set = OnnxSaver.get_onnx_node_to_io_tensor_names_map(onnx_model)
 
         # Export encodings
         QuantizationSimModel._export_encodings_to_files(sim_model, path, filename_prefix,
