@@ -668,6 +668,19 @@ class TestQuantSim(unittest.TestCase):
         is_enabled = p_quantizer.enabled
         self.assertFalse(is_enabled)
 
+        # use strict symmetric and unsigned symmetric
+        use_strict_symmetric = p_quantizer.use_strict_symmetric
+        self.assertFalse(use_strict_symmetric)
+        p_quantizer.use_strict_symmetric = True
+        use_strict_symmetric = p_quantizer.use_strict_symmetric
+        self.assertTrue(use_strict_symmetric)
+
+        use_unsigned_symmetric = p_quantizer.use_unsigned_symmetric
+        self.assertTrue(use_unsigned_symmetric)
+        p_quantizer.use_unsigned_symmetric = False
+        use_unsigned_symmetric = p_quantizer.use_unsigned_symmetric
+        self.assertFalse(use_unsigned_symmetric)
+
         sim.session.close()
         del sim
 
