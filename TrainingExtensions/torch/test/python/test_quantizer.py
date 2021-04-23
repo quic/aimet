@@ -37,6 +37,9 @@
 
 import unittest
 import unittest.mock
+from collections import namedtuple
+from typing import Dict
+
 import numpy as np
 import torch
 import torch.nn as nn
@@ -48,9 +51,11 @@ import onnx
 
 from torchvision import models
 from aimet_common.defs import QuantScheme
+from aimet_torch.elementwise_ops import Multiply
 from aimet_torch.examples.test_models import TwoLayerBidirectionalLstmModel, SingleLayerRNNModel
 
 from aimet_torch.meta.connectedgraph import ConnectedGraph
+from aimet_torch.onnx_utils import OnnxExportApiArgs
 from aimet_torch.qc_quantize_recurrent import QcQuantizeRecurrent
 from aimet_torch.quantsim import QuantizationSimModel
 from aimet_torch.quantsim_straight_through_grad import compute_dloss_by_dx
@@ -69,6 +74,22 @@ def dummy_forward_pass(model, args):
     with torch.no_grad():
         output = model(torch.randn((32, 1, 28, 28)))
     return output
+
+
+class InputOutputDictModel(nn.Module):
+    def __init__(self):
+        super(InputOutputDictModel, self).__init__()
+        self.mul1 = Multiply()
+        self.mul2 = Multiply()
+        self.mul3 = Multiply()
+
+    def forward(self, inputs: Dict[str, torch.Tensor]):
+        ab = self.mul1(inputs['a'], inputs['b'])
+        bc = self.mul2(inputs['b'], inputs['c'])
+        ca = self.mul3(inputs['c'], inputs['a'])
+
+        output_def = namedtuple('output_def', ['ab', 'bc', 'ca'])
+        return output_def(ab, bc, ca)
 
 
 class SmallMnistNoDropoutWithPassThrough(nn.Module):
@@ -658,7 +679,7 @@ class TestQuantizationSim(unittest.TestCase):
         # Quantize
         sim.compute_encodings(forward_pass, None)
 
-        sim.export('./data/', 'resnet50', dummy_input, use_torch_script_graph=True)
+        sim.export('./data/', 'resnet50', dummy_input, onnx_export_args=None)
         with open('./data/resnet50.encodings') as json_file:
             encoding_data = json.load(json_file)
 
@@ -1424,3 +1445,42 @@ class TestQuantizationSim(unittest.TestCase):
             torch.as_tensor(np.array([0.7796169519533523, -0.9791506528745285], dtype='float32')), bitwidth=8)
         self.assertEqual(-128, encoding_dict['offset'])
         self.assertAlmostEqual(encoding_dict['scale'], 0.0077098476, places=7)
+
+    def test_export_dict_input_output(self):
+        """ test export functionality on dictionary input and output """
+
+        dummy_input = {'a': torch.randn(1, 10, 10, 10),
+                       'b': torch.randn(1, 10, 10, 10),
+                       'c': torch.randn(1, 10, 10, 10) }
+
+        model = InputOutputDictModel()
+        def forward_pass(model, args):
+            model.eval()
+            with torch.no_grad():
+                model(dummy_input)
+
+        sim = QuantizationSimModel(model, dummy_input=dummy_input)
+        sim.model.mul1.output_quantizers[0].enabled = True
+        sim.model.mul2.output_quantizers[0].enabled = True
+        sim.model.mul3.output_quantizers[0].enabled = True
+
+        # Quantize
+        sim.compute_encodings(forward_pass, None)
+
+        o_names = ['ab', 'bc', 'ca']
+        sim.export('./data/', 'dict_input_output_model', dummy_input,
+                   onnx_export_args=OnnxExportApiArgs(input_names=dummy_input.keys(),
+                                                      output_names=o_names,
+                                                      opset_version=12
+                                                      ))
+        with open('./data/dict_input_output_model.encodings') as json_file:
+            encoding_data = json.load(json_file)
+            print(encoding_data)
+
+        onnx_model = onnx.load('./data/dict_input_output_model.onnx')
+        for inp in onnx_model.graph.input:
+            assert inp.name in ['a', 'b', 'c']
+        for exp, act in zip(o_names, onnx_model.graph.output):
+            assert exp == act.name
+        for tensor_name in encoding_data["activation_encodings"].keys():
+            assert tensor_name in o_names

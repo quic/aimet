@@ -100,6 +100,31 @@ pytorch_functional_name_to_onnx_dict = {
 }
 
 
+class OnnxExportApiArgs:
+    """
+    configuration for torch onnx export api invocation
+    """
+
+    def __init__(self, opset_version: int = None, input_names: List[str] = None, output_names: List[str] = None):
+        """
+        Refer torch documentation https://pytorch.org/docs/1.7.1/onnx.html?highlight=onnx%20export#torch.onnx.export
+        :param opset_version: onnx opset version to use to export the model
+        :param input_names:  names to assign to the input nodes of the onnx graph, in order
+        :param output_names: names to assign to the output nodes of the graph, in order
+        """
+        self.opset_version = opset_version
+        self.input_names = input_names
+        self.output_names = output_names
+
+    @property
+    def kwargs(self):
+        """
+        formats all override options into kwarg format to appended to onnx export call
+        """
+        return {'opset_version': self.opset_version,
+                'input_names': self.input_names,
+                'output_names': self.output_names}
+
 class OnnxSaver:
     """
     Utilities to save/load onnx models
@@ -107,17 +132,19 @@ class OnnxSaver:
 
     @classmethod
     def set_node_names(cls, onnx_model_path: str, pytorch_model: torch.nn.Module,
-                       dummy_input: Union[torch.Tensor, Tuple]):
+                       dummy_input: Union[torch.Tensor, Tuple],
+                       onnx_export_args: OnnxExportApiArgs = OnnxExportApiArgs()):
         """
         This utility loads a given onnx model file and set the names of all the nodes (ops) to equivalent
         pytorch module names given the corresponding pytorch model.
         :param onnx_model_path: Path to the ONNX model file
         :param pytorch_model: Equivalent PyTorch model instance
         :param dummy_input: Dummy input to the model. Used to parse model graph.
+        :param onnx_export_args:  override options for torch.onnx.export call
         :return:
         """
 
-        cls._map_onnx_nodes_to_pytorch_modules(pytorch_model, dummy_input, onnx_model_path)
+        cls._map_onnx_nodes_to_pytorch_modules(pytorch_model, dummy_input, onnx_model_path, onnx_export_args)
 
     @staticmethod
     def _create_map_of_tensor_to_node(onnx_model: onnx.ModelProto) -> Tuple[Dict[str, List[onnx.NodeProto]],
@@ -224,17 +251,18 @@ class OnnxSaver:
                 cls._add_markers(module_ref, module_name_map)
 
     @classmethod
-    def _map_onnx_nodes_to_pytorch_modules(cls, pt_model, dummy_input, onnx_model_path):
+    def _map_onnx_nodes_to_pytorch_modules(cls, pt_model, dummy_input, onnx_model_path, onnx_export_args):
         """
         Exports an onnx model, maps the nodes in the onnx model to corresponding pytorch modules and names
         them accordingly
         :param pt_model: PyTorch model
         :param dummy_input: Dummy input to run a fwd pass on @pt_model
         :param onnx_model_path: Path to the saved ONNX model
+        :param onnx_export_args:  override options for torch.onnx.export call
         """
         working_dir = os.path.dirname(onnx_model_path)
 
-        onnx_model = cls._create_onnx_model_with_markers(dummy_input, pt_model, working_dir)
+        onnx_model = cls._create_onnx_model_with_markers(dummy_input, pt_model, working_dir, onnx_export_args)
 
         # Parse the ONNX model and create mapping from input and output tensors to corresponding nodes
         map_output_tensor_to_node, map_input_tensor_to_node = cls._create_map_of_tensor_to_node(onnx_model)
@@ -350,12 +378,13 @@ class OnnxSaver:
         return end_marker_map, start_marker_map
 
     @classmethod
-    def _create_onnx_model_with_markers(cls, dummy_input, pt_model, working_dir):
+    def _create_onnx_model_with_markers(cls, dummy_input, pt_model, working_dir, onnx_export_args):
         """
         Exports an onnx model with marker nodes inserted
         :param dummy_input: Dummy input
         :param pt_model: PyTorch model
         :param working_dir: Working directory for storing the exported onnx model
+        :param onnx_export_args:  override options for torch.onnx.export call
         :return: Onnx model with marker layers
         """
         model = copy.deepcopy(pt_model).cpu()
@@ -365,7 +394,7 @@ class OnnxSaver:
                 module_name_map[module_ref] = module_name
         cls._add_markers(model, module_name_map)
         temp_file = os.path.join(working_dir, 'temp_onnx_model_with_markers.onnx')
-        torch.onnx.export(model, dummy_input, temp_file, enable_onnx_checker=False)
+        torch.onnx.export(model, dummy_input, temp_file, enable_onnx_checker=False, **onnx_export_args.kwargs)
         onnx_model = onnx.load(temp_file)
         return onnx_model
 
