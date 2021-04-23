@@ -142,7 +142,7 @@ public:
    * sets strict symmetric flag
    * @param bool, True if strict symmetric, False otherwise
    */
-    void setStrictSymmetric(bool strictSymmetric);
+    void setStrictSymmetric(bool useStrictSymmetric);
 
     /**
     * gets unsigned symmetric flag config for this Tensor Quantizer
@@ -154,15 +154,15 @@ public:
    * sets unsigned symmetric flag
    * @param bool, True or False
    */
-    void setUnsignedSymmetric(bool unsignedsymmetric);
+    void setUnsignedSymmetric(bool useUnsignedsymmetric);
 
     RoundingMode roundingMode;      ///< Rounding mode to use during quantization
     bool isEncodingValid;           ///< Is encoding valid
 
 private:
     QuantizationMode _quantScheme;   ///< Quantization scheme (e.g TF-Enhanced)
-    bool _strictSymmetric;
-    bool _unsignedSymmetric;
+    bool _useStrictSymmetric;
+    bool _useUnsignedSymmetric;
     bool _validStats;
     std::unique_ptr<IQuantizationEncodingAnalyzer<float>> _encodingAnalyzer;
     std::unique_ptr<ITensorQuantizationSim<float>> _tensorQuantizationSim;

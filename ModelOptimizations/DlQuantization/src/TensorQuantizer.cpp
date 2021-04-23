@@ -47,8 +47,8 @@ TensorQuantizer::TensorQuantizer(QuantizationMode quantScheme, RoundingMode roun
         _quantScheme(quantScheme),
         roundingMode(roundingMode),
         isEncodingValid(false),
-        _strictSymmetric(false),
-        _unsignedSymmetric(true),
+        _useStrictSymmetric(false),
+        _useUnsignedSymmetric(true),
         _validStats(false)
 {
     _encodingAnalyzer      = getEncodingAnalyzerInstance<float>(quantScheme);
@@ -73,13 +73,13 @@ void TensorQuantizer::setQuantScheme(QuantizationMode quantScheme)
 
 bool TensorQuantizer::getStrictSymmetric()
 {
-    return _strictSymmetric;
+    return _useStrictSymmetric;
 }
 
-void TensorQuantizer::setStrictSymmetric(bool strictSymmetric)
+void TensorQuantizer::setStrictSymmetric(bool useStrictSymmetric)
 {
     // update strict symmetric flag held by Tensor Quantizer
-    _strictSymmetric = strictSymmetric;
+    _useStrictSymmetric = useStrictSymmetric;
     // create new encoding analyzer instance and reset associated flags
     // _validStats is tightly coupled with the encoding analyzer instance, needs reset
     resetEncodingStats();
@@ -88,13 +88,13 @@ void TensorQuantizer::setStrictSymmetric(bool strictSymmetric)
 
 bool TensorQuantizer::getUnsignedSymmetric()
 {
-    return _unsignedSymmetric;
+    return _useUnsignedSymmetric;
 }
 
-void TensorQuantizer::setUnsignedSymmetric(bool unsignedSymmetric)
+void TensorQuantizer::setUnsignedSymmetric(bool useUnsignedSymmetric)
 {
     // update unsignedSymmetric flag held by Tensor Quantizer
-    _unsignedSymmetric = unsignedSymmetric;
+    _useUnsignedSymmetric = useUnsignedSymmetric;
     // create new encoding analyzer instance and reset associated flags
     // _validStats is tightly coupled with the encoding analyzer instance, needs reset
     resetEncodingStats();
@@ -141,7 +141,7 @@ TfEncoding TensorQuantizer::computeEncoding(unsigned int bitwidth, bool useSymme
     if (_validStats)
     {
         encoding = _encodingAnalyzer->computeEncoding(bitwidth, useSymmetricEncoding,
-                _strictSymmetric, _unsignedSymmetric);
+                _useStrictSymmetric, _useUnsignedSymmetric);
         isEncodingValid = true;
     }
 
