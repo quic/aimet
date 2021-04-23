@@ -100,8 +100,8 @@ class TestTrainingExtensionElementwiseOps(unittest.TestCase):
         with open('./data/quant_model.encodings') as f:
             data = json.load(f)
 
-        self.assertTrue(isinstance(data['activation_encodings']['3'], list))
-        self.assertTrue(isinstance(data['activation_encodings']['4'], list))
+        self.assertTrue(len(data['activation_encodings']) == 3)
+        self.assertTrue(len(data['param_encodings']) == 2)
 
 
     def test_subtract_op(self):
