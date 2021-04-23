@@ -227,6 +227,9 @@ def get_node_to_io_tensor_names_map(model: torch.nn.Module,
         Custom forward hook function to add every module to module list.
         :param curr_module: Current module being traversed during forward pass.
         """
+        if isinstance(curr_module, (torch.nn.RNN, torch.nn.LSTM, torch.nn.GRU)):
+            raise NotImplementedError('exporting encoding for RNN module via torchscript not supported')
+
         if not isinstance(curr_module, PassThroughOp):
             modules.append(curr_module)
 
