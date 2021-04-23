@@ -16,4 +16,4 @@ holoviews==1.12.7
 hvplot==0.4.0
 jsonschema==3.1.1
 osqp==0.6.1
-onnx==1.7.0
+onnx==1.8.1
