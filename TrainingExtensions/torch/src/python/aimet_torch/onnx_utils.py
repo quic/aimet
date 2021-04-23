@@ -225,7 +225,13 @@ class OnnxSaver:
 
     @classmethod
     def _map_onnx_nodes_to_pytorch_modules(cls, pt_model, dummy_input, onnx_model_path):
-
+        """
+        Exports an onnx model, maps the nodes in the onnx model to corresponding pytorch modules and names
+        them accordingly
+        :param pt_model: PyTorch model
+        :param dummy_input: Dummy input to run a fwd pass on @pt_model
+        :param onnx_model_path: Path to the saved ONNX model
+        """
         working_dir = os.path.dirname(onnx_model_path)
 
         onnx_model = cls._create_onnx_model_with_markers(dummy_input, pt_model, working_dir)
@@ -240,11 +246,11 @@ class OnnxSaver:
         cls._set_onnx_node_names(map_input_tensor_to_node, start_marker_map)
 
         # Remove markers
-        for _, markers in start_marker_map.items():
+        for markers in start_marker_map.values():
             for marker in markers:
                 cls._detach_onnx_node(map_input_tensor_to_node, map_output_tensor_to_node, marker)
 
-        for _, markers in end_marker_map.items():
+        for markers in end_marker_map.values():
             for marker in markers:
                 cls._detach_onnx_node(map_input_tensor_to_node, map_output_tensor_to_node, marker)
 
@@ -256,7 +262,10 @@ class OnnxSaver:
 
     @classmethod
     def _fix_param_names(cls, onnx_model):
-
+        """
+        Parameter names have an additional level due to the name of the Marker module itself. This method removes that.
+        :param onnx_model: Onnx Model
+        """
         # Rename initializers
         for ini in onnx_model.graph.initializer:
             if 'marked_module' in ini.name:
@@ -279,7 +288,10 @@ class OnnxSaver:
 
     @classmethod
     def _remove_detached_nodes_from_onnx_graph(cls, onnx_model):
-        # Remove detached nodes from ONNX graph
+        """
+        Given a ONNX model removes any detached nodes from the graph
+        :return: Updated onnx model
+        """
         e = onnx.utils.Extractor(onnx_model)
         model_inputs = [inp.name for inp in onnx_model.graph.input]
         model_outputs = [output.name for output in onnx_model.graph.output]
@@ -288,7 +300,12 @@ class OnnxSaver:
 
     @classmethod
     def _set_onnx_node_names(cls, map_input_tensor_to_node, start_marker_map):
-
+        """
+        Set names of the ONNX nodes using the identifier fields in the marker layers
+        :param map_input_tensor_to_node: Map of tensor to node consuming that tensor
+        :param start_marker_map: Map of start marker nodes in the ONNX graph
+        :return:
+        """
         def set_name_for_downstream_nodes(starting_nodes, name, depth):
             for node in starting_nodes:
 
@@ -312,6 +329,11 @@ class OnnxSaver:
 
     @classmethod
     def _create_map_of_marker_nodes(cls, onnx_model):
+        """
+        Creates and returns maps of start and end marker nodes
+        :param onnx_model: Onnx model
+        :return: Map of end marker node, Map of start marker nodes
+        """
         start_marker_map = defaultdict(list)
         end_marker_map = defaultdict(list)
         for node in onnx_model.graph.node:
@@ -329,6 +351,13 @@ class OnnxSaver:
 
     @classmethod
     def _create_onnx_model_with_markers(cls, dummy_input, pt_model, working_dir):
+        """
+        Exports an onnx model with marker nodes inserted
+        :param dummy_input: Dummy input
+        :param pt_model: PyTorch model
+        :param working_dir: Working directory for storing the exported onnx model
+        :return: Onnx model with marker layers
+        """
         model = copy.deepcopy(pt_model).cpu()
         module_name_map = {}
         for module_name, module_ref in model.named_modules():
@@ -342,6 +371,15 @@ class OnnxSaver:
 
     @classmethod
     def _detach_onnx_node(cls, map_input_tensor_to_node, map_output_tensor_to_node, node_to_detach):
+        """
+        Given a ONNX node, detach it from the graph
+        :param map_input_tensor_to_node: Map of tensor to node consuming the tensor
+        :param map_output_tensor_to_node: Map of tensor to node producing the tensor
+        :param node_to_detach: Reference to the ONNX node to detach
+        """
+        assert len(node_to_detach.input) == 1
+        assert len(node_to_detach.output) == 1
+
         input_tensor = node_to_detach.input[0]
         output_tensor = node_to_detach.output[0]
 
@@ -400,8 +438,6 @@ class OnnxSaver:
                 io_tensor_list.append(node_to_io_tensor_name_map[layer])
                 del node_to_io_tensor_name_map[layer]
             node_to_io_tensor_name_map[root_node] = io_tensor_list
-
-        print(recurrent_nodes)
 
     @classmethod
     def get_onnx_node_to_io_tensor_names_map(cls, onnx_model: onnx.NodeProto) -> \
