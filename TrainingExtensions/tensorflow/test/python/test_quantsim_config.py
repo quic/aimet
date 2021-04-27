@@ -263,7 +263,9 @@ class TestQuantsimConfig(unittest.TestCase):
         quantsim_config = {
             "defaults": {
                 "ops": {},
-                "params": {}
+                "params": {},
+                "strict_symmetric": "True",
+                "unsigned_symmetric": "True"
             },
             "params": {},
             "op_type": {
@@ -297,6 +299,13 @@ class TestQuantsimConfig(unittest.TestCase):
             json.dump(quantsim_config, f)
         sim = QuantizationSimModel(sess, ['input_1'], ['single_residual/Softmax'],
                                    config_file='./quantsim_config.json')
+        for q_config in sim._param_quantizers.values():
+            self.assertTrue(q_config.use_strict_symmetric)
+            self.assertTrue(q_config.use_unsigned_symmetric)
+
+        for q_config in sim._activation_quantizers.values():
+            self.assertTrue(q_config.use_strict_symmetric)
+            self.assertTrue(q_config.use_unsigned_symmetric)
 
         activation_quantizers = [
             'conv2d/BiasAdd_quantized',
