@@ -85,8 +85,7 @@ pipeline {
                             steps {
                                 echo 'Building code (and generating Docs and pip packages)...'
                                 script {
-                                    //TODO Change option back to "-bp" as soon as issue is fixed
-                                    runStage(env.AIMET_VARIANT_TF_GPU, "-b")
+                                    runStage(env.AIMET_VARIANT_TF_GPU, "-bp")
                                 }
                             }
                         }
