@@ -1,7 +1,7 @@
 # =============================================================================
 #  @@-COPYRIGHT-START-@@
 #
-#  Copyright (c) 2020, Qualcomm Innovation Center, Inc. All rights reserved.
+#  Copyright (c) 2021, Qualcomm Innovation Center, Inc. All rights reserved.
 #
 #  Redistribution and use in source and binary forms, with or without
 #  modification, are permitted provided that the following conditions are met:
@@ -34,55 +34,114 @@
 #  @@-COPYRIGHT-END-@@
 # =============================================================================
 
+# CMake file to generate AIMET packages
+
 cmake_minimum_required(VERSION 3.5)
 
+set(src_packaging_dir "${SOURCE_DIR}/packaging")
+set(src_deps_dir "${src_packaging_dir}/dependencies")
+set(build_packaging_dir "${CMAKE_BINARY_DIR}/packaging")
 
-#copying NOTICE, README, INSTALL files to build folder for Aimet whl package creation
-configure_file("${SOURCE_DIR}/packaging/NOTICE.txt" "${CMAKE_BINARY_DIR}/packaging/NOTICE.txt" COPYONLY)
-configure_file("${SOURCE_DIR}/packaging/README.txt" "${CMAKE_BINARY_DIR}/packaging/README.txt" COPYONLY)
-configure_file("${SOURCE_DIR}/packaging/requirements.txt" "${CMAKE_BINARY_DIR}/packaging/requirements.txt" COPYONLY)
-configure_file("${SOURCE_DIR}/packaging/INSTALL.txt" "${CMAKE_BINARY_DIR}/packaging/INSTALL.txt" COPYONLY)
-configure_file("${SOURCE_DIR}/packaging/setup_cfg.py" "${CMAKE_BINARY_DIR}/packaging/setup_cfg.py" COPYONLY)
+# First delete the existing packaging directory if it exists
+file(REMOVE_RECURSE ${build_packaging_dir})
 
-# Setup the package array list
+# Copy NOTICE, README, INSTALL, etc files to build folder for package creation
+configure_file("${src_packaging_dir}/NOTICE.txt" "${build_packaging_dir}/NOTICE.txt" COPYONLY)
+configure_file("${src_packaging_dir}/README.txt" "${build_packaging_dir}/README.txt" COPYONLY)
+configure_file("${src_packaging_dir}/INSTALL.txt" "${build_packaging_dir}/INSTALL.txt" COPYONLY)
+configure_file("${src_packaging_dir}/setup_cfg.py" "${build_packaging_dir}/setup_cfg.py" COPYONLY)
+
+# Common dependencies
+set(deps_name_list_aimet_common "reqs_deb_common.txt" "reqs_pip_common.txt")
+
+# Initialize package array list with AIMET common package
 set(package_name_list aimet_common)
+
+# Set a GPU flag for use by setup scripts
+set(CUDA_OPTION "")
+if(ENABLE_CUDA)
+  set(CUDA_OPTION "--gpu")
+endif()
+
+# Setup Tensorflow package dependencies if required
 if(ENABLE_TENSORFLOW)
+  # Add AIMET Tensorflow package to package array list
   list(APPEND package_name_list aimet_tensorflow)
+
+  # Tensorflow dependencies that are common to CPU and GPU
+  set(deps_name_list_aimet_tensorflow "reqs_pip_tf_common.txt")
+
+  if(ENABLE_CUDA)
+    # Tensorflow GPU dependencies
+    list(APPEND deps_name_list_aimet_tensorflow "reqs_deb_tf_gpu.txt" "reqs_pip_tf_gpu.txt")
+  else()
+    # Tensorflow CPU dependencies
+    list(APPEND deps_name_list_aimet_tensorflow "reqs_pip_tf_cpu.txt")
+  endif()
 endif()
+
+# Setup Torch package dependencies if required
 if(ENABLE_TORCH)
+  # Add AIMET Torch package to package array list
   list(APPEND package_name_list aimet_torch)
+
+  # Torch dependencies that are common to CPU and GPU
+  set(deps_name_list_aimet_torch "reqs_pip_torch_common.txt")
+
+  if(ENABLE_CUDA)
+    # Torch GPU dependencies
+    list(APPEND deps_name_list_aimet_torch "reqs_deb_torch_gpu.txt" "reqs_pip_torch_gpu.txt")
+  else()
+    # Torch CPU dependencies
+    list(APPEND deps_name_list_aimet_torch "reqs_pip_torch_cpu.txt")
+  endif()
 endif()
+
+# Finally, add AIMET "top-level" package to package array list
 list(APPEND package_name_list aimet)
 
-#to create whl packages, copying set up files, and related code to build directory.
-#these copied files would be input to the setuptools
 
+# Loop over the package array list to generate wheel files
 foreach(package ${package_name_list})
 
-  configure_file("${SOURCE_DIR}/packaging/setup_${package}.py" "${CMAKE_BINARY_DIR}/packaging/setup.py" COPYONLY)
-  
+  # Rename the package setup script 
+  configure_file("${src_packaging_dir}/setup_${package}.py" "${build_packaging_dir}/setup.py" COPYONLY)
+  # Location of the package folder
+  set(package_dir "${build_packaging_dir}/${package}")
+  # Location of the dependency subfolder within package
+  set(package_deps_dir "${package_dir}/bin")
+
+  # Loop over the dependency list for this package and copy to dependency location
+  file(MAKE_DIRECTORY "${package_deps_dir}")
+  foreach(dependency_file ${deps_name_list_${package}})
+    message(VERBOSE "*** Copied ${src_deps_dir}/${dependency_file} to ${package_deps_dir}/ ***")
+    configure_file("${src_deps_dir}/${dependency_file}" "${package_deps_dir}/" COPYONLY)
+  endforeach()
+
   if("${package}" STREQUAL "aimet_common")
-    #MANIFEST file is different for different packages 
-    file(WRITE "${CMAKE_BINARY_DIR}/packaging/MANIFEST.ini" "graft ${package}/x86_64-linux-gnu")
-    file(COPY ${AIMET_PACKAGE_PATH}/lib/python/${package} DESTINATION ${CMAKE_BINARY_DIR}/packaging/)
-    file(COPY ${AIMET_PACKAGE_PATH}/lib/x86_64-linux-gnu/ DESTINATION ${CMAKE_BINARY_DIR}/packaging/${package}/x86_64-linux-gnu/)
+    # NOTE: MANIFEST file is different for different packages 
+    file(WRITE "${build_packaging_dir}/MANIFEST.ini" "graft ${package}/x86_64-linux-gnu")
+    # Populate the python code
+    file(COPY ${AIMET_PACKAGE_PATH}/lib/python/${package} DESTINATION ${build_packaging_dir}/)
+    # Populate the C++ libraries
+    file(COPY ${AIMET_PACKAGE_PATH}/lib/x86_64-linux-gnu/ DESTINATION ${package_dir}/x86_64-linux-gnu/)
 
     # Copy over dependency installation files
-    configure_file("${SOURCE_DIR}/packaging/requirements.txt" "${CMAKE_BINARY_DIR}/packaging/${package}/bin/" COPYONLY)
-    configure_file("${SOURCE_DIR}/packaging/packages_common.txt" "${CMAKE_BINARY_DIR}/packaging/${package}/bin/" COPYONLY)
-    configure_file("${SOURCE_DIR}/packaging/packages_gpu.txt" "${CMAKE_BINARY_DIR}/packaging/${package}/bin/" COPYONLY)
-    if(EXISTS "${SOURCE_DIR}/packaging/LICENSE.pdf")
-      configure_file("${SOURCE_DIR}/packaging/LICENSE.pdf" "${CMAKE_BINARY_DIR}/packaging/${package}/bin/" COPYONLY)
+    if(EXISTS "${src_packaging_dir}/LICENSE.pdf")
+      configure_file("${src_packaging_dir}/LICENSE.pdf" "${package_deps_dir}/" COPYONLY)
     endif()
-    configure_file("${SOURCE_DIR}/packaging/INSTALL.txt" "${CMAKE_BINARY_DIR}/packaging/${package}/bin/" COPYONLY)
-    configure_file("${SOURCE_DIR}/packaging/envsetup.sh" "${CMAKE_BINARY_DIR}/packaging/${package}/bin/" COPYONLY)
+    configure_file("${src_packaging_dir}/INSTALL.txt" "${package_deps_dir}/" COPYONLY)
+    configure_file("${src_packaging_dir}/envsetup.sh" "${package_deps_dir}/" COPYONLY)
   elseif("${package}" STREQUAL "aimet")
-    file(WRITE "${CMAKE_BINARY_DIR}/packaging/MANIFEST.ini" "include README.txt NOTICE.txt")
+    # Populate top-level AIMET package contents (manifest file)
+    file(WRITE "${build_packaging_dir}/MANIFEST.ini" "include README.txt NOTICE.txt")
   else()
-    file(WRITE "${CMAKE_BINARY_DIR}/packaging/MANIFEST.ini" "graft ${package}/acceptance_tests")
-    file(COPY ${AIMET_PACKAGE_PATH}/lib/python/${package} DESTINATION ${CMAKE_BINARY_DIR}/packaging/)
+    # Populate AIMET Tensorflow or Torch package contents (manifest and python code)
+    file(WRITE "${build_packaging_dir}/MANIFEST.ini" "graft ${package}/acceptance_tests")
+    file(COPY ${AIMET_PACKAGE_PATH}/lib/python/${package} DESTINATION ${build_packaging_dir}/)
   endif()
-  #creating the whl packages. 
-  execute_process(COMMAND python3 setup.py sdist bdist_wheel WORKING_DIRECTORY ${CMAKE_BINARY_DIR}/packaging OUTPUT_VARIABLE output_var)
+
+  # Invoke the setup tools scrip to create the wheel packages. 
+  execute_process(COMMAND python3 setup.py sdist bdist_wheel ${CUDA_OPTION} WORKING_DIRECTORY ${build_packaging_dir} OUTPUT_VARIABLE output_var)
 
 endforeach()

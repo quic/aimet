@@ -25,6 +25,7 @@ We also provide recipes for users to quantize floating point models using AIMET.
 - [Supported features](#supported-features)
 - [Results](#results)
 - [Getting started](#getting-started)
+- [Resources](#resources)
 - [Contributions](#contributions)
 - [Team](#team)
 - [License](#license)
@@ -114,8 +115,16 @@ AIMET can also significantly compress models. For popular models, such as Resnet
   </tr>
 </table>
 
-## Getting Started
-* [Installation Guide](USAGE.md)
+## Getting started
+To install and use the pre-built version of the AIMET package, please follow one of the below links:
+- [Install and run AIMET in *Ubuntu* environment](./packaging/install.md)
+- [Install and run AIMET in *Google Colab* environment](./packaging/google_colab_install.md)
+
+To build, modify (*optionally*) and use the latest AIMET source code, please follow one of the below links:
+- [Instructions to build, install and run AIMET in *Docker* environment](./packaging/docker_install.md)
+- [Instructions to build, install and run AIMET in *Google Colab* environment](./packaging/google_colab_development.md)
+
+## Resources
 * [User Guide](https://quic.github.io/aimet-pages/AimetDocs/user_guide/index.html)
 * [API Docs](https://quic.github.io/aimet-pages/AimetDocs/api_docs/index.html)
 * [Discussion Forums](https://forums.quicinc.com/)

@@ -36,8 +36,8 @@
 
 """ Package generation file for top-level aimet package """
 
-from setuptools import setup
 import os.path
+from setuptools import setup
 import setup_cfg # pylint: disable=import-error
 
 package_url_base = setup_cfg.remote_url + "/releases/download/" + str(setup_cfg.version)
@@ -55,7 +55,7 @@ setup(
     name='Aimet',
     version=str(setup_cfg.version),
     author='Qualcomm Innovation Center, Inc.',
-    author_email='aimet@noreply.github.com',
+    author_email='aimet.os@quicinc.com',
     url=package_url_base,
     license='NOTICE.txt',
     description='AIMET',

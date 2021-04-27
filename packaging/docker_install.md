@@ -10,27 +10,28 @@ This page provides instructions to build, install and use the AIMET software in 
 - [Set package and library paths](#set-package-and-library-paths)
 - [Usage examples and documentation](#usage-examples-and-documentation)
 - [Docker information](#docker-information)
+  - [Set variant](#set-variant)
   - [Build docker image manually](#build-docker-image-manually)
   - [Start docker container manually](#start-docker-container-manually)
   - [Build and launch docker using script](#build-and-launch-docker-using-script)
 
 ## Requirements
 The AIMET package requires the following host platform setup:
-
 - 64-bit Intel x86-compatible processor
-- Nvidia GPU card (Compute capability 5.2 or later)
 - Linux Ubuntu: 16.04 LTS or later
-- nvidia-docker - Installation instructions: https://github.com/NVIDIA/nvidia-docker
 - bash command shell
+- For GPU variants:
+  - Nvidia GPU card (Compute capability 5.2 or later)
+  - nvidia-docker - Installation instructions: https://github.com/NVIDIA/nvidia-docker
 
-To use the GPU accelerated training modules an Nvidia CUDA enabled GPU with a minimum Nvidia driver version of 361+ is required. Using the latest driver is always recommended, especially if using a newer GPU. Both CUDA and cuDNN (the more advanced CUDA interface) enabled GPUs are supported.
+To use the GPU accelerated training modules an Nvidia CUDA enabled GPU with a minimum Nvidia driver version of 455+ is required. Using the latest driver is always recommended, especially if using a newer GPU. Both CUDA and cuDNN (the more advanced CUDA interface) enabled GPUs are supported.
 
 Recommended host system hardware requirements:
-
 - Intel i7 multicore CPU w/hyperthreading
-- GPU: Nvidia GeForce GTX 1080 or Tesla V100
 - 16+ GB RAM
 - 500GB+ SSD hard drive
+- For GPU variants:
+  - GPU: Nvidia GeForce GTX 1080 or Tesla V100
 
 While these are not minimum requirements, they are recommended for good performance when training large networks.
 
@@ -50,8 +51,9 @@ pushd ./ThirdParty/googletest
 git clone https://github.com/google/googletest.git -b release-1.8.0 googletest-release-1.8.0
 popd
 ```
+
 ## Setup the environment
-In order to build and run AIMET code, several dependencies are required (such as python, cmake, tensorflow, pytorch, etc). A docker file with all prerequisites and dependencies is available [here](../Jenkins/Dockerfile). Either install the dependencies on your machine using [this Dockerfile](../Jenkins/Dockerfile) as a guide, or just build and launch the docker using the instructions [here](#docker-information).
+In order to build and run AIMET code, several dependencies are required (such as python, cmake, tensorflow, pytorch, etc). Docker files with all prerequisites and dependencies are available [here](../Jenkins). Either install the dependencies on your machine using [these Dockerfiles](../Jenkins) as a guide, or just build and launch the docker using the instructions [here](#docker-information).
 
 Set the *common* environment variables as follows:
 ```bash
@@ -101,7 +103,17 @@ make doc
 To begin navigating the documentation, open the page `$WORKSPACE/build/staging/universal/Docs/user_guide/index.html` on any browser.
 
 ## Docker information
-Code may *optionally* be developed inside a development docker container. This section describes how to build a docker image and launch a container using the provided [Dockerfile](../Jenkins/Dockerfile).
+Code may *optionally* be developed inside a development docker container. This section describes how to build a docker image and launch a container using the provided [Dockerfiles](../Jenkins).
+
+### Set variant
+Set the `<variant_string>` to ONE of the following depending on your desired variant
+- For the PyTorch GPU variant, use `"torch-gpu"`
+- For the PyTorch CPU variant, use `"torch-cpu"`
+- For the TensorFlow GPU variant, use `"tf-gpu"`
+- For the TensorFlow CPU variant, use `"tf-cpu"`
+```bash
+export AIMET_VARIANT=<variant_string>
+```
 
 ### Build docker image manually
 Follow these instructions to build the docker:
@@ -109,7 +121,7 @@ Follow these instructions to build the docker:
 WORKSPACE="<absolute_path_to_workspace>"
 docker_image_name="aimet-dev-docker:<any_tag>"
 docker_container_name="aimet-dev-<any_name>"
-docker build -t ${docker_image_name} -f $WORKSPACE/aimet/Jenkins/Dockerfile .
+docker build -t ${docker_image_name} -f $WORKSPACE/aimet/Jenkins/Dockerfile.${AIMET_VARIANT} .
 ```
 
 > NOTE: Feel free to modify the `docker_image_name` and `docker_container_name` as needed.
@@ -123,7 +135,7 @@ docker run --rm -it -u $(id -u ${USER}):$(id -g ${USER}) \
   -v /etc/passwd:/etc/passwd:ro -v /etc/group:/etc/group:ro \
   -v ${HOME}:${HOME} -v ${WORKSPACE}:${WORKSPACE} \
   -v "/local/mnt/workspace":"/local/mnt/workspace" \
-  --entrypoint /bin/bash -w ${WORKSPACE} --hostname aimet-dev ${docker_image_name}
+  --entrypoint /bin/bash -w ${WORKSPACE} --hostname ${docker_container_name} ${docker_image_name}
 ```
 
 > **NOTE**
@@ -131,33 +143,32 @@ docker run --rm -it -u $(id -u ${USER}):$(id -g ${USER}) \
 * If nvidia-docker 2.0 is installed, then add `--gpus all` to the `docker run` commands in order to enable GPU access inside the docker container.
 * If nvidia-docker 1.0 is installed, then replace `docker run` with `nvidia-docker run` in order to enable GPU access inside the docker container. 
 * Port forwarding needs to be done in order to run the Visualization APIs from docker container. This can be achieved by running the docker container as follows:
-```
+```bash
 port_id="<any-port-number>"
 
 docker run -p ${port_id}:${port_id} --rm -it -u $(id -u ${USER}):$(id -g ${USER}) \
   -v /etc/passwd:/etc/passwd:ro -v /etc/group:/etc/group:ro \
   -v ${HOME}:${HOME} -v ${WORKSPACE}:${WORKSPACE} \
   -v "/local/mnt/workspace":"/local/mnt/workspace" \
-  --entrypoint /bin/bash -w ${WORKSPACE} --hostname aimet-dev ${docker_image_name} 
+  --entrypoint /bin/bash -w ${WORKSPACE} --hostname ${docker_container_name} ${docker_image_name} 
 ```
-
 
 ### Build and launch docker using script
 The development docker may also be built and launched in interactive mode using the provided script as follows:
 ```
 cd aimet
-./buildntest.sh -i
+./buildntest.sh -e AIMET_VARIANT -i
 ```
 If additional directories need to be mounted, use `-m` option with list of targeted directories separated by space **surrounded by double quotes `""`**
 ```
 cd aimet
-./buildntest.sh -i -m "sample_dir_1 sample_dir2"
+./buildntest.sh -e AIMET_VARIANT -i -m "sample_dir_1 sample_dir2"
 ```
 
 To help construct user-specific docker commands, the dry-run option (`-n`) can be used with the above script which prints out the equivalent docker command(s):
 ```
 cd aimet
-./buildntest.sh -i -n
+./buildntest.sh -e AIMET_VARIANT -i -n
 # OR
-./buildntest.sh -i -n -m "sample_dir_1 sample_dir2"
+./buildntest.sh -e AIMET_VARIANT -i -n -m "sample_dir_1 sample_dir2"
 ```
