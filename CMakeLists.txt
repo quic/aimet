@@ -39,6 +39,32 @@ cmake_minimum_required(VERSION 3.5)
 
 project(aimet)
 
+# Check whether the CUDA flag was enabled
+if (NOT (DEFINED ENABLE_CUDA))
+  message("Compiling with CUDA not explicitly disabled. Enabling implicitly")
+  set(ENABLE_CUDA ON CACHE BOOL "")
+endif(NOT (DEFINED ENABLE_CUDA))
+
+# Check whether PyTorch flag was enabled
+if (NOT (DEFINED ENABLE_TORCH))
+  message("AIMET Torch build not explicitly disabled. Enabling implicitly")
+  set(ENABLE_TORCH ON CACHE BOOL "")
+endif(NOT (DEFINED ENABLE_TORCH))
+
+# Check whether Tensorflow flag was enabled
+if (NOT (DEFINED ENABLE_TENSORFLOW))
+  message("AIMET TensorFlow build not explicitly disabled. Enabling implicitly")
+  set(ENABLE_TENSORFLOW ON CACHE BOOL "")
+endif(NOT (DEFINED ENABLE_TENSORFLOW))
+
+if (NOT ENABLE_TORCH AND NOT ENABLE_TENSORFLOW)
+  # Either PyTorch or Tensorflow needs to be enabled
+  message(FATAL_ERROR "Both ENABLE_TORCH and ENABLE_TORCH cannot be OFF. Aborting...")
+elseif (ENABLE_CUDA AND ENABLE_TORCH AND ENABLE_TENSORFLOW)
+  # In GPU (CUDA) mode, either PyTorch or Tensorflow can be enabled but NOT both
+  message(FATAL_ERROR "Both ENABLE_TORCH and ENABLE_TORCH cannot be ON in CUDA mode. Aborting...")
+endif()
+
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11 -O0 -ggdb -fPIC -D_GLIBCXX_USE_CXX11_ABI=0")
 set(AIMET_INSTALL_DIR ${CMAKE_BINARY_DIR}/staging/universal)
 
@@ -68,11 +94,6 @@ find_package(Threads)
 # -------------------------------
 # Conditional build for CUDA
 # -------------------------------
-if (NOT (DEFINED ENABLE_CUDA))
-  message("Compiling with CUDA not explicitly disabled. Enabling implicitly")
-  set(ENABLE_CUDA ON CACHE BOOL "")
-
-endif(NOT (DEFINED ENABLE_CUDA))
 
 if (ENABLE_CUDA)
   message("Compiling with CUDA enabled")
@@ -100,14 +121,6 @@ set(OPENCV_LIBRARY /usr/local/lib/libopencv_core.a)
 
 find_package(Python COMPONENTS Interpreter Development)
 set(PYTHON_DIST_PACKAGES "/usr/local/lib/python${Python_VERSION_MAJOR}.${Python_VERSION_MINOR}/dist-packages/")
-
-
-
-if (NOT (DEFINED ENABLE_TORCH))
-  message("AIMET Torch build not explicitly disabled. Enabling implicitly")
-  set(ENABLE_TORCH ON CACHE BOOL "")
-
-endif(NOT (DEFINED ENABLE_TORCH))
 
 if (ENABLE_TORCH)
   set(AIMET_PYTHONPATH "${AIMET_PYTHONPATH}:${CMAKE_CURRENT_SOURCE_DIR}/TrainingExtensions/torch/src/python")
@@ -138,12 +151,6 @@ set_target_properties(PYBIND11 PROPERTIES
 # ----------------------------------
 # Conditional build for TensorFlow
 # ----------------------------------
-
-if (NOT (DEFINED ENABLE_TENSORFLOW))
-  message("AIMET TensorFlow build not explicitly disabled. Enabling implicitly")
-  set(ENABLE_TENSORFLOW ON CACHE BOOL "")
-
-endif(NOT (DEFINED ENABLE_TENSORFLOW))
 
 if (ENABLE_TENSORFLOW)
   set(AIMET_PYTHONPATH "${AIMET_PYTHONPATH}:${CMAKE_CURRENT_SOURCE_DIR}/TrainingExtensions/tensorflow/src/python")

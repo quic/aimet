@@ -20,62 +20,107 @@ Install the basic pre-requisite packages as follows:
 ```bash
 apt-get update
 apt-get install python3.6 python3.6-dev python3-pip
-pip3 install --upgrade pip
+python3 -m pip install --upgrade pip
 ```
 
 ### Install AIMET packages
-Go to https://github.com/quic/aimet/releases and identify the release tag of the package you want to install. Replace `<release_tag>` in the steps below with the appropriate tag and install the AIMET packages in the order specified below:
+Go to https://github.com/quic/aimet/releases and identify the release tag of the package you want to install. 
 
-> _NOTE:_ Python dependencies would automatically get installed.
+Set the `<variant_string>` to ONE of the following depending on your desired variant
+- For the PyTorch GPU variant, use `"torch-gpu"`
+- For the PyTorch CPU variant, use `"torch-cpu"`
+- For the TensorFlow GPU variant, use `"tf-gpu"`
+- For the TensorFlow CPU variant, use `"tf-cpu"`
+```bash
+export AIMET_VARIANT=<variant_string>
+```
 
+Replace `<release_tag>` in the steps below with the appropriate tag:
 ```bash
 release_tag=<release_tag>
-pip3 install https://github.com/quic/aimet/releases/download/${release_tag}/AimetCommon-${release_tag}-py3-none-any.whl -f https://download.pytorch.org/whl/torch_stable.html
-pip3 install https://github.com/quic/aimet/releases/download/${release_tag}/AimetTorch-${release_tag}-py3-none-any.whl
-pip3 install https://github.com/quic/aimet/releases/download/${release_tag}/AimetTensorflow-${release_tag}-py3-none-any.whl
-pip3 install https://github.com/quic/aimet/releases/download/${release_tag}/Aimet-${release_tag}-py3-none-any.whl
+```
+
+Install the AIMET packages in the order specified below:
+> _NOTE:_ Python dependencies would automatically get installed.
+```bash
+release_tag=<release_tag>
+python3 -m pip install https://github.com/quic/aimet/releases/download/${release_tag}/AimetCommon-${AIMET_VARIANT}_${release_tag}-py3-none-any.whl
+
+# Install ONE of the following depending on the variant
+python3 -m pip install https://github.com/quic/aimet/releases/download/${release_tag}/AimetTorch-${AIMET_VARIANT}_${release_tag}-py3-none-any.whl
+# OR
+python3 -m pip install https://github.com/quic/aimet/releases/download/${release_tag}/AimetTensorflow-${AIMET_VARIANT}_${release_tag}-py3-none-any.whl
+
+python3 -m pip install https://github.com/quic/aimet/releases/download/${release_tag}/Aimet-${AIMET_VARIANT}_${release_tag}-py3-none-any.whl
 ```
 
 ### Install common debian packages
-Install the common debian packages from the packages_common.txt file as follows:
+Install the common debian packages as follows:
 ```bash
-cat /usr/local/lib/python3.6/dist-packages/aimet_common/bin/packages_common.txt | xargs apt-get --assume-yes install
+cat /usr/local/lib/python3.6/dist-packages/aimet_common/bin/reqs_deb_common.txt | xargs apt-get --assume-yes install
+```
+
+### Install tensorflow GPU debian packages
+> _NOTE:_ Do this section **ONLY** for the TensorFlow GPU package.
+
+Install the tensorflow GPU debian packages as follows:
+```bash
+cat /usr/local/lib/python3.6/dist-packages/aimet_tensorflow/bin/reqs_deb_tf_gpu.txt | xargs apt-get --assume-yes install
+```
+
+### Install torch GPU debian packages
+> _NOTE:_ Do this section **ONLY** for the PyTorch GPU package.
+
+Install the torch GPU debian packages as follows:
+```bash
+cat /usr/local/lib/python3.6/dist-packages/aimet_torch/bin/reqs_deb_torch_gpu.txt | xargs apt-get --assume-yes install
 ```
 
 #### Replace Pillow with Pillow-SIMD
 *Optional*: Replace the Pillow package with Pillow-SIMD as follows:
 ```bash
-pip3 uninstall -y pillow && pip3 install --no-cache-dir Pillow-SIMD==6.0.0.post0
+python3 -m pip uninstall -y pillow
+python3 -m pip install --no-cache-dir Pillow-SIMD==6.0.0.post0
 ```
 
 ### Install GPU packages
+> _NOTE:_ Do this section **ONLY** for the PyTorch or Tensorflow *GPU* packages.
+
 Prepare the environment for installation of GPU packages as follows:
+> _NOTE:_ Please visit [this page](https://developer.nvidia.com/cuda-11.1.1-download-archive) to obtain the exact and up-to-date installation instructions for your environment.
+
 ```bash
-wget https://developer.download.nvidia.com/compute/cuda/repos/ubuntu1804/x86_64/cuda-repo-ubuntu1804_10.0.130-1_amd64.deb
-apt-key adv --fetch-keys https://developer.download.nvidia.com/compute/cuda/repos/ubuntu1804/x86_64/7fa2af80.pub
-dpkg -i cuda-repo-ubuntu1804_10.0.130-1_amd64.deb
+wget https://developer.download.nvidia.com/compute/cuda/repos/ubuntu1804/x86_64/cuda-ubuntu1804.pin
+mv cuda-ubuntu1804.pin /etc/apt/preferences.d/cuda-repository-pin-600
+wget https://developer.download.nvidia.com/compute/cuda/11.1.0/local_installers/cuda-repo-ubuntu1804-11-1-local_11.1.0-455.23.05-1_amd64.deb
+dpkg -i cuda-repo-ubuntu1804-11-1-local_11.1.0-455.23.05-1_amd64.deb
+apt-key add /var/cuda-repo-ubuntu1804-11-1-local/7fa2af80.pub
 apt-get update
+apt-get -y install cuda
+
 wget http://developer.download.nvidia.com/compute/machine-learning/repos/ubuntu1804/x86_64/nvidia-machine-learning-repo-ubuntu1804_1.0.0-1_amd64.deb
 apt-get --assume-yes install ./nvidia-machine-learning-repo-ubuntu1804_1.0.0-1_amd64.deb
 apt-get update
 ```
 
-Now install the GPU packages from the packages_common.txt file:
-```bash
-cat /usr/local/lib/python3.6/dist-packages/aimet_common/bin/packages_gpu.txt | xargs apt-get --assume-yes install
-```
-
 ### Post installation steps
 Perform the following post-installation steps:
 ```bash
-ln -s /usr/local/cuda-10.0 /usr/local/cuda
 ln -s /usr/lib/x86_64-linux-gnu/libjpeg.so /usr/lib
+```
+
+> _NOTE:_ Do the following step **ONLY** for the PyTorch or Tensorflow GPU packages.
+```bash
+# If you installed the CUDA 10.x drivers
+ln -s /usr/local/cuda-10.0 /usr/local/cuda
+# OR if you installed the CUDA 11.x drivers
+ln -s /usr/local/cuda-11.0 /usr/local/cuda
 ```
 
 ## Environment setup
 Set the common environment variables as follows:
 ```bash
-source /usr/local/lib/python3.6/dist-packages/aimet_common/bin/envsetup.sh 
+source /usr/local/lib/python3.6/dist-packages/aimet_common/bin/envsetup.sh
 ```
 
 Add the AIMET package location to the environment paths as follows:

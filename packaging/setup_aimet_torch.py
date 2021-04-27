@@ -36,26 +36,51 @@
 
 """ Package generation file for aimet torch package """
 
+import os
+import sys
 from setuptools import setup, find_packages, find_namespace_packages
 import setup_cfg # pylint: disable=import-error
 
 package_url_base = setup_cfg.remote_url + "/releases/download/"+str(setup_cfg.version)
 
-packages_found = find_packages() + find_namespace_packages(exclude=['*bin', 'pyenv3*', 'build', 'dist', '*bin', '*x86*'])
 common_dep_whl = package_url_base + "/AimetCommon-" + str(setup_cfg.version) + "-py3-none-any.whl"
+
+# Obtain package contents; exclude build and other files
+packages_found = find_packages() + find_namespace_packages(exclude=['*bin', 'pyenv3*', 'build', 'dist', '*bin', '*x86*'])
+
+# Create common dependency list
+package_dependency_files = []
+install_requires_list = [open('bin/reqs_pip_torch_common.txt').read()]
+if "--gpu" in sys.argv:
+    # Create Torch GPU dependency list
+    package_dependency_files.extend(['bin/reqs_pip_torch_gpu.txt', 'bin/reqs_deb_torch_gpu.txt'])
+    install_requires_list.append(open('bin/reqs_pip_torch_gpu.txt').read())
+    sys.argv.remove("--gpu")
+else:
+    # Create Torch CPU dependency list
+    package_dependency_files.extend(['bin/reqs_pip_torch_cpu.txt'])
+    install_requires_list.append(open('bin/reqs_pip_torch_cpu.txt').read())
+
+# Loop over package artifacts folder
+required_package_data = ['acceptance_tests/*.*']
+for path, _, filenames in os.walk('aimet_torch'):
+    required_package_data += [os.path.join(path, filename) for filename in filenames if
+                              filename.endswith(tuple(package_dependency_files))]
+required_package_data = ['/'.join(files.split('/')[1:]) for files in required_package_data]
+
 
 setup(
     name='AimetTorch',
     version=str(setup_cfg.version),
     author='Qualcomm Innovation Center, Inc.',
-    author_email='aimet@noreply.github.com',
+    author_email='aimet.os@quicinc.com',
     packages=packages_found,
     url=package_url_base,
     license='NOTICE.txt',
-    description='AIMET',
+    description='AIMET PyTorch Package',
     long_description=open('README.txt').read(),
-    package_data={'aimet_torch':['acceptance_tests/*.*']},
-    install_requires=[],
+    package_data={'aimet_torch':required_package_data},
+    install_requires=install_requires_list,
     dependency_links=[common_dep_whl],
     include_package_data=True,
     zip_safe=True,
