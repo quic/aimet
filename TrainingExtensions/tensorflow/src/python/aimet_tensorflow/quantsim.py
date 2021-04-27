@@ -247,7 +247,8 @@ class QuantizationSimModel:
         op_to_quant_ops_dict = create_op_to_quant_ops_dict(self.session.graph, conn_graph,
                                                            ops_with_param_names, indices,
                                                            activation_op_names)
-        QuantSimConfigurator(self.session, conn_graph, op_to_quant_ops_dict, config_file)
+        QuantSimConfigurator(self.session, conn_graph, op_to_quant_ops_dict, self._param_quantizers,
+                             self._activation_quantizers, config_file)
 
     def compute_encodings(self, forward_pass_callback: Callable[[tf.compat.v1.Session, Any], None],
                           forward_pass_callback_args):
