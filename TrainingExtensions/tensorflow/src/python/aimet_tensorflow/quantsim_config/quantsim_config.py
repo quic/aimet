@@ -47,6 +47,7 @@ from aimet_common.quantsim_config.quantsim_config import QuantSimConfigurator as
 from aimet_common.quantsim_config.quantsim_config import SupergroupConfigCallback as AimetCommonSupergroupConfigCallback
 from aimet_common.quantsim_config.quantsim_config import get_setting_type, OnnxConnectedGraphTypeMapper
 from aimet_common.utils import AimetLogger
+from aimet_tensorflow.quantizer_info import QuantizerInfo
 from aimet_tensorflow.common.connectedgraph import ConnectedGraph
 from aimet_tensorflow.common.operation import Op
 from aimet_tensorflow.utils.common import update_variables_with_values, onnx_tf_conn_graph_type_pairs
@@ -94,13 +95,18 @@ class SupergroupConfigCallback(AimetCommonSupergroupConfigCallback):
 class QuantSimConfigurator(AimetCommonQuantSimConfigurator):
     """ Class for parsing and applying
     quantsim configurations from json config file """
-    def __init__(self, sess: tf.compat.v1.Session, conn_graph: ConnectedGraph, op_to_quant_ops_dict: OpToQuantOpsDictType,
+    def __init__(self, sess: tf.compat.v1.Session, conn_graph: ConnectedGraph,
+                 op_to_quant_ops_dict: OpToQuantOpsDictType,
+                 param_quantizer_dict: Dict[str, QuantizerInfo],
+                 activation_quantizer_dict: Dict[str, QuantizerInfo],
                  config_file: str):
         super().__init__(config_file)
 
         self._sess = sess
         self._conn_graph = conn_graph
         self._op_to_quant_ops_dict = op_to_quant_ops_dict
+        self._param_quantizer_dict = param_quantizer_dict
+        self._activation_quantizer_dict = activation_quantizer_dict
         self._op_to_quantizer_lists_dict = self._get_op_to_quantizer_lists_dict()
         self._onnx_conn_graph_name_mapper = OnnxConnectedGraphTypeMapper(onnx_tf_conn_graph_type_pairs)
 
@@ -164,6 +170,29 @@ class QuantSimConfigurator(AimetCommonQuantSimConfigurator):
 
         update_variables_with_values(self._sess, vars_with_value)
 
+    def _set_strict_symmetric(self, use_strict_symmetric: bool):
+        """
+        Set strict symmetric configuration for all quantizers in the model.
+        :param use_strict_symmetric: True or False setting for using strict symmetric mode
+        """
+
+        # set config for all param and activation quantizers, global config
+        for param_quantizer_config in self._param_quantizer_dict.values():
+            param_quantizer_config.use_strict_symmetric = use_strict_symmetric
+        for act_quantizer_config in self._activation_quantizer_dict.values():
+            act_quantizer_config.use_strict_symmetric = use_strict_symmetric
+
+    def _set_unsigned_symmetric(self, use_unsigned_symmetric: bool):
+        """
+        Set unsigned symmetric configuration for all quantizers in the model.
+        :param use_unsigned_symmetric: True or False setting for using unsigned symmetric mode
+        """
+        # set config for all param and activation quantizers, global config
+        for param_quantizer_config in self._param_quantizer_dict.values():
+            param_quantizer_config.use_unsigned_symmetric = use_unsigned_symmetric
+        for act_quantizer_config in self._activation_quantizer_dict.values():
+            act_quantizer_config.use_unsigned_symmetric = use_unsigned_symmetric
+
     def _set_default_configs(self, default_configs: DefaultsType):
         """
         Set default configurations for op and param quantizers in model (first level of specificity in configuration
@@ -172,6 +201,10 @@ class QuantSimConfigurator(AimetCommonQuantSimConfigurator):
         """
         self._set_default_configs_for_ops(default_configs[ConfigDictKeys.OPS])
         self._set_default_configs_for_params(default_configs[ConfigDictKeys.PARAMS])
+        if ConfigDictKeys.STRICT_SYMMETRIC in default_configs:
+            self._set_strict_symmetric(default_configs[ConfigDictKeys.STRICT_SYMMETRIC])
+        if ConfigDictKeys.UNSIGNED_SYMMETRIC in default_configs:
+            self._set_unsigned_symmetric(default_configs[ConfigDictKeys.UNSIGNED_SYMMETRIC])
 
     def _set_default_configs_for_ops(self, default_op_configs: ConfigType):
         """
