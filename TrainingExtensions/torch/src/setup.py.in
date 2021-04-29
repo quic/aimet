@@ -46,8 +46,8 @@ setup(
             name='AimetTensorQuantizer',
             sources=['${CMAKE_CURRENT_SOURCE_DIR}/src/AimetTensorQuantizer.cpp'],
             include_dirs=['${DlQuantizationIncludePaths}'],
-            extra_objects=['${CMAKE_BINARY_DIR}/artifacts/libpymo.so'],
-	        extra_compile_args=['-D_GLIBCXX_USE_CXX11_ABI=0']),
+            extra_objects=['${CMAKE_BINARY_DIR}/artifacts/libpymo.${LIB_EXT}'],
+        ),
     ],
     cmdclass={
         'build_ext': BuildExtension

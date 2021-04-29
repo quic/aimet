@@ -56,10 +56,10 @@ if (ENABLE_CUDA)
              z
           )
 
-else (ENABLE_CUDA)
+else()
     target_link_libraries(PyModelOptimizations
             PUBLIC
-            stdc++
+#            stdc++
             PYBIND11
             MoDlQuantization
             MoDlEqualization
@@ -70,10 +70,11 @@ else (ENABLE_CUDA)
             z
             )
 
-endif (ENABLE_CUDA)
+endif()
 
 set_target_properties(PyModelOptimizations
       PROPERTIES
+         SUFFIX ".so"
          OUTPUT_NAME "pymo"
          LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/artifacts"
       )

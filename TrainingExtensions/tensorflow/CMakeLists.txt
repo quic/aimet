@@ -74,14 +74,14 @@ if (ENABLE_CUDA)
           TrainingExtensionsTfCuda
           )
 
-else(ENABLE_CUDA)
+else()
     target_link_libraries(TrainingExtensionsTf PUBLIC
             MoDlCompression
             MoDlQuantization
             TensorFlow
             )
 
-endif(ENABLE_CUDA)
+endif()
 
 set_target_properties(TrainingExtensionsTf PROPERTIES
       OUTPUT_NAME "aimet_tf_ops"

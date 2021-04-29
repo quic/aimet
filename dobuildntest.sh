@@ -73,6 +73,9 @@ declare -a PYCOV_TEST_PATHS=()
 workspaceFolder=`pwd`
 outputFolder=
 
+# for MAC
+readlink=greadlink
+
 function pre_exit {
     # Capture the exit code
     EXIT_CODE=$?
@@ -190,14 +193,14 @@ if [ $run_clean -eq 0 ] && [ $run_acceptance_tests -eq 0 ] && [ $run_build -eq 0
     [ $run_unit_tests -eq 0 ] && [ $run_code_violation -eq 0 ] && [ $run_code_coverage -eq 0 ] && \
     [ $run_static_analysis -eq 0 ]; then
     run_prep=1
-    run_clean=1
+#    run_clean=1
     run_build=1
-    run_package_gen=0
-    run_unit_tests=1
-    run_code_violation=1
-    run_code_coverage=1
-    run_static_analysis=1
-    run_acceptance_tests=0
+#    run_package_gen=0
+#    run_unit_tests=1
+#    run_code_violation=1
+#    run_code_coverage=1
+#    run_static_analysis=1
+#    run_acceptance_tests=0
 fi
 
 if [[ -z "${workspaceFolder}" ]]; then
@@ -207,7 +210,7 @@ if [[ -z "${workspaceFolder}" ]]; then
 fi
 
 echo "Starting AIMET build and test..."
-workspaceFolder=`readlink -f ${workspaceFolder}`
+workspaceFolder=`$readlink -f ${workspaceFolder}`
 buildFolder=$workspaceFolder/build
 artifactsFolder=$buildFolder/artifacts
 AIMET_TORCH_HOME=${buildFolder}/torch_pretrain_data
@@ -291,14 +294,14 @@ if [ $run_prep -eq 1 ]; then
     # Populate an array of python src paths for use in later stages
     for python_src_path_ending in "${python_src_path_endings[@]}"; do
     	# Find all paths 
-        PYTHON_SRC_PATHS+=($(find . -path "*$python_src_path_ending" -exec readlink -f {} \;))
+        PYTHON_SRC_PATHS+=($(find . -path "*$python_src_path_ending" -exec $readlink -f {} \;))
     done
 
     # Populate the PYTHONPATH env variable value for use in later stages
     PYTHONPATH_VALUE+=$artifactsFolder
     for python_src_path in "${PYTHON_SRC_PATHS[@]}"; do
 	    # Append the parent of each python src path to PYTHONPATH (separated by colon)
-        python_src_path_parent=$(readlink -f ${python_src_path}/..)
+        python_src_path_parent=$($readlink -f ${python_src_path}/..)
         PYTHONPATH_VALUE+=":"
         PYTHONPATH_VALUE+=${python_src_path_parent}
 	    # Append the same path also to a string (separated by space)
@@ -312,8 +315,8 @@ if [ $run_prep -eq 1 ]; then
         pycov_src_path_ending=${pycov_dir_ending%%:*}
         pycov_test_path_ending=${pycov_dir_ending#*:}
         # Find all absolute src and test folders ending in the endings of interest
-        PYCOV_SRC_PATHS+=($(find . -path "*$pycov_src_path_ending" -exec readlink -f {} \; | grep -v build))
-        PYCOV_TEST_PATHS+=($(find . -path "*$pycov_test_path_ending" -exec readlink -f {} \; | grep -v build))
+        PYCOV_SRC_PATHS+=($(find . -path "*$pycov_src_path_ending" -exec $readlink -f {} \; | grep -v build))
+        PYCOV_TEST_PATHS+=($(find . -path "*$pycov_test_path_ending" -exec $readlink -f {} \; | grep -v build))
     done
 
     # Just display all the code coverage paths for debugging purposes
@@ -359,12 +362,12 @@ if [ $run_build -eq 1 ]; then
     set +e
     cmake -DCMAKE_EXPORT_COMPILE_COMMANDS=ON ${extra_opts} ..
 
-    make -j 8
+    make #-j `nproc`
     check_stage $? "Build" "true"
 
-    echo -e "\n********** Stage 2a: Generate Docs **********\n"
-    make doc
-    check_stage $? "Generate Doc" "true"
+    #echo -e "\n********** Stage 2a: Generate Docs **********\n"
+    #make doc
+    #check_stage $? "Generate Doc" "true"
 fi
 
 if [ $run_package_gen -eq 1 ]; then

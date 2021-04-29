@@ -37,4 +37,4 @@
 #=============================================================================
 cmake_minimum_required(VERSION 3.5)
 
-add_subdirectory(googletest EXCLUDE_FROM_ALL)
+add_subdirectory(googletest/googletest-release-1.8.0/ EXCLUDE_FROM_ALL)

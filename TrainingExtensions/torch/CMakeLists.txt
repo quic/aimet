@@ -37,6 +37,11 @@ cmake_minimum_required(VERSION 3.5)
 
 find_program(PYTHON "python3")
 
+if(APPLE)
+  set(LIB_EXT "dylib")
+else()
+  set(LIB_EXT "so")
+endif()
 
 set(SETUP_PY "${CMAKE_CURRENT_BINARY_DIR}/src/setup.py")
 set(OUTPUT  "${CMAKE_CURRENT_BINARY_DIR}/build/timestamp"
@@ -51,6 +56,7 @@ configure_file(${CMAKE_CURRENT_SOURCE_DIR}/src/setup.py.in ${SETUP_PY})
 
 add_custom_command(OUTPUT ${OUTPUT}
       COMMAND ${CMAKE_COMMAND} -E env PYTHONPATH="${CMAKE_BINARY_DIR}/artifacts"
+              CC=${CMAKE_C_COMPILER} CXX=${CMAKE_CXX_COMPILER}
               ${PYTHON} ${SETUP_PY} install  --install-base=${CMAKE_BINARY_DIR}/artifacts
                                              --install-purelib=${CMAKE_BINARY_DIR}/artifacts
                                              --install-platlib=${CMAKE_BINARY_DIR}/artifacts
@@ -74,7 +80,7 @@ add_subdirectory(test)
 
 install(DIRECTORY ${CMAKE_BINARY_DIR}/artifacts/
       DESTINATION ${AIMET_INSTALL_DIR}/lib/x86_64-linux-gnu
-      FILES_MATCHING PATTERN "AimetTensorQuantizer*.so"
+      FILES_MATCHING PATTERN "AimetTensorQuantizer*.${LIB_EXT}"
       PATTERN "__pycache*" EXCLUDE
       )
 

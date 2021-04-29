@@ -40,6 +40,8 @@
 #define QC_QUANTIZE_OP_HPP
 
 #include "tensorflow/core/framework/op.h"
+#include "absl/base/config.h"
+#undef ABSL_HAVE_STD_STRING_VIEW
 #include "tensorflow/core/framework/op_kernel.h"
 #include "tensorflow/core/framework/shape_inference.h"
 #include "tensorflow/core/platform/logging.h"
