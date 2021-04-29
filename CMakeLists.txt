@@ -172,7 +172,11 @@ if (NOT (DEFINED ENABLE_TENSORFLOW))
 endif(NOT (DEFINED ENABLE_TENSORFLOW))
 
 if (ENABLE_TENSORFLOW)
-  list(APPEND AIMET_PYTHONPATH "${CMAKE_CURRENT_SOURCE_DIR}/TrainingExtensions/tensorflow_core/src/python")
+  # TODO check TF version
+  # set(TF_DIR "$ENV{CONDA_PREFIX}/lib/python3.7/site-packages/tensorflow_core")  # for TF<=2.0
+  set(TF_DIR "$ENV{CONDA_PREFIX}/lib/python3.7/site-packages/tensorflow")  # for TF>2.0
+
+  list(APPEND AIMET_PYTHONPATH "${CMAKE_CURRENT_SOURCE_DIR}/TrainingExtensions/tensorflow/src/python")
 #  list(APPEND TENSORFLOW_INCLUDES "${PYTHON_DIST_PACKAGES}/tensorflow/include")
 #  add_library(TensorFlow SHARED IMPORTED)
 #  set_target_properties(TensorFlow PROPERTIES
@@ -181,11 +185,11 @@ if (ENABLE_TENSORFLOW)
 #        INTERFACE_INCLUDE_DIRECTORIES
 #          "${TENSORFLOW_INCLUDES}"
 #        )
-  list(APPEND TENSORFLOW_INCLUDES "$ENV{CONDA_PREFIX}/lib/python3.7/site-packages/tensorflow_core/include")
+  list(APPEND TENSORFLOW_INCLUDES "${TF_DIR}/include")
   add_library(TensorFlow SHARED IMPORTED)
   set_target_properties(TensorFlow PROPERTIES
         IMPORTED_LOCATION
-          "$ENV{CONDA_PREFIX}/lib/python3.7/site-packages/tensorflow_core/libtensorflow_framework.${LIB_EXT}"
+          "${TF_DIR}/libtensorflow_framework.${LIB_EXT}"
         INTERFACE_INCLUDE_DIRECTORIES
           "${TENSORFLOW_INCLUDES}"
         )
