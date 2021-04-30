@@ -170,13 +170,13 @@ class TestOnnxUtils:
         assert isinstance(node_to_io_dict['lstm'], list)
         assert 3 == len(node_to_io_dict['lstm'])
 
-    def test_onnx_export(self):
+    def test_onnx_export_complex_model(self):
 
         from aimet_torch.elementwise_ops import Add
 
-        class ResidualLayer(torch.nn.Module):
+        class ResidualLayer1(torch.nn.Module):
             def __init__(self):
-                super(ResidualLayer, self).__init__()
+                super(ResidualLayer1, self).__init__()
                 self.conv1 = torch.nn.Conv2d(20, 20, 3)
                 self.relu1 = torch.nn.ReLU()
                 self.conv2 = torch.nn.Conv2d(20, 20, 3)
@@ -199,6 +199,34 @@ class TestOnnxUtils:
                 y2 = self.relu4(y2)
 
                 return y1 + y2
+
+        class ResidualLayer2(torch.nn.Module):
+            def __init__(self):
+                super(ResidualLayer2, self).__init__()
+                self.conv1 = torch.nn.Conv2d(20, 20, 3, padding=(1, 1))
+                self.relu1 = torch.nn.ReLU()
+                self.conv3 = torch.nn.Conv2d(20, 20, 3, padding=(1, 1))
+                self.relu3 = torch.nn.ReLU()
+
+                self.conv2 = torch.nn.Dropout2d()
+
+                self.conv4 = torch.nn.Conv2d(20, 20, 3, padding=(1, 1))
+                self.relu4 = torch.nn.ReLU()
+                self.add = Add()
+
+            def forward(self, x):
+                y1 = self.conv1(x)
+                y1 = self.relu1(y1)
+                y1 = self.conv3(y1)
+                y1 = self.relu3(y1)
+
+                y2 = self.conv2(x)
+
+                y3 = self.conv4(x)
+                y3 = self.relu4(y3)
+
+                y2 = self.add(y1, y2)
+                return y2 + y3
 
         class TwoLevelLayer(torch.nn.Module):
             def __init__(self):
@@ -230,7 +258,8 @@ class TestOnnxUtils:
                 self.conv1 = torch.nn.Conv2d(10, 20, 3)
                 self.custom = CustomLayer()
                 self.block1 = TwoLevelLayer()
-                self.block2 = ResidualLayer()
+                self.block2 = ResidualLayer1()
+                self.block3 = ResidualLayer2()
                 self.add = Add()
                 self.relu1 = torch.nn.ReLU()
 
@@ -242,6 +271,7 @@ class TestOnnxUtils:
                 x = self.conv2(x)
                 x = self.block1(x)
                 x = self.block2(x)
+                x = self.block3(x)
                 x = self.add(x, x)
                 x = x[:, :, 0, 0]
                 x = x.reshape(x.shape[0], x.shape[1], 1, 1)
@@ -253,7 +283,7 @@ class TestOnnxUtils:
         onnx_utils.OnnxSaver.set_node_names('./data/MyModel.onnx', model, dummy_input=torch.rand(1, 10, 24, 24))
         onnx_model = onnx.load('./data/MyModel.onnx')
         expected_conv_names = ['conv1', 'conv2', 'block1.conv1', 'block1.conv2', 'block2.conv1', 'block2.conv2',
-                               'block2.conv3', 'block2.conv4']
+                               'block2.conv3', 'block2.conv4', 'block3.conv1', 'block3.conv3', 'block3.conv4']
         expected_other_node_names = ['relu1', 'add', 'block1.relu1', 'block2.relu1', 'block2.relu2', 'block2.relu3',
                                      'block2.relu4']
         not_expected_names = ['conv0']
@@ -268,3 +298,186 @@ class TestOnnxUtils:
         for name in not_expected_names:
             assert name not in actual_node_names
 
+    def test_onnx_export_model_input_empty_layer(self):
+
+        class MyModel(torch.nn.Module):
+            def __init__(self):
+                super(MyModel, self).__init__()
+                self.drop0 = torch.nn.Dropout2d()
+                self.drop1 = torch.nn.Dropout2d()
+                self.conv0 = torch.nn.Conv2d(10, 20, 3)
+                self.conv2 = torch.nn.Conv2d(20, 20, 3)
+
+            def forward(self, x):
+                x = self.drop0(x)
+                x = self.drop1(x)
+                x = self.conv0(x)
+                x = self.conv2(x)
+
+                return x
+
+        model = MyModel()
+
+        onnx_utils.OnnxSaver.set_node_names('./data/MyModel.onnx', model, dummy_input=torch.rand(1, 10, 24, 24))
+        onnx_model = onnx.load('./data/MyModel.onnx')
+
+        expected_nodes = ['conv0', 'conv2']
+        actual_nodes = [node.name for node in onnx_model.graph.node]
+        assert len(actual_nodes) == len(expected_nodes)
+
+        for name in expected_nodes:
+            assert name in actual_nodes
+
+    def test_onnx_export_model_output_empty_layer(self):
+
+        class MyModel(torch.nn.Module):
+            def __init__(self):
+                super(MyModel, self).__init__()
+                self.conv0 = torch.nn.Conv2d(10, 20, 3)
+                self.conv2 = torch.nn.Conv2d(20, 20, 3)
+                self.drop0 = torch.nn.Dropout2d()
+                self.drop1 = torch.nn.Dropout2d()
+
+            def forward(self, x):
+                x = self.conv0(x)
+                x = self.conv2(x)
+                x = self.drop0(x)
+                x = self.drop1(x)
+
+                return x
+
+        model = MyModel()
+
+        onnx_utils.OnnxSaver.set_node_names('./data/MyModel.onnx', model, dummy_input=torch.rand(1, 10, 24, 24))
+        onnx_model = onnx.load('./data/MyModel.onnx')
+
+        expected_nodes = ['conv0', 'conv2']
+        actual_nodes = [node.name for node in onnx_model.graph.node]
+        assert len(actual_nodes) == len(expected_nodes)
+
+        for name in expected_nodes:
+            assert name in actual_nodes
+
+    def test_onnx_export_model_empty_layer_consumed_by_multiple_nodes(self):
+
+        class MyModel(torch.nn.Module):
+            def __init__(self):
+                super(MyModel, self).__init__()
+                self.conv0 = torch.nn.Conv2d(10, 20, 3)
+                self.drop0 = torch.nn.Dropout2d()
+                self.drop1 = torch.nn.Dropout2d()
+                self.conv1 = torch.nn.Conv2d(20, 20, 3)
+                self.conv2 = torch.nn.Conv2d(20, 20, 3)
+
+            def forward(self, x):
+                x = self.conv0(x)
+                x = self.drop0(x)
+                x = self.drop1(x)
+                y1 = self.conv1(x)
+                y2 = self.conv2(x)
+
+                return y1, y2
+
+        model = MyModel()
+
+        onnx_utils.OnnxSaver.set_node_names('./data/MyModel.onnx', model, dummy_input=torch.rand(1, 10, 24, 24))
+        onnx_model = onnx.load('./data/MyModel.onnx')
+
+        expected_nodes = ['conv0', 'conv1', 'conv2']
+        actual_nodes = [node.name for node in onnx_model.graph.node]
+        assert len(actual_nodes) == len(expected_nodes)
+
+        for name in expected_nodes:
+            assert name in actual_nodes
+
+    def test_onnx_export_model_input_empty_layer_consumed_by_multiple_nodes(self):
+
+        class MyModel(torch.nn.Module):
+            def __init__(self):
+                super(MyModel, self).__init__()
+                self.drop0 = torch.nn.Dropout2d()
+                self.drop1 = torch.nn.Dropout2d()
+                self.conv1 = torch.nn.Conv2d(10, 20, 3)
+                self.conv2 = torch.nn.Conv2d(10, 20, 3)
+
+            def forward(self, x):
+                x = self.drop0(x)
+                x = self.drop1(x)
+                y1 = self.conv1(x)
+                y2 = self.conv2(x)
+
+                return y1, y2
+
+        model = MyModel()
+
+        onnx_utils.OnnxSaver.set_node_names('./data/MyModel.onnx', model, dummy_input=torch.rand(1, 10, 24, 24))
+        onnx_model = onnx.load('./data/MyModel.onnx')
+
+        expected_nodes = ['conv1', 'conv2']
+        actual_nodes = [node.name for node in onnx_model.graph.node]
+        assert len(actual_nodes) == len(expected_nodes)
+
+        for name in expected_nodes:
+            assert name in actual_nodes
+
+    def test_onnx_export_intermediate_tensor_also_model_output(self):
+
+        class MyModel(torch.nn.Module):
+            def __init__(self):
+                super(MyModel, self).__init__()
+                self.conv1 = torch.nn.Conv2d(10, 20, 3)
+                self.conv2 = torch.nn.Conv2d(20, 20, 3)
+                self.conv3 = torch.nn.Conv2d(20, 20, 3)
+
+            def forward(self, x):
+                x = self.conv1(x)
+
+                y1 = self.conv2(x)
+                y2 = self.conv3(x)
+
+                return y1, y2, x
+
+        model = MyModel()
+
+        onnx_utils.OnnxSaver.set_node_names('./data/MyModel.onnx', model, dummy_input=torch.rand(1, 10, 24, 24))
+        onnx_model = onnx.load('./data/MyModel.onnx')
+
+        expected_nodes = ['conv1', 'conv2', 'conv3']
+        actual_nodes = [node.name for node in onnx_model.graph.node]
+        assert len(actual_nodes) == len(expected_nodes)
+
+        for name in expected_nodes:
+            assert name in actual_nodes
+
+    def test_onnx_export_intermediate_tensor_also_model_output_via_empty_marker(self):
+
+        class MyModel(torch.nn.Module):
+            def __init__(self):
+                super(MyModel, self).__init__()
+                self.conv1 = torch.nn.Conv2d(10, 20, 3)
+                self.conv2 = torch.nn.Conv2d(20, 20, 3)
+                self.conv3 = torch.nn.Conv2d(20, 20, 3)
+                self.drop1 = torch.nn.Dropout2d()
+                self.drop2 = torch.nn.Dropout2d()
+
+            def forward(self, x):
+                x = self.conv1(x)
+
+                y1 = self.conv2(x)
+                y2 = self.conv3(x)
+                y3 = self.drop1(x)
+                y4 = self.drop2(x)
+
+                return y1, y2, y3, y4
+
+        model = MyModel()
+
+        onnx_utils.OnnxSaver.set_node_names('./data/MyModel.onnx', model, dummy_input=torch.rand(1, 10, 24, 24))
+        onnx_model = onnx.load('./data/MyModel.onnx')
+
+        expected_nodes = ['conv1', 'conv2', 'conv3']
+        actual_nodes = [node.name for node in onnx_model.graph.node]
+        assert len(actual_nodes) == len(expected_nodes)
+
+        for name in expected_nodes:
+            assert name in actual_nodes

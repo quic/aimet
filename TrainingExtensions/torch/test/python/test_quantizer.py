@@ -653,8 +653,8 @@ class TestQuantizationSim(unittest.TestCase):
             print(encoding_data)
 
         activation_keys = list(encoding_data["activation_encodings"].keys())
-        self.assertTrue(activation_keys[0] == "126")
-        self.assertTrue(isinstance(encoding_data["activation_encodings"]["126"], list))
+        self.assertTrue(activation_keys[0] == "124")
+        self.assertTrue(isinstance(encoding_data["activation_encodings"]["124"], list))
 
         param_keys = list(encoding_data["param_encodings"].keys())
         self.assertTrue(param_keys[2] == "conv1.weight")
@@ -1176,7 +1176,7 @@ class TestQuantizationSim(unittest.TestCase):
         with open('./data/encodings_with_standalone_ops.encodings') as json_file:
             encoding_data = json.load(json_file)
         # in onnx definition tensor 16 is output of Reshape, to be ignored
-        self.assertTrue("16" not in encoding_data["activation_encodings"].keys())
+        self.assertTrue("32" not in encoding_data["activation_encodings"].keys())
 
     # -------------------------------------------------------------------------------
     def test_layers_to_ignore(self):
@@ -1479,8 +1479,8 @@ class TestQuantizationSim(unittest.TestCase):
 
         onnx_model = onnx.load('./data/dict_input_output_model.onnx')
         for inp in onnx_model.graph.input:
-            assert inp.name in ['a', 'b', 'c']
+            self.assertIn(inp.name, ['a', 'b', 'c'])
         for exp, act in zip(o_names, onnx_model.graph.output):
-            assert exp == act.name
+            self.assertEqual(exp, act.name)
         for tensor_name in encoding_data["activation_encodings"].keys():
-            assert tensor_name in o_names
+            self.assertIn(tensor_name, o_names)
