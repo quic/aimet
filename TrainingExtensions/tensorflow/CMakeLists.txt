@@ -76,10 +76,12 @@ else()
 
 endif()
 
-set_target_properties(TrainingExtensionsTf PROPERTIES
-      OUTPUT_NAME "aimet_tf_ops"
-      LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/artifacts"
-      )
+set_target_properties(TrainingExtensionsTf 
+    PROPERTIES
+        SUFFIX ".so"
+        OUTPUT_NAME "aimet_tf_ops"
+        LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/artifacts"
+    )
 
 get_target_property(dirs MoDlQuantization INCLUDE_DIRECTORIES)
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/../common/include ${TENSORFLOW_INCLUDES}/external/nsync/public ${dirs})

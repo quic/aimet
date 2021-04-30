@@ -72,7 +72,8 @@ set(AIMET_PYTHONPATH "${AIMET_PYTHONPATH}:${CMAKE_CURRENT_SOURCE_DIR}/TrainingEx
 
 if(NOT DEFINED AIMET_LD_LIBRARY_PATH)
   if(APPLE)  
-    set(AIMET_LD_LIBRARY_PATH "LIBRARY_PATH=${CMAKE_BINARY_DIR}/artifacts:$ENV{CONDA_PREFIX}/lib:$ENV{DYLD_LIBRARY_PATH}:$ENV{LIBRARY_PATH}")
+    # set(AIMET_LD_LIBRARY_PATH "DYLD_LIBRARY_PATH=${CMAKE_BINARY_DIR}/artifacts:$ENV{CONDA_PREFIX}/lib:$ENV{DYLD_LIBRARY_PATH}")
+    set(AIMET_LD_LIBRARY_PATH "DYLD_LIBRARY_PATH=${CMAKE_BINARY_DIR}/artifacts:$ENV{CONDA_PREFIX}/lib")
   else()
     set(AIMET_LD_LIBRARY_PATH "LD_LIBRARY_PATH=${CMAKE_BINARY_DIR}/artifacts:$ENV{LD_LIBRARY_PATH}")
   endif()
@@ -170,8 +171,8 @@ endif(NOT (DEFINED ENABLE_TENSORFLOW))
 
 if (ENABLE_TENSORFLOW)
   # TODO check TF version
-  # set(TF_DIR "$ENV{CONDA_PREFIX}/lib/python3.7/site-packages/tensorflow_core")  # for TF<=2.0
-  set(TF_DIR "$ENV{CONDA_PREFIX}/lib/python3.7/site-packages/tensorflow")  # for TF>2.0
+  set(TF_DIR "$ENV{CONDA_PREFIX}/lib/python3.7/site-packages/tensorflow_core")  # for TF<=2.0
+  #set(TF_DIR "$ENV{CONDA_PREFIX}/lib/python3.7/site-packages/tensorflow")  # for TF>2.0
 
   set(AIMET_PYTHONPATH "${AIMET_PYTHONPATH}:${CMAKE_CURRENT_SOURCE_DIR}/TrainingExtensions/tensorflow/src/python")
   list(APPEND TENSORFLOW_INCLUDES "${TF_DIR}/include")

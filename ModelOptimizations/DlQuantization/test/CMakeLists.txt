@@ -60,7 +60,7 @@ if (ENABLE_CUDA)
     target_link_libraries(MoDlQuantizationTest
             MoDlQuantization
             MoDlQuantizationCuda
-	    $ENV{CONDA_PREFIX}/lib/libcublas.so
+	      $ENV{CONDA_PREFIX}/lib/libcublas.so
             gtest gtest_main
             )
 

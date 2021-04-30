@@ -54,7 +54,7 @@ if(ENABLE_CUDA)
         target_link_libraries(MoDlEqualizationTest
                 ${OpenCV_LIBS}
                 MoDlEqualization
-                PYBIND11
+                pybind11::embed
                 ${LAPACKE_LIBRARY}
                 z
                 ${CUDA_LIBRARIES}
@@ -66,7 +66,7 @@ else()
         target_link_libraries(MoDlEqualizationTest
                 ${OpenCV_LIBS}
                 MoDlEqualization
-                PYBIND11
+                pybind11::embed
                 ${LAPACKE_LIBRARY}
                 z
                 gtest gtest_main

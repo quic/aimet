@@ -39,9 +39,7 @@
 import os
 import unittest
 import logging
-# import tensorflow as tf
-import tensorflow.compat.v1 as tf
-tf.disable_v2_behavior()
+import tensorflow as tf
 tf.logging.set_verbosity(tf.logging.WARN)
 from tf.contrib.quantize.python import graph_matcher
 
