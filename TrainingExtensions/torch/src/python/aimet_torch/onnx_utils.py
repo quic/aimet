@@ -266,7 +266,7 @@ class OnnxSaver:
         working_dir = os.path.dirname(onnx_model_path)
 
         onnx_model = cls._create_onnx_model_with_markers(dummy_input, pt_model, working_dir, onnx_export_args)
-        model_output_names = [output.name for output in onnx_model.graph.output]
+        model_output_names = [output.name for output in onnx_model.graph.output]    # pylint: disable=no-member
 
         # Parse the ONNX model and create mapping from input and output tensors to corresponding nodes
         map_output_tensor_to_node, map_input_tensor_to_node = cls._create_map_of_tensor_to_node(onnx_model)
@@ -386,7 +386,7 @@ class OnnxSaver:
         return end_marker_map, start_marker_map
 
     @classmethod
-    def _create_onnx_model_with_markers(cls, dummy_input, pt_model, working_dir, onnx_export_args):
+    def _create_onnx_model_with_markers(cls, dummy_input, pt_model, working_dir, onnx_export_args) -> onnx.ModelProto:
         """
         Exports an onnx model with marker nodes inserted
         :param dummy_input: Dummy input
@@ -465,7 +465,7 @@ class OnnxSaver:
                 map_input_tensor_to_node[input_tensor].append(next_node)
 
         map_input_tensor_to_node[input_tensor].remove(end_marker)
-        if len(map_input_tensor_to_node[input_tensor]) == 0:
+        if not map_input_tensor_to_node[input_tensor]:
             del map_input_tensor_to_node[input_tensor]
 
         del map_output_tensor_to_node[output_tensor]        # No node should produce output tensor anymore
@@ -491,6 +491,9 @@ class OnnxSaver:
             new_tensor = desired_model_output_names[index]
             old_tensor = output.name
 
+            if old_tensor == new_tensor:        # Nothing to do
+                continue
+
             if old_tensor in map_input_tensor_to_node:
                 # Degenerate case: model output tensor also is an intermediate tensor that inputs into other nodes
                 for consumer in map_input_tensor_to_node[old_tensor]:
@@ -515,10 +518,10 @@ class OnnxSaver:
             map_output_tensor_to_node[new_tensor] = producer
 
             # If there were duplicate outputs with the same name, they need to be updated
-            for output in onnx_model.graph.output:
+            for output_node in onnx_model.graph.output:
                 # Ugly double loop - cannot avoid
-                if output.name == old_tensor:
-                    output.name = new_tensor
+                if output_node.name == old_tensor:
+                    output_node.name = new_tensor
 
 
     @staticmethod
