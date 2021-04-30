@@ -64,10 +64,10 @@ if(ENABLE_CUDA)
                 )
 else()
         target_link_libraries(MoDlEqualizationTest
-                ${OpenCV_LIBS}
                 MoDlEqualization
                 pybind11::embed
                 ${LAPACKE_LIBRARY}
+                ${OPENCV_LIBRARY}
                 z
                 gtest gtest_main
                 )

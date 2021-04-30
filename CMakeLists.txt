@@ -53,7 +53,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_VERBOSE_MAKEFILE ON)
 
 #set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11 -O0 -ggdb -fPIC -D_GLIBCXX_USE_CXX11_ABI=0")
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11 -ggdb -march=native -Wno-narrowing -fPIC -D_GLIBCXX_USE_CXX11_ABI=0")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11 -ggdb -march=native -Wno-narrowing -fPIC -DGLIBCXX_USE_CXX11_ABI=0")
 list(APPEND CMAKE_PREFIX_PATH $ENV{CONDA_PREFIX})
 include_directories($ENV{CONDA_PREFIX}/include)
 link_directories($ENV{CONDA_PREFIX}/lib)
@@ -121,7 +121,7 @@ message("Python_INCLUDE_DIRS ${Python_INCLUDE_DIRS}")
 #set(PYTHON_DIST_PACKAGES "/usr/local/lib/python${Python_VERSION_MAJOR}.${Python_VERSION_MINOR}/dist-packages/")
 
 find_package(pybind11 REQUIRED CONFIG)
-set(PYBIND11_CPP_STANDARD -std=c++11)
+# set(PYBIND11_CPP_STANDARD -std=c++11)
 set(PYBIND11_PYTHON_VERSION ${Python_VERSION})
 set(PYBIND11_INC_DIRS "${pybind11_INCLUDE_DIRS}")
 message("pybind11_INCLUDE_DIRS ${pybind11_INCLUDE_DIRS}")
@@ -178,7 +178,7 @@ if (ENABLE_TENSORFLOW)
   list(APPEND TENSORFLOW_INCLUDES "${TF_DIR}/include")
   add_library(TensorFlow SHARED IMPORTED)
   set_target_properties(TensorFlow PROPERTIES
-        IMPORTED_LOCATION "${TF_DIR}/libtensorflow_framework.${LIB_EXT}"
+        IMPORTED_LOCATION "${TF_DIR}/libtensorflow_framework.so.1"
         INTERFACE_INCLUDE_DIRECTORIES "${TENSORFLOW_INCLUDES}"
         )
 

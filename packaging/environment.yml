@@ -1,0 +1,26 @@
+name: aimet
+channels:
+  - pytorch
+dependencies:
+  - cmake
+  - make
+  - pyyaml
+  - jsonschema
+  - matplotlib
+  - osqp
+  - opencv
+  - numpy
+  - scipy
+  - pandas
+  - bokeh
+  - holoviews
+  - hvplot
+  - pybind11
+  - pytest
+  - tensorflow=1.15
+  - libprotobuf=3.8
+  - blas-dev
+  - liblapacke
+  - pytorch
+  - torchvision
+  - cudatoolkit>=10

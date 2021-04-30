@@ -73,9 +73,6 @@ declare -a PYCOV_TEST_PATHS=()
 workspaceFolder=`pwd`
 outputFolder=
 
-# for MAC
-readlink=greadlink
-
 function pre_exit {
     # Capture the exit code
     EXIT_CODE=$?
@@ -210,7 +207,7 @@ if [[ -z "${workspaceFolder}" ]]; then
 fi
 
 echo "Starting AIMET build and test..."
-workspaceFolder=`$readlink -f ${workspaceFolder}`
+workspaceFolder=`readlink -f ${workspaceFolder}`
 buildFolder=$workspaceFolder/build
 artifactsFolder=$buildFolder/artifacts
 AIMET_TORCH_HOME=${buildFolder}/torch_pretrain_data
@@ -258,7 +255,7 @@ if [ $run_prep -eq 1 ]; then
     ## wget -N https://download.pytorch.org/models/inception_v3_google-1a9a5a14.pth -P ${AIMET_TORCH_HOME}/checkpoints
 
     # Clone the google test repo if not already present
-    google_test_path="${workspaceFolder}/ThirdParty/googletest/googletest-release-1.8.0"
+    google_test_path="${workspaceFolder}/ThirdParty/googletest/googletest-release-1.10.0"
     if [ ! -e ${google_test_path} ]; then
         mkdir -p $workspaceFolder/ThirdParty/googletest
         pushd $workspaceFolder/ThirdParty/googletest
@@ -294,14 +291,14 @@ if [ $run_prep -eq 1 ]; then
     # Populate an array of python src paths for use in later stages
     for python_src_path_ending in "${python_src_path_endings[@]}"; do
     	# Find all paths 
-        PYTHON_SRC_PATHS+=($(find . -path "*$python_src_path_ending" -exec $readlink -f {} \;))
+        PYTHON_SRC_PATHS+=($(find . -path "*$python_src_path_ending" -exec readlink -f {} \;))
     done
 
     # Populate the PYTHONPATH env variable value for use in later stages
     PYTHONPATH_VALUE+=$artifactsFolder
     for python_src_path in "${PYTHON_SRC_PATHS[@]}"; do
 	    # Append the parent of each python src path to PYTHONPATH (separated by colon)
-        python_src_path_parent=$($readlink -f ${python_src_path}/..)
+        python_src_path_parent=$(readlink -f ${python_src_path}/..)
         PYTHONPATH_VALUE+=":"
         PYTHONPATH_VALUE+=${python_src_path_parent}
 	    # Append the same path also to a string (separated by space)
@@ -315,8 +312,8 @@ if [ $run_prep -eq 1 ]; then
         pycov_src_path_ending=${pycov_dir_ending%%:*}
         pycov_test_path_ending=${pycov_dir_ending#*:}
         # Find all absolute src and test folders ending in the endings of interest
-        PYCOV_SRC_PATHS+=($(find . -path "*$pycov_src_path_ending" -exec $readlink -f {} \; | grep -v build))
-        PYCOV_TEST_PATHS+=($(find . -path "*$pycov_test_path_ending" -exec $readlink -f {} \; | grep -v build))
+        PYCOV_SRC_PATHS+=($(find . -path "*$pycov_src_path_ending" -exec readlink -f {} \; | grep -v build || true))
+        PYCOV_TEST_PATHS+=($(find . -path "*$pycov_test_path_ending" -exec readlink -f {} \; | grep -v build || true))
     done
 
     # Just display all the code coverage paths for debugging purposes

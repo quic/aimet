@@ -51,7 +51,7 @@ target_compile_options(MoDlCompressionTest
 
 if(ENABLE_CUDA)
       target_link_libraries(MoDlCompressionTest
-            ${OpenCV_LIBS}
+            ${OPENCV_LIBRARY}
             MoDlCompression
             ${LAPACKE_LIBRARY}
       #      Threads::Threads
@@ -63,10 +63,10 @@ if(ENABLE_CUDA)
             )
 else()
       target_link_libraries(MoDlCompressionTest
-            ${OpenCV_LIBS}
+            ${OPENCV_LIBRARY}
             MoDlCompression
             ${LAPACKE_LIBRARY}
-            z m
+            z dl
             gtest_main
             )
 endif()

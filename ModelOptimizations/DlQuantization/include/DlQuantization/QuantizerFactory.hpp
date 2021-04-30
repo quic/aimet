@@ -42,6 +42,7 @@
 
 #include <string>
 #include <vector>
+#include <memory>
 
 #include "DlQuantization/IQuantizationEncodingAnalyzer.hpp"
 #include "DlQuantization/IQuantizer.hpp"
