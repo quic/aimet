@@ -41,8 +41,10 @@ import json
 import os
 import unittest
 
-import tensorflow as tf
-tf.compat.v1.logging.set_verbosity(tf.logging.WARN)
+# import tensorflow as tf
+import tensorflow.compat.v1 as tf
+tf.disable_v2_behavior()
+tf.logging.set_verbosity(tf.logging.WARN)
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
 
 from aimet_common.connected_graph.connectedgraph_utils import get_all_input_ops

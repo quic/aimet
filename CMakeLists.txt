@@ -35,18 +35,19 @@
 #  @@-COPYRIGHT-END-@@
 #
 #=============================================================================
-cmake_minimum_required(VERSION 3.5)
+cmake_minimum_required(VERSION 3.17)
+# 3.17+ required for correct finding of python within conda env
 
 project(aimet)
 
-  # Fix behavior of CMAKE_CXX_STANDARD when targeting macOS.
-  if (POLICY CMP0025)
-    cmake_policy(SET CMP0025 NEW)
-  endif ()
+# # Fix behavior of CMAKE_CXX_STANDARD when targeting macOS.
+# if (POLICY CMP0025)
+#   cmake_policy(SET CMP0025 NEW)
+# endif ()
 
 set(AIMET_INSTALL_DIR ${CMAKE_BINARY_DIR}/staging/universal)
 
-set(CMAKE_BUILD_TYPE Release)
+set(CMAKE_BUILD_TYPE Debug)
 set(CMAKE_CXX_STANDARD 11)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_VERBOSE_MAKEFILE ON)
@@ -70,7 +71,11 @@ endif()
 set(AIMET_PYTHONPATH "${AIMET_PYTHONPATH}:${CMAKE_CURRENT_SOURCE_DIR}/TrainingExtensions/common/src/python")
 
 if(NOT DEFINED AIMET_LD_LIBRARY_PATH)
-  set(AIMET_LD_LIBRARY_PATH "LD_LIBRARY_PATH=${CMAKE_BINARY_DIR}/artifacts:$ENV{DYLD_LIBRARY_PATH}")
+  if(APPLE)  
+    set(AIMET_LD_LIBRARY_PATH "LIBRARY_PATH=${CMAKE_BINARY_DIR}/artifacts:$ENV{CONDA_PREFIX}/lib:$ENV{DYLD_LIBRARY_PATH}:$ENV{LIBRARY_PATH}")
+  else()
+    set(AIMET_LD_LIBRARY_PATH "LD_LIBRARY_PATH=${CMAKE_BINARY_DIR}/artifacts:$ENV{LD_LIBRARY_PATH}")
+  endif()
   message(STATUS "Set ${AIMET_LD_LIBRARY_PATH} in ${CMAKE_CURRENT_SOURCE_DIR}")
 endif()
 
@@ -101,7 +106,6 @@ endif()
 find_library(LAPACKE_LIBRARY lapacke)
 message("Found lapacke ${LAPACKE_LIBRARY}")
 
-
 find_package(OpenCV REQUIRED)
 include_directories(${OpenCV_INCLUDE_DIRS})
 link_directories(${OpenCV_LIBRARY_DIRS})
@@ -111,55 +115,48 @@ find_library(OPENCV_LIBRARY opencv_core)
 # ----------------------------------
 # Conditional build for PyTorch
 # ----------------------------------
-
-#find_package(Python COMPONENTS Interpreter Development)
-#message("Python_INCLUDE_DIRS ${Python_INCLUDE_DIRS}")
+find_package(Python COMPONENTS Interpreter Development)
+message("Python_INCLUDE_DIRS ${Python_INCLUDE_DIRS}")
 #set(PYTHON_DIST_PACKAGES "/usr/local/lib/python${Python_VERSION_MAJOR}.${Python_VERSION_MINOR}/dist-packages/")
 
+find_package(pybind11 REQUIRED CONFIG)
 set(PYBIND11_CPP_STANDARD -std=c++11)
-set(PYBIND11_PYTHON_VERSION 3.7)
-find_package(pybind11 REQUIRED)
-add_library(PYBIND11 SHARED IMPORTED)
-message("pybind11_INCLUDE_DIR ${pybind11_INCLUDE_DIR}")
+set(PYBIND11_PYTHON_VERSION ${Python_VERSION})
+set(PYBIND11_INC_DIRS "${pybind11_INCLUDE_DIRS}")
+message("pybind11_INCLUDE_DIRS ${pybind11_INCLUDE_DIRS}")
+message("pybind11_LIBRARIES ${pybind11_LIBRARIES}")
 
 if (NOT (DEFINED ENABLE_TORCH))
   message("AIMET Torch build not explicitly disabled. Enabling implicitly")
   set(ENABLE_TORCH ON CACHE BOOL "")
-
-endif(NOT (DEFINED ENABLE_TORCH))
+endif()
 
 if (ENABLE_TORCH)
   set(AIMET_PYTHONPATH "${AIMET_PYTHONPATH}:${CMAKE_CURRENT_SOURCE_DIR}/TrainingExtensions/torch/src/python")
   # If we enable PyTorch builds then use the pybind11 headers that are part of the torch pip install
   # So we don't have a version mismatch - between PyTorch custom C++ op code and PyMO
 #  list(APPEND PYBIND11_INC_DIRS "${PYTHON_DIST_PACKAGES}/torch/include")
-#  list(APPEND PYBIND11_INC_DIRS ${Python_INCLUDE_DIRS})
-  list(APPEND PYBIND11_INC_DIRS "$ENV{CONDA_PREFIX}/lib/python3.7/site-packages/torch/include")
+  set(PYBIND11_INC_DIRS "$ENV{CONDA_PREFIX}/lib/python3.7/site-packages/torch/include")
+  list(APPEND PYBIND11_INC_DIRS ${Python_INCLUDE_DIRS})
 
-else (ENABLE_TORCH)
+else()
 #  list(APPEND PYBIND11_INC_DIRS "${PYTHON_DIST_PACKAGES}/pybind11/include/")
 #  list(APPEND PYBIND11_INC_DIRS ${Python_INCLUDE_DIRS})
 
   message("AIMET Torch build disabled")
 
-endif (ENABLE_TORCH)
+endif()
 
 # ----------------------------------
 # PyBind11
 # ----------------------------------
-list(APPEND PYBIND11_INC_DIRS "${pybind11_INCLUDE_DIR}")
-list(APPEND PYBIND11_INC_DIRS "$ENV{CONDA_PREFIX}/include/python3.7m")
+
+add_library(PYBIND11 SHARED IMPORTED)
 set_target_properties(PYBIND11 PROPERTIES
       IMPORTED_LOCATION "$ENV{CONDA_PREFIX}/lib/libpython3.7m.${LIB_EXT}"
       INTERFACE_INCLUDE_DIRECTORIES "${PYBIND11_INC_DIRS}"
-      )
-
-#add_library(PYBIND11 SHARED IMPORTED)
-#
-#set_target_properties(PYBIND11 PROPERTIES
-#        IMPORTED_LOCATION ${Python_LIBRARIES}
-#        INTERFACE_INCLUDE_DIRECTORIES "${PYBIND11_INC_DIRS}"
-#        )
+      LINK_FLAGS "${pybind11_LIBRARIES}"
+)
 
 # ----------------------------------
 # Conditional build for TensorFlow
@@ -176,22 +173,12 @@ if (ENABLE_TENSORFLOW)
   # set(TF_DIR "$ENV{CONDA_PREFIX}/lib/python3.7/site-packages/tensorflow_core")  # for TF<=2.0
   set(TF_DIR "$ENV{CONDA_PREFIX}/lib/python3.7/site-packages/tensorflow")  # for TF>2.0
 
-  list(APPEND AIMET_PYTHONPATH "${CMAKE_CURRENT_SOURCE_DIR}/TrainingExtensions/tensorflow/src/python")
-#  list(APPEND TENSORFLOW_INCLUDES "${PYTHON_DIST_PACKAGES}/tensorflow/include")
-#  add_library(TensorFlow SHARED IMPORTED)
-#  set_target_properties(TensorFlow PROPERTIES
-#        IMPORTED_LOCATION
-#          "${PYTHON_DIST_PACKAGES}/tensorflow_core/libtensorflow_framework.so.1"
-#        INTERFACE_INCLUDE_DIRECTORIES
-#          "${TENSORFLOW_INCLUDES}"
-#        )
+  set(AIMET_PYTHONPATH "${AIMET_PYTHONPATH}:${CMAKE_CURRENT_SOURCE_DIR}/TrainingExtensions/tensorflow/src/python")
   list(APPEND TENSORFLOW_INCLUDES "${TF_DIR}/include")
   add_library(TensorFlow SHARED IMPORTED)
   set_target_properties(TensorFlow PROPERTIES
-        IMPORTED_LOCATION
-          "${TF_DIR}/libtensorflow_framework.${LIB_EXT}"
-        INTERFACE_INCLUDE_DIRECTORIES
-          "${TENSORFLOW_INCLUDES}"
+        IMPORTED_LOCATION "${TF_DIR}/libtensorflow_framework.${LIB_EXT}"
+        INTERFACE_INCLUDE_DIRECTORIES "${TENSORFLOW_INCLUDES}"
         )
 
 else (ENABLE_TENSORFLOW)

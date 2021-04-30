@@ -262,7 +262,7 @@ if [ $run_prep -eq 1 ]; then
     if [ ! -e ${google_test_path} ]; then
         mkdir -p $workspaceFolder/ThirdParty/googletest
         pushd $workspaceFolder/ThirdParty/googletest
-        git clone https://github.com/google/googletest.git -b release-1.8.0 googletest-release-1.8.0
+        git clone https://github.com/google/googletest.git -b release-1.10.0 googletest-release-1.10.0
         popd
         check_stage $? "Preparation" "true"
     fi
@@ -362,7 +362,7 @@ if [ $run_build -eq 1 ]; then
     set +e
     cmake -DCMAKE_EXPORT_COMPILE_COMMANDS=ON ${extra_opts} ..
 
-    make #-j `nproc`
+    make -j `nproc`
     check_stage $? "Build" "true"
 
     #echo -e "\n********** Stage 2a: Generate Docs **********\n"

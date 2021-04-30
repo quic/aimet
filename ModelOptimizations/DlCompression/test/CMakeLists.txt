@@ -66,9 +66,6 @@ else()
             ${OpenCV_LIBS}
             MoDlCompression
             ${LAPACKE_LIBRARY}
-      #      Threads::Threads
-      #      stdc++
-      #      dl
             z m
             gtest_main
             )

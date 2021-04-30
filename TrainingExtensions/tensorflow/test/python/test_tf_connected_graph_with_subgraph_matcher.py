@@ -43,8 +43,10 @@ import numpy as np
 import unittest
 import logging
 
-import tensorflow as tf
-tf.compat.v1.logging.set_verbosity(tf.logging.WARN)
+# import tensorflow as tf
+import tensorflow.compat.v1 as tf
+tf.disable_v2_behavior()
+tf.logging.set_verbosity(tf.logging.WARN)
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
 
 from tensorflow.contrib.graph_editor.edit import detach_inputs

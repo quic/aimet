@@ -39,8 +39,11 @@
 import os
 import unittest
 import logging
-import tensorflow as tf
-from tensorflow_core.contrib.quantize.python import graph_matcher
+# import tensorflow as tf
+import tensorflow.compat.v1 as tf
+tf.disable_v2_behavior()
+tf.logging.set_verbosity(tf.logging.WARN)
+from tf.contrib.quantize.python import graph_matcher
 
 from aimet_common.utils import AimetLogger
 from aimet_tensorflow.common.sub_graph_matcher_op_templates import op_type_templates

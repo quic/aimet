@@ -49,13 +49,6 @@ add_library(TrainingExtensionsTf SHARED
         )
 
 target_include_directories(TrainingExtensionsTf PRIVATE
-#        ${PYTHON_DIST_PACKAGES}/tensorflow_core/include
-#        ${PYTHON_DIST_PACKAGES}/tensorflow_core/include/external/nsync/public
-#        ${CMAKE_CURRENT_SOURCE_DIR}/../common/include
-#        )
-
-#      /usr/local/lib/python3.6/dist-packages/tensorflow_core/include
-#      /usr/local/lib/python3.6/dist-packages/tensorflow_core/include/external/nsync/public
       ${TENSORFLOW_INCLUDES}
       ${CMAKE_CURRENT_SOURCE_DIR}/../common/include
       )
