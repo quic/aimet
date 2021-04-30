@@ -35,8 +35,11 @@
 #  @@-COPYRIGHT-END-@@
 #
 #=============================================================================
-cmake_minimum_required(VERSION 3.17)
+cmake_minimum_required(VERSION 3.18)
 # 3.17+ required for correct finding of python within conda env
+# 3.18 for CUDA_ARCHITECTURES
+# C++14 for CUB
+# TODO this code doesn't work with cuda 11
 
 project(aimet)
 
@@ -48,12 +51,12 @@ project(aimet)
 set(AIMET_INSTALL_DIR ${CMAKE_BINARY_DIR}/staging/universal)
 
 set(CMAKE_BUILD_TYPE Debug)
-set(CMAKE_CXX_STANDARD 11)
+set(CMAKE_CXX_STANDARD 14)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_VERBOSE_MAKEFILE ON)
 
 #set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11 -O0 -ggdb -fPIC -D_GLIBCXX_USE_CXX11_ABI=0")
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11 -ggdb -march=native -Wno-narrowing -fPIC -DGLIBCXX_USE_CXX11_ABI=0")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++14 -ggdb -march=native -Wno-narrowing -fPIC -DGLIBCXX_USE_CXX11_ABI=0")
 list(APPEND CMAKE_PREFIX_PATH $ENV{CONDA_PREFIX})
 include_directories($ENV{CONDA_PREFIX}/include)
 link_directories($ENV{CONDA_PREFIX}/lib)
@@ -97,11 +100,14 @@ find_package(Threads)
 # Conditional build for CUDA
 # -------------------------------
 if (ENABLE_CUDA)
+  set(CMAKE_CUDA_COMPILER "/usr/local/cuda-10.0/bin/nvcc")
   enable_language(CUDA)
+  set(CMAKE_CUDA_SEPARABLE_COMPILATION ON)
   set(CUDA_NVCC_FLAGS
-        -O3 -std=c++11 -I /usr/local -I /usr/local/cuda/include -x cu -Xcompiler -fPIC -D_GLIBCXX_USE_CXX11_ABI=0
+        -O3 -std=c++14 -I /usr/local -I /usr/local/cuda-10.0/include -x cu -Xcompiler -fPIC -DGLIBCXX_USE_CXX11_ABI=0
         -gencode arch=compute_75,code=compute_75
     )
+  set(CMAKE_CUDA_ARCHITECTURES "75")
 endif()
 
 find_library(LAPACKE_LIBRARY lapacke)

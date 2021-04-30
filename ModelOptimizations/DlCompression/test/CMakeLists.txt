@@ -65,8 +65,9 @@ else()
       target_link_libraries(MoDlCompressionTest
             ${OPENCV_LIBRARY}
             MoDlCompression
+#            Threads::Threads
             ${LAPACKE_LIBRARY}
-            z dl
+            z 
             gtest_main
             )
 endif()

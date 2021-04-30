@@ -359,7 +359,7 @@ if [ $run_build -eq 1 ]; then
     set +e
     cmake -DCMAKE_EXPORT_COMPILE_COMMANDS=ON ${extra_opts} ..
 
-    make -j `nproc`
+    make #-j `nproc`
     check_stage $? "Build" "true"
 
     #echo -e "\n********** Stage 2a: Generate Docs **********\n"
