@@ -144,7 +144,10 @@ class OnnxSaver:
         :return:
         """
 
-        cls._map_onnx_nodes_to_pytorch_modules(pytorch_model, dummy_input, onnx_model_path, onnx_export_args)
+        onnx_model = cls._map_onnx_nodes_to_pytorch_modules(pytorch_model, dummy_input,
+                                                            onnx_model_path, onnx_export_args)
+
+        onnx.save(onnx_model, onnx_model_path)
 
     @staticmethod
     def _create_map_of_tensor_to_node(onnx_model: onnx.ModelProto) -> Tuple[Dict[str, List[onnx.NodeProto]],
@@ -263,6 +266,7 @@ class OnnxSaver:
         working_dir = os.path.dirname(onnx_model_path)
 
         onnx_model = cls._create_onnx_model_with_markers(dummy_input, pt_model, working_dir, onnx_export_args)
+        model_output_names = [output.name for output in onnx_model.graph.output]
 
         # Parse the ONNX model and create mapping from input and output tensors to corresponding nodes
         map_output_tensor_to_node, map_input_tensor_to_node = cls._create_map_of_tensor_to_node(onnx_model)
@@ -276,17 +280,21 @@ class OnnxSaver:
         # Remove markers
         for markers in start_marker_map.values():
             for marker in markers:
-                cls._detach_onnx_node(map_input_tensor_to_node, map_output_tensor_to_node, marker)
+                cls._detach_start_marker_node(map_input_tensor_to_node, map_output_tensor_to_node, marker)
 
         for markers in end_marker_map.values():
             for marker in markers:
-                cls._detach_onnx_node(map_input_tensor_to_node, map_output_tensor_to_node, marker)
+                cls._detach_end_marker_node(onnx_model, map_input_tensor_to_node, map_output_tensor_to_node, marker)
 
+        # Make sure we rename the model outputs to original names
+        cls._set_output_names(onnx_model, model_output_names, map_output_tensor_to_node, map_input_tensor_to_node)
+
+        # Clean up the detached nodes
         onnx_model = cls._remove_detached_nodes_from_onnx_graph(onnx_model)
 
         cls._fix_param_names(onnx_model)
 
-        onnx.save(onnx_model, onnx_model_path)
+        return onnx_model
 
     @classmethod
     def _fix_param_names(cls, onnx_model):
@@ -399,45 +407,119 @@ class OnnxSaver:
         return onnx_model
 
     @classmethod
-    def _detach_onnx_node(cls, map_input_tensor_to_node, map_output_tensor_to_node, node_to_detach):
+    def _detach_start_marker_node(cls, map_input_tensor_to_node, map_output_tensor_to_node, start_marker):
         """
-        Given a ONNX node, detach it from the graph
+        Given a ONNX start_marker node, detach it from the graph
         :param map_input_tensor_to_node: Map of tensor to node consuming the tensor
         :param map_output_tensor_to_node: Map of tensor to node producing the tensor
-        :param node_to_detach: Reference to the ONNX node to detach
+        :param start_marker: Reference to the ONNX node to detach
         """
-        assert len(node_to_detach.input) == 1
-        assert len(node_to_detach.output) == 1
+        assert len(start_marker.input) == 1
+        assert len(start_marker.output) == 1
 
-        input_tensor = node_to_detach.input[0]
-        output_tensor = node_to_detach.output[0]
+        input_tensor = start_marker.input[0]
+        output_tensor = start_marker.output[0]
 
-        if input_tensor in map_output_tensor_to_node:
-            prev_node = map_output_tensor_to_node[input_tensor]
-            index = list(prev_node.output).index(input_tensor)
-            prev_node.output.remove(input_tensor)
-            prev_node.output.insert(index, output_tensor)
+        for next_node in map_input_tensor_to_node[output_tensor]:
 
-            map_output_tensor_to_node[output_tensor] = prev_node
-            map_output_tensor_to_node.pop(input_tensor)
+            index = list(next_node.input).index(output_tensor)
+            next_node.input.remove(output_tensor)
+            next_node.input.insert(index, input_tensor)
+            map_input_tensor_to_node[input_tensor].append(next_node)
 
-            for consumer in map_input_tensor_to_node[input_tensor]:
-                if consumer is node_to_detach:
-                    continue
-                index = list(consumer.input).index(input_tensor)
-                consumer.input.remove(input_tensor)
-                consumer.input.insert(index, output_tensor)
+        map_input_tensor_to_node[input_tensor].remove(start_marker)
+        del map_output_tensor_to_node[output_tensor]        # No node should produce output tensor anymore
+        del map_input_tensor_to_node[output_tensor]         # No node should consume output tensor anymore
 
-            map_input_tensor_to_node.pop(input_tensor)
+        start_marker.input.pop()
+        start_marker.output.pop()
 
+    @classmethod
+    def _detach_end_marker_node(cls, onnx_model, map_input_tensor_to_node, map_output_tensor_to_node, end_marker):
+        """
+        Given a ONNX end_marker node, detach it from the graph
+        :param onnx_model: ONNX model instance
+        :param map_input_tensor_to_node: Map of tensor to node consuming the tensor
+        :param map_output_tensor_to_node: Map of tensor to node producing the tensor
+        :param end_marker: Reference to the ONNX node to detach
+        """
+        assert len(end_marker.input) == 1
+        assert len(end_marker.output) == 1
+
+        input_tensor = end_marker.input[0]
+        output_tensor = end_marker.output[0]
+
+        model_outputs = [output.name for output in onnx_model.graph.output]
+
+        if output_tensor in model_outputs:
+
+            # Degenerate case: somebody did a "return y, y" at the end of the model or something similar
+            for index, model_output in enumerate(model_outputs):
+                if model_output == output_tensor:
+                    onnx_model.graph.output[index].name = input_tensor
         else:
-            for consumer in map_input_tensor_to_node[output_tensor]:
-                index = list(consumer.input).index(output_tensor)
-                consumer.input.remove(output_tensor)
-                consumer.input.insert(index, input_tensor)
+            for next_node in map_input_tensor_to_node[output_tensor]:
+                index = list(next_node.input).index(output_tensor)
+                next_node.input.remove(output_tensor)
+                next_node.input.insert(index, input_tensor)
+                map_input_tensor_to_node[input_tensor].append(next_node)
 
-        node_to_detach.input.pop()
-        node_to_detach.output.pop()
+        map_input_tensor_to_node[input_tensor].remove(end_marker)
+        if len(map_input_tensor_to_node[input_tensor]) == 0:
+            del map_input_tensor_to_node[input_tensor]
+
+        del map_output_tensor_to_node[output_tensor]        # No node should produce output tensor anymore
+        if output_tensor in map_input_tensor_to_node:
+            del map_input_tensor_to_node[output_tensor]     # No node should consume output tensor anymore
+
+        end_marker.input.pop()
+        end_marker.output.pop()
+
+    @staticmethod
+    def _set_output_names(onnx_model: onnx.ModelProto, desired_model_output_names,
+                          map_output_tensor_to_node, map_input_tensor_to_node):
+
+        # Find duplicates in model outputs
+        duplicates = []
+        actual_model_output_names = [output.name for output in onnx_model.graph.output]
+        for output in actual_model_output_names:
+            if actual_model_output_names.count(output) > 1:
+                duplicates.append(output)
+
+        # Iterate over the model outputs
+        for index, output in enumerate(onnx_model.graph.output):
+            new_tensor = desired_model_output_names[index]
+            old_tensor = output.name
+
+            if old_tensor in map_input_tensor_to_node:
+                # Degenerate case: model output tensor also is an intermediate tensor that inputs into other nodes
+                for consumer in map_input_tensor_to_node[old_tensor]:
+                    index = list(consumer.input).index(old_tensor)
+                    consumer.input.remove(old_tensor)
+                    consumer.input.insert(index, new_tensor)
+                    if new_tensor not in map_input_tensor_to_node:
+                        map_input_tensor_to_node[new_tensor] = []
+                    map_input_tensor_to_node[new_tensor].append(consumer)
+
+                del map_input_tensor_to_node[old_tensor]        # No node should consume old tensor anymore
+
+
+            producer = map_output_tensor_to_node[old_tensor]
+
+            output.name = new_tensor
+            index = list(producer.output).index(old_tensor)
+            producer.output.remove(old_tensor)
+            producer.output.insert(index, new_tensor)
+
+            del map_output_tensor_to_node[old_tensor]
+            map_output_tensor_to_node[new_tensor] = producer
+
+            # If there were duplicate outputs with the same name, they need to be updated
+            for output in onnx_model.graph.output:
+                # Ugly double loop - cannot avoid
+                if output.name == old_tensor:
+                    output.name = new_tensor
+
 
     @staticmethod
     def _collate_io_tensors_for_multi_layer_recurrent_nodes(onnx_model: onnx.NodeProto,
