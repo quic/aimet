@@ -40,8 +40,7 @@ import os
 import unittest
 import logging
 import tensorflow as tf
-tf.logging.set_verbosity(tf.logging.WARN)
-from tf.contrib.quantize.python import graph_matcher
+from tensorflow_core.contrib.quantize.python import graph_matcher
 
 from aimet_common.utils import AimetLogger
 from aimet_tensorflow.common.sub_graph_matcher_op_templates import op_type_templates

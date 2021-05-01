@@ -63,10 +63,9 @@ if(ENABLE_CUDA)
             )
 else()
       target_link_libraries(MoDlCompressionTest
-            ${OPENCV_LIBRARY}
             MoDlCompression
-#            Threads::Threads
-            ${LAPACKE_LIBRARY}
+            ${OPENCV_LIBRARY}
+            LAPACK::LAPACK
             z 
             gtest_main
             )

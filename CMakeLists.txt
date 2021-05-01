@@ -50,7 +50,7 @@ project(aimet)
 
 set(AIMET_INSTALL_DIR ${CMAKE_BINARY_DIR}/staging/universal)
 
-set(CMAKE_BUILD_TYPE Debug)
+set(CMAKE_BUILD_TYPE Release)
 set(CMAKE_CXX_STANDARD 14)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_VERBOSE_MAKEFILE ON)
@@ -91,7 +91,7 @@ else()
   message(STATUS "SW_VERSION already set to ${SW_VERSION}.")
 endif()
 
-find_package(Threads)
+# find_package(Threads)
 # Disabling openMP since statically linked OpenMP in PyTorch (v1.5.0) seems to conflict with aimet usage
 #find_package(OpenMP REQUIRED)
 #set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${OpenMP_CXX_FLAGS}")
@@ -110,8 +110,13 @@ if (ENABLE_CUDA)
   set(CMAKE_CUDA_ARCHITECTURES "75")
 endif()
 
-find_library(LAPACKE_LIBRARY lapacke)
-message("Found lapacke ${LAPACKE_LIBRARY}")
+if(APPLE)
+  set(BLA_VENDOR Apple)
+else()
+  set(BLA_VENDOR Intel10_64lp)  # all works, MKL is faster
+  # set(BLA_VENDOR OpenBLAS)
+endif()
+find_package(LAPACK REQUIRED)
 
 find_package(OpenCV REQUIRED)
 include_directories(${OpenCV_INCLUDE_DIRS})
@@ -123,7 +128,6 @@ find_library(OPENCV_LIBRARY opencv_core)
 # Conditional build for PyTorch
 # ----------------------------------
 find_package(Python COMPONENTS Interpreter Development)
-message("Python_INCLUDE_DIRS ${Python_INCLUDE_DIRS}")
 #set(PYTHON_DIST_PACKAGES "/usr/local/lib/python${Python_VERSION_MAJOR}.${Python_VERSION_MINOR}/dist-packages/")
 
 find_package(pybind11 REQUIRED CONFIG)
@@ -131,7 +135,6 @@ find_package(pybind11 REQUIRED CONFIG)
 set(PYBIND11_PYTHON_VERSION ${Python_VERSION})
 set(PYBIND11_INC_DIRS "${pybind11_INCLUDE_DIRS}")
 message("pybind11_INCLUDE_DIRS ${pybind11_INCLUDE_DIRS}")
-message("pybind11_LIBRARIES ${pybind11_LIBRARIES}")
 
 if (NOT (DEFINED ENABLE_TORCH))
   message("AIMET Torch build not explicitly disabled. Enabling implicitly")
