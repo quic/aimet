@@ -55,8 +55,8 @@ set(CMAKE_CXX_STANDARD 14)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_VERBOSE_MAKEFILE ON)
 
-#set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11 -O0 -ggdb -fPIC -D_GLIBCXX_USE_CXX11_ABI=0")
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++14 -ggdb -march=native -Wno-narrowing -fPIC -DGLIBCXX_USE_CXX11_ABI=0")
+#set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11 -O0 -ggdb -fPIC -DGLIBCXX_USE_CXX11_ABI=0")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -ggdb -march=native -Wno-narrowing -fPIC -DGLIBCXX_USE_CXX11_ABI=0")
 list(APPEND CMAKE_PREFIX_PATH $ENV{CONDA_PREFIX})
 include_directories($ENV{CONDA_PREFIX}/include)
 link_directories($ENV{CONDA_PREFIX}/lib)
@@ -99,17 +99,32 @@ endif()
 # -------------------------------
 # Conditional build for CUDA
 # -------------------------------
-if (ENABLE_CUDA)
-  set(CMAKE_CUDA_COMPILER "/usr/local/cuda-10.0/bin/nvcc")
-  enable_language(CUDA)
-  set(CMAKE_CUDA_SEPARABLE_COMPILATION ON)
-  set(CUDA_NVCC_FLAGS
-        -O3 -std=c++14 -I /usr/local -I /usr/local/cuda-10.0/include -x cu -Xcompiler -fPIC -DGLIBCXX_USE_CXX11_ABI=0
-        -gencode arch=compute_75,code=compute_75
-    )
-  set(CMAKE_CUDA_ARCHITECTURES "75")
-endif()
+if (NOT (DEFINED ENABLE_CUDA))
+  message("Compiling with CUDA not explicitly disabled. Enabling implicitly")
+  set(ENABLE_CUDA ON CACHE BOOL "")
 
+endif(NOT (DEFINED ENABLE_CUDA))
+
+if (ENABLE_CUDA)
+  message("Compiling with CUDA enabled")
+
+  find_package(CUDAToolkit)
+
+  if(NOT DEFINED CMAKE_CUDA_ARCHITECTURES)
+    # set(CMAKE_CUDA_ARCHITECTURES 52 60 61 70 72 75 80 86)
+    set(CMAKE_CUDA_ARCHITECTURES 75)  # TODO should be configurable
+  endif()
+
+  list(APPEND CUDA_NVCC_FLAGS -O3 -std=c++14 -x cu -Xcompiler -fPIC -DGLIBCXX_USE_CXX11_ABI=0)
+
+  enable_language(CUDA)
+
+else(ENABLE_CUDA)
+  message("Compiling with CUDA disabled")
+
+endif(ENABLE_CUDA)
+
+# find LAPACK
 if(APPLE)
   set(BLA_VENDOR Apple)
 else()

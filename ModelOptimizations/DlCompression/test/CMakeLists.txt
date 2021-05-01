@@ -49,27 +49,13 @@ target_compile_options(MoDlCompressionTest
          -DUSE_OPENCV
       )
 
-if(ENABLE_CUDA)
-      target_link_libraries(MoDlCompressionTest
-            ${OPENCV_LIBRARY}
-            MoDlCompression
-            ${LAPACKE_LIBRARY}
-      #      Threads::Threads
-            ${CUDA_LIBRARIES}
-            ${CUDA_CUBLAS_LIBRARIES}
-            $ENV{CONDA_PREFIX}/lib/libcublas.so
-            z m atomic
-            gtest_main
-            )
-else()
-      target_link_libraries(MoDlCompressionTest
-            MoDlCompression
-            ${OPENCV_LIBRARY}
-            LAPACK::LAPACK
-            z 
-            gtest_main
-            )
-endif()
+target_link_libraries(MoDlCompressionTest
+      MoDlCompression
+      ${OPENCV_LIBRARY}
+      LAPACK::LAPACK
+      z 
+      gtest_main
+      )
 
 add_test(MoDlCompressionTest
       MoDlCompressionTest --gtest_output=xml:cpp_test_output.xml

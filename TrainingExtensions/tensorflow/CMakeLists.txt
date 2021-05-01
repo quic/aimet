@@ -60,19 +60,20 @@ if (ENABLE_CUDA)
             )
 
     target_link_libraries(TrainingExtensionsTf PUBLIC
-          MoDlCompression
-          MoDlQuantization
-          MoDlQuantizationCuda
-          TensorFlow
-          TrainingExtensionsTfCuda
-          )
+            MoDlCompression
+            MoDlQuantization
+            MoDlQuantizationCuda
+            TensorFlow
+            TrainingExtensionsTfCuda
+            CUDA::cublas
+        )
 
 else()
     target_link_libraries(TrainingExtensionsTf PUBLIC
             MoDlCompression
             MoDlQuantization
             TensorFlow
-            )
+        )
 
 endif()
 
@@ -97,7 +98,7 @@ if (ENABLE_CUDA)
 
     target_compile_options(TrainingExtensionsTfCuda
             PRIVATE
-            -Xcompiler -fPIC -D_GLIBCXX_USE_CXX11_ABI=0
+            -Xcompiler -fPIC -DGLIBCXX_USE_CXX11_ABI=0
             -DGOOGLE_CUDA=1
             -I ${TENSORFLOW_INCLUDES} --expt-relaxed-constexpr
             )

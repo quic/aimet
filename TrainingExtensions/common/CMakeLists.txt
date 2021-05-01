@@ -46,7 +46,7 @@ if (ENABLE_CUDA)
             pybind11::module
             MoDlQuantization
             MoDlQuantizationCuda
-	    $ENV{CONDA_PREFIX}/lib/libcublas.so
+	      CUDA::cublas
             )
 
 else (ENABLE_CUDA)

@@ -98,7 +98,6 @@ if (ENABLE_CUDA)
             PRIVATE $<$<COMPILE_LANGUAGE:CUDA>:
             --generate-line-info
             --use_fast_math>
-            -I /usr/local/cuda-10.0/include
             -Xcompiler -fPIC
             )
 

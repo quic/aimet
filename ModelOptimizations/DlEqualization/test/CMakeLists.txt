@@ -50,28 +50,14 @@ target_compile_options(MoDlEqualizationTest
             -DUSE_OPENCV
         )
 
-if(ENABLE_CUDA)
-        target_link_libraries(MoDlEqualizationTest
-                ${OpenCV_LIBS}
-                MoDlEqualization
-                pybind11::embed
-                ${LAPACKE_LIBRARY}
-                z
-                ${CUDA_LIBRARIES}
-                ${CUDA_CUBLAS_LIBRARIES}
-                $ENV{CONDA_PREFIX}/lib/libcublas.so
-                gtest gtest_main
-                )
-else()
-        target_link_libraries(MoDlEqualizationTest
-                MoDlEqualization
-                pybind11::embed
-                ${LAPACKE_LIBRARY}
-                ${OPENCV_LIBRARY}
-                z
-                gtest gtest_main
-                )
-endif()
+target_link_libraries(MoDlEqualizationTest
+        MoDlEqualization
+        pybind11::embed
+        ${LAPACKE_LIBRARY}
+        ${OPENCV_LIBRARY}
+        z
+        gtest gtest_main
+        )
 
 add_test(MoDlEqualizationTest
         MoDlEqualizationTest --gtest_output=xml:cpp_test_output.xml)

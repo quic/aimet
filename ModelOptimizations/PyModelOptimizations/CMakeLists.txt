@@ -42,14 +42,13 @@ add_library(PyModelOptimizations MODULE PyModelOptimizations.cpp)
 if (ENABLE_CUDA)
     target_link_libraries(PyModelOptimizations
         PUBLIC
-            # stdc++
-            # PYBIND11
             pybind11::module
             MoDlQuantization
             MoDlEqualization
             MoDlQuantizationCuda
             MoDlCompression
-            $ENV{CONDA_PREFIX}/lib/libcublas.so
+
+            CUDA::cublas
             ${LAPACKE_LIBRARY}
             ${OPENCV_LIBRARY}
             z
