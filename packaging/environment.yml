@@ -20,6 +20,6 @@ dependencies:
   - tensorflow=1.15
   - libprotobuf=3.8
   - mkl-devel
-  - pytorch=1.8
+  - pytorch
   - torchvision
   - cudatoolkit>=10
