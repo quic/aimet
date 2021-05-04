@@ -328,10 +328,11 @@ class OnnxSaver:
         Given a ONNX model removes any detached nodes from the graph
         :return: Updated onnx model
         """
-        e = onnx.utils.Extractor(onnx_model)
-        model_inputs = [inp.name for inp in onnx_model.graph.input]
-        model_outputs = [output.name for output in onnx_model.graph.output]
-        onnx_model = e.extract_model(model_inputs, model_outputs)
+        marker_nodes = [node for node in onnx_model.graph.node if node.op_type == 'CustomMarker']
+
+        for node in marker_nodes:
+            onnx_model.graph.node.remove(node)
+
         return onnx_model
 
     @classmethod
