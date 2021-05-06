@@ -4,8 +4,5 @@ python3-pip
 liblapacke
 liblapacke-dev
 wget
-cmake
-libprotobuf-dev
-protobuf-compiler
 -y libjpeg8-dev
 -y zlib1g-dev
