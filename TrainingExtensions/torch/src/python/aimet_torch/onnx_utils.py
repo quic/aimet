@@ -367,9 +367,9 @@ class OnnxSaver:
         except KeyError:
             param_name = f'#d{depth}_{onnx_op_type}.{input_index}'
 
-        if param_name not in param_name:
-            _logger.warning(
-                f'Failed to find a matching param name for {type(module)} using name:{param_names}')
+        if param_name not in param_names:
+            _logger.warning('Failed to find a matching param name for %s using name:%s',
+                            type(module), param_name)
 
         return param_name
 
