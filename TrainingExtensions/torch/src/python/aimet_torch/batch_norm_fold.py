@@ -49,13 +49,14 @@ from aimet_common.bias_correction import ConvBnPatternHandler
 from aimet_common.graph_pattern_matcher import PatternType
 from aimet_common.graph_searcher import GraphSearcher
 
+# pylint: disable=unused-import
 from aimet_torch.defs import PassThroughOp
 from aimet_torch import utils
 from aimet_torch.meta.connectedgraph import ConnectedGraph
 
 
 def _delete_bn_from_model(model: torch.nn.Module, bn_layer_list: List[torch.nn.BatchNorm2d]):
-    utils.replace_modules_with_instances_of_new_type(model, bn_layer_list, PassThroughOp)
+    utils.replace_modules_with_instances_of_new_type(model, bn_layer_list, torch.nn.Identity)
 
 
 LayerType = Union[torch.nn.Conv2d, torch.nn.Linear]
@@ -72,6 +73,7 @@ def call_mo_batch_norm_fold(conv_linear: Union[torch.nn.Linear, torch.nn.Conv2d,
     :param conv_linear: Conv or Linear layer. For Conv layers Conv2D and TransposedConv2D are supported currently
     :param bn: Batch Norm layer
     :param is_batch_norm_second: True if BatchNorm comes after Conv/Linear layer
+    :return: Updated bias and weight
     :return: Updated bias and weight
     """
     bn_params = libpymo.BNParams()

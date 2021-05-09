@@ -53,7 +53,6 @@ from aimet_torch.quantsim_config.quantsim_config import QuantSimConfigurator
 from aimet_torch.qc_quantize_op import QcQuantizeStandAloneBase, QcQuantizeWrapper, QcQuantizeOpMode, \
     QcPostTrainingWrapper
 from aimet_torch import torchscript_utils
-from aimet_torch.batch_norm_fold import PassThroughOp
 from aimet_torch import utils
 from aimet_torch.onnx_utils import OnnxSaver, OnnxExportApiArgs
 from aimet_torch.meta.connectedgraph import ConnectedGraph
@@ -63,8 +62,7 @@ logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Quant)
 
 
 # Types of modules which cannot be quantized
-unquantizable_modules = (QcQuantizeWrapper, QcQuantizeStandAloneBase, QcQuantizeRecurrent, PassThroughOp,
-                         torch.nn.Identity)
+unquantizable_modules = (QcQuantizeWrapper, QcQuantizeStandAloneBase, QcQuantizeRecurrent, torch.nn.Identity)
 
 # If a torch module type is in this dictionary, call the corresponding quantized module constructor instead of wrapping
 # it with QcQuantizeWrapper.
@@ -670,7 +668,7 @@ class QuantizationSimModel:
                     setattr(starting_module, module_name, module_ref._module_to_wrap)
 
                 elif isinstance(module_ref, QcQuantizeStandAloneBase):
-                    setattr(starting_module, module_name, PassThroughOp())
+                    setattr(starting_module, module_name, torch.nn.Identity())
 
                 elif isinstance(module_ref, QcQuantizeRecurrent):
                     module_ref.update_params()

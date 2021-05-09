@@ -41,7 +41,7 @@ from typing import List, Union, Dict
 import torch
 
 from aimet_common.utils import AimetLogger
-from aimet_torch.defs import OpToIOTensors, PassThroughOp
+from aimet_torch.defs import OpToIOTensors
 from aimet_torch.utils import is_leaf_module, run_hook_for_layers_with_given_input
 from aimet_torch.meta.connectedgraph import ConnectedGraph
 
@@ -230,7 +230,7 @@ def get_node_to_io_tensor_names_map(model: torch.nn.Module,
         if isinstance(curr_module, (torch.nn.RNN, torch.nn.LSTM, torch.nn.GRU)):
             raise NotImplementedError('exporting encoding for RNN module via torchscript not supported')
 
-        if not isinstance(curr_module, PassThroughOp):
+        if not isinstance(curr_module, torch.nn.Identity):
             modules.append(curr_module)
 
     run_hook_for_layers_with_given_input(model, inputs, forward_hook)
