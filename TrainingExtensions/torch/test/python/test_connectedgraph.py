@@ -179,7 +179,7 @@ class TestConnectedGraph(unittest.TestCase):
         self.assertEqual(conn_graph.get_op_from_module_name('HierarchicalModel.sq.seq_list.0'), conn_graph.ordered_ops[84])
 
     def test_passthrough_op_last_module(self):
-        """ Test building a connected graph on a model where a PassThroughOp is the last module in the graph. """
+        """ Test building a connected graph on a model where a torch.nn.Identity is the last module in the graph. """
         model = test_models.PassThroughOpLastLayerModel()
         model.eval()
         inp_shape = (1, 3, 32, 32)

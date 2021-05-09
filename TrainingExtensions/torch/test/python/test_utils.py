@@ -49,7 +49,6 @@ from aimet_common.utils import round_up_to_multiplicity, round_down_to_multiplic
 from aimet_torch import utils, elementwise_ops
 
 from aimet_torch.quantsim import QuantizationSimModel
-from aimet_torch.defs import PassThroughOp
 from aimet_torch.examples.test_models import TinyModel, MultiInput, ModelWithReusedNodes, SingleResidual
 
 
@@ -89,15 +88,15 @@ class TestTrainingExtensionsUtils(unittest.TestCase):
         model.eval()
 
         utils.replace_modules_with_instances_of_new_type(model, [model.layer1[0].bn1, model.layer1[1].bn1],
-                                                         PassThroughOp)
+                                                         torch.nn.Identity)
 
         # check - given modules have been replaced
-        self.assertTrue(isinstance(model.layer1[0].bn1, PassThroughOp))
-        self.assertTrue(isinstance(model.layer1[1].bn1, PassThroughOp))
+        self.assertTrue(isinstance(model.layer1[0].bn1, torch.nn.Identity))
+        self.assertTrue(isinstance(model.layer1[1].bn1, torch.nn.Identity))
 
         # check - other bn layers have not been modified
-        self.assertFalse(isinstance(model.layer1[0].bn2, PassThroughOp))
-        self.assertFalse(isinstance(model.layer1[1].bn2, PassThroughOp))
+        self.assertFalse(isinstance(model.layer1[0].bn2, torch.nn.Identity))
+        self.assertFalse(isinstance(model.layer1[1].bn2, torch.nn.Identity))
 
         # sanity-check: forward pass continues to work
         with torch.no_grad():
