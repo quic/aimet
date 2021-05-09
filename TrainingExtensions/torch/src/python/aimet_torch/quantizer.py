@@ -49,7 +49,6 @@ import torch
 # Import AIMET specific modules
 from aimet_common.utils import AimetLogger
 from aimet_common.defs import QuantScheme
-from aimet_torch.batch_norm_fold import PassThroughOp
 from aimet_torch import utils
 from aimet_torch.qc_quantize_op import QcQuantizeWrapper, QcQuantizeStandAloneBase, QcQuantizeOpMode, \
     QcPostTrainingWrapper
@@ -116,7 +115,7 @@ class Quantizer:
             Quantized or if the module is in the layers_to_ignore list, don't quantize.
         """
 
-        if isinstance(module_ref, (QcQuantizeWrapper, PassThroughOp)):
+        if isinstance(module_ref, (QcQuantizeWrapper, torch.nn.Identity)):
             self._logger.debug("Module %s already Quantized", module_ref)
             return False
 

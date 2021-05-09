@@ -59,7 +59,6 @@ from aimet_torch.onnx_utils import OnnxExportApiArgs
 from aimet_torch.qc_quantize_recurrent import QcQuantizeRecurrent
 from aimet_torch.quantsim import QuantizationSimModel
 from aimet_torch.quantsim_straight_through_grad import compute_dloss_by_dx
-from aimet_torch.defs import PassThroughOp
 from aimet_torch import utils, elementwise_ops
 
 from aimet_torch.qc_quantize_op import QcQuantizeWrapper, QcQuantizeStandalone, MAP_ROUND_MODE_TO_PYMO, \
@@ -96,10 +95,10 @@ class SmallMnistNoDropoutWithPassThrough(nn.Module):
     def __init__(self):
         super(SmallMnistNoDropoutWithPassThrough, self).__init__()
         self.conv1 = nn.Conv2d(1, 10, kernel_size=5)
-        self.pt1 = PassThroughOp()
+        self.pt1 = torch.nn.Identity()
         self.relu1 = nn.ReLU()
         self.conv2 = nn.Conv2d(10, 20, kernel_size=5)
-        self.pt2 = PassThroughOp()
+        self.pt2 = torch.nn.Identity()
         self.relu2 = nn.ReLU()
         self.fc1 = nn.Linear(320, 50)
         self.relu3 = nn.ReLU()
