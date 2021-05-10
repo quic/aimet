@@ -99,12 +99,12 @@ pytorch_functional_name_to_onnx_dict = {
     'div': 'Div'
 }
 
-pytorch_module_param_to_onnx_subgraph_op_map = {
+onnx_subgraph_op_to_pytorch_module_param_name = {
     torch.nn.GroupNorm:
         {
-            # op_type: #torch module parameter name
-            'Mul': 'weight',
-            'Add': 'bias'
+            # '#depth', 'op_type': {input_index: torch module parameter name}
+            ('#2', 'Mul'):  {1: 'weight'},
+            ('#3', 'Add'):  {1: 'bias'}
         }
 }
 
@@ -133,6 +133,7 @@ class OnnxExportApiArgs:
         return {'opset_version': self.opset_version,
                 'input_names': self.input_names,
                 'output_names': self.output_names}
+
 
 class OnnxSaver:
     """
@@ -313,65 +314,30 @@ class OnnxSaver:
         with param names using a custom mapping.
         :param onnx_model: Onnx Model
         """
-        # Change the references to initializers in each node
+
         initializer_names = [initializer.name for initializer in onnx_model.graph.initializer]
-        module_name_map = {}
+        onnx_node_map = {(node.name, node.op_type): node for node in onnx_model.graph.node}
+
         for module_name, module_ref in pt_model.named_modules():
-            if aimet_torch.utils.is_leaf_module(module_ref):
-                module_name_map[module_name] = module_ref
+            if type(module_ref) in onnx_subgraph_op_to_pytorch_module_param_name:
 
-        for node in onnx_model.graph.node:
-            module_name, depth = node.name.split('#') if '#' in node.name else [node.name, 0]
-            replace_pairs = {}
+                for (node_suffix, op_type), replace_pairs in \
+                        onnx_subgraph_op_to_pytorch_module_param_name[type(module_ref)].items():
+                    node = onnx_node_map[module_name + node_suffix, op_type]
 
-            if module_name not in module_name_map:
-                continue
+                    for input_index, param_name in replace_pairs.items():
+                        new_param_name = module_name + '.' + param_name
+                        inp_tensor = node.input[input_index]
+                        node.input.remove(inp_tensor)
+                        node.input.insert(input_index, new_param_name)
 
-            for index, inp_tensor in enumerate(node.input):
-                if inp_tensor in initializer_names and module_name not in inp_tensor:
-                    assert inp_tensor not in replace_pairs
-                    replace_pairs[inp_tensor] = index
-
-            for inp_tensor, index in replace_pairs.items():
-                new_param_name = module_name + '.' + cls._get_torch_module_param_name(module_name_map[module_name],
-                                                                                      node.op_type, index, depth)
-                node.input.remove(inp_tensor)
-                node.input.insert(index, new_param_name)
-
-                initializer_index = initializer_names.index(inp_tensor)
-                initializer_names.remove(inp_tensor)
-                initializer_names.insert(initializer_index, new_param_name)
+                        initializer_index = initializer_names.index(inp_tensor)
+                        initializer_names.remove(inp_tensor)
+                        initializer_names.insert(initializer_index, new_param_name)
 
         for index, initializer in enumerate(onnx_model.graph.initializer):
             if initializer_names[index] != initializer.name:
                 initializer.name = initializer_names[index]
-
-    @classmethod
-    def _get_torch_module_param_name(cls,
-                                     module: torch.nn.Module,
-                                     onnx_op_type: str,
-                                     input_index: int,
-                                     depth: int) -> str:
-        """
-        Get the torch module parameter name associated with onnx node
-        :param module: torch module which generated the onnx node or sub-graph containing the onnx node
-        :param onnx_op_type: ONNX op type of the node
-        :param input_index: input index of the onnx op using the parameter
-        :param depth: depth at which the onnx op exists with sub-graph associated with the torch module
-        :return: torch param name if mapping found else provide generated name
-        """
-        param_names = [name for name, param in module.named_parameters()]
-
-        try:
-            param_name = pytorch_module_param_to_onnx_subgraph_op_map[type(module)][onnx_op_type]
-        except KeyError:
-            param_name = f'#d{depth}_{onnx_op_type}.{input_index}'
-
-        if param_name not in param_names:
-            _logger.warning('Failed to find a matching param name for %s using name:%s',
-                            type(module), param_name)
-
-        return param_name
 
     @classmethod
     def _fix_param_names(cls, onnx_model):
