@@ -308,36 +308,51 @@ class OnnxSaver:
         return onnx_model
 
     @classmethod
-    def _fix_initializer_names(cls, onnx_model, pt_model):
+    def _fix_initializer_names(cls, onnx_model: onnx.NodeProto, pt_model: torch.nn.Module):
         """
         Parameter names in some case do not have reflect the torch param names. This method updates the onnx model
         with param names using a custom mapping.
         :param onnx_model: Onnx Model
+        :param pt_model: PyTorch Model
         """
 
         initializer_names = [initializer.name for initializer in onnx_model.graph.initializer]
         onnx_node_map = {(node.name, node.op_type): node for node in onnx_model.graph.node}
 
         for module_name, module_ref in pt_model.named_modules():
-            if type(module_ref) in onnx_subgraph_op_to_pytorch_module_param_name:
 
-                for (node_suffix, op_type), replace_pairs in \
-                        onnx_subgraph_op_to_pytorch_module_param_name[type(module_ref)].items():
-                    node = onnx_node_map[module_name + node_suffix, op_type]
+            if not isinstance(module_ref, tuple(onnx_subgraph_op_to_pytorch_module_param_name.keys())):
+                continue
 
-                    for input_index, param_name in replace_pairs.items():
-                        new_param_name = module_name + '.' + param_name
-                        inp_tensor = node.input[input_index]
-                        node.input.remove(inp_tensor)
-                        node.input.insert(input_index, new_param_name)
+            for (node_suffix, op_type), replace_pairs in \
+                    onnx_subgraph_op_to_pytorch_module_param_name[type(module_ref)].items():
+                node = onnx_node_map[module_name + node_suffix, op_type]
 
-                        initializer_index = initializer_names.index(inp_tensor)
-                        initializer_names.remove(inp_tensor)
-                        initializer_names.insert(initializer_index, new_param_name)
+                cls._replace_param_name(initializer_names, module_name, node, replace_pairs)
 
         for index, initializer in enumerate(onnx_model.graph.initializer):
             if initializer_names[index] != initializer.name:
                 initializer.name = initializer_names[index]
+
+    @classmethod
+    def _replace_param_name(cls, initializer_names: List[str], module_name: str,
+                            node: onnx.NodeProto, replace_pairs: Dict[int, str]):
+        """
+        helper method to replace parameter names at the corresponding input tensor index
+        :param initializer_names: List of model initializer names
+        :param module_name: PyTorch module name
+        :param node: Onnx node part of sub-graph that maps to the torch module
+        :param replace_pairs: dictionary of input tensor indices and param names
+        """
+        for input_index, param_name in replace_pairs.items():
+            new_param_name = module_name + '.' + param_name
+            inp_tensor = node.input[input_index]
+            node.input.remove(inp_tensor)
+            node.input.insert(input_index, new_param_name)
+
+            initializer_index = initializer_names.index(inp_tensor)
+            initializer_names.remove(inp_tensor)
+            initializer_names.insert(initializer_index, new_param_name)
 
     @classmethod
     def _fix_param_names(cls, onnx_model):
