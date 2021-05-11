@@ -47,7 +47,7 @@ release_tag=<release_tag>
 python3 -m pip install https://github.com/quic/aimet/releases/download/${release_tag}/AimetCommon-${AIMET_VARIANT}_${release_tag}-py3-none-any.whl
 
 # Install ONE of the following depending on the variant
-python3 -m pip install https://github.com/quic/aimet/releases/download/${release_tag}/AimetTorch-${AIMET_VARIANT}_${release_tag}-py3-none-any.whl
+python3 -m pip install https://github.com/quic/aimet/releases/download/${release_tag}/AimetTorch-${AIMET_VARIANT}_${release_tag}-py3-none-any.whl -f https://download.pytorch.org/whl/torch_stable.html
 # OR
 python3 -m pip install https://github.com/quic/aimet/releases/download/${release_tag}/AimetTensorflow-${AIMET_VARIANT}_${release_tag}-py3-none-any.whl
 

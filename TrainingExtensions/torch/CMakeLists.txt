@@ -84,6 +84,14 @@ install(DIRECTORY ${CMAKE_BINARY_DIR}/artifacts/
       PATTERN "__pycache*" EXCLUDE
       )
 
-install(FILES ${CMAKE_BINARY_DIR}/artifacts/easy-install.pth ${CMAKE_BINARY_DIR}/artifacts/site.py
-      DESTINATION ${AIMET_INSTALL_DIR}/lib/x86_64-linux-gnu
-      )
+if(EXISTS ${CMAKE_BINARY_DIR}/artifacts/easy-install.pth)
+      install(FILES ${CMAKE_BINARY_DIR}/artifacts/easy-install.pth 
+            DESTINATION ${AIMET_INSTALL_DIR}/lib/x86_64-linux-gnu
+            )
+endif()
+
+if(EXISTS ${CMAKE_BINARY_DIR}/artifacts/site.py)
+      install(FILES ${CMAKE_BINARY_DIR}/artifacts/site.py
+            DESTINATION ${AIMET_INSTALL_DIR}/lib/x86_64-linux-gnu
+            )
+endif()
