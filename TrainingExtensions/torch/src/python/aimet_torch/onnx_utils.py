@@ -99,6 +99,15 @@ pytorch_functional_name_to_onnx_dict = {
     'div': 'Div'
 }
 
+onnx_subgraph_op_to_pytorch_module_param_name = {
+    torch.nn.GroupNorm:
+        {
+            # '#depth', 'op_type': {input_index: torch module parameter name}
+            ('#2', 'Mul'):  {1: 'weight'},
+            ('#3', 'Add'):  {1: 'bias'}
+        }
+}
+
 
 class OnnxExportApiArgs:
     """
@@ -124,6 +133,7 @@ class OnnxExportApiArgs:
         return {'opset_version': self.opset_version,
                 'input_names': self.input_names,
                 'output_names': self.output_names}
+
 
 class OnnxSaver:
     """
@@ -293,8 +303,56 @@ class OnnxSaver:
         onnx_model = cls._remove_detached_nodes_from_onnx_graph(onnx_model)
 
         cls._fix_param_names(onnx_model)
+        cls._fix_initializer_names(onnx_model, pt_model)
 
         return onnx_model
+
+    @classmethod
+    def _fix_initializer_names(cls, onnx_model: onnx.NodeProto, pt_model: torch.nn.Module):
+        """
+        Parameter names in some case do not have reflect the torch param names. This method updates the onnx model
+        with param names using a custom mapping.
+        :param onnx_model: Onnx Model
+        :param pt_model: PyTorch Model
+        """
+
+        initializer_names = [initializer.name for initializer in onnx_model.graph.initializer]
+        onnx_node_map = {(node.name, node.op_type): node for node in onnx_model.graph.node}
+
+        for module_name, module_ref in pt_model.named_modules():
+
+            if not isinstance(module_ref, tuple(onnx_subgraph_op_to_pytorch_module_param_name.keys())):
+                continue
+
+            for (node_suffix, op_type), replace_pairs in \
+                    onnx_subgraph_op_to_pytorch_module_param_name[type(module_ref)].items():
+                node = onnx_node_map[module_name + node_suffix, op_type]
+
+                cls._replace_param_name(initializer_names, module_name, node, replace_pairs)
+
+        for index, initializer in enumerate(onnx_model.graph.initializer):
+            if initializer_names[index] != initializer.name:
+                initializer.name = initializer_names[index]
+
+    @classmethod
+    def _replace_param_name(cls, initializer_names: List[str], module_name: str,
+                            node: onnx.NodeProto, replace_pairs: Dict[int, str]):
+        """
+        helper method to replace parameter names at the corresponding input tensor index
+        :param initializer_names: List of model initializer names
+        :param module_name: PyTorch module name
+        :param node: Onnx node part of sub-graph that maps to the torch module
+        :param replace_pairs: dictionary of input tensor indices and param names
+        """
+        for input_index, param_name in replace_pairs.items():
+            new_param_name = module_name + '.' + param_name
+            inp_tensor = node.input[input_index]
+            node.input.remove(inp_tensor)
+            node.input.insert(input_index, new_param_name)
+
+            initializer_index = initializer_names.index(inp_tensor)
+            initializer_names.remove(inp_tensor)
+            initializer_names.insert(initializer_index, new_param_name)
 
     @classmethod
     def _fix_param_names(cls, onnx_model):
@@ -480,13 +538,6 @@ class OnnxSaver:
     def _set_output_names(onnx_model: onnx.ModelProto, desired_model_output_names,
                           map_output_tensor_to_node, map_input_tensor_to_node):
 
-        # Find duplicates in model outputs
-        duplicates = []
-        actual_model_output_names = [output.name for output in onnx_model.graph.output]
-        for output in actual_model_output_names:
-            if actual_model_output_names.count(output) > 1:
-                duplicates.append(output)
-
         # Iterate over the model outputs
         for index, output in enumerate(onnx_model.graph.output):
             new_tensor = desired_model_output_names[index]
@@ -506,7 +557,6 @@ class OnnxSaver:
                     map_input_tensor_to_node[new_tensor].append(consumer)
 
                 del map_input_tensor_to_node[old_tensor]        # No node should consume old tensor anymore
-
 
             producer = map_output_tensor_to_node[old_tensor]
 

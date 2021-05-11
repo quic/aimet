@@ -481,3 +481,36 @@ class TestOnnxUtils:
 
         for name in expected_nodes:
             assert name in actual_nodes
+
+    def test_onnx_custom_param_mapping(self):
+        from aimet_torch.elementwise_ops import Add
+
+        class GroupNormModel(torch.nn.Module):
+            def __init__(self):
+                super(GroupNormModel, self).__init__()
+                self.conv1 = torch.nn.Conv2d(10, 10, 3)
+                self.bn = torch.nn.BatchNorm2d(10)
+                self.gn = torch.nn.GroupNorm(2, 10)
+                self.add = Add()
+
+            def forward(self, x):
+                x = self.conv1(x)
+                y1 = self.bn(x)
+                y2 = self.gn(x)
+                return self.add(y1, y2)
+
+        model = GroupNormModel()
+
+        onnx_utils.OnnxSaver.set_node_names('./data/MyModel.onnx', model, dummy_input=torch.rand(1, 10, 24, 24))
+        onnx_model = onnx.load('./data/MyModel.onnx')
+        expected_node_names = ['conv1', 'bn', 'gn', 'add']
+
+        actual_node_names = [node.name for node in onnx_model.graph.node]
+        for name in expected_node_names:
+            assert name in actual_node_names
+
+        expected_param_names = ['conv1.weight', 'gn.bias', 'conv1.bias', 'gn.weight', 'bn.weight',
+                                'bn.running_mean', 'bn.bias', 'bn.running_var']
+        _, valid_param_set = onnx_utils.OnnxSaver.get_onnx_node_to_io_tensor_names_map(onnx_model)
+        for name in expected_param_names:
+            assert name in valid_param_set
