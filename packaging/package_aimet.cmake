@@ -141,7 +141,7 @@ foreach(package ${package_name_list})
     file(COPY ${AIMET_PACKAGE_PATH}/lib/python/${package} DESTINATION ${build_packaging_dir}/)
   endif()
 
-  # Invoke the setup tools scrip to create the wheel packages. 
+  # Invoke the setup tools script to create the wheel packages.
   execute_process(COMMAND python3 setup.py sdist bdist_wheel ${CUDA_OPTION} WORKING_DIRECTORY ${build_packaging_dir} OUTPUT_VARIABLE output_var)
 
 endforeach()

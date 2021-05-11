@@ -52,9 +52,7 @@ packages_found = find_packages() + find_namespace_packages(exclude=['pyenv3*', '
 install_requires_list = [open(package_bin_dir + '/reqs_pip_common.txt').read()]
 package_dependency_files = ['reqs_pip_common.txt', 'reqs_deb_common.txt', 'INSTALL.txt', 'envsetup.sh', 'LICENSE.pdf']
 if "--gpu" in sys.argv:
-    # Create common GPU dependency list
-    package_dependency_files.append(['reqs_pip_gpu.txt', 'reqs_deb_gpu.txt'])
-    install_requires_list.append(open(package_bin_dir + '/reqs_pip_gpu.txt').read())
+    # There is NO common GPU dependency list, so just ignore the option if it was passed in
     sys.argv.remove("--gpu")
 
 # Loop over package artifacts folder

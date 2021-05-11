@@ -81,7 +81,7 @@ RUN apt-get update && apt-get install -y python-pip && rm -rf /var/lib/apt/lists
 RUN pip3 --no-cache-dir install --upgrade \
         setuptools==41.0.1 \
         pip==20.2.4 \
-        numpy==1.16.4 \
+        numpy==1.16.6 \
         wheel==0.33.4
 
 ENV DEBIAN_FRONTEND=noninteractive
@@ -115,12 +115,14 @@ RUN apt-get update > /dev/null && \
 
 # Python3 Packages
 RUN pip3 --no-cache-dir install \
+        astroid==2.5.3 \
         attrs==19.1.0 \
         behave==1.2.6 \
         blosc==1.8.1 \
         cffi==1.12.3 \
         click==7.0 \
         cython==0.29.10 \
+        Deprecated==1.2.12 \
         docutils==0.16 \
         h5py==2.9.0 \
         ipykernel==4.8.2 \
