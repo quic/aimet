@@ -36,6 +36,7 @@
 
 """ Package generation file for top-level aimet package """
 
+import sys
 import os.path
 from setuptools import setup
 import setup_cfg # pylint: disable=import-error
@@ -44,6 +45,10 @@ package_url_base = setup_cfg.remote_url + "/releases/download/" + str(setup_cfg.
 
 torch_dep_whl = package_url_base + "/AimetTorch-" + str(setup_cfg.version) + "-py3-none-any.whl"
 tf_dep_whl = package_url_base + "/AimetTensorflow-" + str(setup_cfg.version) + "-py3-none-any.whl"
+
+if "--gpu" in sys.argv:
+    # There is NO common GPU dependency list, so just ignore the option if it was passed in
+    sys.argv.remove("--gpu")
 
 dependency_list = []
 if os.path.isfile(torch_dep_whl):
