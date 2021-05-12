@@ -41,7 +41,9 @@ release_tag=<release_tag>
 ```
 
 Install the AIMET packages in the order specified below:
-> _NOTE:_ Python dependencies would automatically get installed.
+> _NOTE:_
+>   - Python dependencies will automatically get installed.
+>   - Replace `py3-none-any` with `cp36-cp36m-linux_x86_64` OR `cp37-cp37m-linux_x86_64` as appropriate depending on the actual wheel filename(s) on the [releases page](https://github.com/quic/aimet/releases).
 ```bash
 release_tag=<release_tag>
 python3 -m pip install https://github.com/quic/aimet/releases/download/${release_tag}/AimetCommon-${AIMET_VARIANT}_${release_tag}-py3-none-any.whl
