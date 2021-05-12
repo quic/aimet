@@ -39,6 +39,7 @@
 import os
 import sys
 from setuptools import setup, find_packages, find_namespace_packages
+from packaging_common import bdist_wheel_aimet
 import setup_cfg # pylint: disable=import-error
 
 package_name = "aimet_common"
@@ -80,4 +81,7 @@ setup(
     zip_safe=True,
     platforms='x86',
     python_requires='>=3.6',
+    cmdclass={
+        'bdist_wheel': bdist_wheel_aimet,
+    },
 )

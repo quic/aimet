@@ -50,6 +50,7 @@ configure_file("${src_packaging_dir}/NOTICE.txt" "${build_packaging_dir}/NOTICE.
 configure_file("${src_packaging_dir}/README.txt" "${build_packaging_dir}/README.txt" COPYONLY)
 configure_file("${src_packaging_dir}/INSTALL.txt" "${build_packaging_dir}/INSTALL.txt" COPYONLY)
 configure_file("${src_packaging_dir}/setup_cfg.py" "${build_packaging_dir}/setup_cfg.py" COPYONLY)
+configure_file("${src_packaging_dir}/packaging_common.py" "${build_packaging_dir}/packaging_common.py" COPYONLY)
 
 # Common dependencies
 set(deps_name_list_aimet_common "reqs_deb_common.txt" "reqs_pip_common.txt")

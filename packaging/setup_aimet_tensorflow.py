@@ -39,90 +39,37 @@
 import os
 import sys
 from setuptools import setup, find_packages, find_namespace_packages
+from packaging_common import bdist_wheel_aimet, get_dependency_packages, get_dependency_urls, get_dependency_wheel
 import setup_cfg # pylint: disable=import-error
 
 package_name = "aimet_tensorflow"
-
-def prepend_bin_path(dependency_list_file):
-    '''
-    Append the common path to the dependency file
-    '''
-    package_bin_dir = package_name + "/bin"
-    full_path = package_bin_dir + '/' + dependency_list_file
-    return full_path
-
-
-def get_dependency_packages(dependency_list_file):
-    '''
-    Read the dependency file and return a list of packages
-    '''
-
-    dependency_file_full_path = prepend_bin_path(dependency_list_file)
-    dependency_list_array = open(dependency_file_full_path).read().splitlines()
-
-    dependency_packages_list = []
-    for dependency_line in dependency_list_array:
-        if dependency_line.strip().startswith('#'):
-            # Skip the commented out lines
-            continue
-        # Pick up the package and version (<package>==<ver> i.e. first column of file)
-        dependency_packages_list.append(dependency_line.lstrip().split()[0])
-
-    return dependency_packages_list
-
-def get_dependency_urls(dependency_list_file):
-    '''
-    Read the dependency file and return a list of package source URLs
-    '''
-
-    url_delimiter = '-f '
-
-    dependency_file_full_path = prepend_bin_path(dependency_list_file)
-    dependency_list_array = open(dependency_file_full_path).read().splitlines()
-
-    dependency_urls_list = []
-    for dependency_line in dependency_list_array:
-        if dependency_line.strip().startswith('#'):
-            # Skip the commented out lines
-            continue
-
-        # Extract any package custom URLs from the requirements file
-        # Ex. torch==1.7.1+cu110 -f https://download.pytorch.org/whl/torch_stable.html
-        url_delimiter = '-f '
-        # Split each line using the URL option as delimiter
-        dependency_line_split_list = dependency_line.split(url_delimiter)
-        # The split list will have at least 2 elements if a URL was present
-        if len(dependency_line_split_list) > 1:
-            # If the URL exists, remove all whitespaces
-            dependency_url = dependency_line_split_list[1].strip()
-            # Add to the list only if not already present
-            if dependency_url not in dependency_urls_list:
-                dependency_urls_list.append(dependency_url)
-
-    return dependency_urls_list
-
-
 package_url_base = setup_cfg.remote_url + "/releases/download/"+str(setup_cfg.version)
-common_dep_whl = package_url_base + "/AimetCommon-" + str(setup_cfg.version) + "-py3-none-any.whl"
-dependency_url_list = [common_dep_whl]
+
+dependency_url_list = []
+common_dep_whl = get_dependency_wheel("AimetCommon")
+if common_dep_whl is not None:
+    common_dep_whl_url = package_url_base + "/" + common_dep_whl
+    dependency_url_list.append(common_dep_whl_url)
+else:
+    sys.exit("Could not find dependency wheel file for package: %s" % package_name)
 
 # Obtain package contents; exclude build and other files
 packages_found = find_packages() + find_namespace_packages(exclude=['*bin', 'pyenv3*', 'build', 'dist', '*bin', '*x86*'])
 
 # Create common dependency list
 package_dependency_files = ['reqs_pip_tf_common.txt']
-install_requires_list = get_dependency_packages('reqs_pip_tf_common.txt')
+install_requires_list = get_dependency_packages(package_name, 'reqs_pip_tf_common.txt')
 if "--gpu" in sys.argv:
     # Create Tensorflow GPU dependency list
     package_dependency_files.extend(['bin/reqs_pip_tf_gpu.txt', 'bin/reqs_deb_tf_gpu.txt'])
-    install_requires_list.extend(get_dependency_packages('reqs_pip_tf_gpu.txt'))
-    dependency_url_list.extend(get_dependency_urls('reqs_pip_tf_gpu.txt'))
+    install_requires_list.extend(get_dependency_packages(package_name, 'reqs_pip_tf_gpu.txt'))
+    dependency_url_list.extend(get_dependency_urls(package_name, 'reqs_pip_tf_gpu.txt'))
     sys.argv.remove("--gpu")
 else:
     # Create Tensorflow CPU dependency list
     package_dependency_files.extend(['bin/reqs_pip_tf_cpu.txt'])
-    install_requires_list.extend(get_dependency_packages('reqs_pip_tf_cpu.txt'))
-    dependency_url_list.extend(get_dependency_urls('reqs_pip_tf_cpu.txt'))
+    install_requires_list.extend(get_dependency_packages(package_name, 'reqs_pip_tf_cpu.txt'))
+    dependency_url_list.extend(get_dependency_urls(package_name, 'reqs_pip_tf_cpu.txt'))
 
 # Loop over package artifacts folder
 required_package_data = ['acceptance_tests/*.*']
@@ -149,4 +96,7 @@ setup(
     zip_safe=True,
     platforms='x86',
     python_requires='>=3.6',
+    cmdclass={
+        'bdist_wheel': bdist_wheel_aimet,
+    },
 )
