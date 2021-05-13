@@ -312,3 +312,10 @@ class CompressionStats:
         stream.write('**********************************************************************************************\n')
 
         return stream.getvalue()
+
+
+class AdaroundConstants:
+    """ Constants used for Adarounding """
+
+    GAMMA = -0.1
+    ZETA = 1.1
