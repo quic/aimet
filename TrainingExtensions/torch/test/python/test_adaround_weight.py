@@ -1,0 +1,493 @@
+# /usr/bin/env python3.6
+# -*- mode: python -*-
+# =============================================================================
+#  @@-COPYRIGHT-START-@@
+#
+#  Copyright (c) 2021, Qualcomm Innovation Center, Inc. All rights reserved.
+#
+#  Redistribution and use in source and binary forms, with or without
+#  modification, are permitted provided that the following conditions are met:
+#
+#  1. Redistributions of source code must retain the above copyright notice,
+#     this list of conditions and the following disclaimer.
+#
+#  2. Redistributions in binary form must reproduce the above copyright notice,
+#     this list of conditions and the following disclaimer in the documentation
+#     and/or other materials provided with the distribution.
+#
+#  3. Neither the name of the copyright holder nor the names of its contributors
+#     may be used to endorse or promote products derived from this software
+#     without specific prior written permission.
+#
+#  THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+#  AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+#  IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+#  ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE
+#  LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+#  CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+#  SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+#  INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+#  CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+#  ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+#  POSSIBILITY OF SUCH DAMAGE.
+#
+#  SPDX-License-Identifier: BSD-3-Clause
+#
+#  @@-COPYRIGHT-END-@@
+# =============================================================================
+
+""" AdaRound Weights Unit Test Cases """
+
+import os
+import json
+import logging
+import unittest.mock
+import torch
+import torch.nn.functional as functional
+
+from aimet_common.utils import AimetLogger
+from aimet_common.defs import QuantScheme
+from aimet_common.quantsim import calculate_delta_offset
+from aimet_torch.utils import create_fake_data_loader, create_rand_tensors_given_shapes
+from aimet_torch.examples.test_models import TinyModel
+from aimet_torch.quantsim import QuantizationSimModel
+from aimet_torch.qc_quantize_op import QcPostTrainingWrapper, QcQuantizeOpMode
+from aimet_torch.adaround.adaround_weight import Adaround, AdaroundParameters
+
+
+logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Test)
+
+
+def dummy_forward_pass(model, inp_shape):
+    """ Dummy forward pass"""
+    model.eval()
+    with torch.no_grad():
+        output = model(torch.randn(inp_shape))
+    return output
+
+
+class ConvOnlyModel(torch.nn.Module):
+    """ Use this model for unit testing purposes. Expect input shape (1, 3, 32, 32) """
+
+    def __init__(self):
+        super(ConvOnlyModel, self).__init__()
+        self.conv1 = torch.nn.Conv2d(3, 32, kernel_size=2, stride=2, padding=2, bias=False)
+
+    def forward(self, *inputs):
+        x = self.conv1(inputs[0])
+        return x
+
+
+class UnusedModule(torch.nn.Module):
+    """ Use this model for unit testing purposes. Expect input shape (1, 3, 32, 32) """
+
+    def __init__(self):
+        super(UnusedModule, self).__init__()
+        self.conv1 = torch.nn.Conv2d(3, 32, kernel_size=2, stride=2, padding=2, bias=False)
+        self.conv2 = torch.nn.Conv2d(32, 64, kernel_size=2, stride=2, padding=2, bias=False)
+
+    def forward(self, *inputs):
+        x = self.conv1(inputs[0])
+        return x
+
+
+class OutOfSequenceModule(torch.nn.Module):
+    """ Use this model for unit testing purposes. Expect input shape (1, 3, 32, 32) """
+
+    def __init__(self):
+        super(OutOfSequenceModule, self).__init__()
+        self.conv1 = torch.nn.Conv2d(32, 64, kernel_size=2, stride=2, padding=2, bias=False)
+        self.conv2 = torch.nn.Conv2d(3, 32, kernel_size=2, stride=2, padding=2, bias=False)
+
+    def forward(self, *inputs):
+        x = self.conv2(inputs[0])
+        x = self.conv1(x)
+        return x
+
+
+class ConvTransposeNet(torch.nn.Module):
+    """ Model with ConvTranspose2d layer """
+    def __init__(self):
+
+        super(ConvTransposeNet, self).__init__()
+        self.trans_conv1 = torch.nn.ConvTranspose2d(3, 6, 3, groups=3)
+        self.bn1 = torch.nn.BatchNorm2d(6)
+        self.reul1 = torch.nn.ReLU()
+
+    def forward(self, x):
+        x = self.trans_conv1(x)
+        x = self.bn1(x)
+        x = self.reul1(x)
+
+        return x
+
+
+class TestAdaround(unittest.TestCase):
+    """
+    AdaRound Weights Unit Test Cases
+    """
+
+    def test_apply_adaround(self):
+        """ test apply_adaround end to end using tiny model """
+        AimetLogger.set_level_for_all_areas(logging.DEBUG)
+
+        # create fake data loader with image size (3, 32, 32)
+        data_loader = create_fake_data_loader(dataset_size=64, batch_size=16, image_size=(3, 32, 32))
+
+        net = TinyModel().eval()
+        model = net.to(torch.device('cpu'))
+
+        input_shape = (1, 3, 32, 32)
+        out_before_ada = dummy_forward_pass(model, input_shape)
+
+        inp_tensor_list = create_rand_tensors_given_shapes(input_shape)
+
+        params = AdaroundParameters(data_loader=data_loader, num_batches=4, default_num_iterations=5)
+        ada_rounded_model = Adaround.apply_adaround(model, inp_tensor_list, params, './', 'dummy')
+        out_after_ada = dummy_forward_pass(ada_rounded_model, input_shape)
+
+        self.assertFalse(torch.all(torch.eq(out_before_ada, out_after_ada)))
+
+        # Test export functionality
+        with open('./dummy.encodings') as json_file:
+            encoding_data = json.load(json_file)
+            print(encoding_data)
+
+        param_keys = list(encoding_data.keys())
+        print(param_keys)
+        self.assertTrue(param_keys[0] == "conv1.weight")
+        self.assertTrue(isinstance(encoding_data["conv1.weight"], list))
+
+        # Delete encodings file
+        if os.path.exists("./dummy.encodings"):
+            os.remove("./dummy.encodings")
+
+    def test_before_opt_MSE(self):
+        """  Check MSE of the output activations at the beginning of the optimization """
+        model = TinyModel().eval()
+        dummy_input = torch.randn(1, 3, 32, 32)
+        out_float32 = model.conv1(dummy_input)
+
+        sim = QuantizationSimModel(model, dummy_input=dummy_input, default_param_bw=4)
+
+        for quant_wrapper in sim.model.modules():
+            if isinstance(quant_wrapper, QcPostTrainingWrapper):
+                # Adaround requires input and output quantizers to be disabled
+                quant_wrapper.input_quantizer.enabled = False
+                quant_wrapper.output_quantizer.enabled = False
+
+                for name, param in quant_wrapper._module_to_wrap.named_parameters():
+                    # Compute encodings for parameters, needed for initializing Adaround quantizers
+                    param_quantizer = quant_wrapper.param_quantizers[name]
+                    param_quantizer.reset_encoding_stats()
+                    param_quantizer.update_encoding_stats(param.data)
+                    param_quantizer.compute_encoding()
+
+                # Wrapper mode must be set to ACTIVE because the wrapper's quantize_dequantize_params() will only call
+                # into the param tensor quantizer's quantize_dequantize() if the mode is not PASSTHROUGH.
+                quant_wrapper.set_mode(QcQuantizeOpMode.ACTIVE)
+
+        quant_module = sim.model.conv1
+
+        # Get output using weight quantized with 'nearest' rounding mode, asymmetric encoding
+        out_rounding_to_nearest = quant_module(dummy_input)
+
+        # replace the tensor quantizer
+        Adaround._replace_tensor_quantizer(quant_module)  # pylint: disable=protected-access
+        out_soft_quant = quant_module(dummy_input)
+
+        soft_quant_rec = functional.mse_loss(out_soft_quant, out_float32)
+        print('Reconstruction error before optimization (soft quant): ', float(soft_quant_rec))
+        self.assertTrue(soft_quant_rec < 1)
+
+        # enable hard rounding
+        quant_module.param_quantizers['weight'].use_soft_rounding = False
+        out_hard_quant = quant_module(dummy_input)
+        hard_quant_rec = functional.mse_loss(out_hard_quant, out_rounding_to_nearest)
+
+        print('Reconstruction error before optimization (hard quant): ', float(hard_quant_rec))
+        self.assertTrue(hard_quant_rec < 1)
+
+    def test_adaround_conv_only_model_weight_binning(self):
+        """ test AdaRound weight binning """
+        AimetLogger.set_level_for_all_areas(logging.DEBUG)
+
+        # create fake data loader with image size (3, 32, 32)
+        data_loader = create_fake_data_loader(dataset_size=64, batch_size=16, image_size=(3, 32, 32))
+
+        net = ConvOnlyModel().eval()
+        model = net.to(torch.device('cpu'))
+        param_bit_width = 4
+        delta, offset = calculate_delta_offset(float(torch.min(model.conv1.weight)),
+                                               float(torch.max(model.conv1.weight)),
+                                               param_bit_width)
+        print(delta, offset)
+
+        input_shape = (1, 3, 32, 32)
+        inp_tensor_list = create_rand_tensors_given_shapes(input_shape)
+
+        params = AdaroundParameters(data_loader=data_loader, num_batches=4, default_num_iterations=10,
+                                    default_reg_param=0.01, default_beta_range=(20, 2))
+
+        ada_model = Adaround.apply_adaround(model, inp_tensor_list, params, path='./', filename_prefix='dummy',
+                                            default_param_bw=param_bit_width,
+                                            default_quant_scheme=QuantScheme.post_training_tf,
+                                            default_config_file=None)
+        self.assertTrue(torch.allclose(model.conv1.weight, ada_model.conv1.weight, atol=2*delta))
+
+        # Delete encodings file
+        if os.path.exists("./dummy.encodings"):
+            os.remove("./dummy.encodings")
+
+    def test_unused_module_model(self):
+        """ test AdaRound weight binning """
+        AimetLogger.set_level_for_all_areas(logging.DEBUG)
+
+        # create fake data loader with image size (3, 32, 32)
+        data_loader = create_fake_data_loader(dataset_size=64, batch_size=16, image_size=(3, 32, 32))
+
+        net = UnusedModule().eval()
+        model = net.to(torch.device('cpu'))
+        param_bit_width = 4
+        delta, offset = calculate_delta_offset(float(torch.min(model.conv1.weight)),
+                                               float(torch.max(model.conv1.weight)),
+                                               param_bit_width)
+        print(delta, offset)
+
+        input_shape = (1, 3, 32, 32)
+        inp_tensor_list = create_rand_tensors_given_shapes(input_shape)
+
+        params = AdaroundParameters(data_loader=data_loader, num_batches=4, default_num_iterations=10,
+                                    default_reg_param=0.01, default_beta_range=(20, 2))
+
+        ada_model = Adaround.apply_adaround(model, inp_tensor_list, params, path='./', filename_prefix='dummy',
+                                            default_param_bw=param_bit_width,
+                                            default_quant_scheme=QuantScheme.post_training_tf,
+                                            default_config_file=None)
+        # Only Conv1 must be AdaRounded.
+        self.assertTrue(torch.allclose(model.conv1.weight, ada_model.conv1.weight, atol=2*delta))
+
+        # Conv2 weights are not AdaRounded and should be the same
+        self.assertTrue(torch.equal(model.conv2.weight, ada_model.conv2.weight))
+
+        # Delete encodings file
+        if os.path.exists("./dummy.encodings"):
+            os.remove("./dummy.encodings")
+
+    def test_out_of_sequence_module_model(self):
+        """ test  out of sequence modules """
+        AimetLogger.set_level_for_all_areas(logging.DEBUG)
+
+        # create fake data loader with image size (3, 32, 32)
+        data_loader = create_fake_data_loader(dataset_size=64, batch_size=16, image_size=(3, 32, 32))
+
+        net = OutOfSequenceModule().eval()
+        model = net.to(torch.device('cpu'))
+        param_bit_width = 4
+        delta, offset = calculate_delta_offset(float(torch.min(model.conv1.weight)),
+                                               float(torch.max(model.conv1.weight)),
+                                               param_bit_width)
+        print(delta, offset)
+
+        input_shape = (1, 3, 32, 32)
+        inp_tensor_list = create_rand_tensors_given_shapes(input_shape)
+
+        params = AdaroundParameters(data_loader=data_loader, num_batches=4, default_num_iterations=10,
+                                    default_reg_param=0.01, default_beta_range=(20, 2))
+
+        ada_model = Adaround.apply_adaround(model, inp_tensor_list, params, path='./', filename_prefix='dummy',
+                                            default_param_bw=param_bit_width,
+                                            default_quant_scheme=QuantScheme.post_training_tf,
+                                            default_config_file=None)
+        # Both the modules must be AdaRounded
+        self.assertTrue(torch.allclose(model.conv1.weight, ada_model.conv1.weight, atol=2*delta))
+        self.assertTrue(torch.allclose(model.conv2.weight, ada_model.conv2.weight, atol=2*delta))
+
+        # Delete encodings file
+        if os.path.exists("./dummy.encodings"):
+            os.remove("./dummy.encodings")
+
+    def test_conv_transpose_2d_model(self):
+        """ test a model that has a ConveTranspose2d module """
+
+        AimetLogger.set_level_for_all_areas(logging.DEBUG)
+
+        # create fake data loader with image size (3, 32, 32)
+        data_loader = create_fake_data_loader(dataset_size=64, batch_size=16, image_size=(3, 24, 24))
+
+        net = ConvTransposeNet().eval()
+        model = net.to(torch.device('cpu'))
+
+        param_bit_width = 4
+        delta, offset = calculate_delta_offset(float(torch.min(model.trans_conv1.weight)),
+                                               float(torch.max(model.trans_conv1.weight)),
+                                               param_bit_width)
+        logger.info("For the ConvTranspose2d layer's weights, delta = %f, offset = %f", delta, offset)
+
+        input_shape = (1, 3, 24, 24)
+        inp_tensor_list = create_rand_tensors_given_shapes(input_shape)
+
+        # Test Forward Pass
+        _ = model(*inp_tensor_list)
+
+        params = AdaroundParameters(data_loader=data_loader, num_batches=4, default_num_iterations=10,
+                                    default_reg_param=0.01, default_beta_range=(20, 2))
+
+        ada_model = Adaround.apply_adaround(model, inp_tensor_list, params, path='./', filename_prefix='dummy',
+                                            default_param_bw=param_bit_width,
+                                            default_quant_scheme=QuantScheme.post_training_tf,
+                                            default_config_file=None)
+
+        # Test that forward pass works for the AdaRounded model
+        _ = ada_model(*inp_tensor_list)
+
+        # Assert that AdaRounded weights are not rounded more than one delta value up or down
+        self.assertTrue(torch.allclose(model.trans_conv1.weight, ada_model.trans_conv1.weight, atol=1*delta))
+
+        # Delete encodings file
+        if os.path.exists("./dummy.encodings"):
+            os.remove("./dummy.encodings")
+
+    def test_overriding_default_parameter_bitwidths(self):
+        """ Override the default parameter bitwidths for a model """
+
+        AimetLogger.set_level_for_all_areas(logging.DEBUG)
+
+        # create fake data loader with image size (3, 32, 32)
+        data_loader = create_fake_data_loader(dataset_size=64, batch_size=16, image_size=(3, 32, 32))
+
+        net = TinyModel().eval()
+        model = net.to(torch.device('cpu'))
+
+        input_shape = (1, 3, 32, 32)
+        inp_tensor_list = create_rand_tensors_given_shapes(input_shape)
+
+        params = AdaroundParameters(data_loader=data_loader, num_batches=4, default_num_iterations=5)
+
+        # Create the override list with non-default parameter bitwidths 8 and 16
+        param_bw_override_list = [(model.conv2, 8), (model.conv4, 16)]
+
+        ada_rounded_model = Adaround.apply_adaround(model=model, dummy_input=inp_tensor_list, params=params,
+                                                    path='./', filename_prefix='dummy',
+                                                    param_bw_override_list=param_bw_override_list)
+
+        # Read exported param encodings JSON file
+        with open('./dummy.encodings') as json_file:
+            encoding_data = json.load(json_file)
+
+        # Verify Conv2 weight encoding bitwidth is set to 8
+        conv2_encoding = encoding_data["conv2.weight"][0]
+        self.assertTrue(conv2_encoding.get('bitwidth') == 8)
+
+        # Verify Conv4 weight encoding bitwidth is set to 16
+        conv4_encoding = encoding_data["conv4.weight"][0]
+        self.assertTrue(conv4_encoding.get('bitwidth') == 16)
+
+        # Delete encodings JSON file
+        if os.path.exists("./dummy.encodings"):
+            os.remove("./dummy.encodings")
+
+    def test_overriding_default_parameter_bitwidths_with_empty_list(self):
+        """ Override the default parameter bitwidths for a model """
+
+        AimetLogger.set_level_for_all_areas(logging.DEBUG)
+
+        # create fake data loader with image size (3, 32, 32)
+        data_loader = create_fake_data_loader(dataset_size=64, batch_size=16, image_size=(3, 32, 32))
+
+        net = TinyModel().eval()
+        model = net.to(torch.device('cpu'))
+
+        input_shape = (1, 3, 32, 32)
+        inp_tensor_list = create_rand_tensors_given_shapes(input_shape)
+
+        params = AdaroundParameters(data_loader=data_loader, num_batches=4, default_num_iterations=5)
+
+        # Keep the parameter override list as empty
+        param_bw_override_list = []
+        ada_rounded_model = Adaround.apply_adaround(model=model, dummy_input=inp_tensor_list, params=params,
+                                                    path='./', filename_prefix='dummy',
+                                                    param_bw_override_list=param_bw_override_list)
+
+        # Read exported param encodings JSON file
+        with open('./dummy.encodings') as json_file:
+            encoding_data = json.load(json_file)
+
+        # Verify Conv2 weight encoding bitwidth is set to the default value of 4
+        conv2_encoding = encoding_data["conv2.weight"][0]
+        self.assertTrue(conv2_encoding.get('bitwidth') == 4)
+
+        # Verify Conv4 weight encoding bitwidth is set to the default value of 4
+        conv4_encoding = encoding_data["conv4.weight"][0]
+        self.assertTrue(conv4_encoding.get('bitwidth') == 4)
+
+        # Delete encodings JSON file
+        if os.path.exists("./dummy.encodings"):
+            os.remove("./dummy.encodings")
+
+    def test_ignoring_ops_for_quantization(self):
+        """ Test ignoring certain layers from being quantized. """
+
+        net = TinyModel().eval()
+        model = net.to(torch.device('cpu'))
+
+        input_shape = (1, 3, 32, 32)
+        inp_tensor_list = create_rand_tensors_given_shapes(input_shape)
+
+        sim = QuantizationSimModel(model, dummy_input=inp_tensor_list, default_param_bw=8)
+        # sim.compute_encodings(dummy_forward_pass, forward_pass_callback_args=input_shape)
+
+        # Before modifying the QuantSim, verify layers are wrapped
+        self.assertTrue(isinstance(sim.model.maxpool, QcPostTrainingWrapper))
+        self.assertTrue(isinstance(sim.model.avgpool, QcPostTrainingWrapper))
+        self.assertTrue(isinstance(sim.model.conv2, QcPostTrainingWrapper))
+        self.assertTrue(isinstance(sim.model.relu3, QcPostTrainingWrapper))
+
+        # Skip the maxpool and avgpool layers.
+        ignore_quant_ops_list = [model.maxpool, model.avgpool]
+        Adaround._skip_quantization_for_ops(model, sim, ignore_quant_ops_list)
+        sim.compute_encodings(dummy_forward_pass, forward_pass_callback_args=input_shape)
+
+        # Since maxpool and avgpool are skipped, they shouldn't be wrapped QcPostTrainingWrapper.
+        self.assertFalse(isinstance(sim.model.maxpool, QcPostTrainingWrapper))
+        self.assertFalse(isinstance(sim.model.avgpool, QcPostTrainingWrapper))
+
+        # conv2 and relu3 must be remain wrapped in QcPostTrainingWrapper
+        self.assertTrue(isinstance(sim.model.conv2, QcPostTrainingWrapper))
+        self.assertTrue(isinstance(sim.model.relu3, QcPostTrainingWrapper))
+
+    def test_apply_adaround_with_ignore_list(self):
+        """ Test the apply_adaround() API with ignore list """
+
+        AimetLogger.set_level_for_all_areas(logging.DEBUG)
+
+        # create fake data loader with image size (3, 32, 32)
+        data_loader = create_fake_data_loader(dataset_size=64, batch_size=16, image_size=(3, 32, 32))
+
+        net = TinyModel().eval()
+        model = net.to(torch.device('cpu'))
+
+        input_shape = (1, 3, 32, 32)
+        inp_tensor_list = create_rand_tensors_given_shapes(input_shape)
+
+        params = AdaroundParameters(data_loader=data_loader, num_batches=4, default_num_iterations=5)
+
+        ignore_quant_ops_list = [model.relu1, model.bn2]
+        ada_model = Adaround.apply_adaround(model=model, dummy_input=inp_tensor_list, params=params,
+                                            path='./', filename_prefix='dummy',
+                                            ignore_quant_ops_list=ignore_quant_ops_list)
+
+        # Make sure model forwatd pass works.
+        _ = ada_model(*inp_tensor_list)
+
+        # Read exported param encodings JSON file
+        with open('./dummy.encodings') as json_file:
+            encoding_data = json.load(json_file)
+
+        # Verify Conv2 weight encoding bitwidth is set to the default value of 4
+        conv2_encoding = encoding_data["conv2.weight"][0]
+        self.assertTrue(conv2_encoding.get('bitwidth') == 4)
+
+        # Delete encodings JSON file
+        if os.path.exists("./dummy.encodings"):
+            os.remove("./dummy.encodings")
