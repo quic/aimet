@@ -183,15 +183,15 @@ RUN mkdir /var/run/sshd
 
 RUN apt-get update && apt-get install -y liblapacke liblapacke-dev && rm -rf /var/lib/apt/lists/*
 
-# Remove pillow and replace with pillow-simd.
-RUN pip3 uninstall -y Pillow && pip3 install Pillow-SIMD==6.0.0.post0
-
 RUN apt-get update && apt-get install -y libjpeg8-dev && \
     rm -rf /var/lib/apt/lists/*
 
 # Set up symlink to point to the correct python version
 RUN ln -sf /usr/bin/python3.6 /usr/bin/python
 RUN ln -s /usr/lib/x86_64-linux-gnu/libjpeg.so /usr/lib
+
+# Remove pillow and replace with pillow-simd.
+RUN pip3 uninstall -y Pillow && pip3 install Pillow-SIMD==6.0.0.post0
 
 RUN sed -i 's/PermitRootLogin prohibit-password/PermitRootLogin yes/' /etc/ssh/sshd_config && \
     sed -i 's/Port 22/Port 25000/' /etc/ssh/sshd_config
