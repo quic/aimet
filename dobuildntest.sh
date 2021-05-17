@@ -187,12 +187,12 @@ done
 
 # If no modes are enabled by user, then enable most modes by default
 if [ $run_clean -eq 0 ] && [ $run_acceptance_tests -eq 0 ] && [ $run_build -eq 0 ] && \
-    [ $run_unit_tests -eq 0 ] && [ $run_code_violation -eq 0 ] && [ $run_code_coverage -eq 0 ] && \
-    [ $run_static_analysis -eq 0 ]; then
+    [ $run_package_gen -eq 0 ] && [ $run_unit_tests -eq 0 ] && [ $run_code_violation -eq 0 ] && \
+    [ $run_code_coverage -eq 0 ] && [ $run_static_analysis -eq 0 ]; then
     run_prep=1
     run_clean=1
     run_build=1
-    run_package_gen=0
+    run_package_gen=1
     run_unit_tests=1
     run_code_violation=1
     run_code_coverage=1
