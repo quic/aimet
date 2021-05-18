@@ -39,6 +39,7 @@
 """ AdaRound Nightly Tests """
 import json
 import unittest
+import pytest
 import logging
 import random
 import os
@@ -70,6 +71,7 @@ class AdaroundAcceptanceTests(unittest.TestCase):
     """
     AdaRound test cases
     """
+    @pytest.mark.cuda
     def test_adaround_resnet18_only_weights(self):
         """ test end to end adaround with only weight quantized """
         AimetLogger.set_level_for_all_areas(logging.DEBUG)
@@ -108,6 +110,7 @@ class AdaroundAcceptanceTests(unittest.TestCase):
         if os.path.exists("./resnet18.encodings"):
             os.remove("./resnet18.encodings")
 
+    @pytest.mark.cuda
     def test_adaround_resnet18_followed_by_quantsim(self):
         """ test end to end adaround with weight 4 bits and output activations 8 bits quantized """
         AimetLogger.set_level_for_all_areas(logging.DEBUG)
