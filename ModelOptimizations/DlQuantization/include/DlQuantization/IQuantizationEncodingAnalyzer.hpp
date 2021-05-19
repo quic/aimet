@@ -48,6 +48,8 @@ template <typename DTYPE>
 class IQuantizationEncodingAnalyzer
 {
 public:
+    virtual ~IQuantizationEncodingAnalyzer() = default;
+
     /**
      * @brief Given a tensor update running stats for this encoding analyzer
      * @param tensor The tensor to use for updating stats
