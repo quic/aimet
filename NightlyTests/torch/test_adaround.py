@@ -164,6 +164,12 @@ class AdaroundAcceptanceTests(unittest.TestCase):
         if os.path.exists("./resnet18.encodings"):
             os.remove("./resnet18.encodings")
 
+    def test_dummy(self):
+        # pytest has a 'feature' that returns an error code when all tests for a given suite are not selected
+        # to be executed
+        # So adding a dummy test to satisfy pytest
+        pass
+
 
 def seed_all(seed=1029):
     """ Setup seed """
