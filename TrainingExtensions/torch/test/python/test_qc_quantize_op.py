@@ -202,3 +202,27 @@ class TestQcQuantizeOp(unittest.TestCase):
         quant_out = post_training_tensor_quantizer.quantize(inp_tensor_gpu, MAP_ROUND_MODE_TO_PYMO['nearest'])
         expected_out = torch.tensor([0, 6, 75, 178, 181, 255], dtype=torch.float32, device=torch.device('cuda'))
         self.assertTrue(torch.equal(quant_out, expected_out))
+
+    def test_qc_post_training_wrapper_mem_leak(self):
+        torch.manual_seed(0)
+
+        rand_tensor = torch.rand(1, 10, 20, 20)
+        quant = PostTrainingTensorQuantizer(bitwidth=8, round_mode='nearest',
+                                            quant_scheme=MAP_QUANT_SCHEME_TO_PYMO[QuantScheme.post_training_tf_enhanced],
+                                            use_symmetric_encodings=False, enabled_by_default=True)
+        import psutil
+        import os
+        process = psutil.Process(os.getpid())
+        baseline_mem = None
+
+        for i in range(1000):
+            quant.reset_encoding_stats()
+            quant.update_encoding_stats(rand_tensor)
+            quant.compute_encoding()
+            if not baseline_mem:
+                baseline_mem = process.memory_info().rss
+
+        quant.reset_encoding_stats()
+        delta = process.memory_info().rss - baseline_mem
+        self.assertEqual(0, delta)
+
