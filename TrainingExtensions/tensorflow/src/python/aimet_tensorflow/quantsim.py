@@ -175,6 +175,7 @@ class QuantizationSimModel:
         self._use_cuda = use_cuda
         self._param_quantizers = {}
         self._activation_quantizers = {}
+        self.connected_graph = ConnectedGraph(self.session.graph, starting_op_names, output_op_names)
 
         # We save a copy of the original model (to be used during export later)
         with self.session.graph.as_default():
@@ -506,19 +507,15 @@ class QuantizationSimModel:
         update_tensor_quantizer_references(self.session, self._activation_quantizers)
         update_tensor_quantizer_references(self.session, self._param_quantizers)
 
-    def _add_quant_nodes_recurrent(self, graph, starting_op_names: List[str], output_op_names: List[str],
-                                   default_param_bw: int, default_output_bw: int) \
+    def _add_quant_nodes_recurrent(self, conn_graph: ConnectedGraph, default_param_bw: int, default_output_bw: int) \
             -> Tuple[List[str], List[int], List[str]]:
         """
         Utility to add quant nodes to recurrent module
-        :param graph: TensorFlow graph
-        :param starting_op_names: List of starting op names of the model
-        :param output_op_names: List of output op names of the model
+        :param conn_graph: Connected graph of the model
         :param default_param_bw: default param bitwidth
         :param default_output_bw: default output bitwidth
         :return: Tuple[List[str], List[int], List[str]], param op names, input indices and activation op names
         """
-
         # pylint: disable=protected-access
         # pylint: disable=too-many-locals
 
@@ -532,7 +529,6 @@ class QuantizationSimModel:
         input_indices = []
         activation_op_names = []
 
-        conn_graph = ConnectedGraph(graph, starting_op_names, output_op_names)
         for op in conn_graph.get_all_ops().values():
             #  we can configure custom layer selectors per recurrent type or use default one
             if op.type in SUPPORTED_RECURRENT_TYPES:
@@ -577,18 +573,16 @@ class QuantizationSimModel:
                                                                                                    starting_op_names,
                                                                                                    output_op_names)
 
-        # Get list of activation ops to insert quantizers for, and the connected graph used to obtain these ops
-        activation_op_names, conn_graph = QuantizationSimModel._get_ops_to_quantize_activations_for(self.session.graph,
-                                                                                                    starting_op_names,
-                                                                                                    output_op_names)
+        # Get list of activation ops to insert quantizers for
+        activation_op_names = QuantizationSimModel._get_ops_to_quantize_activations_for(self.session.graph,
+                                                                                        self.connected_graph)
 
         self._insert_param_quantization_ops(ops_with_param_names, input_indices, default_param_bw)
         self._insert_activation_quantization_ops(activation_op_names, default_output_bw)
 
         # this takes care of quant node insertion in loop context of recurrent layer, which makes a cell
         recurrent_ops_with_param_names, recurrent_input_indices, recurrent_activation_op_names = \
-            self._add_quant_nodes_recurrent(self.session.graph, starting_op_names, output_op_names,
-                                            default_param_bw, default_output_bw)
+            self._add_quant_nodes_recurrent(self.connected_graph, default_param_bw, default_output_bw)
 
         if recurrent_ops_with_param_names and recurrent_input_indices:
             ops_with_param_names.extend(recurrent_ops_with_param_names)
@@ -598,7 +592,7 @@ class QuantizationSimModel:
 
         # Note: at this point, the session used to construct conn_graph is different than the current
         # self.session, however we still use the connected graph to traverse the graph structure.
-        self.configure_quantization_ops(conn_graph, ops_with_param_names, input_indices, activation_op_names,
+        self.configure_quantization_ops(self.connected_graph, ops_with_param_names, input_indices, activation_op_names,
                                         config_file)
 
     @staticmethod
@@ -782,22 +776,19 @@ class QuantizationSimModel:
         return ops_with_param_names, input_indices
 
     @staticmethod
-    def _get_ops_to_quantize_activations_for(graph: tf.Graph, starting_op_names: List[str], output_op_names: List[str]) \
-            -> Tuple[List[str], ConnectedGraph]:
+    def _get_ops_to_quantize_activations_for(graph: tf.Graph, conn_graph: ConnectedGraph) -> List[str]:
         """
         Get names of ops to insert activation quantizers for
         :param graph: TensorFlow graph to get names of ops to quantize weights for
-        :param starting_op_names: List of starting op names of the model
-        :param output_op_names: List of output op names of the model
-        :return: List of op names to insert activation quantize ops for, and the connected graph used to obtain these
-        ops.
+        :param conn_graph: Connected graph of the model
+        :return: List of op names to insert activation quantize ops for
         """
-        conn_graph = ConnectedGraph(graph, starting_op_names, output_op_names)
         valid_ops = [op for op in conn_graph.get_all_ops().values() if op.type not in op_types_to_ignore]
         op_names_to_quantize = [conn_graph_op.output_op_node.name for conn_graph_op in valid_ops if
                                 is_op_quantizable(conn_graph_op.output_op_node)
                                 and op_not_in_loop_control_flow_context(graph, conn_graph_op.output_op_node)]
-        return op_names_to_quantize, conn_graph
+
+        return op_names_to_quantize
 
     def _insert_post_training_quant_op_in_loop_context(self, preceeding_tensor,
                                                        quant_op_name: str,
@@ -1035,10 +1026,7 @@ def save_checkpoint(quantsim: QuantizationSimModel, meta_path: str, file_name_pr
     :param quantsim: QuantizationSimModel to be saved
     :param meta_path: path to save the meta file
     :param file_name_prefix: filename prefix string
-    :return: None
-
     """
-
     if not os.path.exists(meta_path):
         os.mkdir(meta_path)
 
@@ -1055,12 +1043,10 @@ def load_checkpoint(meta_path: str, file_name_prefix: str) -> QuantizationSimMod
     """
     Loads QuantSim model from saved checkpoint and pickle files.
 
-    :param meta_path path: to load meta from
+    :param meta_path: to load meta from
     :param file_name_prefix: filename prefix string
     :return: returns new QuantSim object
-
     """
-
     #pylint: disable=protected-access
 
     # load saved session with quant ops
