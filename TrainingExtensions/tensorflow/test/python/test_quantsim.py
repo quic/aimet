@@ -686,15 +686,14 @@ class TestQuantSim(unittest.TestCase):
 
     def test_manual_quantize(self):
         """ Test quantizing a model by manually specifying ops to quantize """
-        def get_manual_activations(_graph, _starting_ops, _ending_ops):
+        def get_manual_activations(_graph, _conn_graph):
             """
             Overriding function for getting a list of ops to insert activation quantizers for
             :param _graph: Unused argument
-            :param _starting_ops: Unused argument
-            :param _ending_ops: Unused argument
-            :return: List of ops to insert activation quantizers for, None for placeholder
+            :param _conn_graph: Unused argument
+            :return: List of ops to insert activation quantizers for
             """
-            return ['conv2d/Relu'], None
+            return ['conv2d/Relu']
 
         def get_manual_params(_graph, _starting_ops, _ending_ops):
             """
