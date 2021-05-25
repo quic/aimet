@@ -38,7 +38,7 @@
 import pytest
 import torch
 
-from aimet_torch.qc_quantize_op import QcPostTrainingWrapper, QcQuantizeOpMode, QuantScheme, MAP_QUANT_SCHEME_TO_PYMO, \
+from aimet_torch.qc_quantize_op import StaticGridQuantWrapper, QcQuantizeOpMode, QuantScheme, MAP_QUANT_SCHEME_TO_PYMO, \
     MAP_ROUND_MODE_TO_PYMO
 from aimet_torch.tensor_quantizer import PostTrainingTensorQuantizer
 import libpymo
@@ -50,8 +50,8 @@ class TestQcQuantizeOp:
 
         device = torch.device('cpu')
         conv1 = torch.nn.Conv2d(4, 4, 1)
-        quantize = QcPostTrainingWrapper(conv1, weight_bw=8, activation_bw=8, round_mode='nearest',
-                                         quant_scheme=QuantScheme.post_training_tf_enhanced)
+        quantize = StaticGridQuantWrapper(conv1, weight_bw=8, activation_bw=8, round_mode='nearest',
+                                          quant_scheme=QuantScheme.post_training_tf_enhanced)
 
         input_var = torch.autograd.Variable(torch.randn(4, 4, 2, 2), requires_grad=False).to(device)
         print(input_var)
@@ -69,8 +69,8 @@ class TestQcQuantizeOp:
 
         device = torch.device('cpu')
         conv1 = torch.nn.Conv2d(4, 4, 1)
-        quantize = QcPostTrainingWrapper(conv1, weight_bw=8, activation_bw=8, round_mode='nearest',
-                                         quant_scheme=QuantScheme.post_training_tf_enhanced)
+        quantize = StaticGridQuantWrapper(conv1, weight_bw=8, activation_bw=8, round_mode='nearest',
+                                          quant_scheme=QuantScheme.post_training_tf_enhanced)
 
         input_var = torch.autograd.Variable(torch.randn(4, 4, 2, 2), requires_grad=True).to(device)
 
@@ -108,8 +108,8 @@ class TestQcQuantizeOp:
                     print ("None found for Gradient")
 
         conv1 = torch.nn.Conv2d(1, 2, 1)
-        quantize = QcPostTrainingWrapper(conv1, weight_bw=8, activation_bw=8, round_mode='nearest',
-                                         quant_scheme=QuantScheme.post_training_tf_enhanced)
+        quantize = StaticGridQuantWrapper(conv1, weight_bw=8, activation_bw=8, round_mode='nearest',
+                                          quant_scheme=QuantScheme.post_training_tf_enhanced)
         quantize.train()
         quantize._module_to_wrap.register_backward_hook(hook_fn)
 
@@ -151,8 +151,8 @@ class TestQcQuantizeOp:
     def test_quantize_maxpool_with_indices(self):
         """ Test that maxpool2d returning int tensor can be quantized """
         maxpool = torch.nn.MaxPool2d(2, return_indices=True)
-        quantize_op = QcPostTrainingWrapper(maxpool, weight_bw=8, activation_bw=8, round_mode='nearest',
-                                            quant_scheme=QuantScheme.post_training_tf_enhanced)
+        quantize_op = StaticGridQuantWrapper(maxpool, weight_bw=8, activation_bw=8, round_mode='nearest',
+                                             quant_scheme=QuantScheme.post_training_tf_enhanced)
         inp = torch.rand((1, 3, 8, 8))
         quantize_op.set_mode(QcQuantizeOpMode.ANALYSIS)
         quantize_op(inp)

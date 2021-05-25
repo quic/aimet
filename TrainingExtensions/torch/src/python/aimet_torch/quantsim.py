@@ -51,7 +51,7 @@ from aimet_common.defs import QuantScheme
 from aimet_common.quantsim import encoding_version
 from aimet_torch.quantsim_config.quantsim_config import QuantSimConfigurator
 from aimet_torch.qc_quantize_op import QcQuantizeStandAloneBase, QcQuantizeWrapper, QcQuantizeOpMode, \
-    QcPostTrainingWrapper
+    StaticGridQuantWrapper
 from aimet_torch import torchscript_utils
 from aimet_torch import utils
 from aimet_torch.onnx_utils import OnnxSaver, OnnxExportApiArgs
@@ -618,8 +618,8 @@ class QuantizationSimModel:
         num_in_tensors, num_out_tensors = num_inout_tensors.get(module_to_quantize, (1, 1))
 
         # Set quantizer to be a module replacer if it is in qc_quantize_modules_dict, otherwise set as
-        # QcPostTrainingWrapper.
-        quantizer = qc_quantize_modules_dict.get(type(module_to_quantize), QcPostTrainingWrapper)
+        # StaticGridQuantWrapper.
+        quantizer = qc_quantize_modules_dict.get(type(module_to_quantize), StaticGridQuantWrapper)
         quantized_module = quantizer(module_to_quantize, self._default_param_bw, self._default_output_bw,
                                      self._rounding_mode, self._quant_scheme,
                                      num_inputs=num_in_tensors, num_outputs=num_out_tensors)
@@ -701,7 +701,7 @@ class QuantizationSimModel:
             param_encodings = json.load(json_file)
 
         for name, quant_module in self.model.named_modules():
-            if isinstance(quant_module, QcPostTrainingWrapper):
+            if isinstance(quant_module, StaticGridQuantWrapper):
                 quant_module.set_and_freeze_param_encoding(name, param_encodings)
 
 

@@ -51,7 +51,7 @@ from aimet_common.utils import AimetLogger
 from aimet_common.defs import QuantScheme
 from aimet_torch import utils
 from aimet_torch.qc_quantize_op import QcQuantizeWrapper, QcQuantizeStandAloneBase, QcQuantizeOpMode, \
-    QcPostTrainingWrapper
+    StaticGridQuantWrapper
 from aimet_torch import save_utils as su
 
 
@@ -161,9 +161,9 @@ class Quantizer:
                         self._logger.info("Skipping output activation quantization of Module %s ", module_ref)
 
                     # Create a new QcQuantize wrapper module
-                    quantized_module = QcPostTrainingWrapper(module_ref, params.weight_bw, params.act_bw,
-                                                             params.round_mode, params.quant_scheme,
-                                                             is_output_quantized=(not skip_output))
+                    quantized_module = StaticGridQuantWrapper(module_ref, params.weight_bw, params.act_bw,
+                                                              params.round_mode, params.quant_scheme,
+                                                              is_output_quantized=(not skip_output))
 
                     setattr(module, module_name, quantized_module)
 
