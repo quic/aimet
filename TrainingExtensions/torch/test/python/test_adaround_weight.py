@@ -51,7 +51,7 @@ from aimet_common.quantsim import calculate_delta_offset
 from aimet_torch.utils import create_fake_data_loader, create_rand_tensors_given_shapes
 from aimet_torch.examples.test_models import TinyModel
 from aimet_torch.quantsim import QuantizationSimModel
-from aimet_torch.qc_quantize_op import QcPostTrainingWrapper, QcQuantizeOpMode
+from aimet_torch.qc_quantize_op import StaticGridQuantWrapper, QcQuantizeOpMode
 from aimet_torch.adaround.adaround_weight import Adaround, AdaroundParameters
 
 
@@ -171,7 +171,7 @@ class TestAdaround(unittest.TestCase):
         sim = QuantizationSimModel(model, dummy_input=dummy_input, default_param_bw=4)
 
         for quant_wrapper in sim.model.modules():
-            if isinstance(quant_wrapper, QcPostTrainingWrapper):
+            if isinstance(quant_wrapper, StaticGridQuantWrapper):
                 # Adaround requires input and output quantizers to be disabled
                 quant_wrapper.input_quantizer.enabled = False
                 quant_wrapper.output_quantizer.enabled = False
@@ -438,23 +438,23 @@ class TestAdaround(unittest.TestCase):
         # sim.compute_encodings(dummy_forward_pass, forward_pass_callback_args=input_shape)
 
         # Before modifying the QuantSim, verify layers are wrapped
-        self.assertTrue(isinstance(sim.model.maxpool, QcPostTrainingWrapper))
-        self.assertTrue(isinstance(sim.model.avgpool, QcPostTrainingWrapper))
-        self.assertTrue(isinstance(sim.model.conv2, QcPostTrainingWrapper))
-        self.assertTrue(isinstance(sim.model.relu3, QcPostTrainingWrapper))
+        self.assertTrue(isinstance(sim.model.maxpool, StaticGridQuantWrapper))
+        self.assertTrue(isinstance(sim.model.avgpool, StaticGridQuantWrapper))
+        self.assertTrue(isinstance(sim.model.conv2, StaticGridQuantWrapper))
+        self.assertTrue(isinstance(sim.model.relu3, StaticGridQuantWrapper))
 
         # Skip the maxpool and avgpool layers.
         ignore_quant_ops_list = [model.maxpool, model.avgpool]
         Adaround._skip_quantization_for_ops(model, sim, ignore_quant_ops_list)
         sim.compute_encodings(dummy_forward_pass, forward_pass_callback_args=input_shape)
 
-        # Since maxpool and avgpool are skipped, they shouldn't be wrapped QcPostTrainingWrapper.
-        self.assertFalse(isinstance(sim.model.maxpool, QcPostTrainingWrapper))
-        self.assertFalse(isinstance(sim.model.avgpool, QcPostTrainingWrapper))
+        # Since maxpool and avgpool are skipped, they shouldn't be wrapped StaticGridQuantWrapper.
+        self.assertFalse(isinstance(sim.model.maxpool, StaticGridQuantWrapper))
+        self.assertFalse(isinstance(sim.model.avgpool, StaticGridQuantWrapper))
 
-        # conv2 and relu3 must be remain wrapped in QcPostTrainingWrapper
-        self.assertTrue(isinstance(sim.model.conv2, QcPostTrainingWrapper))
-        self.assertTrue(isinstance(sim.model.relu3, QcPostTrainingWrapper))
+        # conv2 and relu3 must be remain wrapped in StaticGridQuantWrapper
+        self.assertTrue(isinstance(sim.model.conv2, StaticGridQuantWrapper))
+        self.assertTrue(isinstance(sim.model.relu3, StaticGridQuantWrapper))
 
     def test_apply_adaround_with_ignore_list(self):
         """ Test the apply_adaround() API with ignore list """

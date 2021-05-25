@@ -53,7 +53,7 @@ from aimet_torch import utils
 from aimet_torch.save_utils import SaveUtils
 from aimet_torch.meta import connectedgraph_utils
 from aimet_torch.quantsim import QuantizationSimModel, QcQuantizeWrapper
-from aimet_torch.qc_quantize_op import QcPostTrainingWrapper, QcQuantizeOpMode
+from aimet_torch.qc_quantize_op import StaticGridQuantWrapper, QcQuantizeOpMode
 from aimet_torch.adaround.adaround_tensor_quantizer import AdaroundTensorQuantizer
 from aimet_torch.adaround.adaround_optimizer import AdaroundOptimizer
 from aimet_torch.adaround.adaround_loss import AdaroundHyperParameters
@@ -201,7 +201,7 @@ class Adaround:
         :param quant_sim: Quant sim
         """
         for quant_module in quant_sim.model.modules():
-            if isinstance(quant_module, QcPostTrainingWrapper):
+            if isinstance(quant_module, StaticGridQuantWrapper):
                 # Adaround requires input and output quantizers to be disabled
                 quant_module.input_quantizer.enabled = False
                 quant_module.output_quantizer.enabled = False
@@ -218,7 +218,7 @@ class Adaround:
                 quant_module.set_mode(QcQuantizeOpMode.ACTIVE)
 
     @staticmethod
-    def _replace_tensor_quantizer(quant_module: QcPostTrainingWrapper):
+    def _replace_tensor_quantizer(quant_module: StaticGridQuantWrapper):
         """
         Replace the quantized module's weight tensor quantizer with the Adaround tensor quantizer
         :param quant_module: quant module
@@ -235,7 +235,7 @@ class Adaround:
         quant_module.param_quantizers['weight'] = adaround_quantizer
 
     @staticmethod
-    def _get_quant_module(quant_sim_model: torch.nn.Module, module_name: str) -> Union[QcPostTrainingWrapper, None]:
+    def _get_quant_module(quant_sim_model: torch.nn.Module, module_name: str) -> Union[StaticGridQuantWrapper, None]:
         """
         For given module name, get the quantized wrapper module from the QuantSim model
         :param quant_sim_model: Model with simulation ops
@@ -245,7 +245,7 @@ class Adaround:
         quant_module = None
 
         for name, module in quant_sim_model.named_modules():
-            if name == module_name and isinstance(module, QcPostTrainingWrapper):
+            if name == module_name and isinstance(module, StaticGridQuantWrapper):
                 quant_module = module
                 break
 
@@ -259,7 +259,7 @@ class Adaround:
         """
         # pylint: disable=protected-access
         for quant_module in quant_sim.model.modules():
-            if isinstance(quant_module, QcPostTrainingWrapper) and \
+            if isinstance(quant_module, StaticGridQuantWrapper) and \
                     isinstance(quant_module._module_to_wrap, AdaroundSupportedModules):
                 quantizer = quant_module.param_quantizers['weight']
 
@@ -300,7 +300,7 @@ class Adaround:
         param_encodings = {}
 
         for name, quant_module in quant_sim.model.named_modules():
-            if isinstance(quant_module, QcPostTrainingWrapper) and \
+            if isinstance(quant_module, StaticGridQuantWrapper) and \
                     isinstance(quant_module._module_to_wrap, AdaroundSupportedModules):
                 quantizer = quant_module.param_quantizers['weight']
 
@@ -313,7 +313,7 @@ class Adaround:
             json.dump(param_encodings, encoding_fp, sort_keys=True, indent=4)
 
     @classmethod
-    def _update_param_encodings_dict(cls, quant_module: QcPostTrainingWrapper, name: str, param_encodings: Dict):
+    def _update_param_encodings_dict(cls, quant_module: StaticGridQuantWrapper, name: str, param_encodings: Dict):
         """
         Add module's weight parameter encodings to dictionary to be used for exporting encodings
         :param quant_module: quant module

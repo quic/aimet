@@ -276,7 +276,7 @@ class QcQuantizeWrapper(nn.Module):
             param_quantizer.reset_encoding_stats()
 
 
-class QcPostTrainingWrapper(QcQuantizeWrapper):
+class StaticGridQuantWrapper(QcQuantizeWrapper):
     """ A custom PyTorch module that derives from QcQuantizeWrapper and quantizes modules """
 
     # pylint: disable=too-many-arguments
@@ -298,8 +298,8 @@ class QcPostTrainingWrapper(QcQuantizeWrapper):
         round_mode = MAP_ROUND_MODE_TO_PYMO[round_mode]
         quant_scheme = MAP_QUANT_SCHEME_TO_PYMO[quant_scheme]
 
-        super(QcPostTrainingWrapper, self).__init__(module_to_wrap, weight_bw, activation_bw, round_mode, quant_scheme,
-                                                    is_output_quantized, is_symmetric, num_inputs, num_outputs)
+        super(StaticGridQuantWrapper, self).__init__(module_to_wrap, weight_bw, activation_bw, round_mode, quant_scheme,
+                                                     is_output_quantized, is_symmetric, num_inputs, num_outputs)
 
     def forward(self, *inputs):
         """
@@ -462,6 +462,10 @@ class QcPostTrainingWrapper(QcQuantizeWrapper):
 
                 param_quantizer.freeze_encoding()
                 _logger.info("Setting and freezing quantization encodings for parameter: %s", param_name)
+
+
+# Temporarily added for backwards compatibility
+QcPostTrainingWrapper = StaticGridQuantWrapper
 
 
 class QcQuantizeStandalone(QcQuantizeStandAloneBase):
