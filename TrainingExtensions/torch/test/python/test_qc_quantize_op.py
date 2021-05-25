@@ -40,7 +40,7 @@ import torch
 
 from aimet_torch.qc_quantize_op import StaticGridQuantWrapper, QcQuantizeOpMode, QuantScheme, MAP_QUANT_SCHEME_TO_PYMO, \
     MAP_ROUND_MODE_TO_PYMO
-from aimet_torch.tensor_quantizer import PostTrainingTensorQuantizer
+from aimet_torch.tensor_quantizer import StaticGridTensorQuantizer
 import libpymo
 
 
@@ -168,9 +168,9 @@ class TestQcQuantizeOp:
         """ Test tensor quantizer quantize only functionality """
 
         post_training_tensor_quantizer = \
-            PostTrainingTensorQuantizer(bitwidth=8, round_mode='nearest',
-                                        quant_scheme=MAP_QUANT_SCHEME_TO_PYMO[QuantScheme.post_training_tf],
-                                        use_symmetric_encodings=False, enabled_by_default=True)
+            StaticGridTensorQuantizer(bitwidth=8, round_mode='nearest',
+                                      quant_scheme=MAP_QUANT_SCHEME_TO_PYMO[QuantScheme.post_training_tf],
+                                      use_symmetric_encodings=False, enabled_by_default=True)
         encodings = libpymo.TfEncoding()
         encodings.bw = 8
         encodings.max = 2.23
@@ -187,9 +187,9 @@ class TestQcQuantizeOp:
         """ Test tensor quantizer quantize only functionality on gpu """
     
         post_training_tensor_quantizer = \
-            PostTrainingTensorQuantizer(bitwidth=8, round_mode='nearest',
-                                        quant_scheme=MAP_QUANT_SCHEME_TO_PYMO[QuantScheme.post_training_tf],
-                                        use_symmetric_encodings=False, enabled_by_default=True)
+            StaticGridTensorQuantizer(bitwidth=8, round_mode='nearest',
+                                      quant_scheme=MAP_QUANT_SCHEME_TO_PYMO[QuantScheme.post_training_tf],
+                                      use_symmetric_encodings=False, enabled_by_default=True)
         encodings = libpymo.TfEncoding()
         encodings.bw = 8
         encodings.max = 2.23
@@ -206,9 +206,9 @@ class TestQcQuantizeOp:
         torch.manual_seed(0)
 
         rand_tensor = torch.rand(1, 10, 20, 20)
-        quant = PostTrainingTensorQuantizer(bitwidth=8, round_mode='nearest',
-                                            quant_scheme=MAP_QUANT_SCHEME_TO_PYMO[QuantScheme.post_training_tf_enhanced],
-                                            use_symmetric_encodings=False, enabled_by_default=True)
+        quant = StaticGridTensorQuantizer(bitwidth=8, round_mode='nearest',
+                                          quant_scheme=MAP_QUANT_SCHEME_TO_PYMO[QuantScheme.post_training_tf_enhanced],
+                                          use_symmetric_encodings=False, enabled_by_default=True)
         import psutil
         import os
         process = psutil.Process(os.getpid())
