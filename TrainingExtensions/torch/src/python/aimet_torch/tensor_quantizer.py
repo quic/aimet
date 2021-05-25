@@ -227,6 +227,10 @@ class StaticGridTensorQuantizer(TensorQuantizer):
             self.encoding = encoding
 
 
+# Temporary change to preserve backwards compatibility
+PostTrainingTensorQuantizer = StaticGridTensorQuantizer
+
+
 class QuantizeDequantize(torch.autograd.Function):
     """
     Custom gradient function for STE
