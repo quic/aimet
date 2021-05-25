@@ -48,7 +48,7 @@ import numpy as np
 from aimet_torch.quantsim import QuantizationSimModel, load_checkpoint, save_checkpoint
 from aimet_torch.examples import mnist_torch_model
 import aimet_torch.examples.mnist_torch_model as mnist_model
-from aimet_torch.qc_quantize_op import QcPostTrainingWrapper
+from aimet_torch.qc_quantize_op import StaticGridQuantWrapper
 from aimet_common.defs import QuantScheme
 
 path = str('../data')
@@ -145,8 +145,8 @@ class QuantizationSimAcceptanceTests(unittest.TestCase):
         # Adding wrapper to first convolution layer
         for module_name, module_ref in model.named_children():
             if module_name is 'conv1':
-                quantized_module = QcPostTrainingWrapper(module_ref, weight_bw=8, activation_bw=8, round_mode='nearest',
-                                                         quant_scheme=QuantScheme.post_training_tf)
+                quantized_module = StaticGridQuantWrapper(module_ref, weight_bw=8, activation_bw=8, round_mode='nearest',
+                                                          quant_scheme=QuantScheme.post_training_tf)
                 setattr(model, module_name, quantized_module)
 
         sim = QuantizationSimModel(model, dummy_input=torch.rand(1, 1, 28, 28).cuda())

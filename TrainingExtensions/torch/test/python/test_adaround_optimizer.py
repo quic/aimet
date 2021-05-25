@@ -49,7 +49,7 @@ from aimet_common.utils import AimetLogger
 from aimet_torch.utils import to_numpy, create_fake_data_loader, compute_encoding_for_given_bitwidth,\
     create_encoding_from_dict
 from aimet_torch.quantsim import QuantizationSimModel
-from aimet_torch.qc_quantize_op import QcPostTrainingWrapper, QuantScheme, MAP_QUANT_SCHEME_TO_PYMO
+from aimet_torch.qc_quantize_op import StaticGridQuantWrapper, QuantScheme, MAP_QUANT_SCHEME_TO_PYMO
 from aimet_torch.examples.test_models import TinyModel
 from aimet_torch.adaround.adaround_weight import Adaround
 from aimet_torch.adaround.adaround_loss import AdaroundLoss
@@ -139,8 +139,8 @@ class TestAdaroundOptimizer(unittest.TestCase):
 
         conv1 = torch.nn.Conv2d(4, 4, 1, bias=False)
         conv1.weight.data = torch.from_numpy(weight_data)
-        quant_module = QcPostTrainingWrapper(conv1, weight_bw, activation_bw, round_mode='nearest',
-                                             quant_scheme=quant_scheme)
+        quant_module = StaticGridQuantWrapper(conv1, weight_bw, activation_bw, round_mode='nearest',
+                                              quant_scheme=quant_scheme)
 
         quant_module.param_quantizers['weight'].encoding = encoding
         Adaround._replace_tensor_quantizer(quant_module)
@@ -170,8 +170,8 @@ class TestAdaroundOptimizer(unittest.TestCase):
 
         conv1 = torch.nn.Conv2d(4, 4, 1, bias=False).to(torch.device('cuda'))
         conv1.weight.data = torch.from_numpy(weight_data).to(torch.device('cuda'))
-        quant_module = QcPostTrainingWrapper(conv1, weight_bw, activation_bw, round_mode='nearest',
-                                             quant_scheme=quant_scheme)
+        quant_module = StaticGridQuantWrapper(conv1, weight_bw, activation_bw, round_mode='nearest',
+                                              quant_scheme=quant_scheme)
 
         # Compute encodings
         quant_module.param_quantizers['weight'].update_encoding_stats(conv1.weight.data)

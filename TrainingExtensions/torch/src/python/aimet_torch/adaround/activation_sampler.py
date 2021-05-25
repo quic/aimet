@@ -45,7 +45,7 @@ import torch.nn
 # Import AIMET specific modules
 from aimet_common.utils import AimetLogger
 from aimet_torch.utils import ModuleData, get_device
-from aimet_torch.qc_quantize_op import QcPostTrainingWrapper
+from aimet_torch.qc_quantize_op import StaticGridQuantWrapper
 
 logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Quant)
 
@@ -56,7 +56,7 @@ class ActivationSampler:
     collect the module's output and input activation data respectively
     """
     @staticmethod
-    def sample_activation(orig_module: torch.nn.Module, quant_module: QcPostTrainingWrapper,
+    def sample_activation(orig_module: torch.nn.Module, quant_module: StaticGridQuantWrapper,
                           orig_model: torch.nn.Module, quant_model: torch.nn.Module,
                           iterator: Iterator, num_batches: int) -> \
             Tuple[torch.Tensor, torch.Tensor]:

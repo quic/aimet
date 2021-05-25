@@ -62,7 +62,7 @@ from aimet_torch.quantsim_straight_through_grad import compute_dloss_by_dx
 from aimet_torch import utils, elementwise_ops
 
 from aimet_torch.qc_quantize_op import QcQuantizeWrapper, QcQuantizeStandalone, MAP_ROUND_MODE_TO_PYMO, \
-    MAP_QUANT_SCHEME_TO_PYMO, QcPostTrainingWrapper, QcQuantizeOpMode
+    MAP_QUANT_SCHEME_TO_PYMO, StaticGridQuantWrapper, QcQuantizeOpMode
 from aimet_common.utils import AimetLogger
 
 logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Test)
@@ -298,8 +298,8 @@ class TestQuantizationSim(unittest.TestCase):
     # -------------------------------------------------------------
     def test_is_quantizable_module_negative(self):
         """With a non-quantizable module"""
-        conv1 = QcPostTrainingWrapper(nn.Conv2d(1, 10, 5), weight_bw=8, activation_bw=8, round_mode='nearest',
-                                      quant_scheme=QuantScheme.post_training_tf_enhanced)
+        conv1 = StaticGridQuantWrapper(nn.Conv2d(1, 10, 5), weight_bw=8, activation_bw=8, round_mode='nearest',
+                                       quant_scheme=QuantScheme.post_training_tf_enhanced)
         self.assertFalse(QuantizationSimModel._is_quantizable_module(conv1))
 
     # ------------------------------------------------------------
@@ -327,7 +327,7 @@ class TestQuantizationSim(unittest.TestCase):
 
             if quant_scheme in [QuantScheme.post_training_tf, QuantScheme.post_training_tf_enhanced]:
                 # For every leaf module in the first list, there is a corresponding QcQuantized model in the second list
-                self.assertEqual(str(type(quant_mod_tuple[1]).__name__), 'QcPostTrainingWrapper')
+                self.assertEqual(str(type(quant_mod_tuple[1]).__name__), 'StaticGridQuantWrapper')
 
             # Each QcQuantized model has 1 child, that is the same type as the corresponding module in the original list
             self.assertEqual(len(list(quant_mod_tuple[1].modules())), 2)
@@ -367,8 +367,8 @@ class TestQuantizationSim(unittest.TestCase):
         class Net(nn.Module):
             def __init__(self):
                 super(Net, self).__init__()
-                self.conv1 = QcPostTrainingWrapper(nn.Conv2d(1, 10, 5), weight_bw=8, activation_bw=8,
-                                                   round_mode='stochastic', quant_scheme=QuantScheme.post_training_tf_enhanced)
+                self.conv1 = StaticGridQuantWrapper(nn.Conv2d(1, 10, 5), weight_bw=8, activation_bw=8,
+                                                    round_mode='stochastic', quant_scheme=QuantScheme.post_training_tf_enhanced)
                 self.conv2 = nn.Conv2d(10, 20, kernel_size=5)
                 self.conv2_drop = nn.Dropout2d()
                 self.fc1 = nn.Linear(320, 50)
@@ -493,9 +493,9 @@ class TestQuantizationSim(unittest.TestCase):
             def __init__(self):
                 super(Net, self).__init__()
                 self.layers = nn.ModuleList([nn.Linear(1, 32), nn.Linear(32, 64), nn.Conv2d(1, 32, 5),
-                                             QcPostTrainingWrapper(nn.Conv2d(1, 10, 5), weight_bw=8, activation_bw=8,
-                                                                   round_mode='nearest',
-                                                                   quant_scheme=QuantScheme.post_training_tf_enhanced)])
+                                             StaticGridQuantWrapper(nn.Conv2d(1, 10, 5), weight_bw=8, activation_bw=8,
+                                                                    round_mode='nearest',
+                                                                    quant_scheme=QuantScheme.post_training_tf_enhanced)])
 
             def forward(self, *inputs):
                 return self.layers[2](inputs[0])
@@ -515,8 +515,8 @@ class TestQuantizationSim(unittest.TestCase):
                 self.layers = nn.ModuleList([nn.Linear(1, 32), nn.Linear(32, 64), nn.Conv2d(3, 32, kernel_size=3)])
                 self.layers_deep = nn.ModuleList([nn.ModuleList([nn.BatchNorm2d(10), nn.ReLU()]),
                                                   nn.Linear(3, 32), nn.Linear(32, 64), nn.Conv2d(1, 32, 5),
-                                                  QcPostTrainingWrapper(nn.Conv2d(1, 10, 5), weight_bw=8, activation_bw=8,
-                                                                    round_mode='nearest', quant_scheme=QuantScheme.post_training_tf_enhanced)])
+                                                  StaticGridQuantWrapper(nn.Conv2d(1, 10, 5), weight_bw=8, activation_bw=8,
+                                                                         round_mode='nearest', quant_scheme=QuantScheme.post_training_tf_enhanced)])
 
             def forward(self, *inputs):
                 return self.layers[2](inputs[0])
@@ -538,9 +538,9 @@ class TestQuantizationSim(unittest.TestCase):
                 self.layers = nn.ModuleList([nn.Linear(1, 32), nn.Linear(32, 64), nn.Conv2d(3, 32, kernel_size=3)])
                 self.layers_deep = nn.ModuleList([nn.ModuleList([nn.BatchNorm2d(10), nn.ReLU()]),
                                                   nn.Linear(3, 32), nn.Linear(32, 64), nn.Conv2d(1, 32, 5),
-                                                  QcPostTrainingWrapper(nn.Conv2d(1, 10, 5), weight_bw=8, activation_bw=8,
-                                                                    round_mode='nearest',
-                                                                    quant_scheme=QuantScheme.post_training_tf_enhanced)])
+                                                  StaticGridQuantWrapper(nn.Conv2d(1, 10, 5), weight_bw=8, activation_bw=8,
+                                                                         round_mode='nearest',
+                                                                         quant_scheme=QuantScheme.post_training_tf_enhanced)])
 
             def forward(self, *inputs):
                 return self.layers[2](inputs[0])
@@ -1322,7 +1322,7 @@ class TestQuantizationSim(unittest.TestCase):
         sim = QuantizationSimModel(model, dummy_input=torch.rand(1, 1, 28, 28))
         sim.compute_encodings(dummy_forward_pass, None)
         for name, module in sim.model.named_modules():
-            if isinstance(module, QcPostTrainingWrapper):
+            if isinstance(module, StaticGridQuantWrapper):
                 self.assertEqual(QcQuantizeOpMode.ACTIVE, module._mode)
                 if name == 'relu1':
                     self.assertTrue(module.output_quantizers[0].enabled)
@@ -1399,8 +1399,8 @@ class TestQuantizationSim(unittest.TestCase):
     def test_set_and_freeze_param_encoding(self):
         """ Test set and freeze parameter encoding  """
         conv1 = torch.nn.Conv2d(4, 4, 1)
-        quant_module = QcPostTrainingWrapper(conv1, weight_bw=8, activation_bw=8, round_mode='nearest',
-                                             quant_scheme=QuantScheme.post_training_tf_enhanced)
+        quant_module = StaticGridQuantWrapper(conv1, weight_bw=8, activation_bw=8, round_mode='nearest',
+                                              quant_scheme=QuantScheme.post_training_tf_enhanced)
 
         param_encodings = {'conv1.weight': [{'bitwidth': 4, 'is_symmetric': 'False', 'max': 0.3, 'min': -0.2,
                                              'offset': -7.0, 'scale': 0.038}]}
