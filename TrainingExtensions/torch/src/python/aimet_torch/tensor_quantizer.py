@@ -93,7 +93,7 @@ class PickableState:
             self.bw = encoding.bw
 
 
-class PostTrainingTensorQuantizer(TensorQuantizer):
+class StaticGridTensorQuantizer(TensorQuantizer):
     """
     Simulates quantization for the given tensor post training.
     """
@@ -108,8 +108,8 @@ class PostTrainingTensorQuantizer(TensorQuantizer):
         :param use_symmetric_encodings: True if symmetric encoding is used.  False otherwise.
         :param enabled_by_default: True if quantization of tensor is enabled.  False otherwise.
         """
-        super(PostTrainingTensorQuantizer, self).__init__(bitwidth, round_mode, quant_scheme, use_symmetric_encodings,
-                                                          enabled_by_default)
+        super(StaticGridTensorQuantizer, self).__init__(bitwidth, round_mode, quant_scheme, use_symmetric_encodings,
+                                                        enabled_by_default)
         self._cppOp = AimetTensorQuantizer.AimetTensorQuantizer(quant_scheme)
         self.encoding = None
         self._is_encoding_frozen = False

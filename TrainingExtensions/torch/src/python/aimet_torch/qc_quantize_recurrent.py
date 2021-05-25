@@ -45,7 +45,7 @@ from aimet_common.utils import AimetLogger
 from aimet_torch.defs import OpToIOTensors
 from aimet_torch.qc_quantize_op import MAP_ROUND_MODE_TO_PYMO, MAP_QUANT_SCHEME_TO_PYMO
 from aimet_torch.qc_quantize_op import QcQuantizeOpMode, tensor_quantizer_factory
-from aimet_torch.tensor_quantizer import PostTrainingTensorQuantizer
+from aimet_torch.tensor_quantizer import StaticGridTensorQuantizer
 
 import libpymo
 
@@ -219,7 +219,7 @@ class QcQuantizeRecurrent(torch.nn.Module):
 
     def _create_activation_quantizers(self, tensor_names: List[str], activation_bw: int,
                                       round_mode: libpymo.RoundingMode, quant_scheme: libpymo.QuantizationMode,
-                                      is_symmetric: bool) -> Dict[str, PostTrainingTensorQuantizer]:
+                                      is_symmetric: bool) -> Dict[str, StaticGridTensorQuantizer]:
         """
         helper method to construct activation quantizers
         :param activation_bw: Quantization bitwidth for activations
@@ -400,7 +400,7 @@ class QcQuantizeRecurrent(torch.nn.Module):
 
         return params
 
-    def _param_quantize_dequantize(self, data: torch.Tensor, param_quantizer: PostTrainingTensorQuantizer) -> \
+    def _param_quantize_dequantize(self, data: torch.Tensor, param_quantizer: StaticGridTensorQuantizer) -> \
             torch.Tensor:
         """
         Helper method for quantizing-dequantizing parameters
@@ -442,7 +442,7 @@ class QcQuantizeRecurrent(torch.nn.Module):
 
     def get_activation_param_quantizers_for_onnx_tensors(
             self, io_tensor_map: Union[OpToIOTensors, List[OpToIOTensors]]) -> \
-            Dict[str, PostTrainingTensorQuantizer]:
+            Dict[str, StaticGridTensorQuantizer]:
         """
         Retrieve mapping from onnx tensor names and quantizers
         :param io_tensor_map: ONNX IO tensor maps,
@@ -482,7 +482,7 @@ class QcQuantizeRecurrent(torch.nn.Module):
 
         return activations_quantizer_map, params_quantizer_map
 
-    def _quantize_activation(self, tensor_quantizer: PostTrainingTensorQuantizer,
+    def _quantize_activation(self, tensor_quantizer: StaticGridTensorQuantizer,
                              tensors_to_quantize: Union[List[torch.Tensor], torch.Tensor]) -> \
             Union[List[torch.Tensor], torch.Tensor]:
         """
