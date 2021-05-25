@@ -47,7 +47,7 @@ import libpymo
 from aimet_common.utils import AimetLogger
 from aimet_common.defs import QuantScheme
 from aimet_torch import utils
-from aimet_torch.tensor_quantizer import PostTrainingTensorQuantizer
+from aimet_torch.tensor_quantizer import StaticGridTensorQuantizer
 import aimet_torch.quantsim_straight_through_grad as ste
 
 MAP_ROUND_MODE_TO_PYMO = {'nearest':     libpymo.RoundingMode.ROUND_NEAREST,
@@ -90,12 +90,12 @@ def tensor_quantizer_factory(bitwidth: int, round_mode: str, quant_scheme: Union
     :param quant_scheme: Quantization scheme (e.g. Range Learning)
     :param use_symmetric_encodings: True if symmetric encoding is used.  False otherwise.
     :param enabled_by_default: True if quantization of tensor is enabled.  False otherwise.
-    :return: An instance of PostTrainingTensorQuantizer
+    :return: An instance of StaticGridTensorQuantizer
     """
     assert quant_scheme in [libpymo.QuantizationMode.QUANTIZATION_TF_ENHANCED, libpymo.QuantizationMode.QUANTIZATION_TF]
 
-    tensor_quantizer = PostTrainingTensorQuantizer(bitwidth, round_mode, quant_scheme, use_symmetric_encodings,
-                                                   enabled_by_default)
+    tensor_quantizer = StaticGridTensorQuantizer(bitwidth, round_mode, quant_scheme, use_symmetric_encodings,
+                                                 enabled_by_default)
     return tensor_quantizer
 
 
