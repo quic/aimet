@@ -65,7 +65,8 @@ are with their default values which lead to good and stable results over many mo
 
 Following is guideline for Hyper parameters:
 
-#. Hyper Parameters to be changed often: number of batches (approximately 500-1000 images), number of iterations(default 10k)
+#. Hyper Parameters to be changed often: number of batches (approximately 500-1000 images, if batch size of data loader
+   is 64, then 16 number of batches leads to 1024 images), number of iterations(default 10000)
 
 #. Hyper Parameters to be changed moderately: regularization parameter (default 0.01)
 
