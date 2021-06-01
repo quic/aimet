@@ -87,19 +87,17 @@ def forward_pass(model: torch.nn.Module, batch: torch.Tensor):
         pass
 
 
-def get_quantized_dequantized_weight(layer: torch.nn.Module, use_cuda: bool) -> torch.Tensor:
+def get_quantized_dequantized_weight(layer: torch.nn.Module) -> torch.Tensor:
     """
     Gets quantized dequantized weights of a layer
     :param layer: Conv/FC layer
-    :param use_cuda: If use cuda or not for quantization dequantization
     :return: quantized dequantized weights
     """
-    weight_tensor = layer._modules['_module_to_wrap'].weight
+    weight_tensor = layer._module_to_wrap.weight
+    weight_quantizer = layer.param_quantizers['weight']
 
-    encodings = layer.param_quantizers['weight'].encoding
-    round_mode = layer.param_quantizers['weight'].round_mode
-    quant_dequant_weights = layer.param_quantizers['weight']._cppOp.quantizeDequantize(weight_tensor, encodings,
-                                                                                       round_mode, use_cuda)
+    quant_dequant_weights = weight_quantizer.quantize_dequantize(weight_tensor, weight_quantizer.round_mode)
+
     return quant_dequant_weights
 
 
@@ -175,9 +173,8 @@ def call_analytical_mo_correct_bias(layer: torch.nn.Module, bn: Union[torch.nn.B
     bias_correction = libpymo.BnBasedBiasCorrection()
     # Passed wrapped layer since quantized network has to be corrected
     device = layer._modules['_module_to_wrap'].bias.device
-    use_cuda = utils.is_model_on_gpu(layer)
 
-    quant_dequant_weight = get_quantized_dequantized_weight(layer, use_cuda)
+    quant_dequant_weight = get_quantized_dequantized_weight(layer)
 
     weight_tensor = layer._module_to_wrap.weight
 
