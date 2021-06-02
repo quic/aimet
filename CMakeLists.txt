@@ -111,6 +111,7 @@ endif(NOT (DEFINED ENABLE_TORCH))
 
 if (ENABLE_TORCH)
   set(AIMET_PYTHONPATH "${AIMET_PYTHONPATH}:${CMAKE_CURRENT_SOURCE_DIR}/TrainingExtensions/torch/src/python")
+
   # If we enable PyTorch builds then use the pybind11 headers that are part of the torch pip install
   # So we don't have a version mismatch - between PyTorch custom C++ op code and PyMO
   list(APPEND PYBIND11_INC_DIRS "${PYTHON_DIST_PACKAGES}/torch/include")
@@ -208,6 +209,7 @@ add_subdirectory(TrainingExtensions)
 add_subdirectory(NightlyTests)
 add_subdirectory(ThirdParty)
 add_subdirectory(Docs)
+add_subdirectory(Examples)
 if(IS_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/Benchmarks")
   add_subdirectory(Benchmarks)
 endif()
