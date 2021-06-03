@@ -51,6 +51,7 @@ from aimet_tensorflow.utils.graph_saver import load_model_from_meta
 from aimet_tensorflow.quantsim import save_checkpoint, load_checkpoint
 
 
+@unittest.skip("Skipping TF RNN unit tests")
 class TestQuantSimRnn(unittest.TestCase):
 
     def test_insert_quant_op_recurrent(self):
