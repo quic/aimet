@@ -128,7 +128,7 @@ class TestTrainingExtensionBnFold(unittest.TestCase):
                                              dummy_input=torch.rand(1, 1, 28, 28))
         quantsim.compute_encodings(pass_data_through_model, None)
         layer = quantsim.model.conv2
-        quant_dequant_weights = bias_correction.get_quantized_dequantized_weight(layer, use_cuda)
+        quant_dequant_weights = bias_correction.get_quantized_dequantized_weight(layer)
         self.assertEqual(quant_dequant_weights.shape, torch.Size([64, 32, 5, 5]))
 
     def test_bias_correction_analytical_and_empirical(self):
