@@ -86,11 +86,7 @@ class PickableState:
         self.dict = builtin_dict
 
         if encoding:
-            self.min = encoding.min
-            self.max = encoding.max
-            self.delta = encoding.delta
-            self.offset = encoding.offset
-            self.bw = encoding.bw
+            self.encoding = (encoding.min, encoding.max, encoding.delta, encoding.offset, encoding.bw)
 
 
 class StaticGridTensorQuantizer(TensorQuantizer):
@@ -111,8 +107,16 @@ class StaticGridTensorQuantizer(TensorQuantizer):
         super(StaticGridTensorQuantizer, self).__init__(bitwidth, round_mode, quant_scheme, use_symmetric_encodings,
                                                         enabled_by_default)
         self._cppOp = AimetTensorQuantizer.AimetTensorQuantizer(quant_scheme)
-        self.encoding = None
+        self._encoding = None
         self._is_encoding_frozen = False
+
+    @property
+    def encoding(self):
+        return self._encoding
+
+    @encoding.setter
+    def encoding(self, encoding):
+        self._encoding = encoding
 
     def __str__(self):
         stream = io.StringIO(newline='\n')
@@ -121,9 +125,9 @@ class StaticGridTensorQuantizer(TensorQuantizer):
                                                                                           self.round_mode,
                                                                                           self.bitwidth,
                                                                                           self.enabled))
-        if self.encoding:
-            stream.write('  min:{}, max={}, delta={}, offset={}\n'.format(self.encoding.min, self.encoding.max,
-                                                                          self.encoding.delta, self.encoding.offset))
+        if self._encoding:
+            stream.write('  min:{}, max={}, delta={}, offset={}\n'.format(self._encoding.min, self._encoding.max,
+                                                                          self._encoding.delta, self._encoding.offset))
         else:
             stream.write('  no encoding\n')
 
@@ -134,11 +138,11 @@ class StaticGridTensorQuantizer(TensorQuantizer):
         # Copy the object's state from self.__dict__ which contains
         # all our instance attributes. Always use the dict.copy()
         # method to avoid modifying the original state.
-        state = PickableState(self.__dict__.copy(), self.encoding)
+        state = PickableState(self.__dict__.copy(), self._encoding)
 
         # Remove the unpicklable entries.
         del state.dict['_cppOp']
-        del state.dict['encoding']
+        del state.dict['_encoding']
 
         return state
 
@@ -150,15 +154,17 @@ class StaticGridTensorQuantizer(TensorQuantizer):
         self._cppOp = AimetTensorQuantizer.AimetTensorQuantizer(self.quant_scheme)
 
         # Create the encoding object
-        if hasattr(state, 'min'):
-            self.encoding = libpymo.TfEncoding()
-            self.encoding.bw = state.bw
-            self.encoding.max = state.max
-            self.encoding.min = state.min
-            self.encoding.delta = state.delta
-            self.encoding.offset = state.offset
+        if hasattr(state, 'encoding'):
+            self._encoding = libpymo.TfEncoding()
+
+            min, max, delta, offset, bw = state.encoding
+            self._encoding.bw = bw
+            self._encoding.max = max
+            self._encoding.min = min
+            self._encoding.delta = delta
+            self._encoding.offset = offset
         else:
-            self.encoding = None
+            self._encoding = None
 
     def update_encoding_stats(self, tensor):
         """
@@ -178,10 +184,10 @@ class StaticGridTensorQuantizer(TensorQuantizer):
                                                                   self.use_unsigned_symmetric)
 
             if is_encoding_valid:
-                self.encoding = encoding
+                self._encoding = encoding
 
             else:
-                self.encoding = None
+                self._encoding = None
                 self.enabled = False
 
     def quantize_dequantize(self, tensor, round_mode):
@@ -210,7 +216,7 @@ class StaticGridTensorQuantizer(TensorQuantizer):
         """
         if not self._is_encoding_frozen:
             self._cppOp.resetEncodingStats()
-            self.encoding = None
+            self._encoding = None
 
     def freeze_encoding(self):
         """
@@ -224,7 +230,7 @@ class StaticGridTensorQuantizer(TensorQuantizer):
         :param encoding: Encoding to be set
         """
         if not self._is_encoding_frozen:
-            self.encoding = encoding
+            self._encoding = encoding
 
 
 # Temporary change to preserve backwards compatibility
