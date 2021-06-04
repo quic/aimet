@@ -1,0 +1,2 @@
+liblapacke
+wget
