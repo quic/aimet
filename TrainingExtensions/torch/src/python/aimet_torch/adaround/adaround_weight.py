@@ -77,9 +77,9 @@ class AdaroundParameters:
         :param num_batches: Number of batches
         :param default_num_iterations: Number of iterations to adaround each layer. Default 10000
         :param default_reg_param: Regularization parameter, trading off between rounding loss vs reconstruction loss.
-        Default 0.01
-        :param default_beta_range: Start and stop beta parameter for annealing of rounding loss (start_beta, end_beta)
-        Default (20, 2)
+         Default 0.01
+        :param default_beta_range: Start and stop beta parameter for annealing of rounding loss (start_beta, end_beta).
+         Default (20, 2)
         :param default_warm_start: warm up period, during which rounding loss has zero effect. Default 20% (0.2)
         """
         self.data_loader = data_loader

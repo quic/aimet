@@ -56,6 +56,20 @@ Applying BC either before or after AdaRound is not recommended.
 
  #. BC --> AdaRound
 
+=====================================
+ AdaRound Hyper parameters guidelines
+=====================================
+
+There are couple of hyper parameters required during AdaRound optimization and are exposed to users. But some of them
+are with their default values which lead to good and stable results over many models and not recommended to change often.
+
+Following is guideline for Hyper parameters:
+
+#. Hyper Parameters to be changed often: number of batches (approximately 500-1000 images, if batch size of data loader
+   is 64, then 16 number of batches leads to 1024 images), number of iterations(default 10000)
+
+#. Hyper Parameters to be changed moderately: regularization parameter (default 0.01)
+
+#. Hyper Parameters to be changed least: beta range(default (20, 2)), warm start period (default 20%)
+
 |
-
-
