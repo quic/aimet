@@ -137,14 +137,17 @@ class QuantSimConfigurator(AimetCommonQuantSimConfigurator):
         """
         input_true_quant_ops = []
         queue = [op]
+        processed_ops = set()
         while queue:
             curr_op = queue.pop()
+            processed_ops.add(curr_op)
             for inp_op in curr_op.input_ops:
                 if inp_op in self._op_to_quant_ops_dict:
                     _, output_quantize_op = self._op_to_quant_ops_dict[inp_op]
                     input_true_quant_ops.append(output_quantize_op)
                 else:
-                    queue.append(inp_op)
+                    if inp_op not in processed_ops:
+                        queue.append(inp_op)
         return input_true_quant_ops
 
     def _get_quant_ops_for_output_setting(self, op: Op):
