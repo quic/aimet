@@ -75,7 +75,7 @@ WORKING_DIR = '/tmp/quantsim/'
 
 
 # Op types which we will not place quantize ops after
-op_types_to_ignore = {'branch', 'Flatten', 'Shape'}
+op_types_to_ignore = {'branch', 'Flatten', 'Shape', 'Identity'}
 
 DTYPES_QUANTIZE_NOT_REQUIRED = [tf.dtypes.int8, tf.dtypes.uint8, tf.dtypes.int16, tf.dtypes.uint16,
                                 tf.dtypes.int32, tf.dtypes.uint32, tf.dtypes.int64, tf.dtypes.uint64,
