@@ -82,8 +82,9 @@ class PickableState:
     """
     State variables in QcQuantizeBase that need to be saved separately when pickling
     """
-    def __init__(self, builtin_dict, encoding):
+    def __init__(self, builtin_dict, encoding, num_channels):
         self.dict = builtin_dict
+        self.num_channels = num_channels
 
         if encoding:
             self.encoding = (encoding.min, encoding.max, encoding.delta, encoding.offset, encoding.bw)
@@ -106,7 +107,7 @@ class StaticGridTensorQuantizer(TensorQuantizer):
         """
         super(StaticGridTensorQuantizer, self).__init__(bitwidth, round_mode, quant_scheme, use_symmetric_encodings,
                                                         enabled_by_default)
-        self._cppOp = AimetTensorQuantizer.AimetTensorQuantizer(quant_scheme)
+        self._cppOp = [AimetTensorQuantizer.AimetTensorQuantizer(quant_scheme)]
         self._encoding = None
         self._is_encoding_frozen = False
 
@@ -138,7 +139,7 @@ class StaticGridTensorQuantizer(TensorQuantizer):
         # Copy the object's state from self.__dict__ which contains
         # all our instance attributes. Always use the dict.copy()
         # method to avoid modifying the original state.
-        state = PickableState(self.__dict__.copy(), self._encoding)
+        state = PickableState(self.__dict__.copy(), self._encoding, len(self._cppOp))
 
         # Remove the unpicklable entries.
         del state.dict['_cppOp']
@@ -151,7 +152,9 @@ class StaticGridTensorQuantizer(TensorQuantizer):
         self.__dict__.update(state.dict)
 
         # Create the c++ op
-        self._cppOp = AimetTensorQuantizer.AimetTensorQuantizer(self.quant_scheme)
+        self._cppOp = []
+        for i in range(state.num_channels):
+            self._cppOp.append(AimetTensorQuantizer.AimetTensorQuantizer(self.quant_scheme))
 
         # Create the encoding object
         if hasattr(state, 'encoding'):
@@ -172,23 +175,26 @@ class StaticGridTensorQuantizer(TensorQuantizer):
         :param tensor: Tensor to use for updating the encodings stats
         """
         if self.enabled and not self._is_encoding_frozen:
-            self._cppOp.updateStats(tensor, tensor.is_cuda)
+            for op in self._cppOp:
+                op.updateStats(tensor, tensor.is_cuda)
 
     def compute_encoding(self):
         """
         Compute the quantization encoding for this tensor
         """
         if self.enabled and not self._is_encoding_frozen:
-            encoding, is_encoding_valid = self._cppOp.getEncoding(self.bitwidth, self.use_symmetric_encodings,
-                                                                  self.use_strict_symmetric,
-                                                                  self.use_unsigned_symmetric)
 
-            if is_encoding_valid:
-                self._encoding = encoding
+            for op in self._cppOp:
+                encoding, is_encoding_valid = op.getEncoding(self.bitwidth, self.use_symmetric_encodings,
+                                                             self.use_strict_symmetric,
+                                                             self.use_unsigned_symmetric)
 
-            else:
-                self._encoding = None
-                self.enabled = False
+                if is_encoding_valid:
+                    self._encoding = encoding
+
+                else:
+                    self._encoding = None
+                    self.enabled = False
 
     def quantize_dequantize(self, tensor, round_mode):
         """
@@ -215,8 +221,9 @@ class StaticGridTensorQuantizer(TensorQuantizer):
         Resets the encodings stats and set encoding to None
         """
         if not self._is_encoding_frozen:
-            self._cppOp.resetEncodingStats()
-            self._encoding = None
+            for op in self._cppOp:
+                op.resetEncodingStats()
+                self._encoding = None
 
     def freeze_encoding(self):
         """
@@ -238,6 +245,29 @@ PostTrainingTensorQuantizer = StaticGridTensorQuantizer
 StaticGridPerTensorQuantizer = StaticGridTensorQuantizer
 
 
+class StaticGridPerTensorQuantizer(StaticGridTensorQuantizer):
+    """
+    Simulates quantization for the given tensor using a per-tensor scale/offset
+    """
+
+    def __init__(self, bitwidth: int, round_mode: str, quant_scheme: str, use_symmetric_encodings: bool,
+                 enabled_by_default: bool):
+        """
+        Constructor
+        :param bitwidth: Quantization bitwidth
+        :param round_mode: Rounding mode (e.g. Nearest)
+        :param quant_scheme: Quantization scheme (e.g. tf, tf_enhanced)
+        :param use_symmetric_encodings: True if symmetric encoding is used.  False otherwise.
+        :param enabled_by_default: True if quantization of tensor is enabled.  False otherwise.
+        """
+        super(StaticGridPerTensorQuantizer, self).__init__(bitwidth, round_mode, quant_scheme, use_symmetric_encodings,
+                                                           enabled_by_default)
+        self._cppOp = [AimetTensorQuantizer.AimetTensorQuantizer(quant_scheme)]
+        self._encoding = None
+        self._is_encoding_frozen = False
+
+
+
 class QuantizeDequantize(torch.autograd.Function):
     """
     Custom gradient function for STE
@@ -254,8 +284,8 @@ class QuantizeDequantize(torch.autograd.Function):
         """
         if tensor_quantizer.enabled:
             # pylint:disable = protected-access
-            quantized_tensor = tensor_quantizer._cppOp.quantizeDequantize(tensor, tensor_quantizer.encoding,
-                                                                          round_mode, tensor.is_cuda)
+            quantized_tensor = tensor_quantizer._cppOp[0].quantizeDequantize(tensor, tensor_quantizer.encoding,
+                                                                             round_mode, tensor.is_cuda)
         else:
             quantized_tensor = tensor
 
@@ -296,7 +326,7 @@ class Quantize(torch.autograd.Function):
             shift_to_signed = False
             if tensor_quantizer.use_symmetric_encodings and tensor_quantizer.encoding.offset < 0:
                 shift_to_signed = True
-            quantized_tensor = tensor_quantizer._cppOp.quantize(tensor, tensor_quantizer.encoding, round_mode,
+            quantized_tensor = tensor_quantizer._cppOp[0].quantize(tensor, tensor_quantizer.encoding, round_mode,
                                                                 tensor.is_cuda, shift_to_signed)
         else:
             quantized_tensor = tensor
