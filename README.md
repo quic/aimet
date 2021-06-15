@@ -1,7 +1,10 @@
 
-![Qualcomm Innovation Center, Inc.](Docs/images/logo-quic-on@h68.png)
-[![AIMET on GitHub Pages](Docs/images/button_aimet-on-github-pages.png)](https://quic.github.io/aimet-pages/index.html)
-[![Discussion Forums](Docs/images/button_discussion-forums.png)](https://forums.quicinc.com)
+![Qualcomm Innovation Center, Inc.](Docs/images/Logo_QIC_vertical_rgb.png)
+[![AIMET on GitHub Pages](Docs/images/button-overview.png)](https://quic.github.io/aimet-pages/index.html)
+[![Documentation](Docs/images/button-docs.png)](https://quic.github.io/aimet-pages/releases/1.16.1/user_guide/index.html)
+[![Install instructions](Docs/images/button-install.png)](#installation-instructions)
+[![Discussion Forums](Docs/images/button-forums.png)](https://forums.quicinc.com)
+[![What's New](Docs/images/button-whats-new.png)](#whats-new)
 
 
 
@@ -23,8 +26,9 @@ We also provide recipes for users to quantize floating point models using AIMET.
 ## Table of Contents
 - [Why AIMET?](#why-aimet)
 - [Supported features](#supported-features)
+- [What's New](#whats-new)  
 - [Results](#results)
-- [Getting started](#getting-started)
+- [Installation](#installation-instructions)
 - [Resources](#resources)
 - [Contributions](#contributions)
 - [Team](#team)
@@ -52,8 +56,9 @@ Please visit the [AIMET on Github Pages](https://quic.github.io/aimet-pages/inde
 
 * *Cross-Layer Equalization*: Equalize weight tensors to reduce amplitude variation across channels
 * *Bias Correction*: Corrects shift in layer outputs introduced due to quantization
+* *Adaptive Rounding*: Learn the optimal rounding given unlabelled data
 * *Quantization Simulation*: Simulate on-target quantized inference accuracy
-* *Fine-tuning*: Use quantization simulation to train the model further to improve accuracy
+* *Quantization-aware Training*: Use quantization simulation to train the model further to improve accuracy
 
 #### Model Compression
 
@@ -65,6 +70,11 @@ Please visit the [AIMET on Github Pages](https://quic.github.io/aimet-pages/inde
 
 * *Weight ranges*: Inspect visually if a model is a candidate for applying the Cross Layer Equalization technique. And the effect after applying the technique
 * *Per-layer compression sensitivity*: Visually get feedback about the sensitivity of any given layer in the model to compression
+
+## What's New
+Some recently added features include
+* Adaptive Rounding (AdaRound): Learn the optimal rounding given unlabelled data
+* Quantization-aware Training (QAT) for recurrent models (including with RNNs, LSTMs and GRUs)
 
 ## Results
 
@@ -115,7 +125,7 @@ AIMET can also significantly compress models. For popular models, such as Resnet
   </tr>
 </table>
 
-## Getting started
+## Installation Instructions
 To install and use the pre-built version of the AIMET package, please follow one of the below links:
 - [Install and run AIMET in *Ubuntu* environment](./packaging/install.md)
 - [Install and run AIMET in *Google Colab* environment](./packaging/google_colab_install.md)
