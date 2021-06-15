@@ -1,5 +1,6 @@
 
-![Qualcomm Innovation Center, Inc.](Docs/images/Logo_QIC_vertical_rgb.png)
+![Qualcomm Innovation Center, Inc.](Docs/images/logo-quic-on@h68.png)
+
 [![AIMET on GitHub Pages](Docs/images/button-overview.png)](https://quic.github.io/aimet-pages/index.html)
 [![Documentation](Docs/images/button-docs.png)](https://quic.github.io/aimet-pages/releases/1.16.1/user_guide/index.html)
 [![Install instructions](Docs/images/button-install.png)](#installation-instructions)
