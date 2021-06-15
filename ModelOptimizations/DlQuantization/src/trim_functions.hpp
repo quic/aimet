@@ -55,14 +55,15 @@ void quantizeDequantize(const DTYPE* in, int cnt, const TfEncoding& encoding, DT
 
 template <typename DTYPE>
 void quantizeToFxp(const DTYPE* in, int cnt, const TfEncoding& encoding, DTYPE* out, ComputationMode mode_cpu_gpu,
-                   RoundingMode rounding_mode);
+                   RoundingMode rounding_mode, bool shiftToSigned);
 
 template <typename DTYPE>
 void quantizeDequantizeCpu(const DTYPE* in, int cnt, const TfEncoding& encoding, DTYPE* out,
                            RoundingMode rounding_mode);
 
 template <typename DTYPE>
-void quantizeToFxpCpu(const DTYPE* in, int cnt, const TfEncoding& encoding, DTYPE* out, RoundingMode rounding_mode);
+void quantizeToFxpCpu(const DTYPE* in, int cnt, const TfEncoding& encoding, DTYPE* out, RoundingMode rounding_mode,
+                      bool shiftToSigned);
 
 double computeDelta(double encodingMin, double encodingMax, double numSteps);
 double computeOffset(double encodingMin, double delta);
@@ -72,7 +73,8 @@ double computeOffset(double encodingMin, double delta);
 #ifdef GPU_QUANTIZATION_ENABLED
 
 template <typename DTYPE>
-void quantizeToFxpGpu(const DTYPE* in, int cnt, const TfEncoding& encoding, DTYPE* out, RoundingMode rounding_mode);
+void quantizeToFxpGpu(const DTYPE* in, int cnt, const TfEncoding& encoding, DTYPE* out, RoundingMode rounding_mode,
+                      bool shiftToSigned);
 
 template <typename DTYPE>
 void quantizeDequantizeGpu(const DTYPE* in, int cnt, const TfEncoding& encoding, DTYPE* out,
