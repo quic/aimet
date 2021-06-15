@@ -136,8 +136,8 @@ To build, modify (*optionally*) and use the latest AIMET source code, please fol
 - [Instructions to build, install and run AIMET in *Google Colab* environment](./packaging/google_colab_development.md)
 
 ## Resources
-* [User Guide](https://quic.github.io/aimet-pages/AimetDocs/user_guide/index.html)
-* [API Docs](https://quic.github.io/aimet-pages/AimetDocs/api_docs/index.html)
+* [User Guide](https://quic.github.io/aimet-pages/releases/1.16.1/user_guide/index.html)
+* [API Docs](https://quic.github.io/aimet-pages/releases/1.16.1/api_docs/index.html)
 * [Discussion Forums](https://forums.quicinc.com/)
 * [Tutorial Videos](https://quic.github.io/aimet-pages/index.html#video)
 
