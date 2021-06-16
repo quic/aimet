@@ -59,13 +59,14 @@ template <typename DTYPE>
 __global__ void quantizeToFxpKernel(const DTYPE* in, int cnt, const TfEncoding encoding, DTYPE* out,
                                     RoundingMode rounding_mode, bool shiftToSigned)
 {
-    int shift = pow(2, encoding.bw - 1);
+    int shift = 0;
+    if (shiftToSigned) {
+        shift = pow(2, encoding.bw - 1);
+    }
     CUDA_KERNEL_LOOP(i, cnt)
     {
         quantizeToFxpDevice<DTYPE>(in + i, i, encoding, out + i, rounding_mode);
-        if (shiftToSigned) {
-            *(out + i) -= shift;
-        }
+        *(out + i) -= shift;
     }
 }
 
