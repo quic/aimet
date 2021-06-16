@@ -40,7 +40,7 @@ import torch
 
 from aimet_torch.qc_quantize_op import StaticGridQuantWrapper, QcQuantizeOpMode, QuantScheme, MAP_QUANT_SCHEME_TO_PYMO, \
     MAP_ROUND_MODE_TO_PYMO
-from aimet_torch.tensor_quantizer import StaticGridTensorQuantizer
+from aimet_torch.tensor_quantizer import StaticGridPerTensorQuantizer
 import libpymo
 
 
@@ -168,7 +168,7 @@ class TestQcQuantizeOp:
         """ Test tensor quantizer quantize only asymmetric functionality """
 
         post_training_tensor_quantizer = \
-            StaticGridTensorQuantizer(bitwidth=8, round_mode='nearest',
+            StaticGridPerTensorQuantizer(bitwidth=8, round_mode='nearest',
                                       quant_scheme=MAP_QUANT_SCHEME_TO_PYMO[QuantScheme.post_training_tf],
                                       use_symmetric_encodings=False, enabled_by_default=True)
         encodings = libpymo.TfEncoding()
@@ -232,7 +232,7 @@ class TestQcQuantizeOp:
         """ Test tensor quantizer quantize only asymmetric functionality on gpu """
     
         post_training_tensor_quantizer = \
-            StaticGridTensorQuantizer(bitwidth=8, round_mode='nearest',
+            StaticGridPerTensorQuantizer(bitwidth=8, round_mode='nearest',
                                       quant_scheme=MAP_QUANT_SCHEME_TO_PYMO[QuantScheme.post_training_tf],
                                       use_symmetric_encodings=False, enabled_by_default=True)
         encodings = libpymo.TfEncoding()
@@ -298,7 +298,7 @@ class TestQcQuantizeOp:
         torch.manual_seed(0)
 
         rand_tensor = torch.rand(1, 10, 20, 20)
-        quant = StaticGridTensorQuantizer(bitwidth=8, round_mode='nearest',
+        quant = StaticGridPerTensorQuantizer(bitwidth=8, round_mode='nearest',
                                           quant_scheme=MAP_QUANT_SCHEME_TO_PYMO[QuantScheme.post_training_tf_enhanced],
                                           use_symmetric_encodings=False, enabled_by_default=True)
         import psutil
