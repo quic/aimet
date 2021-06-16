@@ -229,6 +229,7 @@ class StaticGridTensorQuantizer(TensorQuantizer):
 
 # Temporary change to preserve backwards compatibility
 PostTrainingTensorQuantizer = StaticGridTensorQuantizer
+StaticGridPerTensorQuantizer = StaticGridTensorQuantizer
 
 
 class QuantizeDequantize(torch.autograd.Function):
