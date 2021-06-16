@@ -107,7 +107,7 @@ class StaticGridTensorQuantizer(TensorQuantizer):
         """
         super(StaticGridTensorQuantizer, self).__init__(bitwidth, round_mode, quant_scheme, use_symmetric_encodings,
                                                         enabled_by_default)
-        self._cppOp = [AimetTensorQuantizer.AimetTensorQuantizer(quant_scheme)]
+        self._cppOp = None
         self._encoding = None
         self._is_encoding_frozen = False
 
@@ -241,7 +241,6 @@ class StaticGridTensorQuantizer(TensorQuantizer):
 
 
 # Temporary change to preserve backwards compatibility
-PostTrainingTensorQuantizer = StaticGridTensorQuantizer
 StaticGridPerTensorQuantizer = StaticGridTensorQuantizer
 
 
