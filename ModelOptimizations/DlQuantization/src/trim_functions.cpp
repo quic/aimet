@@ -151,13 +151,14 @@ template <typename DTYPE>
 void quantizeToFxpCpu(const DTYPE* in, int cnt, const TfEncoding& encoding, DTYPE* out, RoundingMode rounding_mode,
                       bool shiftToSigned)
 {
-    int shift = pow(2, encoding.bw - 1);
+    int shift = 0;
+    if (shiftToSigned) {
+        shift = pow(2, encoding.bw - 1);
+    }
     for (int i = 0; i < cnt; ++i)
     {
         quantizeValueCpu(&in[i], encoding, &out[i], rounding_mode);
-        if (shiftToSigned) {
-            out[i] -= shift;
-        }
+        out[i] -= shift;
     }
 }
 
