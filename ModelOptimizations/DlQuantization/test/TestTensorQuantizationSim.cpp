@@ -156,7 +156,7 @@ TEST(TestTensorQuantizationSim, SanityTestWithGatedMax)
     }
 }
 
-TEST(TestTensorQuantizationSim, SanityTestWithQuantizeOnly)
+TEST(TestTensorQuantizationSim, SanityTestWithQuantizeOnlyUnsigned)
 {
     // Instantiate TensorQuantizationSim
     DlQuantization::TensorQuantizationSim<float> sim;
@@ -170,9 +170,34 @@ TEST(TestTensorQuantizationSim, SanityTestWithQuantizeOnly)
     double max    = 0.72;
 
     sim.quantizeTensor(tensor.data(), tensor.size(), outputTensor.data(), min, max, bw,
-                       DlQuantization::RoundingMode::ROUND_NEAREST, false);
+                       DlQuantization::RoundingMode::ROUND_NEAREST, false, false);
 
     std::vector<float> expectedOutput = {0, 45, 99, 153, 207, 255};
+
+    EXPECT_EQ(outputTensor.size(), expectedOutput.size());
+
+    for (int i = 0; i < outputTensor.size(); i++) {
+        EXPECT_FLOAT_EQ(outputTensor[i], expectedOutput[i]);
+    }
+}
+
+TEST(TestTensorQuantizationSim, SanityTestWithQuantizeOnlySigned)
+{
+    // Instantiate TensorQuantizationSim
+    DlQuantization::TensorQuantizationSim<float> sim;
+
+    // Create a dummy tensor
+    const std::vector<float> tensor = {-0.5f, -0.25f, 0, 0.25, 0.5, 0.75};
+    std::vector<float> outputTensor(tensor.size());
+
+    uint8_t bw     = 8;
+    double min    = -0.46;
+    double max    = 0.72;
+
+    sim.quantizeTensor(tensor.data(), tensor.size(), outputTensor.data(), min, max, bw,
+                       DlQuantization::RoundingMode::ROUND_NEAREST, false, true);
+
+    std::vector<float> expectedOutput = {-128, -83, -29, 25, 79, 127};
 
     EXPECT_EQ(outputTensor.size(), expectedOutput.size());
 

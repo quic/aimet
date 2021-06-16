@@ -278,7 +278,7 @@ class Quantize(torch.autograd.Function):
     @staticmethod
     def forward(ctx, tensor, tensor_quantizer, round_mode):
         """
-        Quantize-dequantize the tensor, using the saved encoding for this tensor
+        Quantize the tensor, using the saved encoding for this tensor
         :param tensor: Tensor to quantize
         :param tensor_quantizer: Reference to the tensor quantizer
         :param round_mode: Rounding mode
@@ -286,8 +286,11 @@ class Quantize(torch.autograd.Function):
         """
         if tensor_quantizer.enabled:
             # pylint:disable = protected-access
+            shift_to_signed = False
+            if tensor_quantizer.use_symmetric_encodings and tensor_quantizer.encoding.offset < 0:
+                shift_to_signed = True
             quantized_tensor = tensor_quantizer._cppOp.quantize(tensor, tensor_quantizer.encoding, round_mode,
-                                                                tensor.is_cuda)
+                                                                tensor.is_cuda, shift_to_signed)
         else:
             quantized_tensor = tensor
 

@@ -114,16 +114,16 @@ void quantizeDequantize(const DTYPE* in, int cnt, const TfEncoding& encoding, DT
 // encoding: TF: rounded
 template <typename DTYPE>
 void quantizeToFxp(const DTYPE* in, int cnt, const TfEncoding& encoding, DTYPE* out, ComputationMode mode_cpu_gpu,
-                   RoundingMode rounding_mode)
+                   RoundingMode rounding_mode, bool shiftToSigned)
 {
     switch (mode_cpu_gpu)
     {
         case COMP_MODE_CPU:
-            quantizeToFxpCpu(in, cnt, encoding, out, rounding_mode);
+            quantizeToFxpCpu(in, cnt, encoding, out, rounding_mode, shiftToSigned);
             break;
         case COMP_MODE_GPU:
 #ifdef GPU_QUANTIZATION_ENABLED
-            quantizeToFxpGpu(in, cnt, encoding, out, rounding_mode);
+            quantizeToFxpGpu(in, cnt, encoding, out, rounding_mode, shiftToSigned);
 #else
             throw runtime_error("Not compiled for GPU mode.");
 #endif
@@ -148,11 +148,17 @@ void quantizeDequantizeCpu(const DTYPE* in, int cnt, const TfEncoding& encoding,
 }
 
 template <typename DTYPE>
-void quantizeToFxpCpu(const DTYPE* in, int cnt, const TfEncoding& encoding, DTYPE* out, RoundingMode rounding_mode)
+void quantizeToFxpCpu(const DTYPE* in, int cnt, const TfEncoding& encoding, DTYPE* out, RoundingMode rounding_mode,
+                      bool shiftToSigned)
 {
+    int shift = 0;
+    if (shiftToSigned) {
+        shift = pow(2, encoding.bw - 1);
+    }
     for (int i = 0; i < cnt; ++i)
     {
         quantizeValueCpu(&in[i], encoding, &out[i], rounding_mode);
+        out[i] -= shift;
     }
 }
 
@@ -196,9 +202,9 @@ template void quantizeDequantize(const float* in, int cnt, const TfEncoding& enc
                                  ComputationMode mode_cpu_gpu, RoundingMode rounding_mode);
 
 template void quantizeToFxp(const double* in, int cnt, const TfEncoding& encoding, double* out,
-                            ComputationMode mode_cpu_gpu, RoundingMode rounding_mode);
+                            ComputationMode mode_cpu_gpu, RoundingMode rounding_mode, bool shiftToSigned);
 
 template void quantizeToFxp(const float* in, int cnt, const TfEncoding& encoding, float* out,
-                            ComputationMode mode_cpu_gpu, RoundingMode rounding_mode);
+                            ComputationMode mode_cpu_gpu, RoundingMode rounding_mode, bool shiftToSigned);
 
 }   // End of namespace DlQuantization
