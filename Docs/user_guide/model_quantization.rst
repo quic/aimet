@@ -15,7 +15,7 @@ AIMET provides multiple techniques and tools that help to create quantized model
 
 Use Cases
 =========
-1. **Predict on-target accuracy**: AIMET enables a user to simulate the effects of quantization to get a first order estimate of the model’s accuracy when run on quantized targets. This is useful to get an estimate of on-target accuracy without needing an actual target platform. Note that to create a simulation model, AIMET uses representative data samples to compute per-layer quantization encodings.
+1. **Predict on-target accuracy**: AIMET enables a user to simulate the effects of quantization to get a first order estimate of the model's accuracy when run on quantized targets. This is useful to get an estimate of on-target accuracy without needing an actual target platform. Note that to create a simulation model, AIMET uses representative data samples to compute per-layer quantization encodings.
 
     .. image:: ../images/quant_use_case_1.PNG
 
@@ -42,9 +42,14 @@ Relevant steps in the diagram are annotated with a green circle with a number. F
 
 .. image:: ../images/flow_diagram.png
 
+AIMET Quantization features
+===========================
+
 #. :ref:`Quantization Simulation<ug-quantsim>`: AIMET enables a user to modify a model to add quantization simulation ops. When an evaluation is run on a model with these quantization simulation ops, the user can observe a first-order simulation of expected accuracy on quantized hardware.
 
 #. :ref:`Quantization Visualization<ug-quantization-visualization>`: AIMET provides visualization tools that help guide the user to determine if AIMET post-training quantization techniques are useful for a given model
+
+#. :ref:`Applying Adaptive Rounding<ug-adaround>`: Determine optimal rounding for weight tensors to improve quantized performance
 
 #. :ref:`Applying Cross-Layer Equalization<ug-post-training-quantization>`: Post-training quantization techniques help a model improve quantized accuracy without needing to re-train. Cross-Layer Equalization equalizes weight ranges in consecutive layers.
 

@@ -1,6 +1,6 @@
 :orphan:
 
-.. _api-tensorflow-adaround:
+.. _api-tf-adaround:
 
 ==================================
 AIMET TensorFlow AdaRound API

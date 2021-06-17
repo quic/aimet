@@ -1,6 +1,6 @@
 :orphan:
 
-.. _tf-cle:
+.. _api-tf-cle:
 
 ===============================================
 AIMET TensorFlow Cross Layer Equalization APIs

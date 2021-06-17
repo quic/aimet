@@ -1,10 +1,10 @@
 :orphan:
 
-.. _tf-quantsim:
+.. _api-tf-quantsim:
 
-===========================
-QuantSim API for TensorFlow
-===========================
+=====================================
+AIMET TensorFlow Quantization SIM API
+=====================================
 
 Top-level API
 =============

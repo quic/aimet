@@ -1,6 +1,6 @@
 :orphan:
 
-.. _tf-bias-correction:
+.. _api-tf-bias-correction:
 
 ====================================
 AIMET TensorFlow Bias Correction API
