@@ -37,18 +37,19 @@
 import pytest
 import unittest
 import shutil
-
 import os
 import tensorflow as tf
-tf.compat.v1.logging.set_verbosity(tf.logging.WARN)
-os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
-
 import numpy as np
 import json
 import time
+
 from aimet_tensorflow.quantsim import QuantizationSimModel
 from aimet_tensorflow.utils.graph_saver import load_model_from_meta
 from aimet_tensorflow.quantsim import save_checkpoint, load_checkpoint
+
+tf.compat.v1.logging.set_verbosity(tf.logging.WARN)
+tf.compat.v1.disable_eager_execution()
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
 
 
 @unittest.skip("Skipping TF RNN unit tests")

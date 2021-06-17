@@ -51,6 +51,7 @@ from aimet_tensorflow.examples.test_models import keras_model
 from aimet_tensorflow.adaround.adaround_weight import Adaround, AdaroundParameters
 
 logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Test)
+tf.compat.v1.disable_eager_execution()
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
 
 

@@ -40,16 +40,15 @@
 import json
 import os
 import unittest
-
 import tensorflow as tf
-tf.compat.v1.logging.set_verbosity(tf.logging.WARN)
-os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
 
 from aimet_tensorflow.examples.test_models import single_residual
 from aimet_tensorflow.quantsim import QuantizationSimModel
-
 import libpymo as pymo
 
+tf.compat.v1.logging.set_verbosity(tf.logging.WARN)
+tf.compat.v1.disable_eager_execution()
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
 
 # pylint: disable=protected-access
 # pylint: disable=too-many-locals

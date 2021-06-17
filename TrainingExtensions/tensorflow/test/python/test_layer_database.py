@@ -41,18 +41,17 @@ import copy
 import shutil
 import unittest
 import numpy as np
-
 import tensorflow as tf
-tf.compat.v1.logging.set_verbosity(tf.logging.WARN)
-os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
 
 from aimet_common.utils import AimetLogger
 from aimet_tensorflow.layer_database import LayerDatabase
 from aimet_tensorflow.examples import mnist_tf_model
-
 from tensorflow.keras.applications.resnet50 import ResNet50
 
 logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Test)
+tf.compat.v1.logging.set_verbosity(tf.logging.WARN)
+tf.compat.v1.disable_eager_execution()
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
 
 
 class TestTensorFlowLayerDatabase(unittest.TestCase):

@@ -38,18 +38,18 @@
 """ This file contains unit tests for testing cross layer scaling feature of CLE """
 
 import os
-
 import unittest
 import tensorflow as tf
-tf.compat.v1.logging.set_verbosity(tf.logging.WARN)
-os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
-
 import numpy as np
 
 from aimet_tensorflow.batch_norm_fold import  fold_all_batch_norms, find_all_batch_norms_to_fold
 from aimet_tensorflow.common.connectedgraph import ConnectedGraph
 from aimet_tensorflow.examples.test_models import tf_slim_basic_model
 from aimet_tensorflow.utils.op.conv import WeightTensorUtils
+
+tf.compat.v1.logging.set_verbosity(tf.logging.WARN)
+tf.compat.v1.disable_eager_execution()
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
 
 
 class TestBatchNormFold(unittest.TestCase):

@@ -36,15 +36,12 @@
 #  @@-COPYRIGHT-END-@@
 # =============================================================================
 """ Module to test TF utils """
+
 import pytest
 import unittest
 import numpy as np
-
 import os
 import tensorflow as tf
-tf.compat.v1.logging.set_verbosity(tf.logging.WARN)
-os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
-
 import tensorflow.contrib.slim as slim
 from tensorflow.contrib import graph_editor
 from tensorflow.keras.applications.vgg16 import VGG16
@@ -58,9 +55,11 @@ from aimet_tensorflow.examples.test_models import single_residual, multiple_inpu
     model_with_multiple_training_tensors, keras_model_functional, keras_model_functional_with_non_fused_batchnorms
 from aimet_tensorflow.utils.op.conv import WeightTensorUtils, BiasUtils, get_output_activation_shape
 from aimet_tensorflow.utils.op.fusedbatchnorm import BNUtils
-
 from aimet_tensorflow.utils.graph_saver import save_and_load_graph
 
+tf.compat.v1.logging.set_verbosity(tf.logging.WARN)
+tf.compat.v1.disable_eager_execution()
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
 logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Test)
 
 

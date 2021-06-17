@@ -38,14 +38,15 @@
 
 import unittest
 from unittest.mock import MagicMock
-
 import os
 import tensorflow as tf
-tf.compat.v1.logging.set_verbosity(tf.logging.WARN)
-os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
 
 from aimet_tensorflow.layer_database import Layer
 from aimet_tensorflow.layer_selector import ConvFcLayerSelector, ConvNoDepthwiseLayerSelector
+
+tf.compat.v1.logging.set_verbosity(tf.logging.WARN)
+tf.compat.v1.disable_eager_execution()
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
 
 
 class TestLayerSelector(unittest.TestCase):

@@ -37,7 +37,6 @@
 import pytest
 import unittest
 import shutil
-
 import os
 import tensorflow as tf
 
@@ -47,6 +46,7 @@ from aimet_tensorflow.quantizer_info import QuantizeOpIndices
 import libpymo
 
 tf.compat.v1.logging.set_verbosity(tf.logging.WARN)
+tf.compat.v1.disable_eager_execution()
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
 
 

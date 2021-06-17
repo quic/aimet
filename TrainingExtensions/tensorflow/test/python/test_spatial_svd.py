@@ -42,15 +42,11 @@ import copy
 import shutil
 from decimal import Decimal
 import numpy as np
-
 import os
 import tensorflow as tf
-tf.compat.v1.logging.set_verbosity(tf.logging.WARN)
-os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
 
 from aimet_common.utils import AimetLogger
 from aimet_common.defs import CostMetric, LayerCompRatioPair
-
 from aimet_tensorflow import layer_database as lad
 from aimet_tensorflow.layer_database import LayerDatabase
 from aimet_tensorflow.common.connectedgraph import ConnectedGraph
@@ -61,6 +57,10 @@ from aimet_tensorflow.svd_pruner import SpatialSvdPruner
 from aimet_tensorflow.utils.common import get_succeeding_bias_op
 from aimet_tensorflow.utils.graph_saver import save_and_load_graph
 from aimet_tensorflow.utils.op.conv import WeightTensorUtils, BiasUtils
+
+tf.compat.v1.logging.set_verbosity(tf.logging.WARN)
+tf.compat.v1.disable_eager_execution()
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
 logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Test)
 
 

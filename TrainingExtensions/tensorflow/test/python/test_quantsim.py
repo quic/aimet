@@ -36,17 +36,11 @@
 
 import shutil
 import os
-import time
-
 import numpy as np
 import json
-
 import pytest
 import unittest.mock
 import tensorflow as tf
-tf.compat.v1.logging.set_verbosity(tf.logging.WARN)
-os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
-
 import libpymo
 from aimet_tensorflow.quantsim import QuantizationSimModel, check_accumulator_overflow
 from aimet_tensorflow.quantsim_straight_through_grad import _get_n_and_p
@@ -56,6 +50,10 @@ from aimet_tensorflow.examples.test_models import model_with_dtype_int, keras_mo
 from aimet_common.defs import QuantScheme
 from aimet_tensorflow.quantsim import save_checkpoint, load_checkpoint
 from aimet_tensorflow.utils.constants import QuantizeOpIndices
+
+tf.compat.v1.logging.set_verbosity(tf.logging.WARN)
+tf.compat.v1.disable_eager_execution()
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
 
 
 class TestQuantSim(unittest.TestCase):

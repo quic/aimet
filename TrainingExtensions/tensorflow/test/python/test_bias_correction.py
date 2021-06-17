@@ -38,12 +38,8 @@
 """ This file contains unit tests for testing bias correction """
 
 import unittest
-
 import os
 import tensorflow as tf
-tf.compat.v1.logging.set_verbosity(tf.logging.WARN)
-os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
-
 import numpy as np
 from unittest.mock import MagicMock
 
@@ -55,6 +51,10 @@ from aimet_tensorflow.bias_correction import BiasCorrectionParams, BiasCorrectio
 from aimet_tensorflow.examples.test_models import keras_model_functional
 from aimet_tensorflow.utils.graph_saver import save_and_load_graph
 from aimet_common.defs import ActivationType
+
+tf.compat.v1.logging.set_verbosity(tf.logging.WARN)
+tf.compat.v1.disable_eager_execution()
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
 
 
 class TestBiasCorrection(unittest.TestCase):

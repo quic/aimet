@@ -42,23 +42,22 @@ import unittest.mock
 import math
 import shutil
 from decimal import Decimal
-
 import tensorflow as tf
-tf.compat.v1.logging.set_verbosity(tf.logging.WARN)
-os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
-
 from tensorflow.python.keras.models import Sequential
 from tensorflow.python.keras.layers import Reshape, MaxPool2D, Conv2D, Flatten, Dense
 
 from aimet_common.utils import AimetLogger
 from aimet_common import cost_calculator as cc
 from aimet_common.defs import CostMetric, LayerCompRatioPair
-
 from aimet_tensorflow.layer_database import LayerDatabase, Layer
 from aimet_tensorflow.examples import mnist_tf_model, test_models
 from aimet_tensorflow.channel_pruning.channel_pruner import InputChannelPruner, ChannelPruningCostCalculator
 
 logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Test)
+tf.compat.v1.logging.set_verbosity(tf.logging.WARN)
+tf.compat.v1.disable_eager_execution()
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
+
 
 
 def mnist(data_format):

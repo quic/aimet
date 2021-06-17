@@ -54,6 +54,7 @@ from aimet_tensorflow.adaround.adaround_loss import AdaroundLoss
 from aimet_tensorflow.adaround.adaround_loss import AdaroundHyperParameters
 
 logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Test)
+tf.compat.v1.disable_eager_execution()
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
 
 

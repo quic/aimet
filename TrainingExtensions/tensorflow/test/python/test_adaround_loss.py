@@ -46,6 +46,7 @@ import tensorflow as tf
 
 from aimet_tensorflow.adaround.adaround_loss import AdaroundLoss
 
+tf.compat.v1.disable_eager_execution()
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
 
 

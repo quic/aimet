@@ -51,6 +51,7 @@ from aimet_tensorflow.adaround.adaround_wrapper import AdaroundWrapper
 from aimet_tensorflow.examples.test_models import depthwise_conv2d_model
 
 logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Test)
+tf.compat.v1.disable_eager_execution()
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
 
 

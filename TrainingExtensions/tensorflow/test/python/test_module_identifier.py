@@ -45,6 +45,7 @@ from aimet_common.utils import AimetLogger
 from aimet_tensorflow.common.module_identifier import StructureModuleIdentifier
 from aimet_tensorflow.examples.test_models import keras_model, keras_model_functional, tf_slim_basic_model
 
+tf.compat.v1.disable_eager_execution()
 logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Test)
 AimetLogger.set_area_logger_level(AimetLogger.LogAreas.Test, logging.DEBUG)
 AimetLogger.set_area_logger_level(AimetLogger.LogAreas.ConnectedGraph, logging.DEBUG)

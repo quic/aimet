@@ -39,16 +39,17 @@
 
 import unittest
 import numpy as np
-
 import os
 import tensorflow as tf
-tf.compat.v1.logging.set_verbosity(tf.logging.WARN)
-os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
 
 from aimet_common.connected_graph.connectedgraph import get_ordered_ops
 from aimet_tensorflow.examples.test_models import single_residual
 from aimet_tensorflow.common.connectedgraph import ConnectedGraph
 from aimet_tensorflow.winnow.module_reducer import _insert_downsample_or_upsample_ops_if_needed
+
+tf.compat.v1.logging.set_verbosity(tf.logging.WARN)
+tf.compat.v1.disable_eager_execution()
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
 
 
 class TestModuleReducer(unittest.TestCase):

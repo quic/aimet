@@ -59,8 +59,9 @@ from aimet_tensorflow.channel_pruning.channel_pruner import InputChannelPruner
 from aimet_tensorflow.channel_pruning.weight_reconstruction import WeightReconstructor
 from aimet_tensorflow.layer_database import Layer, LayerDatabase
 
-os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
 logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Test)
+tf.compat.v1.disable_eager_execution()
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
 
 
 class TestTrainingExtensionsChannelPruning(unittest.TestCase):

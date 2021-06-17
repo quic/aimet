@@ -42,11 +42,7 @@ import os
 import numpy as np
 import unittest
 import logging
-
 import tensorflow as tf
-tf.compat.v1.logging.set_verbosity(tf.logging.WARN)
-os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
-
 from tensorflow.contrib.graph_editor.edit import detach_inputs
 from tensorflow.contrib.slim.nets import vgg
 
@@ -60,9 +56,10 @@ from aimet_tensorflow.examples.test_models import keras_model, keras_model_funct
     model_with_global_max_pool2d, keras_model_functional_with_non_fused_batchnorms, transposed_conv2d_model, instance_norm_model
 import aimet_tensorflow.winnow.winnow as winnow
 
+tf.compat.v1.logging.set_verbosity(tf.logging.WARN)
+tf.compat.v1.disable_eager_execution()
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
 logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Test)
-# AimetLogger.set_area_logger_level(AimetLogger.LogAreas.Test, logging.DEBUG)
-# AimetLogger.set_area_logger_level(AimetLogger.LogAreas.ConnectedGraph, logging.DEBUG)
 
 
 class TestTfConnectedGraph(unittest.TestCase):

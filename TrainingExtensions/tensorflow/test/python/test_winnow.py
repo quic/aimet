@@ -46,9 +46,6 @@ import os
 import numpy as np
 import tensorflow as tf
 
-tf.compat.v1.logging.set_verbosity(tf.logging.WARN)
-os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
-
 from aimet_common.winnow.mask import Mask
 from aimet_common.utils import AimetLogger
 from aimet_tensorflow.common.connectedgraph import ConnectedGraph
@@ -61,6 +58,9 @@ from aimet_tensorflow.winnow.mask_propagation_winnower import MaskPropagationWin
 import aimet_tensorflow.winnow.winnow as winnow
 from aimet_tensorflow.utils.graph_saver import save_and_load_graph
 
+tf.compat.v1.logging.set_verbosity(tf.logging.WARN)
+tf.compat.v1.disable_eager_execution()
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
 logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Test)
 AimetLogger.set_area_logger_level(AimetLogger.LogAreas.Test, logging.DEBUG)
 AimetLogger.set_area_logger_level(AimetLogger.LogAreas.Winnow, logging.DEBUG)

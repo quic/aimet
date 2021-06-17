@@ -42,21 +42,21 @@ from decimal import Decimal
 import math
 import os
 import signal
-
 import tensorflow as tf
-tf.compat.v1.logging.set_verbosity(tf.logging.WARN)
-os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
 
 from aimet_common.defs import CostMetric, LayerCompRatioPair
 from aimet_common.cost_calculator import SpatialSvdCostCalculator
 from aimet_common import comp_ratio_select
-
 from aimet_tensorflow.layer_database import LayerDatabase, Layer
 from aimet_tensorflow.examples import mnist_tf_model
 from aimet_tensorflow.svd_pruner import SpatialSvdPruner
 from aimet_common.utils import start_bokeh_server_session
 from aimet_common.bokeh_plots import BokehServerSession
 from aimet_common.bokeh_plots import DataTable, ProgressBar
+
+tf.compat.v1.logging.set_verbosity(tf.logging.WARN)
+tf.compat.v1.disable_eager_execution()
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
 
 
 class TestTrainingExtensionsCompRatioSelect(unittest.TestCase):

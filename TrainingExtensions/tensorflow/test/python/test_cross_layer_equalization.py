@@ -37,19 +37,19 @@
 # =============================================================================
 """ This file contains unit tests for testing cross layer scaling feature of CLE """
 
-
 import unittest
 import numpy as np
-
 import os
 import tensorflow as tf
-tf.compat.v1.logging.set_verbosity(tf.logging.WARN)
-os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
 
 import aimet_tensorflow.utils.graph_saver
 from aimet_tensorflow.cross_layer_equalization import CrossLayerScaling, GraphSearchUtils, equalize_model, \
     fold_all_batch_norms, HighBiasFold
 from aimet_tensorflow.utils.op.conv import WeightTensorUtils, BiasUtils
+
+tf.compat.v1.logging.set_verbosity(tf.logging.WARN)
+tf.compat.v1.disable_eager_execution()
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
 
 
 class TestCrossLayerEqualization(unittest.TestCase):

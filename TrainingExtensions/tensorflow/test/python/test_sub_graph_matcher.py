@@ -36,6 +36,7 @@
 #  @@-COPYRIGHT-END-@@
 # =============================================================================
 """ This file contains unit tests for testing  Sub Graph  functions. """
+
 import os
 import unittest
 import logging
@@ -48,10 +49,10 @@ from aimet_tensorflow.common.sub_graph_matcher import create_subgraph_for_op_def
     create_op_type_patterns_from_subgraph
 from aimet_tensorflow.examples.test_models import keras_model_functional
 
-
 logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Test)
 AimetLogger.set_area_logger_level(AimetLogger.LogAreas.Test, logging.DEBUG)
 AimetLogger.set_area_logger_level(AimetLogger.LogAreas.ConnectedGraph, logging.DEBUG)
+tf.compat.v1.disable_eager_execution()
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
 
 subgraph_constructors = op_type_templates
