@@ -15,7 +15,7 @@ AIMET provides multiple techniques and tools that help to create quantized model
 
 Use Cases
 =========
-1. **Predict on-target accuracy**: AIMET enables a user to simulate the effects of quantization to get a first order estimate of the model’s accuracy when run on quantized targets. This is useful to get an estimate of on-target accuracy without needing an actual target platform. Note that to create a simulation model, AIMET uses representative data samples to compute per-layer quantization encodings.
+1. **Predict on-target accuracy**: AIMET enables a user to simulate the effects of quantization to get a first order estimate of the model's accuracy when run on quantized targets. This is useful to get an estimate of on-target accuracy without needing an actual target platform. Note that to create a simulation model, AIMET uses representative data samples to compute per-layer quantization encodings.
 
     .. image:: ../images/quant_use_case_1.PNG
 
