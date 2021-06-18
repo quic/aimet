@@ -58,7 +58,7 @@ class ActivationSampler:
         """
         # pylint: disable=protected-access
         with data_set._graph.as_default():
-            self._iterator = data_set.make_initializable_iterator()
+            self._iterator = tf.compat.v1.data.make_initializable_iterator(data_set)
 
         self._dataset_session = tf.compat.v1.Session(graph=data_set._graph)
 
@@ -66,7 +66,8 @@ class ActivationSampler:
         self._dataset_session.close()
 
     def sample_activation(self, orig_op: tf.Operation, quant_op: tf.Operation,
-                          orig_session: tf.Session, quant_session: tf.Session, inp_op_names: List, num_batches: int) \
+                          orig_session: tf.compat.v1.Session, quant_session: tf.compat.v1.Session,
+                          inp_op_names: List, num_batches: int) \
             -> Tuple[np.ndarray, np.ndarray]:
         """
         From the original op, collect output activations and input activations to corresponding quantized op.

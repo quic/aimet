@@ -164,8 +164,8 @@ class TestAdaroundOptimizer(unittest.TestCase):
     def test_compute_recons_metrics(self):
         """ Test compute reconstruction metrics function """
         np.random.seed(0)
-        tf.reset_default_graph()
-        tf.set_random_seed(0)
+        tf.compat.v1.reset_default_graph()
+        tf.compat.v1.set_random_seed(0)
         quant_scheme = QuantScheme.post_training_tf_enhanced
         weight_bw = 8
 
@@ -179,7 +179,7 @@ class TestAdaroundOptimizer(unittest.TestCase):
         out_data = np.random.rand(1, 4, 10, 10).astype(dtype='float32')
         out_tensor = tf.convert_to_tensor(out_data, dtype=tf.float32)
 
-        _ = tf.nn.conv2d(input=inp_tensor, filter=weight_tensor, strides=[1, 1, 1, 1], padding='SAME',
+        _ = tf.nn.conv2d(input=inp_tensor, filters=weight_tensor, strides=[1, 1, 1, 1], padding='SAME',
                          data_format="NCHW", name='Conv2D')
 
         init = tf.compat.v1.global_variables_initializer()
@@ -207,8 +207,8 @@ class TestAdaroundOptimizer(unittest.TestCase):
     def test_compute_output_with_adarounded_weights(self):
         """ Test compute output with adarounded weights for Conv layer """
         np.random.seed(0)
-        tf.reset_default_graph()
-        tf.set_random_seed(0)
+        tf.compat.v1.reset_default_graph()
+        tf.compat.v1.set_random_seed(0)
         quant_scheme = QuantScheme.post_training_tf_enhanced
         weight_bw = 8
 
@@ -224,7 +224,7 @@ class TestAdaroundOptimizer(unittest.TestCase):
         out_data_t = np.transpose(out_data, (0, 2, 3, 1))
         out_tensor = tf.convert_to_tensor(out_data_t, dtype=tf.float32)
 
-        _ = tf.nn.conv2d(input=inp_tensor, filter=weight_tensor, strides=[1, 1, 1, 1], padding='SAME',
+        _ = tf.nn.conv2d(input=inp_tensor, filters=weight_tensor, strides=[1, 1, 1, 1], padding='SAME',
                          data_format="NHWC", name='Conv2D')
 
         init = tf.compat.v1.global_variables_initializer()

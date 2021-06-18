@@ -41,7 +41,7 @@ from typing import Tuple, List, Union
 import numpy as np
 
 import tensorflow as tf
-from tensorflow.contrib import graph_editor as ge
+# from tensorflow.contrib import graph_editor as ge
 from aimet_common.utils import AimetLogger
 from aimet_tensorflow.utils.common import get_padding, create_input_feed_dict, create_rand_tensors_given_shapes, \
     get_valid_ops

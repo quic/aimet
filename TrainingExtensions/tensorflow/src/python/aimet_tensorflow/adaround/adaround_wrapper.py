@@ -158,7 +158,7 @@ class AdaroundWrapper(keras.layers.Layer):
         tensor = (tensor / encoding.delta) - tensor_floor
 
         alpha = -tf.math.log((AdaroundConstants.ZETA - AdaroundConstants.GAMMA) / (tensor - AdaroundConstants.GAMMA) - 1)
-        alpha_var = tf.Variable(alpha, trainable=True, use_resource=True, name='alpha')
+        alpha_var = tf.Variable(alpha, trainable=True, name='alpha')
 
         return alpha_var
 
