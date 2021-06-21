@@ -49,9 +49,9 @@ from aimet_tensorflow.examples import mnist_tf_model
 from tensorflow.keras.applications.resnet50 import ResNet50
 
 logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Test)
-tf.compat.v1.logging.set_verbosity(tf.logging.WARN)
+tf.compat.v1.logging.set_verbosity(tf.compat.v1.logging.WARN)
 tf.compat.v1.disable_eager_execution()
-os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
 
 
 class TestTensorFlowLayerDatabase(unittest.TestCase):
@@ -287,7 +287,7 @@ class TestTensorFlowLayerDatabase(unittest.TestCase):
         sess.run(init)
 
         layer_db = LayerDatabase(model=sess, input_shape=(1, 224, 224, 3), working_dir=None, starting_ops=['input'],
-                                 ending_ops=['batch_normalization_1/cond/Merge'])
+                                 ending_ops=['batch_normalization_1/cond'])
 
         conv1_layer = layer_db.find_layer_by_name('conv2d/Conv2D')
         conv2_layer = layer_db.find_layer_by_name('conv2d_1/Conv2D')
@@ -305,7 +305,7 @@ class TestTensorFlowLayerDatabase(unittest.TestCase):
 
         batch_size = 32
         layer_db = LayerDatabase(model=sess, input_shape=(batch_size, 28, 28, 3), working_dir=None,
-                                 starting_ops=['input'], ending_ops=['batch_normalization_1/cond/Merge'])
+                                 starting_ops=['input'], ending_ops=['batch_normalization_1/cond'])
 
         conv1_layer = layer_db.find_layer_by_name('conv2d/Conv2D')
         conv2_layer = layer_db.find_layer_by_name('conv2d_1/Conv2D')
