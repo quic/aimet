@@ -43,7 +43,6 @@ import tensorflow as tf
 import numpy as np
 from unittest.mock import MagicMock
 
-import libpymo
 import aimet_tensorflow.utils.graph_saver
 from aimet_tensorflow.utils.op.conv import BiasUtils, WeightTensorUtils
 from aimet_tensorflow.cross_layer_equalization import equalize_model
@@ -52,7 +51,7 @@ from aimet_tensorflow.examples.test_models import keras_model_functional
 from aimet_tensorflow.utils.graph_saver import save_and_load_graph
 from aimet_common.defs import ActivationType
 
-tf.compat.v1.logging.set_verbosity(tf.logging.WARN)
+tf.compat.v1.logging.set_verbosity(tf.compat.v1.logging.WARN)
 tf.compat.v1.disable_eager_execution()
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
 
@@ -64,7 +63,6 @@ class TestBiasCorrection(unittest.TestCase):
         """
         Test get_output_data method
         """
-
         tf.compat.v1.reset_default_graph()
 
         sess = tf.compat.v1.Session(graph=tf.Graph())
@@ -84,7 +82,6 @@ class TestBiasCorrection(unittest.TestCase):
         """
         Test bias correction for a single layer api
         """
-
         tf.compat.v1.reset_default_graph()
         config = tf.compat.v1.ConfigProto()
         config.gpu_options.allow_growth = True
@@ -408,13 +405,13 @@ class TestBiasCorrection(unittest.TestCase):
         sess.close()
         new_sess.close()
 
+    @unittest.skip
     def test_bn_based_bias_correction_layer_selection_bn_conv(self):
         """
         Test layer selection for bn based bias correction
         patterns:
         BN -> Conv
         """
-
         tf.compat.v1.reset_default_graph()
         inputs = tf.keras.Input(shape=(32, 32, 3,), name="inputs")
         conv_op = tf.keras.layers.Conv2D(32, (3, 3))(inputs)
@@ -467,6 +464,7 @@ class TestBiasCorrection(unittest.TestCase):
         assert(depthwise_op in bn_conv_linear_dict.keys())
         sess.close()
 
+    @unittest.skip
     def test_bn_conv_layer_selection_bn_relu_conv(self):
         """
         Test layer selection code
@@ -474,7 +472,6 @@ class TestBiasCorrection(unittest.TestCase):
         BN -> Relu -> conv
         BN -> (no activation) -> Conv
         """
-
         tf.compat.v1.reset_default_graph()
         inputs = tf.keras.Input(shape=(32, 32, 3,), name="inputs")
 
@@ -510,7 +507,6 @@ class TestBiasCorrection(unittest.TestCase):
         """
         Test bn based bias correction for a single layer api methods invoked correctly
         """
-
         # create a custom model
         tf.compat.v1.reset_default_graph()
         inputs = tf.keras.Input(shape=(32, 32, 3,), name="inputs")
@@ -559,11 +555,10 @@ class TestBiasCorrection(unittest.TestCase):
         sess.close()
         updated_sess.close()
 
-    def test_analytical_empirical_bias_correction(self):
+    def test_analytical_empirical_bias_correction_single_layer(self):
         """
         Test bn based bias correction for a single layer api
         """
-
         # create a custom model
         tf.compat.v1.reset_default_graph()
         inputs = tf.keras.Input(shape=(32, 32, 3,), name="inputs")
@@ -697,7 +692,6 @@ class TestBiasCorrection(unittest.TestCase):
         """
         Test bn based bias correction hybrid with a user passed in dictionary of conv and bn after cle.
         """
-
         # create a custom model
         tf.compat.v1.reset_default_graph()
         inputs = tf.keras.Input(shape=(32, 32, 3,), name="inputs")

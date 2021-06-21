@@ -85,7 +85,7 @@ def iter_first_x(dataset: tf.data.Dataset, num_batches: int):
     # pylint: disable=protected-access
     with dataset._graph.as_default():
 
-        iterator = dataset.make_one_shot_iterator()
+        iterator = tf.compat.v1.data.make_one_shot_iterator(dataset)
         # create iterator graph element.  This does not actually get the data, but makes a tensor which must be
         # evaluated.
         next_element = iterator.get_next()
