@@ -55,19 +55,15 @@ logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.ChannelPruning)
 
 
 class DataSubSampler:
-
     """
     Utilities to sub-sample data for weight reconstruction
     """
-
     @classmethod
     def get_sub_sampled_data(cls, orig_layer: Layer, pruned_layer: Layer, inp_op_names: List,
                              orig_layer_db: LayerDatabase, comp_layer_db: LayerDatabase, data_set: tf.data.Dataset,
                              batch_size: int, num_reconstruction_samples: int) -> (np.ndarray, np.ndarray):
-
         # pylint: disable=too-many-arguments
         # pylint: disable=too-many-locals
-
         """
         Get all the input data from pruned model and output data from original model
 
@@ -82,7 +78,6 @@ class DataSubSampler:
         :param num_reconstruction_samples: The number of reconstruction samples
         :return: input_data, output_data
         """
-
         # Grow GPU memory as needed at the cost of fragmentation.
         config = tf.compat.v1.ConfigProto()
         config.gpu_options.allow_growth = True  # pylint: disable=no-member
@@ -93,8 +88,7 @@ class DataSubSampler:
         sess = tf.compat.v1.Session(graph=data_set._graph, config=config)  # pylint: disable=protected-access
 
         with sess.graph.as_default():
-
-            iterator = data_set.make_one_shot_iterator()
+            iterator = tf.compat.v1.data.make_one_shot_iterator(data_set)
             next_element = iterator.get_next()
 
         # hard coded value
