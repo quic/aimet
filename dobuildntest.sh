@@ -232,7 +232,7 @@ if [ $run_clean -eq 1 ]; then
 fi
 
 if [ -z "$outputFolder" ]; then
-    outputFolder=$workspaceFolder/build/results
+    outputFolder=$buildFolder/results
 fi
 mkdir -p ${outputFolder}
 if [ ! -f "${outputFolder}/summary.txt" ]; then
@@ -327,8 +327,8 @@ fi
 if [ $run_build -eq 1 ]; then
     echo -e "\n********** Stage 2: Build **********\n"
 
-    mkdir -p build
-    cd build
+    mkdir -p $buildFolder
+    cd $buildFolder
 
     extra_opts=""
     if [ -n "$SW_VERSION" ]; then
@@ -368,7 +368,8 @@ if [ $run_build -eq 1 ]; then
 fi
 
 if [ $run_package_gen -eq 1 ]; then
-    cd build
+    cd $buildFolder
+
 
     echo -e "\n********** Stage 2b: Install **********\n"
     make install
@@ -381,7 +382,7 @@ fi
 
 if [ $run_unit_tests -eq 1 ]; then
     echo -e "\n********** Stage 3: Unit tests **********\n"
-    cd $workspaceFolder/build
+    cd $buildFolder
     set +e
     unit_test_cmd=""
     if [[ -z ${DEPENDENCY_DATA_PATH} ]]; then
@@ -437,7 +438,7 @@ if [ $run_static_analysis -eq 1 ]; then
     mkdir -p ${clangtidy_results_dir}
     #TODO: Do not fail from the static analysis command since there are many unresolved errors
     set +e
-    cd $workspaceFolder/build; python3 /usr/bin/run-clang-tidy.py >| ${clangtidy_results_dir}/clang-tidy_results.out
+    cd $buildFolder; python3 /usr/bin/run-clang-tidy.py >| ${clangtidy_results_dir}/clang-tidy_results.out
     static_analysis_result=$?
     set -e
     # Check for errors in static analysis log file and if found, display the log.
@@ -452,7 +453,7 @@ fi
 
 if [ $run_acceptance_tests -eq 1 ]; then
     echo -e "\n********** Stage 6: Acceptance tests **********\n"
-    cd $workspaceFolder/build
+    cd $buildFolder
     set +e
     make AcceptanceTests
     acceptance_test_rc=$?
