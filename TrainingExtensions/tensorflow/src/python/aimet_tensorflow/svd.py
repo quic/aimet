@@ -47,7 +47,7 @@ from enum import Enum
 import numpy as np
 
 import tensorflow as tf
-from tensorflow.contrib import graph_editor as ge
+from aimet_tensorflow import graph_editor
 from aimet_tensorflow.common import core, graph_eval
 import libpymo as pymo
 from aimet_common import statistics_util as stats_u
@@ -671,7 +671,7 @@ class Svd:
         for inp in rerouted_inputs:
             for consumer in inp.consumers():
                 consumers.append(consumer)
-        _ = ge.reroute_ts(conv_acts, rerouted_inputs, can_modify=consumers)
+        _ = graph_editor.reroute_ts(conv_acts, rerouted_inputs, can_modify=consumers)
 
         return ratio
 
@@ -755,7 +755,7 @@ class Svd:
         for inp in rerouted_inputs:
             for consumer in inp.consumers():
                 consumers.append(consumer)
-        _ = ge.reroute_ts(fc_acts, rerouted_inputs, can_modify=consumers)
+        _ = graph_editor.reroute_ts(fc_acts, rerouted_inputs, can_modify=consumers)
         return ratio
 
     def _split_layers(self, sess, rank_index, use_best_ranks):

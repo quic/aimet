@@ -44,9 +44,9 @@ import tensorflow as tf
 from aimet_tensorflow import svd as s
 import libpymo as pymo
 
-tf.compat.v1.logging.set_verbosity(tf.logging.WARN)
+tf.compat.v1.logging.set_verbosity(tf.compat.v1.logging.WARN)
 tf.compat.v1.disable_eager_execution()
-os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
 
 
 def conv(x, shape, scope):

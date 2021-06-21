@@ -43,9 +43,9 @@ import libpymo
 from aimet_tensorflow.utils.constants import QuantizeOpIndices
 from aimet_tensorflow import quantsim_straight_through_grad
 
-tf.compat.v1.logging.set_verbosity(tf.logging.WARN)
+tf.compat.v1.logging.set_verbosity(tf.compat.v1.logging.WARN)
 tf.compat.v1.disable_eager_execution()
-os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
 
 
 class TestTrainingExtensionsQcQuantizeOp(unittest.TestCase):
