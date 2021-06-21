@@ -44,7 +44,7 @@ import numpy as np
 
 from aimet_tensorflow.batch_norm_fold import  fold_all_batch_norms, find_all_batch_norms_to_fold
 from aimet_tensorflow.common.connectedgraph import ConnectedGraph
-from aimet_tensorflow.examples.test_models import tf_slim_basic_model
+from aimet_tensorflow.examples.test_models import tf_compat_v1_layers_basic_model
 from aimet_tensorflow.utils.op.conv import WeightTensorUtils
 
 tf.compat.v1.logging.set_verbosity(tf.logging.WARN)
@@ -331,7 +331,7 @@ class TestBatchNormFold(unittest.TestCase):
         tf.compat.v1.reset_default_graph()
         sess = tf.compat.v1.Session()
         x = tf.compat.v1.placeholder(tf.float32, [1, 32, 32, 3])
-        _ = tf_slim_basic_model(x)
+        _ = tf_compat_v1_layers_basic_model(x)
         init = tf.compat.v1.global_variables_initializer()
         sess.run(init)
 

@@ -43,7 +43,7 @@ import tensorflow as tf
 
 from aimet_common.utils import AimetLogger
 from aimet_tensorflow.common.module_identifier import StructureModuleIdentifier
-from aimet_tensorflow.examples.test_models import keras_model, keras_model_functional, tf_slim_basic_model
+from aimet_tensorflow.examples.test_models import keras_model, keras_model_functional, tf_compat_v1_layers_basic_model
 
 tf.compat.v1.disable_eager_execution()
 logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Test)
@@ -92,7 +92,7 @@ class TestStructureModuleIdentifier(unittest.TestCase):
 
         tf.compat.v1.reset_default_graph()
         x = tf.compat.v1.placeholder(tf.float32, [1, 32, 32, 3])
-        _ = tf_slim_basic_model(x)
+        _ = tf_compat_v1_layers_basic_model(x)
         module_identifier = StructureModuleIdentifier(tf.compat.v1.get_default_graph(), ["Placeholder"],
                                                       set(tf.compat.v1.get_default_graph().get_operations()))
         mul_op = tf.compat.v1.get_default_graph().get_operation_by_name('BatchNorm/FusedBatchNormV3')

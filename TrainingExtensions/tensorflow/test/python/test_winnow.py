@@ -50,7 +50,7 @@ from aimet_common.winnow.mask import Mask
 from aimet_common.utils import AimetLogger
 from aimet_tensorflow.common.connectedgraph import ConnectedGraph
 from aimet_tensorflow.examples.test_models import keras_model, single_residual, concat_model, pad_model, \
-    depthwise_conv2d_model, keras_model_functional, dropout_keras_model, dropout_slim_model, tf_slim_basic_model, \
+    depthwise_conv2d_model, keras_model_functional, dropout_keras_model, dropout_slim_model, tf_compat_v1_layers_basic_model, \
     upsample_model, multiple_input_model, model_with_postprocessing_nodes, minimum_maximum_model, \
     model_with_upsample_already_present, model_with_multiple_downsamples, model_with_upsample2d, \
     model_with_leaky_relu, keras_model_functional_with_non_fused_batchnorms, model_to_test_downstream_masks
@@ -79,7 +79,7 @@ class TestTfModuleReducer(unittest.TestCase):
         module_zero_channels_list = []
 
         x = tf.compat.v1.placeholder(tf.float32, [1, 32, 32, 3])
-        _ = tf_slim_basic_model(x)
+        _ = tf_compat_v1_layers_basic_model(x)
         init = tf.compat.v1.global_variables_initializer()
         sess.run(init)
 

@@ -142,28 +142,28 @@ def keras_model_functional_with_non_fused_batchnorms():
     return model
 
 
-def tf_slim_basic_model(inp):
-    """ Function for returning basic tf slim model """
+def tf_compat_v1_layers_basic_model(inp):
+    """ Function for returning basic tf.compat.v1.layers model """
     is_training = tf.compat.v1.placeholder_with_default(tf.constant(True), shape=(), name='is_training')
-    net = slim.conv2d(inp, 32, [3, 3])
-    net = slim.batch_norm(net, decay=.7, epsilon=.65, is_training=True)
-    net = slim.conv2d(net, 16, [2, 2])
-    net = slim.batch_norm(net, decay=.6, epsilon=.25, scale=True, is_training=is_training)
-    net = slim.conv2d(net, 8, [2, 2])
-    net = slim.batch_norm(net, decay=.5, epsilon=.35, scale=True, is_training=False)
-    net = slim.conv2d(net, 4, [2, 2])
-    net = slim.flatten(net)
-    net = slim.fully_connected(net, num_outputs=10, activation_fn=tf.nn.softmax, scope="tf_slim_model")
+    net = tf.compat.v1.layers.conv2d(inp, 32, [3, 3])
+    net = tf.compat.v1.layers.batch_normalization(net, epsilon=.65, training=True)
+    net = tf.compat.v1.layers.conv2d(net, 16, [2, 2])
+    net = tf.compat.v1.layers.batch_normalization(net, epsilon=.25, scale=True, training=is_training)
+    net = tf.compat.v1.layers.conv2d(net, 8, [2, 2])
+    net = tf.compat.v1.layers.batch_normalization(net, epsilon=.35, scale=True, training=False)
+    net = tf.compat.v1.layers.conv2d(net, 4, [2, 2])
+    net = tf.compat.v1.layers.flatten(net)
+    net = tf.compat.v1.layers.dense(net, units=10, activation=tf.nn.softmax)
     return net
 
 
-def tf_slim_with_softmax(inp):
-    """ Function for returning tf slim model ending in softmax """
-    net = slim.conv2d(inp, 32, [3, 3])
-    net = slim.batch_norm(net, decay=.7, epsilon=.65, is_training=False)
-    net = slim.conv2d(net, 16, [2, 2])
-    net = slim.batch_norm(net, decay=.6, epsilon=.25, is_training=False)
-    net = slim.softmax(net)
+def tf_compat_v1_layers_with_softmax(inp):
+    """ Function for returning tf.compat.v1.layers ending in softmax """
+    net = tf.compat.v1.layers.conv2d(inp, 32, [3, 3])
+    net = tf.compat.v1.layers.batch_normalization(net, epsilon=.65, training=False)
+    net = tf.compat.v1.layers.conv2d(net, 16, [2, 2])
+    net = tf.compat.v1.layers.batch_normalization(net, epsilon=.25, training=False)
+    net = tf.compat.v1.layers.softmax(net)
     return net
 
 
