@@ -44,13 +44,13 @@ from unittest.mock import MagicMock
 import tensorflow as tf
 
 from aimet_common.utils import start_bokeh_server_session
-from aimet_common.defs import CostMetric, EvalFunction, LayerCompRatioPair
+from aimet_common.defs import CostMetric
 from aimet_tensorflow.defs import SpatialSvdParameters, GreedySelectionParameters
 from aimet_tensorflow.compression_factory import CompressionFactory
 
-tf.compat.v1.logging.set_verbosity(tf.logging.WARN)
+tf.compat.v1.logging.set_verbosity(tf.compat.v1.logging.WARN)
 tf.compat.v1.disable_eager_execution()
-os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
 
 
 class TestTfCompressionFactory(unittest.TestCase):
