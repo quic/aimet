@@ -42,7 +42,7 @@
 
 from typing import List, Tuple, Dict
 import tensorflow as tf
-from tensorflow.contrib import graph_editor
+from aimet_tensorflow import graph_editor
 
 import aimet_common.winnow.module_reducer
 from aimet_common.connected_graph.connectedgraph import get_ordered_ops
