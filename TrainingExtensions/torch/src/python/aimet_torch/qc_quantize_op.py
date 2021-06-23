@@ -455,7 +455,7 @@ class StaticGridQuantWrapper(QcQuantizeWrapper):
             if param_name in param_encodings:
                 encoding_dict = param_encodings[param_name][0]
                 encoding, is_symmetric = utils.create_encoding_from_dict(encoding_dict)
-                param_quantizer.set_encoding(encoding)
+                param_quantizer.encoding = encoding
 
                 param_quantizer.bitwidth = encoding.bw
                 param_quantizer.use_symmetric_encodings = is_symmetric
