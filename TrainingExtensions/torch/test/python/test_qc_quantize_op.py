@@ -187,9 +187,9 @@ class TestQcQuantizeOp:
         """ Test tensor quantizer quantize only symmetric signed functionality on cpu """
 
         post_training_tensor_quantizer = \
-            StaticGridTensorQuantizer(bitwidth=8, round_mode='nearest',
-                                      quant_scheme=MAP_QUANT_SCHEME_TO_PYMO[QuantScheme.post_training_tf],
-                                      use_symmetric_encodings=True, enabled_by_default=True)
+            StaticGridPerTensorQuantizer(bitwidth=8, round_mode='nearest',
+                                         quant_scheme=MAP_QUANT_SCHEME_TO_PYMO[QuantScheme.post_training_tf],
+                                         use_symmetric_encodings=True, enabled_by_default=True)
         encodings = libpymo.TfEncoding()
         encodings.bw = 8
         encodings.max = 5.19
@@ -209,9 +209,9 @@ class TestQcQuantizeOp:
         """ Test tensor quantizer quantize only symmetric unsigned functionality on cpu """
 
         post_training_tensor_quantizer = \
-            StaticGridTensorQuantizer(bitwidth=8, round_mode='nearest',
-                                      quant_scheme=MAP_QUANT_SCHEME_TO_PYMO[QuantScheme.post_training_tf],
-                                      use_symmetric_encodings=True, enabled_by_default=True)
+            StaticGridPerTensorQuantizer(bitwidth=8, round_mode='nearest',
+                                         quant_scheme=MAP_QUANT_SCHEME_TO_PYMO[QuantScheme.post_training_tf],
+                                         use_symmetric_encodings=True, enabled_by_default=True)
         encodings = libpymo.TfEncoding()
         encodings.bw = 8
         encodings.max = 5.19
@@ -253,9 +253,9 @@ class TestQcQuantizeOp:
         """ Test tensor quantizer quantize only symmetric signed functionality on gpu """
 
         post_training_tensor_quantizer = \
-            StaticGridTensorQuantizer(bitwidth=8, round_mode='nearest',
-                                      quant_scheme=MAP_QUANT_SCHEME_TO_PYMO[QuantScheme.post_training_tf],
-                                      use_symmetric_encodings=True, enabled_by_default=True)
+            StaticGridPerTensorQuantizer(bitwidth=8, round_mode='nearest',
+                                         quant_scheme=MAP_QUANT_SCHEME_TO_PYMO[QuantScheme.post_training_tf],
+                                         use_symmetric_encodings=True, enabled_by_default=True)
         encodings = libpymo.TfEncoding()
         encodings.bw = 8
         encodings.max = 5.19
@@ -276,9 +276,9 @@ class TestQcQuantizeOp:
         """ Test tensor quantizer quantize only symmetric unsigned functionality on gpu """
 
         post_training_tensor_quantizer = \
-            StaticGridTensorQuantizer(bitwidth=8, round_mode='nearest',
-                                      quant_scheme=MAP_QUANT_SCHEME_TO_PYMO[QuantScheme.post_training_tf],
-                                      use_symmetric_encodings=True, enabled_by_default=True)
+            StaticGridPerTensorQuantizer(bitwidth=8, round_mode='nearest',
+                                         quant_scheme=MAP_QUANT_SCHEME_TO_PYMO[QuantScheme.post_training_tf],
+                                         use_symmetric_encodings=True, enabled_by_default=True)
         encodings = libpymo.TfEncoding()
         encodings.bw = 8
         encodings.max = 5.19
