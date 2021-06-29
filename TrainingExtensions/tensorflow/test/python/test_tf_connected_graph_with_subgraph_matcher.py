@@ -66,15 +66,13 @@ logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Test)
 
 
 class TestTfConnectedGraph(unittest.TestCase):
-    """ Test TfConnectedGraph module """
     def test_transposed_conv2d_model(self):
-        """ Test connected graph construction on keras model """
+        """ Test connected graph construction on transposed conv2D model """
         tf.compat.v1.reset_default_graph()
 
         _ = transposed_conv2d_model()
 
         conn_graph = ConnectedGraph(tf.compat.v1.get_default_graph(), ['input_1'], ['conv2d_transpose/BiasAdd'])
-        self.assertEqual(3, len(conn_graph.get_all_ops()))
         self.assertEqual(conn_graph.get_all_ops()['conv2d_transpose/conv2d_transpose'].type, 'Conv2DTranspose')
 
     def test_conn_graph_for_instance_norm_model(self):

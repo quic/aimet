@@ -274,9 +274,6 @@ class TestSubGraph(unittest.TestCase):
         for pat in op_type_patterns:
             logger.debug(pat._op_type)
 
-        # The pattern list consists of successive OpTypePattern() objects starting from the layer's input Op to
-        # the output Op. Each OpTypePattern() becomes an input to the next OpTypePattern(). In the case of a Conv2D
-        # with Bias, the last element in the pattern list is BiasAdd.
         self.assertEqual(op_type_patterns[-1]._op_type, 'Conv2DBackpropInput')
 
     def test_transposed_conv2d_bias_subgraph(self):
