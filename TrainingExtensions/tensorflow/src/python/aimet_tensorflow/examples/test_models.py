@@ -69,7 +69,7 @@ def single_residual():
 
     inputs = tf.keras.Input(shape=(16, 16, 3,))
     x = tf.keras.layers.Conv2D(16, (3, 3))(inputs)
-    x = tf.keras.layers.BatchNormalization(momentum=.3, epsilon=.65)(x)
+    x = tf.compat.v1.layers.batch_normalization(x, momentum=.3, epsilon=.65)
     x = tf.nn.relu(x)
     x = tf.keras.layers.MaxPool2D()(x)
     residual = x
@@ -78,7 +78,7 @@ def single_residual():
 
     x = tf.keras.layers.Conv2D(8, (1, 1))(x)
     x = tf.keras.layers.Conv2D(8, (1, 1))(x)
-    x = tf.keras.layers.BatchNormalization(momentum=.4, epsilon=.25)(x)
+    x = tf.compat.v1.layers.batch_normalization(x, momentum=.4, epsilon=.25)
     x = tf.add(x, residual)
     x = tf.nn.relu(x)
 

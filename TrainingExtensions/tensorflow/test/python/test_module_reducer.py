@@ -125,7 +125,6 @@ class TestModuleReducer(unittest.TestCase):
         with self.assertRaises(AssertionError):
             _ = _insert_downsample_or_upsample_ops_if_needed(inputs, [1, 0, 1, 0, 1, 1], [1, 1, 0, 1, 1, 1])
 
-    @unittest.skip
     def test_get_ordered_operations(self):
         """ Test the creation of the ordered operations list """
         tf.compat.v1.reset_default_graph()
