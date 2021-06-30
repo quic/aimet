@@ -144,11 +144,10 @@ def keras_model_functional_with_non_fused_batchnorms():
 
 def tf_compat_v1_layers_basic_model(inp):
     """ Function for returning basic tf.compat.v1.layers model """
-    is_training = tf.compat.v1.placeholder_with_default(tf.constant(True), shape=(), name='is_training')
     net = tf.compat.v1.layers.conv2d(inp, 32, [3, 3])
     net = tf.compat.v1.layers.batch_normalization(net, epsilon=.65, training=True)
     net = tf.compat.v1.layers.conv2d(net, 16, [2, 2])
-    net = tf.compat.v1.layers.batch_normalization(net, epsilon=.25, scale=True, training=is_training)
+    net = tf.compat.v1.layers.batch_normalization(net, epsilon=.25, scale=True, training=True)
     net = tf.compat.v1.layers.conv2d(net, 8, [2, 2])
     net = tf.compat.v1.layers.batch_normalization(net, epsilon=.35, scale=True, training=False)
     net = tf.compat.v1.layers.conv2d(net, 4, [2, 2])
