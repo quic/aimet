@@ -62,6 +62,7 @@ recurrent_onnx_optypes = ['LSTM', 'GRU', 'RNN']
 
 # This is a dict that maps a PyTorch module type to the corresponding ONNX op type (as a string)
 map_torch_types_to_onnx = {
+    nn.Conv1d: ['Conv'],
     nn.Conv2d: ['Conv'],
     nn.Dropout: ['Dropout'],
     nn.Dropout2d: ['Dropout'],
