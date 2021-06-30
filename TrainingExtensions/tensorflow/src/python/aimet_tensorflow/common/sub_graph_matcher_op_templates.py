@@ -287,6 +287,13 @@ op_type_templates = {
         'constructor': "tf.keras.layers.PReLU()(inputs)",
         'module_regex': ['(.+/Relu)$'],
         'associated_op_regex': ['Relu$']
+    },
+    'InstanceNormalization': {
+        'input_shape': (10, 10, 3,),
+        'op_type': 'InstanceNormalization',
+        'constructor': "tf.contrib.layers.instance_norm(inputs)",
+        'module_regex': ['(.+)/instancenorm/add_1$'],
+        'associated_op_regex': ['/instancenorm/add_1$']
     }
 
 }
