@@ -266,7 +266,8 @@ def create_subgraph_for_op_with_placeholder(input_shape: tuple, op_string: str, 
 
             # Also, if we have only one dimension input shape, we need to make it a 2D shape for placeholder input
             # unlike other modules, below op types expect 3D shape for placeholder input
-            if len(input_shape) == 1 or op_type in ['SimpleRNN', 'LSTM', 'Upsample2D', 'GlobalMaxPool2D']:
+            if len(input_shape) == 1 or op_type in ['SimpleRNN', 'LSTM', 'Upsample2D', 'GlobalMaxPool2D',
+                                                    'Conv2DTranspose']:
                 input_shape_list.insert(0, 1)
                 input_shape = tuple(input_shape_list)
                 inputs = tf.compat.v1.placeholder(tf.float32, input_shape, name='aimet_input')

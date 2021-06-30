@@ -57,7 +57,7 @@ from aimet_tensorflow.common.sub_graph_matcher import ModuleIdentifierOpInfo
 from aimet_tensorflow.examples.test_models import keras_model, keras_model_functional, tf_slim_basic_model, \
     single_residual, split_and_concat_model, concat_model, dropout_keras_model, dropout_slim_model, \
     tf_slim_with_softmax, multiple_input_model, upsample_model, model_with_upsample2d, model_with_leaky_relu, \
-    model_with_global_max_pool2d, keras_model_functional_with_non_fused_batchnorms, instance_norm_model
+    model_with_global_max_pool2d, keras_model_functional_with_non_fused_batchnorms, transposed_conv2d_model, instance_norm_model
 import aimet_tensorflow.winnow.winnow as winnow
 
 logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Test)
@@ -66,7 +66,14 @@ logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Test)
 
 
 class TestTfConnectedGraph(unittest.TestCase):
-    """ Test TfConnectedGraph module """
+    def test_transposed_conv2d_model(self):
+        """ Test connected graph construction on transposed conv2D model """
+        tf.compat.v1.reset_default_graph()
+
+        _ = transposed_conv2d_model()
+
+        conn_graph = ConnectedGraph(tf.compat.v1.get_default_graph(), ['input_1'], ['conv2d_transpose/BiasAdd'])
+        self.assertEqual(conn_graph.get_all_ops()['conv2d_transpose/conv2d_transpose'].type, 'Conv2DTranspose')
 
     def test_conn_graph_for_instance_norm_model(self):
         tf.compat.v1.reset_default_graph()
