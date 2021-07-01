@@ -51,7 +51,7 @@ from aimet_common.defs import QuantScheme
 from aimet_tensorflow.quantsim import save_checkpoint, load_checkpoint
 from aimet_tensorflow.utils.constants import QuantizeOpIndices
 
-tf.compat.v1.logging.set_verbosity(tf.logging.WARN)
+tf.compat.v1.logging.set_verbosity(tf.compat.v1.logging.WARN)
 tf.compat.v1.disable_eager_execution()
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
 
@@ -62,7 +62,6 @@ class TestQuantSim(unittest.TestCase):
         """
         Create QuantSim for a CPU model and check that quantizers have been added to the graph
         """
-
         tf.compat.v1.reset_default_graph()
         with tf.device('/cpu:0'):
             model = tf.keras.Sequential()
@@ -142,11 +141,9 @@ class TestQuantSim(unittest.TestCase):
         del sim
 
     def test_compute_encodings_cpu_model(self):
-
         """
         Create QuantSim for a CPU model and test that activation encodings are computed
         """
-
         tf.compat.v1.reset_default_graph()
         with tf.device('/cpu:0'):
             model = tf.keras.Sequential()
@@ -184,7 +181,7 @@ class TestQuantSim(unittest.TestCase):
         for name, quantizer in sim._activation_quantizers.items():
             if name in deactivated_quantizers:
                 self.assertTrue(int(libpymo.TensorQuantizerOpMode.passThrough),
-                                sim.session.run(name + '_op_mode/read:0'))
+                                sim.session.run(name + '/ReadVariableOp:0'))
             else:
                 self.assertTrue(quantizer.tensor_quantizer.isEncodingValid,
                                 "quantizer: {} does not have a valid encoding".format(name))
@@ -288,7 +285,6 @@ class TestQuantSim(unittest.TestCase):
         """
         Create QuantSim for a CPU model and test that activation encodings are computed
         """
-
         tf.compat.v1.reset_default_graph()
         with tf.device('/gpu:0'):
             model = tf.keras.Sequential()
@@ -326,7 +322,7 @@ class TestQuantSim(unittest.TestCase):
         for name, quantizer in sim._activation_quantizers.items():
             if name in deactivated_quantizers:
                 self.assertTrue(int(libpymo.TensorQuantizerOpMode.passThrough),
-                                sim.session.run(name + '_op_mode/read:0'))
+                                sim.session.run(name + '/ReadVariableOp:0'))
             else:
                 self.assertTrue(quantizer.tensor_quantizer.isEncodingValid,
                                 "quantizer: {} does not have a valid encoding".format(name))
@@ -350,7 +346,6 @@ class TestQuantSim(unittest.TestCase):
         """
         Create QuantSim model and update quantScheme using property interface
         """
-
         tf.compat.v1.reset_default_graph()
         np.random.seed(0)
         tf.compat.v1.set_random_seed(0)
@@ -404,7 +399,6 @@ class TestQuantSim(unittest.TestCase):
         del sim
 
     def test_export_cpu_model(self):
-
         """
         Create QuantSim for a CPU model, compute encodings and export out a resulting model
         """
@@ -478,7 +472,6 @@ class TestQuantSim(unittest.TestCase):
         del sim
 
     def test_save_load_ckpt_cpu_model(self):
-
         """
         Create QuantSim for a CPU model, test save and load on a quantsim model.
         """
@@ -608,11 +601,9 @@ class TestQuantSim(unittest.TestCase):
         del new_quantsim
 
     def test_set_get_quantizer_params_using_properties(self):
-
         """
         Create QuantSim for a CPU model, test param read and write using properties
         """
-
         tf.compat.v1.reset_default_graph()
         with tf.device('/cpu:0'):
             model = tf.keras.Sequential()
@@ -811,7 +802,7 @@ class TestQuantSim(unittest.TestCase):
         session = tf.compat.v1.Session()
         session.run(init)
 
-        sim = QuantizationSimModel(session, ['conv2d_input'], ['keras_model/Softmax'], use_cuda=False)
+        sim = QuantizationSimModel(session, ['input_1'], ['keras_model/Softmax'], use_cuda=False)
         param_encodings = {'conv2d/Conv2D/ReadVariableOp:0': [{'bitwidth': 4, 'is_symmetric': False,
                                                                'max': 0.14584073424339294,
                                                                'min': -0.12761062383651733,

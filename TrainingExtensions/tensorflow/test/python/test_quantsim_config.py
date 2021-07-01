@@ -46,7 +46,7 @@ from aimet_tensorflow.examples.test_models import single_residual
 from aimet_tensorflow.quantsim import QuantizationSimModel
 import libpymo as pymo
 
-tf.compat.v1.logging.set_verbosity(tf.logging.WARN)
+tf.compat.v1.logging.set_verbosity(tf.compat.v1.logging.WARN)
 tf.compat.v1.disable_eager_execution()
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
 
@@ -84,8 +84,8 @@ class TestQuantsimConfig(unittest.TestCase):
         all_quantize_ops = [op for op in sim.session.graph.get_operations() if op.type == 'QcQuantize']
         self.assertTrue(all_quantize_ops is not None)
         for op in all_quantize_ops:
-            is_symmetric_tensor = sim.session.graph.get_tensor_by_name(op.name + '_use_symmetric_encoding:0')
-            op_mode_tensor = sim.session.graph.get_tensor_by_name(op.name + '_op_mode:0')
+            is_symmetric_tensor = sim.session.graph.get_tensor_by_name(op.name + '/ReadVariableOp_5:0')
+            op_mode_tensor = sim.session.graph.get_tensor_by_name(op.name + '/ReadVariableOp:0')
             self.assertEqual(sim.session.run(is_symmetric_tensor), False)
             self.assertEqual(sim.session.run(op_mode_tensor), int(pymo.TensorQuantizerOpMode.passThrough))
         if os.path.exists('./quantsim_config.json'):
@@ -125,6 +125,10 @@ class TestQuantsimConfig(unittest.TestCase):
         sim = QuantizationSimModel(sess, ['input_1'], ['single_residual/Softmax'],
                                    config_file='./quantsim_config.json')
 
+        all_ops = sim.session.graph.get_operations()
+        for op in all_ops:
+            print(op.name, op.type)
+
         activation_quantizers = [
             'conv2d/BiasAdd_quantized',
             'conv2d_1/BiasAdd_quantized',
@@ -132,10 +136,10 @@ class TestQuantsimConfig(unittest.TestCase):
             'conv2d_3/BiasAdd_quantized',
             'conv2d_4/BiasAdd_quantized',
             'input_1_quantized',
-            'batch_normalization/cond/Merge_quantized',
+            'batch_normalization/FusedBatchNormV3_quantized',
             'Relu_quantized',
             'max_pooling2d/MaxPool_quantized',
-            'batch_normalization_1/cond/Merge_quantized',
+            'batch_normalization_1/FusedBatchNormV3_quantized',
             'Add_quantized',
             'Relu_2_quantized',
             'average_pooling2d/AvgPool_quantized',
@@ -159,15 +163,15 @@ class TestQuantsimConfig(unittest.TestCase):
         ]
 
         for op_name in weight_quantizers:
-            is_symmetric_tensor = sim.session.graph.get_tensor_by_name(op_name + '_use_symmetric_encoding:0')
-            op_mode_tensor = sim.session.graph.get_tensor_by_name(op_name + '_op_mode:0')
+            is_symmetric_tensor = sim.session.graph.get_tensor_by_name(op_name + '/ReadVariableOp_5:0')
+            op_mode_tensor = sim.session.graph.get_tensor_by_name(op_name + '/ReadVariableOp:0')
             self.assertEqual(sim.session.run(is_symmetric_tensor), True)
             self.assertEqual(sim.session.run(op_mode_tensor),
                              int(pymo.TensorQuantizerOpMode.oneShotQuantizeDequantize))
 
         for op_name in activation_quantizers:
-            is_symmetric_tensor = sim.session.graph.get_tensor_by_name(op_name + '_use_symmetric_encoding:0')
-            op_mode_tensor = sim.session.graph.get_tensor_by_name(op_name + '_op_mode:0')
+            is_symmetric_tensor = sim.session.graph.get_tensor_by_name(op_name + '/ReadVariableOp_5:0')
+            op_mode_tensor = sim.session.graph.get_tensor_by_name(op_name + '/ReadVariableOp:0')
             if 'input_1' in op_name:
                 self.assertEqual(sim.session.run(op_mode_tensor), int(pymo.TensorQuantizerOpMode.passThrough))
             else:
@@ -232,14 +236,14 @@ class TestQuantsimConfig(unittest.TestCase):
         ]
 
         for param_quantizer in weight_quantizers:
-            is_symmetric_tensor = sim.session.graph.get_tensor_by_name(param_quantizer + '_use_symmetric_encoding:0')
-            op_mode_tensor = sim.session.graph.get_tensor_by_name(param_quantizer + '_op_mode:0')
+            is_symmetric_tensor = sim.session.graph.get_tensor_by_name(param_quantizer + '/ReadVariableOp_5:0')
+            op_mode_tensor = sim.session.graph.get_tensor_by_name(param_quantizer + '/ReadVariableOp:0')
             self.assertEqual(sim.session.run(op_mode_tensor),
                              int(pymo.TensorQuantizerOpMode.oneShotQuantizeDequantize))
             self.assertEqual(sim.session.run(is_symmetric_tensor), False)
         for param_quantizer in bias_quantizers:
-            is_symmetric_tensor = sim.session.graph.get_tensor_by_name(param_quantizer + '_use_symmetric_encoding:0')
-            op_mode_tensor = sim.session.graph.get_tensor_by_name(param_quantizer + '_op_mode:0')
+            is_symmetric_tensor = sim.session.graph.get_tensor_by_name(param_quantizer + '/ReadVariableOp_5:0')
+            op_mode_tensor = sim.session.graph.get_tensor_by_name(param_quantizer + '/ReadVariableOp:0')
             self.assertEqual(sim.session.run(op_mode_tensor),
                              int(pymo.TensorQuantizerOpMode.passThrough))
             self.assertEqual(sim.session.run(is_symmetric_tensor), True)
@@ -311,10 +315,10 @@ class TestQuantsimConfig(unittest.TestCase):
             'conv2d_3/BiasAdd_quantized',
             'conv2d_4/BiasAdd_quantized',
             'input_1_quantized',
-            'batch_normalization/cond/Merge_quantized',
+            'batch_normalization/FusedBatchNormV3_quantized',
             'Relu_quantized',
             'max_pooling2d/MaxPool_quantized',
-            'batch_normalization_1/cond/Merge_quantized',
+            'batch_normalization_1/FusedBatchNormV3_quantized',
             'Add_quantized',
             'Relu_2_quantized',
             'average_pooling2d/AvgPool_quantized',
@@ -338,7 +342,7 @@ class TestQuantsimConfig(unittest.TestCase):
         ]
 
         for activation_quantizer in activation_quantizers:
-            op_mode_tensor = sim.session.graph.get_tensor_by_name(activation_quantizer + '_op_mode:0')
+            op_mode_tensor = sim.session.graph.get_tensor_by_name(activation_quantizer + '/ReadVariableOp:0')
             if activation_quantizer in ['input_1_quantized',
                                         'conv2d/BiasAdd_quantized',
                                         'max_pooling2d/MaxPool_quantized',
@@ -351,8 +355,8 @@ class TestQuantsimConfig(unittest.TestCase):
                 self.assertEqual(sim.session.run(op_mode_tensor), int(pymo.TensorQuantizerOpMode.passThrough))
         for weight_quantizer in weight_quantizers:
             is_symmetric_tensor = sim.session.graph.get_tensor_by_name(weight_quantizer +
-                                                                            '_use_symmetric_encoding:0')
-            op_mode_tensor = sim.session.graph.get_tensor_by_name(weight_quantizer + '_op_mode:0')
+                                                                            '/ReadVariableOp_5:0')
+            op_mode_tensor = sim.session.graph.get_tensor_by_name(weight_quantizer + '/ReadVariableOp:0')
             if weight_quantizer in ['conv2d/BiasAdd/ReadVariableOp_quantized',
                                     'conv2d_1/BiasAdd/ReadVariableOp_quantized',
                                     'conv2d_2/BiasAdd/ReadVariableOp_quantized',
@@ -421,10 +425,10 @@ class TestQuantsimConfig(unittest.TestCase):
             'conv2d_3/BiasAdd_quantized',
             'conv2d_4/BiasAdd_quantized',
             'input_1_quantized',
-            'batch_normalization/cond/Merge_quantized',
+            'batch_normalization/FusedBatchNormV3_quantized',
             'Relu_quantized',
             'max_pooling2d/MaxPool_quantized',
-            'batch_normalization_1/cond/Merge_quantized',
+            'batch_normalization_1/FusedBatchNormV3_quantized',
             'Add_quantized',
             'Relu_2_quantized',
             'average_pooling2d/AvgPool_quantized',
@@ -433,7 +437,7 @@ class TestQuantsimConfig(unittest.TestCase):
         ]
 
         for activation_quantizer in activation_quantizers:
-            op_mode_tensor = sim.session.graph.get_tensor_by_name(activation_quantizer + '_op_mode:0')
+            op_mode_tensor = sim.session.graph.get_tensor_by_name(activation_quantizer + '/ReadVariableOp:0')
             if activation_quantizer in ['input_1_quantized',
                                         'conv2d/BiasAdd_quantized',
                                         'conv2d_3/BiasAdd_quantized',
@@ -477,7 +481,7 @@ class TestQuantsimConfig(unittest.TestCase):
         sim = QuantizationSimModel(sess, ['input_1'], ['single_residual/Softmax'],
                                    config_file='./quantsim_config.json')
 
-        op_mode_tensor = sim.session.graph.get_tensor_by_name('input_1_quantized_op_mode:0')
+        op_mode_tensor = sim.session.graph.get_tensor_by_name('input_1_quantized/ReadVariableOp:0')
         self.assertEqual(sim.session.run(op_mode_tensor), int(pymo.TensorQuantizerOpMode.updateStats))
 
         if os.path.exists('./quantsim_config.json'):
@@ -547,7 +551,7 @@ class TestQuantsimConfig(unittest.TestCase):
         sim = QuantizationSimModel(sess, ['input_1'], ['single_residual/Softmax'],
                                    config_file='./quantsim_config.json')
 
-        op_mode_tensor = sim.session.graph.get_tensor_by_name('single_residual/Softmax_quantized_op_mode:0')
+        op_mode_tensor = sim.session.graph.get_tensor_by_name('single_residual/Softmax_quantized/ReadVariableOp:0')
         self.assertEqual(sim.session.run(op_mode_tensor), int(pymo.TensorQuantizerOpMode.updateStats))
 
         if os.path.exists('./quantsim_config.json'):

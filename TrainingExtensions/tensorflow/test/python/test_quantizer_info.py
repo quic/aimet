@@ -45,7 +45,7 @@ from aimet_tensorflow.quantsim import QuantizationSimModel
 from aimet_tensorflow.quantizer_info import QuantizeOpIndices
 import libpymo
 
-tf.compat.v1.logging.set_verbosity(tf.logging.WARN)
+tf.compat.v1.logging.set_verbosity(tf.compat.v1.logging.WARN)
 tf.compat.v1.disable_eager_execution()
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
 
@@ -64,7 +64,7 @@ class TestQuantizerInfo(unittest.TestCase):
         session = tf.compat.v1.Session()
         session.run(init)
 
-        sim = QuantizationSimModel(session, ['conv2d_input'], ['keras_model/Softmax'], use_cuda=False)
+        sim = QuantizationSimModel(session, ['input_1'], ['keras_model/Softmax'], use_cuda=False)
         quantizer = sim.quantizer_config('conv2d/Conv2D/ReadVariableOp_quantized')
 
         encoding = quantizer.compute_encoding(8, False)
@@ -100,7 +100,7 @@ class TestQuantizerInfo(unittest.TestCase):
         session = tf.compat.v1.Session()
         session.run(init)
 
-        sim = QuantizationSimModel(session, ['conv2d_input'], ['keras_model/Softmax'], use_cuda=False)
+        sim = QuantizationSimModel(session, ['input_1'], ['keras_model/Softmax'], use_cuda=False)
         quantizer = sim.quantizer_config('conv2d/Conv2D/ReadVariableOp_quantized')
 
         op_mode = int(libpymo.TensorQuantizerOpMode.oneShotQuantizeDequantize)
@@ -125,7 +125,7 @@ class TestQuantizerInfo(unittest.TestCase):
         session = tf.compat.v1.Session()
         session.run(init)
 
-        sim = QuantizationSimModel(session, ['conv2d_input'], ['keras_model/Softmax'], use_cuda=False)
+        sim = QuantizationSimModel(session, ['input_1'], ['keras_model/Softmax'], use_cuda=False)
         quantizer = sim.quantizer_config('conv2d/Conv2D/ReadVariableOp_quantized')
 
         # Freeze encoding before computing it
@@ -144,7 +144,7 @@ class TestQuantizerInfo(unittest.TestCase):
         session = tf.compat.v1.Session()
         session.run(init)
 
-        sim = QuantizationSimModel(session, ['conv2d_input'], ['keras_model/Softmax'], use_cuda=False)
+        sim = QuantizationSimModel(session, ['input_1'], ['keras_model/Softmax'], use_cuda=False)
         quantizer = sim.quantizer_config('conv2d/Conv2D/ReadVariableOp_quantized')
 
         self.assertRaises(AssertionError, lambda: quantizer.get_encoding())
