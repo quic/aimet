@@ -67,25 +67,21 @@ logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Test)
 class TestSpatialSvdLayerSplit(unittest.TestCase):
 
     def test_split_layer(self):
-        """ test the output after and before the split_module call"""
-
+        """
+        test the output after and before the split_module call
+        """
+        tf.compat.v1.reset_default_graph()
         num_examples = 2000
         g = tf.Graph()
-
         with g.as_default():
-
             inp_tensor = tf.compat.v1.get_variable('inp_tensor', shape=[num_examples, 5, 5, 20],
                                          initializer=tf.random_normal_initializer())
             filter_tensor = tf.compat.v1.get_variable('filter_tensor', shape=[5, 5, 20, 50],
                                             initializer=tf.random_normal_initializer())
-
             conv1 = tf.nn.conv2d(input=inp_tensor, filters=filter_tensor, strides=[1, 1, 1, 1], padding='VALID',
                                  data_format="NHWC", name='Conv2D_1')
-
             bias_tensor = tf.compat.v1.get_variable('bias_tensor', shape=[50], initializer=tf.random_normal_initializer())
-
             bias = tf.nn.bias_add(value=conv1, bias=bias_tensor, data_format="NHWC")
-
             init = tf.compat.v1.global_variables_initializer()
 
         orig_conv_op = g.get_operation_by_name('Conv2D_1')
@@ -118,29 +114,24 @@ class TestSpatialSvdLayerSplit(unittest.TestCase):
 
         self.assertTrue(np.allclose(orig_bias_out, split_bias_out, atol=1e-4))
 
-        tf.compat.v1.reset_default_graph()
         sess.close()
 
     def test_split_layer_channels_last(self):
-        """ test the split after and before split_module call with channel last"""
-
+        """
+        test the split after and before split_module call with channel last
+        """
+        tf.compat.v1.reset_default_graph()
         num_examples = 2000
         g = tf.Graph()
-
         with g.as_default():
-
             inp_tensor = tf.compat.v1.get_variable('inp_tensor', shape=[num_examples, 5, 5, 20],
                                          initializer=tf.random_normal_initializer())
             filter_tensor = tf.compat.v1.get_variable('filter_tensor', shape=[5, 5, 20, 50],
                                             initializer=tf.random_normal_initializer())
-
             conv1 = tf.nn.conv2d(input=inp_tensor, filters=filter_tensor, strides=[1, 1, 1, 1], padding='VALID',
                                  data_format="NHWC", name='Conv2D_1')
-
             bias_tensor = tf.compat.v1.get_variable('bias_tensor', shape=[50], initializer=tf.random_normal_initializer())
-
             bias = tf.nn.bias_add(value=conv1, bias=bias_tensor, data_format="NHWC")
-
             init = tf.compat.v1.global_variables_initializer()
 
         orig_conv_op = g.get_operation_by_name('Conv2D_1')
@@ -173,14 +164,14 @@ class TestSpatialSvdLayerSplit(unittest.TestCase):
 
         self.assertTrue(np.allclose(orig_bias_out, split_bias_out, atol=1e-4))
 
-        tf.compat.v1.reset_default_graph()
         sess.close()
 
     @pytest.mark.cuda
     def test_split_layer_with_stride(self):
-        """test the conv2d split after and before split_module call with stride option """
-        """Conv NCHW not allowed on CPU"""
-
+        """
+        test the conv2d split after and before split_module call with stride option Conv NCHW not allowed on CPU
+        """
+        tf.compat.v1.reset_default_graph()
         num_examples = 2000
         g = tf.Graph()
 
@@ -226,12 +217,13 @@ class TestSpatialSvdLayerSplit(unittest.TestCase):
 
         self.assertTrue(np.allclose(orig_bias_out, split_bias_out, atol=1e-4))
 
-        tf.compat.v1.reset_default_graph()
         sess.close()
 
     def test_split_layer_with_stirde_channels_last(self):
-        """test the conv2d split after and before split_module call with stride option and channel last"""
-
+        """
+        test the conv2d split after and before split_module call with stride option and channel last
+        """
+        tf.compat.v1.reset_default_graph()
         num_examples = 2000
         g = tf.Graph()
 
@@ -277,12 +269,13 @@ class TestSpatialSvdLayerSplit(unittest.TestCase):
 
         self.assertTrue(np.allclose(orig_bias_out, split_bias_out, atol=1e-4))
 
-        tf.compat.v1.reset_default_graph()
         sess.close()
 
     def test_split_layer_rank_reduced(self):
-        """ test the conv2d split after and before split_module call with reduced rank 100 --> 96"""
-
+        """
+        test the conv2d split after and before split_module call with reduced rank 100 --> 96
+        """
+        tf.compat.v1.reset_default_graph()
         num_examples = 2000
         g = tf.Graph()
         with g.as_default():
@@ -326,16 +319,17 @@ class TestSpatialSvdLayerSplit(unittest.TestCase):
         # relaxed absolute tolerance
         self.assertTrue(np.allclose(orig_bias_out, split_bias_out, atol=1e+2))
 
-        tf.compat.v1.reset_default_graph()
         sess.close()
 
 
 class TestSpatialSvdPruning(unittest.TestCase):
 
     def test_prune_layer(self):
-        """ Pruning single layer with 0.5 comp-ratio in MNIST"""
-
+        """
+        Pruning single layer with 0.5 comp-ratio in MNIST
+        """
         # create tf.compat.v1.Session and initialize the weights and biases with zeros
+        tf.compat.v1.reset_default_graph()
         config = tf.compat.v1.ConfigProto()
         config.gpu_options.allow_growth = True
 
@@ -398,15 +392,16 @@ class TestSpatialSvdPruning(unittest.TestCase):
         self.assertTrue(np.array_equal(conv2d_a_weight, conv2d_a_weight_after_save_load))
         self.assertTrue(np.array_equal(conv2d_b_weight, conv2d_b_weight_after_save_load))
 
-        tf.compat.v1.reset_default_graph()
         sess.close()
         new_sess.close()
         # delete temp directory
         shutil.rmtree(str('./temp_meta/'))
 
     def test_prune_model_2_layers(self):
-        """ Punning two layers with 0.5 comp-ratio in MNIST"""
-
+        """
+        Punning two layers with 0.5 comp-ratio in MNIST
+        """
+        tf.compat.v1.reset_default_graph()
         # create tf.compat.v1.Session and initialize the weights and biases with zeros
         config = tf.compat.v1.ConfigProto()
         config.gpu_options.allow_growth = True
@@ -448,15 +443,15 @@ class TestSpatialSvdPruning(unittest.TestCase):
             print("Layer: " + layer.name)
             print("   Module: " + str(layer.module.name))
 
-        tf.compat.v1.reset_default_graph()
         sess.close()
         # delete temp directory
         shutil.rmtree(str('./temp_meta/'))
 
-    @unittest.skip
-    def test_prune_model_tf_slim(self):
-        """ Punning a model with tf slim api """
-
+    def test_prune_model_tf_compat_v1_layers(self):
+        """
+        Punning a model with tf.compat.v1.layers api
+        """
+        tf.compat.v1.reset_default_graph()
         # create tf.compat.v1.Session and initialize the weights and biases with zeros
         config = tf.compat.v1.ConfigProto()
         config.gpu_options.allow_growth = True
@@ -470,12 +465,16 @@ class TestSpatialSvdPruning(unittest.TestCase):
             _ = tf_compat_v1_layers_basic_model(x)
             sess.run(tf.compat.v1.global_variables_initializer())
 
+        all_ops = sess.graph.get_operations()
+        for op in all_ops:
+            print(op.name, op.type)
+
         conn_graph_orig = ConnectedGraph(sess.graph, ['Placeholder'], ['dense/Softmax'])
         num_ops_orig = len(conn_graph_orig.get_all_ops())
 
         # Create a layer database
         orig_layer_db = LayerDatabase(model=sess, input_shape=(1, 32, 32, 3), working_dir=None)
-        conv1 = orig_layer_db.find_layer_by_name('Conv_1/Conv2D')
+        conv1 = orig_layer_db.find_layer_by_name('conv2d_1/Conv2D')
         conv1_bias = BiasUtils.get_bias_as_numpy_data(orig_layer_db.model, conv1.module)
 
         layer_comp_ratio_list = [LayerCompRatioPair(conv1, Decimal(0.5))]
@@ -484,20 +483,25 @@ class TestSpatialSvdPruning(unittest.TestCase):
         comp_layer_db = spatial_svd_pruner.prune_model(orig_layer_db, layer_comp_ratio_list, CostMetric.mac,
                                                        trainer=None)
         # Check that svd added these ops
-        _ = comp_layer_db.model.graph.get_operation_by_name('Conv_1_a/Conv2D')
-        _ = comp_layer_db.model.graph.get_operation_by_name('Conv_1_b/Conv2D')
+        _ = comp_layer_db.model.graph.get_operation_by_name('conv2d_1_a/Conv2D')
+        _ = comp_layer_db.model.graph.get_operation_by_name('conv2d_1_b/Conv2D')
 
         conn_graph_new = ConnectedGraph(comp_layer_db.model.graph, ['Placeholder'], ['dense/Softmax'])
         num_ops_new = len(conn_graph_new.get_all_ops())
         self.assertEqual(num_ops_orig + 1, num_ops_new)
-        bias_add_op = comp_layer_db.model.graph.get_operation_by_name('Conv_1_b/BiasAdd')
-        conv_1_b_op = comp_layer_db.model.graph.get_operation_by_name('Conv_1_b/Conv2D')
+        bias_add_op = comp_layer_db.model.graph.get_operation_by_name('conv2d_1_b/BiasAdd')
+        conv_1_b_op = comp_layer_db.model.graph.get_operation_by_name('conv2d_1_b/Conv2D')
         self.assertEqual(conn_graph_new._module_identifier.get_op_info(bias_add_op),
                          conn_graph_new._module_identifier.get_op_info(conv_1_b_op))
         self.assertTrue(np.array_equal(conv1_bias, BiasUtils.get_bias_as_numpy_data(comp_layer_db.model, conv_1_b_op)))
 
+        sess.close()
+
     def test_prune_conv_no_bias(self):
-        """ Test spatial svd on a conv layer with no bias """
+        """
+        Test spatial svd on a conv layer with no bias
+        """
+        tf.compat.v1.reset_default_graph()
         # create tf.compat.v1.Session and initialize the weights and biases with zeros
         config = tf.compat.v1.ConfigProto()
         config.gpu_options.allow_growth = True
@@ -526,3 +530,5 @@ class TestSpatialSvdPruning(unittest.TestCase):
         conv2d_b_op = comp_layer_db.model.graph.get_operation_by_name('conv2d_b/Conv2D')
         reshape_op = comp_layer_db.model.graph.get_operation_by_name('flatten/Reshape')
         self.assertEqual(conv2d_b_op, reshape_op.inputs[0].op)
+
+        sess.close()
