@@ -1,6 +1,5 @@
-# /usr/bin/env python3.5
-# -*- mode: python -*-
-# =============================================================================
+#=============================================================================
+#
 #  @@-COPYRIGHT-START-@@
 #
 #  Copyright (c) 2021, Qualcomm Innovation Center, Inc. All rights reserved.
@@ -34,11 +33,14 @@
 #  SPDX-License-Identifier: BSD-3-Clause
 #
 #  @@-COPYRIGHT-END-@@
-# =============================================================================
+#
+#=============================================================================
+
 
 """
-This file demonstrates the use of compression using AIMET weight SVD
-technique followed by fine tuning.
+This file demonstrates the use of compression using AIMET spatial SVD technique
+followed by fine tuning followed by AIMET channel pruning technique followed by
+fine tuning.
 """
 
 import argparse
@@ -47,38 +49,55 @@ from datetime import datetime
 import logging
 import os
 from typing import Tuple
-import torch
 from torchvision import models
+import torch
+import torch.utils.data as torch_data
 
 # imports for AIMET
-import aimet_common.defs as aimet_common_defs
+import aimet_common.defs
+from aimet_common.defs import CompressionScheme
+from aimet_common.defs import CostMetric
 from aimet_torch.compress import ModelCompressor
-import aimet_torch.defs as aimet_torch_defs
+import aimet_torch.defs
 
 # imports for data pipelines
 from Examples.common import image_net_config
 from Examples.torch.utils.image_net_evaluator import ImageNetEvaluator
 from Examples.torch.utils.image_net_trainer import ImageNetTrainer
+from Examples.torch.utils.image_net_data_loader import ImageNetDataLoader
 
 
-logger = logging.getLogger('TorchWeightSVD')
+logger = logging.getLogger('TorchSpatialSVDChannelPruning')
 formatter = logging.Formatter('%(asctime)s : %(name)s - %(levelname)s - %(message)s')
 logging.basicConfig(format=formatter)
 
-###
-# This script utilize AIMET do perform weight svd compression (50% ratio) on a resnet18 pretrained model
-# with the ImageNet data set. It should re-create the same performance numbers as published in the
-# AIMET release for the particular scenario as described below.
-
+#
+# This script utilize AIMET do perform spatial svd and channel pruning compression on a resnet18
+# pretrained model with the ImageNet data set.  It should re-create the same performance numbers
+# as published in the AIMET release for the particular scenario as described below.
+#
 # Scenario parameters:
-#    - AIMET Weight SVD compression using auto mode
+#
+#   Spatial SVD:
+#    - AIMET Spatial SVD compression using auto mode
 #    - Ignored model.conv1 (this is the first layer of the model)
 #    - Target compression ratio: 0.5 (or 50%)
 #    - Number of compression ration candidates: 10
 #    - Input shape: [1, 3, 224, 224]
 #    - Learning rate: 0.01
 #    - Learning rate schedule: [5,10]
-###
+#    - Finetuning epoch: 15
+#
+#   Channel Pruning
+#    - AIMET Spatial SVD compression using auto mode
+#    - Ignored model.conv1 (this is the first layer of the model)
+#    - Target compression ratio: 0.66 (or 66%)
+#    - Number of compression ration candidates: 10
+#    - Input shape: [1, 3, 224, 224]
+#    - Learning rate: 0.01
+#    - Learning rate schedule: [10,20,25]
+#    - Finetuning epoch: 30
+#
 
 class ImageNetDataPipeline:
     """
@@ -133,91 +152,59 @@ class ImageNetDataPipeline:
 
         torch.save(model, os.path.join(self._config.logdir, 'finetuned_model.pth'))
 
-
-def aimet_weight_svd(model: torch.nn.Module,
-                     evaluator: aimet_common_defs.EvalFunction) -> Tuple[torch.nn.Module,
-                                                                         aimet_common_defs.CompressionStats]:
+def aimet_spatial_svd_cp(model: torch.nn.Module,
+                     evaluator: aimet_common.defs.EvalFunction, data_loader: torch_data.DataLoader) -> Tuple[torch.nn.Module,
+                                                                         aimet_common.defs.CompressionStats]:
     """
     Compresses the model using AIMET's Weight SVD auto mode compression scheme.
 
     :param model: The model to compress.
     :param evaluator: Evaluator used during compression.
+    :param dataloader: DataLoader used during compression.
     :return: A tuple of compressed model and its statistics
     """
 
-    # Please refer to the API documentation for more details.
+    cp_mode = aimet_torch.defs.ChannelPruningParameters.Mode.auto
 
-    # Desired target compression ratio using Weight SVD
-    # This value denotes the desired compression % of the original model.
-    # To compress the model to 20% of original model, use 0.2. This would
-    # compress the model by 80%.
-    # We are compressing the model by 50% here.
-    target_comp_ratio = Decimal(0.5)
+    # configure the greedy comp-ratio selection algorithm
+    greedy_params = aimet_torch.defs.GreedySelectionParameters(target_comp_ratio=Decimal(0.66),
+                                                               num_comp_ratio_candidates=10)
 
-    # Number of compression ratio used by the API at each layer
-    # API will evaluate 0.1, 0.2, ..., 0.9, 1.0 ratio (total 10 candidates)
-    # at each layer
-    num_comp_ratio_candidates = 10
+    # configure the auto mode compression.  ignore the first layer of the model (model.conv1).
+    auto_params = aimet_torch.defs.ChannelPruningParameters.AutoModeParams(greedy_params,
+                                                                           modules_to_ignore=[model.conv1])
 
-    # Creating Greedy selection parameters:
-    greedy_params = aimet_torch_defs.GreedySelectionParameters(target_comp_ratio=target_comp_ratio,
-                                                               num_comp_ratio_candidates=num_comp_ratio_candidates)
+    # configure the parameters for channel pruning compression
+    params = aimet_torch.defs.ChannelPruningParameters(data_loader= data_loader,
+                                                       num_reconstruction_samples=50000,
+                                                       allow_custom_downsample_ops=True,
+                                                       mode=cp_mode,
+                                                       params=auto_params)
 
-    # Selecting 'greedy' for rank select scheme:
-    rank_select_scheme = aimet_common_defs.RankSelectScheme.greedy
-
-    # Ignoring first convolutional layer of the model for compression
-    modules_to_ignore = [model.conv1]
-
-    # Creating Auto mode Parameters:
-    auto_params = aimet_torch_defs.WeightSvdParameters.AutoModeParams(rank_select_scheme=rank_select_scheme,
-                                                                      select_params=greedy_params,
-                                                                      modules_to_ignore=modules_to_ignore)
-
-    # Creating Weight SVD parameters with Auto Mode:
-    params = aimet_torch_defs.WeightSvdParameters(aimet_torch_defs.WeightSvdParameters.Mode.auto,
-                                                  auto_params)
-
-    # Scheme is Weight SVD:
-    scheme = aimet_common_defs.CompressionScheme.weight_svd
-
-    # Cost metric is MAC, it can be MAC or Memory
-    cost_metric = aimet_common_defs.CostMetric.mac
-
-    # Input image shape
-    image_shape = (1, image_net_config.dataset['image_channels'],
-                   image_net_config.dataset['image_width'], image_net_config.dataset['image_height'])
-
-    # Calling model compression using Weight SVD:
-    # Here evaluator is passed which is used by the API to evaluate the
-    # accuracy for various compression ratio of each layer. To speed up
-    # the process, only 10 batches of data is being used inside evaluator
-    # (by passing eval_iterations=10) instead of running evaluation on
-    # complete dataset.
+    scheme = CompressionScheme.channel_pruning      # spatial_svd, weight_svd or channel_pruning
+    metric = CostMetric.mac                         # mac or memory
     results = ModelCompressor.compress_model(model=model,
                                              eval_callback=evaluator,
                                              eval_iterations=10,
-                                             input_shape=image_shape,
+                                             input_shape=(1, 3, 224, 224),
                                              compress_scheme=scheme,
-                                             cost_metric=cost_metric,
+                                             cost_metric=metric,
                                              parameters=params)
-
     return results
-
 
 def compress_and_finetune(config: argparse.Namespace):
     """
-    1. Instantiates Data Pipeline for evaluation and training
-    2. Loads the pretrained resnet18 model
-    3. Calculates floating point accuracy
+    1. Instantiate Data Pipeline for evaluation and training
+    2. Load the pretrained resnet18 model
+    3. Calculate floating point accuracy
     4. Compression
-        4.1. Compresses the model using AIMET Weight SVD
-        4.2. Logs the statistics
-        4.3. Saves the compressed model
-        4.4. Calculates and logs the accuracy of compressed model
+        4.1. Compress the model using AIMET Spatial SVD and Channel Pruning
+        4.2. Log the statistics
+        4.3. Save the compressed model
+        4.4. Calculate and log the accuracy of compressed model
     5. Finetuning
-        5.1 Finetunes the compressed model
-        5.2 Calculates and logs the accuracy of compressed-finetuned model
+        5.1 Finetune the compressed model
+        5.2 Calculate and logs the accuracy of compressed-finetuned model
 
     :param config: This argparse.Namespace config expects following parameters:
                    dataset_dir: Path to a directory containing ImageNet dataset.
@@ -232,57 +219,58 @@ def compress_and_finetune(config: argparse.Namespace):
                                            for more details.
     """
 
-    ## 1. Instantiates Data Pipeline for evaluation and training
+    # Instantiate Data Pipeline for evaluation and training
     data_pipeline = ImageNetDataPipeline(config)
 
 
-    ## 2. Loads the pretrained resnet18 model
+    # Load the pretrained resnet18 model
     model = models.resnet18(pretrained=True)
     if config.use_cuda:
         model.to(torch.device('cuda'))
 
 
-    ## 3. Calculates floating point accuracy
+    # Calculate floating point accuracy
     accuracy = data_pipeline.evaluate(model, use_cuda=config.use_cuda)
     logger.info("Original Model Top-1 accuracy = %.2f", accuracy)
 
 
-    ## 4. Compression
+    # Compression
     logger.info("Starting Model Compression...")
 
-    # 4.1. Compresses the model using AIMET Weight SVD
-    compressed_model, stats = aimet_weight_svd(model=model, evaluator=data_pipeline.evaluate)
+    # Compress the model using AIMET Spatial SVD and Channel Pruning
+    data_loader = ImageNetDataLoader(is_training=True, images_dir=_config.dataset_dir, image_size=224).data_loader
+    compressed_model, stats = aimet_spatial_svd_cp(model=model, evaluator=data_pipeline.evaluate, data_loader=data_loader)
 
-    # 4.2. Logs the statistics
+    # Log the statistics
     logger.info(stats)
     with open(os.path.join(config.logdir, 'log.txt'), "w") as outfile:
         outfile.write("%s\n\n" % (stats))
 
-    # 4.3. Saves the compressed model
+    # Save the compressed model
     torch.save(compressed_model, os.path.join(config.logdir, 'compressed_model.pth'))
 
-    # 4.4. Calculates and logs the accuracy of compressed model
+    # Calculate and log the accuracy of compressed model
     accuracy = data_pipeline.evaluate(compressed_model, use_cuda=config.use_cuda)
     logger.info("Compressed Model Top-1 accuracy = %.2f", accuracy)
 
-    logger.info("...Model Compression Done")
+    logger.info("...Model Compression Complete")
 
+    # Finetune
+    logger.info("Starting Model Finetuning...")
 
-    ## 5. Finetuning
-    logger.info("Strating Model Finetuning...")
-
-    # 5.1 Finetunes the compressed model
+    # Finetune the compressed model
     data_pipeline.finetune(compressed_model)
 
-    # 5.2 Calculates and logs the accuracy of compressed-finetuned model
+    # Calculate and log the accuracy of compressed-finetuned model
     accuracy = data_pipeline.evaluate(compressed_model, use_cuda=config.use_cuda)
     logger.info("Finetuned Compressed Model Top-1 accuracy = %.2f", accuracy)
 
-    logger.info("...Model Finetuning Done")
+    logger.info("...Model Finetuning Complete")
+
 
 
 if __name__ == '__main__':
-    default_logdir = os.path.join("benchmark_output", "weight_svd_"+datetime.now().strftime("%Y-%m-%d-%H-%M-%S"))
+    default_logdir = os.path.join("benchmark_output", "spatial_svd_cp_"+datetime.now().strftime("%Y-%m-%d-%H-%M-%S"))
 
     parser = argparse.ArgumentParser(description='Apply Weight SVD on pretrained ResNet18 model and finetune it for ImageNet dataset')
 
@@ -292,7 +280,7 @@ if __name__ == '__main__':
                               This folder should conatin at least 2 subfolders:\n\
                               'train': for training dataset and 'val': for validation dataset")
     parser.add_argument('--use_cuda', action='store_true',
-                        default=False,
+                        required=True,
                         help='Add this flag to run the test on GPU.')
 
     parser.add_argument('--logdir', type=str,
