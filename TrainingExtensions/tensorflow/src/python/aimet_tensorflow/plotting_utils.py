@@ -3,7 +3,7 @@
 # =============================================================================
 #  @@-COPYRIGHT-START-@@
 #
-#  Copyright (c) 2019, Qualcomm Innovation Center, Inc. All rights reserved.
+#  Copyright (c) 2019-2021, Qualcomm Innovation Center, Inc. All rights reserved.
 #
 #  Redistribution and use in source and binary forms, with or without
 #  modification, are permitted provided that the following conditions are met:
@@ -37,11 +37,13 @@
 # =============================================================================
 
 """ Create visualizations on the weights in each conv and linear layer in a model"""
+import os
 import math
 import holoviews as hv
 import numpy as np
 import pandas as pd
 import torch
+from bokeh import plotting
 from bokeh.layouts import row
 from bokeh.models import HoverTool, WheelZoomTool, ColumnDataSource, Span, TableColumn, DataTable
 from bokeh.plotting import figure
@@ -52,7 +54,6 @@ from bokeh.models import Div
 # Need this import, please don't remove
 import hvplot.pandas  # pylint:disable=unused-import
 
-from aimet_common.bokeh_plots import BokehServerSession
 from aimet_tensorflow.utils.op.conv import WeightTensorUtils
 
 
@@ -387,9 +388,9 @@ def histogram(data_frame, column_name, num_bins, x_label=None, y_label=None, tit
 
 def convert_pandas_data_frame_to_bokeh_data_table(data):
     """
-    Converts a pandas data frame to a bokeh column data source object so that it can be pushed to a server document
+    Converts a pandas data frame to a bokeh column data source object so that it can be plotted
     :param data: pandas data frame
-    :return: data table that can be displayed on a bokeh server document
+    :return: data table that can be displayed on a bokeh plot
     """
     data["index"] = data.index
     data = data[['index'] + data.columns[:-1].tolist()]
@@ -426,18 +427,19 @@ def add_title(layout, title):
     return wrap_layout_with_div
 
 
-def visualize_weight_ranges_single_layer(sess, layer, visualization_url):
+def visualize_weight_ranges_single_layer(sess, layer, results_dir):
     """
     Given a layer, visualizes weight ranges with scatter plots and line plots
 
     :param sess: tf.compat.v1.Session
     :param layer: layer with weights
-    :param visualization_url: user inputted url with session id set as optimization for the visualizations
-    :return: bokeh_session, so that user can close the session
+    :param results_dir: Directory to save the Bokeh plots
+    :return: Bokeh plot
     """
 
-    bokeh_session = BokehServerSession(url=visualization_url, session_id="optimization")
-    document = bokeh_session.document
+    file_path = os.path.join(results_dir, 'visualize_weight_ranges_single_layer.html')
+    plotting.output_file(file_path)
+
     layer_weights = pd.DataFrame(get_weights(layer, sess))
     layer_name = layer.name
     layer_weights_summary_statistics = layer_weights.describe().T
@@ -456,11 +458,11 @@ def visualize_weight_ranges_single_layer(sess, layer, visualization_url):
                                                     width=1500, height=700)
     layout = column(scatter_plots_layout, line_plots)
     layout_with_title = add_title(layout, layer_name)
-    document.add_root(layout_with_title)
-    return bokeh_session
+    plotting.save(layout_with_title)
+    return layout_with_title
 
 
-def visualize_relative_weight_ranges_single_layer(sess, layer, visualization_url):
+def visualize_relative_weight_ranges_single_layer(sess, layer, results_dir):
     """
 
     Publishes a line plot showing  weight ranges for each layer, summary statistics
@@ -468,14 +470,15 @@ def visualize_relative_weight_ranges_single_layer(sess, layer, visualization_url
 
     :param sess: tf.compat.v1.Session
     :param layer: layer with weights
-    :param visualization_url: user inputted url with session id set as optimization for the visualizations
-    :return: bokeh_session, so that user can close the session
+    :param results_dir: Directory to save the Bokeh plots
+    :return: bokeh plot
 
     """
 
     # pylint: disable=too-many-locals
-    bokeh_session = BokehServerSession(url=visualization_url, session_id="optimization")
-    server_document = bokeh_session.document
+    file_path = os.path.join(results_dir, 'visualize_relative_weight_ranges_single_layer.html')
+    plotting.output_file(file_path)
+
     layer_weights_data_frame = pd.DataFrame(get_weights(layer, sess)).describe().T
     layer_name = layer.name
     plot = line_plot_summary_statistics_model(layer_name, layer_weights_data_frame, width=1150, height=700)
@@ -498,9 +501,9 @@ def visualize_relative_weight_ranges_single_layer(sess, layer, visualization_url
     for channel in problematic_output_channels:
         add_vertical_line_to_figure(channel, plot)
 
-    # push plot to server document
     column_layout = column(histogram_plot, output_channel_ranges_as_column_data_source)
     layout = row(plot, column_layout)
     layout_with_title = add_title(layout, layer_name)
-    server_document.add_root(layout_with_title)
-    return bokeh_session
+
+    plotting.save(layout_with_title)
+    return layout_with_title
