@@ -3,7 +3,7 @@
 # =============================================================================
 #  @@-COPYRIGHT-START-@@
 #  
-#  Copyright (c) 2017-2018, Qualcomm Innovation Center, Inc. All rights reserved.
+#  Copyright (c) 2017-2021, Qualcomm Innovation Center, Inc. All rights reserved.
 #  
 #  Redistribution and use in source and binary forms, with or without 
 #  modification, are permitted provided that the following conditions are met:
@@ -36,20 +36,14 @@
 #  @@-COPYRIGHT-END-@@
 # =============================================================================
 """ Cross Layer Equalization acceptance tests for ResNet model. """
-
 import os
-import signal
 import unittest
 import copy
 import torch
 import numpy as np
-import math
-import torch.nn as nn
 from torchvision import models
 from aimet_torch import batch_norm_fold
 from aimet_torch.cross_layer_equalization import CrossLayerScaling, HighBiasFold, equalize_model
-from aimet_common.utils import start_bokeh_server_session
-from aimet_common.bokeh_plots import BokehServerSession
 from aimet_torch import visualize_model
 from aimet_torch.examples.mobilenet import MobileNetV2
 
@@ -110,33 +104,31 @@ class TestCrossLayerEqualization(unittest.TestCase):
 
     @unittest.skip("Takes 1 min 42 secs to run")
     def test_cross_layer_equalization_mobilenet_v2_visualize_after_optimization(self):
-        bokeh_visualizations_url, process = start_bokeh_server_session(8006)
         torch.manual_seed(10)
         model = MobileNetV2().to(torch.device('cpu'))
-        bokeh_session = BokehServerSession(bokeh_visualizations_url, session_id="cle")
         model = model.eval()
         model_copy = copy.deepcopy(model)
+        results_dir = 'artifacts'
+        if not os.path.exists('artifacts'):
+            os.makedirs('artifacts')
 
         # model_copy_again = copy.deepcopy(model)
         batch_norm_fold.fold_all_batch_norms(model_copy, (1, 3, 224, 224))
         equalize_model(model, (1, 3, 224, 224))
-        visualize_model.visualize_changes_after_optimization(model_copy, model, bokeh_visualizations_url)
-        bokeh_session.server_session.close("test complete")
-        os.killpg(os.getpgid(process.pid), signal.SIGTERM)
+        visualize_model.visualize_changes_after_optimization(model_copy, model, results_dir)
 
     def test_cross_layer_equalization_resnet18_visualize_to_identify_problem_layers(self):
-        bokeh_visualizations_url, process = start_bokeh_server_session(6008)
         torch.manual_seed(10)
         model = models.resnet18()
         model = model.eval()
 
+        results_dir = 'artifacts'
+        if not os.path.exists('artifacts'):
+            os.makedirs('artifacts')
+
         batch_norm_fold.fold_all_batch_norms(model, (1, 3, 224, 224))
 
-        bokeh_server_session = \
-            visualize_model.visualize_relative_weight_ranges_to_identify_problematic_layers(model,
-                                                                                            bokeh_visualizations_url)
-        bokeh_server_session.server_session.close("test complete")
-        os.killpg(os.getpgid(process.pid), signal.SIGTERM)
+        visualize_model.visualize_relative_weight_ranges_to_identify_problematic_layers(model, results_dir)
 
     def test_cle_transposed_conv2D(self):
         class TransposedConvModel(torch.nn.Module):
