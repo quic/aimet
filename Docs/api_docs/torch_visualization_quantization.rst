@@ -26,7 +26,7 @@ Code Examples
 
 .. literalinclude:: ../torch_code_examples/visualization.py
     :language: python
-    :lines: 40, 42-43, 47, 52-58
+    :lines: 40, 42-43, 52-58
 
 **Comparing Model After Optimization**
 

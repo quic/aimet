@@ -3,7 +3,7 @@
 # =============================================================================
 #  @@-COPYRIGHT-START-@@
 #  
-#  Copyright (c) 2017-2018, Qualcomm Innovation Center, Inc. All rights reserved.
+#  Copyright (c) 2017-2021, Qualcomm Innovation Center, Inc. All rights reserved.
 #  
 #  Redistribution and use in source and binary forms, with or without 
 #  modification, are permitted provided that the following conditions are met:
@@ -88,45 +88,52 @@ def visualize_changes_in_model_after_and_before_cle():
     """
     Code example for visualizating model before and after Cross Layer Equalization optimization
     """
-    visualization_url, process = start_bokeh_server_session(8002)
     model = models.resnet18(pretrained=True).to(torch.device('cpu'))
     model = model.eval()
+    # Create a copy of the model to visualize the before and after optimization changes
     model_copy = copy.deepcopy(model)
+
+    # Specify a folder in which the plots will be saved
+    results_dir = './visualization'
 
     batch_norm_fold.fold_all_batch_norms(model_copy, (1, 3, 224, 224))
 
     equalize_model(model, (1, 3, 224, 224))
-    visualize_model.visualize_changes_after_optimization(model_copy, model, visualization_url)
+    visualize_model.visualize_changes_after_optimization(model_copy, model, results_dir)
 
 
 def visualize_weight_ranges_model():
     """
     Code example for model visualization
     """
-    visualization_url, process = start_bokeh_server_session(8002)
     model = models.resnet18(pretrained=True).to(torch.device('cpu'))
     model = model.eval()
+
+    # Specify a folder in which the plots will be saved
+    results_dir = './visualization'
 
     batch_norm_fold.fold_all_batch_norms(model, (1, 3, 224, 224))
 
     # Usually it is observed that if we do BatchNorm fold the layer's weight range increases.
     # This helps in visualizing layer's weight
-    visualize_model.visualize_weight_ranges(model, visualization_url)
+    visualize_model.visualize_weight_ranges(model, results_dir)
 
 
 def visualize_relative_weight_ranges_model():
     """
     Code example for model visualization
     """
-    visualization_url, process = start_bokeh_server_session(8002)
     model = models.resnet18(pretrained=True).to(torch.device('cpu'))
     model = model.eval()
+
+    # Specify a folder in which the plots will be saved
+    results_dir = './visualization'
 
     batch_norm_fold.fold_all_batch_norms(model, (1, 3, 224, 224))
 
     # Usually it is observed that if we do BatchNorm fold the layer's weight range increases.
     # This helps in finding layers which can be equalized to get better performance on hardware
-    visualize_model.visualize_relative_weight_ranges_to_identify_problematic_layers(model, visualization_url)
+    visualize_model.visualize_relative_weight_ranges_to_identify_problematic_layers(model, results_dir)
 
 
 def model_compression_with_visualization():
