@@ -21,7 +21,7 @@ Code Examples for Visualization of Weight tensors
 
 .. literalinclude:: ../tf_code_examples/visualization.py
     :language: python
-    :lines: 39-45
+    :lines: 40-42
 
 **Visualizing weight ranges for layer**
 
