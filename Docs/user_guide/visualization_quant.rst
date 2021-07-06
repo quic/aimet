@@ -9,7 +9,7 @@ AIMET Visualization for Quantization
 
 Overview
 ========
-AIMET Visualization adds analytical capability to the AIMET tool (which helps quantize and compress ML models) through visualization. It provide more detailed insights in to AIMET features as users are able to analyze a model’s layers in terms of compressibility and also highlight potential issues when applying quantization. The tool also assists in displaying progress for computationally heavy tasks. The visualizations get saved as an HTML file under the specified directory.
+AIMET Visualization adds analytical capability to the AIMET tool (which helps quantize and compress ML models) through visualization. It provide more detailed insights in to AIMET features as users are able to analyze a model's layers in terms of compressibility and also highlight potential issues when applying quantization. The tool also assists in displaying progress for computationally heavy tasks. The visualizations get saved as an HTML file under the specified directory.
 
 Quantization
 ============
