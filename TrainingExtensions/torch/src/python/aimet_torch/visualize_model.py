@@ -40,9 +40,9 @@
 import os
 from typing import List
 import torch
+from bokeh import plotting
 from aimet_torch import plotting_utils
 from aimet_torch.utils import get_layer_by_name
-from bokeh import plotting
 
 
 def visualize_changes_after_optimization(old_model: torch.nn.Module, new_model: torch.nn.Module,
