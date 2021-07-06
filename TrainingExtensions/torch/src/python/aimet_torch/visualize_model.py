@@ -3,7 +3,7 @@
 # =============================================================================
 #  @@-COPYRIGHT-START-@@
 #
-#  Copyright (c) 2019, Qualcomm Innovation Center, Inc. All rights reserved.
+#  Copyright (c) 2019-2021, Qualcomm Innovation Center, Inc. All rights reserved.
 #
 #  Redistribution and use in source and binary forms, with or without
 #  modification, are permitted provided that the following conditions are met:
@@ -37,34 +37,29 @@
 # =============================================================================
 
 """ Top level API for visualizing a pytorch model. """
-
+import os
 from typing import List
 import torch
 from aimet_torch import plotting_utils
 from aimet_torch.utils import get_layer_by_name
-from aimet_common.bokeh_plots import BokehServerSession
+from bokeh import plotting
 
 
 def visualize_changes_after_optimization(old_model: torch.nn.Module, new_model: torch.nn.Module,
-                                         visualization_url: str, selected_layers: List = None,
-                                         session_id: str = "optimization",
-                                         display: bool = True):
+                                         results_dir: str, selected_layers: List = None):
     """
     Visualizes changes before and after some optimization has been applied to a model.
-    Visualization_url is in the form: http://<host name>:<port number>/
 
     :param old_model: pytorch model before optimization
     :param new_model: pytorch model after optimization
-    :param visualization_url: user inputted url with session id set as optimization for the visualizations.
+    :param results_dir: Directory to save the Bokeh plots
     :param selected_layers: a list of layers a user can choose to have visualized. If selected layers is None,
         all Linear and Conv layers will be visualized.
-    :param session_id : custom string descriptor to be associated with this session, appended to visualization url.
-    :param display: a flag to indicate if output is to be displayed immediately.
-    :return: None
+    :return: Bokeh plot
     """
-
-    bokeh_session = BokehServerSession(url=visualization_url, session_id=session_id, display=display)
-    server_document = bokeh_session.document
+    file_path = os.path.join(results_dir, 'visualize_changes_after_optimization.html')
+    plotting.output_file(file_path)
+    plot = None
     if selected_layers:
         for name, module in new_model.named_modules():
             if name in selected_layers and hasattr(module, "weight"):
@@ -72,7 +67,6 @@ def visualize_changes_after_optimization(old_model: torch.nn.Module, new_model: 
                 new_model_module = module
                 plot = plotting_utils.visualize_changes_after_optimization_single_layer(name, old_model_module,
                                                                                         new_model_module)
-                server_document.add_root(plot)
 
     else:
         for name, module in new_model.named_modules():
@@ -82,69 +76,58 @@ def visualize_changes_after_optimization(old_model: torch.nn.Module, new_model: 
                 new_model_module = module
                 plot = plotting_utils.visualize_changes_after_optimization_single_layer(name, old_model_module,
                                                                                         new_model_module)
-                server_document.add_root(plot)
+    plotting.save(plot)
+    # returns bokeh plot
+    return plot
 
-    # returns bokeh session object, mostly for testing purposes, so the session can be closed in a test case.
-    return bokeh_session
 
-
-def visualize_weight_ranges(model: torch.nn.Module, visualization_url: str,
-                            selected_layers: List = None,
-                            session_id: str = "optimization",
-                            display: bool = True):
+def visualize_weight_ranges(model: torch.nn.Module, results_dir: str, selected_layers: List = None):
     """
     Visualizes weight ranges for each layer through a scatter plot showing mean plotted against the standard deviation,
     the minimum plotted against the max, and a line plot with min, max, and mean for each output channel.
-    Visualization_url is in the form: http://<host name>:<port number>/
 
     :param model: pytorch model
-    :param visualization_url: user inputted url with session id set as optimization for the visualizations.
     :param selected_layers:  a list of layers a user can choose to have visualized. If selected layers is None,
         all Linear and Conv layers will be visualized.
-    :param session_id : custom string descriptor to be associated with this session, appended to visualization url.
-    :param display: a bool variable to indicate if output is to be displayed immediately.
-    :return: None
+    :param results_dir: Directory to save the Bokeh plots
+    :return: Bokeh Plot
     """
 
-    bokeh_session = BokehServerSession(url=visualization_url, session_id=session_id, display=display)
-    server_document = bokeh_session.document
+    file_path = os.path.join(results_dir, 'visualize_weight_ranges.html')
+    plotting.output_file(file_path)
+    plot = None
     if selected_layers:
         for name, module in model.named_modules():
             if name in selected_layers and hasattr(module, "weight"):
                 plot = plotting_utils.visualize_weight_ranges_single_layer(module, name)
-                server_document.add_root(plot)
     else:
         for name, module in model.named_modules():
             if hasattr(module, "weight") and isinstance(module,
                                                         (torch.nn.modules.conv.Conv2d, torch.nn.modules.linear.Linear)):
                 plot = plotting_utils.visualize_weight_ranges_single_layer(module, name)
-                server_document.add_root(plot)
 
-    # returns bokeh session object, mostly for testing purposes, so the session can be closed in a test case.
-    return bokeh_session
+    plotting.save(plot)
+    # returns plot
+    return plot
 
 
-def visualize_relative_weight_ranges_to_identify_problematic_layers(model: torch.nn.Module, visualization_url: str,
-                                                                    selected_layers: List = None,
-                                                                    session_id: str = "optimization",
-                                                                    display: bool = True):
+def visualize_relative_weight_ranges_to_identify_problematic_layers(model: torch.nn.Module, results_dir: str,
+                                                                    selected_layers: List = None):
     """
     For each of the selected layers, publishes a line plot showing  weight ranges for each layer, summary statistics
     for relative weight ranges, and a histogram showing weight ranges of output channels
     with respect to the minimum weight range.
-    Visualization_url is in the form: http://<host name>:<port number>/
 
     :param model: pytorch model
-    :param visualization_url: user provided url with session id for the visualizations.
+    :param results_dir: Directory to save the Bokeh plots
     :param selected_layers: a list of layers a user can choose to have visualized. If selected layers is None,
         all Linear and Conv layers will be visualized.
-    :param session_id : custom string descriptor to be associated with this session, appended to visualization url.
-    :param display: a bool variable to indicate if output is to be displayed immediately.
     :return: None
     """
 
-    bokeh_session = BokehServerSession(url=visualization_url, session_id=session_id, display=display)
-    server_document = bokeh_session.document
+    file_path = os.path.join(results_dir, 'visualize_changes_after_optimization.html')
+    plotting.output_file(file_path)
+    plot = None
     # layer name -> module weights data frame mapping
     if not selected_layers:
         for name, module in model.named_modules():
@@ -152,13 +135,13 @@ def visualize_relative_weight_ranges_to_identify_problematic_layers(model: torch
                                                         (torch.nn.modules.conv.Conv2d,
                                                          torch.nn.modules.linear.Linear)):
                 plot = plotting_utils.visualize_relative_weight_ranges_single_layer(module, name)
-                server_document.add_root(plot)
     else:
         for name, module in model.named_modules():
             if hasattr(module, "weight") and isinstance(module,
                                                         (torch.nn.modules.conv.Conv2d,
                                                          torch.nn.modules.linear.Linear)) and name in selected_layers:
                 plot = plotting_utils.visualize_relative_weight_ranges_single_layer(module, name)
-                server_document.add_root(plot)
 
-    return bokeh_session
+    plotting.save(plot)
+    # returns plot
+    return plot
