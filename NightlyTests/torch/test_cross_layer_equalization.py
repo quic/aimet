@@ -125,10 +125,12 @@ class TestCrossLayerEqualization(unittest.TestCase):
         results_dir = 'artifacts'
         if not os.path.exists('artifacts'):
             os.makedirs('artifacts')
+        file = os.path.join(results_dir, 'visualize_changes_after_optimization.html')
 
         batch_norm_fold.fold_all_batch_norms(model, (1, 3, 224, 224))
 
         visualize_model.visualize_relative_weight_ranges_to_identify_problematic_layers(model, results_dir)
+        self.assertTrue(os.path.isfile(file))
 
     def test_cle_transposed_conv2D(self):
         class TransposedConvModel(torch.nn.Module):
