@@ -139,6 +139,10 @@ class PassThroughOp(tf.keras.layers.Layer):
     # pylint: disable=arguments-differ
     @staticmethod
     def call(inputs):
+        """
+        This is a function to return input as an output
+        :param inputs: input to pass through
+        """
         return inputs
 
 
