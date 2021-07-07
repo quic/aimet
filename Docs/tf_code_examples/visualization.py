@@ -36,11 +36,11 @@
 #  @@-COPYRIGHT-END-@@
 # =============================================================================
 
-# TF specific imports
+# Quantization visualization imports
 import tensorflow as tf
 from tensorflow.keras.applications.resnet50 import ResNet50
 from aimet_tensorflow import plotting_utils
-
+# End of import statements
 
 def visualizing_weight_ranges_for_single_layer():
     # load a model

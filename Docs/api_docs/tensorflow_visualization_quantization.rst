@@ -21,7 +21,8 @@ Code Examples for Visualization of Weight tensors
 
 .. literalinclude:: ../tf_code_examples/visualization.py
     :language: python
-    :lines: 40-42
+    :start-after: # Quantization visualization imports
+    :end-before: # End of import statements
 
 **Visualizing weight ranges for layer**
 
