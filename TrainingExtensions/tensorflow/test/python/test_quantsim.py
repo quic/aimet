@@ -802,7 +802,7 @@ class TestQuantSim(unittest.TestCase):
         session = tf.compat.v1.Session()
         session.run(init)
 
-        sim = QuantizationSimModel(session, ['input_1'], ['keras_model/Softmax'], use_cuda=False)
+        sim = QuantizationSimModel(session, ['conv2d_input'], ['keras_model/Softmax'], use_cuda=False)
         param_encodings = {'conv2d/Conv2D/ReadVariableOp:0': [{'bitwidth': 4, 'is_symmetric': False,
                                                                'max': 0.14584073424339294,
                                                                'min': -0.12761062383651733,

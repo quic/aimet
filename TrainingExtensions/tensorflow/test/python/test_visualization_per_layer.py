@@ -37,13 +37,9 @@
 # =============================================================================
 
 import os
-import signal
 import unittest
 import tensorflow as tf
-import numpy as np
 from tensorflow.keras.applications.resnet50 import ResNet50
-
-from aimet_common.utils import start_bokeh_server_session
 from aimet_tensorflow import plotting_utils
 
 tf.compat.v1.disable_eager_execution()

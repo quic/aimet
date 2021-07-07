@@ -64,7 +64,7 @@ class TestQuantizerInfo(unittest.TestCase):
         session = tf.compat.v1.Session()
         session.run(init)
 
-        sim = QuantizationSimModel(session, ['input_1'], ['keras_model/Softmax'], use_cuda=False)
+        sim = QuantizationSimModel(session, ['conv2d_input'], ['keras_model/Softmax'], use_cuda=False)
         quantizer = sim.quantizer_config('conv2d/Conv2D/ReadVariableOp_quantized')
 
         encoding = quantizer.compute_encoding(8, False)
@@ -100,7 +100,7 @@ class TestQuantizerInfo(unittest.TestCase):
         session = tf.compat.v1.Session()
         session.run(init)
 
-        sim = QuantizationSimModel(session, ['input_1'], ['keras_model/Softmax'], use_cuda=False)
+        sim = QuantizationSimModel(session, ['conv2d_input'], ['keras_model/Softmax'], use_cuda=False)
         quantizer = sim.quantizer_config('conv2d/Conv2D/ReadVariableOp_quantized')
 
         op_mode = int(libpymo.TensorQuantizerOpMode.oneShotQuantizeDequantize)
@@ -125,7 +125,7 @@ class TestQuantizerInfo(unittest.TestCase):
         session = tf.compat.v1.Session()
         session.run(init)
 
-        sim = QuantizationSimModel(session, ['input_1'], ['keras_model/Softmax'], use_cuda=False)
+        sim = QuantizationSimModel(session, ['conv2d_input'], ['keras_model/Softmax'], use_cuda=False)
         quantizer = sim.quantizer_config('conv2d/Conv2D/ReadVariableOp_quantized')
 
         # Freeze encoding before computing it
@@ -144,7 +144,7 @@ class TestQuantizerInfo(unittest.TestCase):
         session = tf.compat.v1.Session()
         session.run(init)
 
-        sim = QuantizationSimModel(session, ['input_1'], ['keras_model/Softmax'], use_cuda=False)
+        sim = QuantizationSimModel(session, ['conv2d_input'], ['keras_model/Softmax'], use_cuda=False)
         quantizer = sim.quantizer_config('conv2d/Conv2D/ReadVariableOp_quantized')
 
         self.assertRaises(AssertionError, lambda: quantizer.get_encoding())

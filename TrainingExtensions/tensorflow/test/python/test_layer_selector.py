@@ -93,6 +93,8 @@ class TestLayerSelector(unittest.TestCase):
         layer_selector.select(layer_db, [layer2.module])
         layer_db.mark_picked_layers.assert_called_once_with([layer1])
 
+        sess.close()
+
     def test_select_all_conv_and_fc_layers(self):
 
         # Two regular conv layers
@@ -134,3 +136,5 @@ class TestLayerSelector(unittest.TestCase):
         layer_db.mark_picked_layers.reset_mock()
         layer_selector.select(layer_db, [layer2.module])
         layer_db.mark_picked_layers.assert_called_once_with([layer1, layer4])
+
+        sess.close()

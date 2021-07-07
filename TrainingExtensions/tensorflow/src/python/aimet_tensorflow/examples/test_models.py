@@ -93,7 +93,7 @@ def single_residual():
 def keras_model():
     """ Function for returning a basic keras model """
 
-    inputs = tf.keras.Input(shape=(16, 16, 3,))
+    inputs = tf.keras.Input(shape=(16, 16, 3,), name='conv2d_input')
     x = tf.keras.layers.Conv2D(8, (2, 2))(inputs)
     x = tf.compat.v1.layers.batch_normalization(x, momentum=.3, epsilon=.65)
     x = tf.keras.layers.AveragePooling2D()(x)
