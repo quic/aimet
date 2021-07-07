@@ -35,9 +35,9 @@
 #  
 #  @@-COPYRIGHT-END-@@
 # =============================================================================
-""" code examples for visualization APIs """
+""" Code examples for visualization APIs """
 
-import copy
+# Visualization imports
 from decimal import Decimal
 import torch
 from torchvision import models
@@ -48,101 +48,15 @@ from aimet_common.utils import start_bokeh_server_session
 from aimet_torch.compress import ModelCompressor
 from aimet_torch.visualize_serialized_data import VisualizeCompression
 
-
-from aimet_torch.cross_layer_equalization import equalize_model
-from aimet_torch.examples.imagenet_dataloader import ImageNetDataLoader
-from aimet_torch.examples.supervised_classification_pipeline import \
-    create_stand_alone_supervised_classification_evaluator
-from aimet_torch.utils import IterFirstX
-from aimet_torch import batch_norm_fold
-from aimet_torch import visualize_model
-
-image_dir = './data/tiny-imagenet-200'
-image_size = 224
-batch_size = 5
-num_workers = 1
+# End of import statements
 
 
-def evaluate(model, early_stopping_iterations, use_cuda):
-    """
-    :param model: model to be evaluated
-    :param early_stopping_iterations: if None, data loader will iterate over entire validation data
-    :return: top_1_accuracy on validation data
-    """
-
-    data_loader = ImageNetDataLoader(image_dir, image_size, batch_size, num_workers)
-    if early_stopping_iterations is not None:
-        # wrapper around validation data loader to run only 'X' iterations to save time
-        val_loader = IterFirstX(data_loader.val_loader, early_stopping_iterations)
-    else:
-        # iterate over entire validation data set
-        val_loader = data_loader.val_loader
-
-    criterion = torch.nn.CrossEntropyLoss().cuda()
-    evaluator = create_stand_alone_supervised_classification_evaluator(model, criterion, use_cuda=use_cuda)
-    evaluator.run(val_loader)
-    return evaluator.state.metrics['top_1_accuracy']
-
-
-def visualize_changes_in_model_after_and_before_cle():
-    """
-    Code example for visualizating model before and after Cross Layer Equalization optimization
-    """
-    model = models.resnet18(pretrained=True).to(torch.device('cpu'))
-    model = model.eval()
-    # Create a copy of the model to visualize the before and after optimization changes
-    model_copy = copy.deepcopy(model)
-
-    # Specify a folder in which the plots will be saved
-    results_dir = './visualization'
-
-    batch_norm_fold.fold_all_batch_norms(model_copy, (1, 3, 224, 224))
-
-    equalize_model(model, (1, 3, 224, 224))
-    visualize_model.visualize_changes_after_optimization(model_copy, model, results_dir)
-
-
-def visualize_weight_ranges_model():
-    """
-    Code example for model visualization
-    """
-    model = models.resnet18(pretrained=True).to(torch.device('cpu'))
-    model = model.eval()
-
-    # Specify a folder in which the plots will be saved
-    results_dir = './visualization'
-
-    batch_norm_fold.fold_all_batch_norms(model, (1, 3, 224, 224))
-
-    # Usually it is observed that if we do BatchNorm fold the layer's weight range increases.
-    # This helps in visualizing layer's weight
-    visualize_model.visualize_weight_ranges(model, results_dir)
-
-
-def visualize_relative_weight_ranges_model():
-    """
-    Code example for model visualization
-    """
-    model = models.resnet18(pretrained=True).to(torch.device('cpu'))
-    model = model.eval()
-
-    # Specify a folder in which the plots will be saved
-    results_dir = './visualization'
-
-    batch_norm_fold.fold_all_batch_norms(model, (1, 3, 224, 224))
-
-    # Usually it is observed that if we do BatchNorm fold the layer's weight range increases.
-    # This helps in finding layers which can be equalized to get better performance on hardware
-    visualize_model.visualize_relative_weight_ranges_to_identify_problematic_layers(model, results_dir)
-
-
-def model_compression_with_visualization():
+def model_compression_with_visualization(eval_func):
     """
     Code example for compressing a model with a visualization url provided.
     """
     visualization_url, process = start_bokeh_server_session(8002)
 
-    ImageNetDataLoader(image_dir, image_size, batch_size, num_workers)
     input_shape = (1, 3, 224, 224)
     model = models.resnet18(pretrained=True).to(torch.device('cuda'))
 
@@ -160,7 +74,7 @@ def model_compression_with_visualization():
                                                    multiplicity=8)
 
     # If no visualization URL is provided, during model compression execution no visualizations will be published.
-    ModelCompressor.compress_model(model=model, eval_callback=evaluate, eval_iterations=5,
+    ModelCompressor.compress_model(model=model, eval_callback=eval_func, eval_iterations=5,
                                    input_shape=input_shape,
                                    compress_scheme=aimet_common.defs.CompressionScheme.spatial_svd,
                                    cost_metric=aimet_common.defs.CostMetric.mac, parameters=params,
