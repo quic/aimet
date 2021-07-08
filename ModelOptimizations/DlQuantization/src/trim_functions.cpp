@@ -151,9 +151,8 @@ template <typename DTYPE>
 void quantizeToFxpCpu(const DTYPE* in, int cnt, const TfEncoding& encoding, DTYPE* out, RoundingMode rounding_mode,
                       bool shiftToSigned)
 {
-    // Using long int to account for case of signed symmetric 32 bit, when shift will be 2^31 which regular 8 bit int
-    // cannot handle.
-    long int shift = 0;
+    // Using unsigned int to account for case of signed symmetric 32 bit, when shift will be 2^31
+    unsigned int shift = 0;
     if (shiftToSigned) {
         shift = pow(2, encoding.bw - 1);
     }
