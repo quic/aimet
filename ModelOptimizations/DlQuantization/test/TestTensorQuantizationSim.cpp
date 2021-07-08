@@ -205,3 +205,23 @@ TEST(TestTensorQuantizationSim, SanityTestWithQuantizeOnlySigned)
         EXPECT_FLOAT_EQ(outputTensor[i], expectedOutput[i]);
     }
 }
+
+TEST(TestTensorQuantizationSim, SanityTestWith32BitQuantizeOnlySigned)
+{
+    // Instantiate TensorQuantizationSim
+    DlQuantization::TensorQuantizationSim<float> sim;
+
+    // Create a dummy tensor
+    const std::vector<float> tensor = {-1.0};
+    std::vector<float> outputTensor(tensor.size());
+
+    uint8_t bw     = 32;
+    double min    = -1.0;
+    double max    = 1.0;
+
+    sim.quantizeTensor(tensor.data(), tensor.size(), outputTensor.data(), min, max, bw,
+                       DlQuantization::RoundingMode::ROUND_NEAREST, false, true);
+
+    std::vector<float> expectedOutput = {-2147483648};
+    EXPECT_FLOAT_EQ(outputTensor[0], expectedOutput[0]);
+}
