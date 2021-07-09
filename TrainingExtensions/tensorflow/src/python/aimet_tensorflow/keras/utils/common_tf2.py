@@ -41,7 +41,7 @@
 import tensorflow as tf
 
 
-def get_module_name_reference(cur_layer: tf.keras.Model) -> dict:
+def module_to_name_map(cur_layer: tf.keras.Model) -> dict:
     """
     To find a variable name and parent reference of one module
     :cur_layer: model to obtain module_name_reference
@@ -52,7 +52,7 @@ def get_module_name_reference(cur_layer: tf.keras.Model) -> dict:
     # pylint: disable=protected-access
     for layer in cur_layer._layers:
         if layer.submodules:
-            ref_name.update(get_module_name_reference(layer))
+            ref_name.update(module_to_name_map(layer))
         else:
             for _, (key, element) in enumerate(vars(cur_layer).items()):
                 if isinstance(element, tf.keras.layers.Layer) and element == layer:

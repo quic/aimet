@@ -43,7 +43,7 @@ import  numpy as np
 import tensorflow as tf
 import libpymo
 from aimet_common.utils import AimetLogger
-from aimet_tensorflow.utils import common_tf2
+from aimet_tensorflow.keras.utils import common_tf2
 
 logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Utils)
 
@@ -146,32 +146,32 @@ class PassThroughOp(tf.keras.layers.Layer):
         return inputs
 
 
-def _sequential_removal(layer: tf.keras.layers.Layer, bn: tf.keras.layers.BatchNormalization):
+def _remove_bn_from_sequential(layer: tf.keras.layers.Layer, bn: tf.keras.layers.BatchNormalization):
 
     """
     This is the function for removing batch normalization layers that are layers of sequential model
     layer: model to obtain bn_layer that we want to remove
     bn: batch normalization layer that needs to be removed
     """
-    removed_layers = []
+    layers_after_bn  = []
     visited = False
-    idx = -float('inf')
+    idx = None
     for index, layer2 in enumerate(layer.layers):
         if visited:
-            removed_layers.append(layer2)
+            layers_after_bn .append(layer2)
 
         elif layer2 == bn:
             visited = True
             idx = index
 
         elif layer2.submodules and isinstance(layer2, tf.keras.Sequential):
-            _sequential_removal(layer2, bn)
+            _remove_bn_from_sequential(layer2, bn)
 
-        if visited:
-            for _ in range(len(layer.layers) - idx):
-                layer.pop()
-            for layer_to_add in removed_layers:
-                layer.add(layer_to_add)
+    if visited and idx is not None:
+        for _ in range(len(layer.layers) - idx):
+            layer.pop()
+        for layer_to_add in layers_after_bn :
+            layer.add(layer_to_add)
 
 
 def _delete_bn_from_model(model: tf.keras.Model, bn_layers: List[tf.keras.layers.BatchNormalization]):
@@ -181,7 +181,7 @@ def _delete_bn_from_model(model: tf.keras.Model, bn_layers: List[tf.keras.layers
     :param bn_layers: bn layers that should be removed
     """
 
-    ref_name = common_tf2.get_module_name_reference(model)
+    ref_name = common_tf2.module_to_name_map(model)
 
     for bn in bn_layers:
         if bn in ref_name.keys():
@@ -189,7 +189,7 @@ def _delete_bn_from_model(model: tf.keras.Model, bn_layers: List[tf.keras.layers
             op = PassThroughOp()
             setattr(parent_ref, module_name, op)
         else:
-            _sequential_removal(model, bn)
+            _remove_bn_from_sequential(model, bn)
 
 
 def _fold_given_auto_selected_batch_norms(model: tf.keras.Model, layer_pairs: List[PairType]):
