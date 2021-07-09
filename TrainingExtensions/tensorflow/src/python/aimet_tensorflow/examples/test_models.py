@@ -109,7 +109,7 @@ def keras_model_functional():
     """ Function for returning basic keras model defined functionally """
     inputs = tf.keras.Input(shape=(32, 32, 3,))
     x = tf.keras.layers.Conv2D(32, (3, 3))(inputs)
-    x = tf.keras.layers.BatchNormalization(momentum=.3, epsilon=.65)(x, training=True)
+    x = tf.compat.v1.layers.batch_normalization(x, momentum=.3, epsilon=.65, training=True)
     with tf.compat.v1.variable_scope("scope_1"):
         x = tf.keras.layers.Conv2D(16, (2, 2), activation=tf.nn.tanh)(x)
         x = tf.compat.v1.layers.batch_normalization(x, momentum=.4, epsilon=.25, training=True)
