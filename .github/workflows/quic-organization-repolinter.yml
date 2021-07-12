@@ -1,0 +1,28 @@
+name: QuIC Organization Repolinter
+
+on:
+  push:
+    branches: [ develop ]
+  pull_request:
+    branches: [ develop ]
+
+jobs:
+  repolinter:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repo
+        uses: actions/checkout@v2
+      - name: Verify repolinter config file is present
+        id: check_files
+        uses: andstor/file-existence-action@v1
+        with:
+          files: "repolint.json"
+      - name: Run Repolinter with local repolint.json
+        if: steps.check_files.outputs.files_exists == 'true'
+        uses: newrelic/repolinter-action@v1
+      - name: Run Repolinter with default ruleset
+        if: steps.check_files.outputs.files_exists == 'false'
+        uses: newrelic/repolinter-action@v1
+        with:
+          config_url: "https://raw.githubusercontent.com/quic/.github/main/repolint.json"
+
