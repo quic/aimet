@@ -54,7 +54,7 @@ def module_to_name_map(cur_layer: tf.keras.Model) -> dict:
         if layer.submodules:
             ref_name.update(module_to_name_map(layer))
         else:
-            for _, (key, element) in enumerate(vars(cur_layer).items()):
+            for key, element in vars(cur_layer).items():
                 if isinstance(element, tf.keras.layers.Layer) and element == layer:
                     ref_name[element] = [cur_layer, key]
 

@@ -43,7 +43,7 @@ import  numpy as np
 import tensorflow as tf
 import libpymo
 from aimet_common.utils import AimetLogger
-from aimet_tensorflow.keras.utils import common_tf2
+from aimet_tensorflow.keras.utils import common
 
 logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Utils)
 
@@ -156,16 +156,16 @@ def _remove_bn_from_sequential(layer: tf.keras.layers.Layer, bn: tf.keras.layers
     layers_after_bn  = []
     visited = False
     idx = None
-    for index, layer2 in enumerate(layer.layers):
+    for index, inner_layer in enumerate(layer.layers):
         if visited:
-            layers_after_bn .append(layer2)
+            layers_after_bn .append(inner_layer)
 
-        elif layer2 == bn:
+        elif inner_layer == bn:
             visited = True
             idx = index
 
-        elif layer2.submodules and isinstance(layer2, tf.keras.Sequential):
-            _remove_bn_from_sequential(layer2, bn)
+        elif inner_layer.submodules and isinstance(inner_layer, tf.keras.Sequential):
+            _remove_bn_from_sequential(inner_layer, bn)
 
     if visited and idx is not None:
         for _ in range(len(layer.layers) - idx):
@@ -181,10 +181,10 @@ def _delete_bn_from_model(model: tf.keras.Model, bn_layers: List[tf.keras.layers
     :param bn_layers: bn layers that should be removed
     """
 
-    ref_name = common_tf2.module_to_name_map(model)
+    ref_name = common.module_to_name_map(model)
 
     for bn in bn_layers:
-        if bn in ref_name.keys():
+        if bn in ref_name:
             parent_ref, module_name = ref_name[bn]
             op = PassThroughOp()
             setattr(parent_ref, module_name, op)

@@ -40,7 +40,7 @@ import unittest
 import tensorflow as tf
 from packaging import version
 
-from aimet_tensorflow.keras.batch_norm_fold_tf2 import _delete_bn_from_model
+from aimet_tensorflow.keras.batch_norm_fold import _delete_bn_from_model
 
 class TestBatchNormFold(unittest.TestCase):
     """ Test methods for BatchNormFold"""
@@ -51,11 +51,13 @@ class TestBatchNormFold(unittest.TestCase):
             def __init__(self):
                 super(Block2, self).__init__()
                 # define all layers in init
+                self.dn1 = tf.keras.layers.Dense(units=32)
                 self.bn1 = tf.keras.layers.BatchNormalization(fused=True)
                 self.relu = tf.keras.layers.ReLU()
 
             def call(self, x):
                 # forward pass
+                x = self.dn1(x)
                 x = self.bn1(x)
                 x = self.relu(x)
                 return x
@@ -65,11 +67,13 @@ class TestBatchNormFold(unittest.TestCase):
                 super(Block1, self).__init__()
                 # define all layers in init
                 self.bn1 = tf.keras.layers.BatchNormalization(fused=True)
+                self.dn1 = tf.keras.layers.Dense(units=32)
                 self.block2 = Block2()
 
             def call(self, x):
                 # forward pass
                 x = self.bn1(x)
+                x = self.dn1(x)
                 x = self.block2(x)
                 return x
 
@@ -135,6 +139,7 @@ class TestBatchNormFold(unittest.TestCase):
                 # define all layers in init
                 self.conv1 = tf.keras.layers.Conv2D(filters=kernel_num, kernel_size=kernel_size, strides=strides)
                 self.bn1 = tf.keras.layers.BatchNormalization(fused=True)
+                self.dn1 = tf.keras.layers.Dense(units=32)
                 self.block1 = Block1()
                 self.block2 = Block2()
 
@@ -142,6 +147,7 @@ class TestBatchNormFold(unittest.TestCase):
                 # forward pass
                 x = self.conv1(input_tensor)
                 x = self.bn1(x)
+                x = self.dn1(x)
                 x = self.block1(x)
                 x = self.block2(x)
                 return x
@@ -236,14 +242,14 @@ class TestBatchNormFold(unittest.TestCase):
                 # define all layers in init
                 self.conv1 = tf.keras.layers.Conv2D(filters=kernel_num, kernel_size=kernel_size, strides=strides)
                 self.bn1 = tf.keras.layers.BatchNormalization(fused=True)
-                # self.block1 = Block1()
+                self.dn1 = tf.keras.layers.Dense(units=32)
                 self.block2 = Block2
 
             def call(self, input_tensor, training=False):
                 # forward pass
                 x = self.conv1(input_tensor)
                 x = self.bn1(x)
-                # x = self.block1(x)
+                x = self.dn1(x)
                 x = self.block2(x)
                 return x
 
