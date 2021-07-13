@@ -105,6 +105,21 @@ def keras_model():
     return outputs
 
 
+def keras_model_before():
+    """ Function for returning a basic keras model """
+
+    model = Sequential([
+        Conv2D(8, (2, 2), input_shape=(16, 16, 3,)),
+        BatchNormalization(momentum=.3, epsilon=.65),
+        AvgPool2D(),
+        MaxPool2D(),
+        BatchNormalization(momentum=.4, epsilon=.25),
+        Conv2D(4, (2, 2), activation=tf.nn.tanh, kernel_regularizer=tf.keras.regularizers.l2(0.5)),
+        Flatten(),
+        Dense(2, activation='softmax', name="keras_model")])
+    return model
+
+
 def keras_model_functional():
     """ Function for returning basic keras model defined functionally """
     inputs = tf.keras.Input(shape=(32, 32, 3,))
@@ -122,7 +137,44 @@ def keras_model_functional():
     return outputs
 
 
+def keras_model_functional_before():
+    """ Function for returning basic keras model defined functionally """
+    is_training = tf.compat.v1.placeholder(tf.bool, name='is_training')
+    inputs = tf.keras.Input(shape=(32, 32, 3,))
+    x = tf.keras.layers.Conv2D(32, (3, 3))(inputs)
+    x = tf.compat.v1.keras.layers.BatchNormalization(momentum=.3, epsilon=.65)(x, training=True)
+    with tf.compat.v1.variable_scope("scope_1"):
+        x = tf.keras.layers.Conv2D(16, (2, 2), activation=tf.nn.tanh)(x)
+        x = tf.compat.v1.keras.layers.BatchNormalization(momentum=.4, epsilon=.25)(x, training=is_training)
+        x = tf.keras.layers.Conv2D(8, (2, 2), activation=tf.nn.tanh)(x)
+        x = tf.compat.v1.keras.layers.BatchNormalization(momentum=.5, epsilon=.35)(x, training=False)
+        x = tf.keras.layers.Conv2D(4, (2, 2), activation=tf.nn.relu6)(x)
+    x = tf.keras.layers.Flatten()(x)
+    outputs = tf.keras.layers.Dense(10, activation=tf.nn.softmax, name="keras_model_functional")(x)
+    model = tf.keras.Model(inputs=inputs, outputs=outputs)
+    return model
+
+
 def keras_model_functional_with_non_fused_batchnorms():
+    """ Function for returning basic keras model defined functionally using non fused batchnorms"""
+    is_training = tf.compat.v1.placeholder_with_default(tf.constant(True), shape=(), name='is_training')
+    inputs = tf.keras.Input(shape=(32, 32, 3,))
+    x = tf.keras.layers.Conv2D(32, (3, 3))(inputs)
+    x = tf.compat.v1.layers.batch_normalization(x, momentum=.3, epsilon=.65, fused=False, training=True)
+    with tf.compat.v1.variable_scope("scope_1"):
+        x = tf.keras.layers.Conv2D(16, (2, 2), activation=tf.nn.tanh)(x)
+        x = tf.compat.v1.layers.batch_normalization(x, momentum=.4, epsilon=.25, fused=False, training=is_training)
+        x = tf.keras.layers.Conv2D(8, (2, 2), activation=tf.nn.tanh)(x)
+        x = tf.compat.v1.layers.batch_normalization(x, momentum=.5, epsilon=.35, fused=False, training=False)
+        x = tf.keras.layers.Conv2D(4, (2, 2), activation=tf.nn.relu6)(x)
+    x = tf.keras.layers.Flatten()(x)
+    outputs = tf.keras.layers.Dense(10, activation=tf.nn.softmax,
+                                    name="keras_model_functional_with_non_fused_batchnorms")(x)
+
+    return outputs
+
+
+def keras_model_functional_with_non_fused_batchnorms_before():
     """ Function for returning basic keras model defined functionally using non fused batchnorms"""
     is_training = tf.compat.v1.placeholder_with_default(tf.constant(True), shape=(), name='is_training')
     inputs = tf.keras.Input(shape=(32, 32, 3,))

@@ -565,7 +565,7 @@ def get_conv2d_activation_shape(sess: tf.compat.v1.Session, op: tf.Operation, in
         # create feed_dict
         feed_dict = create_input_feed_dict(graph=op.graph,
                                            input_op_names_list=input_op_names,
-                                           input_data=input_data, training=False)
+                                           input_data=input_data)
 
         if input_activation:
             # get the input activation shape by evaluating the input tensor
