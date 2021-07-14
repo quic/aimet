@@ -38,7 +38,7 @@
 """ Custom Tensor Quantizers for PyTorch Op for quantizing weights and activations """
 
 import io
-from typing import Union
+from typing import Union, List
 
 import torch
 
@@ -147,7 +147,7 @@ class StaticGridTensorQuantizer(TensorQuantizer):
 
         # Create the c++ op
         self._cppOp = []
-        for i in range(state.num_channels):
+        for _ in range(state.num_channels):
             self._cppOp.append(AimetTensorQuantizer.AimetTensorQuantizer(self.quant_scheme))
 
         # Create the encoding object
@@ -156,12 +156,12 @@ class StaticGridTensorQuantizer(TensorQuantizer):
             self._encoding = []
             for enc in state.encodings:
 
-                min, max, delta, offset, bw = enc
+                enc_min, enc_max, delta, offset, bw = enc
 
                 new_encoding = libpymo.TfEncoding()
                 new_encoding.bw = bw
-                new_encoding.max = max
-                new_encoding.min = min
+                new_encoding.max = enc_max
+                new_encoding.min = enc_min
                 new_encoding.delta = delta
                 new_encoding.offset = offset
 
@@ -171,21 +171,16 @@ class StaticGridTensorQuantizer(TensorQuantizer):
 
     @property
     def encoding(self):
+        """
+        Property to get encoding
+        :return: One (per-tensor) or list of many (per-channel) encodings
+        """
         return self._encoding
 
     @encoding.setter
     def encoding(self, encoding):
         if not self._is_encoding_frozen:
             self._encoding = encoding
-
-    def update_encoding_stats(self, tensor):
-        """
-        Update the stats for computing encoding
-        :param tensor: Tensor to use for updating the encodings stats
-        """
-        if self.enabled and not self._is_encoding_frozen:
-            for op in self._cppOp:
-                op.updateStats(tensor, tensor.is_cuda)
 
     def compute_encoding(self):
         """
@@ -266,19 +261,86 @@ class StaticGridPerTensorQuantizer(StaticGridTensorQuantizer):
     def encoding(self):
         if self._encoding:
             return self._encoding[0]
-        else:
-            return None
+
+        return None
 
     @encoding.setter
     def encoding(self, encoding: libpymo.TfEncoding):
         if not self._is_encoding_frozen:
             self._encoding = [encoding]
 
+    def update_encoding_stats(self, tensor):
+        """
+        Update the stats for computing encoding
+        :param tensor: Tensor to use for updating the encodings stats
+        """
+        if self.enabled and not self._is_encoding_frozen:
+            for op in self._cppOp:
+                op.updateStats(tensor, tensor.is_cuda)
+
+
+class StaticGridPerChannelQuantizer(StaticGridTensorQuantizer):
+    """
+    Simulates quantization for the given tensor using a per-channel scale/offset
+    """
+
+    def __init__(self, bitwidth: int, round_mode: str, quant_scheme: str, use_symmetric_encodings: bool,
+                 num_channels: int, enabled_by_default: bool):
+        """
+        Constructor
+        :param bitwidth: Quantization bitwidth
+        :param round_mode: Rounding mode (e.g. Nearest)
+        :param quant_scheme: Quantization scheme (e.g. tf, tf_enhanced)
+        :param use_symmetric_encodings: True if symmetric encoding is used.  False otherwise.
+        :param enabled_by_default: True if quantization of tensor is enabled.  False otherwise.
+        """
+        super(StaticGridPerChannelQuantizer, self).__init__(bitwidth, round_mode, quant_scheme, use_symmetric_encodings,
+                                                            enabled_by_default)
+        self._cppOp = [AimetTensorQuantizer.AimetTensorQuantizer(quant_scheme) for _ in range(num_channels)]
+        self._encoding = None
+        self._is_encoding_frozen = False
+
+    @property
+    def encoding(self):
+        return self._encoding
+
+    @encoding.setter
+    def encoding(self, encoding: List[libpymo.TfEncoding]):
+        if not self._is_encoding_frozen:
+            self._encoding = encoding
+
+    def update_encoding_stats(self, tensor):
+        """
+        Update the stats for computing encoding
+        :param tensor: Tensor to use for updating the encodings stats
+        """
+        if self.enabled and not self._is_encoding_frozen:
+            for channel_idx, op in enumerate(self._cppOp):
+                op.updateStats(tensor[channel_idx], tensor.is_cuda)
+
 
 class QuantizeDequantize(torch.autograd.Function):
     """
     Custom gradient function for STE
     """
+
+    @staticmethod
+    def _per_tensor_quantize_dequantize(tensor, tensor_quantizer, round_mode):
+        # pylint:disable = protected-access
+        return tensor_quantizer._cppOp[0].quantizeDequantize(tensor, tensor_quantizer.encoding,
+                                                             round_mode, tensor.is_cuda)
+
+    @staticmethod
+    def _per_channel_quantize_dequantize(tensor, tensor_quantizer, round_mode):
+        quantized_tensors = []
+
+        # pylint:disable = protected-access
+        for index, op in enumerate(tensor_quantizer._cppOp):
+            quantized_tensors.append(op.quantizeDequantize(tensor[index, :], tensor_quantizer._encoding[index],
+                                                           round_mode, tensor.is_cuda))
+        quantized_tensor = torch.stack(tuple(quantized_tensors))
+        return quantized_tensor
+
     # pylint:disable = arguments-differ
     @staticmethod
     def forward(ctx, tensor, tensor_quantizer, round_mode):
@@ -290,9 +352,15 @@ class QuantizeDequantize(torch.autograd.Function):
         :return: Resulting tensor
         """
         if tensor_quantizer.enabled:
-            # pylint:disable = protected-access
-            quantized_tensor = tensor_quantizer._cppOp[0].quantizeDequantize(tensor, tensor_quantizer.encoding,
-                                                                             round_mode, tensor.is_cuda)
+
+            # pylint: disable=protected-access
+            if len(tensor_quantizer._cppOp) > 1:
+                quantized_tensor = QuantizeDequantize._per_channel_quantize_dequantize(tensor, tensor_quantizer,
+                                                                                       round_mode)
+            else:
+                quantized_tensor = QuantizeDequantize._per_tensor_quantize_dequantize(tensor, tensor_quantizer,
+                                                                                      round_mode)
+
         else:
             quantized_tensor = tensor
 
