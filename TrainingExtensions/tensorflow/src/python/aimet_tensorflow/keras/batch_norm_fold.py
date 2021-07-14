@@ -44,6 +44,7 @@ import tensorflow as tf
 import libpymo
 from aimet_common.utils import AimetLogger
 from aimet_tensorflow.keras.utils import common
+from aimet_tensorflow.keras.utils.op.batchnorm import BNUtils
 
 logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Utils)
 
@@ -153,35 +154,55 @@ def _remove_bn_from_sequential(layer: tf.keras.layers.Layer, bn: tf.keras.layers
     layer: model to obtain bn_layer that we want to remove
     bn: batch normalization layer that needs to be removed
     """
-    layers_after_bn  = []
+    layers_after_bn = []
     visited = False
     idx = None
     for index, inner_layer in enumerate(layer.layers):
         if visited:
-            layers_after_bn .append(inner_layer)
+            layers_after_bn.append(inner_layer)
 
         elif inner_layer == bn:
             visited = True
             idx = index
 
-        elif inner_layer.submodules and isinstance(inner_layer, tf.keras.Sequential):
-            _remove_bn_from_sequential(inner_layer, bn)
+
+        elif inner_layer.submodules:
+            _delete_bn_from_model(inner_layer, bn)
 
     if visited and idx is not None:
         for _ in range(len(layer.layers) - idx):
             layer.pop()
-        for layer_to_add in layers_after_bn :
+        for layer_to_add in layers_after_bn:
             layer.add(layer_to_add)
 
-
-def _delete_bn_from_model(model: tf.keras.Model, bn_layers: List[tf.keras.layers.BatchNormalization]):
+def _delete_bn_from_model(model: tf.keras.Model, bn_layer: tf.keras.layers.BatchNormalization):
     """
     Remove bn layer
     :param model
-    :param bn_layers: bn layers that should be removed
+    :param bn_layer: bn layer that should be removed
     """
+    # ref_name = {}
+    if isinstance(model, tf.keras.Sequential):
+        _remove_bn_from_sequential(model, bn_layer)
+
+    # We are expecting to handle functional model or model subclassing in the elif statement
+    elif isinstance(model, (tf.keras.layers.Layer, tf.keras.Model)):
+        for layer in model.layers:
+            if layer.submodules:
+                _delete_bn_from_model(layer, bn_layer)
+
+
+def _delete_all_bns_from_model(model: tf.keras.Model, bn_layers: List[tf.keras.layers.BatchNormalization]):
+    '''
+    Remove bn layer
+    :param model
+    :param bn_layers: bn layers that should be removed
+    '''
 
     ref_name = common.module_to_name_map(model)
+
+    # if bn is a layer in model subclassing api, will exist in ref_name so we will replace it with passthrough op otherwise
+    # it would be a layer inside functional or sequential model which will be handled in delete_bn_from_model function
 
     for bn in bn_layers:
         if bn in ref_name:
@@ -189,7 +210,10 @@ def _delete_bn_from_model(model: tf.keras.Model, bn_layers: List[tf.keras.layers
             op = PassThroughOp()
             setattr(parent_ref, module_name, op)
         else:
-            _remove_bn_from_sequential(model, bn)
+            _delete_bn_from_model(model, bn)
+
+
+
 
 
 def _fold_given_auto_selected_batch_norms(model: tf.keras.Model, layer_pairs: List[PairType]):
@@ -240,5 +264,6 @@ def _fold_given_auto_selected_batch_norms(model: tf.keras.Model, layer_pairs: Li
         numpy_bias_reshaped = np.reshape(bias, bias_tensor_shape)
         conv_linear.set_weights([numpy_weight_reshaped.data, numpy_bias_reshaped])
 
+        BNUtils.modify_bn_params_to_make_as_passthrough(batchnorm)
 
     _delete_bn_from_model(model, list_of_bn_layers)

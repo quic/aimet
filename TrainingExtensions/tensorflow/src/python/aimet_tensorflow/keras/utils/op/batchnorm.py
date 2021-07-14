@@ -36,26 +36,27 @@
 #  @@-COPYRIGHT-END-@@
 # =============================================================================
 
-""" Common Utilities for tf 2.x """
+""" BN Utilities for tf 2.x """
 
 import tensorflow as tf
+import numpy as np
 
-
-def module_to_name_map(cur_layer: tf.keras.Model) -> dict:
+class BNUtils:
     """
-    To find a variable name and parent reference of one module
-    :cur_layer: model to obtain module_name_reference
-    :return: dictionary includes module_ref as a key, module_name and parent_ref as value
+    Batch Norm/ fused Batch Norm op related utils
     """
+    @staticmethod
+    def modify_bn_params_to_make_as_passthrough(bn: tf.keras.layers.BatchNormalization):
+        """
+        To change the batch normalization parameters to work as no-op operation
+        :bn: Batch normalization layer that should be worked as passthrough op (no-op)
+        """
 
-    ref_name = {}
-    # pylint: disable=protected-access
-    for inner_layer in cur_layer._layers:
-        if inner_layer.submodules:
-            ref_name.update(module_to_name_map(inner_layer))
-        else:
-            for key, element in vars(cur_layer).items():
-                if isinstance(element, tf.keras.layers.Layer) and element == inner_layer:
-                    ref_name[element] = [cur_layer, key]
+        bn.trainable = False
+        gamma = np.ones(shape=bn.gamma.shape, dtype=np.float32)
+        beta = np.zeros(shape=bn.beta.shape, dtype=np.float32)
+        move_mean = np.zeros(shape=bn.moving_mean.shape, dtype=np.float32)
+        move_var = np.ones(shape=bn.moving_variance.shape, dtype=np.float32)
 
-    return ref_name
+        bn.set_weights([gamma, beta, move_mean, move_var])
+        bn.epsilon = 0

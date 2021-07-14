@@ -35,12 +35,15 @@
 #
 #  @@-COPYRIGHT-END-@@
 # =============================================================================
-
+"""
+This file contains unit tests for testing batch norm folding
+"""
 import unittest
 import tensorflow as tf
 from packaging import version
 
-from aimet_tensorflow.keras.batch_norm_fold import _delete_bn_from_model
+from aimet_tensorflow.keras.batch_norm_fold import _delete_all_bns_from_model
+from aimet_tensorflow.keras.utils.op.batchnorm import BNUtils
 
 class TestBatchNormFold(unittest.TestCase):
     """ Test methods for BatchNormFold"""
@@ -94,11 +97,11 @@ class TestBatchNormFold(unittest.TestCase):
                 x = self.block2(x)
                 return x
 
-        model = MyModel(3,(3,3),1)
+        model = MyModel(3, (3, 3), 1)
 
         bn_layers = [model.bn1, model.block1.block2.bn1, model.block2.bn1]
 
-        _delete_bn_from_model(model, bn_layers)
+        _delete_all_bns_from_model(model, bn_layers)
 
         self.assertFalse(isinstance(model.bn1,tf.keras.layers.BatchNormalization))
         self.assertFalse(isinstance(model.block1.block2.bn1,tf.keras.layers.BatchNormalization))
@@ -152,15 +155,16 @@ class TestBatchNormFold(unittest.TestCase):
                 x = self.block2(x)
                 return x
 
-        model = MyModel(3,(3,3),1)
-        model.build((1,6,6,3))
+
+        model = MyModel(3, (3, 3), 1)
+        model.build((1, 6, 6, 3))
 
         bn_layers = [model.bn1, model.block1.block2.bn1, model.block2.bn1]
 
         # ref_name = {}
         # module_name_reference(ref_name, model)
 
-        _delete_bn_from_model(model, bn_layers)
+        _delete_all_bns_from_model(model, bn_layers)
 
         self.assertFalse(isinstance(model.bn1,tf.keras.layers.BatchNormalization))
         self.assertFalse(isinstance(model.block1.block2.bn1,tf.keras.layers.BatchNormalization))
@@ -197,7 +201,8 @@ class TestBatchNormFold(unittest.TestCase):
         len_layers.append(len(chain_model.layers[2].layers[3].layers[1].layers))
         bn_layers.append(chain_model.layers[2].layers[3].layers[1].layers[0])
         bn_layers.append(chain_model.layers[2].layers[0])
-        _delete_bn_from_model(chain_model, bn_layers)
+
+        _delete_all_bns_from_model(chain_model, bn_layers)
 
         self.assertTrue(len(chain_model.layers[2].layers) == len_layers[0]-1)
         self.assertTrue(len(chain_model.layers[2].layers[2].layers[1].layers) == len_layers[1]-1)
@@ -263,9 +268,195 @@ class TestBatchNormFold(unittest.TestCase):
         len_layers = []
         len_layers.append(len(model.block2.layers))
 
-        _delete_bn_from_model(model, bn_layers)
+        _delete_all_bns_from_model(model, bn_layers)
+
 
         self.assertTrue(len(model.block2.layers) == len_layers[0]-1)
         self.assertFalse(isinstance(model.block2.get_layer(index=2).bn1, tf.keras.layers.BatchNormalization))
         self.assertFalse(isinstance(model.block2.get_layer(index=2).block3.bn1, tf.keras.layers.BatchNormalization))
 
+    def test_bn_replacement_combined2_seq_model(self):
+
+        Block3 = tf.keras.Sequential()
+        Block3.add(tf.keras.layers.BatchNormalization(fused=True))
+        Block3.add(tf.keras.layers.ReLU())
+        Block3.add(tf.keras.layers.Conv2D(3, 3))
+
+
+        class Block1(tf.keras.Model):
+            def __init__(self):
+                super(Block1, self).__init__()
+                # define all layers in init
+                self.bn1 = tf.keras.layers.BatchNormalization(fused=True)
+                self.block3 = Block3
+
+            def call(self, x):
+                # forward pass
+                x = self.bn1(x)
+                x = self.block3(x)
+                return x
+
+        Block2 = tf.keras.Sequential()
+        Block2.add(tf.keras.layers.BatchNormalization(fused=True))
+        Block2.add(tf.keras.layers.ReLU())
+        Block2.add(tf.keras.layers.Conv2D(3, 3))
+        Block2.add(Block1())
+
+        class chain_model(tf.keras.Model):
+            def __init__(self, kernel_num, kernel_size, strides):
+                super(chain_model, self).__init__()
+                # define all layers in init
+                self.conv1 = tf.keras.layers.Conv2D(filters=kernel_num, kernel_size=kernel_size, strides=strides)
+                self.bn1 = tf.keras.layers.BatchNormalization(fused=True)
+                self.dn1 = tf.keras.layers.Dense(units=32)
+                self.block2 = Block2
+
+            def call(self, input_tensor, training=False):
+                # forward pass
+                x = self.conv1(input_tensor)
+                x = self.bn1(x)
+                x = self.dn1(x)
+                x = self.block2(x)
+                return x
+
+        model = chain_model(3, (3, 3), 1)
+
+        bn_layers = list()
+        bn = model.block2.get_layer(index =3).block3.get_layer(index=0)
+        bn_layers.append(bn)
+        bn = model.bn1
+        bn_layers.append(bn)
+
+        len_layers = []
+        len_layers.append(len(model.block2.get_layer(index =3).block3.layers))
+
+        _delete_all_bns_from_model(model,bn_layers)
+
+        self.assertTrue(len(model.block2.get_layer(index =3).block3.layers) == len_layers[0]-1)
+        self.assertFalse(isinstance(model.bn1, tf.keras.layers.BatchNormalization))
+
+    def test_bn_replacement_combined3_seq_model(self):
+        Block3 = tf.keras.Sequential()
+        Block3.add(tf.keras.layers.BatchNormalization(fused=True))
+        Block3.add(tf.keras.layers.ReLU())
+        Block3.add(tf.keras.layers.Conv2D(3, 3))
+
+
+        class Block1(tf.keras.Model):
+            def __init__(self):
+                super(Block1, self).__init__()
+                # define all layers in init
+                self.bn1 = tf.keras.layers.BatchNormalization(fused=True)
+                self.block3 = Block3
+
+            def call(self, x):
+                # forward pass
+                x = self.bn1(x)
+                x = self.block3(x)
+                return x
+
+
+
+        class chain_model(tf.keras.Model):
+            def __init__(self, kernel_num, kernel_size, strides):
+                super(chain_model, self).__init__()
+                # define all layers in init
+                self.conv1 = tf.keras.layers.Conv2D(filters=kernel_num, kernel_size=kernel_size, strides=strides)
+                self.bn1 = tf.keras.layers.BatchNormalization(fused=True)
+                self.dn1 = tf.keras.layers.Dense(units=32)
+                self.block1 = Block1()
+
+            def call(self, input_tensor, training=False):
+                # forward pass
+                x = self.conv1(input_tensor)
+                x = self.bn1(x)
+                x = self.dn1(x)
+                x = self.block1(x)
+                return x
+
+        model = chain_model(3, (3, 3), 1)
+
+        bn_layers = list()
+        bn = model.block1.block3.get_layer(index=0)
+        bn_layers.append(bn)
+        bn = model.block1.bn1
+        bn_layers.append(bn)
+
+        len_layers = []
+        len_layers.append(len(model.block1.block3.layers))
+
+        _delete_all_bns_from_model(model,bn_layers)
+
+        self.assertTrue(len(model.block1.block3.layers) == len_layers[0]-1)
+        self.assertFalse(isinstance(model.block1.bn1, tf.keras.layers.BatchNormalization))
+
+    def test_bn_replacement_combined_all(self):
+
+        Block3 = tf.keras.Sequential()
+        Block3.add(tf.keras.layers.BatchNormalization(fused=True))
+        Block3.add(tf.keras.layers.ReLU())
+        Block3.add(tf.keras.layers.Conv2D(3, 3))
+
+        inputs = tf.keras.Input((28, 28, 64))
+        conv2d = tf.keras.layers.Conv2D(filters=3, kernel_size=3, strides=1)(inputs)
+        block3 = Block3(conv2d)
+        outputs = tf.keras.layers.BatchNormalization(fused=True)(block3)
+        Block1 = tf.keras.Model(inputs=inputs, outputs=outputs, name="mnist_model3")
+
+        Block2 = tf.keras.Sequential()
+        Block2.add(tf.keras.layers.BatchNormalization(fused=True))
+        Block2.add(tf.keras.layers.ReLU())
+        Block2.add(tf.keras.layers.Conv2D(3, 3))
+        Block2.add(Block1)
+
+        class chain_model(tf.keras.Model):
+            def __init__(self, kernel_num, kernel_size, strides):
+                super(chain_model, self).__init__()
+                # define all layers in init
+                self.conv1 = tf.keras.layers.Conv2D(filters=kernel_num, kernel_size=kernel_size, strides=strides)
+                self.bn1 = tf.keras.layers.BatchNormalization(fused=True)
+                self.dn1 = tf.keras.layers.Dense(units=32)
+                self.block2 = Block2
+
+            def call(self, input_tensor, training=False):
+                # forward pass
+                x = self.conv1(input_tensor)
+                x = self.bn1(x)
+                x = self.dn1(x)
+                x = self.block2(x)
+                return x
+
+        model = chain_model(3, (3, 3), 1)
+
+        bn_layers = list()
+        bn = model.block2.get_layer(index=3).get_layer(index=2).get_layer(index=0)
+        bn_layers.append(bn)
+        bn = model.block2.get_layer(index=3).get_layer(index=3)
+        bn_layers.append(bn)
+        bn = model.bn1
+        bn_layers.append(bn)
+
+        len_layers = []
+        len_layers.append(len(model.block2.get_layer(index=3).get_layer(index=2).layers))
+
+        _delete_all_bns_from_model(model, bn_layers)
+
+        self.assertTrue(len(model.block2.get_layer(index=3).get_layer(index=2).layers) == len_layers[0]-1)
+        self.assertTrue(isinstance(model.block2.get_layer(index=3).get_layer(index=3), tf.keras.layers.BatchNormalization))
+        self.assertFalse(isinstance(model.bn1, tf.keras.layers.BatchNormalization))
+
+    def test_modify_bn_params_to_make_as_passthrough(self):
+        inputs = tf.keras.Input(shape=(1,))
+        add_ = tf.keras.layers.Lambda(lambda x: x + 10)(inputs)
+        outputs = tf.keras.layers.BatchNormalization(epsilon=0, beta_initializer='random_uniform',
+                                                     gamma_initializer='random_uniform',
+                                                     moving_mean_initializer='random_uniform',
+                                                     moving_variance_initializer='ones')(add_)
+        model = tf.keras.Model(inputs=inputs, outputs=outputs, name="functional_model")
+
+        BNUtils.modify_bn_params_to_make_as_passthrough(model.layers[2])
+
+        var = tf.constant([[5]])
+        out = model(var)
+
+        self.assertTrue(out.numpy() == 15)
