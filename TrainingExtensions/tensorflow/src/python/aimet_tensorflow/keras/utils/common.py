@@ -36,7 +36,7 @@
 #  @@-COPYRIGHT-END-@@
 # =============================================================================
 
-""" Common Utilities for tf 2.x """
+""" Common Utilities for tf 2 keras """
 
 import tensorflow as tf
 

@@ -132,7 +132,6 @@ def _get_weight_tensor_transpose_reshape(conv_linear: LayerType) -> libpymo.Tens
 
     return weight_tensor
 
-
 class PassThroughOp(tf.keras.layers.Layer):
     """
     This is a pass-through op, used for purpose of making an op a no-op
@@ -145,7 +144,6 @@ class PassThroughOp(tf.keras.layers.Layer):
         :param inputs: input to pass through
         """
         return inputs
-
 
 def _remove_bn_from_sequential(layer: tf.keras.layers.Layer, bn: tf.keras.layers.BatchNormalization):
 
@@ -181,7 +179,6 @@ def _delete_bn_from_model(model: tf.keras.Model, bn_layer: tf.keras.layers.Batch
     :param model
     :param bn_layer: bn layer that should be removed
     """
-    # ref_name = {}
     if isinstance(model, tf.keras.Sequential):
         _remove_bn_from_sequential(model, bn_layer)
 
@@ -190,7 +187,6 @@ def _delete_bn_from_model(model: tf.keras.Model, bn_layer: tf.keras.layers.Batch
         for layer in model.layers:
             if layer.submodules:
                 _delete_bn_from_model(layer, bn_layer)
-
 
 def _delete_all_bns_from_model(model: tf.keras.Model, bn_layers: List[tf.keras.layers.BatchNormalization]):
     '''
@@ -212,15 +208,11 @@ def _delete_all_bns_from_model(model: tf.keras.Model, bn_layers: List[tf.keras.l
         else:
             _delete_bn_from_model(model, bn)
 
-
-
-
-
 def _fold_given_auto_selected_batch_norms(model: tf.keras.Model, layer_pairs: List[PairType]):
     """
     Fold a given set of batch_norm layers into conv layers
-    :param layer_pairs: Tuple of conv, bn layers and is_batch_norm_second flag
     :param model
+    :param layer_pairs: Tuple of conv, bn layers and is_batch_norm_second flag
     """
 
     list_of_bn_layers = []
