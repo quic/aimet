@@ -43,20 +43,35 @@ import torch
 def compute_dloss_by_dx(x, grad, encoding_min, encoding_max):
     """
     compute derivative w.r.t input using straight through estimator.
+    :param x: input tensor
     :param grad: gradient flowing
     :param encoding_min: encoding min grid param used on forward pass
     :param encoding_max: encoding max grid param used on forward pass
     :return: gradient w.r.t input
     """
 
+    def _broadcast_to_tensor(tensor, encoding):
+        shape = list(tensor.shape)
+        encoding = torch.Tensor(encoding).to(x.device)
+        encoding = encoding * torch.ones(shape[1:] + [shape[0]])
+        encoding = encoding.permute([len(shape) - 1] + list(range(len(shape) - 1)))
+        return encoding
+
     # compute dloss_by_dx = dq_by_dx * grad
-    device = x.device
+    if isinstance(encoding_max, list) and len(x.shape) > 1:
+        encoding_max = _broadcast_to_tensor(x, encoding_max)
+
+    if isinstance(encoding_min, list) and len(x.shape) > 1:
+        encoding_min = _broadcast_to_tensor(x, encoding_min)
+    else:
+        encoding_min = torch.Tensor([encoding_min]).to(x.device)
+
     inner_cond = torch.where(torch.le(x, encoding_max),  # condition to check per value
                              torch.ones_like(x),  # execute if true
                              torch.zeros_like(x))  # execute if false
 
-    dloss_by_dx = (torch.where(torch.le(torch.Tensor([encoding_min]).to(device), x),  # condition to check per value
-                               inner_cond,  # execute if true
-                               torch.zeros_like(x))) * grad
+    dloss_by_dx = torch.where(torch.le(encoding_min, x),  # condition to check per value
+                              inner_cond,  # execute if true
+                              torch.zeros_like(x)) * grad
 
     return dloss_by_dx

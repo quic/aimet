@@ -47,7 +47,7 @@ import libpymo
 from aimet_common.utils import AimetLogger
 from aimet_common.defs import QuantScheme
 from aimet_torch import utils
-from aimet_torch.tensor_quantizer import StaticGridPerTensorQuantizer
+from aimet_torch.tensor_quantizer import StaticGridPerTensorQuantizer, StaticGridPerChannelQuantizer
 import aimet_torch.quantsim_straight_through_grad as ste
 
 MAP_ROUND_MODE_TO_PYMO = {'nearest':     libpymo.RoundingMode.ROUND_NEAREST,
@@ -95,7 +95,7 @@ def tensor_quantizer_factory(bitwidth: int, round_mode: str, quant_scheme: Union
     assert quant_scheme in [libpymo.QuantizationMode.QUANTIZATION_TF_ENHANCED, libpymo.QuantizationMode.QUANTIZATION_TF]
 
     tensor_quantizer = StaticGridPerTensorQuantizer(bitwidth, round_mode, quant_scheme, use_symmetric_encodings,
-                                                 enabled_by_default)
+                                                    enabled_by_default)
     return tensor_quantizer
 
 
@@ -462,6 +462,21 @@ class StaticGridQuantWrapper(QcQuantizeWrapper):
 
                 param_quantizer.freeze_encoding()
                 _logger.info("Setting and freezing quantization encodings for parameter: %s", param_name)
+
+    def enable_per_channel_quantization(self):
+        """
+        Changes all parameter quantizers (if any) to per-channel mode
+        """
+        new_param_quant_dict = {}
+        for param_name, param_quantizer in self.param_quantizers.items():
+            param = eval("self._module_to_wrap." + param_name)      # pylint: disable=eval-used
+            per_channel_quantizer = StaticGridPerChannelQuantizer(param_quantizer.bitwidth, param_quantizer.round_mode,
+                                                                  param_quantizer.quant_scheme,
+                                                                  param_quantizer.use_symmetric_encodings,
+                                                                  num_channels=param.shape[0],
+                                                                  enabled_by_default=param_quantizer.enabled)
+            new_param_quant_dict[param_name] = per_channel_quantizer
+        self.param_quantizers = new_param_quant_dict
 
 
 # Temporarily added for backwards compatibility
