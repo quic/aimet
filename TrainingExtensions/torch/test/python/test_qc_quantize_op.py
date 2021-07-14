@@ -38,9 +38,9 @@
 import pytest
 import torch
 
-from aimet_torch.qc_quantize_op import StaticGridQuantWrapper, QcQuantizeOpMode, QuantScheme, MAP_QUANT_SCHEME_TO_PYMO, \
-    MAP_ROUND_MODE_TO_PYMO
-from aimet_torch.tensor_quantizer import StaticGridPerTensorQuantizer
+from aimet_torch.qc_quantize_op import StaticGridQuantWrapper, QcQuantizeOpMode, \
+    QuantScheme, MAP_QUANT_SCHEME_TO_PYMO, MAP_ROUND_MODE_TO_PYMO
+from aimet_torch.tensor_quantizer import StaticGridPerTensorQuantizer, StaticGridPerChannelQuantizer
 import libpymo
 
 
@@ -166,30 +166,147 @@ class TestQcQuantizeOp:
 
     def test_quantize_only_asymmetric_cpu(self):
         """ Test tensor quantizer quantize only asymmetric functionality """
-
-        post_training_tensor_quantizer = \
-            StaticGridPerTensorQuantizer(bitwidth=8, round_mode='nearest',
-                                      quant_scheme=MAP_QUANT_SCHEME_TO_PYMO[QuantScheme.post_training_tf],
-                                      use_symmetric_encodings=False, enabled_by_default=True)
+        quantizer = StaticGridPerTensorQuantizer(bitwidth=8, round_mode='nearest',
+                                                 quant_scheme=MAP_QUANT_SCHEME_TO_PYMO[QuantScheme.post_training_tf],
+                                                 use_symmetric_encodings=False, enabled_by_default=True)
         encodings = libpymo.TfEncoding()
         encodings.bw = 8
         encodings.max = 2.23
         encodings.min = -5.19
         encodings.offset = -178
-        post_training_tensor_quantizer.encoding = encodings
+        quantizer.encoding = encodings
 
         inp_tensor = torch.tensor([-7, -5, -3, 0, .1, 2.5])
-        quant_out = post_training_tensor_quantizer.quantize(inp_tensor, MAP_ROUND_MODE_TO_PYMO['nearest'])
+        quant_out = quantizer.quantize(inp_tensor, MAP_ROUND_MODE_TO_PYMO['nearest'])
         expected_out = torch.tensor([0, 6, 75, 178, 181, 255], dtype=torch.float32)
         assert torch.equal(quant_out, expected_out)
+
+    def test_per_channel_symmetric_qdq(self):
+        """ Test tensor quantizer symmetric quantize-dequantize functionality on cpu """
+
+        quantizer = StaticGridPerChannelQuantizer(bitwidth=8, round_mode='nearest',
+                                                  quant_scheme=MAP_QUANT_SCHEME_TO_PYMO[QuantScheme.post_training_tf],
+                                                  use_symmetric_encodings=True, enabled_by_default=True,
+                                                  num_channels=4)
+        encodings = [libpymo.TfEncoding() for _ in range(4)]
+        for index in range(3):
+            encodings[index].bw = 8
+            encodings[index].max = 3.81
+            encodings[index].min = -3.84
+            encodings[index].delta = 0.03
+            encodings[index].offset = -128
+
+        encodings[3].bw = 8
+        encodings[3].max = 6.35
+        encodings[3].min = -6.4
+        encodings[3].delta = 0.05
+        encodings[3].offset = -128
+
+        # delta is 0.040745098
+        quantizer.encoding = encodings
+
+        # Test quantize only on gpu
+        inp_tensor = torch.tensor([[-7, -5, -3, 0, .1, 2.5],
+                                   [-7, -5, -3, 0, .1, 2.5],
+                                   [-7, -5, -3, 0, .1, 2.5],
+                                   [-7, -5, -3, 0, .1, 2.5]])
+
+        quant_out = quantizer.quantize_dequantize(inp_tensor, MAP_ROUND_MODE_TO_PYMO['nearest'])
+        expected_out = torch.tensor([[-3.84, -3.84, -3, 0, .09, 2.49],
+                                     [-3.84, -3.84, -3, 0, .09, 2.49],
+                                     [-3.84, -3.84, -3, 0, .09, 2.49],
+                                     [-6.4, -5, -3, 0, .1, 2.5]],
+                                    dtype=torch.float32)
+        assert torch.equal(quant_out, expected_out)
+
+    def test_per_channel_asymmetric_qdq(self):
+        """ Test tensor quantizer asymmetric quantize-dequantize functionality on cpu """
+
+        quantizer = StaticGridPerChannelQuantizer(bitwidth=8, round_mode='nearest',
+                                                  quant_scheme=MAP_QUANT_SCHEME_TO_PYMO[QuantScheme.post_training_tf],
+                                                  use_symmetric_encodings=False, enabled_by_default=True,
+                                                  num_channels=4)
+        encodings = [libpymo.TfEncoding() for _ in range(4)]
+        for index in range(3):
+            encodings[index].bw = 8
+            encodings[index].max = 1.9999956
+            encodings[index].min = -2.9999934
+            encodings[index].delta = 0.0196078
+            encodings[index].offset = -153
+
+        encodings[3].bw = 8
+        encodings[3].max = 2.404693
+        encodings[3].min = -5.995262
+        encodings[3].delta = 0.032941
+        encodings[3].offset = -182
+
+        # delta is 0.040745098
+        quantizer.encoding = encodings
+
+        # Test quantize only on gpu
+        inp_tensor = torch.tensor([[-7, -5, -3, 0, .1, 2.5],
+                                   [-7, -5, -3, 0, .1, 2.5],
+                                   [-7, -5, -3, 0, .1, 2.5],
+                                   [-7, -5, -3, 0, .1, 2.5]])
+
+        quant_out = quantizer.quantize_dequantize(inp_tensor, MAP_ROUND_MODE_TO_PYMO['nearest'])
+        expected_out = torch.tensor([[-3.0, -3.0, -3.0, 0, .098, 2.0],
+                                     [-3.0, -3.0, -3.0, 0, .098, 2.0],
+                                     [-3.0, -3.0, -3.0, 0, .098, 2.0],
+                                     [-5.9953, -5.0070, -2.9976, 0, .09888, 2.4047]],
+                                    dtype=torch.float32)
+        assert torch.allclose(quant_out, expected_out, atol=0.0001)
+
+    def test_per_channel_symmetric_compute_encodings(self):
+        """ Test tensor quantizer symmetric compute-encodings functionality on cpu """
+
+        quantizer = StaticGridPerChannelQuantizer(bitwidth=8, round_mode='nearest',
+                                                  quant_scheme=MAP_QUANT_SCHEME_TO_PYMO[QuantScheme.post_training_tf],
+                                                  use_symmetric_encodings=True, enabled_by_default=True,
+                                                  num_channels=4)
+
+        inp_tensor = torch.tensor([[-7, -5, -3, 0, .1, 2.5],
+                                   [-5, -5, -3, 0, .1, 2.7],
+                                   [-6, -5, -3, 0, .1, 2.8],
+                                   [-5, -5, -3, 0, .1, 2]])
+        quantizer.update_encoding_stats(inp_tensor)
+        quantizer.compute_encoding()
+
+        assert len(quantizer.encoding) == 4
+        assert quantizer.encoding[0].max == 7
+        assert round(quantizer.encoding[0].min, 2) == -7.06
+
+        assert quantizer.encoding[3].max == 5
+        assert round(quantizer.encoding[3].min, 2) == -5.04
+
+    def test_per_channel_asymmetric_compute_encodings(self):
+        """ Test tensor quantizer asymmetric compute-encodings functionality on cpu """
+
+        quantizer = StaticGridPerChannelQuantizer(bitwidth=8, round_mode='nearest',
+                                                  quant_scheme=MAP_QUANT_SCHEME_TO_PYMO[QuantScheme.post_training_tf],
+                                                  use_symmetric_encodings=False, enabled_by_default=True,
+                                                  num_channels=4)
+
+        inp_tensor = torch.tensor([[-7, -5, -3, 0, .1, 2.5],
+                                   [-5, -5, -3, 0, .1, 2.7],
+                                   [-6, -5, -3, 0, .1, 2.8],
+                                   [-5, -5, -3, 0, .1, 2]])
+        quantizer.update_encoding_stats(inp_tensor)
+        quantizer.compute_encoding()
+
+        assert len(quantizer.encoding) == 4
+        assert round(quantizer.encoding[0].max, 3) == 2.496
+        assert round(quantizer.encoding[0].min, 3) == -7.004
+
+        assert round(quantizer.encoding[3].max, 3) == 2.004
+        assert round(quantizer.encoding[3].min, 3) == -4.996
 
     def test_quantize_only_symmetric_signed_cpu(self):
         """ Test tensor quantizer quantize only symmetric signed functionality on cpu """
 
-        post_training_tensor_quantizer = \
-            StaticGridPerTensorQuantizer(bitwidth=8, round_mode='nearest',
-                                         quant_scheme=MAP_QUANT_SCHEME_TO_PYMO[QuantScheme.post_training_tf],
-                                         use_symmetric_encodings=True, enabled_by_default=True)
+        quantizer = StaticGridPerTensorQuantizer(bitwidth=8, round_mode='nearest',
+                                                 quant_scheme=MAP_QUANT_SCHEME_TO_PYMO[QuantScheme.post_training_tf],
+                                                 use_symmetric_encodings=True, enabled_by_default=True)
         encodings = libpymo.TfEncoding()
         encodings.bw = 8
         encodings.max = 5.19
@@ -197,21 +314,20 @@ class TestQcQuantizeOp:
         encodings.offset = -128
 
         # delta is 0.040745098
-        post_training_tensor_quantizer.encoding = encodings
+        quantizer.encoding = encodings
 
         # Test quantize only on gpu
         inp_tensor_gpu = torch.tensor([-7, -5, -3, 0, .1, 2.5])
-        quant_out = post_training_tensor_quantizer.quantize(inp_tensor_gpu, MAP_ROUND_MODE_TO_PYMO['nearest'])
+        quant_out = quantizer.quantize(inp_tensor_gpu, MAP_ROUND_MODE_TO_PYMO['nearest'])
         expected_out = torch.tensor([-128, -123, -74, 0, 2, 61], dtype=torch.float32)
         assert torch.equal(quant_out, expected_out)
 
     def test_quantize_only_symmetric_unsigned_cpu(self):
         """ Test tensor quantizer quantize only symmetric unsigned functionality on cpu """
 
-        post_training_tensor_quantizer = \
-            StaticGridPerTensorQuantizer(bitwidth=8, round_mode='nearest',
-                                         quant_scheme=MAP_QUANT_SCHEME_TO_PYMO[QuantScheme.post_training_tf],
-                                         use_symmetric_encodings=True, enabled_by_default=True)
+        quantizer = StaticGridPerTensorQuantizer(bitwidth=8, round_mode='nearest',
+                                                 quant_scheme=MAP_QUANT_SCHEME_TO_PYMO[QuantScheme.post_training_tf],
+                                                 use_symmetric_encodings=True, enabled_by_default=True)
         encodings = libpymo.TfEncoding()
         encodings.bw = 8
         encodings.max = 5.19
@@ -219,11 +335,11 @@ class TestQcQuantizeOp:
         encodings.offset = 0
 
         # delta is 0.020352941
-        post_training_tensor_quantizer.encoding = encodings
+        quantizer.encoding = encodings
 
         # Test quantize only on gpu
         inp_tensor_gpu = torch.tensor([0, 1.2, 1.5, 4.0, 4.9, 5.3])
-        quant_out = post_training_tensor_quantizer.quantize(inp_tensor_gpu, MAP_ROUND_MODE_TO_PYMO['nearest'])
+        quant_out = quantizer.quantize(inp_tensor_gpu, MAP_ROUND_MODE_TO_PYMO['nearest'])
         expected_out = torch.tensor([0, 59, 74, 197, 241, 255], dtype=torch.float32)
         assert torch.equal(quant_out, expected_out)
 
@@ -231,20 +347,19 @@ class TestQcQuantizeOp:
     def test_quantize_only_asymmetric_gpu(self):
         """ Test tensor quantizer quantize only asymmetric functionality on gpu """
     
-        post_training_tensor_quantizer = \
-            StaticGridPerTensorQuantizer(bitwidth=8, round_mode='nearest',
-                                      quant_scheme=MAP_QUANT_SCHEME_TO_PYMO[QuantScheme.post_training_tf],
-                                      use_symmetric_encodings=False, enabled_by_default=True)
+        quantizer = StaticGridPerTensorQuantizer(bitwidth=8, round_mode='nearest',
+                                                 quant_scheme=MAP_QUANT_SCHEME_TO_PYMO[QuantScheme.post_training_tf],
+                                                 use_symmetric_encodings=False, enabled_by_default=True)
         encodings = libpymo.TfEncoding()
         encodings.bw = 8
         encodings.max = 2.23
         encodings.min = -5.19
         encodings.offset = -178
-        post_training_tensor_quantizer.encoding = encodings
+        quantizer.encoding = encodings
     
         # Test quantize only on gpu
         inp_tensor_gpu = torch.tensor([-7, -5, -3, 0, .1, 2.5], device=torch.device('cuda'))
-        quant_out = post_training_tensor_quantizer.quantize(inp_tensor_gpu, MAP_ROUND_MODE_TO_PYMO['nearest'])
+        quant_out = quantizer.quantize(inp_tensor_gpu, MAP_ROUND_MODE_TO_PYMO['nearest'])
         expected_out = torch.tensor([0, 6, 75, 178, 181, 255], dtype=torch.float32, device=torch.device('cuda'))
         assert torch.equal(quant_out, expected_out)
 

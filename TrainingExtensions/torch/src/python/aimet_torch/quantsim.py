@@ -704,6 +704,14 @@ class QuantizationSimModel:
             if isinstance(quant_module, StaticGridQuantWrapper):
                 quant_module.set_and_freeze_param_encoding(name, param_encodings)
 
+    def quant_wrappers(self):
+        """
+        Generator for yielding all quantization wrappers
+        """
+        for module in self.model.modules():
+            if isinstance(module, (QcQuantizeWrapper, QcQuantizeRecurrent)):
+                yield module
+
 
 def save_checkpoint(quant_sim_model: QuantizationSimModel, file_path: str):
     """
