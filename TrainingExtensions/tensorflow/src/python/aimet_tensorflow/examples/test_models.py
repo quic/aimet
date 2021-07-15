@@ -99,7 +99,7 @@ def keras_model():
     x = tf.keras.layers.AveragePooling2D()(x)
     x = tf.keras.layers.MaxPool2D()(x)
     x = tf.compat.v1.layers.batch_normalization(x, momentum=.4, epsilon=.25)
-    x = tf.keras.layers.Conv2D(4, (2, 2))(x)
+    x = tf.keras.layers.Conv2D(4, (2, 2), activation=tf.nn.tanh, kernel_regularizer=tf.keras.regularizers.l2(0.5))(x)
     x = tf.keras.layers.Flatten()(x)
     outputs = tf.keras.layers.Dense(2, activation=tf.nn.softmax, name="keras_model")(x)
     return outputs
@@ -213,11 +213,26 @@ def tf_compat_v1_layers_with_softmax(inp):
     net = tf.compat.v1.layers.batch_normalization(net, epsilon=.65, training=False)
     net = tf.compat.v1.layers.conv2d(net, 16, [2, 2])
     net = tf.compat.v1.layers.batch_normalization(net, epsilon=.25, training=False)
-    net = tf.compat.v1.layers.softmax(net)
+    net = tf.compat.v1.math.softmax(net)
     return net
 
 
 def split_and_concat_model():
+    """ Function for returning keras model with splits and concats """
+    x = tf.keras.Input(shape=[224, 224, 3, ])
+    # TODO: implement split for the following commented out method of splitting
+    # y1 = x[:, :100, :, :]
+    # y2 = x[:, 101:, :, :]
+    y1, y2 = tf.split(x, [100, 124], 1)
+    y1 = tf.nn.relu(y1)
+    y2 = tf.compat.v1.layers.batch_normalization(y1)
+    z = tf.keras.layers.concatenate([y1, y2], axis=1)
+    z = tf.keras.layers.Flatten()(z)
+    output = tf.keras.layers.Dense(10, activation=tf.nn.softmax, name="split_and_concat_model")(z)
+    return output
+
+
+def split_and_concat_model_before():
     """ Function for returning keras model with splits and concats """
     x = tf.keras.Input(shape=[224, 224, 3, ])
     # TODO: implement split for the following commented out method of splitting
