@@ -163,7 +163,7 @@ def keras_model_functional_with_non_fused_batchnorms():
     x = tf.compat.v1.layers.batch_normalization(x, momentum=.3, epsilon=.65, fused=False, training=True)
     with tf.compat.v1.variable_scope("scope_1"):
         x = tf.keras.layers.Conv2D(16, (2, 2), activation=tf.nn.tanh)(x)
-        x = tf.compat.v1.layers.batch_normalization(x, momentum=.4, epsilon=.25, fused=False, training=is_training)
+        x = tf.compat.v1.layers.batch_normalization(x, momentum=.4, epsilon=.25, fused=False, training=True)
         x = tf.keras.layers.Conv2D(8, (2, 2), activation=tf.nn.tanh)(x)
         x = tf.compat.v1.layers.batch_normalization(x, momentum=.5, epsilon=.35, fused=False, training=False)
         x = tf.keras.layers.Conv2D(4, (2, 2), activation=tf.nn.relu6)(x)
@@ -252,14 +252,14 @@ def upsample_model():
 
     inputs = tf.keras.Input(shape=(16, 16, 3,))
     x = tf.keras.layers.Conv2D(8, (2, 2))(inputs)
-    x = tf.keras.layers.BatchNormalization(momentum=.3, epsilon=.65)(x)
+    x = tf.compat.v1.layers.batch_normalization(x, momentum=.3, epsilon=.65)
     x = tf.nn.relu(x)
     x = tf.keras.layers.MaxPool2D()(x)
     residual = x
 
     x = tf.keras.layers.Conv2D(8, (1, 1))(x)
     x = tf.keras.layers.Conv2D(8, (1, 1))(x)
-    x = tf.keras.layers.BatchNormalization(momentum=.4, epsilon=.25)(x)
+    x = tf.compat.v1.layers.batch_normalization(x, momentum=.4, epsilon=.25)
     x = tf.add(x, residual)
     x = tf.nn.relu(x)
 
@@ -276,7 +276,7 @@ def dropout_keras_model():
 
     inputs = tf.keras.Input(shape=(10, 10, 3,))
     x = tf.keras.layers.Conv2D(16, (3, 3))(inputs)
-    x = tf.keras.layers.Dropout(rate=.4)(x)
+    x = tf.keras.layers.Dropout(rate=.4)(x, training=True)
     x = tf.identity(x)
     x = tf.keras.layers.Conv2D(8, (2, 2))(x)
     x = tf.keras.layers.Flatten()(x)
@@ -495,7 +495,7 @@ def model_to_test_downstream_masks():
     residual = x
     x = tf.keras.layers.Conv2D(8, (1, 1))(x)
     x = x + residual
-    x = tf.keras.layers.BatchNormalization(momentum=.3, epsilon=.65)(x)
+    x = tf.compat.v1.layers.batch_normalization(x, momentum=.3, epsilon=.65)
     x1 = tf.nn.relu(x)
     x2 = tf.nn.relu(x)
     x1 = tf.keras.layers.Conv2D(4, (2, 2))(x1)

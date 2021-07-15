@@ -37,7 +37,6 @@
 # =============================================================================
 """ This file contains unit tests for testing winnowing for tf models. """
 
-# pylint: disable=too-many-lines
 import unittest
 import logging
 import struct
@@ -50,7 +49,7 @@ from aimet_common.winnow.mask import Mask
 from aimet_common.utils import AimetLogger
 from aimet_tensorflow.common.connectedgraph import ConnectedGraph
 from aimet_tensorflow.examples.test_models import keras_model, single_residual, concat_model, pad_model, \
-    depthwise_conv2d_model, keras_model_functional, dropout_keras_model, dropout_slim_model, tf_compat_v1_layers_basic_model, \
+    depthwise_conv2d_model, keras_model_functional, dropout_keras_model, tf_compat_v1_layers_basic_model, \
     upsample_model, multiple_input_model, model_with_postprocessing_nodes, minimum_maximum_model, \
     model_with_upsample_already_present, model_with_multiple_downsamples, model_with_upsample2d, \
     model_with_leaky_relu, keras_model_functional_with_non_fused_batchnorms, model_to_test_downstream_masks
@@ -58,7 +57,7 @@ from aimet_tensorflow.winnow.mask_propagation_winnower import MaskPropagationWin
 import aimet_tensorflow.winnow.winnow as winnow
 from aimet_tensorflow.utils.graph_saver import save_and_load_graph
 
-tf.compat.v1.logging.set_verbosity(tf.logging.WARN)
+tf.compat.v1.logging.set_verbosity(tf.compat.v1.logging.WARN)
 tf.compat.v1.disable_eager_execution()
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
 logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Test)
@@ -66,14 +65,14 @@ AimetLogger.set_area_logger_level(AimetLogger.LogAreas.Test, logging.DEBUG)
 AimetLogger.set_area_logger_level(AimetLogger.LogAreas.Winnow, logging.DEBUG)
 
 
-# pylint: disable=too-many-locals
-# pylint: disable=too-many-statements
-# pylint: disable=protected-access
 class TestTfModuleReducer(unittest.TestCase):
-    """ Unit test cases for testing TensorFlowWinnower's module reducer. """
-
+    """
+    Unit test cases for testing TensorFlowWinnower's module reducer.
+    """
     def test_reducing_tf_slim_model(self):
-        """ Test mask propagation on a conv module in tf slim model """
+        """
+        Test mask propagation on a conv module in tf slim model
+        """
         tf.compat.v1.reset_default_graph()
         sess = tf.compat.v1.Session()
         module_zero_channels_list = []
@@ -87,73 +86,59 @@ class TestTfModuleReducer(unittest.TestCase):
         update_ops = tf.compat.v1.get_collection(tf.compat.v1.GraphKeys.UPDATE_OPS)
         self.assertEqual(4, len(update_ops))
 
-        tf_op = tf.compat.v1.get_default_graph().get_operation_by_name("Conv_1/Conv2D")
+        tf_op = tf.compat.v1.get_default_graph().get_operation_by_name("conv2d_1/Conv2D")
         input_channels_to_winnow = [1, 2, 3]
         module_mask_pair = (tf_op, input_channels_to_winnow)
         module_zero_channels_list.append(module_mask_pair)
 
-        tf_op = tf.compat.v1.get_default_graph().get_operation_by_name("Conv_2/Conv2D")
+        tf_op = tf.compat.v1.get_default_graph().get_operation_by_name("conv2d_2/Conv2D")
         input_channels_to_winnow = [3, 5, 7]
         module_mask_pair = (tf_op, input_channels_to_winnow)
         module_zero_channels_list.append(module_mask_pair)
 
-        tf_op = tf.compat.v1.get_default_graph().get_operation_by_name("Conv_3/Conv2D")
+        tf_op = tf.compat.v1.get_default_graph().get_operation_by_name("conv2d_3/Conv2D")
         input_channels_to_winnow = [2, 4, 6]
         module_mask_pair = (tf_op, input_channels_to_winnow)
         module_zero_channels_list.append(module_mask_pair)
 
         input_op_names = ["Placeholder"]
-        output_op_names = ['tf_slim_model/Softmax']
+        output_op_names = ['dense/Softmax']
         new_sess, ordered_modules_list = winnow.winnow_tf_model(sess, input_op_names, output_op_names,
                                                                 module_zero_channels_list,
                                                                 reshape=True, in_place=True, verbose=True)
 
-        conv3_relu = new_sess.graph.get_operation_by_name('Conv_3/Relu')
-        self.assertEqual(conv3_relu.inputs[0].op.name, 'reduced_Conv_3/BiasAdd')
-        reduced_conv2_op = new_sess.graph.get_operation_by_name('reduced_Conv_2/Conv2D')
-        self.assertEqual(reduced_conv2_op.inputs[0].name, 'reduced_BatchNorm_1/cond/Merge:0')
+        reduced_conv2_op = new_sess.graph.get_operation_by_name('reduced_conv2d_2/Conv2D')
+        self.assertEqual(reduced_conv2_op.inputs[0].name, 'reduced_batch_normalization_1/FusedBatchNormV3:0')
         self.assertEqual(reduced_conv2_op.inputs[0].shape.as_list()[-1], 13)
-        reduced_conv1_op = new_sess.graph.get_operation_by_name('reduced_Conv_1/Conv2D')
-        self.assertEqual(reduced_conv1_op.inputs[0].name, 'reduced_BatchNorm/FusedBatchNormV3:0')
+        reduced_conv1_op = new_sess.graph.get_operation_by_name('reduced_conv2d_1/Conv2D')
+        self.assertEqual(reduced_conv1_op.inputs[0].name, 'reduced_batch_normalization/FusedBatchNormV3:0')
 
         # Check first batch norm's first input is from reduced conv2d, and that its is_training attribute is True
-        reduced_batch_norm = new_sess.graph.get_operation_by_name('reduced_BatchNorm/FusedBatchNormV3')
+        reduced_batch_norm = new_sess.graph.get_operation_by_name('reduced_batch_normalization/FusedBatchNormV3')
         self.assertTrue(reduced_batch_norm.inputs[0].op.name, 'reduced_Conv/BiasAdd')
         self.assertEqual(reduced_batch_norm.get_attr('is_training'), True)
         # Check second batch norm uses an is training placeholder
-        reduced_batch_norm_1 = new_sess.graph.get_operation_by_name('reduced_BatchNorm_1/cond/'
-                                                                    'FusedBatchNormV3')
-        is_training_placeholder = new_sess.graph.get_tensor_by_name('is_training:0')
-        self.assertEqual(reduced_batch_norm_1.inputs[0].op.type, 'Switch')
-        self.assertEqual(reduced_batch_norm_1.inputs[0].op.inputs[1].op.inputs[0], is_training_placeholder)
+        reduced_batch_norm_1 = new_sess.graph.get_operation_by_name('reduced_batch_normalization_1/FusedBatchNormV3')
+        self.assertEqual(reduced_batch_norm_1.get_attr('is_training'), True)
+
         # Check third batch norm's first input is from reduced scope 1 conv2d, and that its is_training_attribute is
         # False
-        reduced_batch_norm_2 = new_sess.graph.get_operation_by_name('reduced_BatchNorm_2/FusedBatchNormV3')
-
-        # Check that old and new epsilon and momentum values match
-        orig_batch_norm = new_sess.graph.get_operation_by_name('BatchNorm/FusedBatchNormV3')
-        new_batch_norm = new_sess.graph.get_operation_by_name('reduced_BatchNorm/FusedBatchNormV3')
-        self.assertEqual(orig_batch_norm.get_attr('epsilon'), new_batch_norm.get_attr('epsilon'))
-        orig_batch_norm_1 = new_sess.graph.get_operation_by_name('BatchNorm_1/cond/FusedBatchNormV3_1')
-        new_batch_norm_1 = new_sess.graph.get_operation_by_name('reduced_BatchNorm_1/cond/FusedBatchNormV3_1')
-        self.assertEqual(orig_batch_norm_1.get_attr('epsilon'), new_batch_norm_1.get_attr('epsilon'))
-        orig_batch_norm_2 = new_sess.graph.get_operation_by_name('BatchNorm_2/FusedBatchNormV3')
-        new_batch_norm_2 = new_sess.graph.get_operation_by_name('reduced_BatchNorm_2/FusedBatchNormV3')
-        self.assertEqual(orig_batch_norm_2.get_attr('epsilon'), new_batch_norm_2.get_attr('epsilon'))
-
-        orig_batch_norm_momentum = new_sess.graph.get_operation_by_name('BatchNorm/Const_3')
-        new_batch_norm_momentum = new_sess.graph.get_operation_by_name('reduced_BatchNorm/Const_2')
-        self.assertEqual(orig_batch_norm_momentum.get_attr('value').float_val[0],
-                         new_batch_norm_momentum.get_attr('value').float_val[0])
-        orig_batch_norm_1_momentum = new_sess.graph.get_operation_by_name('BatchNorm_1/cond_1/Const')
-        new_batch_norm_1_momentum = new_sess.graph.get_operation_by_name('reduced_BatchNorm_1/cond_1/Const')
-        self.assertEqual(orig_batch_norm_1_momentum.get_attr('value').float_val[0],
-                         new_batch_norm_1_momentum.get_attr('value').float_val[0])
-
-        self.assertTrue(reduced_batch_norm_2.inputs[0].op.name, 'reduced_Conv_2/Relu')
+        reduced_batch_norm_2 = new_sess.graph.get_operation_by_name('reduced_batch_normalization_2/FusedBatchNormV3')
+        self.assertTrue(reduced_batch_norm_2.inputs[0].op.name, 'reduced_conv2d_2/BiasAdd')
         self.assertEqual(reduced_batch_norm_2.get_attr('is_training'), False)
 
-        self.assertEqual(10, len(ordered_modules_list))
+        # Check that old and new epsilon and momentum values match
+        orig_batch_norm = new_sess.graph.get_operation_by_name('batch_normalization/FusedBatchNormV3')
+        new_batch_norm = new_sess.graph.get_operation_by_name('reduced_batch_normalization/FusedBatchNormV3')
+        self.assertEqual(orig_batch_norm.get_attr('epsilon'), new_batch_norm.get_attr('epsilon'))
+        orig_batch_norm_1 = new_sess.graph.get_operation_by_name('batch_normalization_1/FusedBatchNormV3')
+        new_batch_norm_1 = new_sess.graph.get_operation_by_name('reduced_batch_normalization_1/FusedBatchNormV3')
+        self.assertEqual(orig_batch_norm_1.get_attr('epsilon'), new_batch_norm_1.get_attr('epsilon'))
+        orig_batch_norm_2 = new_sess.graph.get_operation_by_name('batch_normalization_2/FusedBatchNormV3')
+        new_batch_norm_2 = new_sess.graph.get_operation_by_name('reduced_batch_normalization_2/FusedBatchNormV3')
+        self.assertEqual(orig_batch_norm_2.get_attr('epsilon'), new_batch_norm_2.get_attr('epsilon'))
+
+        self.assertEqual(7, len(ordered_modules_list))
 
         # check that update_ops list is empty
         update_ops = tf.compat.v1.get_collection(tf.compat.v1.GraphKeys.UPDATE_OPS)
@@ -173,7 +158,9 @@ class TestTfModuleReducer(unittest.TestCase):
         sess.close()
 
     def test_reducing_with_downsample(self):
-        """ Test reducing a single_residual model with downsampling layers """
+        """
+        Test reducing a single_residual model with downsampling layers
+        """
         tf.compat.v1.reset_default_graph()
         sess = tf.compat.v1.Session()
         module_zero_channels_list = []
@@ -213,7 +200,9 @@ class TestTfModuleReducer(unittest.TestCase):
         sess.close()
 
     def test_reducing_inserting_downsample_upsample(self):
-        """ Test reducing a single_residual model with inserting downsampling and upsampling layers """
+        """
+        Test reducing a single_residual model with inserting downsampling and upsampling layers
+        """
         tf.compat.v1.reset_default_graph()
         sess = tf.compat.v1.Session()
 
@@ -234,9 +223,12 @@ class TestTfModuleReducer(unittest.TestCase):
                                                                 module_zero_channels_list,
                                                                 reshape=True, in_place=True, verbose=True)
 
+        all_ops = new_sess.graph.get_operations()
+        for op in all_ops:
+            print(op.name, op.type)
+
         stack_output = new_sess.graph.get_tensor_by_name("upsample/stack:0")
-        reduced_batch_normalization_1_output = new_sess.graph.get_tensor_by_name("reduced_batch_normalization_1/"
-                                                                                 "cond/Merge:0")
+        reduced_batch_normalization_1_output = new_sess.graph.get_tensor_by_name("reduced_batch_normalization_1/FusedBatchNormV3:0")
         relu_1_output = new_sess.graph.get_tensor_by_name("Relu_1:0")
         gather_output = new_sess.graph.get_tensor_by_name("downsample/GatherV2:0")
         self.assertEqual([None, 7, 7, 5], reduced_batch_normalization_1_output.shape.as_list())
@@ -269,7 +261,9 @@ class TestTfModuleReducer(unittest.TestCase):
         sess.close()
 
     def test_reducing_with_concat(self):
-        """ Test reducing a model with concat """
+        """
+        Test reducing a model with concat
+        """
         tf.compat.v1.reset_default_graph()
         sess = tf.compat.v1.Session()
         module_zero_channels_list = []
@@ -328,8 +322,9 @@ class TestTfModuleReducer(unittest.TestCase):
         sess.close()
 
     def test_reducing_pad_in_module_reducer(self):
-        """ Test calling module reducer reduce modules for conv op """
-
+        """
+        Test calling module reducer reduce modules for conv op
+        """
         tf.compat.v1.reset_default_graph()
         sess = tf.compat.v1.Session()
         module_zero_channels_list = []
@@ -422,8 +417,9 @@ class TestTfModuleReducer(unittest.TestCase):
 
     @unittest.skip("For some reason, with TF 1.15, regularization does not show up in the convolution op")
     def test_reducing_conv_with_l2_loss(self):
-        """ Test that reducing conv ops with l2 regularization is able to keep the regularization parameter """
-
+        """
+        Test that reducing conv ops with l2 regularization is able to keep the regularization parameter
+        """
         tf.compat.v1.reset_default_graph()
         sess = tf.compat.v1.Session()
         module_zero_channels_list = []
@@ -450,8 +446,9 @@ class TestTfModuleReducer(unittest.TestCase):
         sess.close()
 
     def test_reducing_depthwise_conv2d(self):
-        """ Test reducing depthwise conv2d """
-
+        """
+        Test reducing depthwise conv2d
+        """
         tf.compat.v1.reset_default_graph()
         sess = tf.compat.v1.Session()
         module_zero_channels_list = []
@@ -487,7 +484,9 @@ class TestTfModuleReducer(unittest.TestCase):
         sess.close()
 
     def test_reducing_with_dropout_and_identity_keras(self):
-        """ Test reducing a keras model with dropout and identity modules """
+        """
+        Test reducing a keras model with dropout and identity modules
+        """
         tf.compat.v1.reset_default_graph()
         sess = tf.compat.v1.Session()
         module_zero_channels_list = []
@@ -496,6 +495,7 @@ class TestTfModuleReducer(unittest.TestCase):
         init = tf.compat.v1.global_variables_initializer()
         sess.run(init)
 
+        _ = tf.compat.v1.summary.FileWriter('./', sess.graph)
         input_op_names = ["input_1"]
         output_op_names = ['dropout_keras_model/Softmax']
 
@@ -510,10 +510,9 @@ class TestTfModuleReducer(unittest.TestCase):
 
         reduced_identity = new_sess.graph.get_tensor_by_name("reduced_Identity:0")
         self.assertEqual(13, reduced_identity.shape.as_list()[-1])
-        self.assertEqual(reduced_identity.op.inputs[0].name, 'reduced_dropout/cond/Merge:0')
-        old_dropout_greater_equal_op = new_sess.graph.get_operation_by_name('dropout/cond/dropout/GreaterEqual')
-        reduced_dropout_greater_equal_op = new_sess.graph.get_operation_by_name('reduced_dropout/cond/dropout/'
-                                                                                'GreaterEqual')
+        self.assertEqual(reduced_identity.op.inputs[0].name, 'reduced_dropout/dropout/Mul_1/dropout/Mul_1:0')
+        old_dropout_greater_equal_op = new_sess.graph.get_operation_by_name('dropout/dropout/GreaterEqual')
+        reduced_dropout_greater_equal_op = new_sess.graph.get_operation_by_name('reduced_dropout/dropout/Mul_1/dropout/GreaterEqual')
         old_rate = old_dropout_greater_equal_op.inputs[1].op.get_attr('value').float_val[0]
         rate = reduced_dropout_greater_equal_op.inputs[1].op.get_attr('value').float_val[0]
         self.assertTrue(np.allclose(old_rate, rate))
@@ -521,45 +520,10 @@ class TestTfModuleReducer(unittest.TestCase):
         new_sess.close()
         sess.close()
 
-    def test_reducing_with_dropout_and_identity_slim(self):
-        """ Test reducing a keras model with dropout and identity modules """
-        tf.compat.v1.reset_default_graph()
-        sess = tf.compat.v1.Session()
-        module_zero_channels_list = []
-
-        _ = dropout_slim_model()
-        init = tf.compat.v1.global_variables_initializer()
-        sess.run(init)
-
-        input_op_names = ["input_1"]
-        output_op_names = ['dropout_slim_model/Softmax']
-
-        tf_op = tf.compat.v1.get_default_graph().get_operation_by_name("Conv_1/Conv2D")
-        input_channels_to_winnow = [2, 3, 4]
-        module_mask_pair = (tf_op, input_channels_to_winnow)
-        module_zero_channels_list.append(module_mask_pair)
-
-        new_sess, ordered_modules_list = winnow.winnow_tf_model(sess, input_op_names, output_op_names,
-                                                                module_zero_channels_list,
-                                                                reshape=True, in_place=True, verbose=True)
-
-        reduced_identity = new_sess.graph.get_tensor_by_name("reduced_Identity:0")
-        self.assertEqual(13, reduced_identity.shape.as_list()[-1])
-        self.assertEqual(reduced_identity.op.inputs[0].name, 'reduced_Dropout/dropout/mul_1:0')
-        old_dropout_greater_equal_op = new_sess.graph.get_operation_by_name('Dropout/dropout_1/GreaterEqual')
-        reduced_dropout_greater_equal_op = new_sess.graph.get_operation_by_name('reduced_Dropout/dropout/'
-                                                                                'GreaterEqual')
-        old_rate = old_dropout_greater_equal_op.inputs[1].op.get_attr('value').float_val[0]
-        rate = reduced_dropout_greater_equal_op.inputs[1].op.get_attr('value').float_val[0]
-        self.assertTrue(np.allclose(old_rate, rate))
-
-        self.assertEqual(5, len(ordered_modules_list))
-        new_sess.close()
-        sess.close()
-
     def test_reducing_keras_fused_bn_training_true_and_false(self):
-        """ Test for reducing keras type fused bn ops, both for training true and false """
-
+        """
+        Test for reducing keras type fused bn ops, both for training true and false
+        """
         tf.compat.v1.reset_default_graph()
         sess = tf.compat.v1.Session()
         module_zero_channels_list = []
@@ -592,7 +556,7 @@ class TestTfModuleReducer(unittest.TestCase):
         reduced_conv2d_2_tanh_op = new_sess.graph.get_operation_by_name('reduced_scope_1/conv2d_2/Tanh')
         self.assertEqual(reduced_conv2d_2_tanh_op.inputs[0].op.name, 'reduced_scope_1/conv2d_2/BiasAdd')
         reduced_conv2d_2_op = new_sess.graph.get_operation_by_name('reduced_scope_1/conv2d_2/Conv2D')
-        self.assertEqual(reduced_conv2d_2_op.inputs[0].name, 'reduced_scope_1/batch_normalization_1/cond/Merge:0')
+        self.assertEqual(reduced_conv2d_2_op.inputs[0].name, 'reduced_scope_1/batch_normalization/FusedBatchNormV3:0')
         self.assertEqual(reduced_conv2d_2_op.inputs[0].shape.as_list()[-1], 13)
         reduced_conv2d_1_op = new_sess.graph.get_operation_by_name('reduced_scope_1/conv2d_1/Conv2D')
         self.assertEqual(reduced_conv2d_1_op.inputs[0].name, 'reduced_batch_normalization/FusedBatchNormV3:0')
@@ -601,15 +565,14 @@ class TestTfModuleReducer(unittest.TestCase):
         reduced_batch_norm = new_sess.graph.get_operation_by_name('reduced_batch_normalization/FusedBatchNormV3')
         self.assertTrue(reduced_batch_norm.inputs[0].op.name, 'reduced_conv2d/BiasAdd')
         self.assertEqual(reduced_batch_norm.get_attr('is_training'), True)
+
         # Check second batch norm uses an is training placeholder
-        reduced_batch_norm_1 = new_sess.graph.get_operation_by_name('reduced_scope_1/batch_normalization_1/cond/'
-                                                                    'FusedBatchNormV3')
-        is_training_placeholder = new_sess.graph.get_tensor_by_name('is_training:0')
-        self.assertEqual(reduced_batch_norm_1.inputs[0].op.type, 'Switch')
-        self.assertEqual(reduced_batch_norm_1.inputs[0].op.inputs[1].op.inputs[0], is_training_placeholder)
+        reduced_batch_norm_1 = new_sess.graph.get_operation_by_name('reduced_scope_1/batch_normalization/FusedBatchNormV3')
+        self.assertEqual(reduced_batch_norm_1.get_attr('is_training'), True)
+
         # Check third batch norm's first input is from reduced scope 1 conv2d, and that its is_training_attribute is
         # False
-        reduced_batch_norm_2 = new_sess.graph.get_operation_by_name('reduced_scope_1/batch_normalization_2/'
+        reduced_batch_norm_2 = new_sess.graph.get_operation_by_name('reduced_scope_1/batch_normalization_1/'
                                                                     'FusedBatchNormV3')
         self.assertTrue(reduced_batch_norm_2.inputs[0].op.name, 'reduced_scope_1/conv2d_2/Tanh')
         self.assertEqual(reduced_batch_norm_2.get_attr('is_training'), False)
@@ -618,23 +581,21 @@ class TestTfModuleReducer(unittest.TestCase):
         orig_batch_norm = new_sess.graph.get_operation_by_name('batch_normalization/FusedBatchNormV3')
         new_batch_norm = new_sess.graph.get_operation_by_name('reduced_batch_normalization/FusedBatchNormV3')
         self.assertEqual(orig_batch_norm.get_attr('epsilon'), new_batch_norm.get_attr('epsilon'))
-        orig_batch_norm_1 = new_sess.graph.get_operation_by_name('scope_1/batch_normalization_1/cond/'
-                                                                 'FusedBatchNormV3_1')
-        new_batch_norm_1 = new_sess.graph.get_operation_by_name('reduced_scope_1/batch_normalization_1/'
-                                                                'cond/FusedBatchNormV3_1')
+        orig_batch_norm_1 = new_sess.graph.get_operation_by_name('scope_1/batch_normalization/FusedBatchNormV3')
+        new_batch_norm_1 = new_sess.graph.get_operation_by_name('reduced_scope_1/batch_normalization/FusedBatchNormV3')
         self.assertEqual(orig_batch_norm_1.get_attr('epsilon'), new_batch_norm_1.get_attr('epsilon'))
-        orig_batch_norm_2 = new_sess.graph.get_operation_by_name('scope_1/batch_normalization_2/FusedBatchNormV3')
-        new_batch_norm_2 = new_sess.graph.get_operation_by_name('reduced_scope_1/batch_normalization_2/'
+        orig_batch_norm_2 = new_sess.graph.get_operation_by_name('scope_1/batch_normalization_1/FusedBatchNormV3')
+        new_batch_norm_2 = new_sess.graph.get_operation_by_name('reduced_scope_1/batch_normalization_1/'
                                                                 'FusedBatchNormV3')
         self.assertEqual(orig_batch_norm_2.get_attr('epsilon'), new_batch_norm_2.get_attr('epsilon'))
 
-        orig_batch_norm_momentum = new_sess.graph.get_operation_by_name('batch_normalization/Const_2')
-        new_batch_norm_momentum = new_sess.graph.get_operation_by_name('reduced_batch_normalization/Const_2')
+        orig_batch_norm_momentum = new_sess.graph.get_operation_by_name('batch_normalization/Const')
+        new_batch_norm_momentum = new_sess.graph.get_operation_by_name('reduced_batch_normalization/Const')
         self.assertEqual(orig_batch_norm_momentum.get_attr('value').float_val[0],
                          new_batch_norm_momentum.get_attr('value').float_val[0])
-        orig_batch_norm_1_momentum = new_sess.graph.get_operation_by_name('scope_1/batch_normalization_1/cond_1/Const')
+        orig_batch_norm_1_momentum = new_sess.graph.get_operation_by_name('scope_1/batch_normalization/Const')
         new_batch_norm_1_momentum = new_sess.graph.get_operation_by_name('reduced_scope_1/'
-                                                                         'batch_normalization_1/cond_1/Const')
+                                                                         'batch_normalization/Const')
         self.assertEqual(orig_batch_norm_1_momentum.get_attr('value').float_val[0],
                          new_batch_norm_1_momentum.get_attr('value').float_val[0])
 
@@ -643,8 +604,9 @@ class TestTfModuleReducer(unittest.TestCase):
         sess.close()
 
     def test_reducing_keras_non_fused_bn_training_true_and_false(self):
-        """ Test for reducing keras type non fused bn ops, both for training true and false """
-
+        """
+        Test for reducing keras type non fused bn ops, both for training true and false
+        """
         tf.compat.v1.reset_default_graph()
         sess = tf.compat.v1.Session()
         module_zero_channels_list = []
@@ -677,7 +639,7 @@ class TestTfModuleReducer(unittest.TestCase):
         reduced_conv2d_1_tanh_op = new_sess.graph.get_operation_by_name('reduced_scope_1/conv2d_2/Tanh')
         self.assertEqual(reduced_conv2d_1_tanh_op.inputs[0].op.name, 'reduced_scope_1/conv2d_2/BiasAdd')
         reduced_conv2d_1_op = new_sess.graph.get_operation_by_name('reduced_scope_1/conv2d_2/Conv2D')
-        self.assertEqual(reduced_conv2d_1_op.inputs[0].name, 'reduced_scope_1/batch_normalization_1/batchnorm/add_1:0')
+        self.assertEqual(reduced_conv2d_1_op.inputs[0].name, 'reduced_scope_1/batch_normalization/batchnorm/add_1:0')
         self.assertEqual(reduced_conv2d_1_op.inputs[0].shape.as_list()[-1], 13)
         reduced_conv2d_op = new_sess.graph.get_operation_by_name('reduced_scope_1/conv2d_1/Conv2D')
         self.assertEqual(reduced_conv2d_op.inputs[0].name, 'reduced_batch_normalization/batchnorm/add_1:0')
@@ -687,15 +649,15 @@ class TestTfModuleReducer(unittest.TestCase):
         new_batch_norm_epsilon = new_sess.graph.get_operation_by_name('reduced_batch_normalization/batchnorm/add/y')
         self.assertEqual(orig_batch_norm_epsilon.get_attr('value').float_val[0],
                          new_batch_norm_epsilon.get_attr('value').float_val[0])
-        orig_batch_norm_1_epsilon = new_sess.graph.get_operation_by_name('scope_1/batch_normalization_1/batchnorm/add/'
+        orig_batch_norm_1_epsilon = new_sess.graph.get_operation_by_name('scope_1/batch_normalization/batchnorm/add/'
                                                                          'y')
-        new_batch_norm_1_epsilon = new_sess.graph.get_operation_by_name('reduced_scope_1/batch_normalization_1/'
+        new_batch_norm_1_epsilon = new_sess.graph.get_operation_by_name('reduced_scope_1/batch_normalization/'
                                                                         'batchnorm/add/y')
         self.assertEqual(orig_batch_norm_1_epsilon.get_attr('value').float_val[0],
                          new_batch_norm_1_epsilon.get_attr('value').float_val[0])
-        orig_batch_norm_2_epsilon = new_sess.graph.get_operation_by_name('scope_1/batch_normalization_2/'
+        orig_batch_norm_2_epsilon = new_sess.graph.get_operation_by_name('scope_1/batch_normalization_1/'
                                                                          'batchnorm/add/y')
-        new_batch_norm_2_epsilon = new_sess.graph.get_operation_by_name('reduced_scope_1/batch_normalization_2/'
+        new_batch_norm_2_epsilon = new_sess.graph.get_operation_by_name('reduced_scope_1/batch_normalization_1/'
                                                                         'batchnorm/add/y')
         self.assertEqual(orig_batch_norm_2_epsilon.get_attr('value').float_val[0],
                          new_batch_norm_2_epsilon.get_attr('value').float_val[0])
@@ -705,9 +667,9 @@ class TestTfModuleReducer(unittest.TestCase):
                                                                        'AssignMovingAvg_1/decay')
         self.assertEqual(orig_batch_norm_momentum.get_attr('value').float_val[0],
                          new_batch_norm_momentum.get_attr('value').float_val[0])
-        orig_batch_norm_1_momentum = new_sess.graph.get_operation_by_name('scope_1/batch_normalization_1/cond_3/'
+        orig_batch_norm_1_momentum = new_sess.graph.get_operation_by_name('scope_1/batch_normalization/'
                                                                           'AssignMovingAvg/decay')
-        new_batch_norm_1_momentum = new_sess.graph.get_operation_by_name('reduced_scope_1/batch_normalization_1/cond_3/'
+        new_batch_norm_1_momentum = new_sess.graph.get_operation_by_name('reduced_scope_1/batch_normalization/'
                                                                          'AssignMovingAvg/decay')
         self.assertEqual(orig_batch_norm_1_momentum.get_attr('value').float_val[0],
                          new_batch_norm_1_momentum.get_attr('value').float_val[0])
@@ -717,8 +679,9 @@ class TestTfModuleReducer(unittest.TestCase):
         sess.close()
 
     def test_reducing_multiple_input_model(self):
-        """ Test for reducing a model with multiple inputs"""
-
+        """
+        Test for reducing a model with multiple inputs
+        """
         tf.compat.v1.reset_default_graph()
         sess = tf.compat.v1.Session()
         module_zero_channels_list = []
@@ -747,8 +710,9 @@ class TestTfModuleReducer(unittest.TestCase):
         sess.close()
 
     def test_reducing_minimum_maximum_ops(self):
-        """ Test for reducing a model with minimum and maximum ops """
-
+        """
+        Test for reducing a model with minimum and maximum ops
+        """
         tf.compat.v1.reset_default_graph()
         sess = tf.compat.v1.Session()
         module_zero_channels_list = []
@@ -787,8 +751,9 @@ class TestTfModuleReducer(unittest.TestCase):
         sess.close()
 
     def test_reducing_upsample(self):
-        """ Test for reducing a model with upsample """
-
+        """
+        Test for reducing a model with upsample
+        """
         tf.compat.v1.reset_default_graph()
         sess = tf.compat.v1.Session()
         module_zero_channels_list = []
@@ -824,7 +789,9 @@ class TestTfModuleReducer(unittest.TestCase):
         sess.close()
 
     def test_reducing_downsample(self):
-        """ Test for reducing a model with multiple downsample nodes """
+        """
+        Test for reducing a model with multiple downsample nodes
+        """
         tf.compat.v1.reset_default_graph()
         sess = tf.compat.v1.Session()
         module_zero_channels_list = []
@@ -858,7 +825,9 @@ class TestTfModuleReducer(unittest.TestCase):
         self.assertEqual(0, 0)
 
     def test_reducing_upsample2d(self):
-        """ Test for reducing a model with upsample2D op """
+        """
+        Test for reducing a model with upsample2D op
+        """
         tf.compat.v1.reset_default_graph()
         sess = tf.compat.v1.Session()
         module_zero_channels_list = []
@@ -1181,6 +1150,8 @@ class TestTfWinnower(unittest.TestCase):
         self.assertEqual(8, sum(add_mask.input_channel_masks[1]))
         self.assertEqual(8, sum(add_mask.output_channel_masks[0]))
 
+        sess.close()
+
     def test_mask_propagation_for_add_with_non_split_parents(self):
         """ Test mask propagation on a model with add that does not have a split parent """
         tf.compat.v1.reset_default_graph()
@@ -1256,6 +1227,8 @@ class TestTfWinnower(unittest.TestCase):
         relu_1_op = mask_winnower._conn_graph.get_all_ops()["Relu_1"]
         relu_1_op_mask = mask_winnower._mask_propagator.op_to_mask_dict[relu_1_op]
         self.assertEqual(8, sum(relu_1_op_mask.output_channel_masks[0]))
+
+        sess.close()
 
     def test_create_masks_with_postprocessing_ops(self):
         """ Test that create_masks() is able to handle models with postprocessing nodes """
