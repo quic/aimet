@@ -534,7 +534,7 @@ def get_ordered_lists_of_conv_fc(model: torch.nn.Module, input_shapes: Tuple) ->
     dummy_input = [tensor.to(device) for tensor in dummy_input]
     module_list = get_ordered_list_of_modules(model, dummy_input)
     module_list = [[name, module] for name, module in module_list if
-                   isinstance(module, (torch.nn.Conv2d, torch.nn.Linear, torch.nn.ConvTranspose2d))]
+                   isinstance(module, (torch.nn.Conv1d, torch.nn.Conv2d, torch.nn.Linear, torch.nn.ConvTranspose2d))]
     return module_list
 
 
