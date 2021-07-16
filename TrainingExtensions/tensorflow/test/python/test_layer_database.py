@@ -277,9 +277,9 @@ class TestTensorFlowLayerDatabase(unittest.TestCase):
             # by default, model will be constructed in default graph
             input_placeholder = tf.compat.v1.placeholder(tf.float32, [None, None, None, 3], 'input')
             x = tf.keras.layers.Conv2D(8, (2, 2), padding='SAME')(input_placeholder)
-            x = tf.keras.layers.BatchNormalization(momentum=.3, epsilon=.65)(x)
+            x = tf.keras.layers.BatchNormalization(momentum=.3, epsilon=.65)(x, training=False)
             x = tf.keras.layers.Conv2D(8, (1, 1), padding='SAME', activation=tf.nn.tanh)(x)
-            x = tf.keras.layers.BatchNormalization(momentum=.4, epsilon=.25)(x)
+            x = tf.keras.layers.BatchNormalization(momentum=.4, epsilon=.25)(x, training=False)
             init = tf.compat.v1.global_variables_initializer()
 
         # create session with graph
@@ -287,7 +287,7 @@ class TestTensorFlowLayerDatabase(unittest.TestCase):
         sess.run(init)
 
         layer_db = LayerDatabase(model=sess, input_shape=(1, 224, 224, 3), working_dir=None, starting_ops=['input'],
-                                 ending_ops=['batch_normalization_1/cond'])
+                                 ending_ops=['batch_normalization_1/FusedBatchNormV3'])
 
         conv1_layer = layer_db.find_layer_by_name('conv2d/Conv2D')
         conv2_layer = layer_db.find_layer_by_name('conv2d_1/Conv2D')
@@ -305,7 +305,7 @@ class TestTensorFlowLayerDatabase(unittest.TestCase):
 
         batch_size = 32
         layer_db = LayerDatabase(model=sess, input_shape=(batch_size, 28, 28, 3), working_dir=None,
-                                 starting_ops=['input'], ending_ops=['batch_normalization_1/cond'])
+                                 starting_ops=['input'], ending_ops=['batch_normalization_1/FusedBatchNormV3'])
 
         conv1_layer = layer_db.find_layer_by_name('conv2d/Conv2D')
         conv2_layer = layer_db.find_layer_by_name('conv2d_1/Conv2D')

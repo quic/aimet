@@ -421,7 +421,7 @@ class TestCrossLayerEqualization(unittest.TestCase):
         conv_op = tf.keras.layers.Conv2D(32, (3, 3))(inputs)
         relu_1= tf.nn.relu(conv_op)
         conv2_op = tf.keras.layers.Conv2D(32, (3, 3))(relu_1)
-        bn_op_2 = tf.compat.v1.layers.batch_normalization(conv2_op, fused=True)
+        bn_op_2 = tf.keras.layers.BatchNormalization(fused=True)(conv2_op, training=False)
         conv3_op = tf.keras.layers.Conv2D(32, (3, 3))(bn_op_2)
         relu_2 = tf.nn.relu(conv3_op)
 
@@ -488,7 +488,7 @@ class TestCrossLayerEqualization(unittest.TestCase):
                                     bias_initializer='random_uniform')(x3)
         x = tf.keras.layers.add([x2, x4])
         conv2_op = tf.keras.layers.Conv2D(32, (3, 3))(x)
-        bn_op = tf.compat.v1.layers.batch_normalization(conv2_op, fused=True)
+        bn_op = tf.keras.layers.BatchNormalization(fused=True)(conv2_op, training=False)
         _ = tf.nn.relu(bn_op)
 
         init = tf.compat.v1.global_variables_initializer()
@@ -525,11 +525,11 @@ class TestCrossLayerEqualization(unittest.TestCase):
         with sess.as_default():
             inputs = tf.keras.Input(shape=(32, 32, 3,))
             conv_op = tf.keras.layers.Conv2D(32, (3, 3), use_bias=False)(inputs)
-            bn_op = tf.compat.v1.layers.batch_normalization(conv_op, fused=True)
+            bn_op = tf.keras.layers.BatchNormalization(fused=True)(conv_op, training=False)
             relu_1= tf.nn.relu(bn_op)
             conv2_op = tf.keras.layers.Conv2D(32, (3, 3), use_bias=False)(relu_1)
-            bn_op_2 = tf.compat.v1.layers.batch_normalization(conv2_op, fused=True, training=False)
-            _ = tf.nn.relu(bn_op_2)
+            bn_op_2 = tf.keras.layers.BatchNormalization(fused=True)(conv2_op, training=False)
+            relu_2 = tf.nn.relu(bn_op_2)
 
             init = tf.compat.v1.global_variables_initializer()
             sess.run(init)
@@ -553,7 +553,7 @@ class TestCrossLayerEqualization(unittest.TestCase):
         inputs = tf.keras.Input(shape=(32, 32, 3,), name="inputs")
         conv_op = tf.keras.layers.Conv2D(32, (3, 3))(inputs)
         r_op = tf.nn.relu(conv_op)
-        bn_op = tf.compat.v1.layers.batch_normalization(r_op, fused=True)
+        bn_op = tf.keras.layers.BatchNormalization(fused=True)(r_op, training=False)
         conv2_op = tf.keras.layers.Conv2D(32, (3, 3))(bn_op)
         conv3_op = tf.keras.layers.Conv2D(32, (3, 3))(conv2_op)
         _ = tf.nn.relu(conv3_op)

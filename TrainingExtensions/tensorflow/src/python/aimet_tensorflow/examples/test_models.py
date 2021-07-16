@@ -42,7 +42,6 @@
 # Including above pylint disables since pylint complains about certain module members not found, when they actually
 # are there.
 import tensorflow as tf
-# import tensorflow.contrib.slim as slim
 from tensorflow.python.keras.models import Sequential
 from tensorflow.python.keras.layers import Dense, Conv2D, BatchNormalization, Flatten, AvgPool2D, MaxPool2D
 
@@ -69,7 +68,7 @@ def single_residual():
 
     inputs = tf.keras.Input(shape=(16, 16, 3,))
     x = tf.keras.layers.Conv2D(16, (3, 3))(inputs)
-    x = tf.compat.v1.layers.batch_normalization(x, momentum=.3, epsilon=.65)
+    x = tf.keras.layers.BatchNormalization(momentum=.3, epsilon=.65)(x, training=False)
     x = tf.nn.relu(x)
     x = tf.keras.layers.MaxPool2D()(x)
     residual = x
@@ -78,7 +77,7 @@ def single_residual():
 
     x = tf.keras.layers.Conv2D(8, (1, 1))(x)
     x = tf.keras.layers.Conv2D(8, (1, 1))(x)
-    x = tf.compat.v1.layers.batch_normalization(x, momentum=.4, epsilon=.25)
+    x = tf.keras.layers.BatchNormalization(momentum=.4, epsilon=.25)(x, training=True)
     x = tf.add(x, residual)
     x = tf.nn.relu(x)
 
@@ -95,10 +94,10 @@ def keras_model():
 
     inputs = tf.keras.Input(shape=(16, 16, 3,), name='conv2d_input')
     x = tf.keras.layers.Conv2D(8, (2, 2))(inputs)
-    x = tf.compat.v1.layers.batch_normalization(x, momentum=.3, epsilon=.65)
+    x = tf.keras.layers.BatchNormalization(momentum=.3, epsilon=.65)(x, training=False)
     x = tf.keras.layers.AveragePooling2D()(x)
     x = tf.keras.layers.MaxPool2D()(x)
-    x = tf.compat.v1.layers.batch_normalization(x, momentum=.4, epsilon=.25)
+    x = tf.keras.layers.BatchNormalization(momentum=.4, epsilon=.25)(x, training=True)
     x = tf.keras.layers.Conv2D(4, (2, 2), activation=tf.nn.tanh, kernel_regularizer=tf.keras.regularizers.l2(0.5))(x)
     x = tf.keras.layers.Flatten()(x)
     outputs = tf.keras.layers.Dense(2, activation=tf.nn.softmax, name="keras_model")(x)
@@ -124,17 +123,17 @@ def keras_model_functional():
     """ Function for returning basic keras model defined functionally """
     inputs = tf.keras.Input(shape=(32, 32, 3,))
     x = tf.keras.layers.Conv2D(32, (3, 3))(inputs)
-    x = tf.compat.v1.layers.batch_normalization(x, momentum=.3, epsilon=.65, training=True)
+    x = tf.keras.layers.BatchNormalization(momentum=.3, epsilon=.65)(x, training=True)
     with tf.compat.v1.variable_scope("scope_1"):
         x = tf.keras.layers.Conv2D(16, (2, 2), activation=tf.nn.tanh)(x)
-        x = tf.compat.v1.layers.batch_normalization(x, momentum=.4, epsilon=.25, training=True)
+        x = tf.keras.layers.BatchNormalization(momentum=.4, epsilon=.25)(x, training=True)
         x = tf.keras.layers.Conv2D(8, (2, 2), activation=tf.nn.tanh)(x)
-        x = tf.compat.v1.layers.batch_normalization(x, momentum=.5, epsilon=.35, training=False)
+        x = tf.keras.layers.BatchNormalization(momentum=.5, epsilon=.35)(x, training=False)
         x = tf.keras.layers.Conv2D(4, (2, 2), activation=tf.nn.relu6)(x)
     x = tf.keras.layers.Flatten()(x)
     outputs = tf.keras.layers.Dense(10, activation=tf.nn.softmax, name="keras_model_functional")(x)
-
-    return outputs
+    model = tf.keras.Model(inputs=inputs, outputs=outputs)
+    return model
 
 
 def keras_model_functional_before():
@@ -145,9 +144,9 @@ def keras_model_functional_before():
     x = tf.compat.v1.keras.layers.BatchNormalization(momentum=.3, epsilon=.65)(x, training=True)
     with tf.compat.v1.variable_scope("scope_1"):
         x = tf.keras.layers.Conv2D(16, (2, 2), activation=tf.nn.tanh)(x)
-        x = tf.compat.v1.keras.layers.BatchNormalization(momentum=.4, epsilon=.25)(x, training=is_training)
+        x = tf.keras.layers.BatchNormalization(momentum=.4, epsilon=.25)(x, training=is_training)
         x = tf.keras.layers.Conv2D(8, (2, 2), activation=tf.nn.tanh)(x)
-        x = tf.compat.v1.keras.layers.BatchNormalization(momentum=.5, epsilon=.35)(x, training=False)
+        x = tf.keras.layers.BatchNormalization(momentum=.5, epsilon=.35)(x, training=False)
         x = tf.keras.layers.Conv2D(4, (2, 2), activation=tf.nn.relu6)(x)
     x = tf.keras.layers.Flatten()(x)
     outputs = tf.keras.layers.Dense(10, activation=tf.nn.softmax, name="keras_model_functional")(x)
@@ -157,21 +156,20 @@ def keras_model_functional_before():
 
 def keras_model_functional_with_non_fused_batchnorms():
     """ Function for returning basic keras model defined functionally using non fused batchnorms"""
-    is_training = tf.compat.v1.placeholder_with_default(tf.constant(True), shape=(), name='is_training')
     inputs = tf.keras.Input(shape=(32, 32, 3,))
     x = tf.keras.layers.Conv2D(32, (3, 3))(inputs)
-    x = tf.compat.v1.layers.batch_normalization(x, momentum=.3, epsilon=.65, fused=False, training=True)
+    x = tf.keras.layers.BatchNormalization(momentum=.3, epsilon=.65, fused=False)(x, training=True)
     with tf.compat.v1.variable_scope("scope_1"):
         x = tf.keras.layers.Conv2D(16, (2, 2), activation=tf.nn.tanh)(x)
-        x = tf.compat.v1.layers.batch_normalization(x, momentum=.4, epsilon=.25, fused=False, training=True)
+        x = tf.keras.layers.BatchNormalization(momentum=.4, epsilon=.25, fused=False)(x, training=True)
         x = tf.keras.layers.Conv2D(8, (2, 2), activation=tf.nn.tanh)(x)
-        x = tf.compat.v1.layers.batch_normalization(x, momentum=.5, epsilon=.35, fused=False, training=False)
+        x = tf.keras.layers.BatchNormalization(momentum=.5, epsilon=.35, fused=False)(x, training=False)
         x = tf.keras.layers.Conv2D(4, (2, 2), activation=tf.nn.relu6)(x)
     x = tf.keras.layers.Flatten()(x)
     outputs = tf.keras.layers.Dense(10, activation=tf.nn.softmax,
                                     name="keras_model_functional_with_non_fused_batchnorms")(x)
-
-    return outputs
+    model = tf.keras.Model(inputs=inputs, outputs=outputs)
+    return model
 
 
 def keras_model_functional_with_non_fused_batchnorms_before():
@@ -225,22 +223,7 @@ def split_and_concat_model():
     # y2 = x[:, 101:, :, :]
     y1, y2 = tf.split(x, [100, 124], 1)
     y1 = tf.nn.relu(y1)
-    y2 = tf.compat.v1.layers.batch_normalization(y1)
-    z = tf.keras.layers.concatenate([y1, y2], axis=1)
-    z = tf.keras.layers.Flatten()(z)
-    output = tf.keras.layers.Dense(10, activation=tf.nn.softmax, name="split_and_concat_model")(z)
-    return output
-
-
-def split_and_concat_model_before():
-    """ Function for returning keras model with splits and concats """
-    x = tf.keras.Input(shape=[224, 224, 3, ])
-    # TODO: implement split for the following commented out method of splitting
-    # y1 = x[:, :100, :, :]
-    # y2 = x[:, 101:, :, :]
-    y1, y2 = tf.split(x, [100, 124], 1)
-    y1 = tf.nn.relu(y1)
-    y2 = tf.keras.layers.BatchNormalization()(y2)
+    y2 = tf.keras.layers.BatchNormalization()(y2, training=False)
     z = tf.keras.layers.concatenate([y1, y2], axis=1)
     z = tf.keras.layers.Flatten()(z)
     output = tf.keras.layers.Dense(10, activation=tf.nn.softmax, name="split_and_concat_model")(z)
@@ -267,14 +250,14 @@ def upsample_model():
 
     inputs = tf.keras.Input(shape=(16, 16, 3,))
     x = tf.keras.layers.Conv2D(8, (2, 2))(inputs)
-    x = tf.compat.v1.layers.batch_normalization(x, momentum=.3, epsilon=.65)
+    x = tf.keras.layers.BatchNormalization(momentum=.3, epsilon=.65)(x, training=False)
     x = tf.nn.relu(x)
     x = tf.keras.layers.MaxPool2D()(x)
     residual = x
 
     x = tf.keras.layers.Conv2D(8, (1, 1))(x)
     x = tf.keras.layers.Conv2D(8, (1, 1))(x)
-    x = tf.compat.v1.layers.batch_normalization(x, momentum=.4, epsilon=.25)
+    x = tf.keras.layers.BatchNormalization(momentum=.4, epsilon=.25)(x, training=True)
     x = tf.add(x, residual)
     x = tf.nn.relu(x)
 
@@ -510,7 +493,7 @@ def model_to_test_downstream_masks():
     residual = x
     x = tf.keras.layers.Conv2D(8, (1, 1))(x)
     x = x + residual
-    x = tf.compat.v1.layers.batch_normalization(x, momentum=.3, epsilon=.65)
+    x = tf.keras.layers.BatchNormalization(momentum=.3, epsilon=.65)(x, training=False)
     x1 = tf.nn.relu(x)
     x2 = tf.nn.relu(x)
     x1 = tf.keras.layers.Conv2D(4, (2, 2))(x1)

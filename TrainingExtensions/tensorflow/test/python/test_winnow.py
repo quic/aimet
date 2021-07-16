@@ -556,7 +556,7 @@ class TestTfModuleReducer(unittest.TestCase):
         reduced_conv2d_2_tanh_op = new_sess.graph.get_operation_by_name('reduced_scope_1/conv2d_2/Tanh')
         self.assertEqual(reduced_conv2d_2_tanh_op.inputs[0].op.name, 'reduced_scope_1/conv2d_2/BiasAdd')
         reduced_conv2d_2_op = new_sess.graph.get_operation_by_name('reduced_scope_1/conv2d_2/Conv2D')
-        self.assertEqual(reduced_conv2d_2_op.inputs[0].name, 'reduced_scope_1/batch_normalization/FusedBatchNormV3:0')
+        self.assertEqual(reduced_conv2d_2_op.inputs[0].name, 'reduced_scope_1/batch_normalization_1/FusedBatchNormV3:0')
         self.assertEqual(reduced_conv2d_2_op.inputs[0].shape.as_list()[-1], 13)
         reduced_conv2d_1_op = new_sess.graph.get_operation_by_name('reduced_scope_1/conv2d_1/Conv2D')
         self.assertEqual(reduced_conv2d_1_op.inputs[0].name, 'reduced_batch_normalization/FusedBatchNormV3:0')
@@ -567,12 +567,12 @@ class TestTfModuleReducer(unittest.TestCase):
         self.assertEqual(reduced_batch_norm.get_attr('is_training'), True)
 
         # Check second batch norm uses an is training placeholder
-        reduced_batch_norm_1 = new_sess.graph.get_operation_by_name('reduced_scope_1/batch_normalization/FusedBatchNormV3')
+        reduced_batch_norm_1 = new_sess.graph.get_operation_by_name('reduced_scope_1/batch_normalization_1/FusedBatchNormV3')
         self.assertEqual(reduced_batch_norm_1.get_attr('is_training'), True)
 
         # Check third batch norm's first input is from reduced scope 1 conv2d, and that its is_training_attribute is
         # False
-        reduced_batch_norm_2 = new_sess.graph.get_operation_by_name('reduced_scope_1/batch_normalization_1/'
+        reduced_batch_norm_2 = new_sess.graph.get_operation_by_name('reduced_scope_1/batch_normalization_2/'
                                                                     'FusedBatchNormV3')
         self.assertTrue(reduced_batch_norm_2.inputs[0].op.name, 'reduced_scope_1/conv2d_2/Tanh')
         self.assertEqual(reduced_batch_norm_2.get_attr('is_training'), False)
@@ -581,11 +581,11 @@ class TestTfModuleReducer(unittest.TestCase):
         orig_batch_norm = new_sess.graph.get_operation_by_name('batch_normalization/FusedBatchNormV3')
         new_batch_norm = new_sess.graph.get_operation_by_name('reduced_batch_normalization/FusedBatchNormV3')
         self.assertEqual(orig_batch_norm.get_attr('epsilon'), new_batch_norm.get_attr('epsilon'))
-        orig_batch_norm_1 = new_sess.graph.get_operation_by_name('scope_1/batch_normalization/FusedBatchNormV3')
-        new_batch_norm_1 = new_sess.graph.get_operation_by_name('reduced_scope_1/batch_normalization/FusedBatchNormV3')
+        orig_batch_norm_1 = new_sess.graph.get_operation_by_name('scope_1/batch_normalization_1/FusedBatchNormV3')
+        new_batch_norm_1 = new_sess.graph.get_operation_by_name('reduced_scope_1/batch_normalization_1/FusedBatchNormV3')
         self.assertEqual(orig_batch_norm_1.get_attr('epsilon'), new_batch_norm_1.get_attr('epsilon'))
-        orig_batch_norm_2 = new_sess.graph.get_operation_by_name('scope_1/batch_normalization_1/FusedBatchNormV3')
-        new_batch_norm_2 = new_sess.graph.get_operation_by_name('reduced_scope_1/batch_normalization_1/'
+        orig_batch_norm_2 = new_sess.graph.get_operation_by_name('scope_1/batch_normalization_2/FusedBatchNormV3')
+        new_batch_norm_2 = new_sess.graph.get_operation_by_name('reduced_scope_1/batch_normalization_2/'
                                                                 'FusedBatchNormV3')
         self.assertEqual(orig_batch_norm_2.get_attr('epsilon'), new_batch_norm_2.get_attr('epsilon'))
 
@@ -593,9 +593,9 @@ class TestTfModuleReducer(unittest.TestCase):
         new_batch_norm_momentum = new_sess.graph.get_operation_by_name('reduced_batch_normalization/Const')
         self.assertEqual(orig_batch_norm_momentum.get_attr('value').float_val[0],
                          new_batch_norm_momentum.get_attr('value').float_val[0])
-        orig_batch_norm_1_momentum = new_sess.graph.get_operation_by_name('scope_1/batch_normalization/Const')
+        orig_batch_norm_1_momentum = new_sess.graph.get_operation_by_name('scope_1/batch_normalization_1/Const')
         new_batch_norm_1_momentum = new_sess.graph.get_operation_by_name('reduced_scope_1/'
-                                                                         'batch_normalization/Const')
+                                                                         'batch_normalization_1/Const')
         self.assertEqual(orig_batch_norm_1_momentum.get_attr('value').float_val[0],
                          new_batch_norm_1_momentum.get_attr('value').float_val[0])
 
@@ -639,7 +639,7 @@ class TestTfModuleReducer(unittest.TestCase):
         reduced_conv2d_1_tanh_op = new_sess.graph.get_operation_by_name('reduced_scope_1/conv2d_2/Tanh')
         self.assertEqual(reduced_conv2d_1_tanh_op.inputs[0].op.name, 'reduced_scope_1/conv2d_2/BiasAdd')
         reduced_conv2d_1_op = new_sess.graph.get_operation_by_name('reduced_scope_1/conv2d_2/Conv2D')
-        self.assertEqual(reduced_conv2d_1_op.inputs[0].name, 'reduced_scope_1/batch_normalization/batchnorm/add_1:0')
+        self.assertEqual(reduced_conv2d_1_op.inputs[0].name, 'reduced_scope_1/batch_normalization_1/batchnorm/add_1:0')
         self.assertEqual(reduced_conv2d_1_op.inputs[0].shape.as_list()[-1], 13)
         reduced_conv2d_op = new_sess.graph.get_operation_by_name('reduced_scope_1/conv2d_1/Conv2D')
         self.assertEqual(reduced_conv2d_op.inputs[0].name, 'reduced_batch_normalization/batchnorm/add_1:0')
@@ -649,15 +649,15 @@ class TestTfModuleReducer(unittest.TestCase):
         new_batch_norm_epsilon = new_sess.graph.get_operation_by_name('reduced_batch_normalization/batchnorm/add/y')
         self.assertEqual(orig_batch_norm_epsilon.get_attr('value').float_val[0],
                          new_batch_norm_epsilon.get_attr('value').float_val[0])
-        orig_batch_norm_1_epsilon = new_sess.graph.get_operation_by_name('scope_1/batch_normalization/batchnorm/add/'
+        orig_batch_norm_1_epsilon = new_sess.graph.get_operation_by_name('scope_1/batch_normalization_1/batchnorm/add/'
                                                                          'y')
-        new_batch_norm_1_epsilon = new_sess.graph.get_operation_by_name('reduced_scope_1/batch_normalization/'
+        new_batch_norm_1_epsilon = new_sess.graph.get_operation_by_name('reduced_scope_1/batch_normalization_1/'
                                                                         'batchnorm/add/y')
         self.assertEqual(orig_batch_norm_1_epsilon.get_attr('value').float_val[0],
                          new_batch_norm_1_epsilon.get_attr('value').float_val[0])
-        orig_batch_norm_2_epsilon = new_sess.graph.get_operation_by_name('scope_1/batch_normalization_1/'
+        orig_batch_norm_2_epsilon = new_sess.graph.get_operation_by_name('scope_1/batch_normalization_2/'
                                                                          'batchnorm/add/y')
-        new_batch_norm_2_epsilon = new_sess.graph.get_operation_by_name('reduced_scope_1/batch_normalization_1/'
+        new_batch_norm_2_epsilon = new_sess.graph.get_operation_by_name('reduced_scope_1/batch_normalization_2/'
                                                                         'batchnorm/add/y')
         self.assertEqual(orig_batch_norm_2_epsilon.get_attr('value').float_val[0],
                          new_batch_norm_2_epsilon.get_attr('value').float_val[0])
@@ -667,9 +667,9 @@ class TestTfModuleReducer(unittest.TestCase):
                                                                        'AssignMovingAvg_1/decay')
         self.assertEqual(orig_batch_norm_momentum.get_attr('value').float_val[0],
                          new_batch_norm_momentum.get_attr('value').float_val[0])
-        orig_batch_norm_1_momentum = new_sess.graph.get_operation_by_name('scope_1/batch_normalization/'
+        orig_batch_norm_1_momentum = new_sess.graph.get_operation_by_name('scope_1/batch_normalization_1/'
                                                                           'AssignMovingAvg/decay')
-        new_batch_norm_1_momentum = new_sess.graph.get_operation_by_name('reduced_scope_1/batch_normalization/'
+        new_batch_norm_1_momentum = new_sess.graph.get_operation_by_name('reduced_scope_1/batch_normalization_1/'
                                                                          'AssignMovingAvg/decay')
         self.assertEqual(orig_batch_norm_1_momentum.get_attr('value').float_val[0],
                          new_batch_norm_1_momentum.get_attr('value').float_val[0])

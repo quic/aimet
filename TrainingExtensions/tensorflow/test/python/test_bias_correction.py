@@ -399,7 +399,7 @@ class TestBiasCorrection(unittest.TestCase):
         tf.compat.v1.reset_default_graph()
         inputs = tf.keras.Input(shape=(32, 32, 3,), name="inputs")
         conv_op = tf.keras.layers.Conv2D(32, (3, 3))(inputs)
-        bn_op = tf.compat.v1.layers.batch_normalization(conv_op, fused=True)
+        bn_op = tf.keras.layers.BatchNormalization(fused=True)(conv_op, training=False)
         relu = tf.nn.relu(bn_op)
         conv1_op = tf.keras.layers.Conv2D(32, (3, 3))(relu)
         conv2_op = tf.keras.layers.Conv2D(32, (3, 3))(conv1_op)
@@ -425,7 +425,7 @@ class TestBiasCorrection(unittest.TestCase):
         tf.compat.v1.reset_default_graph()
         inputs = tf.keras.Input(shape=(10, 10, 3,))
         x = tf.keras.layers.Conv2D(10, (1, 1))(inputs)
-        bn_op = tf.compat.v1.layers.batch_normalization(x, fused=True, training=False)
+        bn_op = tf.keras.layers.BatchNormalization(fused=True)(x, training=False)
 
         with tf.compat.v1.variable_scope("standalone_depthwise"):
             x = tf.compat.v1.nn.depthwise_conv2d_native(bn_op,
@@ -456,13 +456,17 @@ class TestBiasCorrection(unittest.TestCase):
         """
         tf.compat.v1.reset_default_graph()
         inputs = tf.keras.Input(shape=(32, 32, 3,), name="inputs")
+
         conv_op = tf.keras.layers.Conv2D(32, (3, 3))(inputs)
-        bn_op = tf.compat.v1.layers.batch_normalization(conv_op, fused=True, training=False)
+
+        bn_op = tf.keras.layers.BatchNormalization(fused=True)(conv_op, training=False)
         relu = tf.nn.relu(bn_op)
         conv1_op = tf.keras.layers.Conv2D(32, (3, 3))(relu)
+
         relu_2 = tf.nn.relu(conv1_op)
-        bn_op_2 = tf.compat.v1.layers.batch_normalization(relu_2, fused=True)
+        bn_op_2 = tf.keras.layers.BatchNormalization(fused=True)(relu_2, training=False)
         conv2_op = tf.keras.layers.Conv2D(32, (3, 3))(bn_op_2, training=False)
+
         _ = tf.nn.relu(conv2_op)
 
         init = tf.compat.v1.global_variables_initializer()

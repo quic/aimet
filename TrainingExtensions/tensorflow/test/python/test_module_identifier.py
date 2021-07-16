@@ -92,10 +92,10 @@ class TestStructureModuleIdentifier(unittest.TestCase):
         self.assertTrue(bn_op in module_identifier.op_to_module_dict.keys())
         self.assertEqual(module_identifier.op_to_module_dict[bn_op].module_name, 'batch_normalization')
 
-        bn_op_1 = tf.compat.v1.get_default_graph().get_operation_by_name('scope_1/batch_normalization/FusedBatchNormV3')
+        bn_op_1 = tf.compat.v1.get_default_graph().get_operation_by_name('scope_1/batch_normalization_1/FusedBatchNormV3')
         self.assertTrue(bn_op_1 in module_identifier.op_to_module_dict.keys())
-        self.assertEqual(module_identifier.op_to_module_dict[bn_op_1].module_name, 'scope_1/batch_normalization')
+        self.assertEqual(module_identifier.op_to_module_dict[bn_op_1].module_name, 'scope_1/batch_normalization_1')
 
-        bn_op_2 = tf.compat.v1.get_default_graph().get_operation_by_name('scope_1/batch_normalization_1/FusedBatchNormV3')
+        bn_op_2 = tf.compat.v1.get_default_graph().get_operation_by_name('scope_1/batch_normalization_2/FusedBatchNormV3')
         self.assertTrue(bn_op_2 in module_identifier.op_to_module_dict.keys())
-        self.assertEqual(module_identifier.op_to_module_dict[bn_op_2].module_name, 'scope_1/batch_normalization_1')
+        self.assertEqual(module_identifier.op_to_module_dict[bn_op_2].module_name, 'scope_1/batch_normalization_2')

@@ -121,8 +121,8 @@ class TestTfConnectedGraph(unittest.TestCase):
 
         print(conn_graph.get_all_ops())
         _ = conn_graph.get_all_ops()['batch_normalization']
-        _ = conn_graph.get_all_ops()['scope_1/batch_normalization']
         _ = conn_graph.get_all_ops()['scope_1/batch_normalization_1']
+        _ = conn_graph.get_all_ops()['scope_1/batch_normalization_2']
         self.assertEqual(0, conn_graph.branch_count)
         self.assertEqual(14, len(conn_graph.get_all_ops()))
 

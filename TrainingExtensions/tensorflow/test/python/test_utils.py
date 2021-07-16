@@ -51,7 +51,7 @@ from aimet_tensorflow.utils.common import get_ordered_ops, create_input_feed_dic
     iter_first_x, get_ordered_conv_linears
 from aimet_tensorflow.utils.graph_saver import wrapper_func
 from aimet_tensorflow.examples.test_models import single_residual, multiple_input_model, \
-    keras_model_functional, keras_model_functional_before,\
+    keras_model_functional,\
     keras_model_functional_with_non_fused_batchnorms
 from aimet_tensorflow.utils.op.conv import WeightTensorUtils, BiasUtils, get_output_activation_shape
 from aimet_tensorflow.utils.op.fusedbatchnorm import BNUtils
@@ -640,14 +640,14 @@ class TestBNUtils(unittest.TestCase):
         tf.compat.v1.reset_default_graph()
         tf.keras.backend.clear_session()
         with tf.device('/cpu:0'):
-            model = keras_model_functional_before()
+            model = keras_model_functional()
             model.summary()
 
         sess = tf.compat.v1.keras.backend.get_session()
         init = tf.compat.v1.global_variables_initializer()
         sess.run(init)
 
-        # layer 1 , 3 and 5 are fused BN of different types
+        # layer 1 ,3 and 5 are fused BN of different types
         with sess.as_default():
             # read weights ( beta, gamma, mean, variance)
             bn_1 = model.layers[2]
@@ -658,15 +658,14 @@ class TestBNUtils(unittest.TestCase):
             keras_bn_3_params = get_bn_params_keras_layer(bn_3)
 
             bn_op_1 = sess.graph.get_operation_by_name('batch_normalization/FusedBatchNormV3')
-            # TODO: when is_training placeholder is attached to BN, the structure is different.
-            # bn_op_2 = sess.graph.get_operation_by_name('scope_1/batch_normalization_1/FusedBatchNormV3_1')
+            bn_op_2 = sess.graph.get_operation_by_name('scope_1/batch_normalization_1/FusedBatchNormV3')
             bn_op_3 = sess.graph.get_operation_by_name('scope_1/batch_normalization_2/FusedBatchNormV3')
             bn_1_params = get_bn_params_aimet_api(sess, bn_op_1)
-            # bn_2_params = get_bn_params_aimet_api(sess, bn_op_2)
+            bn_2_params = get_bn_params_aimet_api(sess, bn_op_2)
             bn_3_params = get_bn_params_aimet_api(sess, bn_op_3)
 
             self.assertTrue(np.allclose(keras_bn_1_params, bn_1_params))
-            # self.assertTrue(np.allclose(keras_bn_2_params, bn_2_params))
+            self.assertTrue(np.allclose(keras_bn_2_params, bn_2_params))
             self.assertTrue(np.allclose(keras_bn_3_params, bn_3_params))
 
         sess.close()
@@ -684,10 +683,10 @@ class TestBNUtils(unittest.TestCase):
         self.assertTrue(BNUtils.get_training(fused_bn_op))
         self.assertTrue(isinstance(BNUtils.get_training(fused_bn_op), bool))
 
-        fused_bn_op = tf.compat.v1.get_default_graph().get_operation_by_name('scope_1/batch_normalization/FusedBatchNormV3')
+        fused_bn_op = tf.compat.v1.get_default_graph().get_operation_by_name('scope_1/batch_normalization_1/FusedBatchNormV3')
         self.assertEqual(BNUtils.get_training(fused_bn_op), True)
 
-        fused_bn_op = tf.compat.v1.get_default_graph().get_operation_by_name('scope_1/batch_normalization_1/FusedBatchNormV3')
+        fused_bn_op = tf.compat.v1.get_default_graph().get_operation_by_name('scope_1/batch_normalization_2/FusedBatchNormV3')
         self.assertFalse(BNUtils.get_training(fused_bn_op))
 
         tf.compat.v1.reset_default_graph()
@@ -695,19 +694,14 @@ class TestBNUtils(unittest.TestCase):
         # Model with non fused batchnorms
         _ = keras_model_functional_with_non_fused_batchnorms()
 
-        all_ops = tf.compat.v1.get_default_graph().get_operations()
-        for op in all_ops:
-            print(op.name, op.type)
         bn_op = tf.compat.v1.get_default_graph().get_operation_by_name('batch_normalization/batchnorm/mul_1')
         self.assertTrue(BNUtils.get_training(bn_op))
         self.assertTrue(isinstance(BNUtils.get_training(bn_op), bool))
 
-        # TODO: BNUtils.get_training() is not fetching training op correctly
-        # bn_op = tf.compat.v1.get_default_graph().get_operation_by_name('scope_1/batch_normalization/batchnorm/mul_1')
-        # training_tensor = tf.compat.v1.get_default_graph().get_tensor_by_name('is_training:0')
-        # self.assertEqual(BNUtils.get_training(bn_op), training_tensor)
-
         bn_op = tf.compat.v1.get_default_graph().get_operation_by_name('scope_1/batch_normalization_1/batchnorm/mul_1')
+        self.assertTrue(BNUtils.get_training(bn_op))
+
+        bn_op = tf.compat.v1.get_default_graph().get_operation_by_name('scope_1/batch_normalization_2/batchnorm/mul_1')
         self.assertFalse(BNUtils.get_training(bn_op))
 
         tf.compat.v1.reset_default_graph()

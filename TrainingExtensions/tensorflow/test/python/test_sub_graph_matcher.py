@@ -41,7 +41,7 @@ import os
 import unittest
 import logging
 import tensorflow as tf
-from tensorflow_core.contrib.quantize.python import graph_matcher
+from aimet_tensorflow.quantize import graph_matcher
 
 from aimet_common.utils import AimetLogger
 from aimet_tensorflow.common.sub_graph_matcher_op_templates import op_type_templates
@@ -116,11 +116,11 @@ class TestSubGraph(unittest.TestCase):
         # with Bias, the last element in the pattern list is BiasAdd.
         self.assertEqual(op_type_patterns[-1]._op_type, 'BiasAdd')
 
-    def test_fused_batchnorm_training_tensor_subgraph(self):
-        """ test sub graph for FusedBatchNorm training Tensor"""
+    def test_fused_batchnorm_training_True_subgraph(self):
+        """ test sub graph for FusedBatchNorm training True"""
 
-        input_shape = subgraph_constructors['BN_keras_with_training_tensor']['input_shape']
-        constructor_string = subgraph_constructors['BN_keras_with_training_tensor']['constructor']
+        input_shape = subgraph_constructors['BN_keras_with_training_True']['input_shape']
+        constructor_string = subgraph_constructors['BN_keras_with_training_True']['constructor']
         bn_subgraph = create_subgraph_for_op_default(input_shape, constructor_string)
 
         logger.debug("Step: I The OPs created by create_subgraph_for_op_default()")
@@ -134,7 +134,7 @@ class TestSubGraph(unittest.TestCase):
 
         # The pattern list consists of successive OpTypePattern() objects starting from the layer's input Op to
         # the output Op. Each OpTypePattern() becomes an input to the next OpTypePattern().
-        self.assertEqual(op_type_patterns[-1]._op_type, 'Merge')
+        self.assertEqual(op_type_patterns[-1]._op_type, 'FusedBatchNormV3')
 
     def test_fused_batchnorm_with_training_False_subgraph(self):
         """ test sub graph for FusedBatchNorm training False"""

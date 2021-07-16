@@ -62,7 +62,7 @@ class TestBatchNormFold(unittest.TestCase):
         tf.compat.v1.reset_default_graph()
         inputs = tf.keras.Input(shape=(32, 32, 3,))
         conv_op = tf.keras.layers.Conv2D(32, (3, 3))(inputs)
-        bn_op = tf.compat.v1.layers.batch_normalization(conv_op, fused=False, training=False)
+        bn_op = tf.keras.layers.BatchNormalization(fused=True)(conv_op, training=False)
         _ = tf.nn.relu(bn_op)
 
         init = tf.compat.v1.global_variables_initializer()
@@ -97,7 +97,7 @@ class TestBatchNormFold(unittest.TestCase):
         tf.compat.v1.reset_default_graph()
         inputs = tf.keras.Input(shape=(32, 32, 3,), name="inputs")
         conv_op = tf.keras.layers.Conv2D(32, (3, 3))(inputs)
-        bn_op = tf.compat.v1.layers.batch_normalization(conv_op, fused=True)
+        bn_op = tf.keras.layers.BatchNormalization(fused=True)(conv_op, training=False)
         _ = tf.nn.relu(bn_op)
 
         init = tf.compat.v1.global_variables_initializer()
@@ -116,8 +116,10 @@ class TestBatchNormFold(unittest.TestCase):
         x1 = tf.keras.layers.Conv2D(8, (1, 1), name='conv1a',
                                     kernel_initializer=tf.random_uniform_initializer(-1, 1),
                                     bias_initializer='random_uniform')(input1)
-        bn_op_1 = tf.compat.v1.layers.batch_normalization(x1, fused=True)
-        bn_op_2 = tf.compat.v1.layers.batch_normalization(x1, fused=True)
+
+        bn_op_1 = tf.keras.layers.BatchNormalization(fused=True)(x1, training=False)
+        bn_op_2 = tf.keras.layers.BatchNormalization(fused=True)(x1, training=True)
+
         add = tf.keras.layers.add([bn_op_1, bn_op_2])
         _ = tf.keras.layers.Conv2D(8, (3, 3), name='conv1b',
                                    kernel_initializer=tf.random_uniform_initializer(-1, 1),
@@ -141,7 +143,7 @@ class TestBatchNormFold(unittest.TestCase):
         """
         tf.compat.v1.reset_default_graph()
         inputs = tf.keras.Input(shape=(32, 32, 3,), name="inputs")
-        bn_op = tf.compat.v1.layers.batch_normalization(inputs, fused=True)
+        bn_op = tf.keras.layers.BatchNormalization(fused=True)(inputs, training=False)
         conv_op = tf.keras.layers.Conv2D(32, (3, 3))(bn_op)
         _ = tf.nn.relu(conv_op)
         init = tf.compat.v1.global_variables_initializer()
@@ -164,7 +166,7 @@ class TestBatchNormFold(unittest.TestCase):
         x2 = tf.keras.layers.Conv2D(8, (3, 3), name='conv1b')(input2)
         x = tf.keras.layers.add([x1, x2])
         x = tf.keras.layers.Conv2D(4, (1, 1), name='conv2')(x)
-        bn_op = tf.compat.v1.layers.batch_normalization(x, fused=True)
+        bn_op = tf.keras.layers.BatchNormalization(fused=True)(x, training=False)
         _ = tf.nn.relu(bn_op)
 
         init = tf.compat.v1.global_variables_initializer()
@@ -188,7 +190,7 @@ class TestBatchNormFold(unittest.TestCase):
         x2 = tf.keras.layers.Conv2D(8, (3, 3), name='conv1b')(input2)
         x = tf.keras.layers.add([x1, x2])
         x = tf.keras.layers.Conv2D(4, (1, 1), name='conv2')(x)
-        bn_op = tf.compat.v1.layers.batch_normalization(x, fused=True)
+        bn_op = tf.keras.layers.BatchNormalization(fused=True)(x, training=True)
         output = tf.nn.relu(bn_op)
 
         # add training ops
@@ -198,6 +200,8 @@ class TestBatchNormFold(unittest.TestCase):
         init = tf.compat.v1.global_variables_initializer()
         sess = tf.compat.v1.Session()
         sess.run(init)
+
+        #_ = tf.compat.v1.summary.FileWriter('./multi_input', sess.graph)
 
         start_ops = ['input1', 'input2']
         output_op = [output.op.name]
@@ -214,7 +218,7 @@ class TestBatchNormFold(unittest.TestCase):
         tf.compat.v1.reset_default_graph()
         inputs = tf.keras.Input(shape=(32, 32, 3,), name="inputs")
         conv_op = tf.keras.layers.Conv2D(32, (3, 3))(inputs)
-        bn_op = tf.compat.v1.layers.batch_normalization(conv_op, fused=True)
+        bn_op = tf.keras.layers.BatchNormalization(fused=True)(conv_op, training=False)
         conv2_op = tf.keras.layers.Conv2D(32, (3, 3))(bn_op)
         _ = tf.nn.relu(conv2_op)
 
@@ -238,7 +242,7 @@ class TestBatchNormFold(unittest.TestCase):
         """
         tf.compat.v1.reset_default_graph()
         inputs = tf.keras.Input(shape=(1, 1, 4,))
-        bn_op = tf.compat.v1.layers.batch_normalization(inputs, fused=True, training=False)
+        bn_op = tf.keras.layers.BatchNormalization(fused=True)(inputs, training=False)
         x = tf.keras.layers.Flatten()(bn_op)
         _ = tf.keras.layers.Dense(2, activation=tf.nn.relu, name="linear_layer")(x)
 
@@ -286,11 +290,11 @@ class TestBatchNormFold(unittest.TestCase):
         conv_op = tf.keras.layers.Conv2D(32, (3, 3),
                                          kernel_initializer=tf.random_uniform_initializer(-1, 1),
                                          bias_initializer='random_uniform')(inputs)
-        bn_op = tf.compat.v1.layers.batch_normalization(conv_op, fused=True, training=False,
-                                                        beta_initializer='random_uniform',
-                                                        gamma_initializer='random_uniform',
-                                                        moving_mean_initializer='random_uniform',
-                                                        moving_variance_initializer='ones')
+        bn_op = tf.keras.layers.BatchNormalization(fused=True,
+                                                   beta_initializer='random_uniform',
+                                                   gamma_initializer='random_uniform',
+                                                   moving_mean_initializer='random_uniform',
+                                                   moving_variance_initializer='ones')(conv_op, training=False)
         # @todo check why moving var with random_uniform init fails on 1.15
         _ = tf.nn.relu(bn_op)
 
@@ -350,7 +354,7 @@ class TestBatchNormFold(unittest.TestCase):
         tf.compat.v1.reset_default_graph()
         inputs = tf.keras.Input(shape=(32, 32, 3,))
         conv_op = tf.keras.layers.Conv2D(32, (3, 3), use_bias=False)(inputs)
-        bn_op = tf.compat.v1.layers.batch_normalization(conv_op, fused=True, training=False)
+        bn_op = tf.keras.layers.BatchNormalization(fused=True)(conv_op, training=False)
         _ = tf.nn.relu(bn_op)
 
         init = tf.compat.v1.global_variables_initializer()
@@ -392,10 +396,10 @@ class TestBatchNormFold(unittest.TestCase):
         inputs = tf.keras.Input(shape=(None, None, 2), name="inputs")
 
         x = tf.keras.layers.Conv2D(2, kernel_size=3, padding='same')(inputs)
-        x = tf.compat.v1.layers.batch_normalization(x)
+        x = tf.keras.layers.BatchNormalization()(x, training=False)
         x = tf.nn.relu(x)
         x = tf.keras.layers.Conv2D(2, kernel_size=3, padding='same')(x)
-        x = tf.compat.v1.layers.batch_normalization(x)
+        x = tf.keras.layers.BatchNormalization()(x, training=True)
         z = tf.keras.layers.Add()([inputs, x])
         x = tf.nn.relu(z)
 
@@ -416,10 +420,10 @@ class TestBatchNormFold(unittest.TestCase):
         tf.compat.v1.reset_default_graph()
         inputs = tf.keras.Input(shape=(None, None, 2), name="inputs")
         x = tf.keras.layers.Conv2D(2, kernel_size=3, padding='same')(inputs)
-        x = tf.compat.v1.layers.batch_normalization(x)
+        x = tf.keras.layers.BatchNormalization()(x, training=False)
         y = tf.keras.layers.PReLU(shared_axes=[1, 2])(x)
         x = tf.keras.layers.Conv2D(2, kernel_size=3, padding='same')(y)
-        x = tf.compat.v1.layers.batch_normalization(x)
+        x = tf.keras.layers.BatchNormalization()(x, training=True)
         x = tf.keras.layers.Add()([y, x])
         _ = tf.nn.relu(x)
 
