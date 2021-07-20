@@ -51,13 +51,29 @@ def compute_dloss_by_dx(x, grad, encoding_min, encoding_max):
     """
 
     def _broadcast_to_tensor(tensor, encoding):
+        """
+        This helper method takes n-dimension tensor and a 1-dimension encoding. And the encoding is broad-casted to
+        match the n-dimensional tensor
+        :param tensor: Tensor to use as target for the broadcasting operation
+        :param encoding: Encoding 1-dimensional tensor to broadcast
+        :return: Broad-casted tensor
+        """
         shape = list(tensor.shape)
-        encoding = torch.Tensor(encoding).to(x.device)
+        encoding = torch.Tensor(encoding).to(x.device)                  # convert encoding to a tensor
+
+        # Original tensor shape is OIHW, we change the shape to IHWO. Encoding (which is of shape O) can naturally
+        # broadcast to this shape
+        # This will work if the original tensor shape was any dimensions as long as the first dimension matches the
+        # encoding tensor shape
         encoding = encoding * torch.ones(shape[1:] + [shape[0]])
+
+        # we permute the resulting tensor back to OIHW shape
         encoding = encoding.permute([len(shape) - 1] + list(range(len(shape) - 1)))
+
         return encoding
 
-    # compute dloss_by_dx = dq_by_dx * grad
+    # Broadcast the encoding min and max tensors if they were single dimensioned. If they were scalars, the
+    # broadcast is automatic and more optimal in runtime, so we skip calling the helper above
     if isinstance(encoding_max, list) and len(x.shape) > 1:
         encoding_max = _broadcast_to_tensor(x, encoding_max)
 
@@ -66,6 +82,7 @@ def compute_dloss_by_dx(x, grad, encoding_min, encoding_max):
     else:
         encoding_min = torch.Tensor([encoding_min]).to(x.device)
 
+    # compute dloss_by_dx = dq_by_dx * grad
     inner_cond = torch.where(torch.le(x, encoding_max),  # condition to check per value
                              torch.ones_like(x),  # execute if true
                              torch.zeros_like(x))  # execute if false
