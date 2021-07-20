@@ -622,7 +622,7 @@ class TestTrainingExtensionBnFold(unittest.TestCase):
             def __init__(self):
 
                 super(MyModel, self).__init__()
-                self.conv1d = torch.nn.Conv1d(10, 20, kernel_size=2, bias=None)
+                self.conv1d = torch.nn.Conv1d(10, 20, kernel_size=2, bias=False)
                 self.bn1 = torch.nn.BatchNorm1d(20)
 
             def forward(self, x):
@@ -692,8 +692,8 @@ class TestTrainingExtensionBnFold(unittest.TestCase):
             def __init__(self):
 
                 super(MyModel, self).__init__()
-                self.bn1 = torch.nn.BatchNorm1d(10)
-                self.conv1d = torch.nn.Conv1d(10, 20, kernel_size=2, bias=None)
+                self.bn1 = torch.nn.BatchNorm1d(4)
+                self.conv1d = torch.nn.Conv1d(4, 4, kernel_size=2, bias=False)
 
             def forward(self, x):
                 x = self.bn1(x)
@@ -704,11 +704,11 @@ class TestTrainingExtensionBnFold(unittest.TestCase):
         torch.manual_seed(10)
         model = MyModel()
 
-        random_input = torch.randn((2, 10, 32))
+        random_input = torch.randn((2, 4, 4))
 
         # Set the batch norm params to something non-zero with a random batch
         model.train()
-        model(torch.randn((2, 10, 32)))
+        model(torch.randn((2, 4, 4)))
         model.eval()
 
         baseline_output = model(random_input)
@@ -718,6 +718,10 @@ class TestTrainingExtensionBnFold(unittest.TestCase):
         fold_given_batch_norms(model, layer_list)
 
         output_after_fold = model(random_input)
+
+        print(baseline_output)
+        print("\n___________________________________________")
+        print(output_after_fold)
 
         self.assertFalse(isinstance(model.bn1, torch.nn.BatchNorm1d))
         self.assertTrue(torch.allclose(baseline_output, output_after_fold, rtol=1.e-2))
