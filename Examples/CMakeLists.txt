@@ -49,3 +49,12 @@ if (ENABLE_TORCH)
       )
 
 endif(ENABLE_TORCH)
+
+if (ENABLE_TENSORFLOW)
+      install(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/tensorflow
+      DESTINATION ${AIMET_INSTALL_DIR}/lib
+      PATTERN "__pycache*" EXCLUDE
+      PATTERN "CMakeLists.txt" EXCLUDE
+      )
+
+endif(ENABLE_TENSORFLOW)
