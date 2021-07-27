@@ -19,6 +19,9 @@
 		"op_list": ["Conv", "Relu"]
 	},
 	{
+		"op_list": ["Conv", "Clip"]
+	},
+	{
 		"op_list": ["Add", "Relu"]
 	},
 	{

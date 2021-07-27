@@ -40,7 +40,7 @@ import json
 import os
 import torch
 from aimet_common.defs import QuantScheme
-from aimet_torch.examples.test_models import SingleResidual, TinyModel, MultiInput
+from aimet_torch.examples.test_models import SingleResidual, QuantSimTinyModel, MultiInput
 from aimet_torch.quantsim import QuantizationSimModel
 from aimet_torch.quantsim_config.quantsim_config import _get_all_ops_in_neighborhood
 from aimet_torch.qc_quantize_op import QcQuantizeWrapper
@@ -209,7 +209,7 @@ class TestQuantsimConfig:
 
     def test_parse_config_file_supergroups(self):
         """ Test that supergroup quantization parameters are set correctly when using json config file """
-        model = TinyModel()
+        model = QuantSimTinyModel()
         model.eval()
 
         quantsim_config = {
@@ -234,7 +234,10 @@ class TestQuantsimConfig:
                 },
                 {
                     "op_list": ["Conv", "Relu", "AveragePool"]
-                }
+                },
+                {
+                    "op_list": ["Conv", "Clip"]
+                },
             ],
             "model_input": {},
             "model_output": {}
@@ -255,7 +258,7 @@ class TestQuantsimConfig:
                     assert not module.input_quantizer.enabled
                     assert not module.output_quantizers[0].enabled
                 # Check configs for ends of supergroups
-                elif module in [model.bn1, model.maxpool, model.bn2, model.avgpool]:
+                elif module in [model.bn1, model.maxpool, model.bn2, model.avgpool, model.relu2]:
                     assert not module.input_quantizer.enabled
                     assert module.output_quantizers[0].enabled
                 else:
