@@ -463,54 +463,53 @@ class TestBatchNormFold(unittest.TestCase):
             self.assertTrue(out.numpy(), 15.0)
 
     def test_find_conv_bn_pairs_combined_model(self):
-        # tf.keras.backend.clear_session()
-        tf.compat.v1.reset_default_graph()
-        Block3 = tf.keras.Sequential()
-        Block3.add(tf.keras.layers.BatchNormalization(fused=True))
-        Block3.add(tf.keras.layers.Conv2D(3, 3))
+        if version.parse(tf.version.VERSION) >= version.parse("2.00"):
+            Block3 = tf.keras.Sequential()
+            Block3.add(tf.keras.layers.BatchNormalization(fused=True))
+            Block3.add(tf.keras.layers.Conv2D(3, 3))
 
-        inputs = tf.keras.Input((60, 60, 3))
-        conv2d = tf.keras.layers.Conv2D(filters=3, kernel_size=3, strides=1)(inputs)
-        block3 = Block3(conv2d)
-        outputs = tf.keras.layers.BatchNormalization(fused=True)(block3)
-        Block1 = tf.keras.Model(inputs=inputs, outputs=outputs)
+            inputs = tf.keras.Input((60, 60, 3))
+            conv2d = tf.keras.layers.Conv2D(filters=3, kernel_size=3, strides=1)(inputs)
+            block3 = Block3(conv2d)
+            outputs = tf.keras.layers.BatchNormalization(fused=True)(block3)
+            Block1 = tf.keras.Model(inputs=inputs, outputs=outputs)
 
-        Block2 = tf.keras.Sequential()
-        Block2.add(tf.keras.layers.BatchNormalization(fused=True))
-        Block2.add(tf.keras.layers.Conv2D(3, 3))
-        Block2.add(tf.keras.layers.ReLU())
-        Block2.add(Block1)
+            Block2 = tf.keras.Sequential()
+            Block2.add(tf.keras.layers.BatchNormalization(fused=True))
+            Block2.add(tf.keras.layers.Conv2D(3, 3))
+            Block2.add(tf.keras.layers.ReLU())
+            Block2.add(Block1)
 
-        class MyModelMLP(tf.keras.Model):
-            def __init__(self, input_shape):
-                super(MyModelMLP, self).__init__()
+            class MyModelMLP(tf.keras.Model):
+                def __init__(self, input_shape):
+                    super(MyModelMLP, self).__init__()
 
-                self.conv1 = tf.keras.layers.Conv2D(filters=3, kernel_size=(3, 3), strides=1, activation='relu')
-                self.bn1 = tf.keras.layers.BatchNormalization(fused=True)
-                self.dn1 = tf.keras.layers.Dense(units=32)
-                self.block2 = Block2
-                self.relu = tf.keras.layers.ReLU()
-                # # Parameters of the model
-                self.input_layer = tf.keras.layers.Input(input_shape)
-                self.out = self.call(self.input_layer)
-                super().__init__(inputs=self.input_layer, outputs=self.out)
+                    self.conv1 = tf.keras.layers.Conv2D(filters=3, kernel_size=(3, 3), strides=1, activation='relu')
+                    self.bn1 = tf.keras.layers.BatchNormalization(fused=True)
+                    self.dn1 = tf.keras.layers.Dense(units=32)
+                    self.block2 = Block2
+                    self.relu = tf.keras.layers.ReLU()
+                    # # Parameters of the model
+                    self.input_layer = tf.keras.layers.Input(input_shape)
+                    self.out = self.call(self.input_layer)
+                    super().__init__(inputs=self.input_layer, outputs=self.out)
 
-            # Define forward passing of model
-            def call(self, input_tensor):
-                x = self.conv1(input_tensor)
-                x = self.bn1(x)
-                x = self.dn1(x)
-                x = self.block2(x)
-                x = self.relu(x)
-                return x
+                # Define forward passing of model
+                def call(self, input_tensor):
+                    x = self.conv1(input_tensor)
+                    x = self.bn1(x)
+                    x = self.dn1(x)
+                    x = self.block2(x)
+                    x = self.relu(x)
+                    return x
 
-        model = MyModelMLP((64,64,64))
+            model = MyModelMLP((64,64,64))
 
-        conv_linear_with_bn_dict = find_all_paths(model)
+            conv_linear_with_bn_dict = find_all_paths(model)
 
-        self.assertFalse(model.conv1 in conv_linear_with_bn_dict)
-        self.assertFalse(model.bn1 in conv_linear_with_bn_dict)
-        self.assertTrue(len(conv_linear_with_bn_dict)==3)
+            self.assertFalse(model.conv1 in conv_linear_with_bn_dict)
+            self.assertFalse(model.bn1 in conv_linear_with_bn_dict)
+            self.assertTrue(len(conv_linear_with_bn_dict)==3)
 
     def test_find_conv_bn_pairs_functional(self):
 
@@ -532,22 +531,20 @@ class TestBatchNormFold(unittest.TestCase):
         self.assertEqual(3, len(conv_linear_with_bn_dict))
 
     def test_find_conv_bn_pairs_sequential(self):
+        if version.parse(tf.version.VERSION) >= version.parse("2.00"):
+            Block1 = tf.keras.Sequential()
+            Block1.add(tf.keras.layers.ReLU())
+            Block1.add(tf.keras.layers.BatchNormalization())
+            Block1.add(tf.keras.layers.Conv2D(3, 3))
 
-        # tf.keras.backend.clear_session()
-        tf.compat.v1.reset_default_graph()
-        Block1 = tf.keras.Sequential()
-        Block1.add(tf.keras.layers.ReLU())
-        Block1.add(tf.keras.layers.BatchNormalization())
-        Block1.add(tf.keras.layers.Conv2D(3, 3))
+            Block2 = tf.keras.Sequential()
+            Block2.add(tf.keras.Input((28, 28, 64)))
+            Block2.add(tf.keras.layers.BatchNormalization(fused=True))
+            Block2.add(tf.keras.layers.ReLU())
+            Block2.add(tf.keras.layers.Conv2D(3, 3))
+            Block2.add(Block1)
+            Block2.add(tf.keras.layers.ReLU())
 
-        Block2 = tf.keras.Sequential()
-        Block2.add(tf.keras.Input((28, 28, 64)))
-        Block2.add(tf.keras.layers.BatchNormalization(fused=True))
-        Block2.add(tf.keras.layers.ReLU())
-        Block2.add(tf.keras.layers.Conv2D(3, 3))
-        Block2.add(Block1)
-        Block2.add(tf.keras.layers.ReLU())
-
-        conv_linear_with_bn_dict = find_all_paths(Block2)
-        self.assertTrue(Block1._layers[3] in conv_linear_with_bn_dict)
-        self.assertEqual(1,len(conv_linear_with_bn_dict))
+            conv_linear_with_bn_dict = find_all_paths(Block2)
+            self.assertTrue(Block1._layers[3] in conv_linear_with_bn_dict)
+            self.assertEqual(1,len(conv_linear_with_bn_dict))
