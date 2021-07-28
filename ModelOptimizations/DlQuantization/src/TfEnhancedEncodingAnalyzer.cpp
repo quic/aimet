@@ -48,6 +48,25 @@
 
 namespace DlQuantization
 {
+
+template <typename DTYPE>
+std::vector<std::tuple<double, double>> TfEnhancedEncodingAnalyzer<DTYPE>::getStatsHistogram() const
+{
+    // Allocate a vector to hold tuples of left edges and pdf for each bucket
+    auto histogram = std::vector<std::tuple<double, double>>(this->_stats.xLeft.size());
+
+    // Assert that the stats structure is well formed
+    assert(this->_stats.xLeft.size() == this->_stats.pdf.size());
+
+    unsigned index = 0;
+    for (auto entry: this->_stats.xLeft)
+    {
+        histogram.push_back(std::make_tuple(entry, this->_stats.pdf[index]));
+        index++;
+    }
+    return histogram;
+}
+
 template <typename DTYPE>
 void TfEnhancedEncodingAnalyzer<DTYPE>::updateStats(const DTYPE* tensor, const size_t tensorSize,
                                                     ComputationMode tensorCpuGpuMode)
