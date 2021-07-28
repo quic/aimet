@@ -79,6 +79,15 @@ public:
      */
     virtual TfEncoding computeEncoding(uint8_t bw, bool useSymmetricEncodings,
                                        bool useStrictSymmetric, bool useUnsignedSymmetric) const = 0;
+
+    /**
+     * @brief Returns a histogram that represents a PDF of tensor values seen by this encoding analyzer so far
+     *
+     * @return Histogram of statistics. The histogram returned is a vector of buckets. Each bucket is a tuple of
+     * two values - the float value representing the left edge of the bucket and a PDF of the values in this bucket
+     * relative to all the values seen across all buckets
+     */
+    virtual std::vector<std::tuple<double, double>> getStatsHistogram() const = 0;
 };
 
 

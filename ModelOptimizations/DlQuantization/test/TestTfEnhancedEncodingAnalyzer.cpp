@@ -51,6 +51,46 @@ class TestTfEnhancedEncodingAnalyzer : public ::testing::Test
 // Test on CPU and GPU with float and double
 TYPED_TEST_CASE(TestTfEnhancedEncodingAnalyzer, TestDataTypesAndDevices);
 
+TYPED_TEST(TestTfEnhancedEncodingAnalyzer, GetStats)
+{
+    typedef typename TypeParam::dataType dataType;
+
+    // Instantiate TfEnhancedEncodingAnalyzer
+    DlQuantization::TfEnhancedEncodingAnalyzer<dataType> analyzer;
+
+    float mean   = 2;
+    float stddev = 2;
+    std::normal_distribution<dataType> distribution(mean, stddev);
+    std::mt19937 generator(1);
+
+    double min               = std::numeric_limits<double>::max();
+    double max               = std::numeric_limits<double>::min();
+    unsigned int tensorCount = 6000;
+    std::vector<dataType> tensor(tensorCount);
+
+    for (unsigned int i = 0; i < tensorCount; i++)
+    {
+        tensor[i] = distribution(generator);
+        min       = std::min(min, double(tensor[i]));
+        max       = std::max(max, double(tensor[i]));
+    }
+    Blob<TypeParam> tensorBlob(tensor.data(), tensorCount);
+
+    // Update the stats using these tensor values
+    analyzer.updateStats(tensorBlob.getDataPtrOnDevice(), tensorCount, TypeParam::modeCpuGpu);
+
+    auto histogram = analyzer.getStatsHistogram();
+    for (auto entry: histogram)
+    {
+        double leftEdge;
+        double pdf;
+
+        std::tie(leftEdge, pdf) = entry;
+        std::cout << leftEdge << ":" << pdf << "\n";
+    }
+    std::cout << histogram.size() << "\n";
+}
+
 TYPED_TEST(TestTfEnhancedEncodingAnalyzer, Asymmetric)
 {
     typedef typename TypeParam::dataType dataType;
