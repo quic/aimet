@@ -134,6 +134,12 @@ public:
         return std::make_tuple(out_encoding, _isEncodingValid);
     }
 
+    std::vector<std::tuple<double, double>> getStatsHistogram() const
+    {
+        auto histogram = this->_encodingAnalyzer->getStatsHistogram();
+        return histogram;
+    }
+
 private:
     bool _isEncodingValid;
     DlQuantization::QuantizationMode _quantizationScheme;
@@ -150,5 +156,6 @@ PYBIND11_MODULE(TORCH_EXTENSION_NAME, m)
         .def("quantizeDequantize", &AimetTensorQuantizer::quantizeDequantize)
         .def("quantize", &AimetTensorQuantizer::quantize)
         .def("getEncoding", &AimetTensorQuantizer::getEncoding)
-        .def("resetEncodingStats", &AimetTensorQuantizer::resetEncodingStats);
+        .def("resetEncodingStats", &AimetTensorQuantizer::resetEncodingStats)
+        .def("getStatsHistogram", &AimetTensorQuantizer::getStatsHistogram);
 }
