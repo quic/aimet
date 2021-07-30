@@ -39,6 +39,7 @@
 """ Utility for batch norm fold in tf 2.x """
 
 from typing import Tuple, Union, List
+from collections import defaultdict
 import  numpy as np
 import tensorflow as tf
 import libpymo
@@ -53,6 +54,108 @@ LayerType = Union[tf.keras.layers.Conv2D, tf.keras.layers.Dense, tf.keras.layers
 
 PairType = Union[Tuple[LayerType, tf.keras.layers.BatchNormalization, bool],
                  Tuple[tf.keras.layers.BatchNormalization, LayerType, bool]]
+
+bn_type = tf.keras.layers.BatchNormalization
+linear_type = tf.keras.layers.Dense
+conv_type = tf.keras.layers.Conv2D
+flatten_type = Union[tf.keras.layers.Flatten, tf.keras.layers.Reshape]
+
+
+def check_layer_to_find_pattern(cur_layer: tf.keras.layers.Layer, conv_linear_with_bn_dict: dict, layer_out_node_ref: dict, has_seen: list):
+    """
+    find all paths in the model considering all inputs
+    :param cur_layer: layer to investigate for finding a pattern
+    :param conv_linear_with_bn_dict: dictionary to store possible conv_bn pairs, key: Dense or Conv layer
+             & Value: list of BNS; first index in this list shows bn_in and the second index shows bn_out
+    :param layer_out_node_ref: dictionary includes node_ref as a key, in_layers and out_layer as value
+    :param has_seen: for storing the layer which is useful for finding pattern in the next layers; index 0 is for conv op,
+        index 2 is for bn op and index 3 is for storing flatten/reshape op
+    """
+
+    # pylint: disable=too-many-branches
+    if isinstance(cur_layer, conv_type):
+        if has_seen[1] is not None:
+            conv_linear_with_bn_dict[cur_layer] = [has_seen[1], None]
+            has_seen[1] = None
+        if (cur_layer.activation is tf.keras.activations.linear) and (cur_layer in layer_out_node_ref) and len(layer_out_node_ref[cur_layer]) == 1:
+            has_seen[0] = cur_layer
+    elif isinstance(cur_layer, bn_type):
+        if has_seen[0] is not None:
+            if has_seen[0] in conv_linear_with_bn_dict:
+                conv_linear_with_bn_dict[has_seen[0]][1] = cur_layer
+            else:
+                conv_linear_with_bn_dict[has_seen[0]] = [None, cur_layer]
+            has_seen[0] = None
+        if (cur_layer in layer_out_node_ref) and len(layer_out_node_ref[cur_layer]) == 1:
+            has_seen[1] = cur_layer
+    elif isinstance(cur_layer, (tf.keras.layers.Flatten, tf.keras.layers.Reshape)):
+        if (cur_layer in layer_out_node_ref) and len(layer_out_node_ref[cur_layer]) == 1:
+            if has_seen[1]:
+                has_seen[2] = cur_layer
+            else:
+                has_seen[1] = None
+        if has_seen[0]:
+            has_seen[0] = None
+    elif isinstance(cur_layer, linear_type):
+        if has_seen[1] is not None and has_seen[2] is not None:
+            conv_linear_with_bn_dict[cur_layer] = [has_seen[1], None]
+        has_seen[2] = None
+        has_seen[1] = None
+        # visited[0] = None
+    else:
+        has_seen[0] = None
+        has_seen[1] = None
+        has_seen[2] = None
+
+def find_paths_specific_input(cur_layer: tf.keras.layers.Layer, node_layer_ref: dict, layer_out_node_ref: dict,
+                              has_seen: list, visited_layer: dict, conv_linear_with_bn_dict: dict) -> dict:
+    """
+    find all paths in the model for the specific input
+    :param cur_layer: dictionary includes node_ref as a key, in_layers and out_layer as value
+    :param node_layer_ref: dictionary includes node_ref as a key, in_layers and out_layer as value
+    :param layer_out_node_ref: dictionary includes layer_ref as a key, outbound nodes as value
+    :paramm has_seen: for storing the layer which is useful for finding pattern in the next layers; index 0 is for conv op,
+        index 2 is for bn op and index 3 is for storing flatten/reshape op
+    :param visited_layer: to store all the layers that have been visited so far in the dictionary
+    :param conv_linear_with_bn_dict:
+    :return: dictionary includes all possible conv-bn pairs for the path starting with the specific input
+    """
+
+    # Mark the current layer as visited to prevent passing from one layer more than once
+    visited_layer[cur_layer] = True
+
+    check_layer_to_find_pattern(cur_layer, conv_linear_with_bn_dict, layer_out_node_ref, has_seen)
+
+    if cur_layer in layer_out_node_ref:
+        for next_node in layer_out_node_ref[cur_layer]:
+            next_layer = node_layer_ref[next_node][1]
+            if next_layer not in visited_layer:
+                find_paths_specific_input(next_layer, node_layer_ref, layer_out_node_ref, has_seen, visited_layer, conv_linear_with_bn_dict)
+            else:
+                has_seen[0] = None
+                has_seen[1] = None
+                has_seen[2] = None
+
+    return conv_linear_with_bn_dict
+
+def find_all_paths(model: tf.keras.Model) -> dict:
+    """
+    find all paths in the model considering all inputs
+    :param model: model to find all paths
+    :return: return dictionary of all possible conv_bn pairs, key: Dense or Conv layer
+             & Value: list of BNS; first index in this list shows bn_in and the second index shows bn_out
+    """
+
+    node_layer_ref = common.node_to_layer_map(model)
+    layer_out_node_ref = common.layer_to_out_node_map(model)
+    input_layers = common.find_input_layers(node_layer_ref)
+    visited_layer = defaultdict()
+    conv_linear_with_bn_dict = dict()
+
+    for input_layer in input_layers:
+        conv_linear_with_bn_dict = find_paths_specific_input(input_layer, node_layer_ref, layer_out_node_ref, [None, None, None], visited_layer, conv_linear_with_bn_dict)
+
+    return conv_linear_with_bn_dict
 
 def _get_bn_params(bn: tf.keras.layers.BatchNormalization) -> libpymo.BNParams():
     """
@@ -155,7 +258,8 @@ def _remove_bn_from_sequential(layer: tf.keras.layers.Layer, bn: tf.keras.layers
     layers_after_bn = []
     visited = False
     idx = None
-    for index, inner_layer in enumerate(layer.layers):
+    # pylint: disable=protected-access
+    for index, inner_layer in enumerate(layer._layers):
         if visited:
             layers_after_bn.append(inner_layer)
 
@@ -168,7 +272,8 @@ def _remove_bn_from_sequential(layer: tf.keras.layers.Layer, bn: tf.keras.layers
             _delete_bn_from_model(inner_layer, bn)
 
     if visited and idx is not None:
-        for _ in range(len(layer.layers) - idx):
+        # pylint: disable=protected-access
+        for _ in range(len(layer._layers) - idx):
             layer.pop()
         for layer_to_add in layers_after_bn:
             layer.add(layer_to_add)
@@ -184,7 +289,8 @@ def _delete_bn_from_model(model: tf.keras.Model, bn_layer: tf.keras.layers.Batch
 
     # We are expecting to handle functional model or model subclassing in the elif statement
     elif isinstance(model, (tf.keras.layers.Layer, tf.keras.Model)):
-        for layer in model.layers:
+        # pylint: disable=protected-access
+        for layer in model._layers:
             if layer.submodules:
                 _delete_bn_from_model(layer, bn_layer)
 
