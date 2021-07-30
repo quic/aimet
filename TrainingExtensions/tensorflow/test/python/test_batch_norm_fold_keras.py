@@ -42,7 +42,8 @@ import unittest
 import tensorflow as tf
 from packaging import version
 
-from aimet_tensorflow.keras.batch_norm_fold import _delete_all_bns_from_model, find_all_paths
+from aimet_tensorflow.keras.utils import common
+from aimet_tensorflow.keras.batch_norm_fold import _delete_all_bns_from_model, find_possible_convs_linears_bn, get_ordered_conv_linears
 from aimet_tensorflow.keras.utils.op.batchnorm import BNUtils
 
 class TestBatchNormFold(unittest.TestCase):
@@ -505,7 +506,9 @@ class TestBatchNormFold(unittest.TestCase):
 
             model = MyModelMLP((64,64,64))
 
-            conv_linear_with_bn_dict = find_all_paths(model)
+            node_layer_map = common.create_node_to_layer_map(model)
+            layer_out_node_map = common.create_layer_to_out_node_map(model)
+            conv_linear_with_bn_dict = find_possible_convs_linears_bn(node_layer_map, layer_out_node_map)
 
             self.assertFalse(model.conv1 in conv_linear_with_bn_dict)
             self.assertFalse(model.bn1 in conv_linear_with_bn_dict)
@@ -527,7 +530,10 @@ class TestBatchNormFold(unittest.TestCase):
         output = tf.nn.relu(bn_op)
         model = tf.keras.Model([input1, input2], output)
 
-        conv_linear_with_bn_dict = find_all_paths(model)
+        node_layer_map = common.create_node_to_layer_map(model)
+        layer_out_node_map = common.create_layer_to_out_node_map(model)
+        conv_linear_with_bn_dict = find_possible_convs_linears_bn(node_layer_map, layer_out_node_map)
+
         self.assertEqual(3, len(conv_linear_with_bn_dict))
 
     def test_find_conv_bn_pairs_sequential(self):
@@ -545,6 +551,53 @@ class TestBatchNormFold(unittest.TestCase):
             Block2.add(Block1)
             Block2.add(tf.keras.layers.ReLU())
 
-            conv_linear_with_bn_dict = find_all_paths(Block2)
+            node_layer_map = common.create_node_to_layer_map(Block2)
+            layer_out_node_map = common.create_layer_to_out_node_map(Block2)
+            conv_linear_with_bn_dict = find_possible_convs_linears_bn(node_layer_map, layer_out_node_map)
+
             self.assertTrue(Block1._layers[3] in conv_linear_with_bn_dict)
             self.assertEqual(1,len(conv_linear_with_bn_dict))
+
+    def test_ordered_conv_linears_functional(self):
+        input1 = tf.keras.Input(name='input1', shape=(10, 10, 3))
+        x1 = tf.keras.layers.Conv2D(8, (1, 1), name='conv1a')(input1)
+        y = tf.keras.layers.BatchNormalization()(x1)
+        x2 = tf.keras.layers.Conv2D(8, (3, 3), name='conv1b')(y)
+        x3 = tf.keras.layers.Conv2D(8, (3, 3), name='conv2b')(y)
+        y2 = tf.keras.layers.BatchNormalization()(x2)
+        y3 = tf.keras.layers.BatchNormalization()(x3)
+        x = tf.keras.layers.add([y3, y2])
+        x = tf.keras.layers.Conv2D(4, (1, 1), name='conv3')(x)
+        bn_op = tf.keras.layers.BatchNormalization(fused=True)(x)
+        output = tf.nn.relu(bn_op)
+        model = tf.keras.Model(input1, output)
+
+        node_layer_map = common.create_node_to_layer_map(model)
+        layer_out_node_map = common.create_layer_to_out_node_map(model)
+        ordered_conv_linears = get_ordered_conv_linears(node_layer_map, layer_out_node_map)
+
+        for layer in model._layers:
+            if layer.name == 'conv1a':
+                self.assertTrue(layer == ordered_conv_linears[0])
+            if layer.name == 'conv3':
+                self.assertTrue(layer == ordered_conv_linears[3])
+
+    def test_ordered_conv_linears_sequential(self):
+        if version.parse(tf.version.VERSION) >= version.parse("2.00"):
+            Block1 = tf.keras.Sequential()
+            Block1.add(tf.keras.layers.ReLU())
+            Block1.add(tf.keras.layers.BatchNormalization())
+            Block1.add(tf.keras.layers.Conv2D(3, 3))
+
+            Block2 = tf.keras.Sequential()
+            Block2.add(tf.keras.Input((28, 28, 64)))
+            Block2.add(tf.keras.layers.BatchNormalization(fused=True))
+            Block2.add(tf.keras.layers.ReLU())
+            Block2.add(tf.keras.layers.Conv2D(3, 3))
+            Block2.add(Block1)
+            Block2.add(tf.keras.layers.ReLU())
+
+            node_layer_map = common.create_node_to_layer_map(Block2)
+            layer_out_node_map = common.create_layer_to_out_node_map(Block2)
+            ordered_conv_linears = get_ordered_conv_linears(node_layer_map, layer_out_node_map)
+            self.assertEqual(Block2._layers[3], ordered_conv_linears[0])
