@@ -107,48 +107,14 @@ def check_layer_to_find_pattern(cur_layer: tf.keras.layers.Layer, conv_linear_wi
         has_seen[1] = None
         has_seen[2] = None
 
-def find_all_batch_norms_to_fold(model: (tf.keras.Model, tf.keras.layers.Layer)) -> List[PairType]:
+def add_children_layer_before_parent_layer(cur_layer: tf.keras.layers.Layer, node_layer_map: dict, layer_out_node_map: dict, visited_layers: set, reversed_ordered_layers: list):
     """
-    uses searcher to choose layers for bias correction
-    :param model: model to obtain conv_linear pairs for
-    :return: List of conv/linear layers with associated bn op / activation info
-    """
-    node_layer_map = common.create_node_to_layer_map(model)
-    layer_out_node_map = common.create_layer_to_out_node_map(model)
-
-    convs_linears_bn_activation_info_dict = find_possible_convs_linears_bn(node_layer_map, layer_out_node_map)
-
-    # get all ordered convs/ linears layers
-    ordered_conv_linears = get_ordered_conv_linears(node_layer_map, layer_out_node_map)
-
-    # get the in out tensor for bns found, we need this on TF to remove the bns after fold.
-    bn_conv_linear_pairs = []
-
-    # track BNs added for fold
-    marked_bn_set = set()
-
-    for conv_linear_layer in ordered_conv_linears:
-        if conv_linear_layer in convs_linears_bn_activation_info_dict.keys():
-            bn_info = convs_linears_bn_activation_info_dict[conv_linear_layer]
-            if bn_info[1]:
-                if bn_info[1] not in marked_bn_set:
-                    bn_conv_linear_pairs.append((conv_linear_layer, bn_info[1], True))
-                    marked_bn_set.add(bn_info.output_bn)
-            elif bn_info[0]:
-                if bn_info[0] not in marked_bn_set:
-                    bn_conv_linear_pairs.append((conv_linear_layer, bn_info[0], False))
-                    marked_bn_set.add(bn_info.input_bn)
-
-    return bn_conv_linear_pairs
-
-def add_children_layer_before_parent_layer(cur_layer: tf.keras.layers.Layer, node_layer_map: dict, layer_out_node_map:dict, visited_layers: set, reversed_ordered_layers: list) :
-    """
-    Function to do topological sorting for finding all the layers  which are accessible from the specific input_layer in order of occurrence
-    :param cur_layer:
-    :param node_layer_map:
-    :param layer_out_node_map:
+    Function to use topological sorting for finding all the layers which are accessible from the specific input_layer in the opposite order of occurrence
+    :param cur_layer:nlayer that we want to find path from
+    :param node_layer_map: dictionary includes node_ref as a key, in_layers and out_layer as value
+    :param layer_out_node_map: dictionary includes layer_ref as a key, outbound nodes as value
     :param visited_layers: Set of all layers that have been visited
-    :param ordered_layers: List of all layers in the opposite of order of occurrence for the layers that we have visited so far
+    :param reversed_ordered_layers: List of layers in the opposite order of occurrence for the layers that we have visited so far
     :return:
     """
 
@@ -169,9 +135,9 @@ def add_children_layer_before_parent_layer(cur_layer: tf.keras.layers.Layer, nod
 def get_ordered_layers(node_layer_map: dict, layer_out_node_map: dict) -> List[tf.keras.layers.Layer]:
     """
     Function to return the list with all the layers in which layers come before parent layer
-    :param node_layer_map:
-    :param layer_out_node_map:
-    :return: ordered_layers: List of all layers in order of occurrence
+    :param node_layer_map: dictionary includes node_ref as a key, in_layers and out_layer as value
+    :param layer_out_node_map: dictionary includes layer_ref as a key, outbound nodes as value
+    :return: ordered_layers: List of all layers in the order of occurrence
     """
     # to find the input layers of the model
     input_layers = common.find_input_layers(node_layer_map)
@@ -195,7 +161,7 @@ def get_ordered_layers(node_layer_map: dict, layer_out_node_map: dict) -> List[t
 
 def get_ordered_conv_linears(node_layer_map: dict, layer_out_node_map: dict) -> List:
     """
-    helper to select a list of candidate layers for bias correction
+    helper to select a list of conv_linears in the order of occurence
     :param node_layer_map:
     :param layer_out_node_map:
     :return: List of conv/linear layer refs
@@ -243,7 +209,7 @@ def find_paths_specific_input(cur_layer: tf.keras.layers.Layer, node_layer_ref: 
 
 def find_possible_convs_linears_bn(node_layer_map: dict, layer_out_node_map: dict) -> dict:
     """
-    find all possible convs_linears_bn_activations by traversing all paths in the model considering all inputs
+    find all possible convs_linears_bn by traversing all paths in the model considering all inputs
     :param node_layer_map:  dictionary includes node_ref as a key, in_layers and out_layer as value
     :param layer_out_node_map: dictionary includes layer_ref as a key, outbound nodes as value
     :return: return dictionary of all possible conv_bn pairs, key: Dense or Conv layer

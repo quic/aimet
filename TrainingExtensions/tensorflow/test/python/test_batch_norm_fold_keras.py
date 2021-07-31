@@ -512,7 +512,7 @@ class TestBatchNormFold(unittest.TestCase):
 
             self.assertFalse(model.conv1 in conv_linear_with_bn_dict)
             self.assertFalse(model.bn1 in conv_linear_with_bn_dict)
-            self.assertTrue(len(conv_linear_with_bn_dict)==3)
+            self.assertTrue(len(conv_linear_with_bn_dict) == 3)
 
     def test_find_conv_bn_pairs_functional(self):
 
@@ -556,7 +556,7 @@ class TestBatchNormFold(unittest.TestCase):
             conv_linear_with_bn_dict = find_possible_convs_linears_bn(node_layer_map, layer_out_node_map)
 
             self.assertTrue(Block1._layers[3] in conv_linear_with_bn_dict)
-            self.assertEqual(1,len(conv_linear_with_bn_dict))
+            self.assertEqual(1, len(conv_linear_with_bn_dict))
 
     def test_ordered_conv_linears_functional(self):
         input1 = tf.keras.Input(name='input1', shape=(10, 10, 3))
