@@ -601,3 +601,56 @@ class TestBatchNormFold(unittest.TestCase):
             layer_out_node_map = common.create_layer_to_out_node_map(Block2)
             ordered_conv_linears = get_ordered_conv_linears(node_layer_map, layer_out_node_map)
             self.assertEqual(Block2._layers[3], ordered_conv_linears[0])
+
+    def test_ordered_conv_linears_combined_model(self):
+        if version.parse(tf.version.VERSION) >= version.parse("2.00"):
+            Block3 = tf.keras.Sequential()
+            Block3.add(tf.keras.layers.BatchNormalization(fused=True))
+            Block3.add(tf.keras.layers.Conv2D(3, 3))
+
+            inputs = tf.keras.Input((60, 60, 3))
+            conv2d = tf.keras.layers.Conv2D(filters=3, kernel_size=3, strides=1)(inputs)
+            block3 = Block3(conv2d)
+            outputs = tf.keras.layers.BatchNormalization(fused=True)(block3)
+            Block1 = tf.keras.Model(inputs=inputs, outputs=outputs)
+
+            Block2 = tf.keras.Sequential()
+            Block2.add(tf.keras.layers.BatchNormalization(fused=True))
+            Block2.add(tf.keras.layers.Conv2D(3, 3))
+            Block2.add(tf.keras.layers.ReLU())
+            Block2.add(Block1)
+
+            class MyModelMLP(tf.keras.Model):
+                def __init__(self, input_shape):
+                    super(MyModelMLP, self).__init__()
+
+                    self.conv1 = tf.keras.layers.Conv2D(filters=3, kernel_size=(3, 3), strides=1, activation='linear')
+                    self.bn1 = tf.keras.layers.BatchNormalization(fused=True)
+                    self.dn1 = tf.keras.layers.Dense(units=32)
+                    self.block2 = Block2
+                    self.relu = tf.keras.layers.ReLU()
+                    # # Parameters of the model
+                    self.input_layer = tf.keras.layers.Input(input_shape)
+                    self.out = self.call(self.input_layer)
+                    super().__init__(inputs=self.input_layer, outputs=self.out)
+
+                # Define forward passing of model
+                def call(self, input_tensor):
+                    x = self.conv1(input_tensor)
+                    x = self.bn1(x)
+                    x = self.dn1(x)
+                    x = self.block2(x)
+                    x = self.relu(x)
+                    return x
+
+            model = MyModelMLP((64,64,64))
+
+            node_layer_map = common.create_node_to_layer_map(model)
+            layer_out_node_map = common.create_layer_to_out_node_map(model)
+            ordered_conv_linears = get_ordered_conv_linears(node_layer_map, layer_out_node_map)
+
+            self.assertEqual(model.conv1, ordered_conv_linears[0])
+            self.assertEqual(model.dn1, ordered_conv_linears[1])
+            self.assertEqual(model.block2._layers[2], ordered_conv_linears[2])
+            self.assertEqual(model.block2._layers[4]._layers[1], ordered_conv_linears[3])
+            self.assertEqual(model.block2._layers[4]._layers[2]._layers[2], ordered_conv_linears[4])
