@@ -47,8 +47,8 @@ from datetime import datetime
 import logging
 import os
 from typing import Tuple
-from torchvision import models
 import torch
+from torchvision import models
 
 # imports for AIMET
 import aimet_common.defs
@@ -59,6 +59,7 @@ import aimet_torch.defs
 from Examples.common import image_net_config
 from Examples.torch.utils.image_net_evaluator import ImageNetEvaluator
 from Examples.torch.utils.image_net_trainer import ImageNetTrainer
+from Examples.torch.utils.image_net_data_loader import ImageNetDataLoader
 
 
 logger = logging.getLogger('TorchWeightSVD')
@@ -251,15 +252,12 @@ def compress_and_finetune(config: argparse.Namespace):
     logger.info("Starting Model Compression...")
 
     # Compress the model using AIMET Weight SVD
-    compressed_model, stats = aimet_weight_svd(model=model, evaluator=data_pipeline.evaluate)
+    compressed_model, eval_dict = aimet_weight_svd(model=model, evaluator=data_pipeline.evaluate)
 
     # Log the statistics
-    logger.info(stats)
+    logger.info(eval_dict)
     with open(os.path.join(config.logdir, 'log.txt'), "w") as outfile:
-        outfile.write("%s\n\n" % (stats))
-
-    # Save the compressed model
-    torch.save(compressed_model, os.path.join(config.logdir, 'compressed_model.pth'))
+        outfile.write("%s\n\n" % (eval_dict))
 
     # Calculate and log the accuracy of compressed model
     accuracy = data_pipeline.evaluate(compressed_model, use_cuda=config.use_cuda)
@@ -267,18 +265,21 @@ def compress_and_finetune(config: argparse.Namespace):
 
     logger.info("...Model Compression Complete")
 
-
-    # Finetuning
-    logger.info("Strating Model Finetuning...")
+    # Finetune
+    logger.info("Starting Model Finetuning...")
 
     # Finetune the compressed model
     data_pipeline.finetune(compressed_model)
+    
+    # Save the compressed model
+    torch.save(compressed_model, os.path.join(config.logdir, 'compressed_model.pth'))
 
-    # Calculate and log the accuracy of compressed-finetuned model
+    # Calculate and logs the accuracy of compressed-finetuned model
     accuracy = data_pipeline.evaluate(compressed_model, use_cuda=config.use_cuda)
     logger.info("Finetuned Compressed Model Top-1 accuracy = %.2f", accuracy)
 
     logger.info("...Model Finetuning Complete")
+
 
 
 if __name__ == '__main__':
