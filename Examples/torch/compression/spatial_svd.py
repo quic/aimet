@@ -36,7 +36,7 @@
 # =============================================================================
 
 """
-This file demonstrates the use of compression using AIMET spatial SVD
+This file demonstrates the use of compression using AIMET spatial SVD 
 technique followed by fine tuning.
 """
 
@@ -51,8 +51,9 @@ import logging
 
 # imports for AIMET
 from aimet_torch.compress import ModelCompressor
-import aimet_torch.defs
 import aimet_common.defs
+import aimet_torch.defs
+
 from aimet_common.defs import CompressionScheme
 from aimet_common.defs import CostMetric
 
@@ -60,6 +61,7 @@ from aimet_common.defs import CostMetric
 from Examples.common import image_net_config
 from Examples.torch.utils.image_net_evaluator import ImageNetEvaluator
 from Examples.torch.utils.image_net_trainer import ImageNetTrainer
+from Examples.torch.utils.image_net_data_loader import ImageNetDataLoader
 
 logger = logging.getLogger('TorchSpatialSVD')
 formatter = logging.Formatter('%(asctime)s : %(name)s - %(levelname)s - %(message)s')
@@ -155,11 +157,11 @@ def aimet_spatial_svd(model: torch.nn.Module,
     # please refer to the API documentation for other schemes (i.e weight svd & channel prunning)
     # and mode (manual)
     greedy_params = aimet_torch.defs.GreedySelectionParameters(target_comp_ratio=Decimal(0.5),
-                                                               num_comp_ratio_candidates=10)
+                                                              num_comp_ratio_candidates=10)
     auto_params = aimet_torch.defs.SpatialSvdParameters.AutoModeParams(greedy_params,
-                                                                       modules_to_ignore=[model.conv1])
+                                                                      modules_to_ignore=[model.conv1])
     params = aimet_torch.defs.SpatialSvdParameters(aimet_torch.defs.SpatialSvdParameters.Mode.auto,
-                                                   auto_params)
+                                                  auto_params)
 
     scheme = CompressionScheme.spatial_svd      # spatial_svd, weight_svd or channel_pruning
     metric = CostMetric.mac                     # mac or memory
@@ -219,40 +221,40 @@ def compress_and_finetune(config: argparse.Namespace):
     logger.info("Starting Model Compression...")
 
     # Compress the model using AIMET Weight SVD
-    compressed_model, stats = aimet_spatial_svd(model=model, evaluator=data_pipeline.evaluate)
-
+    compressed_model, eval_dict = aimet_spatial_svd(model=model, evaluator=data_pipeline.evaluate)
+    
     # Log the statistics
-    logger.info(stats)
+    logger.info(eval_dict)
     with open(os.path.join(config.logdir, 'log.txt'), "w") as outfile:
-        outfile.write("%s\n\n" % (stats))
+        outfile.write("%s\n\n" % (eval_dict))
 
-    # Saves the compressed model
-    torch.save(compressed_model, os.path.join(config.logdir, 'compressed_model.pth'))
-
-    # Calculates and logs the accuracy of compressed model
+    # Calculate and log the accuracy of compressed model
     accuracy = data_pipeline.evaluate(compressed_model, use_cuda=config.use_cuda)
     logger.info("Compressed Model Top-1 accuracy = %.2f", accuracy)
 
     logger.info("...Model Compression Complete")
 
-
-    # Finetuning
-    logger.info("Strating Model Finetuning...")
+    # Finetune
+    logger.info("Starting Model Finetuning...")
 
     # Finetune the compressed model
     data_pipeline.finetune(compressed_model)
+    
+    # Save the compressed model
+    torch.save(compressed_model, os.path.join(config.logdir, 'compressed_model.pth'))
 
-    # Calculate and log the accuracy of compressed-finetuned model
+    # Calculate and logs the accuracy of compressed-finetuned model
     accuracy = data_pipeline.evaluate(compressed_model, use_cuda=config.use_cuda)
     logger.info("Finetuned Compressed Model Top-1 accuracy = %.2f", accuracy)
 
     logger.info("...Model Finetuning Complete")
 
 
+
 if __name__ == '__main__':
     default_logdir = os.path.join("benchmark_output", "spatial_svd_"+datetime.now().strftime("%Y-%m-%d-%H-%M-%S"))
 
-    parser = argparse.ArgumentParser(description='Apply Weight SVD on pretrained ResNet18 model and finetune it for ImageNet dataset')
+    parser = argparse.ArgumentParser(description='Apply Spatial SVD on pretrained ResNet18 model and finetune it for ImageNet dataset')
 
     parser.add_argument('--dataset_dir', type=str,
                         required=True,
@@ -295,3 +297,4 @@ if __name__ == '__main__':
         raise RuntimeError("Found no CUDA Device while use_cuda is selected")
 
     compress_and_finetune(_config)
+
