@@ -92,7 +92,7 @@ def find_last_layers(cur_layer: tf.keras.Model):
 
     return  last_layers
 
-def layer_to_out_node_map(cur_layer: tf.keras.Model) -> dict:
+def create_layer_to_out_node_map(cur_layer: tf.keras.Model) -> dict:
     """
     To find the outbound nodes of one layer
     :param cur_layer: model to obtain layer_to_out_node_map
@@ -100,7 +100,7 @@ def layer_to_out_node_map(cur_layer: tf.keras.Model) -> dict:
     """
 
     layer_node_ref = {}
-    node_layer_ref = node_to_layer_map(cur_layer)
+    node_layer_ref = create_node_to_layer_map(cur_layer)
 
     for node, layers in node_layer_ref.items():
         if layers[0]:
@@ -122,7 +122,7 @@ def _submodule_handler_node_to_layer_map(cur_layer: tf.keras.Model, node_layer_r
              to input layer and the input layer outbounding nodes
     """
 
-    node_layer_map2 = node_to_layer_map(cur_layer)
+    node_layer_map2 = create_node_to_layer_map(cur_layer)
     input_layer = None
     node_input_layer = None
     node_after_input_layer = None
@@ -143,7 +143,7 @@ def _submodule_handler_node_to_layer_map(cur_layer: tf.keras.Model, node_layer_r
 
     return node_layer_map2, node_input_layer, node_after_input_layer
 
-def node_to_layer_map(cur_layer: tf.keras.Model) -> dict:
+def create_node_to_layer_map(cur_layer: tf.keras.Model) -> dict:
     """
     To find the input layers and output layer of one node
     :param cur_layer: model to obtain node_to_layer_map
