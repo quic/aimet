@@ -40,10 +40,11 @@ This file contains unit tests for testing batch norm folding
 """
 import unittest
 import tensorflow as tf
+import numpy as np
 from packaging import version
 
 from aimet_tensorflow.keras.utils import common
-from aimet_tensorflow.keras.batch_norm_fold import _delete_all_bns_from_model, find_possible_convs_linears_bn, get_ordered_conv_linears
+from aimet_tensorflow.keras.batch_norm_fold import _delete_all_bns_from_model, find_possible_convs_linears_bn, get_ordered_conv_linears, find_all_batch_norms_to_fold
 from aimet_tensorflow.keras.utils.op.batchnorm import BNUtils
 
 class TestBatchNormFold(unittest.TestCase):
@@ -654,3 +655,174 @@ class TestBatchNormFold(unittest.TestCase):
             self.assertEqual(model.block2._layers[2], ordered_conv_linears[2])
             self.assertEqual(model.block2._layers[4]._layers[1], ordered_conv_linears[3])
             self.assertEqual(model.block2._layers[4]._layers[2]._layers[2], ordered_conv_linears[4])
+
+    def test_find_all_bns_to_fold_sequential(self):
+
+        Block1 = tf.keras.Sequential()
+        Block1.add(tf.keras.Input((60, 60, 3)))
+        Block1.add(tf.keras.layers.ReLU())
+        Block1.add(tf.keras.layers.BatchNormalization())
+        Block1.add(tf.keras.layers.Conv2D(3, 3))
+        Block1.add(tf.keras.layers.BatchNormalization())
+        Block1.add(tf.keras.layers.Conv2D(6, 6))
+        Block1.add(tf.keras.layers.ReLU())
+
+        conv_bn_pairs = find_all_batch_norms_to_fold(Block1)
+        self.assertEqual(1, len(conv_bn_pairs))
+        self.assertEqual((Block1._layers[3], Block1._layers[4], True), conv_bn_pairs[0])
+
+    def test_find_all_bns_to_fold_functional(self):
+        input1 = tf.keras.Input(name='input1', shape=(10, 10, 3))
+        x1 = tf.keras.layers.Conv2D(8, (1, 1), name='conv1a')(input1)
+        y = tf.keras.layers.BatchNormalization()(x1)
+        x2 = tf.keras.layers.Conv2D(8, (3, 3), name='conv1b')(y)
+        x3 = tf.keras.layers.Conv2D(8, (3, 3), name='conv2b')(y)
+        y2 = tf.keras.layers.BatchNormalization()(x2)
+        y3 = tf.keras.layers.BatchNormalization()(x3)
+        x = tf.keras.layers.add([y3, y2])
+        x = tf.keras.layers.Conv2D(4, (1, 1), name='conv3')(x)
+        bn_op = tf.keras.layers.BatchNormalization(fused=True)(x)
+        output = tf.keras.layers.ReLU()(bn_op)
+        model = tf.keras.Model(input1, output)
+
+        conv_bn_pairs = find_all_batch_norms_to_fold(model)
+        self.assertEqual(4, len(conv_bn_pairs))
+
+    def test_find_all_bns_to_fold_combined_model(self):
+        if version.parse(tf.version.VERSION) >= version.parse("2.00"):
+            Block3 = tf.keras.Sequential()
+            Block3.add(tf.keras.layers.BatchNormalization(fused=True))
+            Block3.add(tf.keras.layers.Conv2D(3, 3))
+
+            inputs = tf.keras.Input((60, 60, 3))
+            conv2d = tf.keras.layers.Conv2D(filters=3, kernel_size=3, strides=1)(inputs)
+            block3 = Block3(conv2d)
+            outputs = tf.keras.layers.BatchNormalization(fused=True)(block3)
+            Block1 = tf.keras.Model(inputs=inputs, outputs=outputs)
+
+            Block2 = tf.keras.Sequential()
+            Block2.add(tf.keras.layers.BatchNormalization(fused=True))
+            Block2.add(tf.keras.layers.Conv2D(3, 3))
+            Block2.add(tf.keras.layers.ReLU())
+            Block2.add(Block1)
+
+            class MyModelMLP(tf.keras.Model):
+                def __init__(self, input_shape):
+                    super(MyModelMLP, self).__init__()
+
+                    self.conv1 = tf.keras.layers.Conv2D(filters=3, kernel_size=(3, 3), strides=1, activation='relu')
+                    self.bn1 = tf.keras.layers.BatchNormalization(fused=True)
+                    self.dn1 = tf.keras.layers.Dense(units=32)
+                    self.block2 = Block2
+                    self.relu = tf.keras.layers.ReLU()
+                    # # Parameters of the model
+                    self.input_layer = tf.keras.layers.Input(input_shape)
+                    self.out = self.call(self.input_layer)
+                    super().__init__(inputs=self.input_layer, outputs=self.out)
+
+                # Define forward passing of model
+                def call(self, input_tensor):
+                    x = self.conv1(input_tensor)
+                    x = self.bn1(x)
+                    x = self.dn1(x)
+                    x = self.block2(x)
+                    x = self.relu(x)
+                    return x
+
+            model = MyModelMLP((64,64,64))
+
+            conv_bn_pairs = find_all_batch_norms_to_fold(model)
+
+            self.assertEqual(3, len(conv_bn_pairs))
+            self.assertEqual((model._layers[4]._layers[2], model._layers[4]._layers[1], False), conv_bn_pairs[0])
+            self.assertEqual((model._layers[4]._layers[4]._layers[1], model._layers[4]._layers[4]._layers[2]._layers[1], True), conv_bn_pairs[1])
+            self.assertEqual((model._layers[4]._layers[4]._layers[2]._layers[2], model._layers[4]._layers[4]._layers[3], True), conv_bn_pairs[2])
+
+    def test_bn_fold_auto_rules_bn_after_conv(self):
+        """
+        Test batch norm fold layer selection when conv layer is followed by a BN layer
+        """
+        inputs = tf.keras.Input(shape=(32, 32, 3,), name="inputs")
+        conv_op = tf.keras.layers.Conv2D(32, (3, 3))(inputs)
+        bn_op = tf.keras.layers.BatchNormalization(fused=True)(conv_op)
+        relu = tf.nn.relu(bn_op)
+        model = tf.keras.Model(inputs = inputs, outputs = relu)
+
+        bn_conv_linear_pairs = find_all_batch_norms_to_fold(model)
+        self.assertEqual(1, len(bn_conv_linear_pairs))
+
+    def test_bn_fold_layer_selection_looped_network(self):
+
+        """
+        Test layer selection with looped network
+        """
+        input1 = tf.keras.Input(name='input1', shape=(10, 10, 3))
+        x1 = tf.keras.layers.Conv2D(8, (1, 1), name='conv1a',
+                                    kernel_initializer=tf.random_uniform_initializer(-1, 1),
+                                    bias_initializer='random_uniform')(input1)
+
+        bn_op_1 = tf.keras.layers.BatchNormalization(fused=True)(x1)
+        bn_op_2 = tf.keras.layers.BatchNormalization(fused=True)(x1)
+
+        add = tf.keras.layers.add([bn_op_1, bn_op_2])
+
+        x2 = tf.keras.layers.Conv2D(8, (3, 3), name='conv1b',
+                                   kernel_initializer=tf.random_uniform_initializer(-1, 1),
+                                   bias_initializer='random_uniform')(add)
+
+        model = tf.keras.Model(inputs=input1, outputs=x2)
+
+        bn_conv_linear_pairs = find_all_batch_norms_to_fold(model)
+
+        self.assertTrue(0 == len(bn_conv_linear_pairs))
+
+    def test_bn_fold_auto_rules_bn_before_conv(self):
+        """
+        Test batch norm fold layer selection when BN layer is followed by a conv layer
+        """
+        inputs = tf.keras.Input(shape=(32, 32, 3,), name="inputs")
+        bn_op = tf.keras.layers.BatchNormalization(fused=True)(inputs)
+        conv_op = tf.keras.layers.Conv2D(32, (3, 3))(bn_op)
+        relu = tf.nn.relu(conv_op)
+        model = tf.keras.Model(inputs=inputs, outputs=relu)
+
+        bn_conv_linear_pairs = find_all_batch_norms_to_fold(model)
+        self.assertEqual(1, len(bn_conv_linear_pairs))
+
+    def test_bn_fold_find_layers_model_with_multi_input(self):
+        """
+        Test bn fold with multiple input nodes
+        """
+
+        input1 = tf.keras.Input(name='input1', shape=(10, 10, 3))
+        input2 = tf.keras.Input(name='input2', shape=(12, 12, 3))
+        x1 = tf.keras.layers.Conv2D(8, (1, 1), name='conv1a')(input1)
+        x2 = tf.keras.layers.Conv2D(8, (3, 3), name='conv1b')(input2)
+        x = tf.keras.layers.add([x1, x2])
+        x = tf.keras.layers.Conv2D(4, (1, 1), name='conv2')(x)
+        bn_op = tf.keras.layers.BatchNormalization(fused=True)(x)
+        relu = tf.nn.relu(bn_op)
+        model = tf.keras.Model(inputs=[input1, input2], outputs=relu)
+
+        bn_conv_linear_pairs = find_all_batch_norms_to_fold(model)
+        assert(1 == len(bn_conv_linear_pairs))
+
+    def test_bn_fold_auto_rules_conv_bn_conv(self):
+        """
+        Test batch norm fold layer selection with pattern conv1 - bn - conv2
+        bn folds into conv1
+        """
+        inputs = tf.keras.Input(shape=(32, 32, 3,), name="inputs")
+        conv_op = tf.keras.layers.Conv2D(32, (3, 3), name ='conv1')(inputs)
+        bn_op = tf.keras.layers.BatchNormalization(fused=True)(conv_op)
+        conv2_op = tf.keras.layers.Conv2D(32, (3, 3), name ='conv2')(bn_op)
+        relu = tf.nn.relu(conv2_op)
+        model = tf.keras.Model(inputs=inputs, outputs=relu)
+
+        bn_conv_linear_pairs = find_all_batch_norms_to_fold(model)
+        self.assertEqual(1, len(bn_conv_linear_pairs))
+        conv_linear, batchnorm, is_batch_norm_second = bn_conv_linear_pairs[0]
+        assert 'conv1' == conv_linear.name
+        # add additional check to verify backward fold is picked over forward in case both are available
+        assert is_batch_norm_second is True
+
