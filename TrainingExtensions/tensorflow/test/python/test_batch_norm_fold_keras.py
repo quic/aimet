@@ -774,7 +774,7 @@ class TestBatchNormFold(unittest.TestCase):
 
         bn_conv_linear_pairs = find_all_batch_norms_to_fold(model)
 
-        self.assertTrue(0 == len(bn_conv_linear_pairs))
+        self.assertEqual(0, len(bn_conv_linear_pairs))
 
     def test_bn_fold_auto_rules_bn_before_conv(self):
         """
@@ -805,7 +805,7 @@ class TestBatchNormFold(unittest.TestCase):
         model = tf.keras.Model(inputs=[input1, input2], outputs=relu)
 
         bn_conv_linear_pairs = find_all_batch_norms_to_fold(model)
-        assert(1 == len(bn_conv_linear_pairs))
+        self.assertEqual(1, len(bn_conv_linear_pairs))
 
     def test_bn_fold_auto_rules_conv_bn_conv(self):
         """
@@ -822,7 +822,7 @@ class TestBatchNormFold(unittest.TestCase):
         bn_conv_linear_pairs = find_all_batch_norms_to_fold(model)
         self.assertEqual(1, len(bn_conv_linear_pairs))
         conv_linear, batchnorm, is_batch_norm_second = bn_conv_linear_pairs[0]
-        assert 'conv1' == conv_linear.name
+        self.assertEqual('conv1', conv_linear.name) 
         # add additional check to verify backward fold is picked over forward in case both are available
-        assert is_batch_norm_second is True
+        self.assertEqual(True, is_batch_norm_second)
 
