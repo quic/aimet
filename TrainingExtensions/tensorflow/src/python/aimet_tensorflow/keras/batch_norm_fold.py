@@ -463,3 +463,15 @@ def find_all_batch_norms_to_fold(model: (tf.keras.Model, tf.keras.layers.Layer))
                     marked_bn_set.add(bn_info[0])
 
     return valid_bn_conv_linear_pairs
+
+def fold_all_batch_norms(model: (tf.keras.Model,tf.keras.layers.Layer)):
+    """
+    Fold all batch_norm layers in a model into corresponding conv layers
+
+    :param model: model to find all batch norms for
+    :return:
+    """
+
+    bn_conv_linear_pairs = find_all_batch_norms_to_fold(model)
+
+    _fold_given_auto_selected_batch_norms(model, bn_conv_linear_pairs)
