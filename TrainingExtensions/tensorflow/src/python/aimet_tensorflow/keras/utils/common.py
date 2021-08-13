@@ -38,14 +38,16 @@
 
 """ Common Utilities for tf 2 keras """
 
+from typing import Dict, List
+
 import tensorflow as tf
 
 
-def module_to_name_map(cur_layer: tf.keras.Model) -> dict:
+def module_to_name_map(cur_layer: tf.keras.Model) -> Dict[tf.keras.layers.Layer, List[str]]:
     """
     To find a variable name and parent reference of one module
     :param cur_layer: model to obtain module_to_name_map
-    :return: dictionary includes module_ref as a key, module_name and parent_ref as value
+    :return: dictionary includes module_ref as a key, parent_ref and module_name as value
     """
 
     ref_name = {}
@@ -60,7 +62,7 @@ def module_to_name_map(cur_layer: tf.keras.Model) -> dict:
 
     return ref_name
 
-def find_input_layers(node_layer_ref: dict) -> list:
+def find_input_layers(node_layer_ref: Dict[str, List[str]]) -> List[str]:
     """
     helper to find the input layers of the model
     :param node_layer_ref: dictionary includes node_ref as a key, in_layers and out_layer as value
@@ -92,7 +94,7 @@ def find_last_layers(cur_layer: tf.keras.Model):
 
     return  last_layers
 
-def create_layer_to_out_node_map(cur_layer: tf.keras.Model) -> dict:
+def create_layer_to_out_node_map(cur_layer: tf.keras.Model) -> Dict[tf.keras.layers.Layer, str]:
     """
     To find the outbound nodes of one layer
     :param cur_layer: model to obtain layer_to_out_node_map
@@ -112,7 +114,7 @@ def create_layer_to_out_node_map(cur_layer: tf.keras.Model) -> dict:
 
     return layer_node_ref
 
-def _submodule_handler_node_to_layer_map(cur_layer: tf.keras.Model, node_layer_ref: dict):
+def _submodule_handler_node_to_layer_map(cur_layer: tf.keras.Model, node_layer_ref: Dict[str, List[str]]):
     """
     The utility to extract node_layer_map for the cur_layer submodule and provide the connectivity with the outer model
     :param cur_layer: model to obtain node_layer_ref for
@@ -143,7 +145,7 @@ def _submodule_handler_node_to_layer_map(cur_layer: tf.keras.Model, node_layer_r
 
     return node_layer_map2, node_input_layer, node_after_input_layer
 
-def create_node_to_layer_map(cur_layer: tf.keras.Model) -> dict:
+def create_node_to_layer_map(cur_layer: tf.keras.Model) -> Dict[str, List[str]]:
     """
     To find the input layers and output layer of one node
     :param cur_layer: model to obtain node_to_layer_map
