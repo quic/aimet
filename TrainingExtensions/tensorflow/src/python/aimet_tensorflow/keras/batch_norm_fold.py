@@ -464,7 +464,7 @@ def find_all_batch_norms_to_fold(model: (tf.keras.Model, tf.keras.layers.Layer))
 
     return valid_bn_conv_linear_pairs
 
-def fold_all_batch_norms(model: (tf.keras.Model,tf.keras.layers.Layer)):
+def fold_all_batch_norms(model: (tf.keras.Model, tf.keras.layers.Layer)):
     """
     Fold all batch_norm layers in a model into corresponding conv layers
 
