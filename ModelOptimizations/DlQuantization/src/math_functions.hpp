@@ -62,6 +62,8 @@ struct PDF
     std::vector<double> xLeft;
     // The probability for each bucket.
     std::vector<double> pdf;
+    // The histogram for each bucket.
+    std::vector<double> hist;
     // This PDF holds the average data for this many iterations.
     int iterations;
 };

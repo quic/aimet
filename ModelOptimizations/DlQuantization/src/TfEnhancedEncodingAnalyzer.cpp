@@ -53,15 +53,15 @@ template <typename DTYPE>
 std::vector<std::tuple<double, double>> TfEnhancedEncodingAnalyzer<DTYPE>::getStatsHistogram() const
 {
     // Allocate a vector to hold tuples of left edges and pdf for each bucket
-    auto histogram = std::vector<std::tuple<double, double>>(this->_stats.xLeft.size());
+    std::vector<std::tuple<double, double>> histogram;
 
     // Assert that the stats structure is well formed
-    assert(this->_stats.xLeft.size() == this->_stats.pdf.size());
+    assert(this->_stats.xLeft.size() == this->_stats.hist.size());
 
     unsigned index = 0;
     for (auto entry: this->_stats.xLeft)
     {
-        histogram.push_back(std::make_tuple(entry, this->_stats.pdf[index]));
+        histogram.push_back(std::make_tuple(entry, (int)this->_stats.hist[index]));
         index++;
     }
     return histogram;

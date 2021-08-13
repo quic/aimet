@@ -46,7 +46,7 @@ import json
 import torch
 import onnx
 
-from aimet_common.utils import AimetLogger, save_json_yaml
+from aimet_common.utils import AimetLogger, save_json_yaml, save_hist_yaml
 from aimet_common.defs import QuantScheme
 from aimet_common.quantsim import encoding_version
 from aimet_torch.quantsim_config.quantsim_config import QuantSimConfigurator
@@ -454,20 +454,30 @@ class QuantizationSimModel:
         # Create a dictionary to export to JSON
         activation_encodings = {}
         param_encodings = {}
+        activation_histogram = {}
+        param_histogram = {}
         quantized_layers = QuantizationSimModel._get_qc_quantized_layers(model)
 
         for layer_name, layer in quantized_layers:
             QuantizationSimModel._update_encoding_dicts_for_layer(layer, layer_name, activation_encodings,
-                                                                  param_encodings, op_to_io_tensor_map,
-                                                                  valid_param_set)
+                                                                  param_encodings, activation_histogram,
+                                                                  param_histogram,
+                                                                  op_to_io_tensor_map, valid_param_set)
 
         encodings_dict = {'version': encoding_version,
                           'activation_encodings': activation_encodings,
                           'param_encodings': param_encodings}
 
+
+        histogram_dict = {'activation_histogram': activation_histogram,
+                          'param_histogram': param_histogram}
+
         # export weight encodings to output json file
         encoding_file_path = os.path.join(path, filename_prefix + '.encodings')
+        hist_file_path = os.path.join(path, filename_prefix + '_hist.encodings')
         save_json_yaml(encoding_file_path, encodings_dict)
+        save_hist_yaml(hist_file_path, histogram_dict)
+
 
     @staticmethod
     def generate_symmetric_encoding_dict(data: torch.Tensor, bitwidth: int) -> Dict:
@@ -499,7 +509,7 @@ class QuantizationSimModel:
 
     @staticmethod
     def _update_param_encodings_dict_for_layer(layer: torch.nn.Module, layer_name: str, param_encodings: Dict,
-                                               valid_param_set: set):
+                                               param_histogram: Dict, valid_param_set: set):
         """
         :param layer: layer as torch.nn.Module
         :param layer_name : Name of the layer
@@ -514,7 +524,9 @@ class QuantizationSimModel:
                 if param_name in valid_param_set:
                     encoding = utils.create_encoding_dict(param_quantizer.encoding,
                                                           param_quantizer.use_symmetric_encodings)
+                    hist_encoding = utils.create_hist_dict(param_quantizer._cppOp[0].getStatsHistogram())
                     param_encodings[param_name] = [encoding]
+                    param_histogram[param_name] = [hist_encoding]
                 else:
                     logger.error('Param tensor {%s} not found in valid param set', param_name)
             else:
@@ -536,7 +548,8 @@ class QuantizationSimModel:
 
     @staticmethod
     def _update_encoding_dicts_for_layer(layer: torch.nn.Module, layer_name: str, activation_encodings: Dict,
-                                         param_encodings: Dict, op_to_io_tensor_map: Dict, valid_param_set: set):
+                                         param_encodings: Dict, activation_histogram: Dict, param_histogram: Dict,
+                                         op_to_io_tensor_map: Dict, valid_param_set: set):
         """
         Add given layer param and activation encodings to respective dictionaries to be used for exporting encodings
         :param layer: layer as torch.nn.Module
@@ -563,28 +576,36 @@ class QuantizationSimModel:
                     if (index < len(layer.input_quantizers)) and layer.input_quantizers[index].enabled:
                         encoding = utils.create_encoding_dict(layer.input_quantizers[index].encoding,
                                                               layer.input_quantizers[index].use_symmetric_encodings)
+                        hist_encoding = utils.create_hist_dict(layer.input_quantizers[index]._cppOp[0].getStatsHistogram())
                         activation_encodings[input_tensor] = [encoding]
+                        activation_histogram[input_tensor] = [hist_encoding]
 
                 if layer.output_quantizers[0].enabled:
                     if op_to_io_tensor_map[layer_name].outputs:
                         for output_tensor in op_to_io_tensor_map[layer_name].outputs:
                             encoding = utils.create_encoding_dict(layer.output_quantizers[0].encoding,
                                                                   layer.output_quantizers[0].use_symmetric_encodings)
+                            hist_encoding = utils.create_hist_dict(layer.output_quantizers[0]._cppOp[0].getStatsHistogram())
                             activation_encodings[output_tensor] = [encoding]
+                            activation_histogram[output_tensor] = [hist_encoding]
 
                 # get param quantizers
                 QuantizationSimModel._update_param_encodings_dict_for_layer(layer, layer_name, param_encodings,
-                                                                            valid_param_set)
+                                                                            param_histogram, valid_param_set)
 
             if isinstance(layer, QcQuantizeRecurrent):
                 onnx_activations_to_quantizers, onnx_params_to_quantizers = \
                     layer.get_activation_param_quantizers_for_onnx_tensors(op_to_io_tensor_map[layer_name])
                 for tensor, quantizer in onnx_activations_to_quantizers.items():
                     encoding = utils.create_encoding_dict(quantizer.encoding, quantizer.use_symmetric_encodings)
+                    hist_encoding = utils.create_hist_dict(quantizer._cppOp[0].getStatsHistogram())
                     activation_encodings[tensor] = [encoding]
+                    activation_histogram[tensor] = [hist_encoding]
                 for tensor, quantizer in onnx_params_to_quantizers.items():
                     encoding = utils.create_encoding_dict(quantizer.encoding, quantizer.use_symmetric_encodings)
+                    hist_encoding = utils.create_hist_dict(quantizer._cppOp[0].getStatsHistogram())
                     param_encodings[tensor] = [encoding]
+                    param_histogram[tensor] = [hist_encoding]
 
     @staticmethod
     def _get_qc_quantized_layers(model) -> List[Tuple[str, QcQuantizeWrapper]]:

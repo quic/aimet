@@ -320,6 +320,7 @@ void UpdatePdfSigned_cpu(const DTYPE* data, int cnt, PDF& pdf)
         }
         // Initialize the rest of the PDF structure.
         pdf.pdf.resize(PDF_SIZE);
+        pdf.hist.resize(PDF_SIZE);
         pdf.iterations = 0;
     }
 
@@ -328,6 +329,7 @@ void UpdatePdfSigned_cpu(const DTYPE* data, int cnt, PDF& pdf)
     DTYPE min_val     = pdf.xLeft[0];
     DTYPE bucket_size = pdf.xLeft[1] - pdf.xLeft[0];
     vector<DTYPE> pdf_this_iter(PDF_SIZE, 0);
+    vector<DTYPE> hist_this_iter(PDF_SIZE, 0);
     // This offset is used to help map numbers to histogram buckets.
     DTYPE pdf_offset = min_val / bucket_size;
     // Go through all data points and add them to the histogram.
@@ -339,6 +341,7 @@ void UpdatePdfSigned_cpu(const DTYPE* data, int cnt, PDF& pdf)
         if (index >= 0 && index < PDF_SIZE)
         {
             pdf_this_iter[index] += 1;
+            hist_this_iter[index] += 1;
         }
     }
 
@@ -349,6 +352,7 @@ void UpdatePdfSigned_cpu(const DTYPE* data, int cnt, PDF& pdf)
         pdf_this_iter[i] /= cnt;
         // Average this PDF into the running average.
         pdf.pdf[i] = (pdf.pdf[i] * pdf.iterations + pdf_this_iter[i]) / (pdf.iterations + 1);
+        pdf.hist[i] += hist_this_iter[i];
     }
     pdf.iterations++;
 }
@@ -389,12 +393,14 @@ void UpdatePdfUnsigned_cpu(const DTYPE* data, int cnt, PDF& pdf)
         }
         // Initialize the rest of the PDF structure.
         pdf.pdf.resize(PDF_SIZE);
+        pdf.hist.resize(PDF_SIZE);
         pdf.iterations = 0;
     }
 
     // Create the histogram of this number distribution.
     DTYPE bucket_size = pdf.xLeft[1] - pdf.xLeft[0];
     vector<DTYPE> pdf_this_iter(PDF_SIZE, 0);
+    vector<DTYPE> hist_this_iter(PDF_SIZE, 0);
     // Go through all data points and add them to the histogram.
     for (int i = 0; i < cnt; ++i)
     {
@@ -404,6 +410,7 @@ void UpdatePdfUnsigned_cpu(const DTYPE* data, int cnt, PDF& pdf)
         if (index >= 0 && index < PDF_SIZE)
         {
             pdf_this_iter[index] += 1;
+            hist_this_iter[index] += 1;
         }
     }
 
@@ -414,6 +421,7 @@ void UpdatePdfUnsigned_cpu(const DTYPE* data, int cnt, PDF& pdf)
         pdf_this_iter[i] /= cnt;
         // Average this PDF into the running average.
         pdf.pdf[i] = (pdf.pdf[i] * pdf.iterations + pdf_this_iter[i]) / (pdf.iterations + 1);
+        pdf.hist[i] = (pdf.hist[i] * pdf.iterations + hist_this_iter[i]) / (pdf.iterations + 1);
     }
     pdf.iterations++;
 }

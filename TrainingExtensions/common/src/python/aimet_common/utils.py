@@ -253,6 +253,16 @@ def log_package_info():
         # Log Product.
         logging.info("%s", Product)
 
+def save_hist_yaml(encoding_file_path: str, encodings_dict: dict):
+    """
+    Function which saves encoding in YAML and JSON file format
+    :param encoding_file_path: file name to use to generate the yaml and json file
+    :param encodings_dict: dictionary containing the encoding
+    """
+    encoding_file_path_yaml = encoding_file_path + '.yaml'
+    with open(encoding_file_path_yaml, 'w') as encoding_fp_yaml:
+        yaml.dump(encodings_dict, encoding_fp_yaml, default_flow_style=None, allow_unicode=True)
+
 
 def save_json_yaml(encoding_file_path: str, encodings_dict: dict):
     """

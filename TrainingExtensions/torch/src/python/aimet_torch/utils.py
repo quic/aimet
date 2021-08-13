@@ -623,6 +623,22 @@ def create_encoding_dict(encoding: libpymo.TfEncoding, is_symmetric: bool) -> Un
                 'is_symmetric': str(is_symmetric)}
     return None
 
+def create_hist_dict(hist_data: List[Tuple]) -> Union[Dict, None]:
+    """
+    Create histogram dictionary from hist_data object
+    :hist: Number of occurance in given bucket
+    :xleft: Left boundary of each bucket
+    :return: Histogram Dictionary
+    """
+    hist_dict = {}
+    for xleft, hist in hist_data:
+        try:
+            hist_dict['hist'].append(hist)
+            hist_dict['xleft'].append(xleft)
+        except KeyError:
+            hist_dict['hist'] = [hist]
+            hist_dict['xleft'] = [xleft]
+    return hist_dict
 
 def compute_encoding_for_given_bitwidth(data: np.ndarray, bitwidth: int, quant_scheme: QuantScheme,
                                         is_symmetric: bool) -> Dict:
