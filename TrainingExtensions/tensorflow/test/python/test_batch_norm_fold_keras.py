@@ -830,79 +830,79 @@ class TestBatchNormFold(unittest.TestCase):
         """
         Test batch norm fold custom model
         """
+        if version.parse(tf.version.VERSION) >= version.parse("2.00"):
+            inputs = tf.keras.Input(shape=(32, 32, 3,))
+            conv = tf.keras.layers.Conv2D(32, (3, 3))(inputs)
+            bn = tf.keras.layers.BatchNormalization(fused=True)(conv, training=False)
+            relu = tf.nn.relu(bn)
+            model = tf.keras.Model(inputs=inputs, outputs=relu)
 
-        inputs = tf.keras.Input(shape=(32, 32, 3,))
-        conv = tf.keras.layers.Conv2D(32, (3, 3))(inputs)
-        bn = tf.keras.layers.BatchNormalization(fused=True)(conv, training=False)
-        relu = tf.nn.relu(bn)
-        model = tf.keras.Model(inputs=inputs, outputs=relu)
+            np.random.seed(0)
+            w_shape = model._layers[0].input.shape
+            numpy_data = np.random.rand(1, w_shape[1], w_shape[2], w_shape[3]).astype(np.float32)
 
-        np.random.seed(0)
-        w_shape = model._layers[0].input.shape
-        numpy_data = np.random.rand(1, w_shape[1], w_shape[2], w_shape[3]).astype(np.float32)
+            baseline_output = model(numpy_data)
 
-        baseline_output = model(numpy_data)
+            fold_all_batch_norms(model)
+            output_after_fold = model(numpy_data)
 
-        fold_all_batch_norms(model)
-        output_after_fold = model(numpy_data)
-
-        self.assertTrue(np.allclose(baseline_output, output_after_fold, atol=1.e-4))
+            self.assertTrue(np.allclose(baseline_output, output_after_fold, atol=1.e-4))
 
     def test_batch_norm_fold_with_random_data(self):
         """
         Test batch norm fold custom model with randomly initialized kernel, bias and bn params,
         """
+        if version.parse(tf.version.VERSION) >= version.parse("2.00"):
+            inputs = tf.keras.Input(shape=(32, 32, 3,))
+            conv = tf.keras.layers.Conv2D(32, (3, 3),
+                                             kernel_initializer=tf.random_uniform_initializer(-1, 1),
+                                             bias_initializer='random_uniform')(inputs)
+            bn = tf.keras.layers.BatchNormalization(fused=True,
+                                                       beta_initializer='random_uniform',
+                                                       gamma_initializer='random_uniform',
+                                                       moving_mean_initializer='random_uniform',
+                                                       moving_variance_initializer='ones')(conv, training=False)
+            relu = tf.nn.relu(bn)
 
-        inputs = tf.keras.Input(shape=(32, 32, 3,))
-        conv = tf.keras.layers.Conv2D(32, (3, 3),
-                                         kernel_initializer=tf.random_uniform_initializer(-1, 1),
-                                         bias_initializer='random_uniform')(inputs)
-        bn = tf.keras.layers.BatchNormalization(fused=True,
-                                                   beta_initializer='random_uniform',
-                                                   gamma_initializer='random_uniform',
-                                                   moving_mean_initializer='random_uniform',
-                                                   moving_variance_initializer='ones')(conv, training=False)
-        relu = tf.nn.relu(bn)
+            model = tf.keras.Model(inputs=inputs, outputs=relu)
 
-        model = tf.keras.Model(inputs=inputs, outputs=relu)
+            np.random.seed(0)
+            w_shape = model._layers[0].input.shape
+            numpy_data = np.random.rand(1, w_shape[1], w_shape[2], w_shape[3]).astype(np.float32)
+            baseline_output = model(numpy_data)
 
-        np.random.seed(0)
-        w_shape = model._layers[0].input.shape
-        numpy_data = np.random.rand(1, w_shape[1], w_shape[2], w_shape[3]).astype(np.float32)
-        baseline_output = model(numpy_data)
+            fold_all_batch_norms(model)
 
-        fold_all_batch_norms(model)
+            output_after_fold = model(numpy_data)
 
-        output_after_fold = model(numpy_data)
-
-        self.assertFalse(np.allclose(baseline_output, output_after_fold, atol=0))
-        self.assertTrue(np.allclose(baseline_output, output_after_fold, atol=1e-4))
+            self.assertFalse(np.allclose(baseline_output, output_after_fold, atol=0))
+            self.assertTrue(np.allclose(baseline_output, output_after_fold, atol=1e-4))
 
     def test_bn_fold_with_linear_layer(self):
         """
         Custom Model where BN layer is followed by Dense layer
         :return:
         """
+        if version.parse(tf.version.VERSION) >= version.parse("2.00"):
+            inputs = tf.keras.Input(shape=(1, 1, 4,))
+            bn = tf.keras.layers.BatchNormalization(fused=True)(inputs, training=False)
+            x = tf.keras.layers.Flatten()(bn)
+            dense = tf.keras.layers.Dense(2, activation=tf.nn.relu, name="linear_layer")(x)
+            model = tf.keras.Model(inputs=inputs, outputs=dense)
 
-        inputs = tf.keras.Input(shape=(1, 1, 4,))
-        bn = tf.keras.layers.BatchNormalization(fused=True)(inputs, training=False)
-        x = tf.keras.layers.Flatten()(bn)
-        dense = tf.keras.layers.Dense(2, activation=tf.nn.relu, name="linear_layer")(x)
-        model = tf.keras.Model(inputs=inputs, outputs=dense)
+            # get baseline output
+            np.random.seed(0)
+            w_shape = model._layers[0].input.shape
+            numpy_data = np.random.rand(1, w_shape[1], w_shape[2], w_shape[3]).astype(np.float32)
+            baseline_output = model(numpy_data)
+            weight_before_fold = model._layers[3].kernel.numpy()
 
-        # get baseline output
-        np.random.seed(0)
-        w_shape = model._layers[0].input.shape
-        numpy_data = np.random.rand(1, w_shape[1], w_shape[2], w_shape[3]).astype(np.float32)
-        baseline_output = model(numpy_data)
-        weight_before_fold = model._layers[3].kernel.numpy()
+            fold_all_batch_norms(model)
+            after_fold_output = model(numpy_data)
+            weight_after_fold = model._layers[3].kernel.numpy()
 
-        fold_all_batch_norms(model)
-        after_fold_output = model(numpy_data)
-        weight_after_fold = model._layers[3].kernel.numpy()
+            # check that weight got updated
+            self.assertFalse(np.allclose(weight_before_fold, weight_after_fold, atol=1e-4))
 
-        # check that weight got updated
-        self.assertFalse(np.allclose(weight_before_fold, weight_after_fold, atol=1e-4))
-
-        # check outputs are close
-        self.assertTrue(np.allclose(baseline_output, after_fold_output, atol=1e-4))
+            # check outputs are close
+            self.assertTrue(np.allclose(baseline_output, after_fold_output, atol=1e-4))
