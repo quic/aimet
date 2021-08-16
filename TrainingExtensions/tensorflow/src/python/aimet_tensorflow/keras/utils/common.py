@@ -114,7 +114,7 @@ def create_layer_to_out_node_map(cur_layer: tf.keras.Model) -> Dict[tf.keras.lay
 
     return layer_node_ref
 
-def _submodule_handler_node_to_layer_map(cur_layer: tf.keras.Model, node_layer_ref: Dict[str, List[str]]):
+def _submodule_handler_node_to_layer_map(cur_layer: tf.keras.Model, node_layer_map: Dict[str, List[str]]):
     """
     The utility to extract node_layer_map for the cur_layer submodule and provide the connectivity with the outer model
     :param cur_layer: model to obtain node_layer_ref for
@@ -124,26 +124,44 @@ def _submodule_handler_node_to_layer_map(cur_layer: tf.keras.Model, node_layer_r
              to input layer and the input layer outbounding nodes
     """
 
-    node_layer_map2 = create_node_to_layer_map(cur_layer)
-    input_layer = None
-    node_input_layer = None
-    node_after_input_layer = None
-    for key, value in node_layer_ref.items():
-        if value[1] == cur_layer:
-            for key1, value1 in node_layer_map2.items():
-                if value1[0] is None:
-                    input_layer = value1[1]
-                    node_input_layer = key1
-            for key2, value2 in node_layer_map2.items():
-                if value2[0] == [input_layer]:
-                    next_layer = value2[1]
-                    node_after_input_layer = key2
-            node_layer_ref.update({key: [value[0], next_layer]})
-        elif value[0] and cur_layer in value[0]:
-            last_layers = find_last_layers(cur_layer)
-            node_layer_ref.update({key: [last_layers, value[1]]})
+    # pylint: disable=too-many-locals
 
-    return node_layer_map2, node_input_layer, node_after_input_layer
+    # im stands for inner model
+    im_node_layer_map = create_node_to_layer_map(cur_layer)
+
+    im_input_layer = None
+    im_node_input = None
+    im_nodes_after_input_layer = []
+    im_input_layer_succeeding_layers = []
+
+    for node, in_out_layers in node_layer_map.items():
+        in_layers = in_out_layers[0]
+        out_layer = in_out_layers[1]
+        if out_layer == cur_layer:
+            # iterating through inner model node_layer_map dict to find input_layer and its inbound_node
+            for im_node, im_in_out_layers in im_node_layer_map.items():
+                im_in_layers, im_out_layer = im_in_out_layers
+                if im_in_layers is None:
+                    im_input_layer = im_out_layer
+                    im_node_input = im_node
+            # iterating through inner model node_layer_map dict to find input layer outbound nodes and its succeeding layers
+            for im_node, im_in_out_layers in im_node_layer_map.items():
+                im_in_layers, im_out_layer = im_in_out_layers
+                if im_in_layers == [im_input_layer]:
+                    im_input_layer_succeeding_layers.append(im_out_layer)
+                    im_nodes_after_input_layer.append(im_node)
+            # If there are more than one layer which input layer goes to in inner model, we need to build a connection between
+            # incoming layer of cur layer and inner model input layer (branch will not be considered in pattern)
+            if len(im_input_layer_succeeding_layers) > 1:
+                node_layer_map.update({node: [in_layers, im_input_layer]})
+            #otherwise we need to build a connection between incoming layer of cur layer and succeeding layers to inner model input layer
+            elif len(im_input_layer_succeeding_layers) == 1:
+                node_layer_map.update({node: [in_layers, im_input_layer_succeeding_layers[0]]})
+        elif in_layers and cur_layer in in_layers:
+            im_last_layers = find_last_layers(cur_layer)
+            node_layer_map.update({node: [im_last_layers, out_layer]})
+
+    return im_node_layer_map, im_node_input, im_nodes_after_input_layer
 
 def create_node_to_layer_map(cur_layer: tf.keras.Model) -> Dict[str, List[str]]:
     """
@@ -152,23 +170,25 @@ def create_node_to_layer_map(cur_layer: tf.keras.Model) -> Dict[str, List[str]]:
     :return: dictionary includes node_ref as a key, in_layers and out_layer as value
     """
 
-    node_layer_ref = {}
+    node_layer_map = {}
     # pylint: disable=protected-access
     for inner_layer in cur_layer._layers:
         for out_node in inner_layer.outbound_nodes:
-            if out_node in node_layer_ref:
-                node_layer_ref[out_node][0].append(inner_layer)
+            if out_node in node_layer_map:
+                node_layer_map[out_node][0].append(inner_layer)
             else:
-                node_layer_ref[out_node] = [[inner_layer], None]
+                node_layer_map[out_node] = [[inner_layer], None]
         for in_node in inner_layer.inbound_nodes:
-            if in_node in node_layer_ref:
-                node_layer_ref[in_node][1] = inner_layer
+            if in_node in node_layer_map:
+                node_layer_map[in_node][1] = inner_layer
             else:
-                node_layer_ref[in_node] = [None, inner_layer]
+                node_layer_map[in_node] = [None, inner_layer]
         if inner_layer.submodules:
-            node_layer_map2, node_input_layer, node_after_input_layer = _submodule_handler_node_to_layer_map(inner_layer, node_layer_ref)
-            del node_layer_map2[node_input_layer]
-            del node_layer_map2[node_after_input_layer]
-            node_layer_ref.update(node_layer_map2)
+            im_node_layer_map, im_node_input, im_nodes_after_input_layer = _submodule_handler_node_to_layer_map(inner_layer, node_layer_map)
+            if len(im_nodes_after_input_layer) == 1:
+                del im_node_layer_map[im_nodes_after_input_layer[0]]
+            del im_node_layer_map[im_node_input]
 
-    return node_layer_ref
+            node_layer_map.update(im_node_layer_map)
+
+    return node_layer_map

@@ -906,3 +906,33 @@ class TestBatchNormFold(unittest.TestCase):
 
             # check outputs are close
             self.assertTrue(np.allclose(baseline_output, after_fold_output, atol=1e-4))
+
+    def test_find_conv_bn_pairs_functional_nested(self):
+        """
+        Test case for finding conv-bn pairs when the inner model has 2 layers connected to the input
+
+        """
+        if version.parse(tf.version.VERSION) >= version.parse("2.00"):
+            inputs = tf.keras.Input((26, 26, 3))
+            conv2d_1 = tf.keras.layers.Conv2D(filters=3, kernel_size=3, strides=1)(inputs)
+            bn = tf.keras.layers.BatchNormalization(fused=True)(inputs)
+            conv2d_2 = tf.keras.layers.Conv2D(filters=3, kernel_size=3, strides=1)(bn)
+            outputs = tf.keras.layers.add([conv2d_1, conv2d_2])
+            Block1 = tf.keras.Model(inputs=inputs, outputs=outputs)
+
+            inputs2 = tf.keras.Input((28, 28, 64))
+            bn1 = tf.keras.layers.BatchNormalization(fused=True)(inputs2)
+            relu = tf.keras.layers.ReLU()(bn1)
+            conv2d_0 = tf.keras.layers.Conv2D(3, 3)(relu)
+            block1 = Block1(conv2d_0)
+            outputs = tf.keras.layers.ReLU()(block1)
+            model = tf.keras.Model(inputs=inputs2, outputs=outputs)
+
+
+            node_layer_map = common.create_node_to_layer_map(model)
+            layer_out_node_map = common.create_layer_to_out_node_map(model)
+            conv_linear_with_bn_dict = find_possible_convs_linears_bn(node_layer_map, layer_out_node_map)
+
+            self.assertEqual(10,len(node_layer_map))
+            self.assertEqual(9, len(layer_out_node_map))
+            self.assertEqual(1, len(conv_linear_with_bn_dict))
