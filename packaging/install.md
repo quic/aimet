@@ -27,10 +27,10 @@ python3 -m pip install --upgrade pip
 Go to https://github.com/quic/aimet/releases and identify the release tag of the package you want to install. 
 
 Set the `<variant_string>` to ONE of the following depending on your desired variant
-- For the PyTorch GPU variant, use `"torch-gpu"`
-- For the PyTorch CPU variant, use `"torch-cpu"`
-- For the TensorFlow GPU variant, use `"tf-gpu"`
-- For the TensorFlow CPU variant, use `"tf-cpu"`
+- For the PyTorch GPU variant, use `"torch_gpu"`
+- For the PyTorch CPU variant, use `"torch_cpu"`
+- For the TensorFlow GPU variant, use `"tf_gpu"`
+- For the TensorFlow CPU variant, use `"tf_cpu"`
 ```bash
 export AIMET_VARIANT=<variant_string>
 ```
