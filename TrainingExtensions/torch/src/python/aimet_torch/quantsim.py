@@ -653,6 +653,7 @@ class QuantizationSimModel:
         :param bw: BW used for quantization
         :return: None
         """
+        # pylint: disable=unused-argument
         return None, None
 
     def _create_encoding_dict(self, encoding: libpymo.TfEncoding, is_symmetric: bool) -> Union[Dict, None]:
