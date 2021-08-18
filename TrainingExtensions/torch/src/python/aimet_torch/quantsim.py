@@ -58,6 +58,7 @@ from aimet_torch.onnx_utils import OnnxSaver, OnnxExportApiArgs
 from aimet_torch.meta.connectedgraph import ConnectedGraph
 from aimet_torch.qc_quantize_recurrent import QcQuantizeRecurrent
 
+import libpymo
 logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Quant)
 
 
@@ -319,8 +320,7 @@ class QuantizationSimModel:
 
             raise ValueError(f'unsupported opt_args type={type(onnx_export_args)}')
 
-    @staticmethod
-    def export_torch_script_model_and_encodings(path: str, filename_prefix: str,
+    def export_torch_script_model_and_encodings(self, path: str, filename_prefix: str,
                                                 original_model: torch.nn.Module,
                                                 sim_model: torch.nn.Module,
                                                 dummy_input: Union[torch.Tensor, Tuple]):
@@ -345,11 +345,10 @@ class QuantizationSimModel:
                 torchscript_utils.get_node_to_io_tensor_names_map(original_model, trace, dummy_input)
 
         # Export encodings
-        QuantizationSimModel._export_encodings_to_files(sim_model, path, filename_prefix,
-                                                        torch_script_node_io_tensor_map, valid_param_set)
+        self._export_encodings_to_files(sim_model, path, filename_prefix,
+                                        torch_script_node_io_tensor_map, valid_param_set)
 
-    @staticmethod
-    def export_onnx_model_and_encodings(path: str, filename_prefix: str, original_model: torch.nn.Module,
+    def export_onnx_model_and_encodings(self, path: str, filename_prefix: str, original_model: torch.nn.Module,
                                         sim_model: torch.nn.Module, dummy_input: Union[torch.Tensor, Tuple],
                                         onnx_export_args: OnnxExportApiArgs):
         """
@@ -376,8 +375,8 @@ class QuantizationSimModel:
         onnx_node_to_io_tensor_map, valid_param_set = OnnxSaver.get_onnx_node_to_io_tensor_names_map(onnx_model)
 
         # Export encodings
-        QuantizationSimModel._export_encodings_to_files(sim_model, path, filename_prefix,
-                                                        onnx_node_to_io_tensor_map, valid_param_set)
+        self._export_encodings_to_files(sim_model, path, filename_prefix,
+                                        onnx_node_to_io_tensor_map, valid_param_set)
 
     def exclude_layers_from_quantization(self, layers_to_exclude: List[torch.nn.Module]):
         """
@@ -439,8 +438,7 @@ class QuantizationSimModel:
 
         return downstream_modules
 
-    @staticmethod
-    def _export_encodings_to_files(model: torch.nn.Module, path: str, filename_prefix: str, op_to_io_tensor_map: Dict,
+    def _export_encodings_to_files(self, model: torch.nn.Module, path: str, filename_prefix: str, op_to_io_tensor_map: Dict,
                                    valid_param_set: set):
         """
         Save the quantized model weight encodings
@@ -457,9 +455,9 @@ class QuantizationSimModel:
         quantized_layers = QuantizationSimModel._get_qc_quantized_layers(model)
 
         for layer_name, layer in quantized_layers:
-            QuantizationSimModel._update_encoding_dicts_for_layer(layer, layer_name, activation_encodings,
-                                                                  param_encodings, op_to_io_tensor_map,
-                                                                  valid_param_set)
+            self._update_encoding_dicts_for_layer(layer, layer_name, activation_encodings,
+                                                  param_encodings, op_to_io_tensor_map,
+                                                  valid_param_set)
 
         encodings_dict = {'version': encoding_version,
                           'activation_encodings': activation_encodings,
@@ -497,8 +495,7 @@ class QuantizationSimModel:
                 'bitwidth': bitwidth,
                 'is_symmetric': str(True)}
 
-    @staticmethod
-    def _update_param_encodings_dict_for_layer(layer: torch.nn.Module, layer_name: str, param_encodings: Dict,
+    def _update_param_encodings_dict_for_layer(self, layer: torch.nn.Module, layer_name: str, param_encodings: Dict,
                                                valid_param_set: set):
         """
         :param layer: layer as torch.nn.Module
@@ -512,7 +509,7 @@ class QuantizationSimModel:
             param_name = layer_name + '.' + orig_param_name
             if param_quantizer.enabled:
                 if param_name in valid_param_set:
-                    encoding = utils.create_encoding_dict(param_quantizer.encoding,
+                    encoding = self._create_encoding_dict(param_quantizer.encoding,
                                                           param_quantizer.use_symmetric_encodings)
                     param_encodings[param_name] = [encoding]
                 else:
@@ -534,8 +531,7 @@ class QuantizationSimModel:
                 encoding = QuantizationSimModel.generate_symmetric_encoding_dict(param, 32)
                 param_encodings[param_name] = [encoding]
 
-    @staticmethod
-    def _update_encoding_dicts_for_layer(layer: torch.nn.Module, layer_name: str, activation_encodings: Dict,
+    def _update_encoding_dicts_for_layer(self, layer: torch.nn.Module, layer_name: str, activation_encodings: Dict,
                                          param_encodings: Dict, op_to_io_tensor_map: Dict, valid_param_set: set):
         """
         Add given layer param and activation encodings to respective dictionaries to be used for exporting encodings
@@ -561,29 +557,29 @@ class QuantizationSimModel:
                 input_tensors = [t for t in op_to_io_tensor_map[layer_name].inputs if t not in param_inputs]
                 for index, input_tensor in enumerate(input_tensors):
                     if (index < len(layer.input_quantizers)) and layer.input_quantizers[index].enabled:
-                        encoding = utils.create_encoding_dict(layer.input_quantizers[index].encoding,
+                        encoding = self._create_encoding_dict(layer.input_quantizers[index].encoding,
                                                               layer.input_quantizers[index].use_symmetric_encodings)
                         activation_encodings[input_tensor] = [encoding]
 
                 if layer.output_quantizers[0].enabled:
                     if op_to_io_tensor_map[layer_name].outputs:
                         for output_tensor in op_to_io_tensor_map[layer_name].outputs:
-                            encoding = utils.create_encoding_dict(layer.output_quantizers[0].encoding,
+                            encoding = self._create_encoding_dict(layer.output_quantizers[0].encoding,
                                                                   layer.output_quantizers[0].use_symmetric_encodings)
                             activation_encodings[output_tensor] = [encoding]
 
                 # get param quantizers
-                QuantizationSimModel._update_param_encodings_dict_for_layer(layer, layer_name, param_encodings,
-                                                                            valid_param_set)
+                self._update_param_encodings_dict_for_layer(layer, layer_name, param_encodings,
+                                                            valid_param_set)
 
             if isinstance(layer, QcQuantizeRecurrent):
                 onnx_activations_to_quantizers, onnx_params_to_quantizers = \
                     layer.get_activation_param_quantizers_for_onnx_tensors(op_to_io_tensor_map[layer_name])
                 for tensor, quantizer in onnx_activations_to_quantizers.items():
-                    encoding = utils.create_encoding_dict(quantizer.encoding, quantizer.use_symmetric_encodings)
+                    encoding = self._create_encoding_dict(quantizer.encoding, quantizer.use_symmetric_encodings)
                     activation_encodings[tensor] = [encoding]
                 for tensor, quantizer in onnx_params_to_quantizers.items():
-                    encoding = utils.create_encoding_dict(quantizer.encoding, quantizer.use_symmetric_encodings)
+                    encoding = self._create_encoding_dict(quantizer.encoding, quantizer.use_symmetric_encodings)
                     param_encodings[tensor] = [encoding]
 
     @staticmethod
@@ -648,6 +644,36 @@ class QuantizationSimModel:
             # recursively call children modules
             else:
                 self._add_quantization_wrappers(module_ref, num_inout_tensors)
+
+    @staticmethod
+    def _calculate_delta_offset(encoding_min: float, encoding_max: float, bw: int):
+        """
+        :param encoding_min: Encoding minimum
+        :param encoding_max: Encoding maximum
+        :param bw: BW used for quantization
+        :return: None
+        """
+        return None, None
+
+    def _create_encoding_dict(self, encoding: libpymo.TfEncoding, is_symmetric: bool) -> Union[Dict, None]:
+        """
+        Create encoding dictionary from encoding object
+        :param encoding: Encoding object
+        :param is_symmetric: Symmetric vs asymmetric boolean
+        :return: Encoding Dictionary
+        """
+        if encoding:
+            encoding_min, encoding_max, bw, scale, offset = encoding.min, encoding.max, encoding.bw, encoding.delta, \
+                                                            encoding.offset
+            if self._quant_scheme not in [QuantScheme.post_training_tf, QuantScheme.post_training_tf_enhanced]:
+                scale, offset = self._calculate_delta_offset(encoding_min, encoding_max, bw)
+            return {'min': encoding_min,
+                    'max': encoding_max,
+                    'scale': scale,
+                    'offset': offset,
+                    'bitwidth': bw,
+                    'is_symmetric': str(is_symmetric)}
+        return None
 
     @classmethod
     def _remove_quantization_wrappers(cls, starting_module, list_of_modules_to_exclude):
