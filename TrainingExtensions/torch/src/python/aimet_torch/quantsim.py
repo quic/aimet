@@ -654,7 +654,8 @@ class QuantizationSimModel:
         :return: None
         """
         # pylint: disable=unused-argument
-        return None, None
+        raise RuntimeError('Function should not be called if quant scheme are either QuantScheme.post_training_tf or'
+                           ' QuantScheme.post_training_tf_enhanced')
 
     def _create_encoding_dict(self, encoding: libpymo.TfEncoding, is_symmetric: bool) -> Union[Dict, None]:
         """
