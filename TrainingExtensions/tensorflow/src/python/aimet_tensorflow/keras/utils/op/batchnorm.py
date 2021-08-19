@@ -49,6 +49,7 @@ class BNUtils:
     def modify_bn_params_to_make_as_passthrough(bn: tf.keras.layers.BatchNormalization):
         """
         To change the batch normalization parameters to work as no-op operation
+
         :bn: Batch normalization layer that should be worked as passthrough op (no-op)
         """
 
