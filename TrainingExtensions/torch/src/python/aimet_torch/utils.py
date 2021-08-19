@@ -48,7 +48,6 @@ from torchvision import datasets, transforms
 
 from aimet_common.defs import QuantScheme
 from aimet_common.utils import AimetLogger
-from aimet_common.quantsim import calculate_delta_offset
 import libpymo
 
 
@@ -603,25 +602,6 @@ def create_encoding_from_dict(encoding_dict: dict) -> (libpymo.TfEncoding, bool)
     encoding.offset = encoding_dict.get('offset')
     is_symmetric = eval(encoding_dict.get('is_symmetric'))  # pylint: disable=eval-used
     return encoding, is_symmetric
-
-
-def create_encoding_dict(encoding: libpymo.TfEncoding, is_symmetric: bool) -> Union[Dict, None]:
-    """
-    Create encoding dictionary from encoding object
-    :param encoding: Encoding object
-    :param is_symmetric: Symmetric vs asymmetric boolean
-    :return: Encoding Dictionary
-    """
-    if encoding:
-        encoding_min, encoding_max, bw = encoding.min, encoding.max, encoding.bw
-        scale, offset = calculate_delta_offset(encoding_min, encoding_max, bw)
-        return {'min': encoding_min,
-                'max': encoding_max,
-                'scale': scale,
-                'offset': offset,
-                'bitwidth': bw,
-                'is_symmetric': str(is_symmetric)}
-    return None
 
 
 def compute_encoding_for_given_bitwidth(data: np.ndarray, bitwidth: int, quant_scheme: QuantScheme,
