@@ -44,7 +44,7 @@ import numpy as np
 from packaging import version
 
 from aimet_tensorflow.keras.utils import common
-from aimet_tensorflow.keras.batch_norm_fold import _delete_all_bns_from_model, find_possible_convs_linears_bn, get_ordered_conv_linears, find_all_batch_norms_to_fold, fold_all_batch_norms
+from aimet_tensorflow.keras.batch_norm_fold import _delete_all_bns_from_model, _find_possible_convs_linears_bn, _get_ordered_conv_linears, _find_all_batch_norms_to_fold, fold_all_batch_norms
 from aimet_tensorflow.keras.utils.op.batchnorm import BNUtils
 
 class TestBatchNormFold(unittest.TestCase):
@@ -323,7 +323,7 @@ class TestBatchNormFold(unittest.TestCase):
 
         model = chain_model(3, (3, 3), 1)
 
-        bn_layers = list()
+        bn_layers = []
         bn = model.block2.get_layer(index =3).block3.get_layer(index=0)
         bn_layers.append(bn)
         bn = model.bn1
@@ -378,7 +378,7 @@ class TestBatchNormFold(unittest.TestCase):
 
         model = chain_model(3, (3, 3), 1)
 
-        bn_layers = list()
+        bn_layers = []
         bn = model.block1.block3.get_layer(index=0)
         bn_layers.append(bn)
         bn = model.block1.bn1
@@ -430,7 +430,7 @@ class TestBatchNormFold(unittest.TestCase):
 
         model = chain_model(3, (3, 3), 1)
 
-        bn_layers = list()
+        bn_layers = []
         bn = model.block2.get_layer(index=3).get_layer(index=2).get_layer(index=0)
         bn_layers.append(bn)
         bn = model.block2.get_layer(index=3).get_layer(index=3)
@@ -509,7 +509,7 @@ class TestBatchNormFold(unittest.TestCase):
 
             node_layer_map = common.create_node_to_layer_map(model)
             layer_out_node_map = common.create_layer_to_out_node_map(model)
-            conv_linear_with_bn_dict = find_possible_convs_linears_bn(node_layer_map, layer_out_node_map)
+            conv_linear_with_bn_dict = _find_possible_convs_linears_bn(node_layer_map, layer_out_node_map)
 
             self.assertFalse(model.conv1 in conv_linear_with_bn_dict)
             self.assertFalse(model.bn1 in conv_linear_with_bn_dict)
@@ -533,7 +533,7 @@ class TestBatchNormFold(unittest.TestCase):
 
         node_layer_map = common.create_node_to_layer_map(model)
         layer_out_node_map = common.create_layer_to_out_node_map(model)
-        conv_linear_with_bn_dict = find_possible_convs_linears_bn(node_layer_map, layer_out_node_map)
+        conv_linear_with_bn_dict = _find_possible_convs_linears_bn(node_layer_map, layer_out_node_map)
 
         self.assertEqual(3, len(conv_linear_with_bn_dict))
 
@@ -554,7 +554,7 @@ class TestBatchNormFold(unittest.TestCase):
 
             node_layer_map = common.create_node_to_layer_map(Block2)
             layer_out_node_map = common.create_layer_to_out_node_map(Block2)
-            conv_linear_with_bn_dict = find_possible_convs_linears_bn(node_layer_map, layer_out_node_map)
+            conv_linear_with_bn_dict = _find_possible_convs_linears_bn(node_layer_map, layer_out_node_map)
 
             self.assertTrue(Block1._layers[3] in conv_linear_with_bn_dict)
             self.assertEqual(1, len(conv_linear_with_bn_dict))
@@ -575,7 +575,7 @@ class TestBatchNormFold(unittest.TestCase):
 
         node_layer_map = common.create_node_to_layer_map(model)
         layer_out_node_map = common.create_layer_to_out_node_map(model)
-        ordered_conv_linears = get_ordered_conv_linears(node_layer_map, layer_out_node_map)
+        ordered_conv_linears = _get_ordered_conv_linears(node_layer_map, layer_out_node_map)
 
         for layer in model._layers:
             if layer.name == 'conv1a':
@@ -600,7 +600,7 @@ class TestBatchNormFold(unittest.TestCase):
 
             node_layer_map = common.create_node_to_layer_map(Block2)
             layer_out_node_map = common.create_layer_to_out_node_map(Block2)
-            ordered_conv_linears = get_ordered_conv_linears(node_layer_map, layer_out_node_map)
+            ordered_conv_linears = _get_ordered_conv_linears(node_layer_map, layer_out_node_map)
             self.assertEqual(Block2._layers[3], ordered_conv_linears[0])
 
     def test_ordered_conv_linears_combined_model(self):
@@ -648,7 +648,7 @@ class TestBatchNormFold(unittest.TestCase):
 
             node_layer_map = common.create_node_to_layer_map(model)
             layer_out_node_map = common.create_layer_to_out_node_map(model)
-            ordered_conv_linears = get_ordered_conv_linears(node_layer_map, layer_out_node_map)
+            ordered_conv_linears = _get_ordered_conv_linears(node_layer_map, layer_out_node_map)
 
             self.assertEqual(model.conv1, ordered_conv_linears[0])
             self.assertEqual(model.dn1, ordered_conv_linears[1])
@@ -667,7 +667,7 @@ class TestBatchNormFold(unittest.TestCase):
         Block1.add(tf.keras.layers.Conv2D(6, 6))
         Block1.add(tf.keras.layers.ReLU())
 
-        conv_bn_pairs = find_all_batch_norms_to_fold(Block1)
+        conv_bn_pairs = _find_all_batch_norms_to_fold(Block1)
         self.assertEqual(1, len(conv_bn_pairs))
         self.assertEqual((Block1._layers[3], Block1._layers[4], True), conv_bn_pairs[0])
 
@@ -685,7 +685,7 @@ class TestBatchNormFold(unittest.TestCase):
         output = tf.keras.layers.ReLU()(bn_op)
         model = tf.keras.Model(input1, output)
 
-        conv_bn_pairs = find_all_batch_norms_to_fold(model)
+        conv_bn_pairs = _find_all_batch_norms_to_fold(model)
         self.assertEqual(4, len(conv_bn_pairs))
 
     def test_find_all_bns_to_fold_combined_model(self):
@@ -731,7 +731,7 @@ class TestBatchNormFold(unittest.TestCase):
 
             model = MyModelMLP((64,64,64))
 
-            conv_bn_pairs = find_all_batch_norms_to_fold(model)
+            conv_bn_pairs = _find_all_batch_norms_to_fold(model)
 
             self.assertEqual(3, len(conv_bn_pairs))
             self.assertEqual((model._layers[4]._layers[2], model._layers[4]._layers[1], False), conv_bn_pairs[0])
@@ -748,7 +748,7 @@ class TestBatchNormFold(unittest.TestCase):
         relu = tf.nn.relu(bn_op)
         model = tf.keras.Model(inputs = inputs, outputs = relu)
 
-        bn_conv_linear_pairs = find_all_batch_norms_to_fold(model)
+        bn_conv_linear_pairs = _find_all_batch_norms_to_fold(model)
         self.assertEqual(1, len(bn_conv_linear_pairs))
 
     def test_bn_fold_layer_selection_looped_network(self):
@@ -772,7 +772,7 @@ class TestBatchNormFold(unittest.TestCase):
 
         model = tf.keras.Model(inputs=input1, outputs=x2)
 
-        bn_conv_linear_pairs = find_all_batch_norms_to_fold(model)
+        bn_conv_linear_pairs = _find_all_batch_norms_to_fold(model)
 
         self.assertEqual(0, len(bn_conv_linear_pairs))
 
@@ -786,7 +786,7 @@ class TestBatchNormFold(unittest.TestCase):
         relu = tf.nn.relu(conv_op)
         model = tf.keras.Model(inputs=inputs, outputs=relu)
 
-        bn_conv_linear_pairs = find_all_batch_norms_to_fold(model)
+        bn_conv_linear_pairs = _find_all_batch_norms_to_fold(model)
         self.assertEqual(1, len(bn_conv_linear_pairs))
 
     def test_bn_fold_find_layers_model_with_multi_input(self):
@@ -804,7 +804,7 @@ class TestBatchNormFold(unittest.TestCase):
         relu = tf.nn.relu(bn_op)
         model = tf.keras.Model(inputs=[input1, input2], outputs=relu)
 
-        bn_conv_linear_pairs = find_all_batch_norms_to_fold(model)
+        bn_conv_linear_pairs = _find_all_batch_norms_to_fold(model)
         self.assertEqual(1, len(bn_conv_linear_pairs))
 
     def test_bn_fold_auto_rules_conv_bn_conv(self):
@@ -819,7 +819,7 @@ class TestBatchNormFold(unittest.TestCase):
         relu = tf.nn.relu(conv2)
         model = tf.keras.Model(inputs=inputs, outputs=relu)
 
-        bn_conv_linear_pairs = find_all_batch_norms_to_fold(model)
+        bn_conv_linear_pairs = _find_all_batch_norms_to_fold(model)
         self.assertEqual(1, len(bn_conv_linear_pairs))
         conv_linear, batchnorm, is_batch_norm_second = bn_conv_linear_pairs[0]
         self.assertEqual('conv1', conv_linear.name)
@@ -931,7 +931,7 @@ class TestBatchNormFold(unittest.TestCase):
 
             node_layer_map = common.create_node_to_layer_map(model)
             layer_out_node_map = common.create_layer_to_out_node_map(model)
-            conv_linear_with_bn_dict = find_possible_convs_linears_bn(node_layer_map, layer_out_node_map)
+            conv_linear_with_bn_dict = _find_possible_convs_linears_bn(node_layer_map, layer_out_node_map)
 
             self.assertEqual(10,len(node_layer_map))
             self.assertEqual(9, len(layer_out_node_map))
