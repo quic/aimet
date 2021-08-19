@@ -342,17 +342,17 @@ class ConnectedGraph(aimetCommonConnectedGraph):
             """ Create products for fusedbatchnorm """
             tf_op = my_op.get_module()
 
-            beta_tensor = BNUtils.get_beta_read_var_op_tensor(tf_op)
+            beta_tensor = BNUtils.get_beta_read_var_op_tensor(self._graph, tf_op)
             create_and_connect_product('beta', beta_tensor.shape, my_op, beta_tensor)
 
-            gamma_tensor = BNUtils.get_gamma_read_var_op_tensor(tf_op)
+            gamma_tensor = BNUtils.get_gamma_read_var_op_tensor(self._graph, tf_op)
             create_and_connect_product('gamma', gamma_tensor.shape, my_op, gamma_tensor)
 
-            moving_mean_tensor = BNUtils.get_moving_mean_read_var_op_tensor(tf_op)
+            moving_mean_tensor = BNUtils.get_moving_mean_read_var_op_tensor(self._graph, tf_op)
             create_and_connect_product('moving_mean', moving_mean_tensor.shape, my_op,
                                        moving_mean_tensor)
 
-            moving_variance_tensor = BNUtils.get_moving_variance_read_var_op_tensor(tf_op)
+            moving_variance_tensor = BNUtils.get_moving_variance_read_var_op_tensor(self._graph, tf_op)
             create_and_connect_product('moving_variance', moving_variance_tensor.shape, my_op,
                                        moving_variance_tensor)
 
