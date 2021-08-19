@@ -140,7 +140,7 @@ class BNUtils:
         return beta_read
 
     @staticmethod
-    def get_beta_read_var_op_tensor(bn_op: tf.Operation) -> tf.Tensor:
+    def _get_beta_read_var_op_tensor_using_structure(bn_op: tf.Operation) -> tf.Tensor:
         """
         Get beta readVariableOp tensor from BN op specified.
 
@@ -159,6 +159,26 @@ class BNUtils:
         return beta_read_tensor
 
     @staticmethod
+    def get_beta_read_var_op_tensor(graph: tf.Graph, bn_op: tf.Operation) -> tf.Tensor:
+        """
+        Get beta readVariableOp tensor from BN op specified.
+
+        :param graph: TensorFlow graph
+        :param bn_op: FusedBatchNorm as tf.Operation
+        :return: tensor associated with bn op beta readVariableOp type, as tf.Tensor
+        """
+        try:
+            # try name based tensor look up for Keras layers
+            beta_read_tensor = BNUtils._get_bn_param_tensor_using_name(graph, bn_op,
+                                                                       constants.BNOpParamType.beta)
+        except KeyError:
+            # if we can't find the tensor name, use structure match
+            # to figure out the read tensor for param
+            beta_read_tensor = BNUtils._get_beta_read_var_op_tensor_using_structure(bn_op)
+
+        return beta_read_tensor
+
+    @staticmethod
     def get_beta_as_numpy_data(sess: tf.compat.v1.Session, bn_op: tf.Operation) -> np.ndarray:
         """
         Get beta param from BN op specified.
@@ -167,14 +187,8 @@ class BNUtils:
         :param bn_op: bn_op as tf.Operation
         :return: beta tensor as numpy data
         """
-        try:
-            # try name based tensor look up for Keras layers
-            beta_tensor = BNUtils._get_bn_param_tensor_using_name(sess, bn_op,
-                                                                  constants.BNOpParamType.beta)
-        except KeyError:
-            # if we can't find the tensor name, use structure match
-            # to figure out the read tensor for param
-            beta_tensor = BNUtils.get_beta_read_var_op_tensor(bn_op)
+
+        beta_tensor = BNUtils.get_beta_read_var_op_tensor(sess.graph, bn_op)
 
         with sess.graph.as_default():
             numpy_data = sess.run(beta_tensor)
@@ -208,7 +222,7 @@ class BNUtils:
         return gamma_read
 
     @staticmethod
-    def get_gamma_read_var_op_tensor(bn_op: tf.Operation) -> tf.Tensor:
+    def _get_gamma_read_var_op_tensor_using_structure(bn_op: tf.Operation) -> tf.Tensor:
         """
         Get the gamma read var op tensor associated with the batchnorm op.
 
@@ -226,6 +240,26 @@ class BNUtils:
         return gamma_read_tensor
 
     @staticmethod
+    def get_gamma_read_var_op_tensor(graph: tf.Graph, bn_op: tf.Operation) -> tf.Tensor:
+        """
+        Get the gamma read var op tensor associated with the batchnorm op.
+
+        :param graph: TensorFlow graph
+        :param bn_op: Batchnorm op to get gamma read var op tensor from
+        :return: Gamma read var op tensor associated with bn_op
+        """
+        try:
+            # try name based tensor look up for Keras layers
+            gamma_read_tensor = BNUtils._get_bn_param_tensor_using_name(graph, bn_op,
+                                                                        constants.BNOpParamType.gamma)
+        except KeyError:
+            # if we can't find the tensor name, use structure match
+            # to figure out the read tensor for param
+            gamma_read_tensor = BNUtils._get_gamma_read_var_op_tensor_using_structure(bn_op)
+
+        return gamma_read_tensor
+
+    @staticmethod
     def get_gamma_as_numpy_data(sess: tf.compat.v1.Session, bn_op: tf.Operation) -> np.ndarray:
         """
         Get gamma param from BN op specified.
@@ -234,14 +268,8 @@ class BNUtils:
         :param bn_op: bn_op obtained from connected graph using get_modules (is mul_1 op inside BN scope)
         :return: gamma as numpy data
         """
-        try:
-            # try name based tensor look up for Keras layers
-            gamma_tensor = BNUtils._get_bn_param_tensor_using_name(sess, bn_op,
-                                                                   constants.BNOpParamType.gamma)
-        except KeyError:
-            # if we can't find the tensor name, use structure match
-            # to figure out the read tensor for param
-            gamma_tensor = BNUtils.get_gamma_read_var_op_tensor(bn_op)
+
+        gamma_tensor = BNUtils.get_gamma_read_var_op_tensor(sess.graph, bn_op)
 
         with sess.graph.as_default():
             numpy_data = sess.run(gamma_tensor)
@@ -357,7 +385,7 @@ class BNUtils:
         return moving_var_read
 
     @staticmethod
-    def get_moving_variance_read_var_op_tensor(bn_op: tf.Operation) -> tf.Tensor:
+    def _get_moving_variance_read_var_op_tensor_using_structure(bn_op: tf.Operation) -> tf.Tensor:
         """
         Get moving variance readVariableOp tensor from BN op specified.
 
@@ -391,6 +419,26 @@ class BNUtils:
         return moving_var_read_tensor
 
     @staticmethod
+    def get_moving_variance_read_var_op_tensor(graph: tf.Graph, bn_op: tf.Operation) -> tf.Tensor:
+        """
+        Get moving variance readVariableOp tensor from BN op specified.
+
+        :param graph: TensorFlow graph
+        :param bn_op: FusedBatchNorm as tf.Operation
+        :return: tensor associated with bn op moving variance readVariableOp type, as tf.Tensor
+        """
+        try:
+            # try name based tensor look up for Keras layers
+            moving_var_read_tensor = BNUtils._get_bn_param_tensor_using_name(graph, bn_op,
+                                                                             constants.BNOpParamType.moving_variance)
+        except KeyError:
+            # if we can't find the tensor name, use structure match
+            # to figure out the read tensor for param
+            moving_var_read_tensor = BNUtils._get_moving_variance_read_var_op_tensor_using_structure(bn_op)
+
+        return moving_var_read_tensor
+
+    @staticmethod
     def get_moving_variance_as_numpy_data(sess: tf.compat.v1.Session, bn_op: tf.Operation) -> np.ndarray:
         """
         Get moving variance param from BN op specified.
@@ -400,14 +448,7 @@ class BNUtils:
         :return: moving variance as numpy data
         """
 
-        try:
-            # try name based tensor look up for Keras layers
-            moving_var_tensor = BNUtils._get_bn_param_tensor_using_name(sess, bn_op,
-                                                                        constants.BNOpParamType.moving_variance)
-        except KeyError:
-            # if we can't find the tensor name, use structure match
-            # to figure out the read tensor for param
-            moving_var_tensor = BNUtils.get_moving_variance_read_var_op_tensor(bn_op)
+        moving_var_tensor = BNUtils.get_moving_variance_read_var_op_tensor(sess.graph, bn_op)
 
         with sess.graph.as_default():
             numpy_data = sess.run(moving_var_tensor)
@@ -520,7 +561,7 @@ class BNUtils:
         return moving_mean_read
 
     @staticmethod
-    def get_moving_mean_read_var_op_tensor(bn_op: tf.Operation) -> tf.Tensor:
+    def _get_moving_mean_read_var_op_tensor_using_structure(bn_op: tf.Operation) -> tf.Tensor:
         """
         Get moving mean readVariableOp tensor from BN op specified.
 
@@ -554,6 +595,26 @@ class BNUtils:
         return moving_mean_read_tensor
 
     @staticmethod
+    def get_moving_mean_read_var_op_tensor(graph: tf.Graph, bn_op: tf.Operation) -> tf.Tensor:
+        """
+        Get moving mean readVariableOp tensor from BN op specified.
+
+        :param graph: TensorFlow graph
+        :param bn_op: FusedBatchNorm as tf.Operation
+        :return: tensor associated with bn op moving mean readVariableOp type, as tf.Tensor
+        """
+        try:
+            # try name based tensor look up for Keras layers
+            moving_mean_read_tensor = BNUtils._get_bn_param_tensor_using_name(graph, bn_op,
+                                                                              constants.BNOpParamType.moving_mean)
+        except KeyError:
+            # if we can't find the tensor name, use structure match
+            # to figure out the read tensor for param
+            moving_mean_read_tensor = BNUtils._get_moving_mean_read_var_op_tensor_using_structure(bn_op)
+
+        return moving_mean_read_tensor
+
+    @staticmethod
     def get_moving_mean_as_numpy_data(sess: tf.compat.v1.Session, bn_op: tf.Operation) -> np.ndarray:
         """
         Get moving mean param from BN op specified.
@@ -563,14 +624,7 @@ class BNUtils:
         :return: moving mean as numpy data
         """
 
-        try:
-            # try name based tensor look up for Keras layers
-            moving_mean_tensor = BNUtils._get_bn_param_tensor_using_name(sess, bn_op,
-                                                                         constants.BNOpParamType.moving_mean)
-        except KeyError:
-            # if we can't find the tensor name, use structure match
-            # to figure out the read tensor for param
-            moving_mean_tensor = BNUtils.get_moving_mean_read_var_op_tensor(bn_op)
+        moving_mean_tensor = BNUtils.get_moving_mean_read_var_op_tensor(sess.graph, bn_op)
 
         with sess.graph.as_default():
             numpy_data = sess.run(moving_mean_tensor)
@@ -672,11 +726,11 @@ class BNUtils:
                 logger.debug('Removed %s from update ops', assign_moving_avg_op_1.name)
 
     @staticmethod
-    def _get_bn_param_tensor_using_name(sess: tf.compat.v1.Session, bn_op: tf.Operation, param_type: constants.BNOpParamType):
+    def _get_bn_param_tensor_using_name(graph: tf.Graph, bn_op: tf.Operation, param_type: constants.BNOpParamType):
         """
         Helper to get BN op param read tensor.
 
-        :param sess: TensorFlow session tf.compat.v1.Session
+        :param graph: TensorFlow graph
         :param bn_op: BN op from which param read tensor is to be extracted
         :param param_type: param type for which param tensor is to be extracted, as constants.BNOpParamType (supported
             types are beta, gamma, moving_mean or moving_variance)
@@ -691,7 +745,7 @@ class BNUtils:
         # we need only the bn_name to make param tensor names
         op_name = bn_op.name.split('/')[0]
         param_tensor_name = op_name + constants.BN_OP_PARAM_NAME_SUFFIX[param_type]
-        param_tensor = sess.graph.get_tensor_by_name(param_tensor_name)
+        param_tensor = graph.get_tensor_by_name(param_tensor_name)
 
         return param_tensor
 
