@@ -723,7 +723,7 @@ class ChannelPruningAcceptanceTests(unittest.TestCase):
 
         with graph.as_default():
 
-            _ = ResNet50(input_shape=(224, 224, 3))
+            _ = ResNet50(weights=None, input_shape=(224, 224, 3))
             init = tf.compat.v1.global_variables_initializer()
 
         # Grow GPU memory as needed at the cost of fragmentation.
