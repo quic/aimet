@@ -273,7 +273,9 @@ def compress_and_finetune(config: argparse.Namespace):
 
     # Compress the model using AIMET Channel Pruning
     data_loader = ImageNetDataLoader(is_training=True, images_dir=_config.dataset_dir, image_size=224).data_loader
-    compressed_model, eval_dict = aimet_channel_pruning(model=model, evaluator=data_pipeline.evaluate, data_loader=data_loader)
+
+    # Compress the model using AIMET Weight SVD
+    compressed_model, eval_dict = aimet_spatial_svd(model=model, evaluator=data_pipeline.evaluate)
 
     # Log the statistics
     logger.info(eval_dict)
@@ -282,23 +284,20 @@ def compress_and_finetune(config: argparse.Namespace):
 
     # Calculate and log the accuracy of compressed model
     accuracy = data_pipeline.evaluate(compressed_model, use_cuda=config.use_cuda)
-    logger.info("Channel Pruning Model Top-1 accuracy = %.2f", accuracy)
-
-    logger.info("...Channel Pruning Complete")
+    logger.info("Spatial SVD Model Top-1 accuracy = %.2f", accuracy)
 
     # Finetune
     logger.info("Starting Model Finetuning...")
-
+    
     # Finetune the compressed model
     data_pipeline.finetune(compressed_model)
 
     # Calculate and logs the accuracy of compressed-finetuned model
     accuracy = data_pipeline.evaluate(compressed_model, use_cuda=config.use_cuda)
-    logger.info("Finetuned Channel Pruning Model Top-1 accuracy = %.2f", accuracy)
-
-    # Compress the model using AIMET Weight SVD
-    compressed_model, eval_dict = aimet_spatial_svd(model=compressed_model, evaluator=data_pipeline.evaluate)
+    logger.info("Finetuned SVD Model Top-1 accuracy = %.2f", accuracy)
     
+    compressed_model, eval_dict = aimet_channel_pruning(model=compressed_model, evaluator=data_pipeline.evaluate, data_loader=data_loader)
+
     # Log the statistics
     logger.info(eval_dict)
     with open(os.path.join(config.logdir, 'log.txt'), "w") as outfile:
