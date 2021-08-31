@@ -34,6 +34,7 @@
 #
 #  @@-COPYRIGHT-END-@@
 # =============================================================================
+import copy
 
 import pytest
 import torch
@@ -432,3 +433,10 @@ class TestQcQuantizeOp:
         delta = process.memory_info().rss - baseline_mem
         assert 100000 >= delta
 
+    def test_compute_encoding_for_tensor_quantizer_with_no_stats(self):
+        quantizer = StaticGridPerTensorQuantizer(bitwidth=8, round_mode='nearest',
+                                                 quant_scheme=MAP_QUANT_SCHEME_TO_PYMO[
+                                                     QuantScheme.post_training_tf_enhanced],
+                                                 use_symmetric_encodings=False, enabled_by_default=True)
+        quantizer.compute_encoding()
+        assert quantizer._encoding == []
