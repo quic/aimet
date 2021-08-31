@@ -111,13 +111,16 @@ class TestBiasCorrection(unittest.TestCase):
 
         WeightTensorUtils.update_tensor_for_op(sess, conv_op, w_numpy_data)
         BiasUtils.update_bias_for_op(sess, conv_op, b_numpy_data)
+        conv_op = sess.graph.get_operation_by_name('conv2d/Conv2D')
+        bool_ = BiasUtils.is_bias_none(conv_op)
 
         # save and load the updated graph after high bias fold update
         n_sess = aimet_tensorflow.utils.graph_saver.save_and_load_graph('./test_update', sess)
 
         output_op = n_sess.graph.get_operation_by_name('Relu_1')
         conv_op = n_sess.graph.get_operation_by_name('conv2d/Conv2D')
-        bias_data = BiasUtils.get_bias_as_numpy_data(n_sess, conv_op)
+        import copy
+        bias_data = copy.deepcopy(BiasUtils.get_bias_as_numpy_data(n_sess, conv_op))
 
         input_op_name = conv_op.inputs[0].op.name
 
@@ -134,15 +137,17 @@ class TestBiasCorrection(unittest.TestCase):
 
         with unittest.mock.patch('aimet_tensorflow.bias_correction.iter_first_x') as iter_first_x:
             iter_first_x.return_value = [dataset]
-            BiasCorrection.bias_correction_per_layer(reference_model=n_sess,
-                                                     corrected_model=n_sess,
+            quantsim = BiasCorrection._get_quantized_model(n_sess, quant_params, bias_corr_input.input_op_names,
+                                                           bias_corr_input.output_op_names, bias_corr_input.num_quant_samples,
+                                                           bias_corr_input.batch_size, dataset)
+            BiasCorrection.bias_correction_per_layer(reference_model=sess,
+                                                     corrected_model=quantsim.session,
                                                      bias_correct_params= bias_corr_input,
                                                      layer_name_to_be_corrected = conv_op.name,
-                                                     quant_params = quant_params,
                                                      data_set = dataset)
 
-            conv_op = n_sess.graph.get_operation_by_name('conv2d/Conv2D')
-            bias_data_updated = BiasUtils.get_bias_as_numpy_data(n_sess, conv_op)
+            conv_op = quantsim.session.graph.get_operation_by_name('conv2d/Conv2D')
+            bias_data_updated = BiasUtils.get_bias_as_numpy_data(quantsim.session, conv_op)
 
         # needs a validation
         self.assertFalse(np.allclose(bias_data, bias_data_updated, atol=1e-4))
@@ -150,6 +155,7 @@ class TestBiasCorrection(unittest.TestCase):
 
         sess.close()
         n_sess.close()
+        quantsim.session.close()
 
     def test_bias_correction_model_tf_enhanced(self):
         """
