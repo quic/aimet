@@ -3,7 +3,7 @@
 # =============================================================================
 #  @@-COPYRIGHT-START-@@
 #
-#  Copyright (c) 2019, Qualcomm Innovation Center, Inc. All rights reserved.
+#  Copyright (c) 2019-2021, Qualcomm Innovation Center, Inc. All rights reserved.
 #
 #  Redistribution and use in source and binary forms, with or without
 #  modification, are permitted provided that the following conditions are met:
@@ -51,8 +51,8 @@ from aimet_common.graph_searcher import GraphSearcher
 from aimet_common.bias_correction import ConvBnPatternHandler
 from aimet_common.graph_pattern_matcher import PatternType
 
-from aimet_tensorflow import quantizer as q
-from aimet_tensorflow.utils.graph_saver import save_model_to_meta, save_and_load_graph
+from aimet_tensorflow.quantsim import QuantizationSimModel
+from aimet_tensorflow.utils.graph_saver import save_model_to_meta, save_and_load_graph, load_model_from_meta
 from aimet_tensorflow.utils.common import create_input_feed_dict, iter_first_x, get_ordered_conv_linears
 from aimet_tensorflow.utils.op.fusedbatchnorm import BNUtils
 from aimet_tensorflow.utils.op.conv import get_weight_tensor_with_shape, BiasUtils
@@ -137,19 +137,20 @@ class BiasCorrection:
         assert tf_op.outputs[0].consumers()
         assert tf_op.outputs[0].consumers()[0].outputs
         biasadd_tensor = tf_op.outputs[0].consumers()[0].outputs[0]     # Replace with a get BiasAdd utils later
-        output_data = biasadd_tensor.eval(session=sess, feed_dict=feed_dict)
+        output_data = sess.run(biasadd_tensor, feed_dict=feed_dict)
         return output_data
 
     @staticmethod
     def _call_mo_correct_bias(corrected_model: tf.compat.v1.Session, layer_name: str,
                               bias_correction: libpymo.BiasCorrection,
-                              bias_shape: int):
+                              bias_shape: int, is_bias_none: bool):
         """
          helper to perform bias correction using cpp backend
         :param corrected_model: active tensorflow session with corrected model as tf.compat.v1.Session
         :param layer_name: name of the layer to be bias corrected
         :param bias_correction: bias correction inputs
         :param bias_shape: shape of bias associated with the layer
+        :param is_bias_none: True if bias for a layer is None
         :return: None, updates bias for the given layer
         """
 
@@ -160,7 +161,7 @@ class BiasCorrection:
         with corrected_model.graph.as_default():
             assert(layer_to_be_corrected.type in ['Conv2D', 'DepthwiseConv2dNative', 'MatMul'])
 
-            if BiasUtils.is_bias_none(layer_to_be_corrected):
+            if is_bias_none:
                 bias_tensor.data = np.zeros(bias_shape)
             else:
                 # read bias from given op
@@ -170,13 +171,13 @@ class BiasCorrection:
             bias_correction.correctBias(bias_tensor)
 
             # this api updates bias or adds bias add to layer if not present
-            BiasUtils.update_bias_for_op(corrected_model, layer_to_be_corrected, np.array(bias_tensor.data))
-
+            BiasUtils.update_bias_for_quantized_op(corrected_model, layer_to_be_corrected, np.array(bias_tensor.data),
+                                                   is_bias_none)
 
     @staticmethod
     def _get_quantized_model(corrected_model: tf.compat.v1.Session, quant_params: QuantParams, input_op_names: List[str],
                              output_op_names: List[str], num_quant_samples: int, batch_size: int,
-                             data_set: tf.data.Dataset) -> tf.compat.v1.Session:
+                             data_set: tf.data.Dataset) -> QuantizationSimModel:
         """
          api to get quantized session
         :param corrected_model: active tensorflow session with corrected model as tf.compat.v1.Session
@@ -185,7 +186,7 @@ class BiasCorrection:
         :param output_op_names: names of the output nodes of the given model
         :param num_quant_samples: number of dataset samples to use during quantization
         :param batch_size: batch size to use for dataset samples
-        :return: session containing quantized model
+        :return: quantized sim model
         """
 
         def bias_correction_callback(session: tf.compat.v1.Session, iterations: int):
@@ -201,20 +202,19 @@ class BiasCorrection:
         save_model_to_meta(corrected_model, './bias_correction/temp')
 
         # Allocate the quantizer and quantize the network using the default 8 bit params/activations
-        quantizer = q.Quantizer(graph='./bias_correction/temp.meta', checkpoint='./bias_correction/temp',
-                                output_file='./quantization/q_graph',
-                                gpu=quant_params.use_cuda,
-                                round_mode=quant_params.round_mode,
-                                quant_mode=quant_params.quant_mode,
-                                ops_to_ignore=quant_params.ops_to_ignore,
-                                skip_output=True)
+        quantsim = QuantizationSimModel(corrected_model, input_op_names, output_op_names,
+                                        quant_params.quant_mode, quant_params.round_mode)
+
+        # Disable all output quantizers
+        # pylint:disable = protected-access
+        for quantize_op in quantsim._activation_quantizers:
+            if quantsim._activation_quantizers[quantize_op].enabled:
+                quantsim._activation_quantizers[quantize_op].enabled = False
 
         n_batches_quantization = int(np.ceil(num_quant_samples / batch_size))
-        quantizer_sess = quantizer.quantize_net(input_tensor_names=input_op_names,
-                                                forward_callback=bias_correction_callback,
-                                                iterations=n_batches_quantization)
+        quantsim.compute_encodings(bias_correction_callback, forward_pass_callback_args=n_batches_quantization)
 
-        return quantizer_sess
+        return quantsim
 
 
     # pylint: disable=too-many-locals
@@ -223,7 +223,6 @@ class BiasCorrection:
                                   corrected_model: tf.compat.v1.Session,
                                   bias_correct_params: BiasCorrectionParams,
                                   layer_name_to_be_corrected: str,
-                                  quant_params: QuantParams,
                                   data_set: tf.data.Dataset) -> tf.compat.v1.Session:
         """
          Helper function to perform empirical bias correction per layer.
@@ -236,14 +235,6 @@ class BiasCorrection:
         :return: None, updates corrected model in-place.
 
         """
-
-        # Quantize model
-        quantize_model = BiasCorrection._get_quantized_model(corrected_model, quant_params,
-                                                             bias_correct_params.input_op_names,
-                                                             bias_correct_params.output_op_names,
-                                                             bias_correct_params.num_quant_samples,
-                                                             bias_correct_params.batch_size,
-                                                             data_set)
 
         ref_layer = reference_model.graph.get_operation_by_name(layer_name_to_be_corrected)
 
@@ -262,7 +253,7 @@ class BiasCorrection:
                                                                      ref_layer.name,
                                                                      batch_input)
 
-            quantized_model_output_batch = BiasCorrection._get_output_data(quantize_model,
+            quantized_model_output_batch = BiasCorrection._get_output_data(corrected_model,
                                                                            bias_correct_params.input_op_names,
                                                                            ref_layer.name,
                                                                            batch_input)
@@ -280,8 +271,10 @@ class BiasCorrection:
             quantized_model_output_batch.transpose(0, 3, 1, 2)))
 
         bias_shape = None
+        is_bias_none = False
         # get shape for bias if the layer does not have bias
         if BiasUtils.is_bias_none(ref_layer):
+            is_bias_none = True
             if ref_layer.type == 'MatMul':
                 bias_shape = reference_output_batch.shape[1]
             elif ref_layer.type in ['Conv2D', 'DepthwiseConv2dNative']:
@@ -289,7 +282,8 @@ class BiasCorrection:
                 bias_shape = reference_output_batch.shape[3]
 
         # bias is to be corrected in the corrected model graph
-        BiasCorrection._call_mo_correct_bias(corrected_model, ref_layer.name, bias_correction, bias_shape)
+        BiasCorrection._call_mo_correct_bias(corrected_model, ref_layer.name, bias_correction, bias_shape,
+                                             is_bias_none)
 
         logger.info('Completed empirical bias correction for layer  %s', ref_layer.name)
 
@@ -342,9 +336,6 @@ class BiasCorrection:
 
         if weight_tensor is None:
             logger.error('Weight tensor extraction failed for layer {%s}', layer_to_be_corrected.name)
-
-        # get bias tensor, at this point we have initialized model layers to have bias add param.
-        assert not BiasUtils.is_bias_none(layer_to_be_corrected)
 
         bias_tensor.data = BiasUtils.get_bias_as_numpy_data(model, layer_to_be_corrected)
         bias_tensor.shape = BiasUtils.get_shape(layer_to_be_corrected)
@@ -418,7 +409,7 @@ class BiasCorrection:
 
         # this api updates bias or adds bias add to layer if not present
         layer = corrected_model.graph.get_operation_by_name(layer.name)
-        BiasUtils.update_bias_for_op(corrected_model, layer, np.array(bias_tensor.data))
+        BiasUtils.update_bias_for_quantized_op(corrected_model, layer, np.array(bias_tensor.data))
         logger.info('Completed analytical bias correction for layer %s', layer.name)
 
     @staticmethod
@@ -541,12 +532,20 @@ class BiasCorrection:
         else:
             convs_bn_activation_info_dict = BiasCorrection.refresh_op_ref(reference_model, conv_bn_dict)
 
+        # Quantize model
+        quantsim = BiasCorrection._get_quantized_model(corrected_model, quant_params,
+                                                       bias_correct_params.input_op_names,
+                                                       bias_correct_params.output_op_names,
+                                                       bias_correct_params.num_quant_samples,
+                                                       bias_correct_params.batch_size,
+                                                       data_set)
+
         # Perform analytical bias correction for first conv layer
         # we always perform empirical bias correction for linear layers
         if ordered_conv_linears:
             if not perform_only_empirical_bias_corr and ordered_conv_linears[0].type not in ['MatMul']:
                 first_conv = ordered_conv_linears.pop(0)
-                BiasCorrection.analytical_bias_correction_per_layer(corrected_model,
+                BiasCorrection.analytical_bias_correction_per_layer(quantsim.session,
                                                                     first_conv,
                                                                     None,
                                                                     quant_params,
@@ -563,7 +562,7 @@ class BiasCorrection:
 
                 preceding_bn_layer_info = convs_bn_activation_info_dict[layer]
 
-                BiasCorrection.analytical_bias_correction_per_layer(corrected_model,
+                BiasCorrection.analytical_bias_correction_per_layer(quantsim.session,
                                                                     layer,
                                                                     preceding_bn_layer_info,
                                                                     quant_params)
@@ -571,11 +570,14 @@ class BiasCorrection:
                 # stand-alone convs/ linears or when perform_only_empirical_bias_corr is set to True
                 # perform empirical bias correction
                 BiasCorrection.bias_correction_per_layer(reference_model,
-                                                         corrected_model,
+                                                         quantsim.session,
                                                          bias_correct_params,
                                                          layer.name,
-                                                         quant_params,
                                                          data_set)
         logger.info('Completed bias correction')
-
+        # Remove quantization nodes and save bias correction model
+        # pylint:disable = protected-access
+        quantsim._remove_quantization_nodes_and_save_graph('./temp_meta_path', 'bias_corrected_model')
+        corrected_model = load_model_from_meta(meta_path=str('./temp_meta_path' + '/' + 'bias_corrected_model' +
+                                                             '.meta'))
         return corrected_model

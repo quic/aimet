@@ -284,7 +284,7 @@ class BiasUtils:
                     # check if one of the inputs is ReadVariableOp type or Identity type
                     # when we add BiasAdd op to a conv op programmatically, the read op is 'Identity' type.
                     if consumer.inputs[constants.BIAS_ADD_CONSUMERS_INPUT_BIAS_READ_INDEX].op.type in \
-                            ['ReadVariableOp', 'Identity']:
+                            ['ReadVariableOp', 'Identity', 'QcQuantize']:
                         is_bias_none = False
                     break
         return is_bias_none
@@ -369,6 +369,34 @@ class BiasUtils:
         assert bias_tensor is not None
         numpy_data = sess.run(bias_tensor)
         return numpy_data
+
+    @staticmethod
+    def update_bias_for_quantized_op(sess: tf.compat.v1.Session, op: tf.Operation, bias_as_numpy_array,
+                                     is_bias_none: bool = False):
+        """
+        update existing bias in given op with new bias value
+        creates and adds new bias if it does not exist.
+        Note :
+        Caller needs to perform a load and save of the graph
+        if this api is invoked for an op without existing bias.
+        :param sess: TensorFlow session
+        :param op:op for which the bias is to be updated
+        :param bias_as_numpy_array: new bias as a numpy array
+        :param is_bias_none: True if Bias is None
+        :return: None
+        """
+
+        with sess.graph.as_default():
+            if not is_bias_none:
+                bias_tensor_as_read_var_op_input = BiasUtils.get_bias_tensor(op)
+                assert len(bias_tensor_as_read_var_op_input.op.inputs) == 7
+                bias_add = bias_tensor_as_read_var_op_input.op.inputs[constants.OP_BIAS_INDICES[op.type]]
+                bias_tensor = bias_add.op.inputs[constants.OP_BIAS_INDICES[op.type]]
+                assert BiasUtils.get_shape(op)[0] == bias_as_numpy_array.size
+                # use tensor name to lookup var type associated with it
+                assert bias_tensor is not None, ('Error, bias tensor lookup failed for op ', op.name)
+                bias_as_var = [var for var in tf.compat.v1.global_variables() if var.name == bias_tensor.name][0]
+                bias_as_var.load(bias_as_numpy_array, sess)
 
     @staticmethod
     def update_bias_for_op(sess: tf.compat.v1.Session, op: tf.Operation, bias_as_numpy_array,
