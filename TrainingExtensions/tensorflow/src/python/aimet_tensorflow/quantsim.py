@@ -340,6 +340,15 @@ class QuantizationSimModel:
         else:
             _logger.info('Original session is not provided, use orig_model_before_quantsim.meta to export')
 
+        self._remove_quantization_nodes_and_save_graph(path, filename_prefix)
+        self._export_encodings(os.path.join(path, filename_prefix) + '.encodings')
+
+    def _remove_quantization_nodes_and_save_graph(self, path: str, filename_prefix: str):
+        """
+        This function removes the quantization nodes from quantized graph and saves it
+        :param path: path where to store model pth and encodings
+        :param filename_prefix: Prefix to use for filenames of the model pth and encodings files
+        """
         vars_to_save = []
         with self.session.graph.as_default():
             for var in tf.compat.v1.global_variables():
@@ -350,10 +359,8 @@ class QuantizationSimModel:
 
             saver = tf.compat.v1.train.Saver(vars_to_save)
             saver.save(self.session, save_path=os.path.join(path, filename_prefix))
-            shutil.copyfile(WORKING_DIR+'orig_model_before_quantsim.meta',
+            shutil.copyfile(WORKING_DIR + 'orig_model_before_quantsim.meta',
                             os.path.join(path, filename_prefix) + '.meta')
-
-        self._export_encodings(os.path.join(path, filename_prefix) + '.encodings')
 
     def save_to_keras(self, temp_dir_path: str = "/tmp/") -> tf.compat.v1.Session:
         """
