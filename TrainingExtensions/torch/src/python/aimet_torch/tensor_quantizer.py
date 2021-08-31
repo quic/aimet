@@ -195,10 +195,19 @@ class StaticGridTensorQuantizer(TensorQuantizer):
                                                              self.use_unsigned_symmetric)
 
                 if not is_encoding_valid:
-                    encoding = None
                     self.enabled = False
+                else:
+                    self._encoding.append(encoding)
 
-                self._encoding.append(encoding)
+            # Check for the case when some cppOp encodings are not valid while others are.
+            # In the case that a module is unused, all cppOp encodings will have is_encoding_valid False, and there
+            # would be no entries in self._encoding. The only way for self._encoding to be non empty with self.enabled
+            # False is if some encodings were valid while others were not.
+            # TODO: add a test case for testing this assert
+            if not self.enabled and self._encoding:
+                _logger.error('At least one encoding for a multi-encoding quantizer is invalid.')
+                assert not (not self.enabled and self._encoding)
+
 
     def quantize_dequantize(self, tensor, round_mode):
         """
