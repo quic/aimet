@@ -106,6 +106,11 @@ onnx_subgraph_op_to_pytorch_module_param_name = {
             # '#depth', 'op_type': {input_index: torch module parameter name}
             ('#2', 'Mul'):  {1: 'weight'},
             ('#3', 'Add'):  {1: 'bias'}
+        },
+    torch.nn.Linear:
+        {
+            ('', 'MatMul'): {1: 'weight'},
+            ('#1', 'Add'): {1: 'bias'}
         }
 }
 
@@ -327,9 +332,11 @@ class OnnxSaver:
 
             for (node_suffix, op_type), replace_pairs in \
                     onnx_subgraph_op_to_pytorch_module_param_name[type(module_ref)].items():
-                node = onnx_node_map[module_name + node_suffix, op_type]
+                # Some modules like linear can take on various forms (e.g. Gemm versus MatMul and Add)
+                if (module_name + node_suffix, op_type) in onnx_node_map:
+                    node = onnx_node_map[module_name + node_suffix, op_type]
 
-                cls._replace_param_name(initializer_names, module_name, node, replace_pairs)
+                    cls._replace_param_name(initializer_names, module_name, node, replace_pairs)
 
         for index, initializer in enumerate(onnx_model.graph.initializer):
             if initializer_names[index] != initializer.name:
@@ -441,8 +448,6 @@ class OnnxSaver:
                     start_marker_map[identifier].append(node)
                 else:
                     end_marker_map[identifier].append(node)
-        print(start_marker_map.keys())
-        print(end_marker_map.keys())
         return end_marker_map, start_marker_map
 
     @classmethod
