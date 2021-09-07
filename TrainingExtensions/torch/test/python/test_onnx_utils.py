@@ -36,7 +36,7 @@
 #  @@-COPYRIGHT-END-@@
 # =============================================================================
 
-import unittest.mock
+import os
 import logging
 
 import torch
@@ -514,3 +514,47 @@ class TestOnnxUtils:
         _, valid_param_set = onnx_utils.OnnxSaver.get_onnx_node_to_io_tensor_names_map(onnx_model)
         for name in expected_param_names:
             assert name in valid_param_set
+
+    def test_set_node_name_for_matmul_add_linear(self):
+        """
+        Test that node names are set correctly for linear ops turned into matmul/add in onnx.
+        """
+        class Linear(torch.nn.Module):
+            def __init__(self):
+                super(Linear, self).__init__()
+                self.linear = torch.nn.Linear(3, 2)
+
+            def forward(self, inp):
+                x = self.linear(inp)
+                return x
+
+        model = Linear()
+        # Using an input to linear op with dimension != 2 causes torch to use matmul->add instead of gemm op
+        onnx_utils.OnnxSaver.set_node_names('./data/MyModel.onnx', model, dummy_input=torch.randn(1, 1, 3))
+        onnx_model = onnx.load('./data/MyModel.onnx')
+        expected_node_names = ['linear', 'linear#1']
+
+        actual_node_names = [node.name for node in onnx_model.graph.node]
+        for name in expected_node_names:
+            assert name in actual_node_names
+
+        expected_param_names = ['linear.weight', 'linear.bias']
+        _, valid_param_set = onnx_utils.OnnxSaver.get_onnx_node_to_io_tensor_names_map(onnx_model)
+        for name in expected_param_names:
+            assert name in valid_param_set
+
+        # Check that gemm still works as expected
+        onnx_utils.OnnxSaver.set_node_names('./data/MyModel.onnx', model, dummy_input=torch.randn(1, 3))
+        onnx_model = onnx.load('./data/MyModel.onnx')
+
+        actual_node_names = [node.name for node in onnx_model.graph.node]
+        assert 'linear' in actual_node_names
+        assert 'linear#1' not in actual_node_names
+
+        expected_param_names = ['linear.weight', 'linear.bias']
+        _, valid_param_set = onnx_utils.OnnxSaver.get_onnx_node_to_io_tensor_names_map(onnx_model)
+        for name in expected_param_names:
+            assert name in valid_param_set
+
+        if os.path.exists('./data/MyModel.onnx'):
+            os.remove('./data/MyModel.onnx')
