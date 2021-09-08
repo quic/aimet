@@ -138,6 +138,7 @@ class ImageNetDataPipeline:
         provide your own implementation if needed.
 
         :param model: The model to finetune.
+        :return: None 
         """
 
         # Your code goes here instead of the example from below
@@ -209,7 +210,7 @@ def aimet_channel_pruning(model: torch.nn.Module,
     # configure the parameters for channel pruning compression
     params = aimet_torch.defs.ChannelPruningParameters(data_loader= data_loader,
                                                       num_reconstruction_samples=50000,
-                                                      allow_custom_downsample_ops=True,
+                                                      allow_custom_downsample_ops=False,
                                                       mode=aimet_torch.defs.ChannelPruningParameters.Mode.auto,
                                                       params=auto_params)
 
