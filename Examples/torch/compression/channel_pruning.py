@@ -158,7 +158,7 @@ def aimet_channel_pruning(model: torch.nn.Module,
     # configure the parameters for channel pruning compression
     params = aimet_torch.defs.ChannelPruningParameters(data_loader=data_loader,
                                                       num_reconstruction_samples=50000,
-                                                      allow_custom_downsample_ops=True,
+                                                      allow_custom_downsample_ops=False,
                                                       mode=aimet_torch.defs.ChannelPruningParameters.Mode.auto,
                                                       params=auto_params)
 
