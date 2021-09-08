@@ -36,7 +36,7 @@
 # =============================================================================
 
 """
-This file demonstrates the use of compression using AIMET spatial SVD 
+This file demonstrates the use of compression using AIMET spatial SVD
 technique followed by fine tuning.
 """
 
@@ -222,7 +222,7 @@ def compress_and_finetune(config: argparse.Namespace):
 
     # Compress the model using AIMET Weight SVD
     compressed_model, eval_dict = aimet_spatial_svd(model=model, evaluator=data_pipeline.evaluate)
-    
+
     # Log the statistics
     logger.info(eval_dict)
     with open(os.path.join(config.logdir, 'log.txt'), "w") as outfile:
@@ -239,11 +239,11 @@ def compress_and_finetune(config: argparse.Namespace):
 
     # Finetune the compressed model
     data_pipeline.finetune(compressed_model)
-    
+
     # Save the compressed model
     torch.save(compressed_model, os.path.join(config.logdir, 'compressed_model.pth'))
 
-    # Calculate and logs the accuracy of compressed-finetuned model
+    # Calculate and log the accuracy of compressed-finetuned model
     accuracy = data_pipeline.evaluate(compressed_model, use_cuda=config.use_cuda)
     logger.info("Finetuned Compressed Model Top-1 accuracy = %.2f", accuracy)
 
@@ -297,4 +297,3 @@ if __name__ == '__main__':
         raise RuntimeError("Found no CUDA Device while use_cuda is selected")
 
     compress_and_finetune(_config)
-

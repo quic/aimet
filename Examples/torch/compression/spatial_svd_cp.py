@@ -198,8 +198,6 @@ def aimet_channel_pruning(model: torch.nn.Module,
     :return: A tuple of compressed model and its statistics
     """
 
-    cp_mode = aimet_torch.defs.ChannelPruningParameters.Mode.auto
-
     # configure the greedy comp-ratio selection algorithm
     greedy_params = aimet_torch.defs.GreedySelectionParameters(target_comp_ratio=Decimal(0.66),
                                                               num_comp_ratio_candidates=10)
@@ -212,7 +210,7 @@ def aimet_channel_pruning(model: torch.nn.Module,
     params = aimet_torch.defs.ChannelPruningParameters(data_loader= data_loader,
                                                       num_reconstruction_samples=50000,
                                                       allow_custom_downsample_ops=True,
-                                                      mode=cp_mode,
+                                                      mode=aimet_torch.defs.ChannelPruningParameters.Mode.auto,
                                                       params=auto_params)
 
     scheme = CompressionScheme.channel_pruning      # spatial_svd, weight_svd or channel_pruning
@@ -238,7 +236,7 @@ def compress_and_finetune(config: argparse.Namespace):
         4.4. Calculate and log the accuracy of compressed model
     5. Finetuning
         5.1 Finetune the compressed model
-        5.2 Calculate and logs the accuracy of compressed-finetuned model
+        5.2 Calculate and log the accuracy of compressed-finetuned model
 
     :param config: This argparse.Namespace config expects following parameters:
                    dataset_dir: Path to a directory containing ImageNet dataset.
@@ -288,14 +286,14 @@ def compress_and_finetune(config: argparse.Namespace):
 
     # Finetune
     logger.info("Starting Model Finetuning...")
-    
+
     # Finetune the compressed model
     data_pipeline.finetune(compressed_model)
 
-    # Calculate and logs the accuracy of compressed-finetuned model
+    # Calculate and log the accuracy of compressed-finetuned model
     accuracy = data_pipeline.evaluate(compressed_model, use_cuda=config.use_cuda)
     logger.info("Finetuned SVD Model Top-1 accuracy = %.2f", accuracy)
-    
+
     compressed_model, eval_dict = aimet_channel_pruning(model=compressed_model, evaluator=data_pipeline.evaluate, data_loader=data_loader)
 
     # Log the statistics
@@ -314,7 +312,7 @@ def compress_and_finetune(config: argparse.Namespace):
 
     # Finetune the compressed model
     data_pipeline.finetune(compressed_model)
-    
+
     # Save the compressed model
     torch.save(compressed_model, os.path.join(config.logdir, 'compressed_model.pth'))
 
