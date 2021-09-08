@@ -270,11 +270,11 @@ def compress_and_finetune(config: argparse.Namespace):
 
     # Finetune the compressed model
     data_pipeline.finetune(compressed_model)
-    
+
     # Save the compressed model
     torch.save(compressed_model, os.path.join(config.logdir, 'compressed_model.pth'))
 
-    # Calculate and logs the accuracy of compressed-finetuned model
+    # Calculate and log the accuracy of compressed-finetuned model
     accuracy = data_pipeline.evaluate(compressed_model, use_cuda=config.use_cuda)
     logger.info("Finetuned Compressed Model Top-1 accuracy = %.2f", accuracy)
 
