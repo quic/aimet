@@ -208,7 +208,7 @@ def aimet_channel_pruning(model: torch.nn.Module,
                                                                           modules_to_ignore=[model.conv1])
 
     # configure the parameters for channel pruning compression
-    # 50000 reconstruction samples will give better results and is reccommended; however we use 5000 here as an example.
+    # # 50000 reconstruction samples will give better results and is recommended; however we use 5000 here as an example.
     params = aimet_torch.defs.ChannelPruningParameters(data_loader= data_loader,
                                                       num_reconstruction_samples=5000,
                                                       allow_custom_downsample_ops=False,
