@@ -120,6 +120,7 @@ class ImageNetDataPipeline:
         provide your own implementation if needed.
 
         :param model: The model to finetune.
+        :return: None
         """
 
         # Your code goes here instead of the example from below
