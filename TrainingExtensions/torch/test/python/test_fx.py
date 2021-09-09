@@ -36,83 +36,101 @@
 #  @@-COPYRIGHT-END-@@
 # =============================================================================
 
-import unittest
-import numpy as np
+import pytest
 import copy
-import torch
 from packaging import version
+import torch
 from torchvision import models
 
 from aimet_torch import elementwise_ops
 from aimet_torch.examples.test_models import ModelWithFunctionalReLU, SingleResidual, ModelWithDuplicateReLU
-from aimet_torch.fx import replace_functional_by_module
-from aimet_torch.quantsim import QuantizationSimModel
 
 
 class TestFX:
 
-    @unittest.skip
+
     def test_fx_with_relu(self):
         """
         """
-        input_shape = (1, 3, 32, 32)
-        input_tensor = torch.randn(*input_shape)
-        model = ModelWithFunctionalReLU().eval()
-        model_copy = copy.deepcopy(model)
+        if version.parse(torch.__version__) >= version.parse("1.8"):
+            from aimet_torch.fx import replace_functional_by_module
+            input_shape = (1, 3, 32, 32)
+            input_tensor = torch.randn(*input_shape)
+            model = ModelWithFunctionalReLU().eval()
+            model_copy = copy.deepcopy(model)
 
-        model_transformed = replace_functional_by_module(model_copy)
-        print(model_transformed)
+            model_transformed = replace_functional_by_module(model_copy)
+            print(model_transformed)
 
-        assert isinstance(model_transformed.module_relu, torch.nn.ReLU)
-        assert isinstance(model_transformed.module_relu_1, torch.nn.ReLU)
-        assert isinstance(model_transformed.module_relu_2, torch.nn.ReLU)
-        assert isinstance(model_transformed.module_relu_3, torch.nn.ReLU)
+            assert isinstance(model_transformed.module_relu, torch.nn.ReLU)
+            assert isinstance(model_transformed.module_relu_1, torch.nn.ReLU)
+            assert isinstance(model_transformed.module_relu_2, torch.nn.ReLU)
+            assert isinstance(model_transformed.module_relu_3, torch.nn.ReLU)
 
-        assert torch.allclose(model(input_tensor), model_transformed(input_tensor))
+            assert torch.allclose(model(input_tensor), model_transformed(input_tensor))
 
-    @unittest.skip
     def test_fx_with_add(self):
         """
         """
-        input_shape = (1, 3, 32, 32)
-        input_tensor = torch.randn(*input_shape)
-        model = SingleResidual().eval()
-        model_copy = copy.deepcopy(model)
+        if version.parse(torch.__version__) >= version.parse("1.8"):
+            from aimet_torch.fx import replace_functional_by_module
+            input_shape = (1, 3, 32, 32)
+            input_tensor = torch.randn(*input_shape)
+            model = SingleResidual().eval()
+            model_copy = copy.deepcopy(model)
 
-        model_transformed = replace_functional_by_module(model_copy)
-        print(model_transformed)
+            model_transformed = replace_functional_by_module(model_copy)
+            print(model_transformed)
 
-        assert isinstance(model_transformed.module_add, elementwise_ops.Add)
-        assert torch.allclose(model(input_tensor), model_transformed(input_tensor))
+            assert isinstance(model_transformed.module_add, elementwise_ops.Add)
+            assert torch.allclose(model(input_tensor), model_transformed(input_tensor))
 
-    @unittest.skip
     def test_fx_with_duplicate_relu(self):
         """
         """
-        input_shape = (1, 3, 32, 32)
-        input_tensor = torch.randn(*input_shape)
-        model = ModelWithDuplicateReLU().eval()
-        model_copy = copy.deepcopy(model)
+        if version.parse(torch.__version__) >= version.parse("1.8"):
+            from aimet_torch.fx import replace_functional_by_module
+            input_shape = (1, 3, 32, 32)
+            input_tensor = torch.randn(*input_shape)
+            model = ModelWithDuplicateReLU().eval()
+            model_copy = copy.deepcopy(model)
 
-        model_transformed = replace_functional_by_module(model_copy)
+            model_transformed = replace_functional_by_module(model_copy)
 
-        assert isinstance(model_transformed.relu, torch.nn.ReLU)
-        assert isinstance(model_transformed.module_relu_1, torch.nn.ReLU)
-        assert isinstance(model_transformed.module_relu_2, torch.nn.ReLU)
-        assert isinstance(model_transformed.module_relu_3, torch.nn.ReLU)
+            assert isinstance(model_transformed.relu, torch.nn.ReLU)
+            assert isinstance(model_transformed.module_relu_1, torch.nn.ReLU)
+            assert isinstance(model_transformed.module_relu_2, torch.nn.ReLU)
+            assert isinstance(model_transformed.module_relu_3, torch.nn.ReLU)
 
-        assert torch.allclose(model(input_tensor), model_transformed(input_tensor))
+            assert torch.allclose(model(input_tensor), model_transformed(input_tensor))
 
-    @unittest.skip
     def test_fx_with_resnet18(self):
         """
         """
-        input_shape = (1, 3, 224, 224)
-        input_tensor = torch.randn(*input_shape)
-        model = models.resnet18().eval()
-        model_copy = copy.deepcopy(model)
+        if version.parse(torch.__version__) >= version.parse("1.8"):
+            from aimet_torch.fx import replace_functional_by_module
+            input_shape = (1, 3, 224, 224)
+            input_tensor = torch.randn(*input_shape)
+            model = models.resnet18().eval()
+            model_copy = copy.deepcopy(model)
 
-        model_transformed = replace_functional_by_module(model_copy)
-        print(model_transformed)
+            model_transformed = replace_functional_by_module(model_copy)
+            print(model_transformed)
 
-        assert torch.allclose(model(input_tensor), model_transformed(input_tensor))
+            assert torch.allclose(model(input_tensor), model_transformed(input_tensor))
+
+    @pytest.mark.cuda
+    def test_fx_with_resnet18_with_cuda(self):
+        """
+        """
+        if version.parse(torch.__version__) >= version.parse("1.8"):
+            from aimet_torch.fx import replace_functional_by_module
+            input_shape = (1, 3, 224, 224)
+            input_tensor = torch.randn(*input_shape).cuda()
+            model = models.resnet18().cuda().eval()
+            model_copy = copy.deepcopy(model)
+
+            model_transformed = replace_functional_by_module(model_copy)
+            print(model_transformed)
+
+            assert torch.allclose(model(input_tensor), model_transformed(input_tensor))

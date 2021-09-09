@@ -39,6 +39,7 @@
 """ Implementation to automatically replace functional by module """
 
 from re import search
+from typing import Any, Optional, Dict
 import torch
 import torch.fx
 import aimet_torch.elementwise_ops as elementwise_ops
@@ -50,16 +51,18 @@ functional_to_module_map = {
 }
 
 
-def replace_functional_by_module(model: torch.nn.Module) -> torch.fx.GraphModule:
+def replace_functional_by_module(model: torch.nn.Module, concrete_args: Optional[Dict[str, Any]] = None) ->\
+        torch.fx.GraphModule:
     """
-    Replaces functional by nn.Modules
-    :param model: torch Model
+    This function replaces functional by nn.Modules in given model and returns GraphModule
+    :param model: torch Model to be modified
+    :param concrete_args: Inputs to be partially specialized
     :return: Modified Model
     """
     unique_nodes = set()
 
     # Symbolic tracing frontend - captures the semantics of the module
-    symbolic_trace = torch.fx.symbolic_trace(model)
+    symbolic_trace = torch.fx.symbolic_trace(model, concrete_args)
 
     # Modify the symbolic_trace by iterating over all the nodes
     for node in symbolic_trace.graph.nodes:
