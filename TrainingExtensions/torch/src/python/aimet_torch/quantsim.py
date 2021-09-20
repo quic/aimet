@@ -578,8 +578,9 @@ class QuantizationSimModel:
                         activation_encodings[input_tensor] = [encoding]
 
                 if layer.output_quantizers[0].enabled:
-                    if op_to_io_tensor_map[layer_name].outputs:
-                        for output_tensor in op_to_io_tensor_map[layer_name].outputs:
+                    op_name = QuantizationSimModel.find_last_op_name_for_layer(layer_name, op_to_io_tensor_map)
+                    if op_to_io_tensor_map[op_name].outputs:
+                        for output_tensor in op_to_io_tensor_map[op_name].outputs:
                             encoding = QuantizationSimModel._create_encoding_dict(layer.output_quantizers[0].encoding,
                                                                                   layer.output_quantizers[0].use_symmetric_encodings)
                             activation_encodings[output_tensor] = [encoding]
@@ -597,6 +598,28 @@ class QuantizationSimModel:
                 for tensor, quantizer in onnx_params_to_quantizers.items():
                     encoding = QuantizationSimModel._create_encoding_dict(quantizer.encoding, quantizer.use_symmetric_encodings)
                     param_encodings[tensor] = [encoding]
+
+    @staticmethod
+    def find_last_op_name_for_layer(layer_name: str, op_to_io_tensor_map: Dict):
+        """
+        if more than one op exist with same layer name suffix exist, sorts the list in natural sort order and
+         return the last op name.
+        :param layer_name: Name of the layer
+        :param op_to_io_tensor_map: ONNX or Torch Script map of layer name to it's input/output tensors
+        :return: last op name
+        """
+        op_names = [key for key in op_to_io_tensor_map if key.startswith(layer_name)]
+
+        if len(op_names) == 1:
+            return op_names[0]
+
+        end_op_names = [op_name for op_name in op_names if op_name.endswith('.end')]
+        if len(end_op_names) != 1:
+            logger.warning('Could not determine the last op in the sub-graph for layer=%s, candidates=%s',
+                           layer_name, end_op_names)
+            return layer_name
+
+        return end_op_names[0]
 
     @staticmethod
     def _get_qc_quantized_layers(model) -> List[Tuple[str, QcQuantizeWrapper]]:

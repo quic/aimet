@@ -105,12 +105,12 @@ onnx_subgraph_op_to_pytorch_module_param_name = {
         {
             # '#depth', 'op_type': {input_index: torch module parameter name}
             ('#2', 'Mul'):  {1: 'weight'},
-            ('#3', 'Add'):  {1: 'bias'}
+            ('#3.end', 'Add'):  {1: 'bias'}
         },
     torch.nn.Linear:
         {
             ('', 'MatMul'): {1: 'weight'},
-            ('#1', 'Add'): {1: 'bias'}
+            ('#1.end', 'Add'): {1: 'bias'}
         }
 }
 
@@ -423,6 +423,12 @@ class OnnxSaver:
                 for tensor in node.output:
                     downstream_nodes = map_input_tensor_to_node.get(tensor, [])
                     set_name_for_downstream_nodes(downstream_nodes, name, depth + 1)
+
+                    if depth != 0:
+                        for dnode in downstream_nodes:
+                            if dnode.op_type == 'CustomMarker':  #end marker
+                                node.name += '.end'
+                                break
 
         for node_name, markers in start_marker_map.items():
             for marker in markers:
