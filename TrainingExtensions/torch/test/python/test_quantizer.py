@@ -162,6 +162,17 @@ class SmallMnistNoDropout(nn.Module):
         return self.log_softmax(x)
 
 
+class SoftMaxAvgPoolModel(torch.nn.Module):
+    def __init__(self):
+        super(SoftMaxAvgPoolModel, self).__init__()
+        self.sfmax = torch.nn.Softmax(dim=1)
+        self.avgpool = torch.nn.AvgPool2d(3)
+
+    def forward(self, inp):
+        x = self.sfmax(inp)
+        return self.avgpool(x)
+
+
 class ModelWithStandaloneOps(nn.Module):
     def __init__(self):
         super(ModelWithStandaloneOps, self).__init__()
@@ -1623,3 +1634,30 @@ class TestQuantizationSim:
             assert exp == act.name
         for tensor_name in encoding_data["activation_encodings"].keys():
             assert tensor_name in o_names
+
+    def test_mapping_encoding_for_torch_module_with_multiple_onnx_ops(self):
+        """
+         Test the input and output encoding map to input/output at subgraph level when atorch module generates
+         multiple onnx ops i.e. a sub-graph
+        """
+
+        dummy_input = torch.randn(1, 4, 256, 512)
+        model = SoftMaxAvgPoolModel()
+
+        def forward_pass(model, args):
+            model.eval()
+            with torch.no_grad():
+                model(dummy_input)
+
+        sim = QuantizationSimModel(model, dummy_input=dummy_input)
+        sim.model.sfmax.output_quantizers[0].enabled = True
+        sim.model.sfmax.input_quantizers[0].enabled = True
+        sim.model.avgpool.output_quantizers[0].enabled = True
+        sim.model.avgpool.input_quantizers[0].enabled = True
+        sim.compute_encodings(forward_pass, None)
+        sim.export('./data', 'sfmaxavgpool_model', dummy_input)
+
+        with open('./data/sfmaxavgpool_model.encodings') as json_file:
+            encoding_data = json.load(json_file)
+
+        assert not set(encoding_data["activation_encodings"].keys()).symmetric_difference(('4', '9', 't.1'))
