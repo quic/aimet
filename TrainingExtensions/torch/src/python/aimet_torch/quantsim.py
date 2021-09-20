@@ -42,6 +42,7 @@ import io
 import copy
 import pickle
 from typing import Tuple, List, Union, Dict
+from collections.abc import Iterable
 import json
 import torch
 import onnx
@@ -511,15 +512,25 @@ class QuantizationSimModel:
         disabled_param_quantizers = []
         for orig_param_name, param_quantizer in layer.param_quantizers.items():
             param_name = layer_name + '.' + orig_param_name
-            if param_quantizer.enabled:
-                if param_name in valid_param_set:
-                    encoding = QuantizationSimModel._create_encoding_dict(param_quantizer.encoding,
-                                                                          param_quantizer.use_symmetric_encodings)
-                    param_encodings[param_name] = [encoding]
-                else:
-                    logger.error('Param tensor {%s} not found in valid param set', param_name)
-            else:
+
+            if not param_quantizer.enabled:
                 disabled_param_quantizers.append(orig_param_name)
+                continue
+
+            if param_name not in valid_param_set:
+                logger.error('Param tensor {%s} not found in valid param set', param_name)
+                continue
+
+            if isinstance(param_quantizer.encoding, Iterable):
+                param_encodings[param_name] = []
+                for encoding in param_quantizer.encoding:
+                    enc_dict = QuantizationSimModel._create_encoding_dict(encoding,
+                                                                          param_quantizer.use_symmetric_encodings)
+                    param_encodings[param_name].append(enc_dict)
+            else:
+                enc_dict = QuantizationSimModel._create_encoding_dict(param_quantizer.encoding,
+                                                                      param_quantizer.use_symmetric_encodings)
+                param_encodings[param_name] = [enc_dict]
 
         # retrieve the appropriate param generator
         if isinstance(layer, QcQuantizeWrapper):

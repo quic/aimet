@@ -582,6 +582,9 @@ class TestQuantizationSim:
 
         sim = QuantizationSimModel(model, dummy_input=dummy_input)
 
+        sim.model.conv1_a.param_quantizers['weight'].use_symmetric_encodings = True
+        sim.model.conv1_a.param_quantizers['weight'].use_strict_symmetric = True
+
         # Quantize
         sim.compute_encodings(forward_pass, None)
         model(*dummy_input)
@@ -627,6 +630,16 @@ class TestQuantizationSim:
                sim.model.conv1_a.param_quantizers['weight'].encoding[1]
         assert sim.model.fc2.param_quantizers['weight'].encoding[0] != \
                sim.model.fc2.param_quantizers['weight'].encoding[1]
+
+        sim.export('./data/', 'two_input_model_per_channel', dummy_input)
+
+        with open("./data/two_input_model_per_channel.encodings", "r") as encodings_file:
+            encodings = json.load(encodings_file)
+        assert len(encodings['param_encodings']) == 10
+        assert len(encodings['param_encodings']['conv1_a.bias']) == 1
+        assert len(encodings['param_encodings']['conv1_a.weight']) == 10
+        assert encodings['param_encodings']['conv1_a.weight'][1]['bitwidth'] == 8
+        assert encodings['param_encodings']['conv1_a.weight'][1]['is_symmetric'] == 'False'
 
     # -------------------------------------------
     def test_model_with_two_inputs_one_to_add(self):
