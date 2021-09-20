@@ -532,7 +532,7 @@ class TestOnnxUtils:
         # Using an input to linear op with dimension != 2 causes torch to use matmul->add instead of gemm op
         onnx_utils.OnnxSaver.set_node_names('./data/MyModel.onnx', model, dummy_input=torch.randn(1, 1, 3))
         onnx_model = onnx.load('./data/MyModel.onnx')
-        expected_node_names = ['linear', 'linear#1']
+        expected_node_names = ['linear', 'linear#1.end']
 
         actual_node_names = [node.name for node in onnx_model.graph.node]
         for name in expected_node_names:
