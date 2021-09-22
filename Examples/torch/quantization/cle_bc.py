@@ -60,8 +60,7 @@ from Examples.torch.utils.image_net_data_loader import ImageNetDataLoader
 
 # imports for AIMET
 from aimet_torch import bias_correction
-from aimet_torch.quantsim import QuantParams
-from aimet_torch import quantsim as q
+from aimet_torch.quantsim import QuantParams, QuantizationSimModel
 from aimet_torch.batch_norm_fold import fold_all_batch_norms
 
 
@@ -143,9 +142,8 @@ class ImageNetDataPipeline:
 
         torch.save(model, os.path.join(self._config.logdir, 'finetuned_model.pth'))
 
-def calculate_quantsim_accuracy (model: torch.nn.Module, evaluator: aimet_common.defs.EvalFunction,
-                                                 use_cuda: bool=False, logdir: str='')-> Tuple[torch.nn.Module,
-                                                                         float]:
+def calculate_quantsim_accuracy(model: torch.nn.Module, evaluator: aimet_common.defs.EvalFunction,
+                                use_cuda: bool = False)-> Tuple[torch.nn.Module, float]:
 
     """
     Calculates model accuracy on quantized simulator and returns quantized model with accuracy.
@@ -153,31 +151,28 @@ def calculate_quantsim_accuracy (model: torch.nn.Module, evaluator: aimet_common
     :param model: the loaded model
     :param evaluator: the Eval function to use for evaluation
     :param use_cuda: the cuda device.
-    :return: a tuple of quantizer and accuracy of model on this quantizer
+    :return: a tuple of quantsim and accuracy of model on this quantsim
     """
-    input_shape = (image_net_config.dataset['image_channels'],
+    input_shape = (1, image_net_config.dataset['image_channels'],
                    image_net_config.dataset['image_width'],
                    image_net_config.dataset['image_height'],)
     if use_cuda:
         model.to(torch.device('cuda'))
-        dummy_input=torch.rand(input_shape).cuda()
+        dummy_input = torch.rand(input_shape).cuda()
     else:
-        dummy_input=torch.rand(input_shape)
+        dummy_input = torch.rand(input_shape)
 
-    quantizer = q.QuantizationSimModel(model=model, quant_scheme='tf_enhanced',
-                                       dummy_input=dummy_input, rounding_mode='nearest',
-                                       default_output_bw=8, default_param_bw=8, in_place=False)
+    quantsim = QuantizationSimModel(model=model, quant_scheme='tf_enhanced',
+                                    dummy_input=dummy_input, rounding_mode='nearest',
+                                    default_output_bw=8, default_param_bw=8, in_place=False)
 
-    quantizer.compute_encodings(forward_pass_callback=partial(evaluator,
-                                use_cuda=use_cuda),
-                                forward_pass_callback_args=None)
+    quantsim.compute_encodings(forward_pass_callback=partial(evaluator, use_cuda=use_cuda),
+                               forward_pass_callback_args=None)
 
-    quantizer.export(path=logdir, filename_prefix='resnet_encodings', dummy_input=dummy_input.cpu())
-    accuracy = evaluator(quantizer.model, use_cuda=use_cuda)
+    accuracy = evaluator(quantsim.model, use_cuda=use_cuda)
+    return quantsim, accuracy
 
-    return quantizer.model, accuracy
-
-def apply_cross_layer_equalization(model: torch.nn.Module,input_shape: tuple):
+def apply_cross_layer_equalization(model: torch.nn.Module, input_shape: tuple):
     """
     Applies CLE on the model and calculates model accuracy on quantized simulator
     Applying CLE on the model inplace consists of:
@@ -193,8 +188,7 @@ def apply_cross_layer_equalization(model: torch.nn.Module,input_shape: tuple):
 
     equalize_model(model, input_shape)
 
-def apply_bias_correction(model: torch.nn.Module, evaluator: aimet_common.defs.EvalFunction,
-                          data_loader: torch_data.DataLoader, logdir: str):
+def apply_bias_correction(model: torch.nn.Module, data_loader: torch_data.DataLoader):
 
     """
     Applies Bias-Correction on the model.
@@ -257,28 +251,31 @@ def quantize(config: argparse.Namespace):
 
     # Quantize the model using AIMET CLE
     data_loader = ImageNetDataLoader(is_training=False, images_dir=_config.dataset_dir, image_size=image_net_config.dataset['image_size']).data_loader
-    apply_cross_layer_equalization(model=model, input_shape=(1,3,224,224))
+    apply_cross_layer_equalization(model=model, input_shape=(1, 3, 224, 224))
 
     BN_folded_model = copy.deepcopy(model)
-    _ = fold_all_batch_norms(BN_folded_model, input_shapes=(1,3,224,224))
+    _ = fold_all_batch_norms(BN_folded_model, input_shapes=(1, 3, 224, 224))
 
-    quantized_model, stats = calculate_quantsim_accuracy (model=BN_folded_model, evaluator=data_pipeline.evaluate, use_cuda=config.use_cuda, logdir=config.logdir)
+    # Log the accuracy after CLE
+    quantsim, stats = calculate_quantsim_accuracy(model=BN_folded_model, evaluator=data_pipeline.evaluate, use_cuda=config.use_cuda)
+    logger.info("Quantized Model Top-1 Accuracy After CLE = %.2f", stats)
 
-    # Calculating accuracy on Quant Simulator
-    # quantized_model, stats = calculate_quantsim_accuracy (model=model, evaluator=data_pipeline.evaluate, use_cuda=config.use_cuda, logdir=config.logdir)
-    # Log the accuracy of quantized model
-    stats = data_pipeline.evaluate(model, use_cuda=config.use_cuda)
-
-    apply_bias_correction(model=model, evaluator=data_pipeline.evaluate, data_loader=data_loader, logdir=config.logdir)
+    apply_bias_correction(model=model, data_loader=data_loader)
 
     # Calculating accuracy on Quant Simulator
-    quantized_model, stats = calculate_quantsim_accuracy (model=model, evaluator=data_pipeline.evaluate, use_cuda=config.use_cuda, logdir=config.logdir)
-
-    # Log the accuracy of quantized model
-    logger.info("Quantized Model Top-1 accuracy = %.2f", stats)
+    quantsim, stats = calculate_quantsim_accuracy(model=model, evaluator=data_pipeline.evaluate, use_cuda=config.use_cuda)
+    
+    # Log the accuracy after bias correction
+    logger.info("Quantized Model Top-1 Accuracy After Bias Correction = %.2f", stats)
 
     # Save the quantized model
-    torch.save(model, os.path.join(config.logdir, 'quantized_model.pth'))
+    input_shape = (1, image_net_config.dataset['image_channels'],
+                   image_net_config.dataset['image_width'],
+                   image_net_config.dataset['image_height'],)
+
+    dummy_input = torch.rand(input_shape)
+
+    quantsim.export(path=config.logdir, filename_prefix='cle_bc_resnet', dummy_input=dummy_input.cpu())
     logger.info("...Model Quantization Complete")
 
 
