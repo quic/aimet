@@ -47,9 +47,9 @@ import copy
 import os
 from typing import Tuple
 from functools import partial
+from torchvision import models, transforms
 import torch
 import torch.utils.data as torch_data
-from torchvision import models, transforms
 
 # imports for data pipelines
 from Examples.common import image_net_config
@@ -58,10 +58,9 @@ from Examples.torch.utils.image_net_trainer import ImageNetTrainer
 from Examples.torch.utils.image_net_data_loader import ImageNetDataLoader
 
 # imports for AIMET
-from aimet_torch import quantsim as q
+from aimet_torch.quantsim import QuantizationSimModel
 from aimet_torch.batch_norm_fold import fold_all_batch_norms
 from aimet_torch.adaround.adaround_weight import Adaround, AdaroundParameters
-from aimet_torch.utils import create_rand_tensors_given_shapes
 import aimet_common
 from aimet_common.defs import QuantScheme
 
@@ -121,12 +120,10 @@ class ImageNetDataPipeline:
         return evaluator.evaluate(model, iterations, use_cuda)
 
 
-def apply_adaround_and_find_quantized_accuracy(model: torch.nn.Module, evaluator: aimet_common.defs.EvalFunction, data_loader: torch_data.DataLoader, iterations: int = None,
-                                               num_val_samples_per_class: int=None, use_cuda: bool=False, logdir: str='')-> Tuple[torch.nn.Module,
-                                                                         float]:
+def apply_adaround_and_find_quantized_accuracy(model: torch.nn.Module, evaluator: aimet_common.defs.EvalFunction, data_loader: torch_data.DataLoader, use_cuda: bool = False, logdir: str = '')->Tuple[torch.nn.Module, float]:
 
     """
-    Quantizes the model using AIMET's adaround feature
+    Quantizes the model using AIMET's adaround feature, and saves the model.
 
     :param model: The loaded model
     :param evaluator: The Eval function to use for evaluation
@@ -136,20 +133,20 @@ def apply_adaround_and_find_quantized_accuracy(model: torch.nn.Module, evaluator
                                       dataset
     :param use_cuda: The cuda device.
     :param logdir: Path to a directory for logging.
-    :return: A tuple of quantized model and accuracy of model on this quantizer
+    :return: A tuple of quantized model and accuracy of model on this quantsim
     """
 
     BN_folded_model = copy.deepcopy(model)
-    _ = fold_all_batch_norms(BN_folded_model, input_shapes=(1,3,224,224))
+    _ = fold_all_batch_norms(BN_folded_model, input_shapes=(1, 3, 224, 224))
 
-    input_shape = (image_net_config.dataset['image_channels'],
+    input_shape = (1, image_net_config.dataset['image_channels'],
                    image_net_config.dataset['image_width'],
                    image_net_config.dataset['image_height'],)
     if use_cuda:
-        dummy_input=torch.rand(input_shape).cuda()
+        dummy_input = torch.rand(input_shape).cuda()
 
     else:
-        dummy_input=torch.rand(input_shape)
+        dummy_input = torch.rand(input_shape)
 
 
     params = AdaroundParameters(data_loader=data_loader, num_batches=5)
@@ -157,17 +154,19 @@ def apply_adaround_and_find_quantized_accuracy(model: torch.nn.Module, evaluator
                                         path=logdir, filename_prefix='adaround', default_param_bw=8,
                                         default_quant_scheme=QuantScheme.post_training_tf_enhanced)
 
-    quantizer = q.QuantizationSimModel(model=ada_model, dummy_input=dummy_input, quant_scheme=QuantScheme.post_training_tf_enhanced,
-                                       rounding_mode='nearest', default_output_bw=8, default_param_bw=8,
-                                       in_place=False)
+    quantsim = QuantizationSimModel(model=ada_model, dummy_input=dummy_input, quant_scheme=QuantScheme.post_training_tf_enhanced,
+                                    rounding_mode='nearest', default_output_bw=8, default_param_bw=8,
+                                    in_place=False)
 
-    quantizer.set_and_freeze_param_encodings(encoding_path=os.path.join(config.logdir, 'adaround_model.encodings'))
-    quantizer.compute_encodings(forward_pass_callback=partial(evaluator, use_cuda=use_cuda),
-                                forward_pass_callback_args=None)
-    quantizer.export(path=logdir, filename_prefix='adaround_resnet_encodings', dummy_input=dummy_input.cpu())
-    accuracy = evaluator(quantizer.model, use_cuda=use_cuda)
+    # Freezing the encodings. This ensures params with frozen encodings will not be computed and set again
+    # when compute_encodings() is invoked again.
+    quantsim.set_and_freeze_param_encodings(encoding_path=os.path.join(logdir, 'adaround.encodings'))
+    quantsim.compute_encodings(forward_pass_callback=partial(evaluator, use_cuda=use_cuda),
+                               forward_pass_callback_args=None)
+    quantsim.export(path=logdir, filename_prefix='adaround_resnet', dummy_input=dummy_input.cpu())
+    accuracy = evaluator(quantsim.model, use_cuda=use_cuda)
 
-    return quantizer.model, accuracy
+    return quantsim, accuracy
 
 def quantize(config: argparse.Namespace):
     """
@@ -207,13 +206,10 @@ def quantize(config: argparse.Namespace):
 
     # Quantize the model using AIMET Adaround
     data_loader = ImageNetDataLoader(is_training=False, images_dir=config.dataset_dir, image_size=image_net_config.dataset['image_size']).data_loader
-    quantized_model, accuracy = apply_adaround_and_find_quantized_accuracy(model=model, evaluator=data_pipeline.evaluate, data_loader=data_loader, use_cuda=config.use_cuda, logdir=config.logdir)
+    _, accuracy = apply_adaround_and_find_quantized_accuracy(model=model, evaluator=data_pipeline.evaluate, data_loader=data_loader, use_cuda=config.use_cuda, logdir=config.logdir)
 
     # Log the accuracy of quantized model
     logger.info("Quantized Model Top-1 accuracy = %.2f", accuracy)
-
-    # Save the quantized model
-    torch.save(quantized_model, os.path.join(config.logdir, 'quantized_model.pth'))
     logger.info("...Model Quantization Complete")
 
 
