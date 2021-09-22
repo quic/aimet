@@ -47,8 +47,9 @@ import logging
 import os
 from functools import partial
 from typing import Tuple
-import torch
 from torchvision import models
+import torch
+import torch.utils.data as torch_data
 
 # imports for data pipelines
 from Examples.common import image_net_config
@@ -57,8 +58,11 @@ from Examples.torch.utils.image_net_trainer import ImageNetTrainer
 from Examples.torch.utils.image_net_data_loader import ImageNetDataLoader
 
 # imports for AIMET
-from aimet_torch.pro import quantsim as q
 import aimet_common
+from aimet_torch import bias_correction
+from aimet_torch.quantsim import QuantParams, QuantizationSimModel
+from aimet_torch.cross_layer_equalization import equalize_model
+
 
 logger = logging.getLogger('TorchQAT')
 formatter = logging.Formatter('%(asctime)s : %(name)s - %(levelname)s - %(message)s')
@@ -132,8 +136,48 @@ class ImageNetDataPipeline:
         torch.save(model, os.path.join(self._config.logdir, 'finetuned_model.pth'))
 
 
-def calculate_quantsim_accuracy (model: torch.nn.Module, evaluator: aimet_common.defs.EvalFunction, use_cuda: bool=False, logdir: str='')-> Tuple[torch.nn.Module,
-                                                                         float]:
+def apply_cross_layer_equalization(model: torch.nn.Module, input_shape: tuple):
+    """
+    Applies CLE on the model and calculates model accuracy on quantized simulator
+    Applying CLE on the model inplace consists of:
+        Batch Norm Folding
+        Cross Layer Scaling
+        High Bias Fold
+    Converts any ReLU6 into ReLU.
+
+    :param model: the loaded model
+    :param input_shape: the shape of the input to the model
+    :return:
+    """
+
+    equalize_model(model, input_shape)
+
+def apply_bias_correction(model: torch.nn.Module, data_loader: torch_data.DataLoader):
+
+    """
+    Applies Bias-Correction on the model.
+    :param model: The model to quantize
+    :param evaluator: Evaluator used during quantization
+    :param dataloader: DataLoader used during quantization
+    :param logdir: Log directory used for storing log files
+    :return: None
+    """
+    # Rounding mode can be 'nearest' or 'stochastic'
+    rounding_mode = 'nearest'
+
+    # Number of samples used during quantization
+    num_quant_samples = 16
+
+    # Number of samples used for bias correction
+    num_bias_correct_samples = 16
+
+    params = QuantParams(weight_bw=8, act_bw=8, round_mode=rounding_mode, quant_scheme='tf_enhanced')
+
+    # Perform Bias Correction
+    bias_correction.correct_bias(model.to(device="cuda"), params, num_quant_samples=num_quant_samples,
+                                 data_loader=data_loader, num_bias_correct_samples=num_bias_correct_samples)
+
+def calculate_quantsim_accuracy (model: torch.nn.Module, evaluator: aimet_common.defs.EvalFunction, use_cuda: bool = False, logdir: str = '')->Tuple[torch.nn.Module, float]:
 
     """
     Calculates model accuracy on quantized simulator and returns quantized model with accuracy.
@@ -146,30 +190,29 @@ def calculate_quantsim_accuracy (model: torch.nn.Module, evaluator: aimet_common
                                       computing encodings. Not used in pascal voc
                                       dataset
     :param use_cuda: the cuda device.
-    :return: a tuple of quantizer and accuracy of model on this quantizer
+    :return: a tuple of quantsim and accuracy of model on this quantsim
     """
 
-    input_shape = (image_net_config.dataset['image_channels'],
+    input_shape = (1, image_net_config.dataset['image_channels'],
                    image_net_config.dataset['image_width'],
                    image_net_config.dataset['image_height'],)
     if use_cuda:
         model.to(torch.device('cuda'))
-        dummy_input=torch.rand(input_shape).cuda()
+        dummy_input = torch.rand(input_shape).cuda()
     else:
-        dummy_input=torch.rand(input_shape)
+        dummy_input = torch.rand(input_shape)
 
-    quantizer = q.QuantizationSimModel(model=model, quant_scheme='tf_enhanced',
-                                       dummy_input=dummy_input, rounding_mode='nearest',
-                                       default_output_bw=8, default_param_bw=8, in_place=False)
+    quantsim = QuantizationSimModel(model=model, quant_scheme='tf_enhanced',
+                                    dummy_input=dummy_input, rounding_mode='nearest',
+                                    default_output_bw=8, default_param_bw=8, in_place=False)
 
-    quantizer.compute_encodings(forward_pass_callback=partial(evaluator,
-                                use_cuda=use_cuda),
-                                forward_pass_callback_args=None)
+    quantsim.compute_encodings(forward_pass_callback=partial(evaluator, use_cuda=use_cuda),
+                               forward_pass_callback_args=None)
 
-    quantizer.export(path=logdir, filename_prefix='resnet_encodings', dummy_input=dummy_input.cpu())
-    accuracy = evaluator(quantizer.model, use_cuda=use_cuda)
+    quantsim.export(path=logdir, filename_prefix='resnet_encodings', dummy_input=dummy_input.cpu())
+    accuracy = evaluator(quantsim.model, use_cuda=use_cuda)
 
-    return quantizer.model, accuracy
+    return quantsim, accuracy
 
 
 def quantize_and_finetune(config: argparse.Namespace):
@@ -182,6 +225,7 @@ def quantize_and_finetune(config: argparse.Namespace):
     4. Applies AIMET CLE and BC
         4.1. Applies AIMET CLE and calculates QuantSim accuracy
         4.2. Applies AIMET BC and calculates QuantSim accuracy
+
 
     :param config: This argparse.Namespace config expects following parameters:
                    tfrecord_dir: Path to a directory containing ImageNet TFRecords.
@@ -209,30 +253,37 @@ def quantize_and_finetune(config: argparse.Namespace):
     logger.info("Starting Model Quantization...")
 
     # Quantize the model using AIMET QAT (quantization aware training) and calculate accuracy on Quant Simulator
-    quantized_model, stats = calculate_quantsim_accuracy (model=model, evaluator=data_pipeline.evaluate, use_cuda=config.use_cuda, logdir=config.logdir)
+    quantsim, stats = calculate_quantsim_accuracy(model=model, evaluator=data_pipeline.evaluate, use_cuda=config.use_cuda, logdir=config.logdir)
 
-     # Log the accuracy of quantized model
-    logger.info("Quantized Model Top-1 accuracy = %.2f", stats)
+    #For good initialization apply, data free quantization methods (optional)
+    data_loader = ImageNetDataLoader(is_training=False, images_dir=config.dataset_dir, image_size=image_net_config.dataset['image_size']).data_loader
+    apply_cross_layer_equalization(model=model, input_shape=(1, 3, 224, 224))
+    apply_bias_correction(model=model, data_loader=data_loader)
 
-    # Log the statistics
-    with open(os.path.join(config.logdir, 'log.txt'), "w") as outfile:
-        outfile.write("%s\n\n" % (stats))
+    quantsim, stats = calculate_quantsim_accuracy(model=model, evaluator=data_pipeline.evaluate, use_cuda=config.use_cuda, logdir=config.logdir)
 
-    # Save the quantized model
-    torch.save(quantized_model, os.path.join(config.logdir, 'quantized_model.pth'))
-    logger.info("...Model Quantization Complete")
+    logger.info("...Post Training Quantization Complete")
 
     # Finetuning
     logger.info("Starting Model Finetuning...")
 
     # Finetune the quantized model
-    data_pipeline.finetune(quantized_model)
+    data_pipeline.finetune(quantsim.model)
 
     # Calculate and log the accuracy of quantized-finetuned model
-    accuracy = data_pipeline.evaluate(quantized_model, use_cuda=config.use_cuda)
+    accuracy = data_pipeline.evaluate(quantsim.model, use_cuda=config.use_cuda)
     logger.info("Finetuned Quantized Model Top-1 accuracy = %.2f", accuracy)
 
     logger.info("...Model Finetuning Complete")
+
+    input_shape = (1, image_net_config.dataset['image_channels'],
+                   image_net_config.dataset['image_width'],
+                   image_net_config.dataset['image_height'],)
+
+    dummy_input = torch.rand(input_shape)
+
+    # Save the quantized model
+    quantsim.export(path=config.logdir, filename_prefix='QAT_resnet', dummy_input=dummy_input.cpu())
 
 
 if __name__ == '__main__':
