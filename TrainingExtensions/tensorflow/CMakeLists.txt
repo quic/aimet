@@ -38,8 +38,6 @@ cmake_minimum_required(VERSION 3.5)
 add_library(TrainingExtensionsTf SHARED
         src/QcQuantizeStaticOp.hpp
         src/QcQuantizeStaticOp.cpp
-        src/QcQuantizeOpDeprecated.cpp
-        src/QcQuantizeOpDeprecated.hpp
         src/AimetOpUtils.h
         src/AimetOpUtils.cpp
         src/QcQuantizeRecurrentParamOp.hpp
@@ -87,7 +85,6 @@ include_directories(${CMAKE_CURRENT_SOURCE_DIR}/../common/include ${PYTHON_DIST_
 
 if (ENABLE_CUDA)
     add_library(TrainingExtensionsTfCuda
-            src/QcQuantizeOpGpuDeprecated.cu
             src/AimetOpUtilsGpu.cu
             )
 
