@@ -534,6 +534,13 @@ class SteGatingFuncForParameters(torch.autograd.Function):
         for name, param in quant_wrapper_ref._module_to_wrap.named_parameters():
             if quant_wrapper_ref.param_quantizers[name].enabled and param.grad is not None:
                 param_quantizer = quant_wrapper_ref.param_quantizers[name]
-                param.grad = ste.compute_dloss_by_dx(param, param.grad, param_quantizer.encoding.min,
-                                                     param_quantizer.encoding.max)
+
+                if isinstance(param_quantizer.encoding, list):
+                    # Stack the encodings
+                    max_encodings = [enc.max for enc in param_quantizer.encoding]
+                    min_encodings = [enc.min for enc in param_quantizer.encoding]
+                    param.grad = ste.compute_dloss_by_dx(param, param.grad, min_encodings, max_encodings)
+                else:
+                    param.grad = ste.compute_dloss_by_dx(param, param.grad, param_quantizer.encoding.min,
+                                                         param_quantizer.encoding.max)
         return (None, *output_grad)

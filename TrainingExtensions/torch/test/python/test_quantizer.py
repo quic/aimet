@@ -642,6 +642,40 @@ class TestQuantizationSim:
         assert encodings['param_encodings']['conv1_a.weight'][1]['is_symmetric'] == 'False'
 
     # -------------------------------------------
+    def test_model_with_two_inputs_per_channel_qat(self):
+        """Model with more than 1 input"""
+
+        dummy_input = (torch.rand(32, 1, 28, 28), torch.rand(32, 1, 28, 28))
+
+        def forward_pass(model, args):
+            model.eval()
+            with torch.no_grad():
+                model(*dummy_input)
+
+        model = ModelWithTwoInputs()
+
+        sim = QuantizationSimModel(model, dummy_input=dummy_input)
+        for wrapper in sim.quant_wrappers():
+            wrapper.enable_per_channel_quantization()
+
+        assert isinstance(sim.model.conv1_a.param_quantizers['weight'], StaticGridPerChannelQuantizer)
+        assert isinstance(sim.model.conv1_a.param_quantizers['bias'], StaticGridPerChannelQuantizer)
+        assert isinstance(sim.model.conv1_a.output_quantizers[0], StaticGridPerTensorQuantizer)
+
+        # Quantize
+        sim.compute_encodings(forward_pass, None)
+
+        # Pass some data in train mode
+        sim.model.train()
+        output = sim.model(*dummy_input)
+
+        # Try a backward pass - all we are testing for is that nothing blows up functionally
+        loss = output.flatten().sum()
+        loss.backward()
+
+
+    # -------------------------------------------
+    # -------------------------------------------
     def test_model_with_two_inputs_one_to_add(self):
         """Model with more than 1 input"""
 
@@ -1325,6 +1359,35 @@ class TestQuantizationSim:
         expected_grad_3 = torch.Tensor([[1.0, 1.0], [1.0, 1.0]])
         grad_out_3 = compute_dloss_by_dx(custom_input_3, grad, c_enc_min, c_enc_max)
         assert np.allclose(expected_grad_3, grad_out_3)
+
+    @pytest.mark.cuda
+    def test_ste_gradient_math_tensors_cuda(self):
+        """
+        Unit test to validate custom gradient computation with auto grad computation.
+        :return: None
+        """
+
+        c_enc_min = [-0.25, -0.25]
+        c_enc_max = [1.0, 1.0]
+        grad = torch.Tensor([[1.0, 1.0], [1.0, 1.0]]).cuda()
+
+        # input > max
+        custom_input_1 = torch.Tensor([[1.0, 1.5], [0.125, -0.12]]).cuda()
+        expected_grad_1 = torch.Tensor([[1.0, 0.0], [1.0, 1.0]]).cuda()
+        grad_out_1 = compute_dloss_by_dx(custom_input_1, grad, c_enc_min, c_enc_max)
+        assert torch.allclose(expected_grad_1, grad_out_1)
+
+        # input < min
+        custom_input_2 = torch.Tensor([[1.0, 0.5], [0.125, -0.30]]).cuda()
+        expected_grad_2 = torch.Tensor([[1.0, 1.0], [1.0, 0.0]]).cuda()
+        grad_out_2 = compute_dloss_by_dx(custom_input_2, grad, c_enc_min, c_enc_max)
+        assert torch.allclose(expected_grad_2, grad_out_2)
+
+        # valid input range
+        custom_input_3 = torch.Tensor([[1.0, 0.5], [0.125, -0.25]]).cuda()
+        expected_grad_3 = torch.Tensor([[1.0, 1.0], [1.0, 1.0]]).cuda()
+        grad_out_3 = compute_dloss_by_dx(custom_input_3, grad, c_enc_min, c_enc_max)
+        assert torch.allclose(expected_grad_3, grad_out_3)
 
     def test_ste_gradient_math(self):
         """
