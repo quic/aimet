@@ -65,7 +65,7 @@ def compute_dloss_by_dx(x, grad, encoding_min, encoding_max):
         # broadcast to this shape
         # This will work if the original tensor shape was any dimensions as long as the first dimension matches the
         # encoding tensor shape
-        encoding = encoding * torch.ones(shape[1:] + [shape[0]])
+        encoding = encoding * torch.ones(shape[1:] + [shape[0]]).to(x.device)
 
         # we permute the resulting tensor back to OIHW shape
         encoding = encoding.permute([len(shape) - 1] + list(range(len(shape) - 1)))
