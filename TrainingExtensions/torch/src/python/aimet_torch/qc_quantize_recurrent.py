@@ -36,6 +36,7 @@
 # =============================================================================
 
 """ Custom PyTorch Op for quantizing weights and activations for Recurrent Layers """
+# pylint: disable=too-many-lines
 from typing import Tuple, List, Union, Dict
 
 import torch
@@ -442,7 +443,7 @@ class QcQuantizeRecurrent(torch.nn.Module):
 
     def get_activation_param_quantizers_for_onnx_tensors(
             self, io_tensor_map: Union[OpToIOTensors, List[OpToIOTensors]]) -> \
-            Dict[str, StaticGridPerTensorQuantizer]:
+            Tuple[Dict[str, StaticGridPerTensorQuantizer], Dict[str, StaticGridPerTensorQuantizer]]:
         """
         Retrieve mapping from onnx tensor names and quantizers
         :param io_tensor_map: ONNX IO tensor maps,
@@ -456,31 +457,67 @@ class QcQuantizeRecurrent(torch.nn.Module):
         if not isinstance(io_tensor_map, list):
             io_tensor_map = [io_tensor_map]
 
+        self._fill_quantizer_maps_for_inputs_and_params(activations_quantizer_map, params_quantizer_map, io_tensor_map)
+        self._fill_quantizer_maps_for_outputs(activations_quantizer_map, io_tensor_map)
+        return activations_quantizer_map, params_quantizer_map
+
+    def _fill_quantizer_maps_for_inputs_and_params(self, activations_quantizer_map: Dict[str,
+                                                                                         StaticGridPerTensorQuantizer],
+                                                   params_quantizer_map: Dict[str, StaticGridPerTensorQuantizer],
+                                                   io_tensor_map: List[OpToIOTensors]):
+        """
+        Fill quantizer map with inputs and params quantizers info
+        :param activations_quantizer_map: Map activation tensor name to quantizer
+        :param params_quantizer_map: Map param tensor name to quantizer
+        :param io_tensor_map: ONNX IO tensor maps, provided as a list of entries if recurrent module has more than one
+            layer i.e. onnx node info per layer.
+        """
         for layer in range(self.module_to_quantize.num_layers):
             inputs = io_tensor_map[layer].inputs
+            # Onnx inputs to quantizers has c and None as the last two elements. In the case of rnn and gru, c will be
+            # skipped but the index will still correspond to lstm's index counts. If the last None is changed in the
+            # future such that we try to use its index in inputs[index], this logic will need to be changed since it
+            # will be 1 larger than it should be.
             for index, quantizer_name in enumerate(onnx_inputs_to_quantizers):
                 if quantizer_name is None:
                     continue
                 quantizer_name = quantizer_name.format(layer)
-                quantizer = self._input_quantizers[quantizer_name] \
-                    if quantizer_name in self._input_quantizers else self._grouped_quantizers[quantizer_name]
+                if quantizer_name in self._input_quantizers:
+                    quantizer = self._input_quantizers[quantizer_name]
+                elif quantizer_name in self._grouped_quantizers:
+                    quantizer = self._grouped_quantizers[quantizer_name]
+                else:
+                    # Case when rnn and gru does not have initial_c_l{} as an input
+                    continue
                 if quantizer.enabled:
                     if quantizer in self._param_quantizers.values():
                         params_quantizer_map[inputs[index]] = quantizer
                     else:
                         activations_quantizer_map[inputs[index]] = quantizer
 
+    def _fill_quantizer_maps_for_outputs(self, activations_quantizer_map: Dict[str, StaticGridPerTensorQuantizer],
+                                         io_tensor_map: List[OpToIOTensors]):
+        """
+        Fill quantizer map with output quantizer info
+        :param activations_quantizer_map: Map activation tensor name to quantizer
+        :param io_tensor_map: ONNX IO tensor maps, provided as a list of entries if recurrent module has more than one
+            layer i.e. onnx node info per layer.
+        """
+        for layer in range(self.module_to_quantize.num_layers):
             outputs = io_tensor_map[layer].outputs
             for index, quantizer_name in enumerate(onnx_outputs_to_quantizers):
                 if quantizer_name is None:
                     continue
                 quantizer_name = quantizer_name.format(layer)
-                quantizer = self._output_quantizers[quantizer_name] \
-                    if quantizer_name in self._output_quantizers else self._grouped_quantizers[quantizer_name]
+                if quantizer_name in self._output_quantizers:
+                    quantizer = self._output_quantizers[quantizer_name]
+                elif quantizer_name in self._grouped_quantizers:
+                    quantizer = self._grouped_quantizers[quantizer_name]
+                else:
+                    # Case when rnn and gru does not have c_l{} as an output
+                    continue
                 if quantizer.enabled:
                     activations_quantizer_map[outputs[index]] = quantizer
-
-        return activations_quantizer_map, params_quantizer_map
 
     def _quantize_activation(self, tensor_quantizer: StaticGridPerTensorQuantizer,
                              tensors_to_quantize: Union[List[torch.Tensor], torch.Tensor]) -> \

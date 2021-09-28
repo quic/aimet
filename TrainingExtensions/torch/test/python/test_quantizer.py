@@ -52,7 +52,8 @@ import onnx
 from torchvision import models
 from aimet_common.defs import QuantScheme
 from aimet_torch.elementwise_ops import Multiply
-from aimet_torch.examples.test_models import TwoLayerBidirectionalLstmModel, SingleLayerRNNModel
+from aimet_torch.examples.test_models import TwoLayerBidirectionalLSTMModel, SingleLayerRNNModel, \
+    TwoLayerBidirectionaRNNModel, TwoLayerBidirectionalGRUModel
 
 from aimet_torch.meta.connectedgraph import ConnectedGraph
 from aimet_torch.onnx_utils import OnnxExportApiArgs
@@ -1511,45 +1512,46 @@ class TestQuantizationSim:
                                                  quant_scheme=QuantScheme.post_training_tf, round_mode='nearest')
         assert not QuantizationSimModel._is_quantizable_module(qc_quantize_module)
 
-    def test_export_lstm_model(self):
-        """ Test export functionality with lstm model """
-        model = TwoLayerBidirectionalLstmModel()
+    def test_export_recurrent_model(self):
+        """ Test export functionality with recurrent models """
+        models = [TwoLayerBidirectionaRNNModel(), TwoLayerBidirectionalLSTMModel(), TwoLayerBidirectionalGRUModel()]
         dummy_input = torch.randn(10, 1, 3)
-
-        sim = QuantizationSimModel(model, dummy_input)
 
         def forward_pass(model, args):
             model.eval()
             model(dummy_input)
 
-        # Quantize
-        sim.compute_encodings(forward_pass, None)
+        for model in models:
+            sim = QuantizationSimModel(model, dummy_input)
 
-        # Edit part of weights tensor to compare with original model before and after removal of quantize module
-        sim.model.lstm.weight_ih_l0[0][0] = 1
-        edited_weight = sim.model.lstm.weight_ih_l0.detach().clone()
+            # Quantize
+            sim.compute_encodings(forward_pass, None)
 
-        # Check that edited weight is different than original weight in module_to_quantize
-        assert not torch.equal(edited_weight, sim.model.lstm.module_to_quantize.weight_ih_l0)
+            # Edit part of weights tensor to compare with original model before and after removal of quantize module
+            sim.model.recurrent.weight_ih_l0[0][0] = 1
+            edited_weight = sim.model.recurrent.weight_ih_l0.detach().clone()
 
-        sim.export('./data', 'rnn_save', dummy_input)
-        exported_model = torch.load('./data/rnn_save.pth')
+            # Check that edited weight is different than original weight in module_to_quantize
+            assert not torch.equal(edited_weight, sim.model.recurrent.module_to_quantize.weight_ih_l0)
 
-        # Check that weight from quantized module was copied to original module successfully
-        assert isinstance(exported_model.lstm, torch.nn.LSTM)
-        assert torch.equal(edited_weight, exported_model.lstm.weight_ih_l0)
+            sim.export('./data', 'recurrent_save', dummy_input)
+            exported_model = torch.load('./data/recurrent_save.pth')
 
-        with open('./data/rnn_save.encodings') as f:
-            encodings = json.load(f)
-            # verifying the encoding against default eAI HW cfg
-            # activation encoding (input only w/o cell state) -- x_l0, h_l0, x_l1 & h_l1
-            assert 8 == len(encodings['activation_encodings'])
-            # param encoding (weight only w/o bias)  -- W_l0, R_l0, W_l1 & R_l1
-            assert 4 == len(encodings['param_encodings'])
+            # Check that weight from quantized module was copied to original module successfully
+            assert isinstance(exported_model.recurrent, (torch.nn.RNN, torch.nn.LSTM, torch.nn.GRU))
+            assert torch.equal(edited_weight, exported_model.recurrent.weight_ih_l0)
 
-        os.remove('./data/rnn_save.pth')
-        os.remove('./data/rnn_save.onnx')
-        os.remove('./data/rnn_save.encodings')
+            with open('./data/recurrent_save.encodings') as f:
+                encodings = json.load(f)
+                # verifying the encoding against default eAI HW cfg
+                # activation encoding (input only w/o cell state) -- x_l0, h_l0, x_l1 & h_l1
+                assert 8 == len(encodings['activation_encodings'])
+                # param encoding (weight only w/o bias)  -- W_l0, R_l0, W_l1 & R_l1
+                assert 4 == len(encodings['param_encodings'])
+
+            os.remove('./data/recurrent_save.pth')
+            os.remove('./data/recurrent_save.onnx')
+            os.remove('./data/recurrent_save.encodings')
 
     def test_set_and_freeze_param_encoding(self):
         """ Test set and freeze parameter encoding  """

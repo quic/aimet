@@ -569,18 +569,46 @@ class SingleLayerBidirectionalLstmModel(nn.Module):
         return self.lstm(x, hx)
 
 
-class TwoLayerBidirectionalLstmModel(nn.Module):
+class TwoLayerBidirectionalLSTMModel(nn.Module):
     """
     Model using torch.nn.LSTM module
     Expected input shape = (SEQ_LENGTH, BATCH_SIZE, INPUT_SIZE=3)
     """
     def __init__(self):
-        super(TwoLayerBidirectionalLstmModel, self).__init__()
-        self.lstm = torch.nn.LSTM(input_size=3, hidden_size=5, num_layers=2, bidirectional=True)
+        super(TwoLayerBidirectionalLSTMModel, self).__init__()
+        self.recurrent = torch.nn.LSTM(input_size=3, hidden_size=5, num_layers=2, bidirectional=True)
 
     # pylint: disable=arguments-differ
     def forward(self, x, hx=None):
-        return self.lstm(x, hx)
+        return self.recurrent(x, hx)
+
+
+class TwoLayerBidirectionaRNNModel(nn.Module):
+    """
+    Model using torch.nn.RNN module
+    Expected input shape = (SEQ_LENGTH, BATCH_SIZE, INPUT_SIZE=3)
+    """
+    def __init__(self):
+        super(TwoLayerBidirectionaRNNModel, self).__init__()
+        self.recurrent = torch.nn.RNN(input_size=3, hidden_size=5, num_layers=2, bidirectional=True)
+
+    # pylint: disable=arguments-differ
+    def forward(self, x, hx=None):
+        return self.recurrent(x, hx)
+
+
+class TwoLayerBidirectionalGRUModel(nn.Module):
+    """
+    Model using torch.nn.GRU module
+    Expected input shape = (SEQ_LENGTH, BATCH_SIZE, INPUT_SIZE=3)
+    """
+    def __init__(self):
+        super(TwoLayerBidirectionalGRUModel, self).__init__()
+        self.recurrent = torch.nn.GRU(input_size=3, hidden_size=5, num_layers=2, bidirectional=True)
+
+    # pylint: disable=arguments-differ
+    def forward(self, x, hx=None):
+        return self.recurrent(x, hx)
 
 
 class MultiLayerRNNModel(nn.Module):
