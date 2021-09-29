@@ -43,7 +43,7 @@ import unittest
 from unittest.mock import MagicMock
 
 import tensorflow as tf
-tf.compat.v1.logging.set_verbosity(tf.logging.WARN)
+tf.logging.set_verbosity(tf.logging.WARN)
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
 
 from aimet_common.utils import start_bokeh_server_session

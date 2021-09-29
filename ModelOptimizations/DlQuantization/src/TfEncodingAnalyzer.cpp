@@ -39,6 +39,7 @@
 #include <cstddef>
 #include <cassert>
 #include <vector>
+#include <cmath>
 
 #include "DlQuantization/Quantization.hpp"
 #include "math_functions.hpp"

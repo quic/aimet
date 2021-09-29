@@ -40,9 +40,9 @@
 #ifndef QUANTIZER_FACTORY_HPP
 #define QUANTIZER_FACTORY_HPP
 
-#include <bits/unique_ptr.h>
 #include <string>
 #include <vector>
+#include <memory>
 
 #include "DlQuantization/IQuantizationEncodingAnalyzer.hpp"
 #include "DlQuantization/IQuantizer.hpp"

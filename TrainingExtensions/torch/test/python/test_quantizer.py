@@ -739,8 +739,13 @@ class TestQuantizationSim:
             print(encoding_data)
 
         activation_keys = list(encoding_data["activation_encodings"].keys())
+<<<<<<< HEAD
+        self.assertTrue(activation_keys[0] == "124")
+        self.assertTrue(isinstance(encoding_data["activation_encodings"]["124"], list))
+=======
         assert activation_keys[0] == "124"
         assert isinstance(encoding_data["activation_encodings"]["124"], list)
+>>>>>>> 05b58a69321e7c93e158debe8c6541924edb5b0e
 
         param_keys = list(encoding_data["param_encodings"].keys())
         assert param_keys[2] == "conv1.weight"
@@ -1262,7 +1267,11 @@ class TestQuantizationSim:
         with open('./data/encodings_with_standalone_ops.encodings') as json_file:
             encoding_data = json.load(json_file)
         # in onnx definition tensor 16 is output of Reshape, to be ignored
+<<<<<<< HEAD
+        self.assertTrue("32" not in encoding_data["activation_encodings"].keys())
+=======
         assert "32" not in encoding_data["activation_encodings"].keys()
+>>>>>>> 05b58a69321e7c93e158debe8c6541924edb5b0e
 
     # -------------------------------------------------------------------------------
     def test_layers_to_ignore(self):
@@ -1582,8 +1591,13 @@ class TestQuantizationSim:
 
         encoding_dict = QuantizationSimModel.generate_symmetric_encoding_dict(
             torch.as_tensor(np.array([0.7796169519533523, -0.9791506528745285], dtype='float32')), bitwidth=8)
+<<<<<<< HEAD
+        self.assertEqual(-128, encoding_dict['offset'])
+        self.assertAlmostEqual(encoding_dict['scale'], 0.0077098476, places=7)
+=======
         assert -128 == encoding_dict['offset']
         assert round(encoding_dict['scale'], 7) == 0.0077098
+>>>>>>> 05b58a69321e7c93e158debe8c6541924edb5b0e
 
     def test_export_dict_input_output(self):
         """ test export functionality on dictionary input and output """
@@ -1618,8 +1632,16 @@ class TestQuantizationSim:
 
         onnx_model = onnx.load('./data/dict_input_output_model.onnx')
         for inp in onnx_model.graph.input:
+<<<<<<< HEAD
+            self.assertIn(inp.name, ['a', 'b', 'c'])
+        for exp, act in zip(o_names, onnx_model.graph.output):
+            self.assertEqual(exp, act.name)
+        for tensor_name in encoding_data["activation_encodings"].keys():
+            self.assertIn(tensor_name, o_names)
+=======
             assert inp.name in ['a', 'b', 'c']
         for exp, act in zip(o_names, onnx_model.graph.output):
             assert exp == act.name
         for tensor_name in encoding_data["activation_encodings"].keys():
             assert tensor_name in o_names
+>>>>>>> 05b58a69321e7c93e158debe8c6541924edb5b0e

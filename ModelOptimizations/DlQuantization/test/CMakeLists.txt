@@ -35,8 +35,6 @@
 #==============================================================================
 cmake_minimum_required(VERSION 3.5)
 
-find_package(GTest)
-
 include_directories(BEFORE
       ${CMAKE_CURRENT_SOURCE_DIR}/../src
       ${gtest_SOURCE_DIR}/include
@@ -62,7 +60,7 @@ if (ENABLE_CUDA)
     target_link_libraries(MoDlQuantizationTest
             MoDlQuantization
             MoDlQuantizationCuda
-            CUDA::cublas
+	      CUDA::cublas
             gtest gtest_main
             )
 
@@ -73,7 +71,6 @@ else (ENABLE_CUDA)
             )
 
 endif (ENABLE_CUDA)
-
 
 add_test(MoDlQuantizationTest
       MoDlQuantizationTest --gtest_output=xml:cpp_test_output.xml)

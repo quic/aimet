@@ -50,16 +50,12 @@ target_compile_options(MoDlCompressionTest
       )
 
 target_link_libraries(MoDlCompressionTest
-      ${OPENCV_LIBRARY}
-      Threads::Threads
       MoDlCompression
-      stdc++
-      ${LAPACKE_LIBRARY}
-      z
-      dl
-      gtest gtest_main
+      ${OPENCV_LIBRARY}
+      LAPACK::LAPACK
+      z 
+      gtest_main
       )
-
 
 add_test(MoDlCompressionTest
       MoDlCompressionTest --gtest_output=xml:cpp_test_output.xml

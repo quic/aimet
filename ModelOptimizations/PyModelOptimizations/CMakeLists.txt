@@ -37,30 +37,27 @@
 #=============================================================================
 cmake_minimum_required(VERSION 3.5)
 
-add_library(PyModelOptimizations SHARED
-      PyModelOptimizations.cpp)
+add_library(PyModelOptimizations MODULE PyModelOptimizations.cpp)
 
 if (ENABLE_CUDA)
     target_link_libraries(PyModelOptimizations
-          PUBLIC
-             stdc++
-             PYBIND11
-             MoDlQuantization
-             MoDlEqualization
-             MoDlQuantizationCuda
-             MoDlCompression
+        PUBLIC
+            pybind11::module
+            MoDlQuantization
+            MoDlEqualization
+            MoDlQuantizationCuda
+            MoDlCompression
 
             CUDA::cublas
-             ${LAPACKE_LIBRARY}
-             ${OPENCV_LIBRARY}
-             z
-          )
+            ${LAPACKE_LIBRARY}
+            ${OPENCV_LIBRARY}
+            z
+        )
 
-else (ENABLE_CUDA)
+else()
     target_link_libraries(PyModelOptimizations
-            PUBLIC
-            stdc++
-            PYBIND11
+        PUBLIC
+            pybind11::module
             MoDlQuantization
             MoDlEqualization
             MoDlCompression
@@ -68,16 +65,17 @@ else (ENABLE_CUDA)
             ${LAPACKE_LIBRARY}
             ${OPENCV_LIBRARY}
             z
-            )
+        )
 
-endif (ENABLE_CUDA)
+endif()
 
 set_target_properties(PyModelOptimizations
-      PROPERTIES
-         OUTPUT_NAME "pymo"
-         LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/artifacts"
-      )
+    PROPERTIES
+        SUFFIX ".so"
+        OUTPUT_NAME "pymo"
+        LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/artifacts"
+    )
 
 install(FILES $<TARGET_FILE:PyModelOptimizations>
-      DESTINATION ${AIMET_INSTALL_DIR}/lib/x86_64-linux-gnu
-      )
+    DESTINATION ${AIMET_INSTALL_DIR}/lib/x86_64-linux-gnu
+    )

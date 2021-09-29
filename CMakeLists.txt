@@ -35,12 +35,38 @@
 #  @@-COPYRIGHT-END-@@
 #
 #=============================================================================
-cmake_minimum_required(VERSION 3.5)
+cmake_minimum_required(VERSION 3.18)
+# 3.17+ required for correct finding of python within conda env
+# 3.18 for CUDA_ARCHITECTURES
+# C++14 for CUB
+# TODO this code doesn't work with cuda 11
 
 project(aimet)
 
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11 -O0 -ggdb -fPIC -D_GLIBCXX_USE_CXX11_ABI=0")
+# # Fix behavior of CMAKE_CXX_STANDARD when targeting macOS.
+# if (POLICY CMP0025)
+#   cmake_policy(SET CMP0025 NEW)
+# endif ()
+
 set(AIMET_INSTALL_DIR ${CMAKE_BINARY_DIR}/staging/universal)
+
+set(CMAKE_BUILD_TYPE Release)
+set(CMAKE_CXX_STANDARD 14)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_VERBOSE_MAKEFILE ON)
+
+#set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11 -O0 -ggdb -fPIC -DGLIBCXX_USE_CXX11_ABI=0")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -ggdb -march=native -Wno-narrowing -fPIC -DGLIBCXX_USE_CXX11_ABI=0")
+list(APPEND CMAKE_PREFIX_PATH $ENV{CONDA_PREFIX})
+include_directories($ENV{CONDA_PREFIX}/include)
+link_directories($ENV{CONDA_PREFIX}/lib)
+
+if(APPLE)
+  set(LIB_EXT "dylib")
+  list(APPEND CMAKE_SHARED_LINKER_FLAGS "-undefined dynamic_lookup")
+else()
+  set(LIB_EXT "so")
+endif()
 
 if(NOT DEFINED AIMET_PYTHONPATH)
   set(AIMET_PYTHONPATH "PYTHONPATH=${CMAKE_BINARY_DIR}/artifacts" CACHE STRING "python path")
@@ -48,7 +74,12 @@ endif()
 set(AIMET_PYTHONPATH "${AIMET_PYTHONPATH}:${CMAKE_CURRENT_SOURCE_DIR}/TrainingExtensions/common/src/python")
 
 if(NOT DEFINED AIMET_LD_LIBRARY_PATH)
-  set(AIMET_LD_LIBRARY_PATH "LD_LIBRARY_PATH=${CMAKE_BINARY_DIR}/artifacts:$ENV{LD_LIBRARY_PATH}")
+  if(APPLE)  
+    # set(AIMET_LD_LIBRARY_PATH "DYLD_LIBRARY_PATH=${CMAKE_BINARY_DIR}/artifacts:$ENV{CONDA_PREFIX}/lib:$ENV{DYLD_LIBRARY_PATH}")
+    set(AIMET_LD_LIBRARY_PATH "DYLD_LIBRARY_PATH=${CMAKE_BINARY_DIR}/artifacts:$ENV{CONDA_PREFIX}/lib")
+  else()
+    set(AIMET_LD_LIBRARY_PATH "LD_LIBRARY_PATH=${CMAKE_BINARY_DIR}/artifacts:$ENV{LD_LIBRARY_PATH}")
+  endif()
   message(STATUS "Set ${AIMET_LD_LIBRARY_PATH} in ${CMAKE_CURRENT_SOURCE_DIR}")
 endif()
 
@@ -60,7 +91,7 @@ else()
   message(STATUS "SW_VERSION already set to ${SW_VERSION}.")
 endif()
 
-find_package(Threads)
+# find_package(Threads)
 # Disabling openMP since statically linked OpenMP in PyTorch (v1.5.0) seems to conflict with aimet usage
 #find_package(OpenMP REQUIRED)
 #set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${OpenMP_CXX_FLAGS}")
@@ -78,9 +109,13 @@ if (ENABLE_CUDA)
   message("Compiling with CUDA enabled")
 
   find_package(CUDAToolkit)
+
   if(NOT DEFINED CMAKE_CUDA_ARCHITECTURES)
-    set(CMAKE_CUDA_ARCHITECTURES 52 60 61 70 72)
+    # set(CMAKE_CUDA_ARCHITECTURES 52 60 61 70 72 75 80 86)
+    set(CMAKE_CUDA_ARCHITECTURES 75)  # TODO should be configurable
   endif()
+
+  list(APPEND CUDA_NVCC_FLAGS -O3 -std=c++14 -x cu -Xcompiler -fPIC -DGLIBCXX_USE_CXX11_ABI=0)
 
   enable_language(CUDA)
 
@@ -89,52 +124,65 @@ else(ENABLE_CUDA)
 
 endif(ENABLE_CUDA)
 
-set(LAPACKE_LIBRARY "/usr/lib/x86_64-linux-gnu/liblapacke.so.3.7.1")
+# find LAPACK
+if(APPLE)
+  set(BLA_VENDOR Apple)
+else()
+  set(BLA_VENDOR Intel10_64lp)  # all works, MKL is faster
+  # set(BLA_VENDOR OpenBLAS)
+endif()
+find_package(LAPACK REQUIRED)
 
 find_package(OpenCV REQUIRED)
-set(OPENCV_LIBRARY /usr/local/lib/libopencv_core.a)
+include_directories(${OpenCV_INCLUDE_DIRS})
+link_directories(${OpenCV_LIBRARY_DIRS})
+add_definitions(${OpenCV_DEFINITIONS})
+find_library(OPENCV_LIBRARY opencv_core)
 
 # ----------------------------------
 # Conditional build for PyTorch
 # ----------------------------------
-
 find_package(Python COMPONENTS Interpreter Development)
-set(PYTHON_DIST_PACKAGES "/usr/local/lib/python${Python_VERSION_MAJOR}.${Python_VERSION_MINOR}/dist-packages/")
+#set(PYTHON_DIST_PACKAGES "/usr/local/lib/python${Python_VERSION_MAJOR}.${Python_VERSION_MINOR}/dist-packages/")
 
-
+find_package(pybind11 REQUIRED CONFIG)
+# set(PYBIND11_CPP_STANDARD -std=c++11)
+set(PYBIND11_PYTHON_VERSION ${Python_VERSION})
+set(PYBIND11_INC_DIRS "${pybind11_INCLUDE_DIRS}")
+message("pybind11_INCLUDE_DIRS ${pybind11_INCLUDE_DIRS}")
 
 if (NOT (DEFINED ENABLE_TORCH))
   message("AIMET Torch build not explicitly disabled. Enabling implicitly")
   set(ENABLE_TORCH ON CACHE BOOL "")
-
-endif(NOT (DEFINED ENABLE_TORCH))
+endif()
 
 if (ENABLE_TORCH)
   set(AIMET_PYTHONPATH "${AIMET_PYTHONPATH}:${CMAKE_CURRENT_SOURCE_DIR}/TrainingExtensions/torch/src/python")
 
   # If we enable PyTorch builds then use the pybind11 headers that are part of the torch pip install
   # So we don't have a version mismatch - between PyTorch custom C++ op code and PyMO
-  list(APPEND PYBIND11_INC_DIRS "${PYTHON_DIST_PACKAGES}/torch/include")
+#  list(APPEND PYBIND11_INC_DIRS "${PYTHON_DIST_PACKAGES}/torch/include")
+  set(PYBIND11_INC_DIRS "$ENV{CONDA_PREFIX}/lib/python3.7/site-packages/torch/include")
   list(APPEND PYBIND11_INC_DIRS ${Python_INCLUDE_DIRS})
 
-else (ENABLE_TORCH)
-  list(APPEND PYBIND11_INC_DIRS "${PYTHON_DIST_PACKAGES}/pybind11/include/")
-  list(APPEND PYBIND11_INC_DIRS ${Python_INCLUDE_DIRS})
+else()
+#  list(APPEND PYBIND11_INC_DIRS "${PYTHON_DIST_PACKAGES}/pybind11/include/")
+#  list(APPEND PYBIND11_INC_DIRS ${Python_INCLUDE_DIRS})
 
   message("AIMET Torch build disabled")
 
-endif (ENABLE_TORCH)
+endif()
 
 # ----------------------------------
 # PyBind11
 # ----------------------------------
 
 add_library(PYBIND11 SHARED IMPORTED)
-
 set_target_properties(PYBIND11 PROPERTIES
-        IMPORTED_LOCATION ${Python_LIBRARIES}
-        INTERFACE_INCLUDE_DIRECTORIES "${PYBIND11_INC_DIRS}"
-        )
+      IMPORTED_LOCATION "$ENV{CONDA_PREFIX}/lib/libpython3.7m.${LIB_EXT}"
+      INTERFACE_INCLUDE_DIRECTORIES "${PYBIND11_INC_DIRS}"
+      LINK_FLAGS "${pybind11_LIBRARIES}"
+)
 
 # ----------------------------------
 # Conditional build for TensorFlow
@@ -147,14 +195,16 @@ if (NOT (DEFINED ENABLE_TENSORFLOW))
 endif(NOT (DEFINED ENABLE_TENSORFLOW))
 
 if (ENABLE_TENSORFLOW)
+  # TODO check TF version
+  set(TF_DIR "$ENV{CONDA_PREFIX}/lib/python3.7/site-packages/tensorflow_core")  # for TF<=2.0
+  #set(TF_DIR "$ENV{CONDA_PREFIX}/lib/python3.7/site-packages/tensorflow")  # for TF>2.0
+
   set(AIMET_PYTHONPATH "${AIMET_PYTHONPATH}:${CMAKE_CURRENT_SOURCE_DIR}/TrainingExtensions/tensorflow/src/python")
-  list(APPEND TENSORFLOW_INCLUDES "${PYTHON_DIST_PACKAGES}/tensorflow_core/include")
+  list(APPEND TENSORFLOW_INCLUDES "${TF_DIR}/include")
   add_library(TensorFlow SHARED IMPORTED)
   set_target_properties(TensorFlow PROPERTIES
-        IMPORTED_LOCATION
-          "${PYTHON_DIST_PACKAGES}/tensorflow_core/libtensorflow_framework.so.1"
-        INTERFACE_INCLUDE_DIRECTORIES
-          "${TENSORFLOW_INCLUDES}"
+        IMPORTED_LOCATION "${TF_DIR}/libtensorflow_framework.so.1"
+        INTERFACE_INCLUDE_DIRECTORIES "${TENSORFLOW_INCLUDES}"
         )
 
 else (ENABLE_TENSORFLOW)
@@ -204,10 +254,11 @@ endif()
 
 enable_testing()
 
+add_subdirectory(ThirdParty)
+include_directories(${gtest_SOURCE_DIR}/include)
 add_subdirectory(ModelOptimizations)
 add_subdirectory(TrainingExtensions)
 add_subdirectory(NightlyTests)
-add_subdirectory(ThirdParty)
 add_subdirectory(Docs)
 add_subdirectory(Examples)
 if(IS_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/Benchmarks")

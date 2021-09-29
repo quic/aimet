@@ -35,5 +35,39 @@
 #==============================================================================
 cmake_minimum_required(VERSION 3.5)
 
+<<<<<<< HEAD
+add_library(PyTrainingExtensions MODULE
+      PyTrainingExtensions/PyTrainingExtensions.cpp)
+
+target_include_directories(PyTrainingExtensions PUBLIC
+      ${CMAKE_CURRENT_SOURCE_DIR}/include)
+
+if (ENABLE_CUDA)
+    target_link_libraries(PyTrainingExtensions PUBLIC
+            pybind11::module
+            MoDlQuantization
+            MoDlQuantizationCuda
+	      CUDA::cublas
+            )
+
+else (ENABLE_CUDA)
+    target_link_libraries(PyTrainingExtensions PUBLIC
+            pybind11::module
+            MoDlQuantization
+            )
+
+endif (ENABLE_CUDA)
+
+set_target_properties(PyTrainingExtensions PROPERTIES
+      SUFFIX ".so"
+      OUTPUT_NAME "pytrext"
+      LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/artifacts")
+
+install(FILES $<TARGET_FILE:PyTrainingExtensions>
+      DESTINATION ${AIMET_INSTALL_DIR}/lib/x86_64-linux-gnu
+      )
+
+=======
+>>>>>>> 05b58a69321e7c93e158debe8c6541924edb5b0e
 add_subdirectory(src/python)
 add_subdirectory(test)

@@ -2,7 +2,7 @@
 //
 //  @@-COPYRIGHT-START-@@
 //
-//  Copyright (c) 2020, Qualcomm Innovation Center, Inc. All rights reserved.
+//  Copyright (c) 2017-2018, Qualcomm Innovation Center, Inc. All rights reserved.
 //
 //  Redistribution and use in source and binary forms, with or without
 //  modification, are permitted provided that the following conditions are met:
@@ -36,8 +36,8 @@
 //
 //==============================================================================
 
-#ifndef QC_QUANTIZE_RECURRENT_PARAM_OP_HPP
-#define QC_QUANTIZE_RECURRENT_PARAM_OP_HPP
+#ifndef QC_QUANTIZE_OP_DEPRECATED_HPP
+#define QC_QUANTIZE_OP_DEPRECATED_HPP
 
 #include "tensorflow/core/framework/op.h"
 #include "absl/base/config.h"
@@ -46,8 +46,27 @@
 #include "tensorflow/core/framework/shape_inference.h"
 #include "tensorflow/core/platform/logging.h"
 
-#include <DlQuantization/TensorQuantizerOpFacade.h>
-#include <DlQuantization/Quantization.hpp>
+#include "DlQuantization/IQuantizer.hpp"
+#include "DlQuantization/QuantizerFactory.hpp"
+#include "QcOp/qc_quantizer.hpp"
 
+// Declarations of the functors to be used
+// to invoke Quantization APIs.
+using namespace tensorflow;
 
-#endif   // QC_QUANTIZE_RECURRENT_PARAM_OP_HPP
+template <typename Device, typename T>
+struct QcQuantizeDeprecatedFunctor
+{
+    void operator()(const Device& d, QcOp::OP_CONFIG_TYPE config, const std::vector<const T*>& in_tensors,
+                    const std::vector<size_t>& in_tensor_counts, std::vector<T*> out_tensors,
+                    DlQuantization::TfEncodingLayer& in_encoding, DlQuantization::TfEncodingLayer& out_encoding,
+                    T* output_min_tensor, T* output_max_tensor, QcOp::QC_Quantizer<T>& quantizer);
+
+    void operator()(const Device& d, QcOp::OP_CONFIG_TYPE config, std::vector<T*>& in_tensors,
+                    const std::vector<size_t>& in_tensor_counts, const bool* training_in_progress,
+                    std::vector<T*> out_tensors, DlQuantization::TfEncodingLayer& in_encoding,
+                    DlQuantization::TfEncodingLayer& out_encoding, T* output_min_tensor, T* output_max_tensor,
+                    QcOp::QC_Quantizer<T>& quantizer);
+};
+
+#endif   // QC_QUANTIZE_OP_DEPRECATED_HPP

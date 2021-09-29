@@ -35,7 +35,6 @@
 #==============================================================================
 cmake_minimum_required(VERSION 3.5)
 
-
 include_directories(BEFORE
         ${CMAKE_CURRENT_SOURCE_DIR}/../src
         ${gtest_SOURCE_DIR}/include
@@ -53,12 +52,10 @@ target_compile_options(MoDlEqualizationTest
 
 target_link_libraries(MoDlEqualizationTest
         MoDlEqualization
-        stdc++
-        PYBIND11
+        pybind11::embed
         ${LAPACKE_LIBRARY}
         ${OPENCV_LIBRARY}
         z
-        dl
         gtest gtest_main
         )
 

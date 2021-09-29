@@ -230,7 +230,11 @@ def get_node_to_io_tensor_names_map(model: torch.nn.Module,
         if isinstance(curr_module, (torch.nn.RNN, torch.nn.LSTM, torch.nn.GRU)):
             raise NotImplementedError('exporting encoding for RNN module via torchscript not supported')
 
+<<<<<<< HEAD
+        if not isinstance(curr_module, PassThroughOp):
+=======
         if not isinstance(curr_module, torch.nn.Identity):
+>>>>>>> 05b58a69321e7c93e158debe8c6541924edb5b0e
             modules.append(curr_module)
 
     run_hook_for_layers_with_given_input(model, inputs, forward_hook)

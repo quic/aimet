@@ -40,6 +40,7 @@
 import unittest
 import logging
 import tensorflow as tf
+tf.logging.set_verbosity(tf.logging.WARN)
 
 from aimet_common.utils import AimetLogger
 from aimet_tensorflow.common.module_identifier import StructureModuleIdentifier

@@ -324,6 +324,165 @@ class TestOnnxUtils:
         expected_nodes = ['conv0', 'conv2']
         actual_nodes = [node.name for node in onnx_model.graph.node]
         assert len(actual_nodes) == len(expected_nodes)
+<<<<<<< HEAD
+
+        for name in expected_nodes:
+            assert name in actual_nodes
+
+    def test_onnx_export_model_output_empty_layer(self):
+
+        class MyModel(torch.nn.Module):
+            def __init__(self):
+                super(MyModel, self).__init__()
+                self.conv0 = torch.nn.Conv2d(10, 20, 3)
+                self.conv2 = torch.nn.Conv2d(20, 20, 3)
+                self.drop0 = torch.nn.Dropout2d()
+                self.drop1 = torch.nn.Dropout2d()
+
+            def forward(self, x):
+                x = self.conv0(x)
+                x = self.conv2(x)
+                x = self.drop0(x)
+                x = self.drop1(x)
+
+                return x
+
+        model = MyModel()
+
+        onnx_utils.OnnxSaver.set_node_names('./data/MyModel.onnx', model, dummy_input=torch.rand(1, 10, 24, 24))
+        onnx_model = onnx.load('./data/MyModel.onnx')
+
+        expected_nodes = ['conv0', 'conv2']
+        actual_nodes = [node.name for node in onnx_model.graph.node]
+        assert len(actual_nodes) == len(expected_nodes)
+
+        for name in expected_nodes:
+            assert name in actual_nodes
+
+    def test_onnx_export_model_empty_layer_consumed_by_multiple_nodes(self):
+
+        class MyModel(torch.nn.Module):
+            def __init__(self):
+                super(MyModel, self).__init__()
+                self.conv0 = torch.nn.Conv2d(10, 20, 3)
+                self.drop0 = torch.nn.Dropout2d()
+                self.drop1 = torch.nn.Dropout2d()
+                self.conv1 = torch.nn.Conv2d(20, 20, 3)
+                self.conv2 = torch.nn.Conv2d(20, 20, 3)
+
+            def forward(self, x):
+                x = self.conv0(x)
+                x = self.drop0(x)
+                x = self.drop1(x)
+                y1 = self.conv1(x)
+                y2 = self.conv2(x)
+
+                return y1, y2
+
+        model = MyModel()
+
+        onnx_utils.OnnxSaver.set_node_names('./data/MyModel.onnx', model, dummy_input=torch.rand(1, 10, 24, 24))
+        onnx_model = onnx.load('./data/MyModel.onnx')
+
+        expected_nodes = ['conv0', 'conv1', 'conv2']
+        actual_nodes = [node.name for node in onnx_model.graph.node]
+        assert len(actual_nodes) == len(expected_nodes)
+
+        for name in expected_nodes:
+            assert name in actual_nodes
+
+    def test_onnx_export_model_input_empty_layer_consumed_by_multiple_nodes(self):
+
+        class MyModel(torch.nn.Module):
+            def __init__(self):
+                super(MyModel, self).__init__()
+                self.drop0 = torch.nn.Dropout2d()
+                self.drop1 = torch.nn.Dropout2d()
+                self.conv1 = torch.nn.Conv2d(10, 20, 3)
+                self.conv2 = torch.nn.Conv2d(10, 20, 3)
+
+            def forward(self, x):
+                x = self.drop0(x)
+                x = self.drop1(x)
+                y1 = self.conv1(x)
+                y2 = self.conv2(x)
+
+                return y1, y2
+
+        model = MyModel()
+
+        onnx_utils.OnnxSaver.set_node_names('./data/MyModel.onnx', model, dummy_input=torch.rand(1, 10, 24, 24))
+        onnx_model = onnx.load('./data/MyModel.onnx')
+
+        expected_nodes = ['conv1', 'conv2']
+        actual_nodes = [node.name for node in onnx_model.graph.node]
+        assert len(actual_nodes) == len(expected_nodes)
+
+        for name in expected_nodes:
+            assert name in actual_nodes
+
+    def test_onnx_export_intermediate_tensor_also_model_output(self):
+
+        class MyModel(torch.nn.Module):
+            def __init__(self):
+                super(MyModel, self).__init__()
+                self.conv1 = torch.nn.Conv2d(10, 20, 3)
+                self.conv2 = torch.nn.Conv2d(20, 20, 3)
+                self.conv3 = torch.nn.Conv2d(20, 20, 3)
+
+            def forward(self, x):
+                x = self.conv1(x)
+
+                y1 = self.conv2(x)
+                y2 = self.conv3(x)
+
+                return y1, y2, x
+
+        model = MyModel()
+
+        onnx_utils.OnnxSaver.set_node_names('./data/MyModel.onnx', model, dummy_input=torch.rand(1, 10, 24, 24))
+        onnx_model = onnx.load('./data/MyModel.onnx')
+
+        expected_nodes = ['conv1', 'conv2', 'conv3']
+        actual_nodes = [node.name for node in onnx_model.graph.node]
+        assert len(actual_nodes) == len(expected_nodes)
+
+        for name in expected_nodes:
+            assert name in actual_nodes
+
+    def test_onnx_export_intermediate_tensor_also_model_output_via_empty_marker(self):
+
+        class MyModel(torch.nn.Module):
+            def __init__(self):
+                super(MyModel, self).__init__()
+                self.conv1 = torch.nn.Conv2d(10, 20, 3)
+                self.conv2 = torch.nn.Conv2d(20, 20, 3)
+                self.conv3 = torch.nn.Conv2d(20, 20, 3)
+                self.drop1 = torch.nn.Dropout2d()
+                self.drop2 = torch.nn.Dropout2d()
+
+            def forward(self, x):
+                x = self.conv1(x)
+
+                y1 = self.conv2(x)
+                y2 = self.conv3(x)
+                y3 = self.drop1(x)
+                y4 = self.drop2(x)
+
+                return y1, y2, y3, y4
+
+        model = MyModel()
+
+        onnx_utils.OnnxSaver.set_node_names('./data/MyModel.onnx', model, dummy_input=torch.rand(1, 10, 24, 24))
+        onnx_model = onnx.load('./data/MyModel.onnx')
+
+        expected_nodes = ['conv1', 'conv2', 'conv3']
+        actual_nodes = [node.name for node in onnx_model.graph.node]
+        assert len(actual_nodes) == len(expected_nodes)
+
+        for name in expected_nodes:
+            assert name in actual_nodes
+=======
 
         for name in expected_nodes:
             assert name in actual_nodes
@@ -558,3 +717,4 @@ class TestOnnxUtils:
 
         if os.path.exists('./data/MyModel.onnx'):
             os.remove('./data/MyModel.onnx')
+>>>>>>> 05b58a69321e7c93e158debe8c6541924edb5b0e
