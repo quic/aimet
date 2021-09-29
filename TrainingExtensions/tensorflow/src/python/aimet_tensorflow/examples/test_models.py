@@ -47,6 +47,23 @@ from tensorflow.python.keras.models import Sequential
 from tensorflow.python.keras.layers import Dense, Conv2D, BatchNormalization, Flatten, AvgPool2D, MaxPool2D
 
 
+def transposed_conv2d_model():
+    """ Trasposed Conv2D model"""
+    inputs = tf.keras.Input(shape=(7, 7, 1))
+    x = tf.layers.Conv2DTranspose(1, (4, 4), use_bias=True)(inputs)
+    return x
+
+
+def instance_norm_model():
+    """
+    Function for Instance Norms
+    """
+    inputs = tf.keras.Input(shape=(16, 16, 3,))
+    x = tf.keras.layers.Conv2D(16, (3, 3))(inputs)
+    x = tf.contrib.layers.instance_norm(x)
+    return x
+
+
 def single_residual():
     """ Function for returning single residual model """
 

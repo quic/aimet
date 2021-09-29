@@ -60,6 +60,21 @@ subgraph_constructors = op_type_templates
 class TestSubGraph(unittest.TestCase):
     """ Test Sub Graph functions """
 
+    def test_instance_norm_model(self):
+        input_shape = subgraph_constructors['InstanceNormalization']['input_shape']
+        constructor_string = subgraph_constructors['InstanceNormalization']['constructor']
+        instance_norm_subgraph = create_subgraph_for_op_default(input_shape, constructor_string)
+
+        logger.debug("The OPs created by create_subgraph_for_op_default()")
+        for op in instance_norm_subgraph.get_operations():
+            logger.debug("OP: %s", op.name)
+
+        op_type_patterns = create_op_type_patterns_from_subgraph(instance_norm_subgraph, additional_starting_ops=[])
+        for pat in op_type_patterns:
+            logger.debug(pat._op_type)
+
+        self.assertEqual(op_type_patterns[-1]._op_type, 'AddV2')
+
     def test_conv2d_no_bias_subgraph(self):
         """ test sub graph for conv2D Op without bias """
 
@@ -244,3 +259,38 @@ class TestSubGraph(unittest.TestCase):
                     matched_op_set.add(dense_op)
 
         logger.debug(len(matched_op_set))
+
+    def test_transposed_conv2d_no_bias_subgraph(self):
+        """ test sub graph for conv2D Op without bias """
+        tf.compat.v1.reset_default_graph()
+        input_shape = subgraph_constructors['Conv2DTranspose']['input_shape']
+        constructor_string = subgraph_constructors['Conv2DTranspose']['constructor']
+        transposed_conv_subgraph = create_subgraph_for_op_default(input_shape, constructor_string)
+        logger.debug("The OPs created by create_subgraph_for_op_default()")
+        for op in transposed_conv_subgraph.get_operations():
+            logger.debug("OP: %s", op.name)
+
+        op_type_patterns = create_op_type_patterns_from_subgraph(transposed_conv_subgraph, additional_starting_ops=[])
+        for pat in op_type_patterns:
+            logger.debug(pat._op_type)
+
+        self.assertEqual(op_type_patterns[-1]._op_type, 'Conv2DBackpropInput')
+
+    def test_transposed_conv2d_bias_subgraph(self):
+        """ test sub graph for conv2D Op without bias """
+        tf.compat.v1.reset_default_graph()
+        input_shape = subgraph_constructors['Conv2DTranspose_with_bias']['input_shape']
+        constructor_string = subgraph_constructors['Conv2DTranspose_with_bias']['constructor']
+        transposed_conv_subgraph = create_subgraph_for_op_default(input_shape, constructor_string)
+        logger.debug("The OPs created by create_subgraph_for_op_default()")
+        for op in transposed_conv_subgraph.get_operations():
+            logger.debug("OP: %s", op.name)
+
+        op_type_patterns = create_op_type_patterns_from_subgraph(transposed_conv_subgraph, additional_starting_ops=[])
+        for pat in op_type_patterns:
+            logger.debug(pat._op_type)
+
+        # The pattern list consists of successive OpTypePattern() objects starting from the layer's input Op to
+        # the output Op. Each OpTypePattern() becomes an input to the next OpTypePattern(). In the case of a Conv2D
+        # with Bias, the last element in the pattern list is BiasAdd.
+        self.assertEqual(op_type_patterns[-1]._op_type, 'BiasAdd')

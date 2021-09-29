@@ -104,7 +104,7 @@ public:
     }
 
     at::Tensor quantize(at::Tensor input, DlQuantization::TfEncoding& encoding,
-                        DlQuantization::RoundingMode roundingMode, bool use_cuda)
+                        DlQuantization::RoundingMode roundingMode, bool use_cuda, bool shiftToSigned)
     {
         // Allocate an output tensor as the same shape as the input
         at::Tensor output = input;
@@ -115,7 +115,7 @@ public:
             inputTensorSize *= size;
 
         _tensorQuantizationSim->quantizeTensor(input.data<float>(), inputTensorSize, output.data<float>(), encoding.min,
-                                               encoding.max, encoding.bw, roundingMode, use_cuda);
+                                               encoding.max, encoding.bw, roundingMode, use_cuda, shiftToSigned);
 
         return output;
     }
@@ -134,6 +134,12 @@ public:
         return std::make_tuple(out_encoding, _isEncodingValid);
     }
 
+    std::vector<std::tuple<double, double>> getStatsHistogram() const
+    {
+        auto histogram = this->_encodingAnalyzer->getStatsHistogram();
+        return histogram;
+    }
+
 private:
     bool _isEncodingValid;
     DlQuantization::QuantizationMode _quantizationScheme;
@@ -150,5 +156,6 @@ PYBIND11_MODULE(TORCH_EXTENSION_NAME, m)
         .def("quantizeDequantize", &AimetTensorQuantizer::quantizeDequantize)
         .def("quantize", &AimetTensorQuantizer::quantize)
         .def("getEncoding", &AimetTensorQuantizer::getEncoding)
-        .def("resetEncodingStats", &AimetTensorQuantizer::resetEncodingStats);
+        .def("resetEncodingStats", &AimetTensorQuantizer::resetEncodingStats)
+        .def("getStatsHistogram", &AimetTensorQuantizer::getStatsHistogram);
 }

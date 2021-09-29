@@ -9,13 +9,7 @@ AIMET Visualization for Quantization
 
 Overview
 ========
-AIMET Visualization adds analytical capability to the AIMET tool (which helps quantize and compress ML models) through visualization. It provide more detailed insights in to AIMET features as users are able to analyze a model’s layers in terms of compressibility and also highlight potential issues when applying quantization. The tool also assists in displaying progress for computationally heavy tasks.
-
-Design
-======
-Given a model, a user can start a Bokeh server session and then invoke functions which will produce visualizations to help analyze and understand the model before using AIMET features from quantization and compression
-
-.. image:: ../images/vis_1.png
+AIMET Visualization adds analytical capability to the AIMET tool (which helps quantize and compress ML models) through visualization. It provide more detailed insights in to AIMET features as users are able to analyze a model's layers in terms of compressibility and also highlight potential issues when applying quantization. The tool also assists in displaying progress for computationally heavy tasks. The visualizations get saved as an HTML file under the specified directory.
 
 Quantization
 ============
@@ -44,19 +38,3 @@ There are two main functions a user can invoke:
 
 #. User can analyze relative weight ranges of a layer to see potentially problematic layers for quantization
 #. User can visualize weight ranges of a layer and see the various statistics for weights
-
-
-Starting a Bokeh Server Session:
-================================
-AIMET uses Bokeh for plotting. To visualize plots using Bokeh, user needs to start a Bokeh server. Following instructions show how Bokeh server can be started.
-
-#. Start a Bokeh server by typing this command: bokeh serve - -allow-websocket-origin=<host name>:<port number> --port=<port number>
-
-    --allow-websocket-origin tells the Bokeh server which network addresses to listen on, again not typically needed for local It is not need just to view locally.
-
-    --port tells the Bokeh server what network port to listen on rather than the default port of 5006
-
-#. Finally, go to the URL to see the visualizations.
-    a) The session-id here is: optimization. So the URL would look something like this:
-    b) http://<host name>:<port number>/?&bokeh-session-id=optimization
-

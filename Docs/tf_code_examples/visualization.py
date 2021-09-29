@@ -3,7 +3,7 @@
 # =============================================================================
 #  @@-COPYRIGHT-START-@@
 #
-#  Copyright (c) 2019, Qualcomm Innovation Center, Inc. All rights reserved.
+#  Copyright (c) 2019-2021, Qualcomm Innovation Center, Inc. All rights reserved.
 #
 #  Redistribution and use in source and binary forms, with or without
 #  modification, are permitted provided that the following conditions are met:
@@ -36,14 +36,11 @@
 #  @@-COPYRIGHT-END-@@
 # =============================================================================
 
-# TF specific imports
+# Quantization visualization imports
 import tensorflow as tf
 from tensorflow.keras.applications.resnet50 import ResNet50
-
-# Import for starting Bokeh Server
-from aimet_common.utils import start_bokeh_server_session
 from aimet_tensorflow import plotting_utils
-
+# End of import statements
 
 def visualizing_weight_ranges_for_single_layer():
     # load a model
@@ -51,14 +48,13 @@ def visualizing_weight_ranges_for_single_layer():
     _ = ResNet50(weights='imagenet', input_shape=(224, 224, 3))
     sess = tf.compat.v1.keras.backend.get_session()
 
+    results_dir = 'artifacts'
+
     with sess.as_default():
         # Getting a layer for visualizaing its weight ranges
         conv_op = sess.graph.get_operation_by_name('conv1_conv/Conv2D')
 
-        # Starting a Bokeh Server with port number 8001
-        visualization_url = start_bokeh_server_session(port=8001)
-        plotting_utils.visualize_weight_ranges_single_layer(sess=sess, layer=conv_op,
-                                                            visualization_url=visualization_url)
+        plotting_utils.visualize_weight_ranges_single_layer(sess=sess, layer=conv_op, results_dir=results_dir)
     sess.close()
 
 
@@ -68,12 +64,12 @@ def visualizing_relative_weight_ranges_for_single_layer():
     _ = ResNet50(weights='imagenet', input_shape=(224, 224, 3))
     sess = tf.compat.v1.keras.backend.get_session()
 
+    results_dir = 'artifacts'
+
     with sess.as_default():
         # Getting a layer for visualizaing its weight ranges
         conv_op = sess.graph.get_operation_by_name('conv1_conv/Conv2D')
 
-        # Starting a Bokeh Server with port number 8001
-        visualization_url = start_bokeh_server_session(port=8001)
         plotting_utils.visualize_relative_weight_ranges_single_layer(sess=sess, layer=conv_op,
-                                                                     visualization_url=visualization_url)
+                                                                     results_dir=results_dir)
     sess.close()

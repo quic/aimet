@@ -49,18 +49,50 @@ from aimet_common.bias_correction import ConvBnPatternHandler
 from aimet_common.graph_pattern_matcher import PatternType
 from aimet_common.graph_searcher import GraphSearcher
 
+# pylint: disable=unused-import
 from aimet_torch.defs import PassThroughOp
 from aimet_torch import utils
 from aimet_torch.meta.connectedgraph import ConnectedGraph
 
 
 def _delete_bn_from_model(model: torch.nn.Module, bn_layer_list: List[torch.nn.BatchNorm2d]):
-    utils.replace_modules_with_instances_of_new_type(model, bn_layer_list, PassThroughOp)
+    utils.replace_modules_with_instances_of_new_type(model, bn_layer_list, torch.nn.Identity)
 
 
 LayerType = Union[torch.nn.Conv2d, torch.nn.Linear]
 PairType = Union[Tuple[LayerType, torch.nn.BatchNorm2d],
                  Tuple[torch.nn.BatchNorm2d, LayerType]]
+
+
+def _extend_weight_shape_to_4d(conv_linear: torch.nn.Module, weight_shape: np.array) -> np.array:
+    """
+    Extends the shape of weight tensor of conv/linear layer, has specific layer type handling.
+    :param conv_linear: Conv or Linear layer
+    :return: 4D weight shape
+    """
+
+    if isinstance(conv_linear, torch.nn.Linear):
+        weight_shape = np.append(weight_shape, [1, 1])
+
+    if isinstance(conv_linear, torch.nn.Conv1d):
+        weight_shape = np.append(weight_shape, [1])
+
+    return weight_shape
+
+
+def _revert_weight_shape_to_orig(conv_linear: torch.nn.Module, weight_tensor: libpymo.TensorParams):
+    """
+    Revert the weight shape to original shape
+    :param conv_linear: Conv/ Linear Layer
+    :param weight_tensor: Weight Tensor as libpymo.TensorParams
+    :return: updates weight_tensor.shape
+    """
+
+    if isinstance(conv_linear, torch.nn.Linear):
+        weight_tensor.shape = np.array([weight_tensor.shape[0], weight_tensor.shape[1]])
+
+    if isinstance(conv_linear, torch.nn.Conv1d):
+        weight_tensor.shape = np.array([weight_tensor.shape[0], weight_tensor.shape[1], weight_tensor.shape[2]])
 
 
 def call_mo_batch_norm_fold(conv_linear: Union[torch.nn.Linear, torch.nn.Conv2d, torch.nn.ConvTranspose2d],
@@ -72,6 +104,7 @@ def call_mo_batch_norm_fold(conv_linear: Union[torch.nn.Linear, torch.nn.Conv2d,
     :param conv_linear: Conv or Linear layer. For Conv layers Conv2D and TransposedConv2D are supported currently
     :param bn: Batch Norm layer
     :param is_batch_norm_second: True if BatchNorm comes after Conv/Linear layer
+    :return: Updated bias and weight
     :return: Updated bias and weight
     """
     bn_params = libpymo.BNParams()
@@ -91,10 +124,9 @@ def call_mo_batch_norm_fold(conv_linear: Union[torch.nn.Linear, torch.nn.Conv2d,
     weight_tensor.data = weight.detach().numpy().reshape(-1)
 
     weight_shape = np.array(weight.shape)
-    if len(conv_linear.weight.shape) == 2:
-        weight_shape = np.append(weight_shape, [1, 1])
 
-    weight_tensor.shape = weight_shape
+    # check linear or Conv1d types and update shape to 4D to be compatible with libpymo api
+    weight_tensor.shape = _extend_weight_shape_to_4d(conv_linear, weight_shape)
 
     bias_tensor = libpymo.TensorParams()
     is_bias_valid = False
@@ -104,6 +136,10 @@ def call_mo_batch_norm_fold(conv_linear: Union[torch.nn.Linear, torch.nn.Conv2d,
         is_bias_valid = True
 
     bias = libpymo.fold(bn_params, weight_tensor, bias_tensor, is_bias_valid, is_batch_norm_second)
+
+    # revert weight_tensor.shape back to original shape
+    _revert_weight_shape_to_orig(conv_linear, weight_tensor)
+
     return bias, weight_tensor
 
 
@@ -132,15 +168,11 @@ def fold_given_batch_norms(model, layer_pairs: List[PairType]):
             bn = pair[1]
             conv_linear = pair[0]
 
-        assert isinstance(conv_linear, (torch.nn.Linear, torch.nn.Conv2d, torch.nn.ConvTranspose2d))
+        assert isinstance(conv_linear, (torch.nn.Linear, torch.nn.Conv1d, torch.nn.Conv2d, torch.nn.ConvTranspose2d))
 
         list_of_bn_layers.append(bn)
 
         bias, weight_tensor = call_mo_batch_norm_fold(conv_linear, bn, is_batch_norm_second)
-
-        if isinstance(conv_linear, torch.nn.Linear):
-            weight_tensor.shape = np.array([weight_tensor.shape[0], weight_tensor.shape[1]])
-
         conv_linear.bias = torch.nn.Parameter(torch.Tensor(bias))
         conv_linear.weight.data = torch.from_numpy(np.reshape(weight_tensor.data,
                                                               np.array(weight_tensor.shape)))
@@ -233,7 +265,7 @@ def find_all_conv_bn_with_activation(model: torch.nn.Module, input_shape: Tuple)
     # initialize all patterns to be matched and associated call back functions
     patterns_with_callbacks = []
     layer_select_handler = ConvBnPatternHandler()
-    conv_types = ['Conv', 'ConvTranspose']
+    conv_types = ['Conv1d', 'Conv', 'ConvTranspose']
     linear_types = ['Gemm']
 
     for op_type in conv_types + linear_types:

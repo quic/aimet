@@ -404,7 +404,10 @@ class TestQuantsimConfig(unittest.TestCase):
                 },
                 {
                     "op_list": ["Conv", "BatchNormalization"]
-                }
+                },
+                {
+                    "op_list": ["Conv", "Clip"]
+                },
             ],
             "model_input": {},
             "model_output": {}

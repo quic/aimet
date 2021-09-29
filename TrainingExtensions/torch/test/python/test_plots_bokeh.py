@@ -3,7 +3,7 @@
 # =============================================================================
 #  @@-COPYRIGHT-START-@@
 #
-#  Copyright (c) 2020, Qualcomm Innovation Center, Inc. All rights reserved.
+#  Copyright (c) 2020-2021, Qualcomm Innovation Center, Inc. All rights reserved.
 #
 #  Redistribution and use in source and binary forms, with or without
 #  modification, are permitted provided that the following conditions are met:
@@ -42,6 +42,7 @@ import unittest
 import numpy as np
 import torch
 import torch.nn as nn
+from bokeh.models import Range1d
 from bokeh.plotting import figure
 from aimet_common.utils import AimetLogger, kill_process_with_name_and_port_number, start_bokeh_server_session
 from aimet_common import bokeh_plots
@@ -99,10 +100,7 @@ class VisualizeNetwork(unittest.TestCase):
         os.killpg(os.getpgid(process.pid), signal.SIGTERM)
 
     def test_show_zoomed_in_plot_from_start(self):
-        visualization_url, process = start_bokeh_server_session(8002)
-        bokeh_session = BokehServerSession(url=visualization_url, session_id="test")
         layout = bokeh_plots.PlotsLayout()
-        from bokeh.models import Range1d
 
         # create a new plot with a range set with a tuple
         p = figure(plot_width=400, plot_height=400, x_range=(0, 20))
@@ -115,13 +113,10 @@ class VisualizeNetwork(unittest.TestCase):
         layout.layout = p
         # layout.add_row(p)
         layout.complete_layout()
-        bokeh_session.server_session.close("test complete")
-        os.killpg(os.getpgid(process.pid), signal.SIGTERM)
 
-    def test__invoke_progress_bar(self):
+    def test_invoke_progress_bar(self):
         visualization_url, process = start_bokeh_server_session(8002)
         bokeh_session = BokehServerSession(url=visualization_url, session_id="test")
-        # import pickle
         progress_bar = ProgressBar(80, title="Some Title Goes Here", color="green", bokeh_session=bokeh_session)
 
         for i in range(80):
@@ -142,7 +137,7 @@ class VisualizeNetwork(unittest.TestCase):
         self.assertEqual(num_conv_and_linear_layers, len(layer_weights_map))
 
     def test_line_plot_visualizations_per_layer(self):
-        visualization_url, process = start_bokeh_server_session(8002)
-        bokeh_session = visualize_model.visualize_relative_weight_ranges_to_identify_problematic_layers(model, visualization_url)
-        bokeh_session.server_session.close("test complete")
-        os.killpg(os.getpgid(process.pid), signal.SIGTERM)
+        results_dir = 'artifacts'
+        if not os.path.exists('artifacts'):
+            os.makedirs('artifacts')
+        plot = visualize_model.visualize_relative_weight_ranges_to_identify_problematic_layers(model, results_dir)

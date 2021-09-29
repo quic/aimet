@@ -62,11 +62,13 @@ class TFVisualization(unittest.TestCase):
         sess = tf.compat.v1.Session(graph=model)
         sess.run(init)
 
+        results_dir = 'artifacts'
+        if not os.path.exists('artifacts'):
+            os.makedirs('artifacts')
+
         conv_op = sess.graph.get_operation_by_name('conv1_conv/Conv2D')
 
-        visualization_url, process = start_bokeh_server_session(8001)
-        plotting_utils.visualize_weight_ranges_single_layer(sess, conv_op, visualization_url)
-        os.killpg(os.getpgid(process.pid), signal.SIGTERM)
+        plotting_utils.visualize_weight_ranges_single_layer(sess, conv_op, results_dir)
 
         sess.close()
 
@@ -80,11 +82,13 @@ class TFVisualization(unittest.TestCase):
         sess = tf.compat.v1.Session(graph=model)
         sess.run(init)
 
+        results_dir = 'artifacts'
+        if not os.path.exists('artifacts'):
+            os.makedirs('artifacts')
+
         conv_op = sess.graph.get_operation_by_name('conv1_conv/Conv2D')
 
-        visualization_url, process = start_bokeh_server_session(8001)
-        plotting_utils.visualize_relative_weight_ranges_single_layer(sess, conv_op, visualization_url)
-        os.killpg(os.getpgid(process.pid), signal.SIGTERM)
+        plotting_utils.visualize_relative_weight_ranges_single_layer(sess, conv_op, results_dir)
 
         sess.close()
 

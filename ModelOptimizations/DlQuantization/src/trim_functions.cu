@@ -57,11 +57,17 @@ __global__ void quantizeDequantizeKernel(const DTYPE* in, int cnt, const TfEncod
 
 template <typename DTYPE>
 __global__ void quantizeToFxpKernel(const DTYPE* in, int cnt, const TfEncoding encoding, DTYPE* out,
-                                    RoundingMode rounding_mode)
+                                    RoundingMode rounding_mode, bool shiftToSigned)
 {
+    // Using unsigned int to account for case of signed symmetric 32 bit, when shift will be 2^31
+    unsigned int shift = 0;
+    if (shiftToSigned) {
+        shift = pow(2, encoding.bw - 1);
+    }
     CUDA_KERNEL_LOOP(i, cnt)
     {
         quantizeToFxpDevice<DTYPE>(in + i, i, encoding, out + i, rounding_mode);
+        *(out + i) -= shift;
     }
 }
 
@@ -73,9 +79,11 @@ void quantizeDequantizeGpu(const DTYPE* in, int cnt, const TfEncoding& encoding,
 }
 
 template <typename DTYPE>
-void quantizeToFxpGpu(const DTYPE* in, int cnt, const TfEncoding& encoding, DTYPE* out, RoundingMode rounding_mode)
+void quantizeToFxpGpu(const DTYPE* in, int cnt, const TfEncoding& encoding, DTYPE* out, RoundingMode rounding_mode,
+                      bool shiftToSigned)
 {
-    quantizeToFxpKernel<<<CUDA_NUM_BLOCKS(cnt), CUDA_NUM_THREADS>>>(in, cnt, encoding, out, rounding_mode);
+    quantizeToFxpKernel<<<CUDA_NUM_BLOCKS(cnt), CUDA_NUM_THREADS>>>(in, cnt, encoding, out, rounding_mode,
+                                                                    shiftToSigned);
 }
 
 // Explicit instantiations
@@ -86,9 +94,9 @@ template void quantizeDequantizeGpu(const float* in, int cnt, const TfEncoding& 
                                      RoundingMode rounding_mode);
 
 template void quantizeToFxpGpu(const double* in, int cnt, const TfEncoding& encoding, double* out,
-                                RoundingMode rounding_mode);
+                                RoundingMode rounding_mode, bool shiftToSigned);
 
 
 template void quantizeToFxpGpu(const float* in, int cnt, const TfEncoding& encoding, float* out,
-                                RoundingMode rounding_mode);
+                                RoundingMode rounding_mode, bool shiftToSigned);
 }   // End of namespace DlQuantization

@@ -36,26 +36,35 @@
 
 """ Package generation file for top-level aimet package """
 
-from setuptools import setup
+import sys
 import os.path
+from setuptools import setup
+from packaging_common import bdist_wheel_aimet, get_dependency_wheel
 import setup_cfg # pylint: disable=import-error
 
 package_url_base = setup_cfg.remote_url + "/releases/download/" + str(setup_cfg.version)
 
-torch_dep_whl = package_url_base + "/AimetTorch-" + str(setup_cfg.version) + "-py3-none-any.whl"
-tf_dep_whl = package_url_base + "/AimetTensorflow-" + str(setup_cfg.version) + "-py3-none-any.whl"
-
 dependency_list = []
-if os.path.isfile(torch_dep_whl):
-    dependency_list.append(torch_dep_whl)
-if os.path.isfile(tf_dep_whl):
-    dependency_list.append(tf_dep_whl)
+torch_dep_whl = get_dependency_wheel("AimetTorch")
+if torch_dep_whl is not None:
+    torch_dep_whl_url = package_url_base + "/" + torch_dep_whl
+    dependency_list.append(torch_dep_whl_url)
+
+tf_dep_whl = get_dependency_wheel("AimetTensorflow")
+if tf_dep_whl is not None:
+    tf_dep_whl_url = package_url_base + "/" + tf_dep_whl
+    dependency_list.append(tf_dep_whl_url)
+
+if "--gpu" in sys.argv:
+    # There is NO common GPU dependency list, so just ignore the option if it was passed in
+    sys.argv.remove("--gpu")
+
 
 setup(
     name='Aimet',
     version=str(setup_cfg.version),
     author='Qualcomm Innovation Center, Inc.',
-    author_email='aimet@noreply.github.com',
+    author_email='aimet.os@quicinc.com',
     url=package_url_base,
     license='NOTICE.txt',
     description='AIMET',
@@ -65,4 +74,7 @@ setup(
     zip_safe=True,
     platforms='x86',
     python_requires='>=3.6',
+    cmdclass={
+        'bdist_wheel': bdist_wheel_aimet,
+    },
 )

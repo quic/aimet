@@ -47,7 +47,7 @@ import libpymo
 from aimet_common.utils import AimetLogger
 from aimet_common.defs import QuantScheme
 from aimet_torch import utils
-from aimet_torch.tensor_quantizer import PostTrainingTensorQuantizer
+from aimet_torch.tensor_quantizer import StaticGridPerTensorQuantizer, StaticGridPerChannelQuantizer
 import aimet_torch.quantsim_straight_through_grad as ste
 
 MAP_ROUND_MODE_TO_PYMO = {'nearest':     libpymo.RoundingMode.ROUND_NEAREST,
@@ -90,12 +90,12 @@ def tensor_quantizer_factory(bitwidth: int, round_mode: str, quant_scheme: Union
     :param quant_scheme: Quantization scheme (e.g. Range Learning)
     :param use_symmetric_encodings: True if symmetric encoding is used.  False otherwise.
     :param enabled_by_default: True if quantization of tensor is enabled.  False otherwise.
-    :return: An instance of PostTrainingTensorQuantizer
+    :return: An instance of StaticGridPerTensorQuantizer
     """
     assert quant_scheme in [libpymo.QuantizationMode.QUANTIZATION_TF_ENHANCED, libpymo.QuantizationMode.QUANTIZATION_TF]
 
-    tensor_quantizer = PostTrainingTensorQuantizer(bitwidth, round_mode, quant_scheme, use_symmetric_encodings,
-                                                   enabled_by_default)
+    tensor_quantizer = StaticGridPerTensorQuantizer(bitwidth, round_mode, quant_scheme, use_symmetric_encodings,
+                                                    enabled_by_default)
     return tensor_quantizer
 
 
@@ -276,7 +276,7 @@ class QcQuantizeWrapper(nn.Module):
             param_quantizer.reset_encoding_stats()
 
 
-class QcPostTrainingWrapper(QcQuantizeWrapper):
+class StaticGridQuantWrapper(QcQuantizeWrapper):
     """ A custom PyTorch module that derives from QcQuantizeWrapper and quantizes modules """
 
     # pylint: disable=too-many-arguments
@@ -298,8 +298,8 @@ class QcPostTrainingWrapper(QcQuantizeWrapper):
         round_mode = MAP_ROUND_MODE_TO_PYMO[round_mode]
         quant_scheme = MAP_QUANT_SCHEME_TO_PYMO[quant_scheme]
 
-        super(QcPostTrainingWrapper, self).__init__(module_to_wrap, weight_bw, activation_bw, round_mode, quant_scheme,
-                                                    is_output_quantized, is_symmetric, num_inputs, num_outputs)
+        super(StaticGridQuantWrapper, self).__init__(module_to_wrap, weight_bw, activation_bw, round_mode, quant_scheme,
+                                                     is_output_quantized, is_symmetric, num_inputs, num_outputs)
 
     def forward(self, *inputs):
         """
@@ -455,13 +455,32 @@ class QcPostTrainingWrapper(QcQuantizeWrapper):
             if param_name in param_encodings:
                 encoding_dict = param_encodings[param_name][0]
                 encoding, is_symmetric = utils.create_encoding_from_dict(encoding_dict)
-                param_quantizer.set_encoding(encoding)
+                param_quantizer.encoding = encoding
 
                 param_quantizer.bitwidth = encoding.bw
                 param_quantizer.use_symmetric_encodings = is_symmetric
 
                 param_quantizer.freeze_encoding()
                 _logger.info("Setting and freezing quantization encodings for parameter: %s", param_name)
+
+    def enable_per_channel_quantization(self):
+        """
+        Changes all parameter quantizers (if any) to per-channel mode
+        """
+        new_param_quant_dict = {}
+        for param_name, param_quantizer in self.param_quantizers.items():
+            param = eval("self._module_to_wrap." + param_name)      # pylint: disable=eval-used
+            per_channel_quantizer = StaticGridPerChannelQuantizer(param_quantizer.bitwidth, param_quantizer.round_mode,
+                                                                  param_quantizer.quant_scheme,
+                                                                  param_quantizer.use_symmetric_encodings,
+                                                                  num_channels=param.shape[0],
+                                                                  enabled_by_default=param_quantizer.enabled)
+            new_param_quant_dict[param_name] = per_channel_quantizer
+        self.param_quantizers = new_param_quant_dict
+
+
+# Temporarily added for backwards compatibility
+QcPostTrainingWrapper = StaticGridQuantWrapper
 
 
 class QcQuantizeStandalone(QcQuantizeStandAloneBase):
@@ -515,6 +534,13 @@ class SteGatingFuncForParameters(torch.autograd.Function):
         for name, param in quant_wrapper_ref._module_to_wrap.named_parameters():
             if quant_wrapper_ref.param_quantizers[name].enabled and param.grad is not None:
                 param_quantizer = quant_wrapper_ref.param_quantizers[name]
-                param.grad = ste.compute_dloss_by_dx(param, param.grad, param_quantizer.encoding.min,
-                                                     param_quantizer.encoding.max)
+
+                if isinstance(param_quantizer.encoding, list):
+                    # Stack the encodings
+                    max_encodings = [enc.max for enc in param_quantizer.encoding]
+                    min_encodings = [enc.min for enc in param_quantizer.encoding]
+                    param.grad = ste.compute_dloss_by_dx(param, param.grad, min_encodings, max_encodings)
+                else:
+                    param.grad = ste.compute_dloss_by_dx(param, param.grad, param_quantizer.encoding.min,
+                                                         param_quantizer.encoding.max)
         return (None, *output_grad)

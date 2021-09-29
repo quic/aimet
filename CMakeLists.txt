@@ -158,6 +158,7 @@ endif()
 
 if (ENABLE_TORCH)
   set(AIMET_PYTHONPATH "${AIMET_PYTHONPATH}:${CMAKE_CURRENT_SOURCE_DIR}/TrainingExtensions/torch/src/python")
+
   # If we enable PyTorch builds then use the pybind11 headers that are part of the torch pip install
   # So we don't have a version mismatch - between PyTorch custom C++ op code and PyMO
 #  list(APPEND PYBIND11_INC_DIRS "${PYTHON_DIST_PACKAGES}/torch/include")
@@ -245,7 +246,7 @@ if(NOT remote_url STREQUAL "")
     # Run the install target first
     COMMAND "${CMAKE_COMMAND}" --build . --target install
     # Now run the packaging target to generate wheel files
-    COMMAND ${CMAKE_COMMAND} -DAIMET_PACKAGE_PATH=${AIMET_PACKAGE_PATH} -DSOURCE_DIR=${CMAKE_CURRENT_SOURCE_DIR} -DENABLE_TENSORFLOW=${ENABLE_TENSORFLOW} -DENABLE_TORCH=${ENABLE_TORCH} -P ${CMAKE_CURRENT_SOURCE_DIR}/packaging/package_aimet.cmake
+    COMMAND ${CMAKE_COMMAND} -DAIMET_PACKAGE_PATH=${AIMET_PACKAGE_PATH} -DSOURCE_DIR=${CMAKE_CURRENT_SOURCE_DIR} -DENABLE_CUDA=${ENABLE_CUDA} -DENABLE_TENSORFLOW=${ENABLE_TENSORFLOW} -DENABLE_TORCH=${ENABLE_TORCH} -P ${CMAKE_CURRENT_SOURCE_DIR}/packaging/package_aimet.cmake
   )
 else()
   message(STATUS "Repo Remote URL is blank. Skipping packageaimet target")
@@ -259,6 +260,7 @@ add_subdirectory(ModelOptimizations)
 add_subdirectory(TrainingExtensions)
 add_subdirectory(NightlyTests)
 add_subdirectory(Docs)
+add_subdirectory(Examples)
 if(IS_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/Benchmarks")
   add_subdirectory(Benchmarks)
 endif()

@@ -54,7 +54,6 @@ from aimet_common.connected_graph.operation import Op, determine_preceding_op_in
 from aimet_common.model_module import PytorchModelModule
 from aimet_common.utils import AimetLogger
 from aimet_torch.utils import is_leaf_module, run_hook_for_layers_with_given_input
-from aimet_torch.defs import PassThroughOp
 from aimet_torch import onnx_utils
 
 logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.ConnectedGraph)
@@ -423,9 +422,9 @@ class ConnectedGraph(AimetCommonConnectedGraph):
 
         elif input_name in node_name_to_module and is_leaf_module(node_name_to_module[input_name]):
             # the graph is fully represented by a directional graph of leaf torch modules so the recursion is
-            # stopped at this level. PassThroughOp are being ignored because in graph node representation
-            # the passthrough op generate no output and are not part of inputs for downstream op
-            if not isinstance(node_name_to_module[input_name], PassThroughOp):
+            # stopped at this level. torch.nn.Identity are being ignored because in graph node representation
+            # the torch.nn.Identity op generate no output and are not part of inputs for downstream op
+            if not isinstance(node_name_to_module[input_name], torch.nn.Identity):
                 op_type = self._get_op_type(node_name_to_module[input_name])
                 node_inputs = [inp for inp in node.inputs()]
                 ir_node = IrNode(node_type=op_type,

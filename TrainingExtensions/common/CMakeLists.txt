@@ -35,6 +35,7 @@
 #==============================================================================
 cmake_minimum_required(VERSION 3.5)
 
+<<<<<<< HEAD
 add_library(PyTrainingExtensions MODULE
       PyTrainingExtensions/PyTrainingExtensions.cpp)
 
@@ -66,5 +67,7 @@ install(FILES $<TARGET_FILE:PyTrainingExtensions>
       DESTINATION ${AIMET_INSTALL_DIR}/lib/x86_64-linux-gnu
       )
 
+=======
+>>>>>>> 05b58a69321e7c93e158debe8c6541924edb5b0e
 add_subdirectory(src/python)
 add_subdirectory(test)

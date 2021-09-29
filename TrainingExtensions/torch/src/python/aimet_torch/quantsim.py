@@ -42,6 +42,7 @@ import io
 import copy
 import pickle
 from typing import Tuple, List, Union, Dict
+from collections.abc import Iterable
 import json
 import torch
 import onnx
@@ -51,20 +52,19 @@ from aimet_common.defs import QuantScheme
 from aimet_common.quantsim import encoding_version
 from aimet_torch.quantsim_config.quantsim_config import QuantSimConfigurator
 from aimet_torch.qc_quantize_op import QcQuantizeStandAloneBase, QcQuantizeWrapper, QcQuantizeOpMode, \
-    QcPostTrainingWrapper
+    StaticGridQuantWrapper
 from aimet_torch import torchscript_utils
-from aimet_torch.batch_norm_fold import PassThroughOp
 from aimet_torch import utils
 from aimet_torch.onnx_utils import OnnxSaver, OnnxExportApiArgs
 from aimet_torch.meta.connectedgraph import ConnectedGraph
 from aimet_torch.qc_quantize_recurrent import QcQuantizeRecurrent
 
+import libpymo
 logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Quant)
 
 
 # Types of modules which cannot be quantized
-unquantizable_modules = (QcQuantizeWrapper, QcQuantizeStandAloneBase, QcQuantizeRecurrent, PassThroughOp,
-                         torch.nn.Identity)
+unquantizable_modules = (QcQuantizeWrapper, QcQuantizeStandAloneBase, QcQuantizeRecurrent, torch.nn.Identity)
 
 # If a torch module type is in this dictionary, call the corresponding quantized module constructor instead of wrapping
 # it with QcQuantizeWrapper.
@@ -512,15 +512,25 @@ class QuantizationSimModel:
         disabled_param_quantizers = []
         for orig_param_name, param_quantizer in layer.param_quantizers.items():
             param_name = layer_name + '.' + orig_param_name
-            if param_quantizer.enabled:
-                if param_name in valid_param_set:
-                    encoding = utils.create_encoding_dict(param_quantizer.encoding,
-                                                          param_quantizer.use_symmetric_encodings)
-                    param_encodings[param_name] = [encoding]
-                else:
-                    logger.error('Param tensor {%s} not found in valid param set', param_name)
-            else:
+
+            if not param_quantizer.enabled:
                 disabled_param_quantizers.append(orig_param_name)
+                continue
+
+            if param_name not in valid_param_set:
+                logger.error('Param tensor {%s} not found in valid param set', param_name)
+                continue
+
+            if isinstance(param_quantizer.encoding, Iterable):
+                param_encodings[param_name] = []
+                for encoding in param_quantizer.encoding:
+                    enc_dict = QuantizationSimModel._create_encoding_dict(encoding,
+                                                                          param_quantizer.use_symmetric_encodings)
+                    param_encodings[param_name].append(enc_dict)
+            else:
+                enc_dict = QuantizationSimModel._create_encoding_dict(param_quantizer.encoding,
+                                                                      param_quantizer.use_symmetric_encodings)
+                param_encodings[param_name] = [enc_dict]
 
         # retrieve the appropriate param generator
         if isinstance(layer, QcQuantizeWrapper):
@@ -563,15 +573,15 @@ class QuantizationSimModel:
                 input_tensors = [t for t in op_to_io_tensor_map[layer_name].inputs if t not in param_inputs]
                 for index, input_tensor in enumerate(input_tensors):
                     if (index < len(layer.input_quantizers)) and layer.input_quantizers[index].enabled:
-                        encoding = utils.create_encoding_dict(layer.input_quantizers[index].encoding,
-                                                              layer.input_quantizers[index].use_symmetric_encodings)
+                        encoding = QuantizationSimModel._create_encoding_dict(layer.input_quantizers[index].encoding,
+                                                                              layer.input_quantizers[index].use_symmetric_encodings)
                         activation_encodings[input_tensor] = [encoding]
 
                 if layer.output_quantizers[0].enabled:
                     if op_to_io_tensor_map[layer_name].outputs:
                         for output_tensor in op_to_io_tensor_map[layer_name].outputs:
-                            encoding = utils.create_encoding_dict(layer.output_quantizers[0].encoding,
-                                                                  layer.output_quantizers[0].use_symmetric_encodings)
+                            encoding = QuantizationSimModel._create_encoding_dict(layer.output_quantizers[0].encoding,
+                                                                                  layer.output_quantizers[0].use_symmetric_encodings)
                             activation_encodings[output_tensor] = [encoding]
 
                 # get param quantizers
@@ -582,10 +592,10 @@ class QuantizationSimModel:
                 onnx_activations_to_quantizers, onnx_params_to_quantizers = \
                     layer.get_activation_param_quantizers_for_onnx_tensors(op_to_io_tensor_map[layer_name])
                 for tensor, quantizer in onnx_activations_to_quantizers.items():
-                    encoding = utils.create_encoding_dict(quantizer.encoding, quantizer.use_symmetric_encodings)
+                    encoding = QuantizationSimModel._create_encoding_dict(quantizer.encoding, quantizer.use_symmetric_encodings)
                     activation_encodings[tensor] = [encoding]
                 for tensor, quantizer in onnx_params_to_quantizers.items():
-                    encoding = utils.create_encoding_dict(quantizer.encoding, quantizer.use_symmetric_encodings)
+                    encoding = QuantizationSimModel._create_encoding_dict(quantizer.encoding, quantizer.use_symmetric_encodings)
                     param_encodings[tensor] = [encoding]
 
     @staticmethod
@@ -620,8 +630,8 @@ class QuantizationSimModel:
         num_in_tensors, num_out_tensors = num_inout_tensors.get(module_to_quantize, (1, 1))
 
         # Set quantizer to be a module replacer if it is in qc_quantize_modules_dict, otherwise set as
-        # QcPostTrainingWrapper.
-        quantizer = qc_quantize_modules_dict.get(type(module_to_quantize), QcPostTrainingWrapper)
+        # StaticGridQuantWrapper.
+        quantizer = qc_quantize_modules_dict.get(type(module_to_quantize), StaticGridQuantWrapper)
         quantized_module = quantizer(module_to_quantize, self._default_param_bw, self._default_output_bw,
                                      self._rounding_mode, self._quant_scheme,
                                      num_inputs=num_in_tensors, num_outputs=num_out_tensors)
@@ -651,6 +661,26 @@ class QuantizationSimModel:
             else:
                 self._add_quantization_wrappers(module_ref, num_inout_tensors)
 
+    @staticmethod
+    def _create_encoding_dict(encoding: libpymo.TfEncoding, is_symmetric: bool) -> Union[Dict, None]:
+        """
+        Create encoding dictionary from encoding object
+        :param encoding: Encoding object
+        :param is_symmetric: Symmetric vs asymmetric boolean
+        :return: Encoding Dictionary
+        """
+        if encoding:
+            encoding_min, encoding_max, bw, scale, offset = encoding.min, encoding.max, encoding.bw, encoding.delta, \
+                                                            encoding.offset
+
+            return {'min': encoding_min,
+                    'max': encoding_max,
+                    'scale': scale,
+                    'offset': offset,
+                    'bitwidth': bw,
+                    'is_symmetric': str(is_symmetric)}
+        return None
+
     @classmethod
     def _remove_quantization_wrappers(cls, starting_module, list_of_modules_to_exclude):
         """
@@ -670,7 +700,7 @@ class QuantizationSimModel:
                     setattr(starting_module, module_name, module_ref._module_to_wrap)
 
                 elif isinstance(module_ref, QcQuantizeStandAloneBase):
-                    setattr(starting_module, module_name, PassThroughOp())
+                    setattr(starting_module, module_name, torch.nn.Identity())
 
                 elif isinstance(module_ref, QcQuantizeRecurrent):
                     module_ref.update_params()
@@ -703,8 +733,16 @@ class QuantizationSimModel:
             param_encodings = json.load(json_file)
 
         for name, quant_module in self.model.named_modules():
-            if isinstance(quant_module, QcPostTrainingWrapper):
+            if isinstance(quant_module, StaticGridQuantWrapper):
                 quant_module.set_and_freeze_param_encoding(name, param_encodings)
+
+    def quant_wrappers(self):
+        """
+        Generator for yielding all quantization wrappers
+        """
+        for module in self.model.modules():
+            if isinstance(module, (QcQuantizeWrapper, QcQuantizeRecurrent)):
+                yield module
 
 
 def save_checkpoint(quant_sim_model: QuantizationSimModel, file_path: str):

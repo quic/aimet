@@ -36,7 +36,7 @@
 #  @@-COPYRIGHT-END-@@
 # =============================================================================
 
-import unittest.mock
+import os
 import logging
 
 import torch
@@ -324,6 +324,7 @@ class TestOnnxUtils:
         expected_nodes = ['conv0', 'conv2']
         actual_nodes = [node.name for node in onnx_model.graph.node]
         assert len(actual_nodes) == len(expected_nodes)
+<<<<<<< HEAD
 
         for name in expected_nodes:
             assert name in actual_nodes
@@ -481,3 +482,239 @@ class TestOnnxUtils:
 
         for name in expected_nodes:
             assert name in actual_nodes
+=======
+
+        for name in expected_nodes:
+            assert name in actual_nodes
+
+    def test_onnx_export_model_output_empty_layer(self):
+
+        class MyModel(torch.nn.Module):
+            def __init__(self):
+                super(MyModel, self).__init__()
+                self.conv0 = torch.nn.Conv2d(10, 20, 3)
+                self.conv2 = torch.nn.Conv2d(20, 20, 3)
+                self.drop0 = torch.nn.Dropout2d()
+                self.drop1 = torch.nn.Dropout2d()
+
+            def forward(self, x):
+                x = self.conv0(x)
+                x = self.conv2(x)
+                x = self.drop0(x)
+                x = self.drop1(x)
+
+                return x
+
+        model = MyModel()
+
+        onnx_utils.OnnxSaver.set_node_names('./data/MyModel.onnx', model, dummy_input=torch.rand(1, 10, 24, 24))
+        onnx_model = onnx.load('./data/MyModel.onnx')
+
+        expected_nodes = ['conv0', 'conv2']
+        actual_nodes = [node.name for node in onnx_model.graph.node]
+        assert len(actual_nodes) == len(expected_nodes)
+
+        for name in expected_nodes:
+            assert name in actual_nodes
+
+    def test_onnx_export_model_empty_layer_consumed_by_multiple_nodes(self):
+
+        class MyModel(torch.nn.Module):
+            def __init__(self):
+                super(MyModel, self).__init__()
+                self.conv0 = torch.nn.Conv2d(10, 20, 3)
+                self.drop0 = torch.nn.Dropout2d()
+                self.drop1 = torch.nn.Dropout2d()
+                self.conv1 = torch.nn.Conv2d(20, 20, 3)
+                self.conv2 = torch.nn.Conv2d(20, 20, 3)
+
+            def forward(self, x):
+                x = self.conv0(x)
+                x = self.drop0(x)
+                x = self.drop1(x)
+                y1 = self.conv1(x)
+                y2 = self.conv2(x)
+
+                return y1, y2
+
+        model = MyModel()
+
+        onnx_utils.OnnxSaver.set_node_names('./data/MyModel.onnx', model, dummy_input=torch.rand(1, 10, 24, 24))
+        onnx_model = onnx.load('./data/MyModel.onnx')
+
+        expected_nodes = ['conv0', 'conv1', 'conv2']
+        actual_nodes = [node.name for node in onnx_model.graph.node]
+        assert len(actual_nodes) == len(expected_nodes)
+
+        for name in expected_nodes:
+            assert name in actual_nodes
+
+    def test_onnx_export_model_input_empty_layer_consumed_by_multiple_nodes(self):
+
+        class MyModel(torch.nn.Module):
+            def __init__(self):
+                super(MyModel, self).__init__()
+                self.drop0 = torch.nn.Dropout2d()
+                self.drop1 = torch.nn.Dropout2d()
+                self.conv1 = torch.nn.Conv2d(10, 20, 3)
+                self.conv2 = torch.nn.Conv2d(10, 20, 3)
+
+            def forward(self, x):
+                x = self.drop0(x)
+                x = self.drop1(x)
+                y1 = self.conv1(x)
+                y2 = self.conv2(x)
+
+                return y1, y2
+
+        model = MyModel()
+
+        onnx_utils.OnnxSaver.set_node_names('./data/MyModel.onnx', model, dummy_input=torch.rand(1, 10, 24, 24))
+        onnx_model = onnx.load('./data/MyModel.onnx')
+
+        expected_nodes = ['conv1', 'conv2']
+        actual_nodes = [node.name for node in onnx_model.graph.node]
+        assert len(actual_nodes) == len(expected_nodes)
+
+        for name in expected_nodes:
+            assert name in actual_nodes
+
+    def test_onnx_export_intermediate_tensor_also_model_output(self):
+
+        class MyModel(torch.nn.Module):
+            def __init__(self):
+                super(MyModel, self).__init__()
+                self.conv1 = torch.nn.Conv2d(10, 20, 3)
+                self.conv2 = torch.nn.Conv2d(20, 20, 3)
+                self.conv3 = torch.nn.Conv2d(20, 20, 3)
+
+            def forward(self, x):
+                x = self.conv1(x)
+
+                y1 = self.conv2(x)
+                y2 = self.conv3(x)
+
+                return y1, y2, x
+
+        model = MyModel()
+
+        onnx_utils.OnnxSaver.set_node_names('./data/MyModel.onnx', model, dummy_input=torch.rand(1, 10, 24, 24))
+        onnx_model = onnx.load('./data/MyModel.onnx')
+
+        expected_nodes = ['conv1', 'conv2', 'conv3']
+        actual_nodes = [node.name for node in onnx_model.graph.node]
+        assert len(actual_nodes) == len(expected_nodes)
+
+        for name in expected_nodes:
+            assert name in actual_nodes
+
+    def test_onnx_export_intermediate_tensor_also_model_output_via_empty_marker(self):
+
+        class MyModel(torch.nn.Module):
+            def __init__(self):
+                super(MyModel, self).__init__()
+                self.conv1 = torch.nn.Conv2d(10, 20, 3)
+                self.conv2 = torch.nn.Conv2d(20, 20, 3)
+                self.conv3 = torch.nn.Conv2d(20, 20, 3)
+                self.drop1 = torch.nn.Dropout2d()
+                self.drop2 = torch.nn.Dropout2d()
+
+            def forward(self, x):
+                x = self.conv1(x)
+
+                y1 = self.conv2(x)
+                y2 = self.conv3(x)
+                y3 = self.drop1(x)
+                y4 = self.drop2(x)
+
+                return y1, y2, y3, y4
+
+        model = MyModel()
+
+        onnx_utils.OnnxSaver.set_node_names('./data/MyModel.onnx', model, dummy_input=torch.rand(1, 10, 24, 24))
+        onnx_model = onnx.load('./data/MyModel.onnx')
+
+        expected_nodes = ['conv1', 'conv2', 'conv3']
+        actual_nodes = [node.name for node in onnx_model.graph.node]
+        assert len(actual_nodes) == len(expected_nodes)
+
+        for name in expected_nodes:
+            assert name in actual_nodes
+
+    def test_onnx_custom_param_mapping(self):
+        from aimet_torch.elementwise_ops import Add
+
+        class GroupNormModel(torch.nn.Module):
+            def __init__(self):
+                super(GroupNormModel, self).__init__()
+                self.conv1 = torch.nn.Conv2d(10, 10, 3)
+                self.bn = torch.nn.BatchNorm2d(10)
+                self.gn = torch.nn.GroupNorm(2, 10)
+                self.add = Add()
+
+            def forward(self, x):
+                x = self.conv1(x)
+                y1 = self.bn(x)
+                y2 = self.gn(x)
+                return self.add(y1, y2)
+
+        model = GroupNormModel()
+
+        onnx_utils.OnnxSaver.set_node_names('./data/MyModel.onnx', model, dummy_input=torch.rand(1, 10, 24, 24))
+        onnx_model = onnx.load('./data/MyModel.onnx')
+        expected_node_names = ['conv1', 'bn', 'gn', 'add']
+
+        actual_node_names = [node.name for node in onnx_model.graph.node]
+        for name in expected_node_names:
+            assert name in actual_node_names
+
+        expected_param_names = ['conv1.weight', 'gn.bias', 'conv1.bias', 'gn.weight', 'bn.weight',
+                                'bn.running_mean', 'bn.bias', 'bn.running_var']
+        _, valid_param_set = onnx_utils.OnnxSaver.get_onnx_node_to_io_tensor_names_map(onnx_model)
+        for name in expected_param_names:
+            assert name in valid_param_set
+
+    def test_set_node_name_for_matmul_add_linear(self):
+        """
+        Test that node names are set correctly for linear ops turned into matmul/add in onnx.
+        """
+        class Linear(torch.nn.Module):
+            def __init__(self):
+                super(Linear, self).__init__()
+                self.linear = torch.nn.Linear(3, 2)
+
+            def forward(self, inp):
+                x = self.linear(inp)
+                return x
+
+        model = Linear()
+        # Using an input to linear op with dimension != 2 causes torch to use matmul->add instead of gemm op
+        onnx_utils.OnnxSaver.set_node_names('./data/MyModel.onnx', model, dummy_input=torch.randn(1, 1, 3))
+        onnx_model = onnx.load('./data/MyModel.onnx')
+        expected_node_names = ['linear', 'linear#1']
+
+        actual_node_names = [node.name for node in onnx_model.graph.node]
+        for name in expected_node_names:
+            assert name in actual_node_names
+
+        expected_param_names = ['linear.weight', 'linear.bias']
+        _, valid_param_set = onnx_utils.OnnxSaver.get_onnx_node_to_io_tensor_names_map(onnx_model)
+        for name in expected_param_names:
+            assert name in valid_param_set
+
+        # Check that gemm still works as expected
+        onnx_utils.OnnxSaver.set_node_names('./data/MyModel.onnx', model, dummy_input=torch.randn(1, 3))
+        onnx_model = onnx.load('./data/MyModel.onnx')
+
+        actual_node_names = [node.name for node in onnx_model.graph.node]
+        assert 'linear' in actual_node_names
+        assert 'linear#1' not in actual_node_names
+
+        expected_param_names = ['linear.weight', 'linear.bias']
+        _, valid_param_set = onnx_utils.OnnxSaver.get_onnx_node_to_io_tensor_names_map(onnx_model)
+        for name in expected_param_names:
+            assert name in valid_param_set
+
+        if os.path.exists('./data/MyModel.onnx'):
+            os.remove('./data/MyModel.onnx')
+>>>>>>> 05b58a69321e7c93e158debe8c6541924edb5b0e

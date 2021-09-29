@@ -45,15 +45,17 @@ add_custom_target(AcceptanceTests.TensorflowTrainer
 
 if (ENABLE_CUDA)
     set(CUDA_FLAG -m "not blah")
+    set(USE_CUDA True)
 else (ENABLE_CUDA)
     set(CUDA_FLAG -m "not cuda")
+    set(USE_CUDA False)
 endif (ENABLE_CUDA)
 
 add_custom_target(AcceptanceTests.TensorflowDependencies
         COMMAND ${CMAKE_COMMAND} -E env
         "${AIMET_LD_LIBRARY_PATH}"
         "${AIMET_PYTHONPATH}"
-        python3 ${CMAKE_CURRENT_SOURCE_DIR}/dependencies.py ${CMAKE_CURRENT_SOURCE_DIR}/resnet50_eval_scores.csv)
+        python3 ${CMAKE_CURRENT_SOURCE_DIR}/dependencies.py ${CMAKE_CURRENT_SOURCE_DIR}/resnet50_eval_scores.csv ${USE_CUDA})
 
 add_custom_target(AcceptanceTests.Tensorflow
       VERBATIM COMMAND ${CMAKE_COMMAND} -E env
