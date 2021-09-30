@@ -44,15 +44,15 @@ technique followed by fine tuning.
 import argparse
 import os
 from decimal import Decimal
-import torch
-from torchvision import models
 from datetime import datetime
 import logging
+import torch
+from torchvision import models
 
 # imports for AIMET
 from aimet_torch.compress import ModelCompressor
-import aimet_common.defs
 import aimet_torch.defs
+import aimet_common.defs
 
 from aimet_common.defs import CompressionScheme
 from aimet_common.defs import CostMetric
@@ -61,7 +61,6 @@ from aimet_common.defs import CostMetric
 from Examples.common import image_net_config
 from Examples.torch.utils.image_net_evaluator import ImageNetEvaluator
 from Examples.torch.utils.image_net_trainer import ImageNetTrainer
-from Examples.torch.utils.image_net_data_loader import ImageNetDataLoader
 
 logger = logging.getLogger('TorchSpatialSVD')
 formatter = logging.Formatter('%(asctime)s : %(name)s - %(levelname)s - %(message)s')
@@ -93,7 +92,7 @@ class ImageNetDataPipeline:
     Provides APIs for model compression using AIMET weight SVD, evaluation and finetuning.
     """
 
-    def __init__(self, _config:argparse.Namespace):
+    def __init__(self, _config: argparse.Namespace):
         """
         :param _config:
         """
@@ -143,7 +142,7 @@ class ImageNetDataPipeline:
         torch.save(model, os.path.join(self._config.logdir, 'finetuned_model.pth'))
 
 def aimet_spatial_svd(model: torch.nn.Module,
-                     evaluator: aimet_common.defs.EvalFunction):
+                      evaluator: aimet_common.defs.EvalFunction):
     """
     Compresses the model using AIMET's Spatial SVD auto mode compression scheme.
 
@@ -158,11 +157,11 @@ def aimet_spatial_svd(model: torch.nn.Module,
     # please refer to the API documentation for other schemes (i.e weight svd & channel prunning)
     # and mode (manual)
     greedy_params = aimet_torch.defs.GreedySelectionParameters(target_comp_ratio=Decimal(0.5),
-                                                              num_comp_ratio_candidates=10)
+                                                               num_comp_ratio_candidates=10)
     auto_params = aimet_torch.defs.SpatialSvdParameters.AutoModeParams(greedy_params,
-                                                                      modules_to_ignore=[model.conv1])
+                                                                       modules_to_ignore=[model.conv1])
     params = aimet_torch.defs.SpatialSvdParameters(aimet_torch.defs.SpatialSvdParameters.Mode.auto,
-                                                  auto_params)
+                                                   auto_params)
 
     scheme = CompressionScheme.spatial_svd      # spatial_svd, weight_svd or channel_pruning
     metric = CostMetric.mac                     # mac or memory

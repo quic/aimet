@@ -47,15 +47,9 @@ import copy
 import os
 from typing import Tuple
 from functools import partial
-from torchvision import models, transforms
+from torchvision import models
 import torch
 import torch.utils.data as torch_data
-
-# imports for data pipelines
-from Examples.common import image_net_config
-from Examples.torch.utils.image_net_evaluator import ImageNetEvaluator
-from Examples.torch.utils.image_net_trainer import ImageNetTrainer
-from Examples.torch.utils.image_net_data_loader import ImageNetDataLoader
 
 # imports for AIMET
 from aimet_torch.quantsim import QuantizationSimModel
@@ -64,6 +58,10 @@ from aimet_torch.adaround.adaround_weight import Adaround, AdaroundParameters
 import aimet_common
 from aimet_common.defs import QuantScheme
 
+# imports for data pipelines
+from Examples.common import image_net_config
+from Examples.torch.utils.image_net_evaluator import ImageNetEvaluator
+from Examples.torch.utils.image_net_data_loader import ImageNetDataLoader
 
 logger = logging.getLogger('TorchAdaround')
 formatter = logging.Formatter('%(asctime)s : %(name)s - %(levelname)s - %(message)s')
