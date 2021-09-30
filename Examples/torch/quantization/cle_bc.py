@@ -52,20 +52,18 @@ import torch
 import torch.utils.data as torch_data
 from torchvision import models
 
+# imports for AIMET
+from aimet_torch import bias_correction
+from aimet_torch.quantsim import QuantParams, QuantizationSimModel
+from aimet_torch.batch_norm_fold import fold_all_batch_norms
+from aimet_torch.cross_layer_equalization import equalize_model
+import aimet_common
+
 # imports for data pipelines
 from Examples.common import image_net_config
 from Examples.torch.utils.image_net_evaluator import ImageNetEvaluator
 from Examples.torch.utils.image_net_trainer import ImageNetTrainer
 from Examples.torch.utils.image_net_data_loader import ImageNetDataLoader
-
-# imports for AIMET
-from aimet_torch import bias_correction
-from aimet_torch.quantsim import QuantParams, QuantizationSimModel
-from aimet_torch.batch_norm_fold import fold_all_batch_norms
-
-
-import aimet_common
-from aimet_torch.cross_layer_equalization import equalize_model
 
 logger = logging.getLogger('TorchCLE-BC')
 formatter = logging.Formatter('%(asctime)s : %(name)s - %(levelname)s - %(message)s')
@@ -249,12 +247,12 @@ def quantize(config: argparse.Namespace):
     # Quantization
     logger.info("Starting Model Quantization...")
 
-    # Quantize the model using AIMET CLE
-    data_loader = ImageNetDataLoader(is_training=False, images_dir=_config.dataset_dir, image_size=image_net_config.dataset['image_size']).data_loader
-    apply_cross_layer_equalization(model=model, input_shape=(1, 3, 224, 224))
-
     BN_folded_model = copy.deepcopy(model)
     _ = fold_all_batch_norms(BN_folded_model, input_shapes=(1, 3, 224, 224))
+
+    # Quantize the model using AIMET CLE
+    data_loader = ImageNetDataLoader(is_training=False, images_dir=_config.dataset_dir, image_size=image_net_config.dataset['image_size']).data_loader
+    apply_cross_layer_equalization(model=BN_folded_model, input_shape=(1, 3, 224, 224))
 
     # Log the accuracy after CLE
     quantsim, stats = calculate_quantsim_accuracy(model=BN_folded_model, evaluator=data_pipeline.evaluate, use_cuda=config.use_cuda)
@@ -263,8 +261,8 @@ def quantize(config: argparse.Namespace):
     apply_bias_correction(model=model, data_loader=data_loader)
 
     # Calculating accuracy on Quant Simulator
-    quantsim, stats = calculate_quantsim_accuracy(model=model, evaluator=data_pipeline.evaluate, use_cuda=config.use_cuda)
-    
+    quantsim, stats = calculate_quantsim_accuracy(model=BN_folded_model, evaluator=data_pipeline.evaluate, use_cuda=config.use_cuda)
+
     # Log the accuracy after bias correction
     logger.info("Quantized Model Top-1 Accuracy After Bias Correction = %.2f", stats)
 
