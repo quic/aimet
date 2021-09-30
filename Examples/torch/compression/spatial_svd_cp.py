@@ -138,7 +138,7 @@ class ImageNetDataPipeline:
         provide your own implementation if needed.
 
         :param model: The model to finetune.
-        :return: None 
+        :return: None
         """
 
         # Your code goes here instead of the example from below
@@ -169,11 +169,11 @@ def aimet_spatial_svd(model: torch.nn.Module,
     # please refer to the API documentation for other schemes (i.e weight svd & channel prunning)
     # and mode (manual)
     greedy_params = aimet_torch.defs.GreedySelectionParameters(target_comp_ratio=Decimal(0.75),
-                                                              num_comp_ratio_candidates=10)
+                                                               num_comp_ratio_candidates=10)
     auto_params = aimet_torch.defs.SpatialSvdParameters.AutoModeParams(greedy_params,
-                                                                      modules_to_ignore=[model.conv1])
+                                                                       modules_to_ignore=[model.conv1])
     params = aimet_torch.defs.SpatialSvdParameters(aimet_torch.defs.SpatialSvdParameters.Mode.auto,
-                                                  auto_params)
+                                                   auto_params)
 
     scheme = CompressionScheme.spatial_svd      # spatial_svd, weight_svd or channel_pruning
     metric = CostMetric.mac                     # mac or memory
@@ -187,9 +187,8 @@ def aimet_spatial_svd(model: torch.nn.Module,
                                              parameters=params)
     return results
 
-def aimet_channel_pruning(model: torch.nn.Module,
-                         evaluator: aimet_common.defs.EvalFunction, data_loader: torch_data.DataLoader) -> Tuple[torch.nn.Module,
-                         aimet_common.defs.CompressionStats]:
+def aimet_channel_pruning(model: torch.nn.Module, evaluator: aimet_common.defs.EvalFunction,
+                          data_loader: torch_data.DataLoader) -> Tuple[torch.nn.Module, aimet_common.defs.CompressionStats]:
     """
     Compresses the model using AIMET's Weight SVD auto mode compression scheme.
 
@@ -201,19 +200,19 @@ def aimet_channel_pruning(model: torch.nn.Module,
 
     # configure the greedy comp-ratio selection algorithm
     greedy_params = aimet_torch.defs.GreedySelectionParameters(target_comp_ratio=Decimal(0.66),
-                                                              num_comp_ratio_candidates=10)
+                                                               num_comp_ratio_candidates=10)
 
     # configure the auto mode compression.  ignore the first layer of the model (model.conv1).
     auto_params = aimet_torch.defs.ChannelPruningParameters.AutoModeParams(greedy_params,
-                                                                          modules_to_ignore=[model.conv1])
+                                                                           modules_to_ignore=[model.conv1])
 
     # configure the parameters for channel pruning compression
     # # 50000 reconstruction samples will give better results and is recommended; however we use 5000 here as an example.
-    params = aimet_torch.defs.ChannelPruningParameters(data_loader= data_loader,
-                                                      num_reconstruction_samples=5000,
-                                                      allow_custom_downsample_ops=False,
-                                                      mode=aimet_torch.defs.ChannelPruningParameters.Mode.auto,
-                                                      params=auto_params)
+    params = aimet_torch.defs.ChannelPruningParameters(data_loader=data_loader,
+                                                       num_reconstruction_samples=5000,
+                                                       allow_custom_downsample_ops=False,
+                                                       mode=aimet_torch.defs.ChannelPruningParameters.Mode.auto,
+                                                       params=auto_params)
 
     scheme = CompressionScheme.channel_pruning      # spatial_svd, weight_svd or channel_pruning
     metric = CostMetric.mac                         # mac or memory

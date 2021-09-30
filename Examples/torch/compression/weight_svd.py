@@ -59,8 +59,6 @@ import aimet_torch.defs
 from Examples.common import image_net_config
 from Examples.torch.utils.image_net_evaluator import ImageNetEvaluator
 from Examples.torch.utils.image_net_trainer import ImageNetTrainer
-from Examples.torch.utils.image_net_data_loader import ImageNetDataLoader
-
 
 logger = logging.getLogger('TorchWeightSVD')
 formatter = logging.Formatter('%(asctime)s : %(name)s - %(levelname)s - %(message)s')

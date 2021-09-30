@@ -51,16 +51,16 @@ import torch
 import torch.utils.data as torch_data
 from torchvision import models
 
+# imports for AIMET
+import aimet_common.defs
+import aimet_torch.defs
+from aimet_torch.compress import ModelCompressor
+
 # imports for data pipelines
 from Examples.common import image_net_config
 from Examples.torch.utils.image_net_evaluator import ImageNetEvaluator
 from Examples.torch.utils.image_net_trainer import ImageNetTrainer
 from Examples.torch.utils.image_net_data_loader import ImageNetDataLoader
-
-# imports for AIMET
-import aimet_common.defs
-import aimet_torch.defs
-from aimet_torch.compress import ModelCompressor
 
 logger = logging.getLogger('TorchChannelPruning')
 formatter = logging.Formatter('%(asctime)s : %(name)s - %(levelname)s - %(message)s')
@@ -136,9 +136,8 @@ class ImageNetDataPipeline:
         torch.save(model, os.path.join(self._config.logdir, 'finetuned_model.pth'))
 
 
-def aimet_channel_pruning(model: torch.nn.Module,
-                     evaluator: aimet_common.defs.EvalFunction, data_loader: torch_data.DataLoader) -> Tuple[torch.nn.Module,
-                                                                         aimet_common.defs.CompressionStats]:
+def aimet_channel_pruning(model: torch.nn.Module, evaluator: aimet_common.defs.EvalFunction,
+                          data_loader: torch_data.DataLoader) -> Tuple[torch.nn.Module, aimet_common.defs.CompressionStats]:
     """
     Compresses the model using AIMET's channel pruning feature
 
@@ -150,19 +149,19 @@ def aimet_channel_pruning(model: torch.nn.Module,
 
     # configure the greedy comp-ratio selection algorithm
     greedy_params = aimet_torch.defs.GreedySelectionParameters(target_comp_ratio=Decimal(0.5),
-                                                              num_comp_ratio_candidates=10)
+                                                               num_comp_ratio_candidates=10)
 
     # configure the auto mode compression.  ignore the first layer of the model (model.conv1).
     auto_params = aimet_torch.defs.ChannelPruningParameters.AutoModeParams(greedy_params,
-                                                                          modules_to_ignore=[model.conv1])
+                                                                           modules_to_ignore=[model.conv1])
 
     # configure the parameters for channel pruning compression
     # 50000 reconstruction samples will give better results and is recommended; however we use 5000 here as an example.
     params = aimet_torch.defs.ChannelPruningParameters(data_loader=data_loader,
-                                                      num_reconstruction_samples=5000,
-                                                      allow_custom_downsample_ops=False,
-                                                      mode=aimet_torch.defs.ChannelPruningParameters.Mode.auto,
-                                                      params=auto_params)
+                                                       num_reconstruction_samples=5000,
+                                                       allow_custom_downsample_ops=False,
+                                                       mode=aimet_torch.defs.ChannelPruningParameters.Mode.auto,
+                                                       params=auto_params)
 
     scheme = aimet_common.defs.CompressionScheme.channel_pruning      # spatial_svd, weight_svd or channel_pruning
     metric = aimet_common.defs.CostMetric.mac                         # mac or memory
@@ -224,7 +223,7 @@ def compress_and_finetune(config: argparse.Namespace):
     # Compress the model using AIMET Channel Pruning
     # in auto mode, AIMET uses the Greedy Compression-Ratio Selection algorithm
     data_loader = ImageNetDataLoader(is_training=True, images_dir=_config.dataset_dir, image_size=224).data_loader
-    compressed_model, eval_dict = aimet_channel_pruning(model=model, evaluator=data_pipeline.evaluate, data_loader= data_loader)
+    compressed_model, eval_dict = aimet_channel_pruning(model=model, evaluator=data_pipeline.evaluate, data_loader=data_loader)
 
     # Log the statistics
     logger.info(eval_dict)

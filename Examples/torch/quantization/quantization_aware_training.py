@@ -51,18 +51,17 @@ from torchvision import models
 import torch
 import torch.utils.data as torch_data
 
+# imports for AIMET
+from aimet_torch import bias_correction
+from aimet_torch.quantsim import QuantParams, QuantizationSimModel
+from aimet_torch.cross_layer_equalization import equalize_model
+import aimet_common
+
 # imports for data pipelines
 from Examples.common import image_net_config
 from Examples.torch.utils.image_net_evaluator import ImageNetEvaluator
 from Examples.torch.utils.image_net_trainer import ImageNetTrainer
 from Examples.torch.utils.image_net_data_loader import ImageNetDataLoader
-
-# imports for AIMET
-import aimet_common
-from aimet_torch import bias_correction
-from aimet_torch.quantsim import QuantParams, QuantizationSimModel
-from aimet_torch.cross_layer_equalization import equalize_model
-
 
 logger = logging.getLogger('TorchQAT')
 formatter = logging.Formatter('%(asctime)s : %(name)s - %(levelname)s - %(message)s')
@@ -177,7 +176,7 @@ def apply_bias_correction(model: torch.nn.Module, data_loader: torch_data.DataLo
     bias_correction.correct_bias(model.to(device="cuda"), params, num_quant_samples=num_quant_samples,
                                  data_loader=data_loader, num_bias_correct_samples=num_bias_correct_samples)
 
-def calculate_quantsim_accuracy (model: torch.nn.Module, evaluator: aimet_common.defs.EvalFunction, use_cuda: bool = False, logdir: str = '')->Tuple[torch.nn.Module, float]:
+def calculate_quantsim_accuracy (model: torch.nn.Module, evaluator: aimet_common.defs.EvalFunction, use_cuda: bool = False, logdir: str = '') -> Tuple[torch.nn.Module, float]:
 
     """
     Calculates model accuracy on quantized simulator and returns quantized model with accuracy.
@@ -253,14 +252,14 @@ def quantize_and_finetune(config: argparse.Namespace):
     logger.info("Starting Model Quantization...")
 
     # Quantize the model using AIMET QAT (quantization aware training) and calculate accuracy on Quant Simulator
-    quantsim, stats = calculate_quantsim_accuracy(model=model, evaluator=data_pipeline.evaluate, use_cuda=config.use_cuda, logdir=config.logdir)
+    quantsim, _ = calculate_quantsim_accuracy(model=model, evaluator=data_pipeline.evaluate, use_cuda=config.use_cuda, logdir=config.logdir)
 
     #For good initialization apply, data free quantization methods (optional)
     data_loader = ImageNetDataLoader(is_training=False, images_dir=config.dataset_dir, image_size=image_net_config.dataset['image_size']).data_loader
     apply_cross_layer_equalization(model=model, input_shape=(1, 3, 224, 224))
     apply_bias_correction(model=model, data_loader=data_loader)
 
-    quantsim, stats = calculate_quantsim_accuracy(model=model, evaluator=data_pipeline.evaluate, use_cuda=config.use_cuda, logdir=config.logdir)
+    quantsim, _ = calculate_quantsim_accuracy(model=model, evaluator=data_pipeline.evaluate, use_cuda=config.use_cuda, logdir=config.logdir)
 
     logger.info("...Post Training Quantization Complete")
 
