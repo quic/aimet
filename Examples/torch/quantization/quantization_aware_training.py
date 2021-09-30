@@ -176,7 +176,8 @@ def apply_bias_correction(model: torch.nn.Module, data_loader: torch_data.DataLo
     bias_correction.correct_bias(model.to(device="cuda"), params, num_quant_samples=num_quant_samples,
                                  data_loader=data_loader, num_bias_correct_samples=num_bias_correct_samples)
 
-def calculate_quantsim_accuracy (model: torch.nn.Module, evaluator: aimet_common.defs.EvalFunction, use_cuda: bool = False, logdir: str = '') -> Tuple[torch.nn.Module, float]:
+def calculate_quantsim_accuracy(model: torch.nn.Module, evaluator: aimet_common.defs.EvalFunction,
+                                use_cuda: bool = False, logdir: str = '') -> Tuple[torch.nn.Module, float]:
 
     """
     Calculates model accuracy on quantized simulator and returns quantized model with accuracy.
