@@ -52,7 +52,7 @@ public:
                                           double encodingMin, double encodingMax,
                                           uint8_t bw, RoundingMode roundMode,
                                           bool use_cuda) = 0;
-    virtual void quantizeTensor(const DTYPE* inputTensorData, size_t inputTensorCount, DTYPE* outputTensorData,
+    virtual void quantizeTensor(const DTYPE* inputTensorData, size_t inputTensorCount, int32_t* outputTensorData,
                                 double encodingMin, double encodingMax, uint8_t bw, RoundingMode roundMode,
                                 bool use_cuda, bool shiftToSigned) = 0;
 };

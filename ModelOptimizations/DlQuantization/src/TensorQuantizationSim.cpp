@@ -105,7 +105,7 @@ void TensorQuantizationSim<DTYPE>::quantizeDequantizeTensor(const DTYPE* inputTe
 
 template <typename DTYPE>
 void TensorQuantizationSim<DTYPE>::quantizeTensor(const DTYPE* inputTensorData, size_t inputTensorCount,
-                                                  DTYPE* outputTensorData, double encodingMin, double encodingMax,
+                                                  int32_t* outputTensorData, double encodingMin, double encodingMax,
                                                   uint8_t bw, RoundingMode roundingMode, bool use_cuda,
                                                   bool shiftToSigned)
 {

@@ -179,7 +179,7 @@ class TestQcQuantizeOp:
 
         inp_tensor = torch.tensor([-7, -5, -3, 0, .1, 2.5])
         quant_out = quantizer.quantize(inp_tensor, MAP_ROUND_MODE_TO_PYMO['nearest'])
-        expected_out = torch.tensor([0, 6, 75, 178, 181, 255], dtype=torch.float32)
+        expected_out = torch.tensor([0, 6, 75, 178, 181, 255], dtype=torch.int32)
         assert torch.equal(quant_out, expected_out)
 
     def test_per_channel_symmetric_qdq(self):
@@ -320,7 +320,7 @@ class TestQcQuantizeOp:
         # Test quantize only on gpu
         inp_tensor_gpu = torch.tensor([-7, -5, -3, 0, .1, 2.5])
         quant_out = quantizer.quantize(inp_tensor_gpu, MAP_ROUND_MODE_TO_PYMO['nearest'])
-        expected_out = torch.tensor([-128, -123, -74, 0, 2, 61], dtype=torch.float32)
+        expected_out = torch.tensor([-128, -123, -74, 0, 2, 61], dtype=torch.int32)
         assert torch.equal(quant_out, expected_out)
 
     def test_quantize_only_symmetric_unsigned_cpu(self):
@@ -341,7 +341,7 @@ class TestQcQuantizeOp:
         # Test quantize only on gpu
         inp_tensor_gpu = torch.tensor([0, 1.2, 1.5, 4.0, 4.9, 5.3])
         quant_out = quantizer.quantize(inp_tensor_gpu, MAP_ROUND_MODE_TO_PYMO['nearest'])
-        expected_out = torch.tensor([0, 59, 74, 197, 241, 255], dtype=torch.float32)
+        expected_out = torch.tensor([0, 59, 74, 197, 241, 255], dtype=torch.int32)
         assert torch.equal(quant_out, expected_out)
 
     @pytest.mark.cuda
@@ -361,7 +361,7 @@ class TestQcQuantizeOp:
         # Test quantize only on gpu
         inp_tensor_gpu = torch.tensor([-7, -5, -3, 0, .1, 2.5], device=torch.device('cuda'))
         quant_out = quantizer.quantize(inp_tensor_gpu, MAP_ROUND_MODE_TO_PYMO['nearest'])
-        expected_out = torch.tensor([0, 6, 75, 178, 181, 255], dtype=torch.float32, device=torch.device('cuda'))
+        expected_out = torch.tensor([0, 6, 75, 178, 181, 255], dtype=torch.int32, device=torch.device('cuda'))
         assert torch.equal(quant_out, expected_out)
 
     @pytest.mark.cuda
@@ -384,7 +384,7 @@ class TestQcQuantizeOp:
         # Test quantize only on gpu
         inp_tensor_gpu = torch.tensor([-7, -5, -3, 0, .1, 2.5], device=torch.device('cuda'))
         quant_out = post_training_tensor_quantizer.quantize(inp_tensor_gpu, MAP_ROUND_MODE_TO_PYMO['nearest'])
-        expected_out = torch.tensor([-128, -123, -74, 0, 2, 61], dtype=torch.float32, device=torch.device('cuda'))
+        expected_out = torch.tensor([-128, -123, -74, 0, 2, 61], dtype=torch.int32, device=torch.device('cuda'))
         assert torch.equal(quant_out, expected_out)
 
     @pytest.mark.cuda
@@ -407,7 +407,7 @@ class TestQcQuantizeOp:
         # Test quantize only on gpu
         inp_tensor_gpu = torch.tensor([0, 1.2, 1.5, 4.0, 4.9, 5.3], device=torch.device('cuda'))
         quant_out = post_training_tensor_quantizer.quantize(inp_tensor_gpu, MAP_ROUND_MODE_TO_PYMO['nearest'])
-        expected_out = torch.tensor([0, 59, 74, 197, 241, 255], dtype=torch.float32, device=torch.device('cuda'))
+        expected_out = torch.tensor([0, 59, 74, 197, 241, 255], dtype=torch.int32, device=torch.device('cuda'))
         assert torch.equal(quant_out, expected_out)
 
     def test_qc_post_training_wrapper_mem_leak(self):
