@@ -38,13 +38,13 @@
 
 """ Common utility for Quantization """
 
-# Defined below is an quantization encoding format version, which will follow XX.YY.ZZ versioning as describe below,
+# Defined below is a quantization encoding format version, which will follow XX.YY.ZZ versioning as described below,
 #
 #    XX = Major Revision
 #    YY = Minor Revision
 #    ZZ = Patching version
 #
-# Change in major revision should indicate substantial change to the format,  updates to minor version indicates
+# Change in major revision should indicate substantial change to the format, updates to minor version indicates
 # additional information element being added to encoding format and might require update to fully consume the encodings.
 # The patching version shall be updated to indicate minor updates to quantization simulation e.g. bug fix etc.
 encoding_version = '0.4.0'
