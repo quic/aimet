@@ -40,18 +40,53 @@ import pytest
 import json
 import os
 import copy
+import numpy as np
 from packaging import version
 import torch
 from torchvision import models
+from torch.utils.data import DataLoader
 
 from aimet_torch import elementwise_ops
 from aimet_torch.quantsim_config import quantsim_config
 from aimet_torch.examples.test_models import ModelWithFunctionalReLU, SingleResidual, ModelWithDuplicateReLU
 from aimet_torch.quantsim import QuantizationSimModel
+from aimet_torch.utils import create_fake_data_loader
+
+
+def train(model: torch.nn.Module, data_loader: DataLoader) -> torch.Tensor:
+    """
+    Helper function to train model given data loader
+    :param model: torch model
+    :param data_loader: torch data loader
+    :return: total loss
+    """
+    total_loss = 0
+    model.train()
+    criterion = torch.nn.CrossEntropyLoss()
+    optimizer = torch.optim.SGD(model.parameters(), lr=0.01)
+    for (data, labels) in data_loader:
+        optimizer.zero_grad()
+        predicted = model(data)
+        loss = criterion(predicted, labels)
+        loss.backward()
+        optimizer.step()
+        total_loss += loss
+
+    return total_loss
+
+
+def evaluate(model: torch.nn.Module, dummy_input: torch.Tensor):
+    """
+    Helper function to evaluate model given dummy input
+    :param model: torch model
+    :param dummy_input: dummy input to model
+    """
+    model.eval()
+    with torch.no_grad():
+        model(dummy_input)
 
 
 class TestFX:
-
 
     def test_fx_with_relu(self):
         """
@@ -218,13 +253,8 @@ class TestFX:
             quant_sim_for_modified_model.model.module_relu_2.output_quantizer.enabled = False
             quant_sim_for_modified_model.model.module_relu_3.output_quantizer.enabled = False
 
-            def model_eval(model: torch.nn.Module, dummy_input: torch.Tensor):
-                model.eval()
-                with torch.no_grad():
-                    model(dummy_input)
-
-            quant_sim_for_original_model.compute_encodings(model_eval, input_tensor)
-            quant_sim_for_modified_model.compute_encodings(model_eval, input_tensor)
+            quant_sim_for_original_model.compute_encodings(evaluate, input_tensor)
+            quant_sim_for_modified_model.compute_encodings(evaluate, input_tensor)
 
             # Eval for both models
             assert torch.allclose(quant_sim_for_original_model.model(input_tensor),
@@ -262,3 +292,66 @@ class TestFX:
             # Add's output quantizer should be disabled, and ReLU's output quantizer should be enabled
             assert quant_sim_for_modified_model.model.module_add.output_quantizer.enabled == False
             assert quant_sim_for_modified_model.model.relu3.output_quantizer.enabled == True
+
+    def test_fx_with_functional_relu_training(self):
+        """
+        test torch fx with training
+        """
+        if version.parse(torch.__version__) >= version.parse("1.8"):
+            from aimet_torch.fx import replace_functional_by_module
+            model = ModelWithFunctionalReLU().eval()
+            model_copy = copy.deepcopy(model)
+
+            data_loader = create_fake_data_loader(32, 16, (3, 32, 32))
+            before_training_weight = model.conv1.weight.clone()
+            total_loss_for_original_model = train(model, data_loader)
+            after_training_weight = model.conv1.weight
+
+            # Weights should not be same before and after training
+            assert not np.allclose(before_training_weight.detach().cpu().numpy(),
+                                   after_training_weight.detach().cpu().numpy())
+
+            # Train modified model
+            model_transformed = replace_functional_by_module(model_copy)
+            total_loss_for_modified_model = train(model_transformed, data_loader)
+
+            # Compare loss after one iteration of training
+            assert total_loss_for_original_model.item() == total_loss_for_modified_model.item()
+
+    def test_fx_with_functional_relu_qat(self):
+        """
+        test torch fx with QAT
+        """
+        if version.parse(torch.__version__) >= version.parse("1.8"):
+            from aimet_torch.fx import replace_functional_by_module
+            model = ModelWithFunctionalReLU().eval()
+            model_copy = copy.deepcopy(model)
+            input_shape = (1, 3, 32, 32)
+            input_tensor = torch.randn(*input_shape)
+
+            model_transformed = replace_functional_by_module(model_copy)
+
+            # Compute encodings for both original and modified models
+            quant_sim_for_original_model = QuantizationSimModel(model, dummy_input=input_tensor)
+            quant_sim_for_modified_model = QuantizationSimModel(model_transformed, dummy_input=input_tensor)
+            quant_sim_for_original_model.compute_encodings(evaluate, input_tensor)
+            quant_sim_for_modified_model.compute_encodings(evaluate, input_tensor)
+
+            before_training_weight = quant_sim_for_modified_model.model.conv1._module_to_wrap.weight.clone()
+            print(before_training_weight[0, 0, :, :].detach().numpy())
+
+            # QAT
+            data_loader = create_fake_data_loader(32, 16, (3, 32, 32))
+            total_loss_for_original_model = train(quant_sim_for_original_model.model, data_loader)
+            total_loss_for_modified_model = train(quant_sim_for_modified_model.model, data_loader)
+
+            after_training_weight = quant_sim_for_modified_model.model.conv1._module_to_wrap.weight
+            print(after_training_weight[0, 0, :, :].detach().numpy())
+
+            # Compare loss after one iteration of training
+            # Since we are additionally adding noise for ReLUs now, loss will not be bit exact same
+            assert torch.allclose(total_loss_for_original_model, total_loss_for_modified_model, atol=1e-2)
+
+            # Weights should not be same before and after training
+            assert not np.allclose(before_training_weight.detach().cpu().numpy(),
+                                   after_training_weight.detach().cpu().numpy())
