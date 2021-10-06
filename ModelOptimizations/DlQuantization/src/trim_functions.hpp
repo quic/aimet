@@ -53,17 +53,17 @@ template <typename DTYPE>
 void quantizeDequantize(const DTYPE* in, int cnt, const TfEncoding& encoding, DTYPE* out, ComputationMode mode_cpu_gpu,
                         RoundingMode rounding_mode);
 
-template <typename DTYPE>
-void quantizeToFxp(const DTYPE* in, int cnt, const TfEncoding& encoding, int32_t* out, ComputationMode mode_cpu_gpu,
-                   RoundingMode rounding_mode, bool shiftToSigned);
+template <typename IN_DTYPE, typename OUT_DTYPE>
+void quantizeToFxp(const IN_DTYPE* in, int cnt, const TfEncoding& encoding, OUT_DTYPE* out,
+                   ComputationMode mode_cpu_gpu, RoundingMode rounding_mode, bool shiftToSigned);
 
 template <typename DTYPE>
 void quantizeDequantizeCpu(const DTYPE* in, int cnt, const TfEncoding& encoding, DTYPE* out,
                            RoundingMode rounding_mode);
 
-template <typename DTYPE>
-void quantizeToFxpCpu(const DTYPE* in, int cnt, const TfEncoding& encoding, int32_t* out, RoundingMode rounding_mode,
-                      bool shiftToSigned);
+template <typename IN_DTYPE, typename OUT_DTYPE>
+void quantizeToFxpCpu(const IN_DTYPE* in, int cnt, const TfEncoding& encoding, OUT_DTYPE* out,
+                      RoundingMode rounding_mode, bool shiftToSigned);
 
 double computeDelta(double encodingMin, double encodingMax, double numSteps);
 double computeOffset(double encodingMin, double delta);
@@ -72,9 +72,9 @@ double computeOffset(double encodingMin, double delta);
 // GPU implementations ...
 #ifdef GPU_QUANTIZATION_ENABLED
 
-template <typename DTYPE>
-void quantizeToFxpGpu(const DTYPE* in, int cnt, const TfEncoding& encoding, int32_t* out, RoundingMode rounding_mode,
-                      bool shiftToSigned);
+template <typename IN_DTYPE, typename OUT_DTYPE>
+void quantizeToFxpGpu(const IN_DTYPE* in, int cnt, const TfEncoding& encoding, OUT_DTYPE* out,
+                      RoundingMode rounding_mode, bool shiftToSigned);
 
 template <typename DTYPE>
 void quantizeDequantizeGpu(const DTYPE* in, int cnt, const TfEncoding& encoding, DTYPE* out,

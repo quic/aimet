@@ -43,6 +43,7 @@
 #include <DlQuantization/QuantizerFactory.hpp>
 
 #include <iostream>
+#include <stdexcept>
 #include <string>
 #include <torch/extension.h>
 #include <vector>
@@ -104,11 +105,15 @@ public:
     }
 
     at::Tensor quantize(at::Tensor input, DlQuantization::TfEncoding& encoding,
-                        DlQuantization::RoundingMode roundingMode, bool use_cuda, bool shiftToSigned)
+                        DlQuantization::RoundingMode roundingMode, bool use_cuda, bool shiftToSigned, bool useInt32)
     {
         // Allocate an output tensor as the same shape as the input
+        torch::ScalarType dtype = torch::kInt32;
+        if (!useInt32) {
+            dtype = torch::kInt64;
+        }
         auto options = torch::TensorOptions()
-                           .dtype(torch::kInt32)
+                           .dtype(dtype)
                            .layout(input.layout())
                            .device(input.device())
                            .requires_grad(input.requires_grad());
@@ -119,10 +124,18 @@ public:
         for (auto size: sizes)
             inputTensorSize *= size;
 
-        _tensorQuantizationSim->quantizeTensor(input.data_ptr<float>(), inputTensorSize, output.data_ptr<int32_t>(),
-                                               encoding.min, encoding.max, encoding.bw, roundingMode, use_cuda,
-                                               shiftToSigned);
-
+        if (useInt32) {
+            if (!shiftToSigned && encoding.bw == 32) {
+                throw std::runtime_error("Asymmetric and unsigned symmetric quantization for 32 bits requires int64 as output.");
+            }
+            _tensorQuantizationSim->quantizeTensor(input.data_ptr<float>(), inputTensorSize,
+                                                   output.data_ptr<int32_t>(), encoding.min, encoding.max, encoding.bw,
+                                                   roundingMode, use_cuda, shiftToSigned);
+        } else {
+            _tensorQuantizationSim->quantizeTensor(input.data_ptr<float>(), inputTensorSize,
+                                                   output.data_ptr<int64_t>(), encoding.min, encoding.max, encoding.bw,
+                                                   roundingMode, use_cuda, shiftToSigned);
+        }
         return output;
     }
 
