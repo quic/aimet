@@ -66,6 +66,10 @@ public:
                         double encodingMin, double encodingMax, uint8_t bw, RoundingMode roundMode, bool use_cuda,
                         bool shiftToSigned)
                         override;
+    void quantizeTensor(const DTYPE* inputTensorData, size_t inputTensorCount, int64_t* outputTensorData,
+                        double encodingMin, double encodingMax, uint8_t bw, RoundingMode roundMode, bool use_cuda,
+                        bool shiftToSigned)
+                        override;
 };
 
 }   // namespace DlQuantization

@@ -55,6 +55,9 @@ public:
     virtual void quantizeTensor(const DTYPE* inputTensorData, size_t inputTensorCount, int32_t* outputTensorData,
                                 double encodingMin, double encodingMax, uint8_t bw, RoundingMode roundMode,
                                 bool use_cuda, bool shiftToSigned) = 0;
+    virtual void quantizeTensor(const DTYPE* inputTensorData, size_t inputTensorCount, int64_t* outputTensorData,
+                                double encodingMin, double encodingMax, uint8_t bw, RoundingMode roundMode,
+                                bool use_cuda, bool shiftToSigned) = 0;
 };
 
 }   // namespace DlQuantization

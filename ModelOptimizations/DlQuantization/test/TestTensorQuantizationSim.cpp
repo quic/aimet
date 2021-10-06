@@ -163,7 +163,7 @@ TEST(TestTensorQuantizationSim, SanityTestWithQuantizeOnlyUnsigned)
 
     // Create a dummy tensor
     const std::vector<float> tensor = {-0.5f, -0.25f, 0, 0.25, 0.5, 0.75};
-    std::vector<int32_t> outputTensor(tensor.size());
+    std::vector<int64_t> outputTensor(tensor.size());
 
     uint8_t bw     = 8;
     double min    = -0.46;
@@ -188,7 +188,7 @@ TEST(TestTensorQuantizationSim, SanityTestWithQuantizeOnlySigned)
 
     // Create a dummy tensor
     const std::vector<float> tensor = {-0.5f, -0.25f, 0, 0.25, 0.5, 0.75};
-    std::vector<int32_t> outputTensor(tensor.size());
+    std::vector<int64_t> outputTensor(tensor.size());
 
     uint8_t bw     = 8;
     double min    = -0.46;
@@ -202,7 +202,7 @@ TEST(TestTensorQuantizationSim, SanityTestWithQuantizeOnlySigned)
     EXPECT_EQ(outputTensor.size(), expectedOutput.size());
 
     for (int i = 0; i < outputTensor.size(); i++) {
-        EXPECT_FLOAT_EQ(outputTensor[i], expectedOutput[i]);
+        EXPECT_EQ(outputTensor[i], expectedOutput[i]);
     }
 }
 
@@ -223,7 +223,7 @@ TEST(TestTensorQuantizationSim, SanityTestWith32BitQuantizeOnlySigned)
                        DlQuantization::RoundingMode::ROUND_NEAREST, false, true);
 
     std::vector<float> expectedOutput = {-2147483648};
-    EXPECT_FLOAT_EQ(outputTensor[0], expectedOutput[0]);
+    EXPECT_EQ(outputTensor[0], expectedOutput[0]);
 }
 
 TEST(TestTensorQuantizationSim, SanityTestWithLargeBitwidthQuantizeOnly)
@@ -233,33 +233,15 @@ TEST(TestTensorQuantizationSim, SanityTestWithLargeBitwidthQuantizeOnly)
 
     // Create a dummy tensor
     const std::vector<float> tensor = {1.329116940498352};
-    std::vector<int32_t> outputTensor(tensor.size());
+    std::vector<int64_t> outputTensor(tensor.size());
 
-    uint8_t bw     = 31;
-    double min    = -1.3424270153045654;
+    uint8_t bw     = 32;
+    double min    = 0;
     double max    = 1.3424270153045654;
 
     sim.quantizeTensor(tensor.data(), tensor.size(), outputTensor.data(), min, max, bw,
-                       DlQuantization::RoundingMode::ROUND_NEAREST, false, true);
+                       DlQuantization::RoundingMode::ROUND_NEAREST, false, false);
 
-    std::vector<int32_t> expectedOutput = {1063095743};
+    std::vector<int64_t> expectedOutput = {4252382979};
     EXPECT_EQ(outputTensor[0], expectedOutput[0]);
-}
-
-TEST(TestTensorQuantizationSim, SanityTestWithCrashExpected)
-{
-    // Instantiate TensorQuantizationSim
-    DlQuantization::TensorQuantizationSim<float> sim;
-
-    // Create a dummy tensor
-    const std::vector<float> tensor = {1.329116940498352};
-    std::vector<int32_t> outputTensor(tensor.size());
-
-    uint8_t bw     = 32;
-    double min    = -1.3424270153045654;
-    double max    = 1.3424270153045654;
-
-    // Quantization with shiftToSigned = false and bw = 32 should throw an error
-    EXPECT_ANY_THROW(sim.quantizeTensor(tensor.data(), tensor.size(), outputTensor.data(), min, max, bw,
-                                        DlQuantization::RoundingMode::ROUND_NEAREST, false, false));
 }
