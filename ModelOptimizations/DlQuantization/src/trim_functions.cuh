@@ -106,8 +106,8 @@ __device__ void quantizeToFxpDevice(const DTYPE* in, int seed, TfEncoding encodi
  * @param rounding_mode The rounding mode to use for quantization to fixed
  * point.
  */
-template <typename DTYPE>
-__device__ void quantizeToFxpDeviceWithInt(const DTYPE* in, int seed, TfEncoding encoding, int64_t* out,
+template <typename IN_DTYPE, typename OUT_DTYPE>
+__device__ void quantizeToFxpDeviceWithInt(const IN_DTYPE* in, int seed, TfEncoding encoding, OUT_DTYPE* out,
                                            RoundingMode rounding_mode)
 {
     // Saturate

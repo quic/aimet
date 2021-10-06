@@ -219,14 +219,15 @@ class StaticGridTensorQuantizer(TensorQuantizer):
         output = QuantizeDequantize.apply(tensor, self, round_mode)
         return output
 
-    def quantize(self, tensor, round_mode):
+    def quantize(self, tensor, round_mode, use_int32=True):
         """
         Quantize the tensor, using the saved encoding for this tensor
         :param tensor: Tensor to quantize
         :param round_mode: Rounding mode
+        :param use_int32: True if using int32 as output datatype, False for int64
         :return: Resulting tensor
         """
-        output = Quantize.apply(tensor, self, round_mode)
+        output = Quantize.apply(tensor, self, round_mode, use_int32)
         return output
 
     def reset_encoding_stats(self):
@@ -397,12 +398,13 @@ class Quantize(torch.autograd.Function):
     """
     # pylint:disable = arguments-differ
     @staticmethod
-    def forward(ctx, tensor, tensor_quantizer, round_mode):
+    def forward(ctx, tensor, tensor_quantizer, round_mode, use_int32):
         """
         Quantize the tensor, using the saved encoding for this tensor
         :param tensor: Tensor to quantize
         :param tensor_quantizer: Reference to the tensor quantizer
         :param round_mode: Rounding mode
+        :param use_int32: True if using int32 as output datatype, False for int64
         :return: Resulting tensor
         """
         if tensor_quantizer.enabled:
@@ -411,7 +413,7 @@ class Quantize(torch.autograd.Function):
             if tensor_quantizer.use_symmetric_encodings and tensor_quantizer.encoding.offset < 0:
                 shift_to_signed = True
             quantized_tensor = tensor_quantizer._cppOp[0].quantize(tensor, tensor_quantizer.encoding, round_mode,
-                                                                   tensor.is_cuda, shift_to_signed)
+                                                                   tensor.is_cuda, shift_to_signed, use_int32)
         else:
             quantized_tensor = tensor
 

@@ -410,6 +410,30 @@ class TestQcQuantizeOp:
         expected_out = torch.tensor([0, 59, 74, 197, 241, 255], dtype=torch.int32, device=torch.device('cuda'))
         assert torch.equal(quant_out, expected_out)
 
+    @pytest.mark.cuda
+    def test_quantize_only_int64_return_type(self):
+        """ Test tensor quantizer quantize only symmetric unsigned functionality on gpu """
+
+        post_training_tensor_quantizer = \
+            StaticGridPerTensorQuantizer(bitwidth=8, round_mode='nearest',
+                                         quant_scheme=MAP_QUANT_SCHEME_TO_PYMO[QuantScheme.post_training_tf],
+                                         use_symmetric_encodings=True, enabled_by_default=True)
+        encodings = libpymo.TfEncoding()
+        encodings.bw = 8
+        encodings.max = 5.19
+        encodings.min = 0.0
+        encodings.offset = 0
+
+        # delta is 0.020352941
+        post_training_tensor_quantizer.encoding = encodings
+
+        # Test quantize only on gpu
+        inp_tensor_gpu = torch.tensor([0, 1.2, 1.5, 4.0, 4.9, 5.3], device=torch.device('cuda'))
+        quant_out = post_training_tensor_quantizer.quantize(inp_tensor_gpu, MAP_ROUND_MODE_TO_PYMO['nearest'],
+                                                            use_int32=False)
+        expected_out = torch.tensor([0, 59, 74, 197, 241, 255], dtype=torch.int64, device=torch.device('cuda'))
+        assert torch.equal(quant_out, expected_out)
+
     def test_qc_post_training_wrapper_mem_leak(self):
         torch.manual_seed(0)
 

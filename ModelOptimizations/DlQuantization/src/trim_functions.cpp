@@ -112,14 +112,10 @@ void quantizeDequantize(const DTYPE* in, int cnt, const TfEncoding& encoding, DT
 }
 
 // encoding: TF: rounded
-template <typename DTYPE>
-void quantizeToFxp(const DTYPE* in, int cnt, const TfEncoding& encoding, int32_t* out, ComputationMode mode_cpu_gpu,
-                   RoundingMode rounding_mode, bool shiftToSigned)
+template <typename IN_DTYPE, typename OUT_DTYPE>
+void quantizeToFxp(const IN_DTYPE* in, int cnt, const TfEncoding& encoding, OUT_DTYPE* out,
+                   ComputationMode mode_cpu_gpu, RoundingMode rounding_mode, bool shiftToSigned)
 {
-    // Output value must fit in int32_t
-    if (!shiftToSigned && encoding.bw == 32) {
-        throw runtime_error("Asymmetric and unsigned symmetric quantization not supported for 32 bits.");
-    }
     switch (mode_cpu_gpu)
     {
         case COMP_MODE_CPU:
@@ -151,9 +147,9 @@ void quantizeDequantizeCpu(const DTYPE* in, int cnt, const TfEncoding& encoding,
     }
 }
 
-template <typename DTYPE>
-void quantizeToFxpCpu(const DTYPE* in, int cnt, const TfEncoding& encoding, int32_t* out, RoundingMode rounding_mode,
-                      bool shiftToSigned)
+template <typename IN_DTYPE, typename OUT_DTYPE>
+void quantizeToFxpCpu(const IN_DTYPE* in, int cnt, const TfEncoding& encoding, OUT_DTYPE* out,
+                      RoundingMode rounding_mode, bool shiftToSigned)
 {
     // Using unsigned int to account for case of signed symmetric 32 bit, when shift will be 2^31
     unsigned int shift = 0;
@@ -164,7 +160,7 @@ void quantizeToFxpCpu(const DTYPE* in, int cnt, const TfEncoding& encoding, int3
     {
         int64_t out_64;
         quantizeValueCpuWithInt(&in[i], encoding, &out_64, rounding_mode);
-        out[i] = (int32_t)(out_64 - shift);
+        out[i] = (OUT_DTYPE) (out_64 - shift);
     }
 }
 
@@ -193,8 +189,8 @@ inline void quantizeValueCpu(const DTYPE* in, const TfEncoding& encoding, DTYPE*
     }
 }
 
-template <typename DTYPE>
-inline void quantizeValueCpuWithInt(const DTYPE* in, const TfEncoding& encoding, int64_t* out,
+template <typename IN_DTYPE, typename OUT_DTYPE>
+inline void quantizeValueCpuWithInt(const IN_DTYPE* in, const TfEncoding& encoding, OUT_DTYPE* out,
                                     RoundingMode rounding_mode)
 {
     double out_float = max(min((double) *in, encoding.max), encoding.min);
@@ -239,6 +235,12 @@ template void quantizeToFxp(const double* in, int cnt, const TfEncoding& encodin
                             ComputationMode mode_cpu_gpu, RoundingMode rounding_mode, bool shiftToSigned);
 
 template void quantizeToFxp(const float* in, int cnt, const TfEncoding& encoding, int32_t* out,
+                            ComputationMode mode_cpu_gpu, RoundingMode rounding_mode, bool shiftToSigned);
+
+template void quantizeToFxp(const double* in, int cnt, const TfEncoding& encoding, int64_t* out,
+                            ComputationMode mode_cpu_gpu, RoundingMode rounding_mode, bool shiftToSigned);
+
+template void quantizeToFxp(const float* in, int cnt, const TfEncoding& encoding, int64_t* out,
                             ComputationMode mode_cpu_gpu, RoundingMode rounding_mode, bool shiftToSigned);
 
 }   // End of namespace DlQuantization
