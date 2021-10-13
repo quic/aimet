@@ -1,4 +1,4 @@
-#!/usr/bin/env python3.5
+#!/usr/bin/env python3.6
 
 #  =============================================================================
 #
@@ -45,7 +45,7 @@ operations represent a module or a function that generates a tensor, while produ
 the tensors that are either input to the model (input, constant or parameter) or the
 result of an operation. Furthermore the graph representation is bi-directional."""
 
-from typing import Tuple, Union, List, Dict
+from typing import Tuple, Union, List, Dict, Type
 import torch
 
 from aimet_common.connected_graph.connectedgraph import ConnectedGraph as AimetCommonConnectedGraph
@@ -425,7 +425,7 @@ class ConnectedGraph(AimetCommonConnectedGraph):
             # stopped at this level. torch.nn.Identity are being ignored because in graph node representation
             # the torch.nn.Identity op generate no output and are not part of inputs for downstream op
             if not isinstance(node_name_to_module[input_name], torch.nn.Identity):
-                op_type = self._get_op_type(node_name_to_module[input_name])
+                op_type = self.get_op_type(type(node_name_to_module[input_name]))
                 node_inputs = [inp for inp in node.inputs()]
                 ir_node = IrNode(node_type=op_type,
                                  inputs=[inputs_map.get(inp, inp) for inp in node_inputs[1:]],
@@ -443,7 +443,7 @@ class ConnectedGraph(AimetCommonConnectedGraph):
         :param ir_nodes_list: List of IrNodes created from traversing the trace graph
         :return: Node created for the module
         """
-        op_type = self._get_op_type(module)
+        op_type = self.get_op_type(type(module))
         node_inputs = [inp for inp in graph.inputs()]
         outputs = [output for output in graph.return_node().inputs()]
         ir_node = IrNode(node_type=op_type,
@@ -506,19 +506,19 @@ class ConnectedGraph(AimetCommonConnectedGraph):
         return GetAttrNodeInfo(node_alias, node_name, node_input)
 
     @staticmethod
-    def _get_op_type(model: torch.nn.Module) -> str:
+    def get_op_type(model_cls: Type[torch.nn.Module]) -> str:
         """
         Get connected graph op type for a pytorch module
-        :param model: Pytorch module to get op type for
+        :param model_cls: Pytorch module class to get op type for
         :return: Connected graph op type
         """
         # use nominal Op type if its a known type else use torch defined Module name
-        if isinstance(model, tuple(onnx_utils.map_torch_types_to_onnx.keys())):
+        if issubclass(model_cls, tuple(onnx_utils.map_torch_types_to_onnx.keys())):
             # Currently always taking first element in the list. Check whether we need extra logic for using other
             # elements in the list.
-            op_type = onnx_utils.map_torch_types_to_onnx[type(model)][0]
+            op_type = onnx_utils.map_torch_types_to_onnx[model_cls][0]
         else:
-            op_type = type(model).__name__
+            op_type = model_cls.__name__
             logger.debug("unknown op_type -- defaulting to class name %s", op_type)
         return op_type
 
