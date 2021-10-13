@@ -40,22 +40,20 @@ This file demonstrates the use of compression using AIMET spatial SVD
 technique followed by fine tuning.
 """
 
-
 import argparse
-import os
-from decimal import Decimal
-from datetime import datetime
 import logging
+import os
+from datetime import datetime
+from decimal import Decimal
 import torch
 from torchvision import models
 
 # imports for AIMET
-from aimet_torch.compress import ModelCompressor
-import aimet_torch.defs
 import aimet_common.defs
-
 from aimet_common.defs import CompressionScheme
 from aimet_common.defs import CostMetric
+import aimet_torch
+from aimet_torch.compress import ModelCompressor
 
 # imports for data pipelines
 from Examples.common import image_net_config
@@ -73,8 +71,8 @@ logging.basicConfig(format=formatter)
 # the PyTorch framework. It also provides visualization of computational graph meta-data like
 # number of parameters involved and MAC count estimate.
 
-# This script utilize AIMET do perform spatial svd compression (50% ratio) on a resnet18 pretrained model
-# with the ImageNet data set.   It should re-create the same performance numbers as published in the
+# This script utilize AIMET do perform spatial svd compression (50% compression ratio) on a resnet18 pretrained model
+# with the ImageNet data set. It should re-create the same performance numbers as published in the
 # AIMET release for the particular scenario as described below.
 #
 # Scenario parameters:
@@ -98,7 +96,6 @@ class ImageNetDataPipeline:
         """
         self._config = _config
 
-
     def evaluate(self, model: torch.nn.Module, iterations: int = None, use_cuda: bool = False) -> float:
         """
         Evaluate the specified model using the specified number of samples from the validation set.
@@ -119,7 +116,6 @@ class ImageNetDataPipeline:
 
         return evaluator.evaluate(model, iterations, use_cuda)
 
-
     def finetune(self, model: torch.nn.Module):
         """
         Finetunes the model.  The implemtation provided here is just an example,
@@ -138,8 +134,8 @@ class ImageNetDataPipeline:
         trainer.train(model, max_epochs=self._config.epochs, learning_rate=self._config.learning_rate,
                       learning_rate_schedule=self._config.learning_rate_schedule, use_cuda=self._config.use_cuda)
 
-
         torch.save(model, os.path.join(self._config.logdir, 'finetuned_model.pth'))
+
 
 def aimet_spatial_svd(model: torch.nn.Module,
                       evaluator: aimet_common.defs.EvalFunction):
@@ -152,7 +148,6 @@ def aimet_spatial_svd(model: torch.nn.Module,
     :return: A tuple of compressed model and its statistics
     """
 
-
     # create the parameters for AIMET to compress on auto mode.
     # please refer to the API documentation for other schemes (i.e weight svd & channel prunning)
     # and mode (manual)
@@ -163,8 +158,8 @@ def aimet_spatial_svd(model: torch.nn.Module,
     params = aimet_torch.defs.SpatialSvdParameters(aimet_torch.defs.SpatialSvdParameters.Mode.auto,
                                                    auto_params)
 
-    scheme = CompressionScheme.spatial_svd      # spatial_svd, weight_svd or channel_pruning
-    metric = CostMetric.mac                     # mac or memory
+    scheme = CompressionScheme.spatial_svd
+    metric = CostMetric.mac
 
     results = ModelCompressor.compress_model(model=model,
                                              eval_callback=evaluator,
@@ -175,7 +170,8 @@ def aimet_spatial_svd(model: torch.nn.Module,
                                              parameters=params)
     return results
 
-def compress_and_finetune(config: argparse.Namespace):
+
+def spatial_svd_example(config: argparse.Namespace):
     """
     1. Instantiate Data Pipeline for evaluation and training
     2. Load the pretrained resnet18 model
@@ -205,56 +201,49 @@ def compress_and_finetune(config: argparse.Namespace):
     # Instantiate Data Pipeline for evaluation and training
     data_pipeline = ImageNetDataPipeline(config)
 
-
     # Loads the pretrained resnet18 model
     model = models.resnet18(pretrained=True)
     if config.use_cuda:
         model.to(torch.device('cuda'))
-
+    model.eval()
 
     # Calculates floating point accuracy
     accuracy = data_pipeline.evaluate(model, use_cuda=config.use_cuda)
-    logger.info("Original Model Top-1 accuracy = %.2f", accuracy)
-
-
-    # Compression
-    logger.info("Starting Model Compression...")
+    logger.info("Original Model top-1 accuracy = %.2f", accuracy)
 
     # Compress the model using AIMET Weight SVD
-    compressed_model, eval_dict = aimet_spatial_svd(model=model, evaluator=data_pipeline.evaluate)
+    logger.info("Starting Spatial SVD")
+    compressed_model, stats = aimet_spatial_svd(model=model, evaluator=data_pipeline.evaluate)
 
-    # Log the statistics
-    logger.info(eval_dict)
+    logger.info(stats)
     with open(os.path.join(config.logdir, 'log.txt'), "w") as outfile:
-        outfile.write("%s\n\n" % (eval_dict))
+        outfile.write("%s\n\n" % (stats))
 
     # Calculate and log the accuracy of compressed model
     accuracy = data_pipeline.evaluate(compressed_model, use_cuda=config.use_cuda)
     logger.info("Compressed Model Top-1 accuracy = %.2f", accuracy)
 
-    logger.info("...Model Compression Complete")
-
-    # Finetune
-    logger.info("Starting Model Finetuning...")
+    logger.info("Spatial SVD Complete")
 
     # Finetune the compressed model
+    logger.info("Starting Model Finetuning")
     data_pipeline.finetune(compressed_model)
+
+    # Calculate and log the accuracy of compressed-finetuned model
+    accuracy = data_pipeline.evaluate(compressed_model, use_cuda=config.use_cuda)
+    logger.info("Finetuned Compressed Model top-1 accuracy = %.2f", accuracy)
+
+    logger.info("Model Finetuning Complete")
 
     # Save the compressed model
     torch.save(compressed_model, os.path.join(config.logdir, 'compressed_model.pth'))
 
-    # Calculate and log the accuracy of compressed-finetuned model
-    accuracy = data_pipeline.evaluate(compressed_model, use_cuda=config.use_cuda)
-    logger.info("Finetuned Compressed Model Top-1 accuracy = %.2f", accuracy)
-
-    logger.info("...Model Finetuning Complete")
-
-
 
 if __name__ == '__main__':
-    default_logdir = os.path.join("benchmark_output", "spatial_svd_"+datetime.now().strftime("%Y-%m-%d-%H-%M-%S"))
+    default_logdir = os.path.join("benchmark_output", "spatial_svd_" + datetime.now().strftime("%Y-%m-%d-%H-%M-%S"))
 
-    parser = argparse.ArgumentParser(description='Apply Spatial SVD on pretrained ResNet18 model and finetune it for ImageNet dataset')
+    parser = argparse.ArgumentParser(
+        description='Apply Spatial SVD on pretrained ResNet18 model and finetune it for ImageNet dataset')
 
     parser.add_argument('--dataset_dir', type=str,
                         required=True,
@@ -277,12 +266,12 @@ if __name__ == '__main__':
     parser.add_argument('--learning_rate', type=float,
                         default=1e-2,
                         help="A float type learning rate for model finetuning.\n\
-                              default is 0.01")
+                              Default is 0.01")
     parser.add_argument('--learning_rate_schedule', type=list,
                         default=[5, 10],
                         help="A list of epoch indices for learning rate schedule used in finetuning.\n\
                               Check https://pytorch.org/docs/stable/_modules/torch/optim/lr_scheduler.html#MultiStepLR for more details.\n\
-                              default is [5, 10]")
+                              Default is [5, 10]")
 
     _config = parser.parse_args()
 
@@ -296,4 +285,4 @@ if __name__ == '__main__':
         logger.error('use_cuda is selected but no cuda device found.')
         raise RuntimeError("Found no CUDA Device while use_cuda is selected")
 
-    compress_and_finetune(_config)
+    spatial_svd_example(_config)

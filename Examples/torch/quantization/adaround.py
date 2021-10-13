@@ -1,4 +1,4 @@
-#=============================================================================
+# =============================================================================
 #
 #  @@-COPYRIGHT-START-@@
 #
@@ -34,38 +34,39 @@
 #
 #  @@-COPYRIGHT-END-@@
 #
-#=============================================================================
+# =============================================================================
 """
 This file demonstrates the use of quantization using AIMET Adaround
 technique.
 """
 
 import argparse
-from datetime import datetime
-import logging
 import copy
+import logging
 import os
-from typing import Tuple
+from datetime import datetime
 from functools import partial
+from typing import Tuple
 from torchvision import models
 import torch
 import torch.utils.data as torch_data
 
 # imports for AIMET
-from aimet_torch.quantsim import QuantizationSimModel
-from aimet_torch.batch_norm_fold import fold_all_batch_norms
-from aimet_torch.adaround.adaround_weight import Adaround, AdaroundParameters
 import aimet_common
 from aimet_common.defs import QuantScheme
+from aimet_torch.adaround.adaround_weight import Adaround, AdaroundParameters
+from aimet_torch.batch_norm_fold import fold_all_batch_norms
+from aimet_torch.quantsim import QuantizationSimModel
 
 # imports for data pipelines
 from Examples.common import image_net_config
-from Examples.torch.utils.image_net_evaluator import ImageNetEvaluator
 from Examples.torch.utils.image_net_data_loader import ImageNetDataLoader
+from Examples.torch.utils.image_net_evaluator import ImageNetEvaluator
 
 logger = logging.getLogger('TorchAdaround')
 formatter = logging.Formatter('%(asctime)s : %(name)s - %(levelname)s - %(message)s')
 logging.basicConfig(format=formatter)
+
 
 ###
 # This script utilizes AIMET to apply Adaround on a resnet18 pretrained model with
@@ -98,7 +99,6 @@ class ImageNetDataPipeline:
         """
         self._config = _config
 
-
     def evaluate(self, model: torch.nn.Module, iterations: int = None, use_cuda: bool = False) -> float:
         """
         Evaluate the specified model using the specified number of samples from the validation set.
@@ -118,8 +118,9 @@ class ImageNetDataPipeline:
         return evaluator.evaluate(model, iterations, use_cuda)
 
 
-def apply_adaround_and_find_quantized_accuracy(model: torch.nn.Module, evaluator: aimet_common.defs.EvalFunction, data_loader: torch_data.DataLoader, use_cuda: bool = False, logdir: str = '')->Tuple[torch.nn.Module, float]:
-
+def apply_adaround_and_find_quantized_accuracy(model: torch.nn.Module, evaluator: aimet_common.defs.EvalFunction,
+                                               data_loader: torch_data.DataLoader, use_cuda: bool = False,
+                                               logdir: str = '') -> Tuple[torch.nn.Module, float]:
     """
     Quantizes the model using AIMET's adaround feature, and saves the model.
 
@@ -134,8 +135,8 @@ def apply_adaround_and_find_quantized_accuracy(model: torch.nn.Module, evaluator
     :return: A tuple of quantized model and accuracy of model on this quantsim
     """
 
-    BN_folded_model = copy.deepcopy(model)
-    _ = fold_all_batch_norms(BN_folded_model, input_shapes=(1, 3, 224, 224))
+    bn_folded_model = copy.deepcopy(model)
+    _ = fold_all_batch_norms(bn_folded_model, input_shapes=(1, 3, 224, 224))
 
     input_shape = (1, image_net_config.dataset['image_channels'],
                    image_net_config.dataset['image_width'],
@@ -146,27 +147,28 @@ def apply_adaround_and_find_quantized_accuracy(model: torch.nn.Module, evaluator
     else:
         dummy_input = torch.rand(input_shape)
 
-
     params = AdaroundParameters(data_loader=data_loader, num_batches=5)
-    ada_model = Adaround.apply_adaround(model, dummy_input, params,
+    ada_model = Adaround.apply_adaround(bn_folded_model, dummy_input, params,
                                         path=logdir, filename_prefix='adaround', default_param_bw=8,
                                         default_quant_scheme=QuantScheme.post_training_tf_enhanced)
 
-    quantsim = QuantizationSimModel(model=ada_model, dummy_input=dummy_input, quant_scheme=QuantScheme.post_training_tf_enhanced,
+    quantsim = QuantizationSimModel(model=ada_model, dummy_input=dummy_input,
+                                    quant_scheme=QuantScheme.post_training_tf_enhanced,
                                     rounding_mode='nearest', default_output_bw=8, default_param_bw=8,
                                     in_place=False)
 
-    # Freezing the encodings. This ensures params with frozen encodings will not be computed and set again
-    # when compute_encodings() is invoked again.
+    # Set and freeze parameter encodings. These encodings are associated with the Adarounded parameters.
+    # This will make sure compute_encodings() doesn't alter the parameter encodings.
     quantsim.set_and_freeze_param_encodings(encoding_path=os.path.join(logdir, 'adaround.encodings'))
     quantsim.compute_encodings(forward_pass_callback=partial(evaluator, use_cuda=use_cuda),
                                forward_pass_callback_args=None)
     quantsim.export(path=logdir, filename_prefix='adaround_resnet', dummy_input=dummy_input.cpu())
     accuracy = evaluator(quantsim.model, use_cuda=use_cuda)
 
-    return quantsim, accuracy
+    return accuracy
 
-def quantize(config: argparse.Namespace):
+
+def adaround_example(config: argparse.Namespace):
     """
     1. Instantiates Data Pipeline for evaluation
     2. Loads the pretrained resnet18 Pytorch model
@@ -194,27 +196,28 @@ def quantize(config: argparse.Namespace):
         model.to(torch.device('cuda'))
     model = model.eval()
 
-    # Calculate floating point accuracy
+    # Calculate FP32 accuracy
     accuracy = data_pipeline.evaluate(model, use_cuda=config.use_cuda)
-    logger.info("Original Model Top-1 accuracy = %.2f", accuracy)
+    logger.info("Original Model top-1 accuracy = %.2f", accuracy)
+    logger.info("Applying Adaround")
 
+    # Applying Adaround
+    # Optimally rounds the parameters of the model
+    data_loader = ImageNetDataLoader(is_training=False, images_dir=config.dataset_dir,
+                                     image_size=image_net_config.dataset['image_size']).data_loader
+    accuracy = apply_adaround_and_find_quantized_accuracy(model=model, evaluator=data_pipeline.evaluate,
+                                                          data_loader=data_loader, use_cuda=config.use_cuda,
+                                                          logdir=config.logdir)
 
-    # Quantization
-    logger.info("Starting Model Quantization...")
-
-    # Quantize the model using AIMET Adaround
-    data_loader = ImageNetDataLoader(is_training=False, images_dir=config.dataset_dir, image_size=image_net_config.dataset['image_size']).data_loader
-    _, accuracy = apply_adaround_and_find_quantized_accuracy(model=model, evaluator=data_pipeline.evaluate, data_loader=data_loader, use_cuda=config.use_cuda, logdir=config.logdir)
-
-    # Log the accuracy of quantized model
-    logger.info("Quantized Model Top-1 accuracy = %.2f", accuracy)
-    logger.info("...Model Quantization Complete")
+    logger.info("After applying Adaround, top-1 accuracy = %.2f", accuracy)
+    logger.info("Adaround Complete")
 
 
 if __name__ == '__main__':
-    default_logdir = os.path.join("benchmark_output", "adaround"+datetime.now().strftime("%Y-%m-%d-%H-%M-%S"))
+    default_logdir = os.path.join("benchmark_output", "adaround" + datetime.now().strftime("%Y-%m-%d-%H-%M-%S"))
 
-    parser = argparse.ArgumentParser(description='Apply Adaround on pretrained ResNet18 model and evaluate on ImageNet dataset')
+    parser = argparse.ArgumentParser(
+        description='Apply Adaround on pretrained ResNet18 model and evaluate on ImageNet dataset')
 
     parser.add_argument('--dataset_dir', type=str,
                         required=True,
@@ -230,20 +233,6 @@ if __name__ == '__main__':
                         help="Path to a directory for logging.\
                               Default value is 'benchmark_output/weight_svd_<Y-m-d-H-M-S>'")
 
-    parser.add_argument('--epochs', type=int,
-                        default=15,
-                        help="Number of epochs for finetuning.\n\
-                              Default is 15")
-    parser.add_argument('--learning_rate', type=float,
-                        default=1e-2,
-                        help="A float type learning rate for model finetuning.\n\
-                              default is 0.01")
-    parser.add_argument('--learning_rate_schedule', type=list,
-                        default=[5, 10],
-                        help="A list of epoch indices for learning rate schedule used in finetuning.\n\
-                              Check https://pytorch.org/docs/stable/_modules/torch/optim/lr_scheduler.html#MultiStepLR for more details.\n\
-                              default is [5, 10]")
-
     _config = parser.parse_args()
 
     os.makedirs(_config.logdir, exist_ok=True)
@@ -256,4 +245,4 @@ if __name__ == '__main__':
         logger.error('use_cuda is selected but no cuda device found.')
         raise RuntimeError("Found no CUDA Device while use_cuda is selected")
 
-    quantize(_config)
+    adaround_example(_config)

@@ -40,14 +40,16 @@
 Creates Evaluator for Image-Net dataset
 """
 import logging
+
 import progressbar
 import torch
 from torch import nn
 
-from Examples.torch.utils.image_net_data_loader import ImageNetDataLoader
 from Examples.common.utils import accuracy
+from Examples.torch.utils.image_net_data_loader import ImageNetDataLoader
 
 logger = logging.getLogger('Eval')
+
 
 class ImageNetEvaluator:
     """
