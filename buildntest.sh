@@ -216,7 +216,6 @@ else
     done
 fi
 
-
 # Add data dependency path as additional volume mount if it exists
 if [ -n "${DEPENDENCY_DATA_PATH}" ]; then
    docker_add_vol_mount+=${DEPENDENCY_DATA_PATH}
