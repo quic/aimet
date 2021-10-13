@@ -40,6 +40,7 @@
 Creates trainer for Image-Net dataset
 """
 import logging
+
 import progressbar
 import torch
 from torch import nn, optim
@@ -54,7 +55,8 @@ class ImageNetTrainer:
     """
     For training a model using the ImageNet dataset.
     """
-    #pylint: disable=too-many-arguments
+
+    # pylint: disable=too-many-arguments
     def __init__(self, images_dir: str, image_size: int, batch_size: int = 128,
                  num_workers: int = 32, num_train_samples_per_class: int = None):
         """
@@ -120,11 +122,11 @@ class ImageNetTrainer:
 
                 progress_bar.update(curr_iter)
 
-                if curr_iter%debug_steps == 0:
+                if curr_iter % debug_steps == 0:
                     eval_accuracy = self._evaluator.evaluate(model, use_cuda=use_cuda)
                     logger.info('Epoch #%d/%d: iteration #%d/%d: Global Avg Loss=%f, Eval Accuracy=%f',
                                 current_epoch, max_epochs, curr_iter, max_iterations,
-                                avg_loss/curr_iter, eval_accuracy)
+                                avg_loss / curr_iter, eval_accuracy)
                     # switch to training mode after evaluation
                     model.train()
 
@@ -135,7 +137,7 @@ class ImageNetTrainer:
         eval_accuracy = self._evaluator.evaluate(model, use_cuda=use_cuda)
         print("eval : ", eval_accuracy)
         logger.info('At the end of Epoch #%d/%d: Global Avg Loss=%f, Eval Accuracy=%f',
-                    current_epoch, max_epochs, avg_loss/max_iterations, eval_accuracy)
+                    current_epoch, max_epochs, avg_loss / max_iterations, eval_accuracy)
 
     def train(self, model: nn.Module, max_epochs: int = 20, learning_rate: int = 0.1,
               weight_decay: float = 1e-4, decay_rate: float = 0.1, learning_rate_schedule: list = None,
@@ -159,11 +161,12 @@ class ImageNetTrainer:
         optimizer = optim.SGD(model.parameters(), lr=learning_rate, momentum=0.9, weight_decay=weight_decay)
 
         if learning_rate_schedule:
-            learning_rate_scheduler = optim.lr_scheduler.MultiStepLR(optimizer, learning_rate_schedule, gamma=decay_rate)
+            learning_rate_scheduler = optim.lr_scheduler.MultiStepLR(optimizer, learning_rate_schedule,
+                                                                     gamma=decay_rate)
 
         for current_epoch in range(max_epochs):
-            self._train_loop(model, loss, optimizer, max_iterations, current_epoch+1, max_epochs, debug_steps, use_cuda)
+            self._train_loop(model, loss, optimizer, max_iterations, current_epoch + 1, max_epochs, debug_steps,
+                             use_cuda)
 
             if learning_rate_schedule:
                 learning_rate_scheduler.step()
-                

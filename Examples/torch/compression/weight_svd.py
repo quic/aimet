@@ -42,18 +42,18 @@ technique followed by fine tuning.
 """
 
 import argparse
-from decimal import Decimal
-from datetime import datetime
 import logging
 import os
+from datetime import datetime
+from decimal import Decimal
 from typing import Tuple
 import torch
 from torchvision import models
 
 # imports for AIMET
 import aimet_common.defs
-from aimet_torch.compress import ModelCompressor
 import aimet_torch.defs
+from aimet_torch.compress import ModelCompressor
 
 # imports for data pipelines
 from Examples.common import image_net_config
@@ -63,6 +63,7 @@ from Examples.torch.utils.image_net_trainer import ImageNetTrainer
 logger = logging.getLogger('TorchWeightSVD')
 formatter = logging.Formatter('%(asctime)s : %(name)s - %(levelname)s - %(message)s')
 logging.basicConfig(format=formatter)
+
 
 ###
 # This script utilize AIMET do perform weight svd compression (50% ratio) on a resnet18 pretrained model
@@ -90,7 +91,6 @@ class ImageNetDataPipeline:
         """
         self._config = _config
 
-
     def evaluate(self, model: torch.nn.Module, iterations: int = None, use_cuda: bool = False) -> float:
         """
         Evaluate the specified model using the specified number of samples from the validation set.
@@ -111,7 +111,6 @@ class ImageNetDataPipeline:
 
         return evaluator.evaluate(model, iterations, use_cuda)
 
-
     def finetune(self, model: torch.nn.Module):
         """
         Finetunes the model.  The implemtation provided here is just an example,
@@ -128,7 +127,6 @@ class ImageNetDataPipeline:
 
         trainer.train(model, max_epochs=self._config.epochs, learning_rate=self._config.learning_rate,
                       learning_rate_schedule=self._config.learning_rate_schedule, use_cuda=self._config.use_cuda)
-
 
         torch.save(model, os.path.join(self._config.logdir, 'finetuned_model.pth'))
 
@@ -204,7 +202,7 @@ def aimet_weight_svd(model: torch.nn.Module,
     return results
 
 
-def compress_and_finetune(config: argparse.Namespace):
+def weight_svd_example(config: argparse.Namespace):
     """
     1. Instantiate Data Pipeline for evaluation and training
     2. Load the pretrained resnet18 model
@@ -234,56 +232,49 @@ def compress_and_finetune(config: argparse.Namespace):
     # Instantiate Data Pipeline for evaluation and training
     data_pipeline = ImageNetDataPipeline(config)
 
-
     # Load the pretrained resnet18 model
     model = models.resnet18(pretrained=True)
     if config.use_cuda:
         model.to(torch.device('cuda'))
-
+    model.eval()
 
     # Calculate floating point accuracy
     accuracy = data_pipeline.evaluate(model, use_cuda=config.use_cuda)
-    logger.info("Original Model Top-1 accuracy = %.2f", accuracy)
-
-
-    # Compression
-    logger.info("Starting Model Compression...")
+    logger.info("Original Model top-1 accuracy = %.2f", accuracy)
 
     # Compress the model using AIMET Weight SVD
-    compressed_model, eval_dict = aimet_weight_svd(model=model, evaluator=data_pipeline.evaluate)
+    logger.info("Starting Weight SVD")
+    compressed_model, stats = aimet_weight_svd(model=model, evaluator=data_pipeline.evaluate)
 
-    # Log the statistics
-    logger.info(eval_dict)
+    logger.info(stats)
     with open(os.path.join(config.logdir, 'log.txt'), "w") as outfile:
-        outfile.write("%s\n\n" % (eval_dict))
+        outfile.write("%s\n\n" % (stats))
 
     # Calculate and log the accuracy of compressed model
     accuracy = data_pipeline.evaluate(compressed_model, use_cuda=config.use_cuda)
-    logger.info("Compressed Model Top-1 accuracy = %.2f", accuracy)
+    logger.info("Compressed Model top-1 accuracy = %.2f", accuracy)
 
-    logger.info("...Model Compression Complete")
-
-    # Finetune
-    logger.info("Starting Model Finetuning...")
+    logger.info("Weight SVD Complete")
 
     # Finetune the compressed model
+    logger.info("Starting Model Finetuning")
     data_pipeline.finetune(compressed_model)
+
+    # Calculate and log the accuracy of compressed-finetuned model
+    accuracy = data_pipeline.evaluate(compressed_model, use_cuda=config.use_cuda)
+    logger.info("After Weight SVD, Model top-1 accuracy = %.2f", accuracy)
+
+    logger.info("Model Finetuning Complete")
 
     # Save the compressed model
     torch.save(compressed_model, os.path.join(config.logdir, 'compressed_model.pth'))
 
-    # Calculate and log the accuracy of compressed-finetuned model
-    accuracy = data_pipeline.evaluate(compressed_model, use_cuda=config.use_cuda)
-    logger.info("Finetuned Compressed Model Top-1 accuracy = %.2f", accuracy)
-
-    logger.info("...Model Finetuning Complete")
-
-
 
 if __name__ == '__main__':
-    default_logdir = os.path.join("benchmark_output", "weight_svd_"+datetime.now().strftime("%Y-%m-%d-%H-%M-%S"))
+    default_logdir = os.path.join("benchmark_output", "weight_svd_" + datetime.now().strftime("%Y-%m-%d-%H-%M-%S"))
 
-    parser = argparse.ArgumentParser(description='Apply Weight SVD on pretrained ResNet18 model and finetune it for ImageNet dataset')
+    parser = argparse.ArgumentParser(
+        description='Apply Weight SVD on pretrained ResNet18 model and finetune it for ImageNet dataset')
 
     parser.add_argument('--dataset_dir', type=str,
                         required=True,
@@ -306,12 +297,12 @@ if __name__ == '__main__':
     parser.add_argument('--learning_rate', type=float,
                         default=1e-2,
                         help="A float type learning rate for model finetuning.\n\
-                              default is 0.01")
+                              Default is 0.01")
     parser.add_argument('--learning_rate_schedule', type=list,
                         default=[5, 10],
                         help="A list of epoch indices for learning rate schedule used in finetuning.\n\
                               Check https://pytorch.org/docs/stable/_modules/torch/optim/lr_scheduler.html#MultiStepLR for more details.\n\
-                              default is [5, 10]")
+                              Default is [5, 10]")
 
     _config = parser.parse_args()
 
@@ -325,4 +316,4 @@ if __name__ == '__main__':
         logger.error('use_cuda is selected but no cuda device found.')
         raise RuntimeError("Found no CUDA Device while use_cuda is selected")
 
-    compress_and_finetune(_config)
+    weight_svd_example(_config)

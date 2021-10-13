@@ -40,6 +40,7 @@ Creates data-loader for Image-Net dataset
 """
 import logging
 import os
+
 import torch.utils.data as torch_data
 from torch.utils.data import Dataset
 from torchvision import transforms
@@ -50,6 +51,7 @@ from Examples.common import image_net_config
 logger = logging.getLogger('Dataloader')
 
 IMG_EXTENSIONS = '.jpg', '.jpeg', '.png', '.ppm', '.bmp', '.pgm', '.tif'
+
 
 def make_dataset(directory: str, class_to_idx: dict, extensions: tuple, num_samples_per_class: int) -> list:
     """
@@ -76,7 +78,8 @@ def make_dataset(directory: str, class_to_idx: dict, extensions: tuple, num_samp
     logger.info("Dataset consists of %d images in %d classes", len(images), num_classes)
     return images
 
-def add_images_for_class(class_path: str, extensions: tuple, num_samples_per_class: int, class_idx: int)->list:
+
+def add_images_for_class(class_path: str, extensions: tuple, num_samples_per_class: int, class_idx: int) -> list:
     """
     For a given class, adds num_samples_per_class images to a list.
 
@@ -106,6 +109,7 @@ class ImageFolder(Dataset):
     Dataset class inspired by torchvision.datasets.folder.DatasetFolder for images organized as
         individual files grouped by category.
     """
+
     def __init__(self, root: str, transform=None, target_transform=None,
                  num_samples_per_class: int = None):
 
@@ -116,6 +120,7 @@ class ImageFolder(Dataset):
         :param num_samples_per_class: Number of samples to use per class.
 
         """
+        Dataset.__init__(self)
         classes, class_to_idx = self._find_classes(root)
         self.samples = make_dataset(root, class_to_idx, IMG_EXTENSIONS, num_samples_per_class)
         if not self.samples:
@@ -193,10 +198,12 @@ class ImageNetDataLoader:
 
         if is_training:
             data_set = ImageFolder(
-                root=os.path.join(images_dir, 'train'), transform=self.train_transforms, num_samples_per_class=num_samples_per_class)
+                root=os.path.join(images_dir, 'train'), transform=self.train_transforms,
+                num_samples_per_class=num_samples_per_class)
         else:
             data_set = ImageFolder(
-                root=os.path.join(images_dir, 'val'), transform=self.val_transforms, num_samples_per_class=num_samples_per_class)
+                root=os.path.join(images_dir, 'val'), transform=self.val_transforms,
+                num_samples_per_class=num_samples_per_class)
 
         self._data_loader = torch_data.DataLoader(
             data_set, batch_size=batch_size, shuffle=is_training,

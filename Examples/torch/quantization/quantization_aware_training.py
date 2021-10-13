@@ -1,4 +1,4 @@
-#=============================================================================
+# =============================================================================
 #
 #  @@-COPYRIGHT-START-@@
 #
@@ -34,7 +34,7 @@
 #
 #  @@-COPYRIGHT-END-@@
 #
-#=============================================================================
+# =============================================================================
 
 """
 This file demonstrates the use of quantization using AIMET
@@ -42,30 +42,31 @@ quantization aware training.
 """
 
 import argparse
-from datetime import datetime
 import logging
 import os
+from datetime import datetime
 from functools import partial
 from typing import Tuple
-from torchvision import models
 import torch
 import torch.utils.data as torch_data
+from torchvision import models
 
 # imports for AIMET
-from aimet_torch import bias_correction
-from aimet_torch.quantsim import QuantParams, QuantizationSimModel
-from aimet_torch.cross_layer_equalization import equalize_model
 import aimet_common
+from aimet_torch import bias_correction
+from aimet_torch.cross_layer_equalization import equalize_model
+from aimet_torch.quantsim import QuantParams, QuantizationSimModel
 
 # imports for data pipelines
 from Examples.common import image_net_config
+from Examples.torch.utils.image_net_data_loader import ImageNetDataLoader
 from Examples.torch.utils.image_net_evaluator import ImageNetEvaluator
 from Examples.torch.utils.image_net_trainer import ImageNetTrainer
-from Examples.torch.utils.image_net_data_loader import ImageNetDataLoader
 
 logger = logging.getLogger('TorchQAT')
 formatter = logging.Formatter('%(asctime)s : %(name)s - %(levelname)s - %(message)s')
 logging.basicConfig(format=formatter)
+
 
 ###
 # This script utilizes AIMET to perform Quantization Aware Training on a resnet18 pretrained model
@@ -94,7 +95,6 @@ class ImageNetDataPipeline:
         """
         self._config = _config
 
-
     def evaluate(self, model: torch.nn.Module, iterations: int = None, use_cuda: bool = False) -> float:
         """
         Evaluate the specified model using the specified number of samples from the validation set.
@@ -113,7 +113,6 @@ class ImageNetDataPipeline:
 
         return evaluator.evaluate(model, iterations, use_cuda)
 
-
     def finetune(self, model: torch.nn.Module):
         """
         Finetunes the model.  The implemtation provided here is just an example,
@@ -130,7 +129,6 @@ class ImageNetDataPipeline:
 
         trainer.train(model, max_epochs=self._config.epochs, learning_rate=self._config.learning_rate,
                       learning_rate_schedule=self._config.learning_rate_schedule, use_cuda=self._config.use_cuda)
-
 
         torch.save(model, os.path.join(self._config.logdir, 'finetuned_model.pth'))
 
@@ -151,8 +149,8 @@ def apply_cross_layer_equalization(model: torch.nn.Module, input_shape: tuple):
 
     equalize_model(model, input_shape)
 
-def apply_bias_correction(model: torch.nn.Module, data_loader: torch_data.DataLoader):
 
+def apply_bias_correction(model: torch.nn.Module, data_loader: torch_data.DataLoader):
     """
     Applies Bias-Correction on the model.
     :param model: The model to quantize
@@ -176,9 +174,9 @@ def apply_bias_correction(model: torch.nn.Module, data_loader: torch_data.DataLo
     bias_correction.correct_bias(model.to(device="cuda"), params, num_quant_samples=num_quant_samples,
                                  data_loader=data_loader, num_bias_correct_samples=num_bias_correct_samples)
 
+
 def calculate_quantsim_accuracy(model: torch.nn.Module, evaluator: aimet_common.defs.EvalFunction,
                                 use_cuda: bool = False, logdir: str = '') -> Tuple[torch.nn.Module, float]:
-
     """
     Calculates model accuracy on quantized simulator and returns quantized model with accuracy.
 
@@ -215,7 +213,7 @@ def calculate_quantsim_accuracy(model: torch.nn.Module, evaluator: aimet_common.
     return quantsim, accuracy
 
 
-def quantize_and_finetune(config: argparse.Namespace):
+def quantization_aware_training_example(config: argparse.Namespace):
     """
     1. Instantiates Data Pipeline for evaluation
     2. Loads the pretrained resnet18 Pytorch model
@@ -237,49 +235,48 @@ def quantize_and_finetune(config: argparse.Namespace):
     # Instantiate Data Pipeline for evaluation and training
     data_pipeline = ImageNetDataPipeline(config)
 
-
     # Load the pretrained resnet18 model
     model = models.resnet18(pretrained=True)
     if config.use_cuda:
         model.to(torch.device('cuda'))
     model = model.eval()
 
-    # Calculate floating point accuracy
+    # Calculate FP32 accuracy
     accuracy = data_pipeline.evaluate(model, use_cuda=config.use_cuda)
-    logger.info("Original Model Top-1 accuracy = %.2f", accuracy)
+    logger.info("Original Model top-1 accuracy = %.2f", accuracy)
 
-
-    # Quantization
-    logger.info("Starting Model Quantization...")
+    logger.info("Starting Model Quantization")
 
     # Quantize the model using AIMET QAT (quantization aware training) and calculate accuracy on Quant Simulator
-    quantsim, _ = calculate_quantsim_accuracy(model=model, evaluator=data_pipeline.evaluate, use_cuda=config.use_cuda, logdir=config.logdir)
+    quantsim, accuracy = calculate_quantsim_accuracy(model=model, evaluator=data_pipeline.evaluate,
+                                                     use_cuda=config.use_cuda,
+                                                     logdir=config.logdir)
 
-    #For good initialization apply, data free quantization methods (optional)
-    data_loader = ImageNetDataLoader(is_training=False, images_dir=config.dataset_dir, image_size=image_net_config.dataset['image_size']).data_loader
+    logger.info("Quantized Model top-1 accuracy = %.2f", accuracy)
+
+    # For good initialization apply, apply Post Training Quantization (PTQ) methods
+    # such as Cross Layer Equalization (CLE) and Bias Correction (BC) (optional)
+    data_loader = ImageNetDataLoader(is_training=False, images_dir=config.dataset_dir,
+                                     image_size=image_net_config.dataset['image_size']).data_loader
     apply_cross_layer_equalization(model=model, input_shape=(1, 3, 224, 224))
     apply_bias_correction(model=model, data_loader=data_loader)
 
-    quantsim, _ = calculate_quantsim_accuracy(model=model, evaluator=data_pipeline.evaluate, use_cuda=config.use_cuda, logdir=config.logdir)
+    quantsim, _ = calculate_quantsim_accuracy(model=model, evaluator=data_pipeline.evaluate, use_cuda=config.use_cuda,
+                                              logdir=config.logdir)
 
-    logger.info("...Post Training Quantization Complete")
-
-    # Finetuning
-    logger.info("Starting Model Finetuning...")
+    logger.info("Post Training Quantization (PTQ) Complete")
 
     # Finetune the quantized model
+    logger.info("Starting Model Finetuning")
     data_pipeline.finetune(quantsim.model)
 
     # Calculate and log the accuracy of quantized-finetuned model
     accuracy = data_pipeline.evaluate(quantsim.model, use_cuda=config.use_cuda)
-    logger.info("Finetuned Quantized Model Top-1 accuracy = %.2f", accuracy)
+    logger.info("After Quantization Aware Training, top-1 accuracy = %.2f", accuracy)
 
-    logger.info("...Model Finetuning Complete")
+    logger.info("Quantization Aware Training Complete")
 
-    input_shape = (1, image_net_config.dataset['image_channels'],
-                   image_net_config.dataset['image_width'],
-                   image_net_config.dataset['image_height'],)
-
+    input_shape = (1, 3, 224, 224)
     dummy_input = torch.rand(input_shape)
 
     # Save the quantized model
@@ -287,9 +284,10 @@ def quantize_and_finetune(config: argparse.Namespace):
 
 
 if __name__ == '__main__':
-    default_logdir = os.path.join("benchmark_output", "QAT"+datetime.now().strftime("%Y-%m-%d-%H-%M-%S"))
+    default_logdir = os.path.join("benchmark_output", "QAT" + datetime.now().strftime("%Y-%m-%d-%H-%M-%S"))
 
-    parser = argparse.ArgumentParser(description='Apply Quantization Aware Training (QAT) on pretrained ResNet18 model and evaluate on ImageNet dataset')
+    parser = argparse.ArgumentParser(
+        description='Apply Quantization Aware Training (QAT) on pretrained ResNet18 model and evaluate on ImageNet dataset')
 
     parser.add_argument('--dataset_dir', type=str,
                         required=True,
@@ -312,12 +310,12 @@ if __name__ == '__main__':
     parser.add_argument('--learning_rate', type=float,
                         default=1e-2,
                         help="A float type learning rate for model finetuning.\n\
-                              default is 0.01")
+                              Default is 0.01")
     parser.add_argument('--learning_rate_schedule', type=list,
                         default=[5, 10],
                         help="A list of epoch indices for learning rate schedule used in finetuning.\n\
                               Check https://pytorch.org/docs/stable/_modules/torch/optim/lr_scheduler.html#MultiStepLR for more details.\n\
-                              default is [5, 10]")
+                              Default is [5, 10]")
 
     _config = parser.parse_args()
 
@@ -331,4 +329,4 @@ if __name__ == '__main__':
         logger.error('use_cuda is selected but no cuda device found.')
         raise RuntimeError("Found no CUDA Device while use_cuda is selected")
 
-    quantize_and_finetune(_config)
+    quantization_aware_training_example(_config)

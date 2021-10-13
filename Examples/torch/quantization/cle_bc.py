@@ -1,4 +1,4 @@
-#=============================================================================
+# =============================================================================
 #
 #  @@-COPYRIGHT-START-@@
 #
@@ -34,7 +34,7 @@
 #
 #  @@-COPYRIGHT-END-@@
 #
-#=============================================================================
+# =============================================================================
 
 """
 This file demonstrates the use of quantization using AIMET Cross Layer Equalization (CLE)
@@ -42,32 +42,29 @@ and Bias Correction (BC) technique.
 """
 
 import argparse
-from datetime import datetime
 import logging
 import os
-import copy
+from datetime import datetime
 from functools import partial
-from typing import Tuple
 import torch
 import torch.utils.data as torch_data
 from torchvision import models
 
 # imports for AIMET
-from aimet_torch import bias_correction
-from aimet_torch.quantsim import QuantParams, QuantizationSimModel
-from aimet_torch.batch_norm_fold import fold_all_batch_norms
-from aimet_torch.cross_layer_equalization import equalize_model
 import aimet_common
+from aimet_torch import bias_correction
+from aimet_torch.cross_layer_equalization import equalize_model
+from aimet_torch.quantsim import QuantParams, QuantizationSimModel
 
 # imports for data pipelines
 from Examples.common import image_net_config
-from Examples.torch.utils.image_net_evaluator import ImageNetEvaluator
-from Examples.torch.utils.image_net_trainer import ImageNetTrainer
 from Examples.torch.utils.image_net_data_loader import ImageNetDataLoader
+from Examples.torch.utils.image_net_evaluator import ImageNetEvaluator
 
 logger = logging.getLogger('TorchCLE-BC')
 formatter = logging.Formatter('%(asctime)s : %(name)s - %(levelname)s - %(message)s')
 logging.basicConfig(format=formatter)
+
 
 ###
 # This script utilizes AIMET to apply Cross Layer Equalization and Bias Correction on a resnet18
@@ -89,6 +86,7 @@ logging.basicConfig(format=formatter)
 #    - Input shape: [1, 3, 224, 224]
 ###
 
+
 class ImageNetDataPipeline:
     """
     Provides APIs for model quantization using evaluation and finetuning.
@@ -99,7 +97,6 @@ class ImageNetDataPipeline:
         :param _config:
         """
         self._config = _config
-
 
     def evaluate(self, model: torch.nn.Module, iterations: int = None, use_cuda: bool = False) -> float:
         """
@@ -120,42 +117,20 @@ class ImageNetDataPipeline:
         return evaluator.evaluate(model, iterations, use_cuda)
 
 
-    def finetune(self, model: torch.nn.Module):
-        """
-        Finetunes the model.  The implemtation provided here is just an example,
-        provide your own implementation if needed.
-
-        :param model: The model to finetune.
-        """
-
-        # Your code goes here instead of the example from below
-
-        trainer = ImageNetTrainer(self._config.dataset_dir, image_size=image_net_config.dataset['image_size'],
-                                  batch_size=image_net_config.train['batch_size'],
-                                  num_workers=image_net_config.train['num_workers'])
-
-        trainer.train(model, max_epochs=self._config.epochs, learning_rate=self._config.learning_rate,
-                      learning_rate_schedule=self._config.learning_rate_schedule, use_cuda=self._config.use_cuda)
-
-
-        torch.save(model, os.path.join(self._config.logdir, 'finetuned_model.pth'))
-
 def calculate_quantsim_accuracy(model: torch.nn.Module, evaluator: aimet_common.defs.EvalFunction,
-                                use_cuda: bool = False)-> Tuple[torch.nn.Module, float]:
-
+                                use_cuda: bool = False) -> float:
     """
-    Calculates model accuracy on quantized simulator and returns quantized model with accuracy.
+    Calculates quantized model accuracy (INT8) using AIMET QuantizationSim
 
     :param model: the loaded model
     :param evaluator: the Eval function to use for evaluation
-    :param use_cuda: the cuda device.
-    :return: a tuple of quantsim and accuracy of model on this quantsim
+    :param use_cuda: True, if model is placed on GPU
+    :return: quantized accuracy of model
     """
     input_shape = (1, image_net_config.dataset['image_channels'],
                    image_net_config.dataset['image_width'],
                    image_net_config.dataset['image_height'],)
     if use_cuda:
-        model.to(torch.device('cuda'))
         dummy_input = torch.rand(input_shape).cuda()
     else:
         dummy_input = torch.rand(input_shape)
@@ -168,26 +143,28 @@ def calculate_quantsim_accuracy(model: torch.nn.Module, evaluator: aimet_common.
                                forward_pass_callback_args=None)
 
     accuracy = evaluator(quantsim.model, use_cuda=use_cuda)
-    return quantsim, accuracy
+
+    return accuracy
+
 
 def apply_cross_layer_equalization(model: torch.nn.Module, input_shape: tuple):
     """
     Applies CLE on the model and calculates model accuracy on quantized simulator
     Applying CLE on the model inplace consists of:
-        Batch Norm Folding
-        Cross Layer Scaling
-        High Bias Fold
-    Converts any ReLU6 into ReLU.
+        - Batch Norm Folding
+        - Converts any ReLU6 layers to ReLU layers
+        - Cross Layer Scaling
+        - High Bias Fold
+        - Converts any ReLU6 into ReLU
 
     :param model: the loaded model
     :param input_shape: the shape of the input to the model
     :return:
     """
-
     equalize_model(model, input_shape)
 
-def apply_bias_correction(model: torch.nn.Module, data_loader: torch_data.DataLoader):
 
+def apply_bias_correction(model: torch.nn.Module, data_loader: torch_data.DataLoader):
     """
     Applies Bias-Correction on the model.
     :param model: The model to quantize
@@ -211,8 +188,10 @@ def apply_bias_correction(model: torch.nn.Module, data_loader: torch_data.DataLo
     bias_correction.correct_bias(model.to(device="cuda"), params, num_quant_samples=num_quant_samples,
                                  data_loader=data_loader, num_bias_correct_samples=num_bias_correct_samples)
 
-def quantize(config: argparse.Namespace):
+
+def cle_bc_example(config: argparse.Namespace):
     """
+    Example code that shows the following
     1. Instantiates Data Pipeline for evaluation
     2. Loads the pretrained resnet18 Pytorch model
     3. Calculates Model accuracy
@@ -229,9 +208,9 @@ def quantize(config: argparse.Namespace):
                    use_cuda: A boolean var to indicate to run the test on GPU.
                    logdir: Path to a directory for logging.
     """
+
     # Instantiate Data Pipeline for evaluation and training
     data_pipeline = ImageNetDataPipeline(config)
-
 
     # Load the pretrained resnet18 model
     model = models.resnet18(pretrained=True)
@@ -239,76 +218,55 @@ def quantize(config: argparse.Namespace):
         model.to(torch.device('cuda'))
     model = model.eval()
 
-    # Calculate floating point accuracy
+    # Calculate FP32 accuracy
     accuracy = data_pipeline.evaluate(model, use_cuda=config.use_cuda)
     logger.info("Original Model Top-1 accuracy = %.2f", accuracy)
 
+    # Applying cross-layer equalization (CLE)
+    # Note that this API will equalize the model in-place
+    apply_cross_layer_equalization(model=model, input_shape=(1, 3, 224, 224))
 
-    # Quantization
-    logger.info("Starting Model Quantization...")
+    # Calculate quantized (INT8) accuracy after CLE
+    accuracy = calculate_quantsim_accuracy(model=model, evaluator=data_pipeline.evaluate, use_cuda=config.use_cuda)
+    logger.info("Quantized (INT8) Model Top-1 Accuracy After CLE = %.2f", accuracy)
 
-    BN_folded_model = copy.deepcopy(model)
-    _ = fold_all_batch_norms(BN_folded_model, input_shapes=(1, 3, 224, 224))
-
-    # Quantize the model using AIMET CLE
-    data_loader = ImageNetDataLoader(is_training=False, images_dir=_config.dataset_dir, image_size=image_net_config.dataset['image_size']).data_loader
-    apply_cross_layer_equalization(model=BN_folded_model, input_shape=(1, 3, 224, 224))
-
-    # Log the accuracy after CLE
-    quantsim, stats = calculate_quantsim_accuracy(model=BN_folded_model, evaluator=data_pipeline.evaluate, use_cuda=config.use_cuda)
-    logger.info("Quantized Model Top-1 Accuracy After CLE = %.2f", stats)
-
+    # Applying Bias Correction
+    # Bias Correction needs representative data samples (a small subset of either the training or validation data)
+    data_loader = ImageNetDataLoader(is_training=False, images_dir=_config.dataset_dir,
+                                     image_size=image_net_config.dataset['image_size']).data_loader
+    # Note that this API will bias-correct the model in-place
     apply_bias_correction(model=model, data_loader=data_loader)
 
     # Calculating accuracy on Quant Simulator
-    quantsim, stats = calculate_quantsim_accuracy(model=BN_folded_model, evaluator=data_pipeline.evaluate, use_cuda=config.use_cuda)
-
-    # Log the accuracy after bias correction
-    logger.info("Quantized Model Top-1 Accuracy After Bias Correction = %.2f", stats)
+    accuracy = calculate_quantsim_accuracy(model=model, evaluator=data_pipeline.evaluate, use_cuda=config.use_cuda)
+    logger.info("Quantized (INT8) Model Top-1 Accuracy After Bias Correction = %.2f", accuracy)
 
     # Save the quantized model
-    input_shape = (1, image_net_config.dataset['image_channels'],
-                   image_net_config.dataset['image_width'],
-                   image_net_config.dataset['image_height'],)
+    torch.save(model, "resnet_model_cle_bc.pt")
 
-    dummy_input = torch.rand(input_shape)
-
-    quantsim.export(path=config.logdir, filename_prefix='cle_bc_resnet', dummy_input=dummy_input.cpu())
-    logger.info("...Model Quantization Complete")
+    logger.info("Cross Layer Equalization (CLE) and Bias Correction (BC) complete")
 
 
 if __name__ == '__main__':
-    default_logdir = os.path.join("benchmark_output", "CLE_BC"+datetime.now().strftime("%Y-%m-%d-%H-%M-%S"))
+    default_logdir = os.path.join("benchmark_output", "CLE_BC" + datetime.now().strftime("%Y-%m-%d-%H-%M-%S"))
 
-    parser = argparse.ArgumentParser(description='Apply Cross Layer Equalization and Bias Correction on pretrained ResNet18 model and evaluate on ImageNet dataset')
+    parser = argparse.ArgumentParser(description='Apply Cross Layer Equalization and Bias Correction on pretrained '
+                                                 'ResNet18 model and evaluate on ImageNet dataset')
 
     parser.add_argument('--dataset_dir', type=str,
                         required=True,
                         help="Path to a directory containing ImageNet dataset.\n\
                               This folder should conatin at least 2 subfolders:\n\
                               'train': for training dataset and 'val': for validation dataset")
+
     parser.add_argument('--use_cuda', action='store_true',
                         required=True,
                         help='Add this flag to run the test on GPU.')
 
     parser.add_argument('--logdir', type=str,
                         default=default_logdir,
-                        help="Path to a directory for logging.\
-                              Default value is 'benchmark_output/weight_svd_<Y-m-d-H-M-S>'")
-
-    parser.add_argument('--epochs', type=int,
-                        default=15,
-                        help="Number of epochs for finetuning.\n\
-                              Default is 15")
-    parser.add_argument('--learning_rate', type=float,
-                        default=1e-2,
-                        help="A float type learning rate for model finetuning.\n\
-                              default is 0.01")
-    parser.add_argument('--learning_rate_schedule', type=list,
-                        default=[5, 10],
-                        help="A list of epoch indices for learning rate schedule used in finetuning.\n\
-                              Check https://pytorch.org/docs/stable/_modules/torch/optim/lr_scheduler.html#MultiStepLR for more details.\n\
-                              default is [5, 10]")
+                        help="Path to a directory for logging. "
+                             "Default value is 'benchmark_output/weight_svd_<Y-m-d-H-M-S>'")
 
     _config = parser.parse_args()
 
@@ -322,4 +280,4 @@ if __name__ == '__main__':
         logger.error('use_cuda is selected but no cuda device found.')
         raise RuntimeError("Found no CUDA Device while use_cuda is selected")
 
-    quantize(_config)
+    cle_bc_example(_config)
