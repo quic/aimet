@@ -117,7 +117,7 @@ RUN python3.7 -m pip --no-cache-dir install \
         astroid==2.5.3 \
         attrs==19.1.0 \
         behave==1.2.6 \
-        bert-tensorflow=1.0.1 \
+        bert-tensorflow==1.0.1 \
         blosc==1.10.2 \
         cffi==1.12.3 \
         click==7.0 \
