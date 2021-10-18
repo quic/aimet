@@ -117,6 +117,7 @@ RUN python3.7 -m pip --no-cache-dir install \
         astroid==2.5.3 \
         attrs==19.1.0 \
         behave==1.2.6 \
+        bert-tensorflow=1.0.1 \
         blosc==1.10.2 \
         cffi==1.12.3 \
         click==7.0 \
@@ -148,6 +149,7 @@ RUN python3.7 -m pip --no-cache-dir install \
         tensorboard==1.15 \
         tensorboardX==1.7 \
         tensorflow==1.15.0 \
+        tensorflow-hub \
         tensorlayer==2.1.0 \
         timm==0.3.1 \
         torch==1.7.1+cpu -f https://download.pytorch.org/whl/torch_stable.html \
