@@ -71,6 +71,7 @@ class ConfigDictKeys:
     IS_SYMMETRIC = "is_symmetric"
     STRICT_SYMMETRIC = "strict_symmetric"
     UNSIGNED_SYMMETRIC = "unsigned_symmetric"
+    PER_CHANNEL_QUANTIZATION = "per_channel_quantization"
 
 
 class JsonConfigImporter:

@@ -275,6 +275,14 @@ class QcQuantizeWrapper(nn.Module):
         for param_quantizer in self.param_quantizers.values():
             param_quantizer.reset_encoding_stats()
 
+    def enable_per_channel_quantization(self):
+        """
+        Changes all parameter quantizers (if any) to per-channel mode
+        Todo: This needs to change to an abstract method in the future. The purpose to add this method right now
+        is to enable per-channel quantization for both only supported wrappers. Supported for static-grid and not
+        supported for learned-grid
+        """
+
 
 class StaticGridQuantWrapper(QcQuantizeWrapper):
     """ A custom PyTorch module that derives from QcQuantizeWrapper and quantizes modules """

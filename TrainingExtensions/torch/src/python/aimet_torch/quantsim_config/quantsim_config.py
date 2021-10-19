@@ -280,10 +280,15 @@ class QuantSimConfigurator(AimetCommonQuantSimConfigurator):
         """
         self._set_default_configs_for_ops(default_configs[ConfigDictKeys.OPS])
         self._set_default_configs_for_params(default_configs[ConfigDictKeys.PARAMS])
+
         if ConfigDictKeys.STRICT_SYMMETRIC in default_configs:
             self._set_strict_symmetric(default_configs[ConfigDictKeys.STRICT_SYMMETRIC])
+
         if ConfigDictKeys.UNSIGNED_SYMMETRIC in default_configs:
             self._set_unsigned_symmetric(default_configs[ConfigDictKeys.UNSIGNED_SYMMETRIC])
+
+        if ConfigDictKeys.PER_CHANNEL_QUANTIZATION in default_configs:
+            self._set_per_channel_quantization(default_configs[ConfigDictKeys.PER_CHANNEL_QUANTIZATION])
 
     def _set_default_configs_for_ops(self, default_op_configs: ConfigType):
         """
@@ -335,6 +340,15 @@ class QuantSimConfigurator(AimetCommonQuantSimConfigurator):
                 output_quantizer.use_unsigned_symmetric = unsigned_symmetric
             for param_quantizer in quantsim_wrapper.param_quantizers.values():
                 param_quantizer.use_unsigned_symmetric = unsigned_symmetric
+
+    def _set_per_channel_quantization(self, per_channel_quantization: bool):
+        """
+        Enables per-channel quantization for all parameter quantizers in the model
+        :param per_channel_quantization: Bool to enable/disable per-channel quantization
+        """
+        if per_channel_quantization:
+            for quantsim_wrapper in self._module_to_quantsim_wrapper_dict.values():
+                quantsim_wrapper.enable_per_channel_quantization()
 
     def _set_param_configs(self, param_configs: ParamType):
         """

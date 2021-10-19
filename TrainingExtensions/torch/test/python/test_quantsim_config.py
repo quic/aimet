@@ -66,7 +66,8 @@ class TestQuantsimConfig:
                 "params": {
                     "is_quantized": "False",
                     "is_symmetric": "True"
-                }
+                },
+                "per_channel_quantization": "True",
             },
             "params": {},
             "op_type": {},
@@ -94,6 +95,7 @@ class TestQuantsimConfig:
                     for _, param_quantizer in module.param_quantizers.items():
                         assert not param_quantizer.enabled
                         assert param_quantizer.use_symmetric_encodings
+                        assert len(param_quantizer._cppOp) > 1
 
         if os.path.exists('./data/quantsim_config.json'):
             os.remove('./data/quantsim_config.json')
