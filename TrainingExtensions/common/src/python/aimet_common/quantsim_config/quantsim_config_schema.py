@@ -82,6 +82,10 @@ QUANTSIM_CONFIG_SCHEMA = {
                 "unsigned_symmetric": {
                     "type": "string",
                     "pattern": "^True$|^False$"
+                },
+                "per_channel_quantization": {
+                    "type": "string",
+                    "pattern": "^True$|^False$"
                 }
             },
             "required": ["ops", "params"],
