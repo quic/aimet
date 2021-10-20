@@ -209,10 +209,10 @@ if [[ -z "${BUILD_NUMBER}" ]]; then
     # If invoked from command line by user, kill any previous running containers by the same name
     docker ps | grep ${docker_container_name} && docker kill ${docker_container_name} || true
 else
-    # If invoked from jenkins on bld-wk, kill anly previous running containers starting with aimet-dev_
+    # If invoked from jenkins, kill anly previous running containers starting with "aimet-dev_"
     containers=($(docker ps | awk '/aimet-dev_/ {print $NF}'))
-    for c in "${containers[@]}"; do 
-        docker kill "$c" || true;
+    for container_name in "${containers[@]}"; do 
+        docker kill "$container_name" || true;
     done
 fi
 
