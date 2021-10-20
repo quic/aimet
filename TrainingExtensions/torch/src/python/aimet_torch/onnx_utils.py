@@ -43,13 +43,11 @@ from typing import Union, List, Tuple, Dict
 import os
 import copy
 from collections import defaultdict
-from packaging import version
-
 import torch
 import torch.nn as nn
 import torch.onnx.symbolic_caffe2
-
 import onnx
+from packaging import version
 
 from aimet_common.utils import AimetLogger
 import aimet_torch.utils
