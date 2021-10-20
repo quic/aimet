@@ -1671,7 +1671,8 @@ class TestQuantizationSimStaticGrad:
             sim.compute_encodings(forward_pass, None)
 
             # Edit part of weights tensor to compare with original model before and after removal of quantize module
-            sim.model.recurrent.weight_ih_l0[0][0] = 1
+            with torch.no_grad():
+                sim.model.recurrent.weight_ih_l0[0][0] = 1
             edited_weight = sim.model.recurrent.weight_ih_l0.detach().clone()
 
             # Check that edited weight is different than original weight in module_to_quantize
@@ -1817,7 +1818,7 @@ class TestQuantizationSimStaticGrad:
 
         o_names = ['ab', 'bc', 'ca']
         sim.export('./data/', 'dict_input_output_model', dummy_input,
-                   onnx_export_args=OnnxExportApiArgs(input_names=dummy_input.keys(),
+                   onnx_export_args=OnnxExportApiArgs(input_names=list(dummy_input.keys()),
                                                       output_names=o_names,
                                                       opset_version=12
                                                       ))
