@@ -40,13 +40,14 @@
 import torch
 
 
-def compute_dloss_by_dx(x, grad, encoding_min, encoding_max):
+def compute_dloss_by_dx(x, grad, encoding_min, encoding_max, ch_axis=0):
     """
     compute derivative w.r.t input using straight through estimator.
     :param x: input tensor
     :param grad: gradient flowing
     :param encoding_min: encoding min grid param used on forward pass
     :param encoding_max: encoding max grid param used on forward pass
+    :param ch_axis: Channel axis to use for per-channel quant
     :return: gradient w.r.t input
     """
 
@@ -61,14 +62,17 @@ def compute_dloss_by_dx(x, grad, encoding_min, encoding_max):
         shape = list(tensor.shape)
         encoding = torch.Tensor(encoding).to(x.device)                  # convert encoding to a tensor
 
-        # Original tensor shape is OIHW, we change the shape to IHWO. Encoding (which is of shape O) can naturally
+        # Original tensor shape is OIHW/IOHW, we change the shape to IHWO. Encoding (which is of shape O) can naturally
         # broadcast to this shape
         # This will work if the original tensor shape was any dimensions as long as the first dimension matches the
         # encoding tensor shape
-        encoding = encoding * torch.ones(shape[1:] + [shape[0]]).to(x.device)
+        num_channels = shape.pop(ch_axis)
+        encoding = encoding * torch.ones(shape + [num_channels]).to(x.device)
 
-        # we permute the resulting tensor back to OIHW shape
-        encoding = encoding.permute([len(shape) - 1] + list(range(len(shape) - 1)))
+        # we permute the resulting tensor back to OIHW/IOHW shape
+        permute_dims = list(range(len(shape)))
+        permute_dims.insert(ch_axis, len(shape))
+        encoding = encoding.permute(permute_dims)
 
         return encoding
 
