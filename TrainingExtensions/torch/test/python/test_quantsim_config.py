@@ -39,6 +39,7 @@ import pytest
 import json
 import os
 import torch
+import libpymo
 from aimet_common.defs import QuantScheme
 from aimet_torch.examples.test_models import SingleResidual, QuantSimTinyModel, MultiInput
 from aimet_torch.quantsim import QuantizationSimModel
@@ -514,3 +515,115 @@ class TestQuantsimConfig:
 
         if os.path.exists('./data/quantsim_config.json'):
             os.remove('./data/quantsim_config.json')
+
+    def test_gelu_layernorm_quantsim_config(self):
+        """
+        Create a network with LayerNorm and GELU
+        Override quantization config and check config is applied
+        This is a validation for actual entry in the map_torch_types_to_onnx in onnx_utils
+        This is used by connected graph to apply op level specific quantsim config.
+        :return:
+        """
+
+        import json
+        from aimet_common.defs import QuantScheme
+        from aimet_torch.quantsim import QuantizationSimModel
+        import libpymo
+
+        class ModelWithGeluLayerNorm(torch.nn.Module):
+            def __init__(self):
+                super(ModelWithGeluLayerNorm, self).__init__()
+                self.linear1 = torch.nn.Linear(4, 4)
+                # default attribute -
+                # eps = 1e-05 and elementwise_affine = True
+                # parameters : weight and bias
+                self.ln1 = torch.nn.LayerNorm(4)
+                self.gelu1 = torch.nn.GELU()
+
+            def forward(self, x):
+                x = self.linear1(x)
+                x = self.ln1(x)
+                x = self.gelu1(x)
+                return x
+
+            # create custom config to override LayerNorm and GELU
+            quantsim_config = {
+                "defaults": {
+                    "ops": {
+                        "is_output_quantized": "True",
+                        "is_symmetric": "False"
+                    },
+                    "params": {
+                        "is_quantized": "False",
+                        "is_symmetric": "True"
+                    }
+                },
+                "params": {},
+                "op_type": {
+                    "LayerNorm": {
+                        "is_input_quantized": "True",
+                        "params": {
+                            "bias": {
+                                "is_quantized": "True"
+                            }
+                        }
+                    },
+                    "GELU": {
+                        "is_input_quantized": "True"
+                    }
+                },
+                "supergroups": [],
+                "model_input": {},
+                "model_output": {}
+            }
+
+            with open('./data/quantsim_config.json', 'w') as f:
+                json.dump(quantsim_config, f)
+
+        model = ModelWithGeluLayerNorm()
+        model.eval()
+        random_input = torch.rand(1, 4, 4)
+
+        def forward_pass(model, args):
+            model.eval()
+            with torch.no_grad():
+                model(*random_input)
+
+        # QuantSim for model
+        sim = QuantizationSimModel(model, quant_scheme=QuantScheme.post_training_tf,
+                                   config_file='./data/quantsim_config.json',
+                                   dummy_input=random_input)
+
+        sim.compute_encodings(forward_pass, None)
+
+        #  check quantizer added to parameters of LayerNorm
+        from aimet_torch.qc_quantize_op import StaticGridPerTensorQuantizer
+        self.assertTrue(isinstance(sim.model.ln1.param_quantizers['weight'], StaticGridPerTensorQuantizer))
+        self.assertTrue(isinstance(sim.model.ln1.param_quantizers['bias'], StaticGridPerTensorQuantizer))
+
+
+        # LayerNorm input quantization is disabled by default
+        # override with custom config file, this needs appropriate entry in onnx node name mapping
+        self.assertTrue(isinstance(sim.model.ln1.input_quantizer, StaticGridPerTensorQuantizer))
+        self.assertTrue(sim.model.ln1.input_quantizer.encoding)
+        in_quantizer = sim.model.ln1.input_quantizer
+        self.assertTrue(in_quantizer.enabled)  # disabled by default, override with config file
+        self.assertEqual(in_quantizer.round_mode, libpymo.RoundingMode.ROUND_NEAREST)
+        self.assertEqual(in_quantizer.quant_scheme, libpymo.QuantizationMode.QUANTIZATION_TF)
+        self.assertEqual(in_quantizer.bitwidth, 8)
+
+
+        # GELU input quantization is disabled by default
+        # override with custom config file, this needs appropriate entry in onnx node name mapping
+        self.assertTrue(isinstance(sim.model.gelu1.input_quantizer, StaticGridPerTensorQuantizer))
+        self.assertTrue(sim.model.gelu1.input_quantizer.encoding)
+        in_quantizer = sim.model.gelu1.input_quantizer
+        self.assertTrue(in_quantizer.enabled)  # disabled by default, override with config file
+        self.assertEqual(in_quantizer.round_mode, libpymo.RoundingMode.ROUND_NEAREST)
+        self.assertEqual(in_quantizer.quant_scheme, libpymo.QuantizationMode.QUANTIZATION_TF)
+        self.assertEqual(in_quantizer.bitwidth, 8)
+
+        # remove test config created
+        if os.path.exists('./data/quantsim_config.json'):
+            os.remove('./data/quantsim_config.json')
+

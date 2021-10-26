@@ -68,6 +68,10 @@ map_torch_types_to_onnx = {
     nn.Dropout2d: ['Dropout'],
     nn.BatchNorm1d: ['BatchNormalization'],
     nn.BatchNorm2d: ['BatchNormalization'],
+    # Note - Currently, both LayerNorm and GELU are not in the supported ops list in ONNX
+    # Adding this entry here for usage by Connected graph
+    nn.LayerNorm: ['LayerNorm'],
+    nn.GELU: ['GELU'],
     nn.ReLU: ['Relu'],
     nn.ReLU6: ['Clip'],
     nn.MaxPool2d: ['MaxPool'],
