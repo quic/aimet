@@ -295,7 +295,7 @@ class StaticGridPerChannelQuantizer(StaticGridTensorQuantizer):
     """
 
     def __init__(self, bitwidth: int, round_mode: str, quant_scheme: str, use_symmetric_encodings: bool,
-                 num_channels: int, enabled_by_default: bool):
+                 num_channels: int, enabled_by_default: bool, ch_axis: int = 0):
         """
         Constructor
         :param bitwidth: Quantization bitwidth
@@ -303,10 +303,12 @@ class StaticGridPerChannelQuantizer(StaticGridTensorQuantizer):
         :param quant_scheme: Quantization scheme (e.g. tf, tf_enhanced)
         :param use_symmetric_encodings: True if symmetric encoding is used.  False otherwise.
         :param enabled_by_default: True if quantization of tensor is enabled.  False otherwise.
+        :param ch_axis: Channel Axis to use for per-channel quantization
         """
         super(StaticGridPerChannelQuantizer, self).__init__(bitwidth, round_mode, quant_scheme, use_symmetric_encodings,
                                                             enabled_by_default)
         self._cppOp = [AimetTensorQuantizer.AimetTensorQuantizer(quant_scheme) for _ in range(num_channels)]
+        self._ch_axis = ch_axis
         self._encoding = None
         self._is_encoding_frozen = False
 
@@ -326,7 +328,8 @@ class StaticGridPerChannelQuantizer(StaticGridTensorQuantizer):
         """
         if self.enabled and not self._is_encoding_frozen:
             for channel_idx, op in enumerate(self._cppOp):
-                op.updateStats(tensor[channel_idx], tensor.is_cuda)
+                tensor_slice = tensor.select(self._ch_axis, channel_idx)
+                op.updateStats(tensor_slice, tensor.is_cuda)
 
 
 class QuantizeDequantize(torch.autograd.Function):
@@ -346,9 +349,10 @@ class QuantizeDequantize(torch.autograd.Function):
 
         # pylint:disable = protected-access
         for index, op in enumerate(tensor_quantizer._cppOp):
-            quantized_tensors.append(op.quantizeDequantize(tensor[index, :], tensor_quantizer._encoding[index],
+            tensor_slice = tensor.select(tensor_quantizer._ch_axis, index)
+            quantized_tensors.append(op.quantizeDequantize(tensor_slice, tensor_quantizer._encoding[index],
                                                            round_mode, tensor.is_cuda))
-        quantized_tensor = torch.stack(tuple(quantized_tensors))
+        quantized_tensor = torch.stack(tuple(quantized_tensors), dim=tensor_quantizer._ch_axis)
         return quantized_tensor
 
     # pylint:disable = arguments-differ
@@ -384,8 +388,13 @@ class QuantizeDequantize(torch.autograd.Function):
         tensor = ctx.saved_tensors
         tensor_quantizer = ctx.tensor_quantizer
         if tensor_quantizer.enabled:
+            # pylint: disable=protected-access
+            if len(tensor_quantizer._cppOp) > 1:
+                ch_axis = tensor_quantizer._ch_axis
+            else:
+                ch_axis = 0
             grad = ste.compute_dloss_by_dx(tensor[0], output_grad, tensor_quantizer.encoding.min,
-                                           tensor_quantizer.encoding.max)
+                                           tensor_quantizer.encoding.max, ch_axis)
         else:
             grad = output_grad
 
