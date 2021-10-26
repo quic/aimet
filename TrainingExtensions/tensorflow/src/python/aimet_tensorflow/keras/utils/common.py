@@ -38,12 +38,14 @@
 
 """ Common Utilities for tf 2 keras """
 
-from typing import Dict, List, Tuple
+import typing
 
 import tensorflow as tf
+from aimet_common.utils import AimetLogger
 
+_logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Quant)
 
-def module_to_name_map(cur_layer: (tf.keras.Model, tf.keras.layers.Layer)) -> Dict[tf.keras.layers.Layer, Tuple[tf.keras.Model, str]]:
+def module_to_name_map(cur_layer: (tf.keras.Model, tf.keras.layers.Layer)) -> typing.Dict[tf.keras.layers.Layer, typing.Tuple[tf.keras.Model, str]]:
     """
     To find a variable name and parent reference of one module.
 
@@ -63,7 +65,7 @@ def module_to_name_map(cur_layer: (tf.keras.Model, tf.keras.layers.Layer)) -> Di
 
     return ref_name
 
-def find_input_layers(node_layer_map: Dict) -> List[tf.keras.layers.InputLayer]:
+def find_input_layers(node_layer_map: typing.Dict) -> typing.List[tf.keras.layers.InputLayer]:
     """
     helper to find the input layers of the model.
 
@@ -79,7 +81,7 @@ def find_input_layers(node_layer_map: Dict) -> List[tf.keras.layers.InputLayer]:
 
     return input_layers
 
-def _find_last_layers(cur_layer: (tf.keras.Model, tf.keras.layers.Layer)) -> List[tf.keras.layers.Layer]:
+def _find_last_layers(cur_layer: (tf.keras.Model, tf.keras.layers.Layer)) -> typing.List[tf.keras.layers.Layer]:
     """
     helper to find the last layers of the model.
 
@@ -98,7 +100,7 @@ def _find_last_layers(cur_layer: (tf.keras.Model, tf.keras.layers.Layer)) -> Lis
 
     return  last_layers
 
-def create_layer_to_out_node_map(cur_layer: (tf.keras.Model, tf.keras.layers.Layer)) -> Dict:
+def create_layer_to_out_node_map(cur_layer: (tf.keras.Model, tf.keras.layers.Layer)) -> typing.Dict:
     """
     To find the outbound nodes of one layer.
 
@@ -119,7 +121,7 @@ def create_layer_to_out_node_map(cur_layer: (tf.keras.Model, tf.keras.layers.Lay
 
     return layer_node_map
 
-def _submodule_handler_node_to_layer_map(cur_layer: (tf.keras.Model, tf.keras.layers.Layer), node_layer_map: Dict)-> (Dict, str, List):
+def _submodule_handler_node_to_layer_map(cur_layer: (tf.keras.Model, tf.keras.layers.Layer), node_layer_map: typing.Dict)-> (typing.Dict, str, typing.List):
     """
     The utility to extract node_layer_map for the cur_layer submodule and provide the connectivity with the outer model.
 
@@ -165,7 +167,7 @@ def _submodule_handler_node_to_layer_map(cur_layer: (tf.keras.Model, tf.keras.la
 
     return im_node_layer_map, im_node_input, im_nodes_after_input_layer
 
-def create_node_to_layer_map(cur_layer: (tf.keras.Model, tf.keras.layers.Layer)) -> Dict:
+def create_node_to_layer_map(cur_layer: (tf.keras.Model, tf.keras.layers.Layer)) -> typing.Dict:
     """
     To find the input layers and output layer of one node.
 
@@ -195,3 +197,59 @@ def create_node_to_layer_map(cur_layer: (tf.keras.Model, tf.keras.layers.Layer))
             node_layer_map.update(im_node_layer_map)
 
     return node_layer_map
+
+def replace_layer_for_non_subclassed_model(model: tf.keras.Model, old_layer: tf.keras.layers.Layer,
+                                           new_layers: typing.Union[typing.List, tf.keras.layers.Layer]):
+    """
+    Replace a layer in a model with a list of new layers to be called in sequential order.
+    :param model: Model containing layer to replace
+    :param old_layer: Layer to replace
+    :param new_layers: Layer or list of new layers to insert into the model
+    """
+    if not isinstance(new_layers, list):
+        new_layers = [new_layers]
+
+    if len(old_layer.inbound_nodes) > 1:
+        _logger.error('Replacement for layer with multiple inputs not currently supported')
+        raise NotImplementedError
+
+    if len(old_layer.outbound_nodes) > 1:
+        _logger.error('Replacement for layer with multiple outputs not currently supported')
+        raise NotImplementedError
+
+    # pylint: disable=protected-access
+    if old_layer in model._input_layers:
+        _logger.error('Replacement for input layer not currently supported')
+        raise NotImplementedError
+
+    if old_layer in model._output_layers:
+        _logger.error('Replacement for output layer not currently supported')
+        raise NotImplementedError
+
+    # Find layers before and after the old layer to replace
+    parent_layer = old_layer.inbound_nodes[0].inbound_layers
+    following_layer = old_layer.outbound_nodes[0].outbound_layer
+
+    # Remove any network nodes to do with any of the old and new layers to replace
+    for layer in [old_layer] + new_layers:
+        for idx, _ in enumerate(layer.inbound_nodes):
+            node_key = layer.name + '_ib-' + str(idx)
+            if node_key in model._network_nodes:
+                model._network_nodes.remove(node_key)
+
+    # Clear out inbound and outbound nodes before and after the old layer to replace
+    old_layer._inbound_nodes = []
+    old_layer._outbound_nodes = []
+    parent_layer._outbound_nodes = []
+    following_layer._inbound_nodes = []
+
+    # Use output tensor from parent layer to create new nodes
+    curr_tensor = parent_layer.output
+    for layer in new_layers:
+        curr_tensor = layer(curr_tensor)
+
+    # Connect the last new layer back to old child layer, creating a new node in the process
+    _ = following_layer(curr_tensor)
+
+    # Update model's layers and network nodes
+    model._insert_layers(new_layers + [following_layer])
