@@ -476,13 +476,22 @@ class StaticGridQuantWrapper(QcQuantizeWrapper):
         Changes all parameter quantizers (if any) to per-channel mode
         """
         new_param_quant_dict = {}
-        for param_name, param_quantizer in self.param_quantizers.items():
-            param = eval("self._module_to_wrap." + param_name)      # pylint: disable=eval-used
+        for param_name, param in self._module_to_wrap.named_parameters():
+            param_quantizer = self.param_quantizers[param_name]
+            channel_axis = 0
+            if isinstance(self._module_to_wrap, (torch.nn.ConvTranspose1d,
+                                                 torch.nn.ConvTranspose2d,
+                                                 torch.nn.ConvTranspose3d)):
+                if len(param.shape) > 1:
+                    channel_axis = 1
+
             per_channel_quantizer = StaticGridPerChannelQuantizer(param_quantizer.bitwidth, param_quantizer.round_mode,
                                                                   param_quantizer.quant_scheme,
                                                                   param_quantizer.use_symmetric_encodings,
-                                                                  num_channels=param.shape[0],
-                                                                  enabled_by_default=param_quantizer.enabled)
+                                                                  num_channels=param.shape[channel_axis],
+                                                                  enabled_by_default=param_quantizer.enabled,
+                                                                  ch_axis=channel_axis)
+
             new_param_quant_dict[param_name] = per_channel_quantizer
         self.param_quantizers = new_param_quant_dict
 
@@ -547,7 +556,8 @@ class SteGatingFuncForParameters(torch.autograd.Function):
                     # Stack the encodings
                     max_encodings = [enc.max for enc in param_quantizer.encoding]
                     min_encodings = [enc.min for enc in param_quantizer.encoding]
-                    param.grad = ste.compute_dloss_by_dx(param, param.grad, min_encodings, max_encodings)
+                    param.grad = ste.compute_dloss_by_dx(param, param.grad, min_encodings, max_encodings,
+                                                         param_quantizer._ch_axis)
                 else:
                     param.grad = ste.compute_dloss_by_dx(param, param.grad, param_quantizer.encoding.min,
                                                          param_quantizer.encoding.max)
