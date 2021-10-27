@@ -47,6 +47,7 @@ import re
 from typing import List, Dict, Set, Union
 from collections import OrderedDict
 import tensorflow as tf
+import transformers.activations_tf
 from packaging import version
 
 from aimet_common.utils import AimetLogger

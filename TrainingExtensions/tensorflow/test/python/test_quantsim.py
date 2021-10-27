@@ -45,6 +45,7 @@ import unittest.mock
 import tensorflow as tf
 from packaging import version
 import libpymo
+import aimet_tensorflow.utils.quantsim
 from aimet_tensorflow.quantsim import QuantizationSimModel, check_accumulator_overflow
 from aimet_tensorflow.quantsim_straight_through_grad import _get_n_and_p
 from aimet_tensorflow.utils.graph_saver import load_model_from_meta
@@ -55,6 +56,7 @@ from aimet_common.defs import QuantScheme, QuantizationDataType
 from aimet_common.quantsim import encoding_version
 from aimet_tensorflow.quantsim import save_checkpoint, load_checkpoint
 from aimet_tensorflow.utils.constants import QuantizeOpIndices
+from aimet_tensorflow.utils import transformer_utils
 
 tf.compat.v1.logging.set_verbosity(tf.compat.v1.logging.WARN)
 tf.compat.v1.disable_eager_execution()
@@ -943,6 +945,35 @@ class TestQuantSim(unittest.TestCase):
         if os.path.exists("./dummy.encodings"):
             os.remove("./dummy.encodings")
 
+    def test_transformer_mask_override(self):
+        tf.compat.v1.reset_default_graph()
+
+        mask_add_name = 'dummy_attention/mask_add'
+        np.random.seed(0)
+        dummy_input_0 = np.random.uniform(low=-10.0, high=10.0, size=(28, 28, 3))
+        dummy_input_1 = np.random.uniform(low=-10000.0, high=10.0, size=(28, 28, 3))
+        with tf.device('/cpu:0'):
+            input_0 = tf.Variable(initial_value=dummy_input_0, shape=(28, 28, 3), dtype=tf.float32)
+            input_1 = tf.Variable(initial_value=dummy_input_1, shape=(28, 28, 3), dtype=tf.float32)
+            mask_add = tf.math.add(input_0, input_1, name=mask_add_name)
+
+        sess = tf.compat.v1.Session()
+        initialize_uninitialized_vars(sess)
+        transformer_utils.register_attention_mask_override(mask_add_name)
+        sim = QuantizationSimModel(sess, [input_0.op.name, input_1.op.name], [mask_add.op.name], use_cuda=False)
+
+        def dummy_forward_pass(sess, args):
+            mask_add_tensor = sess.graph.get_operation_by_name(mask_add.op.name + '_quantized').outputs[0]
+            sess.run(mask_add_tensor)
+
+        sim.compute_encodings(dummy_forward_pass, None)
+        mask_quantizer = sim.quantizer_config(mask_add_name + '_quantized')
+        encoding_min = mask_quantizer.get_variable_from_op(QuantizeOpIndices.encoding_min)
+
+        self.assertAlmostEqual(encoding_min, transformer_utils.MASK_OVERRIDE_VALUE, places=1)
+
+        del sim
+        sess.close()
 
 class TestQuantSimRangeLearning:
     """ Test methods for Quantization Simulation """
