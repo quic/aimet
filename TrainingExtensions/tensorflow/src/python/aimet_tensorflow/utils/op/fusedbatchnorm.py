@@ -141,7 +141,7 @@ class BNUtils:
         return beta_read
 
     @staticmethod
-    def _get_beta_read_var_op_tensor_using_structure(bn_op: tf.Operation) -> tf.Tensor:
+    def get_beta_read_var_op_tensor_using_structure(bn_op: tf.Operation) -> tf.Tensor:
         """
         Get beta readVariableOp tensor from BN op specified.
 
@@ -175,7 +175,7 @@ class BNUtils:
         except KeyError:
             # if we can't find the tensor name, use structure match
             # to figure out the read tensor for param
-            beta_read_tensor = BNUtils._get_beta_read_var_op_tensor_using_structure(bn_op)
+            beta_read_tensor = BNUtils.get_beta_read_var_op_tensor_using_structure(bn_op)
 
         return beta_read_tensor
 
@@ -223,7 +223,7 @@ class BNUtils:
         return gamma_read
 
     @staticmethod
-    def _get_gamma_read_var_op_tensor_using_structure(bn_op: tf.Operation) -> tf.Tensor:
+    def get_gamma_read_var_op_tensor_using_structure(bn_op: tf.Operation) -> tf.Tensor:
         """
         Get the gamma read var op tensor associated with the batchnorm op.
 
@@ -256,7 +256,7 @@ class BNUtils:
         except KeyError:
             # if we can't find the tensor name, use structure match
             # to figure out the read tensor for param
-            gamma_read_tensor = BNUtils._get_gamma_read_var_op_tensor_using_structure(bn_op)
+            gamma_read_tensor = BNUtils.get_gamma_read_var_op_tensor_using_structure(bn_op)
 
         return gamma_read_tensor
 

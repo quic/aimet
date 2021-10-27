@@ -46,13 +46,15 @@ import tensorflow as tf
 from tensorflow.python.framework import ops as tf_ops
 from packaging import version
 from aimet_common.defs import QuantScheme, QuantizationDataType
-from aimet_common.quantsim import gate_min_max, calculate_delta_offset, encoding_version, validate_quantsim_inputs
+from aimet_common.quantsim import gate_min_max, calculate_delta_offset, encoding_version, validate_quantsim_inputs, \
+    recompute_grid_params
 from aimet_common.quant_utils import get_conv_accum_bounds
 from aimet_common.utils import AimetLogger, save_json_yaml
 from aimet_tensorflow import graph_editor
 from aimet_tensorflow.utils.common import update_variables_with_values, save_data_to_pickle_file, \
     load_data_from_pickle_file, get_valid_ops
 from aimet_tensorflow import utils
+from aimet_tensorflow.utils import transformer_utils
 from aimet_tensorflow.utils.constants import QuantizeOpIndices
 from aimet_tensorflow.utils.quantsim import create_op_to_quant_ops_dict, is_op_quantizable, \
     get_time_steps_tensor_from_rnn_inner_ops, create_encoding_from_dict
@@ -77,7 +79,7 @@ WORKING_DIR = '/tmp/quantsim/'
 
 
 # Op types which we will not place quantize ops after
-op_types_to_ignore = {'branch', 'Flatten', 'Shape', 'Identity', 'Reshape'}
+op_types_to_ignore = {'branch', 'Flatten', 'Shape', 'Identity', 'Reshape', 'Transpose', 'ResourceGather', 'Tile'}
 
 # Connected graph types to ignore parameter quantization
 param_quant_conn_op_ignore_list = {'FusedBatchNorm', 'FusedBatchNormV3', 'BatchNorm'}
@@ -173,6 +175,8 @@ class QuantizationSimModel:
         self._use_cuda = use_cuda
         self._param_quantizers = {}
         self._activation_quantizers = {}
+        self._default_output_bw = default_output_bw
+        self._default_param_bw = default_param_bw
         self.connected_graph = ConnectedGraph(self.session.graph, starting_op_names, output_op_names)
 
         # We save a copy of the original model (to be used during export later)
@@ -184,6 +188,7 @@ class QuantizationSimModel:
         self._op_name_to_output_channels_axis_dict = {}
         self._add_and_configure_quant_nodes(starting_op_names, output_op_names, default_param_bw, default_output_bw)
 
+        self._override_quant_config_for_transformer_mask_add()
         # Save and load the session so the graph changes can take effect
         self._save_and_load_sim_model()
 
@@ -311,6 +316,8 @@ class QuantizationSimModel:
                          'will be simulated for these ops if they are evaluated in the future.\n'
                          'If this is not desired, amend the forward pass to evaluate tensors which require these ops '
                          'to be evaluated, and recompute encodings.')
+
+        self._clamp_transformer_attention_mask_encoding()
 
     def export(self, path: str, filename_prefix: str, orig_sess: tf.compat.v1.Session = None):
         """
@@ -1151,6 +1158,42 @@ class QuantizationSimModel:
             q_op_out = create_recurrent_param_quantize_op()
 
         return q_op_out
+
+    @staticmethod
+    def _is_op_transformer_mask(quant_op_name: str) -> bool:
+        """
+        Check if quant_op_name is transformer mask add op
+        :param quant_op_name: op name to check
+        :return: True if quant_op_name belongs to transformer mask add op
+        """
+        for supported_mask in transformer_utils.SUPPORTED_ATTENTION_MASK_OVERRIDE:
+            if quant_op_name.endswith(supported_mask + '_quantized'):
+                return True
+        return False
+
+    def _override_quant_config_for_transformer_mask_add(self):
+        """
+        Find transformer mask add op and change bitwidth to 16 and quant_scheme to tf
+        """
+        for quant_op_name, quantizer_info in self._activation_quantizers.items():
+            if self._is_op_transformer_mask(quant_op_name):
+                quantizer_info.bitwidth = 16
+                quantizer_info.quant_scheme = QuantScheme.post_training_tf
+
+    def _clamp_transformer_attention_mask_encoding(self):
+        """
+        Clamp the quantizer encoding min associated with mask adder op within an attention head.
+        """
+        for quant_op_name, quantizer_info in self._activation_quantizers.items():
+            if self._is_op_transformer_mask(quant_op_name) and quantizer_info.enabled:
+                encoding = quantizer_info.get_encoding()
+                encoding.min = max(encoding.min, transformer_utils.MASK_OVERRIDE_VALUE)
+
+                clamped_encoding = recompute_grid_params(encoding, self._default_output_bw,
+                                                         quantizer_info.use_symmetric_encoding)
+                quantizer_info.set_encoding(clamped_encoding)
+                quantizer_info.bitwidth = self._default_output_bw
+                quantizer_info.quant_scheme = self._quant_scheme
 
 
 # load and save utilities

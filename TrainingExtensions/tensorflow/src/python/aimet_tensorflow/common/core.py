@@ -154,6 +154,9 @@ class OpQuery:
 
                 if not skip_bias_op and self._is_op_with_weights(op):
                     for consumer in op.outputs[0].consumers():
+                        # Ignore Reshape as it can be placed between MatMul and BiasAdd on Dense layer of Transformer
+                        if consumer.type in ['Reshape'] and len(consumer.outputs[0].consumers()) == 1:
+                            consumer = consumer.outputs[0].consumers()[0]
                         if consumer.type in _BIAS_TYPES:
                             self._log.debug('Found op w/bias: %s', consumer.name+'('+consumer.type+')')
                             ops_with_weights.append(consumer)

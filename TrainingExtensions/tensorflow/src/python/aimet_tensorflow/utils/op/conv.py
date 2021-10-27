@@ -277,6 +277,9 @@ class BiasUtils:
             # output 0 is the bias tensor
             bias_index = BiasUtils.get_bias_index_in_given_op(input_op)
             for consumer in input_op.outputs[bias_index].consumers():
+                # Ignore Reshape as it can be placed between MatMul and BiasAdd on Dense layer of Transformer
+                if consumer.type in ['Reshape'] and len(consumer.outputs[0].consumers()) == 1:
+                    consumer = consumer.outputs[0].consumers()[0]
                 # check the input types of the add or bias_add
                 if consumer.type == 'BiasAdd':
                     # check num tensors and op types coming into this bias add or add
@@ -311,6 +314,9 @@ class BiasUtils:
         bias_index = BiasUtils.get_bias_index_in_given_op(input_op)
         if not BiasUtils.is_bias_none(input_op):
             for consumer in input_op.outputs[bias_index].consumers():
+                # Ignore Reshape as it can be placed between MatMul and BiasAdd on Dense layer of Transformer
+                if consumer.type in ['Reshape'] and len(consumer.outputs[0].consumers()) == 1:
+                    consumer = consumer.outputs[0].consumers()[0]
                 if consumer.type in ['Add', 'BiasAdd']:
                     assert len(consumer.inputs) == 2
                     # pick the bias ReadVariableOp type
@@ -350,6 +356,9 @@ class BiasUtils:
         bias_index = BiasUtils.get_bias_index_in_given_op(input_op)
         if not BiasUtils.is_bias_none(input_op):
             for consumer in input_op.outputs[bias_index].consumers():
+                # Ignore Reshape as it can be placed between MatMul and BiasAdd on Dense layer of Transformer
+                if consumer.type in ['Reshape'] and len(consumer.outputs[0].consumers()) == 1:
+                    consumer = consumer.outputs[0].consumers()[0]
                 if consumer.type in ['Add', 'BiasAdd']:
                     bias_add_op = consumer
         return bias_add_op

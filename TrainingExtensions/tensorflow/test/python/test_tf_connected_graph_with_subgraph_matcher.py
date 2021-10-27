@@ -59,6 +59,7 @@ from aimet_tensorflow.examples.test_models import keras_model, tf_slim_basic_mod
     model_with_global_max_pool2d,transposed_conv2d_model, instance_norm_model,\
     keras_model_functional_for_tf2, keras_model_functional_with_non_fused_batchnorms_for_tf2
 import aimet_tensorflow.winnow.winnow as winnow
+import transformers.activations_tf
 
 tf.compat.v1.logging.set_verbosity(tf.compat.v1.logging.WARN)
 tf.compat.v1.disable_eager_execution()
@@ -474,6 +475,106 @@ class TestTfConnectedGraph(unittest.TestCase):
 
         self.assertEqual(3, len(conn_graph.get_all_ops()))
         self.assertEqual(5, len(conn_graph.get_all_ops()['p_re_lu/Relu'].internal_ops))
+
+    def test_dense_tensordot(self):
+        tf.compat.v1.reset_default_graph()
+
+        # Check for unknown input shape
+        inputs = tf.keras.Input([10, 10])
+        outputs = tf.keras.layers.Dense(10, activation=None)(inputs)
+
+        conn_graph = ConnectedGraph(tf.compat.v1.get_default_graph(), [inputs.op.name], [outputs.op.name])
+
+        self.assertTrue(validate_branch_ops(conn_graph))
+        self.assertTrue(validate_product_tensor_lists(conn_graph))
+        self.assertEqual(len(conn_graph.get_all_ops()), 2)
+        # 1 product from inter module connection
+        # 2 products from parameters
+        self.assertEqual(len(conn_graph.get_all_products()), 3)
+
+        tf.compat.v1.reset_default_graph()
+
+        # Check for known input shape
+        inputs = tf.keras.Input([10, 10], batch_size=1)
+        outputs = tf.keras.layers.Dense(10, activation=None)(inputs)
+
+        conn_graph = ConnectedGraph(tf.compat.v1.get_default_graph(), [inputs.op.name], [outputs.op.name])
+
+        self.assertTrue(validate_branch_ops(conn_graph))
+        self.assertTrue(validate_product_tensor_lists(conn_graph))
+        self.assertEqual(len(conn_graph.get_all_ops()), 2)
+        # 1 product from inter module connection
+        # 2 products from parameters
+        self.assertEqual(len(conn_graph.get_all_products()), 3)
+
+    def test_model_with_layernorm(self):
+        tf.compat.v1.reset_default_graph()
+
+        inputs = tf.keras.Input([128])
+        outputs = tf.keras.layers.LayerNormalization(epsilon=1e-5)(inputs)
+
+        conn_graph = ConnectedGraph(tf.compat.v1.get_default_graph(), [inputs.op.name], [outputs.op.name])
+
+        self.assertTrue(validate_branch_ops(conn_graph))
+        self.assertTrue(validate_product_tensor_lists(conn_graph))
+        self.assertEqual(len(conn_graph.get_all_ops()), 2)
+        # 1 product from inter module connection
+        # 2 products from parameters
+        self.assertEqual(len(conn_graph.get_all_products()), 3)
+
+        found_layernorm = False
+        for op in conn_graph.get_all_ops().values():
+            if op.type == 'LayerNorm':
+                found_layernorm = True
+        self.assertTrue(found_layernorm)
+
+        tf.compat.v1.reset_default_graph()
+
+    def test_model_with_gelu(self):
+        tf.compat.v1.reset_default_graph()
+
+        inputs = tf.keras.Input([28, 28, 3])
+        outputs = tf.keras.layers.Conv2D(32, kernel_size=3, activation='gelu')(inputs)
+
+        conn_graph = ConnectedGraph(tf.compat.v1.get_default_graph(), [inputs.op.name], [outputs.op.name])
+
+        self.assertTrue(validate_branch_ops(conn_graph))
+        self.assertTrue(validate_product_tensor_lists(conn_graph))
+        self.assertEqual(len(conn_graph.get_all_ops()), 3)
+        # 2 products from inter module connections
+        # 2 products from parameters
+        self.assertEqual(len(conn_graph.get_all_products()), 4)
+
+        found_gelu = False
+        for op in conn_graph.get_all_ops().values():
+            if op.type == 'GeLU':
+                found_gelu = True
+        self.assertTrue(found_gelu)
+
+        tf.compat.v1.reset_default_graph()
+
+    def test_model_with_huggingface_gelu(self):
+        tf.compat.v1.reset_default_graph()
+
+        inputs = tf.keras.Input([28, 28, 3])
+        outputs = transformers.activations_tf.gelu(inputs)
+
+        conn_graph = ConnectedGraph(tf.compat.v1.get_default_graph(), [inputs.op.name], [outputs.op.name])
+
+        self.assertTrue(validate_branch_ops(conn_graph))
+        self.assertTrue(validate_product_tensor_lists(conn_graph))
+        self.assertEqual(len(conn_graph.get_all_ops()), 2)
+        # 1 products from inter module connections
+        # 0 products from parameters
+        self.assertEqual(len(conn_graph.get_all_products()), 1)
+
+        found_huggingface_gelu = False
+        for op in conn_graph.get_all_ops().values():
+            if op.type == 'GeLU':
+                found_huggingface_gelu = True
+        self.assertTrue(found_huggingface_gelu)
+
+        tf.compat.v1.reset_default_graph()
 
     @pytest.mark.tf1
     def test_model_with_simple_rnn_layer(self):
