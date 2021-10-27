@@ -4,10 +4,10 @@
 AIMET Examples provide reference code to learn how to load models, apply AIMET quantization and compression features, fine tune and save your models. It is also a quick way to become familiar with AIMET usage and APIs. For more details on each of the features and APIs please reference the _[user guide](https://quic.github.io/aimet-pages/releases/1.16.2/user_guide/index.html#api-documentation-and-usage-examples)_.
 
 ## Table of Contents
-- [Supported Examples](#supported-examples)
 - [Installation](#installation-instructions)
-- [Running AIMET Examples](#running-aimet-examples-on-the-command-line)
 - [Code Layout](#code-layout)
+- [Supported Examples](#supported-examples)
+- [Running AIMET Examples](#running-aimet-examples-on-the-command-line)
 
 ## Overview
 This section describes how to apply the various quantization and compression techniques.
