@@ -68,7 +68,11 @@ onnx_tf_conn_graph_type_pairs = [
     [["Flatten"], ["Flatten"]],
     [["Pad"], ["Pad"]],
     [["Squeeze"], ["Squeeze"]],
-    [["Identity"], ["Identity"]]
+    [["Identity"], ["Identity"]],
+    # Note - Currently, both LayerNorm and GELU are not in the supported ops list in ONNX
+    # Adding this entry here for usage by Connected graph
+    [["LayerNorm"], ["LayerNorm"]],
+    [["GeLU"], ["GeLU"]]
 ]
 
 

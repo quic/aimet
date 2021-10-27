@@ -357,6 +357,20 @@ class ConnectedGraph(aimetCommonConnectedGraph):
             create_and_connect_product('moving_variance', moving_variance_tensor.shape, my_op,
                                        moving_variance_tensor)
 
+        def create_layernorm_params(layernorm_op: Op):
+            """
+            Create products for layernorm
+            :param layernorm_op: Connected Graph operation to find and insert parameter operations
+            """
+
+            tf_op = layernorm_op.get_module()
+
+            beta_tensor = BNUtils.get_beta_read_var_op_tensor_using_structure(tf_op)
+            create_and_connect_product('beta', beta_tensor.shape, layernorm_op, beta_tensor)
+
+            gamma_tensor = BNUtils.get_gamma_read_var_op_tensor_using_structure(tf_op)
+            create_and_connect_product('gamma', gamma_tensor.shape, layernorm_op, gamma_tensor)
+
         def handle_default(my_op: Op):
             """ Handler for other modules """
             logger.debug("Nothing to handle for op %s", my_op.name)
@@ -366,7 +380,8 @@ class ConnectedGraph(aimetCommonConnectedGraph):
             "Dense": create_conv2d_dense_type_params,
             "DepthwiseConv2dNative": create_conv2d_dense_type_params,
             "BatchNorm": create_batchnorm_params,
-            "FusedBatchNormV3": create_batchnorm_params
+            "FusedBatchNormV3": create_batchnorm_params,
+            "LayerNorm": create_layernorm_params
         }
 
         handler = switcher.get(op.type, handle_default)

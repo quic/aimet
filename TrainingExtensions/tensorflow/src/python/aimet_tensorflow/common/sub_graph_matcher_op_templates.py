@@ -78,6 +78,22 @@ op_type_templates = {
         'associated_op_regex': ['MatMul$'],
         'tf2_support': True
     },
+    'Dense_tensordot_known_shape': {
+        'input_shape': (1, 10, 10),
+        'op_type': 'Dense',
+        'constructor': "tf.keras.layers.Dense(10, activation=None)(constants)",
+        'module_regex': ['(.+/MatMul)$'],
+        'associated_op_regex': ['MatMul$'],
+        'tf2_support': True
+    },
+    'Dense_tensordot_unknown_shape': {
+        'input_shape': (10, 10),
+        'op_type': 'Dense',
+        'constructor': "tf.keras.layers.Dense(10, activation=None)(inputs)",
+        'module_regex': ['(.+/MatMul)$'],
+        'associated_op_regex': ['MatMul$'],
+        'tf2_support': True
+    },
     'BN_keras_with_training_tensor': {
         'input_shape': (10, 10, 3,),
         'op_type': 'FusedBatchNormV3',
@@ -345,6 +361,39 @@ op_type_templates = {
         'module_regex': ['(.+/conv2d_transpose)$'],
         'associated_op_regex': ['conv2d_transpose/conv2d_transpose$'],
         'tf2_support': True
-    }
-
+    },
+    'LayerNorm_non_fused': {
+        'input_shape': (10, 10, 3,),
+        'op_type': 'LayerNorm',
+        # There is no explicit option to create non fused LayerNorm
+        # But setting epsilon to a value smaller than 1e-5 creates non fused version
+        'constructor': "tf.keras.layers.LayerNormalization(epsilon=1e-12)(inputs)",
+        'module_regex': ['(.+)/batchnorm/mul_1$'],
+        'associated_op_regex': ['batchnorm/mul_1$'],
+        'tf2_support': True
+    },
+    'GeLU': {
+        'input_shape': (1, 10),
+        'op_type': 'GeLU',
+        'constructor': "tf.keras.activations.gelu(inputs, approximate=False)",
+        'module_regex': ['(.+/mul_1)$'],
+        'associated_op_regex': ['mul_1$'],
+        'tf2_support': True
+    },
+    'GeLU_approximate': {
+        'input_shape': (1, 10),
+        'op_type': 'GeLU',
+        'constructor': "tf.keras.activations.gelu(inputs, approximate=True)",
+        'module_regex': ['(.+/mul_1)$'],
+        'associated_op_regex': ['mul_1$'],
+        'tf2_support': True
+    },
+    'HuggingFace_GeLU': {
+        'input_shape': (1, 10),
+        'op_type': 'GeLU',
+        'constructor': "transformers.activations_tf._gelu(inputs)",
+        'module_regex': ['(.+/mul_1)$'],
+        'associated_op_regex': ['mul_1$'],
+        'tf2_support': True
+    },
 }
