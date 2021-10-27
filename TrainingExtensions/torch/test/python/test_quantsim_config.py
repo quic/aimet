@@ -598,30 +598,30 @@ class TestQuantsimConfig:
 
         #  check quantizer added to parameters of LayerNorm
         from aimet_torch.qc_quantize_op import StaticGridPerTensorQuantizer
-        self.assertTrue(isinstance(sim.model.ln1.param_quantizers['weight'], StaticGridPerTensorQuantizer))
-        self.assertTrue(isinstance(sim.model.ln1.param_quantizers['bias'], StaticGridPerTensorQuantizer))
+        assert(isinstance(sim.model.ln1.param_quantizers['weight'], StaticGridPerTensorQuantizer))
+        assert(isinstance(sim.model.ln1.param_quantizers['bias'], StaticGridPerTensorQuantizer))
 
 
         # LayerNorm input quantization is disabled by default
         # override with custom config file, this needs appropriate entry in onnx node name mapping
-        self.assertTrue(isinstance(sim.model.ln1.input_quantizer, StaticGridPerTensorQuantizer))
-        self.assertTrue(sim.model.ln1.input_quantizer.encoding)
+        assert(isinstance(sim.model.ln1.input_quantizer, StaticGridPerTensorQuantizer))
+        assert(sim.model.ln1.input_quantizer.encoding)
         in_quantizer = sim.model.ln1.input_quantizer
-        self.assertTrue(in_quantizer.enabled)  # disabled by default, override with config file
-        self.assertEqual(in_quantizer.round_mode, libpymo.RoundingMode.ROUND_NEAREST)
-        self.assertEqual(in_quantizer.quant_scheme, libpymo.QuantizationMode.QUANTIZATION_TF)
-        self.assertEqual(in_quantizer.bitwidth, 8)
+        assert(in_quantizer.enabled)  # disabled by default, override with config file
+        assert(in_quantizer.round_mode == libpymo.RoundingMode.ROUND_NEAREST)
+        assert(in_quantizer.quant_scheme == libpymo.QuantizationMode.QUANTIZATION_TF)
+        assert(in_quantizer.bitwidth == 8)
 
 
         # GELU input quantization is disabled by default
         # override with custom config file, this needs appropriate entry in onnx node name mapping
-        self.assertTrue(isinstance(sim.model.gelu1.input_quantizer, StaticGridPerTensorQuantizer))
-        self.assertTrue(sim.model.gelu1.input_quantizer.encoding)
+        assert(isinstance(sim.model.gelu1.input_quantizer, StaticGridPerTensorQuantizer))
+        assert(sim.model.gelu1.input_quantizer.encoding)
         in_quantizer = sim.model.gelu1.input_quantizer
-        self.assertTrue(in_quantizer.enabled)  # disabled by default, override with config file
-        self.assertEqual(in_quantizer.round_mode, libpymo.RoundingMode.ROUND_NEAREST)
-        self.assertEqual(in_quantizer.quant_scheme, libpymo.QuantizationMode.QUANTIZATION_TF)
-        self.assertEqual(in_quantizer.bitwidth, 8)
+        assert(in_quantizer.enabled)  # disabled by default, override with config file
+        assert(in_quantizer.round_mode == libpymo.RoundingMode.ROUND_NEAREST)
+        assert(in_quantizer.quant_scheme == libpymo.QuantizationMode.QUANTIZATION_TF)
+        assert(in_quantizer.bitwidth == 8)
 
         # remove test config created
         if os.path.exists('./data/quantsim_config.json'):
