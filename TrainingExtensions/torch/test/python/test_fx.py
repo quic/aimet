@@ -38,6 +38,7 @@
 
 import pytest
 import json
+import random
 import os
 import copy
 import numpy as np
@@ -46,12 +47,17 @@ from torchvision import models
 from torch.utils.data import DataLoader
 pytest.importorskip("torch", minversion="1.8")
 
+from aimet_common.defs import QuantScheme
 from aimet_torch import elementwise_ops
 from aimet_torch.quantsim_config import quantsim_config
 from aimet_torch.examples.test_models import ModelWithFunctionalReLU, SingleResidual, ModelWithDuplicateReLU
-from aimet_torch.quantsim import QuantizationSimModel
+from aimet_torch.quantsim import QuantizationSimModel, QuantParams
 from aimet_torch.utils import create_fake_data_loader
 from aimet_torch.fx import replace_functional_by_module
+from aimet_torch.batch_norm_fold import fold_all_batch_norms
+from aimet_torch.cross_layer_equalization import  equalize_model
+from aimet_torch.adaround.adaround_weight import Adaround, AdaroundParameters
+from aimet_torch import bias_correction
 
 
 def train(model: torch.nn.Module, data_loader: DataLoader) -> torch.Tensor:
@@ -85,6 +91,18 @@ def evaluate(model: torch.nn.Module, dummy_input: torch.Tensor):
     model.eval()
     with torch.no_grad():
         model(dummy_input)
+
+
+def seed_all(seed=1029):
+    """ Setup seed """
+    random.seed(seed)
+    os.environ['PYTHONHASHSEED'] = str(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed(seed)
+    torch.cuda.manual_seed_all(seed)  # if you are using multi-GPU.
+    torch.backends.cudnn.benchmark = False
+    torch.backends.cudnn.deterministic = True
 
 
 class TestFX:
@@ -155,6 +173,19 @@ class TestFX:
 
         assert torch.allclose(model(input_tensor), model_transformed(input_tensor))
 
+        original_model_relu_count = 0
+        for module in model.modules():
+            if isinstance(module, torch.nn.ReLU):
+                original_model_relu_count += 1
+
+        modified_model_relu_count = 0
+        for module in model_transformed.modules():
+            if isinstance(module, torch.nn.ReLU):
+                modified_model_relu_count += 1
+
+        # 8 duplicate ReLUs are replaced by new ReLUs in modified model
+        assert original_model_relu_count + 8 == modified_model_relu_count
+
     @pytest.mark.cuda
     def test_fx_with_resnet18_with_cuda(self):
         """
@@ -169,6 +200,19 @@ class TestFX:
         print(model_transformed)
 
         assert torch.allclose(model(input_tensor), model_transformed(input_tensor))
+
+        original_model_relu_count = 0
+        for module in model.modules():
+            if isinstance(module, torch.nn.ReLU):
+                original_model_relu_count += 1
+
+        modified_model_relu_count = 0
+        for module in model_transformed.modules():
+            if isinstance(module, torch.nn.ReLU):
+                modified_model_relu_count += 1
+
+        # 8 duplicate ReLUs are replaced by new ReLUs in modified model
+        assert original_model_relu_count + 8 == modified_model_relu_count
 
     def test_fx_with_functional_relu_quantsim(self):
         """
@@ -336,3 +380,148 @@ class TestFX:
         # Weights should not be same before and after training
         assert not np.allclose(before_training_weight.detach().cpu().numpy(),
                                after_training_weight.detach().cpu().numpy())
+
+    def test_fx_with_batch_norm_folding(self):
+        """
+        test torch fx with torchvision Resnet18 - BN fold
+        """
+        input_shape = (1, 3, 224, 224)
+        input_tensor = torch.randn(*input_shape)
+        model = models.resnet18().eval()
+        model_copy = copy.deepcopy(model)
+        folded_pairs_for_original_model = fold_all_batch_norms(model, input_shape)
+
+        # Apply BN fold for transformed model
+        model_transformed = replace_functional_by_module(model_copy)
+        folded_pairs_for_transformed_model = fold_all_batch_norms(model_transformed, input_shape)
+        print(model_transformed)
+
+        # folded pairs should be same for both original and transformed model
+        assert len(folded_pairs_for_original_model) == len(folded_pairs_for_transformed_model)
+
+        # forward pass for BN folded original and modified model
+        # output should be close for both BN folded original and modified model
+        assert torch.allclose(model(input_tensor), model_transformed(input_tensor))
+
+        # compare weights for very first layer
+        # Weights should be same
+        original_model_conv1_weight = model.conv1.weight.clone()
+        modified_model_conv1_weight = model_transformed.conv1.weight.clone()
+        assert np.array_equal(original_model_conv1_weight.detach().cpu().numpy(),
+                              modified_model_conv1_weight.detach().cpu().numpy())
+
+        # compare weights for very last layer
+        # Weights should be same
+        original_model_fc_weight = model.fc.weight.clone()
+        modified_model_fc_weight = model_transformed.fc.weight.clone()
+        assert np.array_equal(original_model_fc_weight.detach().cpu().numpy(),
+                              modified_model_fc_weight.detach().cpu().numpy())
+
+    def test_fx_with_cle(self):
+        """
+        test torch fx with torchvision Resnet18 - Cross layer equalization
+        """
+        input_shape = (1, 3, 224, 224)
+        input_tensor = torch.randn(*input_shape)
+        model = models.resnet18().eval()
+        model_copy = copy.deepcopy(model)
+
+        # Perform CLE - (BN fold, ReLU6 -> ReLU replacement, CLS, HBF)
+        equalize_model(model, input_shape)
+
+        # Apply CLE for transformed model
+        model_transformed = replace_functional_by_module(model_copy)
+        equalize_model(model_transformed, input_shape)
+
+        # forward pass for equalized original and modified model
+        # output should be close for both equalized original and modified model
+        assert torch.allclose(model(input_tensor), model_transformed(input_tensor))
+
+        # compare weights for very first layer
+        # Weights should be same
+        original_model_conv1_weight = model.conv1.weight.clone()
+        modified_model_conv1_weight = model_transformed.conv1.weight.clone()
+        assert np.array_equal(original_model_conv1_weight.detach().cpu().numpy(),
+                              modified_model_conv1_weight.detach().cpu().numpy())
+
+        # compare weights for very last layer
+        # Weights should be same
+        original_model_fc_weight = model.fc.weight.clone()
+        modified_model_fc_weight = model_transformed.fc.weight.clone()
+        assert np.array_equal(original_model_fc_weight.detach().cpu().numpy(),
+                              modified_model_fc_weight.detach().cpu().numpy())
+
+    @pytest.mark.cuda
+    def test_fx_with_adaround(self):
+        """
+        test torch fx with torchvision Resnet18 - adaround
+        """
+        seed_all(1)
+        input_shape = (1, 3, 224, 224)
+        dummy_input = torch.randn(*input_shape).cuda()
+        model = models.resnet18().cuda().eval()
+        model_copy = copy.deepcopy(model)
+
+        # create fake data loader with image size (3, 224, 224)
+        data_loader = create_fake_data_loader(dataset_size=16, batch_size=16, image_size=input_shape[1:])
+        params = AdaroundParameters(data_loader=data_loader, num_batches=1, default_num_iterations=5)
+        adarounded_original_model = Adaround.apply_adaround(model, dummy_input, params, path='./',
+                                                            filename_prefix='resnet18')
+        # Apply Adaround for transformed model
+        model_transformed = replace_functional_by_module(model_copy)
+        adarounded_transformed_model = Adaround.apply_adaround(model_transformed, dummy_input, params, path='./',
+                                                               filename_prefix='resnet18')
+        # compare weights for very first layer
+        # Weights should be same
+        original_model_conv1_weight = adarounded_original_model.conv1.weight.clone()
+        modified_model_conv1_weight = adarounded_transformed_model.conv1.weight.clone()
+        assert np.allclose(original_model_conv1_weight.detach().cpu().numpy(),
+                           modified_model_conv1_weight.detach().cpu().numpy())
+
+        # compare weights for very last layer
+        # Weights should be same
+        original_model_fc_weight = adarounded_original_model.fc.weight.clone()
+        modified_model_fc_weight = adarounded_transformed_model.fc.weight.clone()
+        assert np.allclose(original_model_fc_weight.detach().cpu().numpy(),
+                           modified_model_fc_weight.detach().cpu().numpy())
+
+    @pytest.mark.cuda
+    def test_fx_with_bias_correction(self):
+        """
+        test torch fx with torchvision Resnet18 - bias correction
+        """
+        seed_all(1)
+        input_shape = (1, 3, 224, 224)
+        dummy_input = torch.randn(*input_shape).cuda()
+        model = models.resnet18().cuda().eval()
+        model_copy = copy.deepcopy(model)
+
+        # create fake data loader with image size (3, 224, 224)
+        data_loader = create_fake_data_loader(dataset_size=16, batch_size=16, image_size=input_shape[1:])
+        params = QuantParams(weight_bw=4, act_bw=4, round_mode="nearest",
+                             quant_scheme=QuantScheme.post_training_tf)
+        bias_correction.correct_bias(model, params, num_quant_samples=1, data_loader=data_loader,
+                                     num_bias_correct_samples=1, perform_only_empirical_bias_corr=True)
+
+        # Apply Adaround for transformed model
+        model_transformed = replace_functional_by_module(model_copy)
+        bias_correction.correct_bias(model_transformed, params, num_quant_samples=1, data_loader=data_loader,
+                                     num_bias_correct_samples=1, perform_only_empirical_bias_corr=True)
+
+        # forward pass for bias corrected original and modified model
+        # output should be close for both bias corrected original and modified model
+        assert torch.allclose(model(dummy_input), model_transformed(dummy_input))
+
+        # compare bias for very first layer
+        # Bias should be same
+        original_model_conv1_weight = model.conv1.bias.clone()
+        modified_model_conv1_weight = model_transformed.conv1.bias.clone()
+        assert np.array_equal(original_model_conv1_weight.detach().cpu().numpy(),
+                              modified_model_conv1_weight.detach().cpu().numpy())
+
+        # compare bias for very last layer
+        # Bias should be same
+        original_model_fc_weight = model.fc.bias.clone()
+        modified_model_fc_weight = model_transformed.fc.bias.clone()
+        assert np.array_equal(original_model_fc_weight.detach().cpu().numpy(),
+                              modified_model_fc_weight.detach().cpu().numpy())
