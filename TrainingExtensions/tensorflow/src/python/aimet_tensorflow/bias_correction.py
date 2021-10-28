@@ -265,10 +265,10 @@ class BiasCorrection:
                 reference_output_batch = reference_output_batch.reshape(extended_shape)
                 quantized_model_output_batch = quantized_model_output_batch.reshape(extended_shape)
 
-        # we need to reshape from tensorflow shape NxHxWxC to NxCxHxW
-        bias_correction.storePreActivationOutput(np.ascontiguousarray(reference_output_batch.transpose(0, 3, 1, 2)))
-        bias_correction.storeQuantizedPreActivationOutput(np.ascontiguousarray(
-            quantized_model_output_batch.transpose(0, 3, 1, 2)))
+            # we need to reshape from tensorflow shape NxHxWxC to NxCxHxW
+            bias_correction.storePreActivationOutput(np.ascontiguousarray(reference_output_batch.transpose(0, 3, 1, 2)))
+            bias_correction.storeQuantizedPreActivationOutput(np.ascontiguousarray(
+                quantized_model_output_batch.transpose(0, 3, 1, 2)))
 
         bias_shape = None
         is_bias_none = False
