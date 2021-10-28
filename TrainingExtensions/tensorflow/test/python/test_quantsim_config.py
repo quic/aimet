@@ -45,10 +45,8 @@ import tensorflow as tf
 tf.compat.v1.logging.set_verbosity(tf.logging.WARN)
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
 
-from aimet_common.connected_graph.connectedgraph_utils import get_all_input_ops
 from aimet_tensorflow.examples.test_models import single_residual
 from aimet_tensorflow.quantsim import QuantizationSimModel
-from aimet_tensorflow.common.connectedgraph import ConnectedGraph
 
 import libpymo as pymo
 
@@ -488,6 +486,39 @@ class TestQuantsimConfig(unittest.TestCase):
         sess.close()
         sim.session.close()
         tf.compat.v1.reset_default_graph()
+
+    def test_parse_config_file_per_channel_quantization(self):
+        """ Test if per channel quantization property gets set correctly"""
+        quantsim_config = {
+            "defaults": {
+                "ops": {
+                    "is_output_quantized": "True",
+                    "is_symmetric": "False"
+                },
+                "params": {
+                    "is_quantized": "False",
+                    "is_symmetric": "True"
+                },
+                "per_channel_quantization": "True",
+            },
+            "params": {},
+            "op_type": {},
+            "supergroups": [],
+            "model_input": {},
+            "model_output": {}
+        }
+        tf.compat.v1.reset_default_graph()
+        sess = tf.compat.v1.Session()
+        with sess.graph.as_default():
+            _ = single_residual()
+            init = tf.compat.v1.global_variables_initializer()
+            sess.run(init)
+        with open('./quantsim_config.json', 'w') as f:
+            json.dump(quantsim_config, f)
+
+        sim = QuantizationSimModel(sess, ['input_1'], ['single_residual/Softmax'],
+                                   config_file='./quantsim_config.json')
+        self.assertEqual(sim.per_channel_quantization_enabled, True)
 
     def test_parse_config_file_model_outputs(self):
         """ Test that model output quantization parameters are set correctly when using json config file """
