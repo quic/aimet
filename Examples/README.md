@@ -10,7 +10,7 @@ AIMET Examples provide reference code to learn how to load models, apply AIMET q
 - [Running AIMET Examples](#running-aimet-examples-on-the-command-line)
 
 ## Installation Instructions
-Please install AIMET and its dependencies using the instructions in this section: TODO: (link to homepage readme.md)
+Please install AIMET and its dependencies using the instructions in [this section](../README.md#installation-instructions).
 The dataloader, evaluator, and trainer utilized in the examples is for the ImageNet dataset. To run the examples end-to-end, please download it here: https://www.image-net.org/download.php 
 
 
@@ -64,7 +64,7 @@ This section describes how to apply the various quantization and compression tec
 -   _[Channel Pruning](https://github.com/quic/aimet/blob/develop/Examples/torch/compression/channel_pruning.py)_: 
     -  Removes redundant input channels from a layer and reconstructs layer weights. Once one or more input channels for a layer are removed, then it means corresponding output channels of a upstream layer could also be removed to get further compression gains. Note that the presence of skip-connections or residuals sometimes prevents upstream layers from getting output-pruned.
 -   _[Weight SVD](https://github.com/quic/aimet/blob/develop/Examples/torch/compression/weight_svd.py)_: 
-    - Weight SVD is a tensor decomposition technique which decomposes one large layer (in terms of mac or memory) into two smaller layers. Given a neural network layer, with kernel (𝑚,𝑛,ℎ,𝑤) where 𝑚 is the input channels, 𝑛 the output channels, and ℎ, 𝑤 giving the height and width of the kernel itself, Weight SVD will decompose the kernel into one of size (𝑚,𝑘,1,1) and another of size (𝑘,𝑛,h,𝑤), where 𝑘 is called the rank. The smaller the value of 𝑘 the larger the degree of compression achieved.
+    - Weight SVD is a tensor decomposition technique which decomposes one large layer (in terms of mac or memory) into two smaller layers. Given a neural network layer, with kernel (m,n,ℎ,w) where m is the input channels, n the output channels, and ℎ, w giving the height and width of the kernel itself, Weight SVD will decompose the kernel into one of size (m,k,1,1) and another of size (k,n,h,w), where k is called the rank. The smaller the value of k the larger the degree of compression achieved.
 
 ## Running AIMET Examples on the Command Line
 Step by step to run AIMET examples. Here is how you would run an AIMET example:
