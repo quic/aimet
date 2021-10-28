@@ -215,18 +215,19 @@ class ConnectedGraph(aimetCommonConnectedGraph):
 
         for start_op_name in starting_op_names:
             starting_op = self._graph.get_operation_by_name(start_op_name)
-            starting_op_info = self._module_identifier.get_op_info(starting_op)
-            op = Op(name=starting_op_info.module_name,
-                    dotted_name=starting_op_info.module_name,
-                    output_shape=None,
-                    is_anonymous=False,
-                    op_type=starting_op_info.op_type,
-                    pattern_type=starting_op_info.pattern_type,
-                    internal_ops=starting_op_info.internal_ops)
-            fill_op_info(op, starting_op_info)
-            self._ops[starting_op_info.module_name] = op
-            self._add_children_ops_to_op_queue(starting_op)
-            self.starting_ops.append(op)
+            if starting_op in self._valid_ops:
+                starting_op_info = self._module_identifier.get_op_info(starting_op)
+                op = Op(name=starting_op_info.module_name,
+                        dotted_name=starting_op_info.module_name,
+                        output_shape=None,
+                        is_anonymous=False,
+                        op_type=starting_op_info.op_type,
+                        pattern_type=starting_op_info.pattern_type,
+                        internal_ops=starting_op_info.internal_ops)
+                fill_op_info(op, starting_op_info)
+                self._ops[starting_op_info.module_name] = op
+                self._add_children_ops_to_op_queue(starting_op)
+                self.starting_ops.append(op)
 
     def _branch_ops_processing(self):
         """ Identify places in the op/product graph where branch ops need to be inserted, and create them """
