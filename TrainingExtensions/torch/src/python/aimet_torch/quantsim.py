@@ -58,6 +58,7 @@ from aimet_torch import utils
 from aimet_torch.onnx_utils import OnnxSaver, OnnxExportApiArgs
 from aimet_torch.meta.connectedgraph import ConnectedGraph
 from aimet_torch.qc_quantize_recurrent import QcQuantizeRecurrent
+from aimet_torch.tensor_quantizer import QuantizationDataType
 
 import libpymo
 logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Quant)
@@ -102,6 +103,7 @@ class QuantParams:
         self.quant_scheme = quant_scheme
         self.config_file = config_file
 
+default_data_type = QuantizationDataType.int
 
 class QuantizationSimModel:
     """
@@ -123,8 +125,8 @@ class QuantizationSimModel:
         :param quant_scheme: Quantization scheme. Supported options are 'tf_enhanced' or 'tf' or using Quant Scheme Enum
                              QuantScheme.post_training_tf or QuantScheme.post_training_tf_enhanced
         :param rounding_mode: Rounding mode. Supported options are 'nearest' or 'stochastic'
-        :param default_output_bw: Default bitwidth (4-31) to use for quantizing layer inputs and outputs
-        :param default_param_bw: Default bitwidth (4-31) to use for quantizing layer parameters
+        :param default_output_bw: Default bitwidth (4-31) to use for quantizing all layer inputs and outputs
+        :param default_param_bw: Default bitwidth (4-31) to use for quantizing all layer parameters
         :param in_place: If True, then the given 'model' is modified in-place to add quant-sim nodes.
                 Only suggested use of this option is when the user wants to avoid creating a copy of the model
         :param config_file: Path to Configuration file for model quantizers
@@ -151,6 +153,7 @@ class QuantizationSimModel:
         self._rounding_mode = rounding_mode
         self._default_output_bw = default_output_bw
         self._default_param_bw = default_param_bw
+        self._data_type = default_data_type
 
         # Add quantization layers
         num_inout_tensors = utils.find_num_inout_tensors_per_module(self.model, dummy_input)
@@ -656,8 +659,8 @@ class QuantizationSimModel:
         # StaticGridQuantWrapper.
         quantizer = qc_quantize_modules_dict.get(type(module_to_quantize), StaticGridQuantWrapper)
         quantized_module = quantizer(module_to_quantize, self._default_param_bw, self._default_output_bw,
-                                     self._rounding_mode, self._quant_scheme,
-                                     num_inputs=num_in_tensors, num_outputs=num_out_tensors)
+                                     self._rounding_mode, self._quant_scheme, num_inputs=num_in_tensors,
+                                     num_outputs=num_out_tensors)
 
         return quantized_module
 

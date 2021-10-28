@@ -64,7 +64,7 @@ from aimet_torch import utils, elementwise_ops
 
 from aimet_torch.qc_quantize_op import QcQuantizeWrapper, QcQuantizeStandalone, MAP_ROUND_MODE_TO_PYMO, \
     MAP_QUANT_SCHEME_TO_PYMO, StaticGridQuantWrapper, QcQuantizeOpMode
-from aimet_torch.tensor_quantizer import StaticGridPerChannelQuantizer, StaticGridPerTensorQuantizer
+from aimet_torch.tensor_quantizer import StaticGridPerChannelQuantizer, StaticGridPerTensorQuantizer, QuantizationDataType
 from aimet_common.utils import AimetLogger
 
 logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Test)
@@ -183,7 +183,7 @@ class ModelWithStandaloneOps(nn.Module):
         self.conv2 = nn.Conv2d(10, 20, kernel_size=5)
         self.myquant = QcQuantizeStandalone(activation_bw=8, round_mode=MAP_ROUND_MODE_TO_PYMO['nearest'],
                                             quant_scheme=MAP_QUANT_SCHEME_TO_PYMO[QuantScheme.post_training_tf_enhanced],
-                                            is_symmetric=False)
+                                            is_symmetric=False, data_type=QuantizationDataType.int)
         self.conv2_drop = nn.Dropout2d()
         self.maxpool2 = nn.MaxPool2d(2)
         self.relu2 = nn.ReLU()
@@ -348,7 +348,7 @@ class TestQuantizationSim:
     def test_is_quantizable_module_negative(self):
         """With a non-quantizable module"""
         conv1 = StaticGridQuantWrapper(nn.Conv2d(1, 10, 5), weight_bw=8, activation_bw=8, round_mode='nearest',
-                                       quant_scheme=QuantScheme.post_training_tf_enhanced)
+                                       quant_scheme=QuantScheme.post_training_tf_enhanced, data_type=QuantizationDataType.int)
         assert not QuantizationSimModel._is_quantizable_module(conv1)
 
     # ------------------------------------------------------------
@@ -417,7 +417,8 @@ class TestQuantizationSim:
             def __init__(self):
                 super(Net, self).__init__()
                 self.conv1 = StaticGridQuantWrapper(nn.Conv2d(1, 10, 5), weight_bw=8, activation_bw=8,
-                                                    round_mode='stochastic', quant_scheme=QuantScheme.post_training_tf_enhanced)
+                                                    round_mode='stochastic', quant_scheme=QuantScheme.post_training_tf_enhanced,
+                                                    data_type=QuantizationDataType.int)
                 self.conv2 = nn.Conv2d(10, 20, kernel_size=5)
                 self.conv2_drop = nn.Dropout2d()
                 self.fc1 = nn.Linear(320, 50)
@@ -544,7 +545,8 @@ class TestQuantizationSim:
                 self.layers = nn.ModuleList([nn.Linear(1, 32), nn.Linear(32, 64), nn.Conv2d(1, 32, 5),
                                              StaticGridQuantWrapper(nn.Conv2d(1, 10, 5), weight_bw=8, activation_bw=8,
                                                                     round_mode='nearest',
-                                                                    quant_scheme=QuantScheme.post_training_tf_enhanced)])
+                                                                    quant_scheme=QuantScheme.post_training_tf_enhanced,
+                                                                    data_type=QuantizationDataType.int)])
 
             def forward(self, *inputs):
                 return self.layers[2](inputs[0])
@@ -565,7 +567,8 @@ class TestQuantizationSim:
                 self.layers_deep = nn.ModuleList([nn.ModuleList([nn.BatchNorm2d(10), nn.ReLU()]),
                                                   nn.Linear(3, 32), nn.Linear(32, 64), nn.Conv2d(1, 32, 5),
                                                   StaticGridQuantWrapper(nn.Conv2d(1, 10, 5), weight_bw=8, activation_bw=8,
-                                                                         round_mode='nearest', quant_scheme=QuantScheme.post_training_tf_enhanced)])
+                                                                         round_mode='nearest', quant_scheme=QuantScheme.post_training_tf_enhanced,
+                                                                         data_type=QuantizationDataType.int)])
 
             def forward(self, *inputs):
                 return self.layers[2](inputs[0])
@@ -589,7 +592,8 @@ class TestQuantizationSim:
                                                   nn.Linear(3, 32), nn.Linear(32, 64), nn.Conv2d(1, 32, 5),
                                                   StaticGridQuantWrapper(nn.Conv2d(1, 10, 5), weight_bw=8, activation_bw=8,
                                                                          round_mode='nearest',
-                                                                         quant_scheme=QuantScheme.post_training_tf_enhanced)])
+                                                                         quant_scheme=QuantScheme.post_training_tf_enhanced,
+                                                                         data_type=QuantizationDataType.int)])
 
             def forward(self, *inputs):
                 return self.layers[2](inputs[0])
@@ -1574,9 +1578,9 @@ class TestQuantizationSim:
 
     def test_quantizing_qc_quantize_module(self):
         """ Test that qc_quantize_module is identified as not quantizable """
-        qc_quantize_module = QcQuantizeRecurrent(torch.nn.RNN(input_size=3, hidden_size=5, num_layers=1),
-                                                 weight_bw=16, activation_bw=16,
-                                                 quant_scheme=QuantScheme.post_training_tf, round_mode='nearest')
+        qc_quantize_module = QcQuantizeRecurrent(torch.nn.RNN(input_size=3, hidden_size=5, num_layers=1), weight_bw=16,
+                                                 activation_bw=16, quant_scheme=QuantScheme.post_training_tf,
+                                                 round_mode='nearest', data_type=QuantizationDataType.int)
         assert not QuantizationSimModel._is_quantizable_module(qc_quantize_module)
 
     def test_export_recurrent_model(self):
@@ -1624,7 +1628,8 @@ class TestQuantizationSim:
         """ Test set and freeze parameter encoding  """
         conv1 = torch.nn.Conv2d(4, 4, 1)
         quant_module = StaticGridQuantWrapper(conv1, weight_bw=8, activation_bw=8, round_mode='nearest',
-                                              quant_scheme=QuantScheme.post_training_tf_enhanced)
+                                              quant_scheme=QuantScheme.post_training_tf_enhanced,
+                                              data_type=QuantizationDataType.int)
 
         param_encodings = {'conv1.weight': [{'bitwidth': 4, 'is_symmetric': 'False', 'max': 0.3, 'min': -0.2,
                                              'offset': -7.0, 'scale': 0.038}]}

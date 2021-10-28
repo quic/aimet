@@ -46,13 +46,11 @@ from aimet_common.utils import AimetLogger
 from aimet_torch.defs import OpToIOTensors
 from aimet_torch.qc_quantize_op import MAP_ROUND_MODE_TO_PYMO, MAP_QUANT_SCHEME_TO_PYMO
 from aimet_torch.qc_quantize_op import QcQuantizeOpMode, tensor_quantizer_factory
-from aimet_torch.tensor_quantizer import StaticGridPerTensorQuantizer
+from aimet_torch.tensor_quantizer import StaticGridPerTensorQuantizer, QuantizationDataType
 
 import libpymo
 
-
 _logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Quant)
-
 
 # grouped quantizers configuration with tensor that share the same quantizer
 
@@ -130,7 +128,7 @@ class QcQuantizeRecurrent(torch.nn.Module):
     def __init__(self, module_to_quantize: Union[torch.nn.RNN, torch.nn.LSTM, torch.nn.GRU],
                  weight_bw: int, activation_bw: int, round_mode: str,
                  quant_scheme: Union[QuantScheme, libpymo.QuantizationMode], is_symmetric: bool = False,
-                 num_inputs=1, num_outputs=1):
+                 num_inputs=1, num_outputs=1, data_type: QuantizationDataType = QuantizationDataType.int):
         """
         Constructor
         :param module_to_quantize: Module that needs to be quantized
@@ -155,6 +153,7 @@ class QcQuantizeRecurrent(torch.nn.Module):
         self._grouped_quantizers = {}
         self._param_quantizers = {}
         self._grouped_param_quantizers = set()
+        self._data_type = data_type
 
         hasCellState: bool = isinstance(self.module_to_quantize, torch.nn.LSTM)
         outputs = ['h_l{}', 'c_l{}'] if hasCellState else ['h_l{}']
@@ -227,6 +226,7 @@ class QcQuantizeRecurrent(torch.nn.Module):
         :param round_mode: Rounding mode (e.g. Nearest)
         :param quant_scheme: Quantization scheme (e.g. TF Enhanced)
         :param is_symmetric: Symmetric or asymmetric quantization
+        :param data_type: Quantization data type (int or float)
         """
         quantizers = {}
         for layer in range(self.num_layers):
@@ -239,7 +239,7 @@ class QcQuantizeRecurrent(torch.nn.Module):
                             tensor_quantizer_factory(activation_bw,
                                                      round_mode,
                                                      quant_scheme,
-                                                     is_symmetric,
+                                                     use_symmetric_encodings=is_symmetric,
                                                      enabled_by_default=False)
                     quantizers[name_in_layer] = self._grouped_quantizers[group_name]
                 else:
@@ -247,7 +247,7 @@ class QcQuantizeRecurrent(torch.nn.Module):
                         activation_bw,
                         round_mode,
                         quant_scheme,
-                        is_symmetric,
+                        use_symmetric_encodings=is_symmetric,
                         enabled_by_default=False)
         return quantizers
 
@@ -269,7 +269,7 @@ class QcQuantizeRecurrent(torch.nn.Module):
                         tensor_quantizer_factory(weight_bw,
                                                  round_mode,
                                                  quant_scheme,
-                                                 is_symmetric,
+                                                 use_symmetric_encodings=is_symmetric,
                                                  enabled_by_default=False)
                 tensor_names = [tensor_name.format(layer) for tensor_name in tensor_names]
                 for tensor_name in tensor_names:
@@ -287,7 +287,7 @@ class QcQuantizeRecurrent(torch.nn.Module):
                     weight_bw,
                     round_mode,
                     quant_scheme,
-                    is_symmetric,
+                    use_symmetric_encodings=is_symmetric,
                     enabled_by_default=False)
 
     def _set_default_eai_quantizer_state(self):
