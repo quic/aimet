@@ -49,6 +49,21 @@ from aimet_common.utils import AimetLogger
 logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Quant)
 
 
+def get_per_channel_quantization_flag(config_file: str) -> bool:
+    """
+    Returns Per channel quantization flag if it is set in config file else returns False
+    """
+    if not config_file:
+        config_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'default_config.json')
+        logger.info('No config file provided, defaulting to config file at %s', config_file)
+    quantsim_configs = JsonConfigImporter.import_json_config_file(config_file)
+
+    # Check if per channel quantization is enabled
+    default_configs = quantsim_configs[ConfigDictKeys.DEFAULTS]
+    if ConfigDictKeys.PER_CHANNEL_QUANTIZATION in default_configs:
+        return default_configs[ConfigDictKeys.PER_CHANNEL_QUANTIZATION]
+    return False
+
 class SupergroupConfigCallback(ABC):
     """ Class acting as a callback for when supergroups are found """
     def __init__(self):

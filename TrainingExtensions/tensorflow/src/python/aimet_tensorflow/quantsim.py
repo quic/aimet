@@ -47,6 +47,7 @@ from tensorflow.python.framework import ops as tf_ops
 from tensorflow.contrib import graph_editor
 from aimet_common.defs import QuantScheme
 from aimet_common.quantsim import gate_min_max, calculate_delta_offset, encoding_version
+from aimet_common.quantsim_config.quantsim_config import get_per_channel_quantization_flag
 from aimet_common.utils import AimetLogger, save_json_yaml
 from aimet_tensorflow.common import core
 from aimet_tensorflow.utils.common import update_variables_with_values, save_data_to_pickle_file, \
@@ -181,12 +182,20 @@ class QuantizationSimModel:
         with self.session.graph.as_default():
             saver = tf.compat.v1.train.Saver()
         saver.save(self.session, save_path=WORKING_DIR+'orig_model_before_quantsim')
+        self.per_channel_quantization_enabled = self._per_channel_quantization_enabled(config_file)
 
         self._add_and_configure_quant_nodes(starting_op_names, output_op_names, default_param_bw, default_output_bw,
                                             config_file)
 
         # Save and load the session so the graph changes can take effect
         self._save_and_load_sim_model()
+
+    @staticmethod
+    def _per_channel_quantization_enabled(config_file: str) -> bool:
+        """
+        Sets Per channel Quantization parameter as True or False based on config file
+        """
+        return get_per_channel_quantization_flag(config_file)
 
     def __getstate__(self):
         # convert object to pickle-able state
