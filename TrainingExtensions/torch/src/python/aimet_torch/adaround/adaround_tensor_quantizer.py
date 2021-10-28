@@ -43,7 +43,7 @@ import torch.nn
 
 # Import AIMET specific modules
 from aimet_common.defs import AdaroundConstants
-from aimet_torch.tensor_quantizer import TensorQuantizer
+from aimet_torch.tensor_quantizer import TensorQuantizer, QuantizationDataType
 
 
 class AdaroundTensorQuantizer(TensorQuantizer):
@@ -60,8 +60,9 @@ class AdaroundTensorQuantizer(TensorQuantizer):
         :param use_symmetric_encodings: True if symmetric encoding is used.  False otherwise.
         :param enabled_by_default: True if quantization of tensor is enabled.  False otherwise.
         """
+        #TODO Remove the hardcoding of data_type
         super(AdaroundTensorQuantizer, self).__init__(bitwidth, round_mode, quant_scheme, use_symmetric_encodings,
-                                                      enabled_by_default)
+                                                      enabled_by_default, QuantizationDataType.int)
         self.encoding = None
         # V in System HLD
         self.alpha = None

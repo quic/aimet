@@ -48,6 +48,7 @@ from aimet_common.utils import AimetLogger
 from aimet_common.defs import QuantScheme
 from aimet_torch import utils
 from aimet_torch.tensor_quantizer import StaticGridPerTensorQuantizer, StaticGridPerChannelQuantizer
+from aimet_torch.tensor_quantizer import QuantizationDataType
 import aimet_torch.quantsim_straight_through_grad as ste
 
 MAP_ROUND_MODE_TO_PYMO = {'nearest':     libpymo.RoundingMode.ROUND_NEAREST,
@@ -68,19 +69,6 @@ class QcQuantizeOpMode(Enum):
     ACTIVE = 3
 
 
-def module_has_weights(module):
-    """
-    Check if the module has a parameter called "weight"
-    :param module: Module
-    :return: True, if module has a parameter called "weight", False otherwise
-    """
-    for name, _ in module.named_parameters():
-        if name == "weight":
-            return True
-
-    return False
-
-
 def tensor_quantizer_factory(bitwidth: int, round_mode: str, quant_scheme: Union[QuantScheme, libpymo.QuantizationMode],
                              use_symmetric_encodings: bool, enabled_by_default: bool):
     """
@@ -95,8 +83,21 @@ def tensor_quantizer_factory(bitwidth: int, round_mode: str, quant_scheme: Union
     assert quant_scheme in [libpymo.QuantizationMode.QUANTIZATION_TF_ENHANCED, libpymo.QuantizationMode.QUANTIZATION_TF]
 
     tensor_quantizer = StaticGridPerTensorQuantizer(bitwidth, round_mode, quant_scheme, use_symmetric_encodings,
-                                                    enabled_by_default)
+                                                    enabled_by_default, QuantizationDataType.int)
     return tensor_quantizer
+
+
+def module_has_weights(module):
+    """
+    Check if the module has a parameter called "weight"
+    :param module: Module
+    :return: True, if module has a parameter called "weight", False otherwise
+    """
+    for name, _ in module.named_parameters():
+        if name == "weight":
+            return True
+
+    return False
 
 
 class QcQuantizeStandAloneBase(nn.Module):
@@ -104,7 +105,7 @@ class QcQuantizeStandAloneBase(nn.Module):
     Base class for the quantization custom ops
     """
 
-    def __init__(self, activation_bw, round_mode, quant_scheme, is_symmetric):
+    def __init__(self, activation_bw, round_mode, quant_scheme, is_symmetric, data_type):
         """
         Constructor
         :param activation_bw: Quantization bitwidth for activations
@@ -122,6 +123,7 @@ class QcQuantizeStandAloneBase(nn.Module):
         self.output_quantizer = self.output_quantizers[0]
 
         self._mode = QcQuantizeOpMode.ANALYSIS
+        self._data_type = data_type # TODO remove this variable after tensor_quantizer_factory is using data_type
 
     @abc.abstractmethod
     def forward(self, *inputs):
@@ -193,7 +195,8 @@ class QcQuantizeWrapper(nn.Module):
 
     # pylint: disable=too-many-arguments
     def __init__(self, module_to_wrap: nn.Module, weight_bw: int, activation_bw: int, round_mode, quant_scheme,
-                 is_output_quantized=True, is_symmetric=False, num_inputs=1, num_outputs=1):
+                 is_output_quantized=True, is_symmetric=False, num_inputs=1, num_outputs=1,
+                 data_type: QuantizationDataType = QuantizationDataType.int):
         """
         Constructor
         :param module_to_wrap: Module that will be wrapped with this custom op
@@ -220,6 +223,7 @@ class QcQuantizeWrapper(nn.Module):
 
         self._mode = QcQuantizeOpMode.ANALYSIS
         self._module_to_wrap = module_to_wrap
+        self._data_type = data_type
 
         # Create quantizer for each parameter and compute encodings
         self.param_quantizers = {}
@@ -289,7 +293,8 @@ class StaticGridQuantWrapper(QcQuantizeWrapper):
 
     # pylint: disable=too-many-arguments
     def __init__(self, module_to_wrap: nn.Module, weight_bw: int, activation_bw: int, round_mode, quant_scheme,
-                 is_output_quantized=True, is_symmetric=False, num_inputs=1, num_outputs=1):
+                 is_output_quantized=True, is_symmetric=False, num_inputs=1, num_outputs=1,
+                 data_type: QuantizationDataType = QuantizationDataType.int):
         """
         Constructor
         :param module_to_wrap: Module that will be wrapped with this custom op
@@ -307,7 +312,8 @@ class StaticGridQuantWrapper(QcQuantizeWrapper):
         quant_scheme = MAP_QUANT_SCHEME_TO_PYMO[quant_scheme]
 
         super(StaticGridQuantWrapper, self).__init__(module_to_wrap, weight_bw, activation_bw, round_mode, quant_scheme,
-                                                     is_output_quantized, is_symmetric, num_inputs, num_outputs)
+                                                     is_output_quantized, is_symmetric, num_inputs,
+                                                     num_outputs, data_type)
 
     def forward(self, *inputs):
         """

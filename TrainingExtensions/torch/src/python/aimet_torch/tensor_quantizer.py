@@ -39,18 +39,22 @@
 
 import io
 from typing import Union, List
+from enum import Enum
 
 import torch
-
 from aimet_common.defs import QuantScheme
 from aimet_common.utils import AimetLogger
 import aimet_torch.quantsim_straight_through_grad as ste
-import libpymo
+import libpymo # pylint: disable=import-error
 #TODO Pylint fails due an unknown import issue. We need to debug this later.
 import AimetTensorQuantizer # pylint: disable=import-error
 
 _logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Quant)
 
+class QuantizationDataType(Enum):
+    """ Enumeration of tensor quantizer data types supported """
+    int = 1
+    float = 2
 
 class TensorQuantizer:
     """
@@ -59,7 +63,7 @@ class TensorQuantizer:
     """
 
     def __init__(self, bitwidth: int, round_mode: str, quant_scheme: Union[QuantScheme, str],
-                 use_symmetric_encodings: bool, enabled_by_default: bool):
+                 use_symmetric_encodings: bool, enabled_by_default: bool, data_type: QuantizationDataType = QuantizationDataType.int):
         """
         Constructor
         :param bitwidth: Quantization bitwidth
@@ -76,7 +80,7 @@ class TensorQuantizer:
         self.use_unsigned_symmetric = True
         self.bitwidth = bitwidth
         self.enabled = enabled_by_default
-
+        self.data_type = data_type
 
 class PickableState:
     """
@@ -98,7 +102,7 @@ class StaticGridTensorQuantizer(TensorQuantizer):
     """
 
     def __init__(self, bitwidth: int, round_mode: str, quant_scheme: str, use_symmetric_encodings: bool,
-                 enabled_by_default: bool):
+                 enabled_by_default: bool, data_type: QuantizationDataType = QuantizationDataType.int):
         """
         Constructor
         :param bitwidth: Quantization bitwidth
@@ -108,7 +112,7 @@ class StaticGridTensorQuantizer(TensorQuantizer):
         :param enabled_by_default: True if quantization of tensor is enabled.  False otherwise.
         """
         super(StaticGridTensorQuantizer, self).__init__(bitwidth, round_mode, quant_scheme, use_symmetric_encodings,
-                                                        enabled_by_default)
+                                                        enabled_by_default, data_type)
         self._cppOp = None
         self._encoding = None
         self._is_encoding_frozen = False
@@ -186,7 +190,7 @@ class StaticGridTensorQuantizer(TensorQuantizer):
         """
         Compute the quantization encoding for this tensor
         """
-        if self.enabled and not self._is_encoding_frozen:
+        if self.enabled and not self._is_encoding_frozen and self.data_type is QuantizationDataType.int:
 
             self._encoding = []
             for op in self._cppOp:
@@ -252,7 +256,7 @@ class StaticGridPerTensorQuantizer(StaticGridTensorQuantizer):
     """
 
     def __init__(self, bitwidth: int, round_mode: str, quant_scheme: str, use_symmetric_encodings: bool,
-                 enabled_by_default: bool):
+                 enabled_by_default: bool, data_type: QuantizationDataType = QuantizationDataType.int):
         """
         Constructor
         :param bitwidth: Quantization bitwidth
@@ -262,7 +266,7 @@ class StaticGridPerTensorQuantizer(StaticGridTensorQuantizer):
         :param enabled_by_default: True if quantization of tensor is enabled.  False otherwise.
         """
         super(StaticGridPerTensorQuantizer, self).__init__(bitwidth, round_mode, quant_scheme, use_symmetric_encodings,
-                                                           enabled_by_default)
+                                                           enabled_by_default, data_type)
         self._cppOp = [AimetTensorQuantizer.AimetTensorQuantizer(quant_scheme)]
         self._encoding = None
         self._is_encoding_frozen = False
@@ -306,7 +310,7 @@ class StaticGridPerChannelQuantizer(StaticGridTensorQuantizer):
         :param ch_axis: Channel Axis to use for per-channel quantization
         """
         super(StaticGridPerChannelQuantizer, self).__init__(bitwidth, round_mode, quant_scheme, use_symmetric_encodings,
-                                                            enabled_by_default)
+                                                            enabled_by_default, data_type=QuantizationDataType.int)
         self._cppOp = [AimetTensorQuantizer.AimetTensorQuantizer(quant_scheme) for _ in range(num_channels)]
         self._ch_axis = ch_axis
         self._encoding = None
@@ -339,19 +343,35 @@ class QuantizeDequantize(torch.autograd.Function):
 
     @staticmethod
     def _per_tensor_quantize_dequantize(tensor, tensor_quantizer, round_mode):
+        """
+        If the quantization data type is floating point, then call the pytorch functions to
+        perform quantization followed by dequantization. Else call the custom function to
+        get the new tensor
+        """
         # pylint:disable = protected-access
-        return tensor_quantizer._cppOp[0].quantizeDequantize(tensor, tensor_quantizer.encoding,
-                                                             round_mode, tensor.is_cuda)
+        if tensor_quantizer.data_type == QuantizationDataType.float:
+            quantized_tensor = tensor.half()
+            quantized_tensor = quantized_tensor.float()
+        else:
+            quantized_tensor = tensor_quantizer._cppOp[0].quantizeDequantize(tensor, tensor_quantizer.encoding,
+                                                                             round_mode, tensor.is_cuda)
+        return quantized_tensor
 
     @staticmethod
     def _per_channel_quantize_dequantize(tensor, tensor_quantizer, round_mode):
         quantized_tensors = []
 
+        if tensor_quantizer.data_type == QuantizationDataType.float:
+            _logger.error('float data_type is not supported for per channel quantize-dequantize')
+            raise AssertionError
+
         # pylint:disable = protected-access
         for index, op in enumerate(tensor_quantizer._cppOp):
             tensor_slice = tensor.select(tensor_quantizer._ch_axis, index)
-            quantized_tensors.append(op.quantizeDequantize(tensor_slice, tensor_quantizer._encoding[index],
-                                                           round_mode, tensor.is_cuda))
+            # pylint:disable = protected-access
+            computed_tensor = op.quantizeDequantize(tensor_slice, tensor_quantizer._encoding[index],
+                                                    round_mode, tensor.is_cuda)
+            quantized_tensors.append(computed_tensor)
         quantized_tensor = torch.stack(tuple(quantized_tensors), dim=tensor_quantizer._ch_axis)
         return quantized_tensor
 
@@ -385,9 +405,9 @@ class QuantizeDequantize(torch.autograd.Function):
 
     @staticmethod
     def backward(ctx, output_grad):
-        tensor = ctx.saved_tensors
         tensor_quantizer = ctx.tensor_quantizer
-        if tensor_quantizer.enabled:
+        if tensor_quantizer.enabled and tensor_quantizer.data_type == QuantizationDataType.int:
+            tensor = ctx.saved_tensors
             # pylint: disable=protected-access
             if len(tensor_quantizer._cppOp) > 1:
                 ch_axis = tensor_quantizer._ch_axis
@@ -399,7 +419,6 @@ class QuantizeDequantize(torch.autograd.Function):
             grad = output_grad
 
         return grad, None, None
-
 
 class Quantize(torch.autograd.Function):
     """

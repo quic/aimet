@@ -47,6 +47,7 @@ import libpymo
 from aimet_common.defs import QuantScheme
 from aimet_common.utils import AimetLogger
 from aimet_torch.qc_quantize_recurrent import QcQuantizeRecurrent
+from aimet_torch.tensor_quantizer import QuantizationDataType
 
 logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Test)
 
@@ -180,7 +181,8 @@ class TestQcQuantizeRecurrentOp(unittest.TestCase):
        helper method to run quant RNN test
         """
         quant_op = QcQuantizeRecurrent(module_to_quantize=tc.model, weight_bw=32, activation_bw=32, is_symmetric=False,
-                                       quant_scheme=QuantScheme.post_training_tf_enhanced, round_mode='nearest')
+                                       quant_scheme=QuantScheme.post_training_tf_enhanced, round_mode='nearest',
+                                       data_type=QuantizationDataType.int)
 
         for input_quantizer in quant_op.input_quantizers.values():
             input_quantizer.enabled = False
@@ -211,7 +213,8 @@ class TestQcQuantizeRecurrentOp(unittest.TestCase):
     def validate_backward_pass(self, tc: TestCase):
         original_model = copy.deepcopy(tc.model)
         quant_op = QcQuantizeRecurrent(module_to_quantize=tc.model, weight_bw=8, activation_bw=8, is_symmetric=False,
-                                       quant_scheme=QuantScheme.post_training_tf_enhanced, round_mode='nearest')
+                                       quant_scheme=QuantScheme.post_training_tf_enhanced, round_mode='nearest',
+                                       data_type=QuantizationDataType.int)
         encodings = libpymo.TfEncoding()
         encodings.bw = 8
         encodings.max = 3
@@ -279,7 +282,8 @@ class TestQcQuantizeRecurrentOp(unittest.TestCase):
         """
         original_model = copy.deepcopy(tc.model)
         quant_op = QcQuantizeRecurrent(module_to_quantize=tc.model, weight_bw=8, activation_bw=8, is_symmetric=False,
-                                       quant_scheme=QuantScheme.post_training_tf_enhanced, round_mode='nearest')
+                                       quant_scheme=QuantScheme.post_training_tf_enhanced, round_mode='nearest',
+                                       data_type=QuantizationDataType.int)
         quant_op.eval()
         inp = torch.rand(tc.input_shape, requires_grad=True).to(tc.device)
         encodings = libpymo.TfEncoding()
@@ -345,7 +349,8 @@ class TestQcQuantizeRecurrentOp(unittest.TestCase):
        helper method to run quant RNN test
         """
         quant_op = QcQuantizeRecurrent(module_to_quantize=tc.model, weight_bw=32, activation_bw=32, is_symmetric=False,
-                                       quant_scheme=QuantScheme.post_training_tf_enhanced, round_mode='nearest')
+                                       quant_scheme=QuantScheme.post_training_tf_enhanced, round_mode='nearest',
+                                       data_type=QuantizationDataType.int)
 
         for input_quantizer in quant_op.input_quantizers.values():
             input_quantizer.enabled = False
@@ -427,7 +432,8 @@ class TestQcQuantizeRecurrentOp(unittest.TestCase):
         model = torch.nn.LSTM(input_size=4, hidden_size=5, num_layers=2, bidirectional=True, bias=True)
 
         quant_op = QcQuantizeRecurrent(module_to_quantize=model, weight_bw=8, activation_bw=8, is_symmetric=False,
-                                       quant_scheme=QuantScheme.post_training_tf_enhanced, round_mode='nearest')
+                                       quant_scheme=QuantScheme.post_training_tf_enhanced, round_mode='nearest',
+                                       data_type=QuantizationDataType.int)
 
         self.assertEqual(8, quant_op.input_quantizers['input_l0'].bitwidth)
         self.assertEqual(8, quant_op.input_quantizers['initial_h_l0'].bitwidth)
