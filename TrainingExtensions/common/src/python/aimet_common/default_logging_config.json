@@ -82,6 +82,12 @@
             "level": "INFO",
             "handlers": ["console"],
             "propagate": false
+        },
+
+        "UnifiedPTQ": {
+            "level": "INFO",
+            "handlers": ["console"],
+            "propagate": false
         }
 
     },
