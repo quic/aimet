@@ -41,7 +41,7 @@ import unittest.mock
 import torch
 import torch.nn as nn
 import numpy as np
-from aimet_torch.elementwise_ops import Add, Subtract, Multiply, Divide, Concat
+from aimet_torch.elementwise_ops import Add, Subtract, Multiply, Divide, Concat, MatMul
 from aimet_torch.quantsim import QuantizationSimModel
 import libpymo
 
@@ -138,4 +138,13 @@ class TestTrainingExtensionElementwiseOps(unittest.TestCase):
         input2 = torch.rand((5, 10, 10, 20))
         out = model(input1, input2)
         out1 = torch.cat((input1, input2), 0)
+        self.assertTrue(np.allclose(out, out1))
+
+    def test_matmul_op(self):
+        torch.manual_seed(10)
+        model = Model(MatMul())
+        tensor1 = torch.randn(10, 3, 4)
+        tensor2 = torch.randn(10, 4, 5)
+        out = model(tensor1, tensor2)
+        out1 = torch.matmul(tensor1, tensor2)
         self.assertTrue(np.allclose(out, out1))

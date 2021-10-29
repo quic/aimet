@@ -98,3 +98,15 @@ class Concat(torch.nn.Module):
         Forward-pass routine for divide op
         """
         return torch.cat((x, y), self.axis)
+
+
+class MatMul(torch.nn.Module):
+    """ MatMul module for a functional matmul"""
+
+    # pylint:disable=arguments-differ
+    @staticmethod
+    def forward(x, y):
+        """
+        Forward-pass routine for divide op
+        """
+        return torch.matmul(x, y)
