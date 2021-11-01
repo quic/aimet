@@ -40,7 +40,7 @@
 
 from typing import Tuple, Union, List, Dict, Set
 
-import  numpy as np
+import numpy as np
 import tensorflow as tf
 import libpymo
 from aimet_common.utils import AimetLogger
@@ -49,9 +49,11 @@ from aimet_tensorflow.keras.utils.op.batchnorm import BNUtils
 
 logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Utils)
 
-LAYER_TYPE = Union[tf.keras.layers.Conv2D, tf.keras.layers.Dense, tf.keras.layers.Conv2DTranspose, tf.keras.layers.DepthwiseConv2D]
+LAYER_TYPE = Union[tf.keras.layers.Conv2D, tf.keras.layers.Dense, tf.keras.layers.Conv2DTranspose,
+                   tf.keras.layers.DepthwiseConv2D]
 
-PAIR_TYPE = Union[Tuple[LAYER_TYPE, tf.keras.layers.BatchNormalization, bool], Tuple[tf.keras.layers.BatchNormalization, LAYER_TYPE, bool]]
+PAIR_TYPE = Union[Tuple[LAYER_TYPE, tf.keras.layers.BatchNormalization, bool],
+                  Tuple[tf.keras.layers.BatchNormalization, LAYER_TYPE, bool]]
 
 BN_TYPE = tf.keras.layers.BatchNormalization
 # Todo: search for more types of convolution
@@ -60,17 +62,21 @@ CONV_TYPE = tf.keras.layers.Conv2D
 FLATTEN_TYPE = Union[tf.keras.layers.Flatten, tf.keras.layers.Reshape]
 
 
-def _check_layer_to_find_pattern(cur_layer: tf.keras.layers.Layer, conv_linear_with_bn_dict: Dict[Union[CONV_TYPE, LINEAR_TYPE], List[Union[None, BN_TYPE]]],
-                                 layer_out_node_ref: Dict, has_seen: List[Union[None, CONV_TYPE, BN_TYPE, FLATTEN_TYPE]]):
+def _check_layer_to_find_pattern(cur_layer: tf.keras.layers.Layer,
+                                 conv_linear_with_bn_dict: Dict[Union[CONV_TYPE, LINEAR_TYPE],
+                                                                List[Union[None, BN_TYPE]]],
+                                 layer_out_node_ref: Dict,
+                                 has_seen: List[Union[None, CONV_TYPE, BN_TYPE, FLATTEN_TYPE]]):
     """
     find all paths in the model considering all inputs.
 
     :param cur_layer: layer to investigate for finding a pattern
-    :param conv_linear_with_bn_dict: dictionary to store possible conv_bn pairs, key: Dense or Conv layer
-             & Value: list of BNS; first index in this list shows bn_in and the second index shows bn_out
+    :param conv_linear_with_bn_dict: dictionary to store possible conv_bn pairs,
+        key: Dense or Conv layer & Value: list of BNS;
+        first index in this list shows bn_in and the second index shows bn_out
     :param layer_out_node_ref: dictionary includes layer_ref as a key, outbound nodes as value
-    :param has_seen: for storing the layer which is useful for finding pattern in the next layers; index 0 is for conv op,
-        index 2 is for bn op and index 3 is for storing flatten/reshape op
+    :param has_seen: for storing the layer which is useful for finding pattern in the next layers;
+        index 0 is for conv op, index 2 is for bn op and index 3 is for storing flatten/reshape op
     """
 
     # pylint: disable=too-many-branches
@@ -78,7 +84,8 @@ def _check_layer_to_find_pattern(cur_layer: tf.keras.layers.Layer, conv_linear_w
         if has_seen[1] is not None:
             conv_linear_with_bn_dict[cur_layer] = [has_seen[1], None]
             has_seen[1] = None
-        if (cur_layer.activation is tf.keras.activations.linear) and (cur_layer in layer_out_node_ref) and len(layer_out_node_ref[cur_layer]) == 1:
+        if (cur_layer.activation is tf.keras.activations.linear) and \
+                (cur_layer in layer_out_node_ref) and len(layer_out_node_ref[cur_layer]) == 1:
             has_seen[0] = cur_layer
     elif isinstance(cur_layer, BN_TYPE):
         if has_seen[0] is not None:
@@ -107,16 +114,21 @@ def _check_layer_to_find_pattern(cur_layer: tf.keras.layers.Layer, conv_linear_w
         has_seen[1] = None
         has_seen[2] = None
 
-def _add_children_layer_before_parent_layer(cur_layer: tf.keras.layers.Layer, node_layer_map: Dict, layer_out_node_map: Dict,
-                                            visited_layers: Set[tf.keras.layers.Layer], reversed_ordered_layers: List[tf.keras.layers.Layer]):
+
+def _add_children_layer_before_parent_layer(cur_layer: tf.keras.layers.Layer, node_layer_map: Dict,
+                                            layer_out_node_map: Dict,
+                                            visited_layers: Set[tf.keras.layers.Layer],
+                                            reversed_ordered_layers: List[tf.keras.layers.Layer]):
     """
-    Function to use topological sorting for finding all the layers which are accessible from the specific input_layer in the opposite order of occurrence.
+    Function to use topological sorting for finding all the layers which are accessible
+    from the specific input_layer in the opposite order of occurrence.
 
     :param cur_layer:layer that we want to find path from
     :param node_layer_map: dictionary includes node_ref as a key, in_layers and out_layer as value
     :param layer_out_node_map: dictionary includes layer_ref as a key, outbound nodes as value
     :param visited_layers: Set of all layers that have been visited
-    :param reversed_ordered_layers: List of layers in the opposite order of occurrence for the layers that we have visited so far
+    :param reversed_ordered_layers: List of layers in the opposite order of occurrence
+        for the layers that we have visited so far
     """
 
     # Mark the current layer as visited.
@@ -127,12 +139,16 @@ def _add_children_layer_before_parent_layer(cur_layer: tf.keras.layers.Layer, no
         for next_node in layer_out_node_map[cur_layer]:
             next_layer = node_layer_map[next_node][1]
             if next_layer not in visited_layers:
-                _add_children_layer_before_parent_layer(next_layer, node_layer_map, layer_out_node_map, visited_layers, reversed_ordered_layers)
+                _add_children_layer_before_parent_layer(next_layer, node_layer_map,
+                                                        layer_out_node_map, visited_layers,
+                                                        reversed_ordered_layers)
             reversed_ordered_layers.append(cur_layer)
     else:
         reversed_ordered_layers.append(cur_layer)
 
-def _get_ordered_layers(node_layer_map: Dict, layer_out_node_map: Dict) -> List[tf.keras.layers.Layer]:
+
+def _get_ordered_layers(node_layer_map: Dict,
+                        layer_out_node_map: Dict) -> List[tf.keras.layers.Layer]:
     """
     Function to return the list with all the layers in which layers come before parent layer.
 
@@ -150,7 +166,8 @@ def _get_ordered_layers(node_layer_map: Dict, layer_out_node_map: Dict) -> List[
     reversed_ordered_layers = []
 
     for input_layer in input_layers:
-        _add_children_layer_before_parent_layer(input_layer, node_layer_map, layer_out_node_map, visited_layers, reversed_ordered_layers)
+        _add_children_layer_before_parent_layer(input_layer, node_layer_map, layer_out_node_map,
+                                                visited_layers, reversed_ordered_layers)
 
     # reverse the list because layers are in reverse order
     ordered_layers = reversed_ordered_layers[::-1]
@@ -160,7 +177,9 @@ def _get_ordered_layers(node_layer_map: Dict, layer_out_node_map: Dict) -> List[
 
     return ordered_layers
 
-def _get_ordered_conv_linears(node_layer_map: Dict, layer_out_node_map: Dict) -> List[Union[CONV_TYPE, LINEAR_TYPE]]:
+
+def _get_ordered_conv_linears(node_layer_map: Dict,
+                              layer_out_node_map: Dict) -> List[Union[CONV_TYPE, LINEAR_TYPE]]:
     """
     helper to select a list of conv_linears in the order of occurence
 
@@ -178,20 +197,25 @@ def _get_ordered_conv_linears(node_layer_map: Dict, layer_out_node_map: Dict) ->
             ordered_conv_linears.append(layer)
     return ordered_conv_linears
 
-def _fill_conv_linear_bn_dict(cur_layer: tf.keras.layers.Layer, node_layer_ref: Dict, layer_out_node_ref: Dict,
+
+def _fill_conv_linear_bn_dict(cur_layer: tf.keras.layers.Layer, node_layer_ref: Dict,
+                              layer_out_node_ref: Dict,
                               has_seen: List[Union[None, CONV_TYPE, BN_TYPE, FLATTEN_TYPE]],
-                              visited_layer: Set[tf.keras.layers.Layer], conv_linear_with_bn_dict: Dict[Union[CONV_TYPE, LINEAR_TYPE], List[Union[None, BN_TYPE]]]):
+                              visited_layer: Set[tf.keras.layers.Layer],
+                              conv_linear_with_bn_dict: Dict[Union[CONV_TYPE, LINEAR_TYPE],
+                                                             List[Union[None, BN_TYPE]]]):
     """
     fill conv_linear_bn_dict for the model
 
     :param cur_layer: dictionary includes node_ref as a key, in_layers and out_layer as value
     :param node_layer_ref: dictionary includes node_ref as a key, in_layers and out_layer as value
     :param layer_out_node_ref: dictionary includes layer_ref as a key, outbound nodes as value
-    :paramm has_seen: for storing the layer which is useful for finding pattern in the next layers; index 0 is for conv op,
-        index 2 is for bn op and index 3 is for storing flatten/reshape op
+    :paramm has_seen: for storing the layer which is useful for finding pattern in the next layers;
+        index 0 is for conv op, index 2 is for bn op and index 3 is for storing flatten/reshape op
     :param visited_layer: to store all the layers that have been visited so far in the dictionary
-    :param conv_linear_with_bn_dict: dictionary of all possible conv_bn pairs, key: Dense or Conv layer
-             & Value: list of BNS; first index in this list shows bn_in and the second index shows bn_out
+    :param conv_linear_with_bn_dict: dictionary of all possible conv_bn pairs,
+        key: Dense or Conv layer & Value: list of BNS;
+        first index in this list shows bn_in and the second index shows bn_out
     """
 
     # Mark the current layer as visited to prevent passing from one layer more than once
@@ -203,11 +227,13 @@ def _fill_conv_linear_bn_dict(cur_layer: tf.keras.layers.Layer, node_layer_ref: 
         for next_node in layer_out_node_ref[cur_layer]:
             next_layer = node_layer_ref[next_node][1]
             if next_layer not in visited_layer:
-                _fill_conv_linear_bn_dict(next_layer, node_layer_ref, layer_out_node_ref, has_seen, visited_layer, conv_linear_with_bn_dict)
+                _fill_conv_linear_bn_dict(next_layer, node_layer_ref, layer_out_node_ref, has_seen,
+                                          visited_layer, conv_linear_with_bn_dict)
             else:
                 has_seen[0] = None
                 has_seen[1] = None
                 has_seen[2] = None
+
 
 def _find_possible_convs_linears_bn(node_layer_map: Dict, layer_out_node_map: Dict)\
         -> Dict[Union[CONV_TYPE, LINEAR_TYPE], List[Union[None, BN_TYPE]]]:
@@ -216,8 +242,9 @@ def _find_possible_convs_linears_bn(node_layer_map: Dict, layer_out_node_map: Di
 
     :param node_layer_map:  dictionary includes node_ref as a key, in_layers and out_layer as value
     :param layer_out_node_map: dictionary includes layer_ref as a key, outbound nodes as value
-    :return: return dictionary of all possible conv_bn pairs, key: Dense or Conv layer
-             & Value: list of BNS; first index in this list shows bn_in and the second index shows bn_out
+    :return: return dictionary of all possible conv_bn pairs,
+        key: Dense or Conv layer & Value: list of BNS;
+        first index in this list shows bn_in and the second index shows bn_out
     """
 
     input_layers = common.find_input_layers(node_layer_map)
@@ -225,9 +252,11 @@ def _find_possible_convs_linears_bn(node_layer_map: Dict, layer_out_node_map: Di
     conv_linear_with_bn_dict = {}
 
     for input_layer in input_layers:
-        _fill_conv_linear_bn_dict(input_layer, node_layer_map, layer_out_node_map, [None, None, None], visited_layer, conv_linear_with_bn_dict)
+        _fill_conv_linear_bn_dict(input_layer, node_layer_map, layer_out_node_map,
+                                  [None, None, None], visited_layer, conv_linear_with_bn_dict)
 
     return conv_linear_with_bn_dict
+
 
 def _get_bn_params(bn: tf.keras.layers.BatchNormalization) -> libpymo.BNParams():
     """
@@ -251,13 +280,14 @@ def _get_bn_params(bn: tf.keras.layers.BatchNormalization) -> libpymo.BNParams()
 
     return bn_params
 
+
 def _get_bias_tensor(conv_linear: LAYER_TYPE) -> libpymo.TensorParams():
     """
     Get bias tensor in given conv layer.
 
     Packs bias in the format required for BN fold
     (libpymo.TensorParams()).
-    :param conv: conv Layer
+    :param conv_linear: conv Layer
     :return: return bias param in libpymo.TensorParams() format.
     """
 
@@ -268,13 +298,14 @@ def _get_bias_tensor(conv_linear: LAYER_TYPE) -> libpymo.TensorParams():
 
     return bias_tensor
 
+
 def _get_weight_tensor_transpose_reshape(conv_linear: LAYER_TYPE) -> libpymo.TensorParams():
     """
     Get weight tensor from conv layer.
 
     Converts to right format - performs transpose and reshape.
     Packs it to the format required for BN fold (libpymo.TensorParams()).
-    :param conv: conv layer
+    :param conv_linear: conv layer
     :return: return weight tensor in libpymo.TensorParams() format.
     """
 
@@ -285,7 +316,6 @@ def _get_weight_tensor_transpose_reshape(conv_linear: LAYER_TYPE) -> libpymo.Ten
     weight = conv_linear.kernel.numpy()
     shape = conv_linear.kernel.shape
 
-
     if isinstance(conv_linear, tf.keras.layers.DepthwiseConv2D):
         # Depthwise conv layers in TF have outputs(Noc) set to 1.
         # we will use format [Nic, Noc, kh, kw] -
@@ -293,7 +323,6 @@ def _get_weight_tensor_transpose_reshape(conv_linear: LAYER_TYPE) -> libpymo.Ten
         weight = np.transpose(weight, (2, 3, 0, 1))
         # [Nic, Noc, kh, kw]
         shape = np.array([shape[2], shape[3], shape[0], shape[1]])
-
     elif isinstance(conv_linear, tf.keras.layers.Dense):
         shape = np.concatenate((np.array([1, 1]), shape))
         weight = np.transpose(weight, (1, 0))
@@ -311,6 +340,7 @@ def _get_weight_tensor_transpose_reshape(conv_linear: LAYER_TYPE) -> libpymo.Ten
 
     return weight_tensor
 
+
 class PassThroughOp(tf.keras.layers.Layer):
     """
     This is a pass-through op, used for purpose of making an op a no-op
@@ -325,10 +355,12 @@ class PassThroughOp(tf.keras.layers.Layer):
         """
         return inputs
 
-def _delete_bn_from_sequential(layer: tf.keras.layers.Layer, bn: tf.keras.layers.BatchNormalization):
+
+def _delete_bn_from_sequential(layer: tf.keras.layers.Layer,
+                               bn: tf.keras.layers.BatchNormalization):
 
     """
-    This is the function for removing batch normalization layers that are layers of sequential model.
+    This is the function for removing batch normalization layers that are layers of sequential model
 
     :param layer: model to obtain bn_layer that we want to remove
     :param bn: batch normalization layer that needs to be removed
@@ -356,7 +388,9 @@ def _delete_bn_from_sequential(layer: tf.keras.layers.Layer, bn: tf.keras.layers
         for layer_to_add in layers_after_bn:
             layer.add(layer_to_add)
 
-def _delete_bn_for_non_subclassed_model(model: (tf.keras.Model, tf.keras.layers.Layer), bn_layer: tf.keras.layers.BatchNormalization):
+
+def _delete_bn_for_non_subclassed_model(model: (tf.keras.Model, tf.keras.layers.Layer),
+                                        bn_layer: tf.keras.layers.BatchNormalization):
     """
     Remove bn layer for those model which are not part of model subclassing
 
@@ -367,32 +401,39 @@ def _delete_bn_for_non_subclassed_model(model: (tf.keras.Model, tf.keras.layers.
     if isinstance(model, tf.keras.Sequential):
         _delete_bn_from_sequential(model, bn_layer)
 
-    # We are expecting to find sequential model in functional model or model subclassing in the elif statement
+    # We are expecting to find sequential model in functional model
+    # or model subclassing in the elif statement
     elif isinstance(model, (tf.keras.layers.Layer, tf.keras.Model)):
         # pylint: disable=protected-access
         for layer in model._layers:
             if layer.submodules:
                 _delete_bn_for_non_subclassed_model(layer, bn_layer)
 
-def _delete_bn_from_model_subclassing(module_to_name_map: Dict[tf.keras.layers.Layer, Tuple[tf.keras.Model, str]], bn_layer: tf.keras.layers.BatchNormalization):
-    '''
-    Remove bn layer which is part of model subclassing api or model inheriting from tf.keras.layers.Layer
 
-    :param model: model to remove bn from
+def _delete_bn_from_model_subclassing(module_to_name_map: Dict[tf.keras.layers.Layer,
+                                                               Tuple[tf.keras.Model, str]],
+                                      bn_layer: tf.keras.layers.BatchNormalization):
+    """
+    Remove bn layer which is part of model subclassing api
+    or model inheriting from tf.keras.layers.Layer
+
+    :param module_to_name_map: model to remove bn from
     :param bn_layer: bn layer that should be removed
-    '''
+    """
 
     parent_ref, module_name = module_to_name_map[bn_layer]
     op = PassThroughOp()
     setattr(parent_ref, module_name, op)
 
-def _delete_all_bns_from_model(model: (tf.keras.Model, tf.keras.layers.Layer), bn_layers: List[tf.keras.layers.BatchNormalization]):
-    '''
+
+def _delete_all_bns_from_model(model: (tf.keras.Model, tf.keras.layers.Layer),
+                               bn_layers: List[tf.keras.layers.BatchNormalization]):
+    """
     Remove all bn layers
 
     :param model
     :param bn_layers: bn layers that should be removed
-    '''
+    """
 
     module_to_name_map = common.module_to_name_map(model)
 
@@ -402,7 +443,9 @@ def _delete_all_bns_from_model(model: (tf.keras.Model, tf.keras.layers.Layer), b
         else:
             _delete_bn_for_non_subclassed_model(model, bn_layer)
 
-def _fold_selected_batch_norms(model: (tf.keras.Model, tf.keras.layers.Layer), layer_pairs: List[PAIR_TYPE]):
+
+def _fold_selected_batch_norms(
+        model: (tf.keras.Model, tf.keras.layers.Layer), layer_pairs: List[PAIR_TYPE]):
     """
     Fold a given set of batch_norm layers into conv layers
 
@@ -414,7 +457,9 @@ def _fold_selected_batch_norms(model: (tf.keras.Model, tf.keras.layers.Layer), l
     for pair in layer_pairs:
 
         conv_linear, batchnorm, is_batch_norm_second = pair
-        assert isinstance(conv_linear, (tf.keras.layers.Conv2D, tf.keras.layers.Dense, tf.keras.layers.DepthwiseConv2D))
+        assert isinstance(
+            conv_linear,
+            (tf.keras.layers.Conv2D, tf.keras.layers.Dense, tf.keras.layers.DepthwiseConv2D))
 
         list_of_bn_layers.append(batchnorm)
 
@@ -428,20 +473,25 @@ def _fold_selected_batch_norms(model: (tf.keras.Model, tf.keras.layers.Layer), l
         weight_tensor = _get_weight_tensor_transpose_reshape(conv_linear)
         bias_tensor = _get_bias_tensor(conv_linear)
 
-        #Updated weight and bias
-        bias = libpymo.fold(bn_params, weight_tensor, bias_tensor, is_bias_valid, is_batch_norm_second)
+        # Updated weight and bias
+        bias = libpymo.fold(bn_params, weight_tensor, bias_tensor, is_bias_valid,
+                            is_batch_norm_second)
 
         if isinstance(conv_linear, tf.keras.layers.DepthwiseConv2D):
             # Depthwise conv layers in TF have outputs(Noc) set to 1.
             # we send in format [Nic, Noc, kh, kw]
-            numpy_weight_reshaped = np.reshape(weight_tensor.data, weight_tensor.shape).transpose((2, 3, 0, 1))
+            numpy_weight_reshaped = np.reshape(weight_tensor.data, weight_tensor.shape)\
+                .transpose((2, 3, 0, 1))
         elif isinstance(conv_linear, tf.keras.layers.Dense):
             # o, i - convert to i , o
-            numpy_weight_reshaped = np.reshape(weight_tensor.data, [weight_tensor.shape[0], weight_tensor.shape[1]]).transpose(1, 0)
+            numpy_weight_reshaped = np.reshape(
+                weight_tensor.data,
+                [weight_tensor.shape[0], weight_tensor.shape[1]]).transpose(1, 0)
         else:
             # conv2D case
             # we sent in format [Noc, Nic, kh, kw]
-            numpy_weight_reshaped = np.reshape(weight_tensor.data, weight_tensor.shape).transpose((2, 3, 1, 0))
+            numpy_weight_reshaped = np.reshape(weight_tensor.data, weight_tensor.shape)\
+                .transpose((2, 3, 1, 0))
 
         # update bias tensor, even in case there was no existing bias add op in given conv2D op.
         bias_tensor_shape = [weight_tensor.shape[0]]
@@ -452,7 +502,9 @@ def _fold_selected_batch_norms(model: (tf.keras.Model, tf.keras.layers.Layer), l
 
     _delete_all_bns_from_model(model, list_of_bn_layers)
 
-def _find_all_batch_norms_to_fold(model: (tf.keras.Model, tf.keras.layers.Layer)) -> List[PAIR_TYPE]:
+
+def _find_all_batch_norms_to_fold(model: (tf.keras.Model,
+                                          tf.keras.layers.Layer)) -> List[PAIR_TYPE]:
     """
     uses searcher to choose layers for bias correction
 
@@ -486,6 +538,7 @@ def _find_all_batch_norms_to_fold(model: (tf.keras.Model, tf.keras.layers.Layer)
                     marked_bn_set.add(bn_info[0])
 
     return valid_bn_conv_linear_pairs
+
 
 def fold_all_batch_norms(model: (tf.keras.Model, tf.keras.layers.Layer)):
     """

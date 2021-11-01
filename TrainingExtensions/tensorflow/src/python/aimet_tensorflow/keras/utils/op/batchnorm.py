@@ -41,6 +41,7 @@
 import tensorflow as tf
 import numpy as np
 
+
 class BNUtils:
     """
     Batch Norm/ fused Batch Norm op related utils
