@@ -628,7 +628,8 @@ def equalize_bn_folded_model(model: torch.nn.Module,
                              input_shapes: Union[Tuple, List[Tuple]],
                              folded_pairs: List[Tuple[torch.nn.Module, torch.nn.BatchNorm2d]]):
     """
-    Perform Cross-Layer Equalization (CLE) on a batchnorm-folded model. The model is equalized in place.
+    Perform Cross-Layer Scaling (CLS) and High Bias Folding (HBF) on a batchnorm-folded model.
+    The model is equalized in place.
 
     :param model: Batchnorm-folded model to equalize
     :param input_shapes: Shape of the input (can be a tuple or a list of tuples if multiple inputs)
