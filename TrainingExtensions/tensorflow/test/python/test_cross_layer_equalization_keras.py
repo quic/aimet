@@ -35,13 +35,18 @@
 #
 #  @@-COPYRIGHT-END-@@
 # =============================================================================
+""" This file contains unit tests for testing cross layer scaling feature of CLE """
+import typing
+
+import numpy as np
 import pytest
 import tensorflow as tf
 
-from aimet_tensorflow.keras.cross_layer_equalization import GraphSearchUtils
+from aimet_tensorflow.keras.cross_layer_equalization import GraphSearchUtils, CrossLayerScaling
 
 
 class TestTrainingExtensionsCrossLayerScaling:
+    """ Test methods for Cross layer equalization """
 
     def test_find_layer_groups_in_vgg16(self):
         """
@@ -100,6 +105,7 @@ class TestTrainingExtensionsCrossLayerScaling:
         """
 
         class Residual(tf.keras.Model):  # pylint: disable=too-many-ancestors
+            """Residual block"""
             def __init__(self):
                 super().__init__()
                 self.conv1 = tf.keras.layers.Conv2D(32, kernel_size=3)
@@ -252,3 +258,83 @@ class TestTrainingExtensionsCrossLayerScaling:
 
         with pytest.raises(NotImplementedError):
             _ = GraphSearchUtils.convert_layer_group_to_cls_sets(layer_group)
+
+    # pylint: disable=too-many-locals
+    def test_scale_cls_set_with_conv_layer(self):
+        """
+        Test scaling logic for cls set consisting of two convolution layers
+        Possible two convolution layer cases are
+          - (Conv2D, Conv2D)
+          - (Conv2D, Conv2DTranspose)
+          - (Conv2DTranspose, Conv2D)
+          - (Conv2DTranspose, Conv2DTranspose)
+        """
+        def _get_max_val_per_channel(layer: tf.keras.layers.Conv2D,
+                                     axis: typing.Tuple) -> np.ndarray:
+            """
+            Conv2D kernel tensor shape ->
+              (kernel_height, kernel_width, in_channels, out_channels)
+            Conv2DTranspose kernel tensor shape ->
+              (kernel_height, kernel_width, out_channels, in_channels)
+            e.g.,
+            _get_max_val_per_channel(conv, axis=(2, 0, 1)) means
+            max values of each output channels in Conv2D
+            because axis are set as (in_channels, kernel_height, kernel_width)
+
+            _get_max_val_per_channel(conv_transpose, axis=(2, 0, 1)) means
+            max values of each input channels in Conv2DTranspose
+            because axis are set as (out_channels, kernel_height, kernel_width)
+            """
+            param_tensors = layer.get_weights()
+            weight_tensor = param_tensors[0]
+            return np.amax(np.abs(weight_tensor), axis=axis)
+
+        model = tf.keras.Sequential([
+            tf.keras.layers.InputLayer(input_shape=(28, 28, 3)),
+            tf.keras.layers.Conv2D(4, kernel_size=3, activation='relu', bias_initializer='normal'),
+            tf.keras.layers.Conv2D(16, kernel_size=5, activation='relu', use_bias=False),
+            tf.keras.layers.Conv2DTranspose(16, kernel_size=7, use_bias=False),
+            tf.keras.layers.Conv2DTranspose(8, kernel_size=5, strides=2, bias_initializer='normal'),
+            tf.keras.layers.Conv2D(4, kernel_size=3, activation='relu', bias_initializer='normal'),
+            tf.keras.layers.Conv2D(16, kernel_size=3, activation='relu', bias_initializer='normal'),
+            tf.keras.layers.Flatten()
+        ])
+
+        np.random.seed(42)
+        inputs = np.random.randn(1, 28, 28, 3).astype('f')
+        outputs_before_scaling = model.predict(inputs)
+
+        conv1, conv2, conv_transpose1, conv_transpose2, conv3, conv4, _ = model.layers
+
+        # (Conv2D, Conv2D w/o bias) case
+        CrossLayerScaling.scale_cls_set_with_conv_layers((conv1, conv2))
+        conv1_output_range = _get_max_val_per_channel(conv1, axis=(2, 0, 1))
+        conv2_input_range = _get_max_val_per_channel(conv2, axis=(3, 0, 1))
+        assert np.allclose(conv1_output_range, conv2_input_range)
+
+        # (Conv2D w/o bias, Conv2DTranspose w/o bias) case
+        CrossLayerScaling.scale_cls_set_with_conv_layers((conv2, conv_transpose1))
+        conv2_output_range = _get_max_val_per_channel(conv2, axis=(2, 0, 1))
+        conv_transpose1_input_range = _get_max_val_per_channel(conv_transpose1, axis=(2, 0, 1))
+        assert np.allclose(conv2_output_range, conv_transpose1_input_range)
+
+        # (Conv2DTranspose w/o bias, Conv2DTranspose) case
+        CrossLayerScaling.scale_cls_set_with_conv_layers((conv_transpose1, conv_transpose2))
+        conv_transpose1_output_range = _get_max_val_per_channel(conv_transpose1, axis=(3, 0, 1))
+        conv_transpose2_input_range = _get_max_val_per_channel(conv_transpose2, axis=(2, 0, 1))
+        assert np.allclose(conv_transpose1_output_range, conv_transpose2_input_range)
+
+        # (Conv2DTranspose, Conv2D) case
+        CrossLayerScaling.scale_cls_set_with_conv_layers((conv_transpose2, conv3))
+        conv_transpose2_output_range = _get_max_val_per_channel(conv_transpose2, axis=(3, 0, 1))
+        conv3_input_range = _get_max_val_per_channel(conv3, axis=(3, 0, 1))
+        assert np.allclose(conv_transpose2_output_range, conv3_input_range)
+
+        # (Conv2D, Conv2D) case
+        CrossLayerScaling.scale_cls_set_with_conv_layers((conv3, conv4))
+        conv3_output_range = _get_max_val_per_channel(conv3, axis=(2, 0, 1))
+        conv4_input_range = _get_max_val_per_channel(conv4, axis=(3, 0, 1))
+        assert np.allclose(conv3_output_range, conv4_input_range)
+
+        outputs_after_scaling = model.predict(inputs)
+        np.allclose(outputs_before_scaling, outputs_after_scaling)

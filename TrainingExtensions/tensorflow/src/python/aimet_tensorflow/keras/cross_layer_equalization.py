@@ -40,8 +40,12 @@
 import collections
 import typing
 
+import numpy as np
 import tensorflow as tf
+import libpymo
+
 from aimet_common.utils import AimetLogger
+from aimet_tensorflow.keras.utils.weight_tensor_utils import WeightTensorUtils
 
 _logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.CrosslayerEqualization)
 
@@ -88,3 +92,89 @@ class GraphSearchUtils:
                 prev_layer_to_scale = next_layer_to_scale
 
         return cls_sets
+
+
+class CrossLayerScaling:
+    """
+    Code to apply the cross-layer-scaling technique to a model
+    """
+
+    @staticmethod
+    def scale_cls_set_with_conv_layers(
+            cls_set: typing.Tuple[tf.keras.layers.Conv2D, tf.keras.layers.Conv2D]) -> np.ndarray:
+        """
+        API to invoke equalize layer params (update for weights and bias is in place)
+        :param cls_set: Consecutive Conv layers Tuple whose weights and biases need to be equalized
+        :return: Scaling factor S_12 for each conv layer pair: numpy array
+        """
+
+        for layer in cls_set:
+            if not isinstance(layer, (tf.keras.layers.Conv2DTranspose, tf.keras.layers.Conv2D)):
+                raise ValueError("Only Conv or Transposed Conv layers are supported for CLE")
+
+        scaling_factor, prev_layer_params, curr_layer_params = CrossLayerScaling.call_mo_scale(cls_set)
+
+        prev_layer, curr_layer = cls_set
+        weight_and_bias_0 = CrossLayerScaling._unpack_equalization_params(prev_layer, prev_layer_params,
+                                                                          unpack_bias=True)
+        prev_layer.set_weights(weight_and_bias_0)
+
+        weight_and_bias_1 = CrossLayerScaling._unpack_equalization_params(curr_layer, curr_layer_params,
+                                                                          unpack_bias=False)
+        curr_layer.set_weights(weight_and_bias_1)
+
+        return scaling_factor
+
+    @staticmethod
+    def call_mo_scale(cls_set: typing.Tuple[tf.keras.layers.Conv2D, tf.keras.layers.Conv2D]) \
+            -> typing.Tuple[np.ndarray, libpymo.EqualizationParams, libpymo.EqualizationParams]:
+        """
+        Invokes scale API in model optimization library
+        :param cls_set: Consecutive Conv layers Tuple whose weights and biases need to be equalized
+        :return: Scaling factor, prev and current layer updated parameters
+        """
+        prev_layer_params = CrossLayerScaling._pack_equalization_params(cls_set[0], pack_bias=True)
+        curr_layer_params = CrossLayerScaling._pack_equalization_params(cls_set[1], pack_bias=False)
+
+        scaling_factor = libpymo.scaleLayerParams(prev_layer_params, curr_layer_params)
+        return scaling_factor, prev_layer_params, curr_layer_params
+
+    @staticmethod
+    def _pack_equalization_params(layer: tf.keras.layers.Conv2D, pack_bias: bool) -> libpymo.EqualizationParams:
+        equalization_params = libpymo.EqualizationParams()
+
+        param_tensors = layer.get_weights()
+
+        weight_tensor = param_tensors[0]
+        weight_tensor = WeightTensorUtils.transpose_from_tf_to_libpymo_format(weight_tensor, layer)
+
+        equalization_params.weight = weight_tensor.reshape(-1)
+        equalization_params.weightShape = np.array(weight_tensor.shape)
+
+        if pack_bias:
+            if layer.use_bias:
+                equalization_params.bias = param_tensors[1]
+            else:
+                equalization_params.isBiasNone = True
+
+        return equalization_params
+
+    @staticmethod
+    def _unpack_equalization_params(layer: tf.keras.layers.Conv2D,
+                                    equalization_params: libpymo.EqualizationParams,
+                                    unpack_bias: bool) -> typing.List:
+
+        weight_tensor = np.reshape(equalization_params.weight, equalization_params.weightShape)
+        weight_tensor = WeightTensorUtils.transpose_from_libpymo_to_tf_format(weight_tensor, layer)
+
+        if layer.use_bias:
+            if unpack_bias:
+                bias_tensor = np.reshape(equalization_params.bias, equalization_params.weightShape[0])
+            else:
+                _, bias_tensor = layer.get_weights()
+
+            param_tensors = [weight_tensor, bias_tensor]
+        else:
+            param_tensors = [weight_tensor]
+
+        return param_tensors
