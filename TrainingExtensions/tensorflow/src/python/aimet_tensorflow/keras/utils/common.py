@@ -198,58 +198,209 @@ def create_node_to_layer_map(cur_layer: (tf.keras.Model, tf.keras.layers.Layer))
 
     return node_layer_map
 
-def replace_layer_for_non_subclassed_model(model: tf.keras.Model, old_layer: tf.keras.layers.Layer,
-                                           new_layers: typing.Union[typing.List, tf.keras.layers.Layer]):
+def replace_layer_in_functional_model(model: tf.keras.Model, old_layer: tf.keras.layers.Layer,
+                                      new_layers: typing.Union[typing.List, tf.keras.layers.Layer]):
     """
     Replace a layer in a model with a list of new layers to be called in sequential order.
     :param model: Model containing layer to replace
     :param old_layer: Layer to replace
     :param new_layers: Layer or list of new layers to insert into the model
     """
+    # pylint: disable=protected-access
+    if old_layer in model._input_layers:
+        _logger.error('Replacement for input layers not currently supported')
+        raise NotImplementedError
+
+    if len(old_layer.inbound_nodes) > 1:
+        _logger.error('Replacement for layers used multiple times not currently supported')
+        raise NotImplementedError
+
     if not isinstance(new_layers, list):
         new_layers = [new_layers]
 
-    if len(old_layer.inbound_nodes) > 1:
-        _logger.error('Replacement for layer with multiple inputs not currently supported')
-        raise NotImplementedError
-
-    if len(old_layer.outbound_nodes) > 1:
-        _logger.error('Replacement for layer with multiple outputs not currently supported')
-        raise NotImplementedError
-
-    # pylint: disable=protected-access
-    if old_layer in model._input_layers:
-        _logger.error('Replacement for input layer not currently supported')
-        raise NotImplementedError
-
-    if old_layer in model._output_layers:
-        _logger.error('Replacement for output layer not currently supported')
-        raise NotImplementedError
+    residing_model = _get_residing_model_of_layer(model, old_layer)
 
     # Find layers before and after the old layer to replace
-    parent_layer = old_layer.inbound_nodes[0].inbound_layers
-    following_layer = old_layer.outbound_nodes[0].outbound_layer
+    # Need to use keras_inputs instead of input_layers due to bug where only one input layer will be shown
+    parent_layers = [keras_input._keras_history.layer for keras_input in old_layer.inbound_nodes[0].keras_inputs]
+    following_layers_and_inputs_dict = _get_following_layers_and_inputs(residing_model, old_layer)
 
-    # Remove any network nodes to do with any of the old and new layers to replace
-    for layer in [old_layer] + new_layers:
-        for idx, _ in enumerate(layer.inbound_nodes):
-            node_key = layer.name + '_ib-' + str(idx)
-            if node_key in model._network_nodes:
-                model._network_nodes.remove(node_key)
+    # Clear out certain outbound nodes of parent layers, inbound node of old layer, outbound nodes of old layer, and
+    # certain inbound nodes of following layers.
+    _clear_inbound_and_outbound_nodes(old_layer, parent_layers, following_layers_and_inputs_dict)
 
-    # Clear out inbound and outbound nodes before and after the old layer to replace
-    old_layer._inbound_nodes = []
-    old_layer._outbound_nodes = []
-    parent_layer._outbound_nodes = []
-    following_layer._inbound_nodes = []
+    # Remove network nodes from the residing model for old_layer and following layers
+    _remove_network_nodes(residing_model, [old_layer] + list(following_layers_and_inputs_dict.keys()))
 
-    # Use output tensor from parent layer to create new nodes
-    curr_tensor = parent_layer.output
-    for layer in new_layers:
-        curr_tensor = layer(curr_tensor)
+    # Call new layers in sequence to create new nodes
+    out_tensor = _call_new_layers_sequentially(parent_layers, new_layers)
 
     # Connect the last new layer back to old child layer, creating a new node in the process
-    _ = following_layer(curr_tensor)
+    if following_layers_and_inputs_dict:
+        _link_following_layers_to_new_layer_output(out_tensor, following_layers_and_inputs_dict, old_layer)
+    else:
+        _update_model_output_info(residing_model, old_layer, out_tensor)
 
     # Update model's layers and network nodes
-    model._insert_layers(new_layers + [following_layer])
+    residing_model._insert_layers(new_layers + list(following_layers_and_inputs_dict.keys()))
+
+def _get_residing_model_of_layer(model: tf.keras.Model, layer: tf.keras.layers.Layer) -> typing.Union[tf.keras.Model,
+                                                                                                      None]:
+    """
+    Get the model in which the layer resides, given a top level model. The residing model could be the topmost level
+    model itself, or a submodel inside the topmost model.
+    :param model: Top level model
+    :param layer: Layer to get residing model of
+    return: Residing model of layer
+    """
+    if layer in model.layers:
+        return model
+
+    # Iterate through layers of current model level and recursively call into any layer that is a model
+    for inner_layer in model.layers:
+        if isinstance(inner_layer, tf.keras.models.Model):
+            residing_model = _get_residing_model_of_layer(inner_layer, layer)
+            if residing_model is not None:
+                return residing_model
+    return None
+
+def _get_following_layers_and_inputs(model: tf.keras.Model, layer: tf.keras.layers.Layer) -> \
+        typing.Dict[tf.keras.layers.Layer, typing.List]:
+    """
+    Get a dictionary mapping following layers of the given layer to the keras inputs for the following layer.
+    :param model: Model containing layer
+    :param layer: Layer to get following layers for
+    :return: Dictionary mapping following layers of the given layer to the keras inputs for the following layer
+    """
+    # pylint: disable=protected-access
+    following_layers_and_inputs = {}
+    if layer.outbound_nodes:
+        for outbound_node in layer.outbound_nodes:
+            following_layer = outbound_node.outbound_layer
+            following_layers_and_inputs[following_layer] = []
+            # Find all inputs of following_layer, of which the old layer will be one
+            for keras_input in outbound_node.keras_inputs:
+                following_layers_and_inputs[following_layer].append(keras_input)
+    else:
+        assert layer in model._output_layers
+    return following_layers_and_inputs
+
+def _remove_network_nodes(model: tf.keras.Model, layers: typing.List[tf.keras.layers.Layer]):
+    """
+    Remove network nodes in the model corresponding to the given layers
+    :param model: Model to remove network nodes from
+    :param layers: List of layers corresponding to network nodes to remove
+    """
+    # pylint: disable=protected-access
+    for layer in layers:
+        node_key = layer.name + '_ib-0'
+        model._network_nodes.remove(node_key)
+
+def _call_new_layers_sequentially(parent_layers: typing.List[tf.keras.layers.Layer],
+                                  new_layers: typing.List[tf.keras.layers.Layer]) -> tf.Tensor:
+    """
+    Call new layers sequentially to create nodes, starting from parent layers.
+    :param parent_layers: Parent layers to start building new nodes from
+    :param new_layers: New layers to be called sequentially
+    :return: Output tensor from final new layer
+    """
+    # pylint: disable=protected-access
+    # Use output tensors from parent layers to create new nodes
+    # Assumption is that the order in which keras inputs showed up is the same order to call into new layers.
+    curr_tensor = []
+    for parent_layer in parent_layers:
+        curr_tensor.append(parent_layer.output)
+
+    # Flatten inputs if there is only one
+    if len(curr_tensor) == 1:
+        curr_tensor = curr_tensor[0]
+
+    for layer in new_layers:
+        curr_tensor = layer(curr_tensor)
+    return curr_tensor
+
+def _clear_inbound_and_outbound_nodes(layer_of_interest: tf.keras.layers.Layer,
+                                      parent_layers: typing.List[tf.keras.layers.Layer],
+                                      following_layers_and_inputs_dict: typing.Dict[tf.keras.layers.Layer,
+                                                                                    typing.List[tf.Tensor]]):
+    """
+    Clear certain outbound nodes of parent layers, inbound node of layer_of_interest, outbound nodes of
+    layer_of_interest, and inbound nodes of following layers.
+    :param layer_of_interest: Layer to remove inbound and outbound nodes of
+    :param parent_layers: Parent layers to remove outbound nodes of
+    :param following_layers_and_inputs_dict: Dictionary containing following layers to remove inbound nodes of
+    """
+    # pylint: disable=protected-access
+    # Clear out inbound node of layer_of_interest
+    old_inbound_node = layer_of_interest.inbound_nodes[0]
+    layer_of_interest._inbound_nodes.remove(old_inbound_node)
+
+    # Clear out the inbound node from the outbound nodes lists of parent layers
+    for parent_layer in parent_layers:
+        parent_layer._outbound_nodes.remove(old_inbound_node)
+
+    # Clear out old outbound node of old layer and corresponding inbound node of following layers.
+    # Following layers may have other inputs as well; for those inputs, the correct outbound node must be removed too.
+    # pylint: disable=too-many-nested-blocks
+    if layer_of_interest.outbound_nodes:
+        for outbound_node in layer_of_interest.outbound_nodes:
+            # For all following layers of old layer, clear out inbound nodes corresponding to the old layer
+            for following_layer in following_layers_and_inputs_dict.keys():
+                if outbound_node in following_layer._inbound_nodes:
+                    following_layer._inbound_nodes.remove(outbound_node)
+
+                    # The following layer may have multiple inputs. In this case, since we are recreating the inbound
+                    # node using all inputs, we need to clear out the corresponding outbound_node from the other input
+                    # layers' outbound_nodes as well.
+                    for keras_input in following_layers_and_inputs_dict[following_layer]:
+                        # Don't modify outbound node of old_layer yet
+                        if keras_input._keras_history.layer != layer_of_interest:
+                            keras_input._keras_history.layer._outbound_nodes.remove(outbound_node)
+
+        layer_of_interest._outbound_nodes = []
+
+def _link_following_layers_to_new_layer_output(new_tensor_output: tf.Tensor,
+                                               following_layers_and_inputs_dict: typing.Dict[tf.keras.layers.Layer,
+                                                                                             typing.List[tf.Tensor]],
+                                               replaced_layer: tf.keras.layers.Layer):
+    """
+    Link following layers to the given tensor.
+    :param new_tensor_output: Tensor to link to following layers
+    :param following_layers_and_inputs_dict: Dictionary containing following layers to link new tensor to
+    :param replaced_layer: Layer that was replaced
+    """
+    # pylint: disable=protected-access
+    for following_layer, keras_inputs in following_layers_and_inputs_dict.items():
+        for idx, keras_input in enumerate(keras_inputs):
+            if keras_input._keras_history.layer == replaced_layer:
+                keras_inputs[idx] = new_tensor_output
+        # Flatten list if only one input
+        if isinstance(keras_inputs, list):
+            keras_inputs = keras_inputs[0]
+        _ = following_layer(keras_inputs)
+
+def _update_model_output_info(residing_model: tf.keras.Model, replaced_layer: tf.keras.layers.Layer,
+                              new_tensor_output: tf.Tensor):
+    """
+    Update model output layers, output coordinates, and nested outputs with the new output tensor.
+    :param residing_model: Model to update output info for
+    :param replaced_layer: Layer that was replaced
+    :param new_tensor_output: New output tensor for the model
+    """
+    # pylint: disable=protected-access
+    # Last layer in new_layers will be a new output op
+    old_layer_index = residing_model._output_layers.index(replaced_layer)
+    del residing_model._output_layers[old_layer_index]
+    del residing_model._output_coordinates[old_layer_index]
+    if isinstance(residing_model.output, list):
+        del residing_model._nested_outputs[old_layer_index]
+    else:
+        assert old_layer_index == 0
+
+    layer, node_index, tensor_index = new_tensor_output._keras_history  # pylint: disable=protected-access
+    residing_model._output_layers.append(layer)
+    residing_model._output_coordinates.append((layer, node_index, tensor_index))
+    if isinstance(residing_model._nested_outputs, list):
+        residing_model._nested_outputs.append(new_tensor_output)
+    else:
+        residing_model._nested_outputs = new_tensor_output
