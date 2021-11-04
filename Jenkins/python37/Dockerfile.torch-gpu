@@ -127,6 +127,7 @@ RUN python3.7 -m pip --no-cache-dir install \
         ipykernel==4.8.2 \
         keras==2.2.4 \
         lmdb==1.2.1 \
+        mock \
         opencv-python==4.1.0.25 \
         pillow==6.2.1 \
         pluggy==0.12.0 \
