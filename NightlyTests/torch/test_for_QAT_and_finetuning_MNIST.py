@@ -1,56 +1,51 @@
-#/usr/bin/env python2.7
-# -*- mode: python -*-
+# /usr/bin/env python3.5
 # =============================================================================
 #  @@-COPYRIGHT-START-@@
-#  
-#  Copyright (c) 2017-2018, Qualcomm Innovation Center, Inc. All rights reserved.
-#  
-#  Redistribution and use in source and binary forms, with or without 
+#
+#  Copyright (c) 2017-2021, Qualcomm Innovation Center, Inc. All rights reserved.
+#
+#  Redistribution and use in source and binary forms, with or without
 #  modification, are permitted provided that the following conditions are met:
-#  
-#  1. Redistributions of source code must retain the above copyright notice, 
+#
+#  1. Redistributions of source code must retain the above copyright notice,
 #     this list of conditions and the following disclaimer.
-#  
-#  2. Redistributions in binary form must reproduce the above copyright notice, 
-#     this list of conditions and the following disclaimer in the documentation 
+#
+#  2. Redistributions in binary form must reproduce the above copyright notice,
+#     this list of conditions and the following disclaimer in the documentation
 #     and/or other materials provided with the distribution.
-#  
-#  3. Neither the name of the copyright holder nor the names of its contributors 
-#     may be used to endorse or promote products derived from this software 
+#
+#  3. Neither the name of the copyright holder nor the names of its contributors
+#     may be used to endorse or promote products derived from this software
 #     without specific prior written permission.
-#  
-#  THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" 
-#  AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE 
-#  IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE 
-#  ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE 
-#  LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR 
-#  CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF 
-#  SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS 
-#  INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN 
-#  CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) 
+#
+#  THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+#  AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+#  IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+#  ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE
+#  LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+#  CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+#  SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+#  INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+#  CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
 #  ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 #  POSSIBILITY OF SUCH DAMAGE.
-#  
+#
 #  SPDX-License-Identifier: BSD-3-Clause
-#  
+#
 #  @@-COPYRIGHT-END-@@
 # =============================================================================
 
-import pytest
 import unittest
 import os
-import copy
+import pytest
 import torch
-import torch.nn as nn
-import torch.nn.functional as F
 import numpy as np
 
 from aimet_torch.quantsim import QuantizationSimModel, load_checkpoint, save_checkpoint
-from aimet_torch.examples import mnist_torch_model
 import aimet_torch.examples.mnist_torch_model as mnist_model
 from aimet_torch.qc_quantize_op import StaticGridQuantWrapper
+from aimet_torch.tensor_quantizer import QuantizationDataType
 from aimet_common.defs import QuantScheme
-
 path = str('../data')
 filename_prefix = 'quantized_mnist'
 
@@ -78,7 +73,7 @@ class QuantizationSimAcceptanceTests(unittest.TestCase):
 
     @staticmethod
     def forward_pass(model, iterations):
-        mnist_torch_model.evaluate(model=model, iterations=iterations, use_cuda=True)
+        mnist_model.evaluate(model=model, iterations=iterations, use_cuda=True)
 
     @pytest.mark.cuda
     def test_with_finetuning(self):
@@ -86,7 +81,7 @@ class QuantizationSimAcceptanceTests(unittest.TestCase):
         torch.cuda.empty_cache()
 
         model = mnist_model.Net().to(torch.device('cuda'))
-        mnist_torch_model.evaluate(model=model, iterations=None, use_cuda=True)
+        mnist_model.evaluate(model=model, iterations=None, use_cuda=True)
 
         sim = QuantizationSimModel(model, dummy_input=torch.rand(1, 1, 28, 28).cuda())
 
@@ -94,7 +89,7 @@ class QuantizationSimAcceptanceTests(unittest.TestCase):
         sim.compute_encodings(self.forward_pass, forward_pass_callback_args=5)
 
         # Run some inferences
-        mnist_torch_model.evaluate(model=sim.model, iterations=None, use_cuda=True)
+        mnist_model.evaluate(model=sim.model, iterations=None, use_cuda=True)
 
         # train the model again
         mnist_model.train(sim.model, epochs=1, num_batches=3,
@@ -155,11 +150,32 @@ class QuantizationSimAcceptanceTests(unittest.TestCase):
         sim.compute_encodings(self.forward_pass, forward_pass_callback_args=5)
 
         # Run some inferences
-        mnist_torch_model.evaluate(model=sim.model, iterations=100, use_cuda=True)
+        mnist_model.evaluate(model=sim.model, iterations=100, use_cuda=True)
 
         # train the model again
         mnist_model.train(model=sim.model, epochs=1, num_batches=3,
                           batch_callback=check_if_layer_weights_are_updating, use_cuda=True)
+
+    @pytest.mark.cuda
+    def test_retraining_on_quantized_model_fp16(self):
+
+        torch.cuda.empty_cache()
+
+        model = mnist_model.Net().to(torch.device('cuda'))
+
+        from aimet_torch import quantsim
+        quantsim.default_data_type = QuantizationDataType.float
+
+        sim = QuantizationSimModel(model,
+                                   default_output_bw=16,
+                                   default_param_bw=16,
+                                   dummy_input=torch.rand(1, 1, 28, 28).cuda())
+
+        # train the model for entire one epoch
+        mnist_model.train(model=sim.model, epochs=1, num_batches=3,
+                          batch_callback=check_if_layer_weights_are_updating, use_cuda=True)
+
+        quantsim.default_data_type = QuantizationDataType.int
 
     def test_dummy(self):
         # pytest has a 'feature' that returns an error code when all tests for a given suite are not selected

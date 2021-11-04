@@ -63,7 +63,8 @@ class TensorQuantizer:
     """
 
     def __init__(self, bitwidth: int, round_mode: str, quant_scheme: Union[QuantScheme, str],
-                 use_symmetric_encodings: bool, enabled_by_default: bool, data_type: QuantizationDataType = QuantizationDataType.int):
+                 use_symmetric_encodings: bool, enabled_by_default: bool,
+                 data_type: QuantizationDataType = QuantizationDataType.int):
         """
         Constructor
         :param bitwidth: Quantization bitwidth
@@ -82,10 +83,12 @@ class TensorQuantizer:
         self.enabled = enabled_by_default
         self.data_type = data_type
 
+
 class PickableState:
     """
     State variables in QcQuantizeBase that need to be saved separately when pickling
     """
+
     def __init__(self, builtin_dict, encoding, num_channels):
         self.dict = builtin_dict
         self.num_channels = num_channels
@@ -159,7 +162,6 @@ class StaticGridTensorQuantizer(TensorQuantizer):
 
             self._encoding = []
             for enc in state.encodings:
-
                 enc_min, enc_max, delta, offset, bw = enc
 
                 new_encoding = libpymo.TfEncoding()
@@ -190,28 +192,29 @@ class StaticGridTensorQuantizer(TensorQuantizer):
         """
         Compute the quantization encoding for this tensor
         """
-        if self.enabled and not self._is_encoding_frozen and self.data_type is QuantizationDataType.int:
-
+        if self.enabled and not self._is_encoding_frozen:
             self._encoding = []
-            for op in self._cppOp:
-                encoding, is_encoding_valid = op.getEncoding(self.bitwidth, self.use_symmetric_encodings,
-                                                             self.use_strict_symmetric,
-                                                             self.use_unsigned_symmetric)
+            if self.data_type == QuantizationDataType.float:
+                self._encoding = None
+            else:
+                for op in self._cppOp:
+                    encoding, is_encoding_valid = op.getEncoding(self.bitwidth, self.use_symmetric_encodings,
+                                                                 self.use_strict_symmetric,
+                                                                 self.use_unsigned_symmetric)
 
-                if not is_encoding_valid:
-                    self.enabled = False
-                else:
-                    self._encoding.append(encoding)
+                    if not is_encoding_valid:
+                        self.enabled = False
+                    else:
+                        self._encoding.append(encoding)
 
-            # Check for the case when some cppOp encodings are not valid while others are.
-            # In the case that a module is unused, all cppOp encodings will have is_encoding_valid False, and there
-            # would be no entries in self._encoding. The only way for self._encoding to be non empty with self.enabled
-            # False is if some encodings were valid while others were not.
-            # TODO: add a test case for testing this assert
-            if not self.enabled and self._encoding:
-                _logger.error('At least one encoding for a multi-encoding quantizer is invalid.')
-                assert not (not self.enabled and self._encoding)
-
+                # Check for the case when some cppOp encodings are not valid while others are.
+                # In the case that a module is unused, all cppOp encodings will have is_encoding_valid False, and there
+                # would be no entries in self._encoding. The only way for self._encoding to be non empty with self.enabled
+                # False is if some encodings were valid while others were not.
+                # TODO: add a test case for testing this assert
+                if not self.enabled and self._encoding:
+                    _logger.error('At least one encoding for a multi-encoding quantizer is invalid.')
+                    assert not (not self.enabled and self._encoding)
 
     def quantize_dequantize(self, tensor, round_mode):
         """
@@ -350,6 +353,8 @@ class QuantizeDequantize(torch.autograd.Function):
         """
         # pylint:disable = protected-access
         if tensor_quantizer.data_type == QuantizationDataType.float:
+            if tensor_quantizer.bitwidth != 16:
+                raise ValueError('float data_type only supports bitwidth=16')
             quantized_tensor = tensor.half()
             quantized_tensor = quantized_tensor.float()
         else:
@@ -362,8 +367,7 @@ class QuantizeDequantize(torch.autograd.Function):
         quantized_tensors = []
 
         if tensor_quantizer.data_type == QuantizationDataType.float:
-            _logger.error('float data_type is not supported for per channel quantize-dequantize')
-            raise AssertionError
+            raise ValueError('float data_type is not supported for per channel quantize-dequantize')
 
         # pylint:disable = protected-access
         for index, op in enumerate(tensor_quantizer._cppOp):
@@ -420,10 +424,12 @@ class QuantizeDequantize(torch.autograd.Function):
 
         return grad, None, None
 
+
 class Quantize(torch.autograd.Function):
     """
     Custom gradient function for STE
     """
+
     # pylint:disable = arguments-differ
     @staticmethod
     def forward(ctx, tensor, tensor_quantizer, round_mode, use_int32):
