@@ -42,6 +42,7 @@ import random
 import os
 import copy
 import numpy as np
+import onnx
 import torch
 from torchvision import models
 from torch.utils.data import DataLoader
@@ -417,13 +418,14 @@ class TestFX:
         assert np.array_equal(original_model_fc_weight.detach().cpu().numpy(),
                               modified_model_fc_weight.detach().cpu().numpy())
 
+    @pytest.mark.cuda
     def test_fx_with_cle(self):
         """
         test torch fx with torchvision Resnet18 - Cross layer equalization
         """
         input_shape = (1, 3, 224, 224)
-        input_tensor = torch.randn(*input_shape)
-        model = models.resnet18().eval()
+        input_tensor = torch.randn(*input_shape).cuda()
+        model = models.resnet18().cuda().eval()
         model_copy = copy.deepcopy(model)
 
         # Perform CLE - (BN fold, ReLU6 -> ReLU replacement, CLS, HBF)
@@ -525,3 +527,122 @@ class TestFX:
         modified_model_fc_weight = model_transformed.fc.bias.clone()
         assert np.array_equal(original_model_fc_weight.detach().cpu().numpy(),
                               modified_model_fc_weight.detach().cpu().numpy())
+
+    def test_fx_with_save_and_load_entire_model(self):
+        """
+        test torch fx with torchvision Resnet18 - torch save and load the entire model
+        """
+        input_shape = (1, 3, 224, 224)
+        input_tensor = torch.randn(*input_shape)
+        model = models.resnet18().eval()
+        model_copy = copy.deepcopy(model)
+
+        model_transformed = replace_functional_by_module(model_copy)
+
+        torch.save(model_transformed, './modified_resnet18.pth')
+        saved_model = torch.load('./modified_resnet18.pth')
+        saved_model.eval()
+        print(saved_model)
+
+        # Eval for both models
+        assert torch.allclose(model_transformed(input_tensor),
+                              saved_model(input_tensor))
+
+        if os.path.exists('./modified_resnet18.pth'):
+            os.remove('./modified_resnet18.pth')
+
+    def test_fx_with_save_and_load_state_dict(self):
+        """
+        test torch fx with torchvision Resnet18 - torch save and load only the state_dict
+        """
+        input_shape = (1, 3, 224, 224)
+        input_tensor = torch.randn(*input_shape)
+        model = models.resnet18().eval()
+        model_copy = copy.deepcopy(model)
+
+        model_transformed = replace_functional_by_module(model_copy)
+
+        # Save only the state_dict of transformed model
+        torch.save(model_transformed.state_dict(), './modified_resnet18.pth')
+
+        # 1) Load the state_dict in same transformed model
+        model_transformed.load_state_dict(torch.load('./modified_resnet18.pth'))
+        model_transformed.eval()
+
+        # Eval for both models
+        assert torch.allclose(model_transformed(input_tensor),
+                              model(input_tensor))
+
+        # 2) Load the dict in original model
+        model.load_state_dict(torch.load('./modified_resnet18.pth'))
+        model.eval()
+
+        # Eval for both models
+        assert torch.allclose(model_transformed(input_tensor),
+                              model(input_tensor))
+
+        if os.path.exists('./modified_resnet18.pth'):
+            os.remove('./modified_resnet18.pth')
+
+    def test_fx_with_quantsim_export(self):
+        """
+        test torch fx with torchvision Resnet18 - QuantSim export
+        """
+        input_shape = (1, 3, 224, 224)
+        input_tensor = torch.randn(*input_shape)
+        model = models.resnet18().eval()
+        model_copy = copy.deepcopy(model)
+
+        model_transformed = replace_functional_by_module(model_copy)
+        quant_sim = QuantizationSimModel(model_transformed, dummy_input=input_tensor)
+
+        def forward_pass(model, args):
+            model.eval()
+            with torch.no_grad():
+                model(torch.randn(1, 3, 224, 224))
+
+        quant_sim.compute_encodings(forward_pass, None)
+
+        quant_sim.export('./data/', filename_prefix='modified_resnet18', dummy_input=input_tensor)
+
+        with open('./data/modified_resnet18.encodings') as json_file:
+            encoding_data = json.load(json_file)
+            print(encoding_data)
+
+        # Check the exported model
+        loaded_model = torch.load('./data/modified_resnet18.pth')
+
+        # Eval for both models
+        assert torch.allclose(model_transformed(input_tensor),
+                              loaded_model(input_tensor))
+
+        # Check the onnx model
+        onnx_model = onnx.load('./data/modified_resnet18.onnx')
+        node_for_relu = 0
+        node_for_add = 0
+        for node in onnx_model.graph.node:
+            if node.op_type == 'Relu':
+                node_for_relu += 1
+            elif node.op_type == 'Add':
+                node_for_add += 1
+
+        # 8 new ReLUs are added.
+        assert node_for_relu == 8 + 9
+
+        # 8 new elementwise_ops.Add are added.
+        assert node_for_add == 8
+
+        if os.path.exists('./data/modified_resnet18.pth'):
+            os.remove('./data/modified_resnet18.pth')
+
+        if os.path.exists('./data/modified_resnet18.onnx'):
+            os.remove('./data/modified_resnet18.onnx')
+
+        if os.path.exists('./data/modified_resnet18.encodings.yaml'):
+            os.remove('./data/modified_resnet18.encodings.yaml')
+
+        if os.path.exists('./data/modified_resnet18.encodings'):
+            os.remove('./data/modified_resnet18.encodings')
+
+        if os.path.exists('./data/temp_onnx_model_with_markers.onnx'):
+            os.remove('./data/temp_onnx_model_with_markers.onnx')
