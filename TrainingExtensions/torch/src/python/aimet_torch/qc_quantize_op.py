@@ -70,7 +70,8 @@ class QcQuantizeOpMode(Enum):
 
 
 def tensor_quantizer_factory(bitwidth: int, round_mode: str, quant_scheme: Union[QuantScheme, libpymo.QuantizationMode],
-                             use_symmetric_encodings: bool, enabled_by_default: bool):
+                             use_symmetric_encodings: bool, enabled_by_default: bool,
+                             data_type: QuantizationDataType = QuantizationDataType.int):
     """
     Instantiates TensorQuantizer depending on the quant_scheme
     :param bitwidth: Quantization bitwidth
@@ -83,7 +84,7 @@ def tensor_quantizer_factory(bitwidth: int, round_mode: str, quant_scheme: Union
     assert quant_scheme in [libpymo.QuantizationMode.QUANTIZATION_TF_ENHANCED, libpymo.QuantizationMode.QUANTIZATION_TF]
 
     tensor_quantizer = StaticGridPerTensorQuantizer(bitwidth, round_mode, quant_scheme, use_symmetric_encodings,
-                                                    enabled_by_default, QuantizationDataType.int)
+                                                    enabled_by_default, data_type)
     return tensor_quantizer
 
 
@@ -117,13 +118,13 @@ class QcQuantizeStandAloneBase(nn.Module):
         self.output_quantizers = [tensor_quantizer_factory(activation_bw, round_mode,
                                                            quant_scheme,
                                                            is_symmetric,
-                                                           enabled_by_default=True)]
+                                                           enabled_by_default=True,
+                                                           data_type=data_type)]
         # Temporary to satisfy dependent code
         # Todo: remove this once all dependent code has been cleaned up
         self.output_quantizer = self.output_quantizers[0]
 
         self._mode = QcQuantizeOpMode.ANALYSIS
-        self._data_type = data_type # TODO remove this variable after tensor_quantizer_factory is using data_type
 
     @abc.abstractmethod
     def forward(self, *inputs):
@@ -211,10 +212,17 @@ class QcQuantizeWrapper(nn.Module):
         """
         super(QcQuantizeWrapper, self).__init__()
 
+        if data_type == QuantizationDataType.float and weight_bw != 16:
+            raise ValueError('weight_bw=16 is the only supported configuration with floating point data type')
+
+        if data_type == QuantizationDataType.float and activation_bw != 16:
+            raise ValueError('activation_bw=16 is the only supported configuration with floating point data type')
+
         self.output_quantizers = [tensor_quantizer_factory(activation_bw, round_mode,
                                                            quant_scheme,
                                                            is_symmetric,
-                                                           enabled_by_default=is_output_quantized)
+                                                           enabled_by_default=is_output_quantized,
+                                                           data_type=data_type)
                                   for _ in range(num_outputs)]
 
         # Temporary to satisfy dependent code
@@ -232,13 +240,15 @@ class QcQuantizeWrapper(nn.Module):
             self.param_quantizers[name] = tensor_quantizer_factory(weight_bw, round_mode,
                                                                    quant_scheme,
                                                                    is_symmetric,
-                                                                   enabled_by_default=True)
+                                                                   enabled_by_default=True,
+                                                                   data_type=data_type)
 
         # Create quantizer for layer input
         self.input_quantizers = [tensor_quantizer_factory(activation_bw, round_mode,
                                                           quant_scheme,
                                                           is_symmetric,
-                                                          enabled_by_default=False)
+                                                          enabled_by_default=False,
+                                                          data_type=data_type)
                                  for _ in range(num_inputs)]
         self.input_quantizer = self.input_quantizers[0]
 
@@ -533,6 +543,7 @@ class SteGatingFuncForParameters(torch.autograd.Function):
     """
     Custom gradient function for STE
     """
+
     # pylint:disable = arguments-differ
     @staticmethod
     def forward(ctx, quant_wrapper_ref, *quantized_input):
@@ -555,7 +566,8 @@ class SteGatingFuncForParameters(torch.autograd.Function):
 
         # pylint:disable = protected-access
         for name, param in quant_wrapper_ref._module_to_wrap.named_parameters():
-            if quant_wrapper_ref.param_quantizers[name].enabled and param.grad is not None:
+            if quant_wrapper_ref.param_quantizers[name].enabled and param.grad is not None and \
+                    quant_wrapper_ref.param_quantizers[name].data_type == QuantizationDataType.int:
                 param_quantizer = quant_wrapper_ref.param_quantizers[name]
 
                 if isinstance(param_quantizer.encoding, list):

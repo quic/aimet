@@ -153,18 +153,17 @@ class QcQuantizeRecurrent(torch.nn.Module):
         self._grouped_quantizers = {}
         self._param_quantizers = {}
         self._grouped_param_quantizers = set()
-        self._data_type = data_type
 
         hasCellState: bool = isinstance(self.module_to_quantize, torch.nn.LSTM)
         outputs = ['h_l{}', 'c_l{}'] if hasCellState else ['h_l{}']
         self._output_quantizers = self._create_activation_quantizers(outputs, activation_bw, round_mode,
-                                                                     quant_scheme, is_symmetric)
+                                                                     quant_scheme, is_symmetric, data_type)
 
         inputs = ['input_l{}', 'initial_h_l{}', 'initial_c_l{}'] if hasCellState else ['input_l{}', 'initial_h_l{}']
         self._input_quantizers = self._create_activation_quantizers(inputs, activation_bw, round_mode,
-                                                                    quant_scheme, is_symmetric)
+                                                                    quant_scheme, is_symmetric, data_type)
 
-        self._create_param_quantizers(weight_bw, round_mode, quant_scheme, is_symmetric)
+        self._create_param_quantizers(weight_bw, round_mode, quant_scheme, is_symmetric, data_type)
         self._set_default_eai_quantizer_state()
 
         # flag to control if initial hidden state quantization during analysis should be done post computation
@@ -219,7 +218,7 @@ class QcQuantizeRecurrent(torch.nn.Module):
 
     def _create_activation_quantizers(self, tensor_names: List[str], activation_bw: int,
                                       round_mode: libpymo.RoundingMode, quant_scheme: libpymo.QuantizationMode,
-                                      is_symmetric: bool) -> Dict[str, StaticGridPerTensorQuantizer]:
+                                      is_symmetric: bool, data_type: QuantizationDataType) -> Dict[str, StaticGridPerTensorQuantizer]:
         """
         helper method to construct activation quantizers
         :param activation_bw: Quantization bitwidth for activations
@@ -240,7 +239,8 @@ class QcQuantizeRecurrent(torch.nn.Module):
                                                      round_mode,
                                                      quant_scheme,
                                                      use_symmetric_encodings=is_symmetric,
-                                                     enabled_by_default=False)
+                                                     enabled_by_default=False,
+                                                     data_type=data_type)
                     quantizers[name_in_layer] = self._grouped_quantizers[group_name]
                 else:
                     quantizers[name_in_layer] = tensor_quantizer_factory(
@@ -248,11 +248,13 @@ class QcQuantizeRecurrent(torch.nn.Module):
                         round_mode,
                         quant_scheme,
                         use_symmetric_encodings=is_symmetric,
-                        enabled_by_default=False)
+                        enabled_by_default=False,
+                        data_type=data_type)
         return quantizers
 
     def _create_param_quantizers(self, weight_bw: int, round_mode: libpymo.RoundingMode,
-                                 quant_scheme: libpymo.QuantizationMode, is_symmetric: bool):
+                                 quant_scheme: libpymo.QuantizationMode, is_symmetric: bool,
+                                 data_type: QuantizationDataType):
         """
         helper method to construct param quantizers
         :param weight_bw: Quantization bitwidth for weights
@@ -270,7 +272,8 @@ class QcQuantizeRecurrent(torch.nn.Module):
                                                  round_mode,
                                                  quant_scheme,
                                                  use_symmetric_encodings=is_symmetric,
-                                                 enabled_by_default=False)
+                                                 enabled_by_default=False,
+                                                 data_type=data_type)
                 tensor_names = [tensor_name.format(layer) for tensor_name in tensor_names]
                 for tensor_name in tensor_names:
                     assert tensor_name not in tensor_grouped_quantizer_map
@@ -288,7 +291,8 @@ class QcQuantizeRecurrent(torch.nn.Module):
                     round_mode,
                     quant_scheme,
                     use_symmetric_encodings=is_symmetric,
-                    enabled_by_default=False)
+                    enabled_by_default=False,
+                    data_type=data_type)
 
     def _set_default_eai_quantizer_state(self):
         """
