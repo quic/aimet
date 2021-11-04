@@ -351,6 +351,7 @@ class TestQuantizationSim:
                                        quant_scheme=QuantScheme.post_training_tf_enhanced, data_type=QuantizationDataType.int)
         assert not QuantizationSimModel._is_quantizable_module(conv1)
 
+
     # ------------------------------------------------------------
     def verify_quantization_wrappers(self, original_model, quantized_model, quant_scheme=QuantScheme.post_training_tf_enhanced):
         """Test utility to determine if quantization wrappers were added correctly"""
@@ -645,6 +646,32 @@ class TestQuantizationSim:
         sim.export('./data/', 'two_input_model', dummy_input)
 
     # -------------------------------------------
+    def test_model_with_two_inputs_fp16(self):
+        """Model with more than 1 input"""
+
+        dummy_input=(torch.rand(32, 1, 28, 28), torch.rand(32, 1, 28, 28))
+
+        def forward_pass(model, args):
+            model.eval()
+            with torch.no_grad():
+                model(*dummy_input)
+
+        model = ModelWithTwoInputs()
+
+        from aimet_torch import quantsim
+        quantsim.default_data_type = QuantizationDataType.float
+
+        sim = QuantizationSimModel(model, default_output_bw=16, default_param_bw=16, dummy_input=dummy_input)
+
+        # Quantize
+        sim.compute_encodings(forward_pass, None)
+
+        # save encodings
+        sim.export('./data/', 'two_input_model_fp16', dummy_input)
+        # reset the global variable back to the default state
+        quantsim.default_data_type = QuantizationDataType.int
+
+    # -------------------------------------------
     def test_model_with_two_inputs_per_channel(self):
         """Model with more than 1 input"""
 
@@ -726,6 +753,44 @@ class TestQuantizationSim:
         loss.backward()
 
     # -------------------------------------------
+
+    def test_model_with_two_inputs_per_channel_fp16_qat(self):
+        """Model with more than 1 input"""
+
+        dummy_input = (torch.rand(32, 1, 28, 28), torch.rand(32, 1, 28, 28))
+
+        def forward_pass(model, args):
+            model.eval()
+            with torch.no_grad():
+                model(*dummy_input)
+
+        model = ModelWithTwoInputs()
+
+        from aimet_torch import quantsim
+        quantsim.default_data_type = QuantizationDataType.float
+
+        sim = QuantizationSimModel(model, dummy_input=dummy_input, default_output_bw=16, default_param_bw=16)
+
+        for wrapper in sim.quant_wrappers():
+            wrapper.enable_per_channel_quantization()
+
+        assert isinstance(sim.model.conv1_a.param_quantizers['weight'], StaticGridPerChannelQuantizer)
+        assert isinstance(sim.model.conv1_a.param_quantizers['bias'], StaticGridPerChannelQuantizer)
+        assert isinstance(sim.model.conv1_a.output_quantizers[0], StaticGridPerTensorQuantizer)
+
+        # Quantize
+        sim.compute_encodings(forward_pass, None)
+
+        # Pass some data in train mode
+        sim.model.train()
+        output = sim.model(*dummy_input)
+
+        # Try a backward pass - all we are testing for is that nothing blows up functionally
+        loss = output.flatten().sum()
+        loss.backward()
+        # reset the global variable back to the default state
+        quantsim.default_data_type = QuantizationDataType.int
+
     def test_model_transposed_conv_per_channel_qat(self):
         """Model with more than 1 input"""
 

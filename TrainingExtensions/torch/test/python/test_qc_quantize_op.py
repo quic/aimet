@@ -184,6 +184,7 @@ class TestQcQuantizeOp:
         expected_out = torch.tensor([0, 6, 75, 178, 181, 255], dtype=torch.int32)
         assert torch.equal(quant_out, expected_out)
 
+
     def test_per_channel_symmetric_qdq(self):
         """ Test tensor quantizer symmetric quantize-dequantize functionality on cpu """
 
@@ -348,10 +349,49 @@ class TestQcQuantizeOp:
         expected_out = torch.tensor([0, 59, 74, 197, 241, 255], dtype=torch.int32)
         assert torch.equal(quant_out, expected_out)
 
+    def test_quantize_dequantize_fp16_cpu(self):
+        """ Test tensor quantizer quantize only symmetric unsigned functionality on cpu """
+
+        quantizer = StaticGridPerTensorQuantizer(bitwidth=16, round_mode='nearest',
+                                                 quant_scheme=MAP_QUANT_SCHEME_TO_PYMO[QuantScheme.post_training_tf],
+                                                 use_symmetric_encodings=True, enabled_by_default=True,
+                                                 data_type=QuantizationDataType.float)
+
+        # Test quantize-dequantize only on gpu
+        inp_tensor = torch.tensor([0.3, 2.1, 1.1, 0.9, 0.1, 1.3])
+        quant_out = quantizer.quantize_dequantize(inp_tensor, MAP_ROUND_MODE_TO_PYMO['nearest'])
+        assert torch.allclose(inp_tensor, quant_out, rtol=0.1)
+
+    @pytest.mark.cuda
+    def test_quantize_dequantize_fp16_gpu(self):
+        """ Test tensor quantizer quantize only symmetric unsigned functionality on cpu """
+
+        quantizer = StaticGridPerTensorQuantizer(bitwidth=16, round_mode='nearest',
+                                                 quant_scheme=MAP_QUANT_SCHEME_TO_PYMO[QuantScheme.post_training_tf],
+                                                 use_symmetric_encodings=True, enabled_by_default=True,
+                                                 data_type=QuantizationDataType.float)
+
+        # Test quantize-dequantize only on gpu
+        inp_tensor = torch.tensor([0.3, 2.1, 1.1, 0.9, 0.1, 1.3])
+        quant_out = quantizer.quantize_dequantize(inp_tensor, MAP_ROUND_MODE_TO_PYMO['nearest'])
+        assert torch.allclose(inp_tensor, quant_out, rtol=0.1)
+
+    def test_compute_encodings_fp16_disable_tensor(self):
+        """ Negative test to make sure the encodings are not computed if 'enabled' field is set to False """
+
+        quantizer = StaticGridPerTensorQuantizer(bitwidth=16, round_mode='nearest',
+                                                 quant_scheme=MAP_QUANT_SCHEME_TO_PYMO[QuantScheme.post_training_tf],
+                                                 use_symmetric_encodings=True, enabled_by_default=True,
+                                                 data_type=QuantizationDataType.float)
+
+        # Test if encodings are computed for a float tensor
+        quantizer.compute_encoding()
+        assert quantizer.encoding == None
+
     @pytest.mark.cuda
     def test_quantize_only_asymmetric_gpu(self):
         """ Test tensor quantizer quantize only asymmetric functionality on gpu """
-    
+
         quantizer = StaticGridPerTensorQuantizer(bitwidth=8, round_mode='nearest',
                                                  quant_scheme=MAP_QUANT_SCHEME_TO_PYMO[QuantScheme.post_training_tf],
                                                  use_symmetric_encodings=False, enabled_by_default=True,
@@ -362,7 +402,7 @@ class TestQcQuantizeOp:
         encodings.min = -5.19
         encodings.offset = -178
         quantizer.encoding = encodings
-    
+
         # Test quantize only on gpu
         inp_tensor_gpu = torch.tensor([-7, -5, -3, 0, .1, 2.5], device=torch.device('cuda'))
         quant_out = quantizer.quantize(inp_tensor_gpu, MAP_ROUND_MODE_TO_PYMO['nearest'])
