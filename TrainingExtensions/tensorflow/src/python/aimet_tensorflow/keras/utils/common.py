@@ -45,7 +45,9 @@ from aimet_common.utils import AimetLogger
 
 _logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Quant)
 
-def module_to_name_map(cur_layer: (tf.keras.Model, tf.keras.layers.Layer)) -> typing.Dict[tf.keras.layers.Layer, typing.Tuple[tf.keras.Model, str]]:
+
+def module_to_name_map(cur_layer: (tf.keras.Model, tf.keras.layers.Layer)) \
+        -> typing.Dict[tf.keras.layers.Layer, typing.Tuple[tf.keras.Model, str]]:
     """
     To find a variable name and parent reference of one module.
 
@@ -65,11 +67,12 @@ def module_to_name_map(cur_layer: (tf.keras.Model, tf.keras.layers.Layer)) -> ty
 
     return ref_name
 
+
 def find_input_layers(node_layer_map: typing.Dict) -> typing.List[tf.keras.layers.InputLayer]:
     """
     helper to find the input layers of the model.
 
-    :param node_layer_ref: dictionary includes node_ref as a key, in_layers and out_layer as value
+    :param node_layer_map: dictionary includes node_ref as a key, in_layers and out_layer as value
     :return: return list of input layers
     """
 
@@ -81,7 +84,9 @@ def find_input_layers(node_layer_map: typing.Dict) -> typing.List[tf.keras.layer
 
     return input_layers
 
-def _find_last_layers(cur_layer: (tf.keras.Model, tf.keras.layers.Layer)) -> typing.List[tf.keras.layers.Layer]:
+
+def _find_last_layers(cur_layer: (tf.keras.Model, tf.keras.layers.Layer)) \
+        -> typing.List[tf.keras.layers.Layer]:
     """
     helper to find the last layers of the model.
 
@@ -98,7 +103,8 @@ def _find_last_layers(cur_layer: (tf.keras.Model, tf.keras.layers.Layer)) -> typ
             else:
                 last_layers.append(inner_layer)
 
-    return  last_layers
+    return last_layers
+
 
 def create_layer_to_out_node_map(cur_layer: (tf.keras.Model, tf.keras.layers.Layer)) -> typing.Dict:
     """
@@ -121,15 +127,20 @@ def create_layer_to_out_node_map(cur_layer: (tf.keras.Model, tf.keras.layers.Lay
 
     return layer_node_map
 
-def _submodule_handler_node_to_layer_map(cur_layer: (tf.keras.Model, tf.keras.layers.Layer), node_layer_map: typing.Dict)-> (typing.Dict, str, typing.List):
+
+def _submodule_handler_node_to_layer_map(
+        cur_layer: (tf.keras.Model, tf.keras.layers.Layer),
+        node_layer_map: typing.Dict) -> (typing.Dict, str, typing.List):
     """
-    The utility to extract node_layer_map for the cur_layer submodule and provide the connectivity with the outer model.
+    The utility to extract node_layer_map for the cur_layer submodule and
+    provide the connectivity with the outer model.
 
     :param cur_layer: model to obtain node_layer_ref for
-    :param node_layer_ref: dictionary of node_layer_ref includes an item with submodule ref as
+    :param node_layer_map: dictionary of node_layer_ref includes an item with submodule ref as
              first value index or first and second value index
-    :return: return dictionary includes node_ref as a key, in_layers and out_layer as value for cur_layer,
-             inbound node of the input layer and list of outbound nodes after input layer
+    :return: return dictionary includes node_ref as a key,
+        in_layers and out_layer as value for cur_layer,
+        inbound node of the input layer and list of outbound nodes after input layer
     """
 
     # pylint: disable=too-many-locals
@@ -144,21 +155,25 @@ def _submodule_handler_node_to_layer_map(cur_layer: (tf.keras.Model, tf.keras.la
 
     for node, (in_layers, out_layer) in node_layer_map.items():
         if out_layer == cur_layer:
-            # iterating through inner model node_layer_map dict to find input_layer and its inbound_node
+            # iterating through inner model node_layer_map dict to find input_layer
+            # and its inbound_node
             for im_node, (im_in_layers, im_out_layer) in im_node_layer_map.items():
                 if im_in_layers is None:
                     im_input_layer = im_out_layer
                     im_node_input = im_node
-            # iterating through inner model node_layer_map dict to find input layer outbound nodes and its succeeding layers
+            # iterating through inner model node_layer_map dict to find input layer
+            # outbound nodes and its succeeding layers
             for im_node, (im_in_layers, im_out_layer) in im_node_layer_map.items():
                 if im_in_layers == [im_input_layer]:
                     im_input_layer_succeeding_layers.append(im_out_layer)
                     im_nodes_after_input_layer.append(im_node)
-            # If there are more than one layer which input layer goes to in inner model, we need to build a connection between
-            # incoming layer of cur layer and inner model input layer (branch will not be considered in pattern)
+            # If there are more than one layer which input layer goes to in inner model,
+            # we need to build a connection between incoming layer of cur layer
+            # and inner model input layer (branch will not be considered in pattern)
             if len(im_input_layer_succeeding_layers) > 1:
                 node_layer_map.update({node: [in_layers, im_input_layer]})
-            #otherwise we need to build a connection between incoming layer of cur layer and succeeding layers to inner model input layer
+            # otherwise we need to build a connection between incoming layer of cur layer
+            # and succeeding layers to inner model input layer
             elif len(im_input_layer_succeeding_layers) == 1:
                 node_layer_map.update({node: [in_layers, im_input_layer_succeeding_layers[0]]})
         elif in_layers and cur_layer in in_layers:
@@ -166,6 +181,7 @@ def _submodule_handler_node_to_layer_map(cur_layer: (tf.keras.Model, tf.keras.la
             node_layer_map.update({node: [im_last_layers, out_layer]})
 
     return im_node_layer_map, im_node_input, im_nodes_after_input_layer
+
 
 def create_node_to_layer_map(cur_layer: (tf.keras.Model, tf.keras.layers.Layer)) -> typing.Dict:
     """
@@ -189,7 +205,8 @@ def create_node_to_layer_map(cur_layer: (tf.keras.Model, tf.keras.layers.Layer))
             else:
                 node_layer_map[in_node] = [None, inner_layer]
         if inner_layer.submodules:
-            im_node_layer_map, im_node_input, im_nodes_after_input_layer = _submodule_handler_node_to_layer_map(inner_layer, node_layer_map)
+            im_node_layer_map, im_node_input, im_nodes_after_input_layer = \
+                _submodule_handler_node_to_layer_map(inner_layer, node_layer_map)
             if len(im_nodes_after_input_layer) == 1:
                 del im_node_layer_map[im_nodes_after_input_layer[0]]
             del im_node_layer_map[im_node_input]
