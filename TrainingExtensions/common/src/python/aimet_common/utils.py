@@ -271,6 +271,9 @@ def save_json_yaml(encoding_file_path: str, encodings_dict: dict):
 
 
 class TqdmStreamHandler(logging.StreamHandler):
+    """
+    Logging handler for tqdm.
+    """
     def emit(self, record):
         with tqdm.external_write_mode(file=self.stream):
             super(TqdmStreamHandler, self).emit(record)
