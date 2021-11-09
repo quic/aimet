@@ -41,7 +41,6 @@
 import os
 import json
 import logging
-import unittest.mock
 import torch
 import torch.nn.functional as functional
 
@@ -122,7 +121,7 @@ class ConvTransposeNet(torch.nn.Module):
         return x
 
 
-class TestAdaround(unittest.TestCase):
+class TestAdaround:
     """
     AdaRound Weights Unit Test Cases
     """
@@ -146,7 +145,7 @@ class TestAdaround(unittest.TestCase):
         ada_rounded_model = Adaround.apply_adaround(model, inp_tensor_list, params, './', 'dummy')
         out_after_ada = dummy_forward_pass(ada_rounded_model, input_shape)
 
-        self.assertFalse(torch.all(torch.eq(out_before_ada, out_after_ada)))
+        assert not torch.all(torch.eq(out_before_ada, out_after_ada))
 
         # Test export functionality
         with open('./dummy.encodings') as json_file:
@@ -155,8 +154,67 @@ class TestAdaround(unittest.TestCase):
 
         param_keys = list(encoding_data.keys())
         print(param_keys)
-        self.assertTrue(param_keys[0] == "conv1.weight")
-        self.assertTrue(isinstance(encoding_data["conv1.weight"], list))
+        assert param_keys[0] == "conv1.weight"
+        assert isinstance(encoding_data["conv1.weight"], list)
+
+        # Delete encodings file
+        if os.path.exists("./dummy.encodings"):
+            os.remove("./dummy.encodings")
+
+    def test_apply_adaround_per_channel(self):
+        """ test apply_adaround end to end using tiny model when using per-channel mode """
+
+        AimetLogger.set_level_for_all_areas(logging.DEBUG)
+
+        # create fake data loader with image size (3, 32, 32)
+        data_loader = create_fake_data_loader(dataset_size=64, batch_size=16, image_size=(3, 32, 32))
+
+        model = TinyModel().eval()
+
+        input_shape = (1, 3, 32, 32)
+        out_before_ada = dummy_forward_pass(model, input_shape)
+
+        inp_tensor_list = create_rand_tensors_given_shapes(input_shape)
+
+        params = AdaroundParameters(data_loader=data_loader, num_batches=4, default_num_iterations=5)
+
+        quantsim_config = {
+            "defaults": {
+                "ops": {
+                    "is_output_quantized": "True",
+                    "is_symmetric": "False"
+                },
+                "params": {
+                    "is_quantized": "True",
+                    "is_symmetric": "False"
+                },
+                "per_channel_quantization": "True",
+            },
+            "params": {},
+            "op_type": {},
+            "supergroups": [],
+            "model_input": {},
+            "model_output": {}
+        }
+        with open('./data/quantsim_config.json', 'w') as f:
+            json.dump(quantsim_config, f)
+
+        ada_rounded_model = Adaround.apply_adaround(model, inp_tensor_list, params, './', 'dummy',
+                                                    default_config_file='./data/quantsim_config.json')
+
+        out_after_ada = dummy_forward_pass(ada_rounded_model, input_shape)
+
+        assert not torch.all(torch.eq(out_before_ada, out_after_ada))
+
+        # Test export functionality
+        with open('./dummy.encodings') as json_file:
+            encoding_data = json.load(json_file)
+            print(encoding_data)
+
+        param_keys = list(encoding_data.keys())
+        print(param_keys)
+        assert param_keys[0] == "conv1.weight"
+        assert isinstance(encoding_data["conv1.weight"], list)
 
         # Delete encodings file
         if os.path.exists("./dummy.encodings"):
@@ -198,7 +256,7 @@ class TestAdaround(unittest.TestCase):
 
         soft_quant_rec = functional.mse_loss(out_soft_quant, out_float32)
         print('Reconstruction error before optimization (soft quant): ', float(soft_quant_rec))
-        self.assertTrue(soft_quant_rec < 1)
+        assert soft_quant_rec < 1
 
         # enable hard rounding
         quant_module.param_quantizers['weight'].use_soft_rounding = False
@@ -206,7 +264,7 @@ class TestAdaround(unittest.TestCase):
         hard_quant_rec = functional.mse_loss(out_hard_quant, out_rounding_to_nearest)
 
         print('Reconstruction error before optimization (hard quant): ', float(hard_quant_rec))
-        self.assertTrue(hard_quant_rec < 1)
+        assert hard_quant_rec < 1
 
     def test_adaround_conv_only_model_weight_binning(self):
         """ test AdaRound weight binning """
@@ -233,7 +291,7 @@ class TestAdaround(unittest.TestCase):
                                             default_param_bw=param_bit_width,
                                             default_quant_scheme=QuantScheme.post_training_tf,
                                             default_config_file=None)
-        self.assertTrue(torch.allclose(model.conv1.weight, ada_model.conv1.weight, atol=2*delta))
+        assert torch.allclose(model.conv1.weight, ada_model.conv1.weight, atol=2*delta)
 
         # Delete encodings file
         if os.path.exists("./dummy.encodings"):
@@ -265,10 +323,10 @@ class TestAdaround(unittest.TestCase):
                                             default_quant_scheme=QuantScheme.post_training_tf,
                                             default_config_file=None)
         # Only Conv1 must be AdaRounded.
-        self.assertTrue(torch.allclose(model.conv1.weight, ada_model.conv1.weight, atol=2*delta))
+        assert torch.allclose(model.conv1.weight, ada_model.conv1.weight, atol=2*delta)
 
         # Conv2 weights are not AdaRounded and should be the same
-        self.assertTrue(torch.equal(model.conv2.weight, ada_model.conv2.weight))
+        assert torch.equal(model.conv2.weight, ada_model.conv2.weight)
 
         # Delete encodings file
         if os.path.exists("./dummy.encodings"):
@@ -300,8 +358,8 @@ class TestAdaround(unittest.TestCase):
                                             default_quant_scheme=QuantScheme.post_training_tf,
                                             default_config_file=None)
         # Both the modules must be AdaRounded
-        self.assertTrue(torch.allclose(model.conv1.weight, ada_model.conv1.weight, atol=2*delta))
-        self.assertTrue(torch.allclose(model.conv2.weight, ada_model.conv2.weight, atol=2*delta))
+        assert torch.allclose(model.conv1.weight, ada_model.conv1.weight, atol=2*delta)
+        assert torch.allclose(model.conv2.weight, ada_model.conv2.weight, atol=2*delta)
 
         # Delete encodings file
         if os.path.exists("./dummy.encodings"):
@@ -342,7 +400,7 @@ class TestAdaround(unittest.TestCase):
         _ = ada_model(*inp_tensor_list)
 
         # Assert that AdaRounded weights are not rounded more than one delta value up or down
-        self.assertTrue(torch.allclose(model.trans_conv1.weight, ada_model.trans_conv1.weight, atol=1*delta))
+        assert torch.allclose(model.trans_conv1.weight, ada_model.trans_conv1.weight, atol=1*delta)
 
         # Delete encodings file
         if os.path.exists("./dummy.encodings"):
@@ -377,11 +435,11 @@ class TestAdaround(unittest.TestCase):
 
         # Verify Conv2 weight encoding bitwidth is set to 8
         conv2_encoding = encoding_data["conv2.weight"][0]
-        self.assertTrue(conv2_encoding.get('bitwidth') == 8)
+        assert conv2_encoding.get('bitwidth') == 8
 
         # Verify Conv4 weight encoding bitwidth is set to 16
         conv4_encoding = encoding_data["conv4.weight"][0]
-        self.assertTrue(conv4_encoding.get('bitwidth') == 16)
+        assert conv4_encoding.get('bitwidth') == 16
 
         # Delete encodings JSON file
         if os.path.exists("./dummy.encodings"):
@@ -415,11 +473,11 @@ class TestAdaround(unittest.TestCase):
 
         # Verify Conv2 weight encoding bitwidth is set to the default value of 4
         conv2_encoding = encoding_data["conv2.weight"][0]
-        self.assertTrue(conv2_encoding.get('bitwidth') == 4)
+        assert conv2_encoding.get('bitwidth') == 4
 
         # Verify Conv4 weight encoding bitwidth is set to the default value of 4
         conv4_encoding = encoding_data["conv4.weight"][0]
-        self.assertTrue(conv4_encoding.get('bitwidth') == 4)
+        assert conv4_encoding.get('bitwidth') == 4
 
         # Delete encodings JSON file
         if os.path.exists("./dummy.encodings"):
@@ -438,10 +496,10 @@ class TestAdaround(unittest.TestCase):
         # sim.compute_encodings(dummy_forward_pass, forward_pass_callback_args=input_shape)
 
         # Before modifying the QuantSim, verify layers are wrapped
-        self.assertTrue(isinstance(sim.model.maxpool, StaticGridQuantWrapper))
-        self.assertTrue(isinstance(sim.model.avgpool, StaticGridQuantWrapper))
-        self.assertTrue(isinstance(sim.model.conv2, StaticGridQuantWrapper))
-        self.assertTrue(isinstance(sim.model.relu3, StaticGridQuantWrapper))
+        assert isinstance(sim.model.maxpool, StaticGridQuantWrapper)
+        assert isinstance(sim.model.avgpool, StaticGridQuantWrapper)
+        assert isinstance(sim.model.conv2, StaticGridQuantWrapper)
+        assert isinstance(sim.model.relu3, StaticGridQuantWrapper)
 
         # Skip the maxpool and avgpool layers.
         ignore_quant_ops_list = [model.maxpool, model.avgpool]
@@ -449,12 +507,12 @@ class TestAdaround(unittest.TestCase):
         sim.compute_encodings(dummy_forward_pass, forward_pass_callback_args=input_shape)
 
         # Since maxpool and avgpool are skipped, they shouldn't be wrapped StaticGridQuantWrapper.
-        self.assertFalse(isinstance(sim.model.maxpool, StaticGridQuantWrapper))
-        self.assertFalse(isinstance(sim.model.avgpool, StaticGridQuantWrapper))
+        assert not isinstance(sim.model.maxpool, StaticGridQuantWrapper)
+        assert not isinstance(sim.model.avgpool, StaticGridQuantWrapper)
 
         # conv2 and relu3 must be remain wrapped in StaticGridQuantWrapper
-        self.assertTrue(isinstance(sim.model.conv2, StaticGridQuantWrapper))
-        self.assertTrue(isinstance(sim.model.relu3, StaticGridQuantWrapper))
+        assert isinstance(sim.model.conv2, StaticGridQuantWrapper)
+        assert isinstance(sim.model.relu3, StaticGridQuantWrapper)
 
     def test_apply_adaround_with_ignore_list(self):
         """ Test the apply_adaround() API with ignore list """
@@ -486,7 +544,7 @@ class TestAdaround(unittest.TestCase):
 
         # Verify Conv2 weight encoding bitwidth is set to the default value of 4
         conv2_encoding = encoding_data["conv2.weight"][0]
-        self.assertTrue(conv2_encoding.get('bitwidth') == 4)
+        assert conv2_encoding.get('bitwidth') == 4
 
         # Delete encodings JSON file
         if os.path.exists("./dummy.encodings"):
