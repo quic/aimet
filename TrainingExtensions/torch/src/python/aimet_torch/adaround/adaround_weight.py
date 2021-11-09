@@ -324,21 +324,29 @@ class Adaround:
             if orig_param_name == 'weight':
                 param_name = name + '.' + orig_param_name
                 encodings = cls._create_encodings_dict_for_quantizer(param_quantizer)
-                param_encodings[param_name] = [encodings]
+                param_encodings[param_name] = encodings
 
     @staticmethod
-    def _create_encodings_dict_for_quantizer(quantizer: AdaroundTensorQuantizer) -> Dict:
+    def _create_encodings_dict_for_quantizer(quantizer: AdaroundTensorQuantizer) -> List[Dict]:
         """
         Return encodings for given qunatizer
         :param quantizer: Tensor quantizer associated with module's param
         :return: Dictionary containing encodings
         """
-        return {'min': quantizer.encoding.min,
-                'max': quantizer.encoding.max,
-                'scale': quantizer.encoding.delta,
-                'offset': quantizer.encoding.offset,
-                'bitwidth': quantizer.encoding.bw,
-                'is_symmetric': str(quantizer.use_symmetric_encodings)}
+        quant_encodings = quantizer.encoding
+        if not isinstance(quantizer.encoding, list):
+            quant_encodings = [quant_encodings]
+
+        encodings_dict = []
+        for enc in quant_encodings:
+            encodings_dict.append({'min': enc.min,
+                                   'max': enc.max,
+                                   'scale': enc.delta,
+                                   'offset': enc.offset,
+                                   'bitwidth': enc.bw,
+                                   'is_symmetric': str(quantizer.use_symmetric_encodings)})
+
+        return encodings_dict
 
     @staticmethod
     def _override_param_bitwidth(model: torch.nn.Module, quant_sim: QuantizationSimModel,

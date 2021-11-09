@@ -113,13 +113,47 @@ class AdaroundTensorQuantizer(TensorQuantizer):
         """
         assert self.encoding, 'Encoding needs to be set before Adaround the weight tensor.'
 
+        def _broadcast_to_tensor(tensor, encoding, ch_axis):
+            """
+            This helper method takes n-dimension tensor and a 1-dimension encoding. And the encoding is broad-casted to
+            match the n-dimensional tensor
+            :param tensor: Tensor to use as target for the broadcasting operation
+            :param encoding: Encoding 1-dimensional tensor to broadcast
+            :return: Broad-casted tensor
+            """
+            shape = list(tensor.shape)
+            encoding = torch.Tensor(encoding).to(tensor.device)  # convert encoding to a tensor
+
+            # Original tensor shape is OIHW/IOHW, we change the shape to IHWO. Encoding (which is of shape O) can naturally
+            # broadcast to this shape
+            # This will work if the original tensor shape was any dimensions as long as the first dimension matches the
+            # encoding tensor shape
+            num_channels = shape.pop(ch_axis)
+            encoding = encoding * torch.ones(shape + [num_channels]).to(tensor.device)
+
+            # we permute the resulting tensor back to OIHW/IOHW shape
+            permute_dims = list(range(len(shape)))
+            permute_dims.insert(ch_axis, len(shape))
+            encoding = encoding.permute(permute_dims)
+
+            return encoding
+
+        if isinstance(self.encoding, list):
+            delta = [enc.delta for enc in self.encoding]                # pylint: disable=not-an-iterable
+            broadcasted_delta = _broadcast_to_tensor(tensor, delta, 0)
+            offset = [enc.offset for enc in self.encoding]              # pylint: disable=not-an-iterable
+            broadcasted_offset = _broadcast_to_tensor(tensor, offset, 0)
+        else:
+            broadcasted_delta = self.encoding.delta
+            broadcasted_offset = self.encoding.offset
+
         # alpha is the "V" parameter in Equation 2 of the Systems HLD which is defined as a FP32 tensor of the
         # same shape as the weight tensor
         if self.alpha is None:
-            self._initialize_alpha(tensor)
+            self._initialize_alpha(tensor, broadcasted_delta)
 
         # Scale the tensor
-        tensor = torch.floor(tensor / self.encoding.delta)
+        tensor = torch.floor(tensor / broadcasted_delta)
 
         # Soft rounding maps alpha parameter between zero and one using
         # rectified sigmoid function and hard rounding maps it to exactly zero or one
@@ -134,19 +168,19 @@ class AdaroundTensorQuantizer(TensorQuantizer):
         tensor = tensor + h_alpha
 
         # Quantize and de-quantize the tensor
-        tensor_quant = torch.clamp(tensor - self.encoding.offset, 0, 2 ** self.bitwidth - 1)
-        tensor_dequant = (tensor_quant + self.encoding.offset) * self.encoding.delta
+        tensor_quant = torch.clamp(tensor - broadcasted_offset, 0, 2 ** self.bitwidth - 1)
+        tensor_dequant = (tensor_quant + broadcasted_offset) * broadcasted_delta
 
         return tensor_dequant
 
-    def _initialize_alpha(self, tensor: torch.Tensor):
+    def _initialize_alpha(self, tensor: torch.Tensor, delta):
         """
         Initializes alpha parameter, same shape as the weight tensor
         :param tensor: The weight tensor to be ada rounded
         """
-        tensor_floor = torch.floor(tensor / self.encoding.delta)
+        tensor_floor = torch.floor(tensor / delta)
 
-        tensor = (tensor / self.encoding.delta) - tensor_floor
+        tensor = (tensor / delta) - tensor_floor
         alpha = - torch.log((AdaroundConstants.ZETA - AdaroundConstants.GAMMA) / (tensor - AdaroundConstants.GAMMA) - 1)
 
         self.alpha = torch.nn.Parameter(alpha, requires_grad=True)
