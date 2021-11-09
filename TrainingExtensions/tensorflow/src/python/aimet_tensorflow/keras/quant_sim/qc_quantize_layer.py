@@ -35,10 +35,11 @@
 #
 #  @@-COPYRIGHT-END-@@
 # =============================================================================
-""" Qc Quantize wrapper for tf 2 keras """
+""" Qc Quantize op for tf 2 keras """
 
 from typing import Union, List
 import tensorflow as tf
+import numpy as np
 
 @tf.custom_gradient
 def round_with_gradient(x):
@@ -47,15 +48,8 @@ def round_with_gradient(x):
         return upstream
     return tf.math.round(x), grad
 
-class QcQuantizeWrapper(tf.keras.layers.Layer):
+class QcQuantizeLayer(tf.keras.layers.Layer):
     """ Wrapper for simulating quantization noise """
-    def __init__(self, layer_to_wrap: tf.keras.layers.Layer):
-        super(QcQuantizeWrapper, self).__init__()
-        self._layer_to_wrap = layer_to_wrap
-
-    def get_config(self):
-        """ Override get_config """
-        return {"layer_to_wrap": self._layer_to_wrap}
 
     # pylint: disable=arguments-differ
     def call(self, inputs):
@@ -65,20 +59,8 @@ class QcQuantizeWrapper(tf.keras.layers.Layer):
         :param inputs: Inputs passed to the module in the forward pass
         :return: Quantized output from the wrapped module
         """
-        shadow_params = [tf.keras.backend.get_value(param) for param in self._layer_to_wrap.weights]
-        self._quantize_params()
-        inputs = self._quantize_activation(inputs)
-        outputs = self._layer_to_wrap(inputs)
-        outputs = self._quantize_activation(outputs)
-        self._restore_shadow_params(shadow_params)
+        outputs = self._quantize_activation(inputs)
         return outputs
-
-    def _quantize_params(self):
-        """ Quantize parameters """
-        for idx, param in enumerate(self._layer_to_wrap.weights):
-            param_val = tf.keras.backend.get_value(param)
-            quantized_param = round_with_gradient(param_val)
-            self._layer_to_wrap.weights[idx].assign(quantized_param)
 
     @staticmethod
     def _quantize_activation(activation: Union[tf.Tensor, List]):
@@ -91,9 +73,41 @@ class QcQuantizeWrapper(tf.keras.layers.Layer):
         quantized_activations = []
         for tensor in activation:
             quantized_activations.append(round_with_gradient(tensor))
+            # quantized_activations.append(tf.add(tensor, 1))
         if len(quantized_activations) == 1:
             quantized_activations = quantized_activations[0]
         return quantized_activations
+
+class QcQuantizeParamWrapper(tf.keras.layers.Layer):
+    """ Wrapper for simulating quantization noise """
+    def __init__(self, layer_to_wrap: tf.keras.layers.Layer):
+        super(QcQuantizeParamWrapper, self).__init__()
+        self._layer_to_wrap = layer_to_wrap
+
+    # pylint: disable=arguments-differ
+    def call(self, inputs):
+        """
+        Forward-pass routine. This quantizes the weights before delegating to the wrapped module and then quantizes the
+        output before returning the same
+        :param inputs: Inputs passed to the module in the forward pass
+        :return: Quantized output from the wrapped module
+        """
+        shadow_params = [tf.keras.backend.get_value(param) for param in self._layer_to_wrap.weights]
+        self._quantize_params()
+        outputs = self._layer_to_wrap(inputs)
+        self._restore_shadow_params(shadow_params)
+        return outputs
+
+    def get_config(self):
+        """ Override get_config """
+        return {"layer_to_wrap": self._layer_to_wrap}
+
+    def _quantize_params(self):
+        """ Quantize parameters """
+        for idx, param in enumerate(self._layer_to_wrap.weights):
+            param_val = tf.keras.backend.get_value(param)
+            quantized_param = np.round(param_val)
+            self._layer_to_wrap.weights[idx].assign(quantized_param)
 
     def _restore_shadow_params(self, shadow_params):
         """
