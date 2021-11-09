@@ -47,8 +47,7 @@
 # Change in major revision should indicate substantial change to the format, updates to minor version indicates
 # additional information element being added to encoding format and might require update to fully consume the encodings.
 # The patching version shall be updated to indicate minor updates to quantization simulation e.g. bug fix etc.
-encoding_version = '0.4.0'
-
+encoding_version = '0.5.0'
 
 def gate_min_max(min_val: float, max_val: float)-> (float, float):
     """

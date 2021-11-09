@@ -970,7 +970,7 @@ class TestQuantizationSim:
             assert 16 == len(activation_encodings)
             assert 'conv1_a.bias' in param_encodings
             assert param_encodings['conv1_a.bias'][0]['bitwidth'] == 32
-            assert 6 == len(param_encodings['conv1_a.weight'][0])
+            assert 7 == len(param_encodings['conv1_a.weight'][0])
             assert 10 == param_encodings['conv1_a.weight'][0]['max']
 
         with open('./data/two_input_model.encodings.yaml', 'r') as fp_yaml:
@@ -981,7 +981,7 @@ class TestQuantizationSim:
             assert 16 == len(activation_encodings)
             assert 'conv1_a.bias' in param_encodings
             assert param_encodings['conv1_a.bias'][0]['bitwidth'] == 32
-            assert 6 == len(param_encodings['conv1_a.weight'][0])
+            assert 7 == len(param_encodings['conv1_a.weight'][0])
             assert 10 == param_encodings['conv1_a.weight'][0]['max']
 
         # check the exported model
@@ -1717,21 +1717,24 @@ class TestQuantizationSim:
         Test functionality to compute encoding for given bitwidth
         """
         encoding_dict = QuantizationSimModel.generate_symmetric_encoding_dict(
-            torch.as_tensor(np.array([1.203197181224823, 0], dtype='float32')),  bitwidth=32)
+            torch.as_tensor(np.array([1.203197181224823, 0], dtype='float32')),  bitwidth=32,
+            data_type=QuantizationDataType.int)
         assert -2147483648 == encoding_dict['offset']
         assert -1.2031972414 == round(encoding_dict['min'], 10)
         assert 1.2031972408 == round(encoding_dict['max'], 10)
         assert round(encoding_dict['scale'], 14) == 5.6028e-10
 
         encoding_dict = QuantizationSimModel.generate_symmetric_encoding_dict(
-            torch.as_tensor(np.array([0.7796169519533523, -0.9791506528745285], dtype='float32')), bitwidth=32)
+            torch.as_tensor(np.array([0.7796169519533523, -0.9791506528745285], dtype='float32')), bitwidth=32,
+            data_type=QuantizationDataType.int)
         assert -2147483648 == encoding_dict['offset']
         assert -0.9791506533 == round(encoding_dict['min'], 10)
         assert 0.9791506529 == round(encoding_dict['max'], 10)
         assert round(encoding_dict['scale'], 14) == 4.5595e-10
 
         encoding_dict = QuantizationSimModel.generate_symmetric_encoding_dict(
-            torch.as_tensor(np.array([0.7796169519533523, -0.9791506528745285], dtype='float32')), bitwidth=8)
+            torch.as_tensor(np.array([0.7796169519533523, -0.9791506528745285], dtype='float32')), bitwidth=8,
+            data_type=QuantizationDataType.int)
         assert -128 == encoding_dict['offset']
         assert round(encoding_dict['scale'], 7) == 0.0077098
 
@@ -1773,6 +1776,33 @@ class TestQuantizationSim:
             assert exp == act.name
         for tensor_name in encoding_data["activation_encodings"].keys():
             assert tensor_name in o_names
+
+    def test_compute_encoding_fp16(self):
+        """
+        Test encodings generated for fp16
+        """
+        dummy_input = {'a': torch.randn(1, 10, 10, 10),
+                       'b': torch.randn(1, 10, 10, 10),
+                       'c': torch.randn(1, 10, 10, 10)}
+
+        model = InputOutputDictModel()
+
+        from aimet_torch import quantsim
+        quantsim.default_data_type = QuantizationDataType.float
+
+        sim = QuantizationSimModel(model, default_output_bw=16, default_param_bw=16, dummy_input=dummy_input)
+        enc_dict = sim._create_encoding_dict(encoding=None, is_symmetric=False, data_type=QuantizationDataType.float,
+                                             bitwidth=16)
+        assert enc_dict['dtype'] == 'float'
+        assert enc_dict['bitwidth'] == 16
+        assert 'min' not in enc_dict
+        assert 'max' not in enc_dict
+        assert 'scale' not in enc_dict
+        assert 'offset' not in enc_dict
+        assert 'is_symmetric' not in enc_dict
+
+        # change dafault_data_type back to int
+        quantsim.default_data_type = QuantizationDataType.int
 
     def test_mapping_encoding_for_torch_module_with_multiple_onnx_ops(self):
         """
