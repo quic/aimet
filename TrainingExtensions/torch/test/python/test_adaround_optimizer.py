@@ -55,6 +55,7 @@ from aimet_torch.adaround.adaround_weight import Adaround
 from aimet_torch.adaround.adaround_loss import AdaroundLoss
 from aimet_torch.adaround.adaround_optimizer import AdaroundOptimizer
 from aimet_torch.adaround.adaround_loss import AdaroundHyperParameters
+from aimet_torch.tensor_quantizer import QuantizationDataType
 
 logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Test)
 
@@ -131,7 +132,8 @@ class TestAdaroundOptimizer(unittest.TestCase):
 
         weight_data = np.random.rand(4, 4, 1, 1).astype(dtype='float32')
         encoding_dict = compute_encoding_for_given_bitwidth(weight_data, weight_bw,
-                                                            MAP_QUANT_SCHEME_TO_PYMO[quant_scheme], False)
+                                                            MAP_QUANT_SCHEME_TO_PYMO[quant_scheme], False,
+                                                            QuantizationDataType.int)
         encoding, _ = create_encoding_from_dict(encoding_dict)
 
         print(encoding_dict['scale'], encoding_dict['max'])

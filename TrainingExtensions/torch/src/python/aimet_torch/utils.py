@@ -48,6 +48,7 @@ from torchvision import datasets, transforms
 
 from aimet_common.defs import QuantScheme
 from aimet_common.utils import AimetLogger
+from aimet_torch.tensor_quantizer import QuantizationDataType
 import libpymo
 
 
@@ -605,7 +606,7 @@ def create_encoding_from_dict(encoding_dict: dict) -> (libpymo.TfEncoding, bool)
 
 
 def compute_encoding_for_given_bitwidth(data: np.ndarray, bitwidth: int, quant_scheme: QuantScheme,
-                                        is_symmetric: bool) -> Dict:
+                                        is_symmetric: bool, data_type: QuantizationDataType) -> Dict:
     """
     Return encoding dictionary for given bitwidth
     :param data: Numpy data
@@ -627,7 +628,8 @@ def compute_encoding_for_given_bitwidth(data: np.ndarray, bitwidth: int, quant_s
                 'scale': encoding.delta,
                 'offset': encoding.offset,
                 'bitwidth': encoding.bw,
-                'is_symmetric': str(is_symmetric)}
+                'is_symmetric': str(is_symmetric),
+                'dtype': 'int' if data_type == QuantizationDataType.int else 'float'}
 
     return {}
 

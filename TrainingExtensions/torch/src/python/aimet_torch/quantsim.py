@@ -492,7 +492,7 @@ class QuantizationSimModel:
         save_json_yaml(encoding_file_path, encodings_dict)
 
     @staticmethod
-    def generate_symmetric_encoding_dict(data: torch.Tensor, bitwidth: int) -> Dict:
+    def generate_symmetric_encoding_dict(data: torch.Tensor, bitwidth: int, data_type: QuantizationDataType) -> Dict:
         """
         Return encoding dictionary for given bitwidth
         :param data: torch Tensor
@@ -508,16 +508,18 @@ class QuantizationSimModel:
         num_positive_steps = 2 ** (bitwidth - 1) - 1
         scale = abs_max_val / num_positive_steps
         offset = - (num_positive_steps + 1)
-
+        dtype = 'int' if data_type == QuantizationDataType.int else 'float'
         # recompute min/max values
         min_val = scale * offset
         max_val = scale * num_positive_steps
+
         return {'min': min_val,
                 'max': max_val,
                 'scale': scale,
                 'offset': offset,
                 'bitwidth': bitwidth,
-                'is_symmetric': str(True)}
+                'is_symmetric': str(True),
+                'dtype': dtype}
 
     @staticmethod
     def _retrieve_named_params_and_update_encodings(layer: torch.nn.Module, layer_name: str, param_encodings: Dict,
@@ -533,7 +535,9 @@ class QuantizationSimModel:
             # if the param quantizer was disabled generate encoding assuming bitwidth of 32
             if name in disabled_param_quantizers:
                 param_name = layer_name + '.' + name
-                encoding = QuantizationSimModel.generate_symmetric_encoding_dict(param, 32)
+                # This part of the code is executed if the name is part of disabled_param_quantizers which do not have
+                # param_encodings. Defaulting them to QuantizationDataType.int
+                encoding = QuantizationSimModel.generate_symmetric_encoding_dict(param, 32, QuantizationDataType.int)
                 param_encodings[param_name] = [encoding]
 
     @staticmethod
@@ -734,15 +738,14 @@ class QuantizationSimModel:
         :return: Encoding Dictionary
         """
         if data_type == QuantizationDataType.float:
-            enc_dict = {'min': None, 'max': None, 'scale': None, 'offset': None, 'bitwidth': bitwidth,
-                        'is_symmetric': None}
+            enc_dict = {'bitwidth': bitwidth, 'dtype': "float"}
         else:
             if encoding:
                 encoding_min, encoding_max, bw, scale, offset = encoding.min, encoding.max, encoding.bw, \
                                                                 encoding.delta, encoding.offset
 
                 enc_dict = {'min': encoding_min, 'max': encoding_max, 'scale': scale, 'offset': offset, 'bitwidth': bw,
-                            'is_symmetric': str(is_symmetric)}
+                            'is_symmetric': str(is_symmetric), 'dtype': "int"}
             else:
                 enc_dict = None
         return enc_dict
