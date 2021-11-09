@@ -45,8 +45,66 @@ import tensorflow as tf
 from aimet_tensorflow.keras.cross_layer_equalization import GraphSearchUtils, CrossLayerScaling
 
 
+def _get_max_val_per_channel(layer: tf.keras.layers.Conv2D,
+                             axis: typing.Tuple) -> np.ndarray:
+    """
+    Conv2D kernel tensor shape ->
+      (kernel_height, kernel_width, in_channels, out_channels)
+    Conv2DTranspose kernel tensor shape ->
+      (kernel_height, kernel_width, out_channels, in_channels)
+    e.g.,
+    _get_max_val_per_channel(conv, axis=(2, 0, 1)) means
+    max values of each output channels in Conv2D
+    because axis are set as (in_channels, kernel_height, kernel_width)
+
+    _get_max_val_per_channel(conv_transpose, axis=(2, 0, 1)) means
+    max values of each input channels in Conv2DTranspose
+    because axis are set as (out_channels, kernel_height, kernel_width)
+    """
+    param_tensors = layer.get_weights()
+    weight_tensor = param_tensors[0]
+    return np.amax(np.abs(weight_tensor), axis=axis)
+
+
 class TestTrainingExtensionsCrossLayerScaling:
     """ Test methods for Cross layer equalization """
+
+    @pytest.fixture(scope='class')
+    def front_part_of_mobile_net_v1(self):
+        """
+        Front part of MobileNetV1
+        """
+        model = tf.keras.Sequential([
+            tf.keras.layers.InputLayer(input_shape=(224, 224, 3)),
+            tf.keras.layers.Conv2D(32, kernel_size=3, strides=2, padding="same"),
+            tf.keras.layers.DepthwiseConv2D(kernel_size=3, strides=1, padding="same"),
+            tf.keras.layers.Conv2D(64, kernel_size=1, strides=1, padding="same"),
+            tf.keras.layers.DepthwiseConv2D(kernel_size=3, strides=2, padding="same"),
+            tf.keras.layers.Conv2D(128, kernel_size=1, strides=1, padding="same"),
+            tf.keras.layers.DepthwiseConv2D(kernel_size=3, padding="same"),
+            tf.keras.layers.Conv2D(128, kernel_size=1, strides=1, padding="same")
+        ])
+
+        return model
+
+    @pytest.fixture(scope='class')
+    def front_part_of_mobile_net_v1_like(self):
+        """
+        Network structure which is similar front part of MobileNetV1
+        Changed some layer (Conv2D -> Conv2DTranspose) or layer parameter (Disable bias) for the test
+        """
+        model = tf.keras.Sequential([
+            tf.keras.layers.InputLayer(input_shape=(224, 224, 3)),
+            tf.keras.layers.Conv2D(32, kernel_size=3, strides=2, padding="same", use_bias=False),
+            tf.keras.layers.DepthwiseConv2D(kernel_size=3, strides=1, padding="same"),
+            tf.keras.layers.Conv2DTranspose(64, kernel_size=1, strides=1, padding="same"),
+            tf.keras.layers.DepthwiseConv2D(kernel_size=3, strides=2, padding="same", use_bias=False),
+            tf.keras.layers.Conv2D(128, kernel_size=1, strides=1, padding="same"),
+            tf.keras.layers.DepthwiseConv2D(kernel_size=3, padding="same"),
+            tf.keras.layers.Conv2D(128, kernel_size=1, strides=1, padding="same")
+        ])
+
+        return model
 
     def test_find_layer_groups_in_vgg16(self):
         """
@@ -217,31 +275,21 @@ class TestTrainingExtensionsCrossLayerScaling:
 
         assert actual == expected
 
-    def test_convert_layer_group_to_cls_sets_for_part_of_mobile_net_v1(self):
+    def test_convert_layer_group_to_cls_sets_for_part_of_mobile_net_v1(self, front_part_of_mobile_net_v1):
         """
         Layer group from the earlier part of MobileNetV1
         """
 
-        conv1 = tf.keras.layers.Conv2D(32, kernel_size=3, strides=2, padding="same")
-        depthwise_conv1 = tf.keras.layers.DepthwiseConv2D(kernel_size=32, strides=1, padding="same")
-        pointwise_conv1 = tf.keras.layers.Conv2D(64, kernel_size=1, strides=1, padding="same")
-        depthwise_conv2 = tf.keras.layers.DepthwiseConv2D(kernel_size=64, strides=2, padding="same")
-        pointwise_conv2 = tf.keras.layers.Conv2D(128, kernel_size=1, strides=1, padding="same")
-        depthwise_conv3 = tf.keras.layers.DepthwiseConv2D(kernel_size=128, padding="same")
-        pointwise_conv3 = tf.keras.layers.Conv2D(128, kernel_size=1, strides=1, padding="same")
+        layers = front_part_of_mobile_net_v1.layers
 
-        layer_group = [
-            conv1,
-            depthwise_conv1, pointwise_conv1,
-            depthwise_conv2, pointwise_conv2,
-            depthwise_conv3, pointwise_conv3
-        ]
+        conv1, dw_conv1, pointwise_conv1, dw_conv2, pointwise_conv2, dw_conv3, pointwise_conv3 = layers
+        layer_group = [conv1, dw_conv1, pointwise_conv1, dw_conv2, pointwise_conv2, dw_conv3, pointwise_conv3]
 
         actual = GraphSearchUtils.convert_layer_group_to_cls_sets(layer_group)
         expected = [
-            (conv1, depthwise_conv1, pointwise_conv1),
-            (pointwise_conv1, depthwise_conv2, pointwise_conv2),
-            (pointwise_conv2, depthwise_conv3, pointwise_conv3)
+            (conv1, dw_conv1, pointwise_conv1),
+            (pointwise_conv1, dw_conv2, pointwise_conv2),
+            (pointwise_conv2, dw_conv3, pointwise_conv3)
         ]
 
         assert actual == expected
@@ -269,26 +317,6 @@ class TestTrainingExtensionsCrossLayerScaling:
           - (Conv2DTranspose, Conv2D)
           - (Conv2DTranspose, Conv2DTranspose)
         """
-        def _get_max_val_per_channel(layer: tf.keras.layers.Conv2D,
-                                     axis: typing.Tuple) -> np.ndarray:
-            """
-            Conv2D kernel tensor shape ->
-              (kernel_height, kernel_width, in_channels, out_channels)
-            Conv2DTranspose kernel tensor shape ->
-              (kernel_height, kernel_width, out_channels, in_channels)
-            e.g.,
-            _get_max_val_per_channel(conv, axis=(2, 0, 1)) means
-            max values of each output channels in Conv2D
-            because axis are set as (in_channels, kernel_height, kernel_width)
-
-            _get_max_val_per_channel(conv_transpose, axis=(2, 0, 1)) means
-            max values of each input channels in Conv2DTranspose
-            because axis are set as (out_channels, kernel_height, kernel_width)
-            """
-            param_tensors = layer.get_weights()
-            weight_tensor = param_tensors[0]
-            return np.amax(np.abs(weight_tensor), axis=axis)
-
         model = tf.keras.Sequential([
             tf.keras.layers.InputLayer(input_shape=(28, 28, 3)),
             tf.keras.layers.Conv2D(4, kernel_size=3, activation='relu', bias_initializer='normal'),
@@ -335,6 +363,37 @@ class TestTrainingExtensionsCrossLayerScaling:
         conv3_output_range = _get_max_val_per_channel(conv3, axis=(2, 0, 1))
         conv4_input_range = _get_max_val_per_channel(conv4, axis=(3, 0, 1))
         assert np.allclose(conv3_output_range, conv4_input_range)
+
+        outputs_after_scaling = model.predict(inputs)
+        np.allclose(outputs_before_scaling, outputs_after_scaling)
+
+    def test_scale_cls_set_with_depthwise_separable_conv_layer(self, front_part_of_mobile_net_v1_like):
+        """
+        Test scaling logic for cls set consisting of depthwise convolution layers
+        """
+        model = front_part_of_mobile_net_v1_like
+
+        np.random.seed(42)
+        inputs = np.random.randn(1, 224, 224, 3).astype('f')
+        outputs_before_scaling = model.predict(inputs)
+
+        conv1, depthwise_conv1, conv_transpose1, depthwise_conv2, conv2, _, _ = model.layers
+
+        # (Conv2D w/o bias, DepthwiseConv2D, ConvTranspose2D) case
+        CrossLayerScaling.scale_cls_set_with_depthwise_conv_layers((conv1, depthwise_conv1, conv_transpose1))
+        conv1_output_range = _get_max_val_per_channel(conv1, axis=(2, 0, 1))
+        depthwise_conv1_output_range = _get_max_val_per_channel(depthwise_conv1, axis=(3, 0, 1))
+        conv_transpose1_input_range = _get_max_val_per_channel(conv_transpose1, axis=(2, 0, 1))
+        assert np.allclose(conv1_output_range, depthwise_conv1_output_range)
+        assert np.allclose(depthwise_conv1_output_range, conv_transpose1_input_range)
+
+        # (ConvTranspose2D, DepthwiseConv2D w/o bias, Conv2D) case
+        CrossLayerScaling.scale_cls_set_with_depthwise_conv_layers((conv_transpose1, depthwise_conv2, conv2))
+        conv_transpose1_output_range = _get_max_val_per_channel(conv2, axis=(3, 0, 1))
+        depthwise_conv2_output_range = _get_max_val_per_channel(depthwise_conv2, axis=(3, 0, 1))
+        conv2_input_range = _get_max_val_per_channel(conv2, axis=(3, 0, 1))
+        assert np.allclose(conv_transpose1_output_range, depthwise_conv2_output_range)
+        assert np.allclose(depthwise_conv2_output_range, conv2_input_range)
 
         outputs_after_scaling = model.predict(inputs)
         np.allclose(outputs_before_scaling, outputs_after_scaling)

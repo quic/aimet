@@ -50,7 +50,7 @@ class WeightTensorUtils:
         """
         Transpose the weight tensor shape from libpymo format to TensorFlow format
         """
-        if isinstance(layer, tf.keras.layers.Conv2DTranspose):
+        if isinstance(layer, (tf.keras.layers.Conv2DTranspose, tf.keras.layers.DepthwiseConv2D)):
             # libpymo shape            [out_channels, in_channels, kernel_height, kernel_width] ->
             # TF Conv2DTranspose shape [kernel_height, kernel_width, out_channels, in_channels]
             transposed_tensor = tensor.transpose((2, 3, 0, 1))
@@ -69,7 +69,7 @@ class WeightTensorUtils:
         """
         Transpose the weight tensor shape from TensorFlow format to libpymo format
         """
-        if isinstance(layer, tf.keras.layers.Conv2DTranspose):
+        if isinstance(layer, (tf.keras.layers.Conv2DTranspose, tf.keras.layers.DepthwiseConv2D)):
             # TF Conv2DTranspose shape [kernel_height, kernel_width, out_channels, in_channels] ->
             # libpymo shape            [out_channels, in_channels, kernel_height, kernel_width]
             transposed_tensor = tensor.transpose((2, 3, 0, 1))

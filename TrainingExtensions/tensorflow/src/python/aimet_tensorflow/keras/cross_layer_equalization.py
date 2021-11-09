@@ -140,6 +140,64 @@ class CrossLayerScaling:
         return scaling_factor, prev_layer_params, curr_layer_params
 
     @staticmethod
+    def scale_cls_set_with_depthwise_conv_layers(
+            cls_set: typing.Tuple[tf.keras.layers.Conv2D,
+                                  tf.keras.layers.DepthwiseConv2D,
+                                  tf.keras.layers.Conv2D]) -> typing.Tuple[np.ndarray, np.ndarray]:
+        """
+        API to invoke equalize layer params (update for weights and bias is in place)
+        :param cls_set: Consecutive Conv layers whose weights and biases need to be equalized.
+                        Second Conv layer is a depth-wise conv and third conv layer is point-wise conv
+        :return: Scaling factors S_12 and S_23 : numpy arrays
+        """
+
+        for layer in cls_set:
+            if not isinstance(layer, (tf.keras.layers.Conv2DTranspose, tf.keras.layers.Conv2D)):
+                raise ValueError("Only Conv or Transposed Conv layers are supported for CLE")
+
+        scaling_params, prev_layer_params, curr_layer_params, next_layer_params = \
+            CrossLayerScaling.call_mo_scale_depthwise_separable_layer(cls_set)
+
+        prev_layer, curr_layer, next_layer = cls_set
+        weight_and_bias_0 = CrossLayerScaling._unpack_equalization_params(prev_layer,
+                                                                          prev_layer_params,
+                                                                          unpack_bias=True)
+        prev_layer.set_weights(weight_and_bias_0)
+
+        weight_and_bias_1 = CrossLayerScaling._unpack_equalization_params(curr_layer,
+                                                                          curr_layer_params,
+                                                                          unpack_bias=True)
+        curr_layer.set_weights(weight_and_bias_1)
+
+        weight_and_bias_2 = CrossLayerScaling._unpack_equalization_params(next_layer,
+                                                                          next_layer_params,
+                                                                          unpack_bias=False)
+        next_layer.set_weights(weight_and_bias_2)
+
+        return scaling_params.scalingMatrix12, scaling_params.scalingMatrix23
+
+    @staticmethod
+    def call_mo_scale_depthwise_separable_layer(
+            cls_set: typing.Tuple[tf.keras.layers.Conv2D,
+                                  tf.keras.layers.DepthwiseConv2D,
+                                  tf.keras.layers.Conv2D]) -> typing.Tuple[libpymo.RescalingParamsVectors,
+                                                                           libpymo.EqualizationParams,
+                                                                           libpymo.EqualizationParams,
+                                                                           libpymo.EqualizationParams]:
+        """
+        Invokes scale API in model optimization library
+        :param cls_set: Consecutive Conv layers whose weights and biases need to be equalized
+        :return: Scaling factors, prev, current and next layer updated parameters
+        """
+
+        prev_layer_params = CrossLayerScaling._pack_equalization_params(cls_set[0], pack_bias=True)
+        curr_layer_params = CrossLayerScaling._pack_equalization_params(cls_set[1], pack_bias=True)
+        next_layer_params = CrossLayerScaling._pack_equalization_params(cls_set[2], pack_bias=False)
+
+        scaling_params = libpymo.scaleDepthWiseSeparableLayer(prev_layer_params, curr_layer_params, next_layer_params)
+        return scaling_params, prev_layer_params, curr_layer_params, next_layer_params
+
+    @staticmethod
     def _pack_equalization_params(layer: tf.keras.layers.Conv2D, pack_bias: bool) -> libpymo.EqualizationParams:
         equalization_params = libpymo.EqualizationParams()
 
