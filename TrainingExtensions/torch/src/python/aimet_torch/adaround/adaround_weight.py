@@ -58,6 +58,7 @@ from aimet_torch.qc_quantize_op import StaticGridQuantWrapper, QcQuantizeOpMode
 from aimet_torch.adaround.adaround_tensor_quantizer import AdaroundTensorQuantizer
 from aimet_torch.adaround.adaround_optimizer import AdaroundOptimizer
 from aimet_torch.adaround.adaround_loss import AdaroundHyperParameters
+from aimet_torch.tensor_quantizer import QuantizationDataType
 
 logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Quant)
 
@@ -347,7 +348,8 @@ class Adaround:
                                    'scale': enc.delta,
                                    'offset': enc.offset,
                                    'bitwidth': enc.bw,
-                                   'is_symmetric': str(quantizer.use_symmetric_encodings)})
+                                   'is_symmetric': str(quantizer.use_symmetric_encodings),
+                                   'dtype': 'int' if quantizer.data_type == QuantizationDataType.int else 'float'})
 
         return encodings_dict
 
