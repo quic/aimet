@@ -47,8 +47,8 @@ import os
 from datetime import datetime
 from decimal import Decimal
 from typing import Tuple
-import torch
 from torchvision import models
+import torch
 
 # imports for AIMET
 import aimet_common.defs
