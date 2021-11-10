@@ -196,6 +196,9 @@ class TestAdaround:
             "model_input": {},
             "model_output": {}
         }
+        if not os.path.exists('./data/'):
+            os.makedirs('./data/')
+
         with open('./data/quantsim_config.json', 'w') as f:
             json.dump(quantsim_config, f)
 
@@ -214,7 +217,7 @@ class TestAdaround:
         param_keys = list(encoding_data.keys())
         print(param_keys)
         assert param_keys[0] == "conv1.weight"
-        assert isinstance(encoding_data["conv1.weight"], list)
+        assert len(encoding_data["conv1.weight"]) == 32
 
         # Delete encodings file
         if os.path.exists("./dummy.encodings"):
