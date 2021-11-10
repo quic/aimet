@@ -46,9 +46,9 @@ import logging
 import os
 from datetime import datetime
 from functools import partial
+from torchvision import models
 import torch
 import torch.utils.data as torch_data
-from torchvision import models
 
 # imports for AIMET
 import aimet_common

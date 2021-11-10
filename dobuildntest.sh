@@ -266,6 +266,8 @@ if [ $run_prep -eq 1 ]; then
 
     # Array of python src file path endings
     declare -a python_src_path_endings=("TrainingExtensions/common/src/python/aimet_common")
+    # TODO: the line below causes code violation failures in TrainingExtensions/tensorflow and TrainingExtensions/torch
+    # python_src_path_endings+=("Examples/common")
     # Array of path endings of interest for code coverage and their corresponding test folders
     declare -a pycov_dir_endings=("TrainingExtensions/common/src/python:TrainingExtensions/common/test")
 
@@ -277,6 +279,9 @@ if [ $run_prep -eq 1 ]; then
         fi
         if [[ "$AIMET_VARIANT" == *"torch"* ]]; then
             python_src_path_endings+=("TrainingExtensions/torch/src/python/aimet_torch")
+            python_src_path_endings+=("Examples/torch/compression")
+            python_src_path_endings+=("Examples/torch/quantization")
+            python_src_path_endings+=("Examples/torch/utils")
             pycov_dir_endings+=("TrainingExtensions/torch/src/python:TrainingExtensions/torch/test")
         fi
     else
@@ -286,11 +291,15 @@ if [ $run_prep -eq 1 ]; then
 
         python_src_path_endings+=("TrainingExtensions/torch/src/python/aimet_torch")
         pycov_dir_endings+=("TrainingExtensions/torch/src/python:TrainingExtensions/torch/test")
+
+        python_src_path_endings+=("Examples/torch/compression")
+        python_src_path_endings+=("Examples/torch/quantization")
+        python_src_path_endings+=("Examples/torch/utils")
     fi
 
     # Populate an array of python src paths for use in later stages
     for python_src_path_ending in "${python_src_path_endings[@]}"; do
-    	# Find all paths 
+    	# Find all paths
         PYTHON_SRC_PATHS+=($(find . -path "*$python_src_path_ending" -exec readlink -f {} \;))
     done
 
@@ -305,6 +314,15 @@ if [ $run_prep -eq 1 ]; then
         PYTHON_SRC_MODULE_PATHS+=python_src_path_parent
         PYTHON_SRC_MODULE_PATHS+=" "
     done
+
+    # Find and add the "Examples" folders to the python path
+    python_example_paths+=($(dirname $(find . -name "Examples" | grep -v "build")))
+    for python_example_path in "${python_example_paths[@]}"; do
+        PYTHONPATH_VALUE+=":"
+        python_example_path_abs=$(readlink -f ${python_example_path})
+        PYTHONPATH_VALUE+=${python_example_path_abs}
+    done
+
     echo "PYTHONPATH value = $PYTHONPATH_VALUE"
 
     # Loop over the directory endings

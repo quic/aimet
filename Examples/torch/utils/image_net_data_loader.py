@@ -41,10 +41,11 @@ Creates data-loader for Image-Net dataset
 import logging
 import os
 
-import torch.utils.data as torch_data
-from torch.utils.data import Dataset
 from torchvision import transforms
 from torchvision.datasets.folder import default_loader, has_file_allowed_extension
+from torch.utils.data import Dataset
+import torch.utils.data as torch_data
+
 
 from Examples.common import image_net_config
 
