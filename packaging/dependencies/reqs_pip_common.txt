@@ -1,6 +1,7 @@
 ipython==7.16.1
 numpy==1.16.6
 scipy==1.2.1
+progressbar2==3.53.3
 protobuf==3.7.1
 scikit-learn==0.21.0
 tensorboard==1.15.0
