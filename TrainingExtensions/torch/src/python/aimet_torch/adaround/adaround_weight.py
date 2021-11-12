@@ -44,6 +44,7 @@ import shutil
 from typing import Tuple, Union, Dict, List
 import torch
 from torch.utils.data import DataLoader
+from tqdm import tqdm
 
 # Import AIMET specific modules
 from aimet_common.utils import AimetLogger
@@ -174,7 +175,9 @@ class Adaround:
                                              params.warm_start)
 
         # AdaRound must be applied to modules in the order of occurrence
-        for name, module in utils.get_ordered_list_of_modules(model, dummy_input):
+        modules = utils.get_ordered_list_of_modules(model, dummy_input)
+
+        for name, module in tqdm(modules):
             if isinstance(module, AdaroundSupportedModules):
 
                 # Using name, get corresponding quantized wrapper module from Quant sim model

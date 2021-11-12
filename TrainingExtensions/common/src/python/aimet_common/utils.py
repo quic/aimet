@@ -50,6 +50,7 @@ import time
 from enum import Enum
 import json
 import yaml
+from tqdm import tqdm
 
 try:
     # The build system updates Product, Version and Feature set information in the package_info file.
@@ -267,3 +268,12 @@ def save_json_yaml(encoding_file_path: str, encodings_dict: dict):
         json.dump(encodings_dict, encoding_fp_json, sort_keys=True, indent=4)
     with open(encoding_file_path_yaml, 'w') as encoding_fp_yaml:
         yaml.dump(encodings_dict, encoding_fp_yaml, default_flow_style=False, allow_unicode=True)
+
+
+class TqdmStreamHandler(logging.StreamHandler):
+    """
+    Logging handler for tqdm.
+    """
+    def emit(self, record):
+        with tqdm.external_write_mode(file=self.stream):
+            super(TqdmStreamHandler, self).emit(record)

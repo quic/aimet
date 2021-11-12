@@ -9,17 +9,17 @@
 
     "handlers": {
         "console": {
-            "class": "logging.StreamHandler",
+            "class": "aimet_common.utils.TqdmStreamHandler",
             "level": "DEBUG",
             "formatter": "simple",
             "stream": "ext://sys.stdout"
         },
 
         "utils_console": {
-        "class": "logging.StreamHandler",
-        "level": "CRITICAL",
-        "formatter": "simple",
-        "stream": "ext://sys.stdout"
+            "class": "aimet_common.utils.TqdmStreamHandler",
+            "level": "CRITICAL",
+            "formatter": "simple",
+            "stream": "ext://sys.stdout"
         }
     },
 
