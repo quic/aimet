@@ -93,6 +93,53 @@ class GraphSearchUtils:
 
         return cls_sets
 
+    @staticmethod
+    def is_relu_activation_present_in_cls_sets(cls_sets: typing.List[ClsSet]) \
+            -> typing.List[typing.Union[bool, typing.Tuple[bool, bool]]]:
+        """
+        Check if there is ReLU or PReLU activation between cls sets
+        :param cls_sets: List of ClsSet to find ReLU activation in
+        :return: List of ReLU activation preset flags (bool or tuple of bool) corresponding to input cls_sets param
+        """
+
+        is_relu_activation_in_cls_sets = []
+        for cls_set in cls_sets:
+            cls_set = cls_set[:-1]
+
+            is_relu_activation_in_cls_set = []
+            for layer in cls_set:
+                has_relu_activation = GraphSearchUtils._does_layer_have_relu_activation(layer)
+                is_relu_activation_in_cls_set.append(has_relu_activation)
+
+            if len(is_relu_activation_in_cls_set) == 1:
+                is_relu_activation_in_cls_sets.append(is_relu_activation_in_cls_set[0])
+            else:
+                is_relu_activation_in_cls_sets.append(tuple(is_relu_activation_in_cls_set))
+
+        return is_relu_activation_in_cls_sets
+
+    @staticmethod
+    def _does_layer_have_relu_activation(layer: tf.keras.layers.Conv2D) -> bool:
+        """
+        Check if layer has ReLU or PReLU activation function
+        :param layer: Conv2D or it's subclass to check activation function
+        :return: True If layer has ReLU or PReLU activation, otherwise False
+        """
+        activation_info = tf.keras.activations.serialize(layer.activation)
+
+        if isinstance(activation_info, str):
+            # Instantiating like tf.keras.layers.Conv2D(8, kernel_size=3, activation=tf.keras.activations.relu)
+            #   has the result of serialization as str type
+            activation_type = activation_info
+        elif isinstance(activation_info, dict):
+            # Instantiating like tf.keras.layers.Conv2D(8, kernel_size=3, activation=tf.keras.layers.ReLU())
+            #   has the result of serialization as dict type
+            activation_type = activation_info["class_name"].lower()
+        else:
+            raise NotImplementedError("Not supported format")
+
+        return activation_type in ["relu", "prelu"]
+
 
 class CrossLayerScaling:
     """
@@ -109,7 +156,9 @@ class CrossLayerScaling:
         """
 
         for layer in cls_set:
-            if not isinstance(layer, (tf.keras.layers.Conv2DTranspose, tf.keras.layers.Conv2D)):
+            # NOTE: DepthwiseConv2D and Conv2DTranspose is subclass of Conv2D
+            #   The check below covers all of Conv2D, DepthwiseConv2D and Conv2DTranspose class
+            if not isinstance(layer, tf.keras.layers.Conv2D):
                 raise ValueError("Only Conv or Transposed Conv layers are supported for CLE")
 
         scaling_factor, prev_layer_params, curr_layer_params = CrossLayerScaling.call_mo_scale(cls_set)
@@ -152,7 +201,9 @@ class CrossLayerScaling:
         """
 
         for layer in cls_set:
-            if not isinstance(layer, (tf.keras.layers.Conv2DTranspose, tf.keras.layers.Conv2D)):
+            # NOTE: DepthwiseConv2D and Conv2DTranspose is subclass of Conv2D
+            #   The check below covers all of Conv2D, DepthwiseConv2D and Conv2DTranspose class
+            if not isinstance(layer, tf.keras.layers.Conv2D):
                 raise ValueError("Only Conv or Transposed Conv layers are supported for CLE")
 
         scaling_params, prev_layer_params, curr_layer_params, next_layer_params = \
