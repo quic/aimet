@@ -54,7 +54,7 @@ from aimet_torch.quantsim_config import quantsim_config
 from aimet_torch.examples.test_models import ModelWithFunctionalReLU, SingleResidual, ModelWithDuplicateReLU
 from aimet_torch.quantsim import QuantizationSimModel, QuantParams
 from aimet_torch.utils import create_fake_data_loader
-from aimet_torch.fx import replace_functional_by_module
+from aimet_torch.model_preparer import prepare_model
 from aimet_torch.batch_norm_fold import fold_all_batch_norms
 from aimet_torch.cross_layer_equalization import  equalize_model
 from aimet_torch.adaround.adaround_weight import Adaround, AdaroundParameters
@@ -117,7 +117,7 @@ class TestFX:
         model = ModelWithFunctionalReLU().eval()
         model_copy = copy.deepcopy(model)
 
-        model_transformed = replace_functional_by_module(model_copy)
+        model_transformed = prepare_model(model_copy)
         print(model_transformed)
 
         assert isinstance(model_transformed.module_relu, torch.nn.ReLU)
@@ -136,7 +136,7 @@ class TestFX:
         model = SingleResidual().eval()
         model_copy = copy.deepcopy(model)
 
-        model_transformed = replace_functional_by_module(model_copy)
+        model_transformed = prepare_model(model_copy)
         print(model_transformed)
 
         assert isinstance(model_transformed.module_add, elementwise_ops.Add)
@@ -151,7 +151,7 @@ class TestFX:
         model = ModelWithDuplicateReLU().eval()
         model_copy = copy.deepcopy(model)
 
-        model_transformed = replace_functional_by_module(model_copy)
+        model_transformed = prepare_model(model_copy)
 
         assert isinstance(model_transformed.relu, torch.nn.ReLU)
         assert isinstance(model_transformed.module_relu_1, torch.nn.ReLU)
@@ -169,7 +169,7 @@ class TestFX:
         model = models.resnet18().eval()
         model_copy = copy.deepcopy(model)
 
-        model_transformed = replace_functional_by_module(model_copy)
+        model_transformed = prepare_model(model_copy)
         print(model_transformed)
 
         assert torch.allclose(model(input_tensor), model_transformed(input_tensor))
@@ -187,6 +187,15 @@ class TestFX:
         # 8 duplicate ReLUs are replaced by new ReLUs in modified model
         assert original_model_relu_count + 8 == modified_model_relu_count
 
+        assert model_transformed.module_layer1_0_relu_1.inplace == True
+        assert model_transformed.module_layer1_1_relu_1.inplace == True
+        assert model_transformed.module_layer2_0_relu_1.inplace == True
+        assert model_transformed.module_layer2_1_relu_1.inplace == True
+        assert model_transformed.module_layer3_0_relu_1.inplace == True
+        assert model_transformed.module_layer3_1_relu_1.inplace == True
+        assert model_transformed.module_layer4_0_relu_1.inplace == True
+        assert model_transformed.module_layer4_1_relu_1.inplace == True
+
     @pytest.mark.cuda
     def test_fx_with_resnet18_with_cuda(self):
         """
@@ -197,7 +206,7 @@ class TestFX:
         model = models.resnet18().cuda().eval()
         model_copy = copy.deepcopy(model)
 
-        model_transformed = replace_functional_by_module(model_copy)
+        model_transformed = prepare_model(model_copy)
         print(model_transformed)
 
         assert torch.allclose(model(input_tensor), model_transformed(input_tensor))
@@ -224,7 +233,7 @@ class TestFX:
         model = ModelWithFunctionalReLU().eval()
         model_copy = copy.deepcopy(model)
 
-        model_transformed = replace_functional_by_module(model_copy)
+        model_transformed = prepare_model(model_copy)
 
         quant_sim_for_modified_model = QuantizationSimModel(model_transformed, dummy_input=input_tensor)
         print(quant_sim_for_modified_model)
@@ -251,7 +260,7 @@ class TestFX:
         model = ModelWithFunctionalReLU().eval()
         model_copy = copy.deepcopy(model)
 
-        model_transformed = replace_functional_by_module(model_copy)
+        model_transformed = prepare_model(model_copy)
 
         quantsim_config = {
             "defaults": {
@@ -308,7 +317,7 @@ class TestFX:
         model = SingleResidual().eval()
         model_copy = copy.deepcopy(model)
 
-        model_transformed = replace_functional_by_module(model_copy)
+        model_transformed = prepare_model(model_copy)
         print(model_transformed)
 
         assert isinstance(model_transformed.module_add, elementwise_ops.Add)
@@ -340,7 +349,7 @@ class TestFX:
                                after_training_weight.detach().cpu().numpy())
 
         # Train modified model
-        model_transformed = replace_functional_by_module(model_copy)
+        model_transformed = prepare_model(model_copy)
         total_loss_for_modified_model = train(model_transformed, data_loader)
 
         # Compare loss after one iteration of training
@@ -355,7 +364,7 @@ class TestFX:
         input_shape = (1, 3, 32, 32)
         input_tensor = torch.randn(*input_shape)
 
-        model_transformed = replace_functional_by_module(model_copy)
+        model_transformed = prepare_model(model_copy)
 
         # Compute encodings for both original and modified models
         quant_sim_for_original_model = QuantizationSimModel(model, dummy_input=input_tensor)
@@ -393,7 +402,7 @@ class TestFX:
         folded_pairs_for_original_model = fold_all_batch_norms(model, input_shape)
 
         # Apply BN fold for transformed model
-        model_transformed = replace_functional_by_module(model_copy)
+        model_transformed = prepare_model(model_copy)
         folded_pairs_for_transformed_model = fold_all_batch_norms(model_transformed, input_shape)
         print(model_transformed)
 
@@ -432,7 +441,7 @@ class TestFX:
         equalize_model(model, input_shape)
 
         # Apply CLE for transformed model
-        model_transformed = replace_functional_by_module(model_copy)
+        model_transformed = prepare_model(model_copy)
         equalize_model(model_transformed, input_shape)
 
         # forward pass for equalized original and modified model
@@ -470,7 +479,7 @@ class TestFX:
         adarounded_original_model = Adaround.apply_adaround(model, dummy_input, params, path='./',
                                                             filename_prefix='resnet18')
         # Apply Adaround for transformed model
-        model_transformed = replace_functional_by_module(model_copy)
+        model_transformed = prepare_model(model_copy)
         adarounded_transformed_model = Adaround.apply_adaround(model_transformed, dummy_input, params, path='./',
                                                                filename_prefix='resnet18')
         # compare weights for very first layer
@@ -506,7 +515,7 @@ class TestFX:
                                      num_bias_correct_samples=1, perform_only_empirical_bias_corr=True)
 
         # Apply Adaround for transformed model
-        model_transformed = replace_functional_by_module(model_copy)
+        model_transformed = prepare_model(model_copy)
         bias_correction.correct_bias(model_transformed, params, num_quant_samples=1, data_loader=data_loader,
                                      num_bias_correct_samples=1, perform_only_empirical_bias_corr=True)
 
@@ -537,7 +546,7 @@ class TestFX:
         model = models.resnet18().eval()
         model_copy = copy.deepcopy(model)
 
-        model_transformed = replace_functional_by_module(model_copy)
+        model_transformed = prepare_model(model_copy)
 
         torch.save(model_transformed, './modified_resnet18.pth')
         saved_model = torch.load('./modified_resnet18.pth')
@@ -560,7 +569,7 @@ class TestFX:
         model = models.resnet18().eval()
         model_copy = copy.deepcopy(model)
 
-        model_transformed = replace_functional_by_module(model_copy)
+        model_transformed = prepare_model(model_copy)
 
         # Save only the state_dict of transformed model
         torch.save(model_transformed.state_dict(), './modified_resnet18.pth')
@@ -593,7 +602,7 @@ class TestFX:
         model = models.resnet18().eval()
         model_copy = copy.deepcopy(model)
 
-        model_transformed = replace_functional_by_module(model_copy)
+        model_transformed = prepare_model(model_copy)
         quant_sim = QuantizationSimModel(model_transformed, dummy_input=input_tensor)
 
         def forward_pass(model, args):
@@ -646,3 +655,131 @@ class TestFX:
 
         if os.path.exists('./data/temp_onnx_model_with_markers.onnx'):
             os.remove('./data/temp_onnx_model_with_markers.onnx')
+
+    def test_fx_with_relu_relu6(self):
+        """
+        test torch fx with functional ReLU6 and ReLU
+        """
+        class ModelWithReLUReLU6(torch.nn.Module):
+            """ Use this model for unit testing purposes. Expect input shape (1, 3, 32, 32) """
+
+            def __init__(self):
+                super(ModelWithReLUReLU6, self).__init__()
+                self.conv1 = torch.nn.Conv2d(3, 32, kernel_size=2, stride=2, padding=2, bias=False)
+
+            def forward(self, *inputs):
+                x = self.conv1(inputs[0])
+                x = torch.nn.functional.relu6(x)
+                x = torch.nn.functional.relu(x)
+                return x
+
+        input_shape = (1, 3, 32, 32)
+        input_tensor = torch.randn(*input_shape)
+        model = ModelWithReLUReLU6().eval()
+        model_copy = copy.deepcopy(model)
+
+        model_transformed = prepare_model(model_copy)
+        print(model_transformed)
+
+        assert torch.allclose(model_transformed(input_tensor),
+                              model(input_tensor))
+
+        assert isinstance(model_transformed.module_relu6, torch.nn.ReLU6)
+        assert isinstance(model_transformed.module_relu, torch.nn.ReLU)
+
+    def test_fx_with_elu(self):
+        """
+        test torch fx with functional ELU and alpha=0.2
+        """
+        class ModelWithNonLinearActivations(torch.nn.Module):
+            """ Use this model for unit testing purposes. Expect input shape (1, 3, 32, 32) """
+
+            def __init__(self):
+                super(ModelWithNonLinearActivations, self).__init__()
+                self.conv1 = torch.nn.Conv2d(3, 32, kernel_size=2, stride=2, padding=2, bias=False)
+
+            def forward(self, *inputs):
+                x = self.conv1(inputs[0])
+                x = torch.nn.functional.elu(x, alpha=0.2)
+                return x
+
+        input_shape = (1, 3, 32, 32)
+        input_tensor = torch.randn(*input_shape)
+        model = ModelWithNonLinearActivations().eval()
+        model_copy = copy.deepcopy(model)
+
+        model_transformed = prepare_model(model_copy)
+        print(model_transformed)
+
+        assert torch.allclose(model_transformed(input_tensor),
+                              model(input_tensor))
+
+        assert isinstance(model_transformed.module_elu, torch.nn.ELU)
+
+    def test_fx_with_hardshrink(self):
+        """
+        test torch fx with functional hardshrink and lambda = 0.2
+        """
+        class ModelWithNonLinearActivations(torch.nn.Module):
+            """ Use this model for unit testing purposes. Expect input shape (1, 3, 32, 32) """
+
+            def __init__(self):
+                super(ModelWithNonLinearActivations, self).__init__()
+                self.conv1 = torch.nn.Conv2d(3, 32, kernel_size=2, stride=2, padding=2, bias=False)
+
+            def forward(self, *inputs):
+                x = self.conv1(inputs[0])
+                x = torch.nn.functional.hardshrink(x, lambd=0.2)
+                return x
+
+        input_shape = (1, 3, 32, 32)
+        input_tensor = torch.randn(*input_shape)
+        model = ModelWithNonLinearActivations().eval()
+        model_copy = copy.deepcopy(model)
+
+        model_transformed = prepare_model(model_copy)
+        print(model_transformed)
+
+        assert torch.allclose(model_transformed(input_tensor),
+                              model(input_tensor))
+
+        assert isinstance(model_transformed.module_hardshrink, torch.nn.Hardshrink)
+        assert model_transformed.module_hardshrink.lambd == 0.2
+
+    def test_fx_with_duplicate_elu(self):
+        """
+        test torch fx with functional reused/duplicate ELU
+        """
+        class ModelWithNonLinearActivations(torch.nn.Module):
+            """ Use this model for unit testing purposes. Expect input shape (1, 3, 32, 32) """
+
+            def __init__(self):
+                super(ModelWithNonLinearActivations, self).__init__()
+                self.conv1 = torch.nn.Conv2d(3, 32, kernel_size=2, stride=2, padding=2, bias=False)
+                self.elu = torch.nn.ELU(alpha=0.2, inplace=True)
+
+            def forward(self, *inputs):
+                x = self.conv1(inputs[0])
+                x = self.elu(x)
+                x = torch.nn.functional.relu(x, inplace=True)
+                x = self.elu(x)
+                return x
+
+        input_shape = (1, 3, 32, 32)
+        input_tensor = torch.randn(*input_shape)
+        model = ModelWithNonLinearActivations().eval()
+        model_copy = copy.deepcopy(model)
+
+        model_transformed = prepare_model(model_copy)
+        print(model_transformed)
+
+        assert torch.allclose(model_transformed(input_tensor),
+                              model(input_tensor))
+
+        assert isinstance(model_transformed.module_relu, torch.nn.ReLU)
+        assert model_transformed.module_relu.inplace == True
+
+        assert isinstance(model_transformed.module_elu_1, torch.nn.ELU)
+        assert model_transformed.module_elu_1.alpha == 0.2
+        assert model_transformed.module_elu_1.inplace == True
+        assert model_transformed.module_elu_1.training == False
