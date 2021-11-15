@@ -59,7 +59,7 @@ class WeightTensorUtils:
             # TF Conv2D shape          [kernel_height, kernel_width, in_channels, out_channels]
             transposed_tensor = tensor.transpose((2, 3, 1, 0))
         else:
-            raise ValueError("Only works for Conv2DTranspose or Conv2D in current")
+            raise ValueError("Only Conv2D or it's subclass is currently supported")
 
         return transposed_tensor
 
@@ -78,6 +78,6 @@ class WeightTensorUtils:
             # libpymo shape            [out_channels, in_channels, kernel_height, kernel_width]
             transposed_tensor = tensor.transpose((3, 2, 0, 1))
         else:
-            raise ValueError("Only works for Conv2DTranspose or Conv2D in current")
+            raise ValueError("Only Conv2D or it's subclass is currently supported")
 
         return transposed_tensor
