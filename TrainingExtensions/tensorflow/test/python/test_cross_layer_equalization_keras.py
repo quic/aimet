@@ -397,3 +397,46 @@ class TestTrainingExtensionsCrossLayerScaling:
 
         outputs_after_scaling = model.predict(inputs)
         np.allclose(outputs_before_scaling, outputs_after_scaling)
+
+    def test_is_relu_activation_present_in_cls_sets(self):
+        """
+        Test ReLU activation present in cls sets
+        """
+        model = tf.keras.Sequential([
+            tf.keras.layers.InputLayer(input_shape=(28, 28, 3)),
+            tf.keras.layers.Conv2D(4, kernel_size=3, activation=None),                              # conv1
+            tf.keras.layers.Conv2D(8, kernel_size=3, activation='relu'),                            # conv2
+            tf.keras.layers.Conv2D(16, kernel_size=3, activation=tf.keras.activations.relu),        # conv3
+            tf.keras.layers.Conv2D(8, kernel_size=3, activation=tf.keras.layers.PReLU()),           # conv4
+            tf.keras.layers.Conv2D(4, kernel_size=3, activation=tf.keras.layers.ReLU()),            # conv5
+            tf.keras.layers.Conv2D(32, kernel_size=3, activation='relu'),                           # conv6
+            tf.keras.layers.DepthwiseConv2D(kernel_size=3, activation=tf.keras.layers.PReLU()),     # dw_conv1
+            tf.keras.layers.Conv2D(64, kernel_size=1, activation=tf.keras.layers.ReLU()),           # pw_conv1
+            tf.keras.layers.DepthwiseConv2D(kernel_size=3, activation=None),                        # dw_conv2
+            tf.keras.layers.Conv2D(32, kernel_size=1, activation=tf.keras.layers.PReLU())           # pw_conv2
+        ])
+
+        # dw means Depthwise / pw means Pointwise
+        conv1, conv2, conv3, conv4, conv5, conv6, dw_conv1, pw_conv1, dw_conv2, pw_conv2 = model.layers
+        cls_sets = [
+            (conv1, conv2),
+            (conv2, conv3),
+            (conv3, conv4),
+            (conv4, conv5),
+            (conv5, conv6),
+            (conv6, dw_conv1, pw_conv1),
+            (pw_conv1, dw_conv2, pw_conv2)
+        ]
+
+        expected = [
+            False,
+            True,
+            True,
+            True,
+            True,
+            (True, True),
+            (True, False)
+        ]
+        actual = GraphSearchUtils.is_relu_activation_present_in_cls_sets(cls_sets)
+
+        assert actual == expected
