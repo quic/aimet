@@ -53,8 +53,9 @@ if common_dep_whl is not None:
 else:
     sys.exit("Could not find dependency wheel file for package: %s" % package_name)
 
-# Obtain package contents; exclude build and other files
-packages_found = find_packages() + find_namespace_packages(exclude=['*bin', 'pyenv3*', 'build', 'dist', '*bin', '*x86*'])
+# Obtain package contents; exclude build and certain other files including those from other packages
+packages_found = find_packages() + \
+    find_namespace_packages(exclude=['*bin', 'pyenv3*', 'build', 'dist', '*bin', '*x86*', '*aimet_common*', '*aimet_tensorflow*'])
 
 # Create common dependency list
 package_dependency_files = ['reqs_pip_torch_common.txt']
