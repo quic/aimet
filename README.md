@@ -216,6 +216,7 @@ To build, modify (*optionally*) and use the latest AIMET source code, please fol
 * [API Docs](https://quic.github.io/aimet-pages/releases/1.16.2/api_docs/index.html)
 * [Discussion Forums](https://forums.quicinc.com/)
 * [Tutorial Videos](https://quic.github.io/aimet-pages/index.html#video)
+* [Example Code](Examples/README.md)
 
 ## Contributions
 Thanks for your interest in contributing to AIMET! Please read our [Contributions Page](CONTRIBUTING.md) for more information on contributing features or bug fixes. We look forward to your participation!
