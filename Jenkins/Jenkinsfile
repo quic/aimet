@@ -435,7 +435,6 @@ pipeline {
                             steps {
                                 echo 'Building code (and generating Docs and pip packages)...'
                                 script {
-                                    //TODO Change option back to "-bp" as soon as issue is fixed
                                     runStage(env.AIMET_VARIANT_TORCH_CPU, "-bp")
                                 }
                             }

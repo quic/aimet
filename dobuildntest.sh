@@ -363,13 +363,16 @@ if [ $run_build -eq 1 ]; then
     check_stage $? "Build" "true"
 
     echo -e "\n********** Stage 2a: Generate Docs **********\n"
-    make doc
+    if [ -n "$DOC_TARGET" ]; then
+        make ${DOC_TARGET}
+    else
+        make doc
+    fi
     check_stage $? "Generate Doc" "true"
 fi
 
 if [ $run_package_gen -eq 1 ]; then
     cd $buildFolder
-
 
     echo -e "\n********** Stage 2b: Install **********\n"
     make install

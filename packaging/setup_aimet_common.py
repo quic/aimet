@@ -47,7 +47,8 @@ package_bin_dir = package_name + "/bin"
 package_url_base = setup_cfg.remote_url + "/releases/download/"+str(setup_cfg.version)
 
 # Obtain package contents; exclude build and other files
-packages_found = find_packages() + find_namespace_packages(exclude=['pyenv3*', 'build', 'dist', '*bin', '*x86*', '*aimet_tensorflow*', '*aimet_torch*'])
+packages_found = find_packages() + \
+    find_namespace_packages(exclude=['pyenv3*', 'build', 'dist', '*bin', '*x86*', '*aimet_tensorflow*', '*aimet_torch*'])
 
 # Create common dependency list
 install_requires_list = [open(package_bin_dir + '/reqs_pip_common.txt').read()]
