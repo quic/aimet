@@ -56,8 +56,6 @@ EXIT_CODE=0
 interactive_mode=0
 dry_run=0
 loading_symbol="..."
-USER_MOUNT_DIRS=""
-USER_ENV_VARS=""
 
 usage() {
   echo -e "\nThis is a script to build and run tests on AIMET code."
@@ -74,8 +72,10 @@ usage() {
   echo "    -a --> run acceptance tests (Warning: This will take a long time to complete!)"
   echo "    -o --> optional output folder. Default is current directory"
   echo "    -i --> just build and start the docker in interactive mode (shell prompt)"
-  echo "    -m --> mount the volumes (space-separated list of paths)"
-  echo "    -e --> set existing env var from current environment (space-separated list of vars name)"
+  echo "    -m --> mount the volumes (For multiple environment variables, use the same option"
+  echo "            multiple times ex. -m <path1> -m <path2> ...)"
+  echo "    -e --> set existing env var from current environment (For multiple environment "
+  echo "            variables, use the same option multiple times ex. -e <var1> -e <var2> ...)"
   echo "    -y --> set any custom script/command as entrypoint for docker (default is dobuildntest.sh)"
   echo "    -n --> dry run mode (just display the docker command)"
 }
@@ -91,7 +91,7 @@ while getopts "o:abce:im:npghsuvy:" opt;
              options_string+=" -b"
              ;;
          e)
-             USER_ENV_VARS=$OPTARG
+             USER_ENV_VARS+=("$OPTARG")
              ;;
          g)
              options_string+=" -g"
@@ -116,7 +116,7 @@ while getopts "o:abce:im:npghsuvy:" opt;
              interactive_mode=1
              ;;
          m)
-             USER_MOUNT_DIRS=$OPTARG
+             USER_MOUNT_DIRS+=("$OPTARG")
              ;;
          n)
              dry_run=1
@@ -210,6 +210,7 @@ docker ps | grep ${docker_container_name} && docker kill ${docker_container_name
 # Add data dependency path as additional volume mount if it exists
 if [ -n "${DEPENDENCY_DATA_PATH}" ]; then
    docker_add_vol_mount+=${DEPENDENCY_DATA_PATH}
+   USER_ENV_VARS+=("DEPENDENCY_DATA_PATH")
 else
    # If it does not exist, then just add the path of the current script since we cannot leave it 
    # empty
@@ -243,7 +244,6 @@ fi
 
 echo -e "Starting docker container${loading_symbol} \n"
 DOCKER_RUN_CMD="${DOCKER_RUN_PREFIX} --rm --name=$docker_container_name -e DISPLAY=:0 \
-				-e DEPENDENCY_DATA_PATH=${DEPENDENCY_DATA_PATH} \
 				-u $(id -u ${USER}):$(id -g ${USER}) \
 				-v /etc/passwd:/etc/passwd:ro -v /etc/group:/etc/group:ro \
 				-v /tmp/.X11-unix:/tmp/.X11-unix \
@@ -255,18 +255,18 @@ DOCKER_RUN_CMD="${DOCKER_RUN_PREFIX} --rm --name=$docker_container_name -e DISPL
 				-w ${workspaceFolder} \
 				--ipc=host --shm-size=8G"
 
-#check if HOME variable is set
+# Check if HOME variable is set
 if [[ -v HOME ]]; then
 	DOCKER_RUN_CMD="${DOCKER_RUN_CMD} -v ${HOME}:${HOME}"
 fi
 
-#set env variables if requested
-for user_env_var in ${USER_ENV_VARS}; do
+# Set env variables if requested
+for user_env_var in "${USER_ENV_VARS[@]}"; do
     DOCKER_RUN_CMD="${DOCKER_RUN_CMD} -e ${user_env_var}=\$${user_env_var}"
 done
 
-#mount directories if requested
-for user_dir in ${USER_MOUNT_DIRS}; do
+# Mount directories if requested
+for user_dir in "${USER_MOUNT_DIRS[@]}"; do
 	DOCKER_RUN_CMD="${DOCKER_RUN_CMD} -v ${user_dir}:${user_dir}"
 done
 
