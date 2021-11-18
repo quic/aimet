@@ -50,7 +50,6 @@ pytest.importorskip("torch", minversion="1.8")
 
 from aimet_common.defs import QuantScheme
 from aimet_torch import elementwise_ops
-from aimet_torch.quantsim_config import quantsim_config
 from aimet_torch.examples.test_models import ModelWithFunctionalReLU, SingleResidual, ModelWithDuplicateReLU
 from aimet_torch.quantsim import QuantizationSimModel, QuantParams
 from aimet_torch.utils import create_fake_data_loader
@@ -323,7 +322,6 @@ class TestFX:
         assert isinstance(model_transformed.module_add, elementwise_ops.Add)
         assert torch.allclose(model(input_tensor), model_transformed(input_tensor))
 
-        quantsim_config.ELEMENTWISE_OP_TYPES = []
         quant_sim_for_modified_model = QuantizationSimModel(model_transformed, dummy_input=input_tensor)
         print(quant_sim_for_modified_model)
 

@@ -62,8 +62,6 @@ MAP_PYTORCH_PARAM_NAME_TO_QUANTSIM_NAME = {
     "weight": "weight"
 }
 
-ELEMENTWISE_OP_TYPES = ['Add', 'Mul', 'Concat', 'Div']
-
 TensorQuantizersTupleType = Tuple[List[TensorQuantizer], List[TensorQuantizer], List[TensorQuantizer],
                                   List[TensorQuantizer]]
 
@@ -80,7 +78,7 @@ class SupergroupConfigCallback(AimetCommonSupergroupConfigCallback):
         # turn off input quantization for last op)
         # Assumes op list is at least of length two
         for index, op in enumerate(op_list):
-            if op.type in ELEMENTWISE_OP_TYPES:
+            if _is_elementwise_functional(op):
                 # if op is an elementwise op, it does not have wrappers.  Thus nothing needs to be done, since previous
                 # and subsequent ops with wrappers will be set correctly anyway.
                 continue
@@ -154,7 +152,7 @@ class QuantSimConfigurator(AimetCommonQuantSimConfigurator):
         """
         module_to_tensor_quantizers_dict = {}
         # Extract only ops in the model which correspond to elementwise ops
-        elementwise_ops = [op for op in self._conn_graph.get_all_ops().values() if op.type in ELEMENTWISE_OP_TYPES]
+        elementwise_ops = [op for op in self._conn_graph.get_all_ops().values() if _is_elementwise_functional(op)]
         for op in elementwise_ops:
             input_true_list = self._get_tensor_quantizers_for_input_true_setting(op)
             output_true_list = self._get_tensor_quantizers_for_output_true_setting(op)
@@ -620,3 +618,12 @@ def _report_unsupported_ops(quantsim_config: ConfigDictType):
                 logger.error('Unsupported op type %s', op)
                 # Raising an error here since an unrecognized op will cause supergroup graph matching to fail
                 raise AssertionError
+
+
+def _is_elementwise_functional(op: Op) -> bool:
+    """
+    Check if op is a functional elementwise op.
+    :param op: Operation to check whether it is functional elementwise op
+    :return: True if op is functional elementwise, False otherwise
+    """
+    return op.type in ['Add', 'Mul', 'Concat', 'Div'] and op.get_module() is None
