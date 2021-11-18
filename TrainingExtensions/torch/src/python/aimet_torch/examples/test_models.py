@@ -43,6 +43,8 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+import aimet_torch.elementwise_ops as aimet_elementwise
+
 
 # pylint: disable=too-many-instance-attributes
 class SingleResidual(nn.Module):
@@ -92,6 +94,62 @@ class SingleResidual(nn.Module):
         residual = self.conv4(residual)
         residual = self.ada(residual)
         x += residual
+        x = self.relu3(x)
+
+        x = self.avgpool(x)
+        x = x.view(x.size(0), -1)
+        x = self.fc(x)
+        return x
+
+
+class SingleResidualWithModuleAdd(nn.Module):
+    """ A model with a single residual connection.
+        Use this model for unit testing purposes. """
+
+    def __init__(self, num_classes=10):
+        super(SingleResidualWithModuleAdd, self).__init__()
+        self.conv1 = nn.Conv2d(3, 32, kernel_size=2, stride=2, padding=2, bias=False)
+        self.bn1 = nn.BatchNorm2d(32)
+        self.relu1 = nn.ReLU(inplace=True)
+        self.maxpool = nn.MaxPool2d(kernel_size=2, stride=2, padding=1)
+        # All layers above are same as ResNet
+        # The output of the MaxPool2d is used as a residual.
+
+        # The following layers are considered as single block.
+        self.conv2 = nn.Conv2d(32, 16, kernel_size=2, stride=2, padding=2, bias=False)
+        self.bn2 = nn.BatchNorm2d(16)
+        self.relu2 = nn.ReLU(inplace=True)
+        self.conv3 = nn.Conv2d(16, 8, kernel_size=2, stride=2, padding=2, bias=False)
+
+        # The output of Conv2d layer above(conv3) is added with the the residual from
+        # MaxPool2d and then fed to the relu layer below.
+        self.add = aimet_elementwise.Add()
+        self.relu3 = nn.ReLU(inplace=True)
+
+        self.avgpool = nn.AvgPool2d(3, stride=1)
+        self.conv4 = nn.Conv2d(32, 8, kernel_size=2, stride=2, padding=2, bias=True)
+        self.ada = nn.AdaptiveAvgPool2d(5)
+        self.fc = nn.Linear(72, num_classes)
+
+    def forward(self, *inputs):
+        x = self.conv1(inputs[0])
+        x = self.bn1(x)
+        x = self.relu1(x)
+        x = self.maxpool(x)
+
+        # Save the output of MaxPool as residual.
+        residual = x
+
+        x = self.conv2(x)
+        x = self.bn2(x)
+        x = self.relu2(x)
+        x = self.conv3(x)
+
+        # Add the residual
+        # AdaptiveAvgPool2d is used to get the desired dimension before adding.
+        residual = self.conv4(residual)
+        residual = self.ada(residual)
+        x = self.add(x, residual)
         x = self.relu3(x)
 
         x = self.avgpool(x)

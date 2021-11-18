@@ -41,7 +41,7 @@ import os
 import torch
 import libpymo
 from aimet_common.defs import QuantScheme
-from aimet_torch.examples.test_models import SingleResidual, QuantSimTinyModel, MultiInput
+from aimet_torch.examples.test_models import SingleResidual, QuantSimTinyModel, MultiInput, SingleResidualWithModuleAdd
 from aimet_torch.quantsim import QuantizationSimModel
 from aimet_torch.quantsim_config.quantsim_config import _get_all_ops_in_neighborhood
 from aimet_torch.qc_quantize_op import QcQuantizeWrapper
@@ -377,8 +377,8 @@ class TestQuantsimConfig:
         if os.path.exists('./data/quantsim_config.json'):
             os.remove('./data/quantsim_config.json')
 
-    def test_supergroups_with_elementwise_add(self):
-        """ Test that supergroup quantization parameters are set correctly when using json config file """
+    def test_supergroups_with_functional_add(self):
+        """ Test supergroup with functional add """
         model = SingleResidual()
         model.eval()
 
@@ -402,7 +402,8 @@ class TestQuantsimConfig:
         with open('./data/quantsim_config.json', 'w') as f:
             json.dump(quantsim_config, f)
         # Use in_place=True here for easy access to modules through model instance variables
-        sim = QuantizationSimModel(model, quant_scheme=QuantScheme.post_training_tf_enhanced, config_file='./data/quantsim_config.json',
+        sim = QuantizationSimModel(model, quant_scheme=QuantScheme.post_training_tf_enhanced,
+                                   config_file='./data/quantsim_config.json',
                                    in_place=True, dummy_input=torch.rand(1, 3, 32, 32))
         for _, module in sim.model.named_modules():
             if isinstance(module, QcQuantizeWrapper):
@@ -410,6 +411,47 @@ class TestQuantsimConfig:
                 if module == model.relu3:
                     # If add were not part of the supergroup, relu's input quantizer would be enabled
                     assert not module.input_quantizer.enabled
+
+        if os.path.exists('./data/quantsim_config.json'):
+            os.remove('./data/quantsim_config.json')
+
+    def test_supergroups_with_module_add(self):
+        """ Test supergroup with add module """
+        model = SingleResidualWithModuleAdd()
+        model.eval()
+
+        quantsim_config = {
+            "defaults": {
+                "ops": {
+                    "is_output_quantized": "True"
+                },
+                "params": {}
+            },
+            "params": {},
+            "op_type": {},
+            "supergroups": [
+                {
+                    "op_list": ["Add", "Relu"]
+                }
+            ],
+            "model_input": {},
+            "model_output": {}
+        }
+        with open('./data/quantsim_config.json', 'w') as f:
+            json.dump(quantsim_config, f)
+        # Use in_place=True here for easy access to modules through model instance variables
+        sim = QuantizationSimModel(model, quant_scheme=QuantScheme.post_training_tf_enhanced,
+                                   config_file='./data/quantsim_config.json',
+                                   in_place=True, dummy_input=torch.rand(1, 3, 32, 32))
+        for _, module in sim.model.named_modules():
+            if isinstance(module, QcQuantizeWrapper):
+                # Check configs for starts of supergroups
+                if module == model.add:
+                    # If add were not part of the supergroup, relu's input quantizer would be enabled
+                    assert not module.output_quantizer.enabled
+                else:
+                    assert module.output_quantizer.enabled
+                assert not module.input_quantizer.enabled
 
         if os.path.exists('./data/quantsim_config.json'):
             os.remove('./data/quantsim_config.json')
