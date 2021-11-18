@@ -56,6 +56,43 @@ ClsSet = typing.Union[typing.Tuple[tf.keras.layers.Conv2D,
                                    tf.keras.layers.Conv2D]]
 
 
+class ClsSetInfo:
+    """
+    This class hold information about the layers in a CLS set, along with corresponding scaling factors
+    and other information like if there is a ReLU activation function between the CLS set layers
+    """
+
+    class ClsSetLayerPairInfo:
+        """
+        Models a pair of layers that were scaled using CLS. And related information.
+        """
+
+        def __init__(self, layer1: tf.keras.layers.Conv2D, layer2: tf.keras.layers.Conv2D, scale_factor: np.ndarray,
+                     relu_activation_between_layers: bool):
+            """
+            :param layer1: Layer whose bias is folded
+            :param layer2: Layer to which bias of previous layer's bias is folded
+            :param scale_factor: Scale Factor found from Cross Layer Scaling to scale BN parameters
+            :param relu_activation_between_layers: If the activation between layer1 and layer2 is Relu
+            """
+            self.layer1 = layer1
+            self.layer2 = layer2
+            self.scale_factor = scale_factor
+            self.relu_activation_between_layers = relu_activation_between_layers
+
+    def __init__(self, cls_pair_1: ClsSetLayerPairInfo, cls_pair_2: ClsSetLayerPairInfo = None):
+        """
+        Constructor takes 2 pairs if Depth-wise separable layer is being folded
+
+        :param cls_pair_1: Pair between two conv or conv and depth-wise conv
+        :param cls_pair_2: Pair between depth-wise conv and point-wise conv
+        """
+        if cls_pair_2:
+            self.cls_pair_info_list = [cls_pair_1, cls_pair_2]
+        else:
+            self.cls_pair_info_list = [cls_pair_1]
+
+
 class GraphSearchUtils:
     """Implements graph search utils required by CLE feature"""
 
@@ -287,3 +324,114 @@ class CrossLayerScaling:
             param_tensors = [weight_tensor]
 
         return param_tensors
+
+
+class HighBiasFold:
+    """
+    Code to apply the high-bias-fold technique to a model
+    """
+
+    @staticmethod
+    def bias_fold(cls_set_info_list: typing.List[ClsSetInfo],
+                  bn_layers: typing.Dict[tf.keras.layers.Conv2D, tf.keras.layers.BatchNormalization]):
+        """
+        Folds bias values greater than 3 * sigma to next layer's bias
+
+        :param cls_set_info_list: List of info elements for each cls set
+        :param bn_layers: Key: Conv/Linear layer Value: Corresponding folded BN layer
+        """
+        if not bn_layers:
+            _logger.info('High Bias folding is not supported for models without BatchNorm Layers')
+            return
+
+        for cls_set_info in cls_set_info_list:
+            for cls_pair_info in cls_set_info.cls_pair_info_list:
+                if (not cls_pair_info.layer1.use_bias) or (not cls_pair_info.layer2.use_bias) or \
+                        (cls_pair_info.layer1 not in bn_layers):
+                    continue
+
+                prev_layer_params, curr_layer_params = HighBiasFold.call_mo_high_bias_fold(cls_pair_info, bn_layers)
+
+                layer1 = cls_pair_info.layer1
+                layer1_weight_tensor, _ = layer1.get_weights()
+                layer1_bias_tensor = np.array(prev_layer_params.bias)
+                layer1.set_weights([layer1_weight_tensor, layer1_bias_tensor])
+
+                layer2 = cls_pair_info.layer2
+                layer2_weight_tensor, _ = layer2.get_weights()
+                layer2_bias_tensor = np.array(curr_layer_params.bias)
+                layer2.set_weights([layer2_weight_tensor, layer2_bias_tensor])
+
+    @staticmethod
+    def call_mo_high_bias_fold(cls_pair_info: ClsSetInfo.ClsSetLayerPairInfo,
+                               bn_layers: typing.Dict[tf.keras.layers.Conv2D, tf.keras.layers.BatchNormalization]) \
+            -> typing.Tuple[libpymo.LayerParams, libpymo.LayerParams]:
+        """
+        Invokes high bias fold MO API
+
+        :param cls_pair_info: Pair of layers that were scaled using CLS and related information
+        :param bn_layers: Key: Conv/Linear layer Value: Corresponding folded BN layer
+        :return: Updated layer params
+        """
+
+        bn_layer = bn_layers[cls_pair_info.layer1]
+        prev_layer_bn_params = HighBiasFold._pack_bn_params_high_bias_fold(bn_layer, cls_pair_info.scale_factor)
+
+        prev_layer_params, curr_layer_params = HighBiasFold._pack_layer_params(cls_pair_info)
+
+        libpymo.updateBias(prev_layer_params, curr_layer_params, prev_layer_bn_params)
+        return prev_layer_params, curr_layer_params
+
+    @staticmethod
+    def _pack_bn_params_high_bias_fold(bn_layer: tf.keras.layers.BatchNormalization,
+                                       scaling_parameter: np.ndarray) -> libpymo.BNParamsHighBiasFold:
+        """
+        Helper method to pack BatchNormalization parameter for high bias fold
+
+        :param bn_layer: Target batch normalization layer
+        :param scaling_parameter: Scaling parameters for each channel obtained from cross layer scaling
+        :return: Packed BNParamsHighBiasFold
+        """
+        bn_params = libpymo.BNParamsHighBiasFold()
+
+        gamma, beta, _, _ = bn_layer.get_weights()
+
+        if len(scaling_parameter) != len(gamma) or len(scaling_parameter) != len(beta):
+            raise ValueError("High Bias absorption is not supported for networks with fold-forward BatchNorms")
+
+        bn_params.gamma = np.divide(gamma, scaling_parameter)
+        bn_params.beta = np.divide(beta, scaling_parameter)
+
+        return bn_params
+
+    @staticmethod
+    def _pack_layer_params(cls_pair_info: ClsSetInfo.ClsSetLayerPairInfo) \
+            -> typing.Tuple[libpymo.LayerParams, libpymo.LayerParams]:
+        """
+        Helper method to pack information of previous and current layer
+
+        :param cls_pair_info: Pair of layers that were scaled using CLS and related information
+        :return: Packed layer parameter tuple
+        """
+        # Pack parameters for previous layer
+        prev_layer_params = libpymo.LayerParams()
+
+        prev_layer = cls_pair_info.layer1
+        prev_layer_params.activationIsRelu = cls_pair_info.relu_activation_between_layers
+
+        _, prev_layer_bias_tensor = prev_layer.get_weights()
+        prev_layer_params.bias = prev_layer_bias_tensor
+
+        # Pack parameters for current layer
+        curr_layer_params = libpymo.LayerParams()
+
+        curr_layer = cls_pair_info.layer2
+        curr_layer_weight_tensor, curr_layer_bias_tensor = curr_layer.get_weights()
+        curr_layer_weight_tensor = WeightTensorUtils.transpose_from_tf_to_libpymo_format(curr_layer_weight_tensor,
+                                                                                         curr_layer)
+
+        curr_layer_params.bias = curr_layer_bias_tensor
+        curr_layer_params.weight = curr_layer_weight_tensor.reshape(-1)
+        curr_layer_params.weightShape = np.array(curr_layer_weight_tensor.shape)
+
+        return prev_layer_params, curr_layer_params
