@@ -55,8 +55,8 @@ __global__ void quantizeDequantizeKernel(const DTYPE* in, int cnt, const TfEncod
     }
 }
 
-template <typename IN_DTYPE, typename OUT_DTYPE>
-__global__ void quantizeToFxpKernel(const IN_DTYPE* in, int cnt, const TfEncoding encoding, OUT_DTYPE* out,
+template <typename DTYPE>
+__global__ void quantizeToFxpKernel(const DTYPE* in, int cnt, const TfEncoding encoding, DTYPE* out,
                                     RoundingMode rounding_mode, bool shiftToSigned)
 {
     // Using unsigned int to account for case of signed symmetric 32 bit, when shift will be 2^31
@@ -66,9 +66,8 @@ __global__ void quantizeToFxpKernel(const IN_DTYPE* in, int cnt, const TfEncodin
     }
     CUDA_KERNEL_LOOP(i, cnt)
     {
-        int64_t out_64;
-        quantizeToFxpDeviceWithInt(in + i, i, encoding, &out_64, rounding_mode);
-        *(out + i) = (OUT_DTYPE) out_64 - shift;
+        quantizeToFxpDevice<DTYPE>(in + i, i, encoding, out + i, rounding_mode);
+        *(out + i) -= shift;
     }
 }
 
@@ -79,9 +78,9 @@ void quantizeDequantizeGpu(const DTYPE* in, int cnt, const TfEncoding& encoding,
     quantizeDequantizeKernel<<<CUDA_NUM_BLOCKS(cnt), CUDA_NUM_THREADS>>>(in, cnt, encoding, out, rounding_mode);
 }
 
-template <typename IN_DTYPE, typename OUT_DTYPE>
-void quantizeToFxpGpu(const IN_DTYPE* in, int cnt, const TfEncoding& encoding, OUT_DTYPE* out,
-                      RoundingMode rounding_mode, bool shiftToSigned)
+template <typename DTYPE>
+void quantizeToFxpGpu(const DTYPE* in, int cnt, const TfEncoding& encoding, DTYPE* out, RoundingMode rounding_mode,
+                      bool shiftToSigned)
 {
     quantizeToFxpKernel<<<CUDA_NUM_BLOCKS(cnt), CUDA_NUM_THREADS>>>(in, cnt, encoding, out, rounding_mode,
                                                                     shiftToSigned);
@@ -94,15 +93,10 @@ template void quantizeDequantizeGpu(const double* in, int cnt, const TfEncoding&
 template void quantizeDequantizeGpu(const float* in, int cnt, const TfEncoding& encoding, float* out,
                                      RoundingMode rounding_mode);
 
-template void quantizeToFxpGpu(const double* in, int cnt, const TfEncoding& encoding, int32_t* out,
+template void quantizeToFxpGpu(const double* in, int cnt, const TfEncoding& encoding, double* out,
                                 RoundingMode rounding_mode, bool shiftToSigned);
 
-template void quantizeToFxpGpu(const float* in, int cnt, const TfEncoding& encoding, int32_t* out,
-                                RoundingMode rounding_mode, bool shiftToSigned);
 
-template void quantizeToFxpGpu(const double* in, int cnt, const TfEncoding& encoding, int64_t* out,
-                                RoundingMode rounding_mode, bool shiftToSigned);
-
-template void quantizeToFxpGpu(const float* in, int cnt, const TfEncoding& encoding, int64_t* out,
+template void quantizeToFxpGpu(const float* in, int cnt, const TfEncoding& encoding, float* out,
                                 RoundingMode rounding_mode, bool shiftToSigned);
 }   // End of namespace DlQuantization
