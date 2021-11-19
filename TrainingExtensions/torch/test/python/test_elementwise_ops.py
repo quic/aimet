@@ -133,10 +133,10 @@ class TestTrainingExtensionElementwiseOps(unittest.TestCase):
 
     def test_concat_op(self):
         torch.manual_seed(10)
-        model = Model(Concat(axis=0))
+        model = Model(Concat())
         input1 = torch.rand((5, 10, 10, 20))
         input2 = torch.rand((5, 10, 10, 20))
-        out = model(input1, input2)
+        out = model([input1, input2], 0)
         out1 = torch.cat((input1, input2), 0)
         self.assertTrue(np.allclose(out, out1))
 

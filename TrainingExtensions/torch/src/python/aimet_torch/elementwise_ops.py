@@ -37,6 +37,7 @@
 # =============================================================================
 
 """ Modules for functional elementwise ops """
+from typing import List, Tuple, Union
 import torch
 import torch.nn
 
@@ -45,7 +46,7 @@ class Add(torch.nn.Module):
     """ Add module for a functional add"""
     # pylint:disable=arguments-differ
     @staticmethod
-    def forward(x, y):
+    def forward(x: torch.Tensor, y: torch.Tensor) -> torch.Tensor:
         """
         Forward-pass routine for add op
         """
@@ -56,9 +57,9 @@ class Subtract(torch.nn.Module):
     """ Subtract module for a functional subtract"""
     # pylint:disable=arguments-differ
     @staticmethod
-    def forward(x, y):
+    def forward(x: torch.Tensor, y: torch.Tensor) -> torch.Tensor:
         """
-        Forward-pass routine for subtact op
+        Forward-pass routine for subtract op
         """
         return x - y
 
@@ -67,7 +68,7 @@ class Multiply(torch.nn.Module):
     """ Multiply module for a functional multiply"""
     # pylint:disable=arguments-differ
     @staticmethod
-    def forward(x, y):
+    def forward(x: torch.Tensor, y: torch.Tensor) -> torch.Tensor:
         """
         Forward-pass routine for multiply op
         """
@@ -76,10 +77,9 @@ class Multiply(torch.nn.Module):
 
 class Divide(torch.nn.Module):
     """ Divide module for a functional divide"""
-
     # pylint:disable=arguments-differ
     @staticmethod
-    def forward(x, y):
+    def forward(x: torch.Tensor, y: torch.Tensor) -> torch.Tensor:
         """
         Forward-pass routine for divide op
         """
@@ -88,25 +88,21 @@ class Divide(torch.nn.Module):
 
 class Concat(torch.nn.Module):
     """ Concat module for a functional concat"""
-    def __init__(self, axis: int = 0):
-        super(Concat, self).__init__()
-        self.axis = axis
-
     # pylint:disable=arguments-differ
-    def forward(self, x, y):
+    @staticmethod
+    def forward(x: Union[Tuple[torch.Tensor], List[torch.Tensor]], dim: int = 0) -> torch.Tensor:
         """
-        Forward-pass routine for divide op
+        Forward-pass routine for cat op
         """
-        return torch.cat((x, y), self.axis)
+        return torch.cat(x, dim=dim)
 
 
 class MatMul(torch.nn.Module):
     """ MatMul module for a functional matmul"""
-
     # pylint:disable=arguments-differ
     @staticmethod
-    def forward(x, y):
+    def forward(x: torch.Tensor, y: torch.Tensor) -> torch.Tensor:
         """
-        Forward-pass routine for divide op
+        Forward-pass routine for matmul op
         """
         return torch.matmul(x, y)
