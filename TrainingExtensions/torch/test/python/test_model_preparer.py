@@ -50,7 +50,9 @@ pytest.importorskip("torch", minversion="1.8")
 
 from aimet_common.defs import QuantScheme
 from aimet_torch import elementwise_ops
-from aimet_torch.examples.test_models import ModelWithFunctionalReLU, SingleResidual, ModelWithDuplicateReLU
+from aimet_torch.quantsim_config import quantsim_config
+from aimet_torch.examples.test_models import ModelWithFunctionalReLU, SingleResidual, ModelWithDuplicateReLU, \
+    ConcatModel
 from aimet_torch.quantsim import QuantizationSimModel, QuantParams
 from aimet_torch.utils import create_fake_data_loader
 from aimet_torch.model_preparer import prepare_model
@@ -781,3 +783,180 @@ class TestFX:
         assert model_transformed.module_elu_1.alpha == 0.2
         assert model_transformed.module_elu_1.inplace == True
         assert model_transformed.module_elu_1.training == False
+
+    def test_fx_with_elementwise_cat(self):
+        """
+        test torch fx with elementwise op - torch.cat
+        """
+        input_shape = (1, 3, 8, 8)
+        input_tensor = [torch.randn(*input_shape), torch.randn(*input_shape), torch.randn(*input_shape)]
+        model = ConcatModel().eval()
+        model_copy = copy.deepcopy(model)
+
+        model_transformed = prepare_model(model_copy)
+        print(model_transformed)
+
+        assert torch.allclose(model_transformed(*input_tensor),
+                              model(*input_tensor))
+
+        assert isinstance(model_transformed.module_cat, elementwise_ops.Concat)
+
+        quant_sim = QuantizationSimModel(model_transformed, dummy_input=input_tensor)
+        assert quant_sim.model.module_cat.output_quantizer.enabled == True
+
+    def test_fx_with_elementwise_subtract(self):
+        """
+        test torch fx with elementwise op - torch.subtract
+        """
+        class ModelWithSubtractOp(torch.nn.Module):
+            def __init__(self):
+                super(ModelWithSubtractOp, self).__init__()
+                self.conv1 = torch.nn.Conv2d(3, 4, kernel_size=2, stride=2, padding=2, bias=False)
+                self.conv2 = torch.nn.Conv2d(3, 4, kernel_size=2, stride=2, padding=2)
+
+            def forward(self, *inputs):
+                x1 = self.conv1(inputs[0])
+                x2 = self.conv2(inputs[1])
+                x = torch.subtract(x1, x2)
+                return x
+
+        input_shape = (1, 3, 8, 8)
+        input_tensor = [torch.randn(*input_shape), torch.randn(*input_shape)]
+        model = ModelWithSubtractOp().eval()
+        model_copy = copy.deepcopy(model)
+
+        model_transformed = prepare_model(model_copy)
+        print(model_transformed)
+
+        assert torch.allclose(model_transformed(*input_tensor),
+                              model(*input_tensor))
+
+        assert isinstance(model_transformed.module_subtract, elementwise_ops.Subtract)
+
+    def test_fx_with_elementwise_mul(self):
+        """
+        test torch fx with elementwise op - torch.mul
+        """
+        class ModelWithMultiplyOp(torch.nn.Module):
+            def __init__(self):
+                super(ModelWithMultiplyOp, self).__init__()
+                self.conv1 = torch.nn.Conv2d(3, 4, kernel_size=2, stride=2, padding=2, bias=False)
+                self.conv2 = torch.nn.Conv2d(3, 4, kernel_size=2, stride=2, padding=2)
+
+            def forward(self, *inputs):
+                x1 = self.conv1(inputs[0])
+                x2 = self.conv2(inputs[1])
+                x = torch.mul(x1, x2)
+                return x
+
+        input_shape = (1, 3, 8, 8)
+        input_tensor = [torch.randn(*input_shape), torch.randn(*input_shape)]
+        model = ModelWithMultiplyOp().eval()
+        model_copy = copy.deepcopy(model)
+
+        model_transformed = prepare_model(model_copy)
+        print(model_transformed)
+
+        assert torch.allclose(model_transformed(*input_tensor),
+                              model(*input_tensor))
+
+        assert isinstance(model_transformed.module_mul, elementwise_ops.Multiply)
+
+        quant_sim = QuantizationSimModel(model_transformed, dummy_input=input_tensor)
+        assert quant_sim.model.module_mul.output_quantizer.enabled == True
+
+    def test_fx_with_elementwise_div(self):
+        """
+        test torch fx with elementwise op - torch.div
+        """
+        class ModelWithDivideOp(torch.nn.Module):
+            def __init__(self):
+                super(ModelWithDivideOp, self).__init__()
+                self.conv1 = torch.nn.Conv2d(3, 4, kernel_size=2, stride=2, padding=2, bias=False)
+                self.conv2 = torch.nn.Conv2d(3, 4, kernel_size=2, stride=2, padding=2)
+
+            def forward(self, *inputs):
+                x1 = self.conv1(inputs[0])
+                x2 = self.conv2(inputs[1])
+                x = torch.div(x1, x2)
+                return x
+
+        input_shape = (1, 3, 8, 8)
+        input_tensor = [torch.randn(*input_shape), torch.randn(*input_shape)]
+        model = ModelWithDivideOp().eval()
+        model_copy = copy.deepcopy(model)
+
+        model_transformed = prepare_model(model_copy)
+        print(model_transformed)
+
+        assert torch.allclose(model_transformed(*input_tensor),
+                              model(*input_tensor))
+
+        assert isinstance(model_transformed.module_div, elementwise_ops.Divide)
+
+        quant_sim = QuantizationSimModel(model_transformed, dummy_input=input_tensor)
+        assert quant_sim.model.module_div.output_quantizer.enabled == True
+
+    def test_fx_with_elementwise_matmul(self):
+        """
+        test torch fx with elementwise op - torch.matmul
+        """
+        class ModelWithMatMulOp(torch.nn.Module):
+            def __init__(self):
+                super(ModelWithMatMulOp, self).__init__()
+                self.conv1 = torch.nn.Conv2d(3, 4, kernel_size=2, stride=2, padding=2, bias=False)
+                self.conv2 = torch.nn.Conv2d(3, 4, kernel_size=2, stride=2, padding=2)
+
+            def forward(self, *inputs):
+                x1 = self.conv1(inputs[0])
+                x2 = self.conv2(inputs[1])
+                x = torch.matmul(x1, x2)
+                return x
+
+        input_shape = (1, 3, 8, 8)
+        input_tensor = [torch.randn(*input_shape), torch.randn(*input_shape)]
+        model = ModelWithMatMulOp().eval()
+        model_copy = copy.deepcopy(model)
+
+        model_transformed = prepare_model(model_copy)
+        print(model_transformed)
+
+        assert torch.allclose(model_transformed(*input_tensor),
+                              model(*input_tensor))
+
+        assert isinstance(model_transformed.module_matmul, elementwise_ops.MatMul)
+
+        quant_sim = QuantizationSimModel(model_transformed, dummy_input=input_tensor)
+        assert quant_sim.model.module_matmul.output_quantizer.enabled == True
+
+    def test_fx_with_elementwise_cat_default_dim(self):
+        """
+        test torch fx with elementwise op - torch.cat with default dim
+        """
+        class ModelWithCatOp(torch.nn.Module):
+            def __init__(self):
+                super(ModelWithCatOp, self).__init__()
+                self.conv1 = torch.nn.Conv2d(3, 4, kernel_size=2, stride=2, padding=2, bias=False)
+                self.conv2 = torch.nn.Conv2d(3, 4, kernel_size=2, stride=2, padding=2)
+
+            def forward(self, *inputs):
+                x1 = self.conv1(inputs[0])
+                x2 = self.conv2(inputs[1])
+                x = torch.cat((x1, x2))
+                return x
+
+        input_shape = (1, 3, 8, 8)
+        input_tensor = [torch.randn(*input_shape), torch.randn(*input_shape)]
+        model = ModelWithCatOp().eval()
+        model_copy = copy.deepcopy(model)
+
+        model_transformed = prepare_model(model_copy)
+        print(model_transformed)
+
+        assert torch.allclose(model_transformed(*input_tensor),
+                              model(*input_tensor))
+
+        assert isinstance(model_transformed.module_cat, elementwise_ops.Concat)
+
+        quant_sim = QuantizationSimModel(model_transformed, dummy_input=input_tensor)
+        assert quant_sim.model.module_cat.output_quantizer.enabled == True

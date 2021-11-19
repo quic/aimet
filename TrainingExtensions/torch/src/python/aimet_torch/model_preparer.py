@@ -77,7 +77,12 @@ functional_to_module_map = {
     'silu'          : torch.nn.SiLU,
 
     # Elementwise operations
-    'add'           : elementwise_ops.Add
+    'add'           : elementwise_ops.Add,
+    'subtract'      : elementwise_ops.Subtract,
+    'mul'           : elementwise_ops.Multiply,
+    'div'           : elementwise_ops.Divide,
+    'cat'           : elementwise_ops.Concat,
+    'matmul'        : elementwise_ops.MatMul
 }
 
 
