@@ -112,9 +112,9 @@ void quantizeDequantize(const DTYPE* in, int cnt, const TfEncoding& encoding, DT
 }
 
 // encoding: TF: rounded
-template <typename IN_DTYPE, typename OUT_DTYPE>
-void quantizeToFxp(const IN_DTYPE* in, int cnt, const TfEncoding& encoding, OUT_DTYPE* out,
-                   ComputationMode mode_cpu_gpu, RoundingMode rounding_mode, bool shiftToSigned)
+template <typename DTYPE>
+void quantizeToFxp(const DTYPE* in, int cnt, const TfEncoding& encoding, DTYPE* out, ComputationMode mode_cpu_gpu,
+                   RoundingMode rounding_mode, bool shiftToSigned)
 {
     switch (mode_cpu_gpu)
     {
@@ -147,9 +147,9 @@ void quantizeDequantizeCpu(const DTYPE* in, int cnt, const TfEncoding& encoding,
     }
 }
 
-template <typename IN_DTYPE, typename OUT_DTYPE>
-void quantizeToFxpCpu(const IN_DTYPE* in, int cnt, const TfEncoding& encoding, OUT_DTYPE* out,
-                      RoundingMode rounding_mode, bool shiftToSigned)
+template <typename DTYPE>
+void quantizeToFxpCpu(const DTYPE* in, int cnt, const TfEncoding& encoding, DTYPE* out, RoundingMode rounding_mode,
+                      bool shiftToSigned)
 {
     // Using unsigned int to account for case of signed symmetric 32 bit, when shift will be 2^31
     unsigned int shift = 0;
@@ -158,9 +158,8 @@ void quantizeToFxpCpu(const IN_DTYPE* in, int cnt, const TfEncoding& encoding, O
     }
     for (int i = 0; i < cnt; ++i)
     {
-        int64_t out_64;
-        quantizeValueCpuWithInt(&in[i], encoding, &out_64, rounding_mode);
-        out[i] = (OUT_DTYPE) (out_64 - shift);
+        quantizeValueCpu(&in[i], encoding, &out[i], rounding_mode);
+        out[i] -= shift;
     }
 }
 
@@ -170,34 +169,6 @@ inline void quantizeValueCpu(const DTYPE* in, const TfEncoding& encoding, DTYPE*
     *out = (DTYPE) max(min((double) *in, encoding.max), encoding.min);
     // Scale and add offset to get something in the range [0,2^bw-1]
     *out = round(*out / encoding.delta) - encoding.offset;
-
-    switch (rounding_mode)
-    {
-        case ROUND_NEAREST:
-        {
-            break;
-        }
-        case ROUND_STOCHASTIC:
-        {
-            *out = floor(*out + randUniformCpu());
-            break;
-        }
-        default:
-        {
-            throw runtime_error("Unknown rounding mode.");
-        }
-    }
-}
-
-template <typename IN_DTYPE, typename OUT_DTYPE>
-inline void quantizeValueCpuWithInt(const IN_DTYPE* in, const TfEncoding& encoding, OUT_DTYPE* out,
-                                    RoundingMode rounding_mode)
-{
-    double out_float = max(min((double) *in, encoding.max), encoding.min);
-    // Scale and add offset to get something in the range [0,2^bw-1]
-    // If bw is 32, we need output to be in range [0, 2^32 - 1], which cannot be handled with int32. So that is why
-    // we use int64.
-    *out = (int64_t)(round(out_float / encoding.delta) - encoding.offset);
 
     switch (rounding_mode)
     {
@@ -231,16 +202,10 @@ template void quantizeDequantize(const double* in, int cnt, const TfEncoding& en
 template void quantizeDequantize(const float* in, int cnt, const TfEncoding& encoding, float* out,
                                  ComputationMode mode_cpu_gpu, RoundingMode rounding_mode);
 
-template void quantizeToFxp(const double* in, int cnt, const TfEncoding& encoding, int32_t* out,
+template void quantizeToFxp(const double* in, int cnt, const TfEncoding& encoding, double* out,
                             ComputationMode mode_cpu_gpu, RoundingMode rounding_mode, bool shiftToSigned);
 
-template void quantizeToFxp(const float* in, int cnt, const TfEncoding& encoding, int32_t* out,
-                            ComputationMode mode_cpu_gpu, RoundingMode rounding_mode, bool shiftToSigned);
-
-template void quantizeToFxp(const double* in, int cnt, const TfEncoding& encoding, int64_t* out,
-                            ComputationMode mode_cpu_gpu, RoundingMode rounding_mode, bool shiftToSigned);
-
-template void quantizeToFxp(const float* in, int cnt, const TfEncoding& encoding, int64_t* out,
+template void quantizeToFxp(const float* in, int cnt, const TfEncoding& encoding, float* out,
                             ComputationMode mode_cpu_gpu, RoundingMode rounding_mode, bool shiftToSigned);
 
 }   // End of namespace DlQuantization

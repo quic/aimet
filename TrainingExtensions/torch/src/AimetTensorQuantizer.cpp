@@ -43,7 +43,6 @@
 #include <DlQuantization/QuantizerFactory.hpp>
 
 #include <iostream>
-#include <stdexcept>
 #include <string>
 #include <torch/extension.h>
 #include <vector>
@@ -79,7 +78,7 @@ public:
             inputTensorSize *= size;
 
         // Get a pointer to the tensor data
-        float* inputDataPtr = input.data_ptr<float>();
+        float* inputDataPtr = input.data<float>();
 
         DlQuantization::ComputationMode cpu_gpu_mode =
             use_cuda ? DlQuantization::ComputationMode::COMP_MODE_GPU : DlQuantization::ComputationMode::COMP_MODE_CPU;
@@ -98,44 +97,26 @@ public:
         for (auto size: sizes)
             inputTensorSize *= size;
 
-        _tensorQuantizationSim->quantizeDequantizeTensor(input.data_ptr<float>(), inputTensorSize, output.data_ptr<float>(),
+        _tensorQuantizationSim->quantizeDequantizeTensor(input.data<float>(), inputTensorSize, output.data<float>(),
                                                          encoding.min, encoding.max, encoding.bw, roundingMode, use_cuda);
 
         return output;
     }
 
     at::Tensor quantize(at::Tensor input, DlQuantization::TfEncoding& encoding,
-                        DlQuantization::RoundingMode roundingMode, bool use_cuda, bool shiftToSigned, bool useInt32)
+                        DlQuantization::RoundingMode roundingMode, bool use_cuda, bool shiftToSigned)
     {
         // Allocate an output tensor as the same shape as the input
-        torch::ScalarType dtype = torch::kInt32;
-        if (!useInt32) {
-            dtype = torch::kInt64;
-        }
-        auto options = torch::TensorOptions()
-                           .dtype(dtype)
-                           .layout(input.layout())
-                           .device(input.device())
-                           .requires_grad(input.requires_grad());
-        at::Tensor output = at::zeros(input.sizes(), options);
+        at::Tensor output = input;
 
         at::IntArrayRef sizes  = input.sizes();
         size_t inputTensorSize = 1;
         for (auto size: sizes)
             inputTensorSize *= size;
 
-        if (useInt32) {
-            if (!shiftToSigned && encoding.bw == 32) {
-                throw std::runtime_error("Asymmetric and unsigned symmetric quantization for 32 bits requires int64 as output.");
-            }
-            _tensorQuantizationSim->quantizeTensor(input.data_ptr<float>(), inputTensorSize,
-                                                   output.data_ptr<int32_t>(), encoding.min, encoding.max, encoding.bw,
-                                                   roundingMode, use_cuda, shiftToSigned);
-        } else {
-            _tensorQuantizationSim->quantizeTensor(input.data_ptr<float>(), inputTensorSize,
-                                                   output.data_ptr<int64_t>(), encoding.min, encoding.max, encoding.bw,
-                                                   roundingMode, use_cuda, shiftToSigned);
-        }
+        _tensorQuantizationSim->quantizeTensor(input.data<float>(), inputTensorSize, output.data<float>(), encoding.min,
+                                               encoding.max, encoding.bw, roundingMode, use_cuda, shiftToSigned);
+
         return output;
     }
 
