@@ -62,11 +62,7 @@ public:
     void quantizeDequantizeTensor(const DTYPE* inputTensorData, size_t inputTensorCount, DTYPE* outputTensorData,
                                   double encodingMin, double encodingMax, uint8_t bw, RoundingMode roundMode,
                                   bool use_cuda) override;
-    void quantizeTensor(const DTYPE* inputTensorData, size_t inputTensorCount, int32_t* outputTensorData,
-                        double encodingMin, double encodingMax, uint8_t bw, RoundingMode roundMode, bool use_cuda,
-                        bool shiftToSigned)
-                        override;
-    void quantizeTensor(const DTYPE* inputTensorData, size_t inputTensorCount, int64_t* outputTensorData,
+    void quantizeTensor(const DTYPE* inputTensorData, size_t inputTensorCount, DTYPE* outputTensorData,
                         double encodingMin, double encodingMax, uint8_t bw, RoundingMode roundMode, bool use_cuda,
                         bool shiftToSigned)
                         override;
