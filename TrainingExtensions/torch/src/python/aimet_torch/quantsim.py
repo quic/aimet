@@ -744,8 +744,8 @@ class QuantizationSimModel:
                 encoding_min, encoding_max, bw, scale, offset = encoding.min, encoding.max, encoding.bw, \
                                                                 encoding.delta, encoding.offset
 
-                enc_dict = {'min': encoding_min, 'max': encoding_max, 'scale': scale, 'offset': offset, 'bitwidth': bw,
-                            'is_symmetric': str(is_symmetric), 'dtype': "int"}
+                enc_dict = {'min': encoding_min, 'max': encoding_max, 'scale': scale, 'offset': int(offset),
+                            'bitwidth': bw, 'is_symmetric': str(is_symmetric), 'dtype': "int"}
             else:
                 enc_dict = None
         return enc_dict
