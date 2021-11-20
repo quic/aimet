@@ -860,8 +860,10 @@ class TestQuantizationSim:
             encodings = json.load(encodings_file)
 
         assert model_input_tensor in encodings['activation_encodings']
-        enc = encodings['activation_encodings'][model_input_tensor]
-        print(enc)
+        activation_enc = encodings['activation_encodings'][model_input_tensor]
+        assert isinstance(activation_enc[0]['offset'], int)
+        param_enc = encodings["param_encodings"]["conv1_a.weight"]
+        assert isinstance(param_enc[0]['offset'], int)
 
     def test_export_unified_encoding_format(self):
         """ test export functionality on ResNet18 """
