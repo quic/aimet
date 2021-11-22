@@ -175,6 +175,13 @@ class GraphSearchUtils:
         else:
             raise NotImplementedError("Not supported format")
 
+        # If activation parameter is not set or None, default activation_type is linear
+        if activation_type == "linear" and layer.outbound_nodes:
+            assert len(layer.outbound_nodes) == 1
+
+            outbound_layer = layer.outbound_nodes[0].outbound_layer
+            return isinstance(outbound_layer, (tf.keras.layers.ReLU, tf.keras.layers.PReLU))
+
         return activation_type in ["relu", "prelu"]
 
 
