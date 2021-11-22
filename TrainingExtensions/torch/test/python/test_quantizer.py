@@ -1793,8 +1793,8 @@ class TestQuantizationSim:
         quantsim.default_data_type = QuantizationDataType.float
 
         sim = QuantizationSimModel(model, default_output_bw=16, default_param_bw=16, dummy_input=dummy_input)
-        enc_dict = sim._create_encoding_dict(encoding=None, is_symmetric=False, data_type=QuantizationDataType.float,
-                                             bitwidth=16)
+        quantizer = sim.model.mul1.input_quantizer
+        enc_dict = sim._create_encoding_dict(encoding=None, quantizer=quantizer)
         assert enc_dict['dtype'] == 'float'
         assert enc_dict['bitwidth'] == 16
         assert 'min' not in enc_dict
