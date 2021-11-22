@@ -53,6 +53,7 @@ from aimet_common.quantsim import encoding_version
 from aimet_torch.quantsim_config.quantsim_config import QuantSimConfigurator
 from aimet_torch.qc_quantize_op import QcQuantizeStandAloneBase, QcQuantizeWrapper, QcQuantizeOpMode, \
     StaticGridQuantWrapper
+from aimet_torch.tensor_quantizer import StaticGridTensorQuantizer
 from aimet_torch import torchscript_utils, utils
 from aimet_torch.onnx_utils import OnnxSaver, OnnxExportApiArgs
 from aimet_torch.meta.connectedgraph import ConnectedGraph
@@ -564,15 +565,10 @@ class QuantizationSimModel:
                 param_encodings[param_name] = []
                 for encoding in param_quantizer.encoding:
                     enc_dict = QuantizationSimModel._create_encoding_dict(encoding,
-                                                                          param_quantizer.use_symmetric_encodings,
-                                                                          param_quantizer.data_type,
-                                                                          param_quantizer.bitwidth)
+                                                                          param_quantizer)
                     param_encodings[param_name].append(enc_dict)
             else:
-                enc_dict = QuantizationSimModel._create_encoding_dict(param_quantizer.encoding,
-                                                                      param_quantizer.use_symmetric_encodings,
-                                                                      param_quantizer.data_type,
-                                                                      param_quantizer.bitwidth)
+                enc_dict = QuantizationSimModel._create_encoding_dict(param_quantizer.encoding, param_quantizer)
                 param_encodings[param_name] = [enc_dict]
 
         QuantizationSimModel._retrieve_named_params_and_update_encodings(layer, layer_name, param_encodings,
@@ -605,20 +601,16 @@ class QuantizationSimModel:
                 input_tensors = [t for t in op_to_io_tensor_map[layer_name].inputs if t not in param_inputs]
                 for index, input_tensor in enumerate(input_tensors):
                     if (index < len(layer.input_quantizers)) and layer.input_quantizers[index].enabled:
-                        encoding = QuantizationSimModel._create_encoding_dict(
-                            layer.input_quantizers[index].encoding,
-                            layer.input_quantizers[index].use_symmetric_encodings,
-                            layer.input_quantizers[index].data_type, layer.input_quantizers[index].bitwidth)
+                        encoding = QuantizationSimModel._create_encoding_dict(layer.input_quantizers[index].encoding,
+                                                                              layer.input_quantizers[index])
                         activation_encodings[input_tensor] = [encoding]
 
                 if layer.output_quantizers[0].enabled:
                     op_name = QuantizationSimModel.find_last_op_name_for_layer(layer_name, op_to_io_tensor_map)
                     if op_to_io_tensor_map[op_name].outputs:
                         for output_tensor in op_to_io_tensor_map[op_name].outputs:
-                            encoding = QuantizationSimModel._create_encoding_dict(
-                                layer.output_quantizers[0].encoding,
-                                layer.output_quantizers[0].use_symmetric_encodings,
-                                layer.output_quantizers[0].data_type, layer.output_quantizers[0].bitwidth)
+                            encoding = QuantizationSimModel._create_encoding_dict(layer.output_quantizers[0].encoding,
+                                                                                  layer.output_quantizers[0])
                             activation_encodings[output_tensor] = [encoding]
 
                 # get param quantizers
@@ -629,16 +621,10 @@ class QuantizationSimModel:
                 onnx_activations_to_quantizers, onnx_params_to_quantizers = \
                     layer.get_activation_param_quantizers_for_onnx_tensors(op_to_io_tensor_map[layer_name])
                 for tensor, quantizer in onnx_activations_to_quantizers.items():
-                    encoding = QuantizationSimModel._create_encoding_dict(quantizer.encoding,
-                                                                          quantizer.use_symmetric_encodings,
-                                                                          quantizer.data_type,
-                                                                          quantizer.bitwidth)
+                    encoding = QuantizationSimModel._create_encoding_dict(quantizer.encoding, quantizer)
                     activation_encodings[tensor] = [encoding]
                 for tensor, quantizer in onnx_params_to_quantizers.items():
-                    encoding = QuantizationSimModel._create_encoding_dict(quantizer.encoding,
-                                                                          quantizer.use_symmetric_encodings,
-                                                                          quantizer.data_type,
-                                                                          quantizer.bitwidth)
+                    encoding = QuantizationSimModel._create_encoding_dict(quantizer.encoding, quantizer)
                     param_encodings[tensor] = [encoding]
 
     @staticmethod
@@ -727,22 +713,40 @@ class QuantizationSimModel:
                 self._add_quantization_wrappers(module_ref, num_inout_tensors)
 
     @staticmethod
-    def _create_encoding_dict(encoding: libpymo.TfEncoding, is_symmetric: bool, data_type: QuantizationDataType,
-                              bitwidth: int) -> Union[Dict, None]:
+    def _recompute_scale_offset(min_val: float, max_val: float, bitwidth: int) -> (float, float):
+        """
+        calculates delta and offset given min and max.
+        :param min_val: min encoding value
+        :param max_val: max encoding value
+        :param bitwidth: bitwidth used for quantization
+        :return: delta and offset values computed
+        """
+
+        delta = (max_val - min_val) / (2 ** bitwidth - 1)
+        if delta == 0:
+            delta = 1e-5
+        offset = round(min_val / delta)
+        return delta, offset
+
+    @staticmethod
+    def _create_encoding_dict(encoding: libpymo.TfEncoding, quantizer) -> Union[Dict, None]:
         """
         Create encoding dictionary from encoding object
-        :param encoding: Encoding object
-        :param is_symmetric: Symmetric vs asymmetric boolean
-        :param data_type: QuantizationDataType enum - int or float
-        :param bitwidth: Quantizer bitwidth
+        :param encoding: Encoding of the quantizer
+        :param quantizer: Tensor Quantizer
         :return: Encoding Dictionary
         """
+        data_type, bitwidth = quantizer.data_type, quantizer.bitwidth
+
         if data_type == QuantizationDataType.float:
             enc_dict = {'bitwidth': bitwidth, 'dtype': "float"}
         else:
             if encoding:
                 encoding_min, encoding_max, bw, scale, offset = encoding.min, encoding.max, encoding.bw, \
                                                                 encoding.delta, encoding.offset
+                is_symmetric = quantizer.use_symmetric_encodings
+                if not isinstance(quantizer, StaticGridTensorQuantizer):
+                    scale, offset = QuantizationSimModel._recompute_scale_offset(encoding_min, encoding_max, bw)
 
                 enc_dict = {'min': encoding_min, 'max': encoding_max, 'scale': scale, 'offset': int(offset),
                             'bitwidth': bw, 'is_symmetric': str(is_symmetric), 'dtype': "int"}
