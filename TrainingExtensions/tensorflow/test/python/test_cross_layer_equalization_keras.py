@@ -440,3 +440,33 @@ class TestTrainingExtensionsCrossLayerScaling:
         actual = GraphSearchUtils.is_relu_activation_present_in_cls_sets(cls_sets)
 
         assert actual == expected
+
+    def test_is_relu_activation_present_when_declared_separately(self):
+        """
+        Test ReLU activation present even if ReLU declared separately
+        """
+        model = tf.keras.Sequential([
+            tf.keras.layers.InputLayer(input_shape=(28, 28, 3)),
+            tf.keras.layers.Conv2D(4, kernel_size=3),
+            tf.keras.layers.ReLU(),
+            tf.keras.layers.Conv2D(16, kernel_size=3, activation=None),
+            tf.keras.layers.PReLU(),
+            tf.keras.layers.Conv2D(32, kernel_size=3, activation=None),
+            tf.keras.layers.Conv2D(8, kernel_size=3, activation='relu')
+        ])
+
+        conv1, _, conv2, _, conv3, conv4 = model.layers
+        cls_sets = [
+            (conv1, conv2),
+            (conv2, conv3),
+            (conv3, conv4)
+        ]
+
+        expected = [
+            True,
+            True,
+            False
+        ]
+        actual = GraphSearchUtils.is_relu_activation_present_in_cls_sets(cls_sets)
+
+        assert actual == expected
