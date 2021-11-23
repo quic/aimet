@@ -723,8 +723,8 @@ class QuantizationSimModel:
         """
 
         delta = (max_val - min_val) / (2 ** bitwidth - 1)
-        if delta == 0:
-            delta = 1e-2
+        # For the case where min==max==0 to avoid division by zero
+        delta = max(delta, 0.01)
         offset = round(min_val / delta)
         return delta, offset
 
