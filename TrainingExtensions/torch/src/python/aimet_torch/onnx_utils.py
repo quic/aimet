@@ -650,3 +650,22 @@ class OnnxSaver:
         cls._collate_io_tensors_for_multi_layer_recurrent_nodes(onnx_model, node_to_io_tensor_name_map)
 
         return node_to_io_tensor_name_map, valid_param_set
+
+    @staticmethod
+    def set_unique_node_names(onnx_model_path: str) -> None:
+        """
+        This utility loads a given onnx model file and set the unique names for all the nodes
+        :param onnx_model_path: Path to the saved ONNX model
+        """
+        onnx_model = onnx.load(onnx_model_path)
+
+        unique_node_names = dict()
+        for node in onnx_model.graph.node:  # pylint: disable=no-member
+            if node.name in unique_node_names:
+                reuse_count = unique_node_names[node.name]
+                unique_node_names[node.name] = reuse_count + 1
+                node.name = f'{node.name}-{reuse_count}' if '#' in node.name else f'{node.name}#0-{reuse_count}'
+            else:
+                unique_node_names[node.name] = 1
+
+        onnx.save(onnx_model, onnx_model_path)
