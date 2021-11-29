@@ -147,6 +147,12 @@ def apply_adaround_and_find_quantized_accuracy(model: torch.nn.Module, evaluator
     else:
         dummy_input = torch.rand(input_shape)
 
+    # Number of batches to use for computing encodings
+    # Only 5 batches are used here to speed up the process, also the
+    # number of images in these 5 batches should be sufficient for
+    # compute encodings
+    iterations = 5
+
     params = AdaroundParameters(data_loader=data_loader, num_batches=5)
     ada_model = Adaround.apply_adaround(bn_folded_model, dummy_input, params,
                                         path=logdir, filename_prefix='adaround', default_param_bw=8,
@@ -161,7 +167,7 @@ def apply_adaround_and_find_quantized_accuracy(model: torch.nn.Module, evaluator
     # This will make sure compute_encodings() doesn't alter the parameter encodings.
     quantsim.set_and_freeze_param_encodings(encoding_path=os.path.join(logdir, 'adaround.encodings'))
     quantsim.compute_encodings(forward_pass_callback=partial(evaluator, use_cuda=use_cuda),
-                               forward_pass_callback_args=None)
+                               forward_pass_callback_args=iterations)
     quantsim.export(path=logdir, filename_prefix='adaround_resnet', dummy_input=dummy_input.cpu())
     accuracy = evaluator(quantsim.model, use_cuda=use_cuda)
 

@@ -200,12 +200,18 @@ def calculate_quantsim_accuracy(model: torch.nn.Module, evaluator: aimet_common.
     else:
         dummy_input = torch.rand(input_shape)
 
+    # Number of batches to use for computing encodings
+    # Only 5 batches are used here to speed up the process, also the
+    # number of images in these 5 batches should be sufficient for
+    # compute encodings
+    iterations = 5
+
     quantsim = QuantizationSimModel(model=model, quant_scheme='tf_enhanced',
                                     dummy_input=dummy_input, rounding_mode='nearest',
                                     default_output_bw=8, default_param_bw=8, in_place=False)
 
     quantsim.compute_encodings(forward_pass_callback=partial(evaluator, use_cuda=use_cuda),
-                               forward_pass_callback_args=None)
+                               forward_pass_callback_args=iterations)
 
     quantsim.export(path=logdir, filename_prefix='resnet_encodings', dummy_input=dummy_input.cpu())
     accuracy = evaluator(quantsim.model, use_cuda=use_cuda)
