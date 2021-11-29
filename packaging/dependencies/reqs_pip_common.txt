@@ -9,3 +9,4 @@ pybind11
 PyYAML==6.0
 scipy==1.2.1
 setuptools
+tqdm

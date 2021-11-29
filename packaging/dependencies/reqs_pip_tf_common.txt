@@ -1,2 +1,2 @@
 holoviews==1.12.7
-scikit_learn
+scikit-learn
