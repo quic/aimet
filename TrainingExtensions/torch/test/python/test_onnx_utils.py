@@ -81,6 +81,14 @@ class OutOfOrderModel(torch.nn.Module):
 
 class TestOnnxUtils:
 
+    @staticmethod
+    def check_onnx_node_name_uniqueness(onnx_model):
+        """
+        utility to check if node names are unique
+        """
+        onnx_node_names = [node.name for node in onnx_model.graph.node]
+        assert len(onnx_node_names) == len(set(onnx_node_names)), f'list size mismatch, check if names are unique'
+
     def test_add_pytorch_node_names_to_onnx_resnet(self):
 
         AimetLogger.set_level_for_all_areas(logging.DEBUG)
@@ -479,6 +487,8 @@ class TestOnnxUtils:
         actual_nodes = [node.name for node in onnx_model.graph.node]
         assert len(actual_nodes) == len(expected_nodes)
 
+        self.check_onnx_node_name_uniqueness(onnx_model)
+
         for name in expected_nodes:
             assert name in actual_nodes
 
@@ -501,8 +511,10 @@ class TestOnnxUtils:
 
         model = GroupNormModel()
 
-        onnx_utils.OnnxSaver.set_node_names('./data/MyModel.onnx', model, dummy_input=torch.rand(1, 10, 24, 24))
-        onnx_model = onnx.load('./data/MyModel.onnx')
+        onnx_path = './data/MyModel.onnx'
+        onnx_utils.OnnxSaver.set_node_names(onnx_path, model, dummy_input=torch.rand(1, 10, 24, 24))
+        onnx_utils.OnnxSaver.set_unique_node_names(onnx_path)
+        onnx_model = onnx.load(onnx_path)
         expected_node_names = ['conv1', 'bn', 'gn', 'add']
 
         actual_node_names = [node.name for node in onnx_model.graph.node]
@@ -514,6 +526,10 @@ class TestOnnxUtils:
         _, valid_param_set = onnx_utils.OnnxSaver.get_onnx_node_to_io_tensor_names_map(onnx_model)
         for name in expected_param_names:
             assert name in valid_param_set
+
+        self.check_onnx_node_name_uniqueness(onnx_model)
+        if os.path.exists(onnx_path):
+            os.remove(onnx_path)
 
     def test_set_node_name_for_matmul_add_linear(self):
         """
@@ -530,8 +546,10 @@ class TestOnnxUtils:
 
         model = Linear()
         # Using an input to linear op with dimension != 2 causes torch to use matmul->add instead of gemm op
-        onnx_utils.OnnxSaver.set_node_names('./data/MyModel.onnx', model, dummy_input=torch.randn(1, 1, 3))
-        onnx_model = onnx.load('./data/MyModel.onnx')
+        onnx_path = './data/MyModel.onnx'
+        onnx_utils.OnnxSaver.set_node_names(onnx_path, model, dummy_input=torch.randn(1, 1, 3))
+        onnx_utils.OnnxSaver.set_unique_node_names(onnx_path)
+        onnx_model = onnx.load(onnx_path)
         expected_node_names = ['linear', 'linear#1.end']
 
         actual_node_names = [node.name for node in onnx_model.graph.node]
@@ -544,8 +562,9 @@ class TestOnnxUtils:
             assert name in valid_param_set
 
         # Check that gemm still works as expected
-        onnx_utils.OnnxSaver.set_node_names('./data/MyModel.onnx', model, dummy_input=torch.randn(1, 3))
-        onnx_model = onnx.load('./data/MyModel.onnx')
+        onnx_utils.OnnxSaver.set_node_names(onnx_path, model, dummy_input=torch.randn(1, 3))
+        onnx_utils.OnnxSaver.set_unique_node_names(onnx_path)
+        onnx_model = onnx.load(onnx_path)
 
         actual_node_names = [node.name for node in onnx_model.graph.node]
         assert 'linear' in actual_node_names
@@ -556,5 +575,36 @@ class TestOnnxUtils:
         for name in expected_param_names:
             assert name in valid_param_set
 
-        if os.path.exists('./data/MyModel.onnx'):
-            os.remove('./data/MyModel.onnx')
+        self.check_onnx_node_name_uniqueness(onnx_model)
+
+        if os.path.exists(onnx_path):
+            os.remove(onnx_path)
+
+    def test_set_unique_node_names(self):
+        """
+        Test that node names are uniquely set.
+        """
+        class TwoLayerLstmModel(torch.nn.Module):
+            """
+            Model using torch.nn.LSTM module
+            """
+            def __init__(self):
+                super(TwoLayerLstmModel, self).__init__()
+                self.lstm = torch.nn.LSTM(input_size=3, hidden_size=5, num_layers=3)
+
+            def forward(self, x, hx=None):
+                return self.lstm(x, hx)
+
+        model = TwoLayerLstmModel()
+        dummy_input = torch.randn(10, 1, 3)
+        onnx_path = './data/MyModel.onnx'
+
+        torch.onnx.export(model, dummy_input, onnx_path)
+        onnx_utils.OnnxSaver.set_node_names(onnx_path, model, dummy_input)
+
+        onnx_utils.OnnxSaver.set_unique_node_names(onnx_path)
+        onnx_model = onnx.load(onnx_path)
+        self.check_onnx_node_name_uniqueness(onnx_model)
+
+        if os.path.exists(onnx_path):
+            os.remove(onnx_path)
