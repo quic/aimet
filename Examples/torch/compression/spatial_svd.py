@@ -45,8 +45,8 @@ import logging
 import os
 from datetime import datetime
 from decimal import Decimal
-import torch
 from torchvision import models
+import torch
 
 # imports for AIMET
 import aimet_common.defs
