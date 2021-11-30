@@ -651,7 +651,7 @@ class TestQuantsimConfig:
         in_quantizer = sim.model.ln1.input_quantizer
         assert(in_quantizer.enabled)  # disabled by default, override with config file
         assert(in_quantizer.round_mode == libpymo.RoundingMode.ROUND_NEAREST)
-        assert(in_quantizer.quant_scheme == libpymo.QuantizationMode.QUANTIZATION_TF)
+        assert(in_quantizer.quant_scheme == QuantScheme.post_training_tf)
         assert(in_quantizer.bitwidth == 8)
 
 
@@ -662,7 +662,7 @@ class TestQuantsimConfig:
         in_quantizer = sim.model.gelu1.input_quantizer
         assert(in_quantizer.enabled)  # disabled by default, override with config file
         assert(in_quantizer.round_mode == libpymo.RoundingMode.ROUND_NEAREST)
-        assert(in_quantizer.quant_scheme == libpymo.QuantizationMode.QUANTIZATION_TF)
+        assert(in_quantizer.quant_scheme == QuantScheme.post_training_tf)
         assert(in_quantizer.bitwidth == 8)
 
         # remove test config created

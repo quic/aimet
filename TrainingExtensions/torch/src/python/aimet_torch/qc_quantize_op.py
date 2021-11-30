@@ -48,14 +48,14 @@ from aimet_common.utils import AimetLogger
 from aimet_common.defs import QuantScheme
 from aimet_torch import utils
 from aimet_torch.tensor_quantizer import StaticGridPerTensorQuantizer, StaticGridPerChannelQuantizer
-from aimet_torch.tensor_quantizer import QuantizationDataType
+from aimet_torch.tensor_quantizer import LearnedGridTensorQuantizer, ParameterQuantizer, QuantizationDataType
 import aimet_torch.quantsim_straight_through_grad as ste
 
-MAP_ROUND_MODE_TO_PYMO = {'nearest':     libpymo.RoundingMode.ROUND_NEAREST,
-                          'stochastic':  libpymo.RoundingMode.ROUND_STOCHASTIC}
+from aimet_torch.tensor_quantizer import MAP_QUANT_SCHEME_TO_PYMO
 
-MAP_QUANT_SCHEME_TO_PYMO = {QuantScheme.post_training_tf_enhanced: libpymo.QuantizationMode.QUANTIZATION_TF_ENHANCED,
-                            QuantScheme.post_training_tf: libpymo.QuantizationMode.QUANTIZATION_TF}
+
+MAP_ROUND_MODE_TO_PYMO = {'nearest': libpymo.RoundingMode.ROUND_NEAREST,
+                          'stochastic': libpymo.RoundingMode.ROUND_STOCHASTIC}
 
 _logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Quant)
 
@@ -69,7 +69,7 @@ class QcQuantizeOpMode(Enum):
     ACTIVE = 3
 
 
-def tensor_quantizer_factory(bitwidth: int, round_mode: str, quant_scheme: Union[QuantScheme, libpymo.QuantizationMode],
+def tensor_quantizer_factory(bitwidth: int, round_mode: str, quant_scheme: QuantScheme,
                              use_symmetric_encodings: bool, enabled_by_default: bool,
                              data_type: QuantizationDataType = QuantizationDataType.int):
     """
@@ -81,10 +81,21 @@ def tensor_quantizer_factory(bitwidth: int, round_mode: str, quant_scheme: Union
     :param enabled_by_default: True if quantization of tensor is enabled.  False otherwise.
     :return: An instance of StaticGridPerTensorQuantizer
     """
-    assert quant_scheme in [libpymo.QuantizationMode.QUANTIZATION_TF_ENHANCED, libpymo.QuantizationMode.QUANTIZATION_TF]
 
-    tensor_quantizer = StaticGridPerTensorQuantizer(bitwidth, round_mode, quant_scheme, use_symmetric_encodings,
-                                                    enabled_by_default, data_type)
+    if quant_scheme == QuantScheme.post_training_tf_enhanced or quant_scheme == QuantScheme.post_training_tf:
+
+        tensor_quantizer = StaticGridPerTensorQuantizer(bitwidth, round_mode, quant_scheme,
+                                                        use_symmetric_encodings, enabled_by_default,
+                                                        data_type=data_type)
+
+    elif quant_scheme == QuantScheme.training_range_learning_with_tf_init or \
+            quant_scheme == QuantScheme.training_range_learning_with_tf_enhanced_init:
+
+        tensor_quantizer = LearnedGridTensorQuantizer(bitwidth, round_mode, quant_scheme, use_symmetric_encodings,
+                                                      enabled_by_default, data_type)
+    else:
+        raise AssertionError("Unsupported quant_scheme: " + str(quant_scheme))
+
     return tensor_quantizer
 
 
@@ -195,8 +206,8 @@ class QcQuantizeWrapper(nn.Module):
     """
 
     # pylint: disable=too-many-arguments
-    def __init__(self, module_to_wrap: nn.Module, weight_bw: int, activation_bw: int, round_mode, quant_scheme,
-                 is_output_quantized=True, is_symmetric=False, num_inputs=1, num_outputs=1,
+    def __init__(self, module_to_wrap: nn.Module, weight_bw: int, activation_bw: int, round_mode,
+                 quant_scheme: QuantScheme, is_output_quantized=True, is_symmetric=False, num_inputs=1, num_outputs=1,
                  data_type: QuantizationDataType = QuantizationDataType.int):
         """
         Constructor
@@ -319,7 +330,6 @@ class StaticGridQuantWrapper(QcQuantizeWrapper):
         """
         # Translate round mode and quant scheme into pymo types prior to initializing super()
         round_mode = MAP_ROUND_MODE_TO_PYMO[round_mode]
-        quant_scheme = MAP_QUANT_SCHEME_TO_PYMO[quant_scheme]
 
         super(StaticGridQuantWrapper, self).__init__(module_to_wrap, weight_bw, activation_bw, round_mode, quant_scheme,
                                                      is_output_quantized, is_symmetric, num_inputs,
@@ -514,6 +524,166 @@ class StaticGridQuantWrapper(QcQuantizeWrapper):
 
 # Temporarily added for backwards compatibility
 QcPostTrainingWrapper = StaticGridQuantWrapper
+
+
+class LearnedGridQuantWrapper(QcQuantizeWrapper):
+    """
+    Learns Min and Max for Encodings of Enabled quantizers for a layer
+    """
+
+    # pylint: disable = too-many-arguments
+    def __init__(self, module_to_wrap: nn.Module, weight_bw: int, activation_bw: int, round_mode: str,
+                 quant_scheme: QuantScheme, device: torch.device, is_output_quantized: bool = True,
+                 is_symmetric: bool = False, num_inputs=1, num_outputs=1,
+                 data_type: QuantizationDataType = QuantizationDataType.int):
+        """
+        Constructor
+        :param module_to_wrap: Module that will be wrapped with this custom op
+        :param weight_bw: Quantization bitwidth for weights
+        :param activation_bw: Quantization bitwidth for activations
+        :param round_mode: Rounding mode (e.g. Nearest)
+        :param quant_scheme: Quantization scheme (e.g. Range Learning)
+        :param is_output_quantized: True if output tensor quantizer is enabled.  False otherwise.
+        :param is_symmetric: True if symmetric encoding is used.  False otherwise.
+        :param device: device on which model is
+        :param num_inputs: Number of inputs for this module
+        :param num_outputs: Number of outputs for this module
+        """
+
+        if data_type != QuantizationDataType.int:
+            raise ValueError('Only QuantizationDataType.int is supported for LearnedGridQuantWrapper')
+
+        super(LearnedGridQuantWrapper, self).__init__(module_to_wrap, weight_bw, activation_bw, round_mode,
+                                                      quant_scheme, is_output_quantized, is_symmetric, num_inputs,
+                                                      num_outputs, data_type)
+
+        self.device = device
+        self._initialize_trainable_parameters_and_tensor_quantizers(num_inputs, num_outputs)
+
+    def _initialize_trainable_parameters_and_tensor_quantizers(self, num_inputs, num_outputs):
+        for index in range(num_inputs):
+            # Initialize trainable parameters to None
+            self.register_parameter('input' + str(index) + '_encoding_min', None)
+            self.register_parameter('input' + str(index) + '_encoding_max', None)
+
+            # Pass name of tensor quantizer and reference of Wrapper to tensor quantizer
+            # Input quantizer
+            self.input_quantizers[index].name = 'input' + str(index)
+            self.input_quantizers[index].wrapper_ref = self
+            self.input_quantizers[index].device = self.device
+
+        for index in range(num_outputs):
+            self.register_parameter('output' + str(index) + '_encoding_min', None)
+            self.register_parameter('output' + str(index) + '_encoding_max', None)
+            # Output quantizer
+            self.output_quantizers[index].name = 'output' + str(index)
+            self.output_quantizers[index].wrapper_ref = self
+            self.output_quantizers[index].device = self.device
+
+        # Param Quantizers
+        for name, _ in self._module_to_wrap.named_parameters():
+            self.register_parameter(name + '_encoding_min', None)
+
+            self.register_parameter(name + '_encoding_max', None)
+
+            # Pass name of tensor quantizer and reference of Wrapper to tensor quantizer
+            self.param_quantizers[name].name = name
+            self.param_quantizers[name].wrapper_ref = self
+            self.param_quantizers[name].device = self.device
+
+    def apply_gating_logic(self):
+
+        def _apply_logic(encoding_min, encoding_max):
+            encoding_min.data = min(torch.tensor([0.0], device=self.device), encoding_min.data)
+            encoding_max.data = max(torch.tensor([0.0], device=self.device), encoding_max.data)
+            encoding_max.data = max(encoding_max.data, encoding_min.data + eps)
+
+        eps = torch.tensor([1e-5], device=self.device)
+
+        # Gating input encodings
+        for index, input_quantizer in enumerate(self.input_quantizers):
+            if input_quantizer.enabled:
+                _apply_logic(self._parameters['input' + str(index) + '_encoding_min'],
+                             self._parameters['input' + str(index) + '_encoding_max'])
+
+        # Gating output encodings
+        for index, output_quantizer in enumerate(self.output_quantizers):
+            if output_quantizer.enabled:
+                _apply_logic(self._parameters['output' + str(index) + '_encoding_min'],
+                             self._parameters['output' + str(index) + '_encoding_max'])
+
+        # Gating for parameters
+        for name, _ in self._module_to_wrap.named_parameters():
+            if self.param_quantizers[name].enabled:
+                _apply_logic(self._parameters[name + '_encoding_min'], self._parameters[name + '_encoding_max'])
+
+    def forward(self, *inputs):
+        """
+        Forward-pass routine. This quantizes the weights before delegating to the wrapped module and
+        then quantizes the output before returning the same
+        :param inputs: Inputs passed to the module in the forward pass
+        :return: Quantized output from the wrapped module
+        """
+
+        shadow_params = {}
+        encoding_list_for_params = []
+
+        self.apply_gating_logic()
+
+        for name, param in self._module_to_wrap.named_parameters():
+
+            # Store current weight for use later on
+            shadow_params[name] = param.detach().clone()
+            # Create a list of encoding parameters for params
+            if self.param_quantizers[name].enabled:
+                encoding_list_for_params.append(self._parameters[name + '_encoding_min'])
+                encoding_list_for_params.append(self._parameters[name + '_encoding_max'])
+
+        # Quantize inputs
+        quantized_inputs = self._quantize_activation(inputs, self.input_quantizers, 'input')
+        if isinstance(quantized_inputs, torch.Tensor):
+            quantized_inputs = [quantized_inputs]
+
+        # Quantize the parameters
+        quantized_inputs[0] = ParameterQuantizer.apply(quantized_inputs[0], self, shadow_params,
+                                                       *encoding_list_for_params)
+
+        # Call the forward of the wrapped module
+        wrapped_output = self._module_to_wrap(*quantized_inputs)
+
+        self._restore_shadow_params(shadow_params)
+
+        # Quantize the outputs
+        # pylint: disable=all
+        # Since type of quantizer is dynamically decided based on range-learning mode or not, pylint is getting
+        # confused
+        # Unfortunately doing a 'pylint: disable=too-many-function-args' does not work
+        # Seems like a pylint bug
+        if isinstance(wrapped_output, torch.Tensor):
+            wrapped_output = [wrapped_output]
+        output = self._quantize_activation(wrapped_output, self.output_quantizers, 'output')
+
+        return output
+
+    def _quantize_activation(self, tensors_to_quantize, tensor_quantizers, type_of_quantizer):
+        quantized_tensors = []
+        for index, tensor_to_quantize in enumerate(tensors_to_quantize):
+            assert len(tensor_quantizers) > index, f"Not enough tensor quantizers ({len(tensor_quantizers)}) allocated"
+            encoding_min = self._parameters[type_of_quantizer + str(index) + '_encoding_min']
+            encoding_max = self._parameters[type_of_quantizer + str(index) + '_encoding_max']
+            quantized_tensors.append(tensor_quantizers[index].quantize_dequantize(tensor_to_quantize, encoding_min,
+                                                                                  encoding_max))
+        # Flatten if there is only one output - which is by far the most common case
+        if len(quantized_tensors) == 1:
+            quantized_tensors = quantized_tensors[0]
+        return quantized_tensors
+
+    def _restore_shadow_params(self, shadow_params):
+
+        # Restore the parameters
+        for name, param in self._module_to_wrap.named_parameters():
+            param.data.zero_()
+            param.data.add_(shadow_params[name].data)
 
 
 class QcQuantizeStandalone(QcQuantizeStandAloneBase):
