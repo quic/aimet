@@ -48,7 +48,7 @@ from torchvision import datasets, transforms
 
 from aimet_common.defs import QuantScheme
 from aimet_common.utils import AimetLogger
-from aimet_torch.tensor_quantizer import QuantizationDataType
+from aimet_torch.tensor_quantizer import QuantizationDataType, MAP_QUANT_SCHEME_TO_PYMO
 import libpymo
 
 
@@ -617,7 +617,7 @@ def compute_encoding_for_given_bitwidth(data: np.ndarray, bitwidth: int, quant_s
     """
     # Create Encodings Analyzer and collect statistical data to compute encodings
     # Since the data is numpy array and on CPU memory, useCuda is False
-    encoding_analyzer = libpymo.EncodingAnalyzerForPython(quant_scheme)
+    encoding_analyzer = libpymo.EncodingAnalyzerForPython(MAP_QUANT_SCHEME_TO_PYMO[quant_scheme])
     encoding_analyzer.updateStats(data, False)
 
     encoding, is_encoding_valid = encoding_analyzer.computeEncoding(bitwidth, is_symmetric, False, False)

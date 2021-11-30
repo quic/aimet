@@ -49,7 +49,7 @@ from aimet_common.utils import AimetLogger
 from aimet_torch.utils import to_numpy, create_fake_data_loader, compute_encoding_for_given_bitwidth,\
     create_encoding_from_dict
 from aimet_torch.quantsim import QuantizationSimModel
-from aimet_torch.qc_quantize_op import StaticGridQuantWrapper, QuantScheme, MAP_QUANT_SCHEME_TO_PYMO
+from aimet_torch.qc_quantize_op import StaticGridQuantWrapper, QuantScheme
 from aimet_torch.examples.test_models import TinyModel
 from aimet_torch.adaround.adaround_weight import Adaround
 from aimet_torch.adaround.adaround_loss import AdaroundLoss
@@ -131,8 +131,7 @@ class TestAdaroundOptimizer(unittest.TestCase):
         activation_bw = 8
 
         weight_data = np.random.rand(4, 4, 1, 1).astype(dtype='float32')
-        encoding_dict = compute_encoding_for_given_bitwidth(weight_data, weight_bw,
-                                                            MAP_QUANT_SCHEME_TO_PYMO[quant_scheme], False,
+        encoding_dict = compute_encoding_for_given_bitwidth(weight_data, weight_bw, quant_scheme, False,
                                                             QuantizationDataType.int)
         encoding, _ = create_encoding_from_dict(encoding_dict)
 

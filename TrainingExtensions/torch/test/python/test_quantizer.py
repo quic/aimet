@@ -55,16 +55,18 @@ from aimet_torch.elementwise_ops import Multiply
 from aimet_torch.examples.test_models import TwoLayerBidirectionalLSTMModel, SingleLayerRNNModel, \
     TwoLayerBidirectionaRNNModel, TwoLayerBidirectionalGRUModel
 
+import libpymo
 from aimet_torch.meta.connectedgraph import ConnectedGraph
 from aimet_torch.onnx_utils import OnnxExportApiArgs
 from aimet_torch.qc_quantize_recurrent import QcQuantizeRecurrent
-from aimet_torch.quantsim import QuantizationSimModel
+from aimet_torch.quantsim import QuantizationSimModel, check_accumulator_overflow
 from aimet_torch.quantsim_straight_through_grad import compute_dloss_by_dx
 from aimet_torch import utils, elementwise_ops
 
 from aimet_torch.qc_quantize_op import QcQuantizeWrapper, QcQuantizeStandalone, MAP_ROUND_MODE_TO_PYMO, \
-    MAP_QUANT_SCHEME_TO_PYMO, StaticGridQuantWrapper, QcQuantizeOpMode
-from aimet_torch.tensor_quantizer import StaticGridPerChannelQuantizer, StaticGridPerTensorQuantizer, QuantizationDataType
+    StaticGridQuantWrapper, QcQuantizeOpMode, LearnedGridQuantWrapper
+from aimet_torch.tensor_quantizer import StaticGridPerChannelQuantizer, StaticGridPerTensorQuantizer, \
+    QuantizationDataType
 from aimet_common.utils import AimetLogger
 
 logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Test)
@@ -182,7 +184,7 @@ class ModelWithStandaloneOps(nn.Module):
         self.relu1 = nn.ReLU()
         self.conv2 = nn.Conv2d(10, 20, kernel_size=5)
         self.myquant = QcQuantizeStandalone(activation_bw=8, round_mode=MAP_ROUND_MODE_TO_PYMO['nearest'],
-                                            quant_scheme=MAP_QUANT_SCHEME_TO_PYMO[QuantScheme.post_training_tf_enhanced],
+                                            quant_scheme=QuantScheme.post_training_tf_enhanced,
                                             is_symmetric=False, data_type=QuantizationDataType.int)
         self.conv2_drop = nn.Dropout2d()
         self.maxpool2 = nn.MaxPool2d(2)
@@ -317,7 +319,7 @@ class ModelWithTwoInputsOneToAdd(nn.Module):
         return self.softmax(x)
 
 
-class TestQuantizationSim:
+class TestQuantizationSimStaticGrad:
     def test_is_leaf_module_positive(self):
         """With an actual leaf module"""
         conv1 = nn.Conv2d(1, 10, 5)
@@ -1832,3 +1834,241 @@ class TestQuantizationSim:
             encoding_data = json.load(json_file)
 
         assert not set(encoding_data["activation_encodings"].keys()).symmetric_difference(('4', '9', 't.1'))
+
+
+class TestQuantizationSimLearnedGrid:
+
+    # -------------------------------------------------------------------------------
+
+    def test_replace_quant_wrapper(self):
+        class Net(nn.Module):
+            def __init__(self):
+                super(Net, self).__init__()
+                self.conv1 = nn.Conv2d(1, 10, 5)
+                self.fc1 = nn.Linear(640, 10)
+
+            def forward(self, *inputs):
+                x = self.conv1(inputs[0])
+                x = x.view(x.size(0), -1)
+                x = self.fc1(x)
+                return x
+
+        net = Net()
+        model = net.to(torch.device('cpu'))
+        sim = QuantizationSimModel(model, quant_scheme=QuantScheme.training_range_learning_with_tf_init,
+                                   dummy_input=torch.randn(1, 1, 12, 12))
+        assert isinstance(sim.model.conv1, StaticGridQuantWrapper)
+        assert isinstance(sim.model.fc1, StaticGridQuantWrapper)
+        for _, module in sim.model._modules.items():
+            module.input_quantizer.enabled = False
+            module.output_quantizer.enabled = False
+            module.param_quantizers['weight'].enabled = False
+        sim._replace_quantization_wrapper(sim.model, device='cpu')
+
+        assert isinstance(sim.model.conv1, LearnedGridQuantWrapper)
+        assert isinstance(sim.model.fc1, LearnedGridQuantWrapper)
+
+    def test_copy_properties_between_wrappers_when_inp_output_is_1(self):
+        conv1 = nn.Conv2d(3, 10, kernel_size=5)
+        post_training_module = StaticGridQuantWrapper(conv1, round_mode='nearest',
+                                                      quant_scheme=QuantScheme.post_training_tf, is_symmetric=False,
+                                                      is_output_quantized=False, activation_bw=8, weight_bw=8)
+
+        encodings = libpymo.TfEncoding()
+        encodings.bw = 8
+        encodings.max = 5
+        encodings.min = -5
+        encodings.delta = 1
+        encodings.offset = 0.2
+
+        post_training_module.input_quantizer.enabled = True
+        post_training_module.input_quantizer.encoding = encodings
+        post_training_module.param_quantizers['weight'].enabled = False
+        post_training_module.param_quantizers['bias'].enabled = False
+        dummy_input = torch.randn(1, 3, 12, 12)
+        sim = QuantizationSimModel(conv1, quant_scheme=QuantScheme.training_range_learning_with_tf_init,
+                                   dummy_input=dummy_input)
+        # sim.model.conv1.input_quantizer.enabled = True
+        trainable_module = sim._construct_and_initialize_trainable_wrapper(post_training_module, device='cpu')
+
+        assert trainable_module.output_quantizer.use_symmetric_encodings == False
+        assert trainable_module.output_quantizer.enabled == False
+        assert trainable_module.input0_encoding_min.item() == -5.0
+
+    def test_copy_properties_for_elementwise_aimet_add_op(self):
+
+        class ElementwiseAdd(nn.Module):
+            def __init__(self):
+                super(ElementwiseAdd, self).__init__()
+                self.add = elementwise_ops.Add()
+
+            def forward(self, *inputs):
+                return self.add(inputs[0], inputs[1])
+
+        add = ElementwiseAdd()
+        post_training_module = StaticGridQuantWrapper(add, round_mode='nearest',
+                                                      quant_scheme=QuantScheme.post_training_tf, is_symmetric=False,
+                                                      is_output_quantized=False, activation_bw=8, weight_bw=8,
+                                                      num_inputs=2, num_outputs=1)
+        encodings = libpymo.TfEncoding()
+        encodings.bw, encodings.max, encodings.min, encodings.delta, encodings.offset = 8, 5.0, -1.0, 1, 0.2
+
+        for inp_quantizer in post_training_module.input_quantizers:
+            inp_quantizer.enabled = True
+            inp_quantizer.encoding = encodings
+
+        dummy_input = (torch.rand(32, 1, 28, 28), torch.rand(32, 1, 28, 28))
+        sim = QuantizationSimModel(add, quant_scheme=QuantScheme.training_range_learning_with_tf_init,
+                                   dummy_input=dummy_input)
+
+        trainable_module = sim._construct_and_initialize_trainable_wrapper(post_training_module, device='cpu')
+
+        assert trainable_module.output_quantizers[0].use_symmetric_encodings == False
+        assert trainable_module.output_quantizers[0].enabled == False
+        assert trainable_module.input0_encoding_min.item() == -1.0
+        assert trainable_module.input1_encoding_max.item() == 5.0
+        assert trainable_module.input_quantizers[0] == trainable_module.input_quantizer
+
+    def test_qc_trainable_wrapper(self):
+        torch.manual_seed(0)
+        conv1 = nn.Conv2d(1, 32, kernel_size=5)
+
+        trainable_module = LearnedGridQuantWrapper(conv1, round_mode='nearest',
+                                                   quant_scheme=QuantScheme.training_range_learning_with_tf_init,
+                                                   is_symmetric=False, is_output_quantized=True, activation_bw=8,
+                                                   weight_bw=8, device='cpu', data_type=QuantizationDataType.int)
+
+        encodings = libpymo.TfEncoding()
+        encodings.bw = 8
+        encodings.max = 3
+        encodings.min = -2
+        encodings.delta = 1
+        encodings.offset = 0.2
+        trainable_module.input_quantizer.enabled = True
+        trainable_module.input_quantizer.encoding = encodings
+
+        trainable_module.param_quantizers['weight'].enabled = True
+        trainable_module.param_quantizers['weight'].encoding = encodings
+        trainable_module.param_quantizers['bias'].enabled = True
+        trainable_module.param_quantizers['bias'].encoding = encodings
+
+        trainable_module.output_quantizer.encoding = encodings
+
+        inp = torch.rand((1, 1, 5, 5), requires_grad=True)
+        out = trainable_module(inp)
+        optimizer = torch.optim.SGD(trainable_module.parameters(), lr=0.05, momentum=0.5)
+        loss = out.flatten().sum()
+        loss.backward()
+        optimizer.step()
+
+        # Checking if encoding min max have changed
+        assert not trainable_module.input0_encoding_min.item() == -2.0
+        assert not trainable_module.input0_encoding_max.item() == 3.0
+
+        assert not trainable_module.output0_encoding_min.item() == -2.0
+        assert not trainable_module.output0_encoding_max.item() == 3.0
+
+        assert not trainable_module.weight_encoding_min.item() == -2.0
+        assert not trainable_module.weight_encoding_max.item() == 3.0
+
+        assert not trainable_module.bias_encoding_min.item() == -2.0
+        assert not trainable_module.bias_encoding_max.item() == 3.0
+
+    def test_qc_trainable_wrapper_for_model_with_multiple_inputs_with_one_add(self):
+        dummy_input = (torch.rand(32, 1, 100, 100), torch.rand(32, 10, 22, 22))
+
+        def forward_pass(sim_model, _):
+            sim_model.eval()
+            with torch.no_grad():
+                sim_model(*dummy_input)
+
+        model = ModelWithTwoInputsOneToAdd()
+
+        sim = QuantizationSimModel(model, dummy_input=dummy_input,
+                                   quant_scheme=QuantScheme.training_range_learning_with_tf_init)
+        # Enable input parameters to add (multiple input parameter exist)
+        sim.model.add.input_quantizers[0].enabled = True
+        sim.model.add.input_quantizers[1].enabled = True
+
+        sim.compute_encodings(forward_pass, forward_pass_callback_args=None)
+
+        assert len(sim.model.add.input_quantizers) == 2
+
+        out = sim.model(*dummy_input)
+        for _, params in sim.model.named_parameters():
+            assert params.grad is None
+
+        optimizer = torch.optim.SGD(sim.model.parameters(), lr=0.05, momentum=0.5)
+        loss = out.flatten().sum()
+        loss.backward()
+        optimizer.step()
+        # All parameters should have a gradient
+        for params in sim.model.parameters():
+            assert params.grad is not None
+
+    def test_set_and_get_encoding_properties(self):
+        torch.manual_seed(0)
+        conv1 = nn.Conv2d(1, 32, kernel_size=5)
+
+        trainable_module = LearnedGridQuantWrapper(conv1, round_mode='nearest',
+                                                   quant_scheme=QuantScheme.training_range_learning_with_tf_init,
+                                                   is_symmetric=False, is_output_quantized=True, activation_bw=8,
+                                                   weight_bw=8, device='cpu', data_type=QuantizationDataType.int)
+
+        trainable_module.input_quantizer.enabled = True
+        trainable_module.input_quantizer.device = trainable_module.device
+
+        encodings = libpymo.TfEncoding()
+        encodings.bw = 8
+        encodings.max = 5
+        encodings.min = -5
+        encodings.delta = 1
+        encodings.offset = 0.2
+
+        # If enabled encoding cannot be None
+        try:
+            trainable_module.input_quantizer.encoding = None
+        except AssertionError:
+            print("Assert successful")
+        trainable_module.input_quantizer.encoding = encodings
+
+        # Check if quantizer.encoding is accessible
+        print(trainable_module.input_quantizer.encoding)
+        assert trainable_module.input0_encoding_min.data == encodings.min
+
+    def test_model_with_two_inputs(self):
+        """Model with more than 1 input"""
+
+        dummy_input = (torch.rand(32, 1, 28, 28), torch.rand(32, 1, 28, 28))
+
+        def forward_pass(model, args):
+            model.eval()
+            with torch.no_grad():
+                model(*dummy_input)
+
+        model = ModelWithTwoInputs()
+
+        sim = QuantizationSimModel(model, quant_scheme=QuantScheme.training_range_learning_with_tf_init,
+                                   dummy_input=dummy_input)
+
+        # Quantize
+        sim.compute_encodings(forward_pass, None)
+
+        assert sim.model.conv1_a.output_quantizer.encoding
+
+        # self.assertAlmostEqual(sim.model.conv1_a.output_quantizer.encoding.min,
+        #                        sim.model.conv1_a.output0_encoding_min.data)
+        # self.assertAlmostEqual(sim.model.conv1_a.output_quantizer.encoding.max,
+        #                        sim.model.conv1_a.output0_encoding_max.data)
+
+        forward_pass(sim.model, None)
+
+    def test_accumulator_overflow(self):
+
+        model = models.resnet18(pretrained=True)
+        model = model.eval()
+        layer, range_used = check_accumulator_overflow(model, 8, 32)
+
+        assert layer == 'layer4.1.conv1'
+
+        # self.assertAlmostEqual(100 * range_used, 0.263623, places=3)

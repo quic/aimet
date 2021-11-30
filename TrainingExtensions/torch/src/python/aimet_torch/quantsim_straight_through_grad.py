@@ -96,3 +96,18 @@ def compute_dloss_by_dx(x, grad, encoding_min, encoding_max, ch_axis=0):
                               torch.zeros_like(x)) * grad
 
     return dloss_by_dx
+
+
+class RoundStraightThrough(torch.autograd.Function):
+    """
+    Defining gradient of rounding function as passthrogh since round is a non-linearity
+    """
+
+    @staticmethod
+    # pylint: disable=arguments-differ
+    def forward(ctx, *x):
+        return torch.round(*x)
+
+    @staticmethod
+    def backward(ctx, *output_grad):
+        return output_grad

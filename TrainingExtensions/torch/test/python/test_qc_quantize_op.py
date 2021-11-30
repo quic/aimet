@@ -35,18 +35,21 @@
 #  @@-COPYRIGHT-END-@@
 # =============================================================================
 import copy
+import time
 
 import pytest
+import numpy as np
 import torch
 
-from aimet_torch.qc_quantize_op import StaticGridQuantWrapper, QcQuantizeOpMode, \
-    QuantScheme, MAP_QUANT_SCHEME_TO_PYMO, MAP_ROUND_MODE_TO_PYMO
+from aimet_torch.qc_quantize_op import StaticGridQuantWrapper, LearnedGridQuantWrapper, QcQuantizeOpMode
+from aimet_torch.qc_quantize_op import QuantScheme, MAP_ROUND_MODE_TO_PYMO
 from aimet_torch.tensor_quantizer import StaticGridPerTensorQuantizer, StaticGridPerChannelQuantizer
+from aimet_torch.tensor_quantizer import LearnedGridTensorQuantizer, ParameterQuantizer
 from aimet_torch.tensor_quantizer import QuantizationDataType
 import libpymo
 
 
-class TestQcQuantizeOp:
+class TestQcQuantizeOpStaticGrid:
 
     def test_update_stats_with_pymo(self):
 
@@ -169,7 +172,7 @@ class TestQcQuantizeOp:
     def test_quantize_only_asymmetric_cpu(self):
         """ Test tensor quantizer quantize only asymmetric functionality """
         quantizer = StaticGridPerTensorQuantizer(bitwidth=8, round_mode='nearest',
-                                                 quant_scheme=MAP_QUANT_SCHEME_TO_PYMO[QuantScheme.post_training_tf],
+                                                 quant_scheme=QuantScheme.post_training_tf,
                                                  use_symmetric_encodings=False, enabled_by_default=True,
                                                  data_type=QuantizationDataType.int)
         encodings = libpymo.TfEncoding()
@@ -184,12 +187,11 @@ class TestQcQuantizeOp:
         expected_out = torch.tensor([0, 6, 75, 178, 181, 255], dtype=torch.float32)
         assert torch.equal(quant_out, expected_out)
 
-
     def test_per_channel_symmetric_qdq(self):
         """ Test tensor quantizer symmetric quantize-dequantize functionality on cpu """
 
         quantizer = StaticGridPerChannelQuantizer(bitwidth=8, round_mode='nearest',
-                                                  quant_scheme=MAP_QUANT_SCHEME_TO_PYMO[QuantScheme.post_training_tf],
+                                                  quant_scheme=QuantScheme.post_training_tf,
                                                   use_symmetric_encodings=True, enabled_by_default=True,
                                                   num_channels=4)
         encodings = [libpymo.TfEncoding() for _ in range(4)]
@@ -227,7 +229,7 @@ class TestQcQuantizeOp:
         """ Test tensor quantizer asymmetric quantize-dequantize functionality on cpu """
 
         quantizer = StaticGridPerChannelQuantizer(bitwidth=8, round_mode='nearest',
-                                                  quant_scheme=MAP_QUANT_SCHEME_TO_PYMO[QuantScheme.post_training_tf],
+                                                  quant_scheme=QuantScheme.post_training_tf,
                                                   use_symmetric_encodings=False, enabled_by_default=True,
                                                   num_channels=4)
         encodings = [libpymo.TfEncoding() for _ in range(4)]
@@ -265,7 +267,7 @@ class TestQcQuantizeOp:
         """ Test tensor quantizer symmetric compute-encodings functionality on cpu """
 
         quantizer = StaticGridPerChannelQuantizer(bitwidth=8, round_mode='nearest',
-                                                  quant_scheme=MAP_QUANT_SCHEME_TO_PYMO[QuantScheme.post_training_tf],
+                                                  quant_scheme=QuantScheme.post_training_tf,
                                                   use_symmetric_encodings=True, enabled_by_default=True,
                                                   num_channels=4)
 
@@ -287,7 +289,7 @@ class TestQcQuantizeOp:
         """ Test tensor quantizer asymmetric compute-encodings functionality on cpu """
 
         quantizer = StaticGridPerChannelQuantizer(bitwidth=8, round_mode='nearest',
-                                                  quant_scheme=MAP_QUANT_SCHEME_TO_PYMO[QuantScheme.post_training_tf],
+                                                  quant_scheme=QuantScheme.post_training_tf,
                                                   use_symmetric_encodings=False, enabled_by_default=True,
                                                   num_channels=4)
 
@@ -309,7 +311,7 @@ class TestQcQuantizeOp:
         """ Test tensor quantizer quantize only symmetric signed functionality on cpu """
 
         quantizer = StaticGridPerTensorQuantizer(bitwidth=8, round_mode='nearest',
-                                                 quant_scheme=MAP_QUANT_SCHEME_TO_PYMO[QuantScheme.post_training_tf],
+                                                 quant_scheme=QuantScheme.post_training_tf,
                                                  use_symmetric_encodings=True, enabled_by_default=True,
                                                  data_type=QuantizationDataType.int)
         encodings = libpymo.TfEncoding()
@@ -331,7 +333,7 @@ class TestQcQuantizeOp:
         """ Test tensor quantizer quantize only symmetric unsigned functionality on cpu """
 
         quantizer = StaticGridPerTensorQuantizer(bitwidth=8, round_mode='nearest',
-                                                 quant_scheme=MAP_QUANT_SCHEME_TO_PYMO[QuantScheme.post_training_tf],
+                                                 quant_scheme=QuantScheme.post_training_tf,
                                                  use_symmetric_encodings=True, enabled_by_default=True,
                                                  data_type=QuantizationDataType.int)
         encodings = libpymo.TfEncoding()
@@ -353,7 +355,7 @@ class TestQcQuantizeOp:
         """ Test tensor quantizer quantize only symmetric unsigned functionality on cpu """
 
         quantizer = StaticGridPerTensorQuantizer(bitwidth=16, round_mode='nearest',
-                                                 quant_scheme=MAP_QUANT_SCHEME_TO_PYMO[QuantScheme.post_training_tf],
+                                                 quant_scheme=QuantScheme.post_training_tf,
                                                  use_symmetric_encodings=True, enabled_by_default=True,
                                                  data_type=QuantizationDataType.float)
 
@@ -367,7 +369,7 @@ class TestQcQuantizeOp:
         """ Test tensor quantizer quantize only symmetric unsigned functionality on cpu """
 
         quantizer = StaticGridPerTensorQuantizer(bitwidth=16, round_mode='nearest',
-                                                 quant_scheme=MAP_QUANT_SCHEME_TO_PYMO[QuantScheme.post_training_tf],
+                                                 quant_scheme=QuantScheme.post_training_tf,
                                                  use_symmetric_encodings=True, enabled_by_default=True,
                                                  data_type=QuantizationDataType.float)
 
@@ -380,7 +382,7 @@ class TestQcQuantizeOp:
         """ Negative test to make sure the encodings are not computed if 'enabled' field is set to False """
 
         quantizer = StaticGridPerTensorQuantizer(bitwidth=16, round_mode='nearest',
-                                                 quant_scheme=MAP_QUANT_SCHEME_TO_PYMO[QuantScheme.post_training_tf],
+                                                 quant_scheme=QuantScheme.post_training_tf,
                                                  use_symmetric_encodings=True, enabled_by_default=True,
                                                  data_type=QuantizationDataType.float)
 
@@ -393,7 +395,7 @@ class TestQcQuantizeOp:
         """ Test tensor quantizer quantize only asymmetric functionality on gpu """
 
         quantizer = StaticGridPerTensorQuantizer(bitwidth=8, round_mode='nearest',
-                                                 quant_scheme=MAP_QUANT_SCHEME_TO_PYMO[QuantScheme.post_training_tf],
+                                                 quant_scheme=QuantScheme.post_training_tf,
                                                  use_symmetric_encodings=False, enabled_by_default=True,
                                                  data_type=QuantizationDataType.int)
         encodings = libpymo.TfEncoding()
@@ -415,7 +417,7 @@ class TestQcQuantizeOp:
 
         post_training_tensor_quantizer = \
             StaticGridPerTensorQuantizer(bitwidth=8, round_mode='nearest',
-                                         quant_scheme=MAP_QUANT_SCHEME_TO_PYMO[QuantScheme.post_training_tf],
+                                         quant_scheme=QuantScheme.post_training_tf,
                                          use_symmetric_encodings=True, enabled_by_default=True,
                                          data_type=QuantizationDataType.int)
         encodings = libpymo.TfEncoding()
@@ -439,7 +441,7 @@ class TestQcQuantizeOp:
 
         post_training_tensor_quantizer = \
             StaticGridPerTensorQuantizer(bitwidth=8, round_mode='nearest',
-                                         quant_scheme=MAP_QUANT_SCHEME_TO_PYMO[QuantScheme.post_training_tf],
+                                         quant_scheme=QuantScheme.post_training_tf,
                                          use_symmetric_encodings=True, enabled_by_default=True,
                                          data_type=QuantizationDataType.int)
         encodings = libpymo.TfEncoding()
@@ -462,7 +464,7 @@ class TestQcQuantizeOp:
 
         rand_tensor = torch.rand(1, 10, 20, 20)
         quant = StaticGridPerTensorQuantizer(bitwidth=8, round_mode='nearest',
-                                           quant_scheme=MAP_QUANT_SCHEME_TO_PYMO[QuantScheme.post_training_tf_enhanced],
+                                           quant_scheme=QuantScheme.post_training_tf_enhanced,
                                            use_symmetric_encodings=False, enabled_by_default=True,
                                            data_type=QuantizationDataType.int)
         import psutil
@@ -483,9 +485,351 @@ class TestQcQuantizeOp:
 
     def test_compute_encoding_for_tensor_quantizer_with_no_stats(self):
         quantizer = StaticGridPerTensorQuantizer(bitwidth=8, round_mode='nearest',
-                                                 quant_scheme=MAP_QUANT_SCHEME_TO_PYMO[
-                                                     QuantScheme.post_training_tf_enhanced],
+                                                 quant_scheme=QuantScheme.post_training_tf_enhanced,
                                                  use_symmetric_encodings=False, enabled_by_default=True,
                                                  data_type=QuantizationDataType.int)
         quantizer.compute_encoding()
         assert quantizer._encoding == []
+
+
+class RoundStraightThrough(torch.autograd.Function):
+    """
+    Defining gradient of rounding function as pass-though since round is a non-linearity.
+    """
+    @staticmethod
+    def forward(ctx, *x):
+        return torch.round(*x)
+
+    @staticmethod
+    def backward(ctx, *output_grad):
+        return output_grad
+
+
+class CustomFunc(torch.autograd.Function):
+    """
+    This a custom function to perform custom gradient computation using
+    to be performed for range learning.
+    """
+
+    @staticmethod
+    def compute_scaling_offset(weight_min, weight_max):
+        scaling = (weight_max - weight_min) / 255
+        offset = RoundStraightThrough.apply(-weight_min / scaling)
+
+        return scaling, offset
+
+    @staticmethod
+    def quant_dequant_param(x, weight_min, weight_max):
+        delta = (weight_max - weight_min) / 255
+        offset = RoundStraightThrough.apply(-weight_min / delta)
+        x = x.clamp(weight_min.item(), weight_max.item())
+        x = RoundStraightThrough.apply(x / delta) + offset
+        x = (x - offset) * delta
+        return x
+
+    @staticmethod
+    def forward(ctx, tensor, enc_min, enc_max, n, p):
+        """
+        Forward pass function
+        :param ctx: context
+        :param tensor: input tensor
+        :param enc_min: encoding min
+        :param enc_max: encoding max
+        :param n: lower bound for a given bitwidth and symmetric/asymmetric encoding
+        :param p: upper bound for a given bitwidth and symmetric/asymmetric encoding
+        :return: computed quant dequant output
+        """
+        # save tensors for backward pass
+        ctx.save_for_backward(tensor, enc_min, enc_max)
+        scaling, offset = CustomFunc.compute_scaling_offset(enc_min, enc_max)
+        # save params for backward pass
+        ctx.offset = offset
+        ctx.scaling = scaling
+        ctx.n = n
+        ctx.p = p
+        y = CustomFunc.quant_dequant_param(tensor, enc_min, enc_max)
+
+        return y
+
+    @staticmethod
+    def backward(ctx, grad):
+        """
+        In the backward pass we receive a Tensor containing the gradient of the loss
+        with respect to the output, and we need to compute the gradient of the loss
+        with respect to the inputs.
+        :param ctx: current context
+        :param grad: gradients as a tensor containing gradient of loss w.r.t output
+        :return: gradients w.r.t input, encoding_min and encoding_max and None for two extra params.
+        """
+
+        input, weight_min, weight_max = ctx.saved_tensors
+        # print('--------------------------------')
+        # print('gradient computation code ')
+        # print('input, min, max passed are ', input, weight_min, weight_max)
+        # print('--------------------------------')
+
+        grad_input = ParameterQuantizer.compute_dloss_by_dx(input, grad, ctx.scaling, ctx.offset, ctx.n, ctx.p)
+        grad_max = ParameterQuantizer.compute_dloss_by_dmax(input, grad, ctx.scaling, ctx.offset, ctx.n, ctx.p)
+        grad_min = ParameterQuantizer.compute_dloss_by_dmin_using_dmax(grad_max)
+
+        return grad_input, grad_min, grad_max, None, None
+
+
+class TestQcQuantizeOpLearnedGrid:
+
+    def test_trainable_tensor_quantizer_forward_backward(self):
+        tensor_quantizer = LearnedGridTensorQuantizer(bitwidth=8, round_mode='nearest',
+                                                      quant_scheme=QuantScheme.training_range_learning_with_tf_init,
+                                                      use_symmetric_encodings=True,
+                                                      enabled_by_default=True,
+                                                      data_type=QuantizationDataType.int)
+
+        encoding_min = torch.nn.Parameter(torch.FloatTensor([-5]))
+        encoding_max = torch.nn.Parameter(torch.FloatTensor([5]))
+        tensor = 10 * torch.rand((2, 1, 3, 5))
+        tensor = tensor_quantizer.quantize_dequantize(tensor, encoding_min, encoding_max)
+
+        assert np.amax(np.abs(tensor.detach().numpy()), axis=(0, 1, 2, 3)) <= 5
+        assert np.amin(np.abs(tensor.detach().numpy()), axis=(0, 1, 2, 3)) >= -5
+
+    @staticmethod
+    def perform_auto_grad_computation(custom_input, min_value, max_value):
+        """
+        helper to perform auto grad computation
+        :return:
+        """
+
+        def quant_dequant_param(x, weight_min, weight_max):
+            delta = (weight_max - weight_min) / 255
+            offset = RoundStraightThrough.apply(-weight_min / delta)
+            x = x.clamp(weight_min.item(), weight_max.item())
+            x = RoundStraightThrough.apply(x / delta) + offset
+            x = (x - offset) * delta
+            return x
+
+        # use same tensor for auto and custom grad
+        a_input_tensor = copy.deepcopy(custom_input)
+        a_enc_min = torch.nn.Parameter(torch.Tensor([min_value]), requires_grad=True)
+        a_enc_max = torch.nn.Parameter(torch.Tensor([max_value]), requires_grad=True)
+
+        # after forward pass for quant op, we get output y
+        y = quant_dequant_param(a_input_tensor, a_enc_min, a_enc_max)
+        loss = y.flatten().sum()
+        loss.backward()
+
+        return a_input_tensor.grad, a_enc_min.grad, a_enc_max.grad
+
+    @staticmethod
+    def perform_custom_grad_computation(custom_input, min_value, max_value, bw, sym_flag):
+
+        c_input_tensor = copy.deepcopy(custom_input)
+        c_enc_min = torch.nn.Parameter(torch.Tensor([min_value]), requires_grad=True)
+        c_enc_max = torch.nn.Parameter(torch.Tensor([max_value]), requires_grad=True)
+        # n = torch.nn.Parameter(torch.Tensor([0]), requires_grad=False)
+
+        # To apply our Function, we use Function.apply method.
+        # We alias this as 'custom_op'.
+        custom_op = CustomFunc.apply
+
+        # Forward pass: compute predicted y using operations; we compute
+        # using our "custom" autograd operation.
+        y_pred = custom_op(c_input_tensor, c_enc_min, c_enc_max, bw, sym_flag)
+
+        # Compute and print loss
+        loss = y_pred.flatten().sum()
+        # Use custom grad to compute the backward pass.ctx.p = p
+        loss.backward()
+
+        # print(' grads after custom computation ...')
+        # print(c_input_tensor.grad)
+        # print(c_enc_min.grad)
+        # print(c_enc_max.grad)
+
+        return c_input_tensor.grad, c_enc_min.grad, c_enc_max.grad
+
+    def test_custom_gradient_math_for_range_learning(self):
+        """
+        Unit test to validate custom gradient computation with auto grad computation.
+        :return: None
+        """
+
+        dtype = torch.float
+        device = torch.device("cpu")
+
+        torch.manual_seed(0)
+        custom_input = torch.rand((2, 2), requires_grad=True, dtype=dtype, device=device)
+
+        a_input_grad, a_min_grad, a_max_grad = TestQcQuantizeOpLearnedGrid.perform_auto_grad_computation(custom_input,
+                                                                                                         0.0015, 1.0)
+        # custom gradient computation
+        torch.manual_seed(0)
+        custom_input = torch.rand((2, 2), requires_grad=True, dtype=dtype, device=device)
+
+        # compute this one time and pass it to forward function
+        n, p = LearnedGridTensorQuantizer.get_n_and_p(bitwidth=8, use_symmetric_encoding=False)
+        c_input_grad, c_min_grad, c_max_grad = TestQcQuantizeOpLearnedGrid.perform_custom_grad_computation(custom_input,
+                                                                                                           0.0015, 1.0,
+                                                                                                           n, p)
+
+        # validate gradients computed
+        assert torch.allclose(c_input_grad.data[0], a_input_grad.data[0])
+        assert torch.isclose(c_min_grad.data[0], a_min_grad.data[0])
+        assert torch.isclose(c_max_grad.data[0], a_max_grad.data[0])
+
+    def test_custom_gradient_for_range_learning_time_taken(self):
+        """
+        Unit test to check the time taken by custom gradient computation against auto grad computation
+        :return: None
+        """
+
+        dtype = torch.float
+        device = torch.device("cpu")
+
+        torch.manual_seed(0)
+        custom_input = torch.rand((2, 2), requires_grad=True, dtype=dtype, device=device)
+
+        time_taken_by_auto = 0
+        iterations = 10
+        for i in range(1, iterations):
+            start_time = time.perf_counter()
+            _ = TestQcQuantizeOpLearnedGrid.perform_auto_grad_computation(custom_input, 0.0015, 1.0)
+            exec_time = time.perf_counter() - start_time
+            time_taken_by_auto = time_taken_by_auto + exec_time
+        auto_average_time = time_taken_by_auto / iterations
+        print('Avg time taken by auto grad', auto_average_time)
+
+        # custom gradient computation
+        time_taken_by_custom = 0
+        torch.manual_seed(0)
+        custom_input = torch.rand((2, 2), requires_grad=True, dtype=dtype, device=device)
+        for i in range(1, iterations):
+            # compute this one time and pass it to forward function
+            n, p = LearnedGridTensorQuantizer.get_n_and_p(bitwidth=8, use_symmetric_encoding=False)
+            start_time = time.perf_counter()
+            _ = TestQcQuantizeOpLearnedGrid.perform_custom_grad_computation(custom_input, 0.0015, 1.0, n, p)
+            exec_time = time.perf_counter() - start_time
+            time_taken_by_custom = time_taken_by_custom + exec_time
+
+        custom_avg_time = time_taken_by_custom/iterations
+
+        print('Avg time taken by custom grad', custom_avg_time)
+        print('Total % increase is ', ((custom_avg_time-auto_average_time)/auto_average_time) * 100)
+
+    @pytest.mark.skip
+    def test_compare_quantize_dequantize_cpp_python(self):
+        torch.manual_seed(10)
+        random_tensor = torch.rand((2, 3), requires_grad=True)
+
+        encoding_min = torch.nn.Parameter(torch.FloatTensor([-5]))
+        encoding_max = torch.nn.Parameter(torch.FloatTensor([5]))
+        tensor_quantizer = LearnedGridTensorQuantizer(bitwidth=8, round_mode='nearest',
+                                                      quant_scheme=QuantScheme.training_range_learning_with_tf_init,
+                                                      use_symmetric_encodings=False,
+                                                      enabled_by_default=True,
+                                                      data_type=QuantizationDataType.int)
+        out1 = tensor_quantizer.quantize_dequantize(random_tensor, encoding_min, encoding_max)
+
+        post_training_tensor_quantizer = StaticGridPerTensorQuantizer(bitwidth=8, round_mode='nearest',
+                                                                      quant_scheme=QuantScheme.post_training_tf,
+                                                                      use_symmetric_encodings=False,
+                                                                      enabled_by_default=True)
+
+        encodings = libpymo.TfEncoding()
+        encodings.bw = 8
+        encodings.max = 5
+        encodings.min = -5
+        encodings.delta = 1
+        encodings.offset = 0.2
+        post_training_tensor_quantizer.encoding = encodings
+
+        out2 = post_training_tensor_quantizer.quantize_dequantize(random_tensor, MAP_ROUND_MODE_TO_PYMO['nearest'])
+        assert np.allclose(out1.detach().numpy(), out2.detach().numpy())
+
+    def test_n_p_computation(self):
+        """
+        validate n and p values computed for symmetric and asymmetric case.
+        :return:
+        """
+        bitwidth = 8
+
+        sym_n, sym_p = LearnedGridTensorQuantizer.get_n_and_p(bitwidth, True)
+
+        # for 8 bit , -127 to +127
+        expected_sym_n = (-2 ** (bitwidth - 1)) + 1
+        expected_sym_p = (2 ** (bitwidth - 1)) - 1
+
+        comp_symmetric_n = sym_n.data[0].item()
+        comp_symmetric_p = sym_p.data[0].item()
+
+        asym_n, asym_p = LearnedGridTensorQuantizer.get_n_and_p(bitwidth, False)
+
+        # for 8 bit , 0 to 255
+        expected_asym_n = 0
+        expected_asym_p = (2 ** bitwidth) - 1
+        comp_asymmetric_n = asym_n.data[0].item()
+        comp_asymmetric_p = asym_p.data[0].item()
+
+        assert expected_asym_n == comp_asymmetric_n
+        assert expected_asym_p == comp_asymmetric_p
+
+        assert expected_sym_n == comp_symmetric_n
+        assert expected_sym_p == comp_symmetric_p
+
+    def test_ste_gating_for_learnable_grid_wrapper(self):
+        torch.manual_seed(0)
+
+        encodings = libpymo.TfEncoding()
+        encodings.bw, encodings.max, encodings.min, encodings.delta, encodings.offset = 8, 0.5, -1, 1, 0.2
+
+        encodings_new = libpymo.TfEncoding()
+        encodings_new.bw, encodings_new.max, encodings_new.min, encodings_new.delta, encodings_new.offset = 8, 0.4, -0.98, 1, 0.2
+
+        output_grad = []
+        def hook_fn(m, _, i):
+
+            for grad in i:
+                try:
+                    output_grad.append(grad)
+                except AttributeError:
+                    print("None found for Gradient")
+
+        conv1 = torch.nn.Conv2d(1, 2, 1)
+        conv1.weight.data = torch.Tensor([[[[-0.8]]], [[[0.9]]]])
+        quantize = LearnedGridQuantWrapper(conv1, weight_bw=8, activation_bw=8, round_mode='nearest',
+                                           quant_scheme=QuantScheme.training_range_learning_with_tf_init, device='cpu',
+                                           data_type=QuantizationDataType.int)
+        quantize.train()
+        quantize._module_to_wrap.register_backward_hook(hook_fn)
+
+        quantize.input_quantizer.enabled = True
+        quantize.output_quantizers[0].enabled = True
+        quantize.input_quantizer.encoding = encodings
+        quantize.output_quantizers[0].encoding = encodings
+        quantize.param_quantizers['weight'].encoding = encodings
+        quantize.param_quantizers['bias'].enabled = False
+
+        new_input = torch.autograd.Variable(torch.tensor([[[[-0.8469]]], [[[0.9]]]]), requires_grad=True)
+        out = quantize(new_input)
+
+        quantize.input_quantizer.encoding = encodings_new
+        quantize.output_quantizers[0].encoding = encodings_new
+        quantize.param_quantizers['weight'].encoding = encodings_new
+
+        loss = out.flatten().sum()
+        loss.backward()
+
+        # Check if input gradient got clipped
+        for i, val in enumerate(new_input):
+            if encodings_new.min > val or val > encodings_new.max:
+                assert new_input.grad.flatten()[1] == 0.0
+
+        # Check if output gradient got clipped
+        output_grad = output_grad[0].flatten()
+        assert output_grad[0] == 1.0
+        assert output_grad[1] == 0.0
+        assert output_grad[2] == 0.0
+        assert output_grad[3] == 1.0
+
+        # Check if weight gradient got clipped
+        weight_tensor_grad = quantize._module_to_wrap.weight.grad.flatten()
+        assert weight_tensor_grad[1] == 0.0
