@@ -50,9 +50,11 @@ import onnx
 from aimet_common.utils import AimetLogger, save_json_yaml
 from aimet_common.defs import QuantScheme
 from aimet_common.quantsim import encoding_version
+from aimet_common.quant_utils import get_conv_accum_bounds
+
 from aimet_torch.quantsim_config.quantsim_config import QuantSimConfigurator
 from aimet_torch.qc_quantize_op import QcQuantizeStandAloneBase, QcQuantizeWrapper, QcQuantizeOpMode, \
-    StaticGridQuantWrapper
+    StaticGridQuantWrapper, LearnedGridQuantWrapper
 from aimet_torch.tensor_quantizer import StaticGridTensorQuantizer
 from aimet_torch import torchscript_utils, utils
 from aimet_torch.onnx_utils import OnnxSaver, OnnxExportApiArgs
@@ -417,8 +419,77 @@ class QuantizationSimModel:
                 if param_name_to_exclude in module.param_quantizers:
                     module.param_quantizers[param_name_to_exclude].enabled = False
 
+    def _replace_quantization_wrapper(self, model, device):
+        """
+        Recursively remove quantization wrappers from all appropriate modules starting with a given module
+        :param model: model for which PostTrainingWrapper gets replaced with Trainable wrapped module
+        :param device: device on which model is present
+        :return: None
+        """
+        for module_name, module_ref in model.named_children():
+
+            if isinstance(module_ref, StaticGridQuantWrapper):
+                # Create a Trainable wrapper and copy properties of PostTrainingWrapper to the Trainable wrapper
+                quantized_module = self._construct_and_initialize_trainable_wrapper(module_ref, device)
+                setattr(model, module_name, quantized_module)
+
+            # Recursively call children modules if present
+            if not utils.is_leaf_module(module_ref):
+                self._replace_quantization_wrapper(module_ref, device)
+
+    def _construct_and_initialize_trainable_wrapper(self, post_training_module: StaticGridQuantWrapper,
+                                                    device) -> StaticGridQuantWrapper:
+        """
+        Copies tensor properties (use_symmetric_encodings, enabled, encodings) from post_training_module wrapper to
+        trainable_module wrapper
+        G:param post_training_module: StaticGridQuantWrapper wrapped module
+        :param device: device on which model is present
+        :return: trainable_module: QcTrainable wrapper module
+        """
+        # Creating a StaticGridQuantWrapper module
+        # pylint: disable=protected-access
+        module = post_training_module._module_to_wrap
+
+        num_inputs = len(post_training_module.input_quantizers)
+        num_outputs = len(post_training_module.output_quantizers)
+
+        trainable_module = LearnedGridQuantWrapper(module, self._default_param_bw,
+                                                   self._default_output_bw, self._rounding_mode, self._quant_scheme,
+                                                   device=device, num_inputs=num_inputs, num_outputs=num_outputs,
+                                                   data_type=QuantizationDataType.int)
+        for index, post_training_output_quantizer in enumerate(post_training_module.output_quantizers):
+            # Setting user set parameters for output
+            trainable_module.output_quantizers[index].use_symmetric_encodings = post_training_output_quantizer. \
+                use_symmetric_encodings
+            trainable_module.output_quantizers[index].enabled = post_training_output_quantizer.enabled
+            # Initializing encodings for trainable wrapper
+            trainable_module.output_quantizers[index].encoding = post_training_output_quantizer.encoding
+
+        for index, post_training_input_quantizer in enumerate(post_training_module.input_quantizers):
+            # Setting user set parameters for input
+            trainable_module.input_quantizers[index].use_symmetric_encodings = post_training_input_quantizer. \
+                use_symmetric_encodings
+            trainable_module.input_quantizers[index].enabled = post_training_input_quantizer.enabled
+            # Initializing encodings for trainable wrapper
+            trainable_module.input_quantizers[index].encoding = post_training_input_quantizer.encoding
+
+        # Setting user set parameters for input
+        for name, _ in module.named_parameters():
+            trainable_module.param_quantizers[name].use_symmetric_encodings = \
+                post_training_module.param_quantizers[name].use_symmetric_encodings
+            trainable_module.param_quantizers[name].enabled = \
+                post_training_module.param_quantizers[name].enabled
+            trainable_module.param_quantizers[name].encoding = \
+                post_training_module.param_quantizers[name].encoding
+
+        return trainable_module
+
     def _replace_wrappers_for_quantize_dequantize(self):
-        pass
+        if self._quant_scheme == QuantScheme.training_range_learning_with_tf_init or self._quant_scheme == \
+                QuantScheme.training_range_learning_with_tf_enhanced_init:
+            device = utils.get_device(self.model)
+
+            self._replace_quantization_wrapper(self.model, device)
 
     @staticmethod
     def _validate_quantsim_inputs(quant_scheme: Union[str, QuantScheme], rounding_mode: str, default_output_bw: int,
@@ -678,7 +749,9 @@ class QuantizationSimModel:
     def _create_quantizer_module(self, module_to_quantize: torch.nn.Module, num_inout_tensors: Dict) -> torch.nn.Module:
         """Instantiates wrapper based on quant scheme
         """
-        assert self._quant_scheme in [QuantScheme.post_training_tf, QuantScheme.post_training_tf_enhanced]
+        assert self._quant_scheme in [QuantScheme.post_training_tf, QuantScheme.post_training_tf_enhanced,
+                                      QuantScheme.training_range_learning_with_tf_enhanced_init,
+                                      QuantScheme.training_range_learning_with_tf_init]
 
         # We lookup the number of input and output tensors already determined
         # Special case, we are adding a wrapper for a module not in the forward pass: Use default of 1, 1
@@ -687,8 +760,18 @@ class QuantizationSimModel:
         # Set quantizer to be a module replacer if it is in qc_quantize_modules_dict, otherwise set as
         # StaticGridQuantWrapper.
         quantizer = qc_quantize_modules_dict.get(type(module_to_quantize), StaticGridQuantWrapper)
+
+        if self._quant_scheme in [QuantScheme.post_training_tf, QuantScheme.post_training_tf_enhanced]:
+            quant_scheme_for_initialization = self._quant_scheme
+
+        elif self._quant_scheme == QuantScheme.training_range_learning_with_tf_init:
+            quant_scheme_for_initialization = QuantScheme.post_training_tf
+
+        elif self._quant_scheme == QuantScheme.training_range_learning_with_tf_enhanced_init:
+            quant_scheme_for_initialization = QuantScheme.post_training_tf_enhanced
+
         quantized_module = quantizer(module_to_quantize, self._default_param_bw, self._default_output_bw,
-                                     self._rounding_mode, self._quant_scheme, num_inputs=num_in_tensors,
+                                     self._rounding_mode, quant_scheme_for_initialization, num_inputs=num_in_tensors,
                                      num_outputs=num_out_tensors, data_type=self._data_type)
 
         return quantized_module
@@ -846,3 +929,37 @@ def load_checkpoint(file_path: str) -> QuantizationSimModel:
     with open(file_path, 'rb') as file:
         sim = pickle.load(file)
         return sim
+
+
+def check_accumulator_overflow(model: torch.nn.Module, quant_bw: int, accum_bw: int):
+    """
+    Checks for any potential for accumulator overflow across all the layers of the given model
+    :param model: Model
+    :param quant_bw: Bitwidth the layers are quantized at
+    :param accum_bw: Bitwidth of the accumulator
+    :return: Name of the layer with the most accumulator range used and range used
+    """
+
+    most_accum_range_used = 0
+    most_accum_range_used_layer = None
+
+    for layer_name, layer in model.named_modules():
+
+        if isinstance(layer, torch.nn.Conv2d):
+            was_accum_range_exceeded, accum_range_used = get_conv_accum_bounds(layer.weight.detach().numpy(),
+                                                                               quant_bw, accum_bw)
+            if accum_range_used > most_accum_range_used:
+                most_accum_range_used = accum_range_used
+                most_accum_range_used_layer = layer_name
+
+            if was_accum_range_exceeded:
+                logger.info('Possible accumulator overflow for layer: %s', layer_name)
+
+    if most_accum_range_used < 1:
+        logger.info('No overflow detected. Layer %s had the most accumulator range used: %f%%',
+                    most_accum_range_used_layer, most_accum_range_used * 100)
+    else:
+        logger.info('Overflow detected. Layer %s had the most accumulator range used: %f%%',
+                    most_accum_range_used_layer, most_accum_range_used * 100)
+
+    return most_accum_range_used_layer, most_accum_range_used

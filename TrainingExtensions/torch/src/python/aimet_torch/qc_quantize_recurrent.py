@@ -44,7 +44,7 @@ from torch.nn.utils.rnn import PackedSequence, pad_packed_sequence, pack_padded_
 from aimet_common.defs import QuantScheme
 from aimet_common.utils import AimetLogger
 from aimet_torch.defs import OpToIOTensors
-from aimet_torch.qc_quantize_op import MAP_ROUND_MODE_TO_PYMO, MAP_QUANT_SCHEME_TO_PYMO
+from aimet_torch.qc_quantize_op import MAP_ROUND_MODE_TO_PYMO
 from aimet_torch.qc_quantize_op import QcQuantizeOpMode, tensor_quantizer_factory
 from aimet_torch.tensor_quantizer import StaticGridPerTensorQuantizer, QuantizationDataType
 
@@ -127,7 +127,7 @@ class QcQuantizeRecurrent(torch.nn.Module):
     # pylint: disable=unused-argument
     def __init__(self, module_to_quantize: Union[torch.nn.RNN, torch.nn.LSTM, torch.nn.GRU],
                  weight_bw: int, activation_bw: int, round_mode: str,
-                 quant_scheme: Union[QuantScheme, libpymo.QuantizationMode], is_symmetric: bool = False,
+                 quant_scheme: QuantScheme, is_symmetric: bool = False,
                  num_inputs=1, num_outputs=1, data_type: QuantizationDataType = QuantizationDataType.int):
         """
         Constructor
@@ -148,7 +148,6 @@ class QcQuantizeRecurrent(torch.nn.Module):
         self.module_to_quantize = module_to_quantize
 
         round_mode = MAP_ROUND_MODE_TO_PYMO[round_mode]
-        quant_scheme = MAP_QUANT_SCHEME_TO_PYMO[quant_scheme]
 
         self._grouped_quantizers = {}
         self._param_quantizers = {}
@@ -217,7 +216,7 @@ class QcQuantizeRecurrent(torch.nn.Module):
         return self._input_quantizers
 
     def _create_activation_quantizers(self, tensor_names: List[str], activation_bw: int,
-                                      round_mode: libpymo.RoundingMode, quant_scheme: libpymo.QuantizationMode,
+                                      round_mode: libpymo.RoundingMode, quant_scheme: QuantScheme,
                                       is_symmetric: bool, data_type: QuantizationDataType) -> Dict[str, StaticGridPerTensorQuantizer]:
         """
         helper method to construct activation quantizers
@@ -253,7 +252,7 @@ class QcQuantizeRecurrent(torch.nn.Module):
         return quantizers
 
     def _create_param_quantizers(self, weight_bw: int, round_mode: libpymo.RoundingMode,
-                                 quant_scheme: libpymo.QuantizationMode, is_symmetric: bool,
+                                 quant_scheme: QuantScheme, is_symmetric: bool,
                                  data_type: QuantizationDataType):
         """
         helper method to construct param quantizers
