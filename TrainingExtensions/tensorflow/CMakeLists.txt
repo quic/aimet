@@ -38,6 +38,8 @@ cmake_minimum_required(VERSION 3.5)
 add_library(TrainingExtensionsTf SHARED
         src/QcQuantizeStaticOp.hpp
         src/QcQuantizeStaticOp.cpp
+        src/QcQuantizePerChannelParamOp.cpp
+        src/QcQuantizePerChannelParamOp.hpp
         src/AimetOpUtils.h
         src/AimetOpUtils.cpp
         src/QcQuantizeRecurrentParamOp.hpp
