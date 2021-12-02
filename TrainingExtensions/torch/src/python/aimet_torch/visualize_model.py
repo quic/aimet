@@ -87,7 +87,7 @@ def visualize_changes_after_optimization(
                         name, old_model_module, new_model_module
                     )
                 )
-    plotting.save(subplots)
+    plotting.save(column(subplots))
     return subplots
 
 
@@ -157,5 +157,5 @@ def visualize_relative_weight_ranges_to_identify_problematic_layers(
                     name in selected_layers:
                 subplots.append(plotting_utils.visualize_relative_weight_ranges_single_layer(module, name))
 
-    plotting.save(subplots)
+    plotting.save(column(subplots))
     return subplots
