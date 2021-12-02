@@ -1,6 +1,5 @@
 holoviews==1.12.7
 matplotlib==3.3.4
 onnx==1.8.1
-pytorch_ignite==0.4.4
 scikit-learn
 tensorboardX==2.4
