@@ -319,6 +319,15 @@ class ModelWithTwoInputsOneToAdd(nn.Module):
         return self.softmax(x)
 
 
+class PreluModel(nn.Module):
+    def __init__(self):
+        super(PreluModel, self).__init__()
+        self.prelu = nn.PReLU()
+
+    def forward(self, x):
+        return self.prelu(x)
+
+
 class TestQuantizationSimStaticGrad:
     def test_is_leaf_module_positive(self):
         """With an actual leaf module"""
@@ -2072,3 +2081,14 @@ class TestQuantizationSimLearnedGrid:
         assert layer == 'layer4.1.conv1'
 
         # self.assertAlmostEqual(100 * range_used, 0.263623, places=3)
+
+    def test_export_prelu_weight_encoding(self):
+        """ Test that prelu weight is exported correctly """
+        model = PreluModel()
+        dummy_input = torch.rand(1, 3, 8, 8)
+        sim = QuantizationSimModel(model, dummy_input=dummy_input)
+        sim.compute_encodings(lambda model, _: model(dummy_input), None)
+        sim.export('./data', 'prelu_model', dummy_input=dummy_input)
+        with open('./data/prelu_model.encodings') as json_file:
+            encoding_data = json.load(json_file)
+        assert 'prelu.weight' in encoding_data['param_encodings'].keys()

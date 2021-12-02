@@ -115,6 +115,10 @@ onnx_subgraph_op_to_pytorch_module_param_name = {
         {
             ('', 'MatMul'): {1: 'weight'},
             ('#1.end', 'Add'): {1: 'bias'}
+        },
+    torch.nn.PReLU:
+        {
+            ('', 'PRelu'): {1: 'weight'}
         }
 }
 
