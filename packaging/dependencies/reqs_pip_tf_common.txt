@@ -1,1 +1,2 @@
-tensorlayer==2.1.0
+holoviews==1.12.7
+scikit-learn
