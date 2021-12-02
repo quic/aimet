@@ -41,6 +41,7 @@ import os
 from typing import List
 import torch
 from bokeh import plotting
+from bokeh.layouts import column
 from aimet_torch import plotting_utils
 from aimet_torch.utils import get_layer_by_name
 
@@ -90,25 +91,24 @@ def visualize_weight_ranges(model: torch.nn.Module, results_dir: str, selected_l
     :param selected_layers:  a list of layers a user can choose to have visualized. If selected layers is None,
         all Linear and Conv layers will be visualized.
     :param results_dir: Directory to save the Bokeh plots
-    :return: Bokeh Plot
+    :return: A list of bokeh plots
     """
 
     file_path = os.path.join(results_dir, 'visualize_weight_ranges.html')
     plotting.output_file(file_path)
-    plot = None
+    subplots = []
     if selected_layers:
         for name, module in model.named_modules():
             if name in selected_layers and hasattr(module, "weight"):
-                plot = plotting_utils.visualize_weight_ranges_single_layer(module, name)
+                subplots.append(plotting_utils.visualize_weight_ranges_single_layer(module, name))
     else:
         for name, module in model.named_modules():
             if hasattr(module, "weight") and isinstance(module,
                                                         (torch.nn.modules.conv.Conv2d, torch.nn.modules.linear.Linear)):
-                plot = plotting_utils.visualize_weight_ranges_single_layer(module, name)
+                subplots.append(plotting_utils.visualize_weight_ranges_single_layer(module, name))
 
-    plotting.save(plot)
-    # returns plot
-    return plot
+    plotting.save(column(subplots))
+    return subplots
 
 
 def visualize_relative_weight_ranges_to_identify_problematic_layers(model: torch.nn.Module, results_dir: str,
