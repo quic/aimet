@@ -96,23 +96,42 @@ class QuantSimConfigurator(AimetCommonQuantSimConfigurator):
     """ Class for parsing and applying
     quantsim configurations from json config file """
     def __init__(self, sess: tf.compat.v1.Session, conn_graph: ConnectedGraph,
-                 op_to_quant_ops_dict: OpToQuantOpsDictType,
-                 param_quantizer_dict: Dict[str, QuantizerInfo],
-                 activation_quantizer_dict: Dict[str, QuantizerInfo],
                  config_file: str):
         super().__init__(config_file)
 
         self._sess = sess
         self._conn_graph = conn_graph
+        self._op_to_quant_ops_dict = {}
+        self._param_quantizer_dict = {}
+        self._activation_quantizer_dict = {}
+        self._op_to_quantizer_lists_dict = None
+        self._onnx_conn_graph_name_mapper = OnnxConnectedGraphTypeMapper(onnx_tf_conn_graph_type_pairs)
+        self.per_channel_quantization_flag = self._get_per_channel_quantization_flag()
+
+    def configure_quantizers(self, op_to_quant_ops_dict: OpToQuantOpsDictType,
+                             param_quantizer_dict: Dict[str, QuantizerInfo],
+                             activation_quantizer_dict: Dict[str, QuantizerInfo]):
+        """
+        Configures quantizers based on config file
+        """
         self._op_to_quant_ops_dict = op_to_quant_ops_dict
         self._param_quantizer_dict = param_quantizer_dict
         self._activation_quantizer_dict = activation_quantizer_dict
         self._op_to_quantizer_lists_dict = self._get_op_to_quantizer_lists_dict()
-        self._onnx_conn_graph_name_mapper = OnnxConnectedGraphTypeMapper(onnx_tf_conn_graph_type_pairs)
 
         # Set all quantizers to pass through mode first
         self._disable_all_quantizers()
         self._set_quantsim_configs()
+
+    def _get_per_channel_quantization_flag(self) -> bool:
+        """
+        Returns Per channel quantization flag if it is set in config file else returns False
+        """
+        # Check if per channel quantization is enabled
+        default_configs = self._quantsim_configs[ConfigDictKeys.DEFAULTS]
+        if ConfigDictKeys.PER_CHANNEL_QUANTIZATION in default_configs:
+            return default_configs[ConfigDictKeys.PER_CHANNEL_QUANTIZATION]
+        return False
 
     def _get_op_to_quantizer_lists_dict(self) -> Dict[Op, QuantizerListType]:
         """
