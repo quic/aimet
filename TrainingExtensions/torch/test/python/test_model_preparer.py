@@ -44,13 +44,17 @@ import copy
 import numpy as np
 import onnx
 import torch
+pytest.importorskip("torch", minversion="1.8") # Skip tests in this file if minimum torch version is not met
+import torch.fx
+torch.fx.wrap('len')
+torch.fx.wrap('sqrt')
+
 from torchvision import models
+from math import sqrt
 from torch.utils.data import DataLoader
-pytest.importorskip("torch", minversion="1.8")
 
 from aimet_common.defs import QuantScheme
 from aimet_torch import elementwise_ops
-from aimet_torch.quantsim_config import quantsim_config
 from aimet_torch.examples.test_models import ModelWithFunctionalReLU, SingleResidual, ModelWithDuplicateReLU, \
     ConcatModel
 from aimet_torch.quantsim import QuantizationSimModel, QuantParams
@@ -95,6 +99,16 @@ def evaluate(model: torch.nn.Module, dummy_input: torch.Tensor):
         model(dummy_input)
 
 
+@torch.fx.wrap
+def custom_function_not_to_be_traced(x, y):
+    """ Function which we do not want to be traced, when traced using torch FX API, call to this function will
+    be inserted as call_function, and won't be traced through """
+    for i in range(2):
+        x += x
+        y += y
+    return x * x + y * y
+
+
 def seed_all(seed=1029):
     """ Setup seed """
     random.seed(seed)
@@ -116,9 +130,7 @@ class TestFX:
         input_shape = (1, 3, 32, 32)
         input_tensor = torch.randn(*input_shape)
         model = ModelWithFunctionalReLU().eval()
-        model_copy = copy.deepcopy(model)
-
-        model_transformed = prepare_model(model_copy)
+        model_transformed = prepare_model(model)
         print(model_transformed)
 
         assert isinstance(model_transformed.module_relu, torch.nn.ReLU)
@@ -135,9 +147,7 @@ class TestFX:
         input_shape = (1, 3, 32, 32)
         input_tensor = torch.randn(*input_shape)
         model = SingleResidual().eval()
-        model_copy = copy.deepcopy(model)
-
-        model_transformed = prepare_model(model_copy)
+        model_transformed = prepare_model(model)
         print(model_transformed)
 
         assert isinstance(model_transformed.module_add, elementwise_ops.Add)
@@ -150,9 +160,7 @@ class TestFX:
         input_shape = (1, 3, 32, 32)
         input_tensor = torch.randn(*input_shape)
         model = ModelWithDuplicateReLU().eval()
-        model_copy = copy.deepcopy(model)
-
-        model_transformed = prepare_model(model_copy)
+        model_transformed = prepare_model(model)
 
         assert isinstance(model_transformed.relu, torch.nn.ReLU)
         assert isinstance(model_transformed.module_relu_1, torch.nn.ReLU)
@@ -168,9 +176,7 @@ class TestFX:
         input_shape = (1, 3, 224, 224)
         input_tensor = torch.randn(*input_shape)
         model = models.resnet18().eval()
-        model_copy = copy.deepcopy(model)
-
-        model_transformed = prepare_model(model_copy)
+        model_transformed = prepare_model(model)
         print(model_transformed)
 
         assert torch.allclose(model(input_tensor), model_transformed(input_tensor))
@@ -205,9 +211,7 @@ class TestFX:
         input_shape = (1, 3, 224, 224)
         input_tensor = torch.randn(*input_shape).cuda()
         model = models.resnet18().cuda().eval()
-        model_copy = copy.deepcopy(model)
-
-        model_transformed = prepare_model(model_copy)
+        model_transformed = prepare_model(model)
         print(model_transformed)
 
         assert torch.allclose(model(input_tensor), model_transformed(input_tensor))
@@ -232,9 +236,7 @@ class TestFX:
         input_shape = (1, 3, 32, 32)
         input_tensor = torch.randn(*input_shape)
         model = ModelWithFunctionalReLU().eval()
-        model_copy = copy.deepcopy(model)
-
-        model_transformed = prepare_model(model_copy)
+        model_transformed = prepare_model(model)
 
         quant_sim_for_modified_model = QuantizationSimModel(model_transformed, dummy_input=input_tensor)
         print(quant_sim_for_modified_model)
@@ -259,9 +261,7 @@ class TestFX:
         input_shape = (1, 3, 32, 32)
         input_tensor = torch.randn(*input_shape)
         model = ModelWithFunctionalReLU().eval()
-        model_copy = copy.deepcopy(model)
-
-        model_transformed = prepare_model(model_copy)
+        model_transformed = prepare_model(model)
 
         quantsim_config = {
             "defaults": {
@@ -316,9 +316,7 @@ class TestFX:
         input_shape = (1, 3, 32, 32)
         input_tensor = torch.randn(*input_shape)
         model = SingleResidual().eval()
-        model_copy = copy.deepcopy(model)
-
-        model_transformed = prepare_model(model_copy)
+        model_transformed = prepare_model(model)
         print(model_transformed)
 
         assert isinstance(model_transformed.module_add, elementwise_ops.Add)
@@ -360,11 +358,10 @@ class TestFX:
         test torch fx with QAT
         """
         model = ModelWithFunctionalReLU().eval()
-        model_copy = copy.deepcopy(model)
         input_shape = (1, 3, 32, 32)
         input_tensor = torch.randn(*input_shape)
 
-        model_transformed = prepare_model(model_copy)
+        model_transformed = prepare_model(model)
 
         # Compute encodings for both original and modified models
         quant_sim_for_original_model = QuantizationSimModel(model, dummy_input=input_tensor)
@@ -514,7 +511,7 @@ class TestFX:
         bias_correction.correct_bias(model, params, num_quant_samples=1, data_loader=data_loader,
                                      num_bias_correct_samples=1, perform_only_empirical_bias_corr=True)
 
-        # Apply Adaround for transformed model
+        # Apply Bias correction for transformed model
         model_transformed = prepare_model(model_copy)
         bias_correction.correct_bias(model_transformed, params, num_quant_samples=1, data_loader=data_loader,
                                      num_bias_correct_samples=1, perform_only_empirical_bias_corr=True)
@@ -544,9 +541,7 @@ class TestFX:
         input_shape = (1, 3, 224, 224)
         input_tensor = torch.randn(*input_shape)
         model = models.resnet18().eval()
-        model_copy = copy.deepcopy(model)
-
-        model_transformed = prepare_model(model_copy)
+        model_transformed = prepare_model(model)
 
         torch.save(model_transformed, './modified_resnet18.pth')
         saved_model = torch.load('./modified_resnet18.pth')
@@ -567,9 +562,7 @@ class TestFX:
         input_shape = (1, 3, 224, 224)
         input_tensor = torch.randn(*input_shape)
         model = models.resnet18().eval()
-        model_copy = copy.deepcopy(model)
-
-        model_transformed = prepare_model(model_copy)
+        model_transformed = prepare_model(model)
 
         # Save only the state_dict of transformed model
         torch.save(model_transformed.state_dict(), './modified_resnet18.pth')
@@ -600,9 +593,7 @@ class TestFX:
         input_shape = (1, 3, 224, 224)
         input_tensor = torch.randn(*input_shape)
         model = models.resnet18().eval()
-        model_copy = copy.deepcopy(model)
-
-        model_transformed = prepare_model(model_copy)
+        model_transformed = prepare_model(model)
         quant_sim = QuantizationSimModel(model_transformed, dummy_input=input_tensor)
 
         def forward_pass(model, args):
@@ -676,9 +667,7 @@ class TestFX:
         input_shape = (1, 3, 32, 32)
         input_tensor = torch.randn(*input_shape)
         model = ModelWithReLUReLU6().eval()
-        model_copy = copy.deepcopy(model)
-
-        model_transformed = prepare_model(model_copy)
+        model_transformed = prepare_model(model)
         print(model_transformed)
 
         assert torch.allclose(model_transformed(input_tensor),
@@ -706,9 +695,7 @@ class TestFX:
         input_shape = (1, 3, 32, 32)
         input_tensor = torch.randn(*input_shape)
         model = ModelWithNonLinearActivations().eval()
-        model_copy = copy.deepcopy(model)
-
-        model_transformed = prepare_model(model_copy)
+        model_transformed = prepare_model(model)
         print(model_transformed)
 
         assert torch.allclose(model_transformed(input_tensor),
@@ -735,9 +722,7 @@ class TestFX:
         input_shape = (1, 3, 32, 32)
         input_tensor = torch.randn(*input_shape)
         model = ModelWithNonLinearActivations().eval()
-        model_copy = copy.deepcopy(model)
-
-        model_transformed = prepare_model(model_copy)
+        model_transformed = prepare_model(model)
         print(model_transformed)
 
         assert torch.allclose(model_transformed(input_tensor),
@@ -768,9 +753,7 @@ class TestFX:
         input_shape = (1, 3, 32, 32)
         input_tensor = torch.randn(*input_shape)
         model = ModelWithNonLinearActivations().eval()
-        model_copy = copy.deepcopy(model)
-
-        model_transformed = prepare_model(model_copy)
+        model_transformed = prepare_model(model)
         print(model_transformed)
 
         assert torch.allclose(model_transformed(input_tensor),
@@ -791,9 +774,7 @@ class TestFX:
         input_shape = (1, 3, 8, 8)
         input_tensor = [torch.randn(*input_shape), torch.randn(*input_shape), torch.randn(*input_shape)]
         model = ConcatModel().eval()
-        model_copy = copy.deepcopy(model)
-
-        model_transformed = prepare_model(model_copy)
+        model_transformed = prepare_model(model)
         print(model_transformed)
 
         assert torch.allclose(model_transformed(*input_tensor),
@@ -823,9 +804,7 @@ class TestFX:
         input_shape = (1, 3, 8, 8)
         input_tensor = [torch.randn(*input_shape), torch.randn(*input_shape)]
         model = ModelWithSubtractOp().eval()
-        model_copy = copy.deepcopy(model)
-
-        model_transformed = prepare_model(model_copy)
+        model_transformed = prepare_model(model)
         print(model_transformed)
 
         assert torch.allclose(model_transformed(*input_tensor),
@@ -852,9 +831,7 @@ class TestFX:
         input_shape = (1, 3, 8, 8)
         input_tensor = [torch.randn(*input_shape), torch.randn(*input_shape)]
         model = ModelWithMultiplyOp().eval()
-        model_copy = copy.deepcopy(model)
-
-        model_transformed = prepare_model(model_copy)
+        model_transformed = prepare_model(model)
         print(model_transformed)
 
         assert torch.allclose(model_transformed(*input_tensor),
@@ -884,9 +861,7 @@ class TestFX:
         input_shape = (1, 3, 8, 8)
         input_tensor = [torch.randn(*input_shape), torch.randn(*input_shape)]
         model = ModelWithDivideOp().eval()
-        model_copy = copy.deepcopy(model)
-
-        model_transformed = prepare_model(model_copy)
+        model_transformed = prepare_model(model)
         print(model_transformed)
 
         assert torch.allclose(model_transformed(*input_tensor),
@@ -916,9 +891,7 @@ class TestFX:
         input_shape = (1, 3, 8, 8)
         input_tensor = [torch.randn(*input_shape), torch.randn(*input_shape)]
         model = ModelWithMatMulOp().eval()
-        model_copy = copy.deepcopy(model)
-
-        model_transformed = prepare_model(model_copy)
+        model_transformed = prepare_model(model)
         print(model_transformed)
 
         assert torch.allclose(model_transformed(*input_tensor),
@@ -948,9 +921,7 @@ class TestFX:
         input_shape = (1, 3, 8, 8)
         input_tensor = [torch.randn(*input_shape), torch.randn(*input_shape)]
         model = ModelWithCatOp().eval()
-        model_copy = copy.deepcopy(model)
-
-        model_transformed = prepare_model(model_copy)
+        model_transformed = prepare_model(model)
         print(model_transformed)
 
         assert torch.allclose(model_transformed(*input_tensor),
@@ -960,3 +931,148 @@ class TestFX:
 
         quant_sim = QuantizationSimModel(model_transformed, dummy_input=input_tensor)
         assert quant_sim.model.module_cat.output_quantizer.enabled == True
+
+    def test_fx_with_elementwise_scalar_add(self):
+        """
+        test torch fx with elementwise op - Scalar torch.add
+        """
+        class ModelWithScalarAddOp(torch.nn.Module):
+            def __init__(self):
+                super(ModelWithScalarAddOp, self).__init__()
+                self.conv1 = torch.nn.Conv2d(3, 4, kernel_size=2, stride=2, padding=2, bias=False)
+                self.conv2 = torch.nn.Conv2d(3, 4, kernel_size=2, stride=2, padding=2)
+
+            def forward(self, *inputs):
+                x1 = self.conv1(inputs[0])
+                _ = self.conv2(inputs[1])
+                x = torch.add(x1, 5)
+                return x
+
+        input_shape = (1, 3, 8, 8)
+        input_tensor = [torch.randn(*input_shape), torch.randn(*input_shape)]
+        model = ModelWithScalarAddOp().eval()
+        model_transformed = prepare_model(model)
+        print(model_transformed)
+
+        assert torch.allclose(model_transformed(*input_tensor),
+                              model(*input_tensor))
+
+        assert isinstance(model_transformed.module_add, elementwise_ops.Add)
+
+    def test_fx_with_duplicate_conv(self):
+        """
+        test torch fx with reused/duplicate - torch.nn.Conv2d
+        """
+        class ModelWithDuplicateConv(torch.nn.Module):
+            def __init__(self):
+                super(ModelWithDuplicateConv, self).__init__()
+                self.conv = torch.nn.Conv2d(3, 4, kernel_size=2, stride=2, padding=2, bias=False)
+
+            def forward(self, *inputs):
+                x1 = self.conv(inputs[0])
+                x2 = self.conv(inputs[1])
+                x = torch.add(x1, x2)
+                return x
+
+        input_shape = (1, 3, 8, 8)
+        input_tensor = [torch.randn(*input_shape), torch.randn(*input_shape)]
+        model = ModelWithDuplicateConv().eval()
+        model_transformed = prepare_model(model)
+        print(model_transformed)
+
+        assert torch.allclose(model_transformed(*input_tensor),
+                              model(*input_tensor))
+
+        assert isinstance(model_transformed.module_conv_1, torch.nn.Conv2d)
+        assert model_transformed.module_conv_1.bias is None
+
+        # Compare the weights
+        conv_weight = model_transformed.conv.weight.clone()
+        new_conv_weight = model_transformed.module_conv_1.weight.clone()
+        assert np.array_equal(conv_weight.detach().cpu().numpy(),
+                              new_conv_weight.detach().cpu().numpy())
+
+        quant_sim = QuantizationSimModel(model_transformed, dummy_input=input_tensor)
+        print(quant_sim)
+
+    def test_fx_with_non_torch_function(self):
+        """
+        test torch fx with non torch function - len()
+        Use torch.fx.wrap() API at the module-level scope
+        """
+        class ModelWithNonTorchFunction(torch.nn.Module):
+            def __init__(self):
+                super(ModelWithNonTorchFunction, self).__init__()
+                self.conv = torch.nn.Conv2d(3, 4, kernel_size=2, stride=2, padding=2, bias=False)
+
+            def forward(self, *inputs):
+                x = self.conv(inputs[0])
+                return x / sqrt(len(x))
+
+        input_shape = (1, 3, 8, 8)
+        input_tensor = torch.randn(*input_shape)
+        model = ModelWithNonTorchFunction().eval()
+        model_transformed = prepare_model(model)
+        print(model_transformed)
+
+        assert torch.allclose(model_transformed(input_tensor),
+                              model(input_tensor))
+
+    def test_fx_with_custom_function(self):
+        """
+        test torch fx with custom function not to be traced -
+        Use torch.fx.wrap() API at the module-level scope
+        """
+        class ModelWithCustomFunction(torch.nn.Module):
+            def __init__(self):
+                super(ModelWithCustomFunction, self).__init__()
+                self.conv1 = torch.nn.Conv2d(3, 4, kernel_size=2, stride=2, padding=2, bias=False)
+                self.conv2 = torch.nn.Conv2d(3, 4, kernel_size=2, stride=2, padding=2, bias=False)
+
+            def forward(self, *inputs):
+                x1 = self.conv1(inputs[0])
+                x2 = self.conv2(inputs[1])
+                x = custom_function_not_to_be_traced(x1, x2)
+                return x
+
+        input_shape = (1, 3, 8, 8)
+        input_tensor = [torch.randn(*input_shape), torch.randn(*input_shape)]
+        model = ModelWithCustomFunction().eval()
+        model_transformed = prepare_model(model)
+        print(model_transformed)
+
+        assert torch.allclose(model_transformed(*input_tensor),
+                              model(*input_tensor))
+
+    def test_fx_with_static_control_flow(self):
+        """
+        test torch fx with model static control flow
+        """
+        class ModelWithBranch(torch.nn.Module):
+            def __init__(self, branch):
+                super(ModelWithBranch, self).__init__()
+                self.conv1 = torch.nn.Conv2d(3, 4, kernel_size=2, stride=2, padding=2, bias=False)
+                self.relu = torch.nn.ReLU(inplace=True)
+                self.branch = branch
+
+            def forward(self, *inputs):
+                x = self.conv1(inputs[0])
+                if self.branch:
+                    x = self.relu(x)
+                return x
+
+        input_shape = (1, 3, 8, 8)
+        input_tensor = [torch.randn(*input_shape), torch.randn(*input_shape)]
+        model_with_branch_false = ModelWithBranch(branch=False).eval()
+        model_transformed = prepare_model(model_with_branch_false)
+        print(model_transformed)
+
+        assert torch.allclose(model_transformed(*input_tensor),
+                              model_with_branch_false(*input_tensor))
+
+        model_with_branch_true = ModelWithBranch(branch=True).eval()
+        model_transformed = prepare_model(model_with_branch_true)
+        print(model_transformed)
+
+        assert torch.allclose(model_transformed(*input_tensor),
+                              model_with_branch_true(*input_tensor))
