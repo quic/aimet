@@ -38,11 +38,13 @@
 
 """ Implementation to automatically prepare pytorch models for AIMET features """
 
+import copy
 from re import search
 from typing import Any, Optional, Dict, Union
 import torch
 import torch.fx
 from aimet_common.utils import AimetLogger
+from aimet_torch.utils import get_device
 import aimet_torch.elementwise_ops as elementwise_ops
 
 logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Quant)
@@ -147,6 +149,26 @@ def prepare_model(model: torch.nn.Module, concrete_args: Optional[Dict[str, Any]
     torch.fx.symbolic_trace(f) # Fails!
     torch.fx.symbolic_trace(f, concrete_args={'flag': True}) # Passes!
 
+    #2 Non-torch functions which does not use __torch_function__ mechanism is not supported by default in symbolic
+    tracing. If we do not want to capture them in symbolic tracing then use torch.fx.wrap() API at module-scope level.
+
+    import torch
+    import torch.fx
+    torch.fx.wrap('len')  # call the API at module-level scope
+    torch.fx.wrap('sqrt') # call the API at module-level scope
+
+    class ModelWithNonTorchFunction(torch.nn.Module):
+        def __init__(self):
+            super(ModelWithNonTorchFunction, self).__init__()
+            self.conv = torch.nn.Conv2d(3, 4, kernel_size=2, stride=2, padding=2, bias=False)
+
+        def forward(self, *inputs):
+            x = self.conv(inputs[0])
+            return x / sqrt(len(x))
+
+    model = ModelWithNonTorchFunction().eval()
+    model_transformed = prepare_model(model)
+
     :param model: pytorch Model to be modified
     :param concrete_args: Allows you to partially specialize your function, whether it's to remove control flow or
      data structures. If the model has control flow, torch.fx won't be able to trace the model. Check
@@ -154,10 +176,14 @@ def prepare_model(model: torch.nn.Module, concrete_args: Optional[Dict[str, Any]
 
     :return: Modified pytorch Model
     """
-    unique_nodes = set()
+    model.eval()
+    device = get_device(model)
+    # Create a copy of model and keep it on cpu
+    model_copy = copy.deepcopy(model).cpu()
 
+    unique_nodes = set()
     # Symbolic tracing frontend - captures the semantics of the module
-    symbolic_traced_model = torch.fx.symbolic_trace(model, concrete_args)
+    symbolic_traced_model = torch.fx.symbolic_trace(model_copy, concrete_args)
 
     # Modify the symbolically traced model by iterating over all the nodes
     for node in symbolic_traced_model.graph.nodes:
@@ -187,21 +213,23 @@ def prepare_model(model: torch.nn.Module, concrete_args: Optional[Dict[str, Any]
         else:
             unique_nodes.add(node.target)
 
+    # Perform some checks to make sure the graph is well formed
     _verify_symbolic_traced_model(symbolic_traced_model)
 
+    symbolic_traced_model.eval()
+    symbolic_traced_model.to(device)
     return symbolic_traced_model
 
 
 def _verify_symbolic_traced_model(symbolic_traced_model: torch.fx.GraphModule):
     """
     Does some checks to make sure the graph is well formed and recompile the forward() method of symbolic_traced
-    model from its graph and keep model in eval mode
+    model from its graph
     :param symbolic_traced_model: Symbolically traced model
     :return: None
     """
     symbolic_traced_model.graph.lint()
     symbolic_traced_model.recompile()
-    symbolic_traced_model.eval()
 
 
 def _create_node_for_new_module(symbolic_traced_model: torch.fx.GraphModule, node: torch.fx.node,
@@ -264,12 +292,9 @@ def _create_module_for_reused_node(node: torch.fx.node, symbolic_traced_model: t
     :param symbolic_traced_model: Symbolically traced model
     :return: New module
     """
-    # Get the original module
+    # Get the original module and return newly deep copied module
     module = _get_module_for_dotted_name(symbolic_traced_model, node.target)
-
-    # Create new module and copy over all the properties from original module
-    new_module = module.__class__()
-    new_module.__dict__.update(module.__dict__)
+    new_module = copy.deepcopy(module)
 
     return new_module
 
