@@ -47,7 +47,6 @@ from tensorflow.python.framework import ops as tf_ops
 from tensorflow.contrib import graph_editor
 from aimet_common.defs import QuantScheme
 from aimet_common.quantsim import gate_min_max, calculate_delta_offset, encoding_version
-from aimet_common.quantsim_config.quantsim_config import get_per_channel_quantization_flag
 from aimet_common.utils import AimetLogger, save_json_yaml
 from aimet_tensorflow.common import core
 from aimet_tensorflow.utils.common import update_variables_with_values, save_data_to_pickle_file, \
@@ -182,20 +181,12 @@ class QuantizationSimModel:
         with self.session.graph.as_default():
             saver = tf.compat.v1.train.Saver()
         saver.save(self.session, save_path=WORKING_DIR+'orig_model_before_quantsim')
-        self.per_channel_quantization_enabled = self._per_channel_quantization_enabled(config_file)
-
-        self._add_and_configure_quant_nodes(starting_op_names, output_op_names, default_param_bw, default_output_bw,
-                                            config_file)
+        self._quantsim_configurator = QuantSimConfigurator(session, self.connected_graph, config_file)
+        self.per_channel_quantization_enabled = self._quantsim_configurator.per_channel_quantization_flag
+        self._add_and_configure_quant_nodes(starting_op_names, output_op_names, default_param_bw, default_output_bw)
 
         # Save and load the session so the graph changes can take effect
         self._save_and_load_sim_model()
-
-    @staticmethod
-    def _per_channel_quantization_enabled(config_file: str) -> bool:
-        """
-        Sets Per channel Quantization parameter as True or False based on config file
-        """
-        return get_per_channel_quantization_flag(config_file)
 
     def __getstate__(self):
         # convert object to pickle-able state
@@ -240,14 +231,13 @@ class QuantizationSimModel:
         return self.session.run(op_var_tensor)
 
     def configure_quantization_ops(self, conn_graph: ConnectedGraph, ops_with_param_names: List[str],
-                                   indices: List[int], activation_op_names: List[str], config_file: str):
+                                   indices: List[int], activation_op_names: List[str]):
         """
         Configure inserted quantize ops using config file
         :param conn_graph: Connected graph of the model
         :param ops_with_param_names: List of ops for which param quantization ops were inserted for
         :param indices: List of input indices (one-to-one for each entry in ops)
         :param activation_op_names: List of ops for which activation quantization ops were inserted for
-        :param config_file: Configuration file to use
         """
         if not conn_graph:
             _logger.error('Connected graph passed into configure_quantization_ops() is None. If manual insertion of '
@@ -257,8 +247,8 @@ class QuantizationSimModel:
         op_to_quant_ops_dict = create_op_to_quant_ops_dict(self.session.graph, conn_graph,
                                                            ops_with_param_names, indices,
                                                            activation_op_names)
-        QuantSimConfigurator(self.session, conn_graph, op_to_quant_ops_dict, self._param_quantizers,
-                             self._activation_quantizers, config_file)
+        self._quantsim_configurator.configure_quantizers(op_to_quant_ops_dict, self._param_quantizers,
+                                                         self._activation_quantizers)
 
     def compute_encodings(self, forward_pass_callback: Callable[[tf.compat.v1.Session, Any], None],
                           forward_pass_callback_args):
@@ -574,14 +564,13 @@ class QuantizationSimModel:
         return ops_with_param_names, input_indices, activation_op_names
 
     def _add_and_configure_quant_nodes(self, starting_op_names: List[str], output_op_names: List[str],
-                                       default_param_bw: int, default_output_bw: int, config_file: str):
+                                       default_param_bw: int, default_output_bw: int):
         """
         Utility to add quant nodes
         :param starting_op_names: List of starting op names of the model
         :param output_op_names: List of output op names of the model
         :param default_param_bw: default param bitwidth
         :param default_output_bw: default output bitwidth
-        :param config_file: Configuration file to use
         """
 
         # Get list of ops with params to insert quantizers for, as well as the input indices to insert on.
@@ -608,8 +597,7 @@ class QuantizationSimModel:
 
         # Note: at this point, the session used to construct conn_graph is different than the current
         # self.session, however we still use the connected graph to traverse the graph structure.
-        self.configure_quantization_ops(self.connected_graph, ops_with_param_names, input_indices, activation_op_names,
-                                        config_file)
+        self.configure_quantization_ops(self.connected_graph, ops_with_param_names, input_indices, activation_op_names)
 
     @staticmethod
     def _get_quantized_name(op_name: str) -> str:

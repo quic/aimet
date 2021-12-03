@@ -705,8 +705,7 @@ class TestQuantSim(unittest.TestCase):
             """
             return ['conv2d_1/Conv2D'], [1]
 
-        def configure_quantization_ops(self, _conn_graph, _ops_with_param_names, _indices, _activation_op_names,
-                                       _config_file):
+        def configure_quantization_ops(self, _conn_graph, _ops_with_param_names, _indices, _activation_op_names):
             """
             Overriding function for configuring quantization ops inserted by QuantizationSimModel
             :param self: Self refers to QuantizationSimModel object
@@ -714,7 +713,6 @@ class TestQuantSim(unittest.TestCase):
             :param _ops_with_param_names: Unused argument
             :param _indices: Unused argument
             :param _activation_op_names: Unused argument
-            :param _config_file: Unused argument
             """
             conv2d_relu_quant_info = self._activation_quantizers['conv2d/Relu_quantized']
             conv2d_relu_quant_info.enabled = False
