@@ -171,6 +171,8 @@ class QuantizationSimAcceptanceTests(unittest.TestCase):
                                    default_param_bw=16,
                                    dummy_input=torch.rand(1, 1, 28, 28).cuda())
 
+        sim.compute_encodings(self.forward_pass, forward_pass_callback_args=5)
+
         # train the model for entire one epoch
         mnist_model.train(model=sim.model, epochs=1, num_batches=3,
                           batch_callback=check_if_layer_weights_are_updating, use_cuda=True)
