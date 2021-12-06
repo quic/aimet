@@ -232,10 +232,6 @@ class QuantizationSimModel:
 
         """
 
-        if self._data_type == QuantizationDataType.float:
-            # do not compute any encodings for a fp16 models
-            return
-
         quantized_layers = self._get_qc_quantized_layers(self.model)
 
         for _, layer in quantized_layers:
