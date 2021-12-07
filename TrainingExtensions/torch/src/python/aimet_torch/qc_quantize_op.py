@@ -242,7 +242,6 @@ class QcQuantizeWrapper(nn.Module):
 
         self._mode = QcQuantizeOpMode.ANALYSIS
         self._module_to_wrap = module_to_wrap
-        self._data_type = data_type
 
         # Create quantizer for each parameter and compute encodings
         self.param_quantizers = {}

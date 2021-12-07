@@ -62,6 +62,7 @@ from aimet_torch.qc_quantize_recurrent import QcQuantizeRecurrent
 from aimet_torch.quantsim import QuantizationSimModel, check_accumulator_overflow
 from aimet_torch.quantsim_straight_through_grad import compute_dloss_by_dx
 from aimet_torch import utils, elementwise_ops
+from aimet_torch.tensor_quantizer import QuantizationDataType
 
 from aimet_torch.qc_quantize_op import QcQuantizeWrapper, QcQuantizeStandalone, MAP_ROUND_MODE_TO_PYMO, \
     StaticGridQuantWrapper, QcQuantizeOpMode, LearnedGridQuantWrapper
@@ -429,7 +430,8 @@ class TestQuantizationSimStaticGrad:
             def __init__(self):
                 super(Net, self).__init__()
                 self.conv1 = StaticGridQuantWrapper(nn.Conv2d(1, 10, 5), weight_bw=8, activation_bw=8,
-                                                    round_mode='stochastic', quant_scheme=QuantScheme.post_training_tf_enhanced,
+                                                    round_mode='stochastic',
+                                                    quant_scheme=QuantScheme.post_training_tf_enhanced,
                                                     data_type=QuantizationDataType.int)
                 self.conv2 = nn.Conv2d(10, 20, kernel_size=5)
                 self.conv2_drop = nn.Dropout2d()
@@ -451,7 +453,7 @@ class TestQuantizationSimStaticGrad:
         sim = QuantizationSimModel(model, dummy_input=torch.rand(1, 1, 12, 12))
 
         # Add wrappers again, expect to be a nop
-        sim._add_quantization_wrappers(model, num_inout_tensors={})
+        sim._add_quantization_wrappers(model, num_inout_tensors={}, default_data_type=QuantizationDataType.int)
 
         self.verify_quantization_wrappers(model, sim.model)
 
@@ -669,18 +671,14 @@ class TestQuantizationSimStaticGrad:
 
         model = ModelWithTwoInputs()
 
-        from aimet_torch import quantsim
-        quantsim.default_data_type = QuantizationDataType.float
-
-        sim = QuantizationSimModel(model, default_output_bw=16, default_param_bw=16, dummy_input=dummy_input)
+        sim = QuantizationSimModel(model, default_output_bw=16, default_param_bw=16, dummy_input=dummy_input,
+                                   default_data_type=QuantizationDataType.float)
 
         # Quantize
         sim.compute_encodings(forward_pass, None)
 
         # save encodings
         sim.export('./data/', 'two_input_model_fp16', dummy_input)
-        # reset the global variable back to the default state
-        quantsim.default_data_type = QuantizationDataType.int
 
     # -------------------------------------------
     def test_model_with_two_inputs_per_channel(self):
@@ -777,10 +775,8 @@ class TestQuantizationSimStaticGrad:
 
         model = ModelWithTwoInputs()
 
-        from aimet_torch import quantsim
-        quantsim.default_data_type = QuantizationDataType.float
-
-        sim = QuantizationSimModel(model, dummy_input=dummy_input, default_output_bw=16, default_param_bw=16)
+        sim = QuantizationSimModel(model, dummy_input=dummy_input, default_output_bw=16, default_param_bw=16,
+                                   default_data_type=QuantizationDataType.float)
 
         for wrapper in sim.quant_wrappers():
             wrapper.enable_per_channel_quantization()
@@ -799,8 +795,6 @@ class TestQuantizationSimStaticGrad:
         # Try a backward pass - all we are testing for is that nothing blows up functionally
         loss = output.flatten().sum()
         loss.backward()
-        # reset the global variable back to the default state
-        quantsim.default_data_type = QuantizationDataType.int
 
     def test_model_transposed_conv_per_channel_qat(self):
         """Model with more than 1 input"""
@@ -1800,10 +1794,9 @@ class TestQuantizationSimStaticGrad:
 
         model = InputOutputDictModel()
 
-        from aimet_torch import quantsim
-        quantsim.default_data_type = QuantizationDataType.float
+        sim = QuantizationSimModel(model, default_output_bw=16, default_param_bw=16, dummy_input=dummy_input,
+                                   default_data_type=QuantizationDataType.float)
 
-        sim = QuantizationSimModel(model, default_output_bw=16, default_param_bw=16, dummy_input=dummy_input)
         quantizer = sim.model.mul1.input_quantizer
         enc_dict = sim._create_encoding_dict(encoding=None, quantizer=quantizer)
         assert enc_dict['dtype'] == 'float'
@@ -1813,9 +1806,6 @@ class TestQuantizationSimStaticGrad:
         assert 'scale' not in enc_dict
         assert 'offset' not in enc_dict
         assert 'is_symmetric' not in enc_dict
-
-        # change dafault_data_type back to int
-        quantsim.default_data_type = QuantizationDataType.int
 
     def test_mapping_encoding_for_torch_module_with_multiple_onnx_ops(self):
         """

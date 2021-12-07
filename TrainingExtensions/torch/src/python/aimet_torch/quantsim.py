@@ -106,10 +106,6 @@ class QuantParams:
         self.quant_scheme = quant_scheme
         self.config_file = config_file
 
-
-default_data_type = QuantizationDataType.int
-
-
 class QuantizationSimModel:
     """
     Implements mechanism to add quantization simulations ops to a model. This allows for off-target simulation of
@@ -120,7 +116,8 @@ class QuantizationSimModel:
     def __init__(self, model: torch.nn.Module, dummy_input: Union[torch.Tensor, Tuple],
                  quant_scheme: Union[str, QuantScheme] = QuantScheme.post_training_tf_enhanced,
                  rounding_mode: str = 'nearest', default_output_bw: int = 8, default_param_bw: int = 8,
-                 in_place: bool = False, config_file: str = None):
+                 in_place: bool = False, config_file: str = None,
+                 default_data_type: QuantizationDataType = QuantizationDataType.int):
         """
         Constructor
 
@@ -135,9 +132,12 @@ class QuantizationSimModel:
         :param in_place: If True, then the given 'model' is modified in-place to add quant-sim nodes.
                 Only suggested use of this option is when the user wants to avoid creating a copy of the model
         :param config_file: Path to Configuration file for model quantizers
+        :param default_data_type: Default data type to use for quantizing all layer inputs, outputs and parameters.
+                                 Possible options are QuantizationDataType.int and QuantizationDataType.float.
+                                 Note that the mode default_data_type=QuantizationDataType.float is only supported with
+                                 default_output_bw=16 and default_param_bw=16
         """
         # Perform sanity checks on inputs
-        # TODO replace default_data_type to data_type passed at construction
         QuantizationSimModel._validate_quantsim_inputs(quant_scheme, rounding_mode, default_output_bw, default_param_bw,
                                                        default_data_type)
         # save some parameters
@@ -160,11 +160,10 @@ class QuantizationSimModel:
         self._rounding_mode = rounding_mode
         self._default_output_bw = default_output_bw
         self._default_param_bw = default_param_bw
-        self._data_type = default_data_type
 
         # Add quantization layers
         num_inout_tensors = utils.find_num_inout_tensors_per_module(self.model, dummy_input)
-        self._add_quantization_wrappers(self.model, num_inout_tensors)
+        self._add_quantization_wrappers(self.model, num_inout_tensors, default_data_type)
 
         # Disable bias quantization
         self.exclude_param_from_quantization("bias")
@@ -742,7 +741,8 @@ class QuantizationSimModel:
         logger.debug("Module %s is quantizable", module_ref)
         return True
 
-    def _create_quantizer_module(self, module_to_quantize: torch.nn.Module, num_inout_tensors: Dict) -> torch.nn.Module:
+    def _create_quantizer_module(self, module_to_quantize: torch.nn.Module, num_inout_tensors: Dict,
+                                 data_type: QuantizationDataType) -> torch.nn.Module:
         """Instantiates wrapper based on quant scheme
         """
         assert self._quant_scheme in [QuantScheme.post_training_tf, QuantScheme.post_training_tf_enhanced,
@@ -768,11 +768,11 @@ class QuantizationSimModel:
 
         quantized_module = quantizer(module_to_quantize, self._default_param_bw, self._default_output_bw,
                                      self._rounding_mode, quant_scheme_for_initialization, num_inputs=num_in_tensors,
-                                     num_outputs=num_out_tensors, data_type=self._data_type)
+                                     num_outputs=num_out_tensors, data_type=data_type)
 
         return quantized_module
 
-    def _add_quantization_wrappers(self, module, num_inout_tensors):
+    def _add_quantization_wrappers(self, module, num_inout_tensors, default_data_type: QuantizationDataType):
         """Recursively add quantization wrappers to all appropriate modules starting with module
         """
         for module_name, module_ref in module.named_children():
@@ -787,13 +787,13 @@ class QuantizationSimModel:
             if utils.is_leaf_module(module_ref):
 
                 # Create a new QcQuantize wrapper module
-                quantized_module = self._create_quantizer_module(module_ref, num_inout_tensors)
+                quantized_module = self._create_quantizer_module(module_ref, num_inout_tensors, default_data_type)
 
                 setattr(module, module_name, quantized_module)
 
             # recursively call children modules
             else:
-                self._add_quantization_wrappers(module_ref, num_inout_tensors)
+                self._add_quantization_wrappers(module_ref, num_inout_tensors, default_data_type)
 
     @staticmethod
     def _recompute_scale_offset(min_val: float, max_val: float, bitwidth: int) -> (float, float):
