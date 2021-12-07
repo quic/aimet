@@ -84,12 +84,6 @@
             "propagate": false
         },
 
-        "UnifiedPTQ": {
-            "level": "INFO",
-            "handlers": ["console"],
-            "propagate": false
-        },
-
         "AutoQuant": {
             "level": "INFO",
             "handlers": ["console"],
