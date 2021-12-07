@@ -163,21 +163,17 @@ class QuantizationSimAcceptanceTests(unittest.TestCase):
 
         model = mnist_model.Net().to(torch.device('cuda'))
 
-        from aimet_torch import quantsim
-        quantsim.default_data_type = QuantizationDataType.float
-
         sim = QuantizationSimModel(model,
                                    default_output_bw=16,
                                    default_param_bw=16,
-                                   dummy_input=torch.rand(1, 1, 28, 28).cuda())
+                                   dummy_input=torch.rand(1, 1, 28, 28).cuda(),
+                                   default_data_type=QuantizationDataType.float)
 
         sim.compute_encodings(self.forward_pass, forward_pass_callback_args=5)
 
         # train the model for entire one epoch
         mnist_model.train(model=sim.model, epochs=1, num_batches=3,
                           batch_callback=check_if_layer_weights_are_updating, use_cuda=True)
-
-        quantsim.default_data_type = QuantizationDataType.int
 
     def test_dummy(self):
         # pytest has a 'feature' that returns an error code when all tests for a given suite are not selected
