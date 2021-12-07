@@ -110,6 +110,7 @@ class AimetLogger(metaclass=SingletonType):
         CrosslayerEqualization = 'CrossLayerEqualization'
         MixedPrecision = 'MixedPrecision'
         UnifiedPTQ = 'UnifiedPTQ'
+        AutoQuant = 'AutoQuant'
 
     def __init__(self):
         self._logger = logging.getLogger()
