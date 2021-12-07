@@ -39,10 +39,12 @@ import numpy as np
 
 import os
 import tensorflow as tf
+from aimet_tensorflow.utils.constants import QuantizeOpIndices
+import libpymo
+from aimet_tensorflow import quantsim_straight_through_grad
+
 tf.compat.v1.logging.set_verbosity(tf.logging.WARN)
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
-
-import libpymo
 
 
 class TestTrainingExtensionsQcQuantizeOp(unittest.TestCase):
@@ -575,4 +577,112 @@ class TestTrainingExtensionsQcQuantizeOp(unittest.TestCase):
         # encodings being set to -0.5 and 0.5 should not have a bearing on this quantized output
         # we should not observe truncation if op's encoding min/max input values are used instead of cached values
         self.assertTrue(np.allclose(out_data, inp_data, atol=1e-6))
+        sess.close()
+
+    def test_qc_quantize_op_gradient_computation(self):
+        """
+        test to validate tensorflow custom gradient computation
+        against golden test data (in this case : an equivalent Pytorch test with auto grad)
+        """
+
+        zero_out_module = tf.load_op_library('libaimet_tf_ops.so')
+        graph = tf.Graph()
+        config = tf.ConfigProto(log_device_placement=False)
+        sess = tf.Session(graph=graph, config=config)
+
+        with graph.as_default():
+            # place holder for the input
+            with tf.device("/device:CPU:0"):
+                inp = tf.placeholder(tf.float32, shape=[2, 2], name='input')
+                tensor_quantizer = libpymo.TensorQuantizer(libpymo.QuantizationMode.QUANTIZATION_TF_ENHANCED,
+                                                           libpymo.RoundingMode.ROUND_NEAREST)
+                tensor_quantizer_val = libpymo.PtrToInt64(tensor_quantizer)
+                tensor_quant_ref = tf.Variable(initial_value=tensor_quantizer_val, trainable=False, dtype=tf.int64)
+
+                mode_var = tf.Variable(initial_value=int(libpymo.TensorQuantizerOpMode.oneShotQuantizeDequantize),
+                                       trainable=False, dtype=tf.int32)
+
+                # fix min max and bitwidth to be used
+                encoding_min = tf.Variable(initial_value=0.0, trainable=True, dtype=tf.double)
+                encoding_max = tf.Variable(initial_value=5.0, trainable=True, dtype=tf.double)
+                bit_width = tf.Variable(initial_value=8, trainable=False, dtype=tf.int8)
+                use_symmetric_encoding = tf.Variable(initial_value=False, trainable=False, dtype=tf.bool)
+
+                sess.run([mode_var.initializer, tensor_quant_ref.initializer, encoding_min.initializer,
+                          encoding_max.initializer, bit_width.initializer, use_symmetric_encoding.initializer])
+
+                with graph.gradient_override_map(
+                        {"QcQuantize": "QcQuantizeRangeLearningCustomGradient"}):
+
+                    pass_through_op_output = zero_out_module.qc_quantize(name='quant_op', in_tensor=inp,
+                                                                         op_mode=mode_var,
+                                                                         tensor_quantizer_reference=tensor_quant_ref,
+                                                                         encoding_min=encoding_min,
+                                                                         encoding_max=encoding_max,
+                                                                         bit_width=bit_width,
+                                                                         use_symmetric_encoding=use_symmetric_encoding)
+
+                pass_through_op = graph.get_operation_by_name('quant_op')
+
+        inp_tensor = sess.graph.get_tensor_by_name('input:0')
+        # fixed input data used
+        inp_data = [[0.4581, 0.4829], [0.3125, 0.6150]]
+
+        # get the output data @todo match these
+        tensor_quantizer.isEncodingValid = True
+        mode_var.load(int(libpymo.TensorQuantizerOpMode.quantizeDequantize), sess)
+
+        # for matching with golden output, truncate to 4
+        tf_output_data = np.around(sess.run(pass_through_op_output, feed_dict={inp_tensor: inp_data}), 4)
+        exp_output = [[0.4510, 0.4902], [0.3137, 0.6078]]
+
+        # dummy loss function to match with Pytorch
+        def custom_loss(y_actual, y_pred):
+            return tf.reduce_sum(tf.subtract(y_pred, y_actual-y_actual))
+
+        with graph.as_default():
+            var_list = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES)
+            labels_placeholder = tf.placeholder(tf.float32, [2, 2], name='labels')
+
+            # output tensor
+            logits = sess.graph.get_tensor_by_name('quant_op:0')
+
+            # dummy loss function is set to sum(output)
+            current_loss = custom_loss(labels_placeholder, logits)
+            labels = np.ones((2), dtype=int)  # np.random.randint(2, size=batches)
+            one_hot_labels = np.eye(2)[labels]
+
+            update_ops = []
+            global_step = tf.train.create_global_step()
+            # Stochastic GD in tf with momentum param
+            optimizer = tf.train.MomentumOptimizer(learning_rate=0.05, momentum=0.5)
+            gradients = optimizer.compute_gradients(current_loss, var_list)
+
+            grad_updates = optimizer.apply_gradients(gradients, global_step=global_step)
+            init_global = tf.global_variables_initializer()
+            init_local = tf.local_variables_initializer()
+            init = tf.group(init_global, init_local)
+            sess.run(init)
+            update_ops.append(grad_updates)
+            update_op = tf.group(*update_ops)
+
+            with tf.control_dependencies([update_op]):
+                train_op = tf.identity(current_loss, name='train_op')
+
+            # enable this to check current loss value used
+            _ = sess.run(current_loss, feed_dict={inp_tensor: inp_data, labels_placeholder: one_hot_labels})
+            # start training
+            _ = sess.run(train_op, feed_dict={inp_tensor: inp_data, labels_placeholder: one_hot_labels})
+            tf_enc_min_after_train = sess.run(pass_through_op.inputs[QuantizeOpIndices.encoding_min])
+            tf_enc_max_after_train = sess.run(pass_through_op.inputs[QuantizeOpIndices.encoding_max])
+
+            # match outputs
+            self.assertTrue(np.allclose(exp_output, tf_output_data))
+
+            # compare min and max after update with expected values (Pytorch values)
+            expected_enc_min_after_train = -5.7160621508955956e-05
+            expected_enc_max_after_train = 5.000057220458984
+            self.assertAlmostEqual(tf_enc_min_after_train, expected_enc_min_after_train, 6)
+            self.assertAlmostEqual(tf_enc_max_after_train, expected_enc_max_after_train, 6)
+
         sess.close()
