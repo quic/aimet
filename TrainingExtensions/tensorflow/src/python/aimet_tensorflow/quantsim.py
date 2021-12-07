@@ -42,16 +42,19 @@ import os
 import shutil
 import json
 
+import numpy as np
 import tensorflow as tf
+
 from tensorflow.python.framework import ops as tf_ops
 from tensorflow.contrib import graph_editor
 from aimet_common.defs import QuantScheme
 from aimet_common.quantsim import gate_min_max, calculate_delta_offset, encoding_version
+from aimet_common.quant_utils import get_conv_accum_bounds
 from aimet_common.utils import AimetLogger, save_json_yaml
 from aimet_tensorflow.common import core
 from aimet_tensorflow.utils.common import update_variables_with_values, save_data_to_pickle_file, \
     load_data_from_pickle_file, get_valid_ops
-from aimet_tensorflow.utils import graph_saver
+from aimet_tensorflow import utils
 from aimet_tensorflow.utils.constants import QuantizeOpIndices
 from aimet_tensorflow.utils.quantsim import create_op_to_quant_ops_dict, is_op_quantizable, \
     get_time_steps_tensor_from_rnn_inner_ops, create_encoding_from_dict
@@ -405,7 +408,7 @@ class QuantizationSimModel:
                                             can_modify=op.outputs[0].consumers())
                     graph_editor.detach_inputs(op)
 
-        new_sess = graph_saver.save_and_load_graph(temp_dir_path, self.session)
+        new_sess = utils.graph_saver.save_and_load_graph(temp_dir_path, self.session)
         return new_sess
 
     def set_and_freeze_param_encodings(self, encoding_path: str):
@@ -431,12 +434,19 @@ class QuantizationSimModel:
                 _logger.info("Setting and freezing quantization encodings for parameter: %s", tensor_name)
 
     @staticmethod
-    def _param_op_mode_after_analysis(_) -> libpymo.TensorQuantizerOpMode:
+    def _param_op_mode_after_analysis(quant_scheme) -> libpymo.TensorQuantizerOpMode:
         """
         Returns op mode to use for parameters after encodings have been computed
+        :param quant_scheme: Quantization scheme to use
         :return:
         """
-        return libpymo.TensorQuantizerOpMode.oneShotQuantizeDequantize
+        if quant_scheme in [QuantScheme.training_range_learning_with_tf_init,
+                            QuantScheme.training_range_learning_with_tf_enhanced_init]:
+            op_mode = libpymo.TensorQuantizerOpMode.quantizeDequantize
+        else:
+            op_mode = libpymo.TensorQuantizerOpMode.oneShotQuantizeDequantize
+
+        return op_mode
 
     def get_min_max_var_dict(self)-> Dict:
         """
@@ -509,7 +519,7 @@ class QuantizationSimModel:
         save_json_yaml(encoding_file_path, encodings_dict)
 
     def _save_and_load_sim_model(self):
-        self.session = graph_saver.save_and_load_graph(WORKING_DIR, self.session)
+        self.session = utils.graph_saver.save_and_load_graph(WORKING_DIR, self.session)
         update_tensor_quantizer_references(self.session, self._activation_quantizers)
         update_tensor_quantizer_references(self.session, self._param_quantizers)
 
@@ -741,9 +751,10 @@ class QuantizationSimModel:
         :return: encoding min and max as tf.Variable type
         """
 
-        is_trainable = True
-        if self._quant_scheme in [QuantScheme.post_training_tf, QuantScheme.post_training_tf_enhanced]:
-            is_trainable = False
+        is_trainable = False
+        if self._quant_scheme in [QuantScheme.training_range_learning_with_tf_init,
+                                  QuantScheme.training_range_learning_with_tf_enhanced_init]:
+            is_trainable = True
 
         encoding_min_var = tf.Variable(initial_value=0.0,
                                        name=q_op_name + '_encoding_min',
@@ -961,21 +972,39 @@ class QuantizationSimModel:
                                       op_mode_var: tf.Variable, tensor_quant_ref: tf.Variable,
                                       encoding_min: tf.Variable, encoding_max: tf.Variable, bit_width: tf.Variable,
                                       use_symmetric_encoding: tf.Variable):
+        """
+        Create a QcQuantize op and place it on CPU/CPU and with the right custom-gradient function registered
+        """
+        # pylint: disable=too-many-arguments
+
         def create_quantize_op():
             op = qcops.qc_quantize(name=quant_op_name, in_tensor=preceeding_tensor,
-                                   op_mode=op_mode_var, tensor_quantizer_reference=tensor_quant_ref,
+                                   op_mode=op_mode_var,
+                                   tensor_quantizer_reference=tensor_quant_ref,
                                    encoding_min=encoding_min, encoding_max=encoding_max,
-                                   bit_width=bit_width, use_symmetric_encoding=use_symmetric_encoding
-                                   )
+                                   bit_width=bit_width,
+                                   use_symmetric_encoding=use_symmetric_encoding)
             return op
 
         if not self._use_cuda:
             with tf.device('/cpu:0'):
-                q_op_out = create_quantize_op()
+                if self._quant_scheme in [QuantScheme.training_range_learning_with_tf_init,
+                                          QuantScheme.training_range_learning_with_tf_enhanced_init]:
+                    with self.session.graph.gradient_override_map(
+                            {"QcQuantize": "QcQuantizeRangeLearningCustomGradient"}):
+                        q_op_out = create_quantize_op()
+                else:
+                    q_op_out = create_quantize_op()
 
         # GPU device assignment for QcQuantize op
         else:
-            q_op_out = create_quantize_op()
+            if self._quant_scheme in [QuantScheme.training_range_learning_with_tf_init,
+                                      QuantScheme.training_range_learning_with_tf_enhanced_init]:
+                with self.session.graph.gradient_override_map(
+                        {"QcQuantize": "QcQuantizeRangeLearningCustomGradient"}):
+                    q_op_out = create_quantize_op()
+            else:
+                q_op_out = create_quantize_op()
 
         return q_op_out
 
@@ -1037,7 +1066,7 @@ def save_checkpoint(quantsim: QuantizationSimModel, meta_path: str, file_name_pr
     save_path = os.path.join(meta_path, file_name_prefix)
 
     # save the model with quant ops
-    graph_saver.save_model_to_meta(quantsim.session, save_path)
+    utils.graph_saver.save_model_to_meta(quantsim.session, save_path)
 
     # save info in the quantsim object
     save_data_to_pickle_file(quantsim, meta_path, 'orig_quantsim_config')
@@ -1054,7 +1083,7 @@ def load_checkpoint(meta_path: str, file_name_prefix: str) -> QuantizationSimMod
     #pylint: disable=protected-access
 
     # load saved session with quant ops
-    new_sess = graph_saver.load_model_from_meta(meta_path=str(meta_path + '/' + file_name_prefix + '.meta'))
+    new_sess = utils.graph_saver.load_model_from_meta(meta_path=str(meta_path + '/' + file_name_prefix + '.meta'))
 
     # load quant sim model object with params from saved pickle data
     new_quant_sim = load_data_from_pickle_file(meta_path + '/orig_quantsim_config')
@@ -1067,3 +1096,37 @@ def load_checkpoint(meta_path: str, file_name_prefix: str) -> QuantizationSimMod
     update_tensor_quantizer_references(new_sess, new_quant_sim._activation_quantizers)
 
     return new_quant_sim
+
+
+def check_accumulator_overflow(sess: tf.Session, quant_bw: int, accum_bw: int):
+    """
+    Checks for any potential for accumulator overflow across all the layers of the given model
+    :param sess: Tensorflow session
+    :param quant_bw: Bitwidth the layers are quantized at
+    :param accum_bw: Bitwidth of the accumulator
+    :return: Name of the layer with the most accumulator range used and range used
+    """
+
+    most_accum_range_used = 0
+    most_accum_range_used_layer = None
+
+    for op in sess.graph.get_operations():
+        if op.type == 'Conv2D':
+            weights = utils.op.conv.WeightTensorUtils.get_tensor_as_numpy_data(sess, op)
+            weights = np.transpose(weights, (3, 2, 0, 1))       # Reshape from HWIO to OIHW
+            was_accum_range_exceeded, accum_range_used = get_conv_accum_bounds(weights, quant_bw, accum_bw)
+            if accum_range_used > most_accum_range_used:
+                most_accum_range_used = accum_range_used
+                most_accum_range_used_layer = op.name
+
+            if was_accum_range_exceeded:
+                _logger.info('Possible accumulator overflow for layer: %s', op.name)
+
+    if most_accum_range_used < 1:
+        _logger.info('No overflow detected. Layer %s had the most accumulator range used: %f%%',
+                     most_accum_range_used_layer, most_accum_range_used * 100)
+    else:
+        _logger.info('Overflow detected. Layer %s had the most accumulator range used: %f%%',
+                     most_accum_range_used_layer, most_accum_range_used * 100)
+
+    return most_accum_range_used_layer, most_accum_range_used
