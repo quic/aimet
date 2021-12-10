@@ -151,6 +151,7 @@ RUN python3.7 -m pip --no-cache-dir install \
         tensorboardX==1.7 \
         tensorflow-gpu==1.15.0 \
         tensorflow-hub \
+        tensorflow-model-optimization \
         tensorlayer==2.1.0 \
         timm==0.3.1 \
         tqdm==4.32.2 \
