@@ -154,6 +154,7 @@ RUN pip3 --no-cache-dir install \
         tensorboardX==1.7 \
         tensorflow==1.15.0 \
         tensorflow-hub \
+        tensorflow-model-optimization \
         tensorlayer==2.1.0 \
         timm==0.4.12 \
         torch==1.9.1+cpu -f https://download.pytorch.org/whl/torch_stable.html \
