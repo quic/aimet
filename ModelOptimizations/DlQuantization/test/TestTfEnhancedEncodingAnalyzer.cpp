@@ -173,6 +173,29 @@ TYPED_TEST(TestTfEnhancedEncodingAnalyzer, AllSameValuesAsymmetric)
     EXPECT_GE(encoding2.max, 0);   // 0 is included
 }
 
+TYPED_TEST(TestTfEnhancedEncodingAnalyzer, AllZeroesAsymmetric)
+{
+    typedef typename TypeParam::dataType dataType;
+
+    // Instantiate TfEnhancedEncodingAnalyzer
+    DlQuantization::TfEnhancedEncodingAnalyzer<dataType> analyzer1;
+
+    unsigned int tensorCount = 6000;
+    std::vector<dataType> tensor1(tensorCount, 0);
+    Blob<TypeParam> tensorBlob1(tensor1.data(), tensorCount);
+
+    // Update the stats using these tensor values
+    analyzer1.updateStats(tensorBlob1.getDataPtrOnDevice(), tensorCount, TypeParam::modeCpuGpu);
+
+    // Get the encodings
+    DlQuantization::TfEncoding encoding1 = analyzer1.computeEncoding(8, false, false, false);
+
+    EXPECT_NEAR(encoding1.min, -1.00392, 0.0001);
+    EXPECT_NEAR(encoding1.max, 0.996078, 0.0001);
+    EXPECT_EQ(encoding1.offset, -128);
+    EXPECT_EQ(encoding1.bw, 8);
+}
+
 TYPED_TEST(TestTfEnhancedEncodingAnalyzer, Symmetric)
 {
     typedef typename TypeParam::dataType dataType;
