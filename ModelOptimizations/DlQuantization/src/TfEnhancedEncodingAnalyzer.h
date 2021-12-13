@@ -85,6 +85,7 @@ public:
 
 private:
     PDF _stats;
+    bool _statsUpdated = false;
 
     // Fudge factor which trades-off quantization and saturation error.
     // The cost function will be "quantization cost" + GAMMA * "saturation cost".
