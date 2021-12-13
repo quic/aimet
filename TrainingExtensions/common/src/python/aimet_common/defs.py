@@ -43,10 +43,9 @@ from typing import Union, Callable, Any, Optional, Dict, List
 from decimal import Decimal
 
 from aimet_common.layer_database import Layer
+import libpymo
 
 # supported quantization schemes
-
-
 class QuantScheme(Enum):
     """ Enumeration of Quant schemes"""
 
@@ -58,6 +57,10 @@ class QuantScheme(Enum):
     training_range_learning_with_tf_enhanced_init = 4
     training_range_learning = 5
 
+MAP_QUANT_SCHEME_TO_PYMO = {QuantScheme.post_training_tf_enhanced: libpymo.QuantizationMode.QUANTIZATION_TF_ENHANCED,
+                            QuantScheme.post_training_tf: libpymo.QuantizationMode.QUANTIZATION_TF}
+MAP_ROUND_MODE_TO_PYMO = {'nearest': libpymo.RoundingMode.ROUND_NEAREST,
+                          'stochastic': libpymo.RoundingMode.ROUND_STOCHASTIC}
 
 class ActivationType(Enum):
     """ Enums to identify activation type"""

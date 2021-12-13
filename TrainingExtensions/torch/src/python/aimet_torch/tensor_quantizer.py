@@ -41,16 +41,13 @@ import io
 from typing import List, Dict
 
 import torch
-from aimet_common.defs import QuantScheme, QuantizationDataType
+from aimet_common.defs import QuantScheme, QuantizationDataType, MAP_QUANT_SCHEME_TO_PYMO
 from aimet_common.utils import AimetLogger
 import aimet_torch.quantsim_straight_through_grad as ste
 import libpymo                  # pylint: disable=import-error
 
 #TODO Pylint fails due an unknown import issue. We need to debug this later.
 import AimetTensorQuantizer     # pylint: disable=import-error
-
-MAP_QUANT_SCHEME_TO_PYMO = {QuantScheme.post_training_tf_enhanced: libpymo.QuantizationMode.QUANTIZATION_TF_ENHANCED,
-                            QuantScheme.post_training_tf: libpymo.QuantizationMode.QUANTIZATION_TF}
 
 _logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Quant)
 
