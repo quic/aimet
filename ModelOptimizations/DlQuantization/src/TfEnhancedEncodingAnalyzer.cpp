@@ -71,6 +71,7 @@ template <typename DTYPE>
 void TfEnhancedEncodingAnalyzer<DTYPE>::updateStats(const DTYPE* tensor, const size_t tensorSize,
                                                     ComputationMode tensorCpuGpuMode)
 {
+    this->_statsUpdated = true;
     UpdatePdf(tensor, tensorSize, tensorCpuGpuMode, true, this->_stats);
 }
 
@@ -80,12 +81,30 @@ TfEncoding TfEnhancedEncodingAnalyzer<DTYPE>::computeEncoding(uint8_t bw, bool u
                                                               bool useStrictSymmetric, bool useUnsignedSymmetric) const
 {
     TfEncoding encoding = {0, 0, 0, 0, 0};
+    DTYPE numSteps = pow(2, bw) - 1;
 
     if (this->_stats.xLeft.size() == 0)
     {
-        // Histogram has not been initialized yet
-        // We return a zero encoding
-        return encoding;
+        if (this->_statsUpdated)
+        {
+            // Histogram has not been initialized yet, we have seen all zero data
+            // We generate a valid encoding that covers float 0
+            encoding.min = -1;
+            encoding.max = 1;
+            encoding.delta = (encoding.max - encoding.min) / int (numSteps);
+            encoding.offset = floor(encoding.min / encoding.delta);
+            encoding.min = encoding.offset * encoding.delta;
+            encoding.max = encoding.min + int(numSteps) * encoding.delta;
+            encoding.bw = bw;
+
+            return encoding;
+        }
+        else
+        {
+            // Histogram has not been initialized yet because we have not seen any data
+            // We return a zero encoding - which is a failure indicator
+            return encoding;
+        }
     }
 
     // Find the range of our collected stats
@@ -93,7 +112,6 @@ TfEncoding TfEnhancedEncodingAnalyzer<DTYPE>::computeEncoding(uint8_t bw, bool u
     std::tie(minVal, maxVal) = _findRangeOfAggregateStats();
 
     // Find test candidates
-    DTYPE numSteps = pow(2, bw) - 1;
     std::vector<std::tuple<DTYPE, int>> testCandidates;
 
     if (useSymmetricEncodings)
