@@ -33,17 +33,14 @@
 #
 #  @@-COPYRIGHT-END-@@
 # =============================================================================
-
-import pytest
-import numpy as np
-import os
-os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 import tensorflow as tf
-from aimet_tensorflow.keras.quant_sim.qc_quantize_wrapper import QcQuantizeWrapper
-from aimet_tensorflow.keras.utils.common import replace_layer_in_functional_model
+from tensorflow_model_optimization.python.core.quantization.keras.graph_transformations import model_transformer
+import numpy as np
+from packaging import version
 
-# Uncomment below to run unit tests. Cannot include always since it will affect all other tensorflow unit tests.
-# tf.compat.v1.enable_eager_execution()
+from aimet_tensorflow.keras.quant_sim.qc_quantize_wrapper import QcQuantizeWrapper, QuantizeWrapperTransform, \
+    QuantizerSettings
+import libpymo
 
 def dense_functional():
     inp = tf.keras.layers.Input(shape=(5,))
@@ -69,49 +66,59 @@ class DenseSubclassing(tf.keras.Model):
         x = self.softmax(x)
         return x
 
-@pytest.mark.skip(reason="Enable with TF 2.4")
+def test_wrapper():
+    if version.parse(tf.version.VERSION) >= version.parse("2.00"):
+        inp = tf.keras.layers.Input(shape=(2,))
+        x = QcQuantizeWrapper(tf.keras.layers.Lambda(lambda x: x),
+                              QuantizerSettings(8, 'nearest', 'tf', False, False, False),
+                              QuantizerSettings(8, 'nearest', 'tf', False, False, False))(inp)
+        model = tf.keras.Model(inputs=inp, outputs=x, name="dense_with_wrapper")
+
+        rand_inp = np.random.randn(100, 2) * 10.0
+        orig_out = model.predict(rand_inp)
+        encoding = model.layers[1].input_quantizers[0].compute_encoding()
+        model.layers[1].quantizer_info_dict[model.layers[1].input_quantizers[0]].encoding_min_var.assign(encoding.min)
+        model.layers[1].quantizer_info_dict[model.layers[1].input_quantizers[0]].encoding_max_var.assign(encoding.max)
+        assert model.layers[1].input_quantizers[0].tensor_quantizer.isEncodingValid
+
+        # Check that before configuring op mode var to quantizeDequantize, the model output remains same
+        quant_out = model.predict(rand_inp)
+        assert np.array_equal(orig_out, quant_out)
+
+        model.layers[1].quantizer_info_dict[model.layers[1].input_quantizers[0]].op_mode_var.assign(
+            int(libpymo.TensorQuantizerOpMode.quantizeDequantize))
+        quant_out = model.predict(rand_inp)
+        assert not np.array_equal(orig_out, quant_out)
+
 def test_functional_model_with_wrapper():
-    rand_inp = np.random.randn(100, 2)
-    inp = tf.keras.layers.Input(shape=(2,))
-    out = tf.keras.layers.Dense(units=2)(inp)
-    out = tf.keras.layers.Softmax()(out)
-    model = tf.keras.Model(inputs=inp, outputs=out, name="dense_functional")
-    orig_out = model.predict(rand_inp)
+    if version.parse(tf.version.VERSION) >= version.parse("2.00"):
+        rand_inp = np.random.randn(100, 2)
+        inp = tf.keras.layers.Input(shape=(2,))
+        out = tf.keras.layers.Dense(units=2)(inp)
+        out = tf.keras.layers.Softmax()(out)
+        model = tf.keras.Model(inputs=inp, outputs=out, name="dense_functional")
+        orig_out = model.predict(rand_inp)
 
-    replace_layer_in_functional_model(model, model.layers[1], QcQuantizeWrapper(model.layers[1]))
-    tf.keras.models.save_model(model, './data/saved_model', save_format='tf')
-    model = tf.keras.models.load_model('./data/saved_model', custom_objects={'QcQuantizeWrapper': QcQuantizeWrapper})
-    quant_out = model.predict(rand_inp)
-    assert not np.array_equal(orig_out, quant_out)
+        name_to_layer_map = {}
+        for layer in model.layers:
+            name_to_layer_map[layer.name] = layer
 
-    starting_weights = [weight for weight in model.layers[1]._layer_to_wrap.get_weights()]
-    y = np.random.randn(100, 2)
-    model.compile(optimizer=tf.keras.optimizers.Adam(learning_rate=1e-3),
-                  loss=tf.keras.losses.BinaryCrossentropy(),
-                  metrics=['accuracy'])
-    model.fit(x=rand_inp, y=y, batch_size=1)
-    ending_weights = [weight for weight in model.layers[1]._layer_to_wrap.get_weights()]
-    for idx, weight in enumerate(starting_weights):
-        assert not np.array_equal(weight, ending_weights[idx])
+        transforms = [QuantizeWrapperTransform('Softmax',
+                                               QuantizerSettings(8, 'nearest', 'tf', False, False, False),
+                                               QuantizerSettings(8, 'nearest', 'tf', False, False, False),
+                                               name_to_layer_map),
+                      QuantizeWrapperTransform('Dense',
+                                               QuantizerSettings(8, 'nearest', 'tf', False, False, False),
+                                               QuantizerSettings(8, 'nearest', 'tf', False, False, False),
+                                               name_to_layer_map)]
+        new_model, _ = model_transformer.ModelTransformer(model, transforms).transform()
 
-@pytest.mark.skip(reason="Enable with TF 2.4")
-def test_subclass_model_with_wrapper():
-    model = DenseSubclassing()
+        # Test that model output remains same prior to compute encodings
+        quant_out = new_model.predict(rand_inp)
+        assert np.array_equal(orig_out, quant_out)
 
-    rand_inp = np.random.randn(100, 2)
-    orig_out = model.predict(rand_inp)
-    model.linear1 = QcQuantizeWrapper(model.linear1)
-    tf.keras.models.save_model(model, './data/saved_model', save_format='tf')
-    new_model = tf.keras.models.load_model('./data/saved_model')
-    quant_out = new_model.predict(rand_inp)
-    assert not np.array_equal(orig_out, quant_out)
-
-    starting_weights = [weight for weight in model.linear1._layer_to_wrap.get_weights()]
-    y = np.random.randn(100, 2)
-    model.compile(optimizer=tf.keras.optimizers.Adam(learning_rate=1e-3),
-                  loss=tf.keras.losses.BinaryCrossentropy(),
-                  metrics=['accuracy'])
-    model.fit(x=rand_inp, y=y, batch_size=1)
-    ending_weights = [weight for weight in model.linear1._layer_to_wrap.get_weights()]
-    for idx, weight in enumerate(starting_weights):
-        assert not np.array_equal(weight, ending_weights[idx])
+        new_model.layers[1].input_quantizers[0].compute_encoding()
+        new_model.layers[1].quantizer_info_dict[new_model.layers[1].input_quantizers[0]].op_mode_var.assign(
+            int(libpymo.TensorQuantizerOpMode.quantizeDequantize))
+        quant_out = new_model.predict(rand_inp)
+        assert not np.array_equal(orig_out, quant_out)
