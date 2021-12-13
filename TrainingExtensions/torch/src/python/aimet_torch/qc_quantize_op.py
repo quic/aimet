@@ -39,22 +39,17 @@
 
 import abc
 from enum import Enum
-from typing import Union, Dict
+from typing import Dict
 import torch
 from torch import nn
 
 import libpymo
 from aimet_common.utils import AimetLogger
-from aimet_common.defs import QuantScheme, QuantizationDataType
+from aimet_common.defs import QuantScheme, QuantizationDataType, MAP_ROUND_MODE_TO_PYMO, MAP_QUANT_SCHEME_TO_PYMO
 from aimet_torch import utils
 from aimet_torch.tensor_quantizer import StaticGridPerTensorQuantizer, StaticGridPerChannelQuantizer
 from aimet_torch.tensor_quantizer import LearnedGridTensorQuantizer, ParameterQuantizer
 import aimet_torch.quantsim_straight_through_grad as ste
-
-from aimet_torch.tensor_quantizer import MAP_QUANT_SCHEME_TO_PYMO
-
-MAP_ROUND_MODE_TO_PYMO = {'nearest': libpymo.RoundingMode.ROUND_NEAREST,
-                          'stochastic': libpymo.RoundingMode.ROUND_STOCHASTIC}
 
 _logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Quant)
 
