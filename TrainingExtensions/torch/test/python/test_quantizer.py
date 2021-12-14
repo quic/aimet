@@ -1719,6 +1719,48 @@ class TestQuantizationSimStaticGrad:
 
         assert quant_module.param_quantizers['weight'].encoding
 
+    def test_set_and_freeze_param_encoding_per_channel(self):
+        """ Test set and freeze parameter encoding for per-channel encodings """
+        conv1 = torch.nn.Conv2d(4, 4, 1)
+        quant_module = StaticGridQuantWrapper(conv1, weight_bw=8, activation_bw=8, round_mode='nearest',
+                                              quant_scheme=QuantScheme.post_training_tf_enhanced,
+                                              data_type=QuantizationDataType.int)
+        quant_module.enable_per_channel_quantization()
+
+        param_encodings = {'conv1.weight': [{'bitwidth': 4, 'is_symmetric': 'False', 'max': 0.3, 'min': -0.2,
+                                             'offset': -7.0, 'scale': 0.038},
+                                            {'bitwidth': 4, 'is_symmetric': 'False', 'max': 0.3, 'min': -0.2,
+                                             'offset': -7.0, 'scale': 0.038},
+                                            {'bitwidth': 4, 'is_symmetric': 'False', 'max': 0.3, 'min': -0.2,
+                                             'offset': -7.0, 'scale': 0.038},
+                                            {'bitwidth': 4, 'is_symmetric': 'False', 'max': 0.3, 'min': -0.2,
+                                             'offset': -7.0, 'scale': 0.038}
+                                            ]}
+
+        quant_module.set_and_freeze_param_encoding('conv1', param_encodings)
+
+        assert len(quant_module.param_quantizers['weight'].encoding) == 4
+        assert quant_module.param_quantizers['weight'].encoding[0].bw == 4
+        assert quant_module.param_quantizers['weight'].encoding[0].offset == -7.0
+        assert quant_module.param_quantizers['weight'].encoding[0].delta == 0.038
+        assert quant_module.param_quantizers['weight'].encoding[3].bw == 4
+        assert quant_module.param_quantizers['weight'].encoding[3].offset == -7.0
+        assert quant_module.param_quantizers['weight'].encoding[3].delta == 0.038
+
+        assert not quant_module.param_quantizers['weight'].use_symmetric_encodings
+        assert quant_module.param_quantizers['weight'].bitwidth == 4
+
+        # Reset encoding, Since encoding are frozen they should not be None after reset encoding
+        quant_module.reset_encodings()
+
+        assert len(quant_module.param_quantizers['weight'].encoding) == 4
+        assert quant_module.param_quantizers['weight'].encoding[0].bw == 4
+        assert quant_module.param_quantizers['weight'].encoding[0].offset == -7.0
+        assert quant_module.param_quantizers['weight'].encoding[0].delta == 0.038
+        assert quant_module.param_quantizers['weight'].encoding[3].bw == 4
+        assert quant_module.param_quantizers['weight'].encoding[3].offset == -7.0
+        assert quant_module.param_quantizers['weight'].encoding[3].delta == 0.038
+
     def test_compute_encoding_with_given_bitwidth(self):
         """
         Test functionality to compute encoding for given bitwidth
