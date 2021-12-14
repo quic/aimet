@@ -1765,27 +1765,34 @@ class TestQuantizationSimStaticGrad:
         """
         Test functionality to compute encoding for given bitwidth
         """
-        encoding_dict = QuantizationSimModel.generate_symmetric_encoding_dict(
-            torch.as_tensor(np.array([1.203197181224823, 0], dtype='float32')),  bitwidth=32,
+
+        encoding_dict = QuantizationSimModel.generate_symmetric_encoding_dict_for_disabled_param(
+            torch.as_tensor(np.array([1.203197181224823, 0], dtype='float32')),
             data_type=QuantizationDataType.int)
         assert -2147483648 == encoding_dict['offset']
         assert -1.2031972414 == round(encoding_dict['min'], 10)
         assert 1.2031972408 == round(encoding_dict['max'], 10)
         assert round(encoding_dict['scale'], 14) == 5.6028e-10
 
-        encoding_dict = QuantizationSimModel.generate_symmetric_encoding_dict(
-            torch.as_tensor(np.array([0.7796169519533523, -0.9791506528745285], dtype='float32')), bitwidth=32,
+        encoding_dict = QuantizationSimModel.generate_symmetric_encoding_dict_for_disabled_param(
+            torch.as_tensor(np.array([0.7796169519533523, -0.9791506528745285], dtype='float32')),
             data_type=QuantizationDataType.int)
         assert -2147483648 == encoding_dict['offset']
         assert -0.9791506533 == round(encoding_dict['min'], 10)
         assert 0.9791506529 == round(encoding_dict['max'], 10)
         assert round(encoding_dict['scale'], 14) == 4.5595e-10
 
-        encoding_dict = QuantizationSimModel.generate_symmetric_encoding_dict(
-            torch.as_tensor(np.array([0.7796169519533523, -0.9791506528745285], dtype='float32')), bitwidth=8,
+        encoding_dict = QuantizationSimModel.generate_symmetric_encoding_dict_for_disabled_param(
+            torch.as_tensor(np.array([-0.7796169519533523, -0.9791506528745285], dtype='float32')),
             data_type=QuantizationDataType.int)
-        assert -128 == encoding_dict['offset']
-        assert round(encoding_dict['scale'], 7) == 0.0077098
+        assert -2147483648 == encoding_dict['offset']
+        assert round(encoding_dict['scale'], 14) == 4.5595e-10
+
+        encoding_dict = QuantizationSimModel.generate_symmetric_encoding_dict_for_disabled_param(
+            torch.as_tensor(np.array([-0.7796169519533523, -0.9791506528745285], dtype='float32')),
+            data_type=QuantizationDataType.float)
+        assert 16 == encoding_dict['bitwidth']
+        assert 'float' == encoding_dict['dtype']
 
     def test_export_dict_input_output(self):
         """ test export functionality on dictionary input and output """
