@@ -486,12 +486,18 @@ class StaticGridQuantWrapper(QcQuantizeWrapper):
         for orig_param_name, param_quantizer in self.param_quantizers.items():
             param_name = module_name + '.' + orig_param_name
             if param_name in param_encodings:
-                encoding_dict = param_encodings[param_name][0]
-                encoding, is_symmetric = utils.create_encoding_from_dict(encoding_dict)
-                param_quantizer.encoding = encoding
+                encodings = []
+                is_symmetric = False
+                for encoding_dict in param_encodings[param_name]:
+                    encoding, is_symmetric = utils.create_encoding_from_dict(encoding_dict)
+                    encodings.append(encoding)
 
-                param_quantizer.bitwidth = encoding.bw
+                param_quantizer.bitwidth = encodings[0].bw
                 param_quantizer.use_symmetric_encodings = is_symmetric
+                if len(encodings) > 1:
+                    param_quantizer.encoding = encodings            # per-channel quant
+                else:
+                    param_quantizer.encoding = encodings[0]         # per-tensor quant
 
                 param_quantizer.freeze_encoding()
                 _logger.info("Setting and freezing quantization encodings for parameter: %s", param_name)
