@@ -39,12 +39,15 @@
 
 from typing import Union, List, Dict
 import tensorflow as tf
-from tensorflow.python.training.tracking.data_structures import NoDependency
-from tensorflow_model_optimization.python.core.quantization.keras.graph_transformations import transforms
+from packaging import version
 
 from aimet_common.utils import AimetLogger
 from aimet_common.defs import MAP_QUANT_SCHEME_TO_PYMO, MAP_ROUND_MODE_TO_PYMO, QuantScheme
 import libpymo
+# Remove version check when we upgrade to tf 2.0
+if version.parse(tf.version.VERSION) >= version.parse("2.00"):
+    # pylint: disable=no-name-in-module
+    from tensorflow_model_optimization.python.core.quantization.keras.graph_transformations import transforms
 
 _logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Quant)
 
@@ -163,18 +166,24 @@ class QuantizeWrapperTransform(transforms.Transform):
         """ List of custom objects used in replacement method """
         return {'QcQuantizeWrapper': QcQuantizeWrapper}
 
-class TensorQuantizer():
+class TensorQuantizer(tf.keras.layers.Layer):
     """ Tensor quantizer class containing cpp tensor quantizer and associated attributes """
-    def __init__(self, quant_scheme, round_mode, quantizer_mode, bitwidth, is_symmetric):
+    # pylint: disable=too-many-arguments
+    def __init__(self, name, op_mode, quant_scheme, round_mode, bitwidth, is_symmetric, use_strict_symmetric,
+                 use_unsigned_symmetric):
+        super(TensorQuantizer, self).__init__()
         self._tensor_quantizer = libpymo.TensorQuantizer(quant_scheme, round_mode)
-        self._quantizer_mode = quantizer_mode
-        self.bitwidth = bitwidth
-        self.is_symmetric = is_symmetric
+        self._tensor_quantizer.setStrictSymmetric(use_strict_symmetric)
+        self._tensor_quantizer.setUnsignedSymmetric(use_unsigned_symmetric)
+        self._bitwidth = bitwidth
+        self._is_symmetric = is_symmetric
 
-    @property
-    def quantizer_mode(self):
-        """ Quantizer mode getter """
-        return self._quantizer_mode
+        self._encoding_min = self.add_weight(name + '.encoding_min', dtype=tf.float64,
+                                             initializer=tf.constant_initializer(0.))
+        self._encoding_max = self.add_weight(name + '.encoding_max', dtype=tf.float64,
+                                             initializer=tf.constant_initializer(0.))
+        self._quantizer_mode = self.add_weight(name + '.op_mode', dtype=tf.int32, trainable=False,
+                                               initializer=tf.constant_initializer(int(op_mode)))
 
     @property
     def tensor_quantizer(self):
@@ -183,24 +192,33 @@ class TensorQuantizer():
 
     def compute_encoding(self):
         """ Compute encoding for the tensor quantizer """
-        encoding = self._tensor_quantizer.computeEncoding(self.bitwidth, self.is_symmetric, False, False)
+        # TODO: remove last two parameters after fixing PyModelOptimizations
+        encoding = self._tensor_quantizer.computeEncoding(self._bitwidth, self._is_symmetric, False, False)
         return encoding
 
-class QuantizerVars:
-    """ Object holding quantizer variables """
-    def __init__(self, encoding_min_var: tf.Variable, encoding_max_var: tf.Variable, op_mode_var: tf.Variable):
-        self.encoding_min_var = encoding_min_var
-        self.encoding_max_var = encoding_max_var
-        self.op_mode_var = op_mode_var
+    # pylint: disable=arguments-differ
+    def call(self, tensor):
+        """ Forward pass for tensor quantizer """
+        return qcops.qc_quantize(name='qc_quantize_op', in_tensor=tensor,
+                                 op_mode=self._quantizer_mode,
+                                 tensor_quantizer_reference=libpymo.PtrToInt64(self._tensor_quantizer),
+                                 encoding_min=self._encoding_min,
+                                 encoding_max=self._encoding_max,
+                                 bit_width=self._bitwidth,
+                                 use_symmetric_encoding=self._is_symmetric)
 
 class QcQuantizeWrapper(tf.keras.layers.Layer):
     """ Wrapper for simulating quantization noise """
+    # pylint: disable=too-many-arguments
     def __init__(self,
                  layer_to_wrap: tf.keras.layers.Layer,
                  activation_quant_settings: QuantizerSettings,
                  param_quant_settings: QuantizerSettings,
                  num_inputs: int = 1,
                  num_outputs: int = 1,
+                 input_quantizers: Union[None, List[TensorQuantizer]] = None,
+                 output_quantizers: Union[None, List[TensorQuantizer]] = None,
+                 param_quantizers: Union[None, List[TensorQuantizer]] = None,
                  **kwargs):
         super(QcQuantizeWrapper, self).__init__(**kwargs)
         self._layer_to_wrap = layer_to_wrap
@@ -209,46 +227,55 @@ class QcQuantizeWrapper(tf.keras.layers.Layer):
 
         self._num_inputs = num_inputs
         self._num_outputs = num_outputs
-        self.input_quantizers = []
-        self.param_quantizers = {}
-        self.output_quantizers = []
-        self.quantizer_info_dict = NoDependency({})
+        self.input_quantizers = input_quantizers
+        self.output_quantizers = output_quantizers
+        self.param_quantizers = param_quantizers
 
-        for i in range(num_inputs):
-            encoding_min = self.add_weight('inputs.' + str(i) + '.encoding_min', dtype=tf.float64,
-                                           initializer=tf.constant_initializer(0.))
-            encoding_max = self.add_weight('inputs.' + str(i) + '.encoding_max', dtype=tf.float64,
-                                           initializer=tf.constant_initializer(0.))
-            quantizer_mode = self.add_weight('inputs.' + str(i) + '.op_mode', dtype=tf.int32,
-                                             trainable=False,
-                                             initializer=tf.constant_initializer(
-                                                 int(libpymo.TensorQuantizerOpMode.updateStats)))
-            tensor_quantizer = TensorQuantizer(MAP_QUANT_SCHEME_TO_PYMO[self._activation_quant_settings.quant_scheme],
-                                               MAP_ROUND_MODE_TO_PYMO[self._activation_quant_settings.round_mode],
-                                               libpymo.TensorQuantizerOpMode.updateStats,
-                                               self._activation_quant_settings.bitwidth,
-                                               self._activation_quant_settings.is_symmetric)
-            # pylint: disable=unsupported-assignment-operation
-            self.quantizer_info_dict[tensor_quantizer] = QuantizerVars(encoding_min, encoding_max, quantizer_mode)
-            self.input_quantizers.append(tensor_quantizer)
+        # Create quantizer variables and quantizers for input quantizers if not yet existing
+        if self.input_quantizers is None:
+            self.input_quantizers = []
+            for i in range(self._num_inputs):
+                self.input_quantizers.append(TensorQuantizer(self._layer_to_wrap.name + '_input_quantizer_' + str(i),
+                                                             libpymo.TensorQuantizerOpMode.updateStats,
+                                                             MAP_QUANT_SCHEME_TO_PYMO[
+                                                                 self._activation_quant_settings.quant_scheme],
+                                                             MAP_ROUND_MODE_TO_PYMO[
+                                                                 self._activation_quant_settings.round_mode],
+                                                             self._activation_quant_settings.bitwidth,
+                                                             self._activation_quant_settings.is_symmetric,
+                                                             self._activation_quant_settings.use_strict_symmetric,
+                                                             self._activation_quant_settings.use_unsigned_symmetric))
 
-        for i in range(num_outputs):
-            encoding_min = self.add_weight('outputs.' + str(i) + '.encoding_min', dtype=tf.float64,
-                                           initializer=tf.constant_initializer(0.))
-            encoding_max = self.add_weight('outputs.' + str(i) + '.encoding_max', dtype=tf.float64,
-                                           initializer=tf.constant_initializer(0.))
-            quantizer_mode = self.add_weight('outputs.' + str(i) + '.op_mode', dtype=tf.int32,
-                                             trainable=False,
-                                             initializer=tf.constant_initializer(
-                                                 int(libpymo.TensorQuantizerOpMode.updateStats)))
-            tensor_quantizer = TensorQuantizer(MAP_QUANT_SCHEME_TO_PYMO[self._activation_quant_settings.quant_scheme],
-                                               MAP_ROUND_MODE_TO_PYMO[self._activation_quant_settings.round_mode],
-                                               libpymo.TensorQuantizerOpMode.updateStats,
-                                               self._activation_quant_settings.bitwidth,
-                                               self._activation_quant_settings.is_symmetric)
-            # pylint: disable=unsupported-assignment-operation
-            self.quantizer_info_dict[tensor_quantizer] = QuantizerVars(encoding_min, encoding_max, quantizer_mode)
-            self.output_quantizers.append(tensor_quantizer)
+        # Create quantizer variables and quantizers for outputs if not yet existing
+        if self.output_quantizers is None:
+            self.output_quantizers = []
+            for i in range(self._num_outputs):
+                self.output_quantizers.append(TensorQuantizer(self._layer_to_wrap.name + '_output_quantizer_' + str(i),
+                                                              libpymo.TensorQuantizerOpMode.updateStats,
+                                                              MAP_QUANT_SCHEME_TO_PYMO[
+                                                                  self._activation_quant_settings.quant_scheme],
+                                                              MAP_ROUND_MODE_TO_PYMO[
+                                                                  self._activation_quant_settings.round_mode],
+                                                              self._activation_quant_settings.bitwidth,
+                                                              self._activation_quant_settings.is_symmetric,
+                                                              self._activation_quant_settings.use_strict_symmetric,
+                                                              self._activation_quant_settings.use_unsigned_symmetric))
+
+        # Create quantizer variables and quantizers for params if not yet existing
+        if self.param_quantizers is None:
+            self.param_quantizers = []
+            for weight in self._layer_to_wrap.weights:
+                weight_name = weight.name.split(':')[0]
+                self.param_quantizers.append(TensorQuantizer(weight_name,
+                                                             libpymo.TensorQuantizerOpMode.oneShotQuantizeDequantize,
+                                                             MAP_QUANT_SCHEME_TO_PYMO[
+                                                                 self._activation_quant_settings.quant_scheme],
+                                                             MAP_ROUND_MODE_TO_PYMO[
+                                                                 self._activation_quant_settings.round_mode],
+                                                             self._param_quant_settings.bitwidth,
+                                                             self._param_quant_settings.is_symmetric,
+                                                             self._param_quant_settings.use_strict_symmetric,
+                                                             self._param_quant_settings.use_unsigned_symmetric))
 
     def get_config(self):
         """ Override get_config """
@@ -257,7 +284,10 @@ class QcQuantizeWrapper(tf.keras.layers.Layer):
                 "param_quant_settings": self._param_quant_settings,
                 "num_inputs": self._num_inputs,
                 "num_outputs": self._num_outputs,
-                "name": self.name}
+                "name": self.name,
+                "input_quantizers": self.input_quantizers,
+                "output_quantizers": self.output_quantizers,
+                "param_quantizers": self.param_quantizers}
 
     # pylint: disable=arguments-differ
     def call(self, inputs):
@@ -279,11 +309,11 @@ class QcQuantizeWrapper(tf.keras.layers.Layer):
         """ Quantize parameters """
         for idx, param in enumerate(self._layer_to_wrap.weights):
             param_val = tf.keras.backend.get_value(param)
-            # Perform parameter quantization here
-            quantized_param = param_val
+            quantized_param = self.param_quantizers[idx](param_val)
             self._layer_to_wrap.weights[idx].assign(quantized_param)
 
-    def _quantize_activation(self, activation: Union[tf.Tensor, List], quantizers: List[TensorQuantizer]) -> \
+    @staticmethod
+    def _quantize_activation(activation: Union[tf.Tensor, List], quantizers: List[TensorQuantizer]) -> \
             Union[tf.Tensor, List]:
         """
         Quantize activation
@@ -300,16 +330,7 @@ class QcQuantizeWrapper(tf.keras.layers.Layer):
             raise AssertionError
         quantized_activations = []
         for idx, tensor in enumerate(activation):
-            # pylint: disable=unsubscriptable-object
-            quantizer_info = self.quantizer_info_dict[quantizers[idx]]
-            quantized_tensor = qcops.qc_quantize(name='qc_quantize_op', in_tensor=tensor,
-                                                 op_mode=quantizer_info.op_mode_var,
-                                                 tensor_quantizer_reference=libpymo.PtrToInt64(
-                                                     quantizers[idx].tensor_quantizer),
-                                                 encoding_min=quantizer_info.encoding_min_var,
-                                                 encoding_max=quantizer_info.encoding_max_var,
-                                                 bit_width=quantizers[idx].bitwidth,
-                                                 use_symmetric_encoding=quantizers[idx].is_symmetric)
+            quantized_tensor = quantizers[idx](tensor)
             quantized_activations.append(quantized_tensor)
         if len(quantized_activations) == 1:
             quantized_activations = quantized_activations[0]
