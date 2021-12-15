@@ -51,12 +51,13 @@ import onnx
 
 from torchvision import models
 from aimet_common.defs import QuantScheme
-from aimet_torch.elementwise_ops import Multiply
+from aimet_torch.elementwise_ops import Multiply, Add
 from aimet_torch.examples.test_models import TwoLayerBidirectionalLSTMModel, SingleLayerRNNModel, \
     TwoLayerBidirectionaRNNModel, TwoLayerBidirectionalGRUModel
 
 import libpymo
 from aimet_torch.meta.connectedgraph import ConnectedGraph
+from aimet_torch import transformer_utils
 from aimet_torch.onnx_utils import OnnxExportApiArgs
 from aimet_torch.qc_quantize_recurrent import QcQuantizeRecurrent
 from aimet_torch.quantsim import QuantizationSimModel, check_accumulator_overflow
@@ -2131,3 +2132,55 @@ class TestQuantizationSimLearnedGrid:
         with open('./data/prelu_model.encodings') as json_file:
             encoding_data = json.load(json_file)
         assert 'prelu.weight' in encoding_data['param_encodings'].keys()
+
+    def test_transformer_mask_override(self):
+        """
+        test logic to override mask for a custom block with mask op
+        :return:
+        """
+
+        class AttnBlock(nn.Module):
+
+            def __init__(self):
+                super(AttnBlock, self).__init__()
+
+                self.add = elementwise_ops.Add()
+                self.softmax = nn.LogSoftmax(dim=1)
+
+            def forward(self, x1, x2):
+
+                x = self.add(x1, x2)
+                return self.softmax(x)
+
+        class DummyAttnBlockModel(nn.Module):
+            def __init__(self):
+                super(DummyAttnBlockModel, self).__init__()
+                self.block = AttnBlock()
+
+            def forward(self, x1, x2):
+                return self.block(x1, x2)
+
+        dummy_input = (torch.FloatTensor(32, 1, 100, 100).uniform_(-6000, -4000),
+                       torch.FloatTensor(32, 1, 100, 100).uniform_(-5000, -4000))
+
+        def forward_pass(sim_model, _):
+            sim_model.eval()
+            with torch.no_grad():
+                sim_model(*dummy_input)
+
+        # use some dummy custom block type
+        model = DummyAttnBlockModel()
+        sim = QuantizationSimModel(model, dummy_input=dummy_input)
+        sim.compute_encodings(forward_pass, None)
+        old_encoding_min = sim.model.block.add.output_quantizer.encoding.min
+
+        # use override registration function
+        transformer_utils.register_attention_mask_override('AttnBlock', 'add')
+
+        # compute encodings again to check override takes effect
+        sim.compute_encodings(forward_pass, None)
+        new_encoding_min = sim.model.block.add.output_quantizer.encoding.min
+
+        # validate override
+        assert old_encoding_min != new_encoding_min
+        assert new_encoding_min == -6

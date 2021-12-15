@@ -56,7 +56,7 @@ from aimet_torch.quantsim_config.quantsim_config import QuantSimConfigurator
 from aimet_torch.qc_quantize_op import QcQuantizeStandAloneBase, QcQuantizeWrapper, QcQuantizeOpMode, \
     StaticGridQuantWrapper, LearnedGridQuantWrapper
 from aimet_torch.tensor_quantizer import StaticGridTensorQuantizer
-from aimet_torch import torchscript_utils, utils
+from aimet_torch import torchscript_utils, utils, transformer_utils
 from aimet_torch.onnx_utils import OnnxSaver, OnnxExportApiArgs
 from aimet_torch.meta.connectedgraph import ConnectedGraph
 from aimet_torch.qc_quantize_recurrent import QcQuantizeRecurrent
@@ -259,6 +259,8 @@ class QuantizationSimModel:
                 layer.set_mode(QcQuantizeOpMode.ACTIVE)
 
         self._replace_wrappers_for_quantize_dequantize()
+
+        self._clamp_transformer_attention_mask_encoding()
 
     @classmethod
     def set_mode_for_recurrent_module(cls, layer: QcQuantizeRecurrent, name: str):
@@ -485,6 +487,31 @@ class QuantizationSimModel:
             device = utils.get_device(self.model)
 
             self._replace_quantization_wrapper(self.model, device)
+
+    def _clamp_transformer_attention_mask_encoding(self):
+        """
+        clamps the quantizer encoding min associated with mask adder
+        op within a attention head.
+        :return:
+        """
+
+        supported_attn_type_mask_dict = transformer_utils.get_supported_attention_types()
+        # find an attention block
+        for module in self.model.modules():
+            # pylint: disable=protected-access
+            module_name = type(module)._get_name(module)
+
+            if module_name in supported_attn_type_mask_dict:
+                for name, sub_module in module.named_modules():
+                    # Find mask add op (input op to SoftMax) within attention head unit
+                    if name is supported_attn_type_mask_dict[module_name]:
+                        # if this quantizer is enabled, clamp the min value
+                        if isinstance(sub_module, QcQuantizeWrapper) and sub_module.output_quantizer.enabled:
+                            logger.info("Encoding min {%s} before clamp = %d ", name, sub_module.output_quantizer.encoding.min)
+                            sub_module.output_quantizer.encoding.min = max(sub_module.output_quantizer.encoding.min,
+                                                                           transformer_utils.MASK_OVERRIDE_VALUE)
+                            logger.info("Encoding min {%s} after clamp = %d ", name, sub_module.output_quantizer.encoding.min)
+                            sub_module.output_quantizer.freeze_encoding()
 
     @staticmethod
     def _validate_quantsim_inputs(quant_scheme: Union[str, QuantScheme], rounding_mode: str, default_output_bw: int,
