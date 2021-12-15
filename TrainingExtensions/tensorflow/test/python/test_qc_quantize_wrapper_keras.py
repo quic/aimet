@@ -34,12 +34,13 @@
 #  @@-COPYRIGHT-END-@@
 # =============================================================================
 import tensorflow as tf
-from tensorflow_model_optimization.python.core.quantization.keras.graph_transformations import model_transformer
 import numpy as np
 from packaging import version
+if version.parse(tf.version.VERSION) >= version.parse("2.00"):
+    from tensorflow_model_optimization.python.core.quantization.keras.graph_transformations import model_transformer
 
-from aimet_tensorflow.keras.quant_sim.qc_quantize_wrapper import QcQuantizeWrapper, QuantizeWrapperTransform, \
-    QuantizerSettings
+    from aimet_tensorflow.keras.quant_sim.qc_quantize_wrapper import QcQuantizeWrapper, QuantizeWrapperTransform, \
+        QuantizerSettings
 import libpymo
 
 def dense_functional():
@@ -72,20 +73,20 @@ def test_wrapper():
         x = QcQuantizeWrapper(tf.keras.layers.Lambda(lambda x: x),
                               QuantizerSettings(8, 'nearest', 'tf', False, False, False),
                               QuantizerSettings(8, 'nearest', 'tf', False, False, False))(inp)
-        model = tf.keras.Model(inputs=inp, outputs=x, name="dense_with_wrapper")
+        model = tf.keras.Model(inputs=inp, outputs=x)
 
         rand_inp = np.random.randn(100, 2) * 10.0
         orig_out = model.predict(rand_inp)
         encoding = model.layers[1].input_quantizers[0].compute_encoding()
-        model.layers[1].quantizer_info_dict[model.layers[1].input_quantizers[0]].encoding_min_var.assign(encoding.min)
-        model.layers[1].quantizer_info_dict[model.layers[1].input_quantizers[0]].encoding_max_var.assign(encoding.max)
+        model.layers[1].input_quantizers[0]._encoding_min.assign(encoding.min)
+        model.layers[1].input_quantizers[0]._encoding_max.assign(encoding.max)
         assert model.layers[1].input_quantizers[0].tensor_quantizer.isEncodingValid
 
         # Check that before configuring op mode var to quantizeDequantize, the model output remains same
         quant_out = model.predict(rand_inp)
         assert np.array_equal(orig_out, quant_out)
 
-        model.layers[1].quantizer_info_dict[model.layers[1].input_quantizers[0]].op_mode_var.assign(
+        model.layers[1].input_quantizers[0]._quantizer_mode.assign(
             int(libpymo.TensorQuantizerOpMode.quantizeDequantize))
         quant_out = model.predict(rand_inp)
         assert not np.array_equal(orig_out, quant_out)
@@ -112,13 +113,26 @@ def test_functional_model_with_wrapper():
                                                QuantizerSettings(8, 'nearest', 'tf', False, False, False),
                                                name_to_layer_map)]
         new_model, _ = model_transformer.ModelTransformer(model, transforms).transform()
+        assert len(new_model.layers[1].input_quantizers) == 1
+        assert len(new_model.layers[1].output_quantizers) == 1
+        assert len(new_model.layers[1].param_quantizers) == 2
+        assert len(new_model.layers[2].input_quantizers) == 1
+        assert len(new_model.layers[2].output_quantizers) == 1
+        assert len(new_model.layers[2].param_quantizers) == 0
 
         # Test that model output remains same prior to compute encodings
+        # Disable param quantizers first, otherwise one shot quant/dequant will affect output
+        new_model.layers[1].param_quantizers[0]._quantizer_mode.assign(3)
+        new_model.layers[1].param_quantizers[1]._quantizer_mode.assign(3)
         quant_out = new_model.predict(rand_inp)
         assert np.array_equal(orig_out, quant_out)
 
-        new_model.layers[1].input_quantizers[0].compute_encoding()
-        new_model.layers[1].quantizer_info_dict[new_model.layers[1].input_quantizers[0]].op_mode_var.assign(
+        new_model.layers[1].param_quantizers[0]._quantizer_mode.assign(1)
+        new_model.layers[1].param_quantizers[1]._quantizer_mode.assign(1)
+        encoding = new_model.layers[1].input_quantizers[0].compute_encoding()
+        new_model.layers[1].input_quantizers[0]._quantizer_mode.assign(
             int(libpymo.TensorQuantizerOpMode.quantizeDequantize))
+        new_model.layers[1].input_quantizers[0]._encoding_min.assign(encoding.min)
+        new_model.layers[1].input_quantizers[0]._encoding_max.assign(encoding.max)
         quant_out = new_model.predict(rand_inp)
         assert not np.array_equal(orig_out, quant_out)
