@@ -46,9 +46,9 @@ import torch
 from torch.utils.data import DataLoader, Dataset
 from torchvision import datasets, transforms
 
-from aimet_common.defs import QuantScheme
+from aimet_common.defs import QuantScheme, QuantizationDataType
 from aimet_common.utils import AimetLogger
-from aimet_torch.tensor_quantizer import QuantizationDataType, MAP_QUANT_SCHEME_TO_PYMO
+from aimet_torch.tensor_quantizer import MAP_QUANT_SCHEME_TO_PYMO
 import libpymo
 
 

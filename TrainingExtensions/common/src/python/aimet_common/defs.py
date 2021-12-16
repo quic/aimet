@@ -319,3 +319,8 @@ class AdaroundConstants:
 
     GAMMA = -0.1
     ZETA = 1.1
+
+class QuantizationDataType(Enum):
+    """ Enumeration of tensor quantizer data types supported """
+    int = 1
+    float = 2

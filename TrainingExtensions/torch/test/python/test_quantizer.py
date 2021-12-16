@@ -50,8 +50,10 @@ import onnx
 
 
 from torchvision import models
-from aimet_common.defs import QuantScheme
-from aimet_torch.elementwise_ops import Multiply, Add
+
+from aimet_common.defs import QuantScheme, QuantizationDataType
+from aimet_torch.elementwise_ops import Multiply
+
 from aimet_torch.examples.test_models import TwoLayerBidirectionalLSTMModel, SingleLayerRNNModel, \
     TwoLayerBidirectionaRNNModel, TwoLayerBidirectionalGRUModel
 
@@ -63,12 +65,10 @@ from aimet_torch.qc_quantize_recurrent import QcQuantizeRecurrent
 from aimet_torch.quantsim import QuantizationSimModel, check_accumulator_overflow
 from aimet_torch.quantsim_straight_through_grad import compute_dloss_by_dx
 from aimet_torch import utils, elementwise_ops
-from aimet_torch.tensor_quantizer import QuantizationDataType
 
 from aimet_torch.qc_quantize_op import QcQuantizeWrapper, QcQuantizeStandalone, MAP_ROUND_MODE_TO_PYMO, \
     StaticGridQuantWrapper, QcQuantizeOpMode, LearnedGridQuantWrapper
-from aimet_torch.tensor_quantizer import StaticGridPerChannelQuantizer, StaticGridPerTensorQuantizer, \
-    QuantizationDataType
+from aimet_torch.tensor_quantizer import StaticGridPerChannelQuantizer, StaticGridPerTensorQuantizer
 from aimet_common.utils import AimetLogger
 
 logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Test)
