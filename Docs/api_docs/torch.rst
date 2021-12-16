@@ -8,6 +8,7 @@ AIMET PyTorch APIs
    :maxdepth: 1
 
    PyTorch Model Guidelines<torch_model_guidelines>
+   PyTorch Model Preparer API <torch_model_preparer>
    PyTorch Quantization API<torch_quantization>
    PyTorch Model Compression API<torch_compress>
    PyTorch Model Visualization API for Compression<torch_visualization_compression>
