@@ -42,6 +42,7 @@ from typing import List, Dict
 from enum import Enum
 
 import torch
+import aimet_common.defs
 from aimet_common.defs import QuantScheme
 from aimet_common.utils import AimetLogger
 import aimet_torch.quantsim_straight_through_grad as ste
@@ -56,13 +57,6 @@ MAP_QUANT_SCHEME_TO_PYMO = {QuantScheme.post_training_tf_enhanced: libpymo.Quant
 
 _logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Quant)
 
-
-class QuantizationDataType(Enum):
-    """ Enumeration of tensor quantizer data types supported """
-    int = 1
-    float = 2
-
-
 class TensorQuantizer:
     """
     Base class for Simulation of quantization for a given tensor. This tensor can be a parameter in the model or an
@@ -71,7 +65,7 @@ class TensorQuantizer:
 
     def __init__(self, bitwidth: int, round_mode: str, quant_scheme: QuantScheme,
                  use_symmetric_encodings: bool, enabled_by_default: bool,
-                 data_type: QuantizationDataType = QuantizationDataType.int):
+                 data_type: aimet_common.defs.QuantizationDataType = aimet_common.defs.QuantizationDataType.int):
         """
         Constructor
         :param bitwidth: Quantization bitwidth
@@ -112,7 +106,8 @@ class StaticGridTensorQuantizer(TensorQuantizer):
     """
 
     def __init__(self, bitwidth: int, round_mode: str, quant_scheme: QuantScheme, use_symmetric_encodings: bool,
-                 enabled_by_default: bool, data_type: QuantizationDataType = QuantizationDataType.int):
+                 enabled_by_default: bool,
+                 data_type: aimet_common.defs.QuantizationDataType = aimet_common.defs.QuantizationDataType.int):
         """
         Constructor
         :param bitwidth: Quantization bitwidth
@@ -202,7 +197,7 @@ class StaticGridTensorQuantizer(TensorQuantizer):
         """
         if self.enabled and not self._is_encoding_frozen:
             self._encoding = []
-            if self.data_type == QuantizationDataType.float:
+            if self.data_type == aimet_common.defs.QuantizationDataType.float:
                 self._encoding = None
             else:
                 for op in self._cppOp:
@@ -266,7 +261,8 @@ class StaticGridPerTensorQuantizer(StaticGridTensorQuantizer):
     """
 
     def __init__(self, bitwidth: int, round_mode: str, quant_scheme: QuantScheme, use_symmetric_encodings: bool,
-                 enabled_by_default: bool, data_type: QuantizationDataType = QuantizationDataType.int):
+                 enabled_by_default: bool,
+                 data_type: aimet_common.defs.QuantizationDataType = aimet_common.defs.QuantizationDataType.int):
         """
         Constructor
         :param bitwidth: Quantization bitwidth
@@ -322,7 +318,8 @@ class StaticGridPerChannelQuantizer(StaticGridTensorQuantizer):
         :param ch_axis: Channel Axis to use for per-channel quantization
         """
         super(StaticGridPerChannelQuantizer, self).__init__(bitwidth, round_mode, quant_scheme, use_symmetric_encodings,
-                                                            enabled_by_default, data_type=QuantizationDataType.int)
+                                                            enabled_by_default,
+                                                            data_type=aimet_common.defs.QuantizationDataType.int)
         quant_scheme = MAP_QUANT_SCHEME_TO_PYMO[quant_scheme]
         self._cppOp = [AimetTensorQuantizer.AimetTensorQuantizer(quant_scheme) for _ in range(num_channels)]
         self._ch_axis = ch_axis
@@ -382,7 +379,7 @@ class LearnedGridTensorQuantizer(TensorQuantizer):
         return n, p
 
     def __init__(self, bitwidth: int, round_mode: str, quant_scheme: QuantScheme, use_symmetric_encodings: bool,
-                 enabled_by_default: bool, data_type: QuantizationDataType):
+                 enabled_by_default: bool, data_type: aimet_common.defs.QuantizationDataType):
         """
         Constructor
         :param bitwidth: Quantization bitwidth
@@ -392,7 +389,7 @@ class LearnedGridTensorQuantizer(TensorQuantizer):
         :param enabled_by_default: True if quantization of tensor is enabled.  False otherwise.
         """
 
-        if data_type != QuantizationDataType.int:
+        if data_type != aimet_common.defs.QuantizationDataType.int:
             raise ValueError('Only QuantizationDataType.int is supported for LearnedGridTensorQuantizer')
 
         super(LearnedGridTensorQuantizer, self).__init__(bitwidth, round_mode, quant_scheme, use_symmetric_encodings,
@@ -675,7 +672,7 @@ class QuantizeDequantize(torch.autograd.Function):
         get the new tensor
         """
         # pylint:disable = protected-access
-        if tensor_quantizer.data_type == QuantizationDataType.float:
+        if tensor_quantizer.data_type == aimet_common.defs.QuantizationDataType.float:
             if tensor_quantizer.bitwidth != 16:
                 raise ValueError('float data_type only supports bitwidth=16')
             quantized_tensor = tensor.half()
@@ -689,7 +686,7 @@ class QuantizeDequantize(torch.autograd.Function):
     def _per_channel_quantize_dequantize(tensor, tensor_quantizer, round_mode):
         quantized_tensors = []
 
-        if tensor_quantizer.data_type == QuantizationDataType.float:
+        if tensor_quantizer.data_type == aimet_common.defs.QuantizationDataType.float:
             raise ValueError('float data_type is not supported for per channel quantize-dequantize')
 
         # pylint:disable = protected-access
@@ -733,7 +730,7 @@ class QuantizeDequantize(torch.autograd.Function):
     @staticmethod
     def backward(ctx, output_grad):
         tensor_quantizer = ctx.tensor_quantizer
-        if tensor_quantizer.enabled and tensor_quantizer.data_type == QuantizationDataType.int:
+        if tensor_quantizer.enabled and tensor_quantizer.data_type == aimet_common.defs.QuantizationDataType.int:
             tensor = ctx.saved_tensors
             # pylint: disable=protected-access
             if len(tensor_quantizer._cppOp) > 1:
@@ -782,3 +779,9 @@ class Quantize(torch.autograd.Function):
     def backward(ctx, output_grad):
         _logger.error('Backward pass for quantize only not implemented')
         raise AssertionError
+
+# TODO Remove the redefenition of Enum
+class QuantizationDataType(Enum):
+    """ Enumeration of tensor quantizer data types supported """
+    int = 1
+    float = 2

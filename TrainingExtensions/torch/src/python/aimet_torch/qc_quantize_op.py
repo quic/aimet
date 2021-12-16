@@ -45,14 +45,13 @@ from torch import nn
 
 import libpymo
 from aimet_common.utils import AimetLogger
-from aimet_common.defs import QuantScheme
+from aimet_common.defs import QuantScheme, QuantizationDataType
 from aimet_torch import utils
 from aimet_torch.tensor_quantizer import StaticGridPerTensorQuantizer, StaticGridPerChannelQuantizer
-from aimet_torch.tensor_quantizer import LearnedGridTensorQuantizer, ParameterQuantizer, QuantizationDataType
+from aimet_torch.tensor_quantizer import LearnedGridTensorQuantizer, ParameterQuantizer
 import aimet_torch.quantsim_straight_through_grad as ste
 
 from aimet_torch.tensor_quantizer import MAP_QUANT_SCHEME_TO_PYMO
-
 
 MAP_ROUND_MODE_TO_PYMO = {'nearest': libpymo.RoundingMode.ROUND_NEAREST,
                           'stochastic': libpymo.RoundingMode.ROUND_STOCHASTIC}
