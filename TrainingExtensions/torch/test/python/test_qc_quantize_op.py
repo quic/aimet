@@ -41,11 +41,13 @@ import pytest
 import numpy as np
 import torch
 
-from aimet_torch.qc_quantize_op import StaticGridQuantWrapper, LearnedGridQuantWrapper, SteGatingFuncForParameters, QcQuantizeOpMode
+from aimet_common.defs import QuantizationDataType
+
+from aimet_torch.qc_quantize_op import StaticGridQuantWrapper, LearnedGridQuantWrapper, SteGatingFuncForParameters, \
+    QcQuantizeOpMode
 from aimet_torch.qc_quantize_op import QuantScheme, MAP_ROUND_MODE_TO_PYMO
 from aimet_torch.tensor_quantizer import StaticGridPerTensorQuantizer, StaticGridPerChannelQuantizer
 from aimet_torch.tensor_quantizer import LearnedGridTensorQuantizer, ParameterQuantizer
-from aimet_torch.tensor_quantizer import QuantizationDataType
 import libpymo
 
 

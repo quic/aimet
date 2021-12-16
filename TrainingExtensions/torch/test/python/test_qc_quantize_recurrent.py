@@ -44,10 +44,9 @@ import tempfile
 from torch.nn.utils.rnn import pack_padded_sequence
 
 import libpymo
-from aimet_common.defs import QuantScheme
+from aimet_common.defs import QuantScheme, QuantizationDataType
 from aimet_common.utils import AimetLogger
 from aimet_torch.qc_quantize_recurrent import QcQuantizeRecurrent
-from aimet_torch.tensor_quantizer import QuantizationDataType
 
 logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Test)
 

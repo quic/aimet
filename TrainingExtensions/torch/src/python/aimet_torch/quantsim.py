@@ -48,7 +48,7 @@ import torch
 import onnx
 
 from aimet_common.utils import AimetLogger, save_json_yaml
-from aimet_common.defs import QuantScheme
+from aimet_common.defs import QuantScheme, QuantizationDataType
 from aimet_common.quantsim import encoding_version
 from aimet_common.quant_utils import get_conv_accum_bounds
 
@@ -60,7 +60,6 @@ from aimet_torch import torchscript_utils, utils, transformer_utils
 from aimet_torch.onnx_utils import OnnxSaver, OnnxExportApiArgs
 from aimet_torch.meta.connectedgraph import ConnectedGraph
 from aimet_torch.qc_quantize_recurrent import QcQuantizeRecurrent
-from aimet_torch.tensor_quantizer import QuantizationDataType
 
 import libpymo
 

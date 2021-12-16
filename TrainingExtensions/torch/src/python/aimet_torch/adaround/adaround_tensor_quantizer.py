@@ -42,9 +42,8 @@ import torch
 import torch.nn
 
 # Import AIMET specific modules
-from aimet_common.defs import AdaroundConstants
-from aimet_torch.tensor_quantizer import TensorQuantizer, QuantizationDataType
-
+from aimet_common.defs import AdaroundConstants, QuantizationDataType
+from aimet_torch.tensor_quantizer import TensorQuantizer
 
 class AdaroundTensorQuantizer(TensorQuantizer):
     """
