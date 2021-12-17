@@ -6,10 +6,15 @@
 AIMET PyTorch ModelPreparer API
 ===============================
 
-AIMET PyTorch ModelPreparer API uses new graph transformation feature available in PyTorch 1.9+ version and
-automate model definition changes for example changing functional to module for activation functions, elementwise
-functions and unrolling into independent modules when modules are reused. AIMET PyTorch ModelPreparer API requires
-minimum PyTorch 1.9 version.
+AIMET PyTorch ModelPreparer API uses new graph transformation feature available in PyTorch 1.9+ version and automates
+model definition changes required by user. For example, it changes torch.nn.functional defined in forward pass to
+torch.nn.Module for activation and elementwise functions. Also, when torch.nn.Module type modules are reused,
+it unrolls into independent modules.
+
+Users are strongly encouraged to use AIMET PyTorch ModelPreparer API first and then use the returned model as input
+to all the AIMET Quantization features.
+
+AIMET PyTorch ModelPreparer API requires minimum PyTorch 1.9 version.
 
 Top-level API
 =============
