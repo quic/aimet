@@ -43,12 +43,11 @@ from typing import Union, List, Tuple, Dict
 import os
 import copy
 from collections import defaultdict
-
 import torch
 import torch.nn as nn
 import torch.onnx.symbolic_caffe2
-
 import onnx
+from packaging import version
 
 from aimet_common.utils import AimetLogger
 import aimet_torch.utils
@@ -104,23 +103,43 @@ pytorch_functional_name_to_onnx_dict = {
     'div': 'Div'
 }
 
-onnx_subgraph_op_to_pytorch_module_param_name = {
-    torch.nn.GroupNorm:
-        {
-            # '#depth', 'op_type': {input_index: torch module parameter name}
-            ('#2', 'Mul'):  {1: 'weight'},
-            ('#3.end', 'Add'):  {1: 'bias'}
-        },
-    torch.nn.Linear:
-        {
-            ('', 'MatMul'): {1: 'weight'},
-            ('#1.end', 'Add'): {1: 'bias'}
-        },
-    torch.nn.PReLU:
-        {
-            ('', 'PRelu'): {1: 'weight'}
-        }
-}
+
+if version.parse(torch.__version__) >= version.parse("1.9"):
+    onnx_subgraph_op_to_pytorch_module_param_name = {
+        torch.nn.GroupNorm:
+            {
+                # '#depth', 'op_type': {input_index: torch module parameter name}
+                ('#2', 'Mul'): {1: 'weight'},
+                ('#3.end', 'Add'): {1: 'bias'}
+            },
+        torch.nn.Linear:
+            {
+                ('', 'MatMul'): {1: 'weight'},
+                ('#1.end', 'Add'): {0: 'bias'}
+            },
+        torch.nn.PReLU:
+            {
+                ('', 'PRelu'): {1: 'weight'}
+            }
+    }
+else:
+    onnx_subgraph_op_to_pytorch_module_param_name = {
+        torch.nn.GroupNorm:
+            {
+                # '#depth', 'op_type': {input_index: torch module parameter name}
+                ('#2', 'Mul'): {1: 'weight'},
+                ('#3.end', 'Add'): {1: 'bias'}
+            },
+        torch.nn.Linear:
+            {
+                ('', 'MatMul'): {1: 'weight'},
+                ('#1.end', 'Add'): {1: 'bias'}
+            },
+        torch.nn.PReLU:
+            {
+                ('', 'PRelu'): {1: 'weight'}
+            }
+    }
 
 
 class OnnxExportApiArgs:

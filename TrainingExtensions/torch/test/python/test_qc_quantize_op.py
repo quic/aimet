@@ -41,7 +41,7 @@ import pytest
 import numpy as np
 import torch
 
-from aimet_torch.qc_quantize_op import StaticGridQuantWrapper, LearnedGridQuantWrapper, QcQuantizeOpMode
+from aimet_torch.qc_quantize_op import StaticGridQuantWrapper, LearnedGridQuantWrapper, SteGatingFuncForParameters, QcQuantizeOpMode
 from aimet_torch.qc_quantize_op import QuantScheme, MAP_ROUND_MODE_TO_PYMO
 from aimet_torch.tensor_quantizer import StaticGridPerTensorQuantizer, StaticGridPerChannelQuantizer
 from aimet_torch.tensor_quantizer import LearnedGridTensorQuantizer, ParameterQuantizer
@@ -490,6 +490,20 @@ class TestQcQuantizeOpStaticGrid:
                                                  data_type=QuantizationDataType.int)
         quantizer.compute_encoding()
         assert quantizer._encoding == []
+
+    def test_custom_stegatingfuncforparameters(self):
+        """
+        test SteGatingFuncForParameters function
+        """
+        inputs = torch.randn(3, requires_grad=True)
+        tensor_to_be_copied = torch.randn(3)
+        print(tensor_to_be_copied)
+        outputs = SteGatingFuncForParameters.apply(None, inputs)
+        print(outputs)
+        outputs = [out.clone() for out in outputs]
+        # After clone(), following copy operation should succeed, otherwise throws RuntimeError
+        outputs = [out.copy_(tensor_to_be_copied) for out in outputs]
+        print(outputs)
 
 
 class RoundStraightThrough(torch.autograd.Function):

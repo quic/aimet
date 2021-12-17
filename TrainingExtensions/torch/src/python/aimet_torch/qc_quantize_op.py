@@ -350,9 +350,14 @@ class StaticGridQuantWrapper(QcQuantizeWrapper):
         # Quantize the parameters
         shadow_params = self._quantize_dequantize_params()
 
-        # Save quantized parameters tensors for backward pass and perform custom bakward pass for gating parameters grad
+        # Save quantized parameters tensors for backward pass and perform custom backward pass for gating parameters grad
         # during backward pass
         quantized_inputs = SteGatingFuncForParameters.apply(self, *quantized_inputs)
+
+        # clone() the outputs of Custom function to avoid incorrect gradient calculation for in-place modification
+        # of view (view is created since Custom function's forward return input as-is)
+        quantized_inputs = [quantized_input.clone() for quantized_input in quantized_inputs]
+
         # Call the forward of the wrapped module
         wrapped_output = self._module_to_wrap(*quantized_inputs)
 
@@ -653,6 +658,10 @@ class LearnedGridQuantWrapper(QcQuantizeWrapper):
         quantized_inputs[0] = ParameterQuantizer.apply(quantized_inputs[0], self, shadow_params,
                                                        *encoding_list_for_params)
 
+        # clone() the outputs of Custom function to avoid incorrect gradient calculation for in-place modification
+        # of view (view is created since Custom function's forward return input as-is)
+        quantized_inputs[0] = quantized_inputs[0].clone()
+
         # Call the forward of the wrapped module
         wrapped_output = self._module_to_wrap(*quantized_inputs)
 
@@ -721,19 +730,17 @@ class SteGatingFuncForParameters(torch.autograd.Function):
 
     # pylint:disable = arguments-differ
     @staticmethod
-    def forward(ctx, quant_wrapper_ref, *quantized_input):
+    def forward(ctx, quant_wrapper_ref, *quantized_inputs):
         """
         Quantize-dequantize the tensor, using the saved encoding for this tensor
-        :param tensor: Tensor to quantize-dequantize
-        :param tensor_quantizer: Reference to the tensor quantizer
-        :param round_mode: Rounding mode
-        :param wrapper_ref: Reference to quantization wrapper
-        :param tensor_name: Name of tensor to be quantized-dequantized
-        :return: Resulting tensor
+        :param ctx: Context object to be used to save information for backward method
+        :param quant_wrapper_ref: Reference to quantization wrapper
+        :param quantized_inputs: Quantized input tensors
+        :return: Tensors as it is as input tensors
         """
 
         ctx.quantization_wrapper_ref = quant_wrapper_ref
-        return quantized_input
+        return quantized_inputs
 
     @staticmethod
     def backward(ctx, *output_grad):

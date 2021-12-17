@@ -524,5 +524,3 @@ class TestConnectedGraphUtils(unittest.TestCase):
         rand_inp = torch.randn(1, 3, 32, 32)
         ops_with_missing_modules = connectedgraph_utils.get_ops_with_missing_modules(model, rand_inp)
         self.assertEqual(2, len(ops_with_missing_modules))
-        self.assertTrue('relu' in ops_with_missing_modules[0])
-        self.assertTrue('matmul' in ops_with_missing_modules[1])
