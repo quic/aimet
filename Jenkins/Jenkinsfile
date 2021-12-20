@@ -135,33 +135,18 @@ pipeline {
                                     script {
                                         if ("${env.QCInternalValidation}" == "false") {
                                             // Parse CTest, Junit, or GoogleTest results
-                                            step([$class: 'XUnitBuilder', testTimeMargin: '3000', thresholdMode: THRESHOLD_OBJ.unittests_thresholds.threshold_mode,
-                                                thresholds: [
-                                                        [$class: 'FailedThreshold',
-                                                            failureNewThreshold: THRESHOLD_OBJ.unittests_thresholds.failed_thresholds.new_tests,
-                                                            failureThreshold: THRESHOLD_OBJ.unittests_thresholds.failed_thresholds.total_tests,
-                                                            unstableNewThreshold: '',
-                                                            unstableThreshold: ''],
-                                                        [$class: 'SkippedThreshold',
-                                                            failureNewThreshold: THRESHOLD_OBJ.unittests_thresholds.skipped_thresholds.new_tests,
-                                                            failureThreshold: THRESHOLD_OBJ.unittests_thresholds.skipped_thresholds.total_tests,
-                                                            unstableNewThreshold: '',
-                                                            unstableThreshold: '']],
-                                                tools: [
-                                                        [$class: 'CustomType',
-                                                            customXSL: "${XUNIT_XSL_FILE}",
-                                                            deleteOutputFiles: false,
-                                                            failIfNotNew: false,
-                                                            pattern: "**/unit_test_results/**/*.xml",
-                                                            skipNoTestFiles: true,
-                                                            stopProcessingIfError: false]
-                                                ]
-                                            ])
-                                            if (currentBuild.currentResult.equals("FAILURE")) {
-                                                // the plugin won't fail the stage.  it only sets
-                                                // the build status, so we have to fail it manually
-                                                sh "exit 1"
-                                            }
+                                            xunit thresholdMode: 2,
+                                            thresholds: [
+                                                failed(failureNewThreshold: THRESHOLD_OBJ.unittests_thresholds.failed_thresholds.new_tests,
+                                                    failureThreshold: THRESHOLD_OBJ.unittests_thresholds.failed_thresholds.total_tests,
+                                                    unstableNewThreshold: THRESHOLD_OBJ.unittests_thresholds.skipped_thresholds.new_tests,
+                                                    unstableThreshold: THRESHOLD_OBJ.unittests_thresholds.skipped_thresholds.total_tests)],
+                                            tools: [Custom(customXSL: "${XUNIT_XSL_FILE}",
+                                                        deleteOutputFiles: false,
+                                                        excludesPattern: '',
+                                                        pattern: "**/unit_test_results/**/*.xml",
+                                                        skipNoTestFiles: true,
+                                                        stopProcessingIfError: true)]
                                         }
                                     }
                                 }
@@ -252,33 +237,18 @@ pipeline {
                                     script {
                                         if ("${env.QCInternalValidation}" == "false") {
                                             // Parse CTest, Junit, or GoogleTest results
-                                            step([$class: 'XUnitBuilder', testTimeMargin: '3000', thresholdMode: THRESHOLD_OBJ.unittests_thresholds.threshold_mode,
-                                                thresholds: [
-                                                        [$class: 'FailedThreshold',
-                                                            failureNewThreshold: THRESHOLD_OBJ.unittests_thresholds.failed_thresholds.new_tests,
-                                                            failureThreshold: THRESHOLD_OBJ.unittests_thresholds.failed_thresholds.total_tests,
-                                                            unstableNewThreshold: '',
-                                                            unstableThreshold: ''],
-                                                        [$class: 'SkippedThreshold',
-                                                            failureNewThreshold: THRESHOLD_OBJ.unittests_thresholds.skipped_thresholds.new_tests,
-                                                            failureThreshold: THRESHOLD_OBJ.unittests_thresholds.skipped_thresholds.total_tests,
-                                                            unstableNewThreshold: '',
-                                                            unstableThreshold: '']],
-                                                tools: [
-                                                        [$class: 'CustomType',
-                                                            customXSL: "${XUNIT_XSL_FILE}",
-                                                            deleteOutputFiles: false,
-                                                            failIfNotNew: false,
-                                                            pattern: "**/unit_test_results/**/*.xml",
-                                                            skipNoTestFiles: true,
-                                                            stopProcessingIfError: false]
-                                                ]
-                                            ])
-                                            if (currentBuild.currentResult.equals("FAILURE")) {
-                                                // the plugin won't fail the stage.  it only sets
-                                                // the build status, so we have to fail it manually
-                                                sh "exit 1"
-                                            }
+                                            xunit thresholdMode: 2,
+                                            thresholds: [
+                                                failed(failureNewThreshold: THRESHOLD_OBJ.unittests_thresholds.failed_thresholds.new_tests,
+                                                    failureThreshold: THRESHOLD_OBJ.unittests_thresholds.failed_thresholds.total_tests,
+                                                    unstableNewThreshold: THRESHOLD_OBJ.unittests_thresholds.skipped_thresholds.new_tests,
+                                                    unstableThreshold: THRESHOLD_OBJ.unittests_thresholds.skipped_thresholds.total_tests)],
+                                            tools: [Custom(customXSL: "${XUNIT_XSL_FILE}",
+                                                        deleteOutputFiles: false,
+                                                        excludesPattern: '',
+                                                        pattern: "**/unit_test_results/**/*.xml",
+                                                        skipNoTestFiles: true,
+                                                        stopProcessingIfError: true)]
                                         }
                                     }
                                 }
@@ -369,33 +339,18 @@ pipeline {
                                     script {
                                         if ("${env.QCInternalValidation}" == "false") {
                                             // Parse CTest, Junit, or GoogleTest results
-                                            step([$class: 'XUnitBuilder', testTimeMargin: '3000', thresholdMode: THRESHOLD_OBJ.unittests_thresholds.threshold_mode,
-                                                thresholds: [
-                                                        [$class: 'FailedThreshold',
-                                                            failureNewThreshold: THRESHOLD_OBJ.unittests_thresholds.failed_thresholds.new_tests,
-                                                            failureThreshold: THRESHOLD_OBJ.unittests_thresholds.failed_thresholds.total_tests,
-                                                            unstableNewThreshold: '',
-                                                            unstableThreshold: ''],
-                                                        [$class: 'SkippedThreshold',
-                                                            failureNewThreshold: THRESHOLD_OBJ.unittests_thresholds.skipped_thresholds.new_tests,
-                                                            failureThreshold: THRESHOLD_OBJ.unittests_thresholds.skipped_thresholds.total_tests,
-                                                            unstableNewThreshold: '',
-                                                            unstableThreshold: '']],
-                                                tools: [
-                                                        [$class: 'CustomType',
-                                                            customXSL: "${XUNIT_XSL_FILE}",
-                                                            deleteOutputFiles: false,
-                                                            failIfNotNew: false,
-                                                            pattern: "**/unit_test_results/**/*.xml",
-                                                            skipNoTestFiles: true,
-                                                            stopProcessingIfError: false]
-                                                ]
-                                            ])
-                                            if (currentBuild.currentResult.equals("FAILURE")) {
-                                                // the plugin won't fail the stage.  it only sets 
-                                                // the build status, so we have to fail it manually
-                                                sh "exit 1"
-                                            }
+                                            xunit thresholdMode: 2,
+                                            thresholds: [
+                                                failed(failureNewThreshold: THRESHOLD_OBJ.unittests_thresholds.failed_thresholds.new_tests,
+                                                    failureThreshold: THRESHOLD_OBJ.unittests_thresholds.failed_thresholds.total_tests,
+                                                    unstableNewThreshold: THRESHOLD_OBJ.unittests_thresholds.skipped_thresholds.new_tests,
+                                                    unstableThreshold: THRESHOLD_OBJ.unittests_thresholds.skipped_thresholds.total_tests)],
+                                            tools: [Custom(customXSL: "${XUNIT_XSL_FILE}",
+                                                        deleteOutputFiles: false,
+                                                        excludesPattern: '',
+                                                        pattern: "**/unit_test_results/**/*.xml",
+                                                        skipNoTestFiles: true,
+                                                        stopProcessingIfError: true)]
                                         }
                                     }
                                 }
@@ -485,33 +440,18 @@ pipeline {
                                     script {
                                         if ("${env.QCInternalValidation}" == "false") {
                                             // Parse CTest, Junit, or GoogleTest results
-                                            step([$class: 'XUnitBuilder', testTimeMargin: '3000', thresholdMode: THRESHOLD_OBJ.unittests_thresholds.threshold_mode,
-                                                thresholds: [
-                                                        [$class: 'FailedThreshold',
-                                                            failureNewThreshold: THRESHOLD_OBJ.unittests_thresholds.failed_thresholds.new_tests,
-                                                            failureThreshold: THRESHOLD_OBJ.unittests_thresholds.failed_thresholds.total_tests,
-                                                            unstableNewThreshold: '',
-                                                            unstableThreshold: ''],
-                                                        [$class: 'SkippedThreshold',
-                                                            failureNewThreshold: THRESHOLD_OBJ.unittests_thresholds.skipped_thresholds.new_tests,
-                                                            failureThreshold: THRESHOLD_OBJ.unittests_thresholds.skipped_thresholds.total_tests,
-                                                            unstableNewThreshold: '',
-                                                            unstableThreshold: '']],
-                                                tools: [
-                                                        [$class: 'CustomType',
-                                                            customXSL: "${XUNIT_XSL_FILE}",
-                                                            deleteOutputFiles: false,
-                                                            failIfNotNew: false,
-                                                            pattern: "**/unit_test_results/**/*.xml",
-                                                            skipNoTestFiles: true,
-                                                            stopProcessingIfError: false]
-                                                ]
-                                            ])
-                                            if (currentBuild.currentResult.equals("FAILURE")) {
-                                                // the plugin won't fail the stage.  it only sets 
-                                                // the build status, so we have to fail it manually
-                                                sh "exit 1"
-                                            }
+                                            xunit thresholdMode: 2,
+                                            thresholds: [
+                                                failed(failureNewThreshold: THRESHOLD_OBJ.unittests_thresholds.failed_thresholds.new_tests,
+                                                    failureThreshold: THRESHOLD_OBJ.unittests_thresholds.failed_thresholds.total_tests,
+                                                    unstableNewThreshold: THRESHOLD_OBJ.unittests_thresholds.skipped_thresholds.new_tests,
+                                                    unstableThreshold: THRESHOLD_OBJ.unittests_thresholds.skipped_thresholds.total_tests)],
+                                            tools: [Custom(customXSL: "${XUNIT_XSL_FILE}",
+                                                        deleteOutputFiles: false,
+                                                        excludesPattern: '',
+                                                        pattern: "**/unit_test_results/**/*.xml",
+                                                        skipNoTestFiles: true,
+                                                        stopProcessingIfError: true)]
                                         }
                                     }
                                 }
