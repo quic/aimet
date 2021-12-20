@@ -67,6 +67,7 @@ class ModelApi(Enum):
     """ Enum differentiating between Pytorch or Tensorflow """
     pytorch = 0
     tensorflow = 1
+    keras = 2
 
 
 class SingletonType(type):
