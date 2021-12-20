@@ -67,3 +67,11 @@ class TfModelModule(ModelModule):
     def __init__(self, model_module):
         super().__init__(model_module)
         self._api = ModelApi.tensorflow
+
+
+class KerasModelModule(ModelModule):
+    """ Keras ModelModule class to represent an op inside a Keras model """
+
+    def __init__(self, model_module):
+        super().__init__(model_module)
+        self._api = ModelApi.keras
