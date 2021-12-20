@@ -48,7 +48,7 @@ from aimet_tensorflow.keras.connectedgraph import ConnectedGraph
 
 @pytest.mark.skipif(
     version.parse(tf.version.VERSION) < version.parse("2.00"),
-    reason="Enable with TF 2.4"
+    reason="Enable with TF 2.4",
 )
 class TestConnectedGraph:
     """
@@ -70,7 +70,7 @@ class TestConnectedGraph:
     def test_simple_sequential_without_input_shape(self):
         model = test_models_keras.simple_sequential_without_input_shape()
 
-        # There's no connection information between layers before building
+        # There is no connection information between layers before building
         for layer in model.layers:
             assert not layer.inbound_nodes
 
@@ -100,7 +100,7 @@ class TestConnectedGraph:
     def test_simple_subclassing(self):
         model = test_models_keras.simple_subclassing()
 
-        # In Subclassing model, there's no connection information between layers before building
+        # In Subclassing model, there is no connection information between layers before building
         for layer in model.layers:
             assert not layer.inbound_nodes
         connected_graph = ConnectedGraph(model, (3,))
@@ -108,11 +108,17 @@ class TestConnectedGraph:
             assert layer.inbound_nodes
 
         assert len(connected_graph.ordered_ops) == 2
+        assert (
+            model.layers[0] == connected_graph.ordered_ops[0].model_module.get_module()
+        )
+        assert (
+            model.layers[1] == connected_graph.ordered_ops[1].model_module.get_module()
+        )
 
     def test_multi_input_subclassing(self):
         model = test_models_keras.multi_input_subclassing()
 
-        # In Subclassing model, there's no connection information between layers before building
+        # In Subclassing model, there is no connection information between layers before building
         for layer in model.layers:
             assert not layer.inbound_nodes
 
@@ -128,7 +134,7 @@ class TestConnectedGraph:
 
     def test_residual_subclassing(self):
         model = test_models_keras.residual_subclassing()
-        # In Subclassing model, there's no connection information between layers before building
+        # In Subclassing model, there is no connection information between layers before building
         for layer in model.layers:
             assert not layer.inbound_nodes
         connected_graph = ConnectedGraph(model, (28, 28, 3))
@@ -136,6 +142,18 @@ class TestConnectedGraph:
             assert layer.inbound_nodes
 
         assert len(connected_graph.ordered_ops) == 7
+        assert (
+            model.layers[0] == connected_graph.ordered_ops[0].model_module.get_module()
+        )
+        assert (
+            model.layers[1] == connected_graph.ordered_ops[3].model_module.get_module()
+        )
+        assert (
+            model.layers[2] == connected_graph.ordered_ops[1].model_module.get_module()
+        )
+        assert (
+            model.layers[3] == connected_graph.ordered_ops[4].model_module.get_module()
+        )
 
     def test_concat_functional(self):
         model = test_models_keras.concat_functional()
@@ -156,12 +174,19 @@ class TestConnectedGraph:
         # This is temporary result not considering SplitOps
         assert len(connected_graph.ordered_ops) == 15
 
+        product_dict = connected_graph.get_all_products()
+        assert "Conv_8_to_Add_10" in product_dict
+        assert "AveragePool_9_to_Add_10" in product_dict
+
     def test_nested_sequential(self):
         """Test building ConnectedGraph on a model constructed with nested Sequential"""
         model = test_models_keras.nested_sequential_model()
 
         connected_graph = ConnectedGraph(model, (8, 8, 3))
         assert len(connected_graph.ordered_ops) == 8
+
+        products = connected_graph.get_all_products()
+        assert "Conv_0_to_BatchNormalization_1" in products
 
     def test_nested_functional(self):
         """Test building ConnectedGraph on a model constructed with nested Functional"""
@@ -170,8 +195,16 @@ class TestConnectedGraph:
         connected_graph = ConnectedGraph(model)
         assert len(connected_graph.ordered_ops) == 5
 
+        product_dict = connected_graph.get_all_products()
+        assert "Conv_0_to_BatchNormalization_1" in product_dict
+        assert "Relu_2_to_MaxPool_3" in product_dict
+
     def test_sequential_in_functional(self):
         model = test_models_keras.sequential_in_functional()
 
         connected_graph = ConnectedGraph(model)
         assert len(connected_graph.ordered_ops) == 6
+
+        product_dict = connected_graph.get_all_products()
+        assert "BatchNormalization_1_to_Relu_2" in product_dict
+        assert "Relu_4_to_MaxPool_5" in product_dict
