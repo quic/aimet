@@ -58,7 +58,7 @@ Code Example #1 Post Training Quantization
     :language: python
     :lines: 39-46
 
-**Quantize with Range Learning**
+**Quantize and fine-tune a trained model**
 
 .. literalinclude:: ../tf_code_examples/quantization.py
     :language: python
