@@ -21,6 +21,7 @@ Enum Definition
 
 .. autoclass:: aimet_common.defs.QuantScheme
     :members:
+    :noindex:
 
 Code Examples
 =============

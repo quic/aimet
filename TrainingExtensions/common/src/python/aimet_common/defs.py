@@ -51,11 +51,17 @@ class QuantScheme(Enum):
     """ Enumeration of Quant schemes"""
 
     post_training_tf = 1
-    """ Tf scheme """
+    """ TF scheme (absolute min-max) """
+
     post_training_tf_enhanced = 2
-    """ Tf- enhanced scheme """
+    """ Tf- enhanced scheme (SQNR based approach to discard outliers) """
+
     training_range_learning_with_tf_init = 3
+    """ Learn appropriate encodings (scale/offset) during QAT. Uses TF scheme (absolute min/max) to initialize."""
+
     training_range_learning_with_tf_enhanced_init = 4
+    """ Learn appropriate encodings (scale/offset) during QAT. Uses TF-enhanced scheme (SQNR) to initialize."""
+
     training_range_learning = 5
 
 

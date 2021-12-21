@@ -118,7 +118,7 @@ class QuantizationSimModel:
 
     # pylint: disable=too-many-arguments
     def __init__(self, model: torch.nn.Module, dummy_input: Union[torch.Tensor, Tuple],
-                 quant_scheme: Union[str, QuantScheme] = QuantScheme.post_training_tf_enhanced,
+                 quant_scheme: QuantScheme = QuantScheme.post_training_tf_enhanced,
                  rounding_mode: str = 'nearest', default_output_bw: int = 8, default_param_bw: int = 8,
                  in_place: bool = False, config_file: str = None):
         """
@@ -127,14 +127,18 @@ class QuantizationSimModel:
         :param model: Model to add simulation ops to
         :param dummy_input: Dummy input to the model. Used to parse model graph. If the model has more than one input,
                             pass a tuple. User is expected to place the tensors on the appropriate device.
-        :param quant_scheme: Quantization scheme. Supported options are 'tf_enhanced' or 'tf' or using Quant Scheme Enum
-                             QuantScheme.post_training_tf or QuantScheme.post_training_tf_enhanced
+        :param quant_scheme: Quantization scheme. Supported options are QuantScheme.post_training_tf,
+                            QuantScheme.post_training_tf_enhanced (default), QuantScheme.training_range_learning_with_tf_init,
+                            training_range_learning_with_tf_enhanced_init. Note that passing a string is deprecated.
+
         :param rounding_mode: Rounding mode. Supported options are 'nearest' or 'stochastic'
         :param default_output_bw: Default bitwidth (4-31) to use for quantizing all layer inputs and outputs
         :param default_param_bw: Default bitwidth (4-31) to use for quantizing all layer parameters
         :param in_place: If True, then the given 'model' is modified in-place to add quant-sim nodes.
                 Only suggested use of this option is when the user wants to avoid creating a copy of the model
-        :param config_file: Path to Configuration file for model quantizers
+        :param config_file: Path to config file that specifies rules on how quantizers should be configured. E.g. this
+                            file can specify if parameters or activation quantization should be symmetric. If this is
+                            not specified, a default config file is used.
         """
         # Perform sanity checks on inputs
         # TODO replace default_data_type to data_type passed at construction
