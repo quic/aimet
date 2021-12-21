@@ -61,8 +61,32 @@ Enum Definition
 
 |
 
-Code Examples
-=============
+
+Code Example #1 - Post Training Quantization
+============================================
+
+**Required imports**
+
+.. literalinclude:: ../torch_code_examples/code_examples.py
+   :language: python
+   :lines: 43, 56, 52-53
+
+**Evaluation function**
+
+.. literalinclude:: ../torch_code_examples/code_examples.py
+   :language: python
+   :pyobject: evaluate_model
+
+**Quantize and fine-tune a trained model**
+
+.. literalinclude:: ../torch_code_examples/code_examples.py
+   :language: python
+   :pyobject: quantize_model
+
+|
+
+Code Example #2 - Trainable Quantization
+========================================
 
 **Required imports**
 
