@@ -43,6 +43,7 @@ from packaging import version
 
 from aimet_common.utils import AimetLogger
 from aimet_common.defs import MAP_QUANT_SCHEME_TO_PYMO, MAP_ROUND_MODE_TO_PYMO, QuantScheme
+from aimet_tensorflow.keras.quant_sim.tensor_quantizer import ActivationTensorQuantizer, ParamTensorQuantizer
 import libpymo
 # Remove version check when we upgrade to tf 2.0
 if version.parse(tf.version.VERSION) >= version.parse("2.00"):
@@ -50,19 +51,6 @@ if version.parse(tf.version.VERSION) >= version.parse("2.00"):
     from tensorflow_model_optimization.python.core.quantization.keras.graph_transformations import transforms
 
 _logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Quant)
-
-def _load_ops():
-    """
-    Function which loads the quantization op library. In order to load a graph with
-    custom quantization ops this must be called first as this provides tensorflow with
-    the required op definitions.
-
-    :return: Loaded library
-    """
-    return tf.load_op_library('libaimet_tf_ops.so')
-
-# Load the aimet ops
-qcops = _load_ops()
 
 class QuantizerSettings:
     """ Class holding quantizer settings """
@@ -166,46 +154,6 @@ class QuantizeWrapperTransform(transforms.Transform):
         """ List of custom objects used in replacement method """
         return {'QcQuantizeWrapper': QcQuantizeWrapper}
 
-class TensorQuantizer(tf.keras.layers.Layer):
-    """ Tensor quantizer class containing cpp tensor quantizer and associated attributes """
-    # pylint: disable=too-many-arguments
-    def __init__(self, name, op_mode, quant_scheme, round_mode, bitwidth, is_symmetric, use_strict_symmetric,
-                 use_unsigned_symmetric):
-        super(TensorQuantizer, self).__init__()
-        self._tensor_quantizer = libpymo.TensorQuantizer(quant_scheme, round_mode)
-        self._tensor_quantizer.setStrictSymmetric(use_strict_symmetric)
-        self._tensor_quantizer.setUnsignedSymmetric(use_unsigned_symmetric)
-        self._bitwidth = bitwidth
-        self._is_symmetric = is_symmetric
-
-        self._encoding_min = self.add_weight(name + '.encoding_min', dtype=tf.float64,
-                                             initializer=tf.constant_initializer(0.))
-        self._encoding_max = self.add_weight(name + '.encoding_max', dtype=tf.float64,
-                                             initializer=tf.constant_initializer(0.))
-        self._quantizer_mode = self.add_weight(name + '.op_mode', dtype=tf.int32, trainable=False,
-                                               initializer=tf.constant_initializer(int(op_mode)))
-
-    @property
-    def tensor_quantizer(self):
-        """ Tensor quantizer getter """
-        return self._tensor_quantizer
-
-    def compute_encoding(self):
-        """ Compute encoding for the tensor quantizer """
-        # TODO: remove last two parameters after fixing PyModelOptimizations
-        encoding = self._tensor_quantizer.computeEncoding(self._bitwidth, self._is_symmetric, False, False)
-        return encoding
-
-    # pylint: disable=arguments-differ
-    def call(self, tensor):
-        """ Forward pass for tensor quantizer """
-        return qcops.qc_quantize(name='qc_quantize_op', in_tensor=tensor,
-                                 op_mode=self._quantizer_mode,
-                                 tensor_quantizer_reference=libpymo.PtrToInt64(self._tensor_quantizer),
-                                 encoding_min=self._encoding_min,
-                                 encoding_max=self._encoding_max,
-                                 bit_width=self._bitwidth,
-                                 use_symmetric_encoding=self._is_symmetric)
 
 class QcQuantizeWrapper(tf.keras.layers.Layer):
     """ Wrapper for simulating quantization noise """
@@ -216,9 +164,10 @@ class QcQuantizeWrapper(tf.keras.layers.Layer):
                  param_quant_settings: QuantizerSettings,
                  num_inputs: int = 1,
                  num_outputs: int = 1,
-                 input_quantizers: Union[None, List[TensorQuantizer]] = None,
-                 output_quantizers: Union[None, List[TensorQuantizer]] = None,
-                 param_quantizers: Union[None, List[TensorQuantizer]] = None,
+                 input_quantizers: Union[None, List[ActivationTensorQuantizer]] = None,
+                 output_quantizers: Union[None, List[ActivationTensorQuantizer]] = None,
+                 param_quantizers: Union[None, List[ParamTensorQuantizer]] = None,
+                 shadow_params: List[tf.Variable] = None,
                  **kwargs):
         super(QcQuantizeWrapper, self).__init__(**kwargs)
         self._layer_to_wrap = layer_to_wrap
@@ -230,52 +179,58 @@ class QcQuantizeWrapper(tf.keras.layers.Layer):
         self.input_quantizers = input_quantizers
         self.output_quantizers = output_quantizers
         self.param_quantizers = param_quantizers
+        self._shadow_params = shadow_params
 
-        # Create quantizer variables and quantizers for input quantizers if not yet existing
+        # Create quantizer variables and quantizers for inputs if not yet existing
         if self.input_quantizers is None:
             self.input_quantizers = []
             for i in range(self._num_inputs):
-                self.input_quantizers.append(TensorQuantizer(self._layer_to_wrap.name + '_input_quantizer_' + str(i),
-                                                             libpymo.TensorQuantizerOpMode.updateStats,
-                                                             MAP_QUANT_SCHEME_TO_PYMO[
-                                                                 self._activation_quant_settings.quant_scheme],
-                                                             MAP_ROUND_MODE_TO_PYMO[
-                                                                 self._activation_quant_settings.round_mode],
-                                                             self._activation_quant_settings.bitwidth,
-                                                             self._activation_quant_settings.is_symmetric,
-                                                             self._activation_quant_settings.use_strict_symmetric,
-                                                             self._activation_quant_settings.use_unsigned_symmetric))
+                self.input_quantizers.append(
+                    ActivationTensorQuantizer(self._layer_to_wrap.name + '_input_quantizer_' + str(i),
+                                              MAP_QUANT_SCHEME_TO_PYMO[self._activation_quant_settings.quant_scheme],
+                                              MAP_ROUND_MODE_TO_PYMO[self._activation_quant_settings.round_mode],
+                                              self._activation_quant_settings.bitwidth,
+                                              self._activation_quant_settings.is_symmetric,
+                                              self._activation_quant_settings.use_strict_symmetric,
+                                              self._activation_quant_settings.use_unsigned_symmetric,
+                                              enabled=True))
 
         # Create quantizer variables and quantizers for outputs if not yet existing
         if self.output_quantizers is None:
             self.output_quantizers = []
             for i in range(self._num_outputs):
-                self.output_quantizers.append(TensorQuantizer(self._layer_to_wrap.name + '_output_quantizer_' + str(i),
-                                                              libpymo.TensorQuantizerOpMode.updateStats,
-                                                              MAP_QUANT_SCHEME_TO_PYMO[
-                                                                  self._activation_quant_settings.quant_scheme],
-                                                              MAP_ROUND_MODE_TO_PYMO[
-                                                                  self._activation_quant_settings.round_mode],
-                                                              self._activation_quant_settings.bitwidth,
-                                                              self._activation_quant_settings.is_symmetric,
-                                                              self._activation_quant_settings.use_strict_symmetric,
-                                                              self._activation_quant_settings.use_unsigned_symmetric))
+                self.output_quantizers.append(
+                    ActivationTensorQuantizer(self._layer_to_wrap.name + '_output_quantizer_' + str(i),
+                                              MAP_QUANT_SCHEME_TO_PYMO[self._activation_quant_settings.quant_scheme],
+                                              MAP_ROUND_MODE_TO_PYMO[self._activation_quant_settings.round_mode],
+                                              self._activation_quant_settings.bitwidth,
+                                              self._activation_quant_settings.is_symmetric,
+                                              self._activation_quant_settings.use_strict_symmetric,
+                                              self._activation_quant_settings.use_unsigned_symmetric,
+                                              enabled=True))
 
         # Create quantizer variables and quantizers for params if not yet existing
         if self.param_quantizers is None:
             self.param_quantizers = []
             for weight in self._layer_to_wrap.weights:
                 weight_name = weight.name.split(':')[0]
-                self.param_quantizers.append(TensorQuantizer(weight_name,
-                                                             libpymo.TensorQuantizerOpMode.oneShotQuantizeDequantize,
-                                                             MAP_QUANT_SCHEME_TO_PYMO[
-                                                                 self._activation_quant_settings.quant_scheme],
-                                                             MAP_ROUND_MODE_TO_PYMO[
-                                                                 self._activation_quant_settings.round_mode],
-                                                             self._param_quant_settings.bitwidth,
-                                                             self._param_quant_settings.is_symmetric,
-                                                             self._param_quant_settings.use_strict_symmetric,
-                                                             self._param_quant_settings.use_unsigned_symmetric))
+                self.param_quantizers.append(
+                    ParamTensorQuantizer(weight_name,
+                                         MAP_QUANT_SCHEME_TO_PYMO[self._param_quant_settings.quant_scheme],
+                                         MAP_ROUND_MODE_TO_PYMO[self._param_quant_settings.round_mode],
+                                         self._param_quant_settings.bitwidth,
+                                         self._param_quant_settings.is_symmetric,
+                                         self._param_quant_settings.use_strict_symmetric,
+                                         self._param_quant_settings.use_unsigned_symmetric,
+                                         enabled=True))
+
+        # This is needed since Model Transformer reconstructs the layer, with the layer to wrap weights being empty
+        # during the time of this init call.
+        # If we try to access param values on the fly during the forward pass and use them to restore parameter values,
+        # TF's static graph stores the first set of param values seen and uses them for all future forward passes.
+        # Get around this by using Tf.Variables to store param values.
+        if self._shadow_params is None:
+            self._shadow_params = [tf.Variable(param, trainable=False) for param in self._layer_to_wrap.weights]
 
     def get_config(self):
         """ Override get_config """
@@ -287,7 +242,8 @@ class QcQuantizeWrapper(tf.keras.layers.Layer):
                 "name": self.name,
                 "input_quantizers": self.input_quantizers,
                 "output_quantizers": self.output_quantizers,
-                "param_quantizers": self.param_quantizers}
+                "param_quantizers": self.param_quantizers,
+                "shadow_params": self._shadow_params}
 
     # pylint: disable=arguments-differ
     def call(self, inputs):
@@ -297,23 +253,23 @@ class QcQuantizeWrapper(tf.keras.layers.Layer):
         :param inputs: Inputs passed to the module in the forward pass
         :return: Quantized output from the wrapped module
         """
-        shadow_params = [tf.keras.backend.get_value(param) for param in self._layer_to_wrap.weights]
+        for idx, param in enumerate(self._layer_to_wrap.weights):
+            self._shadow_params[idx].assign(param)
         self._quantize_params()
         inputs = self._quantize_activation(inputs, self.input_quantizers)
         outputs = self._layer_to_wrap(inputs)
         outputs = self._quantize_activation(outputs, self.output_quantizers)
-        self._restore_shadow_params(shadow_params)
+        self._restore_shadow_params()
         return outputs
 
     def _quantize_params(self):
         """ Quantize parameters """
         for idx, param in enumerate(self._layer_to_wrap.weights):
-            param_val = tf.keras.backend.get_value(param)
-            quantized_param = self.param_quantizers[idx](param_val)
+            quantized_param = self.param_quantizers[idx](param)
             self._layer_to_wrap.weights[idx].assign(quantized_param)
 
     @staticmethod
-    def _quantize_activation(activation: Union[tf.Tensor, List], quantizers: List[TensorQuantizer]) -> \
+    def _quantize_activation(activation: Union[tf.Tensor, List], quantizers: List[ActivationTensorQuantizer]) -> \
             Union[tf.Tensor, List]:
         """
         Quantize activation
@@ -336,10 +292,22 @@ class QcQuantizeWrapper(tf.keras.layers.Layer):
             quantized_activations = quantized_activations[0]
         return quantized_activations
 
-    def _restore_shadow_params(self, shadow_params):
+    def compute_encoding(self):
+        """
+        Compute the quantization encoding for this layer
+        """
+        for quantizer in self.input_quantizers:
+            quantizer.compute_encoding()
+
+        for quantizer in self.output_quantizers:
+            quantizer.compute_encoding()
+
+        for quantizer in self.param_quantizers:
+            quantizer.compute_encoding()
+
+    def _restore_shadow_params(self):
         """
         Restore saved parameters
-        :param shadow_params: Original parameters to restore
         """
-        for idx, param in enumerate(shadow_params):
+        for idx, param in enumerate(self._shadow_params):
             self._layer_to_wrap.weights[idx].assign(param)

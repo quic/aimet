@@ -41,7 +41,6 @@ if version.parse(tf.version.VERSION) >= version.parse("2.00"):
 
     from aimet_tensorflow.keras.quant_sim.qc_quantize_wrapper import QcQuantizeWrapper, QuantizeWrapperTransform, \
         QuantizerSettings
-import libpymo
 
 def dense_functional():
     inp = tf.keras.layers.Input(shape=(5,))
@@ -69,27 +68,50 @@ class DenseSubclassing(tf.keras.Model):
 
 def test_wrapper():
     if version.parse(tf.version.VERSION) >= version.parse("2.00"):
+        test_inp = np.array([[1.5, 2.5]])
         inp = tf.keras.layers.Input(shape=(2,))
-        x = QcQuantizeWrapper(tf.keras.layers.Lambda(lambda x: x),
+        dense = tf.keras.layers.Dense(3, kernel_initializer=tf.initializers.Constant([[2.3,-1.4, .5], [-.6, 3.1, -.2]]),
+                                      bias_initializer=tf.initializers.Constant([5.0]))
+        # run forward pass on dense to generate weights
+        _ = dense(test_inp)
+        x = QcQuantizeWrapper(dense,
                               QuantizerSettings(8, 'nearest', 'tf', False, False, False),
                               QuantizerSettings(8, 'nearest', 'tf', False, False, False))(inp)
         model = tf.keras.Model(inputs=inp, outputs=x)
 
-        rand_inp = np.random.randn(100, 2) * 10.0
-        orig_out = model.predict(rand_inp)
-        encoding = model.layers[1].input_quantizers[0].compute_encoding()
-        model.layers[1].input_quantizers[0]._encoding_min.assign(encoding.min)
-        model.layers[1].input_quantizers[0]._encoding_max.assign(encoding.max)
-        assert model.layers[1].input_quantizers[0].tensor_quantizer.isEncodingValid
+        _ = model.predict(test_inp)
 
-        # Check that before configuring op mode var to quantizeDequantize, the model output remains same
-        quant_out = model.predict(rand_inp)
-        assert np.array_equal(orig_out, quant_out)
+        # Disable input quantizer and check later that quantizer mode remains passThrough, and encoding is None
+        model.layers[1].input_quantizers[0].disable()
+        model.layers[1].param_quantizers[1].disable()
+        model.layers[1].compute_encoding()
+        assert model.layers[1].input_quantizers[0].quant_mode == 3
+        assert model.layers[1].output_quantizers[0].quant_mode == 2
+        assert model.layers[1].input_quantizers[0].encoding is None
+        assert model.layers[1].output_quantizers[0].encoding is not None
 
-        model.layers[1].input_quantizers[0]._quantizer_mode.assign(
-            int(libpymo.TensorQuantizerOpMode.quantizeDequantize))
-        quant_out = model.predict(rand_inp)
-        assert not np.array_equal(orig_out, quant_out)
+        model.layers[1].output_quantizers[0].disable()
+        param_quant_only = model.predict(test_inp)
+        model.layers[1].output_quantizers[0].enable()
+        param_and_output_quant = model.predict(test_inp)
+        assert np.allclose(param_quant_only, np.array([[6.9411764145, 10.6735286713,  5.2558822632]]))
+        assert np.allclose(param_and_output_quant, np.array([[6.9482579231, 10.6735286713,  5.2739787102]]))
+
+        model.compile(optimizer=tf.keras.optimizers.Adam(learning_rate=1e-3),
+                           loss=tf.keras.losses.MeanSquaredError())
+        test_out = np.random.randn(1, 3)
+        for i in range(10):
+            starting_weights = [tf.keras.backend.get_value(param) for param in model.layers[1]._layer_to_wrap.weights]
+            model.fit(x=test_inp, y=test_out, batch_size=1)
+            weights_after_fit = [tf.keras.backend.get_value(param) for param in model.layers[1]._layer_to_wrap.weights]
+            for idx, weight in enumerate(starting_weights):
+                assert not np.array_equal(weight, weights_after_fit[idx])
+            _ = model.predict(test_inp)
+            weights_after_predict = [tf.keras.backend.get_value(param) for param in
+                                     model.layers[1]._layer_to_wrap.weights]
+            for idx, weight in enumerate(weights_after_predict):
+                assert np.array_equal(weight, weights_after_fit[idx])
+
 
 def test_functional_model_with_wrapper():
     if version.parse(tf.version.VERSION) >= version.parse("2.00"):
@@ -122,17 +144,18 @@ def test_functional_model_with_wrapper():
 
         # Test that model output remains same prior to compute encodings
         # Disable param quantizers first, otherwise one shot quant/dequant will affect output
-        new_model.layers[1].param_quantizers[0]._quantizer_mode.assign(3)
-        new_model.layers[1].param_quantizers[1]._quantizer_mode.assign(3)
+        new_model.layers[1].param_quantizers[0].disable()
+        new_model.layers[1].param_quantizers[1].disable()
         quant_out = new_model.predict(rand_inp)
         assert np.array_equal(orig_out, quant_out)
 
-        new_model.layers[1].param_quantizers[0]._quantizer_mode.assign(1)
-        new_model.layers[1].param_quantizers[1]._quantizer_mode.assign(1)
-        encoding = new_model.layers[1].input_quantizers[0].compute_encoding()
-        new_model.layers[1].input_quantizers[0]._quantizer_mode.assign(
-            int(libpymo.TensorQuantizerOpMode.quantizeDequantize))
-        new_model.layers[1].input_quantizers[0]._encoding_min.assign(encoding.min)
-        new_model.layers[1].input_quantizers[0]._encoding_max.assign(encoding.max)
+        new_model.layers[1].param_quantizers[0].enable()
+        new_model.layers[1].param_quantizers[1].enable()
+
+        # Run one more forward pass after enabling param quantizers
+        _ = new_model.predict(rand_inp)
+        new_model.layers[1].compute_encoding()
+
+        assert new_model.layers[1].param_quantizers[0].encoding is not None
         quant_out = new_model.predict(rand_inp)
         assert not np.array_equal(orig_out, quant_out)
