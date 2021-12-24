@@ -42,7 +42,7 @@ export release_tag=<release_tag>
 
 Set the package download URL as follows:
 ```bash
-download_url="https://github.com/quic/aimet/releases/download/${release_tag}"
+export download_url="https://github.com/quic/aimet/releases/download/${release_tag}"
 ```
 
 Set the common suffix for the package files as follows:
