@@ -37,23 +37,31 @@ export AIMET_VARIANT=<variant_string>
 
 Replace `<release_tag>` in the steps below with the appropriate tag:
 ```bash
-release_tag=<release_tag>
+export release_tag=<release_tag>
+```
+
+Set the package download URL as follows:
+```bash
+export download_url="https://github.com/quic/aimet/releases/download/${release_tag}"
+```
+
+Set the common suffix for the package files as follows:
+> _NOTE:_ Set wheel_file_suffix to `cp36-cp36m-linux_x86_64` OR `cp37-cp37m-linux_x86_64` OR `py3-none-any` as appropriate depending on the actual wheel filename(s) on the [releases page](https://github.com/quic/aimet/releases).
+```bash
+export wheel_file_suffix="cp36-cp36m-linux_x86_64.whl"
 ```
 
 Install the AIMET packages in the order specified below:
-> _NOTE:_
->   - Python dependencies will automatically get installed.
->   - Replace `py3-none-any` with `cp36-cp36m-linux_x86_64` OR `cp37-cp37m-linux_x86_64` as appropriate depending on the actual wheel filename(s) on the [releases page](https://github.com/quic/aimet/releases).
+> _NOTE:_ Python dependencies will automatically get installed.
 ```bash
-release_tag=<release_tag>
-python3 -m pip install https://github.com/quic/aimet/releases/download/${release_tag}/AimetCommon-${AIMET_VARIANT}_${release_tag}-py3-none-any.whl
+python3 -m pip install ${download_url}/AimetCommon-${AIMET_VARIANT}_${release_tag}-${wheel_file_suffix}
 
 # Install ONE of the following depending on the variant
-python3 -m pip install https://github.com/quic/aimet/releases/download/${release_tag}/AimetTorch-${AIMET_VARIANT}_${release_tag}-py3-none-any.whl -f https://download.pytorch.org/whl/torch_stable.html
+python3 -m pip install ${download_url}/AimetTorch-${AIMET_VARIANT}_${release_tag}-${wheel_file_suffix} -f https://download.pytorch.org/whl/torch_stable.html
 # OR
-python3 -m pip install https://github.com/quic/aimet/releases/download/${release_tag}/AimetTensorflow-${AIMET_VARIANT}_${release_tag}-py3-none-any.whl
+python3 -m pip install ${download_url}/AimetTensorflow-${AIMET_VARIANT}_${release_tag}-${wheel_file_suffix}
 
-python3 -m pip install https://github.com/quic/aimet/releases/download/${release_tag}/Aimet-${AIMET_VARIANT}_${release_tag}-py3-none-any.whl
+python3 -m pip install ${download_url}/Aimet-${AIMET_VARIANT}_${release_tag}-${wheel_file_suffix}
 ```
 
 ### Install common debian packages
