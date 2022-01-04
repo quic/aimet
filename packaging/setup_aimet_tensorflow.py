@@ -62,13 +62,13 @@ package_dependency_files = ['reqs_pip_tf_common.txt']
 install_requires_list = get_dependency_packages(package_name, 'reqs_pip_tf_common.txt')
 if "--gpu" in sys.argv:
     # Create Tensorflow GPU dependency list
-    package_dependency_files.extend(['bin/reqs_pip_tf_gpu.txt', 'bin/reqs_deb_tf_gpu.txt'])
+    package_dependency_files.extend(['reqs_pip_tf_gpu.txt', 'reqs_deb_tf_gpu.txt'])
     install_requires_list.extend(get_dependency_packages(package_name, 'reqs_pip_tf_gpu.txt'))
     dependency_url_list.extend(get_dependency_urls(package_name, 'reqs_pip_tf_gpu.txt'))
     sys.argv.remove("--gpu")
 else:
     # Create Tensorflow CPU dependency list
-    package_dependency_files.extend(['bin/reqs_pip_tf_cpu.txt'])
+    package_dependency_files.extend(['reqs_pip_tf_cpu.txt'])
     install_requires_list.extend(get_dependency_packages(package_name, 'reqs_pip_tf_cpu.txt'))
     dependency_url_list.extend(get_dependency_urls(package_name, 'reqs_pip_tf_cpu.txt'))
 
