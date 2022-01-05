@@ -6,11 +6,14 @@
 AIMET PyTorch Quantization SIM API
 ==================================
 
-AIMET Quantization Sim requires the model definitions to use certain constructs and avoid others. These constraints are
-described in detail :ref:`here<api-torch-model-validator>`.
+AIMET Quantization Sim requires PyTorch model definition to follow certain guidelines. These guidelines are described
+in detail here. :ref:`Model Guidelines<api-torch-model-guidelines>`
 
-AIMET also includes a Model Validator tool to allow the users to check their model definition and find constructs that
-might need to be replaced. Please see the API and usage examples for this tool also on the same page.
+AIMET provides Model Preparer API to allow user to prepare PyTorch model for AIMET Quantization features. The API and
+usage examples are described in detail here. :ref:`Model Preparer API<api-torch-model-preparer>`
+
+AIMET also includes a Model Validator utility to allow user to check their model definition. Please see the API and
+usage examples for this utility here. :ref:`Model Validator API<api-torch-model-validator>`
 
 Top-level API
 =============
@@ -60,18 +63,25 @@ Code Examples
 
 **Required imports**
 
-.. literalinclude:: ../torch_code_examples/code_examples.py
+.. literalinclude:: ../torch_code_examples/quantsim_code_example.py
    :language: python
-   :lines: 43, 56, 52-53
+   :start-after: # Quantsim imports
+   :end-before: # End of import statements
+
+**Train function**
+
+.. literalinclude:: ../torch_code_examples/quantsim_code_example.py
+   :language: python
+   :pyobject: train
 
 **Evaluation function**
 
-.. literalinclude:: ../torch_code_examples/code_examples.py
+.. literalinclude:: ../torch_code_examples/quantsim_code_example.py
    :language: python
-   :pyobject: evaluate_model
+   :pyobject: evaluate
 
-**Quantize and fine-tune a trained model**
+**Quantize and fine-tune a quantized model (QAT)**
 
-.. literalinclude:: ../torch_code_examples/code_examples.py
+.. literalinclude:: ../torch_code_examples/quantsim_code_example.py
    :language: python
-   :pyobject: quantize_model
+   :pyobject: quantsim_example
