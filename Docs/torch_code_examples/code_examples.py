@@ -291,24 +291,6 @@ def channel_pruning_manual_mode():
     print(stats)    # Stats object can be pretty-printed easily
 
 
-def quantize_model(trainer_function):
-
-    model = mnist_torch_model.Net().to(torch.device('cuda'))
-
-    sim = QuantizationSimModel(model, default_output_bw=8, default_param_bw=8, dummy_input=torch.rand(1, 1, 28, 28),
-                               config_file='../../../TrainingExtensions/common/src/python/aimet_common/quantsim_config/'
-                                           'default_config.json')
-
-    # Quantize the untrained MNIST model
-    sim.compute_encodings(forward_pass_callback=evaluate_model, forward_pass_callback_args=5)
-
-    # Fine-tune the model's parameter using training
-    trainer_function(model=sim.model, epochs=1, num_batches=100, use_cuda=True)
-
-    # Export the model
-    sim.export(path='./', filename_prefix='quantized_mnist', dummy_input=torch.rand(1, 1, 28, 28))
-
-
 if __name__ == '__main__':
     spatial_svd_manual_mode()
     spatial_svd_auto_mode()
@@ -319,4 +301,3 @@ if __name__ == '__main__':
     channel_pruning_manual_mode()
     channel_pruning_auto_mode()
 
-    quantize_model(mnist_torch_model.train)
