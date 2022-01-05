@@ -41,7 +41,6 @@
 
 import torch
 import torch.nn.functional as F
-
 from aimet_torch.model_preparer import prepare_model
 
 # End of import statements
@@ -109,11 +108,11 @@ def model_preparer_functional_example():
     input_tensor = torch.randn(*input_shape)
 
     # Call to prepare_model API
-    model_transformed = prepare_model(model)
-    print(model_transformed)
+    prepared_model = prepare_model(model)
+    print(prepared_model)
 
     # Compare the outputs of original and transformed model
-    assert torch.allclose(model(input_tensor), model_transformed(input_tensor))
+    assert torch.allclose(model(input_tensor), prepared_model(input_tensor))
 
 
 def model_preparer_reused_example():
@@ -124,11 +123,11 @@ def model_preparer_reused_example():
     input_tensor = torch.randn(*input_shape)
 
     # Call to prepare_model API
-    model_transformed = prepare_model(model)
-    print(model_transformed)
+    prepared_model = prepare_model(model)
+    print(prepared_model)
 
     # Compare the outputs of original and transformed model
-    assert torch.allclose(model(input_tensor), model_transformed(input_tensor))
+    assert torch.allclose(model(input_tensor), prepared_model(input_tensor))
 
 
 def model_preparer_elementwise_add_example():
@@ -139,11 +138,11 @@ def model_preparer_elementwise_add_example():
     input_tensor = [torch.randn(*input_shape), torch.randn(*input_shape)]
 
     # Call to prepare_model API
-    model_transformed = prepare_model(model)
-    print(model_transformed)
+    prepared_model = prepare_model(model)
+    print(prepared_model)
 
     # Compare the outputs of original and transformed model
-    assert torch.allclose(model(*input_tensor), model_transformed(*input_tensor))
+    assert torch.allclose(model(*input_tensor), prepared_model(*input_tensor))
 
 
 if __name__ == '__main__':
