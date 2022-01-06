@@ -38,13 +38,19 @@
 """ Quantsim for Keras """
 
 from typing import Union
-from tensorflow_model_optimization.python.core.quantization.keras.graph_transformations import model_transformer
+import tensorflow as tf
+from packaging import version
 
 from aimet_common.defs import QuantScheme
 from aimet_tensorflow.keras.quant_sim.qc_quantize_wrapper import QcQuantizeWrapper, QuantizeWrapperTransform, \
     QuantizerSettings
 
-unquantizable_modules = ('InputLayer', 'QcQuantizeWrapper')
+# Remove version check when we upgrade to tf 2.0
+if version.parse(tf.version.VERSION) >= version.parse("2.00"):
+    # pylint: disable=no-name-in-module
+    from tensorflow_model_optimization.python.core.quantization.keras.graph_transformations import model_transformer
+
+unquantizable_modules = (tf.keras.layers.InputLayer, QcQuantizeWrapper)
 
 class QuantizationSimModel:
     """
@@ -56,6 +62,7 @@ class QuantizationSimModel:
     # pylint: disable=unused-argument
     def __init__(self, model, quant_scheme: Union[QuantScheme, str] = 'tf_enhanced', rounding_mode: str = 'nearest',
                  default_output_bw: int = 8, default_param_bw: int = 8, config_file: str = None):
+        self._original_model = model
         self.model = self._add_quantization_wrappers(model, quant_scheme, rounding_mode, default_output_bw,
                                                      default_param_bw)
 
@@ -69,24 +76,35 @@ class QuantizationSimModel:
         :param default_output_bw: Default bitwidth for activation quantizers
         :param default_param_bw: Default bitwidth for param quantizers
         """
-        layer_type_set = set()
+        layer_types_to_wrap = set()
+        # Need this dictionary to contain all custom objects in the model to give to transforms, even if the custom
+        # object is not to be wrapped.
+        layer_types_to_class_dict = {}
         name_to_layer_map = {}
         for layer in model.layers:
-            layer_type = layer.__class__.__name__
-            if layer_type not in unquantizable_modules:
-                layer_type_set.add(layer.__class__.__name__)
+            layer_types_to_class_dict[layer.__class__.__name__] = layer.__class__
             name_to_layer_map[layer.name] = layer
+            if layer.__class__ not in unquantizable_modules and not layer.submodules:
+                layer_types_to_wrap.add(layer.__class__)
         transforms = []
-        for layer_type in layer_type_set:
+        for layer_class in layer_types_to_wrap:
             transforms.append(
-                QuantizeWrapperTransform(layer_type,
+                QuantizeWrapperTransform(layer_class,
                                          activation_quant_settings=QuantizerSettings(default_output_bw, rounding_mode,
                                                                                      quant_scheme, False, False, False),
                                          param_quant_settings=QuantizerSettings(default_param_bw, rounding_mode,
                                                                                 quant_scheme, False, False, False),
-                                         name_to_module_map=name_to_layer_map))
+                                         name_to_module_map=name_to_layer_map,
+                                         layer_types_to_class_dict=layer_types_to_class_dict))
         model, _ = model_transformer.ModelTransformer(model, transforms).transform()
         return model
+
+    def _copy_params_to_original_model(self):
+        """ Copy parameter values from the quantized model to the original model """
+        for idx, layer in enumerate(self.model.layers):
+            if isinstance(layer, QcQuantizeWrapper):
+                # pylint: disable=protected-access
+                self._original_model.layers[idx].set_weights(layer._layer_to_wrap.get_weights())
 
     def compute_encodings(self, forward_pass_callback, forward_pass_callback_args):
         """

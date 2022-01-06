@@ -62,9 +62,10 @@ qcops = _load_ops()
 class TensorQuantizer(tf.keras.layers.Layer, abc.ABC):
     """ Tensor quantizer class containing cpp tensor quantizer and associated attributes """
     # pylint: disable=too-many-arguments
+    # pylint: disable=unused-argument
     def __init__(self, name: str, op_mode: libpymo.TensorQuantizerOpMode, quant_scheme: libpymo.QuantizationMode,
                  round_mode: libpymo.RoundingMode, bitwidth: int, is_symmetric: bool, use_strict_symmetric: bool,
-                 use_unsigned_symmetric: bool):
+                 use_unsigned_symmetric: bool, **kwargs):
         super(TensorQuantizer, self).__init__(name=name)
         self._tensor_quantizer = libpymo.TensorQuantizer(quant_scheme, round_mode)
         self._tensor_quantizer.setStrictSymmetric(use_strict_symmetric)

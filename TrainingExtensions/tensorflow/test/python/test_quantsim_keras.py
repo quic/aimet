@@ -37,8 +37,9 @@ from packaging import version
 import numpy as np
 import tensorflow as tf
 
-from aimet_tensorflow.keras.quantsim import QuantizationSimModel
 import libpymo
+if version.parse(tf.version.VERSION) >= version.parse("2.00"):
+    from aimet_tensorflow.keras.quantsim import QuantizationSimModel
 
 def dense_functional():
     inp = tf.keras.layers.Input(shape=(5,))
@@ -62,6 +63,17 @@ class DenseSubclassing(tf.keras.Model):
     def call(self, inputs, training=None, mask=None):
         x = self.linear1(inputs)
         x = self.softmax(x)
+        return x
+
+class DenseReluLayer(tf.keras.layers.Layer):
+    def __init__(self, **kwargs):
+        super(DenseReluLayer, self).__init__()
+        self.dense = tf.keras.layers.Dense(units=2)
+        self.relu = tf.keras.layers.ReLU()
+
+    def call(self, inputs):
+        x = self.dense(inputs)
+        x = self.relu(x)
         return x
 
 def test_quantsim_basic():
@@ -93,15 +105,23 @@ def test_qat():
                            loss=tf.keras.losses.MeanSquaredError())
         running_weights = [tf.keras.backend.get_value(param) for
                               param in qsim.model.layers[1]._layer_to_wrap.weights]
-        running_loss = None
         for i in range(10):
-            history = qsim.model.fit(x=rand_inp, y=rand_out, batch_size=1)
-            loss = history.history['loss'][0]
-            if running_loss is not None:
-                assert loss <= running_loss
-            running_loss = loss
+            _ = qsim.model.fit(x=rand_inp, y=rand_out, batch_size=1)
             ending_weights = [tf.keras.backend.get_value(param) for
                               param in qsim.model.layers[1]._layer_to_wrap.weights]
             for idx, weight in enumerate(running_weights):
                 assert not np.array_equal(weight, ending_weights[idx])
             running_weights = ending_weights
+
+def test_copy_params():
+    if version.parse(tf.version.VERSION) >= version.parse("2.00"):
+        inp = tf.keras.layers.Input(shape=(5,))
+        x = tf.keras.layers.Dense(units=3)(inp)
+        x = DenseReluLayer()(x)
+        x = tf.keras.layers.Softmax()(x)
+        model = tf.keras.Model(inputs=inp, outputs=x)
+        qsim = QuantizationSimModel(model, quant_scheme='tf', default_param_bw=8, default_output_bw=8)
+        new_kernel = np.ones((5, 3))
+        qsim.model.layers[1]._layer_to_wrap.set_weights([new_kernel, qsim.model.layers[1]._layer_to_wrap.get_weights()[1]])
+        qsim._copy_params_to_original_model()
+        assert np.array_equal(new_kernel, qsim._original_model.layers[1].get_weights()[0])
