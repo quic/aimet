@@ -23,6 +23,28 @@ apt-get install python3.6 python3.6-dev python3-pip
 python3 -m pip install --upgrade pip
 ```
 
+### Install GPU packages
+> _NOTE:_ Do this section **ONLY** for the PyTorch or Tensorflow *GPU* packages.
+
+Prepare the environment for installation of GPU packages as follows:
+> _NOTE:_ Please visit [this page](https://developer.nvidia.com/cuda-11.1.1-download-archive) to obtain the exact and up-to-date installation instructions for your environment.
+
+```bash
+wget https://developer.download.nvidia.com/compute/cuda/repos/ubuntu1804/x86_64/cuda-ubuntu1804.pin
+mv cuda-ubuntu1804.pin /etc/apt/preferences.d/cuda-repository-pin-600
+wget https://developer.download.nvidia.com/compute/cuda/11.1.1/local_installers/cuda-repo-ubuntu1804-11-1-local_11.1.1-455.32.00-1_amd64.deb
+dpkg -i cuda-repo-ubuntu1804-11-1-local_11.1.1-455.32.00-1_amd64.deb
+apt-key add /var/cuda-repo-ubuntu1804-11-1-local/7fa2af80.pub
+echo "deb https://developer.download.nvidia.com/compute/cuda/repos/ubuntu1804/x86_64 /" > /etc/apt/sources.list.d/cuda.list
+echo "deb https://developer.download.nvidia.com/compute/machine-learning/repos/ubuntu1804/x86_64 /" > /etc/apt/sources.list.d/nvidia-ml.list
+apt-get update
+apt-get -y install cuda
+
+wget http://developer.download.nvidia.com/compute/machine-learning/repos/ubuntu1804/x86_64/nvidia-machine-learning-repo-ubuntu1804_1.0.0-1_amd64.deb
+apt-get --assume-yes install ./nvidia-machine-learning-repo-ubuntu1804_1.0.0-1_amd64.deb
+apt-get update
+```
+
 ### Install AIMET packages
 Go to https://github.com/quic/aimet/releases and identify the release tag of the package you want to install. 
 
@@ -91,26 +113,6 @@ cat /usr/local/lib/python3.6/dist-packages/aimet_torch/bin/reqs_deb_torch_gpu.tx
 ```bash
 python3 -m pip uninstall -y pillow
 python3 -m pip install --no-cache-dir Pillow-SIMD==6.0.0.post0
-```
-
-### Install GPU packages
-> _NOTE:_ Do this section **ONLY** for the PyTorch or Tensorflow *GPU* packages.
-
-Prepare the environment for installation of GPU packages as follows:
-> _NOTE:_ Please visit [this page](https://developer.nvidia.com/cuda-11.1.1-download-archive) to obtain the exact and up-to-date installation instructions for your environment.
-
-```bash
-wget https://developer.download.nvidia.com/compute/cuda/repos/ubuntu1804/x86_64/cuda-ubuntu1804.pin
-mv cuda-ubuntu1804.pin /etc/apt/preferences.d/cuda-repository-pin-600
-wget https://developer.download.nvidia.com/compute/cuda/11.1.0/local_installers/cuda-repo-ubuntu1804-11-1-local_11.1.0-455.23.05-1_amd64.deb
-dpkg -i cuda-repo-ubuntu1804-11-1-local_11.1.0-455.23.05-1_amd64.deb
-apt-key add /var/cuda-repo-ubuntu1804-11-1-local/7fa2af80.pub
-apt-get update
-apt-get -y install cuda
-
-wget http://developer.download.nvidia.com/compute/machine-learning/repos/ubuntu1804/x86_64/nvidia-machine-learning-repo-ubuntu1804_1.0.0-1_amd64.deb
-apt-get --assume-yes install ./nvidia-machine-learning-repo-ubuntu1804_1.0.0-1_amd64.deb
-apt-get update
 ```
 
 ### Post installation steps
