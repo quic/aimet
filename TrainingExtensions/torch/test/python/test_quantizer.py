@@ -1883,6 +1883,134 @@ class TestQuantizationSimStaticGrad:
 
         assert not set(encoding_data["activation_encodings"].keys()).symmetric_difference(('4', '9', 't.1'))
 
+    def test_transformer_mask_override_tf(self):
+        """
+        test logic to override mask for a custom block with mask op for tf mode
+        :return:
+        """
+        torch.manual_seed(10)
+
+        class AttnBlock(nn.Module):
+
+            def __init__(self):
+                super(AttnBlock, self).__init__()
+
+                self.add = elementwise_ops.Add()
+                self.softmax = nn.LogSoftmax(dim=1)
+
+            def forward(self, x1, x2):
+
+                x = self.add(x1, x2)
+                return self.softmax(x)
+
+        class DummyAttnBlockModel(nn.Module):
+            def __init__(self):
+                super(DummyAttnBlockModel, self).__init__()
+                self.block = AttnBlock()
+
+            def forward(self, x1, x2):
+                return self.block(x1, x2)
+
+        # update data input to reflect range at add -10000 to ~16.xx
+        # this results in max being mapped to zero when econding grid is computed with 8 bit for mask add
+        dummy_input = (torch.FloatTensor(32, 1, 100, 100).uniform_(-6000, 15),
+                       torch.FloatTensor(32, 1, 100, 100).uniform_(-5000, 17))
+
+        def forward_pass(sim_model, _):
+            sim_model.eval()
+            with torch.no_grad():
+                sim_model(*dummy_input)
+
+        # use some dummy custom block type
+        model = DummyAttnBlockModel()
+        from aimet_common.defs import QuantScheme
+        sim = QuantizationSimModel(model, quant_scheme=QuantScheme.post_training_tf,  dummy_input=dummy_input)
+        sim.compute_encodings(forward_pass, None)
+
+        old_encoding_min = sim.model.block.add.output_quantizer.encoding.min
+        old_encoding_max = sim.model.block.add.output_quantizer.encoding.max
+
+        print("old encoding min = ", old_encoding_min)
+        print("old encoding max = ", old_encoding_max)
+        assert int(old_encoding_min) == -11013
+        assert int(old_encoding_max) == 0
+
+        # use override registration function
+        transformer_utils.register_attention_mask_override('AttnBlock', 'add')
+
+        # compute encodings again to check override takes effect
+        sim.compute_encodings(forward_pass, None)
+        new_encoding_min = sim.model.block.add.output_quantizer.encoding.min
+        new_encoding_max = sim.model.block.add.output_quantizer.encoding.max
+        print("encoding min = ", new_encoding_min)
+        print("encoding max = ", new_encoding_max)
+
+        # validate override
+        assert int(new_encoding_min) == -6
+        assert int(new_encoding_max) == 18
+
+    def test_transformer_mask_override_tf_enhanced(self):
+        """
+        test logic to override mask for a custom block with mask op for tf enhanced mode
+        :return:
+        """
+        torch.manual_seed(10)
+
+        class AttnBlock(nn.Module):
+
+            def __init__(self):
+                super(AttnBlock, self).__init__()
+
+                self.add_2 = elementwise_ops.Add()
+                self.softmax = nn.LogSoftmax(dim=1)
+
+            def forward(self, x1, x2):
+
+                x = self.add_2(x1, x2)
+                return self.softmax(x)
+
+        class DummyAttnBlockModel(nn.Module):
+            def __init__(self):
+                super(DummyAttnBlockModel, self).__init__()
+                self.block = AttnBlock()
+
+            def forward(self, x1, x2):
+                return self.block(x1, x2)
+
+        # update data input to reflect range at add -10000 to ~16.xx
+        # this results in max being mapped to zero when econding grid is computed with 8 bit for mask add
+        dummy_input = (torch.FloatTensor(32, 1, 100, 100).uniform_(-6000, 15),
+                       torch.FloatTensor(32, 1, 100, 100).uniform_(-5000, 17))
+
+        def forward_pass(sim_model, _):
+            sim_model.eval()
+            with torch.no_grad():
+                sim_model(*dummy_input)
+
+        # use some dummy custom block type
+        model = DummyAttnBlockModel()
+        sim = QuantizationSimModel(model, quant_scheme=QuantScheme.post_training_tf_enhanced,  dummy_input=dummy_input)
+        sim.compute_encodings(forward_pass, None)
+        old_encoding_min = sim.model.block.add_2.output_quantizer.encoding.min
+        old_encoding_max = sim.model.block.add_2.output_quantizer.encoding.max
+
+        print("old encoding min = ", old_encoding_min)
+        print("old encoding max = ", old_encoding_max)
+        assert int(old_encoding_min) == -10974
+        assert int(old_encoding_max) == 0
+
+        # use override registration function
+        transformer_utils.register_attention_mask_override('AttnBlock', 'add_2')
+
+        # compute encodings again to check override takes effect
+        sim.compute_encodings(forward_pass, None)
+        new_encoding_min = sim.model.block.add_2.output_quantizer.encoding.min
+        new_encoding_max = sim.model.block.add_2.output_quantizer.encoding.max
+        print("encoding min = ", new_encoding_min)
+        print("encoding max = ", new_encoding_max)
+        assert int(new_encoding_min) == -6
+        assert int(new_encoding_max) == 18
+
 
 class TestQuantizationSimLearnedGrid:
 
@@ -2131,55 +2259,3 @@ class TestQuantizationSimLearnedGrid:
         with open('./data/prelu_model.encodings') as json_file:
             encoding_data = json.load(json_file)
         assert 'prelu.weight' in encoding_data['param_encodings'].keys()
-
-    def test_transformer_mask_override(self):
-        """
-        test logic to override mask for a custom block with mask op
-        :return:
-        """
-
-        class AttnBlock(nn.Module):
-
-            def __init__(self):
-                super(AttnBlock, self).__init__()
-
-                self.add = elementwise_ops.Add()
-                self.softmax = nn.LogSoftmax(dim=1)
-
-            def forward(self, x1, x2):
-
-                x = self.add(x1, x2)
-                return self.softmax(x)
-
-        class DummyAttnBlockModel(nn.Module):
-            def __init__(self):
-                super(DummyAttnBlockModel, self).__init__()
-                self.block = AttnBlock()
-
-            def forward(self, x1, x2):
-                return self.block(x1, x2)
-
-        dummy_input = (torch.FloatTensor(32, 1, 100, 100).uniform_(-6000, -4000),
-                       torch.FloatTensor(32, 1, 100, 100).uniform_(-5000, -4000))
-
-        def forward_pass(sim_model, _):
-            sim_model.eval()
-            with torch.no_grad():
-                sim_model(*dummy_input)
-
-        # use some dummy custom block type
-        model = DummyAttnBlockModel()
-        sim = QuantizationSimModel(model, dummy_input=dummy_input)
-        sim.compute_encodings(forward_pass, None)
-        old_encoding_min = sim.model.block.add.output_quantizer.encoding.min
-
-        # use override registration function
-        transformer_utils.register_attention_mask_override('AttnBlock', 'add')
-
-        # compute encodings again to check override takes effect
-        sim.compute_encodings(forward_pass, None)
-        new_encoding_min = sim.model.block.add.output_quantizer.encoding.min
-
-        # validate override
-        assert old_encoding_min != new_encoding_min
-        assert new_encoding_min == -6
