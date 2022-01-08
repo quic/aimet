@@ -77,7 +77,15 @@ public:
     // Minimum range of quantization
     static constexpr double MIN_RANGE = 0.01;
 
+    /**
+    * Find range (min, max) of the aggregated stats
+    * @return Tuple of bool (isStatsValid), min and max values
+    */
+    std::tuple<bool, DTYPE, DTYPE> getAccumulatedStatsMinMax() const override;
+
+
 private:
+    bool _statsUpdated = false;
     struct
     {
         double min = std::numeric_limits<double>::max();

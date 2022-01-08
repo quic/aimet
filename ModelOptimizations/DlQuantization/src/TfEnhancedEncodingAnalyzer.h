@@ -73,6 +73,7 @@ public:
     TfEncoding computeEncoding(uint8_t bw, bool useSymmetricEncodings, bool useStrictSymmetric,
                                bool useUnsignedSymmetric) const override;
 
+
     /**
      * @brief Returns a histogram that represents a PDF of tensor values seen by this encoding analyzer so far
      *
@@ -82,10 +83,22 @@ public:
      */
     std::vector<std::tuple<double, double>> getStatsHistogram() const override;
 
+    /**
+    * Find range (min, max) of the aggregated stats
+    * @return Tuple of statsValid flag, min and max values
+    */
+    std::tuple<bool, DTYPE, DTYPE> getAccumulatedStatsMinMax() const override;
+
 
 private:
     PDF _stats;
     bool _statsUpdated = false;
+    struct
+    {
+        double min = std::numeric_limits<double>::max();
+        double max = -std::numeric_limits<double>::max();
+
+    } _accumulatedStats;
 
     // Fudge factor which trades-off quantization and saturation error.
     // The cost function will be "quantization cost" + GAMMA * "saturation cost".
@@ -104,12 +117,6 @@ private:
      * by this specific fixed point encoding.
      */
     DTYPE _quantAndSatCost(const PDF& pdf, int bw, DTYPE delta, int offset) const;
-
-    /**
-     * Find range (min, max) of the aggregated stats
-     * @return Tuple of min and max values
-     */
-    std::tuple<DTYPE, DTYPE> _findRangeOfAggregateStats() const;
 
     /**
      * Pick asymmetric test candidates to use for searching the lowest quantized cost. Each candidates is expressed
@@ -154,6 +161,12 @@ private:
      */
     std::tuple<DTYPE, int> _findBestCandidate(uint8_t bw,
                                               const std::vector<std::tuple<DTYPE, int>>& testCandidates) const;
+
+    /**
+   * Find range (min, max) of the aggregated stats
+   * @return Tuple of min and max values
+   */
+    std::tuple<DTYPE, DTYPE> _findRangeOfAggregateStats() const;
 };
 
 }   // namespace DlQuantization

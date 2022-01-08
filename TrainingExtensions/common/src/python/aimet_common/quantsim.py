@@ -37,7 +37,7 @@
 # =============================================================================
 
 """ Common utility for Quantization """
-
+import libpymo
 # Defined below is a quantization encoding format version, which will follow XX.YY.ZZ versioning as described below,
 #
 #    XX = Major Revision
@@ -48,6 +48,7 @@
 # additional information element being added to encoding format and might require update to fully consume the encodings.
 # The patching version shall be updated to indicate minor updates to quantization simulation e.g. bug fix etc.
 encoding_version = '0.5.0'
+
 
 def gate_min_max(min_val: float, max_val: float)-> (float, float):
     """
@@ -81,3 +82,45 @@ def calculate_delta_offset(min_val: float, max_val: float, bitwidth: int)-> (flo
         delta = 1e-5
     offset = round(min_val / delta)
     return delta, offset
+
+
+def recompute_grid_params(current_encoding: libpymo.TfEncoding, bitwidth: int,
+                          use_symmetric_encoding: bool) -> libpymo.TfEncoding:
+    """
+    Recomputed the encoding grid params - min/max/offset and delta.
+    :param current_encoding: Encoding associated with the quantizer as TfEncoding
+    :param bitwidth: bit width configured for the quantizer
+    :param use_symmetric_encoding: symmetric or asymmetric mode
+    :return: updated encoding params as libpymo.TfEncoding type.
+    """
+
+    MIN_RANGE = 0.01
+    min_val = min(0., current_encoding.min)
+    max_val = max(0., current_encoding.max, (min_val + MIN_RANGE))
+    updated_encoding = libpymo.TfEncoding()
+
+    # check mode used to recompute delta and offset
+    if use_symmetric_encoding:
+        num_positive_steps = (2 ** (bitwidth - 1)) - 1
+        abs_max_val = max(abs(max_val), abs(min_val))
+        delta = abs_max_val / num_positive_steps
+        offset = -(num_positive_steps + 1)
+        # recompute min/max values
+        min_val = delta * offset
+        max_val = delta * num_positive_steps
+
+    else:
+        num_steps = (2 ** bitwidth) - 1
+        delta = (max_val - min_val) / num_steps
+        # @todo check zero point representation related code
+        offset = round(min_val / delta)
+        # recompute min/max values
+        min_val = delta * offset
+        max_val = min_val + delta * num_steps
+
+    updated_encoding.min = min_val
+    updated_encoding.max = max_val
+    updated_encoding.delta = delta
+    updated_encoding.offset = offset
+
+    return updated_encoding
