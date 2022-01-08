@@ -140,6 +140,12 @@ public:
         return histogram;
     }
 
+    std::tuple<bool, double, double> getAccumulatedStatsMinMax() const
+    {
+        auto accumlatedStatsMinMax = this->_encodingAnalyzer->getAccumulatedStatsMinMax();
+        return accumlatedStatsMinMax;
+    }
+
 private:
     bool _isEncodingValid;
     DlQuantization::QuantizationMode _quantizationScheme;
@@ -157,5 +163,6 @@ PYBIND11_MODULE(TORCH_EXTENSION_NAME, m)
         .def("quantize", &AimetTensorQuantizer::quantize)
         .def("getEncoding", &AimetTensorQuantizer::getEncoding)
         .def("resetEncodingStats", &AimetTensorQuantizer::resetEncodingStats)
-        .def("getStatsHistogram", &AimetTensorQuantizer::getStatsHistogram);
+        .def("getStatsHistogram", &AimetTensorQuantizer::getStatsHistogram)
+        .def("getAccumulatedStatsMinMax", &AimetTensorQuantizer::getAccumulatedStatsMinMax);
 }

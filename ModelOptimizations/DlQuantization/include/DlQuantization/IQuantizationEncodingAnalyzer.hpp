@@ -81,6 +81,12 @@ public:
                                        bool useStrictSymmetric, bool useUnsignedSymmetric) const = 0;
 
     /**
+    * Find range (min, max) of the aggregated stats
+    * @return Tuple of statsValid, min and max values
+    */
+    virtual std::tuple<bool, DTYPE, DTYPE> getAccumulatedStatsMinMax() const = 0;
+
+    /**
      * @brief Returns a histogram that represents a PDF of tensor values seen by this encoding analyzer so far
      *
      * @return Histogram of statistics. The histogram returned is a vector of buckets. Each bucket is a tuple of
