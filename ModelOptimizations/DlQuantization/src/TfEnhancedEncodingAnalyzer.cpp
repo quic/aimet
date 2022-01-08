@@ -72,6 +72,15 @@ void TfEnhancedEncodingAnalyzer<DTYPE>::updateStats(const DTYPE* tensor, const s
                                                     ComputationMode tensorCpuGpuMode)
 {
     this->_statsUpdated = true;
+    // note down the absolute min and max of current stats seen by analyzer
+    auto currentMin  = (double) GetMin(tensor, tensorSize, tensorCpuGpuMode);
+    auto currentMax  = (double) GetMax(tensor, tensorSize, tensorCpuGpuMode);
+
+    // store the min/max of stats seen by the analyzer
+    _accumulatedStats.min = std::min(_accumulatedStats.min, currentMin);
+    _accumulatedStats.max = std::max(_accumulatedStats.max, currentMax);
+
+    // update pdf
     UpdatePdf(tensor, tensorSize, tensorCpuGpuMode, true, this->_stats);
 }
 
@@ -276,6 +285,11 @@ void TfEnhancedEncodingAnalyzer<DTYPE>::_pickTestCandidatesSymmetric(DTYPE minVa
         DTYPE testDelta = f * deltaMax;
         testCandidates.push_back(std::tuple<DTYPE, int>(testDelta, testOffset));
     }
+}
+
+template <typename DTYPE>
+std::tuple<bool, DTYPE, DTYPE> TfEnhancedEncodingAnalyzer<DTYPE>::getAccumulatedStatsMinMax() const {
+    return std::make_tuple(this->_statsUpdated, _accumulatedStats.min, _accumulatedStats.max);
 }
 
 template <typename DTYPE>

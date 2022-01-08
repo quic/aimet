@@ -37,6 +37,7 @@
 # =============================================================================
 
 """ Implementation for simulating models running on Quantized hardware """
+# pylint: disable=too-many-lines
 import os
 import io
 import copy
@@ -47,6 +48,7 @@ import json
 import torch
 import onnx
 
+import aimet_common
 from aimet_common.utils import AimetLogger, save_json_yaml
 from aimet_common.defs import QuantScheme, QuantizationDataType
 from aimet_common.quantsim import encoding_version
@@ -495,22 +497,38 @@ class QuantizationSimModel:
         """
 
         supported_attn_type_mask_dict = transformer_utils.get_supported_attention_types()
+
+        # pylint: disable=too-many-nested-blocks
         # find an attention block
         for module in self.model.modules():
             # pylint: disable=protected-access
             module_name = type(module)._get_name(module)
-
             if module_name in supported_attn_type_mask_dict:
                 for name, sub_module in module.named_modules():
                     # Find mask add op (input op to SoftMax) within attention head unit
                     if name is supported_attn_type_mask_dict[module_name]:
                         # if this quantizer is enabled, clamp the min value
                         if isinstance(sub_module, QcQuantizeWrapper) and sub_module.output_quantizer.enabled:
-                            logger.info("Encoding min {%s} before clamp = %d ", name, sub_module.output_quantizer.encoding.min)
-                            sub_module.output_quantizer.encoding.min = max(sub_module.output_quantizer.encoding.min,
-                                                                           transformer_utils.MASK_OVERRIDE_VALUE)
-                            logger.info("Encoding min {%s} after clamp = %d ", name, sub_module.output_quantizer.encoding.min)
-                            sub_module.output_quantizer.freeze_encoding()
+                            for output_quantizer in sub_module.output_quantizers:
+                                for tensor_quantizer in output_quantizer._cppOp:
+                                    # get the min/max from accumulated stats associated with this quantizer
+                                    is_stats_updated, stats_min, stats_max = tensor_quantizer.getAccumulatedStatsMinMax()
+                                    if is_stats_updated:
+                                        output_quantizer.encoding.min = max(stats_min,
+                                                                            transformer_utils.MASK_OVERRIDE_VALUE)
+                                        output_quantizer.encoding.max = stats_max
+
+                                        # recompute grid params as we clamped min and updated max above
+                                        clamped_encoding = aimet_common.quantsim.recompute_grid_params(
+                                            output_quantizer.encoding,
+                                            output_quantizer.bitwidth,
+                                            output_quantizer.use_symmetric_encodings)
+
+                                        # update encoding of this quantizer
+                                        output_quantizer.encoding = clamped_encoding
+                                        sub_module.output_quantizer.freeze_encoding()
+                                    else:
+                                        logger.info('No Valid stats found, skipping quantizer clamp for op {%s}', name)
 
     @staticmethod
     def _validate_quantsim_inputs(quant_scheme: Union[str, QuantScheme], rounding_mode: str, default_output_bw: int,
