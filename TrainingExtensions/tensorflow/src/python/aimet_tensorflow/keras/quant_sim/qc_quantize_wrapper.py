@@ -37,6 +37,8 @@
 # =============================================================================
 """ Qc Quantize wrapper for tf 2 keras """
 
+# pylint: skip-file
+
 from typing import Union, List, Dict
 import tensorflow as tf
 from packaging import version
