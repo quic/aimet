@@ -1,7 +1,7 @@
 # =============================================================================
 #  @@-COPYRIGHT-START-@@
 #
-#  Copyright (c) 2021, Qualcomm Innovation Center, Inc. All rights reserved.
+#  Copyright (c) 2021-2022, Qualcomm Innovation Center, Inc. All rights reserved.
 #
 #  Redistribution and use in source and binary forms, with or without
 #  modification, are permitted provided that the following conditions are met:
@@ -34,13 +34,18 @@
 #  @@-COPYRIGHT-END-@@
 # =============================================================================
 
-import pytest
 import unittest
-
+import random
 import numpy as np
-
 import os
+import json
+
 import tensorflow as tf
+
+from aimet_tensorflow.common.graph_eval import initialize_uninitialized_vars
+from aimet_tensorflow.quantsim import QuantizationSimModel
+from aimet_common.quantsim import calculate_delta_offset
+
 
 tf.compat.v1.logging.set_verbosity(tf.logging.WARN)
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
@@ -92,7 +97,7 @@ class TestTrainingExtensionsQcQuantizeOpPerChannel(unittest.TestCase):
 
                 mode_var = tf.Variable(initial_value=int(libpymo.TensorQuantizerOpMode.updateStats),
                                        trainable=False, dtype=tf.int32)
-                axis = tf.Variable(initial_value=3, trainable=False, dtype=tf.int8)
+                axis = tf.Variable(initial_value=3, trainable=False, dtype=tf.int32)
 
                 sess.run([mode_var.initializer, tensor_quant_ref.initializer, encoding_min.initializer,
                           encoding_max.initializer, bit_width.initializer, use_symmetric_encoding.initializer,
@@ -164,7 +169,7 @@ class TestTrainingExtensionsQcQuantizeOpPerChannel(unittest.TestCase):
 
                 mode_var = tf.Variable(initial_value=int(libpymo.TensorQuantizerOpMode.updateStats),
                                        trainable=False, dtype=tf.int32)
-                axis = tf.Variable(initial_value=1, trainable=False, dtype=tf.int8)
+                axis = tf.Variable(initial_value=1, trainable=False, dtype=tf.int32)
 
                 sess.run([mode_var.initializer, tensor_quant_ref.initializer, encoding_min.initializer,
                           encoding_max.initializer, bit_width.initializer, use_symmetric_encoding.initializer,
@@ -230,7 +235,7 @@ class TestTrainingExtensionsQcQuantizeOpPerChannel(unittest.TestCase):
 
                 mode_var = tf.Variable(initial_value=int(libpymo.TensorQuantizerOpMode.updateStats),
                                        trainable=False, dtype=tf.int32)
-                axis = tf.Variable(initial_value=0, trainable=False, dtype=tf.int8)
+                axis = tf.Variable(initial_value=0, trainable=False, dtype=tf.int32)
 
                 sess.run([mode_var.initializer, tensor_quant_ref.initializer, encoding_min.initializer,
                           encoding_max.initializer, bit_width.initializer, use_symmetric_encoding.initializer,
@@ -255,4 +260,115 @@ class TestTrainingExtensionsQcQuantizeOpPerChannel(unittest.TestCase):
         # compare qc_quantize op's output with input
         self.assertTrue(np.allclose(out_data, inp_data))
         sess.close()
+
+    def test_quantsim_created_correctly(self):
+        quantsim_config = {
+            "defaults": {
+                "ops": {
+                    "is_output_quantized": "True",
+                    "is_symmetric": "False"
+                },
+                "params": {
+                    "is_quantized": "True",
+                    "is_symmetric": "True"
+                },
+                "per_channel_quantization": "True",
+            },
+            "params": {},
+            "op_type": {},
+            "supergroups": [],
+            "model_input": {},
+            "model_output": {}
+        }
+
+
+        with open('./quantsim_config.json', 'w') as f:
+            json.dump(quantsim_config, f)
+
+        tf.compat.v1.reset_default_graph()
+        with tf.device('/cpu:0'):
+            model = tf.keras.Sequential()
+            model.add(tf.keras.layers.Conv2D(2, kernel_size=3, input_shape=(5, 5, 3), activation='relu'))
+            model.summary()
+
+        sess = tf.compat.v1.Session()
+        initialize_uninitialized_vars(sess)
+        sim = QuantizationSimModel(sess, [model.input.op.name], [model.output.op.name], use_cuda=False,
+                                   config_file='./quantsim_config.json')
+
+        for quant_op_name, quantizer_info in sim._activation_quantizers.items():
+            assert isinstance(quantizer_info.tensor_quantizer, libpymo.TensorQuantizer)
+
+        for quant_op_name, quantizer_info in sim._param_quantizers.items():
+            op = sim.session.graph.get_operation_by_name(quant_op_name)
+            assert op.type == 'QcQuantizePerChannelParam'
+            shape = op.inputs[0].shape.as_list()
+            assert  len(quantizer_info.tensor_quantizer) == shape[-1]
+
+    def test_export_encodings(self):
+        quantsim_config = {
+            "defaults": {
+                "ops": {
+                    "is_output_quantized": "True",
+                    "is_symmetric": "False"
+                },
+                "params": {
+                    "is_quantized": "True",
+                    "is_symmetric": "True"
+                },
+                "per_channel_quantization": "True",
+            },
+            "params": {},
+            "op_type": {},
+            "supergroups": [],
+            "model_input": {},
+            "model_output": {}
+        }
+
+        with open('./quantsim_config.json', 'w') as f:
+            json.dump(quantsim_config, f)
+
+        tf.compat.v1.reset_default_graph()
+        with tf.device('/cpu:0'):
+            model = tf.keras.Sequential()
+            model.add(tf.keras.layers.Conv2D(32, kernel_size=3, input_shape=(5, 5, 3), activation='relu'))
+            model.summary()
+
+        sess = tf.compat.v1.Session()
+        initialize_uninitialized_vars(sess)
+        sim = QuantizationSimModel(sess, [model.input.op.name], [model.output.op.name], use_cuda=False,
+                                   config_file='./quantsim_config.json')
+
+        def create_encoding():
+            _encoding = libpymo.TfEncoding()
+            _encoding.min = random.uniform(0, 1)
+            _encoding.max = random.uniform(1, 3)
+            _encoding.bw = 8
+            _encoding.delta, _encoding.offset = calculate_delta_offset(_encoding.min, _encoding.max,
+                                                                       8)
+            return _encoding
+
+        # Set the encodings for activation quantizers
+        for quant_op_name, quantizer_info in sim._activation_quantizers.items():
+            _encoding = create_encoding()
+            quantizer_info.set_encoding(_encoding)
+
+        # Set encodings for parameter quantizers
+        for quant_op_name, quantizer_info in sim._param_quantizers.items():
+            encoding = []
+            for i in range(len(quantizer_info.tensor_quantizer)):
+                _encoding = create_encoding()
+                encoding.append(_encoding)
+            quantizer_info.set_encoding(encoding)
+
+        sim.export('/tmp', 'quant_sim_model')
+
+        with open('/tmp/quant_sim_model.encodings') as json_file:
+            encoding_data = json.load(json_file)
+
+        param_keys = list(encoding_data["param_encodings"].keys())
+        self.assertTrue(param_keys[1] == "conv2d/Conv2D/ReadVariableOp:0")
+        self.assertTrue(isinstance(encoding_data["param_encodings"]["conv2d/Conv2D/ReadVariableOp:0"], list))
+        self.assertTrue(isinstance(encoding_data["param_encodings"]["conv2d/Conv2D/ReadVariableOp:0"][0]['max'], list))
+        self.assertTrue(isinstance(encoding_data["param_encodings"]["conv2d/Conv2D/ReadVariableOp:0"][0]['min'], list))
 

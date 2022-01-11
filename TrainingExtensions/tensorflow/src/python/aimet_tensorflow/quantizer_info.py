@@ -49,11 +49,11 @@ import libpymo
 
 quant_scheme_to_libpymo = {QuantScheme.post_training_tf: libpymo.QuantizationMode.QUANTIZATION_TF,
                            QuantScheme.post_training_tf_enhanced:
-                           libpymo.QuantizationMode.QUANTIZATION_TF_ENHANCED,
+                               libpymo.QuantizationMode.QUANTIZATION_TF_ENHANCED,
                            QuantScheme.training_range_learning_with_tf_init:
-                           libpymo.QuantizationMode.QUANTIZATION_TF,
+                               libpymo.QuantizationMode.QUANTIZATION_TF,
                            QuantScheme.training_range_learning_with_tf_enhanced_init:
-                           libpymo.QuantizationMode.QUANTIZATION_TF_ENHANCED}
+                               libpymo.QuantizationMode.QUANTIZATION_TF_ENHANCED}
 
 
 class QuantizerType(Enum):
@@ -75,12 +75,23 @@ class PickleableTensorQuantizerState:
         """
 
         self.quant_op_name = quant_op_name
-        self.quant_scheme = tensor_quantizer_ref.getQuantScheme()
-        self.use_strict_symmetric = tensor_quantizer_ref.getStrictSymmetric()
-        self.use_unsigned_symmetric = tensor_quantizer_ref.getUnsignedSymmetric()
-        self.rounding_mode = tensor_quantizer_ref.roundingMode
-        self.is_encoding_valid = tensor_quantizer_ref.isEncodingValid
         self.quantizer_type = quantizer_type
+        self.num_channels = 0
+        if isinstance(tensor_quantizer_ref, list):
+            for tensor_quantizer in tensor_quantizer_ref:
+                self.quant_scheme = tensor_quantizer.getQuantScheme()
+                self.use_strict_symmetric = tensor_quantizer.getStrictSymmetric()
+                self.use_unsigned_symmetric = tensor_quantizer.getUnsignedSymmetric()
+                self.rounding_mode = tensor_quantizer.roundingMode
+                self.is_encoding_valid = tensor_quantizer.isEncodingValid
+                self.num_channels = len(tensor_quantizer_ref)
+                break
+        else:
+            self.quant_scheme = tensor_quantizer_ref.getQuantScheme()
+            self.use_strict_symmetric = tensor_quantizer_ref.getStrictSymmetric()
+            self.use_unsigned_symmetric = tensor_quantizer_ref.getUnsignedSymmetric()
+            self.rounding_mode = tensor_quantizer_ref.roundingMode
+            self.is_encoding_valid = tensor_quantizer_ref.isEncodingValid
 
 
 class QuantizerInfo:
@@ -136,7 +147,11 @@ class QuantizerInfo:
         """
         var_name = self.quant_op_name + '_bit_width'
         self.set_variable(var_name, bitwidth)
-        self.tensor_quantizer.isEncodingValid = False
+        if isinstance(self.tensor_quantizer, list):
+            for tensor_quantizer in self.tensor_quantizer:
+                tensor_quantizer.isEncodingValid = False
+        else:
+            self.tensor_quantizer.isEncodingValid = False
 
     @property
     def use_symmetric_encoding(self) -> bool:
@@ -154,7 +169,11 @@ class QuantizerInfo:
         """
         var_name = self.quant_op_name + '_use_symmetric_encoding'
         self.set_variable(var_name, use_symmetric_encoding)
-        self.tensor_quantizer.isEncodingValid = False
+        if isinstance(self.tensor_quantizer, list):
+            for tensor_quantizer in self.tensor_quantizer:
+                tensor_quantizer.isEncodingValid = False
+        else:
+            self.tensor_quantizer.isEncodingValid = False
 
     @property
     def quant_scheme(self) -> libpymo.QuantizationMode:
@@ -162,7 +181,11 @@ class QuantizerInfo:
         Reads the quant_scheme associated with the Quantize op
         :return: quant_scheme as libpymo.QuantizationMode type
         """
-        return self.tensor_quantizer.getQuantScheme()
+        if isinstance(self.tensor_quantizer, list):
+            for tensor_quantizer in self.tensor_quantizer:
+                return tensor_quantizer.getQuantScheme()
+        else:
+            return self.tensor_quantizer.getQuantScheme()
 
     @quant_scheme.setter
     def quant_scheme(self, quant_scheme: libpymo.QuantizationMode):
@@ -170,7 +193,11 @@ class QuantizerInfo:
         Sets the quant_scheme associated with the Quantize op
         :param quant_scheme: value to be assigned to quant_scheme param in Quantizer
         """
-        self.tensor_quantizer.setQuantScheme(quant_scheme_to_libpymo[quant_scheme])
+        if isinstance(self.tensor_quantizer, list):
+            for tensor_quantizer in self.tensor_quantizer:
+                tensor_quantizer.setQuantScheme(quant_scheme_to_libpymo[quant_scheme])
+        else:
+            self.tensor_quantizer.setQuantScheme(quant_scheme_to_libpymo[quant_scheme])
 
     @property
     def rounding_mode(self) -> libpymo.RoundingMode:
@@ -178,7 +205,11 @@ class QuantizerInfo:
         Reads rounding_mode associated with the Quantize op
         :return: rounding_mode value as libpymo.RoundingMode type
         """
-        return self.tensor_quantizer.roundingMode
+        if isinstance(self.tensor_quantizer, list):
+            for tensor_quantizer in self.tensor_quantizer:
+                return tensor_quantizer.roundingMode
+        else:
+            return self.tensor_quantizer.roundingMode
 
     @rounding_mode.setter
     def rounding_mode(self, rounding_mode: libpymo.RoundingMode):
@@ -186,8 +217,13 @@ class QuantizerInfo:
         Sets the rounding_mode associated with the Quantize op
         :param rounding_mode: value to be assigned to rounding_mode param in Quantizer
         """
-        self.tensor_quantizer.isEncodingValid = False
-        self.tensor_quantizer.roundingMode = rounding_mode
+        if isinstance(self.tensor_quantizer, list):
+            for tensor_quantizer in self.tensor_quantizer:
+                tensor_quantizer.isEncodingValid = False
+                tensor_quantizer.roundingMode = rounding_mode
+        else:
+            self.tensor_quantizer.isEncodingValid = False
+            self.tensor_quantizer.roundingMode = rounding_mode
 
     @property
     def use_strict_symmetric(self) -> bool:
@@ -195,7 +231,11 @@ class QuantizerInfo:
         Reads useStrictSymmetric config from Tensor Quantizer
         :return: True if strict symmetric mode is to be used, False otherwise
         """
-        return self.tensor_quantizer.getStrictSymmetric()
+        if isinstance(self.tensor_quantizer, list):
+            for tensor_quantizer in self.tensor_quantizer:
+                return tensor_quantizer.getStrictSymmetric()
+        else:
+            return self.tensor_quantizer.getStrictSymmetric()
 
     @use_strict_symmetric.setter
     def use_strict_symmetric(self, use_strict_symmetric: bool):
@@ -203,7 +243,11 @@ class QuantizerInfo:
         Sets the useStrictSymmetric associated with the Tensor Quantizer
         :param use_strict_symmetric: True if strict symmetric mode is to be used, False otherwise
         """
-        self.tensor_quantizer.setStrictSymmetric(use_strict_symmetric)
+        if isinstance(self.tensor_quantizer, list):
+            for tensor_quantizer in self.tensor_quantizer:
+                tensor_quantizer.setStrictSymmetric(use_strict_symmetric)
+        else:
+            self.tensor_quantizer.setStrictSymmetric(use_strict_symmetric)
 
     @property
     def use_unsigned_symmetric(self) -> bool:
@@ -211,7 +255,11 @@ class QuantizerInfo:
         Reads useStrictSymmetric config from Tensor Quantizer
         :return: True if unsigned symmetric mode is to be used, False otherwise
         """
-        return self.tensor_quantizer.getUnsignedSymmetric()
+        if isinstance(self.tensor_quantizer, list):
+            for tensor_quantizer in self.tensor_quantizer:
+                return tensor_quantizer.getUnsignedSymmetric()
+        else:
+            return self.tensor_quantizer.getUnsignedSymmetric()
 
     @use_unsigned_symmetric.setter
     def use_unsigned_symmetric(self, use_unsigned_symmetric: bool):
@@ -219,7 +267,11 @@ class QuantizerInfo:
         Sets the useUnsignedSymmetric associated with the Tensor Quantizer
         :param use_unsigned_symmetric: True if unsigned symmetric mode is to be used, False otherwise
         """
-        self.tensor_quantizer.setUnsignedSymmetric(use_unsigned_symmetric)
+        if isinstance(self.tensor_quantizer, list):
+            for tensor_quantizer in self.tensor_quantizer:
+                tensor_quantizer.setUnsignedSymmetric(use_unsigned_symmetric)
+        else:
+            self.tensor_quantizer.setUnsignedSymmetric(use_unsigned_symmetric)
 
     def get_op_mode(self) -> libpymo.TensorQuantizerOpMode:
         """
@@ -262,7 +314,11 @@ class QuantizerInfo:
         if not enabled and self.get_op_mode() != int(libpymo.TensorQuantizerOpMode.passThrough):
             op_mode = int(libpymo.TensorQuantizerOpMode.passThrough)
             # update the isEncodingValid state to False
-            self.tensor_quantizer.isEncodingValid = False
+            if isinstance(self.tensor_quantizer, list):
+                for tensor_quantizer in self.tensor_quantizer:
+                    tensor_quantizer.isEncodingValid = False
+            else:
+                self.tensor_quantizer.isEncodingValid = False
         # if enable is requested and this op was previously disabled
         # we enable the op by setting the initial op_mode that depends on the Quantizer type
         elif enabled and self.get_op_mode() == int(libpymo.TensorQuantizerOpMode.passThrough):
@@ -271,7 +327,11 @@ class QuantizerInfo:
             elif self.quantizer_type is QuantizerType.activation:
                 op_mode = int(libpymo.TensorQuantizerOpMode.updateStats)
             # update the isEncodingValid state to False
-            self.tensor_quantizer.isEncodingValid = False
+            if isinstance(self.tensor_quantizer, list):
+                for tensor_quantizer in self.tensor_quantizer:
+                    tensor_quantizer.isEncodingValid = False
+            else:
+                self.tensor_quantizer.isEncodingValid = False
 
         var_name = self.quant_op_name + '_op_mode'
         self.set_variable(var_name, op_mode)
@@ -284,7 +344,13 @@ class QuantizerInfo:
         :return: Encoding
         """
         if not self._is_encoding_frozen:
-            encoding = self.tensor_quantizer.computeEncoding(bitwidth, use_symmetric_encodings, False, False)
+            encoding = []
+            if isinstance(self.tensor_quantizer, list):
+                for tensor_quantizer in self.tensor_quantizer:
+                    encoding.append(tensor_quantizer.computeEncoding(bitwidth, use_symmetric_encodings, False, False))
+            else:
+                encoding.append(self.tensor_quantizer.computeEncoding(bitwidth, use_symmetric_encodings, False, False))
+                encoding = encoding[0]
         else:
             encoding = self.get_encoding()
 
@@ -296,13 +362,24 @@ class QuantizerInfo:
         :param encoding: Encoding
         """
         if not self._is_encoding_frozen:
-            var_name = self.quant_op_name + '_encoding_min'
-            self.set_variable(var_name, encoding.min)
-            var_name = self.quant_op_name + '_encoding_max'
-            self.set_variable(var_name, encoding.max)
+            encoding_min_var = self.quant_op_name + '_encoding_min'
+            encoding_max_var = self.quant_op_name + '_encoding_max'
 
-            # update the isEncodingValid state to True
-            self.tensor_quantizer.isEncodingValid = True
+            # update the isEncodingValid state to True as well as encoding variable in the TF op
+            if isinstance(self.tensor_quantizer, list):
+                encoding_min = []
+                encoding_max = []
+                for index, tensor_quantizer in enumerate(self.tensor_quantizer):
+                    tensor_quantizer.isEncodingValid = True
+                    encoding_min.append(encoding[index].min)
+                    encoding_max.append(encoding[index].max)
+                self.set_variable(encoding_min_var, encoding_min)
+                self.set_variable(encoding_max_var, encoding_max)
+            else:
+                self.tensor_quantizer.isEncodingValid = True
+                self.set_variable(encoding_min_var, encoding.min)
+                self.set_variable(encoding_max_var, encoding.max)
+
 
     def get_encoding(self) -> libpymo.TfEncoding:
         """
@@ -314,12 +391,23 @@ class QuantizerInfo:
             encoding_max = self.get_variable_from_op(QuantizeOpIndices.encoding_max)
             bitwidth = self.bitwidth
 
-            # Create Encoding object
-            encoding = libpymo.TfEncoding()
-            encoding.min = encoding_min
-            encoding.max = encoding_max
-            encoding.bw = bitwidth
-            encoding.delta, encoding.offset = calculate_delta_offset(encoding_min, encoding_max, bitwidth)
+            # If per channel quantization is enabled then we need to create a list of TF encoding objects
+            if isinstance(encoding_min, list):
+                encoding = []
+                for i, encoding_min_val in enumerate(encoding_min):
+                    _encoding = libpymo.TfEncoding()
+                    _encoding.min = encoding_min_val
+                    _encoding.max = encoding_max[i]
+                    _encoding.bw = bitwidth
+                    _encoding.delta, _encoding.offset = calculate_delta_offset(encoding_min_val, encoding_max[i],
+                                                                               bitwidth)
+                    encoding.append(_encoding)
+            else:
+                encoding = libpymo.TfEncoding()
+                encoding.min = encoding_min
+                encoding.max = encoding_max
+                encoding.bw = bitwidth
+                encoding.delta, encoding.offset = calculate_delta_offset(encoding_min, encoding_max, bitwidth)
         else:
             raise AssertionError('Compute encoding or Set encoding must be invoked before')
 
@@ -346,7 +434,11 @@ class QuantizerInfo:
         Return bool if encoding is valid or not
         :return: Boolean
         """
-        return self.tensor_quantizer.isEncodingValid
+        if isinstance(self.tensor_quantizer, list):
+            for tensor_quantizer in self.tensor_quantizer:
+                return tensor_quantizer.isEncodingValid
+        else:
+            return self.tensor_quantizer.isEncodingValid
 
     def __getstate__(self):
         # convert tensor quantizer state to pickle-able form
@@ -360,11 +452,22 @@ class QuantizerInfo:
         # Create the cpp tensor quantizer reference
         self.quant_op_name = state.quant_op_name
         self.quantizer_type = state.quantizer_type
-        self.tensor_quantizer = libpymo.TensorQuantizer(state.quant_scheme,
-                                                        state.rounding_mode)
-        self.tensor_quantizer.setStrictSymmetric(state.use_strict_symmetric)
-        self.tensor_quantizer.setUnsignedSymmetric(state.use_unsigned_symmetric)
-        self.tensor_quantizer.isEncodingValid = state.is_encoding_valid
+        # If per channel quantization is enabled for a parameter
+        if state.num_channels > 0:
+            self.tensor_quantizer = []
+            for _ in range(state.num_channels):
+                tensor_quantizer = libpymo.TensorQuantizer(state.quant_scheme,
+                                                           state.rounding_mode)
+                tensor_quantizer.setStrictSymmetric(state.use_strict_symmetric)
+                tensor_quantizer.setUnsignedSymmetric(state.use_unsigned_symmetric)
+                tensor_quantizer.isEncodingValid = state.is_encoding_valid
+                self.tensor_quantizer.append(tensor_quantizer)
+        else:
+            self.tensor_quantizer = libpymo.TensorQuantizer(state.quant_scheme,
+                                                            state.rounding_mode)
+            self.tensor_quantizer.setStrictSymmetric(state.use_strict_symmetric)
+            self.tensor_quantizer.setUnsignedSymmetric(state.use_unsigned_symmetric)
+            self.tensor_quantizer.isEncodingValid = state.is_encoding_valid
 
     def __str__(self):
         stream = io.StringIO(newline='\n')
