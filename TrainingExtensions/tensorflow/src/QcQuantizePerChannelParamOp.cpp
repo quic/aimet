@@ -61,7 +61,7 @@ REGISTER_OP("QcQuantizePerChannelParam")
     .Input("encoding_max: double")
     .Input("bit_width: int8")
     .Input("use_symmetric_encoding: bool")
-    .Input("axis: int8")
+    .Input("axis: int32")
     .Output("out_tensor: T")   // list of output tensors (weights/activations)
 
     .Attr("T: {float} = DT_FLOAT")   // attr 'T' specifies which template instantiation of op to use, default float
@@ -152,19 +152,21 @@ public:
         const Tensor& inTensor = context->input(0);
         // Get shape of input tensor by iterating over each dimension
         int numDimensionsTensor = inTensor.shape().dims();
+        std::cout<<" \n dimersions ";
         std::vector<int> shapeVector;
         for(int axis=0; axis< numDimensionsTensor; axis++)
         {
             shapeVector.push_back(inTensor.shape().dim_size(axis));
+            std::cout<<inTensor.shape().dim_size(axis)<<" ";
         }
 
         // Read axis for per channel quantization
         const Tensor* axisTensor;
         OP_REQUIRES_OK(context, context->input("axis", &axisTensor));
-        const int8* axis = axisTensor->flat<int8>().data();
+        const int32* axis = axisTensor->flat<int32>().data();
 
         // Get shape along axis for per channel quantization
-        int8 channelShape = shapeVector[*axis];
+        int channelShape = shapeVector[*axis];
 
         // Read the op_mode
         const Tensor* opModeTensor;

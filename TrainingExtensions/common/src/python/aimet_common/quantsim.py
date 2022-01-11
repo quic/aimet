@@ -37,6 +37,9 @@
 # =============================================================================
 
 """ Common utility for Quantization """
+
+import numpy as np
+
 import libpymo
 # Defined below is a quantization encoding format version, which will follow XX.YY.ZZ versioning as described below,
 #
@@ -61,9 +64,17 @@ def gate_min_max(min_val: float, max_val: float)-> (float, float):
     """
 
     epsilon = 1e-5
-    gated_min = min(min_val, 0.0)
-    gated_max = max(max_val, 0.0)
-    gated_max = max(gated_max, gated_min + epsilon)
+    # For per channel quantization
+    if isinstance(min_val, np.ndarray):
+        gated_min = np.clip(min_val, None, 0.0)
+        gated_max = np.clip(max_val, 0.0, None)
+        gated_max = np.clip(gated_max, gated_min + epsilon, None)
+        gated_min = gated_min.tolist()
+        gated_max = gated_max.tolist()
+    else:
+        gated_min = min(min_val, 0.0)
+        gated_max = max(max_val, 0.0)
+        gated_max = max(gated_max, gated_min + epsilon)
 
     return gated_min, gated_max
 
@@ -76,11 +87,22 @@ def calculate_delta_offset(min_val: float, max_val: float, bitwidth: int)-> (flo
     :param bitwidth: bitwidth used for quantization
     :return: delta and offset values computed
     """
+    def calculate_values(min_val, max_val):
+        delta = (max_val - min_val) / (2 ** bitwidth - 1)
+        if delta == 0:
+            delta = 1e-5
+        offset = round(min_val / delta)
+        return delta, offset
+    if isinstance(min_val, list):
+        delta = []
+        offset = []
+        for i, minimum_val in enumerate(min_val):
+            delta_, offset_ = calculate_values(minimum_val, max_val[i])
+            delta.append(delta_)
+            offset.append(offset_)
+    else:
+        delta, offset = calculate_values(min_val, max_val)
 
-    delta = (max_val - min_val) / (2 ** bitwidth - 1)
-    if delta == 0:
-        delta = 1e-5
-    offset = round(min_val / delta)
     return delta, offset
 
 
