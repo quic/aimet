@@ -118,6 +118,7 @@ def recompute_grid_params(current_encoding: libpymo.TfEncoding, bitwidth: int,
         min_val = delta * offset
         max_val = min_val + delta * num_steps
 
+    updated_encoding.bw = bitwidth
     updated_encoding.min = min_val
     updated_encoding.max = max_val
     updated_encoding.delta = delta

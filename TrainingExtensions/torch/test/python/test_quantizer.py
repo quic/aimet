@@ -1948,6 +1948,7 @@ class TestQuantizationSimStaticGrad:
         # validate override
         assert int(new_encoding_min) == -6
         assert int(new_encoding_max) == 18
+        assert sim.model.block.add.output_quantizer.encoding.bw == 8
 
     def test_transformer_mask_override_tf_enhanced(self):
         """
@@ -2010,6 +2011,7 @@ class TestQuantizationSimStaticGrad:
         print("encoding max = ", new_encoding_max)
         assert int(new_encoding_min) == -6
         assert int(new_encoding_max) == 18
+        assert sim.model.block.add_2.output_quantizer.encoding.bw == 8
 
 
 class TestQuantizationSimLearnedGrid:
