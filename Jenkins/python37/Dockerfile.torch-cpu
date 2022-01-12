@@ -123,6 +123,8 @@ RUN python3.7 -m pip --no-cache-dir install \
         cython==0.29.10 \
         Deprecated==1.2.12 \
         docutils==0.16 \
+        grpcio \
+        grpcio-tools \
         h5py==2.9.0 \
         ipykernel==4.8.2 \
         keras==2.2.4 \
