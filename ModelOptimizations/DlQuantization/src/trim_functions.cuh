@@ -98,12 +98,15 @@ __device__ inline double round_stochastic(double val, int seed)
 /**
  * @brief Quantize a floating point number to fixed point.
  * @param in Pointer to the floating point number to be quantized.
- * @param seed This number is solely used to generate random numbers in
- * stochastic rounding mode.
- * @param encoding The fixed point format.
  * @param out Compute the result of quantization.
+ * @param encoding_min The minimum value for clipping.
+ * @param encoding_max The maximum value for clipping.
+ * @param encoding_delta The fixed point scale.
+ * @param encoding_offset The fixed point offset.
  * @param rounding_mode The rounding mode to use for quantization to fixed
  * point.
+ * @param seed This number is solely used to generate random numbers in
+ * stochastic rounding mode.
  */
 template <typename DTYPE>
 __device__ void quantizeToFxpDevice(const DTYPE* in, DTYPE* out,
@@ -137,8 +140,9 @@ __device__ void quantizeToFxpDevice(const DTYPE* in, DTYPE* out,
 
 /**
  * @brief Dequantize a fixed point number to floating point.
- * @param encoding The fixed point format.
  * @param out Compute the result of dequantization.
+ * @param encoding_delta The fixed point scale.
+ * @param encoding_offset The fixed point offset.
  */
 template <typename DTYPE>
 __device__ void dequantizeFromFxpDevice(DTYPE* out,
