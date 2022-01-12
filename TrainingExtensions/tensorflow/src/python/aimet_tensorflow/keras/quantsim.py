@@ -39,16 +39,9 @@
 
 from typing import Union
 import tensorflow as tf
-from packaging import version
 
 from aimet_common.defs import QuantScheme
-from aimet_tensorflow.keras.quant_sim.qc_quantize_wrapper import QcQuantizeWrapper, QuantizeWrapperTransform, \
-    QuantizerSettings
-
-# Remove version check when we upgrade to tf 2.0
-if version.parse(tf.version.VERSION) >= version.parse("2.00"):
-    # pylint: disable=no-name-in-module
-    from tensorflow_model_optimization.python.core.quantization.keras.graph_transformations import model_transformer
+from aimet_tensorflow.keras.quant_sim.qc_quantize_wrapper import QcQuantizeWrapper, QuantizerSettings
 
 unquantizable_modules = (tf.keras.layers.InputLayer, QcQuantizeWrapper)
 
@@ -76,28 +69,21 @@ class QuantizationSimModel:
         :param default_output_bw: Default bitwidth for activation quantizers
         :param default_param_bw: Default bitwidth for param quantizers
         """
-        layer_types_to_wrap = set()
-        # Need this dictionary to contain all custom objects in the model to give to transforms, even if the custom
-        # object is not to be wrapped.
-        layer_types_to_class_dict = {}
-        name_to_layer_map = {}
-        for layer in model.layers:
-            layer_types_to_class_dict[layer.__class__.__name__] = layer.__class__
-            name_to_layer_map[layer.name] = layer
-            if layer.__class__ not in unquantizable_modules and not layer.submodules:
-                layer_types_to_wrap.add(layer.__class__)
-        transforms = []
-        for layer_class in layer_types_to_wrap:
-            transforms.append(
-                QuantizeWrapperTransform(layer_class,
-                                         activation_quant_settings=QuantizerSettings(default_output_bw, rounding_mode,
-                                                                                     quant_scheme, False, False, False),
-                                         param_quant_settings=QuantizerSettings(default_param_bw, rounding_mode,
-                                                                                quant_scheme, False, False, False),
-                                         name_to_module_map=name_to_layer_map,
-                                         layer_types_to_class_dict=layer_types_to_class_dict))
-        model, _ = model_transformer.ModelTransformer(model, transforms).transform()
-        return model
+        def wrap_layer(layer) -> tf.keras.layers.Layer:
+            """
+            Function to wrap layers with QcQuantizeWrappers, used by keras clone_model()
+            :param layer: Layer to wrap
+            :return: Wrapped layer, or original layer if layer is not to be wrapped
+            """
+            activation_quant_settings = QuantizerSettings(default_output_bw, rounding_mode,
+                                                          quant_scheme, False, False, False)
+            param_quant_settings = QuantizerSettings(default_param_bw, rounding_mode,
+                                                     quant_scheme, False, False, False)
+            if isinstance(layer, unquantizable_modules) or layer.submodules:
+                return layer
+            return QcQuantizeWrapper(layer, activation_quant_settings, param_quant_settings)
+
+        return tf.keras.models.clone_model(model, clone_function=wrap_layer)
 
     def _copy_params_to_original_model(self):
         """ Copy parameter values from the quantized model to the original model """

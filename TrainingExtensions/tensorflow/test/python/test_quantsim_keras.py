@@ -37,9 +37,8 @@ from packaging import version
 import numpy as np
 import tensorflow as tf
 
+from aimet_tensorflow.keras.quantsim import QuantizationSimModel
 import libpymo
-if version.parse(tf.version.VERSION) >= version.parse("2.00"):
-    from aimet_tensorflow.keras.quantsim import QuantizationSimModel
 
 def dense_functional():
     inp = tf.keras.layers.Input(shape=(5,))
@@ -80,8 +79,9 @@ def test_quantsim_basic():
     if version.parse(tf.version.VERSION) >= version.parse("2.00"):
         model = dense_functional()
         rand_inp = np.random.randn(100, 5)
+        orig_out = model.predict(rand_inp)
+
         qsim = QuantizationSimModel(model, quant_scheme='tf')
-        orig_out = qsim.model.predict(rand_inp)
         quant_wrappers = [quant_wrapper for quant_wrapper in qsim.quant_wrappers()]
         assert len(quant_wrappers) == 2
         assert len(quant_wrappers[0].param_quantizers) == 2
@@ -90,7 +90,27 @@ def test_quantsim_basic():
             assert quant_wrapper.input_quantizers[0].round_mode == libpymo.RoundingMode.ROUND_NEAREST
             assert quant_wrapper.output_quantizers[0].quant_scheme == libpymo.QuantizationMode.QUANTIZATION_TF
             assert quant_wrapper.output_quantizers[0].round_mode == libpymo.RoundingMode.ROUND_NEAREST
-        qsim.compute_encodings(lambda model, _: model.predict(rand_inp), None)
+        assert len(qsim.model.layers[1].input_quantizers) == 1
+        assert len(qsim.model.layers[1].output_quantizers) == 1
+        assert len(qsim.model.layers[1].param_quantizers) == 2
+        assert len(qsim.model.layers[2].input_quantizers) == 1
+        assert len(qsim.model.layers[2].output_quantizers) == 1
+        assert len(qsim.model.layers[2].param_quantizers) == 0
+
+        # Test that model output remains same prior to compute encodings
+        # Disable param quantizers first, otherwise one shot quant/dequant will affect output
+        qsim.model.layers[1].param_quantizers[0].disable()
+        qsim.model.layers[1].param_quantizers[1].disable()
+        quant_out = qsim.model.predict(rand_inp)
+        assert np.array_equal(orig_out, quant_out)
+
+        qsim.model.layers[1].param_quantizers[0].enable()
+        qsim.model.layers[1].param_quantizers[1].enable()
+
+        # Run one more forward pass after enabling param quantizers
+        qsim.compute_encodings(lambda m, _: m(rand_inp), None)
+
+        assert qsim.model.layers[1].param_quantizers[0].encoding is not None
         quant_out = qsim.model.predict(rand_inp)
         assert not np.array_equal(orig_out, quant_out)
 

@@ -36,11 +36,8 @@
 import tensorflow as tf
 import numpy as np
 from packaging import version
-if version.parse(tf.version.VERSION) >= version.parse("2.00"):
-    from tensorflow_model_optimization.python.core.quantization.keras.graph_transformations import model_transformer
 
-    from aimet_tensorflow.keras.quant_sim.qc_quantize_wrapper import QcQuantizeWrapper, QuantizeWrapperTransform, \
-        QuantizerSettings
+from aimet_tensorflow.keras.quant_sim.qc_quantize_wrapper import QcQuantizeWrapper, QuantizerSettings
 
 def dense_functional():
     inp = tf.keras.layers.Input(shape=(5,))
@@ -111,51 +108,3 @@ def test_wrapper():
                                      model.layers[1]._layer_to_wrap.weights]
             for idx, weight in enumerate(weights_after_predict):
                 assert np.array_equal(weight, weights_after_fit[idx])
-
-
-def test_functional_model_with_wrapper():
-    if version.parse(tf.version.VERSION) >= version.parse("2.00"):
-        rand_inp = np.random.randn(100, 2)
-        inp = tf.keras.layers.Input(shape=(2,))
-        out = tf.keras.layers.Dense(units=2)(inp)
-        out = tf.keras.layers.Softmax()(out)
-        model = tf.keras.Model(inputs=inp, outputs=out, name="dense_functional")
-        orig_out = model.predict(rand_inp)
-
-        name_to_layer_map = {}
-        for layer in model.layers:
-            name_to_layer_map[layer.name] = layer
-
-        transforms = [QuantizeWrapperTransform('Softmax',
-                                               QuantizerSettings(8, 'nearest', 'tf', False, False, False),
-                                               QuantizerSettings(8, 'nearest', 'tf', False, False, False),
-                                               name_to_layer_map),
-                      QuantizeWrapperTransform('Dense',
-                                               QuantizerSettings(8, 'nearest', 'tf', False, False, False),
-                                               QuantizerSettings(8, 'nearest', 'tf', False, False, False),
-                                               name_to_layer_map)]
-        new_model, _ = model_transformer.ModelTransformer(model, transforms).transform()
-        assert len(new_model.layers[1].input_quantizers) == 1
-        assert len(new_model.layers[1].output_quantizers) == 1
-        assert len(new_model.layers[1].param_quantizers) == 2
-        assert len(new_model.layers[2].input_quantizers) == 1
-        assert len(new_model.layers[2].output_quantizers) == 1
-        assert len(new_model.layers[2].param_quantizers) == 0
-
-        # Test that model output remains same prior to compute encodings
-        # Disable param quantizers first, otherwise one shot quant/dequant will affect output
-        new_model.layers[1].param_quantizers[0].disable()
-        new_model.layers[1].param_quantizers[1].disable()
-        quant_out = new_model.predict(rand_inp)
-        assert np.array_equal(orig_out, quant_out)
-
-        new_model.layers[1].param_quantizers[0].enable()
-        new_model.layers[1].param_quantizers[1].enable()
-
-        # Run one more forward pass after enabling param quantizers
-        _ = new_model.predict(rand_inp)
-        new_model.layers[1].compute_encoding()
-
-        assert new_model.layers[1].param_quantizers[0].encoding is not None
-        quant_out = new_model.predict(rand_inp)
-        assert not np.array_equal(orig_out, quant_out)
