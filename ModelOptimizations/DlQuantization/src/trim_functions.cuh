@@ -51,11 +51,48 @@ namespace DlQuantization
 // states.
 __device__ __forceinline__
 
-double randUniformDevice(int seed)
+__device__ float rand_uniform(int seed)
+{
+    curandState state;
+    curand_init(static_cast<unsigned long long>(clock()) + seed, 0, 0, &state);
+    return curand_uniform(&state);
+}
+
+__device__ double rand_uniform_double(int seed)
 {
     curandState state;
     curand_init(static_cast<unsigned long long>(clock()) + seed, 0, 0, &state);
     return curand_uniform_double(&state);
+}
+
+__device__ inline float clamp(float val, float min, float max)
+{
+    return fmaxf(fminf(val, max), min);
+}
+
+__device__ inline double clamp(double val, double min, double max)
+{
+    return fmax(fmin(val, max), min);
+}
+
+__device__ inline float round_nearest(float val)
+{
+    return roundf(val);
+}
+
+__device__ inline double round_nearest(double val)
+{
+    return round(val);
+}
+
+__device__ inline float round_stochastic(float val, int seed)
+{
+    return __float2int_rd(val + rand_uniform(seed));
+}
+
+__device__ inline double round_stochastic(double val, int seed)
+{
+    return __double2int_rd(val + rand_uniform_double(seed));
 }
 
 /**
@@ -69,30 +106,32 @@ double randUniformDevice(int seed)
  * point.
  */
 template <typename DTYPE>
-__device__ void quantizeToFxpDevice(const DTYPE* in, int seed, TfEncoding encoding, DTYPE* out,
-                                    RoundingMode rounding_mode)
+__device__ void quantizeToFxpDevice(const DTYPE* in, DTYPE* out,
+                                    DTYPE encoding_min, DTYPE encoding_max,
+                                    DTYPE encoding_delta, DTYPE encoding_offset,
+                                    RoundingMode rounding_mode, int seed)
 {
     // Saturate
-    *out = (DTYPE) fmax(fmin((double) *in, encoding.max), encoding.min);
+    *out = clamp(*in, encoding_min, encoding_max);
     // Scale and add offset to get something in the range [0,2^bw-1]
-    *out = *out / encoding.delta - encoding.offset;
+    *out = *out / encoding_delta - encoding_offset;
     // Round
     switch (rounding_mode)
     {
-    case ROUND_NEAREST:
-    {
-        *out = roundf(*out);
-        break;
-    }
-    case ROUND_STOCHASTIC:
-    {
-        *out = __float2int_rd(*out + randUniformDevice(seed));
-        break;
-    }
-    default:
-    {
-        break;
-    }
+        case ROUND_NEAREST:
+        {
+            *out = round_nearest(*out);
+            break;
+        }
+        case ROUND_STOCHASTIC:
+        {
+            *out = round_stochastic(*out, seed);
+            break;
+        }
+        default:
+        {
+            break;
+        }
     }
 }
 
@@ -102,10 +141,12 @@ __device__ void quantizeToFxpDevice(const DTYPE* in, int seed, TfEncoding encodi
  * @param out Compute the result of dequantization.
  */
 template <typename DTYPE>
-__device__ void dequantizeFromFxpDevice(TfEncoding encoding, DTYPE* out)
+__device__ void dequantizeFromFxpDevice(DTYPE* out,
+                                        DTYPE encoding_delta,
+                                        DTYPE encoding_offset)
 {
     // De-quantize
-    *out = encoding.delta * (*out + encoding.offset);
+    *out = encoding_delta * (*out + encoding_offset);
 }
 
 }   // end of namespace DlQuantization
