@@ -37,20 +37,12 @@
 # =============================================================================
 """ Qc Quantize wrapper for tf 2 keras """
 
-# pylint: skip-file
-
-from typing import Union, List, Dict
+from typing import Union, List
 import tensorflow as tf
-from packaging import version
 
 from aimet_common.utils import AimetLogger
 from aimet_common.defs import MAP_QUANT_SCHEME_TO_PYMO, MAP_ROUND_MODE_TO_PYMO, QuantScheme
 from aimet_tensorflow.keras.quant_sim.tensor_quantizer import ActivationTensorQuantizer, ParamTensorQuantizer
-# Remove version check when we upgrade to tf 2.0
-if version.parse(tf.version.VERSION) >= version.parse("2.00"):
-    # pylint: disable=no-name-in-module
-    from tensorflow_model_optimization.python.core.quantization.keras.graph_transformations import transforms
-
 _logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Quant)
 
 class QuantizerSettings:
@@ -121,44 +113,6 @@ class QuantizerSettings:
     def use_strict_symmetric(self, use_strict_symmetric: bool):
         """ Use strict symmetric setter """
         self._use_strict_symmetric = use_strict_symmetric
-
-
-class QuantizeWrapperTransform(transforms.Transform):
-    """ Transform for inserting quantize wrapper """
-
-    def __init__(self, layer_class: type, activation_quant_settings: QuantizerSettings,
-                 param_quant_settings: QuantizerSettings, name_to_module_map: Dict[str, tf.keras.layers.Layer],
-                 layer_types_to_class_dict: Dict[str, type]):
-        super(QuantizeWrapperTransform, self).__init__()
-        self._name_to_module_map = name_to_module_map
-        self._layer_class = layer_class
-        self._activation_quant_settings = activation_quant_settings
-        self._param_quant_settings = param_quant_settings
-        self._layer_types_to_class = layer_types_to_class_dict
-
-    def pattern(self):
-        """ Layer pattern to search for replacement """
-        return transforms.LayerPattern(self._layer_class.__name__)
-
-    def replacement(self, match_layer):
-        """ Replacement method to create quant wrapper layer node """
-        keras_module = self._name_to_module_map.get(match_layer.layer['config']['name'])
-        if keras_module is not None:
-            wrapper = QcQuantizeWrapper(keras_module, self._activation_quant_settings, self._param_quant_settings)
-            wrapper_layer_config = tf.keras.layers.serialize(wrapper)
-            wrapper_layer_config['name'] = wrapper.name
-            wrapper_layer_node = transforms.LayerNode(wrapper_layer_config, weights=match_layer.weights)
-            return wrapper_layer_node
-        _logger.error('Layer to replace does not have associated keras module')
-        raise AssertionError
-
-    # pylint: disable=no-self-use
-    def custom_objects(self):
-        """ List of custom objects used in replacement method """
-        custom_objects = {'QcQuantizeWrapper': QcQuantizeWrapper}
-        custom_objects.update(self._layer_types_to_class)
-        return custom_objects
-
 
 class QcQuantizeWrapper(tf.keras.layers.Layer):
     """ Wrapper for simulating quantization noise """
