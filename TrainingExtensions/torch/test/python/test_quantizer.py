@@ -72,6 +72,19 @@ from aimet_common.utils import AimetLogger
 logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Test)
 
 
+def evaluate(model: torch.nn.Module, dummy_input: torch.Tensor):
+    """
+    Helper function to evaluate model given dummy input
+    :param model: torch model
+    :param dummy_input: dummy input to model
+    """
+    model.eval()
+    if isinstance(dummy_input, torch.Tensor):
+        dummy_input = [dummy_input]
+    with torch.no_grad():
+        model(*dummy_input)
+
+
 def dummy_forward_pass(model, args):
     model.eval()
     with torch.no_grad():
@@ -2261,3 +2274,70 @@ class TestQuantizationSimLearnedGrid:
         with open('./data/prelu_model.encodings') as json_file:
             encoding_data = json.load(json_file)
         assert 'prelu.weight' in encoding_data['param_encodings'].keys()
+
+    def test_inplace_modification_with_relu(self):
+        """
+        Test custom function behavior with view+in-place (relu)
+         (output of custom function is view when returned as-is)
+        """
+
+        class ModelWithInPlaceReLU(torch.nn.Module):
+            """ A model with in-place ReLU. Use this model for unit testing purposes.
+                Expected inputs: 1 input, of size (1, 3, 8, 8) """
+
+            def __init__(self):
+                super(ModelWithInPlaceReLU, self).__init__()
+                self.conv1 = torch.nn.Conv2d(3, 4, kernel_size=2, stride=2, padding=2, bias=False)
+                self.relu = torch.nn.ReLU(inplace=True)
+
+            def forward(self, inputs):
+                x = self.conv1(inputs)
+                x = self.relu(x)
+                return x
+
+        # Test with both QAT and QAT-range learning.
+        input_shape = (1, 3, 8, 8)
+        dummy_input = [torch.randn(*input_shape)]
+        model = ModelWithInPlaceReLU().eval()
+        quant_schemes = [QuantScheme.post_training_tf_enhanced,
+                         QuantScheme.training_range_learning_with_tf_enhanced_init]
+
+        for quant_scheme in quant_schemes:
+            quant_sim = QuantizationSimModel(model, dummy_input, quant_scheme=quant_scheme, default_param_bw=4,
+                                             default_output_bw=4)
+            quant_sim.compute_encodings(evaluate, dummy_input)
+            quant_sim.model(*dummy_input)
+
+    def test_inplace_modification_with_add(self):
+        """
+        Test custom function behavior with view+in-place (add)
+         (output of custom function is view when returned as-is)
+        """
+
+        class ModelWithInPlaceAdd(torch.nn.Module):
+            """ A model with in-place Add. Use this model for unit testing purposes.
+                Expected inputs: 2 inputs, of size (1, 3, 8, 8) """
+
+            def __init__(self):
+                super(ModelWithInPlaceAdd, self).__init__()
+                self.conv1 = torch.nn.Conv2d(3, 4, kernel_size=2, stride=2, padding=2, bias=False)
+                self.conv2 = torch.nn.Conv2d(3, 4, kernel_size=2, stride=2, padding=2, bias=False)
+
+            def forward(self, *inputs):
+                x = self.conv1(inputs[0])
+                y = self.conv2(inputs[1])
+                x += y
+                return x
+
+        # Test with both QAT and QAT-range learning.
+        input_shape = (1, 3, 8, 8)
+        dummy_input = [torch.randn(*input_shape), torch.randn(*input_shape)]
+        model = ModelWithInPlaceAdd().eval()
+        quant_schemes = [QuantScheme.post_training_tf_enhanced,
+                         QuantScheme.training_range_learning_with_tf_enhanced_init]
+
+        for quant_scheme in quant_schemes:
+            quant_sim = QuantizationSimModel(model, dummy_input, quant_scheme=quant_scheme, default_param_bw=4,
+                                             default_output_bw=4)
+            quant_sim.compute_encodings(evaluate, dummy_input)
+            quant_sim.model(*dummy_input)
