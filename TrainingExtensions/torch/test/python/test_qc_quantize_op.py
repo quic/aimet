@@ -849,3 +849,20 @@ class TestQcQuantizeOpLearnedGrid:
         # Check if weight gradient got clipped
         weight_tensor_grad = quantize._module_to_wrap.weight.grad.flatten()
         assert weight_tensor_grad[1] == 0.0
+
+    def test_wrapper_for_in_place_operation(self):
+        """
+        Test wrapper for following in-place operation
+        """
+        module = torch.nn.Conv2d(3, 4, 2)
+        wrapper = StaticGridQuantWrapper(module, weight_bw=8, activation_bw=8, round_mode='nearest',
+                                         quant_scheme=QuantScheme.post_training_tf_enhanced)
+        input_shape = (1, 3, 8, 8)
+        input_var = torch.autograd.Variable(torch.randn(*input_shape), requires_grad=True)
+        wrapper.set_mode(QcQuantizeOpMode.ANALYSIS)
+        output = wrapper.forward(input_var)
+        output += output # in-place operation should succeed
+        wrapper.compute_encoding()
+        wrapper.set_mode(QcQuantizeOpMode.ACTIVE)
+        output = wrapper.forward(input_var)
+        output += output    # in-place operation should succeed

@@ -223,6 +223,7 @@ class StaticGridTensorQuantizer(TensorQuantizer):
         :return: Resulting tensor
         """
         output = QuantizeDequantize.apply(tensor, self, round_mode)
+        output = output.clone()
         return output
 
     def quantize(self, tensor, round_mode):
@@ -233,6 +234,7 @@ class StaticGridTensorQuantizer(TensorQuantizer):
         :return: Resulting tensor
         """
         output = Quantize.apply(tensor, self, round_mode)
+        output = output.clone()
         return output
 
     def reset_encoding_stats(self):
