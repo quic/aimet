@@ -122,9 +122,9 @@ RUN python3.7 -m pip --no-cache-dir install \
         click==7.0 \
         cython==0.29.10 \
         Deprecated==1.2.12 \
+        docutils==0.16 \
         grpcio \
         grpcio-tools \
-        docutils==0.16 \
         h5py==2.9.0 \
         ipykernel==4.8.2 \
         keras==2.2.4 \
