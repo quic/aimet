@@ -588,13 +588,13 @@ class TestTrainingExtensionsQcQuantizeOp(unittest.TestCase):
 
         zero_out_module = tf.load_op_library('libaimet_tf_ops.so')
         graph = tf.Graph()
-        config = tf.ConfigProto(log_device_placement=False)
-        sess = tf.Session(graph=graph, config=config)
+        config = tf.compat.v1.ConfigProto(log_device_placement=False)
+        sess = tf.compat.v1.Session(graph=graph, config=config)
 
         with graph.as_default():
             # place holder for the input
             with tf.device("/device:CPU:0"):
-                inp = tf.placeholder(tf.float32, shape=[2, 2], name='input')
+                inp = tf.compat.v1.placeholder(tf.float32, shape=[2, 2], name='input')
                 tensor_quantizer = libpymo.TensorQuantizer(libpymo.QuantizationMode.QUANTIZATION_TF_ENHANCED,
                                                            libpymo.RoundingMode.ROUND_NEAREST)
                 tensor_quantizer_val = libpymo.PtrToInt64(tensor_quantizer)
@@ -642,8 +642,8 @@ class TestTrainingExtensionsQcQuantizeOp(unittest.TestCase):
             return tf.reduce_sum(tf.subtract(y_pred, y_actual-y_actual))
 
         with graph.as_default():
-            var_list = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES)
-            labels_placeholder = tf.placeholder(tf.float32, [2, 2], name='labels')
+            var_list = tf.compat.v1.get_collection(tf.compat.v1.GraphKeys.TRAINABLE_VARIABLES)
+            labels_placeholder = tf.compat.v1.placeholder(tf.float32, [2, 2], name='labels')
 
             # output tensor
             logits = sess.graph.get_tensor_by_name('quant_op:0')
@@ -654,14 +654,14 @@ class TestTrainingExtensionsQcQuantizeOp(unittest.TestCase):
             one_hot_labels = np.eye(2)[labels]
 
             update_ops = []
-            global_step = tf.train.create_global_step()
+            global_step = tf.compat.v1.train.create_global_step()
             # Stochastic GD in tf with momentum param
-            optimizer = tf.train.MomentumOptimizer(learning_rate=0.05, momentum=0.5)
+            optimizer = tf.compat.v1.train.MomentumOptimizer(learning_rate=0.05, momentum=0.5)
             gradients = optimizer.compute_gradients(current_loss, var_list)
 
             grad_updates = optimizer.apply_gradients(gradients, global_step=global_step)
-            init_global = tf.global_variables_initializer()
-            init_local = tf.local_variables_initializer()
+            init_global = tf.compat.v1.global_variables_initializer()
+            init_local = tf.compat.v1.local_variables_initializer()
             init = tf.group(init_global, init_local)
             sess.run(init)
             update_ops.append(grad_updates)
