@@ -1199,7 +1199,7 @@ def load_checkpoint(meta_path: str, file_name_prefix: str) -> QuantizationSimMod
     return new_quant_sim
 
 
-def check_accumulator_overflow(sess: tf.Session, quant_bw: int, accum_bw: int):
+def check_accumulator_overflow(sess: tf.compat.v1.Session, quant_bw: int, accum_bw: int):
     """
     Checks for any potential for accumulator overflow across all the layers of the given model
     :param sess: Tensorflow session

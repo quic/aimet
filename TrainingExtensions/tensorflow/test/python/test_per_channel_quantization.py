@@ -49,7 +49,7 @@ from aimet_tensorflow.quantsim import QuantizationSimModel
 from aimet_tensorflow.examples.test_models import depthwise_conv2d_model
 from aimet_common.quantsim import calculate_delta_offset
 
-
+tf.compat.v1.disable_eager_execution()
 tf.compat.v1.logging.set_verbosity(tf.logging.WARN)
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
 

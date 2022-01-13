@@ -47,7 +47,7 @@ from aimet_tensorflow.quantsim import QuantizationSimModel
 from aimet_tensorflow.utils.graph_saver import load_model_from_meta
 from aimet_tensorflow.quantsim import save_checkpoint, load_checkpoint
 
-tf.compat.v1.logging.set_verbosity(tf.logging.WARN)
+tf.compat.v1.logging.set_verbosity(tf.compat.v1.logging.WARN)
 tf.compat.v1.disable_eager_execution()
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
 
