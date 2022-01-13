@@ -365,11 +365,11 @@ def perform_cle_bc(config: argparse.Namespace):
     logger.info("CLE+BC applied Model Top-1 accuracy on Quant Simulator = %.2f", accuracy)
 
     # 4.3 Exports CLE+BC applied model so it is ready to be run on-target
-    logger.info("Saving Quantized model graph...")
+    logger.info("Saving Quantized model graph")
     quant_sim.export(path=config.logdir, filename_prefix='quantized_model')
-    logger.info("...Quantized model graph is saved!")
+    logger.info("Quantized model graph is saved!")
 
-    logger.info("...Aimet Cross Layer Equalization and Bias Correction Done")
+    logger.info("Aimet Cross Layer Equalization and Bias Correction Done")
 
 if __name__ == '__main__':
     default_logdir = os.path.join("benchmark_output", "cle_bc_" + datetime.now().strftime("%Y-%m-%d-%H-%M-%S"))

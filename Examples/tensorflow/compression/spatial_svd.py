@@ -92,6 +92,8 @@ class ImageNetDataPipeline:
 
     def __init__(self, _config: argparse.Namespace):
         """
+        Instantiates ImageNetDataPipeline object
+
         :param _config:
         """
         self._config = _config
@@ -280,10 +282,10 @@ def compress_and_finetune(config: argparse.Namespace):
     accuracy = data_pipeline.evaluate(compressed_sess)
     logger.info("Compressed Model Top-1 accuracy = %.2f", accuracy)
 
-    logger.info("...Model Compression Done")
+    logger.info("Model Compression Done")
 
     # 5. Finetuning
-    logger.info("Starting Model Finetuning...")
+    logger.info("Starting Model Finetuning")
 
     # 5.1. Finetunes the compressed model
     data_pipeline.finetune(compressed_sess, update_ops_name=update_ops_name)
@@ -292,7 +294,7 @@ def compress_and_finetune(config: argparse.Namespace):
     accuracy = data_pipeline.evaluate(compressed_sess)
     logger.info("Finetuned Compressed Model Top-1 accuracy = %.2f", accuracy)
 
-    logger.info("...Model Finetuning Done")
+    logger.info("Model Finetuning Done")
 
 
 if __name__ == '__main__':

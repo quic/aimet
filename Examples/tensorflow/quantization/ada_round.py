@@ -300,7 +300,7 @@ def perform_adaround(config: argparse.Namespace):
     logger.info("Original Model Top-1 accuracy on Quant Simulator = %.2f", accuracy)
 
     # 4. Applies AIMET Adaround and calculates QuantSim accuracy
-    logger.info("Starting Aimet Adaround...")
+    logger.info("Starting Aimet Adaround")
 
     # 4.1. Applies AIMET Adaround
     adaround_applied_BN_folded_sess = aimet_adaround(BN_folded_sess, start_op_names=['input_1'],
@@ -324,9 +324,9 @@ def perform_adaround(config: argparse.Namespace):
     # 4.3 Exports Adaround applied model so it is ready to be run on-target
     logger.info("Saving Quantized model graph...")
     quant_sim.export(path=config.logdir, filename_prefix='quantized_model')
-    logger.info("...Quantized model graph is saved!")
+    logger.info("Quantized model graph is saved!")
 
-    logger.info("...Aimet Adaround Done")
+    logger.info("Aimet Adaround Done")
 
 
 if __name__ == '__main__':

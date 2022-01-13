@@ -274,10 +274,10 @@ def perform_qat(config: argparse.Namespace):
     accuracy = data_pipeline.evaluate(quant_sim.session)
     logger.info("Model Top-1 Accuracy on Quant Simulator = %.2f", accuracy)
 
-    logger.info("...Model QuantSim Done")
+    logger.info("Model QuantSim Done")
 
     # 5. Quantization Aware Training
-    logger.info("Starting Model QAT...")
+    logger.info("Starting Model QAT")
 
     # 5.1. Trains the quantization aware model
     data_pipeline.train(quant_sim.session, update_ops_name=update_ops_name)
@@ -287,11 +287,11 @@ def perform_qat(config: argparse.Namespace):
     logger.info("Quantization aware trained model Top-1 Accuracy on Quant Simulator = %.2f", accuracy)
 
     # 5.3. Exports quantization aware model so it is ready to be run on-target
-    logger.info("Saving Quantized model graph...")
+    logger.info("Saving Quantized model graph")
     quant_sim.export(path=config.logdir, filename_prefix='quantized_model')
-    logger.info("...Quantized model graph is saved!")
+    logger.info("Quantized model graph is saved!")
 
-    logger.info("...Model QAT Done")
+    logger.info("Model QAT Done")
 
 
 if __name__ == '__main__':
