@@ -54,7 +54,7 @@ from aimet_common.defs import QuantScheme
 from aimet_tensorflow import batch_norm_fold as aimet_bnf
 from aimet_tensorflow import bias_correction as aimet_bc
 from aimet_tensorflow import cross_layer_equalization as aimet_cle
-from aimet_tensorflow import quantsim as aimet_tf_quantsim
+from aimet_tensorflow.quantsim import QuantizationSimModel
 from aimet_tensorflow.utils.graph_saver import save_and_load_graph
 
 # imports for data pipelines
@@ -73,8 +73,8 @@ logging.basicConfig(format=formatter)
 
 ###
 # This script utilizes AIMET to apply Cross Layer Equalization and Bias Correction on a resnet50
-# pretrained model with the ImageNet data set. It should re-create the same performance numbers
-# as published in the AIMET release for the particular scenario as described below.
+# pretrained model with the ImageNet data set. This is intended as a working example to show
+# how AIMET APIs can be invoked.
 
 # Scenario parameters:
 #    - AIMET quantization accuracy using simulation model
@@ -98,6 +98,8 @@ class ImageNetDataPipeline:
 
     def __init__(self, _config: argparse.Namespace):
         """
+        Instantiates ImageNetDataPipeline object
+
         :param _config:
         """
         self._config = _config
@@ -137,7 +139,7 @@ class ImageNetDataPipeline:
 
 def create_quant_sim_model(sess: tf.Session, start_op_names: List[str], output_op_names: List[str],
                            use_cuda: bool, evaluator: Callable[[tf.Session, Any], None],
-                           logdir: str):
+                           logdir: str) -> QuantizationSimModel:
     """
     Apply quantizer simulator on the original model and return its object.
 
@@ -167,13 +169,13 @@ def create_quant_sim_model(sess: tf.Session, start_op_names: List[str], output_o
     # Parameter bitwidth for quantization
     default_param_bw = 8
 
-    quant_sim_model = aimet_tf_quantsim.QuantizationSimModel(session=copied_sess,
-                                                             starting_op_names=start_op_names,
-                                                             output_op_names=output_op_names,
-                                                             quant_scheme=quant_scheme, rounding_mode=rounding_mode,
-                                                             default_output_bw=default_output_bw,
-                                                             default_param_bw=default_param_bw,
-                                                             use_cuda=use_cuda)
+    quant_sim_model = QuantizationSimModel(session=copied_sess,
+                                           starting_op_names=start_op_names,
+                                           output_op_names=output_op_names,
+                                           quant_scheme=quant_scheme, rounding_mode=rounding_mode,
+                                           default_output_bw=default_output_bw,
+                                           default_param_bw=default_param_bw,
+                                           use_cuda=use_cuda)
 
     # Number of batches to use for computing encodings
     # Only 5 batches are used here to speed up the process, also the

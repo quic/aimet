@@ -67,11 +67,11 @@ formatter = logging.Formatter('%(asctime)s : %(name)s - %(levelname)s - %(messag
 logging.basicConfig(format=formatter)
 
 
-#
-# This script utilize AIMET to perform channel pruning compression (0.5% ratio) on a resnet18 pretrained model
-# with the ImageNet data set.It should re-create the same performance numbers as published in the
-# AIMET release for the particular scenario as described below.
-#
+###
+# This script utilize AIMET to perform channel pruning compression (0.5% ratio) on a resnet18
+# pretrained model with the ImageNet data set. This is intended as a working example to show
+# how AIMET APIs can be invoked.
+
 # Scenario parameters:
 #    - AIMET channel pruning compression scheme using auto mode
 #    - Ignored model.conv1

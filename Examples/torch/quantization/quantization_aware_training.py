@@ -69,9 +69,9 @@ logging.basicConfig(format=formatter)
 
 
 ###
-# This script utilizes AIMET to perform Quantization Aware Training on a resnet18 pretrained model
-# with the ImageNet data set. It should re-create the same performance numbers as published in the
-# AIMET release for the particular scenario as described below.
+# This script utilizes AIMET to perform Quantization Aware Training on a resnet18
+# pretrained model with the ImageNet data set. This is intended as a working example
+# to show how AIMET APIs can be invoked.
 
 # Scenario parameters:
 #    - AIMET quantization aware training using simulation model
