@@ -276,6 +276,9 @@ if [ $run_prep -eq 1 ]; then
         if [[ "$AIMET_VARIANT" == *"tf"* ]]; then
             python_src_path_endings+=("TrainingExtensions/tensorflow/src/python/aimet_tensorflow")
             pycov_dir_endings+=("TrainingExtensions/tensorflow/src/python:TrainingExtensions/tensorflow/test")
+            python_src_path_endings+=("Examples/tensorflow/compression")
+            python_src_path_endings+=("Examples/tensorflow/quantization")
+            python_src_path_endings+=("Examples/tensorflow/utils")
         fi
         if [[ "$AIMET_VARIANT" == *"torch"* ]]; then
             python_src_path_endings+=("TrainingExtensions/torch/src/python/aimet_torch")
@@ -295,6 +298,10 @@ if [ $run_prep -eq 1 ]; then
         python_src_path_endings+=("Examples/torch/compression")
         python_src_path_endings+=("Examples/torch/quantization")
         python_src_path_endings+=("Examples/torch/utils")
+        python_src_path_endings+=("Examples/tensorflow/compression")
+        python_src_path_endings+=("Examples/tensorflow/quantization")
+        python_src_path_endings+=("Examples/tensorflow/utils")
+
     fi
 
     # Populate an array of python src paths for use in later stages
