@@ -49,7 +49,7 @@ from tensorflow.python.keras.layers import Dense, Conv2D, BatchNormalization, Fl
 def transposed_conv2d_model():
     """ Trasposed Conv2D model"""
     inputs = tf.keras.Input(shape=(7, 7, 1))
-    x = tf.layers.Conv2DTranspose(1, (4, 4), use_bias=True)(inputs)
+    x = tf.keras.layers.Conv2DTranspose(1, (4, 4), use_bias=True)(inputs)
     return x
 
 

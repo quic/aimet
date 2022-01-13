@@ -260,19 +260,19 @@ op_type_templates = {
     #     'module_regex': ['(.+)/instancenorm/add_1$'],
     #     'associated_op_regex': ['/instancenorm/add_1$']
     # },
-    # 'Conv2DTranspose': {
-    #     'input_shape': (7, 7, 1),
-    #     'op_type': 'Conv2DTranspose',
-    #     'constructor': "tf.layers.Conv2DTranspose(1, (4, 4), use_bias=False)(inputs)",
-    #     'module_regex': ['(.+/conv2d_transpose)$'],
-    #     'associated_op_regex': ['conv2d_transpose/conv2d_transpose$']
-    # },
-    # 'Conv2DTranspose_with_bias': {
-    #     'input_shape': (7, 7, 1),
-    #     'op_type': 'Conv2DTranspose',
-    #     'constructor': "tf.layers.Conv2DTranspose(1, (4, 4), use_bias=True)(inputs)",
-    #     'module_regex': ['(.+/conv2d_transpose)$'],
-    #     'associated_op_regex': ['conv2d_transpose/conv2d_transpose$']
-    # }
+    'Conv2DTranspose': {
+        'input_shape': (7, 7, 1),
+        'op_type': 'Conv2DTranspose',
+        'constructor': "tf.keras.layers.Conv2DTranspose(1, (4, 4), use_bias=False)(inputs)",
+        'module_regex': ['(.+/conv2d_transpose)$'],
+        'associated_op_regex': ['conv2d_transpose/conv2d_transpose$']
+    },
+    'Conv2DTranspose_with_bias': {
+        'input_shape': (7, 7, 1),
+        'op_type': 'Conv2DTranspose',
+        'constructor': "tf.keras.layers.Conv2DTranspose(1, (4, 4), use_bias=True)(inputs)",
+        'module_regex': ['(.+/conv2d_transpose)$'],
+        'associated_op_regex': ['conv2d_transpose/conv2d_transpose$']
+    }
 
 }
