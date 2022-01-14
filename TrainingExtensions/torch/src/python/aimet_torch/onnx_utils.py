@@ -354,16 +354,16 @@ class OnnxSaver:
 
         for module_name, module_ref in pt_model.named_modules():
 
-            if not isinstance(module_ref, tuple(onnx_subgraph_op_to_pytorch_module_param_name.keys())):
-                continue
+            # Not using isinstance since we want to check for the exact type and not any subclasses
+            # pylint: disable=unidiomatic-typecheck
+            if type(module_ref) in onnx_subgraph_op_to_pytorch_module_param_name:
+                for (node_suffix, op_type), replace_pairs in \
+                        onnx_subgraph_op_to_pytorch_module_param_name[type(module_ref)].items():
+                    # Some modules like linear can take on various forms (e.g. Gemm versus MatMul and Add)
+                    if (module_name + node_suffix, op_type) in onnx_node_map:
+                        node = onnx_node_map[module_name + node_suffix, op_type]
 
-            for (node_suffix, op_type), replace_pairs in \
-                    onnx_subgraph_op_to_pytorch_module_param_name[type(module_ref)].items():
-                # Some modules like linear can take on various forms (e.g. Gemm versus MatMul and Add)
-                if (module_name + node_suffix, op_type) in onnx_node_map:
-                    node = onnx_node_map[module_name + node_suffix, op_type]
-
-                    cls._replace_param_name(initializer_names, module_name, node, replace_pairs)
+                        cls._replace_param_name(initializer_names, module_name, node, replace_pairs)
 
         for index, initializer in enumerate(onnx_model.graph.initializer):
             if initializer_names[index] != initializer.name:
