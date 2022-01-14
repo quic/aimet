@@ -68,7 +68,7 @@ logging.basicConfig(format=formatter)
 
 ###
 # This script utilizes AIMET to apply Cross Layer Equalization and Bias Correction on a resnet18
-# pretrained model with the ImageNet data set. This is intended as a working example to show 
+# pretrained model with the ImageNet data set. This is intended as a working example to show
 # how AIMET APIs can be invoked.
 
 # Scenario parameters:

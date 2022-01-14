@@ -246,13 +246,12 @@ def aimet_range_learning(config: argparse.Namespace):
     3. Calculates Model accuracy
         3.1. Calculates floating point accuracy
         3.2. Calculates Quant Simulator accuracy
-    4. Applies AIMET Range Learning
+    4. Applies AIMET CLE (optional)
         4.1. Applies AIMET CLE and calculates QuantSim accuracy
-        4.2. Finetune the quantized model
     5. Quantization Aware Training
         5.1. Trains the quantization aware model
         5.2. Calculates and logs the accuracy of quantization Aware trained model
-        5.3. Exports quantization aware model so it is ready to be run on-target
+        5.3. Exports quantization aware trained (QAT) model so it is ready to be run on-target
 
     :param config: This argparse.Namespace config expects following parameters:
                    tfrecord_dir: Path to a directory containing ImageNet TFRecords.
@@ -319,20 +318,20 @@ def aimet_range_learning(config: argparse.Namespace):
                                        logdir=config.logdir)
     # Calculating QuantSim model accuracy
     accuracy = data_pipeline.evaluate(quant_sim.session)
-    logger.info("CLE applied Model Top-1 accuracy on Quant Simulator = %.2f", accuracy)
+    logger.info("CLE Applied Model Top-1 accuracy on Quant Simulator = %.2f", accuracy)
     logger.info("Model Quantization Complete")
 
-    # 5. Finetuning
+    # 5. Quantization Aware Training (QAT)
     logger.info("Starting Model QAT")
 
-    # 5.1. Finetunes the compressed model
+    # 5.1. Trains the quantization aware model
     data_pipeline.finetune(quant_sim.session, update_ops_name=update_ops_name)
 
-    # 5.2. Calculates and logs the accuracy of compressed-finetuned model
+    # 5.2. Calculates and logs the accuracy of Quantization Aware Trained model
     accuracy = data_pipeline.evaluate(quant_sim.session)
     logger.info("Applied Range Learning, Top-1 Accuracy on Quant Simulator = %.2f", accuracy)
 
-    # 5.3 Exports applied model so it is ready to be run on-target
+    # 5.3 Exports quantization aware trained model so it is ready to be run on-target
     logger.info("Saving Quantized model graph")
     quant_sim.export(path=config.logdir, filename_prefix='quantized_model')
     logger.info("Quantized model graph is saved!")
