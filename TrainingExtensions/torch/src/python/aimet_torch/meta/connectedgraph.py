@@ -513,7 +513,7 @@ class ConnectedGraph(AimetCommonConnectedGraph):
         :return: Connected graph op type
         """
         # use nominal Op type if its a known type else use torch defined Module name
-        if issubclass(model_cls, tuple(onnx_utils.map_torch_types_to_onnx.keys())):
+        if model_cls in onnx_utils.map_torch_types_to_onnx:
             # Currently always taking first element in the list. Check whether we need extra logic for using other
             # elements in the list.
             op_type = onnx_utils.map_torch_types_to_onnx[model_cls][0]
