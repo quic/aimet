@@ -421,3 +421,32 @@ def _update_model_output_info(residing_model: tf.keras.Model, replaced_layer: tf
         residing_model._nested_outputs.append(new_tensor_output)
     else:
         residing_model._nested_outputs = new_tensor_output
+
+
+def parse_activation_layer(
+        activation_layer: tf.keras.layers.Activation,
+) -> typing.List[str]:
+    """
+    Parse generic tf.keras.layers.Activation and convert it to corresponding onnx type
+
+    :param activation_layer: tf.keras.layers.Activation
+    :return: list of converted onnx type str
+    """
+    activation_name = tf.keras.activations.serialize(activation_layer.activation)
+
+    keras_to_onnx_dict = {
+        "softmax": "Softmax",
+        "relu": "Relu",
+        "selu": "Selu",
+        "tanh": "Tanh",
+        "sigmoid": "Sigmoid",
+        "leaky_relu": "LeakyRelu",
+        "softplus": "Softplus",
+        "softsign": "Softsign",
+        "elu": "Elu",
+    }
+    onnx_activation = keras_to_onnx_dict.get(activation_name)
+    if onnx_activation is None:
+        return ["Unknown"]
+
+    return [onnx_activation]
