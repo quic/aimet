@@ -3,7 +3,7 @@
 # =============================================================================
 #  @@-COPYRIGHT-START-@@
 #
-#  Copyright (c) 2021, Qualcomm Innovation Center, Inc. All rights reserved.
+#  Copyright (c) 2022, Qualcomm Innovation Center, Inc. All rights reserved.
 #
 #  Redistribution and use in source and binary forms, with or without
 #  modification, are permitted provided that the following conditions are met:
@@ -122,7 +122,6 @@ class QcQuantizeWrapper(tf.keras.layers.Layer):
                  activation_quant_settings: QuantizerSettings,
                  param_quant_settings: QuantizerSettings,
                  num_inputs: int = 1,
-                 num_outputs: int = 1,
                  input_quantizers: Union[None, List[ActivationTensorQuantizer]] = None,
                  output_quantizers: Union[None, List[ActivationTensorQuantizer]] = None,
                  param_quantizers: Union[None, List[ParamTensorQuantizer]] = None,
@@ -134,7 +133,6 @@ class QcQuantizeWrapper(tf.keras.layers.Layer):
         self._param_quant_settings = param_quant_settings
 
         self._num_inputs = num_inputs
-        self._num_outputs = num_outputs
         self.input_quantizers = input_quantizers
         self.output_quantizers = output_quantizers
         self.param_quantizers = param_quantizers
@@ -157,16 +155,16 @@ class QcQuantizeWrapper(tf.keras.layers.Layer):
         # Create quantizer variables and quantizers for outputs if not yet existing
         if self.output_quantizers is None:
             self.output_quantizers = []
-            for i in range(self._num_outputs):
-                self.output_quantizers.append(
-                    ActivationTensorQuantizer(self._layer_to_wrap.name + '_output_quantizer_' + str(i),
-                                              MAP_QUANT_SCHEME_TO_PYMO[self._activation_quant_settings.quant_scheme],
-                                              MAP_ROUND_MODE_TO_PYMO[self._activation_quant_settings.round_mode],
-                                              self._activation_quant_settings.bitwidth,
-                                              self._activation_quant_settings.is_symmetric,
-                                              self._activation_quant_settings.use_strict_symmetric,
-                                              self._activation_quant_settings.use_unsigned_symmetric,
-                                              enabled=True))
+            # Only support single output quantizaton for now
+            self.output_quantizers.append(
+                ActivationTensorQuantizer(self._layer_to_wrap.name + '_output_quantizer_' + str(0),
+                                          MAP_QUANT_SCHEME_TO_PYMO[self._activation_quant_settings.quant_scheme],
+                                          MAP_ROUND_MODE_TO_PYMO[self._activation_quant_settings.round_mode],
+                                          self._activation_quant_settings.bitwidth,
+                                          self._activation_quant_settings.is_symmetric,
+                                          self._activation_quant_settings.use_strict_symmetric,
+                                          self._activation_quant_settings.use_unsigned_symmetric,
+                                          enabled=True))
 
         # Create quantizer variables and quantizers for params if not yet existing
         if self.param_quantizers is None:
@@ -197,7 +195,6 @@ class QcQuantizeWrapper(tf.keras.layers.Layer):
                 "activation_quant_settings": self._activation_quant_settings,
                 "param_quant_settings": self._param_quant_settings,
                 "num_inputs": self._num_inputs,
-                "num_outputs": self._num_outputs,
                 "name": self.name,
                 "input_quantizers": self.input_quantizers,
                 "output_quantizers": self.output_quantizers,

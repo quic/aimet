@@ -3,7 +3,7 @@
 # =============================================================================
 #  @@-COPYRIGHT-START-@@
 #
-#  Copyright (c) 2021, Qualcomm Innovation Center, Inc. All rights reserved.
+#  Copyright (c) 2022, Qualcomm Innovation Center, Inc. All rights reserved.
 #
 #  Redistribution and use in source and binary forms, with or without
 #  modification, are permitted provided that the following conditions are met:
@@ -81,7 +81,8 @@ class QuantizationSimModel:
                                                      quant_scheme, False, False, False)
             if isinstance(layer, unquantizable_modules) or layer.submodules:
                 return layer
-            return QcQuantizeWrapper(layer, activation_quant_settings, param_quant_settings)
+            return QcQuantizeWrapper(layer, activation_quant_settings, param_quant_settings,
+                                     num_inputs=len(layer.inbound_nodes[0].keras_inputs))
 
         return tf.keras.models.clone_model(model, clone_function=wrap_layer)
 
