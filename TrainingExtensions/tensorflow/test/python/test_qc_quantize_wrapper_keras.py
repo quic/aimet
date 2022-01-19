@@ -1,7 +1,7 @@
 # =============================================================================
 #  @@-COPYRIGHT-START-@@
 #
-#  Copyright (c) 2021, Qualcomm Innovation Center, Inc. All rights reserved.
+#  Copyright (c) 2022, Qualcomm Innovation Center, Inc. All rights reserved.
 #
 #  Redistribution and use in source and binary forms, with or without
 #  modification, are permitted provided that the following conditions are met:
@@ -38,6 +38,7 @@ import numpy as np
 from packaging import version
 
 from aimet_tensorflow.keras.quant_sim.qc_quantize_wrapper import QcQuantizeWrapper, QuantizerSettings
+import libpymo
 
 def dense_functional():
     inp = tf.keras.layers.Input(shape=(5,))
@@ -108,3 +109,41 @@ def test_wrapper():
                                      model.layers[1]._layer_to_wrap.weights]
             for idx, weight in enumerate(weights_after_predict):
                 assert np.array_equal(weight, weights_after_fit[idx])
+
+def test_wrapper_settings():
+    if version.parse(tf.version.VERSION) >= version.parse("2.00"):
+        test_inp = np.array([[-3.0, -2.0, -1.0, 0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0 ,7.0, 8.0]])
+        inp = tf.keras.layers.Input(shape=(12,))
+        identity = tf.keras.layers.Lambda(lambda x: x)
+        out = QcQuantizeWrapper(identity,
+                              QuantizerSettings(8, 'nearest', 'tf_enhanced', False, False, False),
+                              QuantizerSettings(8, 'nearest', 'tf_enhanced', False, False, False))(inp)
+        model = tf.keras.Model(inputs=inp, outputs=out)
+
+        _ = model.predict(test_inp)
+        model.layers[1].input_quantizers[0].compute_encoding()
+        quant_out_0 = model.predict(test_inp)
+
+        model.layers[1].input_quantizers[0].is_symmetric = True
+        model.layers[1].input_quantizers[0].use_strict_symmetric = True
+        _ = model.predict(test_inp)
+        model.layers[1].input_quantizers[0].compute_encoding()
+        assert model.layers[1].input_quantizers[0].encoding.offset == -127  # Test strict symmetric
+        quant_out_1 = model.predict(test_inp)
+        assert quant_out_0[0][0] != quant_out_1[0][0]   # Test that changed settings take effect
+
+        model.layers[1].input_quantizers[0].quant_scheme = libpymo.QuantizationMode.QUANTIZATION_TF_ENHANCED
+        model.layers[1].input_quantizers[0].round_mode = libpymo.RoundingMode.ROUND_STOCHASTIC
+        model.layers[1].input_quantizers[0].bitwidth = 2
+        model.layers[1].input_quantizers[0].is_symmetric = False
+        model.layers[1].input_quantizers[0].use_strict_symmetric = False
+
+        _ = model.predict(test_inp)
+        model.layers[1].input_quantizers[0].compute_encoding()
+        quant_out = model.predict(test_inp)
+
+        # Check that by changing bitwidth to 2, the number of distinct quant/dequant values in the output is 4
+        out_values = set()
+        for num in quant_out[0]:
+            out_values.add(num)
+        assert len(out_values) == 4

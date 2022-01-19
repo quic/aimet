@@ -3,7 +3,7 @@
 # =============================================================================
 #  @@-COPYRIGHT-START-@@
 #
-#  Copyright (c) 2021, Qualcomm Innovation Center, Inc. All rights reserved.
+#  Copyright (c) 2022, Qualcomm Innovation Center, Inc. All rights reserved.
 #
 #  Redistribution and use in source and binary forms, with or without
 #  modification, are permitted provided that the following conditions are met:
@@ -42,7 +42,7 @@ import tensorflow as tf
 from aimet_common.utils import AimetLogger
 # this is required to associate gradient with QcQuantize op
 from aimet_tensorflow import quantsim_straight_through_grad      # pylint: disable=unused-import
-import libpymo
+import libpymo  # pylint: disable=import-error
 
 _logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Quant)
 
@@ -70,13 +70,16 @@ class TensorQuantizer(tf.keras.layers.Layer, abc.ABC):
         self._tensor_quantizer = libpymo.TensorQuantizer(quant_scheme, round_mode)
         self._tensor_quantizer.setStrictSymmetric(use_strict_symmetric)
         self._tensor_quantizer.setUnsignedSymmetric(use_unsigned_symmetric)
-        self._bitwidth = bitwidth
-        self._is_symmetric = is_symmetric
+        self._bitwidth = self.add_weight(name + '.bitwidth', dtype=tf.int8,
+                                         initializer=tf.constant_initializer(bitwidth))
+        self._is_symmetric = self.add_weight(name + '.is_symmetric', dtype=tf.bool,
+                                             initializer=tf.constant_initializer(is_symmetric))
+
         self._encoding = None
 
-        self._encoding_min = self.add_weight(name + '.encoding_min', dtype=tf.float64,
+        self._encoding_min = self.add_weight(name + '.encoding_min', dtype=tf.float64, trainable=False,
                                              initializer=tf.constant_initializer(0.))
-        self._encoding_max = self.add_weight(name + '.encoding_max', dtype=tf.float64,
+        self._encoding_max = self.add_weight(name + '.encoding_max', dtype=tf.float64, trainable=False,
                                              initializer=tf.constant_initializer(0.))
         self._quantizer_mode = self.add_weight(name + '.op_mode', dtype=tf.int32, trainable=False,
                                                initializer=tf.constant_initializer(int(op_mode)))
@@ -106,23 +109,23 @@ class TensorQuantizer(tf.keras.layers.Layer, abc.ABC):
     @property
     def bitwidth(self):
         """ Bitwidth getter """
-        return self._bitwidth
+        return tf.keras.backend.get_value(self._bitwidth)
 
     @bitwidth.setter
     def bitwidth(self, bitwidth):
         """ Bitwidth setter """
-        self._bitwidth = bitwidth
+        self._bitwidth.assign(bitwidth)
         self.reset_encoding()
 
     @property
     def is_symmetric(self):
         """ Is symmetric getter """
-        return self._is_symmetric
+        return tf.keras.backend.get_value(self._is_symmetric)
 
     @is_symmetric.setter
     def is_symmetric(self, is_symmetric):
         """ Is symmetric setter """
-        self._is_symmetric = is_symmetric
+        self._is_symmetric.assign(is_symmetric)
         self.reset_encoding()
 
     @property
@@ -167,18 +170,18 @@ class TensorQuantizer(tf.keras.layers.Layer, abc.ABC):
 
     def is_enabled(self) -> bool:
         """ Return True if the tensor quantizer is enabled, False otherwise """
-        return tf.keras.backend.get_value(self._quantizer_mode) != int(libpymo.TensorQuantizerOpMode.passThrough)
+        return self.quant_mode != int(libpymo.TensorQuantizerOpMode.passThrough)
 
     def compute_encoding(self):
         """ Compute encoding for the tensor quantizer """
-        if tf.keras.backend.get_value(self._quantizer_mode) != int(libpymo.TensorQuantizerOpMode.passThrough):
+        if self.quant_mode != int(libpymo.TensorQuantizerOpMode.passThrough):
             # TODO: remove last two parameters after fixing PyModelOptimizations
-            encoding = self._tensor_quantizer.computeEncoding(self._bitwidth, self._is_symmetric, False, False)
+            encoding = self._tensor_quantizer.computeEncoding(self.bitwidth, self.is_symmetric, False, False)
             if self._tensor_quantizer.isEncodingValid:
                 self._encoding = encoding
                 self._encoding_min.assign(self._encoding.min)
                 self._encoding_max.assign(self._encoding.max)
-                if tf.keras.backend.get_value(self._quantizer_mode) == int(libpymo.TensorQuantizerOpMode.updateStats):
+                if self.quant_mode == int(libpymo.TensorQuantizerOpMode.updateStats):
                     self._quantizer_mode.assign(int(libpymo.TensorQuantizerOpMode.quantizeDequantize))
             else:
                 _logger.info('Tensor quantizer %s did not have a valid encoding calculated, and has been set to '
@@ -189,7 +192,7 @@ class TensorQuantizer(tf.keras.layers.Layer, abc.ABC):
     def reset_encoding(self):
         """ Reset the encoding to None, and reset quantizer mode if applicable """
         self._encoding = None
-        if tf.keras.backend.get_value(self._quantizer_mode) == int(libpymo.TensorQuantizerOpMode.quantizeDequantize):
+        if self.quant_mode == int(libpymo.TensorQuantizerOpMode.quantizeDequantize):
             self._quantizer_mode.assign(int(libpymo.TensorQuantizerOpMode.updateStats))
 
     # pylint: disable=arguments-differ
