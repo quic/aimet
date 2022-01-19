@@ -486,11 +486,14 @@ class QuantizationSimModel:
 
             quant_op = self.session.graph.get_operation_by_name(quant_op_name)
             min_val, max_val = self.read_min_max(quant_op_name, variable_dict)
-            # if per channel quantization is enabled, then min and max are numpy arrays, and this function gates them as well
-            # as returns them as list for calculating delta offset as well as exporting purposes
+            # if per channel quantization is enabled, then min and max are numpy arrays, and this function gates the array
             min_val, max_val = gate_min_max(min_val, max_val)
             op_bitwidth = int(self._get_op_variable_value(quant_op, QuantizeOpIndices.bit_width))
             delta, offset = calculate_delta_offset(min_val, max_val, op_bitwidth)
+            # Min and max will be numpy arrays, so to make them JSON serializable
+            if self.per_channel_quantization_enabled and isinstance(min_val, np.ndarray):
+                min_val = min_val.tolist()
+                max_val = max_val.tolist()
             is_symmetric = str(self._get_op_variable_value(quant_op,
                                                            QuantizeOpIndices.use_symmetric_encoding))
 
@@ -966,7 +969,6 @@ class QuantizationSimModel:
 
         return tensor_quantizers, tensor_quant_ref, encoding_min, encoding_max, axis
 
-
     def _create_per_tensor_quantizers_and_encodings(self, quant_op_name: str):
         """
         Creates per tensor quantizers and encoding min max variables
@@ -1057,14 +1059,14 @@ class QuantizationSimModel:
 
         def create_quantize_op():
             if self.per_channel_quantization_enabled and quantizer_type == QuantizerType.param:
-                op = qcops.qc_quantize_per_channel_param(name=quant_op_name, in_tensor=preceeding_tensor,
-                                                         op_mode=op_mode_var,
-                                                         tensor_quantizer_reference=tensor_quant_ref,
-                                                         encoding_min=encoding_min,
-                                                         encoding_max=encoding_max,
-                                                         bit_width=bit_width,
-                                                         use_symmetric_encoding=use_symmetric_encoding,
-                                                         axis=quantization_axis)
+                op = qcops.qc_quantize_per_channel(name=quant_op_name, in_tensor=preceeding_tensor,
+                                                   op_mode=op_mode_var,
+                                                   tensor_quantizer_reference=tensor_quant_ref,
+                                                   encoding_min=encoding_min,
+                                                   encoding_max=encoding_max,
+                                                   bit_width=bit_width,
+                                                   use_symmetric_encoding=use_symmetric_encoding,
+                                                   axis=quantization_axis)
             else:
                 op = qcops.qc_quantize(name=quant_op_name, in_tensor=preceeding_tensor,
                                        op_mode=op_mode_var,

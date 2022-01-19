@@ -2,7 +2,7 @@
 //
 //  @@-COPYRIGHT-START-@@
 //
-//  Copyright (c) 2021, Qualcomm Innovation Center, Inc. All rights reserved.
+//  Copyright (c) 2021-2022, Qualcomm Innovation Center, Inc. All rights reserved.
 //
 //  Redistribution and use in source and binary forms, with or without
 //  modification, are permitted provided that the following conditions are met:
@@ -36,7 +36,7 @@
 //
 //==============================================================================
 
-#include "QcQuantizePerChannelParamOp.hpp"
+#include "QcQuantizePerChannelOp.hpp"
 #include "AimetOpUtils.h"
 #include <iostream>
 #include <type_traits>
@@ -53,7 +53,7 @@ using namespace tensorflow;
 using namespace std;
 using namespace gtl;
 
-REGISTER_OP("QcQuantizePerChannelParam")
+REGISTER_OP("QcQuantizePerChannel")
     .Input("in_tensor: T")     // list of input tensors (weights/activations)
     .Input("op_mode: int32")   //{'ANALYSIS', 'ACTIVE', 'PASSTHROUGH'}")
     .Input("tensor_quantizer_reference: int64")
@@ -65,12 +65,11 @@ REGISTER_OP("QcQuantizePerChannelParam")
     .Output("out_tensor: T")   // list of output tensors (weights/activations)
 
     .Attr("T: {float} = DT_FLOAT")   // attr 'T' specifies which template instantiation of op to use, default float
-    .Doc(R"doc(QcQuantize Per Channel for Param custom op.)doc")
+    .Doc(R"doc(QcQuantize Per Channel custom op.)doc")
     .SetShapeFn([](::tensorflow::shape_inference::InferenceContext* c) {
         c->set_output(0, c->input(0));
         return Status::OK();
     });
-
 
 
 
@@ -139,10 +138,10 @@ void modeSpecificAction(const D& d, const T* inTensor, size_t count, T* outTenso
 // 'Device is templated on the type of device.
 // template parameter <T> is the datatype of the tensors.
 template <typename Device, typename T>
-class QcQuantizePerChannelParamOp : public OpKernel
+class QcQuantizePerChannelOp : public OpKernel
 {
 public:
-    explicit QcQuantizePerChannelParamOp(OpKernelConstruction* context) : OpKernel(context)
+    explicit QcQuantizePerChannelOp(OpKernelConstruction* context) : OpKernel(context)
     {
     }
 
@@ -152,21 +151,11 @@ public:
         const Tensor& inTensor = context->input(0);
         // Get shape of input tensor by iterating over each dimension
         int numDimensionsTensor = inTensor.shape().dims();
-        std::cout<<" \n dimersions ";
         std::vector<int> shapeVector;
         for(int axis=0; axis< numDimensionsTensor; axis++)
         {
             shapeVector.push_back(inTensor.shape().dim_size(axis));
-            std::cout<<inTensor.shape().dim_size(axis)<<" ";
         }
-
-        // Read axis for per channel quantization
-        const Tensor* axisTensor;
-        OP_REQUIRES_OK(context, context->input("axis", &axisTensor));
-        const int32* axis = axisTensor->flat<int32>().data();
-
-        // Get shape along axis for per channel quantization
-        int channelShape = shapeVector[*axis];
 
         // Read the op_mode
         const Tensor* opModeTensor;
@@ -193,6 +182,14 @@ public:
         OP_REQUIRES_OK(context, context->input("bit_width", &bitwidthTensor));
         const int8* bitwidth = bitwidthTensor->flat<int8>().data();
 
+        // Read axis for per channel quantization
+        const Tensor* axisTensor;
+        OP_REQUIRES_OK(context, context->input("axis", &axisTensor));
+        const int32 axis = *(axisTensor->flat<int32>().data());
+
+        // Get shape along axis for per channel quantization
+        int channelShape = shapeVector[axis];
+
         // use symmetric encoding
         const Tensor* useSymmetricEncodingTensor;
         OP_REQUIRES_OK(context, context->input("use_symmetric_encoding", &useSymmetricEncodingTensor));
@@ -202,9 +199,12 @@ public:
         Tensor* outTensor = nullptr;
         OP_REQUIRES_OK(context, context->allocate_output(0, inTensor.shape(), &outTensor));
 
+        // Get the device
+        const Device& device = context->eigen_device<Device>();
+
         // Performs per layer quantization
         // For parameters in convolution layers or linear layers
-        // TODO: Add depthwise layer and transposed conv2d
+        // TODO: transposed conv2d
         if(numDimensionsTensor == 4 or numDimensionsTensor == 2)
         {
             // K x K x I x O -> N x O
@@ -251,7 +251,7 @@ public:
 
 
 #define REGISTER_CPU(T) \
-    REGISTER_KERNEL_BUILDER(Name("QcQuantizePerChannelParam").Device(DEVICE_CPU).TypeConstraint<T>("T"), QcQuantizePerChannelParamOp<CPUDevice, T>);
+    REGISTER_KERNEL_BUILDER(Name("QcQuantizePerChannel").Device(DEVICE_CPU).TypeConstraint<T>("T"), QcQuantizePerChannelOp<CPUDevice, T>);
 
 REGISTER_CPU(float);
 
@@ -259,7 +259,7 @@ REGISTER_CPU(float);
 
 #ifdef GOOGLE_CUDA
 #define REGISTER_GPU(T) \
-    REGISTER_KERNEL_BUILDER(Name("QcQuantizePerChannelParam").Device(DEVICE_GPU).TypeConstraint<T>("T"), QcQuantizePerChannelParamOp<GPUDevice, T>);
+    REGISTER_KERNEL_BUILDER(Name("QcQuantizePerChannel").Device(DEVICE_GPU).TypeConstraint<T>("T"), QcQuantizePerChannelOp<GPUDevice, T>);
 REGISTER_GPU(float);
 
 #endif   // GOOGLE_CUDA
