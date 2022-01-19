@@ -103,14 +103,14 @@ class TestTrainingExtensionsQcQuantizeOpPerChannel(unittest.TestCase):
                           encoding_max.initializer, bit_width.initializer, use_symmetric_encoding.initializer,
                           axis.initializer])
                 # Giving axis = 3
-                pass_through_op_output = zero_out_module.qc_quantize_per_channel_param(name='quant_op', in_tensor=inp,
-                                                                     op_mode=mode_var,
-                                                                     tensor_quantizer_reference=tensor_quant_ref,
-                                                                     encoding_min=encoding_min,
-                                                                     encoding_max=encoding_max,
-                                                                     bit_width=bit_width,
-                                                                     use_symmetric_encoding=use_symmetric_encoding,
-                                                                     axis=axis)
+                pass_through_op_output = zero_out_module.qc_quantize_per_channel(name='quant_op', in_tensor=inp,
+                                                                                 op_mode=mode_var,
+                                                                                 tensor_quantizer_reference=tensor_quant_ref,
+                                                                                 encoding_min=encoding_min,
+                                                                                 encoding_max=encoding_max,
+                                                                                 bit_width=bit_width,
+                                                                                 use_symmetric_encoding=use_symmetric_encoding,
+                                                                                 axis=axis)
 
             inp_tensor = sess.graph.get_tensor_by_name('input:0')
             inp_data = np.ones((1, 1, 2, num_output_channels))
@@ -175,14 +175,14 @@ class TestTrainingExtensionsQcQuantizeOpPerChannel(unittest.TestCase):
                           encoding_max.initializer, bit_width.initializer, use_symmetric_encoding.initializer,
                           axis.initializer])
                 # Giving axis = 1
-                pass_through_op_output = zero_out_module.qc_quantize_per_channel_param(name='quant_op', in_tensor=inp,
-                                                                     op_mode=mode_var,
-                                                                     tensor_quantizer_reference=tensor_quant_ref,
-                                                                     encoding_min=encoding_min,
-                                                                     encoding_max=encoding_max,
-                                                                     bit_width=bit_width,
-                                                                     use_symmetric_encoding=use_symmetric_encoding,
-                                                                     axis=axis)
+                pass_through_op_output = zero_out_module.qc_quantize_per_channel(name='quant_op', in_tensor=inp,
+                                                                                 op_mode=mode_var,
+                                                                                 tensor_quantizer_reference=tensor_quant_ref,
+                                                                                 encoding_min=encoding_min,
+                                                                                 encoding_max=encoding_max,
+                                                                                 bit_width=bit_width,
+                                                                                 use_symmetric_encoding=use_symmetric_encoding,
+                                                                                 axis=axis)
 
         inp_tensor = sess.graph.get_tensor_by_name('input:0')
         inp_data = np.ones((2, 3))
@@ -241,14 +241,14 @@ class TestTrainingExtensionsQcQuantizeOpPerChannel(unittest.TestCase):
                           encoding_max.initializer, bit_width.initializer, use_symmetric_encoding.initializer,
                           axis.initializer])
                 # Giving axis = 3
-                pass_through_op_output = zero_out_module.qc_quantize_per_channel_param(name='quant_op', in_tensor=inp,
-                                                                     op_mode=mode_var,
-                                                                     tensor_quantizer_reference=tensor_quant_ref,
-                                                                     encoding_min=encoding_min,
-                                                                     encoding_max=encoding_max,
-                                                                     bit_width=bit_width,
-                                                                     use_symmetric_encoding=use_symmetric_encoding,
-                                                                     axis=axis)
+                pass_through_op_output = zero_out_module.qc_quantize_per_channel(name='quant_op', in_tensor=inp,
+                                                                                 op_mode=mode_var,
+                                                                                 tensor_quantizer_reference=tensor_quant_ref,
+                                                                                 encoding_min=encoding_min,
+                                                                                 encoding_max=encoding_max,
+                                                                                 bit_width=bit_width,
+                                                                                 use_symmetric_encoding=use_symmetric_encoding,
+                                                                                 axis=axis)
 
         inp_tensor = sess.graph.get_tensor_by_name('input:0')
         inp_data = np.ones(3)
@@ -288,22 +288,38 @@ class TestTrainingExtensionsQcQuantizeOpPerChannel(unittest.TestCase):
         tf.compat.v1.reset_default_graph()
         with tf.device('/cpu:0'):
             model = tf.keras.Sequential()
-            model.add(tf.keras.layers.Conv2D(2, kernel_size=3, input_shape=(5, 5, 3), activation='relu'))
+            model.add(tf.keras.layers.Conv2D(2, kernel_size=3, input_shape=(5, 5, 3)))
             model.summary()
 
-        sess = tf.compat.v1.Session()
-        initialize_uninitialized_vars(sess)
-        sim = QuantizationSimModel(sess, [model.input.op.name], [model.output.op.name], use_cuda=False,
-                                   config_file='./quantsim_config.json')
+        with tf.device("/device:CPU:0"):
 
-        for quant_op_name, quantizer_info in sim._activation_quantizers.items():
-            assert isinstance(quantizer_info.tensor_quantizer, libpymo.TensorQuantizer)
+            sess = tf.compat.v1.Session()
+            initialize_uninitialized_vars(sess)
+            sim = QuantizationSimModel(sess, [model.input.op.name], [model.output.op.name], use_cuda=False,
+                                       config_file='./quantsim_config.json')
 
-        for quant_op_name, quantizer_info in sim._param_quantizers.items():
-            op = sim.session.graph.get_operation_by_name(quant_op_name)
-            assert op.type == 'QcQuantizePerChannelParam'
-            shape = op.inputs[0].shape.as_list()
-            assert  len(quantizer_info.tensor_quantizer) == shape[-1]
+            for quant_op_name, quantizer_info in sim._activation_quantizers.items():
+                assert isinstance(quantizer_info.tensor_quantizer, libpymo.TensorQuantizer)
+
+            for quant_op_name, quantizer_info in sim._param_quantizers.items():
+                op = sim.session.graph.get_operation_by_name(quant_op_name)
+                assert op.type == 'QcQuantizePerChannel'
+                shape = op.inputs[0].shape.as_list()
+                assert  len(quantizer_info.tensor_quantizer) == shape[-1]
+
+
+            def dummy_forward_pass(sess, args):
+                model_output = sess.graph.get_tensor_by_name('conv2d_input:0')
+
+                model_input = sess.graph.get_tensor_by_name('conv2d_input:0')
+                np.random.seed(0)
+                dummy_input = np.random.randn(20, 5, 5, 3)
+                sess.run(model_output, feed_dict={model_input: dummy_input})
+
+            sim.compute_encodings(dummy_forward_pass, None)
+            for quant_op_name, quantizer_info in sim._param_quantizers.items():
+                encoding = quantizer_info.get_encoding()
+                assert isinstance(encoding, list)
 
     def test_export_encodings(self):
         quantsim_config = {
@@ -371,4 +387,3 @@ class TestTrainingExtensionsQcQuantizeOpPerChannel(unittest.TestCase):
         self.assertTrue(isinstance(encoding_data["param_encodings"]["conv2d/Conv2D/ReadVariableOp:0"], list))
         self.assertTrue(isinstance(encoding_data["param_encodings"]["conv2d/Conv2D/ReadVariableOp:0"][0]['max'], list))
         self.assertTrue(isinstance(encoding_data["param_encodings"]["conv2d/Conv2D/ReadVariableOp:0"][0]['min'], list))
-
