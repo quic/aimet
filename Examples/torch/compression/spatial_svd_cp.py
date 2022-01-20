@@ -71,10 +71,10 @@ formatter = logging.Formatter('%(asctime)s : %(name)s - %(levelname)s - %(messag
 logging.basicConfig(format=formatter)
 
 
-#
+###
 # This script utilize AIMET do perform spatial svd and channel pruning compression on a resnet18
-# pretrained model with the ImageNet data set.  It should re-create the same performance numbers
-# as published in the AIMET release for the particular scenario as described below.
+# pretrained model with the ImageNet data set.This is intended as a working example to show
+# how AIMET APIs can be invoked.
 #
 # Scenario parameters:
 #
