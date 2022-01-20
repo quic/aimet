@@ -71,9 +71,9 @@ logging.basicConfig(format=formatter)
 # the PyTorch framework. It also provides visualization of computational graph meta-data like
 # number of parameters involved and MAC count estimate.
 
-# This script utilize AIMET do perform spatial svd compression (50% compression ratio) on a resnet18 pretrained model
-# with the ImageNet data set. It should re-create the same performance numbers as published in the
-# AIMET release for the particular scenario as described below.
+# This script utilize AIMET do perform spatial svd compression (50% compression ratio) on a
+# resnet18 pretrained model with the ImageNet data set.This is intended as a working example
+# to show how AIMET APIs can be invoked.
 #
 # Scenario parameters:
 #    - AIMET Spatial SVD compression using auto mode

@@ -51,7 +51,7 @@ from tensorflow.python.keras.applications.resnet import ResNet50
 # imports for AIMET
 from aimet_common.defs import QuantScheme
 from aimet_tensorflow import batch_norm_fold as aimet_bnf
-from aimet_tensorflow import quantsim as aimet_tf_quantsim
+from aimet_tensorflow.quantsim import QuantizationSimModel
 from aimet_tensorflow.adaround.adaround_weight import Adaround, AdaroundParameters
 from aimet_tensorflow.utils.graph_saver import save_and_load_graph
 
@@ -71,8 +71,8 @@ logging.basicConfig(format=formatter)
 
 ###
 # This script utilizes AIMET to apply Adaround on a resnet50 pretrained model with
-# the ImageNet data set. It should re-create the same performance numbers as
-# published in the AIMET release for the particular scenario as described below.
+# the ImageNet data set. This is intended as a working example to show
+# how AIMET APIs can be invoked.
 
 # Scenario parameters:
 #    - AIMET quantization accuracy using simulation model
@@ -96,6 +96,8 @@ class ImageNetDataPipeline:
 
     def __init__(self, _config: argparse.Namespace):
         """
+        Instantiates ImageNetDataPipeline object
+
         :param _config:
         """
         self._config = _config
@@ -135,7 +137,7 @@ class ImageNetDataPipeline:
 
 def create_quant_sim_model(sess: tf.Session, start_op_names: List[str], output_op_names: List[str],
                            use_cuda: bool, evaluator: Callable[[tf.Session, Any], None],
-                           logdir: str, encoding_filename: str = None):
+                           logdir: str, encoding_filename: str = None) -> QuantizationSimModel:
     """
     Apply quantizer simulator on the original model and return its object.
 
@@ -167,13 +169,13 @@ def create_quant_sim_model(sess: tf.Session, start_op_names: List[str], output_o
     # Parameter bit-width for quantization
     default_param_bw = 8
 
-    quant_sim_model = aimet_tf_quantsim.QuantizationSimModel(session=copied_sess,
-                                                             starting_op_names=start_op_names,
-                                                             output_op_names=output_op_names,
-                                                             quant_scheme=quant_scheme, rounding_mode=rounding_mode,
-                                                             default_output_bw=default_output_bw,
-                                                             default_param_bw=default_param_bw,
-                                                             use_cuda=use_cuda)
+    quant_sim_model = QuantizationSimModel(session=copied_sess,
+                                           starting_op_names=start_op_names,
+                                           output_op_names=output_op_names,
+                                           quant_scheme=quant_scheme, rounding_mode=rounding_mode,
+                                           default_output_bw=default_output_bw,
+                                           default_param_bw=default_param_bw,
+                                           use_cuda=use_cuda)
 
     if encoding_filename:
         quant_sim_model.set_and_freeze_param_encodings(encoding_path=encoding_filename)
@@ -298,7 +300,7 @@ def perform_adaround(config: argparse.Namespace):
     logger.info("Original Model Top-1 accuracy on Quant Simulator = %.2f", accuracy)
 
     # 4. Applies AIMET Adaround and calculates QuantSim accuracy
-    logger.info("Starting Aimet Adaround...")
+    logger.info("Starting Aimet Adaround")
 
     # 4.1. Applies AIMET Adaround
     adaround_applied_BN_folded_sess = aimet_adaround(BN_folded_sess, start_op_names=['input_1'],
@@ -322,9 +324,9 @@ def perform_adaround(config: argparse.Namespace):
     # 4.3 Exports Adaround applied model so it is ready to be run on-target
     logger.info("Saving Quantized model graph...")
     quant_sim.export(path=config.logdir, filename_prefix='quantized_model')
-    logger.info("...Quantized model graph is saved!")
+    logger.info("Quantized model graph is saved!")
 
-    logger.info("...Aimet Adaround Done")
+    logger.info("Aimet Adaround Done")
 
 
 if __name__ == '__main__':

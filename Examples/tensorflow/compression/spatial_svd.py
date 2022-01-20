@@ -71,9 +71,9 @@ logging.basicConfig(format=formatter)
 
 
 ###
-# This script utilizes AIMET to perform spatial svd compression (50% ratio) on a resnet50 pretrained model
-# with the ImageNet data set. It should re-create the same performance numbers as published in the
-# AIMET release for the particular scenario as described below.
+# This script utilizes AIMET to perform spatial svd compression (50% ratio) on a resnet50
+# pretrained model with the ImageNet data set. This is intended as a working example to show
+# how AIMET APIs can be invoked.
 
 # Scenario parameters:
 #    - AIMET Spatial SVD compression using auto mode
@@ -92,6 +92,8 @@ class ImageNetDataPipeline:
 
     def __init__(self, _config: argparse.Namespace):
         """
+        Instantiates ImageNetDataPipeline object
+
         :param _config:
         """
         self._config = _config
@@ -118,7 +120,6 @@ class ImageNetDataPipeline:
                                       format_bgr=True)
 
         return evaluator.evaluate(sess, iterations)
-    # pylint: enable=unused-argument
 
     def finetune(self, sess: tf.Session, update_ops_name: List[str] = None):
         """
@@ -281,10 +282,10 @@ def compress_and_finetune(config: argparse.Namespace):
     accuracy = data_pipeline.evaluate(compressed_sess)
     logger.info("Compressed Model Top-1 accuracy = %.2f", accuracy)
 
-    logger.info("...Model Compression Done")
+    logger.info("Model Compression Done")
 
     # 5. Finetuning
-    logger.info("Starting Model Finetuning...")
+    logger.info("Starting Model Finetuning")
 
     # 5.1. Finetunes the compressed model
     data_pipeline.finetune(compressed_sess, update_ops_name=update_ops_name)
@@ -293,7 +294,7 @@ def compress_and_finetune(config: argparse.Namespace):
     accuracy = data_pipeline.evaluate(compressed_sess)
     logger.info("Finetuned Compressed Model Top-1 accuracy = %.2f", accuracy)
 
-    logger.info("...Model Finetuning Done")
+    logger.info("Model Finetuning Done")
 
 
 if __name__ == '__main__':
