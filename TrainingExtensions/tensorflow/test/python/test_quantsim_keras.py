@@ -1,7 +1,7 @@
 # =============================================================================
 #  @@-COPYRIGHT-START-@@
 #
-#  Copyright (c) 2021, Qualcomm Innovation Center, Inc. All rights reserved.
+#  Copyright (c) 2022, Qualcomm Innovation Center, Inc. All rights reserved.
 #
 #  Redistribution and use in source and binary forms, with or without
 #  modification, are permitted provided that the following conditions are met:
@@ -132,16 +132,3 @@ def test_qat():
             for idx, weight in enumerate(running_weights):
                 assert not np.array_equal(weight, ending_weights[idx])
             running_weights = ending_weights
-
-def test_copy_params():
-    if version.parse(tf.version.VERSION) >= version.parse("2.00"):
-        inp = tf.keras.layers.Input(shape=(5,))
-        x = tf.keras.layers.Dense(units=3)(inp)
-        x = DenseReluLayer()(x)
-        x = tf.keras.layers.Softmax()(x)
-        model = tf.keras.Model(inputs=inp, outputs=x)
-        qsim = QuantizationSimModel(model, quant_scheme='tf', default_param_bw=8, default_output_bw=8)
-        new_kernel = np.ones((5, 3))
-        qsim.model.layers[1]._layer_to_wrap.set_weights([new_kernel, qsim.model.layers[1]._layer_to_wrap.get_weights()[1]])
-        qsim._copy_params_to_original_model()
-        assert np.array_equal(new_kernel, qsim._original_model.layers[1].get_weights()[0])

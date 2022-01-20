@@ -54,16 +54,17 @@ class QuantizationSimModel:
     # pylint: disable=too-many-arguments
     # pylint: disable=unused-argument
     def __init__(self, model, quant_scheme: Union[QuantScheme, str] = 'tf_enhanced', rounding_mode: str = 'nearest',
-                 default_output_bw: int = 8, default_param_bw: int = 8, config_file: str = None):
-        self._original_model = model
-        self.model = self._add_quantization_wrappers(model, quant_scheme, rounding_mode, default_output_bw,
-                                                     default_param_bw)
+                 default_output_bw: int = 8, default_param_bw: int = 8, in_place: bool = False,
+                 config_file: str = None):
+        self._model_without_wrappers = model
+        if not in_place:
+            self._model_without_wrappers = tf.keras.models.clone_model(model)
+        self._layer_name_to_quant_wrapper = {}
+        self.model = self._add_quantization_wrappers(quant_scheme, rounding_mode, default_output_bw, default_param_bw)
 
-    @staticmethod
-    def _add_quantization_wrappers(model, quant_scheme, rounding_mode, default_output_bw, default_param_bw):
+    def _add_quantization_wrappers(self, quant_scheme, rounding_mode, default_output_bw, default_param_bw):
         """
         Add quantization wrappers to the model and return a new model with the wrappers inserted.
-        :param model: Model to add quantization wrappers for
         :param quant_scheme: Quantization scheme to use
         :param rounding_mode: Rounding mode to use
         :param default_output_bw: Default bitwidth for activation quantizers
@@ -81,17 +82,12 @@ class QuantizationSimModel:
                                                      quant_scheme, False, False, False)
             if isinstance(layer, unquantizable_modules) or layer.submodules:
                 return layer
-            return QcQuantizeWrapper(layer, activation_quant_settings, param_quant_settings,
-                                     num_inputs=len(layer.inbound_nodes[0].keras_inputs))
+            wrapper = QcQuantizeWrapper(layer, activation_quant_settings, param_quant_settings,
+                                        num_inputs=len(layer.inbound_nodes[0].keras_inputs))
+            self._layer_name_to_quant_wrapper[layer.name] = wrapper
+            return wrapper
 
-        return tf.keras.models.clone_model(model, clone_function=wrap_layer)
-
-    def _copy_params_to_original_model(self):
-        """ Copy parameter values from the quantized model to the original model """
-        for idx, layer in enumerate(self.model.layers):
-            if isinstance(layer, QcQuantizeWrapper):
-                # pylint: disable=protected-access
-                self._original_model.layers[idx].set_weights(layer._layer_to_wrap.get_weights())
+        return tf.keras.models.clone_model(self._model_without_wrappers, clone_function=wrap_layer)
 
     def compute_encodings(self, forward_pass_callback, forward_pass_callback_args):
         """
@@ -115,3 +111,11 @@ class QuantizationSimModel:
         for layer in self.model.layers:
             if isinstance(layer, QcQuantizeWrapper):
                 yield layer
+
+    def get_quant_wrapper_for_layer_name(self, layer_name: str) -> QcQuantizeWrapper:
+        """
+        Return qc quant wrapper corresponding to a layer name
+        :param layer_name: Layer name to get quantize wrapper for
+        :return: Qc quant wrapper corresponding to a layer name
+        """
+        return self._layer_name_to_quant_wrapper.get(layer_name)
