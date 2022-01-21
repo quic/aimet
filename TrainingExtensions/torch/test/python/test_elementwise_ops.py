@@ -68,8 +68,26 @@ class Model2(nn.Module):
         return x
 
 
+class Model3(nn.Module):
+    def __init__(self, op):
+        super(Model3, self).__init__()
+        self.op1 = op
+
+    def forward(self, *x):
+        x = self.op1(*x)
+        return x
+
+
+def dummy_forward_pass(model, args):
+    model.eval()
+    with torch.no_grad():
+        output = model(torch.randn((5, 10, 10, 20)))
+    return output
+
+
 def forward_pass(model, iterations):
     return torch.rand(1)
+
 
 class TestTrainingExtensionElementwiseOps(unittest.TestCase):
     def test_add_op(self):
@@ -103,7 +121,6 @@ class TestTrainingExtensionElementwiseOps(unittest.TestCase):
         self.assertTrue(len(data['activation_encodings']) == 3)
         self.assertTrue(len(data['param_encodings']) == 2)
 
-
     def test_subtract_op(self):
         torch.manual_seed(10)
         model = Model(Subtract())
@@ -131,14 +148,34 @@ class TestTrainingExtensionElementwiseOps(unittest.TestCase):
         out1 = torch.div(input1, input2)
         self.assertTrue(np.allclose(out, out1))
 
-    def test_concat_op(self):
+    def test_concat_op_two_input_tensors(self):
         torch.manual_seed(10)
-        model = Model(Concat())
+        model = Model3(Concat())
         input1 = torch.rand((5, 10, 10, 20))
         input2 = torch.rand((5, 10, 10, 20))
-        out = model([input1, input2], 0)
+        out = model(input1, input2)
         out1 = torch.cat((input1, input2), 0)
         self.assertTrue(np.allclose(out, out1))
+
+    def test_concat_op_four_input_tensors(self):
+        torch.manual_seed(10)
+        model = Model3(Concat())
+        input1 = torch.rand((5, 10, 10, 20))
+        input2 = torch.rand((5, 10, 10, 20))
+        input3 = torch.rand((5, 10, 10, 20))
+        input4 = torch.rand((5, 10, 10, 20))
+        out = model(input1, input2, input3, input4)
+        out1 = torch.cat((input1, input2, input3, input4), 0)
+        self.assertTrue(np.allclose(out, out1))
+
+    def test_concat_compute_encodings(self):
+        torch.manual_seed(10)
+        model = Model3(Concat())
+        dummy_input = torch.randn(5, 10, 10, 20)
+        sim = QuantizationSimModel(model, dummy_input)
+        sim.compute_encodings(dummy_forward_pass, None)
+        print(sim)
+        sim.export(path='./data', filename_prefix='concat_model', dummy_input=dummy_input)
 
     def test_matmul_op(self):
         torch.manual_seed(10)
