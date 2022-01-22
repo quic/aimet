@@ -141,7 +141,7 @@ Please run below commands to install dependencies to build AIMET:
 
 !apt install zlib1g-dev
 
-!pip3 uninstall Pillow && pip3 install Pillow-SIMD==6.0.0.post0
+!pip3 uninstall Pillow && pip3 install Pillow-SIMD==6.2.2.post1
 
 !pip3 uninstall pytest
 
