@@ -198,9 +198,6 @@ RUN apt-get update && apt-get install -y libjpeg8-dev && \
 RUN ln -sf /usr/bin/python3.6 /usr/bin/python
 RUN ln -s /usr/lib/x86_64-linux-gnu/libjpeg.so /usr/lib
 
-# Remove pillow and replace with pillow-simd.
-RUN pip3 uninstall -y Pillow && pip3 install Pillow-SIMD==6.0.0.post0
-
 RUN sed -i 's/PermitRootLogin prohibit-password/PermitRootLogin yes/' /etc/ssh/sshd_config && \
     sed -i 's/Port 22/Port 25000/' /etc/ssh/sshd_config
 
@@ -216,6 +213,10 @@ RUN pip install setuptools_rust git-pylint-commit-hook osqp==0.6.1 onnx==1.8.1
 RUN pip install holoviews==1.12.7 netron jsonschema pandas
 
 RUN pip install bokeh==1.2.0 hvplot==0.4.0
+
+# Remove existing Pillow & Pillow-SIMD and replace with correct version of Pillow-SIMD.
+RUN pip3 uninstall -y Pillow Pillow-SIMD
+RUN pip3 --no-cache-dir install Pillow-SIMD==6.2.2.post1
 
 RUN apt-get update && apt-get install -y gnupg2
 RUN wget -O - http://llvm.org/apt/llvm-snapshot.gpg.key|sudo apt-key add - && echo "deb http://apt.llvm.org/bionic/ llvm-toolchain-bionic-11 main" >> /etc/apt/sources.list

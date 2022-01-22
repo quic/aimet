@@ -112,7 +112,7 @@ cat /usr/local/lib/python3.6/dist-packages/aimet_torch/bin/reqs_deb_torch_gpu.tx
 *Optional*: Replace the Pillow package with Pillow-SIMD as follows:
 ```bash
 python3 -m pip uninstall -y pillow
-python3 -m pip install --no-cache-dir Pillow-SIMD==6.0.0.post0
+python3 -m pip install --no-cache-dir Pillow-SIMD==6.2.2.post1
 ```
 
 ### Post installation steps
