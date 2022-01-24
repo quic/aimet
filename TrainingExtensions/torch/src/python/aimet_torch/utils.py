@@ -440,19 +440,6 @@ def get_ordered_list_of_modules(model: torch.nn.Module, dummy_input: Union[torch
     return list_modules
 
 
-def get_ordered_list_of_conv_modules(model: torch.nn.Module, dummy_input: Union[torch.Tensor, Tuple]) -> List:
-    """
-    Finds order of nodes in graph
-    :param model: model
-    :param dummy_input: Dummy input to the model. Used to parse model graph.
-    :return: List of names in graph in order
-    """
-    module_list = get_ordered_list_of_modules(model, dummy_input)
-    module_list = [[name, module] for name, module in module_list if isinstance(module, (torch.nn.Conv2d,
-                                                                                         torch.nn.ConvTranspose2d))]
-    return module_list
-
-
 def replace_modules_of_type1_with_type2(model: torch.nn.Module,
                                         type1: type(torch.nn.Module), type2: type(torch.nn.Module)):
     """
