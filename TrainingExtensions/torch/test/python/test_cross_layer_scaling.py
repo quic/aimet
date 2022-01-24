@@ -41,7 +41,7 @@ import torch
 from torchvision import models
 
 from aimet_torch.batch_norm_fold import fold_all_batch_norms
-from aimet_torch.cross_layer_equalization import CrossLayerScaling, GraphSearchUtils
+from aimet_torch.cross_layer_equalization import CrossLayerScaling, GraphSearchUtils, HighBiasFold, equalize_model
 from aimet_torch.utils import get_layer_name
 from aimet_torch.examples.mobilenet import MockMobileNetV2, MockMobileNetV1
 
@@ -66,6 +66,7 @@ class MyModel(torch.nn.Module):
 
         # 1D conv layers
         self.conv5 = torch.nn.Conv1d(20, 20, 3)
+        self.bn1 = torch.nn.BatchNorm1d(20)
         self.relu3 = torch.nn.ReLU()
         self.conv6 = torch.nn.Conv1d(20, 20, 3)
         self.relu4 = torch.nn.ReLU()
@@ -105,6 +106,7 @@ class MyModel(torch.nn.Module):
         x = x.reshape(x.size(0), x.size(1), -1)
 
         x = self.conv5(x)
+        x = self.bn1(x)
         x = self.relu3(x)
         x = self.conv6(x)
 
@@ -368,7 +370,7 @@ class TestTrainingExtensionsCrossLayerScaling(unittest.TestCase):
         scale_factors = CrossLayerScaling.scale_model(model, (1, 3, 224, 224))
         self.assertEqual(8, len(scale_factors))
 
-    def test_auto_custom_model(self):
+    def test_auto_cls_custom_model(self):
 
         torch.manual_seed(10)
         model = MyModel()
@@ -387,6 +389,21 @@ class TestTrainingExtensionsCrossLayerScaling(unittest.TestCase):
 
         output_after_scale = model(random_input)
         self.assertTrue(torch.allclose(output_before_scale, output_after_scale))
+
+
+    def test_auto_cle_custom_model(self):
+
+        torch.manual_seed(10)
+        model = MyModel()
+        model.eval()
+        random_input = torch.rand(2, 10, 24, 24)
+        output_before_equalize = model(random_input)
+
+        equalize_model(model, (2, 10, 24, 24))
+
+        output_after_equalize = model(random_input)
+        self.assertTrue(torch.allclose(output_before_equalize, output_after_equalize))
+
 
     def test_auto_transposed_conv2d_model(self):
         torch.manual_seed(10)
