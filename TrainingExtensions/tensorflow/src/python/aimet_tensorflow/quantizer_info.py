@@ -2,7 +2,7 @@
 # =============================================================================
 #  @@-COPYRIGHT-START-@@
 #
-#  Copyright (c) 2021, Qualcomm Innovation Center, Inc. All rights reserved.
+#  Copyright (c) 2021-2022, Qualcomm Innovation Center, Inc. All rights reserved.
 #
 #  Redistribution and use in source and binary forms, with or without
 #  modification, are permitted provided that the following conditions are met:
@@ -79,14 +79,12 @@ class PickleableTensorQuantizerState:
         self.quantizer_type = quantizer_type
         self.num_channels = 0
         if isinstance(tensor_quantizer_ref, list):
-            for tensor_quantizer in tensor_quantizer_ref:
-                self.quant_scheme = tensor_quantizer.getQuantScheme()
-                self.use_strict_symmetric = tensor_quantizer.getStrictSymmetric()
-                self.use_unsigned_symmetric = tensor_quantizer.getUnsignedSymmetric()
-                self.rounding_mode = tensor_quantizer.roundingMode
-                self.is_encoding_valid = tensor_quantizer.isEncodingValid
-                self.num_channels = len(tensor_quantizer_ref)
-                break
+            self.quant_scheme = tensor_quantizer_ref[0].getQuantScheme()
+            self.use_strict_symmetric = tensor_quantizer_ref[0].getStrictSymmetric()
+            self.use_unsigned_symmetric = tensor_quantizer_ref[0].getUnsignedSymmetric()
+            self.rounding_mode = tensor_quantizer_ref[0].roundingMode
+            self.is_encoding_valid = tensor_quantizer_ref[0].isEncodingValid
+            self.num_channels = len(tensor_quantizer_ref)
         else:
             self.quant_scheme = tensor_quantizer_ref.getQuantScheme()
             self.use_strict_symmetric = tensor_quantizer_ref.getStrictSymmetric()

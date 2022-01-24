@@ -2,7 +2,7 @@
 //
 //  @@-COPYRIGHT-START-@@
 //
-//  Copyright (c) 2020, Qualcomm Innovation Center, Inc. All rights reserved.
+//  Copyright (c) 2020-2022, Qualcomm Innovation Center, Inc. All rights reserved.
 //
 //  Redistribution and use in source and binary forms, with or without
 //  modification, are permitted provided that the following conditions are met:
@@ -55,6 +55,22 @@ template <typename T>
 T copyLiteralToHost(const CPUDevice& d, const T* deviceValue)
 {
     return *deviceValue;
+}
+
+void sliceTensorAlongLastDim(const CPUDevice& d, Tensor slicedTensor, const Tensor& tensorToSlice, int channel)
+{
+    // K x K x I x O -> N x O
+    auto tensorToSliceTwoDim = tensorToSlice.flat_inner_dims<float, 2>();
+    slicedTensor.tensor<float, 2>().chip<0>(0) = tensorToSliceTwoDim.chip<1>(channel);
+
+
+}
+
+void sliceAndStoreTensor(const CPUDevice& d, Tensor* slicedTensor, Tensor tensorToSlice, int channel)
+{
+    auto slicedTensorTwoDim = slicedTensor->flat_inner_dims<float, 2>();
+    slicedTensorTwoDim.chip<1>(channel) = tensorToSlice.tensor<float, 2>().chip<0>(0);
+
 }
 
 template void copyInputTensorsToOutputTensors(const CPUDevice& d, const float* inTensor, size_t count, float* outTensor);

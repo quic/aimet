@@ -2,7 +2,7 @@
 //
 //  @@-COPYRIGHT-START-@@
 //
-//  Copyright (c) 2020, Qualcomm Innovation Center, Inc. All rights reserved.
+//  Copyright (c) 2020-2022, Qualcomm Innovation Center, Inc. All rights reserved.
 //
 //  Redistribution and use in source and binary forms, with or without
 //  modification, are permitted provided that the following conditions are met:
@@ -64,5 +64,13 @@ void copyInputTensorsToOutputTensors(const GPUDevice& d, const T* inTensor, size
 
 template <typename T>
 T copyLiteralToHost(const GPUDevice& d, const T* deviceValue);
+
+void sliceTensorAlongLastDim(const CPUDevice& d, Tensor slicedTensor, const Tensor& tensorToSlice, int channel);
+
+void sliceTensorAlongLastDim(const GPUDevice& d, Tensor slicedTensor, const Tensor& tensorToSlice, int channel);
+
+void sliceAndStoreTensor(const CPUDevice& d, Tensor* slicedTensor, Tensor tensorToSlice, int channel);
+
+void sliceAndStoreTensor(const GPUDevice& d, Tensor* slicedTensor, Tensor tensorToSlice, int channel);
 
 #endif   // AIMET_OP_UTILS_H
