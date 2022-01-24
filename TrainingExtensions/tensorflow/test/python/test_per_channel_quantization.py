@@ -34,9 +34,11 @@
 #  @@-COPYRIGHT-END-@@
 # =============================================================================
 
+import pytest
 import unittest
 import random
 import numpy as np
+import time
 import os
 import json
 
@@ -111,6 +113,84 @@ class TestTrainingExtensionsQcQuantizeOpPerChannel(unittest.TestCase):
                                                                                  bit_width=bit_width,
                                                                                  use_symmetric_encoding=use_symmetric_encoding,
                                                                                  axis=axis)
+
+            inp_tensor = sess.graph.get_tensor_by_name('input:0')
+            inp_data = np.ones((1, 1, 2, num_output_channels))
+
+            inp_data[:, :, :, 1] *= 2
+            inp_data[:, :, :, 2] *= 3
+            out_data = sess.run(pass_through_op_output, feed_dict={inp_tensor: inp_data})
+            for i in range(num_output_channels):
+                encoding = tensor_quantizers[i].computeEncoding(bitwidth, use_symm_encoding, False, False)
+            mode_var.load(int(libpymo.TensorQuantizerOpMode.quantizeDequantize), sess)
+            out_data = sess.run(pass_through_op_output, feed_dict={inp_tensor: inp_data})
+            # compare qc_quantize op's output with input
+            expected_output = np.ones((1, 1, 2, num_output_channels))
+            expected_output[:, :, :, 1] *= 2
+            expected_output[:, :, :, 2] *= 2.5
+            self.assertTrue(np.allclose(out_data, expected_output))
+            sess.close()
+
+    @pytest.mark.cuda
+    def test_qc_quantize_op_gpu_conv(self):
+        """
+        test custom op with GPU
+
+        """
+        np.random.seed(0)
+        zero_out_module = tf.load_op_library('libaimet_tf_ops.so')
+        graph = tf.Graph()
+        config = tf.compat.v1.ConfigProto(log_device_placement=False)
+        sess = tf.compat.v1.Session(graph=graph, config=config)
+        bitwidth = 8
+        use_symm_encoding = True
+
+        with graph.as_default():
+            # place holder for the input
+
+            num_output_channels = 3
+            inp = tf.compat.v1.placeholder(tf.float32, shape=[1, 1, 2, num_output_channels], name='input')
+            # Assuming 3 output channels
+            tensor_quantizer_int64 = [None] * num_output_channels
+            tensor_quantizers = [None] * num_output_channels
+            # Create a tensor_quantizer per channel
+            for i in range(num_output_channels):
+                tensor_quantizer = libpymo.TensorQuantizer(libpymo.QuantizationMode.QUANTIZATION_TF_ENHANCED,
+                                                           libpymo.RoundingMode.ROUND_NEAREST)
+
+                tensor_quantizers[i] = tensor_quantizer
+                val = libpymo.PtrToInt64(tensor_quantizer)
+                tensor_quantizer_int64[i] = val
+
+            tensor_quant_ref = tf.Variable(tensor_quantizer_int64, trainable=False, dtype=tf.int64)
+
+            en_min = (np.zeros(num_output_channels)).tolist()
+            en_max = [1.0, 2.0, 2.5]
+            encoding_min = tf.Variable(en_min,
+                                       trainable=True, dtype=tf.double)
+            encoding_max = tf.Variable(en_max,
+                                       trainable=True, dtype=tf.double)
+
+            bit_width = tf.Variable(initial_value=bitwidth, trainable=False, dtype=tf.int8)
+            use_symmetric_encoding = tf.Variable(initial_value=use_symm_encoding, trainable=False, dtype=tf.bool)
+
+            mode_var = tf.Variable(initial_value=int(libpymo.TensorQuantizerOpMode.updateStats),
+                                   trainable=False, dtype=tf.int32)
+            axis = tf.Variable(initial_value=3, trainable=False, dtype=tf.int32)
+
+            sess.run([mode_var.initializer, tensor_quant_ref.initializer, encoding_min.initializer,
+                      encoding_max.initializer, bit_width.initializer, use_symmetric_encoding.initializer,
+                      axis.initializer])
+            with tf.device("/device:GPU:0"):
+                # Giving axis = 3
+                pass_through_op_output = zero_out_module.qc_quantize_per_channel(name='quant_op', in_tensor=inp,
+                                                                                 op_mode=mode_var,
+                                                                                 tensor_quantizer_reference=tensor_quant_ref,
+                                                                                 encoding_min=encoding_min,
+                                                                                 encoding_max=encoding_max,
+                                                                                 bit_width=bit_width,
+                                                                                 use_symmetric_encoding=use_symmetric_encoding,
+                                                                                 axis=3)
 
             inp_tensor = sess.graph.get_tensor_by_name('input:0')
             inp_data = np.ones((1, 1, 2, num_output_channels))
@@ -261,29 +341,8 @@ class TestTrainingExtensionsQcQuantizeOpPerChannel(unittest.TestCase):
         self.assertTrue(np.allclose(out_data, inp_data))
         sess.close()
 
-    def test_quantsim_created_correctly(self):
-        quantsim_config = {
-            "defaults": {
-                "ops": {
-                    "is_output_quantized": "True",
-                    "is_symmetric": "False"
-                },
-                "params": {
-                    "is_quantized": "True",
-                    "is_symmetric": "True"
-                },
-                "per_channel_quantization": "True",
-            },
-            "params": {},
-            "op_type": {},
-            "supergroups": [],
-            "model_input": {},
-            "model_output": {}
-        }
-
-
-        with open('./quantsim_config.json', 'w') as f:
-            json.dump(quantsim_config, f)
+    def test_compute_encodings_cpu(self):
+        save_config_file_for_per_channel_quantization()
 
         tf.compat.v1.reset_default_graph()
         with tf.device('/cpu:0'):
@@ -322,27 +381,7 @@ class TestTrainingExtensionsQcQuantizeOpPerChannel(unittest.TestCase):
                 assert isinstance(encoding, list)
 
     def test_export_encodings(self):
-        quantsim_config = {
-            "defaults": {
-                "ops": {
-                    "is_output_quantized": "True",
-                    "is_symmetric": "False"
-                },
-                "params": {
-                    "is_quantized": "True",
-                    "is_symmetric": "True"
-                },
-                "per_channel_quantization": "True",
-            },
-            "params": {},
-            "op_type": {},
-            "supergroups": [],
-            "model_input": {},
-            "model_output": {}
-        }
-
-        with open('./quantsim_config.json', 'w') as f:
-            json.dump(quantsim_config, f)
+        save_config_file_for_per_channel_quantization()
 
         tf.compat.v1.reset_default_graph()
         with tf.device('/cpu:0'):
@@ -387,3 +426,112 @@ class TestTrainingExtensionsQcQuantizeOpPerChannel(unittest.TestCase):
         self.assertTrue(isinstance(encoding_data["param_encodings"]["conv2d/Conv2D/ReadVariableOp:0"], list))
         self.assertTrue(isinstance(encoding_data["param_encodings"]["conv2d/Conv2D/ReadVariableOp:0"][0]['max'], list))
         self.assertTrue(isinstance(encoding_data["param_encodings"]["conv2d/Conv2D/ReadVariableOp:0"][0]['min'], list))
+
+    @pytest.mark.cuda
+    def test_compute_encodings_gpu_model(self):
+        """
+        Create QuantSim for a CPU model and test that activation encodings are computed
+        """
+        save_config_file_for_per_channel_quantization()
+
+        tf.compat.v1.reset_default_graph()
+        with tf.device('/gpu:0'):
+            model = tf.keras.Sequential()
+            model.add(tf.keras.layers.Conv2D(32, kernel_size=3, input_shape=(28, 28, 3), activation='relu'))
+            model.add(tf.keras.layers.MaxPooling2D((2, 2)))
+            model.add(tf.keras.layers.Conv2D(64, kernel_size=3, activation='relu'))
+            model.summary()
+
+        sess = tf.compat.v1.Session()
+        initialize_uninitialized_vars(sess)
+        sim = QuantizationSimModel(sess, ['conv2d_input'], ['conv2d_1/Relu'], use_cuda=True,
+                                   config_file='./quantsim_config.json')
+
+        # Check that op-mode is set correctly
+        conv2d_weight_quant_op = sim.session.graph.get_operation_by_name('conv2d/Conv2D/ReadVariableOp_quantized')
+        conv2d_output_quant_op = sim.session.graph.get_operation_by_name('conv2d/Relu_quantized')
+        self.assertEqual(int(libpymo.TensorQuantizerOpMode.oneShotQuantizeDequantize),
+                         sim.session.run(conv2d_weight_quant_op.inputs[1]))
+        self.assertEqual(int(libpymo.TensorQuantizerOpMode.updateStats),
+                         sim.session.run(conv2d_output_quant_op.inputs[1]))
+
+        def dummy_forward_pass(sess, args):
+            model_output = sess.graph.get_tensor_by_name('conv2d_1/Relu_quantized:0')
+            model_input = sess.graph.get_tensor_by_name('conv2d_input:0')
+            dummy_input = np.random.randn(20, 28, 28, 3)
+            sess.run(model_output, feed_dict={model_input: dummy_input})
+
+        sim.compute_encodings(dummy_forward_pass, None)
+        for quant_op_name, quantizer_info in sim._param_quantizers.items():
+            encoding = quantizer_info.get_encoding()
+            assert isinstance(encoding, list)
+
+    @pytest.mark.cuda
+    def test_to_compare_time_per_channel_and_per_tensor_quantization(self):
+        save_config_file_for_per_channel_quantization()
+
+        tf.compat.v1.reset_default_graph()
+
+        def dummy_forward_pass(sess, args):
+            model_output = sess.graph.get_tensor_by_name('conv2d_1/Relu_quantized:0')
+            model_input = sess.graph.get_tensor_by_name('conv2d_input:0')
+            dummy_input = np.random.randn(20, 28, 28, 3)
+            sess.run(model_output, feed_dict={model_input: dummy_input})
+
+        with tf.device('/gpu:0'):
+            model = tf.keras.Sequential()
+            model.add(tf.keras.layers.Conv2D(32, kernel_size=3, input_shape=(28, 28, 3), activation='relu'))
+            model.add(tf.keras.layers.MaxPooling2D((2, 2)))
+            model.add(tf.keras.layers.Conv2D(64, kernel_size=3, activation='relu'))
+            model.summary()
+
+        sess = tf.compat.v1.Session()
+        initialize_uninitialized_vars(sess)
+        sim = QuantizationSimModel(sess, ['conv2d_input'], ['conv2d_1/Relu'], use_cuda=True,
+                                   config_file='./quantsim_config.json')
+
+
+        start_time = time.time()
+        sim.compute_encodings(dummy_forward_pass, None)
+        per_channel_quantization_time = time.time() - start_time
+        print("--- %s seconds ---" % per_channel_quantization_time)
+
+        tf.compat.v1.reset_default_graph()
+        with tf.device('/gpu:0'):
+            model = tf.keras.Sequential()
+            model.add(tf.keras.layers.Conv2D(32, kernel_size=3, input_shape=(28, 28, 3), activation='relu'))
+            model.add(tf.keras.layers.MaxPooling2D((2, 2)))
+            model.add(tf.keras.layers.Conv2D(64, kernel_size=3, activation='relu'))
+            model.summary()
+        sess = tf.compat.v1.Session()
+        initialize_uninitialized_vars(sess)
+        sim = QuantizationSimModel(sess, ['conv2d_input'], ['conv2d_1/Relu'], use_cuda=True)
+
+        start_time = time.time()
+        sim.compute_encodings(dummy_forward_pass, None)
+        per_tensor_quantization_time = time.time() - start_time
+        print("--- %s seconds ---" % per_tensor_quantization_time)
+
+
+def save_config_file_for_per_channel_quantization():
+    quantsim_config = {
+        "defaults": {
+            "ops": {
+                "is_output_quantized": "True",
+                "is_symmetric": "False"
+            },
+            "params": {
+                "is_quantized": "True",
+                "is_symmetric": "True"
+            },
+            "per_channel_quantization": "True",
+        },
+        "params": {},
+        "op_type": {},
+        "supergroups": [],
+        "model_input": {},
+        "model_output": {}
+    }
+
+    with open('./quantsim_config.json', 'w') as f:
+        json.dump(quantsim_config, f)

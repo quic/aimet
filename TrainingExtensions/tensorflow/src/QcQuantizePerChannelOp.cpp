@@ -185,11 +185,11 @@ public:
         // Read axis for per channel quantization
         const Tensor* axisTensor;
         OP_REQUIRES_OK(context, context->input("axis", &axisTensor));
-        const int32 axis = *(axisTensor->flat<int32>().data());
-
+        const int32* axis = axisTensor->flat<int32>().data();
+        // Move axis to correct device and get value
+        auto axisVal = copyLiteralToHost<int32>(context->eigen_device<Device>(), axis);
         // Get shape along axis for per channel quantization
-        int channelShape = shapeVector[axis];
-
+        int channelShape = shapeVector[axisVal];
         // use symmetric encoding
         const Tensor* useSymmetricEncodingTensor;
         OP_REQUIRES_OK(context, context->input("use_symmetric_encoding", &useSymmetricEncodingTensor));
@@ -199,36 +199,32 @@ public:
         Tensor* outTensor = nullptr;
         OP_REQUIRES_OK(context, context->allocate_output(0, inTensor.shape(), &outTensor));
 
-        // Get the device
-        const Device& device = context->eigen_device<Device>();
-
         // Performs per layer quantization
         // For parameters in convolution layers or linear layers
         // TODO: transposed conv2d
         if(numDimensionsTensor == 4 or numDimensionsTensor == 2)
         {
-            // K x K x I x O -> N x O
-            auto inTensorTwoDim = inTensor.flat_inner_dims<float, 2>();
-            auto outTensorTwoDim = outTensor->flat_inner_dims<float, 2>();
             // For linear layers
             int numElements = shapeVector[0];
             // For conv layers
             if (numDimensionsTensor == 4)
                 numElements = numElements * shapeVector[1] * shapeVector[2];
 
-            for(int8 channel=0; channel < channelShape; channel++)
+            for(int channel=0; channel < channelShape; channel++)
             {
                  Tensor temp1, temp2;
                  OP_REQUIRES_OK(context, context->allocate_temp(DT_FLOAT, TensorShape({numElements, 2}), &temp1));
                  OP_REQUIRES_OK(context, context->allocate_temp(DT_FLOAT, TensorShape({numElements, 2}), &temp2));
-                 temp1.tensor<float, 2>().chip<0>(0) = inTensorTwoDim.chip<1>(channel);
+                 // Chip input tensor along last dimension
+                 sliceTensorAlongLastDim(context->eigen_device<Device>(), temp1, inTensor, channel);
                  auto inpData = temp1.flat<float>().data();
                  auto outData = temp2.flat<float>().data();
 
                  modeSpecificAction(context->eigen_device<Device>(), inpData, numElements,
                                     outData, quantizerAddr++, opMode, encodingMin++,
                                     encodingMax++, bitwidth, useSymmetricEncoding);
-                 outTensorTwoDim.chip<1>(channel) = temp2.tensor<float, 2>().chip<0>(0);
+
+                 sliceAndStoreTensor(context->eigen_device<Device>(), outTensor, temp2, channel);
             }
         }
         else if(numDimensionsTensor == 1)
