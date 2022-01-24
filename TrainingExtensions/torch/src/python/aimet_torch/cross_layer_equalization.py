@@ -618,8 +618,13 @@ class HighBiasFold:
         prev_layer_params.bias = cls_pair_info.layer1.bias.detach().numpy()
 
         weight = cls_pair_info.layer2.weight
+
+        if isinstance(cls_pair_info.layer2, (torch.nn.Conv1d, torch.nn.ConvTranspose1d)):
+            weight = torch.unsqueeze(weight, dim=-1)
+
         # Transpose weights to C, N, H, W from N, C, H, W since axis are flipped for transposed conv
-        if isinstance(cls_pair_info.layer2, torch.nn.ConvTranspose2d) and cls_pair_info.layer2.groups == 1:
+        if isinstance(cls_pair_info.layer2, (torch.nn.ConvTranspose1d, torch.nn.ConvTranspose2d)) and \
+                cls_pair_info.layer2.groups == 1:
             weight = weight.permute(1, 0, 2, 3)
 
         curr_layer_params.bias = cls_pair_info.layer2.bias.detach().numpy()
@@ -653,13 +658,14 @@ class HighBiasFold:
                 prev_layer_params, curr_layer_params = HighBiasFold.call_mo_high_bias_fold(cls_pair_info, bn_layers)
 
                 prev_layer_bias_shape = cls_pair_info.layer1.weight.shape[0]
-                # Transpose weight back to N, C, H, W for transposed Conv2D
-                if isinstance(cls_pair_info.layer1, torch.nn.ConvTranspose2d) and cls_pair_info.layer1.groups == 1:
+                if (isinstance(cls_pair_info.layer1, (torch.nn.ConvTranspose1d, torch.nn.ConvTranspose2d))) and \
+                        (cls_pair_info.layer1.groups == 1):
                     prev_layer_bias_shape = cls_pair_info.layer1.weight.shape[1]
 
                 cls_pair_info.layer1.bias.data = torch.from_numpy(np.reshape(prev_layer_params.bias,
                                                                              prev_layer_bias_shape))
                 cls_pair_info.layer1.bias.data = cls_pair_info.layer1.bias.data.type(torch.FloatTensor)
+
                 cls_pair_info.layer2.bias.data = torch.from_numpy(np.reshape(curr_layer_params.bias,
                                                                              curr_layer_params.weightShape[0]))
                 cls_pair_info.layer2.bias.data = cls_pair_info.layer2.bias.data.type(torch.FloatTensor)
