@@ -64,6 +64,16 @@ class MyModel(torch.nn.Module):
 
         self.conv4 = torch.nn.Conv2d(20, 20, 3)
 
+        self.conv5 = torch.nn.Conv1d(20, 20, 3)
+        self.relu3 = torch.nn.ReLU()
+        self.conv6 = torch.nn.Conv1d(20, 20, 3)
+        self.relu4 = torch.nn.ReLU()
+
+        self.conv7 = torch.nn.ConvTranspose1d(20, 20, 3)
+        self.relu5 = torch.nn.ReLU()
+        self.conv8 = torch.nn.ConvTranspose1d(20, 20, 3)
+
+
         self.fc1 = torch.nn.Linear(5120, 10)
 
     def forward(self, x):
@@ -81,6 +91,17 @@ class MyModel(torch.nn.Module):
 
         # No fold if there is a split between conv and BN
         x = self.conv4(x)
+        x = x.reshape(x.size(0), x.size(1), -1)
+
+        x = self.conv5(x)
+        x = self.relu3(x)
+        x = self.conv6(x)
+
+        x = self.relu4(x)
+
+        x = self.conv7(x)
+        x = self.relu5(x)
+        x = self.conv8(x)
 
         x = x.view(x.size(0), -1)
         x = self.fc1(x)
@@ -333,15 +354,20 @@ class TestTrainingExtensionsCrossLayerScaling(unittest.TestCase):
         torch.manual_seed(10)
         model = MyModel()
         model.eval()
+        random_input = torch.rand(2, 10, 24, 24)
+        output_before_scale = model(random_input)
 
         # BN fold
         fold_all_batch_norms(model, (2, 10, 24, 24))
 
         scale_factors = CrossLayerScaling.scale_model(model, (2, 10, 24, 24))
-        self.assertEqual(3, len(scale_factors))
+        self.assertEqual(6, len(scale_factors))
         self.assertTrue(scale_factors[0].cls_pair_info_list[0].relu_activation_between_layers)
         self.assertTrue(scale_factors[1].cls_pair_info_list[0].relu_activation_between_layers)
         self.assertFalse(scale_factors[2].cls_pair_info_list[0].relu_activation_between_layers)
+
+        output_after_scale = model(random_input)
+        self.assertTrue(torch.allclose(output_before_scale, output_after_scale))
 
     def test_auto_transposed_conv2d_model(self):
         torch.manual_seed(10)
