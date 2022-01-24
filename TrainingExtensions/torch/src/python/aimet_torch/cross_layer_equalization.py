@@ -48,7 +48,6 @@ import numpy as np
 import torch
 
 import libpymo      # pylint: disable=import-error
-import torch.nn
 
 from aimet_torch import utils
 from aimet_torch.meta.connectedgraph import ConnectedGraph
@@ -409,9 +408,10 @@ class CrossLayerScaling:
         :return: Scaling factors S_12 and S_23 : numpy arrays
         """
         # pylint:disable=too-many-branches
+        # pylint:disable=too-many-statements
         on_gpu = False
         for module in cls_set:
-            if not isinstance(module, (torch.nn.Conv2d, torch.nn.ConvTranspose2d)):
+            if not isinstance(module, cls_supported_layers):
                 raise ValueError("Only conv layers are supported for cross layer equalization")
             if module.weight.is_cuda:
                 on_gpu = True
@@ -424,18 +424,31 @@ class CrossLayerScaling:
 
         if isinstance(cls_set[0], torch.nn.ConvTranspose2d):
             cls_set[0].weight.data = cls_set[0].weight.data.permute(1, 0, 2, 3)
+        if isinstance(cls_set[0], torch.nn.ConvTranspose1d):
+            cls_set[0].weight.data = cls_set[0].weight.data.permute(1, 0, 2)
+
         if isinstance(cls_set[2], torch.nn.ConvTranspose2d):
             cls_set[2].weight.data = cls_set[2].weight.data.permute(1, 0, 2, 3)
+        if isinstance(cls_set[2], torch.nn.ConvTranspose1d):
+            cls_set[2].weight.data = cls_set[2].weight.data.permute(1, 0, 2)
+
         assert cls_set[1].groups > 1
 
         prev_layer_params.weight = cls_set[0].weight.detach().numpy().flatten()
         prev_layer_params.weightShape = np.array(cls_set[0].weight.shape)
+        if len(prev_layer_params.weightShape) == 3:
+            prev_layer_params.weightShape = prev_layer_params.weightShape + [1]
 
         curr_layer_params.weight = cls_set[1].weight.detach().numpy().flatten()
         curr_layer_params.weightShape = np.array(cls_set[1].weight.shape)
+        if len(curr_layer_params.weightShape) == 3:
+            curr_layer_params.weightShape = curr_layer_params.weightShape + [1]
 
         next_layer_params.weight = cls_set[2].weight.detach().numpy().flatten()
         next_layer_params.weightShape = np.array(cls_set[2].weight.shape)
+        if len(next_layer_params.weightShape) == 3:
+            next_layer_params.weightShape = next_layer_params.weightShape + [1]
+
 
         if cls_set[0].bias is not None:
             prev_layer_params.bias = cls_set[0].bias.detach().numpy()
@@ -449,21 +462,32 @@ class CrossLayerScaling:
 
         scaling_params = libpymo.scaleDepthWiseSeparableLayer(prev_layer_params, curr_layer_params, next_layer_params)
 
+        if isinstance(cls_set[0], (torch.nn.Conv1d, torch.nn.ConvTranspose1d)):
+            prev_layer_params.weightShape = prev_layer_params.weightShape[:-1]
         cls_set[0].weight.data = torch.from_numpy(np.reshape(prev_layer_params.weight,
                                                              prev_layer_params.weightShape))
         cls_set[0].weight.data = cls_set[0].weight.data.type(torch.FloatTensor)
         if isinstance(cls_set[0], torch.nn.ConvTranspose2d):
             cls_set[0].weight.data = cls_set[0].weight.data.permute(1, 0, 2, 3)
+        if isinstance(cls_set[0], torch.nn.ConvTranspose1d):
+            cls_set[0].weight.data = cls_set[0].weight.data.permute(1, 0, 2)
 
+        if isinstance(cls_set[1], (torch.nn.Conv1d, torch.nn.ConvTranspose1d)):
+            curr_layer_params.weightShape = curr_layer_params.weightShape[:-1]
         cls_set[1].weight.data = torch.from_numpy(np.reshape(curr_layer_params.weight,
                                                              curr_layer_params.weightShape))
         cls_set[1].weight.data = cls_set[1].weight.data.type(torch.FloatTensor)
+
+        if isinstance(cls_set[2], (torch.nn.Conv1d, torch.nn.ConvTranspose1d)):
+            next_layer_params.weightShape = next_layer_params.weightShape[:-1]
 
         cls_set[2].weight.data = torch.from_numpy(np.reshape(next_layer_params.weight,
                                                              next_layer_params.weightShape))
         cls_set[2].weight.data = cls_set[2].weight.data.type(torch.FloatTensor)
         if isinstance(cls_set[2], torch.nn.ConvTranspose2d):
             cls_set[2].weight.data = cls_set[2].weight.data.permute(1, 0, 2, 3)
+        if isinstance(cls_set[2], torch.nn.ConvTranspose1d):
+            cls_set[2].weight.data = cls_set[2].weight.data.permute(1, 0, 2)
 
         if cls_set[0].bias is not None:
             cls_set[0].bias.data = torch.from_numpy(np.reshape(prev_layer_params.bias,

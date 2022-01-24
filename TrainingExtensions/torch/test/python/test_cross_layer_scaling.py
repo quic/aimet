@@ -64,17 +64,28 @@ class MyModel(torch.nn.Module):
 
         self.conv4 = torch.nn.Conv2d(20, 20, 3)
 
+        # 1D conv layers
         self.conv5 = torch.nn.Conv1d(20, 20, 3)
         self.relu3 = torch.nn.ReLU()
         self.conv6 = torch.nn.Conv1d(20, 20, 3)
         self.relu4 = torch.nn.ReLU()
 
+        # Transposed conv layers
         self.conv7 = torch.nn.ConvTranspose1d(20, 20, 3)
         self.relu5 = torch.nn.ReLU()
         self.conv8 = torch.nn.ConvTranspose1d(20, 20, 3)
 
+        self.conv8a = torch.nn.Conv1d(20, 20, 3)
+        self.relu5a = torch.nn.ReLU()
 
-        self.fc1 = torch.nn.Linear(5120, 10)
+        # Depthwise separable conv 1D layers
+        self.relu6 = torch.nn.ReLU()
+        self.conv9 = torch.nn.Conv1d(20, 20, 3, groups=20)
+        self.relu7 = torch.nn.ReLU()
+        self.conv10 = torch.nn.Conv1d(20, 20, 1)
+        self.relu8 = torch.nn.ReLU()
+
+        self.fc1 = torch.nn.Linear(5040, 10)
 
     def forward(self, x):
 
@@ -102,6 +113,14 @@ class MyModel(torch.nn.Module):
         x = self.conv7(x)
         x = self.relu5(x)
         x = self.conv8(x)
+
+        x = self.conv8a(x)
+        x = self.relu5a(x)
+
+        x = self.conv9(x)
+        x = self.relu7(x)
+        x = self.conv10(x)
+        x = self.relu8(x)
 
         x = x.view(x.size(0), -1)
         x = self.fc1(x)
@@ -361,7 +380,7 @@ class TestTrainingExtensionsCrossLayerScaling(unittest.TestCase):
         fold_all_batch_norms(model, (2, 10, 24, 24))
 
         scale_factors = CrossLayerScaling.scale_model(model, (2, 10, 24, 24))
-        self.assertEqual(6, len(scale_factors))
+        self.assertEqual(8, len(scale_factors))
         self.assertTrue(scale_factors[0].cls_pair_info_list[0].relu_activation_between_layers)
         self.assertTrue(scale_factors[1].cls_pair_info_list[0].relu_activation_between_layers)
         self.assertFalse(scale_factors[2].cls_pair_info_list[0].relu_activation_between_layers)
