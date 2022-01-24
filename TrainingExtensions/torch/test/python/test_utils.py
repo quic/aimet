@@ -109,12 +109,8 @@ class TestTrainingExtensionsUtils(unittest.TestCase):
 
         dummy_input = torch.randn(1, 3, 224, 224)
         all_ops = utils.get_ordered_list_of_modules(model, dummy_input)
-        conv_ops = utils.get_ordered_list_of_conv_modules(model, dummy_input)
 
         self.assertEqual(60, len(all_ops))
-        self.assertEqual(20, len(conv_ops))
-        for _, module in conv_ops:
-            self.assertTrue(isinstance(module, torch.nn.Conv2d))
 
     def test_get_reused_modules(self):
         """ Test get_reused_modules utility """
