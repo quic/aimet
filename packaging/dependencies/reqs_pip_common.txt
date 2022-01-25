@@ -1,5 +1,7 @@
 bokeh==1.2.0
+dataclasses
 hvplot==0.4.0
+Jinja2>=2.9
 jsonschema==3.2.0
 numpy==1.16.6
 osqp==0.6.1
