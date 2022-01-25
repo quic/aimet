@@ -37,11 +37,17 @@
 # =============================================================================
 """ Quantsim for Keras """
 
-from typing import Union
+import os
+from typing import Union, Dict
 import tensorflow as tf
 
 from aimet_common.defs import QuantScheme
+from aimet_common.utils import AimetLogger, save_json_yaml
+from aimet_common.quantsim import encoding_version
 from aimet_tensorflow.keras.quant_sim.qc_quantize_wrapper import QcQuantizeWrapper, QuantizerSettings
+from aimet_tensorflow.keras.quant_sim.tensor_quantizer import TensorQuantizer
+
+_logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Quant)
 
 unquantizable_modules = (tf.keras.layers.InputLayer, QcQuantizeWrapper)
 
@@ -59,8 +65,26 @@ class QuantizationSimModel:
         self._model_without_wrappers = model
         if not in_place:
             self._model_without_wrappers = tf.keras.models.clone_model(model)
+            self._model_without_wrappers.set_weights(model.get_weights())
         self._layer_name_to_quant_wrapper = {}
+        self._validate_model()
         self.model = self._add_quantization_wrappers(quant_scheme, rounding_mode, default_output_bw, default_param_bw)
+
+    def _validate_model(self):
+        """
+        Check that model is appropriate for quantsim.
+        """
+        multiple_inbound_node_layers = []
+
+        for layer in self._model_without_wrappers.layers:
+            if len(layer.inbound_nodes) > 1:
+                multiple_inbound_node_layers.append(layer.name)
+
+        if multiple_inbound_node_layers:
+            _logger.error('Layers with more than one inbound nodes are unsupported. This may occur if a layer is '
+                          'reused multiple times in the model definition.')
+            _logger.error('Layers with multiple inbound nodes: {%s}', multiple_inbound_node_layers)
+            raise NotImplementedError
 
     def _add_quantization_wrappers(self, quant_scheme, rounding_mode, default_output_bw, default_param_bw):
         """
@@ -82,12 +106,70 @@ class QuantizationSimModel:
                                                      quant_scheme, False, False, False)
             if isinstance(layer, unquantizable_modules) or layer.submodules:
                 return layer
+
             wrapper = QcQuantizeWrapper(layer, activation_quant_settings, param_quant_settings,
                                         num_inputs=len(layer.inbound_nodes[0].keras_inputs))
             self._layer_name_to_quant_wrapper[layer.name] = wrapper
             return wrapper
 
         return tf.keras.models.clone_model(self._model_without_wrappers, clone_function=wrap_layer)
+
+    @staticmethod
+    def _get_encoding_dict_for_quantizer(quantizer: TensorQuantizer) -> Dict[str, Union[str, int, float]]:
+        """
+        Get encoding dict for a tensor quantizer.
+        :param quantizer: Quantizer to get encoding info from
+        :return: Dictionary containing encodings info for the tensor quantizer
+        """
+        encoding_dict = {}
+        encoding_dict['min'] = quantizer.encoding.min
+        encoding_dict['max'] = quantizer.encoding.max
+        encoding_dict['scale'] = quantizer.encoding.delta
+        encoding_dict['offset'] = int(quantizer.encoding.offset)
+        encoding_dict['bitwidth'] = quantizer.encoding.bw
+        encoding_dict['is_symmetric'] = str(quantizer.is_symmetric)
+        encoding_dict['dtype'] = 'int'
+        return encoding_dict
+
+    def _get_encodings_dict(self) -> Dict[str, Union[str, Dict]]:
+        """
+        Get encodings dict containing all activation and parameter encodings info in the model
+        :return: Dictionary containing all activation and parameter encodings info in the model
+        """
+        # pylint: disable=protected-access
+        activation_encodings = {}
+        param_encodings = {}
+        for wrapper in self.quant_wrappers():
+            for idx, input_quantizer in enumerate(wrapper.input_quantizers):
+                if input_quantizer.encoding is not None:
+                    tensor_name = wrapper._layer_to_wrap.inbound_nodes[0].keras_inputs[idx].name
+                    encoding_dict = self._get_encoding_dict_for_quantizer(input_quantizer)
+                    activation_encodings[tensor_name] = encoding_dict
+            for idx, param_quantizer in enumerate(wrapper.param_quantizers):
+                if param_quantizer.encoding is not None:
+                    param_name = wrapper._layer_to_wrap.weights[idx].name
+                    encoding_dict = self._get_encoding_dict_for_quantizer(param_quantizer)
+                    param_encodings[param_name] = encoding_dict
+            for idx, output_quantizer in enumerate(wrapper.output_quantizers):
+                if output_quantizer.encoding is not None:
+                    if not wrapper._layer_to_wrap.outbound_nodes:
+                        # This must be the case when layer is the output layer, and has only one output quantizer.
+                        if wrapper.output.ref() not in [output.ref() for output in self.model.outputs]:
+                            _logger.error('Layer has no outbound nodes and has valid output encoding but is not an'
+                                          'output layer.')
+                            raise AssertionError
+                        if len(wrapper.output_quantizers) > 1:
+                            _logger.error('Layer with no outbound nodes has more than one output quantizer.')
+                            raise AssertionError
+                        tensor_name = wrapper._layer_to_wrap.output.name
+                    else:
+                        tensor_name = wrapper._layer_to_wrap.outbound_nodes[idx].output_tensors.name
+                    encoding_dict = self._get_encoding_dict_for_quantizer(output_quantizer)
+                    activation_encodings[tensor_name] = encoding_dict
+        encodings_dict = {'version': encoding_version,
+                          'activation_encodings': activation_encodings,
+                          'param_encodings': param_encodings}
+        return encodings_dict
 
     def compute_encodings(self, forward_pass_callback, forward_pass_callback_args):
         """
@@ -103,6 +185,26 @@ class QuantizationSimModel:
         forward_pass_callback(self.model, forward_pass_callback_args)
         for quant_wrapper in self.quant_wrappers():
             quant_wrapper.compute_encoding()
+
+    def export(self, path, filename_prefix):
+        """
+        This method exports out the quant-sim model so it is ready to be run on-target.
+
+        Specifically, the following are saved
+
+        1. The sim-model is exported to a regular Keras model without any simulation ops
+        2. The quantization encodings are exported to a separate JSON-formatted file that can
+           then be imported by the on-target runtime (if desired)
+
+        :param path: path where to store model pth and encodings
+        :param filename_prefix: Prefix to use for filenames of the model pth and encodings files
+        """
+        model_path = os.path.join(path, filename_prefix)
+        self._model_without_wrappers.save(model_path)
+        self._model_without_wrappers.save(model_path + '.h5', save_format='h5')
+        encodings_dict = self._get_encodings_dict()
+        encoding_file_path = os.path.join(path, filename_prefix + '.encodings')
+        save_json_yaml(encoding_file_path, encodings_dict)
 
     def quant_wrappers(self):
         """
