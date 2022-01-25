@@ -33,6 +33,7 @@
 #
 #  @@-COPYRIGHT-END-@@
 # =============================================================================
+import json
 import pytest
 from packaging import version
 import numpy as np
@@ -144,9 +145,18 @@ def test_model_with_add():
         _ = model.predict((rand_inp_1, rand_inp_2))
 
         qsim = QuantizationSimModel(model, quant_scheme='tf')
+        for wrapper in qsim.quant_wrappers():
+            for input_q in wrapper.input_quantizers:
+                input_q.disable()
         qsim.compute_encodings(lambda m, _: m((rand_inp_1, rand_inp_2)), None)
         qsim.export('./data', 'model_with_add')
         assert len(list(qsim.quant_wrappers())) == 3
+
+        with open("./data/model_with_add.encodings", "r") as encodings_file:
+            encodings = json.load(encodings_file)
+
+        assert len(encodings['activation_encodings']) == 3
+        assert len(encodings['param_encodings']) == 4
 
 def test_qat():
     if version.parse(tf.version.VERSION) >= version.parse("2.00"):
