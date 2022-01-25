@@ -121,7 +121,7 @@ class QcQuantizeWrapper(tf.keras.layers.Layer):
                  layer_to_wrap: tf.keras.layers.Layer,
                  activation_quant_settings: QuantizerSettings,
                  param_quant_settings: QuantizerSettings,
-                 num_inputs: int = 1,
+                 num_inputs: int,
                  input_quantizers: Union[None, List[ActivationTensorQuantizer]] = None,
                  output_quantizers: Union[None, List[ActivationTensorQuantizer]] = None,
                  param_quantizers: Union[None, List[ParamTensorQuantizer]] = None,
@@ -224,8 +224,7 @@ class QcQuantizeWrapper(tf.keras.layers.Layer):
             quantized_param = self.param_quantizers[idx](param)
             self._layer_to_wrap.weights[idx].assign(quantized_param)
 
-    @staticmethod
-    def _quantize_activation(activation: Union[tf.Tensor, List], quantizers: List[ActivationTensorQuantizer]) -> \
+    def _quantize_activation(self, activation: Union[tf.Tensor, List], quantizers: List[ActivationTensorQuantizer]) -> \
             Union[tf.Tensor, List]:
         """
         Quantize activation
@@ -237,8 +236,9 @@ class QcQuantizeWrapper(tf.keras.layers.Layer):
             activation = [activation]
 
         if len(activation) != len(quantizers):
-            _logger.error('Mismatch between number of tensors {%s} and number of quantizers {%s}', len(activation),
-                          len(quantizers))
+            _logger.error('Mismatch between number of tensors {%s} and number of quantizers {%s} for layer {%s}',
+                          len(activation), len(quantizers), self._layer_to_wrap.name)
+            _logger.error('If this is a layer with multiple outputs, this is not currently supported by Quantsim.')
             raise AssertionError
         quantized_activations = []
         for idx, tensor in enumerate(activation):

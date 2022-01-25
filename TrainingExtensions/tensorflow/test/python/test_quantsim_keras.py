@@ -33,6 +33,7 @@
 #
 #  @@-COPYRIGHT-END-@@
 # =============================================================================
+import pytest
 from packaging import version
 import numpy as np
 import tensorflow as tf
@@ -63,6 +64,25 @@ class DenseSubclassing(tf.keras.Model):
         x = self.linear1(inputs)
         x = self.softmax(x)
         return x
+
+def model_with_add():
+    inp = tf.keras.layers.Input(shape=(5,))
+    inp_2 = tf.keras.layers.Input(shape=(3,))
+    x1 = tf.keras.layers.Dense(units=2)(inp)
+    x2 = tf.keras.layers.Dense(units=2)(inp_2)
+    x = tf.keras.layers.Add()([x1, x2])
+    model = tf.keras.Model(inputs=(inp, inp_2), outputs=x, name="model_with_add")
+    return model
+
+def model_with_reused_layer():
+    relu = tf.keras.layers.ReLU()
+    inp = tf.keras.layers.Input(shape=(5,))
+    x = relu(inp)
+    x = tf.keras.layers.Dense(units=2)(x)
+    x = relu(x)
+    x = tf.keras.layers.Softmax()(x)
+    model = tf.keras.Model(inputs=inp, outputs=x, name="model_with_reused_layer")
+    return model
 
 class DenseReluLayer(tf.keras.layers.Layer):
     def __init__(self, **kwargs):
@@ -114,6 +134,20 @@ def test_quantsim_basic():
         quant_out = qsim.model.predict(rand_inp)
         assert not np.array_equal(orig_out, quant_out)
 
+        qsim.export('./data', 'test_export')
+
+def test_model_with_add():
+    if version.parse(tf.version.VERSION) >= version.parse("2.00"):
+        model = model_with_add()
+        rand_inp_1 = np.random.randn(10, 5)
+        rand_inp_2 = np.random.randn(10, 3)
+        _ = model.predict((rand_inp_1, rand_inp_2))
+
+        qsim = QuantizationSimModel(model, quant_scheme='tf')
+        qsim.compute_encodings(lambda m, _: m((rand_inp_1, rand_inp_2)), None)
+        qsim.export('./data', 'model_with_add')
+        assert len(list(qsim.quant_wrappers())) == 3
+
 def test_qat():
     if version.parse(tf.version.VERSION) >= version.parse("2.00"):
         model = dense_functional()
@@ -132,3 +166,12 @@ def test_qat():
             for idx, weight in enumerate(running_weights):
                 assert not np.array_equal(weight, ending_weights[idx])
             running_weights = ending_weights
+
+def test_assert_on_reused_layer():
+    if version.parse(tf.version.VERSION) >= version.parse("2.00"):
+        model = model_with_reused_layer()
+        rand_inp = np.random.randn(100, 5)
+        _ = model.predict(rand_inp)
+
+        with pytest.raises(NotImplementedError):
+            _ = QuantizationSimModel(model, quant_scheme='tf')

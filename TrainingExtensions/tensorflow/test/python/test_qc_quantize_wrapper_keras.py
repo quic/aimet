@@ -74,7 +74,8 @@ def test_wrapper():
         _ = dense(test_inp)
         x = QcQuantizeWrapper(dense,
                               QuantizerSettings(8, 'nearest', 'tf', False, False, False),
-                              QuantizerSettings(8, 'nearest', 'tf', False, False, False))(inp)
+                              QuantizerSettings(8, 'nearest', 'tf', False, False, False),
+                              num_inputs=1)(inp)
         model = tf.keras.Model(inputs=inp, outputs=x)
 
         _ = model.predict(test_inp)
@@ -116,8 +117,9 @@ def test_wrapper_settings():
         inp = tf.keras.layers.Input(shape=(12,))
         identity = tf.keras.layers.Lambda(lambda x: x)
         out = QcQuantizeWrapper(identity,
-                              QuantizerSettings(8, 'nearest', 'tf_enhanced', False, False, False),
-                              QuantizerSettings(8, 'nearest', 'tf_enhanced', False, False, False))(inp)
+                                QuantizerSettings(8, 'nearest', 'tf_enhanced', False, False, False),
+                                QuantizerSettings(8, 'nearest', 'tf_enhanced', False, False, False),
+                                num_inputs=1)(inp)
         model = tf.keras.Model(inputs=inp, outputs=out)
 
         _ = model.predict(test_inp)
@@ -147,3 +149,24 @@ def test_wrapper_settings():
         for num in quant_out[0]:
             out_values.add(num)
         assert len(out_values) == 4
+
+def test_keras_add_layer():
+    if version.parse(tf.version.VERSION) >= version.parse("2.00"):
+        inp = tf.keras.layers.Input(shape=(2,))
+        inp_2 = tf.keras.layers.Input(shape=(2,))
+        x = tf.keras.layers.Add()([inp, inp_2])
+        model = tf.keras.Model(inputs=(inp, inp_2), outputs=x, name="model_with_add")
+
+        i1 = np.array([[-.3, .5]])
+        i2 = np.array([[-.2, .8]])
+
+        wrapped_add = QcQuantizeWrapper(model.layers[2],
+                                        QuantizerSettings(8, 'nearest', 'tf', False, False, False),
+                                        QuantizerSettings(8, 'nearest', 'tf', False, False, False),
+                                        num_inputs=2)
+        _ = wrapped_add((i1, i2))
+        wrapped_add.compute_encoding()
+        assert len(wrapped_add.input_quantizers) == 2
+        assert wrapped_add.input_quantizers[0].encoding is not None
+        assert wrapped_add.input_quantizers[1].encoding is not None
+        assert wrapped_add.input_quantizers[0].encoding.max != wrapped_add.input_quantizers[1].encoding.max
