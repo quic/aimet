@@ -37,32 +37,107 @@ import numpy as np
 import tensorflow as tf
 from packaging import version
 
+from aimet_tensorflow.keras.batch_norm_fold import fold_all_batch_norms
 from aimet_tensorflow.keras.quantsim import QuantizationSimModel
 from aimet_tensorflow.keras.quant_sim.qc_quantize_wrapper import QcQuantizeWrapper
 import libpymo
+
+# Placing this here temporarily, remove when it is moved to keras common utils.
+def parse_activation_layer(activation_layer: tf.keras.layers.Activation):
+    """
+    Parse generic tf.keras.layers.Activation and convert it to corresponding onnx type
+
+    :param activation_layer: tf.keras.layers.Activation
+    :return: list of converted onnx type str
+    """
+    activation_name = tf.keras.activations.serialize(activation_layer.activation)
+
+    keras_to_onnx_dict = {
+        "softmax": "Softmax",
+        "relu": "Relu",
+        "selu": "Selu",
+        "tanh": "Tanh",
+        "sigmoid": "Sigmoid",
+        "leaky_relu": "LeakyRelu",
+        "softplus": "Softplus",
+        "softsign": "Softsign",
+        "elu": "Elu",
+    }
+    onnx_activation = keras_to_onnx_dict.get(activation_name)
+    if onnx_activation is None:
+        return ["Unknown"]
+
+    return [onnx_activation]
+
+def disable_input_quantizers(qsim: QuantizationSimModel):
+    # Only use this while quantsim config is not implemented yet.
+    for wrapper in qsim.quant_wrappers():
+        for input_q in wrapper.input_quantizers:
+            input_q.disable()
+
+def disable_conv_and_dense_bias_quantizers(qsim: QuantizationSimModel):
+    # Only use this while quantsim config is not implemented yet.
+    for wrapper in qsim.quant_wrappers():
+        if isinstance(wrapper._layer_to_wrap, (tf.keras.layers.Conv2D, tf.keras.layers.Dense)) and \
+                len(wrapper.param_quantizers) == 2:
+            wrapper.param_quantizers[1].disable()
+
+def disable_bn_quantization(qsim: QuantizationSimModel):
+    # Only use this while quantsim config is not implemented yet.
+    for wrapper in qsim.quant_wrappers():
+        if isinstance(wrapper._layer_to_wrap, tf.keras.layers.BatchNormalization):
+            for param_q in wrapper.param_quantizers:
+                param_q.disable()
+            for output_q in wrapper.output_quantizers:
+                output_q.disable()
+
+def disable_conv_relu_supergroups(qsim: QuantizationSimModel):
+    # assumes bn fold has taken place. Only use this while quantsim config is not implemented yet.
+    # only handles relu that comes in the form of tf.keras.layer.Activation, not tf.keras.layer.ReLU
+    for wrapper in qsim.quant_wrappers():
+        # Take care of conv -> relu supergroups
+        if isinstance(wrapper._layer_to_wrap, tf.keras.layers.Conv2D) and \
+                len(wrapper.outbound_nodes) == 1 and \
+                isinstance(wrapper.outbound_nodes[0].layer._layer_to_wrap, tf.keras.layers.Activation) and \
+                parse_activation_layer(wrapper.outbound_nodes[0].layer._layer_to_wrap)[0] == 'Relu':
+            wrapper.output_quantizers[0].disable()
+        # Take care of conv -> bn -> relu supergroups
+        elif isinstance(wrapper._layer_to_wrap, tf.keras.layers.Conv2D) and \
+                len(wrapper.outbound_nodes) == 1 and \
+                isinstance(wrapper.outbound_nodes[0].layer._layer_to_wrap, tf.keras.layers.BatchNormalization) and \
+                len(wrapper.outbound_nodes[0].layer.outbound_nodes) == 1 and \
+                isinstance(wrapper.outbound_nodes[0].layer.outbound_nodes[0].layer._layer_to_wrap,
+                           tf.keras.layers.Activation) and \
+                parse_activation_layer(wrapper.outbound_nodes[0].layer.outbound_nodes[0].layer._layer_to_wrap)[0] == \
+                'Relu':
+            wrapper.output_quantizers[0].disable()
+            wrapper.outbound_nodes[0].layer.output_quantizers[0].disable()
+
+def disable_add_relu_supergroups(qsim: QuantizationSimModel):
+    # only handles relu that comes in the form of tf.keras.layer.Activation, not tf.keras.layer.ReLU
+    for wrapper in qsim.quant_wrappers():
+        if isinstance(wrapper._layer_to_wrap, tf.keras.layers.Add) and \
+                len(wrapper.outbound_nodes) == 1 and \
+                isinstance(wrapper.outbound_nodes[0].layer._layer_to_wrap, tf.keras.layers.Activation) and \
+                parse_activation_layer(wrapper.outbound_nodes[0].layer._layer_to_wrap)[0] == 'Relu':
+            wrapper.output_quantizers[0].disable()
 
 def test_quantize_resnet50_keras():
     if version.parse(tf.version.VERSION) >= version.parse("2.00"):
         rand_inp = np.random.randn(1, 224, 224, 3)
         model = tf.keras.applications.resnet50.ResNet50()
+        fold_all_batch_norms(model)
         orig_out = model(rand_inp)
         qsim = QuantizationSimModel(model)
-        for wrapper in qsim.quant_wrappers():
-            for input_q in wrapper.input_quantizers:
-                input_q.disable()
+        disable_input_quantizers(qsim)
+        disable_bn_quantization(qsim)
+        disable_conv_relu_supergroups(qsim)
+        disable_conv_and_dense_bias_quantizers(qsim)
+        disable_add_relu_supergroups(qsim)
         qsim.compute_encodings(lambda m, _: m(rand_inp), None)
         quant_out = qsim.model(rand_inp)
         assert not np.array_equal(orig_out, quant_out)
-        for wrapper in qsim.quant_wrappers():
-            for input_q in wrapper.input_quantizers:
-                assert input_q.quant_mode == int(libpymo.TensorQuantizerOpMode.passThrough)
-                assert input_q.encoding is None
-            for param_q in wrapper.param_quantizers:
-                assert param_q.quant_mode == int(libpymo.TensorQuantizerOpMode.oneShotQuantizeDequantize)
-                assert param_q.encoding is not None
-            for output_q in wrapper.output_quantizers:
-                assert output_q.quant_mode == int(libpymo.TensorQuantizerOpMode.quantizeDequantize)
-                assert output_q.encoding is not None
         for idx, layer in enumerate(model.layers):
             if isinstance(qsim.model.layers[idx], QcQuantizeWrapper):
                 assert layer.name == qsim.model.layers[idx]._layer_to_wrap.name
+        qsim.export('./data/', 'resnet50')

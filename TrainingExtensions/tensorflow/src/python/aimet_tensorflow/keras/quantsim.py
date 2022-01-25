@@ -152,18 +152,7 @@ class QuantizationSimModel:
                     param_encodings[param_name] = encoding_dict
             for idx, output_quantizer in enumerate(wrapper.output_quantizers):
                 if output_quantizer.encoding is not None:
-                    if not wrapper._layer_to_wrap.outbound_nodes:
-                        # This must be the case when layer is the output layer, and has only one output quantizer.
-                        if wrapper.output.ref() not in [output.ref() for output in self.model.outputs]:
-                            _logger.error('Layer has no outbound nodes and has valid output encoding but is not an'
-                                          'output layer.')
-                            raise AssertionError
-                        if len(wrapper.output_quantizers) > 1:
-                            _logger.error('Layer with no outbound nodes has more than one output quantizer.')
-                            raise AssertionError
-                        tensor_name = wrapper._layer_to_wrap.output.name
-                    else:
-                        tensor_name = wrapper._layer_to_wrap.outbound_nodes[idx].output_tensors.name
+                    tensor_name = wrapper._layer_to_wrap.output.name
                     encoding_dict = self._get_encoding_dict_for_quantizer(output_quantizer)
                     activation_encodings[tensor_name] = encoding_dict
         encodings_dict = {'version': encoding_version,
