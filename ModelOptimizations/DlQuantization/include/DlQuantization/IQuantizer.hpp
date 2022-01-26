@@ -178,8 +178,7 @@ public:
      *
      * This method uses the fixed point format of activations and weights to find
      * a fixed point format for accumulators. This method assumes this layer
-     * does MAC operations, and chooses the accumulator format as defined by CAL
-     * and as described on the Morpheus Confluence page.
+     * does MAC operations, and chooses the accumulator format as defined by CAL.
      */
     virtual void GetAccumulatorFormat(const TfEncoding& input_acts, const TfEncoding& weights,
                                       TfEncoding& accumulator) = 0;
