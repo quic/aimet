@@ -116,27 +116,26 @@ def concat_create_node(symbolic_traced_model: torch.fx.GraphModule, module_name:
         return new_node
 
 
-def concat_create_module(node: torch.fx.node, functional_name: str) -> torch.nn.Module:
+def concat_create_module(node: torch.fx.node) -> torch.nn.Module:
     """
     Create the replacement module.
 
     :param node: Current node in the graph after which new node will be inserted
-    :param functional_name: Functional name for given node
     :return:
     """
 
-    kwargs = node.kwargs
     num_args = len(node.args)
     if num_args == 1:
         # Handle torch.cat being called with default parameter dim
-        module = functional_to_module_special_handling_map[functional_name]()
-        for key, value in kwargs.items():
-            setattr(module, key, value)
+        kwargs = node.kwargs
+        module = elementwise_ops.Concat()
     else:
-        module = functional_to_module_special_handling_map[functional_name](node.args[1])
-        my_kwargs = {'axis': node.args[1]}
-        for key, value in my_kwargs.items():
-            setattr(module, key, value)
+        module = elementwise_ops.Concat(node.args[1])
+        kwargs = {'axis': node.args[1]}
+
+    for key, value in kwargs.items():
+        setattr(module, key, value)
+
     return module
 
 
@@ -344,7 +343,7 @@ def _create_module_for_functional_node(node: torch.fx.node, functional_name: str
         for key, value in kwargs.items():
             setattr(module, key, value)
     elif functional_name in functional_to_module_special_handling_map:
-        module = special_handler_functions[functional_name]['module_fn'](node, functional_name)
+        module = special_handler_functions[functional_name]['module_fn'](node)
     else:
         raise ValueError("Unsupported module: {}".format(functional_name))
     return module

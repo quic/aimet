@@ -100,17 +100,6 @@ class Concat(torch.nn.Module):
         return torch.cat(x, dim=self._axis)
 
 
-class ConcatOld(torch.nn.Module):
-    """ Concat module for a functional concat"""
-    # pylint:disable=arguments-differ
-    @staticmethod
-    def forward(x: Union[Tuple[torch.Tensor], List[torch.Tensor]], dim: int = 0) -> torch.Tensor:
-        """
-        Forward-pass routine for cat op
-        """
-        return torch.cat(x, dim=dim)
-
-
 class MatMul(torch.nn.Module):
     """ MatMul module for a functional matmul"""
     # pylint:disable=arguments-differ
