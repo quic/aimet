@@ -83,8 +83,64 @@ functional_to_module_map = {
     'subtract'      : elementwise_ops.Subtract,
     'mul'           : elementwise_ops.Multiply,
     'div'           : elementwise_ops.Divide,
-    'cat'           : elementwise_ops.Concat,
     'matmul'        : elementwise_ops.MatMul
+}
+
+functional_to_module_special_handling_map = {
+
+    # Operations that require special transformation
+    'cat'           : elementwise_ops.Concat
+}
+
+
+def concat_create_node(symbolic_traced_model: torch.fx.GraphModule, module_name: str, node: torch.fx.node) \
+        -> torch.fx.node:
+    """
+    Create the node to be inserted in the graph model.
+
+    :param symbolic_traced_model: Symbolically traced model
+    :param module_name: Qualified module name in symbolic_traced_model hierarchy corresponding to new node
+    :param node: Current node in the graph after which new node will be inserted
+    :return: torch.fx.node to be inserted in the graph
+    """
+
+    with symbolic_traced_model.graph.inserting_after(node):
+        num_args = len(node.args)
+        if num_args == 1:
+            forward_args = node.args[0]
+            new_node = symbolic_traced_model.graph.call_module(module_name, args=forward_args)
+        else:
+            forward_args = tuple(node.args[0])
+            new_node = symbolic_traced_model.graph.call_module(module_name, args=forward_args)
+        return new_node
+
+
+def concat_create_module(node: torch.fx.node, functional_name: str) -> torch.nn.Module:
+    """
+    Create the replacement module.
+
+    :param node: Current node in the graph after which new node will be inserted
+    :param functional_name: Functional name for given node
+    :return:
+    """
+
+    kwargs = node.kwargs
+    num_args = len(node.args)
+    if num_args == 1:
+        module = functional_to_module_special_handling_map[functional_name]()
+        for key, value in kwargs.items():
+            setattr(module, key, value)
+    else:
+        module = functional_to_module_special_handling_map[functional_name](node.args[1])
+        my_kwargs = {'axis': node.args[1]}
+        for key, value in my_kwargs.items():
+            setattr(module, key, value)
+    return module
+
+
+special_handler_functions = {
+    # Special handling functions for creating node and module
+    'cat': {'node_fn': concat_create_node, 'module_fn': concat_create_module}
 }
 
 
@@ -100,7 +156,13 @@ def prepare_model(model: torch.nn.Module, concrete_args: Optional[Dict[str, Any]
         class ModelWithFunctionalReLU(torch.nn.Module):
 
             def __init__(self):
-                super(ModelWithFunctionalReLU, self).__init__()
+               num_args = len(node.args)
+            if num_args == 1:
+                forward_args = node.args[0]
+                new_node = symbolic_traced_model.graph.call_module(module_name, args=forward_args)
+            else:
+                forward_args = tuple(node.args[0])
+                new_node = symbolic_traced_model.graph.call_module(module_name, args=forward_args)   super(ModelWithFunctionalReLU, self).__init__()
                 self.conv1 = torch.nn.Conv2d(3, 32, kernel_size=3)
 
             def forward(self, *inputs):
@@ -150,7 +212,19 @@ def prepare_model(model: torch.nn.Module, concrete_args: Optional[Dict[str, Any]
     #2 Non-torch functions which does not use __torch_function__ mechanism is not supported by default in symbolic
     tracing. If we do not want to capture them in symbolic tracing then use torch.fx.wrap() API at module-scope level::
 
-        import torch
+        import torchdef concat_create_node(symbolic_traced_model, module_name, node):
+
+    with symbolic_traced_model.graph.inserting_after(node):
+        num_args = len(node.args)
+        if num_args == 1:
+            forward_args = node.args[0]
+            new_node = symbolic_traced_model.graph.call_module(module_name, args=forward_args)
+        else:
+            forward_args = tuple(node.args[0])
+            new_node = symbolic_traced_model.graph.call_module(module_name, args=forward_args)
+
+        print("\n\nConcat handler", new_node)
+        return new_node
         import torch.fx
         torch.fx.wrap('len')  # call the API at module-level scope.
         torch.fx.wrap('sqrt') # call the API at module-level scope.
@@ -194,7 +268,7 @@ def prepare_model(model: torch.nn.Module, concrete_args: Optional[Dict[str, Any]
                 new_nodule_name = 'module_' + node.name
                 setattr(symbolic_traced_model, new_nodule_name, new_module)
                 # Create the node for new module in the graph
-                _create_node_for_new_module(symbolic_traced_model, node, new_nodule_name)
+                _create_node_for_new_module(symbolic_traced_model, node, new_nodule_name, functional_name)
                 logger.info("Functional         : Adding new module for node: {%s} ", node.name)
 
         # Create new module for reused/duplicate nodes
@@ -230,17 +304,25 @@ def _verify_symbolic_traced_model(symbolic_traced_model: torch.fx.GraphModule):
 
 
 def _create_node_for_new_module(symbolic_traced_model: torch.fx.GraphModule, node: torch.fx.node,
-                                module_name: str):
+                                module_name: str, functional_name: str = None):
     """
     Insert 'call module' node into graph and replace all the uses of 'node' with newly added node and erase the
     the old node from graph.
     :param symbolic_traced_model: Symbolically traced model
     :param node: Current node in the graph after which new node will be inserted
     :param module_name: Qualified module name in symbolic_traced_model hierarchy corresponding to new node
+    :param functional_name: Original functional name
     :return: None
     """
     with symbolic_traced_model.graph.inserting_after(node):
-        new_node = symbolic_traced_model.graph.call_module(module_name, args=node.args)
+        if functional_name:
+            if functional_name in functional_to_module_special_handling_map.keys():
+                new_node = special_handler_functions[functional_name]['node_fn'](symbolic_traced_model, module_name, node)
+            else:
+                new_node = symbolic_traced_model.graph.call_module(module_name, args=node.args)
+        else:
+            new_node = symbolic_traced_model.graph.call_module(module_name, args=node.args)
+
         node.replace_all_uses_with(new_node)
     symbolic_traced_model.graph.erase_node(node)
 
@@ -251,8 +333,9 @@ def _find_functional_name_for_node(node: torch.fx.node) -> Union[str, None]:
     :param node: torch.fx Node
     :return: corresponding functional name if found, else None
     """
-    for functional_name in functional_to_module_map:
 
+    combined_ops_map = {**functional_to_module_map, **functional_to_module_special_handling_map}
+    for functional_name in combined_ops_map:
         # \b boundary character to find the exact match from the functional_to_module lookup
         pattern = r"\b" + functional_name + r"\b"
         if search(pattern, str(node.target)):
@@ -271,12 +354,15 @@ def _create_module_for_functional_node(node: torch.fx.node, functional_name: str
     kwargs = node.kwargs
 
     # Instantiate new module from lookup
-    module = functional_to_module_map[functional_name]()
-
-    # Set the parameters for module from node.kwargs
-    for key, value in kwargs.items():
-        setattr(module, key, value)
-
+    if functional_name in functional_to_module_map.keys():
+        module = functional_to_module_map[functional_name]()
+        # Set the parameters for module from node.kwargs
+        for key, value in kwargs.items():
+            setattr(module, key, value)
+    elif functional_name in functional_to_module_special_handling_map:
+        module = special_handler_functions[functional_name]['module_fn'](node, functional_name)
+    else:
+        raise ValueError("Unsupported module: {}".format(functional_name))
     return module
 
 
