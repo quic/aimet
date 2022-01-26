@@ -37,7 +37,6 @@
 # =============================================================================
 
 """ Modules for functional elementwise ops """
-from typing import List, Tuple, Union
 import torch
 import torch.nn
 
