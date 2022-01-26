@@ -35,6 +35,7 @@
 # =============================================================================
 
 import pytest
+pytestmark = pytest.mark.skip("Disable RNN quantisim tests")
 import unittest
 import shutil
 import os

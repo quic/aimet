@@ -33,6 +33,9 @@
 #
 #  @@-COPYRIGHT-END-@@
 # =============================================================================
+
+import pytest
+pytestmark = pytest.mark.skip("Disable tests that requires eager execution")
 import tensorflow as tf
 import numpy as np
 from packaging import version

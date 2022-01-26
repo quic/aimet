@@ -61,6 +61,7 @@ subgraph_constructors = op_type_templates
 class TestSubGraph(unittest.TestCase):
     """ Test Sub Graph functions """
 
+    @unittest.skip("Instance norm is from tf.contrib which is deprecated")
     def test_instance_norm_model(self):
         input_shape = subgraph_constructors['InstanceNormalization']['input_shape']
         constructor_string = subgraph_constructors['InstanceNormalization']['constructor']

@@ -38,6 +38,7 @@
 """ Utilities for parsing and applying quantsim configurations from json config file """
 
 from typing import List, Dict, Tuple, Set, Union
+from packaging import version
 import tensorflow as tf
 from aimet_common.quantsim_config.json_config_importer import DefaultsType, OpType, ParamType, OpTypeType, \
     SupergroupType, ConfigType, ConfigDictKeys
@@ -408,12 +409,19 @@ class QuantSimConfigurator(AimetCommonQuantSimConfigurator):
                     setting_type in modified_quantize_ops[quantize_op]:
                 # Tensor quantizer's setting has already been modified
                 if setting_name in [ConfigDictKeys.IS_INPUT_QUANTIZED, ConfigDictKeys.IS_OUTPUT_QUANTIZED]:
-                    op_mode_tensor = self._sess.graph.get_tensor_by_name(quantize_op.name + '_op_mode:0')
+                    if version.parse(tf.__version__) >= version.parse("2.0"):
+                        op_mode_tensor_name = '_op_mode/Read/ReadVariableOp:0'
+                    else:
+                        op_mode_tensor_name = '_op_mode:0'
+                    op_mode_tensor = self._sess.graph.get_tensor_by_name(quantize_op.name + op_mode_tensor_name)
                     # current_setting will be True if op mode is not passThrough (is enabled), False otherwise
                     current_setting = (self._sess.run(op_mode_tensor) != int(pymo.TensorQuantizerOpMode.passThrough))
                 else:
-                    op_mode_tensor = self._sess.graph.get_tensor_by_name(quantize_op.name +
-                                                                         '_use_symmetric_encoding:0')
+                    if version.parse(tf.__version__) >= version.parse("2.0"):
+                        op_mode_tensor_name = '_use_symmetric_encoding/Read/ReadVariableOp:0'
+                    else:
+                        op_mode_tensor_name = '_use_symmetric_encoding:0'
+                    op_mode_tensor = self._sess.graph.get_tensor_by_name(quantize_op.name + op_mode_tensor_name)
                     current_setting = self._sess.run(op_mode_tensor)
                 if current_setting != quantizer_setting:
                     logger.error('Conflicting tensor quantizer settings for symmetric encodings')
