@@ -107,6 +107,7 @@ def concat_create_node(symbolic_traced_model: torch.fx.GraphModule, module_name:
     with symbolic_traced_model.graph.inserting_after(node):
         num_args = len(node.args)
         if num_args == 1:
+            # Handle torch.cat being called with default parameter dim
             forward_args = node.args[0]
             new_node = symbolic_traced_model.graph.call_module(module_name, args=forward_args)
         else:
@@ -127,6 +128,7 @@ def concat_create_module(node: torch.fx.node, functional_name: str) -> torch.nn.
     kwargs = node.kwargs
     num_args = len(node.args)
     if num_args == 1:
+        # Handle torch.cat being called with default parameter dim
         module = functional_to_module_special_handling_map[functional_name]()
         for key, value in kwargs.items():
             setattr(module, key, value)
@@ -156,13 +158,7 @@ def prepare_model(model: torch.nn.Module, concrete_args: Optional[Dict[str, Any]
         class ModelWithFunctionalReLU(torch.nn.Module):
 
             def __init__(self):
-               num_args = len(node.args)
-            if num_args == 1:
-                forward_args = node.args[0]
-                new_node = symbolic_traced_model.graph.call_module(module_name, args=forward_args)
-            else:
-                forward_args = tuple(node.args[0])
-                new_node = symbolic_traced_model.graph.call_module(module_name, args=forward_args)   super(ModelWithFunctionalReLU, self).__init__()
+                super(ModelWithFunctionalReLU, self).__init__()
                 self.conv1 = torch.nn.Conv2d(3, 32, kernel_size=3)
 
             def forward(self, *inputs):
@@ -212,19 +208,7 @@ def prepare_model(model: torch.nn.Module, concrete_args: Optional[Dict[str, Any]
     #2 Non-torch functions which does not use __torch_function__ mechanism is not supported by default in symbolic
     tracing. If we do not want to capture them in symbolic tracing then use torch.fx.wrap() API at module-scope level::
 
-        import torchdef concat_create_node(symbolic_traced_model, module_name, node):
-
-    with symbolic_traced_model.graph.inserting_after(node):
-        num_args = len(node.args)
-        if num_args == 1:
-            forward_args = node.args[0]
-            new_node = symbolic_traced_model.graph.call_module(module_name, args=forward_args)
-        else:
-            forward_args = tuple(node.args[0])
-            new_node = symbolic_traced_model.graph.call_module(module_name, args=forward_args)
-
-        print("\n\nConcat handler", new_node)
-        return new_node
+        import torch
         import torch.fx
         torch.fx.wrap('len')  # call the API at module-level scope.
         torch.fx.wrap('sqrt') # call the API at module-level scope.
