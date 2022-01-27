@@ -46,6 +46,7 @@ import tensorflow as tf
 
 from aimet_tensorflow.common.graph_eval import initialize_uninitialized_vars
 from aimet_tensorflow.quantsim import QuantizationSimModel
+from aimet_tensorflow.examples.test_models import depthwise_conv2d_model
 from aimet_common.quantsim import calculate_delta_offset
 
 
@@ -440,23 +441,24 @@ class TestTrainingExtensionsQcQuantizeOpPerChannel(unittest.TestCase):
             model.add(tf.keras.layers.Conv2D(32, kernel_size=3, input_shape=(28, 28, 3), activation='relu'))
             model.add(tf.keras.layers.MaxPooling2D((2, 2)))
             model.add(tf.keras.layers.Conv2D(64, kernel_size=3, activation='relu'))
+            model.add(tf.keras.layers.Dense(2, activation='relu'))
             model.summary()
 
         sess = tf.compat.v1.Session()
         initialize_uninitialized_vars(sess)
-        sim = QuantizationSimModel(sess, ['conv2d_input'], ['conv2d_1/Relu'], use_cuda=True,
+        sim = QuantizationSimModel(sess, ['conv2d_input'], ['dense/Relu'], use_cuda=True,
                                    config_file='./quantsim_config.json')
 
         # Check that op-mode is set correctly
         conv2d_weight_quant_op = sim.session.graph.get_operation_by_name('conv2d/Conv2D/ReadVariableOp_quantized')
-        conv2d_output_quant_op = sim.session.graph.get_operation_by_name('conv2d/Relu_quantized')
+        conv2d_output_quant_op = sim.session.graph.get_operation_by_name('dense/Relu_quantized')
         self.assertEqual(int(libpymo.TensorQuantizerOpMode.oneShotQuantizeDequantize),
                          sim.session.run(conv2d_weight_quant_op.inputs[1]))
         self.assertEqual(int(libpymo.TensorQuantizerOpMode.updateStats),
                          sim.session.run(conv2d_output_quant_op.inputs[1]))
 
         def dummy_forward_pass(sess, args):
-            model_output = sess.graph.get_tensor_by_name('conv2d_1/Relu_quantized:0')
+            model_output = sess.graph.get_tensor_by_name('dense/Relu_quantized:0')
             model_input = sess.graph.get_tensor_by_name('conv2d_input:0')
             dummy_input = np.random.randn(20, 28, 28, 3)
             sess.run(model_output, feed_dict={model_input: dummy_input})
@@ -511,6 +513,34 @@ class TestTrainingExtensionsQcQuantizeOpPerChannel(unittest.TestCase):
         sim.compute_encodings(dummy_forward_pass, None)
         per_tensor_quantization_time = time.time() - start_time
         print("--- %s seconds ---" % per_tensor_quantization_time)
+
+    @pytest.mark.cuda
+    def test_compute_encodings_gpu_model_depthwise_model(self):
+        """
+        Create QuantSim for a CPU model and test that activation encodings are computed
+        """
+        save_config_file_for_per_channel_quantization()
+
+        tf.compat.v1.reset_default_graph()
+        sess = tf.compat.v1.Session()
+        with tf.device('/gpu:0'):
+            _ = depthwise_conv2d_model()
+            init = tf.compat.v1.global_variables_initializer()
+            sess.run(init)
+
+        sim = QuantizationSimModel(sess, ['input_1'], ['depthwise_conv2d_model/Softmax'], use_cuda=True,
+                                   config_file='./quantsim_config.json')
+
+        def dummy_forward_pass(sess, args):
+            model_output = sess.graph.get_tensor_by_name('depthwise_conv2d_model/Softmax:0')
+            model_input = sess.graph.get_tensor_by_name('input_1:0')
+            dummy_input = np.random.randn(1, 10, 10, 3)
+            sess.run(model_output, feed_dict={model_input: dummy_input})
+
+        sim.compute_encodings(dummy_forward_pass, None)
+        for quant_op_name, quantizer_info in sim._param_quantizers.items():
+            encoding = quantizer_info.get_encoding()
+            assert isinstance(encoding, list)
 
 
 def save_config_file_for_per_channel_quantization():
