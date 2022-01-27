@@ -1076,3 +1076,16 @@ class TestFX:
 
         assert torch.allclose(model_transformed(*input_tensor),
                               model_with_branch_true(*input_tensor))
+
+    def test_inception_v3_compute_encodings(self):
+        model = models.inception_v3().eval()
+        model_transformed = prepare_model(model)
+        print(model_transformed)
+        input_shape = (1, 3, 299, 299)
+        input_tensor = torch.randn(*input_shape)
+        assert torch.allclose(model_transformed(input_tensor),
+                              model(input_tensor))
+        quant_sim = QuantizationSimModel(model_transformed, dummy_input=input_tensor)
+        quant_sim.compute_encodings(evaluate, input_tensor)
+        quant_sim.model(input_tensor)
+
