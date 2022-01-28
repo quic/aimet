@@ -150,6 +150,77 @@ class TestJsonConfigImporter(unittest.TestCase):
         with self.assertRaises(jsonschema.exceptions.ValidationError):
             _validate_syntax(quantsim_config)
 
+        # verify supported_kernels has at least one entry
+        quantsim_config = {
+            "defaults": {
+                "ops": {},
+                "params": {},
+                "supported_kernels": []
+            },
+            "params": {},
+            "op_type": {},
+            "supergroups": [],
+            "model_input": {},
+            "model_output": {}
+        }
+        with self.assertRaises(jsonschema.exceptions.ValidationError):
+            _validate_syntax(quantsim_config)
+
+        # verify param in supported_kernels has both bitwidth and dtype
+        quantsim_config = {
+            "defaults": {
+                "ops": {},
+                "params": {},
+                "supported_kernels": [
+                    {
+                        "activation": {
+                            "bitwidth": 16,
+                            "dtype": "int"
+                        },
+                        "param": {
+                            "bitwidth": 16
+                        }
+                    }
+                ]
+            },
+            "params": {},
+            "op_type": {},
+            "supergroups": [],
+            "model_input": {},
+            "model_output": {}
+        }
+        with self.assertRaises(jsonschema.exceptions.ValidationError):
+            _validate_syntax(quantsim_config)
+
+        # verify param in supported_kernels has a valid bitwidth [4, 8, 16, 32]
+        quantsim_config = {
+            "defaults": {
+                "ops": {},
+                "params": {},
+                "supported_kernels": [
+                    {
+                        "activation": {
+                            "bitwidth": 16,
+                            "dtype": "int"
+                        },
+                        "param": {
+                            "bitwidth": 1,
+                            "dtype": "int"
+                        }
+                    }
+                ]
+            },
+            "params": {},
+            "op_type": {},
+            "supergroups": [],
+            "model_input": {},
+            "model_output": {}
+        }
+        with self.assertRaises(jsonschema.exceptions.ValidationError):
+            _validate_syntax(quantsim_config)
+
+
+
     def test_validate_semantics(self):
         """ Test semantic validation for config files """
         # NOTE: using bool True instead of str "True" since validate semantics expects _convert_configs_values_to_bool

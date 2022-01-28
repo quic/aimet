@@ -40,7 +40,7 @@ import json
 import os
 import torch
 import libpymo
-from aimet_common.defs import QuantScheme
+from aimet_common.defs import QuantScheme, QuantizationDataType
 from aimet_torch.examples.test_models import SingleResidual, QuantSimTinyModel, MultiInput, SingleResidualWithModuleAdd
 from aimet_torch.quantsim import QuantizationSimModel
 from aimet_torch.quantsim_config.quantsim_config import _get_all_ops_in_neighborhood
@@ -146,6 +146,92 @@ class TestQuantsimConfig:
         if os.path.exists('./data/quantsim_config.json'):
             os.remove('./data/quantsim_config.json')
 
+    def test_parse_config_file_default_supported_kernels(self):
+        """
+        Test that the supported_kernels in the defaults section is parsed correctly and its values are added
+        in the dict _supported_kernels
+        """
+        model = SingleResidual()
+        model.eval()
+
+        quantsim_config = {
+            "defaults": {
+                "ops": {
+                    "is_output_quantized": "True",
+                    "is_symmetric": "False"
+                },
+                "params": {
+                    "is_quantized": "False",
+                    "is_symmetric": "True"
+                },
+                "supported_kernels":[
+                    {
+                        "activation": {
+                            "bitwidth": 16,
+                            "dtype": "int"
+                        },
+                        "param": {
+                            "bitwidth": 8,
+                            "dtype": "int"
+                        }
+                    },
+                    {
+                        "activation": {
+                            "bitwidth": 16,
+                            "dtype": "float"
+                        },
+                        "param": {
+                            "bitwidth": 16,
+                            "dtype": "float"
+                        }
+                    }
+                ]
+            },
+            "params": {
+                "weight": {
+                    "is_quantized": "True",
+                    "is_symmetric": "False"
+                }
+            },
+            "op_type": {},
+            "supergroups": [],
+            "model_input": {},
+            "model_output": {}
+        }
+
+        expected_supported_kernels = [
+                    {
+                        "activation": {
+                            "bitwidth": 16,
+                            "dtype": QuantizationDataType.int
+                        },
+                        "param": {
+                            "bitwidth": 8,
+                            "dtype": QuantizationDataType.int
+                        }
+                    },
+                    {
+                        "activation": {
+                            "bitwidth": 16,
+                            "dtype": QuantizationDataType.float
+                        },
+                        "param": {
+                            "bitwidth": 16,
+                            "dtype": QuantizationDataType.float
+                        }
+                    }
+                ]
+
+        with open('./data/quantsim_config.json', 'w') as f:
+            json.dump(quantsim_config, f)
+        sim = QuantizationSimModel(model, quant_scheme=QuantScheme.post_training_tf_enhanced,
+                                   config_file='./data/quantsim_config.json',
+                                   dummy_input=torch.rand(1, 3, 32, 32))
+
+        supported_kernels_in_defaults = sim._supported_kernels["defaults"]
+        assert len(supported_kernels_in_defaults) == 2
+        assert supported_kernels_in_defaults == expected_supported_kernels
+
     def test_parse_config_file_op_type(self):
         """ Test that op specific quantization parameters are set correctly when using json config file """
         model = SingleResidual()
@@ -209,6 +295,87 @@ class TestQuantsimConfig:
                             assert param_quantizer.use_symmetric_encodings
         if os.path.exists('./data/quantsim_config.json'):
             os.remove('./data/quantsim_config.json')
+
+    def test_parse_config_file_op_type_supported_kernels(self):
+        """
+        Test that the supported_kernels in the op_type section is parsed correctly and its values are added
+        in the dict _supported_kernels
+        """
+        model = SingleResidual()
+        model.eval()
+
+        quantsim_config = {
+            "defaults": {
+                "ops": {
+                    "is_output_quantized": "True",
+                    "is_symmetric": "False"
+                },
+                "params": {
+                    "is_quantized": "False",
+                    "is_symmetric": "True"
+                },
+                "supported_kernels": [
+                    {
+                        "activation": {
+                            "bitwidth": 16,
+                            "dtype": "int"
+                        },
+                        "param": {
+                            "bitwidth": 16,
+                            "dtype": "int"
+                        }
+                    }
+                ]
+            },
+            "params": {
+                "weight": {
+                    "is_quantized": "True",
+                    "is_symmetric": "False"
+                }
+            },
+            "op_type": {
+                "Conv": {
+                    "supported_kernels": [
+                        {
+                            "activation": {
+                                "bitwidth": 16,
+                                "dtype": "int"
+                            },
+                            "param": {
+                                "bitwidth": 8,
+                                "dtype": "int"
+                            }
+                        }
+                    ]
+                }
+            },
+            "supergroups": [],
+            "model_input": {},
+            "model_output": {}
+        }
+
+        expected_supported_kernels = [
+                    {
+                        "activation": {
+                            "bitwidth": 16,
+                            "dtype": QuantizationDataType.int
+                        },
+                        "param": {
+                            "bitwidth": 8,
+                            "dtype": QuantizationDataType.int
+                        }
+                    }
+                ]
+
+        with open('./data/quantsim_config.json', 'w') as f:
+            json.dump(quantsim_config, f)
+        sim = QuantizationSimModel(model, quant_scheme=QuantScheme.post_training_tf_enhanced,
+                                   config_file='./data/quantsim_config.json',
+                                   dummy_input=torch.rand(1, 3, 32, 32))
+
+        supported_kernels_in_defaults = sim._supported_kernels["Conv"]
+        assert len(supported_kernels_in_defaults) == 1
+        assert supported_kernels_in_defaults == expected_supported_kernels
 
     def test_parse_config_file_supergroups(self):
         """ Test that supergroup quantization parameters are set correctly when using json config file """

@@ -37,6 +37,7 @@
 # =============================================================================
 """ Schema used to validate json configuration file """
 
+
 QUANTSIM_CONFIG_SCHEMA = {
     "type": "object",
     "properties": {
@@ -86,6 +87,48 @@ QUANTSIM_CONFIG_SCHEMA = {
                 "per_channel_quantization": {
                     "type": "string",
                     "pattern": "^True$|^False$"
+                },
+                "supported_kernels": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "activation": {
+                                "type": "object",
+                                "properties": {
+                                    "bitwidth": {
+                                        "type": "number",
+                                        "enum" : [4, 8, 16, 32]
+                                    },
+                                    "dtype": {
+                                        "type": "string",
+                                        "pattern": "^int$|^float$"
+                                    },
+                                },
+                                "required": ["bitwidth", "dtype"],
+                                "additionalProperties": False
+                            },
+                            "param": {
+                                "type": "object",
+                                "properties": {
+                                    "bitwidth": {
+                                        "type": "number",
+                                        "enum" : [4, 8, 16, 32]
+                                    },
+                                    "dtype": {
+                                        "type": "string",
+                                        "pattern": "^int$|^float$"
+                                    }
+                                },
+                                "required": ["bitwidth", "dtype"],
+                                "additionalProperties": False
+                            },
+                        },
+                        "required": ["activation", "param"],
+                        "additionalProperties": False
+                    },
+                    "minItems": 1,
+                    "additionalItems": False
                 }
             },
             "required": ["ops", "params"],
@@ -146,6 +189,48 @@ QUANTSIM_CONFIG_SCHEMA = {
                                     "additionalProperties": False
                                 }
                             }
+                        },
+                        "supported_kernels": {
+                            "type": "array",
+                            "items": {
+                                "type": "object",
+                                "properties": {
+                                    "activation": {
+                                        "type": "object",
+                                        "properties": {
+                                            "bitwidth": {
+                                                "type": "number",
+                                                "enum" : [4, 8, 16, 32]
+                                            },
+                                            "dtype": {
+                                                "type": "string",
+                                                "pattern": "^int$|^float$"
+                                            }
+                                        },
+                                        "required": ["bitwidth", "dtype"],
+                                        "additionalProperties": False
+                                    },
+                                    "param": {
+                                        "type": "object",
+                                        "properties": {
+                                            "bitwidth": {
+                                                "type": "number",
+                                                "enum" : [4, 8, 16, 32]
+                                            },
+                                            "dtype": {
+                                                "type": "string",
+                                                "pattern": "^int$|^float$"
+                                            }
+                                        },
+                                        "required": ["bitwidth", "dtype"],
+                                        "additionalProperties": False
+                                    },
+                                },
+                                "required": ["activation", "param"],
+                                "additionalProperties": False
+                            },
+                            "minItems": 1,
+                            "additionalItems": False
                         }
                     },
                     "additionalProperties": False

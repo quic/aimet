@@ -43,6 +43,7 @@ from jsonschema import validate
 
 from aimet_common.quantsim_config.quantsim_config_schema import QUANTSIM_CONFIG_SCHEMA
 from aimet_common.utils import AimetLogger
+from aimet_common.defs import QuantizationDataType
 
 logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Quant)
 
@@ -53,7 +54,6 @@ OpTypeType = Dict[str, OpType]
 SupergroupType = Dict[str, List[str]]
 DefaultsType = Dict[str, ConfigType]
 ConfigDictType = Dict[str, Union[DefaultsType, ParamType, OpType, List[SupergroupType], ConfigType]]
-
 
 class ConfigDictKeys:
     """ Class holding variables mapping to strings used in quantsim config dictionary keys """
@@ -72,6 +72,7 @@ class ConfigDictKeys:
     STRICT_SYMMETRIC = "strict_symmetric"
     UNSIGNED_SYMMETRIC = "unsigned_symmetric"
     PER_CHANNEL_QUANTIZATION = "per_channel_quantization"
+    SUPPORTED_KERNELS = "supported_kernels"
 
 
 class JsonConfigImporter:
@@ -97,6 +98,7 @@ class JsonConfigImporter:
 
         _validate_syntax(quantsim_configs)
         _convert_configs_values_to_bool(quantsim_configs)
+        _convert_dtype_to_quantization_data_type(quantsim_configs)
         _validate_semantics(quantsim_configs)
         return quantsim_configs
 
@@ -108,6 +110,23 @@ def _validate_syntax(quantsim_config: ConfigDictType):
     """
     validate(quantsim_config, schema=QUANTSIM_CONFIG_SCHEMA)
 
+
+def _validate_supported_kernels(supported_kernels: List):
+    """
+    Validate Supported kernels list
+    :param supported_kernels: List of supported kernels present in the config file
+    """
+    if supported_kernels:
+        for supported_kernel in supported_kernels:
+            if supported_kernel["activation"]["dtype"] == QuantizationDataType.float and \
+                    supported_kernel["activation"]["bitwidth"] != 16:
+                logger.error('Activation dtype:float is only supported with bitwidth:16')
+                raise NotImplementedError
+
+            if supported_kernel["param"]["dtype"] == QuantizationDataType.float and \
+                    supported_kernel["param"]["bitwidth"] != 16:
+                logger.error('Param dtype:float is only supported with bitwidth:16')
+                raise NotImplementedError
 
 def _validate_semantics(quantsim_config: ConfigDictType):
     """
@@ -125,6 +144,11 @@ def _validate_semantics(quantsim_config: ConfigDictType):
         logger.error('Currently IS_OUTPUT_QUANTIZED false setting in default configs is not supported')
         raise NotImplementedError
 
+    #validate "supported_kernels" in the default configs if present
+    if ConfigDictKeys.SUPPORTED_KERNELS in quantsim_config[ConfigDictKeys.DEFAULTS]:
+        default_supported_kernels = quantsim_config[ConfigDictKeys.DEFAULTS][ConfigDictKeys.SUPPORTED_KERNELS]
+        _validate_supported_kernels(default_supported_kernels)
+
     # Currently, for op_type configs, only IS_INPUT_QUANTIZED = True is supported
     op_type_configs = quantsim_config[ConfigDictKeys.OP_TYPE]
     for op_type_config in op_type_configs.values():
@@ -132,6 +156,11 @@ def _validate_semantics(quantsim_config: ConfigDictType):
                 op_type_config[ConfigDictKeys.IS_INPUT_QUANTIZED]:
             logger.error('IS_INPUT_QUANTIZED false in op configs is currently unsupported.')
             raise NotImplementedError
+
+        # validate "supported_kernels" in the specialized op_type configs if present
+        if ConfigDictKeys.SUPPORTED_KERNELS in op_type_config:
+            op_type_supported_kernels = op_type_config[ConfigDictKeys.SUPPORTED_KERNELS]
+            _validate_supported_kernels(op_type_supported_kernels)
 
     # For model input configs, only IS_INPUT_QUANTIZED = True is supported
     model_input_configs = quantsim_config[ConfigDictKeys.MODEL_INPUT]
@@ -146,7 +175,6 @@ def _validate_semantics(quantsim_config: ConfigDictType):
         if not model_output_configs[ConfigDictKeys.IS_OUTPUT_QUANTIZED]:
             logger.error('IS_OUTPUT_QUANTIZED for model output can only be set to True')
             raise NotImplementedError
-
 
 def _convert_configs_values_to_bool(dictionary: Dict):
     """
@@ -167,3 +195,36 @@ def _convert_configs_values_to_bool(dictionary: Dict):
             _convert_configs_values_to_bool(value)
         else:
             pass
+
+def _convert_str_to_quantization_data_type_helper(supported_kernels: List):
+    """
+    Helper function to convert string dtype to QuantizationDataType
+    :param supported_kernels: List of supported kernels added in the config file
+    """
+    if supported_kernels:
+        for supported_kernel in supported_kernels:
+            if supported_kernel["activation"]["dtype"] == "float":
+                supported_kernel["activation"]["dtype"] = QuantizationDataType.float
+            else:
+                supported_kernel["activation"]["dtype"] = QuantizationDataType.int
+
+            if supported_kernel["param"]["dtype"] == "float":
+                supported_kernel["param"]["dtype"] = QuantizationDataType.float
+            else:
+                supported_kernel["param"]["dtype"] = QuantizationDataType.int
+
+
+def _convert_dtype_to_quantization_data_type(quantsim_config: ConfigDictType):
+    """
+    Modify dtype variable present in supported kernels with equivalent enum value from QuantizationDataType
+    :param quantsim_config: Configuration dictionary
+    """
+    if ConfigDictKeys.SUPPORTED_KERNELS in quantsim_config[ConfigDictKeys.DEFAULTS].keys():
+        default_supported_kernels = quantsim_config[ConfigDictKeys.DEFAULTS][ConfigDictKeys.SUPPORTED_KERNELS]
+        _convert_str_to_quantization_data_type_helper(default_supported_kernels)
+
+    op_type_configs = quantsim_config[ConfigDictKeys.OP_TYPE]
+    for op_type_config in op_type_configs.values():
+        if ConfigDictKeys.SUPPORTED_KERNELS in op_type_config:
+            op_type_supported_kernels = op_type_config[ConfigDictKeys.SUPPORTED_KERNELS]
+            _convert_str_to_quantization_data_type_helper(op_type_supported_kernels)
