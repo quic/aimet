@@ -1,10 +1,12 @@
-============================
-Using AIMET with Keras Model
-============================
+=============================================
+Using AIMET Tensorflow APIs with Keras Models
+=============================================
 
 Introduction
 ============
-Currently AIMET APIs support Tensorflow sessions. This example code shows a method for how to use AIMET if you have a Keras model by invoking AIMET on the back-end session and converting the returned session to a Keras model.
+AIMET Keras API support is currently in development. In the meantime, AIMET Tensorflow APIs can be used with Keras
+models by working on the back-end session of the model. This example code shows a method for how to invoke AIMET on the
+back-end session as well as how to convert the returned session to a Keras model.
 
 APIs
 ====
