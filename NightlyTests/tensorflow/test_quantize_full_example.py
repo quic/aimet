@@ -52,7 +52,7 @@ from aimet_tensorflow.common import tfrecord_generator as tf_gen
 from aimet_tensorflow.common import graph_eval
 from aimet_tensorflow.common.connectedgraph import ConnectedGraph
 from aimet_tensorflow.utils import graph_saver
-from aimet_tensorflow.examples.test_models import multiple_input_model
+from aimet_tensorflow.examples.test_models import multiple_input_model, single_residual
 
 import libpymo as pymo
 
@@ -336,5 +336,61 @@ class Quantization(unittest.TestCase):
         quant_graph.get_operation_by_name('conv1b/BiasAdd_quantized')
         quant_graph.get_operation_by_name('conv2/BiasAdd_quantized')
 
+        # close session
+        sess.close()
+
+    @pytest.mark.cuda
+    def test_per_channel_quantization(self):
+        print('Running Per channel Quantization Test')
+        quantsim_config = {
+            "defaults": {
+                "ops": {
+                    "is_output_quantized": "True",
+                    "is_symmetric": "False"
+                },
+                "params": {
+                    "is_quantized": "True",
+                    "is_symmetric": "True"
+                },
+                "per_channel_quantization": "True",
+            },
+            "params": {},
+            "op_type": {},
+            "supergroups": [],
+            "model_input": {},
+            "model_output": {}
+        }
+        with open('./quantsim_config.json', 'w') as f:
+            json.dump(quantsim_config, f)
+
+        tf.compat.v1.reset_default_graph()
+        sess = tf.compat.v1.Session()
+        with tf.device('/gpu:0'):
+            _ = single_residual()
+            init = tf.compat.v1.global_variables_initializer()
+            sess.run(init)
+
+        # Allocate the quantizer and quantize the network using the default 8 bit params/activations
+        sim = quantsim.QuantizationSimModel(sess, ['input_1'], ['single_residual/Softmax'], quant_scheme='tf',
+                                            use_cuda=True,
+                                            config_file='./quantsim_config.json')
+
+        param_quantizers = sim._param_quantizers
+        for quant_op_name, quantizer_info in param_quantizers.items():
+
+            assert len(quantizer_info.tensor_quantizer) > 1
+
+        def forward_callback(sess, ite):
+            model_output = sess.graph.get_tensor_by_name('single_residual/Softmax:0')
+            model_input = sess.graph.get_tensor_by_name('input_1:0')
+            dummy_input = np.random.randn(1, 16, 16, 3)
+            sess.run(model_output, feed_dict={model_input: dummy_input})
+
+        sim.compute_encodings(forward_callback, forward_pass_callback_args=1)
+
+        for quant_op_name, quantizer_info in param_quantizers.items():
+            encoding = quantizer_info.get_encoding()
+            assert isinstance(encoding, list)
+        os.remove('./quantsim_config.json')
         # close session
         sess.close()
