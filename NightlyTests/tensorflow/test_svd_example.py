@@ -38,30 +38,36 @@
 import unittest
 import os
 import shutil
-
+import tensorflow as tf
 from aimet_tensorflow import svd as s
 from aimet_tensorflow.common import tfrecord_generator as tf_gen
 from aimet_tensorflow.common.tfrecord_generator import MnistParser
 from aimet_common.utils import AimetLogger
 logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Test)
+tf.compat.v1.disable_eager_execution()
+
+mnist_model_path = os.path.join(os.environ.get('DEPENDENCY_DATA_PATH'), 'mnist/models/')
+mnist_tfrecords_path = os.path.join(os.environ.get('DEPENDENCY_DATA_PATH'), 'mnist/data/')
 
 
 class SVD(unittest.TestCase):
 
     def test_svd_automatic_rank_selection_mac_top_percent(self):
 
-        os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
+        os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
 
         # Allocate the generator you wish to use to provide the network with data
-        generator = tf_gen.TfRecordGenerator(tfrecords=[os.path.join('data', 'mnist', 'validation.tfrecords')],
+        generator = tf_gen.TfRecordGenerator(tfrecords=[os.path.join(mnist_tfrecords_path, 'validation.tfrecords')],
                                              parser=MnistParser(data_inputs=['reshape_input']))
 
         # error_margin 85 % : forces to go through all 20 rank indices
         error_margin = 85
 
         # Allocate the SVD instance and compress the network
-        svd = s.Svd(graph=os.path.join('models', 'mnist_save.meta'),
-                    checkpoint=os.path.join('models', 'mnist_save'), output_file=os.path.join('svd', 'svd_graph'),
+        meta_path = os.path.join(mnist_model_path, 'mnist_save.meta')
+        checkpoint_path = os.path.join(mnist_model_path, 'mnist_save')
+        svd = s.Svd(graph=meta_path,
+                    checkpoint=checkpoint_path, output_file=os.path.join('svd', 'svd_graph'),
                     layers=[], num_ranks=5, layer_selection_threshold=0.90, metric=s.CostMetric.mac)
 
         stats = svd.compress_net(generator=generator, iterations=10, error_margin=error_margin)
@@ -72,14 +78,16 @@ class SVD(unittest.TestCase):
     @unittest.skip
     def test_svd_automatic_rank_selection_mem_top_percent(self):
 
-        os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
+        os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
 
         # Allocate the generator you wish to use to provide the network with data
-        generator = tf_gen.TfRecordGenerator(tfrecords=[os.path.join('data', 'mnist', 'validation.tfrecords')],
+        generator = tf_gen.TfRecordGenerator(tfrecords=[os.path.join(mnist_tfrecords_path, 'validation.tfrecords')],
                                              parser=MnistParser(data_inputs=['reshape_input']))
 
         # Allocate the SVD instance and compress the network
-        svd = s.Svd(graph=os.path.join('models', 'mnist_save.meta'), checkpoint=os.path.join('models', 'mnist_save'),
+        meta_path = os.path.join(mnist_model_path, 'mnist_save.meta')
+        checkpoint_path = os.path.join(mnist_model_path, 'mnist_save')
+        svd = s.Svd(graph=meta_path, checkpoint=checkpoint_path,
                     output_file=os.path.join('svd', 'svd_graph'), layers=[], num_ranks=5,
                     layer_selection_threshold=0.90, metric=s.CostMetric.mac)
 
@@ -95,10 +103,10 @@ class SVD(unittest.TestCase):
 
     def test_svd_manual_rank_selection(self):
 
-        os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
+        os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
 
         # Allocate the generator you wish to use to provide the network with data
-        generator = tf_gen.TfRecordGenerator(tfrecords=[os.path.join('data', 'mnist', 'validation.tfrecords')],
+        generator = tf_gen.TfRecordGenerator(tfrecords=[os.path.join(mnist_tfrecords_path, 'validation.tfrecords')],
                                              parser=MnistParser(data_inputs=['reshape_input']))
 
         # Only Compress Conv2d_1 and MatMul_1 with ranks 31 and 9 respectively
@@ -107,7 +115,9 @@ class SVD(unittest.TestCase):
         layers = ['conv2/Conv2D', 'dense_1/MatMul']
         layer_ranks = [('conv2/Conv2D', 31), ('dense_1/MatMul', 9)]
 
-        svd = s.Svd(graph=os.path.join('models', 'mnist_save.meta'), checkpoint=os.path.join('models', 'mnist_save'),
+        meta_path = os.path.join(mnist_model_path, 'mnist_save.meta')
+        checkpoint_path = os.path.join(mnist_model_path, 'mnist_save')
+        svd = s.Svd(graph=meta_path, checkpoint=checkpoint_path,
                     output_file=os.path.join('svd', 'svd_graph'), layers=layers, layer_ranks=layer_ranks, num_ranks=20,
                     no_evaluation=True, metric=s.CostMetric.memory)
 

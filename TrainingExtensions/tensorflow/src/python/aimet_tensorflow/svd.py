@@ -216,8 +216,12 @@ class Svd:
 
         for layer_shape in split_layers_shape:
             mem_cost, mac_cost = self._compute_layer_cost(layer_shape, output_shape, op_type)
-            split_layers_mem_cost += mem_cost.value
-            split_layers_mac_cost += mac_cost.value
+            if not isinstance(mem_cost, int):
+                mem_cost = mem_cost.value
+            if not isinstance(mac_cost, int):
+                mac_cost = mac_cost.value
+            split_layers_mem_cost += mem_cost
+            split_layers_mac_cost += mac_cost
 
         if self._metric is CostMetric.memory:
             savings = orig_layer_cost[0] - split_layers_mem_cost
