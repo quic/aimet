@@ -102,7 +102,7 @@ class SupergroupConfigCallback(AimetCommonSupergroupConfigCallback):
 
 class QuantSimConfigurator(AimetCommonQuantSimConfigurator):
     """ Class for parsing and applying quantsim configurations from json config file """
-    def __init__(self, model, connected_graph: ConnectedGraph, config_file: str):
+    def __init__(self, model, connected_graph: ConnectedGraph, config_file: str, supported_kernels: Dict):
         super().__init__(config_file)
 
         _report_unsupported_ops(self._quantsim_configs)
@@ -113,6 +113,28 @@ class QuantSimConfigurator(AimetCommonQuantSimConfigurator):
 
         self._disable_all_quantizers()
         self._set_quantsim_configs()
+        self._store_supported_kernels(supported_kernels)
+
+    def _store_supported_kernels(self, supported_kernels: Dict):
+        """
+        Store the layer overrides present in default and op_type section of the config file
+        :param supported_kernels: Dict to store the supported_kernels parsed from the config file
+        """
+
+        if ConfigDictKeys.SUPPORTED_KERNELS in self._quantsim_configs[ConfigDictKeys.DEFAULTS]:
+            default_supported_kernels = self._quantsim_configs[ConfigDictKeys.DEFAULTS][ConfigDictKeys.SUPPORTED_KERNELS]
+            if default_supported_kernels:
+                supported_kernels[ConfigDictKeys.DEFAULTS] = default_supported_kernels
+            else:
+                # TODO make this an assert
+                logger.debug("supported_kernels is a required argument in the defaults section")
+
+        op_type_configs = self._quantsim_configs[ConfigDictKeys.OP_TYPE]
+        for op_type in op_type_configs:
+            if ConfigDictKeys.SUPPORTED_KERNELS in op_type_configs[op_type]:
+                op_type_supported_kernels = op_type_configs[op_type][ConfigDictKeys.SUPPORTED_KERNELS]
+                if op_type_supported_kernels:
+                    supported_kernels[op_type] = op_type_supported_kernels
 
     def _create_named_modules_to_tensor_quantizers_dict(self) -> Dict[torch.nn.Module, TensorQuantizersTupleType]:
         """
