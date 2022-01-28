@@ -62,6 +62,17 @@ class QuantizationSimModel:
     def __init__(self, model, quant_scheme: Union[QuantScheme, str] = 'tf_enhanced', rounding_mode: str = 'nearest',
                  default_output_bw: int = 8, default_param_bw: int = 8, in_place: bool = False,
                  config_file: str = None):
+        """
+        :param model: Model to quantize
+        :param quant_scheme: Quantization Scheme, currently supported schemes are post_training_tf and
+               post_training_tf_enhanced, defaults to post_training_tf_enhanced
+        :param rounding_mode: The round scheme to used. One of: 'nearest' or 'stochastic', defaults to 'nearest'.
+        :param default_output_bw: bitwidth to use for activation tensors, defaults to 8
+        :param default_param_bw: bitwidth to use for parameter tensors, defaults to 8
+        :param in_place: If True, then the given 'model' is modified in-place to add quant-sim nodes.
+                Only suggested use of this option is when the user wants to avoid creating a copy of the model
+        :param config_file: Path to a config file to use to specify rules for placing quant ops in the model
+        """
         self._model_without_wrappers = model
         if not in_place:
             self._model_without_wrappers = tf.keras.models.clone_model(model)
@@ -163,6 +174,7 @@ class QuantizationSimModel:
     def compute_encodings(self, forward_pass_callback, forward_pass_callback_args):
         """
         Computes encodings for all quantization sim nodes in the model.
+
         :param forward_pass_callback: A callback function that is expected to runs forward passes on a model.
                This callback function should use representative data for the forward pass, so the calculated
                encodings work for all data samples.
