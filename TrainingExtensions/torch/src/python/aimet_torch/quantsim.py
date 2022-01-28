@@ -143,6 +143,7 @@ class QuantizationSimModel:
                                  default_output_bw=16 and default_param_bw=16
         """
         # Perform sanity checks on inputs
+
         QuantizationSimModel._validate_quantsim_inputs(quant_scheme, rounding_mode, default_output_bw, default_param_bw,
                                                        default_data_type)
         # save some parameters
@@ -165,6 +166,7 @@ class QuantizationSimModel:
         self._rounding_mode = rounding_mode
         self._default_output_bw = default_output_bw
         self._default_param_bw = default_param_bw
+        self._supported_kernels = {}
 
         # Add quantization layers
         num_inout_tensors = utils.find_num_inout_tensors_per_module(self.model, dummy_input)
@@ -177,7 +179,7 @@ class QuantizationSimModel:
         # override specific quantizers to tf mode in transformer model
         self._override_quant_config_for_transformer_layers()
 
-        self.configure_quantization_ops(config_file)
+        self.configure_quantization_ops(config_file, self._supported_kernels)
 
     def __str__(self):
         """
@@ -940,10 +942,11 @@ class QuantizationSimModel:
             if not utils.is_leaf_module(module_ref):
                 cls._remove_quantization_wrappers(module_ref, list_of_modules_to_exclude)
 
-    def configure_quantization_ops(self, config_file: str):
+    def configure_quantization_ops(self, config_file: str, supported_kernels: Dict):
         """
-        Configure inserted quantize ops using config file
+        Configure inserted quantize ops using config file and fill in all the supported kernels
         :param config_file: Configuration file to use
+        :param supported_kernels: Dict to fill in the supported kernels
         """
         if self.connected_graph is None:
             logger.error('A connected graph failed to be built.\n'
@@ -951,7 +954,7 @@ class QuantizationSimModel:
                          'Please configure quantization ops manually by redefining '
                          'QuantizationSimModel.configure_quantization_ops()')
             raise AssertionError
-        QuantSimConfigurator(self.model, self.connected_graph, config_file)
+        QuantSimConfigurator(self.model, self.connected_graph, config_file, supported_kernels)
 
     def set_and_freeze_param_encodings(self, encoding_path: str):
         """
