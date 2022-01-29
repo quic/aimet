@@ -164,7 +164,6 @@ PYBIND11_MODULE(libpymo, m)
         .def("computeEncoding", (DlQuantization::TfEncoding(TensorQuantizer::*)(unsigned int, bool, bool, bool)) &DlQuantization::TensorQuantizer::computeEncoding)
         .def("quantizeDequantize", (void (TensorQuantizer::*)(py::array_t<float>, py::array_t<float>, double, double,
                                                               unsigned int, bool)) &DlQuantization::TensorQuantizer::quantizeDequantize)
-        .def("getAccumulatedStatsMinMax", (std::tuple<bool, double, double>(TensorQuantizer::*) ()) &DlQuantization::TensorQuantizer::getAccumulatedStatsMinMax)
         .def_readwrite("roundingMode", &DlQuantization::TensorQuantizer::roundingMode)
         .def_readwrite("isEncodingValid", &DlQuantization::TensorQuantizer::isEncodingValid);
 

@@ -35,8 +35,12 @@
 #
 #  @@-COPYRIGHT-END-@@
 # =============================================================================
-
 """ utils associated with transformer quantization handling """
+
+from typing import Dict
+import torch
+from aimet_torch.qc_quantize_op import QcQuantizeWrapper
+
 # current implementation sets mask to -6 by default.
 # user can register for override on mask add op in an attention head.
 MASK_OVERRIDE_VALUE = -6
@@ -59,9 +63,39 @@ def register_attention_mask_override(attention_type_name: str = None,
         SUPPORTED_ATTENTION_MASK_OVERRIDE_DICT[attention_type_name] = mask_op_name
 
 
-def get_supported_attention_types():
+def get_supported_attention_types() -> Dict:
     """
     returns dictionary of supported attention types with corresponding mask op name
     :return:
     """
     return SUPPORTED_ATTENTION_MASK_OVERRIDE_DICT
+
+
+def get_attention_with_mask_add_quantizer_dict(model: torch.nn.Module) -> Dict:
+    """
+    get attention head with associated mask add modules with their names
+    :param model: model
+    :return: dictionary of attention module to Tuple(mask add module, name)
+    """
+
+    attention_with_mask_adds_dict = {}
+    supported_attention_mask_override_dict = get_supported_attention_types()
+
+    for module in model.modules():
+        # pylint: disable=protected-access
+        module_name = type(module)._get_name(module)
+
+        # find transformer attention head that is supported
+        if module_name in supported_attention_mask_override_dict:
+
+            for name, sub_module in module.named_modules():
+
+                # Within attention unit find mask add op (input op to SoftMax)
+                if name is supported_attention_mask_override_dict[module_name]:
+
+                    # Override the quantizer that was added by default, to tf mode
+                    if isinstance(sub_module, QcQuantizeWrapper) and sub_module.output_quantizer.enabled:
+
+                        attention_with_mask_adds_dict[module] = (sub_module, name)
+
+    return attention_with_mask_adds_dict

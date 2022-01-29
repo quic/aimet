@@ -80,11 +80,6 @@ public:
     virtual TfEncoding computeEncoding(uint8_t bw, bool useSymmetricEncodings,
                                        bool useStrictSymmetric, bool useUnsignedSymmetric) const = 0;
 
-    /**
-    * Find range (min, max) of the aggregated stats
-    * @return Tuple of statsValid, min and max values
-    */
-    virtual std::tuple<bool, DTYPE, DTYPE> getAccumulatedStatsMinMax() const = 0;
 
     /**
      * @brief Returns a histogram that represents a PDF of tensor values seen by this encoding analyzer so far

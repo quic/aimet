@@ -70,13 +70,6 @@ void TfEncodingAnalyzer<DTYPE>::updateStats(const DTYPE* tensor, const size_t te
     _accumulatedStats.max = std::max(_accumulatedStats.max, currentMax);
 }
 
-
-template <typename DTYPE>
-std::tuple<bool, DTYPE, DTYPE> TfEncodingAnalyzer<DTYPE>::getAccumulatedStatsMinMax() const
-{
-    return std::make_tuple(this->_statsUpdated, _accumulatedStats.min, _accumulatedStats.max);
-}
-
 template <typename DTYPE>
 TfEncoding TfEncodingAnalyzer<DTYPE>::computeEncoding(uint8_t bw, bool useSymmetricEncodings,
                                                       bool useStrictSymmetric, bool useUnsignedSymmetric) const
