@@ -89,12 +89,6 @@ public:
      */
     virtual TfEncoding computeEncoding(unsigned int bitwidth, bool useSymmetricEncoding) = 0;
 
-    /**
-    * Find range (min, max) of the aggregated stats
-    * @return Tuple of min and max values
-    */
-    virtual std::tuple<bool, double, double> getAccumulatedStatsMinMax() = 0;
-
 
 };
 

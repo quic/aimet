@@ -1950,18 +1950,19 @@ class TestQuantizationSimStaticGrad:
 
         # use override registration function
         transformer_utils.register_attention_mask_override('AttnBlock', 'add')
+        sim2 = QuantizationSimModel(model, quant_scheme=QuantScheme.post_training_tf,  dummy_input=dummy_input)
 
         # compute encodings again to check override takes effect
-        sim.compute_encodings(forward_pass, None)
-        new_encoding_min = sim.model.block.add.output_quantizer.encoding.min
-        new_encoding_max = sim.model.block.add.output_quantizer.encoding.max
+        sim2.compute_encodings(forward_pass, None)
+        new_encoding_min = sim2.model.block.add.output_quantizer.encoding.min
+        new_encoding_max = sim2.model.block.add.output_quantizer.encoding.max
         print("encoding min = ", new_encoding_min)
         print("encoding max = ", new_encoding_max)
 
         # validate override
         assert int(new_encoding_min) == -6
-        assert int(new_encoding_max) == 18
-        assert sim.model.block.add.output_quantizer.encoding.bw == 8
+        assert int(new_encoding_max) == 17
+        assert sim2.model.block.add.output_quantizer.encoding.bw == 8
 
     def test_transformer_mask_override_tf_enhanced(self):
         """
@@ -2015,16 +2016,17 @@ class TestQuantizationSimStaticGrad:
 
         # use override registration function
         transformer_utils.register_attention_mask_override('AttnBlock', 'add_2')
+        sim2 = QuantizationSimModel(model, quant_scheme=QuantScheme.post_training_tf_enhanced,  dummy_input=dummy_input)
 
         # compute encodings again to check override takes effect
-        sim.compute_encodings(forward_pass, None)
-        new_encoding_min = sim.model.block.add_2.output_quantizer.encoding.min
-        new_encoding_max = sim.model.block.add_2.output_quantizer.encoding.max
+        sim2.compute_encodings(forward_pass, None)
+        new_encoding_min = sim2.model.block.add_2.output_quantizer.encoding.min
+        new_encoding_max = sim2.model.block.add_2.output_quantizer.encoding.max
         print("encoding min = ", new_encoding_min)
         print("encoding max = ", new_encoding_max)
         assert int(new_encoding_min) == -6
-        assert int(new_encoding_max) == 18
-        assert sim.model.block.add_2.output_quantizer.encoding.bw == 8
+        assert int(new_encoding_max) == 17
+        assert sim2.model.block.add_2.output_quantizer.encoding.bw == 8
 
 
 class TestQuantizationSimLearnedGrid:

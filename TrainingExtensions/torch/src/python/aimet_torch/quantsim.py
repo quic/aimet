@@ -79,6 +79,10 @@ qc_quantize_modules_dict = {
 }
 
 
+MAP_PYMO_TO_ROUND_MODE = {libpymo.RoundingMode.ROUND_NEAREST: 'nearest',
+                          libpymo.RoundingMode.ROUND_STOCHASTIC: 'stochastic'}
+
+
 class QuantParams:
     """
     Data type to hold quantization related params.
@@ -164,10 +168,14 @@ class QuantizationSimModel:
 
         # Add quantization layers
         num_inout_tensors = utils.find_num_inout_tensors_per_module(self.model, dummy_input)
+
         self._add_quantization_wrappers(self.model, num_inout_tensors, default_data_type)
 
         # Disable bias quantization
         self.exclude_param_from_quantization("bias")
+
+        # override specific quantizers to tf mode in transformer model
+        self._override_quant_config_for_transformer_layers()
 
         self.configure_quantization_ops(config_file)
 
@@ -489,46 +497,62 @@ class QuantizationSimModel:
 
             self._replace_quantization_wrapper(self.model, device)
 
+    def _override_quant_config_for_transformer_layers(self):
+        """Looks specfic ops in a transformer and overrides the quantizer to tf mode
+        """
+        # pylint: disable=protected-access
+        attention_with_mask_add_quantizer_dict = transformer_utils.get_attention_with_mask_add_quantizer_dict(self.model)
+
+        for attention_head in attention_with_mask_add_quantizer_dict:
+            mask_add_quantizer_module, mask_add_name = attention_with_mask_add_quantizer_dict[attention_head]
+
+            if isinstance(mask_add_quantizer_module, StaticGridQuantWrapper):
+                module_to_quantize = mask_add_quantizer_module._module_to_wrap
+                quantizer = qc_quantize_modules_dict.get(type(module_to_quantize), StaticGridQuantWrapper)
+
+                # Add a quantizer set to tf mode and bw to 16 and copy over remaining attributes
+                # we need 16 bit to retain the max representation for this quantizer.
+                quantized_module = quantizer(module_to_quantize, 16, 16,
+                                             MAP_PYMO_TO_ROUND_MODE[mask_add_quantizer_module.output_quantizer.round_mode],
+                                             QuantScheme.post_training_tf,
+                                             num_inputs=len(mask_add_quantizer_module.input_quantizers),
+                                             num_outputs=len(mask_add_quantizer_module.output_quantizers),
+                                             data_type=mask_add_quantizer_module.output_quantizer.data_type)
+
+                setattr(attention_head, mask_add_name, quantized_module)
+
     def _clamp_transformer_attention_mask_encoding(self):
         """
         clamps the quantizer encoding min associated with mask adder
         op within a attention head.
         :return:
         """
+        # pylint: disable=protected-access
+        attention_with_mask_add_quantizer_dict = transformer_utils.get_attention_with_mask_add_quantizer_dict(self.model)
 
-        supported_attn_type_mask_dict = transformer_utils.get_supported_attention_types()
+        for attention_head in attention_with_mask_add_quantizer_dict:
+            mask_add_quantizer_module, _ = attention_with_mask_add_quantizer_dict[attention_head]
 
-        # pylint: disable=too-many-nested-blocks
-        # find an attention block
-        for module in self.model.modules():
-            # pylint: disable=protected-access
-            module_name = type(module)._get_name(module)
-            if module_name in supported_attn_type_mask_dict:
-                for name, sub_module in module.named_modules():
-                    # Find mask add op (input op to SoftMax) within attention head unit
-                    if name is supported_attn_type_mask_dict[module_name]:
-                        # if this quantizer is enabled, clamp the min value
-                        if isinstance(sub_module, QcQuantizeWrapper) and sub_module.output_quantizer.enabled:
-                            for output_quantizer in sub_module.output_quantizers:
-                                for tensor_quantizer in output_quantizer._cppOp:
-                                    # get the min/max from accumulated stats associated with this quantizer
-                                    is_stats_updated, stats_min, stats_max = tensor_quantizer.getAccumulatedStatsMinMax()
-                                    if is_stats_updated:
-                                        output_quantizer.encoding.min = max(stats_min,
-                                                                            transformer_utils.MASK_OVERRIDE_VALUE)
-                                        output_quantizer.encoding.max = stats_max
+            if isinstance(mask_add_quantizer_module, StaticGridQuantWrapper) and \
+                    mask_add_quantizer_module.output_quantizer.enabled:
+                for output_quantizer in mask_add_quantizer_module.output_quantizers:
+                    # get the min/max from accumulated stats associated with this quantizer
+                    encoding = output_quantizer.encoding
+                    output_quantizer.encoding.min = max(encoding.min,
+                                                        transformer_utils.MASK_OVERRIDE_VALUE)
+                    output_quantizer.encoding.max = encoding.max
 
-                                        # recompute grid params as we clamped min and updated max above
-                                        clamped_encoding = aimet_common.quantsim.recompute_grid_params(
-                                            output_quantizer.encoding,
-                                            output_quantizer.bitwidth,
-                                            output_quantizer.use_symmetric_encodings)
+                    # recompute grid params as we clamped min and updated max above
+                    # with bitwidth as dictated by default config
+                    clamped_encoding = aimet_common.quantsim.recompute_grid_params(
+                        output_quantizer.encoding,
+                        self._default_output_bw,
+                        output_quantizer.use_symmetric_encodings)
 
-                                        # update encoding of this quantizer
-                                        output_quantizer.encoding = clamped_encoding
-                                        sub_module.output_quantizer.freeze_encoding()
-                                    else:
-                                        logger.info('No Valid stats found, skipping quantizer clamp for op {%s}', name)
+                    # update encoding of this quantizer
+                    output_quantizer.encoding = clamped_encoding
+                    mask_add_quantizer_module.output_quantizer.freeze_encoding()
+
 
     @staticmethod
     def _validate_quantsim_inputs(quant_scheme: Union[str, QuantScheme], rounding_mode: str, default_output_bw: int,
@@ -830,7 +854,6 @@ class QuantizationSimModel:
         """Recursively add quantization wrappers to all appropriate modules starting with module
         """
         for module_name, module_ref in module.named_children():
-
             logger.debug("nn.Module found : %s", module_ref)
 
             # check if the module already quantized then ignore

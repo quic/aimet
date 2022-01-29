@@ -96,12 +96,6 @@ public:
     TfEncoding computeEncoding(unsigned int bitwidth, bool useSymmetricEncoding) override;
 
     /**
-    * Find range (min, max) of the aggregated stats
-    * @return Tuple of if stats valid flag,  min and max values
-    */
-    std::tuple<bool, double, double> getAccumulatedStatsMinMax() override;
-
-    /**
      * Convert a tensor from float to quantized int and back to float
      * @param input Input tensor
      * @param tensorSize Size of the input tensor (number of tensor elements)

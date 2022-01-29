@@ -119,13 +119,6 @@ void TensorQuantizer::updateStats(const float* tensor, std::size_t tensorSize, b
     _encodingAnalyzer->updateStats(tensor, tensorSize, cpuGpuMode);
 }
 
-std::tuple<bool, double, double> TensorQuantizer::getAccumulatedStatsMinMax()
-{
-
-   return _encodingAnalyzer->getAccumulatedStatsMinMax();
-}
-
-
 void TensorQuantizer::updateStats(py::array_t<float> tensor, bool useCuda)
 {
     auto npArr        = tensor.mutable_unchecked<4>();
