@@ -102,7 +102,6 @@ find_package(Python COMPONENTS Interpreter Development)
 set(PYTHON_DIST_PACKAGES "/usr/local/lib/python${Python_VERSION_MAJOR}.${Python_VERSION_MINOR}/dist-packages/")
 
 
-
 if (NOT (DEFINED ENABLE_TORCH))
   message("AIMET Torch build not explicitly disabled. Enabling implicitly")
   set(ENABLE_TORCH ON CACHE BOOL "")
@@ -147,12 +146,22 @@ if (NOT (DEFINED ENABLE_TENSORFLOW))
 endif(NOT (DEFINED ENABLE_TENSORFLOW))
 
 if (ENABLE_TENSORFLOW)
+  if(NOT DEFINED TF_LIB_DIR)
+    # Get location of TensorFlow library
+    execute_process(COMMAND "python" "-c" "import tensorflow as tf; print(tf.sysconfig.get_lib())" OUTPUT_VARIABLE TF_LIB_DIR OUTPUT_STRIP_TRAILING_WHITESPACE)
+    # Get Tensorflow version
+    execute_process(COMMAND "python" "-c" "import tensorflow as tf; print(tf.__version__)" OUTPUT_VARIABLE TF_VERSION OUTPUT_STRIP_TRAILING_WHITESPACE)
+    message(STATUS "Found TensorFlow version: ${TF_VERSION} TensorFlow library path: ${TF_LIB_DIR}")
+  else(TF_LIB_DIR)
+    message(STATUS "TensorFlow version and TensorFlow library already set.")
+  endif(NOT DEFINED TF_LIB_DIR)
+
   set(AIMET_PYTHONPATH "${AIMET_PYTHONPATH}:${CMAKE_CURRENT_SOURCE_DIR}/TrainingExtensions/tensorflow/src/python")
-  list(APPEND TENSORFLOW_INCLUDES "${PYTHON_DIST_PACKAGES}/tensorflow_core/include")
+  list(APPEND TENSORFLOW_INCLUDES "${TF_LIB_DIR}/include")
   add_library(TensorFlow SHARED IMPORTED)
   set_target_properties(TensorFlow PROPERTIES
         IMPORTED_LOCATION
-          "${PYTHON_DIST_PACKAGES}/tensorflow_core/libtensorflow_framework.so.1"
+          "${TF_LIB_DIR}/libtensorflow_framework.so.1"
         INTERFACE_INCLUDE_DIRECTORIES
           "${TENSORFLOW_INCLUDES}"
         )

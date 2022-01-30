@@ -49,8 +49,8 @@ add_library(TrainingExtensionsTf SHARED
         )
 
 target_include_directories(TrainingExtensionsTf PRIVATE
-        ${PYTHON_DIST_PACKAGES}/tensorflow_core/include
-        ${PYTHON_DIST_PACKAGES}/tensorflow_core/include/external/nsync/public
+        ${TF_LIB_DIR}/include
+        ${TF_LIB_DIR}/include/external/nsync/public
         ${CMAKE_CURRENT_SOURCE_DIR}/../common/include
         )
 
@@ -83,7 +83,7 @@ set_target_properties(TrainingExtensionsTf PROPERTIES
       )
 
 get_target_property(dirs MoDlQuantization INCLUDE_DIRECTORIES)
-include_directories(${CMAKE_CURRENT_SOURCE_DIR}/../common/include ${PYTHON_DIST_PACKAGES}/tensorflow_core/include/external/nsync/public ${dirs})
+include_directories(${CMAKE_CURRENT_SOURCE_DIR}/../common/include ${TF_LIB_DIR}/include/external/nsync/public ${dirs})
 
 if (ENABLE_CUDA)
     add_library(TrainingExtensionsTfCuda
@@ -94,7 +94,7 @@ if (ENABLE_CUDA)
             PRIVATE
             -Xcompiler -fPIC -D_GLIBCXX_USE_CXX11_ABI=0
             -DGOOGLE_CUDA=1
-            -I ${PYTHON_DIST_PACKAGES}/tensorflow_core/include --expt-relaxed-constexpr
+            -I ${TF_LIB_DIR}/include --expt-relaxed-constexpr
             )
 
 endif(ENABLE_CUDA)
