@@ -156,12 +156,18 @@ if (ENABLE_TENSORFLOW)
     message(STATUS "TensorFlow version and TensorFlow library already set.")
   endif(NOT DEFINED TF_LIB_DIR)
 
+  # Find the TensorFlow library file
+  find_library(TF_LIB_FILE NAMES libtensorflow_framework.so.1 libtensorflow_framework.so.2 HINTS ${TF_LIB_DIR})
+  if(NOT TF_LIB_FILE)
+    message(FATAL_ERROR "TensorFlow library NOT found at ${TF_LIB_FILE}")
+  endif()
+
   set(AIMET_PYTHONPATH "${AIMET_PYTHONPATH}:${CMAKE_CURRENT_SOURCE_DIR}/TrainingExtensions/tensorflow/src/python")
   list(APPEND TENSORFLOW_INCLUDES "${TF_LIB_DIR}/include")
   add_library(TensorFlow SHARED IMPORTED)
   set_target_properties(TensorFlow PROPERTIES
         IMPORTED_LOCATION
-          "${TF_LIB_DIR}/libtensorflow_framework.so.1"
+          "${TF_LIB_FILE}"
         INTERFACE_INCLUDE_DIRECTORIES
           "${TENSORFLOW_INCLUDES}"
         )
