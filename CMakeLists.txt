@@ -159,7 +159,7 @@ if (ENABLE_TENSORFLOW)
   # Find the TensorFlow library file
   find_library(TF_LIB_FILE NAMES libtensorflow_framework.so.1 libtensorflow_framework.so.2 HINTS ${TF_LIB_DIR})
   if(NOT TF_LIB_FILE)
-    message(FATAL_ERROR "TensorFlow library NOT found at ${TF_LIB_FILE}")
+    message(FATAL_ERROR "TensorFlow library NOT found at ${TF_LIB_DIR}")
   endif()
 
   set(AIMET_PYTHONPATH "${AIMET_PYTHONPATH}:${CMAKE_CURRENT_SOURCE_DIR}/TrainingExtensions/tensorflow/src/python")
