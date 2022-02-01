@@ -14,6 +14,8 @@ TensorFlow, Keras, and PyTorch training frameworks.
 
 Please follow the links below to see AIMET APIs for either PyTorch, TensorFlow, or Keras.
 
+.. note:: AIMET Keras API requires Tensorflow 2.4 or later.
+
 .. toctree::
    :titlesonly:
    :maxdepth: 2
