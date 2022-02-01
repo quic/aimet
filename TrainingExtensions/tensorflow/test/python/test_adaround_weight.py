@@ -41,6 +41,7 @@
 import pytest
 import logging
 import os
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
 import json
 import numpy as np
 import unittest.mock
@@ -52,7 +53,6 @@ from aimet_tensorflow.adaround.adaround_weight import Adaround, AdaroundParamete
 
 logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Test)
 tf.compat.v1.disable_eager_execution()
-os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
 
 
 class TestAdaroundWeight(unittest.TestCase):

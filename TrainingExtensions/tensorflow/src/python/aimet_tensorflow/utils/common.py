@@ -156,15 +156,17 @@ def get_succeeding_bias_tensor(op: tf.Operation) -> tf.Tensor:
     return bias
 
 
-def create_input_feed_dict(graph: tf.Graph, input_op_names_list: List, input_data: Union[np.ndarray, List, Tuple])\
-        -> Dict:
+def create_input_feed_dict(graph: tf.Graph, input_op_names_list: List, input_data: Union[np.ndarray, List, Tuple],
+                           training=False) -> Dict:
     """
     Creates feed dictionary [op_name] = data for session.run
     :param graph: tf.Graph
     :param input_op_names_list: list of input op names
     :param input_data: either single numpy array, list or tuple of numpy array
+    :param training: True if graph is in training mode, false otherwise
     :return: feed_dict
     """
+
     feed_dict = {}
 
     # single input
@@ -189,6 +191,10 @@ def create_input_feed_dict(graph: tf.Graph, input_op_names_list: List, input_dat
 
         inp_tensor = graph.get_tensor_by_name(inp_op_name + ':0')
         feed_dict[inp_tensor] = inp_data
+
+    # Identify and set all training tensors to True or False depending on training parameter
+    for training_tensor in get_training_tensors(graph):
+        feed_dict[training_tensor] = training
 
     return feed_dict
 

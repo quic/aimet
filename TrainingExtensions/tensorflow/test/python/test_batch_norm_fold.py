@@ -38,18 +38,19 @@
 """ This file contains unit tests for testing cross layer scaling feature of CLE """
 
 import os
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
 import unittest
+import pytest
 import tensorflow as tf
 import numpy as np
 
 from aimet_tensorflow.batch_norm_fold import  fold_all_batch_norms, find_all_batch_norms_to_fold
 from aimet_tensorflow.common.connectedgraph import ConnectedGraph
-from aimet_tensorflow.examples.test_models import tf_compat_v1_layers_basic_model
+from aimet_tensorflow.examples.test_models import tf_slim_basic_model
 from aimet_tensorflow.utils.op.conv import WeightTensorUtils
 
 tf.compat.v1.logging.set_verbosity(tf.compat.v1.logging.WARN)
 tf.compat.v1.disable_eager_execution()
-os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
 
 
 class TestBatchNormFold(unittest.TestCase):
@@ -97,13 +98,14 @@ class TestBatchNormFold(unittest.TestCase):
         tf.compat.v1.reset_default_graph()
         inputs = tf.keras.Input(shape=(32, 32, 3,), name="inputs")
         conv_op = tf.keras.layers.Conv2D(32, (3, 3))(inputs)
-        bn_op = tf.keras.layers.BatchNormalization(fused=True)(conv_op, training=False)
+        bn_op = tf.keras.layers.BatchNormalization(fused=True)(conv_op)
         _ = tf.nn.relu(bn_op)
 
         init = tf.compat.v1.global_variables_initializer()
         sess = tf.compat.v1.Session()
         sess.run(init)
-        bn_conv_linear_pairs = find_all_batch_norms_to_fold(sess, ["inputs"], ['Relu'])
+        start_op = ["inputs"]
+        bn_conv_linear_pairs = find_all_batch_norms_to_fold(sess, start_op, ['Relu'])
         self.assertEqual(1, len(bn_conv_linear_pairs))
         sess.close()
 
@@ -117,8 +119,8 @@ class TestBatchNormFold(unittest.TestCase):
                                     kernel_initializer=tf.random_uniform_initializer(-1, 1),
                                     bias_initializer='random_uniform')(input1)
 
-        bn_op_1 = tf.keras.layers.BatchNormalization(fused=True)(x1, training=False)
-        bn_op_2 = tf.keras.layers.BatchNormalization(fused=True)(x1, training=True)
+        bn_op_1 = tf.keras.layers.BatchNormalization(fused=True)(x1)
+        bn_op_2 = tf.keras.layers.BatchNormalization(fused=True)(x1)
 
         add = tf.keras.layers.add([bn_op_1, bn_op_2])
         _ = tf.keras.layers.Conv2D(8, (3, 3), name='conv1b',
@@ -129,10 +131,10 @@ class TestBatchNormFold(unittest.TestCase):
         sess = tf.compat.v1.Session()
         sess.run(init)
 
-        start_op_name = ['input1']
-        output_op_name = ['conv1b/Conv2D']
+        start_op_name = 'input1'
+        output_op_name = 'conv1b/Conv2D'
 
-        bn_conv_linear_pairs = find_all_batch_norms_to_fold(sess, start_op_name, output_op_name)
+        bn_conv_linear_pairs = find_all_batch_norms_to_fold(sess, [start_op_name], [output_op_name])
 
         self.assertTrue(0 == len(bn_conv_linear_pairs))
         sess.close()
@@ -143,14 +145,15 @@ class TestBatchNormFold(unittest.TestCase):
         """
         tf.compat.v1.reset_default_graph()
         inputs = tf.keras.Input(shape=(32, 32, 3,), name="inputs")
-        bn_op = tf.keras.layers.BatchNormalization(fused=True)(inputs, training=False)
+        bn_op = tf.keras.layers.BatchNormalization(fused=True)(inputs)
         conv_op = tf.keras.layers.Conv2D(32, (3, 3))(bn_op)
         _ = tf.nn.relu(conv_op)
         init = tf.compat.v1.global_variables_initializer()
         sess = tf.compat.v1.Session()
         sess.run(init)
 
-        bn_conv_linear_pairs = find_all_batch_norms_to_fold(sess, ["inputs"], ['Relu'])
+        start_op = ["inputs"]
+        bn_conv_linear_pairs = find_all_batch_norms_to_fold(sess, start_op, ['Relu'])
 
         self.assertEqual(1, len(bn_conv_linear_pairs))
         sess.close()
@@ -166,7 +169,7 @@ class TestBatchNormFold(unittest.TestCase):
         x2 = tf.keras.layers.Conv2D(8, (3, 3), name='conv1b')(input2)
         x = tf.keras.layers.add([x1, x2])
         x = tf.keras.layers.Conv2D(4, (1, 1), name='conv2')(x)
-        bn_op = tf.keras.layers.BatchNormalization(fused=True)(x, training=False)
+        bn_op = tf.keras.layers.BatchNormalization(fused=True)(x)
         _ = tf.nn.relu(bn_op)
 
         init = tf.compat.v1.global_variables_initializer()
@@ -190,7 +193,7 @@ class TestBatchNormFold(unittest.TestCase):
         x2 = tf.keras.layers.Conv2D(8, (3, 3), name='conv1b')(input2)
         x = tf.keras.layers.add([x1, x2])
         x = tf.keras.layers.Conv2D(4, (1, 1), name='conv2')(x)
-        bn_op = tf.keras.layers.BatchNormalization(fused=True)(x, training=True)
+        bn_op = tf.keras.layers.BatchNormalization(fused=True)(x)
         output = tf.nn.relu(bn_op)
 
         # add training ops
@@ -218,7 +221,7 @@ class TestBatchNormFold(unittest.TestCase):
         tf.compat.v1.reset_default_graph()
         inputs = tf.keras.Input(shape=(32, 32, 3,), name="inputs")
         conv_op = tf.keras.layers.Conv2D(32, (3, 3))(inputs)
-        bn_op = tf.keras.layers.BatchNormalization(fused=True)(conv_op, training=False)
+        bn_op = tf.keras.layers.BatchNormalization(fused=True)(conv_op)
         conv2_op = tf.keras.layers.Conv2D(32, (3, 3))(bn_op)
         _ = tf.nn.relu(conv2_op)
 
@@ -250,6 +253,7 @@ class TestBatchNormFold(unittest.TestCase):
         sess = tf.compat.v1.Session(graph = tf.compat.v1.get_default_graph())
         sess.run(init)
 
+        op_list = sess.graph.get_operations()
         linear_layer = sess.graph.get_operation_by_name('linear_layer/MatMul')
         weight_before_fold  = WeightTensorUtils.get_tensor_as_numpy_data(sess, linear_layer)
         input_op_name = 'input_1'
@@ -323,15 +327,16 @@ class TestBatchNormFold(unittest.TestCase):
         sess.close()
         new_sess.close()
 
+    @pytest.mark.tf1
     def test_removing_bn_ops_from_update_ops(self):
         """
         Test that folding batch norms also removes associated ops from update_ops, if present.
         """
         tf.compat.v1.reset_default_graph()
-        inputs = tf.keras.Input(shape=(32, 32, 3,))
-        _ = tf_compat_v1_layers_basic_model(inputs)
-        init = tf.compat.v1.global_variables_initializer()
         sess = tf.compat.v1.Session()
+        x = tf.compat.v1.placeholder(tf.float32, [1, 32, 32, 3])
+        _ = tf_slim_basic_model(x)
+        init = tf.compat.v1.global_variables_initializer()
         sess.run(init)
 
         # check that update_ops list is not empty
@@ -339,7 +344,7 @@ class TestBatchNormFold(unittest.TestCase):
             update_ops = tf.compat.v1.get_collection(tf.compat.v1.GraphKeys.UPDATE_OPS)
             self.assertEqual(4, len(update_ops))
 
-        new_sess, pairs = fold_all_batch_norms(sess, "input_1", 'dense/Softmax')
+        new_sess, pairs = fold_all_batch_norms(sess, "Placeholder", 'tf_slim_model/Softmax')
 
         self.assertEqual(3, len(pairs))
         # check that update_ops list is empty
@@ -387,6 +392,7 @@ class TestBatchNormFold(unittest.TestCase):
         sess.close()
         new_sess.close()
 
+    @pytest.mark.tf1
     def test_bn_fold_model_zoo_videnn_pose_estimation(self):
         """
         create a smaller network with connections as in pose estimation model and ViDeNN model
@@ -396,10 +402,10 @@ class TestBatchNormFold(unittest.TestCase):
         inputs = tf.keras.Input(shape=(None, None, 2), name="inputs")
 
         x = tf.keras.layers.Conv2D(2, kernel_size=3, padding='same')(inputs)
-        x = tf.keras.layers.BatchNormalization()(x, training=False)
+        x = tf.keras.layers.BatchNormalization()(x)
         x = tf.nn.relu(x)
         x = tf.keras.layers.Conv2D(2, kernel_size=3, padding='same')(x)
-        x = tf.keras.layers.BatchNormalization()(x, training=True)
+        x = tf.keras.layers.BatchNormalization()(x)
         z = tf.keras.layers.Add()([inputs, x])
         x = tf.nn.relu(z)
 
@@ -413,6 +419,7 @@ class TestBatchNormFold(unittest.TestCase):
         sess.close()
         new_sess.close()
 
+    @pytest.mark.tf1
     def test_bn_fold_model_zoo_sr_gan(self):
         """
         create a smaller network with connections as in SR-GAN model
@@ -420,10 +427,10 @@ class TestBatchNormFold(unittest.TestCase):
         tf.compat.v1.reset_default_graph()
         inputs = tf.keras.Input(shape=(None, None, 2), name="inputs")
         x = tf.keras.layers.Conv2D(2, kernel_size=3, padding='same')(inputs)
-        x = tf.keras.layers.BatchNormalization()(x, training=False)
+        x = tf.keras.layers.BatchNormalization()(x)
         y = tf.keras.layers.PReLU(shared_axes=[1, 2])(x)
         x = tf.keras.layers.Conv2D(2, kernel_size=3, padding='same')(y)
-        x = tf.keras.layers.BatchNormalization()(x, training=True)
+        x = tf.keras.layers.BatchNormalization()(x)
         x = tf.keras.layers.Add()([y, x])
         _ = tf.nn.relu(x)
 

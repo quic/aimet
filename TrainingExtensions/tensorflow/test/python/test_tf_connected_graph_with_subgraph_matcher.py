@@ -40,28 +40,33 @@
 # pylint: disable=no-name-in-module
 
 import os
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
+import pytest
+from packaging import version
 import numpy as np
 import unittest
 import tensorflow as tf
 from aimet_tensorflow.graph_editor.edit import detach_inputs
-
+if not version.parse(tf.version.VERSION) >= version.parse("2.0"):
+    from tensorflow.contrib.slim.nets import vgg
 from aimet_common.utils import AimetLogger
 from aimet_tensorflow.common.connectedgraph import ConnectedGraph
 from aimet_tensorflow.common.module_identifier import StructureModuleIdentifier
 from aimet_tensorflow.common.sub_graph_matcher import ModuleIdentifierOpInfo
-from aimet_tensorflow.examples.test_models import keras_model, keras_model_functional, tf_compat_v1_layers_basic_model, \
-    single_residual, split_and_concat_model, concat_model, dropout_keras_model, \
-    tf_compat_v1_layers_with_softmax, multiple_input_model, upsample_model, model_with_upsample2d, model_with_leaky_relu, \
-    model_with_global_max_pool2d, keras_model_functional_with_non_fused_batchnorms, transposed_conv2d_model, instance_norm_model
+from aimet_tensorflow.examples.test_models import keras_model, keras_model_functional, tf_slim_basic_model, \
+    single_residual, split_and_concat_model, concat_model, dropout_keras_model, dropout_slim_model, \
+    tf_slim_with_softmax, multiple_input_model, upsample_model, model_with_upsample2d, model_with_leaky_relu, \
+    model_with_global_max_pool2d, keras_model_functional_with_non_fused_batchnorms,transposed_conv2d_model, instance_norm_model
 import aimet_tensorflow.winnow.winnow as winnow
 
 tf.compat.v1.logging.set_verbosity(tf.compat.v1.logging.WARN)
 tf.compat.v1.disable_eager_execution()
-os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
 logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Test)
 
 
 class TestTfConnectedGraph(unittest.TestCase):
+
+    @pytest.mark.tf1
     def test_transposed_conv2d_model(self):
         """ Test connected graph construction on transposed conv2D model """
         tf.compat.v1.reset_default_graph()
@@ -71,7 +76,7 @@ class TestTfConnectedGraph(unittest.TestCase):
         conn_graph = ConnectedGraph(tf.compat.v1.get_default_graph(), ['input_1'], ['conv2d_transpose/BiasAdd'])
         self.assertEqual(conn_graph.get_all_ops()['conv2d_transpose/conv2d_transpose'].type, 'Conv2DTranspose')
 
-    @unittest.skip("Instance norm is from tf.contrib which is deprecated")
+    @pytest.mark.tf1
     def test_conn_graph_for_instance_norm_model(self):
         tf.compat.v1.reset_default_graph()
 
@@ -96,6 +101,7 @@ class TestTfConnectedGraph(unittest.TestCase):
         # 14 products from parameters
         self.assertEqual(24, len(conn_graph.get_all_products()))
 
+    @pytest.mark.tf1
     def test_keras_model_functional_get_op_product_graph(self):
         """ Test connected graph construction on keras model functional """
         tf.compat.v1.reset_default_graph()
@@ -111,6 +117,7 @@ class TestTfConnectedGraph(unittest.TestCase):
         # 22 products from parameters
         self.assertEqual(35, len(conn_graph.get_all_products()))
 
+    @pytest.mark.tf1
     def test_keras_model_functional_with_non_fused_batchnorms_get_op_product_graph(self):
         """ Test connected graph construction on keras model functional with non fused batchnorms """
         tf.compat.v1.reset_default_graph()
@@ -120,8 +127,6 @@ class TestTfConnectedGraph(unittest.TestCase):
                                     ['keras_model_functional_with_non_fused_batchnorms/Softmax'])
         self.assertTrue(validate_branch_ops(conn_graph))
         self.assertTrue(validate_product_tensor_lists(conn_graph))
-
-        print(conn_graph.get_all_ops())
         _ = conn_graph.get_all_ops()['batch_normalization']
         _ = conn_graph.get_all_ops()['scope_1/batch_normalization_1']
         _ = conn_graph.get_all_ops()['scope_1/batch_normalization_2']
@@ -132,38 +137,41 @@ class TestTfConnectedGraph(unittest.TestCase):
         # 22 products from parameters
         self.assertEqual(35, len(conn_graph.get_all_products()))
 
+    @pytest.mark.tf1
     def test_tf_slim_model_get_op_product_graph(self):
         """ Test connected graph construction on tf_slim model """
 
         tf.compat.v1.reset_default_graph()
 
         x = tf.compat.v1.placeholder(tf.float32, [1, 32, 32, 3])
-        _ = tf_compat_v1_layers_basic_model(x)
-
-        conn_graph = ConnectedGraph(tf.compat.v1.get_default_graph(), ['Placeholder'], ['dense/Softmax'])
+        _ = tf_slim_basic_model(x)
+        conn_graph = ConnectedGraph(tf.compat.v1.get_default_graph(), ['Placeholder'], ['tf_slim_model/Softmax'])
         self.assertTrue(validate_branch_ops(conn_graph))
         self.assertTrue(validate_product_tensor_lists(conn_graph))
         self.assertEqual(0, conn_graph.branch_count)
-        self.assertEqual(11, len(conn_graph.get_all_ops()))
-        # 10 products from interop connections
-        self.assertEqual(10 + len(tf.compat.v1.get_default_graph().get_collection('variables')),
+        self.assertEqual(15, len(conn_graph.get_all_ops()))
+        # 14 products from interop connections
+        # need to add 1 since gamma is treated as a parameter for the training = True bn, even though it is a constant
+        # in the graph
+        self.assertEqual(14 + len(tf.compat.v1.get_default_graph().get_collection('variables')) + 1,
                          len(conn_graph.get_all_products()))
 
+    @pytest.mark.tf1
     def test_tf_slim_with_softmax_model_get_op_product_graph(self):
         """ Test connected graph construction on tf_slim with softmax model """
 
         tf.compat.v1.reset_default_graph()
 
         x = tf.compat.v1.placeholder(tf.float32, [1, 32, 32, 3])
-        _ = tf_compat_v1_layers_with_softmax(x)
-
-        conn_graph = ConnectedGraph(tf.compat.v1.get_default_graph(), ['Placeholder'], ['Softmax'])
+        _ = tf_slim_with_softmax(x)
+        conn_graph = ConnectedGraph(tf.compat.v1.get_default_graph(), ['Placeholder'], ['softmax/Reshape_1'])
         self.assertTrue(validate_branch_ops(conn_graph))
         self.assertTrue(validate_product_tensor_lists(conn_graph))
         self.assertEqual(0, conn_graph.branch_count)
-        self.assertEqual(6, len(conn_graph.get_all_ops()))
-        # 5 products from interop connections
-        self.assertEqual(5 + len(tf.compat.v1.get_default_graph().get_collection('variables')),
+        self.assertEqual(8, len(conn_graph.get_all_ops()))
+        # 7 products from interop connections
+        # need to add 2 since gamma is treated as a parameter, even though it is a constant in this graph
+        self.assertEqual(7 + len(tf.compat.v1.get_default_graph().get_collection('variables')) + 2,
                          len(conn_graph.get_all_products()))
 
     def test_single_residual_get_op_product_graph(self):
@@ -214,6 +222,7 @@ class TestTfConnectedGraph(unittest.TestCase):
             self.assertTrue(len(product.consumers) == 1)
             self.assertEqual(product.tensor_dict[product.consumers[0]], concat_tf_op.inputs[index])
 
+    @pytest.mark.tf1
     def test_dropout_keras_get_op_product_graph(self):
         """ Test connected graph construction on a keras graph with dropout op """
 
@@ -226,8 +235,42 @@ class TestTfConnectedGraph(unittest.TestCase):
         self.assertEqual(8, len(conn_graph.get_all_ops()))
         self.assertEqual(7 + len(tf.compat.v1.get_default_graph().get_collection('variables')),
                          len(conn_graph.get_all_products()))
-        print(conn_graph.get_all_ops())
-        self.assertTrue(conn_graph.get_all_ops()['dropout/dropout/Mul_1'], 'Dropout_with_training_tensor')
+        self.assertTrue(conn_graph.get_all_ops()['dropout'], 'Dropout_with_training_tensor')
+
+    @pytest.mark.tf1
+    def test_dropout_slim_get_op_product_graph(self):
+        """ Test connected graph construction on a slim graph with dropout op """
+
+        tf.compat.v1.reset_default_graph()
+        _ = dropout_slim_model()
+        conn_graph = ConnectedGraph(tf.compat.v1.get_default_graph(), ['input_1'], ['dropout_slim_model/Softmax'])
+        self.assertTrue(validate_branch_ops(conn_graph))
+        self.assertTrue(validate_product_tensor_lists(conn_graph))
+        self.assertEqual(0, conn_graph.branch_count)
+        self.assertEqual(10, len(conn_graph.get_all_ops()))
+        self.assertEqual(9 + len(tf.compat.v1.get_default_graph().get_collection('variables')),
+                         len(conn_graph.get_all_products()))
+        self.assertTrue(conn_graph.get_all_ops()['Dropout'], 'Dropout_training_True')
+
+    @pytest.mark.tf1
+    def test_vgg16_slim_get_op_product_graph(self):
+        """
+        Test connected graph construction on vgg16 from tf slim
+        This model includes dropout pattern 3 which does not appear in other models.
+        """
+
+        tf.compat.v1.reset_default_graph()
+        inp = tf.compat.v1.placeholder(tf.float32, [1, 224, 224, 3])
+        _ = vgg.vgg_16(inp)
+        conn_graph = ConnectedGraph(tf.compat.v1.get_default_graph(), ['Placeholder'], ['vgg_16/fc8/squeezed'])
+        self.assertTrue(validate_branch_ops(conn_graph))
+        self.assertTrue(validate_product_tensor_lists(conn_graph))
+        self.assertEqual(0, conn_graph.branch_count)
+        self.assertEqual(40, len(conn_graph.get_all_ops()))
+        self.assertEqual(39 + len(tf.compat.v1.get_default_graph().get_collection('variables')),
+                         len(conn_graph.get_all_products()))
+        self.assertTrue(conn_graph.get_all_ops()['vgg_16/dropout6'], 'Dropout_training_True_unknown_shape')
+        self.assertTrue(conn_graph.get_all_ops()['vgg_16/dropout7'], 'Dropout_training_True_unknown_shape')
 
     def test_multiple_input_model_get_op_product_graph(self):
         """ Test connected graph construction on a multiple input graph """
@@ -289,6 +332,7 @@ class TestTfConnectedGraph(unittest.TestCase):
         self.assertTrue(reduced_bn_1_op.output.consumers[0].type == 'Upsample')
         new_sess.close()
 
+    @pytest.mark.tf1
     def test_keras_model_functional_with_training_ops_get_op_product_graph(self):
         """ Test connected graph construction on keras model functional with training ops attached """
         tf.compat.v1.reset_default_graph()
@@ -386,10 +430,10 @@ class TestTfConnectedGraph(unittest.TestCase):
         inputs = tf.keras.Input(shape=(None, None, 2), name="inputs")
 
         x = tf.keras.layers.Conv2D(2, kernel_size=3, padding='same')(inputs)
-        x = tf.compat.v1.layers.batch_normalization(x)
+        x = tf.keras.layers.BatchNormalization()(x)
         x = tf.nn.relu(x)
         x = tf.keras.layers.Conv2D(2, kernel_size=3, padding='same')(x)
-        x = tf.compat.v1.layers.batch_normalization(x)
+        x = tf.keras.layers.BatchNormalization()(x)
         z = tf.keras.layers.Add()([inputs, x])
         x = tf.nn.relu(z)
 
@@ -433,7 +477,7 @@ class TestTfConnectedGraph(unittest.TestCase):
         self.assertEqual(3, len(conn_graph.get_all_ops()))
         self.assertEqual(5, len(conn_graph.get_all_ops()['p_re_lu/Relu'].internal_ops))
 
-    @unittest.skip('Skipping until support for tf.keras is added')
+    @pytest.mark.tf1
     def test_model_with_simple_rnn_layer(self):
         """ Test connected graph construction on a model with simple RNN op """
         tf.compat.v1.reset_default_graph()
@@ -454,7 +498,6 @@ class TestTfConnectedGraph(unittest.TestCase):
         conn_graph = ConnectedGraph(sess.graph, ['input_1'], ['matmul0/Softmax'])
 
         # there should be only 4 connected graph ops, input, simpleRNN , Dense and Softmax
-        print(conn_graph.get_all_ops())
         self.assertEqual(4, len(conn_graph.get_all_ops()))
         simple_rnn_detected = False
         for op in conn_graph.get_all_ops().values():
@@ -482,7 +525,7 @@ class TestTfConnectedGraph(unittest.TestCase):
         self.assertEqual(1, len(valid_bias_add))
         self.assertEqual(1, len(valid_activation))
 
-    @unittest.skip('Skipping until support for tf.keras is added')
+    @pytest.mark.tf1
     def test_model_with_simple_rnn_layer_relu(self):
         """ Test connected graph construction on a model with simple RNN op with relu activation """
         tf.compat.v1.reset_default_graph()
@@ -529,7 +572,7 @@ class TestTfConnectedGraph(unittest.TestCase):
         self.assertEqual(1, len(valid_bias_add))
         self.assertEqual(1, len(valid_activation))
 
-    @unittest.skip('Skipping until support for tf.keras is added')
+    @pytest.mark.tf1
     def test_model_with_simple_rnn_multiple_layers(self):
         """ Test connected graph construction on a model with multiple simple RNN layers """
         tf.compat.v1.reset_default_graph()
@@ -560,7 +603,7 @@ class TestTfConnectedGraph(unittest.TestCase):
                 self.assertEqual(49, len(inner_list))
         self.assertEqual(3, num_detected_rnns)
 
-    @unittest.skip('Skipping until support for tf.keras is added')
+    @pytest.mark.tf1
     def test_model_with_lstm_layer_sigmoid(self):
         """ Test connected graph construction on a model with LSTM op with sigmoid activation """
 
@@ -612,7 +655,7 @@ class TestTfConnectedGraph(unittest.TestCase):
         self.assertEqual(4, len(valid_bias_add))
         self.assertEqual(3, len(valid_activation))
 
-    @unittest.skip('Skipping until support for tf.keras is added')
+    @pytest.mark.tf1
     def test_model_with_basic_lstm_layer(self):
         """ Test connected graph construction on a model with LSTM op """
         tf.compat.v1.reset_default_graph()
@@ -688,7 +731,7 @@ class TestTfConnectedGraph(unittest.TestCase):
         self.assertEqual(4, len(valid_bias_add))
         self.assertEqual(2, len(valid_activation))
 
-    @unittest.skip('Skipping until support for tf.keras is added')
+    @pytest.mark.tf1
     def test_model_with_lstm_layer_time_major_true(self):
         """ Test connected graph construction on a model with LSTM time major true option"""
 
@@ -726,7 +769,7 @@ class TestTfConnectedGraph(unittest.TestCase):
         self.assertTrue(lstm_detected)
         self.validate_internal_structure_lstm(inner_list)
 
-    @unittest.skip('Skipping until support for tf.keras is added')
+    @pytest.mark.tf1
     def test_model_with_lstm_layer_deepspeech_time_major_true(self):
         """ Test connected graph construction on a model with stacked LSTM op """
 
@@ -768,7 +811,7 @@ class TestTfConnectedGraph(unittest.TestCase):
         self.assertTrue(lstm_detected)
         self.validate_internal_structure_lstm(inner_list)
 
-    @unittest.skip('Skipping until support for tf.keras is added')
+    @pytest.mark.tf1
     def test_model_with_lstm_layer_deepspeech_time_major_true_sigmoid(self):
         """ Test connected graph construction on a model with stacked LSTM op in DeepSpeech model"""
 
@@ -810,7 +853,7 @@ class TestTfConnectedGraph(unittest.TestCase):
                 self.assertEqual(op.get_module(), sess.graph.get_operation_by_name('lstm_stacked/while/MatMul'))
         self.assertTrue(lstm_detected)
 
-    @unittest.skip('Skipping until support for tf.keras is added')
+    @pytest.mark.tf1
     def test_model_with_lstm_layer_deepspeech_time_major_false(self):
         """ Test connected graph construction on a model with LSTM op in DeepSpeech model"""
 
@@ -851,7 +894,7 @@ class TestTfConnectedGraph(unittest.TestCase):
         self.assertTrue(lstm_detected)
         self.validate_internal_structure_lstm(inner_list)
 
-    @unittest.skip('Skipping until support for tf.keras is added')
+    @pytest.mark.tf1
     def test_simple_rnn_keras_single_timestep_with_placeholder_input(self):
         """ simple RNN layer with placeholder input type """
 

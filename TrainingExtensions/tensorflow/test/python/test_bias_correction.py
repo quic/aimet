@@ -39,6 +39,7 @@
 
 import unittest
 import os
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
 import tensorflow as tf
 import numpy as np
 from unittest.mock import MagicMock
@@ -53,7 +54,6 @@ from aimet_common.defs import ActivationType
 
 tf.compat.v1.logging.set_verbosity(tf.compat.v1.logging.WARN)
 tf.compat.v1.disable_eager_execution()
-os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
 
 
 class TestBiasCorrection(unittest.TestCase):
@@ -164,7 +164,7 @@ class TestBiasCorrection(unittest.TestCase):
         conv2_op = tf.keras.layers.Conv2D(32, (3, 3),use_bias=False)(relu_1)
         relu_2 = tf.nn.relu(conv2_op)
         conv3_op = tf.keras.layers.Conv2D(32, (3, 3))(relu_2)
-        _ = tf.nn.relu(conv3_op)
+        relu_3 = tf.nn.relu(conv3_op)
 
         init = tf.compat.v1.global_variables_initializer()
         sess = tf.compat.v1.Session()
@@ -233,7 +233,7 @@ class TestBiasCorrection(unittest.TestCase):
         conv2_op = tf.keras.layers.Conv2D(32, (3, 3), use_bias=False)(relu_1)
         relu_2 = tf.nn.relu(conv2_op)
         conv3_op = tf.keras.layers.Conv2D(32, (3, 3))(relu_2)
-        _ = tf.nn.relu(conv3_op)
+        relu_3 = tf.nn.relu(conv3_op)
 
         init = tf.compat.v1.global_variables_initializer()
         sess = tf.compat.v1.Session()
@@ -399,7 +399,7 @@ class TestBiasCorrection(unittest.TestCase):
         tf.compat.v1.reset_default_graph()
         inputs = tf.keras.Input(shape=(32, 32, 3,), name="inputs")
         conv_op = tf.keras.layers.Conv2D(32, (3, 3))(inputs)
-        bn_op = tf.keras.layers.BatchNormalization(fused=True)(conv_op, training=False)
+        bn_op = tf.keras.layers.BatchNormalization(fused=True)(conv_op)
         relu = tf.nn.relu(bn_op)
         conv1_op = tf.keras.layers.Conv2D(32, (3, 3))(relu)
         conv2_op = tf.keras.layers.Conv2D(32, (3, 3))(conv1_op)
@@ -464,7 +464,7 @@ class TestBiasCorrection(unittest.TestCase):
         conv1_op = tf.keras.layers.Conv2D(32, (3, 3))(relu)
 
         relu_2 = tf.nn.relu(conv1_op)
-        bn_op_2 = tf.keras.layers.BatchNormalization(fused=True)(relu_2, training=False)
+        bn_op_2 = tf.keras.layers.BatchNormalization(fused=True)(relu_2)
         conv2_op = tf.keras.layers.Conv2D(32, (3, 3))(bn_op_2, training=False)
 
         _ = tf.nn.relu(conv2_op)

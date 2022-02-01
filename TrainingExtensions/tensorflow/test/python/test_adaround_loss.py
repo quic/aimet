@@ -39,6 +39,7 @@
 """ Test AdaroundLoss """
 
 import os
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
 import pytest
 import unittest.mock
 import numpy as np
@@ -47,7 +48,6 @@ import tensorflow as tf
 from aimet_tensorflow.adaround.adaround_loss import AdaroundLoss
 
 tf.compat.v1.disable_eager_execution()
-os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
 
 
 class TestAdaroundLoss(unittest.TestCase):

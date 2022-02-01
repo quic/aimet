@@ -37,6 +37,7 @@
 # =============================================================================
 
 import os
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
 import unittest
 import tensorflow as tf
 from tensorflow.keras.applications.resnet50 import ResNet50

@@ -39,6 +39,7 @@
 """ Adaround wrapper """
 
 from typing import Union, Dict
+from packaging import version
 import numpy as np
 import tensorflow as tf
 from tensorflow import keras
@@ -158,7 +159,12 @@ class AdaroundWrapper(keras.layers.Layer):
         tensor = (tensor / encoding.delta) - tensor_floor
 
         alpha = -tf.math.log((AdaroundConstants.ZETA - AdaroundConstants.GAMMA) / (tensor - AdaroundConstants.GAMMA) - 1)
-        alpha_var = tf.Variable(alpha, trainable=True, name='alpha')
+
+        # Resource variable is default in TF2.x
+        if version.parse(tf.version.VERSION) >= version.parse("2.0"):
+            alpha_var = tf.Variable(alpha, trainable=True, name='alpha')
+        else:
+            alpha_var = tf.Variable(alpha, trainable=True, use_resource=True, name='alpha')
 
         return alpha_var
 

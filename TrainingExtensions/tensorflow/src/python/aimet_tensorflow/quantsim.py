@@ -41,7 +41,7 @@ from typing import List, Union, Dict, Callable, Any, Tuple
 import os
 import shutil
 import json
-
+from packaging import version
 import numpy as np
 import tensorflow as tf
 
@@ -553,7 +553,8 @@ class QuantizationSimModel:
         for op in conn_graph.get_all_ops().values():
             #  we can configure custom layer selectors per recurrent type or use default one
             if op.type in SUPPORTED_RECURRENT_TYPES:
-
+                if version.parse(tf.version.VERSION) >= version.parse("2.00"):
+                    raise AssertionError('Recurrent layers are not supported with TF2.x, instead use TF1.15.')
                 internal_ops = op.internal_ops
 
                 # select internal ops to quantize in this recurrent type

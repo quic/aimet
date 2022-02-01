@@ -39,27 +39,29 @@
 
 import pytest
 import unittest
+from packaging import version
 import numpy as np
 import os
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
 import tensorflow as tf
+if not version.parse(tf.version.VERSION) >= version.parse("2.0"):
+    import tensorflow.contrib.slim as slim
 from aimet_tensorflow import graph_editor
 from tensorflow.keras.applications.vgg16 import VGG16
 from tensorflow.keras.applications.resnet50 import ResNet50
 
 from aimet_common.utils import AimetLogger
 from aimet_tensorflow.utils.common import get_ordered_ops, create_input_feed_dict, \
-    iter_first_x, get_ordered_conv_linears
+    iter_first_x, get_ordered_conv_linears, get_training_tensors
 from aimet_tensorflow.utils.graph_saver import wrapper_func
 from aimet_tensorflow.examples.test_models import single_residual, multiple_input_model, \
-    keras_model_functional,\
-    keras_model_functional_with_non_fused_batchnorms
+    model_with_multiple_training_tensors, keras_model_functional, keras_model_functional_with_non_fused_batchnorms
 from aimet_tensorflow.utils.op.conv import WeightTensorUtils, BiasUtils, get_output_activation_shape
 from aimet_tensorflow.utils.op.fusedbatchnorm import BNUtils
 from aimet_tensorflow.utils.graph_saver import save_and_load_graph
 
 tf.compat.v1.logging.set_verbosity(tf.compat.v1.logging.WARN)
 tf.compat.v1.disable_eager_execution()
-os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
 logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Test)
 
 
@@ -185,7 +187,7 @@ class TestTrainingExtensionsTfUtils(unittest.TestCase):
 
             # add dangling conv, which is not a valid op
             # pylint: disable=no-member
-            _ = tf.nn.conv2d(input=g.get_tensor_by_name('input_1:0'), filters=filter_tensor, strides=[1, 1, 1, 1],
+            _ = tf.nn.conv2d(g.get_tensor_by_name('input_1:0'), filter_tensor, strides=[1, 1, 1, 1],
                              padding='VALID', data_format="NHWC", name='dangling/Conv2D')
 
         ordered_ops = get_ordered_ops(g, ['input_1'], ['probs/Softmax'])
@@ -225,6 +227,7 @@ class TestTrainingExtensionsTfUtils(unittest.TestCase):
         self.assertTrue(ordered_ops.index(g.get_operation_by_name('add/add')) >
                         ordered_ops.index(g.get_operation_by_name('input2')))
 
+    @pytest.mark.tf1
     def test_create_input_feed_dict(self):
         """
         test create_input_feed_dict
@@ -283,10 +286,23 @@ class TestTrainingExtensionsTfUtils(unittest.TestCase):
                                                                      input_data=input_data))
         tf.compat.v1.reset_default_graph()
 
+        g = tf.Graph()
+        with g.as_default():
+            model_with_multiple_training_tensors()
+        input_data = (np.random.rand(32, 32, 3))
+        feed_dict = create_input_feed_dict(graph=g, input_op_names_list=['input_1'],
+                                           input_data=input_data, training=True)
+        keras_learning_phase_tensor = g.get_tensor_by_name('keras_learning_phase:0')
+        is_training_tensor = g.get_tensor_by_name('is_training:0')
+        is_training_2_tensor = g.get_tensor_by_name('is_training_2:0')
+        self.assertEqual(feed_dict[keras_learning_phase_tensor], True)
+        self.assertEqual(feed_dict[is_training_tensor], True)
+        self.assertEqual(feed_dict[is_training_2_tensor], True)
+        tf.compat.v1.reset_default_graph()
+
     def test_iter_first_x(self):
-        """
-        Test iter_first_x generator for creating a dataset generator
-        """
+        """ Test iter_first_x generator for creating a dataset generator """
+
         tf.compat.v1.reset_default_graph()
         sess = tf.compat.v1.Session()
         with sess.graph.as_default():
@@ -474,7 +490,13 @@ class TestTrainingExtensionsTfUtils(unittest.TestCase):
         self.assertEqual(selected_ops[0], conv_op)
         self.assertEqual(selected_ops[1], conv_1_op)
 
-        sess.close()
+    @pytest.mark.tf1
+    def test_get_training_tensors(self):
+        """ Test for obtaining all training tensors in a graph """
+        tf.compat.v1.reset_default_graph()
+        _ = model_with_multiple_training_tensors()
+        training_tensors = get_training_tensors(tf.compat.v1.get_default_graph())
+        self.assertEqual(3, len(training_tensors))
 
     @pytest.mark.cuda
     def test_get_output_activation_shape(self):
@@ -488,7 +510,8 @@ class TestTrainingExtensionsTfUtils(unittest.TestCase):
         with graph.as_default():
             input_tensor = tf.compat.v1.placeholder(tf.float32, [1, None, None, None], 'input')
             filter_tensor = tf.Variable(initial_value=filter_data, name='filter_tensor', dtype=tf.float32)
-            _ = tf.nn.conv2d(input=input_tensor, filters=filter_tensor, padding='SAME', strides=[1, 1, 1, 1],
+
+            _ = tf.nn.conv2d(input_tensor, filter_tensor, padding='SAME', strides=[1, 1, 1, 1],
                              data_format="NCHW", name='Conv2D_1')
 
             init = tf.compat.v1.global_variables_initializer()
@@ -517,7 +540,8 @@ class TestTrainingExtensionsTfUtils(unittest.TestCase):
         with graph.as_default():
             input_tensor = tf.Variable(initial_value=input_data, name='input', dtype=tf.float32)
             filter_tensor = tf.Variable(initial_value=filter_data, name='filter_tensor', dtype=tf.float32)
-            _ = tf.nn.conv2d(input=input_tensor, filters=filter_tensor, padding='SAME', strides=[1, 1, 1, 1],
+
+            _ = tf.nn.conv2d(input_tensor, filter_tensor, padding='SAME', strides=[1, 1, 1, 1],
                              data_format="NCHW", name='Conv2D_1')
 
             init = tf.compat.v1.global_variables_initializer()
@@ -546,7 +570,8 @@ class TestTrainingExtensionsTfUtils(unittest.TestCase):
         with graph.as_default():
             input_tensor = tf.compat.v1.placeholder(tf.float32, [1, None, None, None], 'input')
             filter_tensor = tf.Variable(initial_value=filter_data, name='filter_tensor', dtype=tf.float32)
-            _ = tf.nn.conv2d(input=input_tensor, filters=filter_tensor, padding='SAME', strides=[1, 1, 1, 1],
+
+            _ = tf.nn.conv2d(input_tensor, filter_tensor, padding='SAME', strides=[1, 1, 1, 1],
                              data_format="NHWC", name='Conv2D_1')
 
             init = tf.compat.v1.global_variables_initializer()
@@ -576,7 +601,8 @@ class TestTrainingExtensionsTfUtils(unittest.TestCase):
         with graph.as_default():
             input_tensor = tf.Variable(initial_value=input_data, name='input', dtype=tf.float32)
             filter_tensor = tf.Variable(initial_value=filter_data, name='filter_tensor', dtype=tf.float32)
-            _ = tf.nn.conv2d(input=input_tensor, filters=filter_tensor, padding='SAME', strides=[1, 1, 1, 1],
+
+            _ = tf.nn.conv2d(input_tensor, filter_tensor, padding='SAME', strides=[1, 1, 1, 1],
                              data_format="NHWC", name='Conv2D_1')
             init = tf.compat.v1.global_variables_initializer()
 
@@ -631,6 +657,39 @@ class TestBNUtils(unittest.TestCase):
         self.assertTrue(np.allclose(expected_variance, moving_var))
         sess.close()
 
+    @pytest.mark.tf1
+    def test_with_slim_bn_op(self):
+        """
+        Test with Tf Slim BN op
+        :return:
+        """
+        tf.compat.v1.reset_default_graph()
+        sess = tf.compat.v1.Session(graph=tf.compat.v1.get_default_graph())
+        inp = tf.compat.v1.placeholder(tf.float32, [1, 32, 32, 3])
+        net = slim.conv2d(inp, 32, [3, 3])
+        _ = slim.batch_norm(net, decay=.7, epsilon=.65, is_training=True)
+
+        init = tf.compat.v1.global_variables_initializer()
+        sess.run(init)
+        with sess.graph.as_default():
+            bn_op = sess.graph.get_operation_by_name('BatchNorm/FusedBatchNormV3')
+            moving_mean = BNUtils.get_moving_mean_as_numpy_data(sess, bn_op)
+            moving_var = BNUtils.get_moving_variance_as_numpy_data(sess, bn_op)
+            beta = BNUtils.get_beta_as_numpy_data(sess, bn_op)
+            gamma = BNUtils.get_gamma_as_numpy_data(sess, bn_op)
+
+        # check the values read are equal to init values
+        expected_beta = np.zeros_like(beta)
+        expected_gamma = np.ones_like(gamma)
+        expected_mean = np.zeros_like(moving_mean)
+        expected_variance = np.ones_like(moving_var)
+
+        self.assertTrue(np.allclose(expected_beta, beta))
+        self.assertTrue(np.allclose(expected_gamma, gamma))
+        self.assertTrue(np.allclose(expected_mean, moving_mean))
+        self.assertTrue(np.allclose(expected_variance, moving_var))
+
+    @pytest.mark.tf1
     def test_param_read_keras_model_with_fused_batchnorms(self):
         """
         Test to validate fused BN op param read AIMET api(s) on Keras layers.
@@ -658,7 +717,7 @@ class TestBNUtils(unittest.TestCase):
             keras_bn_3_params = get_bn_params_keras_layer(bn_3)
 
             bn_op_1 = sess.graph.get_operation_by_name('batch_normalization/FusedBatchNormV3')
-            bn_op_2 = sess.graph.get_operation_by_name('scope_1/batch_normalization_1/FusedBatchNormV3')
+            bn_op_2 = sess.graph.get_operation_by_name('scope_1/batch_normalization_1/cond/FusedBatchNormV3_1')
             bn_op_3 = sess.graph.get_operation_by_name('scope_1/batch_normalization_2/FusedBatchNormV3')
             bn_1_params = get_bn_params_aimet_api(sess, bn_op_1)
             bn_2_params = get_bn_params_aimet_api(sess, bn_op_2)
@@ -670,6 +729,7 @@ class TestBNUtils(unittest.TestCase):
 
         sess.close()
 
+    @pytest.mark.tf1
     def test_training_batchnorm(self):
         """
         Test BNUtils get_training() with both fused and non fused batchnorms, with all three training modes
@@ -678,31 +738,35 @@ class TestBNUtils(unittest.TestCase):
 
         # Model with fused batchnorms
         _ = keras_model_functional()
+        fused_bn_training_true_op = tf.compat.v1.get_default_graph().get_operation_by_name('batch_normalization/FusedBatchNormV3')
+        self.assertTrue(BNUtils.get_training(fused_bn_training_true_op))
+        self.assertTrue(isinstance(BNUtils.get_training(fused_bn_training_true_op), bool))
 
-        fused_bn_op = tf.compat.v1.get_default_graph().get_operation_by_name('batch_normalization/FusedBatchNormV3')
-        self.assertTrue(BNUtils.get_training(fused_bn_op))
-        self.assertTrue(isinstance(BNUtils.get_training(fused_bn_op), bool))
+        fused_bn_training_tensor_op = tf.compat.v1.get_default_graph().get_operation_by_name('scope_1/batch_normalization_1/cond/'
+                                                                                   'FusedBatchNormV3_1')
+        training_tensor = tf.compat.v1.get_default_graph().get_tensor_by_name('is_training:0')
+        self.assertEqual(BNUtils.get_training(fused_bn_training_tensor_op), training_tensor)
 
-        fused_bn_op = tf.compat.v1.get_default_graph().get_operation_by_name('scope_1/batch_normalization_1/FusedBatchNormV3')
-        self.assertEqual(BNUtils.get_training(fused_bn_op), True)
-
-        fused_bn_op = tf.compat.v1.get_default_graph().get_operation_by_name('scope_1/batch_normalization_2/FusedBatchNormV3')
-        self.assertFalse(BNUtils.get_training(fused_bn_op))
+        fused_bn_training_false_op = tf.compat.v1.get_default_graph().get_operation_by_name('scope_1/batch_normalization_2/'
+                                                                                  'FusedBatchNormV3')
+        self.assertFalse(BNUtils.get_training(fused_bn_training_false_op))
 
         tf.compat.v1.reset_default_graph()
 
         # Model with non fused batchnorms
         _ = keras_model_functional_with_non_fused_batchnorms()
+        bn_training_true_op = tf.compat.v1.get_default_graph().get_operation_by_name('batch_normalization/batchnorm/mul_1')
+        self.assertTrue(BNUtils.get_training(bn_training_true_op))
+        self.assertTrue(isinstance(BNUtils.get_training(bn_training_true_op), bool))
 
-        bn_op = tf.compat.v1.get_default_graph().get_operation_by_name('batch_normalization/batchnorm/mul_1')
-        self.assertTrue(BNUtils.get_training(bn_op))
-        self.assertTrue(isinstance(BNUtils.get_training(bn_op), bool))
+        bn_training_tensor_op = tf.compat.v1.get_default_graph().get_operation_by_name('scope_1/batch_normalization_1/batchnorm/'
+                                                                             'mul_1')
+        training_tensor = tf.compat.v1.get_default_graph().get_tensor_by_name('is_training:0')
+        self.assertEqual(BNUtils.get_training(bn_training_tensor_op), training_tensor)
 
-        bn_op = tf.compat.v1.get_default_graph().get_operation_by_name('scope_1/batch_normalization_1/batchnorm/mul_1')
-        self.assertTrue(BNUtils.get_training(bn_op))
-
-        bn_op = tf.compat.v1.get_default_graph().get_operation_by_name('scope_1/batch_normalization_2/batchnorm/mul_1')
-        self.assertFalse(BNUtils.get_training(bn_op))
+        bn_training_false_op = tf.compat.v1.get_default_graph().get_operation_by_name('scope_1/batch_normalization_2/batchnorm/'
+                                                                            'mul_1')
+        self.assertFalse(BNUtils.get_training(bn_training_false_op))
 
         tf.compat.v1.reset_default_graph()
 

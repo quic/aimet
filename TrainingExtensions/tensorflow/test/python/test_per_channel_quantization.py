@@ -40,8 +40,8 @@ import random
 import numpy as np
 import time
 import os
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
 import json
-
 import tensorflow as tf
 
 from aimet_tensorflow.common.graph_eval import initialize_uninitialized_vars
@@ -51,7 +51,6 @@ from aimet_common.quantsim import calculate_delta_offset
 
 tf.compat.v1.disable_eager_execution()
 tf.compat.v1.logging.set_verbosity(tf.compat.v1.logging.WARN)
-os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
 
 import libpymo
 

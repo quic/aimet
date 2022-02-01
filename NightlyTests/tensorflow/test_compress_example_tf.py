@@ -37,8 +37,10 @@
 # =============================================================================
 """ Acceptance tests for various compression techniques """
 
+import pytest
 import math
 import os
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
 import unittest
 import unittest.mock
 import logging
@@ -270,7 +272,7 @@ class SvdAcceptanceTests(unittest.TestCase):
         # delete temp directory
         shutil.rmtree(str('./temp_meta/'))
 
-    @unittest.skip('BN support')
+    @pytest.mark.tf1
     def test_spatial_svd_compress_manual(self):
         """
         End to end manual mode spatial SVD using Resnet50 Keras model
@@ -374,7 +376,7 @@ class SvdAcceptanceTests(unittest.TestCase):
         # delete temp directory
         shutil.rmtree(str('./temp_meta/'))
 
-    @unittest.skip('BN support')
+    @pytest.mark.tf1
     def test_spatial_svd_compress_auto(self):
         """
         End to end auto mode spatial SVD using Resnet50 Keras model
@@ -402,7 +404,7 @@ class SvdAcceptanceTests(unittest.TestCase):
         with sess.graph.as_default():
 
             # predicted value of the model
-            y_hat = sess.graph.get_tensor_by_name('predictions/Softmax:0')
+            y_hat = sess.graph.get_tensor_by_name('probs/Softmax:0')
             # place holder for the labels
             y = tf.compat.v1.placeholder(tf.int64, shape=[None, 1000], name='labels')
             # prediction Op
@@ -436,7 +438,7 @@ class SvdAcceptanceTests(unittest.TestCase):
                                                                                 modules_to_ignore=modules_to_ignore)
 
         params = aimet_tensorflow.defs.SpatialSvdParameters(input_op_names=['input_1'],
-                                                            output_op_names=['predictions/Softmax'],
+                                                            output_op_names=['probs/Softmax'],
                                                             mode=aimet_tensorflow.defs.SpatialSvdParameters.Mode.auto,
                                                             params=auto_params,
                                                             multiplicity=8)
@@ -479,7 +481,7 @@ class SvdAcceptanceTests(unittest.TestCase):
 
 class ChannelPruningAcceptanceTests(unittest.TestCase):
 
-    @unittest.skip('BN support')
+    @pytest.mark.tf1
     def test_channel_pruning_manual_vgg16_keras(self):
         """
         :return:
@@ -594,7 +596,7 @@ class ChannelPruningAcceptanceTests(unittest.TestCase):
         # delete temp directory
         shutil.rmtree(str('./temp_meta/'))
 
-    @unittest.skip('BN support')
+    @pytest.mark.tf1
     def test_channel_pruning_auto_mobilenetv1(self):
         """
         Auto mode test fot MobileNetv1 model
@@ -710,7 +712,7 @@ class ChannelPruningAcceptanceTests(unittest.TestCase):
         # delete temp directory
         shutil.rmtree(str('./temp_meta/'))
 
-    @unittest.skip('BN support')
+    @pytest.mark.tf1
     def test_channel_pruning_manual_resnet50_keras(self):
         """
         Manual mode test for Keras Resnet50
@@ -731,7 +733,7 @@ class ChannelPruningAcceptanceTests(unittest.TestCase):
         sess = tf.compat.v1.Session(graph=graph, config=config)
 
         # predicted value of the model
-        y_hat = sess.graph.get_tensor_by_name('predictions/Softmax:0')
+        y_hat = sess.graph.get_tensor_by_name('probs/Softmax:0')
 
         with sess.graph.as_default():
             # place holder for the labels
@@ -759,7 +761,7 @@ class ChannelPruningAcceptanceTests(unittest.TestCase):
                                            ModuleCompRatioPair(conv3_block1_2_conv, 0.5)]
 
         input_op_names = ['input_1']
-        output_op_names = ['predictions/Softmax']
+        output_op_names = ['probs/Softmax']
 
         manual_params = aimet_tensorflow.defs.ChannelPruningParameters.ManualModeParams(list_of_module_comp_ratio_pairs=
                                                                                         list_of_module_comp_ratio_pairs)
@@ -834,7 +836,7 @@ class ChannelPruningAcceptanceTests(unittest.TestCase):
         # delete temp directory
         shutil.rmtree(str('./temp_meta/'))
 
-    @unittest.skip('BN support')
+    @pytest.mark.tf1
     def test_channel_pruning_auto_resnet50(self):
         """
         Auto mode test for Keras ResNet-50.
@@ -855,7 +857,7 @@ class ChannelPruningAcceptanceTests(unittest.TestCase):
         sess = tf.compat.v1.Session(graph=graph, config=config)
 
         # predicted value of the model
-        y_hat = sess.graph.get_tensor_by_name('predictions/Softmax:0')
+        y_hat = sess.graph.get_tensor_by_name('probs/Softmax:0')
 
         with sess.graph.as_default():
             # place holder for the labels
@@ -891,7 +893,7 @@ class ChannelPruningAcceptanceTests(unittest.TestCase):
                                                                                     modules_to_ignore=modules_to_ignore)
 
         input_op_names = ['input_1']
-        output_op_names = ['predictions/Softmax']
+        output_op_names = ['probs/Softmax']
 
         params = aimet_tensorflow.defs.ChannelPruningParameters(input_op_names=input_op_names,
                                                                 output_op_names=output_op_names, data_set=dataset,
@@ -951,7 +953,7 @@ class ChannelPruningAcceptanceTests(unittest.TestCase):
 
 class SvdAndChannelPruningAcceptanceTests(unittest.TestCase):
 
-    @unittest.skip('BN support')
+    @pytest.mark.tf1
     def test_svd_followed_by_channel_pruning(self):
         """ Test that a model can be run through spatial svd and then channel pruning """
         sess = tf.compat.v1.Session()
@@ -1028,3 +1030,5 @@ class SvdAndChannelPruningAcceptanceTests(unittest.TestCase):
         _ = sess.graph.get_operation_by_name('reduced_reduced_conv2d_1_a/Conv2D')
         _ = sess.graph.get_operation_by_name('reduced_reduced_conv2d_1_b/Conv2D')
         _ = sess.graph.get_operation_by_name('reduced_conv2d_2/Conv2D')
+        sess.close()
+

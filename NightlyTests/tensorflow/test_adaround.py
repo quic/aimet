@@ -43,6 +43,7 @@ import json
 import unittest
 import logging
 import os
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
 import numpy as np
 import tensorflow as tf
 from tensorflow.keras.applications.mobilenet import MobileNet
@@ -53,7 +54,6 @@ from aimet_tensorflow.examples.test_models import keras_model
 from aimet_tensorflow.quantsim import QuantizationSimModel
 from aimet_tensorflow.adaround.adaround_weight import Adaround, AdaroundParameters
 
-os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
 tf.compat.v1.disable_eager_execution()
 
 
@@ -61,6 +61,7 @@ class AdaroundAcceptanceTests(unittest.TestCase):
     """
     AdaRound test cases
     """
+    @pytest.mark.tf1
     @pytest.mark.cuda
     def test_adaround_mobilenet_only_weights(self):
         """ test end to end adaround with only weight quantized """
@@ -69,7 +70,7 @@ class AdaroundAcceptanceTests(unittest.TestCase):
             """ Dummy forward pass """
             input_data = np.random.rand(1, 224, 224, 3)
             input_tensor = session.graph.get_tensor_by_name('input_1:0')
-            output_tensor = session.graph.get_tensor_by_name('predictions/Softmax:0')
+            output_tensor = session.graph.get_tensor_by_name('act_softmax/Softmax:0')
             output = session.run(output_tensor, feed_dict={input_tensor: input_data})
             return output
 
@@ -93,7 +94,7 @@ class AdaroundAcceptanceTests(unittest.TestCase):
                                     default_reg_param=0.01, default_beta_range=(20, 2), default_warm_start=0.2)
 
         starting_op_names = ['input_1']
-        output_op_names = ['predictions/Softmax']
+        output_op_names = ['act_softmax/Softmax']
 
         adarounded_session = Adaround.apply_adaround(session,  starting_op_names, output_op_names, params, path='./',
                                                      filename_prefix='mobilenet', default_param_bw=4,
@@ -117,6 +118,7 @@ class AdaroundAcceptanceTests(unittest.TestCase):
         if os.path.exists("./mobilenet.encodings"):
             os.remove("./mobilenet.encodings")
 
+    @pytest.mark.tf1
     def test_adaround_resnet18_followed_by_quantsim(self):
         """ test end to end adaround with weight 4 bits and output activations 8 bits quantized """
 

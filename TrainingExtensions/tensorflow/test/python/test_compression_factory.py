@@ -37,6 +37,7 @@
 # =============================================================================
 
 import os
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
 import signal
 import shutil
 import unittest
@@ -50,7 +51,6 @@ from aimet_tensorflow.compression_factory import CompressionFactory
 
 tf.compat.v1.logging.set_verbosity(tf.compat.v1.logging.WARN)
 tf.compat.v1.disable_eager_execution()
-os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
 
 
 class TestTfCompressionFactory(unittest.TestCase):

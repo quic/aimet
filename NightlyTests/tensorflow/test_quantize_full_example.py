@@ -40,6 +40,7 @@ import json
 import pytest
 import unittest
 import os
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
 import numpy as np
 import tensorflow as tf
 from packaging import version
@@ -126,6 +127,7 @@ class Quantization(unittest.TestCase):
         # close session
         sess.close()
 
+    @pytest.mark.tf1
     @pytest.mark.cuda
     def test_gpu_quantize_resnet50(self):
 
@@ -171,8 +173,8 @@ class Quantization(unittest.TestCase):
         with open('./data/quantsim_config.json', 'w') as f:
             json.dump(quantsim_config, f)
 
-        conn_graph = ConnectedGraph(sess.graph, ['input_1'], ['predictions/Softmax'])
-        sim = quantsim.QuantizationSimModel(sess, ['input_1'], ['predictions/Softmax'],
+        conn_graph = ConnectedGraph(sess.graph, ['input_1'], ['probs/Softmax'])
+        sim = quantsim.QuantizationSimModel(sess, ['input_1'], ['probs/Softmax'],
                                             config_file='./data/quantsim_config.json')
 
         ops_with_deactivated_output_quantizers = set()
@@ -195,11 +197,7 @@ class Quantization(unittest.TestCase):
         param_quantizers = [op for op in sim.session.graph.get_operations() if op.type == 'QcQuantize' and
                             'ReadVariableOp' in op.name]
         for quantize_op in activation_quantizers:
-            if version.parse(tf.__version__) >= version.parse("2.0"):
-                op_mode_tensor_name = '_op_mode/Read/ReadVariableOp:0'
-            else:
-                op_mode_tensor_name = '_op_mode:0'
-            op_mode_tensor = sim.session.graph.get_tensor_by_name(quantize_op.name + op_mode_tensor_name)
+            op_mode_tensor = sim.session.graph.get_tensor_by_name(quantize_op.name + '_op_mode:0')
             conn_graph_op = conn_graph.get_op_from_module_name(quantize_op.inputs[0].op.name)
             if conn_graph_op.name in ops_with_deactivated_output_quantizers_names:
                 self.assertEqual(sim.session.run(op_mode_tensor), int(pymo.TensorQuantizerOpMode.passThrough))
@@ -207,11 +205,7 @@ class Quantization(unittest.TestCase):
                 self.assertEqual(sim.session.run(op_mode_tensor), int(pymo.TensorQuantizerOpMode.updateStats))
 
         for quantize_op in param_quantizers:
-            if version.parse(tf.__version__) >= version.parse("2.0"):
-                op_mode_tensor_name = '_op_mode/Read/ReadVariableOp:0'
-            else:
-                op_mode_tensor_name = '_op_mode:0'
-            op_mode_tensor = sim.session.graph.get_tensor_by_name(quantize_op.name + op_mode_tensor_name)
+            op_mode_tensor = sim.session.graph.get_tensor_by_name(quantize_op.name + '_op_mode:0')
             if 'BiasAdd' in quantize_op.name:
                 self.assertEqual(sim.session.run(op_mode_tensor), int(pymo.TensorQuantizerOpMode.passThrough))
             else:

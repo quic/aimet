@@ -41,6 +41,7 @@ import unittest.mock
 from decimal import Decimal
 import math
 import os
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
 import signal
 import tensorflow as tf
 
@@ -56,7 +57,6 @@ from aimet_common.bokeh_plots import DataTable, ProgressBar
 
 tf.compat.v1.logging.set_verbosity(tf.compat.v1.logging.WARN)
 tf.compat.v1.disable_eager_execution()
-os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
 
 
 class TestTrainingExtensionsCompRatioSelect(unittest.TestCase):
@@ -251,7 +251,7 @@ class TestTrainingExtensionsCompRatioSelect(unittest.TestCase):
         # data format : NHWC
         inp_tensor = tf.Variable(tf.random.normal([1, 28, 28, 32]))
         filter_tensor = tf.Variable(tf.random.normal([5, 5, 32, 64]))
-        conv = tf.nn.conv2d(input=inp_tensor, filters=filter_tensor, strides=[1, 2, 2, 1], padding='SAME',
+        conv = tf.nn.conv2d(inp_tensor, filter_tensor, strides=[1, 2, 2, 1], padding='SAME',
                             data_format="NHWC", name='layer2')
 
         conv_op = tf.compat.v1.get_default_graph().get_operation_by_name('layer2')

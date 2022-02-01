@@ -41,6 +41,7 @@
 import pytest
 import logging
 import os
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
 import unittest.mock
 import numpy as np
 import tensorflow as tf
@@ -55,7 +56,6 @@ from aimet_tensorflow.adaround.adaround_loss import AdaroundHyperParameters
 
 logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Test)
 tf.compat.v1.disable_eager_execution()
-os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
 
 
 class TestAdaroundOptimizer(unittest.TestCase):
@@ -179,7 +179,7 @@ class TestAdaroundOptimizer(unittest.TestCase):
         out_data = np.random.rand(1, 4, 10, 10).astype(dtype='float32')
         out_tensor = tf.convert_to_tensor(out_data, dtype=tf.float32)
 
-        _ = tf.nn.conv2d(input=inp_tensor, filters=weight_tensor, strides=[1, 1, 1, 1], padding='SAME',
+        _ = tf.nn.conv2d(inp_tensor, weight_tensor, strides=[1, 1, 1, 1], padding='SAME',
                          data_format="NCHW", name='Conv2D')
 
         init = tf.compat.v1.global_variables_initializer()
@@ -224,7 +224,7 @@ class TestAdaroundOptimizer(unittest.TestCase):
         out_data_t = np.transpose(out_data, (0, 2, 3, 1))
         out_tensor = tf.convert_to_tensor(out_data_t, dtype=tf.float32)
 
-        _ = tf.nn.conv2d(input=inp_tensor, filters=weight_tensor, strides=[1, 1, 1, 1], padding='SAME',
+        _ = tf.nn.conv2d(inp_tensor, weight_tensor, strides=[1, 1, 1, 1], padding='SAME',
                          data_format="NHWC", name='Conv2D')
 
         init = tf.compat.v1.global_variables_initializer()

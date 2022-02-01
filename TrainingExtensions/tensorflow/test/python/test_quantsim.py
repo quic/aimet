@@ -36,6 +36,7 @@
 
 import shutil
 import os
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
 import time
 import numpy as np
 import json
@@ -54,7 +55,6 @@ from aimet_tensorflow.utils.constants import QuantizeOpIndices
 
 tf.compat.v1.logging.set_verbosity(tf.compat.v1.logging.WARN)
 tf.compat.v1.disable_eager_execution()
-os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
 
 
 class TestQuantSim(unittest.TestCase):
@@ -141,6 +141,7 @@ class TestQuantSim(unittest.TestCase):
         sim.session.close()
         del sim
 
+    @pytest.mark.tf1
     def test_compute_encodings_cpu_model(self):
         """
         Create QuantSim for a CPU model and test that activation encodings are computed
@@ -182,7 +183,7 @@ class TestQuantSim(unittest.TestCase):
         for name, quantizer in sim._activation_quantizers.items():
             if name in deactivated_quantizers:
                 self.assertTrue(int(libpymo.TensorQuantizerOpMode.passThrough),
-                                sim.session.run(name + '/ReadVariableOp:0'))
+                                sim.session.run(name + '_op_mode/read:0'))
             else:
                 self.assertTrue(quantizer.tensor_quantizer.isEncodingValid,
                                 "quantizer: {} does not have a valid encoding".format(name))
@@ -282,6 +283,7 @@ class TestQuantSim(unittest.TestCase):
         self._save_to_keras_common_test_code(True)
 
     @pytest.mark.cuda
+    @pytest.mark.tf1
     def test_compute_encodings_gpu_model(self):
         """
         Create QuantSim for a CPU model and test that activation encodings are computed
@@ -323,7 +325,7 @@ class TestQuantSim(unittest.TestCase):
         for name, quantizer in sim._activation_quantizers.items():
             if name in deactivated_quantizers:
                 self.assertTrue(int(libpymo.TensorQuantizerOpMode.passThrough),
-                                sim.session.run(name + '/ReadVariableOp:0'))
+                                sim.session.run(name + '_op_mode/read:0'))
             else:
                 self.assertTrue(quantizer.tensor_quantizer.isEncodingValid,
                                 "quantizer: {} does not have a valid encoding".format(name))
@@ -755,6 +757,7 @@ class TestQuantSim(unittest.TestCase):
             sim.session.close()
             del sim
 
+    @pytest.mark.tf1
     def test_compute_encodings(self):
         """ Test that ops not evaluated during compute encodings are set to passThrough mode. """
         tf.compat.v1.reset_default_graph()
@@ -1004,7 +1007,7 @@ class TestQuantSimRangeLearning:
         # return gradients w.r.t input, min and max as scalars
         return dq_by_dx, -(dq_by_dmax_reduced.astype(np.float32)), dq_by_dmax_reduced.astype(np.float32)
 
-    @pytest.mark.skip(reason='assert fail with Tf2.x')
+    @pytest.mark.tf1
     def test_qc_custom_gradient_backward_pass(self):
         """
         test to validate custom gradient computed against numpy computations for

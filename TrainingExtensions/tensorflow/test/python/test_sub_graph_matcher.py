@@ -38,6 +38,10 @@
 """ This file contains unit tests for testing  Sub Graph  functions. """
 
 import os
+
+import pytest
+
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
 import unittest
 import logging
 import tensorflow as tf
@@ -53,7 +57,6 @@ logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Test)
 AimetLogger.set_area_logger_level(AimetLogger.LogAreas.Test, logging.DEBUG)
 AimetLogger.set_area_logger_level(AimetLogger.LogAreas.ConnectedGraph, logging.DEBUG)
 tf.compat.v1.disable_eager_execution()
-os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
 
 subgraph_constructors = op_type_templates
 
@@ -61,7 +64,7 @@ subgraph_constructors = op_type_templates
 class TestSubGraph(unittest.TestCase):
     """ Test Sub Graph functions """
 
-    @unittest.skip("Instance norm is from tf.contrib which is deprecated")
+    @pytest.mark.tf1
     def test_instance_norm_model(self):
         input_shape = subgraph_constructors['InstanceNormalization']['input_shape']
         constructor_string = subgraph_constructors['InstanceNormalization']['constructor']
@@ -117,11 +120,12 @@ class TestSubGraph(unittest.TestCase):
         # with Bias, the last element in the pattern list is BiasAdd.
         self.assertEqual(op_type_patterns[-1]._op_type, 'BiasAdd')
 
-    def test_fused_batchnorm_training_True_subgraph(self):
-        """ test sub graph for FusedBatchNorm training True"""
+    @pytest.mark.tf1
+    def test_fused_batchnorm_training_tensor_subgraph(self):
+        """ test sub graph for FusedBatchNorm training Tensor"""
 
-        input_shape = subgraph_constructors['BN_keras_with_training_True']['input_shape']
-        constructor_string = subgraph_constructors['BN_keras_with_training_True']['constructor']
+        input_shape = subgraph_constructors['BN_keras_with_training_tensor']['input_shape']
+        constructor_string = subgraph_constructors['BN_keras_with_training_tensor']['constructor']
         bn_subgraph = create_subgraph_for_op_default(input_shape, constructor_string)
 
         logger.debug("Step: I The OPs created by create_subgraph_for_op_default()")
@@ -135,7 +139,7 @@ class TestSubGraph(unittest.TestCase):
 
         # The pattern list consists of successive OpTypePattern() objects starting from the layer's input Op to
         # the output Op. Each OpTypePattern() becomes an input to the next OpTypePattern().
-        self.assertEqual(op_type_patterns[-1]._op_type, 'FusedBatchNormV3')
+        self.assertEqual(op_type_patterns[-1]._op_type, 'Merge')
 
     def test_fused_batchnorm_with_training_False_subgraph(self):
         """ test sub graph for FusedBatchNorm training False"""
@@ -178,6 +182,7 @@ class TestSubGraph(unittest.TestCase):
         # without activation, the last element in the pattern list is BiasAdd.
         self.assertEqual(dense_patterns[-1]._op_type, 'BiasAdd')
 
+    @pytest.mark.tf1
     def test_conv_subgraph_with_a_model(self):
         """ Detect Conv2D, Conv2D with Bias and FusedBatchNorm subgraphs in the session graph. """
 

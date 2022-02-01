@@ -37,6 +37,7 @@
 # =============================================================================
 
 import os
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
 import unittest
 import unittest.mock
 import math
@@ -56,8 +57,6 @@ from aimet_tensorflow.channel_pruning.channel_pruner import InputChannelPruner, 
 logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Test)
 tf.compat.v1.logging.set_verbosity(tf.compat.v1.logging.WARN)
 tf.compat.v1.disable_eager_execution()
-os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
-
 
 
 def mnist(data_format):
@@ -94,7 +93,7 @@ class TestTrainingExtensionsCostCalculator(unittest.TestCase):
         # data format NCHW
         inp_tensor = tf.Variable(tf.random.normal([1, 1, 28, 28]))
         filter_tensor = tf.Variable(tf.random.normal([5, 5, 1, 32]))
-        conv1 = tf.nn.conv2d(input=inp_tensor, filters=filter_tensor, strides=[1, 1, 1, 1], padding='SAME',
+        conv1 = tf.nn.conv2d(inp_tensor, filter_tensor, strides=[1, 1, 1, 1], padding='SAME',
                              data_format="NCHW", name='Conv2D_1')
 
         conv_op1 = tf.compat.v1.get_default_graph().get_operation_by_name('Conv2D_1')
@@ -121,7 +120,7 @@ class TestTrainingExtensionsCostCalculator(unittest.TestCase):
         inp_tensor = tf.Variable(tf.random.normal([1, 32, 28, 28]))
         filter_tensor = tf.Variable(tf.random.normal([5, 5, 32, 64]))
 
-        conv2 = tf.nn.conv2d(input=inp_tensor, filters=filter_tensor, strides=[1, 1, 2, 2], padding='SAME',
+        conv2 = tf.nn.conv2d(inp_tensor, filter_tensor, strides=[1, 1, 2, 2], padding='SAME',
                              data_format="NCHW", name='Conv2D_2')
 
         conv_op2 = tf.compat.v1.get_default_graph().get_operation_by_name('Conv2D_2')
@@ -178,7 +177,7 @@ class TestTrainingExtensionsSpatialSvdCostCalculator(unittest.TestCase):
         # data format NCHW
         inp_tensor = tf.Variable(tf.random.normal([1, 32, 28, 28]))
         filter_tensor = tf.Variable(tf.random.normal([5, 5, 32, 64]))
-        conv = tf.nn.conv2d(input=inp_tensor, filters=filter_tensor, strides=[1, 1, 1, 1], padding='SAME',
+        conv = tf.nn.conv2d(inp_tensor, filter_tensor, strides=[1, 1, 1, 1], padding='SAME',
                             data_format="NCHW", name='Conv2D')
 
         conv_op = tf.compat.v1.get_default_graph().get_operation_by_name('Conv2D')
@@ -222,7 +221,7 @@ class TestTrainingExtensionsSpatialSvdCostCalculator(unittest.TestCase):
         # data format : NHWC
         inp_tensor = tf.Variable(tf.random.normal([1, 28, 28, 32]))
         filter_tensor = tf.Variable(tf.random.normal([5, 5, 32, 64]))
-        conv = tf.nn.conv2d(input=inp_tensor, filters=filter_tensor, strides=[1, 2, 2, 1], padding='SAME',
+        conv = tf.nn.conv2d(inp_tensor, filter_tensor, strides=[1, 2, 2, 1], padding='SAME',
                             data_format="NHWC", name='Conv2D')
 
         conv_op = tf.compat.v1.get_default_graph().get_operation_by_name('Conv2D')
@@ -288,7 +287,6 @@ class TestTrainingExtensionsSpatialSvdCostCalculator(unittest.TestCase):
 
 class TestTrainingExtensionsChannelPruningCostCalculator(unittest.TestCase):
 
-    @unittest.skip
     def test_calculate_channel_pruning_cost_all_layers(self):
 
         config = tf.compat.v1.ConfigProto()
@@ -345,7 +343,6 @@ class TestTrainingExtensionsChannelPruningCostCalculator(unittest.TestCase):
 
         layer_db.model.close()
 
-    @unittest.skip
     def test_calculate_channel_pruning_cost_two_layers(self):
         """
         test compressed model cost using two layers

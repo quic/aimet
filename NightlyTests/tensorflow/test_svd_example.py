@@ -35,8 +35,10 @@
 #  
 #  @@-COPYRIGHT-END-@@
 # =============================================================================
+
 import unittest
 import os
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
 import shutil
 import tensorflow as tf
 from aimet_tensorflow import svd as s
