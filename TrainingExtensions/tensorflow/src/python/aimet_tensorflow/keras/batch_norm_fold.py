@@ -444,12 +444,47 @@ def _delete_all_bns_from_model(model: (tf.keras.Model, tf.keras.layers.Layer),
             _delete_bn_for_non_subclassed_model(model, bn_layer)
 
 
-def _fold_selected_batch_norms(
-        model: (tf.keras.Model, tf.keras.layers.Layer), layer_pairs: List[PAIR_TYPE]):
+def _find_all_batch_norms_to_fold(model: Tuple[tf.keras.Model, tf.keras.layers.Layer]) -> List[PAIR_TYPE]:
+    """
+    uses searcher to choose layers for bias correction
+
+    :param model: model to obtain conv_linear pairs for
+    :return: List of conv/linear layers with associated bn op / activation info
+    """
+
+    node_layer_map = common.create_node_to_layer_map(model)
+    layer_out_node_map = common.create_layer_to_out_node_map(model)
+
+    possible_convs_linears_bn = _find_possible_convs_linears_bn(node_layer_map, layer_out_node_map)
+
+    # get all ordered convs/ linears layers
+    ordered_conv_linears = _get_ordered_conv_linears(node_layer_map, layer_out_node_map)
+
+    valid_bn_conv_linear_pairs = []
+
+    # track BNs added for fold
+    marked_bn_set = set()
+
+    for conv_linear_layer in ordered_conv_linears:
+        if conv_linear_layer in possible_convs_linears_bn.keys():
+            bn_info = possible_convs_linears_bn[conv_linear_layer]
+            if bn_info[1]:
+                if bn_info[1] not in marked_bn_set:
+                    valid_bn_conv_linear_pairs.append((conv_linear_layer, bn_info[1], True))
+                    marked_bn_set.add(bn_info[1])
+            elif bn_info[0]:
+                if bn_info[0] not in marked_bn_set:
+                    valid_bn_conv_linear_pairs.append((conv_linear_layer, bn_info[0], False))
+                    marked_bn_set.add(bn_info[0])
+
+    return valid_bn_conv_linear_pairs
+
+
+def fold_given_batch_norms(model: Tuple[tf.keras.Model, tf.keras.layers.Layer], layer_pairs: List[PAIR_TYPE]):
     """
     Fold a given set of batch_norm layers into conv layers
 
-    :param model: model to fold selected batchnorm for
+    :param model: model to fold selected batchnorms for
     :param layer_pairs: Tuple of conv, bn layers and is_batch_norm_second flag
     """
 
@@ -503,44 +538,7 @@ def _fold_selected_batch_norms(
     _delete_all_bns_from_model(model, list_of_bn_layers)
 
 
-def _find_all_batch_norms_to_fold(model: (tf.keras.Model,
-                                          tf.keras.layers.Layer)) -> List[PAIR_TYPE]:
-    """
-    uses searcher to choose layers for bias correction
-
-    :param model: model to obtain conv_linear pairs for
-    :return: List of conv/linear layers with associated bn op / activation info
-    """
-
-    node_layer_map = common.create_node_to_layer_map(model)
-    layer_out_node_map = common.create_layer_to_out_node_map(model)
-
-    possible_convs_linears_bn = _find_possible_convs_linears_bn(node_layer_map, layer_out_node_map)
-
-    # get all ordered convs/ linears layers
-    ordered_conv_linears = _get_ordered_conv_linears(node_layer_map, layer_out_node_map)
-
-    valid_bn_conv_linear_pairs = []
-
-    # track BNs added for fold
-    marked_bn_set = set()
-
-    for conv_linear_layer in ordered_conv_linears:
-        if conv_linear_layer in possible_convs_linears_bn.keys():
-            bn_info = possible_convs_linears_bn[conv_linear_layer]
-            if bn_info[1]:
-                if bn_info[1] not in marked_bn_set:
-                    valid_bn_conv_linear_pairs.append((conv_linear_layer, bn_info[1], True))
-                    marked_bn_set.add(bn_info[1])
-            elif bn_info[0]:
-                if bn_info[0] not in marked_bn_set:
-                    valid_bn_conv_linear_pairs.append((conv_linear_layer, bn_info[0], False))
-                    marked_bn_set.add(bn_info[0])
-
-    return valid_bn_conv_linear_pairs
-
-
-def fold_all_batch_norms(model: (tf.keras.Model, tf.keras.layers.Layer)):
+def fold_all_batch_norms(model: Tuple[tf.keras.Model, tf.keras.layers.Layer]):
     """
     Fold all batch_norm layers in a model into corresponding conv layers
 
@@ -549,4 +547,4 @@ def fold_all_batch_norms(model: (tf.keras.Model, tf.keras.layers.Layer)):
 
     bn_conv_linear_pairs = _find_all_batch_norms_to_fold(model)
 
-    _fold_selected_batch_norms(model, bn_conv_linear_pairs)
+    fold_given_batch_norms(model, bn_conv_linear_pairs)
