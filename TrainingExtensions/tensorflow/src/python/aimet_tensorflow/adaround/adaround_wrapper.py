@@ -39,10 +39,10 @@
 """ Adaround wrapper """
 
 from typing import Union, Dict
-from packaging import version
 import numpy as np
 import tensorflow as tf
 from tensorflow import keras
+from packaging import version
 import libpymo
 
 # Import AIMET specific modules

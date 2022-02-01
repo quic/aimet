@@ -76,7 +76,7 @@ class MnistParser:
         dim = 28
         features = tf.compat.v1.parse_single_example(serialized_example,
                                                      features={'label': tf.compat.v1.FixedLenFeature([], tf.int64),
-                                                     'image_raw': tf.compat.v1.FixedLenFeature([], tf.string)})
+                                                               'image_raw': tf.compat.v1.FixedLenFeature([], tf.string)})
 
         # Mnist examples are flattened. Since we aren't performing an augmentations
         # these can remain flattened.

@@ -39,14 +39,15 @@
 
 # pylint: disable=no-name-in-module
 # pylint: disable=no-member
+# pylint: disable=ungrouped-imports
 # Including above pylint disables since pylint complains about certain module members not found, when they actually
 # are there.
-from packaging import version
 import tensorflow as tf
-if not version.parse(tf.version.VERSION) >= version.parse("2.00"):
-    import tensorflow.contrib.slim as slim
 from tensorflow.python.keras.models import Sequential
 from tensorflow.python.keras.layers import Dense, Conv2D, BatchNormalization, Flatten, AvgPool2D, MaxPool2D
+from packaging import version
+if not version.parse(tf.version.VERSION) >= version.parse("2.00"):
+    import tensorflow.contrib.slim as slim
 
 
 def transposed_conv2d_model():

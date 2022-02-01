@@ -14,7 +14,7 @@
 # ==============================================================================
 """SubGraphView: a subgraph view on an existing tf.Graph.
 """
-
+# pylint: skip-file
 from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function

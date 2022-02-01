@@ -41,11 +41,10 @@ from typing import List, Union, Dict, Callable, Any, Tuple
 import os
 import shutil
 import json
-from packaging import version
 import numpy as np
 import tensorflow as tf
-
 from tensorflow.python.framework import ops as tf_ops
+from packaging import version
 from aimet_common.defs import QuantScheme
 from aimet_common.quantsim import gate_min_max, calculate_delta_offset, encoding_version
 from aimet_common.quant_utils import get_conv_accum_bounds

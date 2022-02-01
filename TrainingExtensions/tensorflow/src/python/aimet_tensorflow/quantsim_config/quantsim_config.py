@@ -38,8 +38,8 @@
 """ Utilities for parsing and applying quantsim configurations from json config file """
 
 from typing import List, Dict, Tuple, Set, Union
-from packaging import version
 import tensorflow as tf
+from packaging import version
 from aimet_common.quantsim_config.json_config_importer import DefaultsType, OpType, ParamType, OpTypeType, \
     SupergroupType, ConfigType, ConfigDictKeys
 from aimet_common.connected_graph.connectedgraph_utils import get_all_input_ops, get_all_output_ops
@@ -401,6 +401,7 @@ class QuantSimConfigurator(AimetCommonQuantSimConfigurator):
         :param modified_quantize_ops: Dictionary of quantize ops mapping to set of settings that have been changed for
             that quantize op already.
         """
+        # pylint: disable=too-many-branches
         setting_type = get_setting_type(setting_name)
 
         quantize_ops_to_modify = _get_quantize_ops_to_modify(input_output_quantize_ops, setting_name)

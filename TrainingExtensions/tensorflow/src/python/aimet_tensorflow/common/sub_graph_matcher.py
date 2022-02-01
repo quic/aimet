@@ -40,19 +40,22 @@
 
 # pylint: disable=no-name-in-module
 # pylint: disable=no-member
+# pylint: disable=unused-import
 # Including above pylint disables since pylint complains about certain module members not found, when they actually
 # are there.
 import re
-from packaging import version
 from typing import List, Dict, Set, Union
 from collections import OrderedDict
 import tensorflow as tf
-if not version.parse(tf.version.VERSION) >= version.parse("2.0"):
-    from tensorflow_core.contrib import slim # pylint: disable=unused-import
+from packaging import version
+
+from aimet_common.utils import AimetLogger
+from aimet_tensorflow.common.sub_graph_matcher_op_templates import op_type_templates
 from aimet_tensorflow.quantize import graph_matcher
 from aimet_tensorflow.utils.common import get_valid_ops
-from aimet_tensorflow.common.sub_graph_matcher_op_templates import op_type_templates
-from aimet_common.utils import AimetLogger
+
+if not version.parse(tf.version.VERSION) >= version.parse("2.0"):
+    from tensorflow_core.contrib import slim # pylint: disable=import-error
 
 logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.ConnectedGraph)
 
