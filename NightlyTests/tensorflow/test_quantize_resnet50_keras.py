@@ -40,34 +40,7 @@ from packaging import version
 from aimet_tensorflow.keras.batch_norm_fold import fold_all_batch_norms
 from aimet_tensorflow.keras.quantsim import QuantizationSimModel
 from aimet_tensorflow.keras.quant_sim.qc_quantize_wrapper import QcQuantizeWrapper
-import libpymo
-
-# Placing this here temporarily, remove when it is moved to keras common utils.
-def parse_activation_layer(activation_layer: tf.keras.layers.Activation):
-    """
-    Parse generic tf.keras.layers.Activation and convert it to corresponding onnx type
-
-    :param activation_layer: tf.keras.layers.Activation
-    :return: list of converted onnx type str
-    """
-    activation_name = tf.keras.activations.serialize(activation_layer.activation)
-
-    keras_to_onnx_dict = {
-        "softmax": "Softmax",
-        "relu": "Relu",
-        "selu": "Selu",
-        "tanh": "Tanh",
-        "sigmoid": "Sigmoid",
-        "leaky_relu": "LeakyRelu",
-        "softplus": "Softplus",
-        "softsign": "Softsign",
-        "elu": "Elu",
-    }
-    onnx_activation = keras_to_onnx_dict.get(activation_name)
-    if onnx_activation is None:
-        return ["Unknown"]
-
-    return [onnx_activation]
+from aimet_tensorflow.keras.utils.common import parse_activation_layer
 
 def disable_input_quantizers(qsim: QuantizationSimModel):
     # Only use this while quantsim config is not implemented yet.
