@@ -443,8 +443,8 @@ class StaticGridQuantWrapper(QcQuantizeWrapper):
             if not isinstance(input_tensor, torch.Tensor):
                 _logger.error('Expecting quantize activation input of type torch.Tensor but got %s', type(input_tensor))
                 raise AssertionError
-            if input_tensor.dtype in utils.torch_integer_dtypes:
-                # Do not quantize integer tensors
+            if input_tensor.dtype in utils.torch_dtypes_to_ignore_for_quantization:
+                # Do not quantize tensors of integer or bool data type
                 outputs.append(input_tensor)
                 continue
 
@@ -677,10 +677,15 @@ class LearnedGridQuantWrapper(QcQuantizeWrapper):
         quantized_tensors = []
         for index, tensor_to_quantize in enumerate(tensors_to_quantize):
             assert len(tensor_quantizers) > index, f"Not enough tensor quantizers ({len(tensor_quantizers)}) allocated"
-            encoding_min = self._parameters[type_of_quantizer + str(index) + '_encoding_min']
-            encoding_max = self._parameters[type_of_quantizer + str(index) + '_encoding_max']
-            quantized_tensors.append(tensor_quantizers[index].quantize_dequantize(tensor_to_quantize, encoding_min,
-                                                                                  encoding_max))
+            if tensor_to_quantize.dtype in utils.torch_dtypes_to_ignore_for_quantization:
+                # Do not quantize tensors of integer or bool data type
+                quantized_tensors.append(tensor_to_quantize)
+                continue
+            else:
+                encoding_min = self._parameters[type_of_quantizer + str(index) + '_encoding_min']
+                encoding_max = self._parameters[type_of_quantizer + str(index) + '_encoding_max']
+                quantized_tensors.append(tensor_quantizers[index].quantize_dequantize(tensor_to_quantize, encoding_min,
+                                                                                      encoding_max))
         # Flatten if there is only one output - which is by far the most common case
         if len(quantized_tensors) == 1:
             quantized_tensors = quantized_tensors[0]
