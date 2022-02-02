@@ -503,8 +503,7 @@ class QuantizationSimModel:
         # pylint: disable=protected-access
         attention_with_mask_add_quantizer_dict = transformer_utils.get_attention_with_mask_add_quantizer_dict(self.model)
 
-        for attention_head in attention_with_mask_add_quantizer_dict:
-            mask_add_quantizer_module, mask_add_name = attention_with_mask_add_quantizer_dict[attention_head]
+        for attention_head, (mask_add_quantizer_module, mask_add_name) in attention_with_mask_add_quantizer_dict.items():
 
             if isinstance(mask_add_quantizer_module, StaticGridQuantWrapper):
                 module_to_quantize = mask_add_quantizer_module._module_to_wrap
@@ -530,9 +529,7 @@ class QuantizationSimModel:
         # pylint: disable=protected-access
         attention_with_mask_add_quantizer_dict = transformer_utils.get_attention_with_mask_add_quantizer_dict(self.model)
 
-        for attention_head in attention_with_mask_add_quantizer_dict:
-            mask_add_quantizer_module, _ = attention_with_mask_add_quantizer_dict[attention_head]
-
+        for (mask_add_quantizer_module, _) in attention_with_mask_add_quantizer_dict.values():
             if isinstance(mask_add_quantizer_module, StaticGridQuantWrapper) and \
                     mask_add_quantizer_module.output_quantizer.enabled:
                 for output_quantizer in mask_add_quantizer_module.output_quantizers:

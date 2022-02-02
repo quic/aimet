@@ -51,9 +51,8 @@ namespace DlQuantization
 template <typename DTYPE>
 std::vector<std::tuple<double, double>> TfEncodingAnalyzer<DTYPE>::getStatsHistogram() const
 {
-    // Return an empty histogram since no real histogram data is kept for TF Encoding analyzer
-    auto histogram = std::vector<std::tuple<double, double>>();
-    return histogram;
+    // No real histogram data is kept for TF Encoding analyzer
+    assert(0);
 }
 
 template <typename DTYPE>
