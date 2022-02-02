@@ -67,7 +67,7 @@ if "SW_VERSION" in os.environ:
 else:    
     sys.exit("Unable to set version. SOFTWARE_VERSION is NOT defined.")
 
-included_features = 'tensorflow'
+included_features = []
 
 def setup(app):
     app.add_config_value('included_features', included_features, 'env')
