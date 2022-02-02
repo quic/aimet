@@ -53,7 +53,7 @@ import libpymo
 
 logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Utils)
 
-torch_integer_dtypes = [torch.int, torch.int8, torch.int16, torch.int32, torch.int64]
+torch_dtypes_to_ignore_for_quantization = [torch.int, torch.int8, torch.int16, torch.int32, torch.int64, torch.bool]
 
 
 class IterFirstX:
