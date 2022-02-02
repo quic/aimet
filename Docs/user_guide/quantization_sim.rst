@@ -61,7 +61,13 @@ AIMET achieves this by wrapping existing layers with a custom layer that add thi
 
 In the backward pass, AIMET will backprop normally. This is achieved by keeping the full-resolution floating point weights as shadow weights to be used during backprop.
 
-Placement of quantization simulation ops in the model
+Per Channel Quantization
+========================
+AIMET allows a user to perform per channel quantization (along the output channel for parameters of a layer). The default mode is Per Tensor Quantization where encodings are calculated for each tensor.
+In Per Channel Quantization the encodings are calculated for every output channel leading to better accuracy, in some cases,  with minimal impact on performance. It can be enabled using the JSON configuration file when the Quantization
+Simulation API is called. The section below explains how per channel quantization can be enabled for a model.
+
+Configuring quantization simulation ops in the model
 =====================================================
 AIMET allows the configuration of quantizer placement in accordance with a set of rules specified in a json configuration file if provided when the Quantization Simulation API is called.
 In the configuration file, quantizers can be turned on and off, and/or configured with asymmetric or symmetric encodings.
@@ -78,6 +84,13 @@ It is advised for the user to begin with the default configuration file under
 
 |default-quantsim-config-file|
 
+Below is an example of the default configuration.
+
+.. image:: ../images/quantsim_config.PNG
+
+This config file enables quantization for all outputs and parameters. The per channel quantization is disabled but it can be enabled by
+setting the flag to True.
+
 
 .. _qat_recommendations:
 
@@ -89,5 +102,5 @@ Here are some general guidelines that can aid in improving performance or faster
     - Often it can be beneficial to first apply :ref:`post-training quantization<ug-post-training-quantization>` (Cross layer equalization (CLE) and bias correction) before applying QAT. This is especially beneficial if there is large drop in INT8 performance compared to the FP32 baseline.
 * Hyper-parameters:
     - Number of epochs: 15-20 epochs are generally sufficient for convergence
-    - Learning rate: Comparable (or one order higher) to FP32 model’s final learning rate at convergence. Results in AIMET are with learning of the order 1e-6.
+    - Learning rate: Comparable (or one order higher) to FP32 model's final learning rate at convergence. Results in AIMET are with learning of the order 1e-6.
     - Learning rate schedule: Divide learning rate by 10 every 5-10 epochs
