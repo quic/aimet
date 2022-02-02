@@ -38,18 +38,20 @@
 cmake_minimum_required(VERSION 3.5)
 
 if (ENABLE_CUDA)
-    set(CUDA_FLAG -m "not blah")
+    set(CUDA_FLAG "not blah")
     set(USE_CUDA True)
 else (ENABLE_CUDA)
-    set(CUDA_FLAG -m "not cuda")
+    set(CUDA_FLAG "not cuda")
     set(USE_CUDA False)
 endif (ENABLE_CUDA)
 
 if (TF_VERSION MATCHES "^1.15")
-    set(TF_VERSION_FLAG -m "not blah")
+    set(TF_VERSION_FLAG "not blah")
 else ()
-    set(TF_VERSION_FLAG -m "not tf1")
+    set(TF_VERSION_FLAG "not tf1")
 endif ()
+
+string(APPEND MARKER_FLAG ${CUDA_FLAG} " and " ${TF_VERSION_FLAG})
 
 add_custom_target(AcceptanceTests.TensorflowDependencies
         COMMAND ${CMAKE_COMMAND} -E env
@@ -61,6 +63,6 @@ add_custom_target(AcceptanceTests.Tensorflow
       VERBATIM COMMAND ${CMAKE_COMMAND} -E env
       "${AIMET_LD_LIBRARY_PATH}"
       "${AIMET_PYTHONPATH}"
-      pytest -s ${CMAKE_CURRENT_SOURCE_DIR} ${CUDA_FLAG} ${TF_VERSION_FLAG} --junitxml=${CMAKE_CURRENT_BINARY_DIR}/py_test_output.xml)
+      pytest -s ${CMAKE_CURRENT_SOURCE_DIR} -m ${MARKER_FLAG} --junitxml=${CMAKE_CURRENT_BINARY_DIR}/py_test_output.xml)
 
 add_dependencies(AcceptanceTests.Tensorflow AcceptanceTests.TensorflowDependencies)
