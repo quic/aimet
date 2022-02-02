@@ -159,16 +159,16 @@ class ImagenetParser:
         """
         dim = 224
 
-        features = tf.parse_single_example(serialized_example,
-                                           features={
-                                               'image/class/label': tf.FixedLenFeature([], tf.int64),
-                                               'image/encoded': tf.FixedLenFeature([], tf.string)})
+        features = tf.compat.v1.parse_single_example(serialized_example,
+                                                     features={
+                                                         'image/class/label': tf.FixedLenFeature([], tf.int64),
+                                                         'image/encoded': tf.FixedLenFeature([], tf.string)})
         image_data = features['image/encoded']
         label = tf.cast(features['image/class/label'], tf.int32)
         labels = tf.one_hot(indices=label, depth=1000)
 
         # Decode the jpeg
-        with tf.name_scope('prep_image', [image_data], None):
+        with tf.compat.v1.name_scope('prep_image', [image_data], None):
             # decode and reshape to default 224x224
             # pylint: disable=no-member
             image = tf.image.decode_jpeg(image_data, channels=3)

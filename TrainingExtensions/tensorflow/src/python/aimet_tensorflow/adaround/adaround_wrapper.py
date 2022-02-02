@@ -158,8 +158,10 @@ class AdaroundWrapper(keras.layers.Layer):
         tensor_floor = tf.floor(tensor / encoding.delta)
         tensor = (tensor / encoding.delta) - tensor_floor
 
+        # pylint: disable=invalid-unary-operand-type
         alpha = -tf.math.log((AdaroundConstants.ZETA - AdaroundConstants.GAMMA) / (tensor - AdaroundConstants.GAMMA) - 1)
 
+        # pylint: disable=unexpected-keyword-arg
         # Resource variable is default in TF2.x
         if version.parse(tf.version.VERSION) >= version.parse("2.0"):
             alpha_var = tf.Variable(alpha, trainable=True, name='alpha')
