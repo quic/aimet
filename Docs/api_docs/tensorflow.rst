@@ -3,14 +3,11 @@
 AIMET TensorFlow APIs
 =====================
 
-.. ifconfig:: 'tensorflow' in  included_features
+.. toctree::
+   :titlesonly:
+   :maxdepth: 6
 
-
-    .. toctree::
-       :titlesonly:
-       :maxdepth: 6
-
-       TensorFlow Quantization API<tensorflow_quantization>
-       TensorFlow Model Compression API<tensorflow_compress>
-       TensorFlow Model Visualization API for Quantization<tensorflow_visualization_quantization>
-       Using AIMET Tensorflow APIs with Keras Models<convert_tf_sess_to_keras>
+   TensorFlow Quantization API<tensorflow_quantization>
+   TensorFlow Model Compression API<tensorflow_compress>
+   TensorFlow Model Visualization API for Quantization<tensorflow_visualization_quantization>
+   Using AIMET Tensorflow APIs with Keras Models<convert_tf_sess_to_keras>

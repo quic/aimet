@@ -9,12 +9,21 @@ AI Model Efficiency Toolkit (AIMET) is a software toolkit that enables users to 
 and quantize ML models. The resulting models returned by AIMET can be further trained (or fine-tuned)
 to dramatically improve accuracy lost due to quantization and compression.
 
-AIMET is designed to work generically on any user-provided model. At present, AIMET supports
-TensorFlow, Keras, and PyTorch training frameworks.
+.. ifconfig:: 'keras' in  included_features
 
-Please follow the links below to see AIMET APIs for either PyTorch, TensorFlow, or Keras.
+    AIMET is designed to work generically on any user-provided model. At present, AIMET supports
+    TensorFlow, Keras, and PyTorch training frameworks.
 
-.. note:: AIMET Keras API requires Tensorflow 2.4 or later.
+    Please follow the links below to see AIMET APIs for either PyTorch, TensorFlow, or Keras.
+
+    .. note:: AIMET Keras API requires Tensorflow 2.4 or later.
+
+.. ifconfig:: 'keras' not in included_features
+
+    AIMET is designed to work generically on any user-provided model. At present, AIMET supports
+    TensorFlow and PyTorch training frameworks.
+
+    Please follow the links below to see AIMET APIs for either PyTorch or TensorFlow.
 
 .. toctree::
    :titlesonly:
@@ -22,20 +31,19 @@ Please follow the links below to see AIMET APIs for either PyTorch, TensorFlow, 
 
    AIMET APIs for PyTorch<torch>
 
+.. toctree::
+   :titlesonly:
+   :maxdepth: 2
 
-.. ifconfig:: 'tensorflow' in  included_features
+   AIMET APIs for TensorFlow<tensorflow>
+
+.. ifconfig:: 'keras' in  included_features
 
     .. toctree::
        :titlesonly:
        :maxdepth: 2
 
-       AIMET APIs for TensorFlow<tensorflow>
-
-.. toctree::
-   :titlesonly:
-   :maxdepth: 2
-
-   AIMET APIs for Keras<keras>
+       AIMET APIs for Keras<keras>
 
 |
 |
