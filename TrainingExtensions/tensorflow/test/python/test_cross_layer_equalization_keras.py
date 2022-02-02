@@ -470,3 +470,37 @@ class TestTrainingExtensionsCrossLayerScaling:
         actual = GraphSearchUtils.is_relu_activation_present_in_cls_sets(cls_sets)
 
         assert actual == expected
+
+    def test_scale_cls_sets(self):
+        """
+        Test scale cls sets
+        """
+        model = tf.keras.Sequential([
+            tf.keras.layers.InputLayer(input_shape=(28, 28, 3)),
+            tf.keras.layers.Conv2D(8, kernel_size=2, activation='relu'),
+            tf.keras.layers.Conv2D(16, kernel_size=2, activation=None),
+            tf.keras.layers.ReLU(),
+            tf.keras.layers.DepthwiseConv2D(kernel_size=2, activation=None),
+            tf.keras.layers.Conv2D(4, kernel_size=1, activation=None),
+            tf.keras.layers.Conv2D(8, kernel_size=2, activation='relu')
+        ])
+
+        inp_array = np.random.randn(10, 28, 28, 3)
+        before_scaling_conv0_weight = model.layers[0].get_weights()[0]
+        before_scaling_ouptut = model.predict(inp_array)
+
+        cls_sets = [
+            (model.layers[0], model.layers[1]),
+            (model.layers[1], model.layers[3], model.layers[4]),
+            (model.layers[4], model.layers[5])
+        ]
+
+        scaling_factors = CrossLayerScaling.scale_cls_sets(cls_sets)
+        assert len(scaling_factors) == 3
+        assert len(scaling_factors[1]) == 2
+
+        after_scaling_conv0_weight = model.layers[0].get_weights()[0]
+        assert not np.array_equal(before_scaling_conv0_weight, after_scaling_conv0_weight)
+        after_scaling_output = model.predict(inp_array)
+
+        assert np.allclose(before_scaling_ouptut, after_scaling_output, rtol=1.e-2)

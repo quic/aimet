@@ -332,6 +332,23 @@ class CrossLayerScaling:
 
         return param_tensors
 
+    @staticmethod
+    def scale_cls_sets(cls_sets: typing.List[ClsSet]) -> \
+            typing.List[typing.Union[np.ndarray, typing.Tuple[np.ndarray, np.ndarray]]]:
+        """
+        Scale each cls set
+        :param cls_sets: Cls sets to scale
+        :return: List of scale factors corresponding to each scaled cls set
+        """
+        scale_factor_list = []
+        for cls_set in cls_sets:
+            if len(cls_set) == 3:
+                scale_factor = CrossLayerScaling.scale_cls_set_with_depthwise_conv_layers(cls_set)
+            else:
+                scale_factor = CrossLayerScaling.scale_cls_set_with_conv_layers(cls_set)
+            scale_factor_list.append(scale_factor)
+        return scale_factor_list
+
 
 class HighBiasFold:
     """
