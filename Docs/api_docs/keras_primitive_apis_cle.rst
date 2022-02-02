@@ -1,12 +1,12 @@
 :orphan:
 
-=======================================================
+==================================================
 AIMET Keras Cross Layer Equalization Primitive API
-=======================================================
+==================================================
 Introduction
 ============
 
-If a user wants to modify the order of Cross Layer equalization, not use some features, or manually tweak the list of
+If a user wants to modify the order of Cross Layer Equalization, not use some features, or manually tweak the list of
 layers that need to be equalized, the following APIs can be used.
 
 Higher level API can be used for using one or more features one after the other. It automatically finds the layers to
