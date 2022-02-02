@@ -330,6 +330,46 @@ class TestQcQuantizeOpStaticGrid:
         expected_out = torch.tensor([-128, -123, -74, 0, 2, 61], dtype=torch.float32)
         assert torch.equal(quant_out, expected_out)
 
+    def test_quantizer_ignore_data_type_to_quantize_static_grid(self):
+        relu = torch.nn.ReLU()
+        quantizer = StaticGridQuantWrapper(relu, weight_bw=8, activation_bw=8, round_mode='nearest',
+                                          quant_scheme=QuantScheme.post_training_tf_enhanced)
+        encodings = libpymo.TfEncoding()
+        encodings.bw = 8
+        encodings.max = 5.19
+        encodings.min = 0.0
+        encodings.offset = 0
+
+        # delta is 0.020352941
+        quantizer.encoding = encodings
+
+        inputs = torch.tensor([[True, True, False, False]])
+        quant_out = quantizer._quantize_activation(quantizer.output_quantizers, inputs)
+        expected_output = torch.tensor([True, True, False, False])
+        assert torch.equal(quant_out, expected_output)
+
+    def test_quantizer_ignore_data_type_to_quantize_learned_grid(self):
+        """ Test tensor quantizer quantize only symmetric unsigned functionality on cpu """
+
+        relu = torch.nn.ReLU()
+        quantizer = LearnedGridQuantWrapper(relu, weight_bw=8, activation_bw=8, round_mode='nearest',
+                                            quant_scheme=QuantScheme.training_range_learning_with_tf_init, device='cpu')
+
+        encodings = libpymo.TfEncoding()
+        encodings.bw = 8
+        encodings.max = 5.19
+        encodings.min = 0.0
+        encodings.offset = 0
+
+        # delta is 0.020352941
+        quantizer.encoding = encodings
+
+        inputs = torch.tensor([[True, True, False, False]])
+        quant_out = quantizer._quantize_activation(inputs, quantizer.output_quantizers, 'output')
+        expected_output = torch.tensor([True, True, False, False])
+        assert torch.equal(quant_out, expected_output)
+
+
     def test_quantize_only_symmetric_unsigned_cpu(self):
         """ Test tensor quantizer quantize only symmetric unsigned functionality on cpu """
 
