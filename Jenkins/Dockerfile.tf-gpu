@@ -127,10 +127,12 @@ RUN pip3 --no-cache-dir install \
         cffi==1.12.3 \
         click==7.0 \
         cython==0.29.10 \
+        dataclasses \
         Deprecated==1.2.12 \
         docutils==0.16 \
         h5py==2.9.0 \
         ipykernel==4.8.2 \
+        Jinja2>=2.9 \
         keras==2.2.4 \
         lmdb==0.95 \
         opencv-python==4.1.0.25 \
@@ -215,7 +217,7 @@ RUN cd / && git clone --depth 1 --single-branch --branch v1.15.0 https://github.
 
 RUN pip install git-pylint-commit-hook osqp==0.6.1 onnx==1.8.1
 
-# bokeh requires Pillow while Pillow-SIMD is being used everywhere in Morpheus.
+# bokeh requires Pillow while we need to use Pillow-SIMD for performance reasons.
 # To install bokeh, we are installing all dependencies of bokeh other than Pillow.
 RUN mkdir /var/tmp/bokeh_hvplot_download
 RUN pip download bokeh==1.2.0 hvplot==0.4.0 -d /var/tmp/bokeh_hvplot_download | grep Collecting | cut -d' ' -f2 | grep -Ev "pillow(~|=|\!|>|<|$)" | grep -Ev "bokeh(~|=|\!|>|<|$)"  | grep -Ev "hvplot(~|=|\!|>|<|$)" > /var/tmp/bokeh_hvplot_requirements.txt
