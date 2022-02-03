@@ -1,47 +1,42 @@
 ![Qualcomm Innovation Center, Inc.](../Docs/images/logo-quic-on@h68.png)
 
 # AIMET Examples
-AIMET Examples provide reference code to learn how to load models, apply AIMET quantization and compression features, fine tune and save your models. It is also a quick way to become familiar with AIMET usage and APIs. For more details on each of the features and APIs please reference the _[user guide](https://quic.github.io/aimet-pages/releases/1.16.2/user_guide/index.html#api-documentation-and-usage-examples)_.
+AIMET Examples provide reference code (in the form of *scripts* and *Jupyter Notebooks*) to learn how to load models, apply AIMET quantization and compression features, fine tune and save your models. It is also a quick way to become familiar with AIMET usage and APIs. For more details on each of the features and APIs please reference the _[user guide](https://quic.github.io/aimet-pages/releases/1.19.1/user_guide/index.html#api-documentation-and-usage-examples)_.
 
 ## Table of Contents
 - [Installation](#installation-instructions)
 - [Code Layout](#code-layout)
 - [Supported Examples](#supported-examples)
-- [Running AIMET Examples](#running-aimet-examples-on-the-command-line)
+- [Running Examples via Jupyter Notebook](#running-examples-via-jupyter-notebook)
+- [Running Examples via Command Line](#running-examples-via-command-line)
 
 ## Installation Instructions
-Please install AIMET and its dependencies using the instructions in [this section](../README.md#installation-instructions).
-The dataloader, evaluator, and trainer utilized in the examples is for the ImageNet dataset. To run the examples end-to-end, please download it here: https://www.image-net.org/download.php 
-
+- Install AIMET and its dependencies using the instructions in [this section](../README.md#installation-instructions).
+- The dataloader, evaluator, and trainer utilized in the examples is for the ImageNet dataset. To run the examples end-to-end, please download it from here: https://www.image-net.org/download.php 
+- Go to https://github.com/quic/aimet/releases and identify the release tag (`<release_tag>`) of the AIMET package that you're working with.
+- Clone the AIMET repo as follows to any location:
+```bash
+WORKSPACE="<absolute_path_to_workspace>"
+mkdir $WORKSPACE && cd $WORKSPACE
+git clone https://github.com/quic/aimet.git --branch <release_tag>
+```
+- Update the environment variable as follows:  
+`export PYTHONPATH=$PYTHONPATH:${WORKSPACE}/aimet`
 
 ## Code Layout:
 The code for AIMET Examples shares a common structure:
 ```
 Examples/
-common/
-  image_net_config.py
-  utils.py
-torch/
-  utils/
-    image_net_data_loader.py
-    image_net_evaluator.py
-    image_net_trainer.py
-  quantization/
-    adaround.py
-    cle_bc.py
-    quantization_aware_training.py
-  compression/
-    channel_pruning.py
-    spatial_svd.py
-    spatial_svd_cp.py
-    weight_svd.py
-tensorflow/
-  utils/
-  quantization/
-  compression/
-
+  common/
+  torch/
+    utils/
+    quantization/
+    compression/
+  tensorflow/
+    utils/
+    quantization/
+    compression/
 ```
-
 
 ## Overview
 This section describes how to apply the various quantization and compression techniques.
@@ -52,12 +47,12 @@ This section describes how to apply the various quantization and compression tec
       - Bias Correction corrects shift in layer outputs introduced due to quantization
 -   _[Adaround(Adaptive Rounding)](https://github.com/quic/aimet/blob/develop/Examples/torch/quantization/adaround.py)_: 
       -  AdaRound is a weight-rounding mechanism for post-training quantization (PTQ) that adapts to the data and the task loss. AdaRound is computationally fast, needs only a small number of unlabeled examples (which may even be for a different dataset in the same domain), optimizes a local loss, does not require end-to-end finetuning, requires very little or no hyperparameter tuning for different networks and tasks, and can be applied to convolutional or fully connected layers without any modification. It complementary to most other post-training quantization techniques such as CLE, batch-normalization folding and high bias absorption. 
+
 ### Pre-Training Quantization Examples
 -   _[Quantization-aware Training](https://github.com/quic/aimet/blob/develop/Examples/torch/quantization/quantization_aware_training.py)_:  
       -  Simulate on-target quantized inference. Use quantization simulation to train the model further to improve accuracy. 
 
 ### Compression Examples
-
 -   _[Spatial SVD](https://github.com/quic/aimet/blob/develop/Examples/torch/compression/spatial_svd.py)_: 
     - Spatial SVD is a tensor decomposition technique which decomposes one large layer (in terms of mac or memory) into two smaller layers.
     - Given a conv layer, with a given kernel size, Spatial SVD decomposes it into two kernels of smaller rank, which represents the degree of compression achieved.
@@ -66,8 +61,21 @@ This section describes how to apply the various quantization and compression tec
 -   _[Weight SVD](https://github.com/quic/aimet/blob/develop/Examples/torch/compression/weight_svd.py)_: 
     - Weight SVD is a tensor decomposition technique which decomposes one large layer (in terms of mac or memory) into two smaller layers. Given a neural network layer, with kernel (m,n,h,w) where m is the input channels, n the output channels, and h, w giving the height and width of the kernel itself, Weight SVD will decompose the kernel into one of size (m,k,1,1) and another of size (k,n,h,w), where k is called the rank. The smaller the value of k the larger the degree of compression achieved.
 
-## Running AIMET Examples on the Command Line
-Step by step to run AIMET examples. Here is how you would run an AIMET example:
+## Running Examples via Jupyter Notebook
+- Install the Jupyter metapackage as follows:  
+`sudo -H python3 -m pip install jupyter`  
+- Start the notebook server as follows (please customize the command line options if appropriate):  
+`jupyter notebook --ip=* --no-browser &`
+- The above command will generate and display a URL in the terminal. Copy and paste it into your browser.
+- Navigate to one of the following paths under the Examples directory and launch your chosen Jupyter Notebook (`.ipynb` extension):
+  - `Examples/torch/quantization/`
+  - `Examples/torch/compression/`
+  - `Examples/tensorflow/quantization/`
+  - `Examples/tensorflow/compression/`
+- Follow the instructions therein to execute the code.
+
+## Running Examples via Command Line
+Here is how you would run an AIMET example:
 ```
 python example_name.py --dataset_dir path/to/dataset/ --use_cuda 
 ``` 
@@ -76,6 +84,3 @@ For example, to run the channel pruning example run the following:
 python channel_pruning.py --dataset_dir path/to/dataset/ --use_cuda --epochs 15 --learning_rate 1e-2 --learning_rate_schedule [5, 10]
 ``` 
 Setting the hyperparameters epochs, learning rate, and learning rate scheduler is optional. If the values are not given, the default values will be used.
-
-
-
