@@ -77,9 +77,9 @@ RUN update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.7 1
 RUN update-alternatives --set python3 /usr/bin/python3.7
 
 # Upgrade Python3 pip and install some more packages
-RUN python3.7 -m pip install --no-cache-dir install --upgrade \
+RUN python3.7 -m pip --no-cache-dir install --upgrade \
         pip==20.2.4 \
-        numpy==1.16.6 \
+        'numpy>=1.19.5' \
         setuptools==41.0.1 \
         wheel==0.33.4
 
@@ -117,47 +117,48 @@ RUN python3.7 -m pip --no-cache-dir install \
         astroid==2.5.3 \
         attrs==19.1.0 \
         behave==1.2.6 \
-        bert-tensorflow==1.0.1 \
+        bert-tensorflow \
         blosc==1.10.2 \
         cffi==1.12.3 \
-        click==7.0 \
+        click \
         cython==0.29.10 \
         dataclasses \
-        Deprecated==1.2.12 \
+        Deprecated \
         docutils==0.16 \
         h5py==2.9.0 \
-        ipykernel==4.8.2 \
+        ipykernel \
         Jinja2>=2.9 \
+        jupyter \
         keras==2.2.4 \
         lmdb==1.2.1 \
         opencv-python==4.1.0.25 \
-        pillow==6.2.1 \
+        Pillow==8.4.0 \
         pluggy==0.12.0 \
         progressbar2 \
-        protobuf==3.7.1 \
-        psutil==5.8.0 \
-        ptflops==0.6.4 \
-        pybind11==2.6.1 \
-        pyDOE2==1.3.0 \
+        protobuf \
+        psutil \
+        ptflops \
+        pybind11 \
+        pyDOE2 \
         pylint==2.3.1 \
-        pymoo==0.4.1 \
+        pymoo \
         pytest==4.6.5 \
         pytest-cov==2.6.1 \
-        scikit-image==0.15.0 \
-        scikit-learn==0.21.0 \
-        scipy==1.2.1 \
+        scikit-learn \
+        'scipy>=1.2.1' \
         sphinx==2.1.1 \
         sphinx-jinja==1.1.1 \
         sphinx-autodoc-typehints==1.6.0 \
         tensorboard==1.15 \
         tensorboardX==1.7 \
-        tensorflow==1.15.0 \
+        tensorflow-cpu==2.4.3 \
         tensorflow-hub \
         tensorflow-model-optimization \
         tensorlayer==2.1.0 \
         timm==0.3.1 \
-        tqdm==4.32.2 \
-        wget==3.2
+        tqdm \
+        transformers==4.10.3 \
+        wget
         #TODO && \
     #TODO python3 -m ipykernel.kernelspec
 
@@ -169,6 +170,7 @@ RUN cd /tmp && \
 RUN ln -s /opt/cmake/bin/cmake /usr/local/bin/cmake
 RUN ln -s /opt/cmake/bin/ctest /usr/local/bin/ctest
 RUN ln -s /opt/cmake/bin/cpack /usr/local/bin/cpack
+
 ENV PATH=/usr/local/bin:$PATH
 
 # Opencv
@@ -203,14 +205,18 @@ RUN sed -i 's/PermitRootLogin prohibit-password/PermitRootLogin yes/' /etc/ssh/s
 RUN sed 's@session\s*required\s*pam_loginuid.so@session optional pam_loginuid.so@g' -i /etc/pam.d/sshd
 
 # Clone the tensorflow repo to enable development
-RUN cd / && git clone --depth 1 --single-branch --branch v1.15.0 https://github.com/tensorflow/tensorflow.git
+RUN cd / && git clone --depth 1 --single-branch --branch v2.4.3 https://github.com/tensorflow/tensorflow.git
 
-RUN pip install git-pylint-commit-hook osqp==0.6.1 onnx==1.8.1
+RUN python3.7 -m pip install git-pylint-commit-hook osqp onnx==1.8.1
 
 # NOTE: We need to pin the holoviews version to this since the latest version has a circular dependency on bokeh 2.0.0 through the panel package
 RUN python3.7 -m pip install holoviews==1.12.7 netron jsonschema pandas
 
 RUN python3.7 -m pip install bokeh==1.2.0 hvplot==0.4.0
+
+# Remove existing Pillow & Pillow-SIMD and replace with correct version of Pillow-SIMD.
+RUN python3 -m pip uninstall -y Pillow Pillow-SIMD
+RUN python3 -m pip --no-cache-dir install Pillow-SIMD==7.0.0.post3
 
 RUN apt-get update && apt-get install -y gnupg2
 RUN wget -O - http://llvm.org/apt/llvm-snapshot.gpg.key|sudo apt-key add - && echo "deb http://apt.llvm.org/bionic/ llvm-toolchain-bionic-11 main" >> /etc/apt/sources.list
