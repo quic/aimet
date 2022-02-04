@@ -230,7 +230,7 @@ RUN rm -rf /var/tmp/bokeh_hvplot_download /var/tmp/bokeh_hvplot_requirements.txt
 
 RUN apt-get update && apt-get install -y gnupg2
 RUN wget -O - http://llvm.org/apt/llvm-snapshot.gpg.key|sudo apt-key add - && echo "deb http://apt.llvm.org/bionic/ llvm-toolchain-bionic-11 main" >> /etc/apt/sources.list
-RUN apt-get update && apt-get install -y clang-11 clang-format clang-tidy-11 && \
+RUN apt-get update --fix-missing -y && apt upgrade -y && apt-get install -y clang-11 clang-format clang-tidy-11 && \
    rm -rf /var/lib/apt/lists/*
 
 # Create a version-less symbolic link for clang-tidy
