@@ -50,11 +50,13 @@ class QuantScheme(Enum):
     """ Enumeration of Quant schemes"""
 
     post_training_tf = 1
-    """ Tf scheme """
+    """ TF scheme """
     post_training_tf_enhanced = 2
-    """ Tf- enhanced scheme """
+    """ TF-enhanced scheme """
     training_range_learning_with_tf_init = 3
+    """ Range Learning scheme with TF quant scheme initialization"""
     training_range_learning_with_tf_enhanced_init = 4
+    """ Range Learning scheme with TF-enhanced quant scheme initialization"""
     training_range_learning = 5
 
 MAP_QUANT_SCHEME_TO_PYMO = {QuantScheme.post_training_tf_enhanced: libpymo.QuantizationMode.QUANTIZATION_TF_ENHANCED,

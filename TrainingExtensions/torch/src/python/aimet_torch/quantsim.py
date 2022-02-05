@@ -130,7 +130,9 @@ class QuantizationSimModel:
         :param dummy_input: Dummy input to the model. Used to parse model graph. If the model has more than one input,
                             pass a tuple. User is expected to place the tensors on the appropriate device.
         :param quant_scheme: Quantization scheme. Supported options are 'tf_enhanced' or 'tf' or using Quant Scheme Enum
-                             QuantScheme.post_training_tf or QuantScheme.post_training_tf_enhanced
+                             QuantScheme.post_training_tf or QuantScheme.post_training_tf_enhance. To use with the Range
+                             Learning feature, training_range_learning_with_tf_init or
+                             training_range_learning_with_tf_enhanced_init options are available.
         :param rounding_mode: Rounding mode. Supported options are 'nearest' or 'stochastic'
         :param default_output_bw: Default bitwidth (4-31) to use for quantizing all layer inputs and outputs
         :param default_param_bw: Default bitwidth (4-31) to use for quantizing all layer parameters

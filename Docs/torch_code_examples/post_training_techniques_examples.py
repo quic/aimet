@@ -35,7 +35,7 @@
 #  
 #  @@-COPYRIGHT-END-@@
 # =============================================================================
-# pylint: disable=missing-docstring
+# pylint: skip-file
 """ These are code examples to be used when generating AIMET documentation via Sphinx """
 
 import torch
@@ -52,7 +52,6 @@ from aimet_torch import utils
 from aimet_torch import bias_correction
 from aimet_torch.quantsim import QuantParams
 from aimet_torch.examples.mobilenet import MobileNetV2
-from aimet_torch.utils import create_fake_data_loader
 
 
 def cross_layer_equalization_manual():
@@ -142,7 +141,7 @@ def cross_layer_equalization_auto_step_by_step():
 
     model = model.eval()
     input_shape = (1, 3, 224, 224)
-    # Fold batchnorm layers
+    # Fold BatchNorm layers
     folded_pairs = batch_norm_fold.fold_all_batch_norms(model, input_shape)
     bn_dict = {}
     for conv_bn in folded_pairs:
@@ -162,7 +161,11 @@ def bias_correction_empirical():
     dataset_size = 2000
     batch_size = 64
 
-    data_loader = create_fake_data_loader(dataset_size=dataset_size, batch_size=batch_size, image_size=(3, 224, 224))
+    # User action required
+    # The following commented out line is an example of how to use the ImageNet data loader.
+    # data_loader = ImageNetDataPipeline.get_val_dataloader()
+    # Replace the following line with your own dataset's data loader.
+    data_loader = None
 
     model = MobileNetV2()
     model.eval()
@@ -171,7 +174,7 @@ def bias_correction_empirical():
 
     # Perform Bias Correction
     bias_correction.correct_bias(model.to(device="cuda"), params, num_quant_samples=1000,
-                                 data_loader=data_loader.train_loader, num_bias_correct_samples=512)
+                                 data_loader=data_loader, num_bias_correct_samples=512)
 
 
 def bias_correction_analytical_and_empirical():
@@ -179,7 +182,11 @@ def bias_correction_analytical_and_empirical():
     dataset_size = 2000
     batch_size = 64
 
-    data_loader = create_fake_data_loader(dataset_size=dataset_size, batch_size=batch_size, image_size=(3, 224, 224))
+    # User action required
+    # The following commented out line is an example of how to use the ImageNet data loader.
+    # data_loader = ImageNetDataPipeline.get_val_dataloader()
+    # Replace the following line with your own dataset's data loader.
+    data_loader = None
 
     model = MobileNetV2()
     model.eval()
@@ -194,11 +201,3 @@ def bias_correction_analytical_and_empirical():
                                  data_loader=data_loader, num_bias_correct_samples=512,
                                  conv_bn_dict=module_prop_dict, perform_only_empirical_bias_corr=False)
 
-
-class BatchIterator:
-    def __init__(self, data_loader):
-        self.data_loader = data_loader
-
-    def __iter__(self):
-        for batch, label in self.data_loader:
-            yield (batch, label)

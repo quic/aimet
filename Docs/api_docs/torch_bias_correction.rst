@@ -53,8 +53,3 @@ Code Examples
     :language: python
     :pyobject: bias_correction_analytical_and_empirical
 
-**Bias correction Data loader format example**
-
-.. literalinclude:: ../torch_code_examples/post_training_techniques_examples.py
-    :language: python
-    :pyobject: BatchIterator

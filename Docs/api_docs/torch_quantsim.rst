@@ -68,20 +68,15 @@ Code Examples
    :start-after: # Quantsim imports
    :end-before: # End of import statements
 
-**Train function**
+
+**User should write this function to pass calibration data**
 
 .. literalinclude:: ../torch_code_examples/quantsim_code_example.py
    :language: python
-   :pyobject: train
+   :pyobject: pass_calibration_data
 
-**Evaluation function**
-
-.. literalinclude:: ../torch_code_examples/quantsim_code_example.py
-   :language: python
-   :pyobject: evaluate
-
-**Quantize and fine-tune a quantized model (QAT)**
+**Quantize the model and finetune (QAT)**
 
 .. literalinclude:: ../torch_code_examples/quantsim_code_example.py
    :language: python
-   :pyobject: quantsim_example
+   :pyobject: quantize_and_finetune_example

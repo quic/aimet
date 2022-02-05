@@ -36,11 +36,11 @@ Code Examples
    :start-after: # AdaRound imports
    :end-before: # End of import statements
 
-**Evaluation function**
+**User should write this function to pass calibration data**
 
 .. literalinclude:: ../torch_code_examples/adaround.py
    :language: python
-   :pyobject: dummy_forward_pass
+   :pyobject: pass_calibration_data
 
 **After applying AdaRound to ResNet18, the AdaRounded model and associated encodings are returned**
 

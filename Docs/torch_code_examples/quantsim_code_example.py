@@ -35,7 +35,7 @@
 #
 #  @@-COPYRIGHT-END-@@
 # =============================================================================
-
+# pylint: skip-file
 """ QuantSim and QAT code example to be used for documentation generation. """
 
 # Quantsim imports
@@ -54,49 +54,43 @@ from aimet_torch.quantsim import QuantizationSimModel
 # End of import statements
 
 
-def train(model: torch.nn.Module, data_loader: DataLoader) -> torch.Tensor:
+def pass_calibration_data(sim_model):
     """
-    This is intended to be the user-defined model train function.
-    :param model: torch model
-    :param data_loader: torch data loader
-    :return: total loss
+    The User of the QuantizationSimModel API is expected to write this function based on their data set.
+    This is not a working function and is provided only as a guideline.
+
+    :param sim_model:
+    :return:
     """
-    total_loss = 0
-    model.train()
-    criterion = torch.nn.CrossEntropyLoss()
-    optimizer = torch.optim.SGD(model.parameters(), lr=0.01)
-    for (data, labels) in data_loader:
-        optimizer.zero_grad()
-        data = data.cuda()
-        labels = labels.cuda()
-        predicted = model(data)
-        loss = criterion(predicted, labels)
-        loss.backward()
-        optimizer.step()
-        total_loss += loss
 
-    return total_loss
+    # User action required
+    # The following commented out line is an example of how to use the ImageNet data loader.
+    # data_loader = ImageNetDataPipeline.get_val_dataloader()
+    # Replace the following line with your own dataset's data loader.
+    data_loader = None
 
+    # User action required
+    # For computing the activation encodings, around 1000 unlabelled data samples are required.
+    # Edit the following 2 lines based on your batch size.
+    # batch_size * max_batch_counter should be 1024
+    batch_size = 64
+    max_batch_counter = 16
 
-def evaluate(model: torch.nn.Module, forward_pass_callback_args):
-    """
-     This is intended to be the user-defined model evaluation function. AIMET requires the above signature. So if the
-     user's eval function does not match this signature, please create a simple wrapper.
-     Use representative dataset that covers diversity in training data to compute optimal encodings.
+    sim_model.eval()
 
-    :param model: Model to evaluate
-    :param forward_pass_callback_args: These argument(s) are passed to the forward_pass_callback as-is. Up to
-            the user to determine the type of this parameter. E.g. could be simply an integer representing the number
-            of data samples to use. Or could be a tuple of parameters or an object representing something more complex.
-            If set to None, forward_pass_callback will be invoked with no parameters.
-    """
-    dummy_input = torch.randn(1, 3, 224, 224).to(torch.device('cuda'))
-    model.eval()
+    current_batch_counter = 0
     with torch.no_grad():
-        model(dummy_input)
+        for input_data, target_data in data_loader:
+
+            inputs_batch = input_data  # labels are ignored
+            sim_model(inputs_batch)
+
+            current_batch_counter += 1
+            if current_batch_counter == max_batch_counter:
+                break
 
 
-def quantsim_example():
+def quantize_and_finetune_example():
 
     AimetLogger.set_level_for_all_areas(logging.INFO)
     model = models.resnet18().eval()
@@ -104,24 +98,26 @@ def quantsim_example():
     input_shape = (1, 3, 224, 224)
     dummy_input = torch.randn(input_shape).cuda()
 
-    # Prepare model for Quantization SIM. This will automate some changes required in model definition for example
-    # create independent modules for torch.nn.functional and reused modules
+    # Prepare the model for Quantization Simulation. This will automate some changes required in model definition.
+    # For example, create modules for torch.nn.functional and create unique modules for reused modules.
     prepared_model = prepare_model(model)
 
-    # Instantiate Quantization SIM. This will insert simulation nodes in the model
+    # Instantiate Quantization Simulation Model. This will insert simulation nodes in the model
     quant_sim = QuantizationSimModel(prepared_model, dummy_input=dummy_input,
                                      quant_scheme=QuantScheme.post_training_tf_enhanced,
                                      default_param_bw=8, default_output_bw=8,
                                      config_file='../../TrainingExtensions/common/src/python/aimet_common/quantsim_config/'
                                                  'default_config.json')
 
-    # Compute encodings (min, max, delta, offset) for activations and parameters. Use representative dataset
-    # roughly ~1000 examples
-    quant_sim.compute_encodings(evaluate, forward_pass_callback_args=None)
+    # Compute encodings(min, max, delta, offset, scale) for activations and parameters.
+    # Use around 1000 representative sample from your dataset.
+    quant_sim.compute_encodings(pass_calibration_data, forward_pass_callback_args=None)
 
-    # QAT - Quantization Aware Training - Fine-tune the model fore few epochs to retain accuracy using train loop
-    data_loader = create_fake_data_loader(dataset_size=32, batch_size=16, image_size=input_shape[1:])
-    _ = train(quant_sim.model, data_loader)
+    # Quantization Aware Training - Fine-tune the model for  few epochs to retain accuracy using your pipeline's train()
+
+    # User action required
+    # Replace the following commented out line with calling your pipeline's train() with the model as the argument.
+    # train(quant_sim.model)
 
     # Export the model which saves pytorch model without any simulation nodes and saves encodings file for both
     # activations and parameters in JSON format
@@ -129,4 +125,4 @@ def quantsim_example():
 
 
 if __name__ == '__main__':
-    quantsim_example()
+    quantize_and_finetune_example()
