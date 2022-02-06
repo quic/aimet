@@ -37,29 +37,24 @@
 # =============================================================================
 """ Acceptance tests for various compression techniques """
 
+import pytest
 import math
 import os
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
 import unittest
 import unittest.mock
-
 import logging
 import shutil
-import pickle
 from decimal import Decimal
-from glob import glob
 import numpy as np
 import tensorflow as tf
-
 from tensorflow.keras.applications.resnet50 import ResNet50
 from tensorflow.keras.applications.vgg16 import VGG16
 from tensorflow.keras.applications.mobilenet import MobileNet
 
-from tensorflow.examples.tutorials.mnist import input_data
-
 import aimet_common.defs
 import aimet_tensorflow.utils.graph_saver
 from aimet_common.utils import AimetLogger
-
 import aimet_tensorflow.defs
 from aimet_tensorflow.defs import ModuleCompRatioPair
 from aimet_tensorflow.common import graph_eval
@@ -69,6 +64,10 @@ from aimet_tensorflow.common.tfrecord_generator import MnistParser
 from aimet_tensorflow.examples.test_models import model_with_three_convs
 
 logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Test)
+tf.compat.v1.disable_eager_execution()
+
+mnist_model_path = os.path.join(os.environ.get('DEPENDENCY_DATA_PATH'), 'mnist/models/')
+mnist_tfrecords_path = os.path.join(os.environ.get('DEPENDENCY_DATA_PATH'), 'mnist/data/')
 
 
 def tiny_imagenet_parse(serialized_example):
@@ -81,18 +80,16 @@ def tiny_imagenet_parse(serialized_example):
     # This works for tf_slim model: resnet_50_v2 but NOT for Keras VGG16
     # Dense features in Example proto.
     feature_map = {
-        'height': tf.FixedLenFeature((), tf.int64),
-        'width': tf.FixedLenFeature((), tf.int64),
-        'channel': tf.FixedLenFeature((), tf.int64),
-        'label': tf.FixedLenFeature((), tf.int64),
-        'image_raw': tf.FixedLenFeature((), tf.string),
-        'location_raw': tf.FixedLenFeature((), tf.string)}
+        'height': tf.compat.v1.FixedLenFeature((), tf.int64),
+        'width': tf.compat.v1.FixedLenFeature((), tf.int64),
+        'channel': tf.compat.v1.FixedLenFeature((), tf.int64),
+        'label': tf.compat.v1.FixedLenFeature((), tf.int64),
+        'image_raw': tf.compat.v1.FixedLenFeature((), tf.string),
+        'location_raw': tf.compat.v1.FixedLenFeature((), tf.string)}
 
+    features = tf.compat.v1.parse_single_example(serialized_example, feature_map)
 
-
-    features = tf.parse_single_example(serialized_example, feature_map)
-
-    image_raw = tf.decode_raw(features["image_raw"], tf.uint8)
+    image_raw = tf.compat.v1.decode_raw(features["image_raw"], tf.uint8)
     image = tf.reshape(image_raw, [64, 64, 3])
 
     return image
@@ -106,10 +103,10 @@ def imagenet_parse(serialized_example):
     """
     dim = 224
 
-    features = tf.parse_single_example(serialized_example,
-                                       features={
-                                           'image/class/label': tf.FixedLenFeature([], tf.int64),
-                                           'image/encoded': tf.FixedLenFeature([], tf.string)})
+    features = tf.compat.v1.parse_single_example(serialized_example,
+                                                 features={
+                                                     'image/class/label': tf.FixedLenFeature([], tf.int64),
+                                                     'image/encoded': tf.FixedLenFeature([], tf.string)})
     image_data = features['image/encoded']
 
     # Decode the jpeg
@@ -144,7 +141,7 @@ def evaluate(model: tf.compat.v1.Session, iterations: int, use_cuda: bool):
     parser = MnistParser(data_inputs=['reshape_input'], validation_inputs=['labels'], batch_size=batch_size)
 
     # Allocate the generator you wish to use to provide the network with data
-    generator = tfrecord_generator.TfRecordGenerator(tfrecords=[os.path.join('data', 'mnist', 'validation.tfrecords')],
+    generator = tfrecord_generator.TfRecordGenerator(tfrecords=[os.path.join(mnist_tfrecords_path, 'validation.tfrecords')],
                                                      parser=parser, num_gpus=1)
 
     # Create the tensor map for input and ground truth ops
@@ -191,7 +188,7 @@ class SvdAcceptanceTests(unittest.TestCase):
         AimetLogger.set_level_for_all_areas(logging.DEBUG)
 
         # load the meta file
-        meta_path = os.path.join('models', 'mnist_save.meta')
+        meta_path = os.path.join(mnist_model_path, 'mnist_save.meta')
         sess = aimet_tensorflow.utils.graph_saver.load_model_from_meta(meta_path)
 
         # ignore first Conv2D op
@@ -254,12 +251,10 @@ class SvdAcceptanceTests(unittest.TestCase):
             # only needed when fine tuning, because we are adding new optimizer
             graph_eval.initialize_uninitialized_vars(compr_model_sess)
 
-        mnist = input_data.read_data_sets(os.path.join(str('./'), 'data'), one_hot=True)
-
+        input_data = np.random.rand(32, 784)
+        labels = np.random.randint(low=2, size=(32, 10))
         for i in range(1):
-
-            batch = mnist.train.next_batch(batch_size=32, shuffle=True)
-            _, loss_val = compr_model_sess.run([train_step, cross_entropy], feed_dict={x: batch[0], y: batch[1]})
+            _, loss_val = compr_model_sess.run([train_step, cross_entropy], feed_dict={x: input_data, y: labels})
 
         # get the weights after fine tuning
 
@@ -277,6 +272,7 @@ class SvdAcceptanceTests(unittest.TestCase):
         # delete temp directory
         shutil.rmtree(str('./temp_meta/'))
 
+    @pytest.mark.tf1
     def test_spatial_svd_compress_manual(self):
         """
         End to end manual mode spatial SVD using Resnet50 Keras model
@@ -380,6 +376,7 @@ class SvdAcceptanceTests(unittest.TestCase):
         # delete temp directory
         shutil.rmtree(str('./temp_meta/'))
 
+    @pytest.mark.tf1
     def test_spatial_svd_compress_auto(self):
         """
         End to end auto mode spatial SVD using Resnet50 Keras model
@@ -484,6 +481,7 @@ class SvdAcceptanceTests(unittest.TestCase):
 
 class ChannelPruningAcceptanceTests(unittest.TestCase):
 
+    @pytest.mark.tf1
     def test_channel_pruning_manual_vgg16_keras(self):
         """
         :return:
@@ -598,6 +596,7 @@ class ChannelPruningAcceptanceTests(unittest.TestCase):
         # delete temp directory
         shutil.rmtree(str('./temp_meta/'))
 
+    @pytest.mark.tf1
     def test_channel_pruning_auto_mobilenetv1(self):
         """
         Auto mode test fot MobileNetv1 model
@@ -713,6 +712,7 @@ class ChannelPruningAcceptanceTests(unittest.TestCase):
         # delete temp directory
         shutil.rmtree(str('./temp_meta/'))
 
+    @pytest.mark.tf1
     def test_channel_pruning_manual_resnet50_keras(self):
         """
         Manual mode test for Keras Resnet50
@@ -836,6 +836,7 @@ class ChannelPruningAcceptanceTests(unittest.TestCase):
         # delete temp directory
         shutil.rmtree(str('./temp_meta/'))
 
+    @pytest.mark.tf1
     def test_channel_pruning_auto_resnet50(self):
         """
         Auto mode test for Keras ResNet-50.
@@ -952,6 +953,7 @@ class ChannelPruningAcceptanceTests(unittest.TestCase):
 
 class SvdAndChannelPruningAcceptanceTests(unittest.TestCase):
 
+    @pytest.mark.tf1
     def test_svd_followed_by_channel_pruning(self):
         """ Test that a model can be run through spatial svd and then channel pruning """
         sess = tf.compat.v1.Session()
@@ -1028,3 +1030,5 @@ class SvdAndChannelPruningAcceptanceTests(unittest.TestCase):
         _ = sess.graph.get_operation_by_name('reduced_reduced_conv2d_1_a/Conv2D')
         _ = sess.graph.get_operation_by_name('reduced_reduced_conv2d_1_b/Conv2D')
         _ = sess.graph.get_operation_by_name('reduced_conv2d_2/Conv2D')
+        sess.close()
+

@@ -40,6 +40,7 @@ import pytest
 import unittest
 import unittest.mock
 import os
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
 import shutil
 import itertools
 import copy
@@ -59,8 +60,8 @@ from aimet_tensorflow.channel_pruning.channel_pruner import InputChannelPruner
 from aimet_tensorflow.channel_pruning.weight_reconstruction import WeightReconstructor
 from aimet_tensorflow.layer_database import Layer, LayerDatabase
 
-os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
 logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Test)
+tf.compat.v1.disable_eager_execution()
 
 
 class TestTrainingExtensionsChannelPruning(unittest.TestCase):
@@ -175,7 +176,7 @@ class TestTrainingExtensionsChannelPruning(unittest.TestCase):
             with g.as_default():
                 inp_tensor = tf.Variable(initial_value=input_data, name='inp_tensor', dtype=tf.float32)
                 filter_tensor = tf.Variable(initial_value=filter_data, name='filter_tensor', dtype=tf.float32)
-                _ = tf.nn.conv2d(input=inp_tensor, filter=filter_tensor, strides=[1, 1, stride[0], stride[1]],
+                _ = tf.nn.conv2d(inp_tensor, filter_tensor, strides=[1, 1, stride[0], stride[1]],
                                  padding=padding, data_format="NCHW", name='Conv2D_1')
                 init = tf.compat.v1.global_variables_initializer()
 
@@ -236,7 +237,7 @@ class TestTrainingExtensionsChannelPruning(unittest.TestCase):
             with g.as_default():
                 inp_tensor = tf.Variable(initial_value=input_data, name='inp_tensor', dtype=tf.float32)
                 filter_tensor = tf.Variable(initial_value=filter_data, name='filter_tensor', dtype=tf.float32)
-                _ = tf.nn.conv2d(input=inp_tensor, filter=filter_tensor, strides=[1, stride[0], stride[1], 1],
+                _ = tf.nn.conv2d(inp_tensor, filter_tensor, strides=[1, stride[0], stride[1], 1],
                                  padding=padding, data_format="NHWC", name='Conv2D_1')
                 init = tf.compat.v1.global_variables_initializer()
 
@@ -285,7 +286,7 @@ class TestTrainingExtensionsChannelPruning(unittest.TestCase):
             inp_tensor = tf.Variable(initial_value=input_data, name='inp_tensor', dtype=tf.float32)
             filter_tensor = tf.compat.v1.get_variable('filter_tensor', shape=[5, 5, 5, 10],
                                             initializer=tf.random_normal_initializer())
-            conv1 = tf.nn.conv2d(input=inp_tensor, filter=filter_tensor, strides=[1, 1, 1, 1], padding='VALID',
+            conv1 = tf.nn.conv2d(inp_tensor, filter_tensor, strides=[1, 1, 1, 1], padding='VALID',
                                  data_format="NCHW", name='Conv2D_1')
 
         conv1_op = g.get_operation_by_name('Conv2D_1')
@@ -330,7 +331,7 @@ class TestTrainingExtensionsChannelPruning(unittest.TestCase):
             inp_tensor = tf.compat.v1.placeholder(tf.float32, [None, None, None, None], 'inp_tensor')
             filter_tensor = tf.compat.v1.get_variable('filter_tensor', shape=[5, 5, 5, 10],
                                             initializer=tf.random_normal_initializer())
-            conv1 = tf.nn.conv2d(input=inp_tensor, filter=filter_tensor, strides=[1, 1, 1, 1], padding='VALID',
+            conv1 = tf.nn.conv2d(inp_tensor, filter_tensor, strides=[1, 1, 1, 1], padding='VALID',
                                  data_format="NCHW", name='Conv2D_1')
             init = tf.compat.v1.global_variables_initializer()
 
@@ -377,7 +378,7 @@ class TestTrainingExtensionsChannelPruning(unittest.TestCase):
             inp_tensor = tf.Variable(initial_value=input_data, name='inp_tensor', dtype=tf.float32)
             filter_tensor = tf.compat.v1.get_variable('filter_tensor', shape=[5, 5, 5, 10],
                                             initializer=tf.random_normal_initializer())
-            conv1 = tf.nn.conv2d(input=inp_tensor, filter=filter_tensor, strides=[1, 1, 1, 1], padding='VALID',
+            conv1 = tf.nn.conv2d(inp_tensor, filter_tensor, strides=[1, 1, 1, 1], padding='VALID',
                                  data_format="NHWC", name='Conv2D_1')
 
         conv1_op = g.get_operation_by_name('Conv2D_1')
@@ -423,7 +424,7 @@ class TestTrainingExtensionsChannelPruning(unittest.TestCase):
             inp_tensor = tf.compat.v1.placeholder(tf.float32, [None, None, None, None], 'inp_tensor')
             filter_tensor = tf.compat.v1.get_variable('filter_tensor', shape=[5, 5, 5, 10],
                                             initializer=tf.random_normal_initializer())
-            conv1 = tf.nn.conv2d(input=inp_tensor, filter=filter_tensor, strides=[1, 1, 1, 1], padding='VALID',
+            conv1 = tf.nn.conv2d(inp_tensor, filter_tensor, strides=[1, 1, 1, 1], padding='VALID',
                                  data_format="NHWC", name='Conv2D_1')
             init = tf.compat.v1.global_variables_initializer()
 
@@ -478,7 +479,7 @@ class TestTrainingExtensionsChannelPruning(unittest.TestCase):
             inp_tensor = tf.compat.v1.get_variable('inp_tensor', shape=[num_examples, 32, 5, 5],
                                          initializer=tf.random_normal_initializer())
             filter_tensor = tf.compat.v1.get_variable('filter_tensor', initializer=x2)
-            conv1 = tf.nn.conv2d(input=inp_tensor, filter=filter_tensor, strides=[1, 1, 1, 1], padding='VALID',
+            conv1 = tf.nn.conv2d(inp_tensor, filter_tensor, strides=[1, 1, 1, 1], padding='VALID',
                                  data_format="NCHW", name='Conv2D_1')
             bias_tensor = tf.compat.v1.get_variable('bias_tensor', shape=[64],
                                                     initializer=tf.random_normal_initializer())
@@ -542,7 +543,7 @@ class TestTrainingExtensionsChannelPruning(unittest.TestCase):
             inp_tensor = tf.Variable(initial_value=input_data, name='inp_tensor', dtype=tf.float32)
             filter_tensor = tf.compat.v1.get_variable('filter_tensor', shape=[5, 5, num_in_channels, num_out_channels],
                                             initializer=tf.random_normal_initializer())
-            conv = tf.nn.conv2d(input=inp_tensor, filter=filter_tensor, strides=[1, 1, 1, 1], padding='VALID',
+            conv = tf.nn.conv2d(inp_tensor, filter_tensor, strides=[1, 1, 1, 1], padding='VALID',
                                 data_format="NCHW", name='Conv2D_1')
             init = tf.compat.v1.global_variables_initializer()
 
@@ -600,7 +601,7 @@ class TestTrainingExtensionsChannelPruning(unittest.TestCase):
             inp_tensor = tf.Variable(initial_value=input_data, name='inp_tensor', dtype=tf.float32)
             filter_tensor = tf.compat.v1.get_variable('filter_tensor', shape=[5, 5, num_in_channels, num_out_channels],
                                             initializer=tf.random_normal_initializer())
-            conv = tf.nn.conv2d(input=inp_tensor, filter=filter_tensor, strides=[1, 1, 1, 1], padding='VALID',
+            conv = tf.nn.conv2d(inp_tensor, filter_tensor, strides=[1, 1, 1, 1], padding='VALID',
                                 data_format="NCHW", name='Conv2D_1')
             bias_tensor = tf.compat.v1.get_variable('bias_tensor', shape=[num_out_channels],
                                           initializer=tf.random_normal_initializer())

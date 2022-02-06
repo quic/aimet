@@ -39,6 +39,7 @@
 """ Test Adaround wrapper """
 
 import os
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
 import pytest
 import unittest.mock
 import numpy as np
@@ -51,7 +52,7 @@ from aimet_tensorflow.adaround.adaround_wrapper import AdaroundWrapper
 from aimet_tensorflow.examples.test_models import depthwise_conv2d_model
 
 logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Test)
-os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
+tf.compat.v1.disable_eager_execution()
 
 
 class TestAdaroundWrapper(unittest.TestCase):

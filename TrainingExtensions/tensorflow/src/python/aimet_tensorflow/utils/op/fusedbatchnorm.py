@@ -40,9 +40,10 @@
 from typing import Union
 import numpy as np
 import tensorflow as tf
-from tensorflow.contrib import graph_editor as ge
+
 from aimet_common.utils import AimetLogger
 from aimet_tensorflow.utils import constants
+from aimet_tensorflow import graph_editor
 
 logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Utils)
 
@@ -70,8 +71,8 @@ class BNUtils:
         else:
             with sess.graph.as_default():
                 if bn_op.type in ['FusedBatchNormV3', 'FusedBatchNorm']:
-                    ge.detach_outputs(in_tensor.op)
-                    ge.reroute_ts(in_tensor, out_tensor)
+                    graph_editor.detach_outputs(in_tensor.op)
+                    graph_editor.reroute_ts(in_tensor, out_tensor)
                     BNUtils.remove_bn_op_from_update_ops(sess, bn_op)
                 else:
                     logger.error("Error, Unknown BN op")

@@ -38,18 +38,19 @@
 """ This file contains unit tests for testing cross layer scaling feature of CLE """
 
 import os
-
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
 import unittest
+import pytest
 import tensorflow as tf
-tf.compat.v1.logging.set_verbosity(tf.logging.WARN)
-os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
-
 import numpy as np
 
 from aimet_tensorflow.batch_norm_fold import  fold_all_batch_norms, find_all_batch_norms_to_fold
 from aimet_tensorflow.common.connectedgraph import ConnectedGraph
 from aimet_tensorflow.examples.test_models import tf_slim_basic_model
 from aimet_tensorflow.utils.op.conv import WeightTensorUtils
+
+tf.compat.v1.logging.set_verbosity(tf.compat.v1.logging.WARN)
+tf.compat.v1.disable_eager_execution()
 
 
 class TestBatchNormFold(unittest.TestCase):
@@ -59,7 +60,6 @@ class TestBatchNormFold(unittest.TestCase):
         """
         Test batch norm fold custom model
         """
-
         tf.compat.v1.reset_default_graph()
         inputs = tf.keras.Input(shape=(32, 32, 3,))
         conv_op = tf.keras.layers.Conv2D(32, (3, 3))(inputs)
@@ -88,6 +88,8 @@ class TestBatchNormFold(unittest.TestCase):
         output_after_fold = new_sess.run(new_relu_op.outputs[0], feed_dict= feed_dict)
 
         self.assertTrue(np.allclose(baseline_output, output_after_fold, atol=1.e-4))
+        sess.close()
+        new_sess.close()
 
     def test_bn_fold_auto_rules_bn_after_conv(self):
         """
@@ -105,9 +107,9 @@ class TestBatchNormFold(unittest.TestCase):
         start_op = ["inputs"]
         bn_conv_linear_pairs = find_all_batch_norms_to_fold(sess, start_op, ['Relu'])
         self.assertEqual(1, len(bn_conv_linear_pairs))
+        sess.close()
 
     def test_bn_fold_layer_selection_looped_network(self):
-
         """
         Test layer selection with looped network
         """
@@ -121,7 +123,6 @@ class TestBatchNormFold(unittest.TestCase):
         bn_op_2 = tf.keras.layers.BatchNormalization(fused=True)(x1)
 
         add = tf.keras.layers.add([bn_op_1, bn_op_2])
-
         _ = tf.keras.layers.Conv2D(8, (3, 3), name='conv1b',
                                    kernel_initializer=tf.random_uniform_initializer(-1, 1),
                                    bias_initializer='random_uniform')(add)
@@ -136,6 +137,7 @@ class TestBatchNormFold(unittest.TestCase):
         bn_conv_linear_pairs = find_all_batch_norms_to_fold(sess, [start_op_name], [output_op_name])
 
         self.assertTrue(0 == len(bn_conv_linear_pairs))
+        sess.close()
 
     def test_bn_fold_auto_rules_bn_before_conv(self):
         """
@@ -146,7 +148,6 @@ class TestBatchNormFold(unittest.TestCase):
         bn_op = tf.keras.layers.BatchNormalization(fused=True)(inputs)
         conv_op = tf.keras.layers.Conv2D(32, (3, 3))(bn_op)
         _ = tf.nn.relu(conv_op)
-
         init = tf.compat.v1.global_variables_initializer()
         sess = tf.compat.v1.Session()
         sess.run(init)
@@ -155,12 +156,12 @@ class TestBatchNormFold(unittest.TestCase):
         bn_conv_linear_pairs = find_all_batch_norms_to_fold(sess, start_op, ['Relu'])
 
         self.assertEqual(1, len(bn_conv_linear_pairs))
+        sess.close()
 
     def test_bn_fold_find_layers_model_with_multi_input(self):
         """
         Test bn fold with multiple input nodes
         """
-
         tf.compat.v1.reset_default_graph()
         input1 = tf.keras.Input(name='input1', shape=(10, 10, 3))
         input2 = tf.keras.Input(name='input2', shape=(12, 12, 3))
@@ -175,17 +176,16 @@ class TestBatchNormFold(unittest.TestCase):
         sess = tf.compat.v1.Session()
         sess.run(init)
 
-        ins = sess.graph.get_operations()
         start_ops = ['input1', 'input2']
         bn_conv_linear_pairs = find_all_batch_norms_to_fold(sess, start_ops, ['Relu'])
 
         assert(1 == len(bn_conv_linear_pairs))
+        sess.close()
 
     def test_bn_fold_find_layers_model_with_multi_input_and_training_ops(self):
         """
         Test bn fold with multiple input nodes and training_ops added
         """
-
         tf.compat.v1.reset_default_graph()
         input1 = tf.keras.Input(name='input1', shape=(10, 10, 3))
         input2 = tf.keras.Input(name='input2', shape=(12, 12, 3))
@@ -211,6 +211,7 @@ class TestBatchNormFold(unittest.TestCase):
         bn_conv_linear_pairs = find_all_batch_norms_to_fold(sess, start_ops, output_op)
 
         assert 1 == len(bn_conv_linear_pairs)
+        sess.close()
 
     def test_bn_fold_auto_rules_conv_bn_conv(self):
         """
@@ -235,14 +236,13 @@ class TestBatchNormFold(unittest.TestCase):
         assert first_conv == conv_linear
         # add additional check to verify backward fold is picked over forward in case both are available
         assert is_batch_norm_second is True
+        sess.close()
 
     def test_bn_fold_with_linear_layer(self):
         """
         test bn fold on matmul layer
         Custom Model where BN layer is followed by MatMul layer
-        :return:
         """
-
         tf.compat.v1.reset_default_graph()
         inputs = tf.keras.Input(shape=(1, 1, 4,))
         bn_op = tf.keras.layers.BatchNormalization(fused=True)(inputs, training=False)
@@ -282,12 +282,13 @@ class TestBatchNormFold(unittest.TestCase):
         after_fold_output = new_sess.run(relu_op.outputs[0], feed_dict={linear_layer.inputs[0].op.inputs[0]:numpy_data})
 
         self.assertTrue(np.allclose(baseline_output, after_fold_output, atol=1e-4))
+        sess.close()
+        new_sess.close()
 
     def test_batch_norm_fold_with_random_data(self):
         """
         Test batch norm fold custom model with randomly initialized kernel, bias and bn params,
         """
-
         tf.compat.v1.reset_default_graph()
         inputs = tf.keras.Input(shape=(32, 32, 3,))
         conv_op = tf.keras.layers.Conv2D(32, (3, 3),
@@ -323,7 +324,10 @@ class TestBatchNormFold(unittest.TestCase):
         output_after_fold = new_sess.run(new_relu_op.outputs[0], feed_dict= feed_dict)
 
         self.assertTrue(np.allclose(baseline_output, output_after_fold, atol=1.e-4))
+        sess.close()
+        new_sess.close()
 
+    @pytest.mark.tf1
     def test_removing_bn_ops_from_update_ops(self):
         """
         Test that folding batch norms also removes associated ops from update_ops, if present.
@@ -347,6 +351,9 @@ class TestBatchNormFold(unittest.TestCase):
         with new_sess.graph.as_default():
             update_ops = tf.compat.v1.get_collection(tf.compat.v1.GraphKeys.UPDATE_OPS)
             self.assertEqual(0, len(update_ops))
+
+        sess.close()
+        new_sess.close()
 
     def test_bn_fold_with_no_bias(self):
         tf.compat.v1.reset_default_graph()
@@ -382,13 +389,15 @@ class TestBatchNormFold(unittest.TestCase):
         # New connected graph should have one less op since bn was removed
         self.assertTrue(len(old_conn_graph.get_all_ops()), len(new_conn_graph.get_all_ops()) - 1)
 
+        sess.close()
+        new_sess.close()
+
+    @pytest.mark.tf1
     def test_bn_fold_model_zoo_videnn_pose_estimation(self):
         """
         create a smaller network with connections as in pose estimation model and ViDeNN model
         Test BN fold
-        :return:
         """
-
         tf.compat.v1.reset_default_graph()
         inputs = tf.keras.Input(shape=(None, None, 2), name="inputs")
 
@@ -407,6 +416,10 @@ class TestBatchNormFold(unittest.TestCase):
         new_sess, folded_bn_conv_pairs = fold_all_batch_norms(sess, "inputs", 'Relu_1')
         self.assertEqual(len(folded_bn_conv_pairs), 2)
 
+        sess.close()
+        new_sess.close()
+
+    @pytest.mark.tf1
     def test_bn_fold_model_zoo_sr_gan(self):
         """
         create a smaller network with connections as in SR-GAN model
@@ -429,3 +442,6 @@ class TestBatchNormFold(unittest.TestCase):
 
         # there should be two pairs of BN- Conv picked for fold
         self.assertEqual(len(folded_bn_conv_pairs), 2)
+
+        sess.close()
+        new_sess.close()

@@ -39,12 +39,15 @@
 
 # pylint: disable=no-name-in-module
 # pylint: disable=no-member
+# pylint: disable=ungrouped-imports
 # Including above pylint disables since pylint complains about certain module members not found, when they actually
 # are there.
 import tensorflow as tf
-import tensorflow.contrib.slim as slim
 from tensorflow.python.keras.models import Sequential
 from tensorflow.python.keras.layers import Dense, Conv2D, BatchNormalization, Flatten, AvgPool2D, MaxPool2D
+from packaging import version
+if not version.parse(tf.version.VERSION) >= version.parse("2.00"):
+    import tensorflow.contrib.slim as slim
 
 
 def transposed_conv2d_model():
@@ -99,7 +102,7 @@ def keras_model():
         AvgPool2D(),
         MaxPool2D(),
         BatchNormalization(momentum=.4, epsilon=.25),
-        Conv2D(4, (2, 2), activation=tf.nn.tanh, kernel_regularizer=tf.contrib.layers.l2_regularizer(scale=.5)),
+        Conv2D(4, (2, 2), activation=tf.nn.tanh, kernel_regularizer=tf.keras.regularizers.l2(0.5)),
         Flatten(),
         Dense(2, activation='softmax', name="keras_model")])
     return model

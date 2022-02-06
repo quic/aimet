@@ -38,7 +38,7 @@
 """ utilities for Relu op """
 
 import tensorflow as tf
-from tensorflow.contrib import graph_editor as ge
+from aimet_tensorflow import graph_editor
 from aimet_tensorflow.common.operation import Op
 from aimet_common.utils import AimetLogger
 logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Utils)
@@ -60,10 +60,10 @@ def replace_relu6_with_relu(sess: tf.compat.v1.Session, relu6_op: tf.Operation):
         relu6_outputs = list(relu6_op.outputs)
 
         # swap the two tensors using reroute
-        ge.reroute_ts(ts0=relu_outputs,
-                      ts1=relu6_outputs)
+        graph_editor.reroute_ts(ts0=relu_outputs,
+                                ts1=relu6_outputs)
 
-        ge.detach_inputs(relu6_op)
+        graph_editor.detach_inputs(relu6_op)
 
 def does_conv_have_relu_activation(input_op: Op)-> bool:
     """

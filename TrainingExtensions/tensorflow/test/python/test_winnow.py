@@ -43,11 +43,12 @@ import logging
 import struct
 from typing import List
 import os
+
+import pytest
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
 import numpy as np
 import tensorflow as tf
-
-tf.compat.v1.logging.set_verbosity(tf.logging.WARN)
-os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
 
 from aimet_common.winnow.mask import Mask
 from aimet_common.utils import AimetLogger
@@ -61,17 +62,17 @@ from aimet_tensorflow.winnow.mask_propagation_winnower import MaskPropagationWin
 import aimet_tensorflow.winnow.winnow as winnow
 from aimet_tensorflow.utils.graph_saver import save_and_load_graph
 
+tf.compat.v1.logging.set_verbosity(tf.compat.v1.logging.WARN)
+tf.compat.v1.disable_eager_execution()
 logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Test)
 AimetLogger.set_area_logger_level(AimetLogger.LogAreas.Test, logging.DEBUG)
 AimetLogger.set_area_logger_level(AimetLogger.LogAreas.Winnow, logging.DEBUG)
 
 
-# pylint: disable=too-many-locals
-# pylint: disable=too-many-statements
-# pylint: disable=protected-access
 class TestTfModuleReducer(unittest.TestCase):
     """ Unit test cases for testing TensorFlowWinnower's module reducer. """
 
+    @pytest.mark.tf1
     def test_reducing_tf_slim_model(self):
         """ Test mask propagation on a conv module in tf slim model """
         tf.compat.v1.reset_default_graph()
@@ -172,6 +173,7 @@ class TestTfModuleReducer(unittest.TestCase):
         new_sess.close()
         sess.close()
 
+    @pytest.mark.tf1
     def test_reducing_with_downsample(self):
         """ Test reducing a single_residual model with downsampling layers """
         tf.compat.v1.reset_default_graph()
@@ -212,6 +214,7 @@ class TestTfModuleReducer(unittest.TestCase):
         new_sess.close()
         sess.close()
 
+    @pytest.mark.tf1
     def test_reducing_inserting_downsample_upsample(self):
         """ Test reducing a single_residual model with inserting downsampling and upsampling layers """
         tf.compat.v1.reset_default_graph()
@@ -486,6 +489,7 @@ class TestTfModuleReducer(unittest.TestCase):
         new_sess.close()
         sess.close()
 
+    @pytest.mark.tf1
     def test_reducing_with_dropout_and_identity_keras(self):
         """ Test reducing a keras model with dropout and identity modules """
         tf.compat.v1.reset_default_graph()
@@ -521,6 +525,7 @@ class TestTfModuleReducer(unittest.TestCase):
         new_sess.close()
         sess.close()
 
+    @pytest.mark.tf1
     def test_reducing_with_dropout_and_identity_slim(self):
         """ Test reducing a keras model with dropout and identity modules """
         tf.compat.v1.reset_default_graph()
@@ -557,6 +562,7 @@ class TestTfModuleReducer(unittest.TestCase):
         new_sess.close()
         sess.close()
 
+    @pytest.mark.tf1
     def test_reducing_keras_fused_bn_training_true_and_false(self):
         """ Test for reducing keras type fused bn ops, both for training true and false """
 
@@ -642,6 +648,7 @@ class TestTfModuleReducer(unittest.TestCase):
         new_sess.close()
         sess.close()
 
+    @pytest.mark.tf1
     def test_reducing_keras_non_fused_bn_training_true_and_false(self):
         """ Test for reducing keras type non fused bn ops, both for training true and false """
 
@@ -929,6 +936,7 @@ class TestTfModuleReducer(unittest.TestCase):
 class TestTfWinnower(unittest.TestCase):
     """ Class for testing winnower module on tensorflow graphs """
 
+    @pytest.mark.tf1
     def test_mask_propagation_on_keras_model(self):
         """ Test mask propagation on a conv module in keras_model """
         tf.compat.v1.reset_default_graph()
@@ -966,6 +974,7 @@ class TestTfWinnower(unittest.TestCase):
         self.assertEqual(4, sum(second_conv2d_mask.output_channel_masks[0]))
         sess.close()
 
+    @pytest.mark.tf1
     def test_mask_propagation_on_single_residual_model(self):
         """ Test mask propagation on a conv module in keras_model """
         tf.compat.v1.reset_default_graph()
@@ -1181,6 +1190,8 @@ class TestTfWinnower(unittest.TestCase):
         self.assertEqual(8, sum(add_mask.input_channel_masks[1]))
         self.assertEqual(8, sum(add_mask.output_channel_masks[0]))
 
+        sess.close()
+
     def test_mask_propagation_for_add_with_non_split_parents(self):
         """ Test mask propagation on a model with add that does not have a split parent """
         tf.compat.v1.reset_default_graph()
@@ -1256,6 +1267,8 @@ class TestTfWinnower(unittest.TestCase):
         relu_1_op = mask_winnower._conn_graph.get_all_ops()["Relu_1"]
         relu_1_op_mask = mask_winnower._mask_propagator.op_to_mask_dict[relu_1_op]
         self.assertEqual(8, sum(relu_1_op_mask.output_channel_masks[0]))
+
+        sess.close()
 
     def test_create_masks_with_postprocessing_ops(self):
         """ Test that create_masks() is able to handle models with postprocessing nodes """

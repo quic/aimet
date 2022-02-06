@@ -36,10 +36,10 @@
 #  @@-COPYRIGHT-END-@@
 # =============================================================================
 """ This file contains unit tests for testing cross layer scaling feature of CLE """
-import typing
-
-import numpy as np
 import pytest
+pytestmark = pytest.mark.skip("Disable tests that requires eager execution")
+import typing
+import numpy as np
 import tensorflow as tf
 
 from aimet_tensorflow.keras.cross_layer_equalization import GraphSearchUtils, CrossLayerScaling

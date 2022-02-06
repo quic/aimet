@@ -37,10 +37,15 @@
 # =============================================================================
 """ This file contains nightly tests for testing winnowing for tf models. """
 
+import pytest
+import os
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
 import unittest
 import logging
+from packaging import version
 import tensorflow as tf
-from tensorflow.contrib.slim.nets import vgg        # pylint: disable=no-name-in-module
+if not version.parse(tf.version.VERSION) >= version.parse("2.00"):
+    from tensorflow.contrib.slim.nets import vgg        # pylint: disable=no-name-in-module
 from tensorflow.keras.applications.resnet50 import ResNet50
 from tensorflow.python.keras.applications.vgg16 import VGG16
 from tensorflow.python.keras.applications.inception_v3 import InceptionV3
@@ -51,7 +56,7 @@ from aimet_tensorflow.utils.graph_saver import save_and_load_graph
 import aimet_tensorflow.winnow.winnow as winnow
 from aimet_tensorflow.common.graph_eval import initialize_uninitialized_vars
 
-
+tf.compat.v1.disable_eager_execution()
 logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Test)
 AimetLogger.set_area_logger_level(AimetLogger.LogAreas.Test, logging.DEBUG)
 AimetLogger.set_area_logger_level(AimetLogger.LogAreas.ConnectedGraph, logging.DEBUG)
@@ -135,6 +140,7 @@ class TestTfWinnower(unittest.TestCase):
         new_sess.close()
         sess.close()
 
+    @pytest.mark.tf1
     def test_reducing_resnet_50(self):
         """ Test module reduction in resnet_50 """
         tf.compat.v1.reset_default_graph()
@@ -209,6 +215,7 @@ class TestTfWinnower(unittest.TestCase):
         new_sess.close()
         sess.close()
 
+    @pytest.mark.tf1
     def test_reducing_inceptionV3(self):
         """ Test module reduction in inceptionV3 """
         tf.compat.v1.reset_default_graph()
@@ -283,6 +290,7 @@ class TestTfWinnower(unittest.TestCase):
         new_sess.close()
         sess.close()
 
+    @pytest.mark.tf1
     def test_reducing_vgg16_slim(self):
         """ Test reducing vgg16 slim model """
         tf.compat.v1.reset_default_graph()

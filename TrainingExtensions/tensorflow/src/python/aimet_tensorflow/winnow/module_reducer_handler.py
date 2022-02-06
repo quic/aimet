@@ -92,7 +92,7 @@ def reduce_conv2d(sess: tf.compat.v1.Session,
                                           mask=op_mask,
                                           input_dim=2,
                                           output_dim=output_dim)
-    reduced_weights_init = tf.constant_initializer(reduced_weights, verify_shape=True)
+    reduced_weights_init = tf.compat.v1.constant_initializer(reduced_weights, verify_shape=True)
     bias_product = op_tensor_tuple[0].get_param_product('bias')
     reduced_bias = None
     if bias_product:
@@ -102,7 +102,7 @@ def reduce_conv2d(sess: tf.compat.v1.Session,
                                            mask=op_mask,
                                            input_dim=None,
                                            output_dim=0)
-        reduced_bias_init = tf.constant_initializer(reduced_bias, verify_shape=True)
+        reduced_bias_init = tf.compat.v1.constant_initializer(reduced_bias, verify_shape=True)
     else:
         use_bias = False
         reduced_bias_init = 'zeros'
@@ -206,12 +206,12 @@ def reduce_batchnorm(sess: tf.compat.v1.Session,
     beta_product = op_tensor_tuple[0].get_param_product('beta')
     if beta_product:
         use_beta = True
-        reduced_beta_init = tf.constant_initializer(_get_reduced_params(sess=sess,
-                                                                        product=beta_product,
-                                                                        mask=op_mask,
-                                                                        input_dim=0,
-                                                                        output_dim=None),
-                                                    verify_shape=True)
+        reduced_beta_init = tf.compat.v1.constant_initializer(_get_reduced_params(sess=sess,
+                                                                                  product=beta_product,
+                                                                                  mask=op_mask,
+                                                                                  input_dim=0,
+                                                                                  output_dim=None),
+                                                              verify_shape=True)
     else:
         use_beta = False
         reduced_beta_init = 'zeros'
@@ -219,30 +219,30 @@ def reduce_batchnorm(sess: tf.compat.v1.Session,
     gamma_product = op_tensor_tuple[0].get_param_product('gamma')
     if gamma_product:
         use_gamma = True
-        reduced_gamma_init = tf.constant_initializer(_get_reduced_params(sess=sess,
-                                                                         product=gamma_product,
-                                                                         mask=op_mask,
-                                                                         input_dim=0,
-                                                                         output_dim=None),
-                                                     verify_shape=True)
+        reduced_gamma_init = tf.compat.v1.constant_initializer(_get_reduced_params(sess=sess,
+                                                                                   product=gamma_product,
+                                                                                   mask=op_mask,
+                                                                                   input_dim=0,
+                                                                                   output_dim=None),
+                                                               verify_shape=True)
     else:
         use_gamma = False
         reduced_gamma_init = 'ones'
 
     moving_mean_product = op_tensor_tuple[0].get_param_product('moving_mean')
-    reduced_mov_mean_init = tf.constant_initializer(_get_reduced_params(sess=sess,
-                                                                        product=moving_mean_product,
-                                                                        mask=op_mask,
-                                                                        input_dim=0,
-                                                                        output_dim=None),
-                                                    verify_shape=True)
+    reduced_mov_mean_init = tf.compat.v1.constant_initializer(_get_reduced_params(sess=sess,
+                                                                                  product=moving_mean_product,
+                                                                                  mask=op_mask,
+                                                                                  input_dim=0,
+                                                                                  output_dim=None),
+                                                              verify_shape=True)
     moving_variance_product = op_tensor_tuple[0].get_param_product('moving_variance')
-    reduced_mov_variance_init = tf.constant_initializer(_get_reduced_params(sess=sess,
-                                                                            product=moving_variance_product,
-                                                                            mask=op_mask,
-                                                                            input_dim=0,
-                                                                            output_dim=None),
-                                                        verify_shape=True)
+    reduced_mov_variance_init = tf.compat.v1.constant_initializer(_get_reduced_params(sess=sess,
+                                                                                      product=moving_variance_product,
+                                                                                      mask=op_mask,
+                                                                                      input_dim=0,
+                                                                                      output_dim=None),
+                                                                  verify_shape=True)
 
     name = "reduced_" + op_tensor_tuple[0].dotted_name
     # Get training attribute

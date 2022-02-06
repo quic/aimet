@@ -40,12 +40,13 @@ Unit test about ReLU6 replacement
 """
 import numpy as np
 import pytest
+pytestmark = pytest.mark.skip("Disable tests that requires eager execution")
 import tensorflow as tf
 from packaging import version
 from tensorflow.keras import layers
 
-if version.parse(tf.version.VERSION) >= version.parse("2.00"):
-    from aimet_tensorflow.keras.utils.model_transform_utils import replace_relu6_with_relu
+# if version.parse(tf.version.VERSION) >= version.parse("2.00"):
+#     from aimet_tensorflow.keras.utils.model_transform_utils import replace_relu6_with_relu
 
 
 def _simple_conv_model(model_type="functional"):

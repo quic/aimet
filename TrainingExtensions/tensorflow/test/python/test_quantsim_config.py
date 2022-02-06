@@ -39,23 +39,26 @@
 
 import json
 import os
-import unittest
 
+import pytest
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
+import unittest
 import tensorflow as tf
-tf.compat.v1.logging.set_verbosity(tf.logging.WARN)
-os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
 
 from aimet_tensorflow.examples.test_models import single_residual
 from aimet_tensorflow.quantsim import QuantizationSimModel
-
 import libpymo as pymo
 
+tf.compat.v1.logging.set_verbosity(tf.compat.v1.logging.WARN)
+tf.compat.v1.disable_eager_execution()
 
 # pylint: disable=protected-access
 # pylint: disable=too-many-locals
 class TestQuantsimConfig(unittest.TestCase):
     """ Class containing unit tests for quantsim config feature """
 
+    @pytest.mark.tf1
     def test_empty_config_file(self):
         """ Check that with an empty config file, all op modes and use symmetric encoding settings are set to
         passThrough and False respectively. """
@@ -95,6 +98,7 @@ class TestQuantsimConfig(unittest.TestCase):
         sim.session.close()
         tf.compat.v1.reset_default_graph()
 
+    @pytest.mark.tf1
     def test_parse_config_file_defaults(self):
         """ Test that default quantization parameters are set correctly when using json config file """
         tf.compat.v1.reset_default_graph()
@@ -181,6 +185,7 @@ class TestQuantsimConfig(unittest.TestCase):
         sim.session.close()
         tf.compat.v1.reset_default_graph()
 
+    @pytest.mark.tf1
     def test_parse_config_file_params(self):
         """ Test that param specific quantization parameters are set correctly when using json config file """
         tf.compat.v1.reset_default_graph()
@@ -249,6 +254,7 @@ class TestQuantsimConfig(unittest.TestCase):
         sim.session.close()
         tf.compat.v1.reset_default_graph()
 
+    @pytest.mark.tf1
     def test_parse_config_file_op_type(self):
         """ Test that op specific quantization parameters are set correctly when using json config file """
         tf.compat.v1.reset_default_graph()
@@ -375,6 +381,7 @@ class TestQuantsimConfig(unittest.TestCase):
         sim.session.close()
         tf.compat.v1.reset_default_graph()
 
+    @pytest.mark.tf1
     def test_parse_config_file_supergroups(self):
         """ Test that supergroup quantization parameters are set correctly when using json config file """
         tf.compat.v1.reset_default_graph()
@@ -451,6 +458,7 @@ class TestQuantsimConfig(unittest.TestCase):
         sim.session.close()
         tf.compat.v1.reset_default_graph()
 
+    @pytest.mark.tf1
     def test_parse_config_file_model_inputs(self):
         """ Test that model input quantization parameters are set correctly when using json config file """
         tf.compat.v1.reset_default_graph()
@@ -520,6 +528,7 @@ class TestQuantsimConfig(unittest.TestCase):
                                    config_file='./quantsim_config.json')
         self.assertEqual(sim.per_channel_quantization_enabled, True)
 
+    @pytest.mark.tf1
     def test_parse_config_file_model_outputs(self):
         """ Test that model output quantization parameters are set correctly when using json config file """
         tf.compat.v1.reset_default_graph()

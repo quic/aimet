@@ -39,12 +39,12 @@
 
 from typing import Tuple, List, Union
 import numpy as np
-
 import tensorflow as tf
-from tensorflow.contrib import graph_editor as ge
+
 from aimet_common.utils import AimetLogger
 from aimet_tensorflow.utils.common import get_padding, create_input_feed_dict, create_rand_tensors_given_shapes, \
     get_valid_ops
+from aimet_tensorflow import graph_editor
 from aimet_tensorflow.utils.graph_saver import save_and_load_graph
 from aimet_tensorflow.utils import constants
 
@@ -194,7 +194,7 @@ class BiasUtils:
                 bias_add_op = tf.nn.bias_add(value=conv_op_out_tensor, bias=new_bias_tensor, name=bias_name)
 
                 # use reroute to insert bias-add and swap current outputs of conv with bias-add op
-                ge.reroute_ts(bias_add_op, conv_op_out_tensor, can_modify=consumer_list)
+                graph_editor.reroute_ts(bias_add_op, conv_op_out_tensor, can_modify=consumer_list)
 
                 # initialize tensor once it's added
                 sess.run(tf.compat.v1.variables_initializer([new_bias_tensor]))
@@ -565,7 +565,7 @@ def get_conv2d_activation_shape(sess: tf.compat.v1.Session, op: tf.Operation, in
         # create feed_dict
         feed_dict = create_input_feed_dict(graph=op.graph,
                                            input_op_names_list=input_op_names,
-                                           input_data=input_data, training=False)
+                                           input_data=input_data)
 
         if input_activation:
             # get the input activation shape by evaluating the input tensor

@@ -36,6 +36,7 @@
 #  @@-COPYRIGHT-END-@@
 # =============================================================================
 """ Utilities to convert TF session to Keras """
+# pylint: skip-file
 import shutil
 from typing import List, Tuple
 import tensorflow as tf
@@ -64,9 +65,9 @@ def save_tf_session_single_gpu(sess: tf.compat.v1.Session(), path: 'str', input_
 
     # Saving the input session, meta graph and variables in the provided path
     with sess.graph.as_default():
-        train_signature = tf.saved_model.predict_signature_def(inputs={'x': inputs}, outputs={'out': train_out})
+        train_signature = tf.compat.v1.saved_model.predict_signature_def(inputs={'x': inputs}, outputs={'out': train_out})
         shutil.rmtree(path, ignore_errors=True)
-        builder = tf.saved_model.Builder(path)
+        builder = tf.compat.v1.saved_model.Builder(path)
         builder.add_meta_graph_and_variables(sess, ['serve'], signature_def_map={'train': train_signature})
         builder.save()
 
@@ -80,7 +81,7 @@ def change_name_of_compressed_op(x: str):
     return x.split('/')[0]+'/kernel'+':0'
 
 
-def load_tf_sess_variables_to_keras_single_gpu(path: 'str', compressed_ops: List['str']) -> tf.keras.Model:
+def load_tf_sess_variables_to_keras_single_gpu(path: 'str', compressed_ops: List['str']) -> tf.compat.v1.keras.Model:
     """
     Creates a Keras model subclass and loads the saved session, meta graph and variables to Keras model
 
@@ -93,11 +94,11 @@ def load_tf_sess_variables_to_keras_single_gpu(path: 'str', compressed_ops: List
 
     to_ignore = map(change_name_of_compressed_op, compressed_ops)
 
-    class Model(tf.keras.Model):
+    class Model(tf.compat.v1.keras.Model):
         """ Keras Model subclassing and loading the saved variables"""
         def __init__(self):
             super(Model, self).__init__()
-            self.imported = tf.saved_model.load_v2(path)
+            self.imported = tf.compat.v1.saved_model.load_v2(path)
             self.variables_list = [v for v in self.imported.variables if v.name not in to_ignore]
 
         def call(self, inputs, training=None):
@@ -157,11 +158,11 @@ def load_keras_model_multi_gpu(loading_path: 'str', input_shape: List):
     :return: subclassed Keras model
     """
 
-    class Model(tf.keras.Model):
+    class Model(tf.compat.v1.keras.Model):
         """ Keras Model subclassing and loading the saved variables """
         def __init__(self):
             super(Model, self).__init__()
-            self.imported = tf.saved_model.load_v2(loading_path)
+            self.imported = tf.compat.v1.saved_model.load_v2(loading_path)
             self.variables_list = self.imported.variables_list
 
         def call(self, inputs, training=None):
@@ -178,4 +179,4 @@ def load_keras_model_multi_gpu(loading_path: 'str', input_shape: List):
     tf.keras.backend.set_learning_phase(1)
 
     x = tf.keras.Input(shape=tuple(input_shape))
-    return tf.keras.Model(x, Model()(x, training=True))
+    return tf.compat.v1.keras.Model(x, Model()(x, training=True))

@@ -42,7 +42,6 @@
 
 from typing import List, Tuple, Dict
 import tensorflow as tf
-from tensorflow.contrib import graph_editor
 
 import aimet_common.winnow.module_reducer
 from aimet_common.connected_graph.connectedgraph import get_ordered_ops
@@ -51,6 +50,7 @@ from aimet_common.winnow.mask import Mask
 from aimet_common.utils import AimetLogger, ModelApi
 from aimet_common.winnow.winnow_utils import OpConnectivity, ConnectivityType,\
     get_indices_among_ones_of_overlapping_ones
+from aimet_tensorflow import graph_editor
 from aimet_tensorflow.common.connectedgraph import ConnectedGraph
 from aimet_tensorflow.common.operation import Op
 from aimet_tensorflow.utils.op.fusedbatchnorm import BNUtils

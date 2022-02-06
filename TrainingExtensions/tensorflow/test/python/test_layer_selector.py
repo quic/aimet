@@ -38,14 +38,15 @@
 
 import unittest
 from unittest.mock import MagicMock
-
 import os
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
 import tensorflow as tf
-tf.compat.v1.logging.set_verbosity(tf.logging.WARN)
-os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
 
 from aimet_tensorflow.layer_database import Layer
 from aimet_tensorflow.layer_selector import ConvFcLayerSelector, ConvNoDepthwiseLayerSelector
+
+tf.compat.v1.logging.set_verbosity(tf.compat.v1.logging.WARN)
+tf.compat.v1.disable_eager_execution()
 
 
 class TestLayerSelector(unittest.TestCase):
@@ -92,6 +93,8 @@ class TestLayerSelector(unittest.TestCase):
         layer_selector.select(layer_db, [layer2.module])
         layer_db.mark_picked_layers.assert_called_once_with([layer1])
 
+        sess.close()
+
     def test_select_all_conv_and_fc_layers(self):
 
         # Two regular conv layers
@@ -133,3 +136,5 @@ class TestLayerSelector(unittest.TestCase):
         layer_db.mark_picked_layers.reset_mock()
         layer_selector.select(layer_db, [layer2.module])
         layer_db.mark_picked_layers.assert_called_once_with([layer1, layer4])
+
+        sess.close()

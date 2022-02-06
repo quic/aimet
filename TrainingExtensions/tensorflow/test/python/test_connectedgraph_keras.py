@@ -39,6 +39,7 @@
 This file contains unit tests for testing ConnectedGraph
 """
 import pytest
+pytestmark = pytest.mark.skip("Disable tests that requires eager execution")
 import tensorflow as tf
 from packaging import version
 

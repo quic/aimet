@@ -39,6 +39,7 @@
 """ Unit tests for Adaround Activation Sampler """
 
 import os
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
 import logging
 import unittest.mock
 import tensorflow as tf
@@ -48,7 +49,7 @@ from aimet_common.utils import AimetLogger
 from aimet_tensorflow.examples.test_models import keras_model
 from aimet_tensorflow.adaround.activation_sampler import ActivationSampler
 
-os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
+tf.compat.v1.disable_eager_execution()
 
 
 class TestAdaroundActivationSampler(unittest.TestCase):

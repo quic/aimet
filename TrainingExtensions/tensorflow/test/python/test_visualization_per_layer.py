@@ -37,18 +37,13 @@
 # =============================================================================
 
 import os
-import signal
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
 import unittest
 import tensorflow as tf
-
-tf.compat.v1.logging.set_verbosity(tf.logging.WARN)
-os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
-
-import numpy as np
-from aimet_common.utils import start_bokeh_server_session
 from tensorflow.keras.applications.resnet50 import ResNet50
-
 from aimet_tensorflow import plotting_utils
+
+tf.compat.v1.disable_eager_execution()
 
 
 class TFVisualization(unittest.TestCase):
