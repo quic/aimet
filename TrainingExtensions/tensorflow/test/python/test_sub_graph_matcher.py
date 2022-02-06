@@ -36,11 +36,16 @@
 #  @@-COPYRIGHT-END-@@
 # =============================================================================
 """ This file contains unit tests for testing  Sub Graph  functions. """
+
 import os
+
+import pytest
+
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
 import unittest
 import logging
 import tensorflow as tf
-from tensorflow_core.contrib.quantize.python import graph_matcher
+from aimet_tensorflow.quantize import graph_matcher
 
 from aimet_common.utils import AimetLogger
 from aimet_tensorflow.common.sub_graph_matcher_op_templates import op_type_templates
@@ -48,11 +53,10 @@ from aimet_tensorflow.common.sub_graph_matcher import create_subgraph_for_op_def
     create_op_type_patterns_from_subgraph
 from aimet_tensorflow.examples.test_models import keras_model_functional
 
-
 logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Test)
 AimetLogger.set_area_logger_level(AimetLogger.LogAreas.Test, logging.DEBUG)
 AimetLogger.set_area_logger_level(AimetLogger.LogAreas.ConnectedGraph, logging.DEBUG)
-os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
+tf.compat.v1.disable_eager_execution()
 
 subgraph_constructors = op_type_templates
 
@@ -60,6 +64,7 @@ subgraph_constructors = op_type_templates
 class TestSubGraph(unittest.TestCase):
     """ Test Sub Graph functions """
 
+    @pytest.mark.tf1
     def test_instance_norm_model(self):
         input_shape = subgraph_constructors['InstanceNormalization']['input_shape']
         constructor_string = subgraph_constructors['InstanceNormalization']['constructor']
@@ -115,6 +120,7 @@ class TestSubGraph(unittest.TestCase):
         # with Bias, the last element in the pattern list is BiasAdd.
         self.assertEqual(op_type_patterns[-1]._op_type, 'BiasAdd')
 
+    @pytest.mark.tf1
     def test_fused_batchnorm_training_tensor_subgraph(self):
         """ test sub graph for FusedBatchNorm training Tensor"""
 
@@ -176,6 +182,7 @@ class TestSubGraph(unittest.TestCase):
         # without activation, the last element in the pattern list is BiasAdd.
         self.assertEqual(dense_patterns[-1]._op_type, 'BiasAdd')
 
+    @pytest.mark.tf1
     def test_conv_subgraph_with_a_model(self):
         """ Detect Conv2D, Conv2D with Bias and FusedBatchNorm subgraphs in the session graph. """
 

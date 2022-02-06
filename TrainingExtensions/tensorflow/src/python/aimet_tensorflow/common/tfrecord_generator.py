@@ -74,13 +74,13 @@ class MnistParser:
         :return: Input image and labels
         """
         dim = 28
-        features = tf.parse_single_example(serialized_example,
-                                           features={'label': tf.FixedLenFeature([], tf.int64),
-                                                     'image_raw': tf.FixedLenFeature([], tf.string)})
+        features = tf.compat.v1.parse_single_example(serialized_example,
+                                                     features={'label': tf.compat.v1.FixedLenFeature([], tf.int64),
+                                                               'image_raw': tf.compat.v1.FixedLenFeature([], tf.string)})
 
         # Mnist examples are flattened. Since we aren't performing an augmentations
         # these can remain flattened.
-        image = tf.decode_raw(features['image_raw'], tf.uint8)
+        image = tf.compat.v1.decode_raw(features['image_raw'], tf.uint8)
         image.set_shape([dim*dim])
 
         # Convert from bytes to floats 0 -> 1.
@@ -159,16 +159,16 @@ class ImagenetParser:
         """
         dim = 224
 
-        features = tf.parse_single_example(serialized_example,
-                                           features={
-                                               'image/class/label': tf.FixedLenFeature([], tf.int64),
-                                               'image/encoded': tf.FixedLenFeature([], tf.string)})
+        features = tf.compat.v1.parse_single_example(serialized_example,
+                                                     features={
+                                                         'image/class/label': tf.FixedLenFeature([], tf.int64),
+                                                         'image/encoded': tf.FixedLenFeature([], tf.string)})
         image_data = features['image/encoded']
         label = tf.cast(features['image/class/label'], tf.int32)
         labels = tf.one_hot(indices=label, depth=1000)
 
         # Decode the jpeg
-        with tf.name_scope('prep_image', [image_data], None):
+        with tf.compat.v1.name_scope('prep_image', [image_data], None):
             # decode and reshape to default 224x224
             # pylint: disable=no-member
             image = tf.image.decode_jpeg(image_data, channels=3)
@@ -240,7 +240,7 @@ class TfRecordGenerator:
         # Initialize the iterator. This must be allocated during init when the
         # generator is to be used manually. Otherwise the generator will generate a
         # new iterator each time it's used as an iterator
-        self._iterator = self._dataset.make_one_shot_iterator()
+        self._iterator = tf.compat.v1.data.make_one_shot_iterator(self._dataset)
 
     def __iter__(self):
         """
@@ -253,7 +253,7 @@ class TfRecordGenerator:
 
         # pylint: disable=protected-access
         with self._dataset._graph.as_default():
-            self._iterator = self._dataset.make_one_shot_iterator()
+            self._iterator = tf.compat.v1.data.make_one_shot_iterator(self._dataset)
 
         return self
 

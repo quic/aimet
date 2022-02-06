@@ -96,7 +96,7 @@ class Adaround:
     def apply_adaround(cls, session: tf.compat.v1.Session, starting_op_names: List[str], output_op_names: List[str],
                        params: AdaroundParameters, path: str, filename_prefix: str, default_param_bw: int = 4,
                        default_quant_scheme: QuantScheme = QuantScheme.post_training_tf_enhanced,
-                       default_is_symmetric: bool = False) -> tf.Session:
+                       default_is_symmetric: bool = False) -> tf.compat.v1.Session:
         """
         Returns Tf session - model with optimized weight rounding of every op (Conv and Linear) and also saves the
         corresponding quantization encodings to a separate JSON-formatted file that can then be imported by

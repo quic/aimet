@@ -41,6 +41,7 @@
 import pytest
 import logging
 import os
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
 import json
 import numpy as np
 import unittest.mock
@@ -51,7 +52,7 @@ from aimet_tensorflow.examples.test_models import keras_model
 from aimet_tensorflow.adaround.adaround_weight import Adaround, AdaroundParameters
 
 logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Test)
-os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
+tf.compat.v1.disable_eager_execution()
 
 
 class TestAdaroundWeight(unittest.TestCase):
@@ -63,7 +64,8 @@ class TestAdaroundWeight(unittest.TestCase):
         tf.compat.v1.reset_default_graph()
         _ = keras_model()
 
-        ordered_ops = Adaround._get_ordered_list_of_ops(tf.get_default_graph(), input_op_names=['conv2d_input'],
+        ordered_ops = Adaround._get_ordered_list_of_ops(tf.compat.v1.get_default_graph(),
+                                                        input_op_names=['conv2d_input'],
                                                         output_op_names=['keras_model/Softmax'])
         self.assertEqual(len(ordered_ops), 3)
 
@@ -85,7 +87,7 @@ class TestAdaroundWeight(unittest.TestCase):
         with tf.device(device):
             graph = tf.Graph()
             with graph.as_default():
-                tf.set_random_seed(1)
+                tf.compat.v1.set_random_seed(1)
                 _ = keras_model()
                 init = tf.compat.v1.global_variables_initializer()
 

@@ -36,16 +36,22 @@
 cmake_minimum_required(VERSION 3.5)
 
 if (ENABLE_CUDA)
-    add_test(TfTrainingExtensionTest
-            pytest ${CMAKE_CURRENT_SOURCE_DIR} --junitxml=${CMAKE_CURRENT_BINARY_DIR}/py_test_output.xml
-            )
-
+    set(CUDA_FLAG "not blah")
 else (ENABLE_CUDA)
-    add_test(TfTrainingExtensionTest
-            pytest ${CMAKE_CURRENT_SOURCE_DIR} -m "not cuda" --junitxml=${CMAKE_CURRENT_BINARY_DIR}/py_test_output.xml
-            )
-
+    set(CUDA_FLAG "not cuda")
 endif (ENABLE_CUDA)
+
+if (TF_VERSION MATCHES "^1.15")
+    set(TF_VERSION_FLAG "not blah")
+else ()
+    set(TF_VERSION_FLAG "not tf1")
+endif ()
+
+string(APPEND MARKER_FLAG ${CUDA_FLAG} " and " ${TF_VERSION_FLAG})
+
+add_test(TfTrainingExtensionTest
+        pytest ${CMAKE_CURRENT_SOURCE_DIR} -m ${MARKER_FLAG} --junitxml=${CMAKE_CURRENT_BINARY_DIR}/py_test_output.xml
+        )
 
 set_property(TEST TfTrainingExtensionTest
       APPEND PROPERTY ENVIRONMENT "${AIMET_LD_LIBRARY_PATH}")

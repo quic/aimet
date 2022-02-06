@@ -42,9 +42,9 @@ from collections import OrderedDict
 from typing import Tuple, Set, Union, List
 
 import tensorflow as tf
-from tensorflow.contrib import graph_editor
 
 # Import aimet specific modules
+from aimet_tensorflow import graph_editor
 from aimet_tensorflow.utils.common import is_op_compressible, get_valid_ops
 from aimet_tensorflow.utils import graph_saver
 from aimet_tensorflow.utils.op.conv import get_output_activation_shape

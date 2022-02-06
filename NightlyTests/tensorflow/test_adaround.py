@@ -43,6 +43,7 @@ import json
 import unittest
 import logging
 import os
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
 import numpy as np
 import tensorflow as tf
 from tensorflow.keras.applications.mobilenet import MobileNet
@@ -53,13 +54,14 @@ from aimet_tensorflow.examples.test_models import keras_model
 from aimet_tensorflow.quantsim import QuantizationSimModel
 from aimet_tensorflow.adaround.adaround_weight import Adaround, AdaroundParameters
 
-os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
+tf.compat.v1.disable_eager_execution()
 
 
 class AdaroundAcceptanceTests(unittest.TestCase):
     """
     AdaRound test cases
     """
+    @pytest.mark.tf1
     @pytest.mark.cuda
     def test_adaround_mobilenet_only_weights(self):
         """ test end to end adaround with only weight quantized """
@@ -116,6 +118,7 @@ class AdaroundAcceptanceTests(unittest.TestCase):
         if os.path.exists("./mobilenet.encodings"):
             os.remove("./mobilenet.encodings")
 
+    @pytest.mark.tf1
     def test_adaround_resnet18_followed_by_quantsim(self):
         """ test end to end adaround with weight 4 bits and output activations 8 bits quantized """
 

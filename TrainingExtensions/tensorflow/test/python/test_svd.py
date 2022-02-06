@@ -38,14 +38,16 @@
 
 import unittest
 from unittest.mock import create_autospec
-
 import os
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
 import tensorflow as tf
-tf.compat.v1.logging.set_verbosity(tf.logging.WARN)
-os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
 
 from aimet_tensorflow import svd as s
 import libpymo as pymo
+
+tf.compat.v1.logging.set_verbosity(tf.compat.v1.logging.WARN)
+tf.compat.v1.disable_eager_execution()
+
 
 def conv(x, shape, scope):
     # initialize conv weights, if not done yet
@@ -55,6 +57,7 @@ def conv(x, shape, scope):
     acts = tf.nn.relu(tf.nn.conv2d(x, W, strides=[1, 1, 1, 1], padding='SAME') + b)
     return acts
 
+
 def fc(x, shape, scope):
     # initialize fc weights, if not done yet
     W = tf.compat.v1.get_variable(scope + '_w', initializer=tf.random.truncated_normal(shape, stddev=0.1, seed=0))
@@ -62,6 +65,7 @@ def fc(x, shape, scope):
     # do FC forward path
     y = tf.matmul(x, W) + b
     return y
+
 
 def model(x):
     x = tf.reshape(x, [-1,28,28,1])

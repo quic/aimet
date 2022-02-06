@@ -41,16 +41,15 @@ from typing import List, Union, Dict, Callable, Any, Tuple
 import os
 import shutil
 import json
-
 import numpy as np
 import tensorflow as tf
-
 from tensorflow.python.framework import ops as tf_ops
-from tensorflow.contrib import graph_editor
+from packaging import version
 from aimet_common.defs import QuantScheme
 from aimet_common.quantsim import gate_min_max, calculate_delta_offset, encoding_version
 from aimet_common.quant_utils import get_conv_accum_bounds
 from aimet_common.utils import AimetLogger, save_json_yaml
+from aimet_tensorflow import graph_editor
 from aimet_tensorflow.common import core
 from aimet_tensorflow.utils.common import update_variables_with_values, save_data_to_pickle_file, \
     load_data_from_pickle_file, get_valid_ops
@@ -78,7 +77,7 @@ WORKING_DIR = '/tmp/quantsim/'
 
 
 # Op types which we will not place quantize ops after
-op_types_to_ignore = {'branch', 'Flatten', 'Shape', 'Identity'}
+op_types_to_ignore = {'branch', 'Flatten', 'Shape', 'Identity', 'Reshape'}
 
 DTYPES_QUANTIZE_NOT_REQUIRED = [tf.dtypes.int8, tf.dtypes.uint8, tf.dtypes.int16, tf.dtypes.uint16,
                                 tf.dtypes.int32, tf.dtypes.uint32, tf.dtypes.int64, tf.dtypes.uint64,
@@ -553,7 +552,8 @@ class QuantizationSimModel:
         for op in conn_graph.get_all_ops().values():
             #  we can configure custom layer selectors per recurrent type or use default one
             if op.type in SUPPORTED_RECURRENT_TYPES:
-
+                if version.parse(tf.version.VERSION) >= version.parse("2.00"):
+                    raise AssertionError('Recurrent layers are not supported with TF2.x, instead use TF1.15.')
                 internal_ops = op.internal_ops
 
                 # select internal ops to quantize in this recurrent type
@@ -1199,7 +1199,7 @@ def load_checkpoint(meta_path: str, file_name_prefix: str) -> QuantizationSimMod
     return new_quant_sim
 
 
-def check_accumulator_overflow(sess: tf.Session, quant_bw: int, accum_bw: int):
+def check_accumulator_overflow(sess: tf.compat.v1.Session, quant_bw: int, accum_bw: int):
     """
     Checks for any potential for accumulator overflow across all the layers of the given model
     :param sess: Tensorflow session

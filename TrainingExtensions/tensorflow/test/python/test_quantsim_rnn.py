@@ -36,24 +36,25 @@
 
 import pytest
 import unittest
-import shutil
-
 import os
-import tensorflow as tf
-tf.compat.v1.logging.set_verbosity(tf.logging.WARN)
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
-
+import tensorflow as tf
 import numpy as np
 import json
 import time
+
 from aimet_tensorflow.quantsim import QuantizationSimModel
 from aimet_tensorflow.utils.graph_saver import load_model_from_meta
 from aimet_tensorflow.quantsim import save_checkpoint, load_checkpoint
 
+tf.compat.v1.logging.set_verbosity(tf.compat.v1.logging.WARN)
+tf.compat.v1.disable_eager_execution()
 
-@unittest.skip("Skipping TF RNN unit tests")
+
+
 class TestQuantSimRnn(unittest.TestCase):
 
+    @pytest.mark.tf1
     def test_insert_quant_op_recurrent(self):
 
         """ test insertion of quant ops to recurrent layer with conditional blocks """
@@ -85,6 +86,7 @@ class TestQuantSimRnn(unittest.TestCase):
         sim.session.close()
         del sim
 
+    @pytest.mark.tf1
     def test_matmul_param_selection_lstm(self):
         """ Test apis to select input params to MatMuls within LSTM for quantization """
         tf.compat.v1.reset_default_graph()
@@ -223,6 +225,7 @@ class TestQuantSimRnn(unittest.TestCase):
         sim.session.close()
         del sim
 
+    @pytest.mark.tf1
     def test_insert_quant_op_forward_pass_simple_rnn(self):
 
         """ test insertion of quant ops to recurrent layer with conditional blocks """
@@ -248,6 +251,7 @@ class TestQuantSimRnn(unittest.TestCase):
         self.validate_simple_rnn_auto_insertion_and_forward_pass(sess)
         sess.close()
 
+    @pytest.mark.tf1
     def test_insert_quant_op_forward_pass_simple_rnn_with_relu(self):
 
         """ test insertion of quant ops to simple rnn with relu """
@@ -273,6 +277,7 @@ class TestQuantSimRnn(unittest.TestCase):
         self.validate_simple_rnn_auto_insertion_and_forward_pass(sess)
         sess.close()
 
+    @pytest.mark.tf1
     def test_insert_quant_op_forward_pass_simple_rnn_multiple_layers(self):
 
         """ test insertion of quant ops to simple rnn with multiple layes """
@@ -303,6 +308,7 @@ class TestQuantSimRnn(unittest.TestCase):
 
         sess.close()
 
+    @pytest.mark.tf1
     def test_backward_pass_time_taken_simple_rnn(self, is_quantized=True, iterations=10, time_steps=1):
         """ perform backward pass with quantized simple RNN block"""
 
@@ -558,6 +564,7 @@ class TestQuantSimRnn(unittest.TestCase):
         # quantized moddel output is different from orig model
         self.assertFalse(np.allclose(orig_out, quantized_out))
 
+    @pytest.mark.tf1
     def test_quantize_lstm_default_quantsim_and_forward_pass(self):
         """ Test connected graph construction on a model with lstm op """
         tf.reset_default_graph()
@@ -595,7 +602,7 @@ class TestQuantSimRnn(unittest.TestCase):
         sim.session.close()
         del sim
 
-    #
+    @pytest.mark.tf1
     def test_quantize_simple_rnn_export(self):
         """ Test model export for recurrent models """
         tf.reset_default_graph()
@@ -648,6 +655,7 @@ class TestQuantSimRnn(unittest.TestCase):
         sim.session.close()
         del sim
 
+    @pytest.mark.tf1
     def test_quantize_simple_rnn_save_and_load_checkpoint(self):
         """ Test model export for recurrent models """
         tf.reset_default_graph()
@@ -698,6 +706,7 @@ class TestQuantSimRnn(unittest.TestCase):
         sim.session.close()
         del sim
 
+    @pytest.mark.tf1
     def test_quantize_lstm_sigmoid_quantsim_and_forward_pass(self):
         """ Test connected graph construction on a model with lstm op """
         tf.reset_default_graph()
@@ -735,6 +744,7 @@ class TestQuantSimRnn(unittest.TestCase):
         sim.session.close()
         del sim
 
+    @pytest.mark.tf1
     def test_quantize_lstm_time_major_true_quantsim_and_forward_pass(self):
         """ Test connected graph construction on a model with lstm op """
         tf.reset_default_graph()
@@ -779,6 +789,7 @@ class TestQuantSimRnn(unittest.TestCase):
         sim.session.close()
         del sim
 
+    @pytest.mark.tf1
     def test_quantize_lstm_deepspeech_time_major_true_quantsim_and_forward_pass(self):
         """ Test connected graph construction on a model with lstm op """
         tf.reset_default_graph()
@@ -824,6 +835,7 @@ class TestQuantSimRnn(unittest.TestCase):
         sim.session.close()
         del sim
 
+    @pytest.mark.tf1
     def test_quantize_lstm_deepspeech_time_major_false_quantsim_and_forward_pass(self):
         """ Test connected graph construction on a model with lstm op """
         tf.reset_default_graph()
@@ -866,6 +878,7 @@ class TestQuantSimRnn(unittest.TestCase):
         sim.session.close()
         del sim
 
+    @pytest.mark.tf1
     def test_backward_pass_time_taken_lstm(self, is_quantized=True, iterations=1):
         """ perform backward pass with quantized lstm block"""
 

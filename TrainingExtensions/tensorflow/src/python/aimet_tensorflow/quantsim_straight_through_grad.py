@@ -198,7 +198,7 @@ def quantsim_custom_grad_learned_grid(op, grad):
     n, p = _get_n_and_p(bitwidth, op.inputs[int(QuantizeOpIndices.use_symmetric_encoding)])
     steps = tf.cast(tf.pow(tf.cast(tf.constant(2), tf.float32), bitwidth) - 1, tf.float32)
     scaling = tf.cast(((encoding_max - encoding_min) / steps), tf.float32)
-    rounded_offset = tf.round(-encoding_min / scaling)
+    rounded_offset = tf.round(-encoding_min / scaling)  # pylint: disable=invalid-unary-operand-type
     # R(x/s) + R(o)
     r_x_by_s_plus_round_o = tf.round(x / scaling) + rounded_offset
 

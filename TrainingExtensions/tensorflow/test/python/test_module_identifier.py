@@ -39,12 +39,16 @@
 
 import unittest
 import logging
+import os
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
+import pytest
 import tensorflow as tf
 
 from aimet_common.utils import AimetLogger
 from aimet_tensorflow.common.module_identifier import StructureModuleIdentifier
 from aimet_tensorflow.examples.test_models import keras_model, keras_model_functional, tf_slim_basic_model
 
+tf.compat.v1.disable_eager_execution()
 logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Test)
 AimetLogger.set_area_logger_level(AimetLogger.LogAreas.Test, logging.DEBUG)
 AimetLogger.set_area_logger_level(AimetLogger.LogAreas.ConnectedGraph, logging.DEBUG)
@@ -53,6 +57,7 @@ AimetLogger.set_area_logger_level(AimetLogger.LogAreas.ConnectedGraph, logging.D
 class TestStructureModuleIdentifier(unittest.TestCase):
     """ Test StructureModuleIdentifier module """
 
+    @pytest.mark.tf1
     def test_get_op_info(self):
         """ Test get_op_info() in StructureModuleIdentifier """
         my_op_type_set = set()
@@ -71,6 +76,7 @@ class TestStructureModuleIdentifier(unittest.TestCase):
         self.assertEqual(6, len(current_module_set))
         self.assertEqual(4, len(my_op_type_set))
 
+    @pytest.mark.tf1
     def test_fused_batch_norm_matcher_keras(self):
         """ Test fused batch norm matchers """
 
@@ -86,6 +92,7 @@ class TestStructureModuleIdentifier(unittest.TestCase):
                                                                  'FusedBatchNormV3/Switch')
         self.assertEqual(module_identifier.op_to_module_dict[switch_op].module_name, 'scope_1/batch_normalization_1')
 
+    @pytest.mark.tf1
     def test_fused_batch_norm_matcher_slim(self):
         """ Test fused batch norm matchers """
 

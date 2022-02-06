@@ -40,10 +40,10 @@ import json
 import pytest
 import unittest
 import os
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
 import numpy as np
 import tensorflow as tf
-from tensorflow.examples.tutorials.mnist import input_data
-
+from packaging import version
 # Import the tensorflow quantizer
 import libpymo
 from aimet_common.connected_graph.connectedgraph_utils import get_all_input_ops
@@ -55,6 +55,11 @@ from aimet_tensorflow.utils import graph_saver
 from aimet_tensorflow.examples.test_models import multiple_input_model, single_residual
 
 import libpymo as pymo
+tf.compat.v1.disable_eager_execution()
+
+mnist_model_path = os.path.join(os.environ.get('DEPENDENCY_DATA_PATH'), 'mnist/models/')
+mnist_tfrecords_path = os.path.join(os.environ.get('DEPENDENCY_DATA_PATH'), 'mnist/data/')
+
 
 class Quantization(unittest.TestCase):
 
@@ -67,11 +72,13 @@ class Quantization(unittest.TestCase):
         os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 
         # Allocate the generator you wish to use to provide the network with data
-        parser2 = tf_gen.MnistParser(batch_size=100, data_inputs=['reshape_input'])
-        generator = tf_gen.TfRecordGenerator(tfrecords=[os.path.join('data', 'mnist', 'validation.tfrecords')],
+        parser2 = tf_gen.MnistParser(batch_size=32, data_inputs=['reshape_input'])
+        generator = tf_gen.TfRecordGenerator(tfrecords=[os.path.join(mnist_tfrecords_path, 'validation.tfrecords')],
                                              parser=parser2)
 
-        sess = graph_saver.load_model_from_meta('models/mnist_save.meta', 'models/mnist_save')
+        meta_path = os.path.join(mnist_model_path, 'mnist_save.meta')
+        checkpoint_path = os.path.join(mnist_model_path, 'mnist_save')
+        sess = graph_saver.load_model_from_meta(meta_path, checkpoint_path)
 
         # Allocate the quantizer and quantize the network using the default 8 bit params/activations
         sim = quantsim.QuantizationSimModel(sess, ['reshape_input'], ['dense_1/BiasAdd'], quant_scheme='tf')
@@ -86,8 +93,9 @@ class Quantization(unittest.TestCase):
         sess = sim.session
         with g.as_default():
 
-            parser2 = tf_gen.MnistParser(batch_size=100, data_inputs=['reshape_input'])
-            generator2 = tf_gen.TfRecordGenerator(tfrecords=['data/mnist/validation.tfrecords'], parser=parser2)
+            parser2 = tf_gen.MnistParser(batch_size=32, data_inputs=['reshape_input'])
+            generator2 = tf_gen.TfRecordGenerator(tfrecords=[os.path.join(mnist_tfrecords_path, 'validation.tfrecords')],
+                                                  parser=parser2)
             cross_entropy = g.get_operation_by_name('xent')
             train_step = g.get_operation_by_name("Adam")
 
@@ -103,10 +111,10 @@ class Quantization(unittest.TestCase):
             ts = tf.compat.v1.train.AdamOptimizer(1e-3, name="TempAdam").minimize(ce)
             graph_eval.initialize_uninitialized_vars(sess)
 
-            mnist = input_data.read_data_sets('./data', one_hot=True)
-            for i in range(100):
-                batch = mnist.train.next_batch(50)
-                _, fc1_w_value = sess.run([ts, fc1_w], feed_dict={x: batch[0], y: batch[1]})
+            input_data = np.random.rand(32, 784)
+            labels = np.random.randint(low=2, size=(32, 10))
+            for i in range(20):
+                _, fc1_w_value = sess.run([ts, fc1_w], feed_dict={x: input_data, y: labels})
                 if i != 0:
                     assert not np.allclose(fc1_w_value, fc1_w_value_old), "Weights are not changing. Fine-tuning is not working"
                 else:
@@ -119,6 +127,7 @@ class Quantization(unittest.TestCase):
         # close session
         sess.close()
 
+    @pytest.mark.tf1
     @pytest.mark.cuda
     def test_gpu_quantize_resnet50(self):
 
@@ -229,11 +238,13 @@ class Quantization(unittest.TestCase):
         os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 
         # Allocate the generator you wish to use to provide the network with data
-        parser2 = tf_gen.MnistParser(batch_size=100, data_inputs=['reshape_input'])
-        generator = tf_gen.TfRecordGenerator(tfrecords=[os.path.join('data', 'mnist', 'validation.tfrecords')],
+        parser2 = tf_gen.MnistParser(batch_size=32, data_inputs=['reshape_input'])
+        generator = tf_gen.TfRecordGenerator(tfrecords=[os.path.join(mnist_tfrecords_path, 'validation.tfrecords')],
                                              parser=parser2)
 
-        sess = graph_saver.load_model_from_meta('models/mnist_save.meta', 'models/mnist_save')
+        meta_path = os.path.join(mnist_model_path, 'mnist_save.meta')
+        checkpoint_path = os.path.join(mnist_model_path, 'mnist_save')
+        sess = graph_saver.load_model_from_meta(meta_path, checkpoint_path)
 
         # Allocate the quantizer and quantize the network using the default 8 bit params/activations
         sim = quantsim.QuantizationSimModel(sess, ['reshape_input'], ['dense_1/BiasAdd'], quant_scheme='tf',
@@ -249,8 +260,9 @@ class Quantization(unittest.TestCase):
         sess = sim.session
         with g.as_default():
 
-            parser2 = tf_gen.MnistParser(batch_size=100, data_inputs=['reshape_input'])
-            generator2 = tf_gen.TfRecordGenerator(tfrecords=['data/mnist/validation.tfrecords'], parser=parser2)
+            parser2 = tf_gen.MnistParser(batch_size=32, data_inputs=['reshape_input'])
+            generator2 = tf_gen.TfRecordGenerator(tfrecords=[os.path.join(mnist_tfrecords_path, 'validation.tfrecords')],
+                                                  parser=parser2)
             cross_entropy = g.get_operation_by_name('xent')
             train_step = g.get_operation_by_name("Adam")
 
@@ -261,10 +273,10 @@ class Quantization(unittest.TestCase):
             perf = graph_eval.evaluate_graph(sess, generator2, ['accuracy'], graph_eval.default_eval_func, 1)
             print('Quantized performance: ' + str(perf * 100))
 
-            mnist = input_data.read_data_sets('./data', one_hot=True)
-            for i in range(100):
-                batch = mnist.train.next_batch(50)
-                _, loss_val = sess.run([train_step, cross_entropy], feed_dict={x: batch[0], y: batch[1]})
+            input_data = np.random.rand(32, 784)
+            labels = np.random.randint(low=2, size=(32, 10))
+            for i in range(20):
+                _, loss_val = sess.run([train_step, cross_entropy], feed_dict={x: input_data, y: labels})
                 if i % 10 == 0:
                     perf = graph_eval.evaluate_graph(sess, generator2, ['accuracy'], graph_eval.default_eval_func, 1)
                     print('Quantized performance: ' + str(perf * 100))
@@ -278,11 +290,13 @@ class Quantization(unittest.TestCase):
         os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 
         # Allocate the generator you wish to use to provide the network with data
-        parser2 = tf_gen.MnistParser(batch_size=100, data_inputs=['reshape_input'])
-        generator = tf_gen.TfRecordGenerator(tfrecords=[os.path.join('data', 'mnist', 'validation.tfrecords')],
+        parser2 = tf_gen.MnistParser(batch_size=32, data_inputs=['reshape_input'])
+        generator = tf_gen.TfRecordGenerator(tfrecords=[os.path.join(mnist_tfrecords_path, 'validation.tfrecords')],
                                              parser=parser2)
 
-        sess = graph_saver.load_model_from_meta('models/mnist_save.meta', 'models/mnist_save')
+        meta_path = os.path.join(mnist_model_path, 'mnist_save.meta')
+        checkpoint_path = os.path.join(mnist_model_path, 'mnist_save')
+        sess = graph_saver.load_model_from_meta(meta_path, checkpoint_path)
 
         # Allocate the quantizer and quantize the network using the default 8 bit params/activations
         sim = quantsim.QuantizationSimModel(sess, ['reshape_input'], ['dense_1/BiasAdd'], quant_scheme='tf',

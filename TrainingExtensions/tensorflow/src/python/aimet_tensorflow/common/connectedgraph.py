@@ -390,7 +390,7 @@ def _fill_flatten_shape_if_needed(op: Op):
                 for dim in input_shape:
                     if dim is not None:
                         output_size *= dim
-                new_output_shape = tf.TensorShape([tf.Dimension(None), tf.Dimension(output_size)])
+                new_output_shape = tf.TensorShape([tf.compat.v1.Dimension(None), tf.compat.v1.Dimension(output_size)])
                 op.output_shape = new_output_shape
                 op.output.shape = new_output_shape
 

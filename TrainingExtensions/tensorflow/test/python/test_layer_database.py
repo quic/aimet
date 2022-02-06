@@ -37,22 +37,24 @@
 # =============================================================================
 
 import os
+
+import pytest
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
 import copy
 import shutil
 import unittest
 import numpy as np
-
 import tensorflow as tf
-tf.compat.v1.logging.set_verbosity(tf.logging.WARN)
-os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
 
 from aimet_common.utils import AimetLogger
 from aimet_tensorflow.layer_database import LayerDatabase
 from aimet_tensorflow.examples import mnist_tf_model
-
 from tensorflow.keras.applications.resnet50 import ResNet50
 
 logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Test)
+tf.compat.v1.logging.set_verbosity(tf.compat.v1.logging.WARN)
+tf.compat.v1.disable_eager_execution()
 
 
 class TestTensorFlowLayerDatabase(unittest.TestCase):
@@ -266,6 +268,7 @@ class TestTensorFlowLayerDatabase(unittest.TestCase):
         # delete temp directory
         shutil.rmtree(str('./temp_meta/'))
 
+    @pytest.mark.tf1
     def test_layer_database_with_dynamic_shape(self):
         """ test layer database creation with different input shapes"""
         # create tf.compat.v1.Session and initialize the weights and biases with zeros

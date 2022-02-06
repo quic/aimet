@@ -38,6 +38,8 @@
 """
 This file contains unit tests for testing batch norm folding
 """
+import pytest
+pytestmark = pytest.mark.skip("Disable tests that requires eager execution")
 import unittest
 import tensorflow as tf
 import numpy as np
@@ -46,6 +48,7 @@ from packaging import version
 from aimet_tensorflow.keras.utils import common
 from aimet_tensorflow.keras.batch_norm_fold import _delete_all_bns_from_model, _find_possible_convs_linears_bn, _get_ordered_conv_linears, _find_all_batch_norms_to_fold, fold_all_batch_norms
 from aimet_tensorflow.keras.utils.op.batchnorm import BNUtils
+
 
 class TestBatchNormFold(unittest.TestCase):
     """ Test methods for BatchNormFold"""

@@ -35,13 +35,17 @@
 #  
 #  @@-COPYRIGHT-END-@@
 # =============================================================================
+
 import unittest
 import os
-import numpy as np
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
 import tensorflow as tf
-
+tf.compat.v1.disable_eager_execution()
 # Import the tensorflow quantizer
 from aimet_tensorflow.common import tfrecord_generator as tf_gen
+
+mnist_model_path = os.path.join(os.environ.get('DEPENDENCY_DATA_PATH'), 'mnist/models/')
+mnist_tfrecords_path = os.path.join(os.environ.get('DEPENDENCY_DATA_PATH'), 'mnist/data/')
 
 
 class Generator_Example(unittest.TestCase):
@@ -54,11 +58,11 @@ class Generator_Example(unittest.TestCase):
 
         # Allocate the generator you wish to use to provide the network with data
         parser = tf_gen.MnistParser(batch_size=100, data_inputs=['reshape_input'])
-        generator = tf_gen.TfRecordGenerator(tfrecords=[os.path.join('data', 'mnist', 'test.tfrecords')],
+        generator = tf_gen.TfRecordGenerator(tfrecords=[os.path.join(mnist_tfrecords_path, 'test.tfrecords')],
                                              parser=parser)
 
-        saver = tf.compat.v1.train.import_meta_graph(os.path.join('models', 'mnist_save.meta'))
-        saver.restore(sess, os.path.join('models', 'mnist_save'))
+        saver = tf.compat.v1.train.import_meta_graph(os.path.join(mnist_model_path, 'mnist_save.meta'))
+        saver.restore(sess, os.path.join(mnist_model_path, 'mnist_save'))
         graph = tf.compat.v1.get_default_graph()
 
         # Get the input nodes

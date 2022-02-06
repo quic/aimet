@@ -34,6 +34,8 @@
 #  @@-COPYRIGHT-END-@@
 # =============================================================================
 
+import pytest
+pytestmark = pytest.mark.skip("Disable tests that requires eager execution")
 from packaging import version
 import numpy as np
 import os

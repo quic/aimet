@@ -36,17 +36,13 @@
 
 import shutil
 import os
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
 import time
-
 import numpy as np
 import json
-
 import pytest
 import unittest.mock
 import tensorflow as tf
-tf.compat.v1.logging.set_verbosity(tf.logging.WARN)
-os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
-
 import libpymo
 from aimet_tensorflow.quantsim import QuantizationSimModel, check_accumulator_overflow
 from aimet_tensorflow.quantsim_straight_through_grad import _get_n_and_p
@@ -57,6 +53,9 @@ from aimet_common.defs import QuantScheme
 from aimet_tensorflow.quantsim import save_checkpoint, load_checkpoint
 from aimet_tensorflow.utils.constants import QuantizeOpIndices
 
+tf.compat.v1.logging.set_verbosity(tf.compat.v1.logging.WARN)
+tf.compat.v1.disable_eager_execution()
+
 
 class TestQuantSim(unittest.TestCase):
 
@@ -64,7 +63,6 @@ class TestQuantSim(unittest.TestCase):
         """
         Create QuantSim for a CPU model and check that quantizers have been added to the graph
         """
-
         tf.compat.v1.reset_default_graph()
         with tf.device('/cpu:0'):
             model = tf.keras.Sequential()
@@ -143,12 +141,11 @@ class TestQuantSim(unittest.TestCase):
         sim.session.close()
         del sim
 
+    @pytest.mark.tf1
     def test_compute_encodings_cpu_model(self):
-
         """
         Create QuantSim for a CPU model and test that activation encodings are computed
         """
-
         tf.compat.v1.reset_default_graph()
         with tf.device('/cpu:0'):
             model = tf.keras.Sequential()
@@ -286,11 +283,11 @@ class TestQuantSim(unittest.TestCase):
         self._save_to_keras_common_test_code(True)
 
     @pytest.mark.cuda
+    @pytest.mark.tf1
     def test_compute_encodings_gpu_model(self):
         """
         Create QuantSim for a CPU model and test that activation encodings are computed
         """
-
         tf.compat.v1.reset_default_graph()
         with tf.device('/gpu:0'):
             model = tf.keras.Sequential()
@@ -352,7 +349,6 @@ class TestQuantSim(unittest.TestCase):
         """
         Create QuantSim model and update quantScheme using property interface
         """
-
         tf.compat.v1.reset_default_graph()
         np.random.seed(0)
         tf.compat.v1.set_random_seed(0)
@@ -406,7 +402,6 @@ class TestQuantSim(unittest.TestCase):
         del sim
 
     def test_export_cpu_model(self):
-
         """
         Create QuantSim for a CPU model, compute encodings and export out a resulting model
         """
@@ -480,7 +475,6 @@ class TestQuantSim(unittest.TestCase):
         del sim
 
     def test_save_load_ckpt_cpu_model(self):
-
         """
         Create QuantSim for a CPU model, test save and load on a quantsim model.
         """
@@ -610,11 +604,9 @@ class TestQuantSim(unittest.TestCase):
         del new_quantsim
 
     def test_set_get_quantizer_params_using_properties(self):
-
         """
         Create QuantSim for a CPU model, test param read and write using properties
         """
-
         tf.compat.v1.reset_default_graph()
         with tf.device('/cpu:0'):
             model = tf.keras.Sequential()
@@ -765,6 +757,7 @@ class TestQuantSim(unittest.TestCase):
             sim.session.close()
             del sim
 
+    @pytest.mark.tf1
     def test_compute_encodings(self):
         """ Test that ops not evaluated during compute encodings are set to passThrough mode. """
         tf.compat.v1.reset_default_graph()
@@ -853,7 +846,7 @@ class TestQuantSimRangeLearning:
         and use_symmetric_encoding flag are set.
         """
 
-        tf.reset_default_graph()
+        tf.compat.v1.reset_default_graph()
         with tf.device('/cpu:0'):
             model = tf.keras.Sequential()
             model.add(tf.keras.layers.Conv2D(32, kernel_size=3, input_shape=(28, 28, 3), activation='relu'))
@@ -861,7 +854,7 @@ class TestQuantSimRangeLearning:
             model.add(tf.keras.layers.Conv2D(64, kernel_size=3, activation='relu'))
             model.summary()
 
-        sess = tf.Session()
+        sess = tf.compat.v1.Session()
         initialize_uninitialized_vars(sess)
         sim = QuantizationSimModel(sess, ['conv2d_input'], ['conv2d_1/Relu'], use_cuda=True,
                                    default_output_bw=6,
@@ -906,6 +899,7 @@ class TestQuantSimRangeLearning:
         assert conv2d_output_encoding_max != 0.0
 
         sess.close()
+        sim.session.close()
 
     @pytest.mark.cuda
     def test_gpu_model_quantize_op_input_params_update(self):
@@ -914,7 +908,7 @@ class TestQuantSimRangeLearning:
         bit_width and use_symmetric_encoding params are getting set.
         """
 
-        tf.reset_default_graph()
+        tf.compat.v1.reset_default_graph()
         with tf.device('/gpu:0'):
             model = tf.keras.Sequential()
             model.add(tf.keras.layers.Conv2D(32, kernel_size=3, input_shape=(28, 28, 3), activation='relu'))
@@ -922,7 +916,7 @@ class TestQuantSimRangeLearning:
             model.add(tf.keras.layers.Conv2D(64, kernel_size=3, activation='relu'))
             model.summary()
 
-        sess = tf.Session()
+        sess = tf.compat.v1.Session()
         initialize_uninitialized_vars(sess)
         sim = QuantizationSimModel(sess, ['conv2d_input'], ['conv2d_1/Relu'], use_cuda=True,
                                    default_output_bw=4, default_param_bw=6,
@@ -968,6 +962,7 @@ class TestQuantSimRangeLearning:
         assert conv2d_output_encoding_max != 0.0
 
         sess.close()
+        sim.session.close()
 
     @staticmethod
     def _compute_gradients_numpy(x, encoding_min, encoding_max, bitwidth, use_symmetric_endcoding):
@@ -1012,14 +1007,15 @@ class TestQuantSimRangeLearning:
         # return gradients w.r.t input, min and max as scalars
         return dq_by_dx, -(dq_by_dmax_reduced.astype(np.float32)), dq_by_dmax_reduced.astype(np.float32)
 
+    @pytest.mark.tf1
     def test_qc_custom_gradient_backward_pass(self):
         """
         test to validate custom gradient computed against numpy computations for
         quant sim model with quant scheme set to range learning.
         """
 
-        tf.reset_default_graph()
-        tf.set_random_seed(0)
+        tf.compat.v1.reset_default_graph()
+        tf.compat.v1.set_random_seed(0)
         with tf.device('/cpu:0'):
             inputs = tf.keras.Input(shape=(2, 2, 1,))
             conv_op = tf.keras.layers.Conv2D(1, (2, 2),
@@ -1027,7 +1023,7 @@ class TestQuantSimRangeLearning:
                                              bias_initializer='random_uniform')(inputs)
             _ = tf.nn.relu(conv_op)
 
-        sess = tf.Session(graph=tf.get_default_graph())
+        sess = tf.compat.v1.Session(graph=tf.compat.v1.get_default_graph())
         initialize_uninitialized_vars(sess)
         sim = QuantizationSimModel(sess, ['input_1'], ['Relu'], use_cuda=True,
                                    quant_scheme=QuantScheme.training_range_learning_with_tf_init)
@@ -1085,6 +1081,7 @@ class TestQuantSimRangeLearning:
         assert np.allclose(numpy_dq_by_dx, input_gradient)
 
         sess.close()
+        sim.session.close()
 
     def test_n_p_computation(self):
         """
@@ -1092,11 +1089,11 @@ class TestQuantSimRangeLearning:
         :return:
         """
 
-        tf.reset_default_graph()
+        tf.compat.v1.reset_default_graph()
         bitwidth = 8
 
         sym_n, sym_p = _get_n_and_p(bitwidth, tf.cast(True, tf.bool))
-        sess = tf.Session(graph=tf.get_default_graph())
+        sess = tf.compat.v1.Session(graph=tf.compat.v1.get_default_graph())
         initialize_uninitialized_vars(sess)
 
         # for 8 bit , -127 to +127
@@ -1107,7 +1104,7 @@ class TestQuantSimRangeLearning:
         comp_symmetric_p = sess.run(sym_p)
 
         asym_n, asym_p = _get_n_and_p(bitwidth, tf.cast(False, tf.bool))
-        sess = tf.Session(graph=tf.get_default_graph())
+        sess = tf.compat.v1.Session(graph=tf.compat.v1.get_default_graph())
         initialize_uninitialized_vars(sess)
 
         # for 8 bit , 0 to 255
@@ -1122,13 +1119,15 @@ class TestQuantSimRangeLearning:
         assert expected_sym_n == comp_symmetric_n
         assert expected_sym_p == comp_symmetric_p
 
+        sess.close()
+
     def test_qc_custom_gradient_training_loop_range_learning(self, iterations=1):
         """
         test to get average time spent in range learning grad
         """
 
-        tf.reset_default_graph()
-        tf.set_random_seed(0)
+        tf.compat.v1.reset_default_graph()
+        tf.compat.v1.set_random_seed(0)
         with tf.device('/cpu:0'):
             inputs = tf.keras.Input(shape=(32, 32, 1,))
             conv_op = tf.keras.layers.Conv2D(1, (2, 2),
@@ -1138,7 +1137,7 @@ class TestQuantSimRangeLearning:
             reshape = tf.keras.layers.Flatten()(relu_op)
             _ = tf.keras.layers.Dense(10)(reshape)
 
-        sess = tf.Session(graph=tf.get_default_graph())
+        sess = tf.compat.v1.Session(graph=tf.compat.v1.get_default_graph())
         initialize_uninitialized_vars(sess)
 
         sim = QuantizationSimModel(sess, ['input_1'], ['dense/BiasAdd'], use_cuda=True,
@@ -1166,17 +1165,17 @@ class TestQuantSimRangeLearning:
         one_hot_labels = np.eye(10)[labels]
 
         with sim.session.graph.as_default():
-            var_list = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES)
-            labels_placeholder = tf.placeholder(tf.float32, [None, 10], name='labels')
-            loss = tf.losses.softmax_cross_entropy(onehot_labels=labels_placeholder, logits=logits)
+            var_list = tf.compat.v1.get_collection(tf.compat.v1.GraphKeys.TRAINABLE_VARIABLES)
+            labels_placeholder = tf.compat.v1.placeholder(tf.float32, [None, 10], name='labels')
+            loss = tf.compat.v1.losses.softmax_cross_entropy(onehot_labels=labels_placeholder, logits=logits)
 
             update_ops = []
-            global_step = tf.train.create_global_step()
-            optimizer = tf.train.GradientDescentOptimizer(learning_rate=1e-3)
+            global_step = tf.compat.v1.train.create_global_step()
+            optimizer = tf.compat.v1.train.GradientDescentOptimizer(learning_rate=1e-3)
             gradients = optimizer.compute_gradients(loss, var_list)
 
-            init_global = tf.global_variables_initializer()
-            init_local = tf.local_variables_initializer()
+            init_global = tf.compat.v1.global_variables_initializer()
+            init_local = tf.compat.v1.local_variables_initializer()
             init = tf.group(init_global, init_local)
             sim.session.run(init)
 
@@ -1197,7 +1196,8 @@ class TestQuantSimRangeLearning:
 
         default_grad_avg_time = time_taken_by_default_grad / iterations
         print('Avg time taken by custom grad', default_grad_avg_time)
-
+        sess.close()
+        sim.session.close()
         return default_grad_avg_time
 
     def test_qc_custom_gradient_training_loop_pass_through(self, iterations=1):
@@ -1205,8 +1205,8 @@ class TestQuantSimRangeLearning:
         test to get average time spent with pass through grad
         """
 
-        tf.reset_default_graph()
-        tf.set_random_seed(0)
+        tf.compat.v1.reset_default_graph()
+        tf.compat.v1.set_random_seed(0)
         with tf.device('/cpu:0'):
             inputs = tf.keras.Input(shape=(32, 32, 1,))
             conv_op = tf.keras.layers.Conv2D(1, (2, 2),
@@ -1216,7 +1216,7 @@ class TestQuantSimRangeLearning:
             reshape = tf.keras.layers.Flatten()(relu_op)
             _ = tf.keras.layers.Dense(10)(reshape)
 
-        sess = tf.Session(graph=tf.get_default_graph())
+        sess = tf.compat.v1.Session(graph=tf.compat.v1.get_default_graph())
         initialize_uninitialized_vars(sess)
 
         sim = QuantizationSimModel(sess, ['input_1'], ['dense/BiasAdd'], use_cuda=True,
@@ -1244,17 +1244,17 @@ class TestQuantSimRangeLearning:
         one_hot_labels = np.eye(10)[labels]
 
         with sim.session.graph.as_default():
-            var_list = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES)
-            labels_placeholder = tf.placeholder(tf.float32, [None, 10], name='labels')
-            loss = tf.losses.softmax_cross_entropy(onehot_labels=labels_placeholder, logits=logits)
+            var_list = tf.compat.v1.get_collection(tf.compat.v1.GraphKeys.TRAINABLE_VARIABLES)
+            labels_placeholder = tf.compat.v1.placeholder(tf.float32, [None, 10], name='labels')
+            loss = tf.compat.v1.losses.softmax_cross_entropy(onehot_labels=labels_placeholder, logits=logits)
 
             update_ops = []
-            global_step = tf.train.create_global_step()
-            optimizer = tf.train.GradientDescentOptimizer(learning_rate=1e-3)
+            global_step = tf.compat.v1.train.create_global_step()
+            optimizer = tf.compat.v1.train.GradientDescentOptimizer(learning_rate=1e-3)
             gradients = optimizer.compute_gradients(loss, var_list)
 
-            init_global = tf.global_variables_initializer()
-            init_local = tf.local_variables_initializer()
+            init_global = tf.compat.v1.global_variables_initializer()
+            init_local = tf.compat.v1.local_variables_initializer()
             init = tf.group(init_global, init_local)
             sim.session.run(init)
 
@@ -1276,22 +1276,25 @@ class TestQuantSimRangeLearning:
         default_grad_avg_time = time_taken_by_default_grad / iterations
         print('Avg time taken by custom grad', default_grad_avg_time)
 
+        sess.close()
+        sim.session.close()
         return default_grad_avg_time
 
     def test_accumulator_overflow(self):
         """ Test check accumulator overflow utility """
 
-        tf.reset_default_graph()
-        sess = tf.Session()
+        tf.compat.v1.reset_default_graph()
+        sess = tf.compat.v1.Session()
         with sess.graph.as_default():
             inputs = tf.keras.Input(shape=(8, 8, 3,))
             _ = tf.keras.layers.Conv2D(10, (2, 2), kernel_initializer=tf.constant_initializer(255))(inputs)
-            init = tf.global_variables_initializer()
+            init = tf.compat.v1.global_variables_initializer()
             sess.run(init)
 
         layer, range_used = check_accumulator_overflow(sess, 8, 27)
         assert 'conv2d/Conv2D' == layer
         assert 100 * range_used == pytest.approx(0.5836, 0.001)
+        sess.close()
 
     def _compare_range_learning_with_default_grad(self):
         """
@@ -1312,8 +1315,8 @@ class TestQuantSimRangeLearning:
         with bias add skipped
         """
 
-        tf.reset_default_graph()
-        tf.set_random_seed(0)
+        tf.compat.v1.reset_default_graph()
+        tf.compat.v1.set_random_seed(0)
         np.random.seed(0)
         with tf.device('/cpu:0'):
             inputs = tf.keras.Input(shape=(32, 32, 1,))
@@ -1325,7 +1328,7 @@ class TestQuantSimRangeLearning:
             reshape = tf.keras.layers.Flatten()(relu_op)
             _ = tf.keras.layers.Dense(10)(reshape)
 
-        sess = tf.Session(graph=tf.get_default_graph())
+        sess = tf.compat.v1.Session(graph=tf.compat.v1.get_default_graph())
         initialize_uninitialized_vars(sess)
 
         # create quantsim model without config file
@@ -1362,15 +1365,15 @@ class TestQuantSimRangeLearning:
         one_hot_labels = np.eye(10)[labels]
 
         with sim.session.graph.as_default():
-            var_list = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES)
-            labels_placeholder = tf.placeholder(tf.float32, [None, 10], name='labels')
-            loss = tf.losses.softmax_cross_entropy(onehot_labels=labels_placeholder, logits=logits)
+            var_list = tf.compat.v1.get_collection(tf.compat.v1.GraphKeys.TRAINABLE_VARIABLES)
+            labels_placeholder = tf.compat.v1.placeholder(tf.float32, [None, 10], name='labels')
+            loss = tf.compat.v1.losses.softmax_cross_entropy(onehot_labels=labels_placeholder, logits=logits)
 
             update_ops = []
-            global_step = tf.train.create_global_step()
+            global_step = tf.compat.v1.train.create_global_step()
             initialize_uninitialized_vars(sim.session)
 
-            optimizer = tf.train.GradientDescentOptimizer(learning_rate=1e-3)
+            optimizer = tf.compat.v1.train.GradientDescentOptimizer(learning_rate=1e-3)
             gradients = optimizer.compute_gradients(loss, var_list)
 
             sim.compute_encodings(dummy_forward_pass, None)
@@ -1430,3 +1433,6 @@ class TestQuantSimRangeLearning:
             assert encoding_max_before_train != encoding_max_after_train
             assert conv2d_output_encoding_min_before_train != conv2d_output_encoding_min_after_train
             assert conv2d_output_encoding_max_before_train != conv2d_output_encoding_max_after_train
+
+        sess.close()
+        sim.session.close()
