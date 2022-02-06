@@ -64,10 +64,9 @@ def pass_calibration_data(sim_model):
     """
 
     # User action required
-    # The following commented out line is an example of how to use the ImageNet data loader.
-    # data_loader = ImageNetDataPipeline.get_val_dataloader()
-    # Replace the following line with your own dataset's data loader.
-    data_loader = None
+    # The following line is an example of how to use the ImageNet data's validation data loader.
+    # Replace the following line with your own dataset's validation data loader.
+    data_loader = ImageNetDataPipeline.get_val_dataloader()
 
     # User action required
     # For computing the activation encodings, around 1000 unlabelled data samples are required.
@@ -101,10 +100,10 @@ def apply_adaround_example():
     dummy_input = torch.randn(input_shape).to(torch.device('cuda'))
 
     # User action required
-    # The following commented out line is an example of how to use the ImageNet data loader.
-    # data_loader = ImageNetDataPipeline.get_val_dataloader()
-    # Replace the following line with your own dataset's data loader.
-    data_loader = None
+    # AdaRound requires training data
+    # The following line of code is an example of how to use the ImageNet data's training data loader.
+    # Replace the following line with your own dataset's training data loader.
+    data_loader = ImageNetDataPipeline.get_train_dataloader()
 
     params = AdaroundParameters(data_loader=data_loader, num_batches=4, default_num_iterations=50,
                                 default_reg_param=0.01, default_beta_range=(20, 2))

@@ -64,10 +64,9 @@ def pass_calibration_data(sim_model):
     """
 
     # User action required
-    # The following commented out line is an example of how to use the ImageNet data loader.
-    # data_loader = ImageNetDataPipeline.get_val_dataloader()
-    # Replace the following line with your own dataset's data loader.
-    data_loader = None
+    # The following line of code is an example of how to use the ImageNet data's validation data loader.
+    # Replace the following line with your own dataset's validation data loader.
+    data_loader = ImageNetDataPipeline.get_val_dataloader()
 
     # User action required
     # For computing the activation encodings, around 1000 unlabelled data samples are required.
@@ -116,8 +115,9 @@ def quantize_and_finetune_example():
     # Quantization Aware Training - Fine-tune the model for  few epochs to retain accuracy using your pipeline's train()
 
     # User action required
-    # Replace the following commented out line with calling your pipeline's train() with the model as the argument.
-    # train(quant_sim.model)
+    # The following line of code illustrates that the model is getting finetuned.
+    # Replace the following train() function with your pipeline's train() function.
+    train(quant_sim.model)
 
     # Export the model which saves pytorch model without any simulation nodes and saves encodings file for both
     # activations and parameters in JSON format

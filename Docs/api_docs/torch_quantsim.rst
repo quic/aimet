@@ -22,6 +22,12 @@ Top-level API
 
 |
 
+**Note about Quantization Schemes** : AIMET offers multiple Quantization Schemes-
+    1. Post Training Quantization- The encodings of the model are computed using TF or TF-Enhanced scheme
+    2. Trainable Quantization- The min max of encodings are learnt during training.
+        * Range Learning with TF initialization - Uses TF scheme to initialize the encodings and then during training these encodings are fine-tuned to improve accuracy of the model
+        * Range Learning with TF-Enhanced initialization - Uses TF-Enhanced scheme to initialize the encodings and then during training these encodings are fine-tuned to improve accuracy of the model
+
 **The following API can be used to Compute Encodings for Model**
 
 .. automethod:: aimet_torch.quantsim.QuantizationSimModel.compute_encodings

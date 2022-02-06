@@ -162,10 +162,9 @@ def bias_correction_empirical():
     batch_size = 64
 
     # User action required
-    # The following commented out line is an example of how to use the ImageNet data loader.
-    # data_loader = ImageNetDataPipeline.get_val_dataloader()
-    # Replace the following line with your own dataset's data loader.
-    data_loader = None
+    # The following line of code is an example of how to use the ImageNet data's validation data loader.
+    # Replace the following line with your own dataset's validation data loader.
+    data_loader = ImageNetDataPipeline.get_val_dataloader()
 
     model = MobileNetV2()
     model.eval()
@@ -183,10 +182,9 @@ def bias_correction_analytical_and_empirical():
     batch_size = 64
 
     # User action required
-    # The following commented out line is an example of how to use the ImageNet data loader.
-    # data_loader = ImageNetDataPipeline.get_val_dataloader()
-    # Replace the following line with your own dataset's data loader.
-    data_loader = None
+    # The following line of code is an example of how to use the ImageNet data's validation data loader.
+    # Replace the following line with your own dataset's validation data loader.
+    data_loader = ImageNetDataPipeline.get_val_dataloader()
 
     model = MobileNetV2()
     model.eval()
