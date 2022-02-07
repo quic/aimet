@@ -39,7 +39,9 @@ import tensorflow as tf
 
 from aimet_tensorflow.keras.batch_norm_fold import fold_all_batch_norms
 from aimet_tensorflow.keras.batch_norm_fold import fold_given_batch_norms
+from aimet_tensorflow.keras.cross_layer_equalization import CrossLayerScaling
 from aimet_tensorflow.keras.utils.model_transform_utils import replace_relu6_with_relu
+
 
 def cross_layer_equalization_auto_stepwise():
     """
@@ -87,6 +89,13 @@ def cross_layer_equalization_manual():
     # fold given layers
     fold_given_batch_norms(model, layer_pairs=layer_pairs)
 
+    # Cross Layer Scaling
+    # Create a list of consecutive conv layers to be equalized
+    consecutive_layer_list = get_consecutive_layer_list_from_resnet50_for_scaling(model)
+
+    # invoke api to perform scaling on given list of cls pairs
+    scaling_factor_list = CrossLayerScaling.scale_cls_sets(consecutive_layer_list)
+
 
 def get_example_layer_pairs_resnet50_for_folding(model):
     """
@@ -112,3 +121,17 @@ def get_example_layer_pairs_resnet50_for_folding(model):
                    (conv_op_3, bn_op_3, True)]
 
     return layer_pairs
+
+
+def get_consecutive_layer_list_from_resnet50_for_scaling(model: tf.keras.Model):
+    """
+    helper function to pick example consecutive layer list for scaling.
+    :param model: tf.keras.Model
+    :return: sample layers for scaling as consecutive_layer_list from Resnet50 model
+    """
+    conv_op_1 = model.layers[2]
+    conv_op_2 = model.layers[7]
+    conv_op_3 = model.layers[10]
+
+    consecutive_layer_list = [(conv_op_1, conv_op_2), (conv_op_2, conv_op_3)]
+    return consecutive_layer_list

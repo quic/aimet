@@ -60,7 +60,7 @@ Lower Level APIs for Cross Layer Equalization
 
 **API for Cross Layer Scaling on subset of conv layer groups**
 
-Under development
+.. autofunction:: aimet_tensorflow.keras.cross_layer_equalization.CrossLayerScaling.scale_cls_sets
 
 |
 
@@ -86,7 +86,7 @@ Code Example for Lower level APIs
 
 .. literalinclude:: ../keras_code_examples/post_training_techniques_examples.py
     :language: python
-    :lines: 38, 41, 42
+    :lines: 38, 41, 42, 43
 
 **Perform Cross Layer Equalization in manual mode**
 
@@ -102,3 +102,9 @@ Example helper methods to perform CLE in manual mode
 .. literalinclude:: ../keras_code_examples/post_training_techniques_examples.py
     :language: python
     :pyobject: get_example_layer_pairs_resnet50_for_folding
+
+**Helper to pick layers for cross layer scaling**
+
+.. literalinclude:: ../keras_code_examples/post_training_techniques_examples.py
+    :language: python
+    :pyobject: get_consecutive_layer_list_from_resnet50_for_scaling

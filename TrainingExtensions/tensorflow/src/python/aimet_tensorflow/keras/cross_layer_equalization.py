@@ -337,6 +337,7 @@ class CrossLayerScaling:
             typing.List[typing.Union[np.ndarray, typing.Tuple[np.ndarray, np.ndarray]]]:
         """
         Scale each cls set
+
         :param cls_sets: Cls sets to scale
         :return: List of scale factors corresponding to each scaled cls set
         """
