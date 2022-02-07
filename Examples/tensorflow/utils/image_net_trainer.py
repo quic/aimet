@@ -182,22 +182,22 @@ class ImageNetTrainer:
         with session.graph.as_default():
             loss_op = tf.get_collection(tf.GraphKeys.LOSSES)[0]
 
-            global_step_op = tf.train.get_global_step()
+            global_step_op = tf.compat.v1.train.get_global_step()
             if global_step_op is None:
-                global_step_op = tf.train.create_global_step()
+                global_step_op = tf.compat.v1.train.create_global_step()
 
             if decay_steps:
-                learning_rate_op = tf.train.exponential_decay(learning_rate,
-                                                              global_step=global_step_op,
-                                                              decay_steps=decay_steps * iterations,
-                                                              decay_rate=decay_rate,
-                                                              staircase=True,
-                                                              name='exponential_decay_learning_rate')
+                learning_rate_op = tf.compat.v1.train.exponential_decay(learning_rate,
+                                                                        global_step=global_step_op,
+                                                                        decay_steps=decay_steps * iterations,
+                                                                        decay_rate=decay_rate,
+                                                                        staircase=True,
+                                                                        name='exponential_decay_learning_rate')
             else:
                 learning_rate_op = learning_rate
 
             # Define an optimizer
-            optimizer_op = tf.train.MomentumOptimizer(learning_rate=learning_rate_op, momentum=0.9)
+            optimizer_op = tf.compat.v1.train.MomentumOptimizer(learning_rate=learning_rate_op, momentum=0.9)
 
             # Ensures that we execute the update_ops before performing the train_op
             update_ops = set(update_ops).union(tf.get_collection(tf.GraphKeys.UPDATE_OPS))

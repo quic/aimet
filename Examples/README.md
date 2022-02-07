@@ -46,7 +46,7 @@ This section describes how to apply the various quantization and compression tec
   - Cross Layer Equalization performs BatchNorm Folding, Cross Layer Scaling, and High Bias Fold
   - Bias Correction corrects shift in layer outputs introduced due to quantization
 - _Adaround (Adaptive Rounding) - [Torch](torch/quantization/adaround.py), [TensorFlow](tensorflow/quantization/ada_round.py)_:
-  -  AdaRound is a weight-rounding mechanism for post-training quantization (PTQ) that adapts to the data and the task loss. AdaRound is computationally fast, needs only a small number of unlabeled examples (which may even be for a different dataset in the same domain), optimizes a local loss, does not require end-to-end finetuning, requires very little or no hyperparameter tuning for different networks and tasks, and can be applied to convolutional or fully connected layers without any modification. It complementary to most other post-training quantization techniques such as CLE, batch-normalization folding and high bias absorption.
+  - AdaRound is a weight-rounding mechanism for post-training quantization (PTQ) that adapts to the data and the task loss. AdaRound is computationally fast, needs only a small number of unlabeled examples (which may even be for a different dataset in the same domain), optimizes a local loss, does not require end-to-end finetuning, requires very little or no hyperparameter tuning for different networks and tasks, and can be applied to convolutional or fully connected layers without any modification. It complementary to most other post-training quantization techniques such as CLE, batch-normalization folding and high bias absorption.
 
 ### Quantization Examples
 - _Quantization-aware Training - [Torch](torch/quantization/quantization_aware_training.py), [TensorFlow](tensorflow/quantization/qat.py)_:
@@ -62,8 +62,8 @@ This section describes how to apply the various quantization and compression tec
   - Weight SVD is a tensor decomposition technique which decomposes one large layer (in terms of mac or memory) into two smaller layers. Given a neural network layer, with kernel (m,n,h,w) where m is the input channels, n the output channels, and h, w giving the height and width of the kernel itself, Weight SVD will decompose the kernel into one of size (m,k,1,1) and another of size (k,n,h,w), where k is called the rank. The smaller the value of k the larger the degree of compression achieved.
 
 ## Running Examples via Jupyter Notebook
-- Install the Jupyter metapackage as follows:  
-`sudo -H python3 -m pip install jupyter`  
+- Install the Jupyter metapackage as follows (pre-pend with "sudo -H" if appropriate):  
+`python3 -m pip install jupyter`  
 - Start the notebook server as follows (please customize the command line options if appropriate):  
 `jupyter notebook --ip=* --no-browser &`
 - The above command will generate and display a URL in the terminal. Copy and paste it into your browser.
