@@ -112,7 +112,7 @@ cat /usr/local/lib/python3.6/dist-packages/aimet_torch/bin/reqs_deb_torch_gpu.tx
 *Optional*: Replace the Pillow package with Pillow-SIMD as follows:
 ```bash
 python3 -m pip uninstall -y pillow
-python3 -m pip install --no-cache-dir Pillow-SIMD==6.2.2.post1
+python3 -m pip install --no-cache-dir Pillow-SIMD==7.0.0.post3
 ```
 
 ### Post installation steps
@@ -123,10 +123,10 @@ ln -s /usr/lib/x86_64-linux-gnu/libjpeg.so /usr/lib
 
 > _NOTE:_ Do the following step **ONLY** for the PyTorch or Tensorflow GPU packages.
 ```bash
-# If you installed the CUDA 10.x drivers
-ln -s /usr/local/cuda-10.0 /usr/local/cuda
-# OR if you installed the CUDA 11.x drivers
+# If you installed the CUDA 11.x drivers
 ln -s /usr/local/cuda-11.0 /usr/local/cuda
+# OR if you installed the CUDA 10.x drivers
+ln -s /usr/local/cuda-10.0 /usr/local/cuda
 ```
 
 ## Environment setup

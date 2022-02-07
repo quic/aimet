@@ -77,4 +77,4 @@ def add_image_net_computational_nodes_in_graph(session: tf.Session, logits: tf.p
                                   name='top5-acc')
 
         # loss Op: loss
-        loss = tf.reduce_mean(tf.losses.softmax_cross_entropy(onehot_labels=y, logits=y_hat))
+        loss = tf.reduce_mean(tf.compat.v1.losses.softmax_cross_entropy(onehot_labels=y, logits=y_hat))

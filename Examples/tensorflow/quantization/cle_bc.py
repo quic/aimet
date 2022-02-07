@@ -299,7 +299,7 @@ def perform_cle_bc(config: argparse.Namespace):
                    image_net_config.dataset['image_channels'])
     tf.keras.backend.clear_session()
     model = MobileNet(weights='imagenet', input_shape=input_shape)
-    sess = tf.keras.backend.get_session()
+    sess = tf.compat.v1.keras.backend.get_session()
     add_image_net_computational_nodes_in_graph(sess, model.output, image_net_config.dataset['images_classes'])
 
     # 3. Calculates Model accuracy

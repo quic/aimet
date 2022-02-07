@@ -175,7 +175,7 @@ class ImageNetDataLoader:
         labels = tf.one_hot(indices=label, depth=image_net_config.dataset['images_classes'])
 
         # Decode the jpeg
-        with tf.name_scope('prep_image', values=[image_data], default_name=None):
+        with tf.compat.v1.name_scope('prep_image', values=[image_data], default_name=None):
             # decode and reshape to default self._image_size x self._image_size
             # pylint: disable=no-member
             image = tf.image.decode_jpeg(image_data, channels=image_net_config.dataset['image_channels'])

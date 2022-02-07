@@ -364,7 +364,7 @@ def compress_and_finetune(config: argparse.Namespace):
     tf.keras.backend.clear_session()
     model = ResNet50(weights='imagenet', input_shape=input_shape)
     logger.info("loaded model")
-    sess = tf.keras.backend.get_session()
+    sess = tf.compat.v1.keras.backend.get_session()
     add_image_net_computational_nodes_in_graph(sess, model.output, image_net_config.dataset['images_classes'])
     update_ops_name = [op.name for op in model.updates]
 
