@@ -68,13 +68,16 @@ class DenseSubclassing(tf.keras.Model):
         x = self.softmax(x)
         return x
 
-def model_with_add():
+def model_with_lambda_operators():
     inp = tf.keras.layers.Input(shape=(5,))
     inp_2 = tf.keras.layers.Input(shape=(3,))
     x1 = tf.keras.layers.Dense(units=2)(inp)
     x2 = tf.keras.layers.Dense(units=2)(inp_2)
-    x = tf.keras.layers.Add()([x1, x2])
-    model = tf.keras.Model(inputs=(inp, inp_2), outputs=x, name="model_with_add")
+    x = x1 + x2
+    x = x - 1.0
+    x = x * x1
+    x = x / x2
+    model = tf.keras.Model(inputs=(inp, inp_2), outputs=x, name="model_with_lambda_operators")
     return model
 
 def model_with_reused_layer():
@@ -139,25 +142,22 @@ def test_quantsim_basic():
 
         qsim.export('./data', 'test_export')
 
-def test_model_with_add():
+def test_model_with_lambda_operators():
     if version.parse(tf.version.VERSION) >= version.parse("2.00"):
-        model = model_with_add()
+        model = model_with_lambda_operators()
         rand_inp_1 = np.random.randn(10, 5)
         rand_inp_2 = np.random.randn(10, 3)
         _ = model.predict((rand_inp_1, rand_inp_2))
 
         qsim = QuantizationSimModel(model, quant_scheme='tf')
-        for wrapper in qsim.quant_wrappers():
-            for input_q in wrapper.input_quantizers:
-                input_q.disable()
         qsim.compute_encodings(lambda m, _: m((rand_inp_1, rand_inp_2)), None)
-        qsim.export('./data', 'model_with_add')
-        assert len(list(qsim.quant_wrappers())) == 3
+        qsim.export('./data', 'model_with_lambda_operators')
+        assert len(list(qsim.quant_wrappers())) == 6
 
-        with open("./data/model_with_add.encodings", "r") as encodings_file:
+        with open("./data/model_with_lambda_operators.encodings", "r") as encodings_file:
             encodings = json.load(encodings_file)
 
-        assert len(encodings['activation_encodings']) == 3
+        assert len(encodings['activation_encodings']) == 8
         assert len(encodings['param_encodings']) == 4
 
 def test_qat():

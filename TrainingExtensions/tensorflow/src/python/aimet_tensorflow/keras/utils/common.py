@@ -3,7 +3,7 @@
 # =============================================================================
 #  @@-COPYRIGHT-START-@@
 #
-#  Copyright (c) 2021, Qualcomm Innovation Center, Inc. All rights reserved.
+#  Copyright (c) 2022, Qualcomm Innovation Center, Inc. All rights reserved.
 #
 #  Redistribution and use in source and binary forms, with or without
 #  modification, are permitted provided that the following conditions are met:
@@ -45,6 +45,17 @@ from aimet_common.utils import AimetLogger
 
 _logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Quant)
 
+lambda_operators = ['__operators__.add', 'math.multiply', 'math.truediv', 'math.subtract']
+
+def is_lambda_operator(layer: tf.keras.layers.Layer) -> bool:
+    """
+    Check if layer is a known lambda operator (ex. when '+', '-', '*', '/' are used in the model definition)
+    :param layer: Layer to check
+    :return True if layer is a known lambda operator, False otherwise
+    """
+    if 'function' in layer.get_config():
+        return layer.get_config()['function'] in lambda_operators
+    return False
 
 def module_to_name_map(cur_layer: (tf.keras.Model, tf.keras.layers.Layer)) \
         -> typing.Dict[tf.keras.layers.Layer, typing.Tuple[tf.keras.Model, str]]:

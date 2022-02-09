@@ -43,6 +43,8 @@ import tensorflow as tf
 from aimet_common.utils import AimetLogger
 from aimet_common.defs import MAP_QUANT_SCHEME_TO_PYMO, MAP_ROUND_MODE_TO_PYMO, QuantScheme
 from aimet_tensorflow.keras.quant_sim.tensor_quantizer import ActivationTensorQuantizer, ParamTensorQuantizer
+from aimet_tensorflow.keras.utils.common import is_lambda_operator
+
 _logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Quant)
 
 class QuantizerSettings:
@@ -202,7 +204,7 @@ class QcQuantizeWrapper(tf.keras.layers.Layer):
                 "shadow_params": self._shadow_params}
 
     # pylint: disable=arguments-differ
-    def call(self, inputs):
+    def call(self, inputs, *args, **kwargs):
         """
         Forward-pass routine. This quantizes the weights before delegating to the wrapped module and then quantizes the
         output before returning the same
@@ -212,9 +214,15 @@ class QcQuantizeWrapper(tf.keras.layers.Layer):
         for idx, param in enumerate(self._layer_to_wrap.weights):
             self._shadow_params[idx].assign(param)
         self._quantize_params()
-        inputs = self._quantize_activation(inputs, self.input_quantizers)
-        outputs = self._layer_to_wrap(inputs)
-        outputs = self._quantize_activation(outputs, self.output_quantizers)
+
+        # Special logic for +, -, *, / operators which become lambda layers with kwarg inputs
+        if is_lambda_operator(self._layer_to_wrap) and 'y' in kwargs and len(self.input_quantizers) == 2:
+            inputs = self._quantize_activation(inputs, [self.input_quantizers[0]], True)
+            kwargs['y'] = self._quantize_activation(kwargs['y'], [self.input_quantizers[1]], True)
+        else:
+            inputs = self._quantize_activation(inputs, self.input_quantizers, True)
+        outputs = self._layer_to_wrap(inputs, *args, **kwargs)
+        outputs = self._quantize_activation(outputs, self.output_quantizers, False)
         self._restore_shadow_params()
         return outputs
 
@@ -224,13 +232,14 @@ class QcQuantizeWrapper(tf.keras.layers.Layer):
             quantized_param = self.param_quantizers[idx](param)
             self._layer_to_wrap.weights[idx].assign(quantized_param)
 
-    def _quantize_activation(self, activation: Union[tf.Tensor, List], quantizers: List[ActivationTensorQuantizer]) -> \
-            Union[tf.Tensor, List]:
+    def _quantize_activation(self, activation: Union[tf.Tensor, List], quantizers: List[ActivationTensorQuantizer],
+                             is_input_quantization: bool) -> Union[tf.Tensor, List]:
         """
         Quantize activation
         :param activation: Activation tensor(s) to quantize
         :param quantizers: List of quantizers to use for quantizing activation
-        :return: Quantized tensor(s)
+        :param is_input_quantization: True if the activation is an input, False if output
+        :return: Quantized tensor(s), or original tensors if quantization did not go through
         """
         if isinstance(activation, tf.Tensor):
             activation = [activation]
@@ -239,7 +248,20 @@ class QcQuantizeWrapper(tf.keras.layers.Layer):
             _logger.error('Mismatch between number of tensors {%s} and number of quantizers {%s} for layer {%s}',
                           len(activation), len(quantizers), self._layer_to_wrap.name)
             _logger.error('If this is a layer with multiple outputs, this is not currently supported by Quantsim.')
-            raise AssertionError
+            if is_input_quantization:
+                _logger.error('Not performing input quantization for {%s}', self._layer_to_wrap.name)
+            else:
+                _logger.error('Not performing output quantization for {%s}', self._layer_to_wrap.name)
+
+            for quantizer in quantizers:
+                quantizer.disable()
+
+            # Reformat single activation from list to tensor
+            if len(activation) == 1:
+                activation = activation[0]
+
+            return activation
+
         quantized_activations = []
         for idx, tensor in enumerate(activation):
             quantized_tensor = quantizers[idx](tensor)

@@ -157,7 +157,7 @@ def test_keras_add_layer():
     if version.parse(tf.version.VERSION) >= version.parse("2.00"):
         inp = tf.keras.layers.Input(shape=(2,))
         inp_2 = tf.keras.layers.Input(shape=(2,))
-        x = tf.keras.layers.Add()([inp, inp_2])
+        x = inp + inp_2
         model = tf.keras.Model(inputs=(inp, inp_2), outputs=x, name="model_with_add")
 
         i1 = np.array([[-.3, .5]])
@@ -167,7 +167,7 @@ def test_keras_add_layer():
                                         QuantizerSettings(8, 'nearest', 'tf', False, False, False),
                                         QuantizerSettings(8, 'nearest', 'tf', False, False, False),
                                         num_inputs=2)
-        _ = wrapped_add((i1, i2))
+        _ = wrapped_add(i1, y=i2)
         wrapped_add.compute_encoding()
         assert len(wrapped_add.input_quantizers) == 2
         assert wrapped_add.input_quantizers[0].encoding is not None
