@@ -46,6 +46,7 @@ import unittest.mock
 import logging
 import shutil
 from decimal import Decimal
+from packaging import version
 import numpy as np
 import tensorflow as tf
 from tensorflow.keras.applications.resnet50 import ResNet50
@@ -61,6 +62,7 @@ from aimet_tensorflow.common import graph_eval
 from aimet_tensorflow.compress import ModelCompressor
 from aimet_tensorflow.common import tfrecord_generator
 from aimet_tensorflow.common.tfrecord_generator import MnistParser
+from aimet_tensorflow.utils.graph import update_keras_bn_ops_trainable_flag
 from aimet_tensorflow.examples.test_models import model_with_three_convs
 
 logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Test)
@@ -272,7 +274,6 @@ class SvdAcceptanceTests(unittest.TestCase):
         # delete temp directory
         shutil.rmtree(str('./temp_meta/'))
 
-    @pytest.mark.tf1
     def test_spatial_svd_compress_manual(self):
         """
         End to end manual mode spatial SVD using Resnet50 Keras model
@@ -281,23 +282,24 @@ class SvdAcceptanceTests(unittest.TestCase):
         np.random.seed(1)
         AimetLogger.set_level_for_all_areas(logging.INFO)
 
-        graph = tf.Graph()
-
-        with graph.as_default():
-
-            _ = ResNet50(weights=None, input_shape=(224, 224, 3))
-            init = tf.compat.v1.global_variables_initializer()
-
         # Grow GPU memory as needed at the cost of fragmentation.
         config = tf.compat.v1.ConfigProto()
         config.gpu_options.allow_growth = True  # pylint: disable=no-member
+        sess = tf.compat.v1.Session(config=config)
+        tf.compat.v1.keras.backend.set_session(sess)
 
-        sess = tf.compat.v1.Session(graph=graph, config=config)
+        model = ResNet50(weights=None, input_shape=(224, 224, 3))
+        _ = update_keras_bn_ops_trainable_flag(model, False, "./t")
+        sess = tf.compat.v1.keras.backend.get_session()
+
+        output_op_names = ['probs/Softmax']
+        if version.parse(tf.version.VERSION) >= version.parse("2.00"):
+            output_op_names = ['predictions/Softmax']
 
         with sess.graph.as_default():
 
             # predicted value of the model
-            y_hat = sess.graph.get_tensor_by_name('probs/Softmax:0')
+            y_hat = sess.graph.get_tensor_by_name(output_op_names[0]+':0')
             # place holder for the labels
             y = tf.compat.v1.placeholder(tf.int64, shape=[None, 1000], name='labels')
             # prediction Op
@@ -305,7 +307,6 @@ class SvdAcceptanceTests(unittest.TestCase):
             # accuracy Op
             accuracy = tf.reduce_mean(tf.cast(correct_prediction, tf.float32), name='accuracy')
 
-        sess.run(init)
         writer = tf.compat.v1.summary.FileWriter('./', sess.graph)
         # make sure the learning_phase flag is False (inference mode)
         learning_phase = sess.graph.get_tensor_by_name('keras_learning_phase/input:0')
@@ -323,8 +324,11 @@ class SvdAcceptanceTests(unittest.TestCase):
         manual_params = aimet_tensorflow.defs.SpatialSvdParameters.ManualModeParams(list_of_module_comp_ratio_pairs=
                                                                                     list_of_module_comp_ratio_pairs)
 
+        output_op_names = ['probs/Softmax']
+        if version.parse(tf.version.VERSION) >= version.parse("2.00"):
+            output_op_names = ['predictions/Softmax']
         params = aimet_tensorflow.defs.SpatialSvdParameters(input_op_names=['input_1'],
-                                                            output_op_names=['probs/Softmax'],
+                                                            output_op_names=output_op_names,
                                                             mode=aimet_tensorflow.defs.SpatialSvdParameters.Mode.manual,
                                                             params=manual_params, multiplicity=8)
 
@@ -376,7 +380,6 @@ class SvdAcceptanceTests(unittest.TestCase):
         # delete temp directory
         shutil.rmtree(str('./temp_meta/'))
 
-    @pytest.mark.tf1
     def test_spatial_svd_compress_auto(self):
         """
         End to end auto mode spatial SVD using Resnet50 Keras model
@@ -385,26 +388,30 @@ class SvdAcceptanceTests(unittest.TestCase):
         np.random.seed(1)
         AimetLogger.set_level_for_all_areas(logging.INFO)
 
-        graph = tf.Graph()
-
-        with graph.as_default():
-
-            _ = ResNet50(weights=None, input_shape=(224, 224, 3))
-            init = tf.compat.v1.global_variables_initializer()
-
         # Grow GPU memory as needed at the cost of fragmentation.
         config = tf.compat.v1.ConfigProto()
         config.gpu_options.allow_growth = True  # pylint: disable=no-member
+        sess = tf.compat.v1.Session(config=config)
+        tf.compat.v1.keras.backend.set_session(sess)
 
-        sess = tf.compat.v1.Session(graph=graph, config=config)
+        model = ResNet50(weights=None, input_shape=(224, 224, 3))
+        _ = update_keras_bn_ops_trainable_flag(model, False, "./t")
+        sess = tf.compat.v1.keras.backend.get_session()
+
+        init = tf.compat.v1.global_variables_initializer()
+
         all_ops = sess.graph.get_operations()
         for op in all_ops:
             print(op.name)
 
+        output_op_names = ['probs/Softmax']
+        if version.parse(tf.version.VERSION) >= version.parse("2.00"):
+            output_op_names = ['predictions/Softmax']
+
         with sess.graph.as_default():
 
             # predicted value of the model
-            y_hat = sess.graph.get_tensor_by_name('probs/Softmax:0')
+            y_hat = sess.graph.get_tensor_by_name(output_op_names[0]+":0")
             # place holder for the labels
             y = tf.compat.v1.placeholder(tf.int64, shape=[None, 1000], name='labels')
             # prediction Op
@@ -438,7 +445,7 @@ class SvdAcceptanceTests(unittest.TestCase):
                                                                                 modules_to_ignore=modules_to_ignore)
 
         params = aimet_tensorflow.defs.SpatialSvdParameters(input_op_names=['input_1'],
-                                                            output_op_names=['probs/Softmax'],
+                                                            output_op_names=output_op_names,
                                                             mode=aimet_tensorflow.defs.SpatialSvdParameters.Mode.auto,
                                                             params=auto_params,
                                                             multiplicity=8)
@@ -712,28 +719,29 @@ class ChannelPruningAcceptanceTests(unittest.TestCase):
         # delete temp directory
         shutil.rmtree(str('./temp_meta/'))
 
-    @pytest.mark.tf1
     def test_channel_pruning_manual_resnet50_keras(self):
         """
         Manual mode test for Keras Resnet50
         """
         AimetLogger.set_level_for_all_areas(logging.INFO)
-
-        graph = tf.Graph()
-
-        with graph.as_default():
-
-            _ = ResNet50(weights=None, input_shape=(224, 224, 3))
-            init = tf.compat.v1.global_variables_initializer()
-
         # Grow GPU memory as needed at the cost of fragmentation.
         config = tf.compat.v1.ConfigProto()
         config.gpu_options.allow_growth = True  # pylint: disable=no-member
 
-        sess = tf.compat.v1.Session(graph=graph, config=config)
+        sess = tf.compat.v1.Session(config=config)
+        tf.compat.v1.keras.backend.set_session(sess)
+
+        model = ResNet50(weights=None, input_shape=(224, 224, 3))
+        _ = update_keras_bn_ops_trainable_flag(model, False, "./t")
+        sess = tf.compat.v1.keras.backend.get_session()
+        init = tf.compat.v1.global_variables_initializer()
+
+        output_op_names = ['probs/Softmax']
+        if version.parse(tf.version.VERSION) >= version.parse("2.00"):
+            output_op_names = ['predictions/Softmax']
 
         # predicted value of the model
-        y_hat = sess.graph.get_tensor_by_name('probs/Softmax:0')
+        y_hat = sess.graph.get_tensor_by_name(output_op_names[0]+":0")
 
         with sess.graph.as_default():
             # place holder for the labels
@@ -761,7 +769,6 @@ class ChannelPruningAcceptanceTests(unittest.TestCase):
                                            ModuleCompRatioPair(conv3_block1_2_conv, 0.5)]
 
         input_op_names = ['input_1']
-        output_op_names = ['probs/Softmax']
 
         manual_params = aimet_tensorflow.defs.ChannelPruningParameters.ManualModeParams(list_of_module_comp_ratio_pairs=
                                                                                         list_of_module_comp_ratio_pairs)
@@ -836,28 +843,29 @@ class ChannelPruningAcceptanceTests(unittest.TestCase):
         # delete temp directory
         shutil.rmtree(str('./temp_meta/'))
 
-    @pytest.mark.tf1
     def test_channel_pruning_auto_resnet50(self):
         """
         Auto mode test for Keras ResNet-50.
         """
         AimetLogger.set_level_for_all_areas(logging.INFO)
-
-        graph = tf.Graph()
-
-        with graph.as_default():
-
-            _ = ResNet50(weights=None, input_shape=(224, 224, 3))
-            init = tf.compat.v1.global_variables_initializer()
-
         # Grow GPU memory as needed at the cost of fragmentation.
         config = tf.compat.v1.ConfigProto()
         config.gpu_options.allow_growth = True  # pylint: disable=no-member
+        sess = tf.compat.v1.Session(config=config)
+        tf.compat.v1.keras.backend.set_session(sess)
 
-        sess = tf.compat.v1.Session(graph=graph, config=config)
+        model = ResNet50(weights=None, input_shape=(224, 224, 3))
+        _ = update_keras_bn_ops_trainable_flag(model, False, "./t")
+        sess = tf.compat.v1.keras.backend.get_session()
+
+        init = tf.compat.v1.global_variables_initializer()
+
+        output_op_names = ['probs/Softmax']
+        if version.parse(tf.version.VERSION) >= version.parse("2.00"):
+            output_op_names = ['predictions/Softmax']
 
         # predicted value of the model
-        y_hat = sess.graph.get_tensor_by_name('probs/Softmax:0')
+        y_hat = sess.graph.get_tensor_by_name(output_op_names[0]+":0")
 
         with sess.graph.as_default():
             # place holder for the labels
@@ -893,8 +901,6 @@ class ChannelPruningAcceptanceTests(unittest.TestCase):
                                                                                     modules_to_ignore=modules_to_ignore)
 
         input_op_names = ['input_1']
-        output_op_names = ['probs/Softmax']
-
         params = aimet_tensorflow.defs.ChannelPruningParameters(input_op_names=input_op_names,
                                                                 output_op_names=output_op_names, data_set=dataset,
                                                                 batch_size=32, num_reconstruction_samples=50,

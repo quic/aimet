@@ -52,6 +52,7 @@ from tensorflow.python.keras.applications.inception_v3 import InceptionV3
 import numpy as np
 
 from aimet_common.utils import AimetLogger
+from aimet_tensorflow.utils.graph import update_keras_bn_ops_trainable_flag
 from aimet_tensorflow.utils.graph_saver import save_and_load_graph
 import aimet_tensorflow.winnow.winnow as winnow
 from aimet_tensorflow.common.graph_eval import initialize_uninitialized_vars
@@ -140,14 +141,15 @@ class TestTfWinnower(unittest.TestCase):
         new_sess.close()
         sess.close()
 
-    @pytest.mark.tf1
     def test_reducing_resnet_50(self):
         """ Test module reduction in resnet_50 """
         tf.compat.v1.reset_default_graph()
-        sess = tf.compat.v1.Session()
+
         module_zero_channels_list = []
 
-        _ = ResNet50(weights=None)
+        model = ResNet50(weights=None)
+        _ = update_keras_bn_ops_trainable_flag(model, False, "./t")
+        sess = tf.compat.v1.keras.backend.get_session()
         init = tf.compat.v1.global_variables_initializer()
         sess.run(init)
 
@@ -173,6 +175,9 @@ class TestTfWinnower(unittest.TestCase):
 
         input_op_names = ["input_1"]
         output_op_names = ['probs/Softmax']
+        if version.parse(tf.version.VERSION) >= version.parse("2.00"):
+            output_op_names = ['predictions/Softmax']
+
         new_sess, ordered_modules_list = winnow.winnow_tf_model(sess, input_op_names, output_op_names,
                                                                 module_zero_channels_list,
                                                                 reshape=True, in_place=True, verbose=True)
@@ -188,7 +193,8 @@ class TestTfWinnower(unittest.TestCase):
             inp = tf.random.uniform(shape=(1, 224, 224, 3))
             inp_array = inp.eval(session=new_sess)
         model_input = new_sess.graph.get_tensor_by_name("input_1:0")
-        model_output = new_sess.graph.get_tensor_by_name("probs/Softmax:0")
+
+        model_output = new_sess.graph.get_tensor_by_name(output_op_names[0]+':0')
 
         # check that reduced tensor shapes are as expected
         reduced_conv3_block1_1_input = new_sess.graph.get_operation_by_name("reduced_conv3_block1_1_conv/"
