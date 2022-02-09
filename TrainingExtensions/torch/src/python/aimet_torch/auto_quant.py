@@ -72,7 +72,7 @@ class AutoQuant:
     Integrate and apply post-training quantization techniques.
 
     AutoQuant includes 1) batchnorm folding, 2) cross-layer equalization,
-    3) Adaround, and 4) Automatic Mixed Precision (if enabled).
+    and 3) Adaround.
     These techniques will be applied in a best-effort manner until the model
     meets the evaluation goal given as allowed_accuracy_drop.
     """
@@ -359,7 +359,7 @@ class AutoQuant:
 
         :param model: Model to apply adaround.
         :param dummy_input: Dummy input to the model.
-        :param results_dir: Directory to save the results of AdaRound and mixed precision.
+        :param results_dir: Directory to save the results of AdaRound.
         :return: Output model and the path to the parameter encoding file.
         """
         # NOTE: We dont need to make a deepcopy of model here, since Adaround.apply_adaround
