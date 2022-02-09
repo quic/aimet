@@ -33,12 +33,15 @@
 #
 #  @@-COPYRIGHT-END-@@
 # =============================================================================
+import pytest
+pytestmark = pytest.mark.skip("Disable tests that requires eager execution")
 import numpy as np
 import tensorflow as tf
-import pytest
-# pytestmark = pytest.mark.skip("Disable tests that requires eager execution")
 
 from aimet_tensorflow.keras.batch_norm_fold import fold_all_batch_norms
+from aimet_tensorflow.keras.cross_layer_equalization import CrossLayerScaling
+from aimet_tensorflow.keras.utils.weight_tensor_utils import WeightTensorUtils
+
 
 def test_fold_batch_norms():
     rand_inp = np.random.randn(1, 224, 224, 3)
@@ -53,3 +56,54 @@ def test_fold_batch_norms():
     assert len(conv_bn_pairs) == 53
     assert np.allclose(before_fold_output, after_fold_output, rtol=1e-2)
     assert not np.array_equal(before_fold_weight, after_fold_weight)
+
+
+def test_cross_layer_scaling_resnet50():
+    model = tf.keras.applications.ResNet50(input_shape=(224, 224, 3))
+
+    conv4_weight_before_scaling = model.layers[22].get_weights()[0]
+    conv1, conv2 = model.layers[10], model.layers[13]
+    conv3, conv4 = model.layers[19], model.layers[22]
+
+    cls_sets = [(conv1, conv2), (conv3, conv4)]
+    scaling_factors = CrossLayerScaling.scale_cls_sets(cls_sets)
+    assert len(scaling_factors) == 2
+
+    conv4_weight_after_scaling = model.layers[22].get_weights()[0]
+    assert not np.array_equal(conv4_weight_before_scaling, conv4_weight_after_scaling)
+
+    # Test the distribution of the output channel of previous layer and input channel of next layer
+    conv3_output_range = WeightTensorUtils.get_max_abs_val_per_channel(conv3, axis=(2, 0, 1))
+    conv4_input_range = WeightTensorUtils.get_max_abs_val_per_channel(conv4, axis=(3, 0, 1))
+    assert np.allclose(conv3_output_range, conv4_input_range)
+
+
+def test_cross_layer_scaling_mobile_net_v2():
+    model = tf.keras.applications.MobileNetV2(input_shape=(224, 224, 3))
+    conv1_weight_before_scaling = model.layers[7].get_weights()[0]
+    dw_conv1_weight_before_scaling = model.layers[21].get_weights()[0]
+
+    conv1, conv2 = model.layers[7], model.layers[9]
+    conv3, dw_conv1, conv4 = model.layers[18], model.layers[21], model.layers[24]
+    cls_sets = [(conv1, conv2), (conv3, dw_conv1, conv4)]
+
+    scaling_factors = CrossLayerScaling.scale_cls_sets(cls_sets)
+    assert len(scaling_factors) == 2
+    assert len(scaling_factors[1]) == 2
+
+    conv1_weight_after_scaling = model.layers[7].get_weights()[0]
+    dw_conv1_weight_after_scaling = model.layers[21].get_weights()[0]
+
+    assert not np.array_equal(conv1_weight_before_scaling, conv1_weight_after_scaling)
+    assert not np.array_equal(dw_conv1_weight_before_scaling, dw_conv1_weight_after_scaling)
+
+    # Test the distribution of the output channel of previous layer and input channel of next layer
+    conv1_output_range = WeightTensorUtils.get_max_abs_val_per_channel(conv1, axis=(2, 0, 1))
+    conv2_input_range = WeightTensorUtils.get_max_abs_val_per_channel(conv2, axis=(3, 0, 1))
+    assert np.allclose(conv1_output_range, conv2_input_range)
+
+    conv3_output_range = WeightTensorUtils.get_max_abs_val_per_channel(conv3, axis=(2, 0, 1))
+    depthwise_conv1_output_range = WeightTensorUtils.get_max_abs_val_per_channel(dw_conv1, axis=(3, 0, 1))
+    conv4_input_range = WeightTensorUtils.get_max_abs_val_per_channel(conv4, axis=(3, 0, 1))
+    assert np.allclose(conv3_output_range, depthwise_conv1_output_range)
+    assert np.allclose(depthwise_conv1_output_range, conv4_input_range)
