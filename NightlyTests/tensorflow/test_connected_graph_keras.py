@@ -89,4 +89,5 @@ def test_graph_searcher_functionality_keras():
         graph_searcher = GraphSearcher(connected_graph_from_keras_model, patterns_with_callbacks)
 
         graph_searcher.find_all_patterns_in_graph_apply_actions()
-        _ = layer_select_handler.get_conv_linear_bn_info_dict()
+        conv_linear_bn_info_dict = layer_select_handler.get_conv_linear_bn_info_dict()
+        assert len(conv_linear_bn_info_dict) == 53
