@@ -464,7 +464,15 @@ class AutoQuant:
             results_dir: str = "/tmp",
     ) -> Tuple[torch.nn.Module, float, str]:
         """
-        See self.apply().
+        Helper function of apply().
+
+        :param fp32_model: Model to apply PTQ techniques.
+        :param target_acc: Target eval score.
+        :param dummy_input: Dummy input to the model.
+            The device of dumyy_input should be same as that of model.
+        :param eval_manager: _Evalmanager object.
+        :param results_dir: Directory to save the results.
+        :return: Tuple of  (best model, eval score, encoding path).
         """
         with eval_manager.analysis_session("Weight Quantization Sensitivity") as sess:
             acc = sess.eval(fp32_model, default_output_bw=32)
