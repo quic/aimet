@@ -44,6 +44,7 @@ AIMET Quantsim.
 import os
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
 
+# pylint: disable=wrong-import-position
 import argparse
 from datetime import datetime
 import logging
@@ -51,6 +52,7 @@ from typing import List, Callable, Any
 import tensorflow.compat.v1 as tf
 from tensorflow.python.keras.applications.resnet import ResNet50
 tf.disable_eager_execution()
+tf.logging.set_verbosity(tf.logging.ERROR)
 
 # imports for AIMET
 from aimet_common.defs import QuantScheme

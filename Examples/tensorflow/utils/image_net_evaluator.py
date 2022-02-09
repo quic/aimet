@@ -43,11 +43,13 @@ Creates Evaluator for Image-Net dataset
 import os
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
 
+# pylint: disable=wrong-import-position
 import logging
 from typing import List
 import progressbar
 import tensorflow.compat.v1 as tf
 tf.disable_eager_execution()
+tf.logging.set_verbosity(tf.logging.ERROR)
 
 from Examples.tensorflow.utils.image_net_data_loader import ImageNetDataLoader
 from Examples.common import image_net_config

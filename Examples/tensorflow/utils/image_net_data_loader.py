@@ -42,6 +42,7 @@ Creates data-loader for Image-Net dataset
 import os
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
 
+# pylint: disable=wrong-import-position
 import multiprocessing
 from typing import Tuple
 import wget
@@ -49,6 +50,7 @@ import numpy as np
 import tensorflow.compat.v1 as tf
 from tensorflow.python.framework.ops import Tensor as tf_tensor
 tf.disable_eager_execution()
+tf.logging.set_verbosity(tf.logging.ERROR)
 
 from Examples.common import image_net_config
 

@@ -44,6 +44,7 @@ technique followed by fine-tuning.
 import os
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
 
+# pylint: disable=wrong-import-position
 import argparse
 from decimal import Decimal
 from datetime import datetime
@@ -52,6 +53,7 @@ from typing import List, Tuple
 import tensorflow.compat.v1 as tf
 from tensorflow.python.keras.applications.resnet import ResNet50
 tf.disable_eager_execution()
+tf.logging.set_verbosity(tf.logging.ERROR)
 
 # imports for AIMET
 import aimet_common.defs as aimet_common_defs
@@ -366,7 +368,7 @@ def compress_and_finetune(config: argparse.Namespace):
     model = ResNet50(weights='imagenet', input_shape=input_shape)
     update_ops_name = [op.name for op in model.updates]
     model = set_keras_BN_ops_to_trainable_false(model, load_save_path=config.logdir)
-    sess = tf.compat.v1.keras.backend.get_session()
+    sess = tf.keras.backend.get_session()
     add_image_net_computational_nodes_in_graph(sess, model.output, image_net_config.dataset['images_classes'])
 
     # 3. Calculates floating point accuracy
