@@ -41,19 +41,19 @@
 Creates trainer for Image-Net dataset
 """
 import os
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
+
 import logging
 from typing import List
 import progressbar
-import tensorflow as tf
+import tensorflow.compat.v1 as tf
+tf.disable_eager_execution()
 
 from aimet_tensorflow.common import graph_eval
 
 from Examples.tensorflow.utils.image_net_data_loader import ImageNetDataLoader
 from Examples.tensorflow.utils.image_net_evaluator import ImageNetEvaluator
 from Examples.common import image_net_config
-
-os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
-tf.compat.v1.logging.set_verbosity(tf.compat.v1.logging.ERROR)
 
 logger = logging.getLogger('Train')
 
@@ -167,7 +167,7 @@ class ImageNetTrainer:
         train_tensors = [session.graph.get_tensor_by_name(training_input)
                          for training_input in self._training_inputs]
 
-        train_tensors_dict = dict.fromkeys(train_tensors, False)
+        train_tensors_dict = dict.fromkeys(train_tensors, True)
 
         if not update_ops_name:
             update_ops_name = []
@@ -182,22 +182,22 @@ class ImageNetTrainer:
         with session.graph.as_default():
             loss_op = tf.get_collection(tf.GraphKeys.LOSSES)[0]
 
-            global_step_op = tf.compat.v1.train.get_global_step()
+            global_step_op = tf.train.get_global_step()
             if global_step_op is None:
-                global_step_op = tf.compat.v1.train.create_global_step()
+                global_step_op = tf.train.create_global_step()
 
             if decay_steps:
-                learning_rate_op = tf.compat.v1.train.exponential_decay(learning_rate,
-                                                                        global_step=global_step_op,
-                                                                        decay_steps=decay_steps * iterations,
-                                                                        decay_rate=decay_rate,
-                                                                        staircase=True,
-                                                                        name='exponential_decay_learning_rate')
+                learning_rate_op = tf.train.exponential_decay(learning_rate,
+                                                              global_step=global_step_op,
+                                                              decay_steps=decay_steps * iterations,
+                                                              decay_rate=decay_rate,
+                                                              staircase=True,
+                                                              name='exponential_decay_learning_rate')
             else:
                 learning_rate_op = learning_rate
 
             # Define an optimizer
-            optimizer_op = tf.compat.v1.train.MomentumOptimizer(learning_rate=learning_rate_op, momentum=0.9)
+            optimizer_op = tf.train.MomentumOptimizer(learning_rate=learning_rate_op, momentum=0.9)
 
             # Ensures that we execute the update_ops before performing the train_op
             update_ops = set(update_ops).union(tf.get_collection(tf.GraphKeys.UPDATE_OPS))

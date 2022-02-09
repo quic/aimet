@@ -41,13 +41,14 @@
 Adds labels placeholder and accuracy, loss ops into a graph of a TF session
 """
 import os
-import tensorflow as tf
-
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
-tf.compat.v1.logging.set_verbosity(tf.compat.v1.logging.ERROR)
+
+import tensorflow.compat.v1 as tf
+from tensorflow.python.framework.ops import Tensor as tf_tensor
+tf.disable_eager_execution()
 
 
-def add_image_net_computational_nodes_in_graph(session: tf.Session, logits: tf.python.ops.Tensor, num_classes: int):
+def add_image_net_computational_nodes_in_graph(session: tf.Session, logits: tf_tensor, num_classes: int):
     """
     :param session: Tensorflow session to operate on
     :param logits: Output tensor of session graph
@@ -77,4 +78,17 @@ def add_image_net_computational_nodes_in_graph(session: tf.Session, logits: tf.p
                                   name='top5-acc')
 
         # loss Op: loss
-        loss = tf.reduce_mean(tf.compat.v1.losses.softmax_cross_entropy(onehot_labels=y, logits=y_hat))
+        loss = tf.reduce_mean(tf.losses.softmax_cross_entropy(onehot_labels=y, logits=y_hat))
+
+from tensorflow.keras.layers import BatchNormalization as keras_BN
+from tensorflow.keras.models import load_model, save_model
+def set_keras_BN_ops_to_trainable_false(model, load_save_path: str):
+    for layer in model.layers:
+        if isinstance(layer, keras_BN):
+            layer.trainable = False
+
+    save_model(model, filepath='./tmp.h5')
+    tf.keras.backend.clear_session()
+    model = load_model('./tmp.h5')
+
+    return model

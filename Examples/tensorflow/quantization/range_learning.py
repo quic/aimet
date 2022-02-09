@@ -41,12 +41,15 @@ This file demonstrates the use of Range Learning using AIMET APIs.
 """
 
 import os
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
+
 import argparse
 from datetime import datetime
 import logging
 from typing import List, Callable, Any
-import tensorflow as tf
+import tensorflow.compat.v1 as tf
 from tensorflow.python.keras.applications.resnet import ResNet50
+tf.disable_eager_execution()
 
 # imports for AIMET
 from aimet_common.defs import QuantScheme
@@ -61,9 +64,7 @@ from Examples.common import image_net_config
 from Examples.tensorflow.utils.image_net_trainer import ImageNetTrainer
 from Examples.tensorflow.utils.image_net_evaluator import ImageNetEvaluator
 from Examples.tensorflow.utils.add_computational_nodes_in_graph import add_image_net_computational_nodes_in_graph
-
-os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
-tf.compat.v1.logging.set_verbosity(tf.compat.v1.logging.ERROR)
+from Examples.tensorflow.utils.add_computational_nodes_in_graph import set_keras_BN_ops_to_trainable_false
 
 logger = logging.getLogger('TensorFlowRangeLearning')
 formatter = logging.Formatter('%(asctime)s : %(name)s - %(levelname)s - %(message)s')
@@ -274,9 +275,10 @@ def aimet_range_learning(config: argparse.Namespace):
                    image_net_config.dataset['image_channels'])
     tf.keras.backend.clear_session()
     model = ResNet50(weights='imagenet', input_shape=input_shape)
-    sess = tf.compat.v1.keras.backend.get_session()
-    add_image_net_computational_nodes_in_graph(sess, model.output, image_net_config.dataset['images_classes'])
     update_ops_name = [op.name for op in model.updates]
+    model = set_keras_BN_ops_to_trainable_false(model, load_save_path=config.logdir)
+    sess = tf.keras.backend.get_session()
+    add_image_net_computational_nodes_in_graph(sess, model.output, image_net_config.dataset['images_classes'])
 
     # 3. Calculates Model accuracy
 

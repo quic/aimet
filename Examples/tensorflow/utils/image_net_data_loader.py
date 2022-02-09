@@ -40,29 +40,30 @@
 Creates data-loader for Image-Net dataset
 """
 import os
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
+
 import multiprocessing
 from typing import Tuple
 import wget
 import numpy as np
-import tensorflow as tf
+import tensorflow.compat.v1 as tf
+from tensorflow.python.framework.ops import Tensor as tf_tensor
+tf.disable_eager_execution()
 
 from Examples.common import image_net_config
 
 # pylint: disable-msg=import-error
 if not os.path.isfile("vgg_preprocessing.py"):
     wget.download(
-        "https://raw.githubusercontent.com/tensorflow/models/r1.13.0/research/slim/preprocessing/vgg_preprocessing.py")
+        "https://raw.githubusercontent.com/tensorflow/models/r2/research/slim/preprocessing/vgg_preprocessing.py")
 
 if not os.path.isfile("inception_preprocessing.py"):
     wget.download(
-        "https://raw.githubusercontent.com/tensorflow/models/r1.13.0/research/slim/preprocessing/inception_preprocessing.py")
+        "https://raw.githubusercontent.com/tensorflow/models/r2/research/slim/preprocessing/inception_preprocessing.py")
 
 # pylint: disable-msg=wrong-import-position
 from vgg_preprocessing import preprocess_image as vgg_resnet_preprocess_image
 from inception_preprocessing import preprocess_image as inception_mobilenet_preprocess_image
-
-os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
-tf.compat.v1.logging.set_verbosity(tf.compat.v1.logging.ERROR)
 
 # The number of input Datasets to interleave from in parallel, used in tf.contrib.data.parallel_interleave
 TRAIN_CYCLE_LEN = 10  # interleave from 10 different dataset to increase randomization
@@ -107,7 +108,7 @@ class ImageNetDataLoader:
                                                            shuffle=True)
                 cycle_length = TRAIN_CYCLE_LEN
             else:
-                self._dataset = tf.data.Dataset.list_files(os.path.join(tfrecord_dir, 'validation*'),
+                self._dataset = tf.data.Dataset.list_files(os.path.join(tfrecord_dir, 'valid*'),
                                                            shuffle=False)
                 cycle_length = EVAL_CYCLE_LEN
 
@@ -161,7 +162,7 @@ class ImageNetDataLoader:
         except tf.errors.OutOfRangeError:
             raise StopIteration
 
-    def parse(self, serialized_example: tf.python.ops.Tensor) -> Tuple[tf.python.ops.Tensor]:
+    def parse(self, serialized_example: tf_tensor) -> Tuple[tf_tensor]:
         """
         Parse one example
         :param serialized_example: single TFRecord file
@@ -175,7 +176,7 @@ class ImageNetDataLoader:
         labels = tf.one_hot(indices=label, depth=image_net_config.dataset['images_classes'])
 
         # Decode the jpeg
-        with tf.compat.v1.name_scope('prep_image', values=[image_data], default_name=None):
+        with tf.name_scope('prep_image', values=[image_data], default_name=None):
             # decode and reshape to default self._image_size x self._image_size
             # pylint: disable=no-member
             image = tf.image.decode_jpeg(image_data, channels=image_net_config.dataset['image_channels'])
