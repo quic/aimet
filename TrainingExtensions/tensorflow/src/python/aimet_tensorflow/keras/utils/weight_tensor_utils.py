@@ -36,6 +36,7 @@
 #  @@-COPYRIGHT-END-@@
 # =============================================================================
 """Weight tensor utility"""
+import typing
 import numpy as np
 import tensorflow as tf
 
@@ -81,3 +82,30 @@ class WeightTensorUtils:
             raise ValueError("Only Conv2D or it's subclass is currently supported")
 
         return transposed_tensor
+
+    @staticmethod
+    def get_max_abs_val_per_channel(
+            layer: tf.keras.layers.Conv2D, axis: typing.Tuple
+    ) -> np.ndarray:
+        """
+        Conv2D kernel tensor shape ->
+          (kernel_height, kernel_width, in_channels, out_channels)
+        Conv2DTranspose kernel tensor shape ->
+          (kernel_height, kernel_width, out_channels, in_channels)
+
+        e.g.,
+        _get_max_val_per_channel(conv, axis=(2, 0, 1)) means
+        max values of each output channels in Conv2D
+        because axis are set as (in_channels, kernel_height, kernel_width)
+
+        _get_max_val_per_channel(conv_transpose, axis=(2, 0, 1)) means
+        max values of each input channels in Conv2DTranspose
+        because axis are set as (out_channels, kernel_height, kernel_width)
+
+        :param layer: Conv2D or layer inherited from Conv2D
+        :param axis: Axis or axes along which to operate
+        :return: Argmax absolute value per channel
+        """
+        param_tensors = layer.get_weights()
+        weight_tensor = param_tensors[0]
+        return np.amax(np.abs(weight_tensor), axis=axis)

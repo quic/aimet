@@ -38,32 +38,11 @@
 """ This file contains unit tests for testing cross layer scaling feature of CLE """
 import pytest
 pytestmark = pytest.mark.skip("Disable tests that requires eager execution")
-import typing
 import numpy as np
 import tensorflow as tf
 
 from aimet_tensorflow.keras.cross_layer_equalization import GraphSearchUtils, CrossLayerScaling
-
-
-def _get_max_val_per_channel(layer: tf.keras.layers.Conv2D,
-                             axis: typing.Tuple) -> np.ndarray:
-    """
-    Conv2D kernel tensor shape ->
-      (kernel_height, kernel_width, in_channels, out_channels)
-    Conv2DTranspose kernel tensor shape ->
-      (kernel_height, kernel_width, out_channels, in_channels)
-    e.g.,
-    _get_max_val_per_channel(conv, axis=(2, 0, 1)) means
-    max values of each output channels in Conv2D
-    because axis are set as (in_channels, kernel_height, kernel_width)
-
-    _get_max_val_per_channel(conv_transpose, axis=(2, 0, 1)) means
-    max values of each input channels in Conv2DTranspose
-    because axis are set as (out_channels, kernel_height, kernel_width)
-    """
-    param_tensors = layer.get_weights()
-    weight_tensor = param_tensors[0]
-    return np.amax(np.abs(weight_tensor), axis=axis)
+from aimet_tensorflow.keras.utils.weight_tensor_utils import WeightTensorUtils
 
 
 class TestTrainingExtensionsCrossLayerScaling:
@@ -336,32 +315,32 @@ class TestTrainingExtensionsCrossLayerScaling:
 
         # (Conv2D, Conv2D w/o bias) case
         CrossLayerScaling.scale_cls_set_with_conv_layers((conv1, conv2))
-        conv1_output_range = _get_max_val_per_channel(conv1, axis=(2, 0, 1))
-        conv2_input_range = _get_max_val_per_channel(conv2, axis=(3, 0, 1))
+        conv1_output_range = WeightTensorUtils.get_max_abs_val_per_channel(conv1, axis=(2, 0, 1))
+        conv2_input_range = WeightTensorUtils.get_max_abs_val_per_channel(conv2, axis=(3, 0, 1))
         assert np.allclose(conv1_output_range, conv2_input_range)
 
         # (Conv2D w/o bias, Conv2DTranspose w/o bias) case
         CrossLayerScaling.scale_cls_set_with_conv_layers((conv2, conv_transpose1))
-        conv2_output_range = _get_max_val_per_channel(conv2, axis=(2, 0, 1))
-        conv_transpose1_input_range = _get_max_val_per_channel(conv_transpose1, axis=(2, 0, 1))
+        conv2_output_range = WeightTensorUtils.get_max_abs_val_per_channel(conv2, axis=(2, 0, 1))
+        conv_transpose1_input_range = WeightTensorUtils.get_max_abs_val_per_channel(conv_transpose1, axis=(2, 0, 1))
         assert np.allclose(conv2_output_range, conv_transpose1_input_range)
 
         # (Conv2DTranspose w/o bias, Conv2DTranspose) case
         CrossLayerScaling.scale_cls_set_with_conv_layers((conv_transpose1, conv_transpose2))
-        conv_transpose1_output_range = _get_max_val_per_channel(conv_transpose1, axis=(3, 0, 1))
-        conv_transpose2_input_range = _get_max_val_per_channel(conv_transpose2, axis=(2, 0, 1))
+        conv_transpose1_output_range = WeightTensorUtils.get_max_abs_val_per_channel(conv_transpose1, axis=(3, 0, 1))
+        conv_transpose2_input_range = WeightTensorUtils.get_max_abs_val_per_channel(conv_transpose2, axis=(2, 0, 1))
         assert np.allclose(conv_transpose1_output_range, conv_transpose2_input_range)
 
         # (Conv2DTranspose, Conv2D) case
         CrossLayerScaling.scale_cls_set_with_conv_layers((conv_transpose2, conv3))
-        conv_transpose2_output_range = _get_max_val_per_channel(conv_transpose2, axis=(3, 0, 1))
-        conv3_input_range = _get_max_val_per_channel(conv3, axis=(3, 0, 1))
+        conv_transpose2_output_range = WeightTensorUtils.get_max_abs_val_per_channel(conv_transpose2, axis=(3, 0, 1))
+        conv3_input_range = WeightTensorUtils.get_max_abs_val_per_channel(conv3, axis=(3, 0, 1))
         assert np.allclose(conv_transpose2_output_range, conv3_input_range)
 
         # (Conv2D, Conv2D) case
         CrossLayerScaling.scale_cls_set_with_conv_layers((conv3, conv4))
-        conv3_output_range = _get_max_val_per_channel(conv3, axis=(2, 0, 1))
-        conv4_input_range = _get_max_val_per_channel(conv4, axis=(3, 0, 1))
+        conv3_output_range = WeightTensorUtils.get_max_abs_val_per_channel(conv3, axis=(2, 0, 1))
+        conv4_input_range = WeightTensorUtils.get_max_abs_val_per_channel(conv4, axis=(3, 0, 1))
         assert np.allclose(conv3_output_range, conv4_input_range)
 
         outputs_after_scaling = model.predict(inputs)
@@ -381,17 +360,17 @@ class TestTrainingExtensionsCrossLayerScaling:
 
         # (Conv2D w/o bias, DepthwiseConv2D, ConvTranspose2D) case
         CrossLayerScaling.scale_cls_set_with_depthwise_conv_layers((conv1, depthwise_conv1, conv_transpose1))
-        conv1_output_range = _get_max_val_per_channel(conv1, axis=(2, 0, 1))
-        depthwise_conv1_output_range = _get_max_val_per_channel(depthwise_conv1, axis=(3, 0, 1))
-        conv_transpose1_input_range = _get_max_val_per_channel(conv_transpose1, axis=(2, 0, 1))
+        conv1_output_range = WeightTensorUtils.get_max_abs_val_per_channel(conv1, axis=(2, 0, 1))
+        depthwise_conv1_output_range = WeightTensorUtils.get_max_abs_val_per_channel(depthwise_conv1, axis=(3, 0, 1))
+        conv_transpose1_input_range = WeightTensorUtils.get_max_abs_val_per_channel(conv_transpose1, axis=(2, 0, 1))
         assert np.allclose(conv1_output_range, depthwise_conv1_output_range)
         assert np.allclose(depthwise_conv1_output_range, conv_transpose1_input_range)
 
         # (ConvTranspose2D, DepthwiseConv2D w/o bias, Conv2D) case
         CrossLayerScaling.scale_cls_set_with_depthwise_conv_layers((conv_transpose1, depthwise_conv2, conv2))
-        conv_transpose1_output_range = _get_max_val_per_channel(conv2, axis=(3, 0, 1))
-        depthwise_conv2_output_range = _get_max_val_per_channel(depthwise_conv2, axis=(3, 0, 1))
-        conv2_input_range = _get_max_val_per_channel(conv2, axis=(3, 0, 1))
+        conv_transpose1_output_range = WeightTensorUtils.get_max_abs_val_per_channel(conv2, axis=(3, 0, 1))
+        depthwise_conv2_output_range = WeightTensorUtils.get_max_abs_val_per_channel(depthwise_conv2, axis=(3, 0, 1))
+        conv2_input_range = WeightTensorUtils.get_max_abs_val_per_channel(conv2, axis=(3, 0, 1))
         assert np.allclose(conv_transpose1_output_range, depthwise_conv2_output_range)
         assert np.allclose(depthwise_conv2_output_range, conv2_input_range)
 
