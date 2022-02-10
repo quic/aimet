@@ -53,10 +53,11 @@ from aimet_common.utils import AimetLogger
 from aimet_tensorflow.common.connectedgraph import ConnectedGraph
 from aimet_tensorflow.common.module_identifier import StructureModuleIdentifier
 from aimet_tensorflow.common.sub_graph_matcher import ModuleIdentifierOpInfo
-from aimet_tensorflow.examples.test_models import keras_model, keras_model_functional, tf_slim_basic_model, \
+from aimet_tensorflow.examples.test_models import keras_model, tf_slim_basic_model, \
     single_residual, split_and_concat_model, concat_model, dropout_keras_model, dropout_slim_model, \
     tf_slim_with_softmax, multiple_input_model, upsample_model, model_with_upsample2d, model_with_leaky_relu, \
-    model_with_global_max_pool2d, keras_model_functional_with_non_fused_batchnorms,transposed_conv2d_model, instance_norm_model
+    model_with_global_max_pool2d,transposed_conv2d_model, instance_norm_model,\
+    keras_model_functional_for_tf2, keras_model_functional_with_non_fused_batchnorms_for_tf2
 import aimet_tensorflow.winnow.winnow as winnow
 
 tf.compat.v1.logging.set_verbosity(tf.compat.v1.logging.WARN)
@@ -66,7 +67,7 @@ logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Test)
 
 class TestTfConnectedGraph(unittest.TestCase):
 
-    @pytest.mark.tf1
+
     def test_transposed_conv2d_model(self):
         """ Test connected graph construction on transposed conv2D model """
         tf.compat.v1.reset_default_graph()
@@ -101,12 +102,11 @@ class TestTfConnectedGraph(unittest.TestCase):
         # 14 products from parameters
         self.assertEqual(24, len(conn_graph.get_all_products()))
 
-    @pytest.mark.tf1
     def test_keras_model_functional_get_op_product_graph(self):
         """ Test connected graph construction on keras model functional """
         tf.compat.v1.reset_default_graph()
 
-        _ = keras_model_functional()
+        _ = keras_model_functional_for_tf2()
         conn_graph = ConnectedGraph(tf.compat.v1.get_default_graph(), ['input_1'], ['keras_model_functional/Softmax'])
         self.assertTrue(validate_branch_ops(conn_graph))
         self.assertTrue(validate_product_tensor_lists(conn_graph))
@@ -117,12 +117,11 @@ class TestTfConnectedGraph(unittest.TestCase):
         # 22 products from parameters
         self.assertEqual(35, len(conn_graph.get_all_products()))
 
-    @pytest.mark.tf1
     def test_keras_model_functional_with_non_fused_batchnorms_get_op_product_graph(self):
         """ Test connected graph construction on keras model functional with non fused batchnorms """
         tf.compat.v1.reset_default_graph()
 
-        _ = keras_model_functional_with_non_fused_batchnorms()
+        _ = keras_model_functional_with_non_fused_batchnorms_for_tf2()
         conn_graph = ConnectedGraph(tf.compat.v1.get_default_graph(), ['input_1'],
                                     ['keras_model_functional_with_non_fused_batchnorms/Softmax'])
         self.assertTrue(validate_branch_ops(conn_graph))
@@ -332,11 +331,10 @@ class TestTfConnectedGraph(unittest.TestCase):
         self.assertTrue(reduced_bn_1_op.output.consumers[0].type == 'Upsample')
         new_sess.close()
 
-    @pytest.mark.tf1
     def test_keras_model_functional_with_training_ops_get_op_product_graph(self):
         """ Test connected graph construction on keras model functional with training ops attached """
         tf.compat.v1.reset_default_graph()
-        _ = keras_model_functional()
+        _ = keras_model_functional_for_tf2()
 
         # add training ops
         optimizer = tf.compat.v1.train.AdamOptimizer(learning_rate=1e-3, name='Adam_new')

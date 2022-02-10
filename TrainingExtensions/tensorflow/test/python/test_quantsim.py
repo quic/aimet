@@ -43,12 +43,13 @@ import json
 import pytest
 import unittest.mock
 import tensorflow as tf
+from packaging import version
 import libpymo
 from aimet_tensorflow.quantsim import QuantizationSimModel, check_accumulator_overflow
 from aimet_tensorflow.quantsim_straight_through_grad import _get_n_and_p
 from aimet_tensorflow.utils.graph_saver import load_model_from_meta
 from aimet_tensorflow.common.graph_eval import initialize_uninitialized_vars
-from aimet_tensorflow.examples.test_models import model_with_dtype_int, keras_model, keras_model_functional
+from aimet_tensorflow.examples.test_models import model_with_dtype_int, keras_model
 from aimet_common.defs import QuantScheme
 from aimet_tensorflow.quantsim import save_checkpoint, load_checkpoint
 from aimet_tensorflow.utils.constants import QuantizeOpIndices
@@ -141,7 +142,6 @@ class TestQuantSim(unittest.TestCase):
         sim.session.close()
         del sim
 
-    @pytest.mark.tf1
     def test_compute_encodings_cpu_model(self):
         """
         Create QuantSim for a CPU model and test that activation encodings are computed
@@ -180,10 +180,15 @@ class TestQuantSim(unittest.TestCase):
             'conv2d/BiasAdd_quantized',
             'conv2d_1/BiasAdd_quantized'
         ]
+        if version.parse(tf.version.VERSION) >= version.parse("2.00"):
+            op_mode_name_suffix = '_op_mode/Read/ReadVariableOp:0'
+        else:
+            op_mode_name_suffix = '_op_mode/read:0'
+
         for name, quantizer in sim._activation_quantizers.items():
             if name in deactivated_quantizers:
                 self.assertTrue(int(libpymo.TensorQuantizerOpMode.passThrough),
-                                sim.session.run(name + '_op_mode/read:0'))
+                                sim.session.run(name + op_mode_name_suffix))
             else:
                 self.assertTrue(quantizer.tensor_quantizer.isEncodingValid,
                                 "quantizer: {} does not have a valid encoding".format(name))
@@ -283,7 +288,6 @@ class TestQuantSim(unittest.TestCase):
         self._save_to_keras_common_test_code(True)
 
     @pytest.mark.cuda
-    @pytest.mark.tf1
     def test_compute_encodings_gpu_model(self):
         """
         Create QuantSim for a CPU model and test that activation encodings are computed
@@ -322,10 +326,15 @@ class TestQuantSim(unittest.TestCase):
             'conv2d/BiasAdd_quantized',
             'conv2d_1/BiasAdd_quantized'
         ]
+        if version.parse(tf.version.VERSION) >= version.parse("2.00"):
+            op_mode_name_suffix = '_op_mode/Read/ReadVariableOp:0'
+        else:
+            op_mode_name_suffix = '_op_mode/read:0'
+
         for name, quantizer in sim._activation_quantizers.items():
             if name in deactivated_quantizers:
                 self.assertTrue(int(libpymo.TensorQuantizerOpMode.passThrough),
-                                sim.session.run(name + '_op_mode/read:0'))
+                                sim.session.run(name + op_mode_name_suffix))
             else:
                 self.assertTrue(quantizer.tensor_quantizer.isEncodingValid,
                                 "quantizer: {} does not have a valid encoding".format(name))
@@ -757,12 +766,27 @@ class TestQuantSim(unittest.TestCase):
             sim.session.close()
             del sim
 
-    @pytest.mark.tf1
     def test_compute_encodings(self):
         """ Test that ops not evaluated during compute encodings are set to passThrough mode. """
         tf.compat.v1.reset_default_graph()
         sess = tf.compat.v1.Session()
         test_inp = np.ndarray((1, 32, 32, 3))
+
+        def keras_model_functional():
+            """ Function for returning basic keras model defined functionally """
+            inputs = tf.keras.Input(shape=(32, 32, 3,))
+            x = tf.keras.layers.Conv2D(32, (3, 3))(inputs)
+            x = tf.keras.layers.BatchNormalization(momentum=.3, epsilon=.65)(x, training=True)
+            with tf.compat.v1.variable_scope("scope_1"):
+                x = tf.keras.layers.Conv2D(16, (2, 2), activation=tf.nn.tanh)(x)
+                x = tf.keras.layers.BatchNormalization(momentum=.4, epsilon=.25)(x, training=False)
+                x = tf.keras.layers.Conv2D(8, (2, 2), activation=tf.nn.tanh)(x)
+                x = tf.keras.layers.BatchNormalization(momentum=.5, epsilon=.35)(x, training=False)
+                x = tf.keras.layers.Conv2D(4, (2, 2), activation=tf.nn.relu6)(x)
+            x = tf.keras.layers.Flatten()(x)
+            outputs = tf.keras.layers.Dense(10, activation=tf.nn.softmax, name="keras_model_functional")(x)
+            model = tf.keras.Model(inputs=inputs, outputs=outputs)
+            return model
 
         def dummy_forward_func(sess, _):
             input_tensor = sess.graph.get_tensor_by_name('input_1:0')

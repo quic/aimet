@@ -55,7 +55,8 @@ from aimet_tensorflow.utils.common import get_ordered_ops, create_input_feed_dic
     iter_first_x, get_ordered_conv_linears, get_training_tensors
 from aimet_tensorflow.utils.graph_saver import wrapper_func
 from aimet_tensorflow.examples.test_models import single_residual, multiple_input_model, \
-    model_with_multiple_training_tensors, keras_model_functional, keras_model_functional_with_non_fused_batchnorms
+    model_with_multiple_training_tensors, keras_model_functional, keras_model_functional_with_non_fused_batchnorms,\
+    keras_model_functional_for_tf2, keras_model_functional_with_non_fused_batchnorms_for_tf2
 from aimet_tensorflow.utils.op.conv import WeightTensorUtils, BiasUtils, get_output_activation_shape
 from aimet_tensorflow.utils.op.fusedbatchnorm import BNUtils
 from aimet_tensorflow.utils.graph_saver import save_and_load_graph
@@ -729,6 +730,46 @@ class TestBNUtils(unittest.TestCase):
 
         sess.close()
 
+    def test_param_read_keras_model_with_fused_batchnorms_for_tf2(self):
+        """
+        Test to validate fused BN op param read AIMET api(s) on Keras layers.
+        This test also reproduces SFTI issue
+        tensorflow.python.framework.errors_impl.InvalidArgumentError
+        """
+        if version.parse(tf.version.VERSION) >= version.parse("2.0"):
+            tf.compat.v1.reset_default_graph()
+            tf.keras.backend.clear_session()
+            with tf.device('/cpu:0'):
+                model = keras_model_functional_for_tf2()
+                model.summary()
+
+            sess = tf.compat.v1.keras.backend.get_session()
+            init = tf.compat.v1.global_variables_initializer()
+            sess.run(init)
+
+            # layer 1 ,3 and 5 are fused BN of different types
+            with sess.as_default():
+                # read weights ( beta, gamma, mean, variance)
+                bn_1 = model.layers[2]
+                bn_2 = model.layers[4]
+                bn_3 = model.layers[6]
+                keras_bn_1_params = get_bn_params_keras_layer(bn_1)
+                keras_bn_2_params = get_bn_params_keras_layer(bn_2)
+                keras_bn_3_params = get_bn_params_keras_layer(bn_3)
+
+                bn_op_1 = sess.graph.get_operation_by_name('batch_normalization/FusedBatchNormV3')
+                bn_op_2 = sess.graph.get_operation_by_name('scope_1/batch_normalization_1/FusedBatchNormV3')
+                bn_op_3 = sess.graph.get_operation_by_name('scope_1/batch_normalization_2/FusedBatchNormV3')
+                bn_1_params = get_bn_params_aimet_api(sess, bn_op_1)
+                bn_2_params = get_bn_params_aimet_api(sess, bn_op_2)
+                bn_3_params = get_bn_params_aimet_api(sess, bn_op_3)
+
+                self.assertTrue(np.allclose(keras_bn_1_params, bn_1_params))
+                self.assertTrue(np.allclose(keras_bn_2_params, bn_2_params))
+                self.assertTrue(np.allclose(keras_bn_3_params, bn_3_params))
+
+            sess.close()
+
     @pytest.mark.tf1
     def test_training_batchnorm(self):
         """
@@ -769,6 +810,45 @@ class TestBNUtils(unittest.TestCase):
         self.assertFalse(BNUtils.get_training(bn_training_false_op))
 
         tf.compat.v1.reset_default_graph()
+
+    def test_training_batchnorm_for_tf2(self):
+        """
+        Test BNUtils get_training() with both fused and non fused batchnorms, with all three training modes
+        """
+        if version.parse(tf.version.VERSION) >= version.parse("2.0"):
+            tf.compat.v1.reset_default_graph()
+
+            # Model with fused batchnorms
+            _ = keras_model_functional_for_tf2()
+            fused_bn_training_true_op = tf.compat.v1.get_default_graph().get_operation_by_name('batch_normalization/FusedBatchNormV3')
+            self.assertTrue(BNUtils.get_training(fused_bn_training_true_op))
+            self.assertTrue(isinstance(BNUtils.get_training(fused_bn_training_true_op), bool))
+
+            fused_bn_training_tensor_op = tf.compat.v1.get_default_graph().get_operation_by_name('scope_1/batch_normalization_1/FusedBatchNormV3')
+            assert not BNUtils.get_training(fused_bn_training_tensor_op)
+            self.assertTrue(isinstance(BNUtils.get_training(fused_bn_training_tensor_op), bool))
+
+            fused_bn_training_false_op = tf.compat.v1.get_default_graph().get_operation_by_name('scope_1/batch_normalization_2/FusedBatchNormV3')
+            self.assertFalse(BNUtils.get_training(fused_bn_training_false_op))
+
+            tf.compat.v1.reset_default_graph()
+            # Model with non fused batchnorms
+            _ = keras_model_functional_with_non_fused_batchnorms_for_tf2()
+
+            bn_training_true_op = tf.compat.v1.get_default_graph().get_operation_by_name('batch_normalization/batchnorm/mul_1')
+            self.assertTrue(BNUtils.get_training(bn_training_true_op))
+            self.assertTrue(isinstance(BNUtils.get_training(bn_training_true_op), bool))
+
+            bn_training_tensor_op = tf.compat.v1.get_default_graph().get_operation_by_name('scope_1/batch_normalization_1/batchnorm/'
+                                                                                 'mul_1')
+            assert not BNUtils.get_training(bn_training_tensor_op)
+            self.assertTrue(isinstance(BNUtils.get_training(bn_training_tensor_op), bool))
+
+            bn_training_false_op = tf.compat.v1.get_default_graph().get_operation_by_name('scope_1/batch_normalization_2/batchnorm/'
+                                                                                'mul_1')
+            self.assertFalse(BNUtils.get_training(bn_training_false_op))
+
+            tf.compat.v1.reset_default_graph()
 
     def test_initialize_with_bias_with_detached_ops(self):
         """

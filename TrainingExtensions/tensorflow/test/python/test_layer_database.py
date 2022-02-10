@@ -268,7 +268,6 @@ class TestTensorFlowLayerDatabase(unittest.TestCase):
         # delete temp directory
         shutil.rmtree(str('./temp_meta/'))
 
-    @pytest.mark.tf1
     def test_layer_database_with_dynamic_shape(self):
         """ test layer database creation with different input shapes"""
         # create tf.compat.v1.Session and initialize the weights and biases with zeros
@@ -283,7 +282,6 @@ class TestTensorFlowLayerDatabase(unittest.TestCase):
             x = tf.keras.layers.Conv2D(8, (2, 2), padding='SAME')(input_placeholder)
             x = tf.keras.layers.BatchNormalization(momentum=.3, epsilon=.65)(x)
             x = tf.keras.layers.Conv2D(8, (1, 1), padding='SAME', activation=tf.nn.tanh)(x)
-            x = tf.keras.layers.BatchNormalization(momentum=.4, epsilon=.25)(x)
             init = tf.compat.v1.global_variables_initializer()
 
         # create session with graph
@@ -291,7 +289,7 @@ class TestTensorFlowLayerDatabase(unittest.TestCase):
         sess.run(init)
 
         layer_db = LayerDatabase(model=sess, input_shape=(1, 224, 224, 3), working_dir=None, starting_ops=['input'],
-                                 ending_ops=['batch_normalization_1/cond/Merge'])
+                                 ending_ops=['conv2d_1/Tanh'])
 
         conv1_layer = layer_db.find_layer_by_name('conv2d/Conv2D')
         conv2_layer = layer_db.find_layer_by_name('conv2d_1/Conv2D')
@@ -309,7 +307,7 @@ class TestTensorFlowLayerDatabase(unittest.TestCase):
 
         batch_size = 32
         layer_db = LayerDatabase(model=sess, input_shape=(batch_size, 28, 28, 3), working_dir=None,
-                                 starting_ops=['input'], ending_ops=['batch_normalization_1/cond/Merge'])
+                                 starting_ops=['input'], ending_ops=['conv2d_1/Tanh'])
 
         conv1_layer = layer_db.find_layer_by_name('conv2d/Conv2D')
         conv2_layer = layer_db.find_layer_by_name('conv2d_1/Conv2D')

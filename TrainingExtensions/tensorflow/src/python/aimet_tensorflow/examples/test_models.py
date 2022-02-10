@@ -53,7 +53,7 @@ if not version.parse(tf.version.VERSION) >= version.parse("2.00"):
 def transposed_conv2d_model():
     """ Trasposed Conv2D model"""
     inputs = tf.keras.Input(shape=(7, 7, 1))
-    x = tf.layers.Conv2DTranspose(1, (4, 4), use_bias=True)(inputs)
+    x = tf.keras.layers.Conv2DTranspose(1, (4, 4), use_bias=True)(inputs)
     return x
 
 
@@ -93,6 +93,29 @@ def single_residual():
     return outputs
 
 
+def single_residual_for_tf2():
+    """ Function for returning single residual model for TF2 framework, set trainable=False for BNs """
+
+    inputs = tf.keras.Input(shape=(16, 16, 3,))
+    x = tf.keras.layers.Conv2D(16, (3, 3))(inputs)
+    x = tf.keras.layers.BatchNormalization(momentum=.3, epsilon=.65, trainable=False)(x)
+    x = tf.nn.relu(x)
+    x = tf.keras.layers.MaxPool2D()(x)
+    residual = x
+    residual = tf.keras.layers.Conv2D(8, (1, 1))(residual)
+    residual = tf.nn.relu(residual)
+    x = tf.keras.layers.Conv2D(8, (1, 1))(x)
+    x = tf.keras.layers.Conv2D(8, (1, 1))(x)
+    x = tf.keras.layers.BatchNormalization(momentum=.4, epsilon=.25, trainable=False)(x)
+    x = tf.add(x, residual)
+    x = tf.nn.relu(x)
+    x = tf.keras.layers.Conv2D(8, (3, 3))(x)
+    x = tf.keras.layers.AvgPool2D()(x)
+    x = tf.keras.layers.Flatten()(x)
+    outputs = tf.keras.layers.Dense(2, activation=tf.nn.softmax, name="single_residual")(x)
+    return outputs
+
+
 def keras_model():
     """ Function for returning a basic keras model """
 
@@ -126,6 +149,23 @@ def keras_model_functional():
     return model
 
 
+def keras_model_functional_for_tf2():
+    """ Function for returning basic keras model defined functionally """
+    inputs = tf.keras.Input(shape=(32, 32, 3,))
+    x = tf.keras.layers.Conv2D(32, (3, 3))(inputs)
+    x = tf.keras.layers.BatchNormalization(momentum=.3, epsilon=.65)(x, training=True)
+    with tf.compat.v1.variable_scope("scope_1"):
+        x = tf.keras.layers.Conv2D(16, (2, 2), activation=tf.nn.tanh)(x)
+        x = tf.keras.layers.BatchNormalization(momentum=.4, epsilon=.25)(x, training=False)
+        x = tf.keras.layers.Conv2D(8, (2, 2), activation=tf.nn.tanh)(x)
+        x = tf.keras.layers.BatchNormalization(momentum=.5, epsilon=.35)(x, training=False)
+        x = tf.keras.layers.Conv2D(4, (2, 2), activation=tf.nn.relu6)(x)
+    x = tf.keras.layers.Flatten()(x)
+    outputs = tf.keras.layers.Dense(10, activation=tf.nn.softmax, name="keras_model_functional")(x)
+    model = tf.keras.Model(inputs=inputs, outputs=outputs)
+    return model
+
+
 def keras_model_functional_with_non_fused_batchnorms():
     """ Function for returning basic keras model defined functionally using non fused batchnorms"""
     is_training = tf.compat.v1.placeholder_with_default(tf.constant(True), shape=(), name='is_training')
@@ -135,6 +175,24 @@ def keras_model_functional_with_non_fused_batchnorms():
     with tf.compat.v1.variable_scope("scope_1"):
         x = tf.keras.layers.Conv2D(16, (2, 2), activation=tf.nn.tanh)(x)
         x = tf.keras.layers.BatchNormalization(momentum=.4, epsilon=.25, fused=False)(x, training=is_training)
+        x = tf.keras.layers.Conv2D(8, (2, 2), activation=tf.nn.tanh)(x)
+        x = tf.keras.layers.BatchNormalization(momentum=.5, epsilon=.35, fused=False)(x, training=False)
+        x = tf.keras.layers.Conv2D(4, (2, 2), activation=tf.nn.relu6)(x)
+    x = tf.keras.layers.Flatten()(x)
+    outputs = tf.keras.layers.Dense(10, activation=tf.nn.softmax,
+                                    name="keras_model_functional_with_non_fused_batchnorms")(x)
+    model = tf.keras.Model(inputs=inputs, outputs=outputs)
+    return model
+
+
+def keras_model_functional_with_non_fused_batchnorms_for_tf2():
+    """ Function for returning basic keras model defined functionally using non fused batchnorms"""
+    inputs = tf.keras.Input(shape=(32, 32, 3,))
+    x = tf.keras.layers.Conv2D(32, (3, 3))(inputs)
+    x = tf.keras.layers.BatchNormalization(momentum=.3, epsilon=.65, fused=False)(x, training=True)
+    with tf.compat.v1.variable_scope("scope_1"):
+        x = tf.keras.layers.Conv2D(16, (2, 2), activation=tf.nn.tanh)(x)
+        x = tf.keras.layers.BatchNormalization(momentum=.4, epsilon=.25, fused=False)(x, training=False)
         x = tf.keras.layers.Conv2D(8, (2, 2), activation=tf.nn.tanh)(x)
         x = tf.keras.layers.BatchNormalization(momentum=.5, epsilon=.35, fused=False)(x, training=False)
         x = tf.keras.layers.Conv2D(4, (2, 2), activation=tf.nn.relu6)(x)
@@ -213,6 +271,29 @@ def upsample_model():
     x = tf.keras.layers.Conv2D(8, (1, 1))(x)
     x = tf.keras.layers.Conv2D(8, (1, 1))(x)
     x = tf.keras.layers.BatchNormalization(momentum=.4, epsilon=.25)(x)
+    x = tf.add(x, residual)
+    x = tf.nn.relu(x)
+
+    x = tf.keras.layers.Conv2D(4, (1, 1))(x)
+    x = tf.keras.layers.AvgPool2D()(x)
+    x = tf.keras.layers.Flatten()(x)
+    outputs = tf.keras.layers.Dense(2, activation=tf.nn.softmax, name="upsample_model")(x)
+    return outputs
+
+
+def upsample_model_for_tf2():
+    """ Returns a model that can be used to test inserting upsample ops """
+
+    inputs = tf.keras.Input(shape=(16, 16, 3,))
+    x = tf.keras.layers.Conv2D(8, (2, 2))(inputs)
+    x = tf.keras.layers.BatchNormalization(momentum=.3, epsilon=.65, trainable=False)(x)
+    x = tf.nn.relu(x)
+    x = tf.keras.layers.MaxPool2D()(x)
+    residual = x
+
+    x = tf.keras.layers.Conv2D(8, (1, 1))(x)
+    x = tf.keras.layers.Conv2D(8, (1, 1))(x)
+    x = tf.keras.layers.BatchNormalization(momentum=.4, epsilon=.25, trainable=False)(x)
     x = tf.add(x, residual)
     x = tf.nn.relu(x)
 
