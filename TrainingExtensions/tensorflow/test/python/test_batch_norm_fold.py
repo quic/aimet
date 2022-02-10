@@ -396,7 +396,6 @@ class TestBatchNormFold(unittest.TestCase):
         sess.close()
         new_sess.close()
 
-    @pytest.mark.tf1
     def test_bn_fold_model_zoo_videnn_pose_estimation(self):
         """
         create a smaller network with connections as in pose estimation model and ViDeNN model
@@ -406,10 +405,10 @@ class TestBatchNormFold(unittest.TestCase):
         inputs = tf.keras.Input(shape=(None, None, 2), name="inputs")
 
         x = tf.keras.layers.Conv2D(2, kernel_size=3, padding='same')(inputs)
-        x = tf.keras.layers.BatchNormalization()(x)
+        x = tf.keras.layers.BatchNormalization(trainable=False)(x)
         x = tf.nn.relu(x)
         x = tf.keras.layers.Conv2D(2, kernel_size=3, padding='same')(x)
-        x = tf.keras.layers.BatchNormalization()(x)
+        x = tf.keras.layers.BatchNormalization(trainable=False)(x)
         z = tf.keras.layers.Add()([inputs, x])
         x = tf.nn.relu(z)
 
@@ -423,7 +422,6 @@ class TestBatchNormFold(unittest.TestCase):
         sess.close()
         new_sess.close()
 
-    @pytest.mark.tf1
     def test_bn_fold_model_zoo_sr_gan(self):
         """
         create a smaller network with connections as in SR-GAN model
@@ -431,10 +429,10 @@ class TestBatchNormFold(unittest.TestCase):
         tf.compat.v1.reset_default_graph()
         inputs = tf.keras.Input(shape=(None, None, 2), name="inputs")
         x = tf.keras.layers.Conv2D(2, kernel_size=3, padding='same')(inputs)
-        x = tf.keras.layers.BatchNormalization()(x)
+        x = tf.keras.layers.BatchNormalization(trainable=False)(x)
         y = tf.keras.layers.PReLU(shared_axes=[1, 2])(x)
         x = tf.keras.layers.Conv2D(2, kernel_size=3, padding='same')(y)
-        x = tf.keras.layers.BatchNormalization()(x)
+        x = tf.keras.layers.BatchNormalization(trainable=False)(x)
         x = tf.keras.layers.Add()([y, x])
         _ = tf.nn.relu(x)
 
