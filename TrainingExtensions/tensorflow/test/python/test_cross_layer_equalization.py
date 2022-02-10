@@ -130,7 +130,7 @@ class TestCrossLayerEqualization(unittest.TestCase):
         tf.compat.v1.set_random_seed(0)
         inputs = tf.keras.Input(shape=(32, 32, 3,), name="inputs")
         conv_op = tf.keras.layers.Conv2D(32, (3, 3))(inputs)
-        bn_op = tf.keras.layers.BatchNormalization(fused=True)(conv_op)
+        bn_op = tf.keras.layers.BatchNormalization(trainable=False)(conv_op)
         _ = tf.nn.relu(bn_op)
 
         init = tf.compat.v1.global_variables_initializer()
@@ -299,7 +299,6 @@ class TestCrossLayerEqualization(unittest.TestCase):
         sess.close()
         after_relu_replace_sess.close()
 
-    @pytest.mark.tf1
     def test_high_bias_fold_two_bn_folded_convs(self):
         """
         Test high bias fold with a custom model with two BN folded convs
@@ -309,10 +308,10 @@ class TestCrossLayerEqualization(unittest.TestCase):
         np.random.seed(0)
         inputs = tf.keras.Input(shape=(32, 32, 3,))
         conv_op = tf.keras.layers.Conv2D(32, (3, 3))(inputs)
-        bn_op = tf.keras.layers.BatchNormalization(fused=True)(conv_op)
+        bn_op = tf.keras.layers.BatchNormalization(trainable=False)(conv_op)
         relu_1= tf.nn.relu(bn_op)
         conv2_op = tf.keras.layers.Conv2D(32, (3, 3))(relu_1)
-        bn_op_2 = tf.keras.layers.BatchNormalization(fused=True)(conv2_op)
+        bn_op_2 = tf.keras.layers.BatchNormalization(trainable=False)(conv2_op)
         relu_2 = tf.nn.relu(bn_op_2)
 
         init = tf.compat.v1.global_variables_initializer()
@@ -413,7 +412,6 @@ class TestCrossLayerEqualization(unittest.TestCase):
 
         sess.close()
 
-    @pytest.mark.tf1
     def test_high_bias_fold_custom_model(self):
         """
         Test high bias fold with a custom model
@@ -424,7 +422,7 @@ class TestCrossLayerEqualization(unittest.TestCase):
         conv_op = tf.keras.layers.Conv2D(32, (3, 3))(inputs)
         relu_1= tf.nn.relu(conv_op)
         conv2_op = tf.keras.layers.Conv2D(32, (3, 3))(relu_1)
-        bn_op_2 = tf.keras.layers.BatchNormalization(fused=True)(conv2_op)
+        bn_op_2 = tf.keras.layers.BatchNormalization(trainable=False)(conv2_op)
         conv3_op = tf.keras.layers.Conv2D(32, (3, 3))(bn_op_2)
         relu_2 = tf.nn.relu(conv3_op)
 
@@ -469,7 +467,6 @@ class TestCrossLayerEqualization(unittest.TestCase):
         after_cls_sess.close()
         after_hbf_sess.close()
 
-    @pytest.mark.tf1
     def test_equalize_model_multi_input(self):
         """
         Test bn fold with multiple input nodes
@@ -492,7 +489,7 @@ class TestCrossLayerEqualization(unittest.TestCase):
                                     bias_initializer='random_uniform')(x3)
         x = tf.keras.layers.add([x2, x4])
         conv2_op = tf.keras.layers.Conv2D(32, (3, 3))(x)
-        bn_op = tf.keras.layers.BatchNormalization(fused=True)(conv2_op)
+        bn_op = tf.keras.layers.BatchNormalization(trainable=False)(conv2_op)
         _ = tf.nn.relu(bn_op)
 
         init = tf.compat.v1.global_variables_initializer()
@@ -520,7 +517,6 @@ class TestCrossLayerEqualization(unittest.TestCase):
         sess.close()
         new_sess.close()
 
-    @pytest.mark.tf1
     def test_equalize_with_custom_model_no_bias(self):
         """
         Test equalize with a custom model with conv without bias param
@@ -530,7 +526,7 @@ class TestCrossLayerEqualization(unittest.TestCase):
         with sess.as_default():
             inputs = tf.keras.Input(shape=(32, 32, 3,))
             conv_op = tf.keras.layers.Conv2D(32, (3, 3), use_bias=False)(inputs)
-            bn_op = tf.keras.layers.BatchNormalization(fused=True)(conv_op)
+            bn_op = tf.keras.layers.BatchNormalization(trainable=False)(conv_op)
             relu_1= tf.nn.relu(bn_op)
             conv2_op = tf.keras.layers.Conv2D(32, (3, 3), use_bias=False)(relu_1)
             bn_op_2 = tf.keras.layers.BatchNormalization(fused=True)(conv2_op, training=False)
@@ -551,7 +547,6 @@ class TestCrossLayerEqualization(unittest.TestCase):
         sess.close()
         new_sess.close()
 
-    @pytest.mark.tf1
     def test_equalize_fold_forward(self):
         """
         Test equalize on a model with a forward bn fold
@@ -560,7 +555,7 @@ class TestCrossLayerEqualization(unittest.TestCase):
         inputs = tf.keras.Input(shape=(32, 32, 3,), name="inputs")
         conv_op = tf.keras.layers.Conv2D(32, (3, 3))(inputs)
         r_op = tf.nn.relu(conv_op)
-        bn_op = tf.keras.layers.BatchNormalization(fused=True)(r_op)
+        bn_op = tf.keras.layers.BatchNormalization(trainable=False)(r_op)
         conv2_op = tf.keras.layers.Conv2D(32, (3, 3))(bn_op)
         conv3_op = tf.keras.layers.Conv2D(32, (3, 3))(conv2_op)
         _ = tf.nn.relu(conv3_op)
