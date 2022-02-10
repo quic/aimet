@@ -552,6 +552,7 @@ class CrossLayerScaling:
         :param input_shapes: Input shape for the model (can be one or multiple inputs)
         :return: CLS information for each CLS set
         """
+        assert not model.training, "Cross-layer scaling works on models in evaluation mode"
 
         device = get_device(model)
         model.cpu()
@@ -679,6 +680,7 @@ def equalize_model(model: torch.nn.Module, input_shapes: Union[Tuple, List[Tuple
     :param input_shapes: Shape of the input (can be a tuple or a list of tuples if multiple inputs)
     :return: None
     """
+    assert not model.training, "Cross-Layer Equalization (CLE) works on models in evaluation mode"
 
     device = get_device(model)
     model.cpu()
@@ -702,6 +704,7 @@ def equalize_bn_folded_model(model: torch.nn.Module,
     :param folded_pairs: List of pairs of folded layers
     :return: None
     """
+    assert not model.training, "CLS and HBF works on models in evaluation mode"
 
     device = get_device(model)
     model.cpu()

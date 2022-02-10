@@ -128,6 +128,8 @@ class ConnectedGraph(AimetCommonConnectedGraph):
         self.ordered_ops = []
 
         self._generate_module_lookup_table(model)
+
+        model.eval()
         with torch.no_grad():
             self._construct_graph(model, model_input)
 
