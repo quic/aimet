@@ -39,19 +39,13 @@
 
 """ AdaRound code example to be used for documentation generation. """
 
-# AdaRound imports
 
-import logging
+# PyTorch imports
+
 import torch
 import torch.cuda
-from torchvision import models
 
-from aimet_common.utils import AimetLogger
-from aimet_common.defs import QuantScheme
-from aimet_torch.quantsim import QuantizationSimModel
-from aimet_torch.adaround.adaround_weight import Adaround, AdaroundParameters
-
-# End of import statements
+# End of PyTorch imports
 
 
 def pass_calibration_data(sim_model):
@@ -91,36 +85,59 @@ def pass_calibration_data(sim_model):
 
 def apply_adaround_example():
 
-    AimetLogger.set_level_for_all_areas(logging.DEBUG)
-    torch.cuda.empty_cache()
+    # Load the model
+    import torch
+    from torchvision import models
 
     model = models.resnet18(pretrained=True).eval()
-    model = model.to(torch.device('cuda'))
-    input_shape = (1, 3, 224, 224)
-    dummy_input = torch.randn(input_shape).to(torch.device('cuda'))
+
+    # Prepare the model
+    from aimet_torch.model_preparer import prepare_model
+    prepared_model = prepare_model(model)
+
+    # Apply AdaRound
+    from aimet_common.defs import QuantScheme
+    from aimet_torch.quantsim import QuantizationSimModel
+    from aimet_torch.adaround.adaround_weight import Adaround, AdaroundParameters
 
     # User action required
-    # AdaRound requires training data
     # The following line of code is an example of how to use the ImageNet data's training data loader.
     # Replace the following line with your own dataset's training data loader.
     data_loader = ImageNetDataPipeline.get_train_dataloader()
 
-    params = AdaroundParameters(data_loader=data_loader, num_batches=4, default_num_iterations=50,
+    params = AdaroundParameters(data_loader=data_loader, num_batches=4, default_num_iterations=32,
                                 default_reg_param=0.01, default_beta_range=(20, 2))
 
+    input_shape = (1, 3, 224, 224)
+    dummy_input = torch.randn(input_shape)
+
     # Returns model with adarounded weights and their corresponding encodings
-    adarounded_model = Adaround.apply_adaround(model, dummy_input, params, path='./',
+    adarounded_model = Adaround.apply_adaround(prepared_model, dummy_input, params, path='./',
                                                filename_prefix='resnet18', default_param_bw=4,
                                                default_quant_scheme=QuantScheme.post_training_tf_enhanced,
                                                default_config_file=None)
 
-    # Create QuantSim using adarounded_model
+    # Create Quantization Simulation using the adarounded_model
     sim = QuantizationSimModel(adarounded_model, quant_scheme=quant_scheme, default_param_bw=param_bw,
                                default_output_bw=output_bw, dummy_input=dummy_input)
 
     # Set and freeze encodings to use same quantization grid and then invoke compute encodings
     sim.set_and_freeze_param_encodings(encoding_path='./resnet18.encodings')
+
+
+    # Compute encodings
     sim.compute_encodings(pass_calibration_data, forward_pass_callback_args=None)
+
+    # Determine simulated accuracy
+    accuracy = ImageNetDataPipeline.evaluate(sim.model, use_cuda)
+    print(accuracy)
+
+    # Export the model
+    # Export the model which saves pytorch model without any simulation nodes and saves encodings file for both
+    # activations and parameters in JSON format
+    sim.export(path='./', filename_prefix='quantized_resnet18', dummy_input=dummy_input.cpu())
+
+    # End of example
 
 
 if __name__ == '__main__':

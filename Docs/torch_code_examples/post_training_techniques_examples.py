@@ -158,22 +158,27 @@ def cross_layer_equalization_auto_step_by_step():
 
 
 def bias_correction_empirical():
-    dataset_size = 2000
-    batch_size = 64
+    # Load the model empirical
+    from aimet_torch.examples.mobilenet import MobileNetV2
+    model = MobileNetV2()
+    model.eval()
+
+    # Apply Empirical Bias Correction
+    from aimet_torch import bias_correction
+    from aimet_torch.quantsim import QuantParams
+
+    params = QuantParams(weight_bw=4, act_bw=4, round_mode="nearest", quant_scheme='tf_enhanced')
 
     # User action required
     # The following line of code is an example of how to use the ImageNet data's validation data loader.
     # Replace the following line with your own dataset's validation data loader.
     data_loader = ImageNetDataPipeline.get_val_dataloader()
 
-    model = MobileNetV2()
-    model.eval()
-
-    params = QuantParams(weight_bw=4, act_bw=4, round_mode="nearest", quant_scheme='tf_enhanced')
-
-    # Perform Bias Correction
+    # Perform Empirical Bias Correction
     bias_correction.correct_bias(model.to(device="cuda"), params, num_quant_samples=1000,
                                  data_loader=data_loader, num_bias_correct_samples=512)
+
+    # End of example empirical
 
 
 def bias_correction_analytical_and_empirical():
@@ -181,21 +186,28 @@ def bias_correction_analytical_and_empirical():
     dataset_size = 2000
     batch_size = 64
 
+    # Load the model analytical_empirical
+    from aimet_torch.examples.mobilenet import MobileNetV2
+    model = MobileNetV2()
+    model.eval()
+
+    # Find BNs
+    module_prop_dict = bias_correction.find_all_conv_bn_with_activation(model, input_shape=(1, 3, 224, 224))
+
+    # Apply Analytical and Empirical Bias Correction
+    from aimet_torch import bias_correction
+    from aimet_torch.quantsim import QuantParams
+
+    params = QuantParams(weight_bw=4, act_bw=4, round_mode="nearest", quant_scheme='tf_enhanced')
+
     # User action required
     # The following line of code is an example of how to use the ImageNet data's validation data loader.
     # Replace the following line with your own dataset's validation data loader.
     data_loader = ImageNetDataPipeline.get_val_dataloader()
-
-    model = MobileNetV2()
-    model.eval()
-
-    # Find all BN + Conv pairs for analytical BC and remaining Conv for Empirical BC
-    module_prop_dict = bias_correction.find_all_conv_bn_with_activation(model, input_shape=(1, 3, 224, 224))
-
-    params = QuantParams(weight_bw=4, act_bw=4, round_mode="nearest", quant_scheme='tf_enhanced')
 
     # Perform Bias Correction
     bias_correction.correct_bias(model.to(device="cuda"), params, num_quant_samples=1000,
                                  data_loader=data_loader, num_bias_correct_samples=512,
                                  conv_bn_dict=module_prop_dict, perform_only_empirical_bias_corr=False)
 
+    # End of example analytical_empirical

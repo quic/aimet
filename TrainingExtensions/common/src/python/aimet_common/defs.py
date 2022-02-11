@@ -45,24 +45,31 @@ from decimal import Decimal
 from aimet_common.layer_database import Layer
 import libpymo
 
+
 # supported quantization schemes
 class QuantScheme(Enum):
     """ Enumeration of Quant schemes"""
 
     post_training_tf = 1
-    """ TF scheme """
+    """ For a Tensor, the absolute minimum and maximum value of the Tensor are used to compute the Quantization
+    encodings. """
     post_training_tf_enhanced = 2
-    """ TF-enhanced scheme """
+    """ For a Tensor, searches and selects the optimal minimum and maximum value that minimizes the Quantization Noise.
+    The Quantization encodings are calculated using the selected minimum and maximum value. """
     training_range_learning_with_tf_init = 3
-    """ Range Learning scheme with TF quant scheme initialization"""
+    """ For a Tensor, the encoding values are initialized with the post_training_tf scheme. Then, the encodings are
+    learned during training. """
     training_range_learning_with_tf_enhanced_init = 4
-    """ Range Learning scheme with TF-enhanced quant scheme initialization"""
+    """ For a Tensor, the encoding values are initialized with the post_training_tf_enhanced scheme. Then, the encodings
+    are learned during training. """
     training_range_learning = 5
+
 
 MAP_QUANT_SCHEME_TO_PYMO = {QuantScheme.post_training_tf_enhanced: libpymo.QuantizationMode.QUANTIZATION_TF_ENHANCED,
                             QuantScheme.post_training_tf: libpymo.QuantizationMode.QUANTIZATION_TF}
 MAP_ROUND_MODE_TO_PYMO = {'nearest': libpymo.RoundingMode.ROUND_NEAREST,
                           'stochastic': libpymo.RoundingMode.ROUND_STOCHASTIC}
+
 
 class ActivationType(Enum):
     """ Enums to identify activation type"""

@@ -13,6 +13,12 @@ Top-level API
 
 |
 
+**Note about Quantization Schemes** : AIMET offers multiple Quantization Schemes-
+    1. Post Training Quantization- The encodings of the model are computed using TF or TF-Enhanced scheme
+    2. Trainable Quantization- The min max of encodings are learnt during training.
+        * Range Learning with TF initialization - Uses TF scheme to initialize the encodings and then during training these encodings are fine-tuned to improve accuracy of the model
+        * Range Learning with TF-Enhanced initialization - Uses TF-Enhanced scheme to initialize the encodings and then during training these encodings are fine-tuned to improve accuracy of the model
+
 **The following API can be used to Compute Encodings for Model**
 
 .. automethod:: aimet_tensorflow.quantsim.QuantizationSimModel.compute_encodings
@@ -40,15 +46,23 @@ Code Examples
     :language: python
     :lines: 39-46
 
-**Quantize with Range Learning**
+**User should write this function to pass calibration data**
+
+
+.. literalinclude:: ../tf_code_examples/quantization.py
+   :language: python
+   :pyobject: pass_calibration_data
+
+
+**Quantize the model and finetune (QAT)**
 
 .. literalinclude:: ../tf_code_examples/quantization.py
     :language: python
     :pyobject: quantize_model
 
-**Example Fine-tuning step**
 
-.. literalinclude:: ../tf_code_examples/quantization.py
-    :language: python
-    :pyobject: training_helper
+**Quantize and finetune a trained model learn the encodings (Range Learning)**
 
+.. literalinclude:: ../tf_code_examples/range_learning.py
+   :language: python
+   :pyobject: quantization_aware_training_range_learning

@@ -38,20 +38,12 @@
 # pylint: skip-file
 """ QuantSim and QAT code example to be used for documentation generation. """
 
-# Quantsim imports
+# PyTorch imports
 
-import logging
 import torch
 import torch.cuda
-from torch.utils.data import DataLoader
-from torchvision import models
-from aimet_common.utils import AimetLogger
-from aimet_common.defs import QuantScheme
-from aimet_torch.utils import create_fake_data_loader
-from aimet_torch.model_preparer import prepare_model
-from aimet_torch.quantsim import QuantizationSimModel
 
-# End of import statements
+# End of PyTorch imports
 
 
 def pass_calibration_data(sim_model):
@@ -91,37 +83,48 @@ def pass_calibration_data(sim_model):
 
 def quantize_and_finetune_example():
 
-    AimetLogger.set_level_for_all_areas(logging.INFO)
-    model = models.resnet18().eval()
-    model.cuda()
+    # Load the model
+    from torchvision.models import resnet18
+
+    model = resnet18(pretrained=True)
+    model = model.cuda()
+
+    # Prepare the model
+    from aimet_torch.model_preparer import prepare_model
+    prepared_model = prepare_model(model)
+
+    # Create Quantization Simulation Model
+    from aimet_common.defs import QuantScheme
+    from aimet_torch.quantsim import QuantizationSimModel
     input_shape = (1, 3, 224, 224)
     dummy_input = torch.randn(input_shape).cuda()
 
-    # Prepare the model for Quantization Simulation. This will automate some changes required in model definition.
-    # For example, create modules for torch.nn.functional and create unique modules for reused modules.
-    prepared_model = prepare_model(model)
-
-    # Instantiate Quantization Simulation Model. This will insert simulation nodes in the model
     quant_sim = QuantizationSimModel(prepared_model, dummy_input=dummy_input,
                                      quant_scheme=QuantScheme.post_training_tf_enhanced,
                                      default_param_bw=8, default_output_bw=8,
                                      config_file='../../TrainingExtensions/common/src/python/aimet_common/quantsim_config/'
                                                  'default_config.json')
 
-    # Compute encodings(min, max, delta, offset, scale) for activations and parameters.
-    # Use around 1000 representative sample from your dataset.
+    # Compute the Quantization Encodings
     quant_sim.compute_encodings(pass_calibration_data, forward_pass_callback_args=None)
 
-    # Quantization Aware Training - Fine-tune the model for  few epochs to retain accuracy using your pipeline's train()
-
+    # Finetune the model
     # User action required
     # The following line of code illustrates that the model is getting finetuned.
-    # Replace the following train() function with your pipeline's train() function.
-    train(quant_sim.model)
+    # Replace the following finetune() unction with your pipeline's finetune() function.
+    ImageNetDataPipeline.finetune(sim.model, epochs=1, learning_rate=5e-7, learning_rate_schedule=[5, 10],
+                                  use_cuda=use_cuda)
 
+    # Determine simulated accuracy
+    accuracy = ImageNetDataPipeline.evaluate(sim.model, use_cuda)
+    print(accuracy)
+
+    # Export the model
     # Export the model which saves pytorch model without any simulation nodes and saves encodings file for both
     # activations and parameters in JSON format
     quant_sim.export(path='./', filename_prefix='quantized_resnet18', dummy_input=dummy_input.cpu())
+
+    # End of example
 
 
 if __name__ == '__main__':
