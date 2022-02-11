@@ -44,10 +44,14 @@ import pytest
 import tensorflow as tf
 import numpy as np
 
+from tensorflow.keras.models import Sequential
+from tensorflow.keras.layers import Dense, Conv2D, BatchNormalization, Flatten, AvgPool2D, MaxPool2D
 from aimet_tensorflow.batch_norm_fold import  fold_all_batch_norms, find_all_batch_norms_to_fold
 from aimet_tensorflow.common.connectedgraph import ConnectedGraph
 from aimet_tensorflow.examples.test_models import tf_slim_basic_model
 from aimet_tensorflow.utils.op.conv import WeightTensorUtils
+from aimet_tensorflow.utils.graph import update_keras_bn_ops_trainable_flag
+
 
 tf.compat.v1.logging.set_verbosity(tf.compat.v1.logging.WARN)
 tf.compat.v1.disable_eager_execution()
@@ -445,3 +449,25 @@ class TestBatchNormFold(unittest.TestCase):
 
         sess.close()
         new_sess.close()
+
+    def test_keras_bn_op_trainable_flag_config(self):
+        """
+        Test to check keras bn op trainable flag update
+        :return:
+        """
+        tf.compat.v1.reset_default_graph()
+        model = Sequential([
+            Conv2D(8, (2, 2), input_shape=(16, 16, 3,)),
+            BatchNormalization(momentum=.3, epsilon=.65),
+            AvgPool2D(),
+            MaxPool2D(),
+            BatchNormalization(momentum=.4, epsilon=.25),
+            Conv2D(4, (2, 2), activation=tf.nn.tanh, kernel_regularizer=tf.keras.regularizers.l2(0.5)),
+            Flatten(),
+            Dense(2, activation='softmax', name="keras_model")])
+
+        _ = update_keras_bn_ops_trainable_flag(model, False, "./data")
+        sess = tf.compat.v1.keras.backend.get_session()
+
+        new_sess, folded_bn_conv_pairs = fold_all_batch_norms(sess, "conv2d_input", 'keras_model/Softmax')
+        self.assertTrue(len(folded_bn_conv_pairs) == 2)

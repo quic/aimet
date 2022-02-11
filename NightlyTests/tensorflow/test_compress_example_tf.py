@@ -603,25 +603,27 @@ class ChannelPruningAcceptanceTests(unittest.TestCase):
         # delete temp directory
         shutil.rmtree(str('./temp_meta/'))
 
-    @pytest.mark.tf1
     def test_channel_pruning_auto_mobilenetv1(self):
         """
         Auto mode test fot MobileNetv1 model
         :return:
         """
         AimetLogger.set_level_for_all_areas(logging.INFO)
-        graph = tf.Graph()
+        # Grow GPU memory as needed at the cost of fragmentation.
+        config = tf.compat.v1.ConfigProto()
+        config.gpu_options.allow_growth = True  # pylint: disable=no-member
+        sess = tf.compat.v1.Session(config=config)
+        tf.compat.v1.keras.backend.set_session(sess)
 
-        with graph.as_default():
-
-            _ = MobileNet(weights=None, input_shape=(224, 224, 3))
-            init = tf.compat.v1.global_variables_initializer()
+        model = MobileNet(weights=None, input_shape=(224, 224, 3))
+        _ = update_keras_bn_ops_trainable_flag(model, False, "./t")
+        sess = tf.compat.v1.keras.backend.get_session()
+        init = tf.compat.v1.global_variables_initializer()
+        sess.run(init)
 
         # Grow GPU memory as needed at the cost of fragmentation.
         config = tf.compat.v1.ConfigProto()
         config.gpu_options.allow_growth = True  # pylint: disable=no-member
-
-        sess = tf.compat.v1.Session(graph=graph, config=config)
 
         with sess.graph.as_default():
 
