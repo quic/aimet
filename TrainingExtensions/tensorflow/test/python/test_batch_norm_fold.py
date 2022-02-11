@@ -471,3 +471,4 @@ class TestBatchNormFold(unittest.TestCase):
 
         new_sess, folded_bn_conv_pairs = fold_all_batch_norms(sess, "conv2d_input", 'keras_model/Softmax')
         self.assertTrue(len(folded_bn_conv_pairs) == 2)
+
