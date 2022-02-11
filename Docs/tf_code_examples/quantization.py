@@ -35,6 +35,7 @@
 #  
 #  @@-COPYRIGHT-END-@@
 # =============================================================================
+# pylint: skip-file
 
 import tensorflow as tf
 
@@ -46,14 +47,51 @@ from aimet_common.defs import QuantScheme
 from tensorflow.examples.tutorials.mnist import input_data
 
 
-def quantize_model(generator):
+def pass_calibration_data(session: tf.Session):
+    """
+    The User of the QuantizationSimModel API is expected to write this function based on their data set.
+    This is not a working function and is provided only as a guideline.
+
+    :param session: Model's session
+    :return:
+    """
+
+    # User action required
+    # The following line of code is an example of how to use the ImageNet data's validation data loader.
+    # Replace the following line with your own dataset's validation data loader.
+    data_loader = None  # Your Dataset's data loader
+
+    # User action required
+    # For computing the activation encodings, around 1000 unlabelled data samples are required.
+    # Edit the following 2 lines based on your dataloader's batch size.
+    # batch_size * max_batch_counter should be 1024
+    batch_size = 64
+    max_batch_counter = 16
+
+    input_tensor = None  # input tensor in session
+    train_tensor = None  # train tensor in session
+
+    current_batch_counter = 0
+    for input_data, _ in data_loader:
+        feed_dict = {input_tensor: input_data,
+                     train_tensor: False}
+
+        session.run([], feed_dict=feed_dict)
+
+        current_batch_counter += 1
+        if current_batch_counter == max_batch_counter:
+            break
+
+
+def quantize_model():
+    """
+    Create the Quantization Simulation and finetune the model.
+    :return:
+    """
     tf.compat.v1.reset_default_graph()
 
     # load graph
     sess = graph_saver.load_model_from_meta('models/mnist_save.meta', 'models/mnist_save')
-
-    def forward_callback(session, iterations):
-        graph_eval.evaluate_graph(session, generator, ['accuracy'], graph_eval.default_eval_func, iterations)
 
     # Create quantsim model to quantize the network using the default 8 bit params/activations
     sim = quantsim.QuantizationSimModel(sess, starting_op_names=['reshape_input'], output_op_names=['dense_1/BiasAdd'],
@@ -62,37 +100,13 @@ def quantize_model(generator):
                                                     'quantsim_config/default_config.json')
 
     # Compute encodings
-    sim.compute_encodings(forward_callback, forward_pass_callback_args=1)
+    sim.compute_encodings(pass_calibration_data, forward_pass_callback_args=None)
 
-    # Do some fine-tuning
-    training_helper(sim, generator)
+    # Do some finetuning
 
+    # User action required
+    # The following line of code illustrates that the model is getting finetuned.
+    # Replace the following train() function with your pipeline's train() function.
+    train(sim)
 
-def training_helper(sim, generator):
-    """A Helper function to fine-tune MNIST model"""
-    g = sim.session.graph
-    sess = sim.session
-    with g.as_default():
-        x = sim.session.graph.get_tensor_by_name("reshape_input:0")
-        y = g.get_tensor_by_name("labels:0")
-        fc1_w = g.get_tensor_by_name("dense_1/MatMul/ReadVariableOp:0")
-
-        ce = g.get_tensor_by_name("xent:0")
-        # Using Adam optimizer
-        train_step = tf.compat.v1.train.AdamOptimizer(1e-3, name="TempAdam").minimize(ce)
-        graph_eval.initialize_uninitialized_vars(sess)
-        # Input data for MNIST
-        mnist = input_data.read_data_sets('./data', one_hot=True)
-
-        # Using 100 iterations and batch of size 50
-        for i in range(100):
-            batch = mnist.train.next_batch(50)
-            sess.run([train_step, fc1_w], feed_dict={x: batch[0], y: batch[1]})
-            if i % 10 == 0:
-                # Find accuracy of model every 10 iterations
-                perf = graph_eval.evaluate_graph(sess, generator, ['accuracy'], graph_eval.default_eval_func, 1)
-                print('Quantized performance: ' + str(perf * 100))
-
-    # close session
-    sess.close()
 

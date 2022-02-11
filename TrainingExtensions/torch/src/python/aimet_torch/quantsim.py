@@ -111,6 +111,7 @@ class QuantParams:
         self.quant_scheme = quant_scheme
         self.config_file = config_file
 
+
 class QuantizationSimModel:
     """
     Implements mechanism to add quantization simulations ops to a model. This allows for off-target simulation of
@@ -129,8 +130,8 @@ class QuantizationSimModel:
         :param model: Model to add simulation ops to
         :param dummy_input: Dummy input to the model. Used to parse model graph. If the model has more than one input,
                             pass a tuple. User is expected to place the tensors on the appropriate device.
-        :param quant_scheme: Quantization scheme. Supported options are 'tf_enhanced' or 'tf' or using Quant Scheme Enum
-                             QuantScheme.post_training_tf or QuantScheme.post_training_tf_enhanced
+        :param quant_scheme: Quantization scheme. The Quantization scheme is used to compute the Quantization encodings.
+                             There are multiple schemes available. Please refer the QuantScheme enum definition.
         :param rounding_mode: Rounding mode. Supported options are 'nearest' or 'stochastic'
         :param default_output_bw: Default bitwidth (4-31) to use for quantizing all layer inputs and outputs
         :param default_param_bw: Default bitwidth (4-31) to use for quantizing all layer parameters
