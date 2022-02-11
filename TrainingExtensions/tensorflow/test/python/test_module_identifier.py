@@ -43,10 +43,11 @@ import os
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
 import pytest
 import tensorflow as tf
-
+from packaging import version
 from aimet_common.utils import AimetLogger
 from aimet_tensorflow.common.module_identifier import StructureModuleIdentifier
-from aimet_tensorflow.examples.test_models import keras_model, keras_model_functional, tf_slim_basic_model
+from aimet_tensorflow.examples.test_models import keras_model, keras_model_functional, tf_slim_basic_model,\
+    keras_model_functional_for_tf2
 
 tf.compat.v1.disable_eager_execution()
 logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Test)
@@ -76,6 +77,26 @@ class TestStructureModuleIdentifier(unittest.TestCase):
         self.assertEqual(6, len(current_module_set))
         self.assertEqual(4, len(my_op_type_set))
 
+    def test_get_op_info_for_tf2(self):
+        """ Test get_op_info() in StructureModuleIdentifier """
+        if version.parse(tf.version.VERSION) >= version.parse("2.00"):
+            my_op_type_set = set()
+            current_module_set = set()
+
+            tf.compat.v1.reset_default_graph()
+            _ = keras_model_functional_for_tf2()
+
+            module_identifier = StructureModuleIdentifier(tf.compat.v1.get_default_graph(), ["conv2d_input"],
+                                                          set(tf.compat.v1.get_default_graph().get_operations()))
+            for op_info in module_identifier.op_to_module_dict.values():
+                print(op_info.module_name)
+                my_op_type_set.add(op_info.op_type)
+                current_module_set.add(op_info.module_name)
+
+            # Only identifies 4 conv2d, 3 fusedbatchnorm, flatten, and dense
+            self.assertEqual(9, len(current_module_set))
+            self.assertEqual(4, len(my_op_type_set))
+
     @pytest.mark.tf1
     def test_fused_batch_norm_matcher_keras(self):
         """ Test fused batch norm matchers """
@@ -91,6 +112,18 @@ class TestStructureModuleIdentifier(unittest.TestCase):
         switch_op = tf.compat.v1.get_default_graph().get_operation_by_name('scope_1/batch_normalization_1/cond/'
                                                                  'FusedBatchNormV3/Switch')
         self.assertEqual(module_identifier.op_to_module_dict[switch_op].module_name, 'scope_1/batch_normalization_1')
+
+    def test_fused_batch_norm_matcher_keras_for_tf2(self):
+        """ Test fused batch norm matchers """
+        if version.parse(tf.version.VERSION) >= version.parse("2.00"):
+            tf.compat.v1.reset_default_graph()
+            _ = keras_model_functional_for_tf2()
+
+            module_identifier = StructureModuleIdentifier(tf.compat.v1.get_default_graph(), ["input_1"],
+                                                          set(tf.compat.v1.get_default_graph().get_operations()))
+            bn_op = tf.compat.v1.get_default_graph().get_operation_by_name('batch_normalization/FusedBatchNormV3')
+            self.assertTrue(bn_op in module_identifier.op_to_module_dict.keys())
+            self.assertEqual(module_identifier.op_to_module_dict[bn_op].module_name, 'batch_normalization')
 
     @pytest.mark.tf1
     def test_fused_batch_norm_matcher_slim(self):
