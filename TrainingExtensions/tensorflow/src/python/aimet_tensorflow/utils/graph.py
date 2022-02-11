@@ -36,7 +36,7 @@
 #  @@-COPYRIGHT-END-@@
 # =============================================================================
 """ utilities for tf graph related operations """
-import shutil
+
 import os
 import tensorflow as tf
 from tensorflow.keras.models import load_model, save_model
@@ -93,14 +93,14 @@ def update_keras_bn_ops_trainable_flag(model: tf.keras.Model, trainable: bool, l
      helper method to update Keras BN ops trainable state in a given keras model.
     :param model: Keras model to be updated with BN ops trainable flag
     :param trainable: bool flag to indicate trainable to be set to true or false
-    :param load_save_path: temp folder to perform load/save, note that the folder will be deleted during this operation.
+    :param load_save_path: temp folder to perform load/save, cleans up file created
     :return: updated keras model
     """
 
-    output_file_with_path = ""
     if not os.path.exists(load_save_path):
         os.mkdir(load_save_path)
-        output_file_with_path = os.path.join(load_save_path, 't.h5')
+
+    output_file_with_path = os.path.join(load_save_path, 't.h5')
 
     # update BN ops trainable flag
     for layer in model.layers:
@@ -110,9 +110,9 @@ def update_keras_bn_ops_trainable_flag(model: tf.keras.Model, trainable: bool, l
     tf.compat.v1.keras.backend.clear_session()
     model = load_model(output_file_with_path)
 
-    # clean up folder after use
-    if os.path.exists(load_save_path):
-        shutil.rmtree(load_save_path)
+    # clean up file after use
+    if os.path.exists(output_file_with_path):
+        os.remove(output_file_with_path)
 
     # return updated keras model
     return model
