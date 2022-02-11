@@ -111,6 +111,8 @@ class AimetLogger(metaclass=SingletonType):
         CrosslayerEqualization = 'CrossLayerEqualization'
         MixedPrecision = 'MixedPrecision'
         AutoQuant = 'AutoQuant'
+        Nas = 'Nas'
+        NasPipeline = 'NasPipeline'
 
     def __init__(self):
         self._logger = logging.getLogger()
