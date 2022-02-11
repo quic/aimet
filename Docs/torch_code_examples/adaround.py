@@ -39,68 +39,106 @@
 
 """ AdaRound code example to be used for documentation generation. """
 
-# AdaRound imports
 
-import logging
+# PyTorch imports
+
 import torch
 import torch.cuda
-from torchvision import models
 
-from aimet_common.utils import AimetLogger
-from aimet_common.defs import QuantScheme
-from aimet_torch.utils import create_fake_data_loader
-from aimet_torch.quantsim import QuantizationSimModel
-from aimet_torch.adaround.adaround_weight import Adaround, AdaroundParameters
-
-# End of import statements
+# End of PyTorch imports
 
 
-def dummy_forward_pass(model: torch.nn.Module, forward_pass_callback_args) -> float:
+def pass_calibration_data(sim_model):
     """
-    This is intended to be the user-defined model evaluation function.
-    AIMET requires the above signature. So if the user's eval function does not
-    match this signature, please create a simple wrapper.
+    The User of the QuantizationSimModel API is expected to write this function based on their data set.
+    This is not a working function and is provided only as a guideline.
 
-    :param model: Model to evaluate
-    :param forward_pass_callback_args: These argument(s) are passed to the forward_pass_callback as-is. Up to
-            the user to determine the type of this parameter. E.g. could be simply an integer representing the number
-            of data samples to use. Or could be a tuple of parameters or an object representing something more complex.
-            If set to None, forward_pass_callback will be invoked with no parameters.
-    :return: single float number (accuracy) representing model's performance
+    :param sim_model:
+    :return:
     """
-    return .5
+
+    # User action required
+    # The following line is an example of how to use the ImageNet data's validation data loader.
+    # Replace the following line with your own dataset's validation data loader.
+    data_loader = ImageNetDataPipeline.get_val_dataloader()
+
+    # User action required
+    # For computing the activation encodings, around 1000 unlabelled data samples are required.
+    # Edit the following 2 lines based on your batch size.
+    # batch_size * max_batch_counter should be 1024
+    batch_size = 64
+    max_batch_counter = 16
+
+    sim_model.eval()
+
+    current_batch_counter = 0
+    with torch.no_grad():
+        for input_data, target_data in data_loader:
+
+            inputs_batch = input_data  # labels are ignored
+            sim_model(inputs_batch)
+
+            current_batch_counter += 1
+            if current_batch_counter == max_batch_counter:
+                break
 
 
 def apply_adaround_example():
 
-    AimetLogger.set_level_for_all_areas(logging.DEBUG)
-    torch.cuda.empty_cache()
+    # Load the model
+    import torch
+    from torchvision import models
 
     model = models.resnet18(pretrained=True).eval()
-    model = model.to(torch.device('cuda'))
-    input_shape = (1, 3, 224, 224)
-    dummy_input = torch.randn(input_shape).to(torch.device('cuda'))
 
-    # As an illustrating example, a fake data loader is used here.
-    # For AdaRound, the user should provide the training data loader.
-    data_loader = create_fake_data_loader(dataset_size=64, batch_size=16, image_size=input_shape[1:])
+    # Prepare the model
+    from aimet_torch.model_preparer import prepare_model
+    prepared_model = prepare_model(model)
 
-    params = AdaroundParameters(data_loader=data_loader, num_batches=4, default_num_iterations=50,
+    # Apply AdaRound
+    from aimet_common.defs import QuantScheme
+    from aimet_torch.quantsim import QuantizationSimModel
+    from aimet_torch.adaround.adaround_weight import Adaround, AdaroundParameters
+
+    # User action required
+    # The following line of code is an example of how to use the ImageNet data's training data loader.
+    # Replace the following line with your own dataset's training data loader.
+    data_loader = ImageNetDataPipeline.get_train_dataloader()
+
+    params = AdaroundParameters(data_loader=data_loader, num_batches=4, default_num_iterations=32,
                                 default_reg_param=0.01, default_beta_range=(20, 2))
 
+    input_shape = (1, 3, 224, 224)
+    dummy_input = torch.randn(input_shape)
+
     # Returns model with adarounded weights and their corresponding encodings
-    adarounded_model = Adaround.apply_adaround(model, dummy_input, params, path='./',
+    adarounded_model = Adaround.apply_adaround(prepared_model, dummy_input, params, path='./',
                                                filename_prefix='resnet18', default_param_bw=4,
                                                default_quant_scheme=QuantScheme.post_training_tf_enhanced,
                                                default_config_file=None)
 
-    # Create QuantSim using adarounded_model
+    # Create Quantization Simulation using the adarounded_model
     sim = QuantizationSimModel(adarounded_model, quant_scheme=quant_scheme, default_param_bw=param_bw,
                                default_output_bw=output_bw, dummy_input=dummy_input)
 
     # Set and freeze encodings to use same quantization grid and then invoke compute encodings
     sim.set_and_freeze_param_encodings(encoding_path='./resnet18.encodings')
-    sim.compute_encodings(dummy_forward_pass, forward_pass_callback_args=None)
+
+
+    # Compute encodings
+    sim.compute_encodings(pass_calibration_data, forward_pass_callback_args=None)
+
+    # Determine simulated accuracy
+    accuracy = ImageNetDataPipeline.evaluate(sim.model, use_cuda)
+    print(accuracy)
+
+    # Export the model
+    # Export the model which saves pytorch model without any simulation nodes and saves encodings file for both
+    # activations and parameters in JSON format
+    sim.export(path='./', filename_prefix='quantized_resnet18', dummy_input=dummy_input.cpu())
+
+    # End of example
+
 
 if __name__ == '__main__':
     apply_adaround_example()
