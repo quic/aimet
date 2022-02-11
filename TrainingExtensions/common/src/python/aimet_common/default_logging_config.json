@@ -88,6 +88,18 @@
             "level": "INFO",
             "handlers": ["console"],
             "propagate": false
+        },
+
+        "Nas": {
+            "level": "INFO",
+            "handlers": ["console"],
+            "propagate": false
+        },
+
+        "NasPipeline": {
+            "level": "INFO",
+            "handlers": ["console"],
+            "propagate": false
         }
 
     },
