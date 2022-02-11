@@ -961,7 +961,7 @@ class ChannelPruningAcceptanceTests(unittest.TestCase):
 
 class SvdAndChannelPruningAcceptanceTests(unittest.TestCase):
 
-    @pytest.mark.tf1
+
     def test_svd_followed_by_channel_pruning(self):
         """ Test that a model can be run through spatial svd and then channel pruning """
         sess = tf.compat.v1.Session()
