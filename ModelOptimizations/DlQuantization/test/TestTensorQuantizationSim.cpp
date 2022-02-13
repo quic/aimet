@@ -46,6 +46,7 @@ class TestTensorQuantizationSim : public ::testing::Test
 {
 };
 
+
 TEST(TestTensorQuantizationSim, SanityTest)
 {
     // Instantiate TensorQuantizationSim
@@ -60,7 +61,7 @@ TEST(TestTensorQuantizationSim, SanityTest)
     double max    = 0.72;
 
     sim.quantizeDequantizeTensor(tensor.data(), tensor.size(), outputTensor.data(), min, max, bw,
-                                 DlQuantization::RoundingMode::ROUND_NEAREST,  false);
+                                 DlQuantization::RoundingMode::ROUND_NEAREST, false);
 
     std::vector<float> expectedOutput = {-0.45811754, -0.2498823, 0.0, 0.2498823, 0.49976459, 0.72188222};
 
@@ -90,7 +91,7 @@ TEST(TestTensorQuantizationSim, SanityTestWithGatedMin)
     sim.quantizeDequantizeTensor(tensor.data(), tensor.size(), outputTensor.data(), min, max, bw,
                                  DlQuantization::RoundingMode::ROUND_NEAREST,  false);
 
-    std::vector<float> expectedOutput = {0.0, 0.0, 0.0, 0.25098041,  0.50196081, 0.74901962};
+    std::vector<float> expectedOutput = {0.0, 0.0, 0.0, 0.25098041, 0.49803925, 0.74901962};
 
     EXPECT_EQ(outputTensor.size(), expectedOutput.size());
 
@@ -118,7 +119,7 @@ TEST(TestTensorQuantizationSim, SanityTestWithGatedMinMaxEqual)
     sim.quantizeDequantizeTensor(tensor.data(), tensor.size(), outputTensor.data(), min, max, bw,
                                  DlQuantization::RoundingMode::ROUND_NEAREST,  false);
 
-    std::vector<float> expectedOutput = {0.0, 0.0, 0.0, 0.25098041,  0.5, 0.5};
+    std::vector<float> expectedOutput = {0.0, 0.0, 0.0, 0.24901962,  0.5, 0.5};
 
     EXPECT_EQ(outputTensor.size(), expectedOutput.size());
 
@@ -146,7 +147,7 @@ TEST(TestTensorQuantizationSim, SanityTestWithGatedMax)
     sim.quantizeDequantizeTensor(tensor.data(), tensor.size(), outputTensor.data(), min, max, bw,
                                  DlQuantization::RoundingMode::ROUND_NEAREST,  false);
 
-    std::vector<float> expectedOutput = {-0.5, -0.25098041, 0.0, 0.0, 0.0, 0.0};
+    std::vector<float> expectedOutput = {-0.5, -0.24901962, 0.0, 0.0, 0.0, 0.0};
 
     EXPECT_EQ(outputTensor.size(), expectedOutput.size());
 

@@ -212,16 +212,17 @@ class TestQcQuantizeOpStaticGrid:
         # delta is 0.040745098
         quantizer.encoding = encodings
 
-        # Test quantize only on gpu
+        # Test quantize only on cpu
         inp_tensor = torch.tensor([[-7, -5, -3, 0, .1, 2.5],
                                    [-7, -5, -3, 0, .1, 2.5],
                                    [-7, -5, -3, 0, .1, 2.5],
-                                   [-7, -5, -3, 0, .1, 2.5]])
+                                   [-7, -5, -3, 0, .1, 2.5]],
+                                  dtype=torch.float32)
 
         quant_out = quantizer.quantize_dequantize(inp_tensor, MAP_ROUND_MODE_TO_PYMO['nearest'])
-        expected_out = torch.tensor([[-3.84, -3.84, -3, 0, .09, 2.49],
-                                     [-3.84, -3.84, -3, 0, .09, 2.49],
-                                     [-3.84, -3.84, -3, 0, .09, 2.49],
+        expected_out = torch.tensor([[-3.84, -3.84, -3, 0, .089999996, 2.49],
+                                     [-3.84, -3.84, -3, 0, .089999996, 2.49],
+                                     [-3.84, -3.84, -3, 0, .089999996, 2.49],
                                      [-6.4, -5, -3, 0, .1, 2.5]],
                                     dtype=torch.float32)
         assert torch.equal(quant_out, expected_out)
@@ -250,7 +251,7 @@ class TestQcQuantizeOpStaticGrid:
         # delta is 0.040745098
         quantizer.encoding = encodings
 
-        # Test quantize only on gpu
+        # Test quantize only on cpu
         inp_tensor = torch.tensor([[-7, -5, -3, 0, .1, 2.5],
                                    [-7, -5, -3, 0, .1, 2.5],
                                    [-7, -5, -3, 0, .1, 2.5],
@@ -324,7 +325,7 @@ class TestQcQuantizeOpStaticGrid:
         # delta is 0.040745098
         quantizer.encoding = encodings
 
-        # Test quantize only on gpu
+        # Test quantize only on cpu
         inp_tensor_gpu = torch.tensor([-7, -5, -3, 0, .1, 2.5])
         quant_out = quantizer.quantize(inp_tensor_gpu, MAP_ROUND_MODE_TO_PYMO['nearest'])
         expected_out = torch.tensor([-128, -123, -74, 0, 2, 61], dtype=torch.float32)
@@ -386,7 +387,7 @@ class TestQcQuantizeOpStaticGrid:
         # delta is 0.020352941
         quantizer.encoding = encodings
 
-        # Test quantize only on gpu
+        # Test quantize only on cpu
         inp_tensor_gpu = torch.tensor([0, 1.2, 1.5, 4.0, 4.9, 5.3])
         quant_out = quantizer.quantize(inp_tensor_gpu, MAP_ROUND_MODE_TO_PYMO['nearest'])
         expected_out = torch.tensor([0, 59, 74, 197, 241, 255], dtype=torch.float32)
@@ -400,7 +401,7 @@ class TestQcQuantizeOpStaticGrid:
                                                  use_symmetric_encodings=True, enabled_by_default=True,
                                                  data_type=QuantizationDataType.float)
 
-        # Test quantize-dequantize only on gpu
+        # Test quantize-dequantize only on cpu
         inp_tensor = torch.tensor([0.3, 2.1, 1.1, 0.9, 0.1, 1.3])
         quant_out = quantizer.quantize_dequantize(inp_tensor, MAP_ROUND_MODE_TO_PYMO['nearest'])
         assert torch.allclose(inp_tensor, quant_out, rtol=0.1)
@@ -414,7 +415,7 @@ class TestQcQuantizeOpStaticGrid:
                                                  use_symmetric_encodings=True, enabled_by_default=True,
                                                  data_type=QuantizationDataType.float)
 
-        # Test quantize-dequantize only on gpu
+        # Test quantize-dequantize only on cpu
         inp_tensor = torch.tensor([0.3, 2.1, 1.1, 0.9, 0.1, 1.3])
         quant_out = quantizer.quantize_dequantize(inp_tensor, MAP_ROUND_MODE_TO_PYMO['nearest'])
         assert torch.allclose(inp_tensor, quant_out, rtol=0.1)

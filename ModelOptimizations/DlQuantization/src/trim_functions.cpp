@@ -39,7 +39,7 @@
 
 #include <algorithm>
 #include <cstdint>
-#include <math.h>
+#include <cmath>
 #include <stdexcept>
 #include <stdlib.h>
 #include <thread>
@@ -52,9 +52,10 @@ namespace DlQuantization
 {
 using namespace std;
 
-inline double randUniformCpu()
+template <typename DTYPE>
+inline DTYPE randUniformCpu()
 {
-    return rand() / (RAND_MAX + 1.0);
+    return rand() / (RAND_MAX + static_cast<DTYPE>(1.0));
 }
 
 double computeDelta(double encodingMin, double encodingMax, double numSteps)
@@ -137,13 +138,50 @@ void quantizeToFxp(const DTYPE* in, int cnt, const TfEncoding& encoding, DTYPE* 
 // CPU implementations
 
 template <typename DTYPE>
+inline void quantizeValueCpu(const DTYPE* in, DTYPE* out,
+                             DTYPE encoding_min, DTYPE encoding_max,
+                             DTYPE encoding_delta, DTYPE encoding_offset,
+                             RoundingMode rounding_mode)
+{
+    *out = fmax(fmin(*in, encoding_max), encoding_min);
+    // Scale and add offset to get something in the range [0,2^bw-1]
+    *out = round(*out / encoding_delta) - encoding_offset;
+
+    switch (rounding_mode)
+    {
+        case ROUND_NEAREST:
+        {
+            break;
+        }
+        case ROUND_STOCHASTIC:
+        {
+            *out = floor(*out + randUniformCpu<DTYPE>());
+            break;
+        }
+        default:
+        {
+            throw runtime_error("Unknown rounding mode.");
+        }
+    }
+}
+
+template <typename DTYPE>
+inline void dequantizeValueCpu(DTYPE* out, DTYPE encoding_delta, DTYPE encoding_offset)
+{
+    *out = encoding_delta * (*out + encoding_offset);
+}
+
+template <typename DTYPE>
 void quantizeDequantizeCpu(const DTYPE* in, int cnt, const TfEncoding& encoding, DTYPE* out,
                            RoundingMode rounding_mode)
 {
     for (int i = 0; i < cnt; ++i)
     {
-        quantizeValueCpu(&in[i], encoding, &out[i], rounding_mode);
-        dequantizeValueCpu(encoding, &out[i]);
+        quantizeValueCpu<DTYPE>(&in[i], &out[i],
+                                encoding.min, encoding.max,
+                                encoding.delta, encoding.offset,
+                                rounding_mode);
+        dequantizeValueCpu<DTYPE>(&out[i], encoding.delta, encoding.offset);
     }
 }
 
@@ -158,40 +196,12 @@ void quantizeToFxpCpu(const DTYPE* in, int cnt, const TfEncoding& encoding, DTYP
     }
     for (int i = 0; i < cnt; ++i)
     {
-        quantizeValueCpu(&in[i], encoding, &out[i], rounding_mode);
+        quantizeValueCpu<DTYPE>(&in[i], &out[i],
+                                encoding.min, encoding.max,
+                                encoding.delta, encoding.offset,
+                                rounding_mode);
         out[i] -= shift;
     }
-}
-
-template <typename DTYPE>
-inline void quantizeValueCpu(const DTYPE* in, const TfEncoding& encoding, DTYPE* out, RoundingMode rounding_mode)
-{
-    *out = (DTYPE) max(min((double) *in, encoding.max), encoding.min);
-    // Scale and add offset to get something in the range [0,2^bw-1]
-    *out = round(*out / encoding.delta) - encoding.offset;
-
-    switch (rounding_mode)
-    {
-        case ROUND_NEAREST:
-        {
-            break;
-        }
-        case ROUND_STOCHASTIC:
-        {
-            *out = floor(*out + randUniformCpu());
-            break;
-        }
-        default:
-        {
-            throw runtime_error("Unknown rounding mode.");
-        }
-    }
-}
-
-template <typename DTYPE>
-inline void dequantizeValueCpu(const TfEncoding& encoding, DTYPE* out)
-{
-    *out = encoding.delta * (*out + encoding.offset);
 }
 
 
