@@ -39,7 +39,7 @@ import numpy as np
 import tensorflow as tf
 
 from aimet_tensorflow.keras.batch_norm_fold import fold_all_batch_norms
-from aimet_tensorflow.keras.cross_layer_equalization import CrossLayerScaling
+from aimet_tensorflow.keras.cross_layer_equalization import CrossLayerScaling, GraphSearchUtils
 from aimet_tensorflow.keras.utils.weight_tensor_utils import WeightTensorUtils
 
 
@@ -56,6 +56,22 @@ def test_fold_batch_norms():
     assert len(conv_bn_pairs) == 53
     assert np.allclose(before_fold_output, after_fold_output, rtol=1e-2)
     assert not np.array_equal(before_fold_weight, after_fold_weight)
+
+
+def test_layer_group_search():
+    model = tf.keras.applications.ResNet50(input_shape=(224, 224, 3))
+
+    _ = fold_all_batch_norms(model)
+    graph_search_utils = GraphSearchUtils(model, input_shapes=(224, 224, 3))
+    layer_groups = graph_search_utils.find_layer_groups_to_scale()
+
+    cls_set_list = []
+    for layer_group in layer_groups:
+        cls_sets = graph_search_utils.convert_layer_group_to_cls_sets(layer_group)
+        cls_set_list.extend(cls_sets)
+
+    assert len(layer_groups) == 16
+    assert len(cls_set_list) == 32
 
 
 def test_cross_layer_scaling_resnet50():

@@ -45,6 +45,7 @@ import tensorflow as tf
 import libpymo
 
 from aimet_common.utils import AimetLogger
+from aimet_tensorflow.keras.connectedgraph import ConnectedGraph
 from aimet_tensorflow.keras.utils.weight_tensor_utils import WeightTensorUtils
 
 _logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.CrosslayerEqualization)
@@ -57,6 +58,10 @@ ClsSet = typing.Union[typing.Tuple[tf.keras.layers.Conv2D,
 
 ScaleFactor = typing.Union[np.ndarray, typing.Tuple[np.ndarray, np.ndarray]]
 ReluFlag = typing.Union[bool, typing.Tuple[bool, bool]]
+
+cls_supported_layers = (tf.keras.layers.Conv2D, tf.keras.layers.Conv1D)
+zero_padding_layers = (tf.keras.layers.ZeroPadding2D, tf.keras.layers.ZeroPadding1D)
+cls_supported_activations = (tf.keras.layers.ReLU, tf.keras.layers.PReLU)
 
 
 class ClsSetInfo:
@@ -113,8 +118,140 @@ class ClsSetInfo:
 class GraphSearchUtils:
     """Implements graph search utils required by CLE feature"""
 
-    def __init__(self):
-        pass
+    def __init__(
+            self,
+            model: tf.keras.Model,
+            input_shapes: typing.Union[
+                None, typing.Tuple, typing.List[typing.Tuple]
+            ] = None,
+    ):
+        """
+        :param model: Keras Model (Sequential, Functional, Subclassing)
+        :param input_shapes: Input shape tuple or list of input tuple shape
+        """
+        self._connected_graph = ConnectedGraph(model, input_shapes)
+        self._ordered_module_list = self._get_ordered_list_of_conv_modules()
+
+    def _get_ordered_list_of_conv_modules(self):
+        """
+        Finds order of nodes in graph
+
+        :return: List of name, layer tuples in graph in order
+        """
+        result = []
+        for op in self._connected_graph.ordered_ops:
+            layer = op.get_module()
+            if isinstance(layer, cls_supported_layers):
+                result.append([layer.name, layer])
+
+        return result
+
+    def find_layer_groups_to_scale(self) -> typing.List[typing.List[tf.keras.layers.Conv2D]]:
+        """
+        Find layer groups to scale
+
+        :return: List of groups of layers. Each group can be independently equalized
+        """
+        # Find the input node(s) in the graph
+        input_nodes = []
+        for op in self._connected_graph.get_all_ops().values():
+            if op.inputs and op.inputs[0].is_model_input:
+                input_nodes.append(op)
+
+        layer_groups = []
+        for op in input_nodes:
+            self.find_downstream_layer_groups_to_scale(op, layer_groups)
+
+        # Sort the layer groups in order of occurrence in the model
+        ordered_layer_groups = []
+        for _, module in self._ordered_module_list:
+            for layer_group in layer_groups:
+                if layer_group[0] is module:
+                    ordered_layer_groups.append(layer_group)
+
+        return ordered_layer_groups
+
+    @staticmethod
+    def find_downstream_layer_groups_to_scale(op, layer_groups, current_group=None, visited_nodes=None):
+        """
+        Recursive function to find cls layer groups downstream from a given op
+
+        :param op: Starting op to search from
+        :param layer_groups: Running list of layer groups
+        :param current_group: Running current layer group
+        :param visited_nodes: Running list of visited nodes (to short-circuit recursion)
+        :return: None
+        """
+
+        if not visited_nodes:
+            visited_nodes = []
+        if not current_group:
+            current_group = []
+
+        if op in visited_nodes:
+            return
+        visited_nodes.append(op)
+
+        current_layer = op.get_module()
+        # Conv2D, Conv1D or its subclass is added to the current group
+        if current_layer and isinstance(current_layer, cls_supported_layers):
+            current_group.append(current_layer)
+
+        # Terminating condition for current group
+        if not current_layer or not GraphSearchUtils._is_supported_layer_case(current_layer):
+            if (len(current_group) > 1) and (current_group not in layer_groups):
+                layer_groups.append(current_group)
+            current_group = []
+
+        if op.output:
+            for consumer in op.output.consumers:
+                GraphSearchUtils.find_downstream_layer_groups_to_scale(consumer, layer_groups,
+                                                                       current_group, visited_nodes)
+
+        # Reached a leaf.. See if the current group has something to grab
+        if (len(current_group) > 1) and (current_group not in layer_groups):
+            layer_groups.append(current_group)
+
+    @staticmethod
+    def _is_supported_layer_case(layer: tf.keras.layers.Layer) -> bool:
+        """
+        Check if the current layer is CLS supported layers or a supported activation layer
+
+        :param layer: tf.keras.layers.Layer
+        :return: True if it's CLS supported layers or a supported layer
+        """
+        return isinstance(layer, (cls_supported_layers + zero_padding_layers)) or \
+            GraphSearchUtils._is_supported_activations(layer) or \
+            GraphSearchUtils._is_folded_batch_normalization(layer)
+
+    @staticmethod
+    def _is_folded_batch_normalization(layer: tf.keras.layers.Layer) -> bool:
+        if not isinstance(layer, tf.keras.layers.BatchNormalization):
+            return False
+
+        return np.all(layer.beta == 0.0) and np.all(layer.gamma == 1.0)
+
+    @staticmethod
+    def _is_supported_activations(layer: tf.keras.layers.Layer) -> bool:
+        """
+        Check if the current layer is a supported activation layer
+
+        :param layer: tf.keras.layers.Layer
+        :return: True if layer is ReLU, PReLU or Activation with supported type
+        """
+        # Case of explicit layer such as tf.keras.layers.ReLU
+        if isinstance(layer, cls_supported_activations):
+            return True
+
+        # Case of implicit layer such as tf.keras.layers.Activation(tf.nn.relu)
+        # Note: PReLU is not supported by implicit approach until TF 2.4
+        layer_config = layer.get_config()
+        activation = layer_config.get("activation")
+
+        if activation is None:
+            return False
+
+        return activation in ["relu", "relu6"]
 
     @staticmethod
     def convert_layer_group_to_cls_sets(layer_group: typing.List[tf.keras.layers.Conv2D]) \
