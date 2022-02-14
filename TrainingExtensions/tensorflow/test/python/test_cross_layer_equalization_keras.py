@@ -121,68 +121,40 @@ class TestTrainingExtensionsCrossLayerScaling:
             tf.keras.layers.Dense(10)
         ])
 
-        # TODO: Implement layer group searching logic and replace mock_layer_groups with its result
-        layers = model.layers
-        mock_layer_groups = [
-            [layers[0], layers[1]],
-            [layers[3], layers[4]],
-            [layers[6], layers[7], layers[8]],
-            [layers[10], layers[11], layers[12]],
-            [layers[14], layers[15], layers[16]]
-        ]
-        assert len(mock_layer_groups) == 5
+        graph_search_utils = GraphSearchUtils(model, (224, 224, 3))
+        layer_groups = graph_search_utils.find_layer_groups_to_scale()
+
+        assert len(layer_groups) == 5
 
     def test_find_layer_groups_in_network_with_residual(self):
         """
         Sample network that has residual connection (branching)
-        Input -> Conv -> BN -> ReLU -> MaxPool ->
-               -> (In Residual) Conv -> BN -> ReLU -> Conv -> BN -> ReLU
-               -> (In Residual) Conv -> BN -> ReLU -> Conv -> BN -> ReLU
+        Input -> Conv -> ReLU -> MaxPool ->
+               -> (In Residual) Conv -> ReLU -> Conv -> ReLU
+               -> (In Residual) Conv -> ReLU -> Conv -> ReLU
                -> Dense
         """
+        def residual_block(inputs):
+            x = tf.keras.layers.Conv2D(32, kernel_size=3, padding="same")(inputs)
+            x = tf.keras.layers.ReLU()(x)
+            x = tf.keras.layers.Conv2D(64, kernel_size=1)(x)
 
-        class Residual(tf.keras.Model):  # pylint: disable=too-many-ancestors
-            """Residual block"""
-            def __init__(self):
-                super().__init__()
-                self.conv1 = tf.keras.layers.Conv2D(32, kernel_size=3)
-                self.conv2 = tf.keras.layers.Conv2D(32, kernel_size=3)
+            x += inputs
+            x = tf.keras.layers.Activation(tf.nn.relu)(x)
+            return x
 
-                self.bn1 = tf.keras.layers.BatchNormalization()
-                self.bn2 = tf.keras.layers.BatchNormalization()
+        input_layer = tf.keras.layers.Input(shape=(28, 28, 3))
+        model = tf.keras.layers.Conv2D(64, kernel_size=7, strides=2, padding="same")(input_layer)
+        model = tf.keras.layers.ReLU()(model)
+        model = tf.keras.layers.MaxPool2D(pool_size=3, strides=2, padding="same")(model)
+        model = residual_block(model)
+        model = residual_block(model)
+        output = tf.keras.layers.Dense(units=10)(model)
 
-                self.relu1 = tf.keras.layers.ReLU()
-                self.relu2 = tf.keras.layers.ReLU()
-
-            def call(self, inputs, training=None, mask=None):
-                outputs = self.relu1(self.bn1(self.conv1))
-                outputs = self.bn2(self.conv2(outputs))
-
-                outputs += inputs
-                return self.relu2(outputs)
-
-            def get_config(self):
-                pass
-
-        model = tf.keras.Sequential([
-            tf.keras.layers.Conv2D(64, kernel_size=7),
-            tf.keras.layers.BatchNormalization(),
-            tf.keras.layers.ReLU(),
-            tf.keras.layers.MaxPool2D(pool_size=3),
-            Residual(),
-            Residual(),
-            tf.keras.layers.Dense(units=10)
-        ])
-
-        # TODO: Implement layer group searching logic and replace mock_layer_groups with its result
-        #   Also need to implement graph parsing in future,
-        #   model.layers can't guarantee actual ordering and structure
-        layers = model.layers
-        mock_layer_groups = [
-            [layers[4].conv1, layers[4].conv2],
-            [layers[5].conv1, layers[5].conv2]
-        ]
-        assert len(mock_layer_groups) == 2
+        keras_model = tf.keras.Model(inputs=input_layer, outputs=output)
+        graph_search_utils = GraphSearchUtils(keras_model)
+        layer_groups = graph_search_utils.find_layer_groups_to_scale()
+        assert len(layer_groups) == 2
 
     def test_find_layer_groups_in_network_with_multiple_inputs(self):
         """
@@ -211,17 +183,10 @@ class TestTrainingExtensionsCrossLayerScaling:
             return tf.keras.models.Model([x1, x2], y)
 
         model = generate_model()
-        # TODO: Implement layer group searching logic and replace mock_layer_groups with its result
-        #   Also need to implement graph parsing in future,
-        #   model.layers can't guarantee actual ordering and structure
-        layers = model.layers
-        mock_layer_groups = [
-            [layers[1], layers[2]],
-            [layers[5], layers[6]],
-            [layers[7], layers[8], layers[9]]
-        ]
+        graph_search_utils = GraphSearchUtils(model)
+        layer_groups = graph_search_utils.find_layer_groups_to_scale()
 
-        assert len(mock_layer_groups) == 3
+        assert len(layer_groups) == 3
 
     def test_convert_layer_group_to_cls_sets_for_consecutive_convolution(self):
         """
