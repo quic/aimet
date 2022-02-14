@@ -41,6 +41,7 @@ from packaging import version
 import numpy as np
 import tensorflow as tf
 
+from aimet_common.defs import QuantScheme
 from aimet_tensorflow.keras.quantsim import QuantizationSimModel
 import libpymo
 
@@ -112,9 +113,9 @@ def test_quantsim_basic():
         assert len(quant_wrappers) == 2
         assert len(quant_wrappers[0].param_quantizers) == 2
         for quant_wrapper in quant_wrappers:
-            assert quant_wrapper.input_quantizers[0].quant_scheme == libpymo.QuantizationMode.QUANTIZATION_TF
+            assert quant_wrapper.input_quantizers[0].quant_scheme == QuantScheme.post_training_tf
             assert quant_wrapper.input_quantizers[0].round_mode == libpymo.RoundingMode.ROUND_NEAREST
-            assert quant_wrapper.output_quantizers[0].quant_scheme == libpymo.QuantizationMode.QUANTIZATION_TF
+            assert quant_wrapper.output_quantizers[0].quant_scheme == QuantScheme.post_training_tf
             assert quant_wrapper.output_quantizers[0].round_mode == libpymo.RoundingMode.ROUND_NEAREST
         assert len(qsim.model.layers[1].input_quantizers) == 1
         assert len(qsim.model.layers[1].output_quantizers) == 1
@@ -169,15 +170,55 @@ def test_qat():
         qsim.compute_encodings(lambda m, _: m.predict(rand_inp), None)
         qsim.model.compile(optimizer=tf.keras.optimizers.Adam(learning_rate=1e-3),
                            loss=tf.keras.losses.MeanSquaredError())
+        # Track weights for dense layer to check that they are updated during fit
         running_weights = [tf.keras.backend.get_value(param) for
                               param in qsim.model.layers[1]._layer_to_wrap.weights]
+        # Track encoding max for dense output quantizer to check that it is not updated during fit
+        running_dense_output_quantizer_encoding_max = \
+            tf.keras.backend.get_value(qsim.model.layers[1].output_quantizers[0]._encoding_max)
+
         for i in range(10):
             _ = qsim.model.fit(x=rand_inp, y=rand_out, batch_size=1)
             ending_weights = [tf.keras.backend.get_value(param) for
                               param in qsim.model.layers[1]._layer_to_wrap.weights]
+            new_dense_output_quantizer_encoding_max = \
+                tf.keras.backend.get_value(qsim.model.layers[1].output_quantizers[0]._encoding_max)
             for idx, weight in enumerate(running_weights):
                 assert not np.array_equal(weight, ending_weights[idx])
+            assert np.array_equal(new_dense_output_quantizer_encoding_max,
+                                  running_dense_output_quantizer_encoding_max)
             running_weights = ending_weights
+            running_dense_output_quantizer_encoding_max = new_dense_output_quantizer_encoding_max
+
+def test_range_learning():
+    if version.parse(tf.version.VERSION) >= version.parse("2.00"):
+        model = dense_functional()
+        rand_inp = np.random.randn(10, 5)
+        rand_out = np.random.randn(10, 2)
+        qsim = QuantizationSimModel(model, quant_scheme=QuantScheme.training_range_learning_with_tf_init,
+                                    default_param_bw=8, default_output_bw=8)
+        qsim.compute_encodings(lambda m, _: m.predict(rand_inp), None)
+        qsim.model.compile(optimizer=tf.keras.optimizers.Adam(learning_rate=1e-3),
+                           loss=tf.keras.losses.MeanSquaredError())
+        # Track weights for dense layer to check that they are updated during fit
+        running_weights = [tf.keras.backend.get_value(param) for
+                              param in qsim.model.layers[1]._layer_to_wrap.weights]
+        # Track encoding max for dense output quantizer to check that it is updated during fit
+        running_dense_output_quantizer_encoding_max = \
+            tf.keras.backend.get_value(qsim.model.layers[1].output_quantizers[0]._encoding_max)
+
+        for i in range(10):
+            _ = qsim.model.fit(x=rand_inp, y=rand_out, batch_size=1)
+            ending_weights = [tf.keras.backend.get_value(param) for
+                              param in qsim.model.layers[1]._layer_to_wrap.weights]
+            new_dense_output_quantizer_encoding_max = \
+                tf.keras.backend.get_value(qsim.model.layers[1].output_quantizers[0]._encoding_max)
+            for idx, weight in enumerate(running_weights):
+                assert not np.array_equal(weight, ending_weights[idx])
+            assert not np.array_equal(new_dense_output_quantizer_encoding_max,
+                                      running_dense_output_quantizer_encoding_max)
+            running_weights = ending_weights
+            running_dense_output_quantizer_encoding_max = new_dense_output_quantizer_encoding_max
 
 def test_assert_on_reused_layer():
     if version.parse(tf.version.VERSION) >= version.parse("2.00"):

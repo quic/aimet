@@ -41,7 +41,7 @@ from typing import Union, List
 import tensorflow as tf
 
 from aimet_common.utils import AimetLogger
-from aimet_common.defs import MAP_QUANT_SCHEME_TO_PYMO, MAP_ROUND_MODE_TO_PYMO, QuantScheme
+from aimet_common.defs import QuantScheme
 from aimet_tensorflow.keras.quant_sim.tensor_quantizer import ActivationTensorQuantizer, ParamTensorQuantizer
 from aimet_tensorflow.keras.utils.common import is_lambda_operator
 
@@ -146,8 +146,8 @@ class QcQuantizeWrapper(tf.keras.layers.Layer):
             for i in range(self._num_inputs):
                 self.input_quantizers.append(
                     ActivationTensorQuantizer(self._layer_to_wrap.name + '_input_quantizer_' + str(i),
-                                              MAP_QUANT_SCHEME_TO_PYMO[self._activation_quant_settings.quant_scheme],
-                                              MAP_ROUND_MODE_TO_PYMO[self._activation_quant_settings.round_mode],
+                                              self._activation_quant_settings.quant_scheme,
+                                              self._activation_quant_settings.round_mode,
                                               self._activation_quant_settings.bitwidth,
                                               self._activation_quant_settings.is_symmetric,
                                               self._activation_quant_settings.use_strict_symmetric,
@@ -160,8 +160,8 @@ class QcQuantizeWrapper(tf.keras.layers.Layer):
             # Only support single output quantizaton for now
             self.output_quantizers.append(
                 ActivationTensorQuantizer(self._layer_to_wrap.name + '_output_quantizer_' + str(0),
-                                          MAP_QUANT_SCHEME_TO_PYMO[self._activation_quant_settings.quant_scheme],
-                                          MAP_ROUND_MODE_TO_PYMO[self._activation_quant_settings.round_mode],
+                                          self._activation_quant_settings.quant_scheme,
+                                          self._activation_quant_settings.round_mode,
                                           self._activation_quant_settings.bitwidth,
                                           self._activation_quant_settings.is_symmetric,
                                           self._activation_quant_settings.use_strict_symmetric,
@@ -175,8 +175,8 @@ class QcQuantizeWrapper(tf.keras.layers.Layer):
                 weight_name = weight.name.split(':')[0]
                 self.param_quantizers.append(
                     ParamTensorQuantizer(weight_name,
-                                         MAP_QUANT_SCHEME_TO_PYMO[self._param_quant_settings.quant_scheme],
-                                         MAP_ROUND_MODE_TO_PYMO[self._param_quant_settings.round_mode],
+                                         self._param_quant_settings.quant_scheme,
+                                         self._param_quant_settings.round_mode,
                                          self._param_quant_settings.bitwidth,
                                          self._param_quant_settings.is_symmetric,
                                          self._param_quant_settings.use_strict_symmetric,
