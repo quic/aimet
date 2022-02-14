@@ -64,9 +64,13 @@ class QuantScheme(Enum):
     are learned during training. """
     training_range_learning = 5
 
-
-MAP_QUANT_SCHEME_TO_PYMO = {QuantScheme.post_training_tf_enhanced: libpymo.QuantizationMode.QUANTIZATION_TF_ENHANCED,
-                            QuantScheme.post_training_tf: libpymo.QuantizationMode.QUANTIZATION_TF}
+MAP_QUANT_SCHEME_TO_PYMO = {QuantScheme.post_training_tf: libpymo.QuantizationMode.QUANTIZATION_TF,
+                            QuantScheme.post_training_tf_enhanced:
+                                libpymo.QuantizationMode.QUANTIZATION_TF_ENHANCED,
+                            QuantScheme.training_range_learning_with_tf_init:
+                                libpymo.QuantizationMode.QUANTIZATION_TF,
+                            QuantScheme.training_range_learning_with_tf_enhanced_init:
+                                libpymo.QuantizationMode.QUANTIZATION_TF_ENHANCED}
 MAP_ROUND_MODE_TO_PYMO = {'nearest': libpymo.RoundingMode.ROUND_NEAREST,
                           'stochastic': libpymo.RoundingMode.ROUND_STOCHASTIC}
 

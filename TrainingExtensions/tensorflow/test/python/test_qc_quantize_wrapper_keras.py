@@ -40,6 +40,7 @@ import tensorflow as tf
 import numpy as np
 from packaging import version
 
+from aimet_common.defs import QuantScheme
 from aimet_tensorflow.keras.quant_sim.qc_quantize_wrapper import QcQuantizeWrapper, QuantizerSettings
 import libpymo
 
@@ -137,8 +138,8 @@ def test_wrapper_settings():
         quant_out_1 = model.predict(test_inp)
         assert quant_out_0[0][0] != quant_out_1[0][0]   # Test that changed settings take effect
 
-        model.layers[1].input_quantizers[0].quant_scheme = libpymo.QuantizationMode.QUANTIZATION_TF_ENHANCED
-        model.layers[1].input_quantizers[0].round_mode = libpymo.RoundingMode.ROUND_STOCHASTIC
+        model.layers[1].input_quantizers[0].quant_scheme = QuantScheme.post_training_tf_enhanced
+        model.layers[1].input_quantizers[0].round_mode = 'stochastic'
         model.layers[1].input_quantizers[0].bitwidth = 2
         model.layers[1].input_quantizers[0].is_symmetric = False
         model.layers[1].input_quantizers[0].use_strict_symmetric = False
