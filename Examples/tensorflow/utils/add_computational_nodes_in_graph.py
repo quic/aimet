@@ -45,20 +45,19 @@ os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
 
 # pylint: disable=wrong-import-position
 import tensorflow.compat.v1 as tf
-from tensorflow.python.framework.ops import Tensor as tf_tensor
 tf.disable_eager_execution()
 tf.logging.set_verbosity(tf.logging.ERROR)
 
 
-def add_image_net_computational_nodes_in_graph(session: tf.Session, logits: tf_tensor, num_classes: int):
+def add_image_net_computational_nodes_in_graph(session: tf.Session, logits_name: str, num_classes: int):
     """
     :param session: Tensorflow session to operate on
-    :param logits: Output tensor of session graph
+    :param logits_name: Output tensor name of session graph
     :param num_classes: No of classes in model data
     """
     with session.graph.as_default():
         # predicted value of the model
-        y_hat = logits
+        y_hat = session.graph.get_tensor_by_name(logits_name)
         y_hat_argmax = tf.argmax(y_hat, axis=1)
 
         # place holder for the labels
@@ -81,23 +80,3 @@ def add_image_net_computational_nodes_in_graph(session: tf.Session, logits: tf_t
 
         # loss Op: loss
         loss = tf.reduce_mean(tf.losses.softmax_cross_entropy(onehot_labels=y, logits=y_hat))
-
-from tensorflow.keras.layers import BatchNormalization as keras_BN
-from tensorflow.keras.models import load_model, save_model
-def set_keras_BN_ops_to_trainable_false(model, load_save_path: str):
-    """
-    Function to set trainable parameters of BN layers of Keras model to False
-    :param model: Keras model
-    :param load_save_path: path to temporally store the model h5 file
-    :return: The Keras model after BN.trainable set to False.
-    """
-    for layer in model.layers:
-        if isinstance(layer, keras_BN):
-            layer.trainable = False
-
-    os.makedirs(load_save_path, exist_ok=True)
-    save_model(model, filepath=os.path.join(load_save_path, 'tmp.h5'))
-    tf.keras.backend.clear_session()
-    model = load_model(os.path.join(load_save_path, 'tmp.h5'))
-
-    return model
