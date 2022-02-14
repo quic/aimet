@@ -471,47 +471,41 @@ class TestTrainingExtensionsQcQuantizeOpPerChannel(unittest.TestCase):
     def test_to_compare_time_per_channel_and_per_tensor_quantization(self):
         save_config_file_for_per_channel_quantization()
 
-        tf.compat.v1.reset_default_graph()
+        def create_sim_run_compute_encodings(config_file):
 
-        def dummy_forward_pass(sess, args):
-            model_output = sess.graph.get_tensor_by_name('conv2d_1/Relu_quantized:0')
-            model_input = sess.graph.get_tensor_by_name('conv2d_input:0')
-            dummy_input = np.random.randn(20, 28, 28, 3)
-            sess.run(model_output, feed_dict={model_input: dummy_input})
+            tf.compat.v1.reset_default_graph()
 
-        with tf.device('/gpu:0'):
-            model = tf.keras.Sequential()
-            model.add(tf.keras.layers.Conv2D(32, kernel_size=3, input_shape=(28, 28, 3), activation='relu'))
-            model.add(tf.keras.layers.MaxPooling2D((2, 2)))
-            model.add(tf.keras.layers.Conv2D(64, kernel_size=3, activation='relu'))
-            model.summary()
+            def dummy_forward_pass(sess, args):
+                np.random.seed(0)
+                model_output = sess.graph.get_tensor_by_name('conv2d_1/Relu_quantized:0')
+                model_input = sess.graph.get_tensor_by_name('conv2d_input:0')
+                dummy_input = np.random.randn(20, 28, 28, 3)
+                sess.run(model_output, feed_dict={model_input: dummy_input})
 
-        sess = tf.compat.v1.Session()
-        initialize_uninitialized_vars(sess)
-        sim = QuantizationSimModel(sess, ['conv2d_input'], ['conv2d_1/Relu'], use_cuda=True,
-                                   config_file='./quantsim_config.json')
+            with tf.device('/gpu:0'):
+                model = tf.keras.Sequential()
+                model.add(tf.keras.layers.Conv2D(32, kernel_size=3, input_shape=(28, 28, 3), activation='relu'))
+                model.add(tf.keras.layers.MaxPooling2D((2, 2)))
+                model.add(tf.keras.layers.Conv2D(64, kernel_size=3, activation='relu'))
+                model.summary()
+
+            sess = tf.compat.v1.Session()
+            initialize_uninitialized_vars(sess)
+            sim = QuantizationSimModel(sess, ['conv2d_input'], ['conv2d_1/Relu'], use_cuda=True,
+                                       config_file=config_file)
 
 
-        start_time = time.time()
-        sim.compute_encodings(dummy_forward_pass, None)
-        per_channel_quantization_time = time.time() - start_time
-        print("--- %s seconds ---" % per_channel_quantization_time)
+            start_time = time.time()
+            sim.compute_encodings(dummy_forward_pass, None)
+            compute_encodings_time = time.time() - start_time
+            return compute_encodings_time
 
-        tf.compat.v1.reset_default_graph()
-        with tf.device('/gpu:0'):
-            model = tf.keras.Sequential()
-            model.add(tf.keras.layers.Conv2D(32, kernel_size=3, input_shape=(28, 28, 3), activation='relu'))
-            model.add(tf.keras.layers.MaxPooling2D((2, 2)))
-            model.add(tf.keras.layers.Conv2D(64, kernel_size=3, activation='relu'))
-            model.summary()
-        sess = tf.compat.v1.Session()
-        initialize_uninitialized_vars(sess)
-        sim = QuantizationSimModel(sess, ['conv2d_input'], ['conv2d_1/Relu'], use_cuda=True)
+        # Run one comment it, uncomment the other one and run again
+        per_channel_time = create_sim_run_compute_encodings('./quantsim_config.json')
+        print(per_channel_time)
+        # per_tensor_time = create_sim_run_compute_encodings(None)
+        # print(per_tensor_time)
 
-        start_time = time.time()
-        sim.compute_encodings(dummy_forward_pass, None)
-        per_tensor_quantization_time = time.time() - start_time
-        print("--- %s seconds ---" % per_tensor_quantization_time)
 
     @pytest.mark.cuda
     def test_compute_encodings_gpu_model_depthwise_model(self):

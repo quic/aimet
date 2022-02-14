@@ -210,11 +210,13 @@ public:
             if (numDimensionsTensor == 4)
                 numElements = numElements * shapeVector[1] * shapeVector[2];
 
+            Tensor temp1, temp2;
+            OP_REQUIRES_OK(context, context->allocate_temp(DT_FLOAT, TensorShape({numElements, 2}), &temp1));
+            OP_REQUIRES_OK(context, context->allocate_temp(DT_FLOAT, TensorShape({numElements, 2}), &temp2));
+
             for(int channel=0; channel < channelShape; channel++)
             {
-                 Tensor temp1, temp2;
-                 OP_REQUIRES_OK(context, context->allocate_temp(DT_FLOAT, TensorShape({numElements, 2}), &temp1));
-                 OP_REQUIRES_OK(context, context->allocate_temp(DT_FLOAT, TensorShape({numElements, 2}), &temp2));
+
                  // Chip input tensor along last dimension
                  sliceTensorAlongLastDim(context->eigen_device<Device>(), temp1, inTensor, channel);
                  auto inpData = temp1.flat<float>().data();
@@ -225,6 +227,7 @@ public:
                                     encodingMax++, bitwidth, useSymmetricEncoding);
 
                  sliceAndStoreTensor(context->eigen_device<Device>(), outTensor, temp2, channel);
+
             }
         }
         else if(numDimensionsTensor == 1)
