@@ -408,3 +408,70 @@ class Quantization(unittest.TestCase):
         os.remove('./quantsim_config.json')
         # close session
         sess.close()
+
+    @pytest.mark.cuda
+    def test_per_channel_quantization_sequential_mnist_like_model(self):
+        print('Running Per channel Quantization Test')
+
+        quantsim_config = {
+            "defaults": {
+                "ops": {
+                    "is_output_quantized": "True",
+                    "is_symmetric": "False"
+                },
+                "params": {
+                    "is_quantized": "True",
+                    "is_symmetric": "True"
+                },
+                "per_channel_quantization": "True",
+            },
+            "params": {},
+            "op_type": {},
+            "supergroups": [],
+            "model_input": {},
+            "model_output": {}
+        }
+        with open('./quantsim_config.json', 'w') as f:
+            json.dump(quantsim_config, f)
+
+        tf.compat.v1.reset_default_graph()
+        sess = tf.compat.v1.Session()
+        with tf.device('/gpu:0'):
+            _ = sequential_model()
+            init = tf.compat.v1.global_variables_initializer()
+            sess.run(init)
+
+        # Allocate the quantizer and quantize the network using the default 8 bit params/activations
+        sim = quantsim.QuantizationSimModel(sess, ['input_1'], ['dense_1/Relu'], quant_scheme='tf',
+                                            use_cuda=True, config_file='./quantsim_config.json')
+
+        param_quantizers = sim._param_quantizers
+        for quant_op_name, quantizer_info in param_quantizers.items():
+
+            assert len(quantizer_info.tensor_quantizer) > 1
+
+        def forward_callback(sess, ite):
+            model_output = sess.graph.get_tensor_by_name('dense_1/Relu:0')
+            model_input = sess.graph.get_tensor_by_name('input_1:0')
+            dummy_input = np.random.randn(1, 28, 28, 1)
+            sess.run(model_output, feed_dict={model_input: dummy_input})
+
+        sim.compute_encodings(forward_callback, forward_pass_callback_args=1)
+        for quant_op_name, quantizer_info in param_quantizers.items():
+            encoding = quantizer_info.get_encoding()
+            assert isinstance(encoding, list)
+        os.remove('./quantsim_config.json')
+        # close session
+        sess.close()
+
+
+def sequential_model():
+    inputs = tf.keras.Input(shape=(28, 28, 1,))
+    x = tf.keras.layers.Conv2D(32, (5, 5), activation='relu')(inputs)
+    x = tf.keras.layers.MaxPool2D()(x)
+    x = tf.keras.layers.Conv2D(64, (5, 5), activation='relu')(inputs)
+    x = tf.keras.layers.MaxPool2D()(x)
+    x = tf.keras.layers.Flatten()(x)
+    x = tf.keras.layers.Dense(1024, activation='relu')(x)
+    x = tf.keras.layers.Dense(10, activation='relu')(x)
+    return x
