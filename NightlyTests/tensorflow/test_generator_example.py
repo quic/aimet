@@ -52,6 +52,7 @@ class Generator_Example(unittest.TestCase):
 
     def test_generator(self):
         # create tf.compat.v1.Session and initialize the weights
+        tf.compat.v1.reset_default_graph()
         config = tf.compat.v1.ConfigProto()
         config.gpu_options.allow_growth = True
         sess = tf.compat.v1.Session(config=config)
@@ -85,3 +86,4 @@ class Generator_Example(unittest.TestCase):
 
             acc_val = sess.run(accuracy_output, feed_dict={data: batch['reshape_input'], labels: batch['labels']})
             print('Accuracy: '+str(acc_val))
+        sess.close()
