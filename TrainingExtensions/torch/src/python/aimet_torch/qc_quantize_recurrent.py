@@ -443,8 +443,8 @@ class QcQuantizeRecurrent(torch.nn.Module):
         for output_quantizer in self._output_quantizers.values():
             output_quantizer.compute_encoding()
 
-    def get_activation_param_quantizers_for_onnx_tensors(
-            self, io_tensor_map: Union[OpToIOTensors, List[OpToIOTensors]]) -> \
+    def get_activation_param_quantizers_for_onnx_tensors(self,
+                                                         io_tensor_map: Union[OpToIOTensors, List[OpToIOTensors]]) -> \
             Tuple[Dict[str, StaticGridPerTensorQuantizer], Dict[str, StaticGridPerTensorQuantizer]]:
         """
         Retrieve mapping from onnx tensor names and quantizers
@@ -491,6 +491,7 @@ class QcQuantizeRecurrent(torch.nn.Module):
                 else:
                     # Case when rnn and gru does not have initial_c_l{} as an input
                     continue
+
                 if quantizer.enabled:
                     if quantizer in self._param_quantizers.values():
                         params_quantizer_map[inputs[index]] = quantizer

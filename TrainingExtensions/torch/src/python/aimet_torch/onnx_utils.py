@@ -627,20 +627,33 @@ class OnnxSaver:
                 recurrent_nodes.append(node.name)
 
         # Collection of recurrent nodes that includes only the first layer nodes
-        recurrent_root_nodes = [node for node in recurrent_nodes if '#' not in node]
+        root_nodes = [node for node in recurrent_nodes if '#' not in node or '#0' in node]
 
-        for root_node in recurrent_root_nodes:
+        for root_node in root_nodes:
             # Find nodes corresponding to all other layers of the recurrent node
-            other_layers = [node for node in recurrent_nodes if node.startswith(root_node + '#')]
+            other_layers = [node for node in recurrent_nodes if node.startswith(root_node.split('#')[0])]
+
+            # Remove the root node from other layers
+            other_layers.remove(root_node)
 
             # sort the other layers using the depth value following the '#'
-            other_layers = sorted(other_layers, key=lambda layer: int(layer.split('#')[1]))
+            def get_depth(layer_name):
+                right_of_pound = layer_name.split('#')[1]
+                but_ignore_dash = right_of_pound.split('-')[0]
+                return int(but_ignore_dash)
+
+            other_layers = sorted(other_layers, key=get_depth)
 
             # Append the io_tensors for all layers for the current root recurrent node, in order
             io_tensor_list = [node_to_io_tensor_name_map[root_node]]
             for layer in other_layers:
                 io_tensor_list.append(node_to_io_tensor_name_map[layer])
                 del node_to_io_tensor_name_map[layer]
+
+            # Let's rename the root node, so we can identify it later when building encoding file e.g.
+            del node_to_io_tensor_name_map[root_node]
+            root_node = root_node.split('#')[0] + '#root_node'
+
             node_to_io_tensor_name_map[root_node] = io_tensor_list
 
     @classmethod
