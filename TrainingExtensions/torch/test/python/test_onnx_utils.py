@@ -175,8 +175,8 @@ class TestOnnxUtils:
         assert 3 == len(lstm_nodes)
 
         node_to_io_dict, _ = onnx_utils.OnnxSaver.get_onnx_node_to_io_tensor_names_map(onnx_model)
-        assert isinstance(node_to_io_dict['lstm'], list)
-        assert 3 == len(node_to_io_dict['lstm'])
+        assert isinstance(node_to_io_dict['lstm#root_node'], list)
+        assert 3 == len(node_to_io_dict['lstm#root_node'])
 
     def test_onnx_export_complex_model(self):
 
