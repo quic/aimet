@@ -197,6 +197,9 @@ def test_range_learning():
         rand_out = np.random.randn(10, 2)
         qsim = QuantizationSimModel(model, quant_scheme=QuantScheme.training_range_learning_with_tf_init,
                                     default_param_bw=8, default_output_bw=8)
+        for wrapper in qsim.quant_wrappers():
+            wrapper.input_quantizers[0].disable()
+
         qsim.compute_encodings(lambda m, _: m.predict(rand_inp), None)
         qsim.model.compile(optimizer=tf.keras.optimizers.Adam(learning_rate=1e-3),
                            loss=tf.keras.losses.MeanSquaredError())
@@ -219,6 +222,13 @@ def test_range_learning():
                                       running_dense_output_quantizer_encoding_max)
             running_weights = ending_weights
             running_dense_output_quantizer_encoding_max = new_dense_output_quantizer_encoding_max
+
+        # Check that exporting encodings exports the learned encodings
+        qsim.export('./data', 'dense_functional')
+        with open("./data/dense_functional.encodings", "r") as encodings_file:
+            encodings = json.load(encodings_file)
+        assert encodings['activation_encodings']['dense/BiasAdd:0']['max'] == \
+               running_dense_output_quantizer_encoding_max
 
 def test_assert_on_reused_layer():
     if version.parse(tf.version.VERSION) >= version.parse("2.00"):
