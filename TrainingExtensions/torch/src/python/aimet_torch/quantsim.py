@@ -416,10 +416,6 @@ class QuantizationSimModel:
                                                         onnx_node_to_io_tensor_map, valid_param_set,
                                                         propagate_encodings)
 
-        # #TODO: Quick workaround to have unique node names in onnx model
-        # # Set unique node names after pytorch model to onnx mapping is completed and encodings are generated correctly
-        # OnnxSaver.set_unique_node_names(onnx_path)
-
     def exclude_layers_from_quantization(self, layers_to_exclude: List[torch.nn.Module]):
         """
         Excludes certain layers from being quantized-dequantized by the simulator
