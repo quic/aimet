@@ -55,6 +55,9 @@ ClsSet = typing.Union[typing.Tuple[tf.keras.layers.Conv2D,
                                    tf.keras.layers.DepthwiseConv2D,
                                    tf.keras.layers.Conv2D]]
 
+ScaleFactor = typing.Union[np.ndarray, typing.Tuple[np.ndarray, np.ndarray]]
+ReluFlag = typing.Union[bool, typing.Tuple[bool, bool]]
+
 
 class ClsSetInfo:
     """
@@ -80,6 +83,14 @@ class ClsSetInfo:
             self.scale_factor = scale_factor
             self.relu_activation_between_layers = relu_activation_between_layers
 
+        def __eq__(self, other):
+            if isinstance(self, other.__class__):
+                return self.layer1 == other.layer1 and \
+                       self.layer2 == other.layer2 and \
+                       np.allclose(self.scale_factor, other.scale_factor) and \
+                       self.relu_activation_between_layers == other.relu_activation_between_layers
+            return False
+
     def __init__(self, cls_pair_1: ClsSetLayerPairInfo, cls_pair_2: ClsSetLayerPairInfo = None):
         """
         Constructor takes 2 pairs if Depth-wise separable layer is being folded
@@ -91,6 +102,12 @@ class ClsSetInfo:
             self.cls_pair_info_list = [cls_pair_1, cls_pair_2]
         else:
             self.cls_pair_info_list = [cls_pair_1]
+
+    def __eq__(self, other):
+        if isinstance(self, other.__class__):
+            return self.cls_pair_info_list == other.cls_pair_info_list
+
+        return False
 
 
 class GraphSearchUtils:
@@ -349,6 +366,51 @@ class CrossLayerScaling:
                 scale_factor = CrossLayerScaling.scale_cls_set_with_conv_layers(cls_set)
             scale_factor_list.append(scale_factor)
         return scale_factor_list
+
+    @staticmethod
+    def create_cls_set_info_list(
+            cls_sets: typing.List[ClsSet],
+            scale_factors: typing.List[ScaleFactor],
+            is_relu_activation_in_cls_sets: typing.List[ReluFlag],
+    ) -> typing.List[ClsSetInfo]:
+        """
+        Binds information from there separate lists into one [ClsInfoSet] data structure
+
+        :param cls_sets: List of CLS sets
+        :param scale_factors: List of scale factors for each cls set
+        :param is_relu_activation_in_cls_sets: List of ReLU flag whether there is ReLU activation in each cls set
+        :return: List of ClsSetInfo
+        """
+        assert len(cls_sets) == len(scale_factors) == len(is_relu_activation_in_cls_sets)
+
+        cls_set_info_list = []
+        for cls_set, scale_factor, has_relu_activation in zip(cls_sets,
+                                                              scale_factors,
+                                                              is_relu_activation_in_cls_sets):
+            # Depthwise separable convolution layer case (triplet of layers)
+            # Should have two scale factors and ReLU flags
+            if isinstance(scale_factor, tuple):
+                assert len(cls_set) == 3
+                assert len(scale_factor) == len(has_relu_activation) == 2
+
+                prev_layer, curr_layer, next_layer = cls_set
+                cls_pair_1 = ClsSetInfo.ClsSetLayerPairInfo(prev_layer, curr_layer,
+                                                            scale_factor[0], has_relu_activation[0])
+                cls_pair_2 = ClsSetInfo.ClsSetLayerPairInfo(curr_layer, next_layer,
+                                                            scale_factor[1], has_relu_activation[1])
+                cls_set_info = ClsSetInfo(cls_pair_1, cls_pair_2)
+
+            # Standard convolution layer case (tuple of layers)
+            # Should have one scale factor and ReLU flag
+            else:
+                prev_layer, curr_layer = cls_set
+                cls_pair = ClsSetInfo.ClsSetLayerPairInfo(prev_layer, curr_layer,
+                                                          scale_factor, has_relu_activation)
+                cls_set_info = ClsSetInfo(cls_pair)
+
+            cls_set_info_list.append(cls_set_info)
+
+        return cls_set_info_list
 
 
 class HighBiasFold:
