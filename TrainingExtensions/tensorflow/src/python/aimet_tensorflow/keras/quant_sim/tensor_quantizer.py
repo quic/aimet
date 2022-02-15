@@ -40,6 +40,7 @@ import abc
 import tensorflow as tf
 
 from aimet_common.defs import MAP_QUANT_SCHEME_TO_PYMO, MAP_ROUND_MODE_TO_PYMO, QuantScheme
+from aimet_common.quantsim import calculate_delta_offset
 from aimet_common.utils import AimetLogger
 from aimet_tensorflow.keras.quant_sim.quantsim_straight_through_grad import qc_straight_through_estimator_grad, \
     quantsim_custom_grad_learned_grid
@@ -77,15 +78,16 @@ class TensorQuantizer(tf.keras.layers.Layer, abc.ABC):
                                          initializer=tf.constant_initializer(bitwidth), trainable=False)
         self._is_symmetric = self.add_weight(name + '.is_symmetric', dtype=tf.bool,
                                              initializer=tf.constant_initializer(is_symmetric), trainable=False)
-
-        self._encoding = None
-
         self._encoding_min = self.add_weight(name + '.encoding_min', dtype=tf.float64, trainable=True,
                                              initializer=tf.constant_initializer(0.))
         self._encoding_max = self.add_weight(name + '.encoding_max', dtype=tf.float64, trainable=True,
                                              initializer=tf.constant_initializer(0.))
         self._quantizer_mode = self.add_weight(name + '.op_mode', dtype=tf.int32, trainable=False,
                                                initializer=tf.constant_initializer(int(op_mode)))
+        # Use this flag to determine if encoding min and max values are fit to be used. Ex. Can be set to True after
+        # compute encodings has been called, or after encodings have been set by passing in a libpymo TfEncoding object.
+        # Can set to False upon changing things like quant scheme, bitwidth, is symmetric, etc.
+        self._is_encoding_valid = False
 
     @property
     def quant_scheme(self):
@@ -97,7 +99,7 @@ class TensorQuantizer(tf.keras.layers.Layer, abc.ABC):
         """ Quant scheme setter """
         self._tensor_quantizer.setQuantScheme(MAP_QUANT_SCHEME_TO_PYMO[quant_scheme])
         self._quant_scheme = quant_scheme
-        self.reset_encoding()
+        self.reset_quant_mode()
 
     @property
     def round_mode(self):
@@ -108,7 +110,7 @@ class TensorQuantizer(tf.keras.layers.Layer, abc.ABC):
     def round_mode(self, round_mode: str):
         """ Round mode setter """
         self._tensor_quantizer.roundingMode = MAP_ROUND_MODE_TO_PYMO[round_mode]
-        self.reset_encoding()
+        self.reset_quant_mode()
 
     @property
     def bitwidth(self):
@@ -119,7 +121,7 @@ class TensorQuantizer(tf.keras.layers.Layer, abc.ABC):
     def bitwidth(self, bitwidth: int):
         """ Bitwidth setter """
         self._bitwidth.assign(bitwidth)
-        self.reset_encoding()
+        self.reset_quant_mode()
 
     @property
     def is_symmetric(self):
@@ -130,7 +132,7 @@ class TensorQuantizer(tf.keras.layers.Layer, abc.ABC):
     def is_symmetric(self, is_symmetric: bool):
         """ Is symmetric setter """
         self._is_symmetric.assign(is_symmetric)
-        self.reset_encoding()
+        self.reset_quant_mode()
 
     @property
     def use_strict_symmetric(self):
@@ -141,7 +143,7 @@ class TensorQuantizer(tf.keras.layers.Layer, abc.ABC):
     def use_strict_symmetric(self, use_strict_symmetric: bool):
         """ Use strict symmetric setter """
         self._tensor_quantizer.setStrictSymmetric(use_strict_symmetric)
-        self.reset_encoding()
+        self.reset_quant_mode()
 
     @property
     def use_unsigned_symmetric(self):
@@ -152,16 +154,37 @@ class TensorQuantizer(tf.keras.layers.Layer, abc.ABC):
     def use_unsigned_symmetric(self, use_unsigned_symmetric: bool):
         """ Use unsigned symmetric setter """
         self._tensor_quantizer.setUnsignedSymmetric(use_unsigned_symmetric)
-        self.reset_encoding()
+        self.reset_quant_mode()
 
     @property
-    def encoding(self):
-        """ Encoding getter """
-        return self._encoding
+    def encoding(self) -> libpymo.TfEncoding:
+        """ Get encodings in libpymo form """
+        if self._is_encoding_valid:
+            encodings = libpymo.TfEncoding()
+            # pylint: disable = protected-access
+            encodings.min = tf.keras.backend.get_value(self._encoding_min)
+            encodings.max = tf.keras.backend.get_value(self._encoding_max)
+            encodings.delta, encodings.offset = calculate_delta_offset(encodings.min, encodings.max, self.bitwidth)
+            encodings.bw = self.bitwidth
+            return encodings
+        return None
+
+    @encoding.setter
+    def encoding(self, encodings: libpymo.TfEncoding):
+        """
+        Sets encoding parameter using values obtained from encodings
+        :param encodings: encodings value
+        """
+        assert encodings is not None, "Encodings cannot be None if Quantizer is enabled"
+        assert isinstance(encodings, libpymo.TfEncoding), "Encodings should be a libpymo.TfEncoding() object"
+        self.bitwidth = encodings.bw
+        self._encoding_min.assign(encodings.min)
+        self._encoding_max.assign(encodings.max)
+        self._is_encoding_valid = True
 
     @property
     def quant_mode(self):
-        """ Get quant mode"""
+        """ Get quant mode """
         return tf.keras.backend.get_value(self._quantizer_mode)
 
     @abc.abstractmethod
@@ -182,22 +205,21 @@ class TensorQuantizer(tf.keras.layers.Layer, abc.ABC):
             # TODO: remove last two parameters after fixing PyModelOptimizations
             encoding = self._tensor_quantizer.computeEncoding(self.bitwidth, self.is_symmetric, False, False)
             if self._tensor_quantizer.isEncodingValid:
-                self._encoding = encoding
-                self._encoding_min.assign(self._encoding.min)
-                self._encoding_max.assign(self._encoding.max)
+                self._encoding_min.assign(encoding.min)
+                self._encoding_max.assign(encoding.max)
                 if self.quant_mode == int(libpymo.TensorQuantizerOpMode.updateStats):
                     self._quantizer_mode.assign(int(libpymo.TensorQuantizerOpMode.quantizeDequantize))
+                self._is_encoding_valid = True
             else:
                 _logger.info('Tensor quantizer %s did not have a valid encoding calculated, and has been set to '
                              'passThrough mode.', self.name)
-                self._encoding = None
                 self._quantizer_mode.assign(int(libpymo.TensorQuantizerOpMode.passThrough))
 
-    def reset_encoding(self):
-        """ Reset the encoding to None, and reset quantizer mode if applicable """
-        self._encoding = None
+    def reset_quant_mode(self):
+        """ Reset quantizer mode if applicable """
         if self.quant_mode == int(libpymo.TensorQuantizerOpMode.quantizeDequantize):
             self._quantizer_mode.assign(int(libpymo.TensorQuantizerOpMode.updateStats))
+        self._is_encoding_valid = False
 
     # pylint: disable=arguments-differ
     def call(self, tensor):
@@ -276,7 +298,7 @@ class ActivationTensorQuantizer(TensorQuantizer):
 
     def enable(self):
         """ Enable the activation tensor quantizer """
-        if self._encoding is not None:
+        if self._is_encoding_valid:
             self._quantizer_mode.assign(int(libpymo.TensorQuantizerOpMode.quantizeDequantize))
         else:
             self._quantizer_mode.assign(int(libpymo.TensorQuantizerOpMode.updateStats))
