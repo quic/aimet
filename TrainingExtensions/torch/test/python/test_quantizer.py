@@ -341,6 +341,15 @@ class PreluModel(nn.Module):
         return self.prelu(x)
 
 
+class PixelShuffleModel(nn.Module):
+    def __init__(self):
+        super(PixelShuffleModel, self).__init__()
+        self.ps = nn.PixelShuffle(2)
+
+    def forward(self, x):
+        return self.ps(x)
+
+
 class TestQuantizationSimStaticGrad:
     def test_is_leaf_module_positive(self):
         """With an actual leaf module"""
@@ -1669,7 +1678,8 @@ class TestQuantizationSimStaticGrad:
 
     def test_export_recurrent_model(self):
         """ Test export functionality with recurrent models """
-        models = [TwoLayerBidirectionaRNNModel(), TwoLayerBidirectionalLSTMModel(), TwoLayerBidirectionalGRUModel()]
+        # models = [TwoLayerBidirectionaRNNModel(), TwoLayerBidirectionalLSTMModel(), TwoLayerBidirectionalGRUModel()]
+        models = [TwoLayerBidirectionalLSTMModel()]
         dummy_input = torch.randn(10, 1, 3)
 
         def forward_pass(model, args):
@@ -1860,7 +1870,7 @@ class TestQuantizationSimStaticGrad:
                                    default_data_type=QuantizationDataType.float)
 
         quantizer = sim.model.mul1.input_quantizer
-        enc_dict = sim._create_encoding_dict(encoding=None, quantizer=quantizer)
+        enc_dict = sim._create_encoding_dict(encoding=None, quantizer=quantizer, propagate_encodings=False)
         assert enc_dict['dtype'] == 'float'
         assert enc_dict['bitwidth'] == 16
         assert 'min' not in enc_dict
@@ -2027,6 +2037,80 @@ class TestQuantizationSimStaticGrad:
         assert int(new_encoding_min) == -6
         assert int(new_encoding_max) == 17
         assert sim2.model.block.add_2.output_quantizer.encoding.bw == 8
+
+    def test_encodings_propagation_simple_model(self):
+        """
+        Test encodings are propagated correctly when more than
+        one onnx node maps to the same torch module
+        """
+        model = PixelShuffleModel()
+        dummy_input = torch.randn(1, 4, 8, 8)
+
+        def forward_pass(model, args):
+            model.eval()
+            model(dummy_input)
+
+        # verifying the encodings propagation works well while using QcQuantizeRecurrent or QcQuantizeWrapper
+        sim = QuantizationSimModel(model, dummy_input)
+
+        # Quantize
+        sim.compute_encodings(forward_pass, None)
+
+        # Save encodings
+        sim.export('./data', 'encodings_propagation_false', dummy_input)
+        with open('./data/encodings_propagation_false.encodings') as f:
+            encodings = json.load(f)
+        assert len(encodings['activation_encodings']) == 2
+        assert 't.1' in encodings['activation_encodings']
+        assert '7' in encodings['activation_encodings']
+
+        # Save encodings again - now with propagate encodings flag enabled
+        sim.export('./data', 'encodings_propagation_true', dummy_input, propagate_encodings=True)
+        with open('./data/encodings_propagation_true.encodings') as f:
+            encodings = json.load(f)
+        assert len(encodings['activation_encodings']) == 4
+        assert '3' in encodings['activation_encodings']
+        assert 'min' not in encodings['activation_encodings']['3']
+        assert '4' in encodings['activation_encodings']
+        assert 'min' not in encodings['activation_encodings']['4']
+
+        pretty_data = json.dumps(encodings, indent=2)
+        print(pretty_data)
+
+    def test_encodings_propagation_lstm_model(self):
+        """
+        Test encodings are propagated correctly when more than
+        one onnx node maps to the same torch module for LSTM layers
+        """
+        model = TwoLayerBidirectionalLSTMModel()
+        dummy_input = torch.randn(10, 1, 3)
+
+        def forward_pass(model, args):
+            model.eval()
+            model(dummy_input)
+
+        # verifying the encodings propagation works well while using QcQuantizeRecurrent or QcQuantizeWrapper
+        sim = QuantizationSimModel(model, dummy_input)
+
+        # Quantize
+        sim.compute_encodings(forward_pass, None)
+
+        # Save encodings
+        sim.export('./data', 'encodings_propagation_false', dummy_input)
+        with open('./data/encodings_propagation_false.encodings') as f:
+            encodings = json.load(f)
+        assert len(encodings['activation_encodings']) == 8
+
+        # Save encodings again - now with propagate encodings flag enabled
+        sim.export('./data', 'encodings_propagation_true', dummy_input, propagate_encodings=True)
+        with open('./data/encodings_propagation_true.encodings') as f:
+            encodings = json.load(f)
+        assert len(encodings['activation_encodings']) == 25
+        # assert '3' in encodings['activation_encodings']
+        # assert '4' in encodings['activation_encodings']
+
+        pretty_data = json.dumps(encodings, indent=2)
+        print(pretty_data)
 
 
 class TestQuantizationSimLearnedGrid:
