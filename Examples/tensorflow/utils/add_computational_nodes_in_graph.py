@@ -41,21 +41,23 @@
 Adds labels placeholder and accuracy, loss ops into a graph of a TF session
 """
 import os
-import tensorflow as tf
-
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
-tf.compat.v1.logging.set_verbosity(tf.compat.v1.logging.ERROR)
+
+# pylint: disable=wrong-import-position
+import tensorflow.compat.v1 as tf
+tf.disable_eager_execution()
+tf.logging.set_verbosity(tf.logging.ERROR)
 
 
-def add_image_net_computational_nodes_in_graph(session: tf.Session, logits: tf.python.ops.Tensor, num_classes: int):
+def add_image_net_computational_nodes_in_graph(session: tf.Session, logits_name: str, num_classes: int):
     """
     :param session: Tensorflow session to operate on
-    :param logits: Output tensor of session graph
+    :param logits_name: Output tensor name of session graph
     :param num_classes: No of classes in model data
     """
     with session.graph.as_default():
         # predicted value of the model
-        y_hat = logits
+        y_hat = session.graph.get_tensor_by_name(logits_name)
         y_hat_argmax = tf.argmax(y_hat, axis=1)
 
         # place holder for the labels
@@ -77,4 +79,4 @@ def add_image_net_computational_nodes_in_graph(session: tf.Session, logits: tf.p
                                   name='top5-acc')
 
         # loss Op: loss
-        loss = tf.reduce_mean(tf.compat.v1.losses.softmax_cross_entropy(onehot_labels=y, logits=y_hat))
+        loss = tf.reduce_mean(tf.losses.softmax_cross_entropy(onehot_labels=y, logits=y_hat))

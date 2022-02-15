@@ -41,12 +41,17 @@ This file demonstrates the use of Adaround using AIMET APIs.
 """
 
 import os
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
+
+# pylint: disable=wrong-import-position
 import argparse
 from datetime import datetime
 import logging
 from typing import List, Callable, Any
-import tensorflow as tf
+import tensorflow.compat.v1 as tf
 from tensorflow.python.keras.applications.resnet import ResNet50
+tf.disable_eager_execution()
+tf.logging.set_verbosity(tf.logging.ERROR)
 
 # imports for AIMET
 from aimet_common.defs import QuantScheme
@@ -54,15 +59,13 @@ from aimet_tensorflow import batch_norm_fold as aimet_bnf
 from aimet_tensorflow.quantsim import QuantizationSimModel
 from aimet_tensorflow.adaround.adaround_weight import Adaround, AdaroundParameters
 from aimet_tensorflow.utils.graph_saver import save_and_load_graph
+from aimet_tensorflow.utils.graph import update_keras_bn_ops_trainable_flag
 
 # imports for data pipelines
 from Examples.common import image_net_config
 from Examples.tensorflow.utils.image_net_data_loader import ImageNetDataLoader
 from Examples.tensorflow.utils.image_net_evaluator import ImageNetEvaluator
 from Examples.tensorflow.utils.add_computational_nodes_in_graph import add_image_net_computational_nodes_in_graph
-
-os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
-tf.compat.v1.logging.set_verbosity(tf.compat.v1.logging.ERROR)
 
 logger = logging.getLogger('TensorFlowAdaround')
 formatter = logging.Formatter('%(asctime)s : %(name)s - %(levelname)s - %(message)s')
@@ -274,9 +277,13 @@ def perform_adaround(config: argparse.Namespace):
                    image_net_config.dataset['image_height'],
                    image_net_config.dataset['image_channels'])
     tf.keras.backend.clear_session()
+    tf_config = tf.ConfigProto()
+    tf_config.gpu_options.allow_growth = True
+    tf.keras.backend.set_session(tf.Session(config=tf_config))
     model = ResNet50(weights='imagenet', input_shape=input_shape)
-    sess = tf.compat.v1.keras.backend.get_session()
-    add_image_net_computational_nodes_in_graph(sess, model.output, image_net_config.dataset['images_classes'])
+    model = update_keras_bn_ops_trainable_flag(model, trainable=False, load_save_path=config.logdir)
+    sess = tf.keras.backend.get_session()
+    add_image_net_computational_nodes_in_graph(sess, model.output.name, image_net_config.dataset['images_classes'])
 
     # 3. Calculates Model accuracy
 

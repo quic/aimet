@@ -40,15 +40,19 @@
 """
 Creates Evaluator for Image-Net dataset
 """
+import os
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
+
+# pylint: disable=wrong-import-position
 import logging
 from typing import List
 import progressbar
-import tensorflow as tf
+import tensorflow.compat.v1 as tf
+tf.disable_eager_execution()
+tf.logging.set_verbosity(tf.logging.ERROR)
 
 from Examples.tensorflow.utils.image_net_data_loader import ImageNetDataLoader
 from Examples.common import image_net_config
-
-tf.compat.v1.logging.set_verbosity(tf.compat.v1.logging.ERROR)
 
 logger = logging.getLogger('Eval')
 
@@ -110,7 +114,7 @@ class ImageNetEvaluator:
         train_tensors = [session.graph.get_tensor_by_name(training_input)
                          for training_input in self._training_inputs]
 
-        train_tensors_dict = dict.fromkeys(train_tensors, True)
+        train_tensors_dict = dict.fromkeys(train_tensors, False)
 
         eval_names = ['top1-acc', 'top5-acc']
         eval_outputs = [session.graph.get_operation_by_name(name).outputs[0] for name in eval_names]
