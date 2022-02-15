@@ -807,12 +807,13 @@ class QuantizationSimModel:
                 # ------------------
                 # Activations
                 # ------------------
+                quantizer = None
                 for tensor, quantizer in onnx_activations_to_quantizers.items():
                     encoding = QuantizationSimModel._create_encoding_dict(quantizer.encoding, quantizer,
                                                                           propagate_encodings=False)
                     activation_encodings[tensor] = [encoding]
 
-                if propagate_encodings:
+                if propagate_encodings and quantizer:
                     last_op_name, op_names = QuantizationSimModel.find_last_op_name_for_layer(layer_name,
                                                                                               op_to_io_tensor_map)
                     for op_name in op_names:
