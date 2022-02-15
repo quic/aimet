@@ -41,7 +41,7 @@ pytestmark = pytest.mark.skip("Disable tests that requires eager execution")
 import numpy as np
 import tensorflow as tf
 
-from aimet_tensorflow.keras.cross_layer_equalization import GraphSearchUtils, CrossLayerScaling
+from aimet_tensorflow.keras.cross_layer_equalization import GraphSearchUtils, CrossLayerScaling, ClsSetInfo
 from aimet_tensorflow.keras.utils.weight_tensor_utils import WeightTensorUtils
 
 
@@ -483,3 +483,91 @@ class TestTrainingExtensionsCrossLayerScaling:
         after_scaling_output = model.predict(inp_array)
 
         assert np.allclose(before_scaling_ouptut, after_scaling_output, rtol=1.e-2)
+
+    def test_create_cls_set_info_list(self):
+        """
+        Test create cls set info list for normal cases
+        """
+        np.random.seed(42)
+        model = tf.keras.Sequential([
+            tf.keras.layers.InputLayer(input_shape=(28, 28, 3)),
+            tf.keras.layers.Conv2D(4, kernel_size=3, activation=None),
+            tf.keras.layers.Conv2D(8, kernel_size=3, activation='relu'),
+            tf.keras.layers.Conv2D(32, kernel_size=3, activation='relu'),
+            tf.keras.layers.DepthwiseConv2D(kernel_size=3, activation=tf.keras.layers.PReLU()),
+            tf.keras.layers.Conv2D(64, kernel_size=1, activation=tf.keras.layers.ReLU()),
+            tf.keras.layers.DepthwiseConv2D(kernel_size=3, activation=None),
+            tf.keras.layers.Conv2D(32, kernel_size=1, activation=tf.keras.layers.PReLU())
+        ])
+
+        # dw means Depthwise / pw means Pointwise
+        conv1, conv2, conv3, dw_conv1, pw_conv1, dw_conv2, pw_conv2 = model.layers
+        cls_sets = [
+            (conv1, conv2),
+            (conv2, conv3),
+            (conv3, dw_conv1, pw_conv1),
+            (pw_conv1, dw_conv2, pw_conv2)
+        ]
+
+        scale_factor1 = np.random.randn(4)
+        scale_factor2 = np.random.randn(8)
+        scale_factor3 = (np.random.randn(32), np.random.randn(32))
+        scale_factor4 = (np.random.randn(64), np.random.randn(64))
+        scale_factors = [
+            scale_factor1, scale_factor2, scale_factor3, scale_factor4
+        ]
+
+        is_relu_activation_in_cls_sets = [
+            False,
+            True,
+            (True, True),
+            (True, False)
+        ]
+
+        actual = CrossLayerScaling.create_cls_set_info_list(cls_sets, scale_factors, is_relu_activation_in_cls_sets)
+        expected = [
+            ClsSetInfo(ClsSetInfo.ClsSetLayerPairInfo(conv1, conv2, scale_factor1, False)),
+            ClsSetInfo(ClsSetInfo.ClsSetLayerPairInfo(conv2, conv3, scale_factor2, True)),
+            ClsSetInfo(ClsSetInfo.ClsSetLayerPairInfo(conv3, dw_conv1, scale_factor3[0], True),
+                       ClsSetInfo.ClsSetLayerPairInfo(dw_conv1, pw_conv1, scale_factor3[1], True)),
+            ClsSetInfo(ClsSetInfo.ClsSetLayerPairInfo(pw_conv1, dw_conv2, scale_factor4[0], True),
+                       ClsSetInfo.ClsSetLayerPairInfo(dw_conv2, pw_conv2, scale_factor4[1], False)),
+        ]
+
+        assert actual == expected
+
+    def test_create_cls_set_info_list_for_exceptional_case(self):
+        """
+        Test create cls set info list for exceptional case
+        """
+        np.random.seed(42)
+        model = tf.keras.Sequential([
+            tf.keras.layers.InputLayer(input_shape=(28, 28, 3)),
+            tf.keras.layers.Conv2D(4, kernel_size=3, activation=None),
+            tf.keras.layers.Conv2D(8, kernel_size=3, activation='relu'),
+            tf.keras.layers.DepthwiseConv2D(kernel_size=3, activation=tf.keras.layers.PReLU()),
+            tf.keras.layers.Conv2D(64, kernel_size=1, activation=tf.keras.layers.ReLU()),
+        ])
+
+        conv1, conv2, dw_conv1, pw_conv1 = model.layers
+        cls_sets = [(conv1, conv2), (conv2, dw_conv1, pw_conv1)]
+        is_relu_activation_in_cls_sets = [False, (True, True)]
+        scale_factors1 = [np.random.randn(4)]
+
+        # Raise assertion if the length of the three input arrays do not match
+        # assert len(cls_sets) == len(scale_factors) == len(is_relu_activation_in_cls_sets)
+        with pytest.raises(AssertionError):
+            CrossLayerScaling.create_cls_set_info_list(cls_sets, scale_factors1, is_relu_activation_in_cls_sets)
+
+        # Raise assertion if the length of cls set is not three in case of depthwise separable conv layer
+        # assert len(cls_set) == 3
+        cls_sets2 = [(conv1, conv2), (conv2, dw_conv1)]
+        scale_factors2 = [np.random.randn(4), (np.random.randn(8), np.random.randn(8))]
+        with pytest.raises(AssertionError):
+            CrossLayerScaling.create_cls_set_info_list(cls_sets2, scale_factors2, is_relu_activation_in_cls_sets)
+
+        # Raise assertion if scale factors or relu flags are not tuple in case of depthwise separable conv layer
+        # assert len(scale_factor) == len(has_relu_activation) == 2
+        scale_factors3 = [np.random.randn(4), (np.random.randn(8),)]
+        with pytest.raises(AssertionError):
+            CrossLayerScaling.create_cls_set_info_list(cls_sets, scale_factors3, is_relu_activation_in_cls_sets)
