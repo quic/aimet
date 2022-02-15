@@ -188,6 +188,7 @@ class SvdAcceptanceTests(unittest.TestCase):
         """
         tf.compat.v1.set_random_seed(10)
         AimetLogger.set_level_for_all_areas(logging.DEBUG)
+        tf.compat.v1.reset_default_graph()
 
         # load the meta file
         meta_path = os.path.join(mnist_model_path, 'mnist_save.meta')
@@ -281,7 +282,7 @@ class SvdAcceptanceTests(unittest.TestCase):
         """
         np.random.seed(1)
         AimetLogger.set_level_for_all_areas(logging.INFO)
-
+        tf.compat.v1.reset_default_graph()
         # Grow GPU memory as needed at the cost of fragmentation.
         config = tf.compat.v1.ConfigProto()
         config.gpu_options.allow_growth = True  # pylint: disable=no-member
@@ -387,7 +388,7 @@ class SvdAcceptanceTests(unittest.TestCase):
         """
         np.random.seed(1)
         AimetLogger.set_level_for_all_areas(logging.INFO)
-
+        tf.compat.v1.reset_default_graph()
         # Grow GPU memory as needed at the cost of fragmentation.
         config = tf.compat.v1.ConfigProto()
         config.gpu_options.allow_growth = True  # pylint: disable=no-member
@@ -488,13 +489,13 @@ class SvdAcceptanceTests(unittest.TestCase):
 
 class ChannelPruningAcceptanceTests(unittest.TestCase):
 
-    @pytest.mark.tf1
+
     def test_channel_pruning_manual_vgg16_keras(self):
         """
         :return:
         """
         AimetLogger.set_level_for_all_areas(logging.INFO)
-
+        tf.compat.v1.reset_default_graph()
         batch_size = 1
         input_data = np.random.rand(100, 224, 224, 3)
         dataset = tf.data.Dataset.from_tensor_slices(input_data)
@@ -609,6 +610,7 @@ class ChannelPruningAcceptanceTests(unittest.TestCase):
         :return:
         """
         AimetLogger.set_level_for_all_areas(logging.INFO)
+        tf.compat.v1.reset_default_graph()
         # Grow GPU memory as needed at the cost of fragmentation.
         config = tf.compat.v1.ConfigProto()
         config.gpu_options.allow_growth = True  # pylint: disable=no-member
@@ -726,6 +728,7 @@ class ChannelPruningAcceptanceTests(unittest.TestCase):
         Manual mode test for Keras Resnet50
         """
         AimetLogger.set_level_for_all_areas(logging.INFO)
+        tf.compat.v1.reset_default_graph()
         # Grow GPU memory as needed at the cost of fragmentation.
         config = tf.compat.v1.ConfigProto()
         config.gpu_options.allow_growth = True  # pylint: disable=no-member
@@ -850,6 +853,7 @@ class ChannelPruningAcceptanceTests(unittest.TestCase):
         Auto mode test for Keras ResNet-50.
         """
         AimetLogger.set_level_for_all_areas(logging.INFO)
+        tf.compat.v1.reset_default_graph()
         # Grow GPU memory as needed at the cost of fragmentation.
         config = tf.compat.v1.ConfigProto()
         config.gpu_options.allow_growth = True  # pylint: disable=no-member
@@ -964,6 +968,7 @@ class SvdAndChannelPruningAcceptanceTests(unittest.TestCase):
 
     def test_svd_followed_by_channel_pruning(self):
         """ Test that a model can be run through spatial svd and then channel pruning """
+        tf.compat.v1.reset_default_graph()
         sess = tf.compat.v1.Session()
         with sess.graph.as_default():
             _ = model_with_three_convs()
