@@ -225,7 +225,7 @@ class TestQcQuantizeOpStaticGrid:
                                      [-3.84, -3.84, -3, 0, .089999996, 2.49],
                                      [-6.4, -5, -3, 0, .1, 2.5]],
                                     dtype=torch.float32)
-        assert torch.equal(quant_out, expected_out)
+        assert torch.allclose(quant_out, expected_out, atol=1e-5)
 
     def test_per_channel_asymmetric_qdq(self):
         """ Test tensor quantizer asymmetric quantize-dequantize functionality on cpu """
