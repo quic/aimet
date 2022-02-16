@@ -54,7 +54,7 @@ from aimet_common.defs import QuantScheme, QuantizationDataType, MAP_ROUND_MODE_
 from aimet_torch.elementwise_ops import Multiply
 
 from aimet_torch.examples.test_models import TwoLayerBidirectionalLSTMModel, SingleLayerRNNModel, \
-    TwoLayerBidirectionaRNNModel, TwoLayerBidirectionalGRUModel
+    ModelWithTwoInputs
 
 import libpymo
 from aimet_torch.meta.connectedgraph import ConnectedGraph
@@ -66,7 +66,6 @@ from aimet_torch.quantsim_straight_through_grad import compute_dloss_by_dx
 from aimet_torch import utils, elementwise_ops
 from aimet_torch.qc_quantize_op import QcQuantizeWrapper, QcQuantizeStandalone, \
     StaticGridQuantWrapper, QcQuantizeOpMode, LearnedGridQuantWrapper
-from aimet_torch.tensor_quantizer import StaticGridPerChannelQuantizer, StaticGridPerTensorQuantizer
 from aimet_common.utils import AimetLogger
 
 logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Test)
@@ -219,78 +218,6 @@ class ModelWithStandaloneOps(nn.Module):
         x = self.dropout(x)
         x = self.fc2(x)
         return self.log_softmax(x)
-
-
-class ModelWithTwoInputs(nn.Module):
-
-    def __init__(self):
-        super(ModelWithTwoInputs, self).__init__()
-        self.conv1_a = nn.Conv2d(1, 10, kernel_size=5)
-        self.maxpool1_a = nn.MaxPool2d(2)
-        self.relu1_a = nn.ReLU()
-
-        self.conv1_b = nn.Conv2d(1, 10, kernel_size=5)
-        self.maxpool1_b = nn.MaxPool2d(2)
-        self.relu1_b = nn.ReLU()
-
-        self.conv2 = nn.Conv2d(10, 20, kernel_size=5)
-        self.maxpool2 = nn.MaxPool2d(2)
-        self.relu2 = nn.LeakyReLU()
-        self.flatten = nn.Flatten()
-
-        self.fc1 = nn.Linear(320, 50)
-        self.relu3 = nn.ReLU()
-        self.dropout = nn.Dropout()
-        self.fc2 = nn.Linear(50, 10)
-
-        self.softmax = nn.LogSoftmax(dim=1)
-
-    def forward(self, x1, x2):
-        x1 = self.relu1_a(self.maxpool1_a(self.conv1_a(x1)))
-        x2 = self.relu1_b(self.maxpool1_b(self.conv1_b(x2)))
-        x = x1 + x2
-        x = self.relu2(self.maxpool2(self.conv2(x)))
-        x = self.flatten(x)
-        x = self.relu3(self.fc1(x))
-        x = self.dropout(x)
-        x = self.fc2(x)
-        return self.softmax(x)
-
-
-class ModelWithTransposeConv(nn.Module):
-
-    def __init__(self):
-        super(ModelWithTransposeConv, self).__init__()
-        self.conv1_a = nn.Conv2d(1, 10, kernel_size=5)
-        self.maxpool1_a = nn.MaxPool2d(2)
-        self.relu1_a = nn.ReLU()
-
-        self.conv1_b = nn.Conv2d(1, 10, kernel_size=5)
-        self.maxpool1_b = nn.MaxPool2d(2)
-        self.relu1_b = nn.ReLU()
-
-        self.conv2 = nn.ConvTranspose2d(10, 20, kernel_size=5)
-        self.maxpool2 = nn.MaxPool2d(2)
-        self.relu2 = nn.LeakyReLU()
-        self.flatten = nn.Flatten()
-
-        self.fc1 = nn.Linear(1280, 50)
-        self.relu3 = nn.ReLU()
-        self.dropout = nn.Dropout()
-        self.fc2 = nn.Linear(50, 10)
-
-        self.softmax = nn.LogSoftmax(dim=1)
-
-    def forward(self, x1, x2):
-        x1 = self.relu1_a(self.maxpool1_a(self.conv1_a(x1)))
-        x2 = self.relu1_b(self.maxpool1_b(self.conv1_b(x2)))
-        x = x1 + x2
-        x = self.relu2(self.maxpool2(self.conv2(x)))
-        x = self.flatten(x)
-        x = self.relu3(self.fc1(x))
-        x = self.dropout(x)
-        x = self.fc2(x)
-        return self.softmax(x)
 
 
 class ModelWithTwoInputsOneToAdd(nn.Module):
@@ -700,153 +627,6 @@ class TestQuantizationSimStaticGrad:
 
         # save encodings
         sim.export('./data/', 'two_input_model_fp16', dummy_input)
-
-    # -------------------------------------------
-    def test_model_with_two_inputs_per_channel(self):
-        """Model with more than 1 input"""
-
-        dummy_input = (torch.rand(32, 1, 28, 28), torch.rand(32, 1, 28, 28))
-
-        def forward_pass(model, args):
-            model.eval()
-            with torch.no_grad():
-                model(*dummy_input)
-
-        model = ModelWithTwoInputs()
-
-        sim = QuantizationSimModel(model, dummy_input=dummy_input)
-        for wrapper in sim.quant_wrappers():
-            wrapper.enable_per_channel_quantization()
-
-        assert isinstance(sim.model.conv1_a.param_quantizers['weight'], StaticGridPerChannelQuantizer)
-        assert isinstance(sim.model.conv1_a.param_quantizers['bias'], StaticGridPerChannelQuantizer)
-        assert isinstance(sim.model.conv1_a.output_quantizers[0], StaticGridPerTensorQuantizer)
-
-        assert isinstance(sim.model.fc2.param_quantizers['weight'], StaticGridPerChannelQuantizer)
-        assert isinstance(sim.model.fc2.param_quantizers['bias'], StaticGridPerChannelQuantizer)
-        assert isinstance(sim.model.fc2.output_quantizers[0], StaticGridPerTensorQuantizer)
-
-        # Quantize
-        sim.compute_encodings(forward_pass, None)
-
-        assert len(sim.model.conv1_a.param_quantizers['weight'].encoding) == 10
-        assert len(sim.model.fc2.param_quantizers['weight'].encoding) == 10
-
-        model(*dummy_input)
-
-        # Check that different encodings are computed for different channels
-        assert sim.model.conv1_a.param_quantizers['weight'].encoding[0] != \
-               sim.model.conv1_a.param_quantizers['weight'].encoding[1]
-        assert sim.model.fc2.param_quantizers['weight'].encoding[0] != \
-               sim.model.fc2.param_quantizers['weight'].encoding[1]
-
-        sim.export('./data/', 'two_input_model_per_channel', dummy_input)
-
-        with open("./data/two_input_model_per_channel.encodings", "r") as encodings_file:
-            encodings = json.load(encodings_file)
-        assert len(encodings['param_encodings']) == 10
-        assert len(encodings['param_encodings']['conv1_a.bias']) == 1
-        assert len(encodings['param_encodings']['conv1_a.weight']) == 10
-        assert encodings['param_encodings']['conv1_a.weight'][1]['bitwidth'] == 8
-        assert encodings['param_encodings']['conv1_a.weight'][1]['is_symmetric'] == 'False'
-
-    # -------------------------------------------
-    def test_model_with_two_inputs_per_channel_qat(self):
-        """Model with more than 1 input"""
-
-        dummy_input = (torch.rand(32, 1, 28, 28), torch.rand(32, 1, 28, 28))
-
-        def forward_pass(model, args):
-            model.eval()
-            with torch.no_grad():
-                model(*dummy_input)
-
-        model = ModelWithTwoInputs()
-
-        sim = QuantizationSimModel(model, dummy_input=dummy_input)
-        for wrapper in sim.quant_wrappers():
-            wrapper.enable_per_channel_quantization()
-
-        assert isinstance(sim.model.conv1_a.param_quantizers['weight'], StaticGridPerChannelQuantizer)
-        assert isinstance(sim.model.conv1_a.param_quantizers['bias'], StaticGridPerChannelQuantizer)
-        assert isinstance(sim.model.conv1_a.output_quantizers[0], StaticGridPerTensorQuantizer)
-
-        # Quantize
-        sim.compute_encodings(forward_pass, None)
-
-        # Pass some data in train mode
-        sim.model.train()
-        output = sim.model(*dummy_input)
-
-        # Try a backward pass - all we are testing for is that nothing blows up functionally
-        loss = output.flatten().sum()
-        loss.backward()
-
-    # -------------------------------------------
-
-    def test_model_with_two_inputs_per_channel_fp16_qat(self):
-        """Model with more than 1 input"""
-
-        dummy_input = (torch.rand(32, 1, 28, 28), torch.rand(32, 1, 28, 28))
-
-        def forward_pass(model, args):
-            model.eval()
-            with torch.no_grad():
-                model(*dummy_input)
-
-        model = ModelWithTwoInputs()
-
-        sim = QuantizationSimModel(model, dummy_input=dummy_input, default_output_bw=16, default_param_bw=16,
-                                   default_data_type=QuantizationDataType.float)
-
-        for wrapper in sim.quant_wrappers():
-            wrapper.enable_per_channel_quantization()
-
-        assert isinstance(sim.model.conv1_a.param_quantizers['weight'], StaticGridPerChannelQuantizer)
-        assert isinstance(sim.model.conv1_a.param_quantizers['bias'], StaticGridPerChannelQuantizer)
-        assert isinstance(sim.model.conv1_a.output_quantizers[0], StaticGridPerTensorQuantizer)
-
-        # Quantize
-        sim.compute_encodings(forward_pass, None)
-
-        # Pass some data in train mode
-        sim.model.train()
-        output = sim.model(*dummy_input)
-
-        # Try a backward pass - all we are testing for is that nothing blows up functionally
-        loss = output.flatten().sum()
-        loss.backward()
-
-    def test_model_transposed_conv_per_channel_qat(self):
-        """Model with more than 1 input"""
-
-        dummy_input = (torch.rand(32, 1, 28, 28), torch.rand(32, 1, 28, 28))
-
-        def forward_pass(model, args):
-            model.eval()
-            with torch.no_grad():
-                model(*dummy_input)
-
-        model = ModelWithTransposeConv()
-
-        sim = QuantizationSimModel(model, dummy_input=dummy_input)
-        for wrapper in sim.quant_wrappers():
-            wrapper.enable_per_channel_quantization()
-
-        assert isinstance(sim.model.conv1_a.param_quantizers['weight'], StaticGridPerChannelQuantizer)
-        assert isinstance(sim.model.conv1_a.param_quantizers['bias'], StaticGridPerChannelQuantizer)
-        assert isinstance(sim.model.conv1_a.output_quantizers[0], StaticGridPerTensorQuantizer)
-
-        # Quantize
-        sim.compute_encodings(forward_pass, None)
-
-        # Pass some data in train mode
-        sim.model.train()
-        output = sim.model(*dummy_input)
-
-        # Try a backward pass - all we are testing for is that nothing blows up functionally
-        loss = output.flatten().sum()
-        loss.backward()
 
     # -------------------------------------------
     # -------------------------------------------
@@ -1741,48 +1521,6 @@ class TestQuantizationSimStaticGrad:
         quant_module.reset_encodings()
 
         assert quant_module.param_quantizers['weight'].encoding
-
-    def test_set_and_freeze_param_encoding_per_channel(self):
-        """ Test set and freeze parameter encoding for per-channel encodings """
-        conv1 = torch.nn.Conv2d(4, 4, 1)
-        quant_module = StaticGridQuantWrapper(conv1, weight_bw=8, activation_bw=8, round_mode='nearest',
-                                              quant_scheme=QuantScheme.post_training_tf_enhanced,
-                                              data_type=QuantizationDataType.int)
-        quant_module.enable_per_channel_quantization()
-
-        param_encodings = {'conv1.weight': [{'bitwidth': 4, 'is_symmetric': 'False', 'max': 0.3, 'min': -0.2,
-                                             'offset': -7.0, 'scale': 0.038},
-                                            {'bitwidth': 4, 'is_symmetric': 'False', 'max': 0.3, 'min': -0.2,
-                                             'offset': -7.0, 'scale': 0.038},
-                                            {'bitwidth': 4, 'is_symmetric': 'False', 'max': 0.3, 'min': -0.2,
-                                             'offset': -7.0, 'scale': 0.038},
-                                            {'bitwidth': 4, 'is_symmetric': 'False', 'max': 0.3, 'min': -0.2,
-                                             'offset': -7.0, 'scale': 0.038}
-                                            ]}
-
-        quant_module.set_and_freeze_param_encoding('conv1', param_encodings)
-
-        assert len(quant_module.param_quantizers['weight'].encoding) == 4
-        assert quant_module.param_quantizers['weight'].encoding[0].bw == 4
-        assert quant_module.param_quantizers['weight'].encoding[0].offset == -7.0
-        assert quant_module.param_quantizers['weight'].encoding[0].delta == 0.038
-        assert quant_module.param_quantizers['weight'].encoding[3].bw == 4
-        assert quant_module.param_quantizers['weight'].encoding[3].offset == -7.0
-        assert quant_module.param_quantizers['weight'].encoding[3].delta == 0.038
-
-        assert not quant_module.param_quantizers['weight'].use_symmetric_encodings
-        assert quant_module.param_quantizers['weight'].bitwidth == 4
-
-        # Reset encoding, Since encoding are frozen they should not be None after reset encoding
-        quant_module.reset_encodings()
-
-        assert len(quant_module.param_quantizers['weight'].encoding) == 4
-        assert quant_module.param_quantizers['weight'].encoding[0].bw == 4
-        assert quant_module.param_quantizers['weight'].encoding[0].offset == -7.0
-        assert quant_module.param_quantizers['weight'].encoding[0].delta == 0.038
-        assert quant_module.param_quantizers['weight'].encoding[3].bw == 4
-        assert quant_module.param_quantizers['weight'].encoding[3].offset == -7.0
-        assert quant_module.param_quantizers['weight'].encoding[3].delta == 0.038
 
     def test_compute_encoding_with_given_bitwidth(self):
         """

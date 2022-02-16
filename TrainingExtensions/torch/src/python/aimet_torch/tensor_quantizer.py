@@ -335,7 +335,7 @@ class StaticGridPerChannelQuantizer(StaticGridTensorQuantizer):
         """
         if self.enabled and not self._is_encoding_frozen:
             for channel_idx, op in enumerate(self._cppOp):
-                tensor_slice = tensor.select(self._ch_axis, channel_idx)
+                tensor_slice = tensor.select(self._ch_axis, channel_idx).contiguous(memory_format=torch.contiguous_format)
                 op.updateStats(tensor_slice, tensor.is_cuda)
 
 
@@ -684,7 +684,7 @@ class QuantizeDequantize(torch.autograd.Function):
 
         # pylint:disable = protected-access
         for index, op in enumerate(tensor_quantizer._cppOp):
-            tensor_slice = tensor.select(tensor_quantizer._ch_axis, index)
+            tensor_slice = tensor.select(tensor_quantizer._ch_axis, index).contiguous(memory_format=torch.contiguous_format)
             # pylint:disable = protected-access
             computed_tensor = op.quantizeDequantize(tensor_slice, tensor_quantizer._encoding[index],
                                                     round_mode, tensor.is_cuda)
