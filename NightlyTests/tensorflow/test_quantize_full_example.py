@@ -427,7 +427,8 @@ class Quantization(unittest.TestCase):
                 },
                 "per_channel_quantization": "True",
             },
-            "params": {},
+            "params": {
+            },
             "op_type": {},
             "supergroups": [],
             "model_input": {},
@@ -460,8 +461,9 @@ class Quantization(unittest.TestCase):
 
         sim.compute_encodings(forward_callback, forward_pass_callback_args=1)
         for quant_op_name, quantizer_info in param_quantizers.items():
-            encoding = quantizer_info.get_encoding()
-            assert isinstance(encoding, list)
+            if quantizer_info.is_encoding_valid():
+                encoding = quantizer_info.get_encoding()
+                assert isinstance(encoding, list)
         os.remove('./quantsim_config.json')
         # close session
         sess.close()

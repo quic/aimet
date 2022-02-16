@@ -88,10 +88,10 @@ void modeSpecificAction(const D& d, const T* inTensor, size_t count, T* outTenso
     // Note that all of the pointers to data here could either be pointing to CPU memory or GPU memory
     // We first copy everything to CPU memory and then use them
     auto tensorQuantizerRefHost = copyLiteralToHost<uint64>(d, tensorQuantizerRef);
-    auto opModeHost = copyLiteralToHost<int32>(d, opMode);
     auto encodingMin = copyLiteralToHost<double>(d, min);
     auto encodingMax = copyLiteralToHost<double>(d, max);
     auto tensorQuantizer = reinterpret_cast<DlQuantization::TensorQuantizerOpFacade*>(tensorQuantizerRefHost);
+    auto opModeHost = copyLiteralToHost<int32>(d, opMode);
     auto opModeEnum = static_cast<const DlQuantization::TensorQuantizerOpMode>(opModeHost);
     auto bitwidth = copyLiteralToHost<int8>(d, bw);
     auto useSymmetricEncoding = copyLiteralToHost<bool>(d, useSymEncoding);
@@ -202,48 +202,58 @@ public:
         // Performs per layer quantization
         // For parameters in convolution layers or linear layers
         // TODO: transposed conv2d
-        if(numDimensionsTensor == 4 or numDimensionsTensor == 2)
+
+        auto opModeHost = copyLiteralToHost<int32>(context->eigen_device<Device>(), opMode);
+        auto opModeEnum = static_cast<const DlQuantization::TensorQuantizerOpMode>(opModeHost);
+
+        if(opModeEnum == DlQuantization::TensorQuantizerOpMode::passThrough)
         {
-            // For linear layers
-            int numElements = shapeVector[0];
-            // For conv layers
-            if (numDimensionsTensor == 4)
-                numElements = numElements * shapeVector[1] * shapeVector[2];
-
-            Tensor temp1, temp2;
-            OP_REQUIRES_OK(context, context->allocate_temp(DT_FLOAT, TensorShape({numElements, 2}), &temp1));
-            OP_REQUIRES_OK(context, context->allocate_temp(DT_FLOAT, TensorShape({numElements, 2}), &temp2));
-
-            for(int channel=0; channel < channelShape; channel++)
-            {
-
-                 // Chip input tensor along last dimension
-                 sliceTensorAlongLastDim(context->eigen_device<Device>(), temp1, inTensor, channel);
-                 auto inpData = temp1.flat<float>().data();
-                 auto outData = temp2.flat<float>().data();
-
-                 modeSpecificAction(context->eigen_device<Device>(), inpData, numElements,
-                                    outData, quantizerAddr++, opMode, encodingMin++,
-                                    encodingMax++, bitwidth, useSymmetricEncoding);
-
-                 sliceAndStoreTensor(context->eigen_device<Device>(), outTensor, temp2, channel);
-
-            }
-        }
-        else if(numDimensionsTensor == 1)
-        {
-            // Per channel quantization for Bias
-            int numElements = 1;
-            auto inTensorFlat = inTensor.flat<T>().data();
+            auto inTensorFlat  = inTensor.flat<T>().data();
             auto outTensorFlat = outTensor->flat<T>().data();
-            for(int8 channel=0; channel < channelShape; channel++)
+            modeSpecificAction(context->eigen_device<Device>(), inTensorFlat, inTensor.NumElements(), outTensorFlat,
+                               quantizerAddr, opMode, encodingMin, encodingMax, bitwidth, useSymmetricEncoding);
+        }
+        else
+        {
+            if (numDimensionsTensor == 4 or numDimensionsTensor == 2)
             {
-                 modeSpecificAction(context->eigen_device<Device>(), inTensorFlat++, numElements,
-                                    outTensorFlat++, quantizerAddr++, opMode, encodingMin++,
-                                    encodingMax++, bitwidth, useSymmetricEncoding);
+                // For linear layers
+                int numElements = shapeVector[0];
+                // For conv layers
+                if (numDimensionsTensor == 4)
+                    numElements = numElements * shapeVector[1] * shapeVector[2];
+
+                Tensor temp1, temp2;
+                OP_REQUIRES_OK(context, context->allocate_temp(DT_FLOAT, TensorShape({numElements, 2}), &temp1));
+                OP_REQUIRES_OK(context, context->allocate_temp(DT_FLOAT, TensorShape({numElements, 2}), &temp2));
+
+                for (int channel = 0; channel < channelShape; channel++)
+                {
+                    // Chip input tensor along last dimension
+                    sliceTensorAlongLastDim(context->eigen_device<Device>(), temp1, inTensor, channel);
+                    auto inpData = temp1.flat<float>().data();
+                    auto outData = temp2.flat<float>().data();
+
+                    modeSpecificAction(context->eigen_device<Device>(), inpData, numElements, outData, quantizerAddr++,
+                                       opMode, encodingMin++, encodingMax++, bitwidth, useSymmetricEncoding);
+
+                    sliceAndStoreTensor(context->eigen_device<Device>(), outTensor, temp2, channel);
+                }
+            }
+            else if (numDimensionsTensor == 1)
+            {
+                // Per channel quantization for Bias
+                int numElements    = 1;
+                auto inTensorFlat  = inTensor.flat<T>().data();
+                auto outTensorFlat = outTensor->flat<T>().data();
+                for (int channel = 0; channel < channelShape; channel++)
+                {
+                    modeSpecificAction(context->eigen_device<Device>(), inTensorFlat++, numElements, outTensorFlat++,
+                                       quantizerAddr++, opMode, encodingMin++, encodingMax++, bitwidth,
+                                       useSymmetricEncoding);
+                }
             }
         }
-
 
         }
 };
