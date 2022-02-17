@@ -939,3 +939,31 @@ class TestBatchNormFold(unittest.TestCase):
             self.assertEqual(10,len(node_layer_map))
             self.assertEqual(9, len(layer_out_node_map))
             self.assertEqual(1, len(conv_linear_with_bn_dict))
+
+    def test_bn_fold_with_no_bias(self):
+        inputs = tf.keras.Input((32, 32, 3))
+        x = tf.keras.layers.Conv2D(16, 3, use_bias=False)(inputs)
+        x = tf.keras.layers.BatchNormalization(beta_initializer="normal", gamma_initializer="normal")(x)
+        outputs = tf.keras.layers.ReLU()(x)
+
+        model = tf.keras.Model(inputs=inputs, outputs=outputs)
+        mock_input = np.random.randn(1, 32, 32, 3)
+        output_before_batchnorm_folding = model(mock_input)
+        fold_all_batch_norms(model)
+        output_after_batchnorm_folding = model(mock_input)
+
+        assert np.allclose(output_before_batchnorm_folding, output_after_batchnorm_folding, rtol=1e-2)
+
+    def test_bn_fold_depthwise_convolution(self):
+        inputs = tf.keras.Input((32, 32, 3))
+        x = tf.keras.layers.DepthwiseConv2D(16, use_bias=False)(inputs)
+        x = tf.keras.layers.BatchNormalization(beta_initializer="normal", gamma_initializer="normal")(x)
+        outputs = tf.keras.layers.ReLU()(x)
+
+        model = tf.keras.Model(inputs=inputs, outputs=outputs)
+        mock_input = np.random.randn(1, 32, 32, 3)
+        output_before_batchnorm_folding = model(mock_input)
+        fold_all_batch_norms(model)
+        output_after_batchnorm_folding = model(mock_input)
+
+        assert np.allclose(output_before_batchnorm_folding, output_after_batchnorm_folding, rtol=1e-2)
