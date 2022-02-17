@@ -313,8 +313,8 @@ def _get_weight_tensor_transpose_reshape(conv_linear: LAYER_TYPE) -> libpymo.Ten
     weight_tensor = libpymo.TensorParams()
 
     # linear array to be sent for bn fold
-    weight = conv_linear.kernel.numpy()
-    shape = conv_linear.kernel.shape
+    weight = conv_linear.get_weights()[0]
+    shape = weight.shape
 
     if isinstance(conv_linear, tf.keras.layers.DepthwiseConv2D):
         # Depthwise conv layers in TF have outputs(Noc) set to 1.
@@ -531,6 +531,13 @@ def fold_given_batch_norms(model: Tuple[tf.keras.Model, tf.keras.layers.Layer], 
         # update bias tensor, even in case there was no existing bias add op in given conv2D op.
         bias_tensor_shape = [weight_tensor.shape[0]]
         numpy_bias_reshaped = np.reshape(bias, bias_tensor_shape)
+
+        if not is_bias_valid:
+            conv_linear.use_bias = True
+            conv_linear.bias = conv_linear.add_weight(name="bias",
+                                                      shape=(weight_tensor.shape[0],),
+                                                      dtype=conv_linear.dtype,
+                                                      trainable=True)
         conv_linear.set_weights([numpy_weight_reshaped.data, numpy_bias_reshaped])
 
         BNUtils.modify_bn_params_to_make_as_passthrough(batchnorm)

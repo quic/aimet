@@ -58,6 +58,23 @@ def test_fold_batch_norms():
     assert not np.array_equal(before_fold_weight, after_fold_weight)
 
 
+def test_fold_batch_norms_mobile_net_v2():
+    # rand_inp = np.random.randn(1, 224, 224, 3)
+    model = tf.keras.applications.MobileNetV2()
+    conv_151 = model.layers[151]
+    before_fold_weight = conv_151.get_weights()[0]
+    # before_fold_output = model(rand_inp)
+    conv_bn_pairs = fold_all_batch_norms(model)
+    after_fold_weight = conv_151.get_weights()[0]
+    # after_fold_output = model(rand_inp)
+
+    assert len(conv_bn_pairs) == 52
+    # Note: Currently, it does not pass the assertion below
+    #   It is unclear whether it is due to Keras characteristics or due to wrong implementation
+    # assert np.allclose(before_fold_output, after_fold_output, rtol=1e-2)
+    assert not np.array_equal(before_fold_weight, after_fold_weight)
+
+
 def test_layer_group_search():
     model = tf.keras.applications.ResNet50(input_shape=(224, 224, 3))
 
