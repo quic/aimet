@@ -74,6 +74,63 @@ def _in_eval_mode(model):
         model.train(mode=training)
 
 
+class Cache:
+    """Cache of the outputs of PTQ functions."""
+
+    def __init__(self):
+        self._cache_dir = None
+
+    def mark(self, cache_key: str):
+        """
+        Mark functions that are subject to caching.
+        The functions decorated with this mark will save/load the outputs
+        to/from the cache directory if caching is enabled.
+
+        :param cache_key: Used as a prefix of the name of the file that
+            caches the results of the decorated function.
+        :return: A decorator that registers the decorated functions.
+        """
+        def _wrap(fn: Callable, cache_key: str):
+            @functools.wraps(fn)
+            def caching_helper(*args, **kwargs):
+                # If caching is disabled, Evalaute the result.
+                if self._cache_dir is None:
+                    return fn(*args, **kwargs)
+
+                cache_file = os.path.join(self._cache_dir, f"{cache_key}.pkl")
+                if os.path.exists(cache_file):
+                    _logger.info("Loading result of %s from %s", cache_key, cache_file)
+                    # Cached file exists (cache hit). Load from cache.
+                    with open(cache_file, "rb") as f:
+                        ret = pickle.load(f)
+                else:
+                    # No cached file (cache miss). Evaluate the result.
+                    ret = fn(*args, **kwargs)
+                    _logger.info("Caching result of %s to %s", cache_key, cache_file)
+
+                    # Save results to the cache.
+                    with open(cache_file, "wb") as f:
+                        pickle.dump(ret, f)
+                return ret
+            return caching_helper
+
+        return lambda fn: _wrap(fn, cache_key)
+
+    @contextlib.contextmanager
+    def enable(self, cache_dir: Optional[str]):
+        self._cache_dir = cache_dir
+        try:
+            if self._cache_dir is not None:
+                os.makedirs(self._cache_dir, exist_ok=True)
+                _logger.info("AutoQuant caching is enabled. Cache directory: %s", self._cache_dir)
+            yield
+        finally:
+            self._cache_dir = None
+
+
+cache = Cache()
+
+
 # The number of samples to be used for performance evaluation.
 # NOTE: None means "all".
 NUM_SAMPLES_FOR_PERFORMANCE_EVALUATION = None
@@ -88,86 +145,6 @@ class AutoQuant:
     These techniques will be applied in a best-effort manner until the model
     meets the evaluation goal given as allowed_accuracy_drop.
     """
-    class Cache:
-        """Cache of the outputs of PTQ functions."""
-
-        _cached_funcs: Dict[str, str] = {}
-
-        @classmethod
-        def mark(cls, cache_key: str):
-            """
-            Mark functions that are subject to caching.
-            The functions decorated with this mark will save/load the outputs
-            to/from the cache directory if caching is enabled.
-
-            :param cache_key: Used as a prefix of the name of the file that
-                caches the results of the decorated function.
-            :return: A decorator that registers the decorated functions to `_cached_funcs`.
-            """
-            def decorator(fn):
-                if cache_key in cls._cached_funcs:
-                    raise RuntimeError
-                cls._cached_funcs[cache_key] = fn.__name__
-                return fn
-            return decorator
-
-        def __init__(self, auto_quant: "AutoQuant", cache_dir: str = None):
-            """
-            :param auto_quant: AutoQuant object to apply caching.
-            :param cache_dir: Cache directory. If None, caching is disabled.
-            """
-            self._auto_quant = auto_quant
-            self._cache_dir = cache_dir
-            self._original_funcs = []
-
-            if self._cache_dir:
-                os.makedirs(self._cache_dir, exist_ok=True)
-                _logger.info("AutoQuant caching is enabled. Cache directory: %s", self._cache_dir)
-            else:
-                _logger.info("AutoQuant caching is disabled.")
-
-        def __enter__(self):
-            """Enable caching if self._cache_dir is specified."""
-
-            def _wrap(fn: Callable, cache_key: str):
-                """
-                Wrap a function so that it load/save its results from/to the cache file.
-                :param fn: Function to wrap
-                :param cache_key: Used as a prefix of the name of the cache file.
-                :return: A wrapper function which wraps `fn`.
-                """
-                @functools.wraps(fn)
-                def caching_helper(*args, **kwargs):
-                    # If caching is disabled, Evalaute the result.
-                    if self._cache_dir is None:
-                        return fn(*args, **kwargs)
-
-                    cache_file = os.path.join(self._cache_dir, f"{cache_key}.pkl")
-                    if os.path.exists(cache_file):
-                        _logger.info("Loading result of %s from %s", cache_key, cache_file)
-                        # Cached file exists (cache hit). Load from cache.
-                        with open(cache_file, "rb") as f:
-                            ret = pickle.load(f)
-                    else:
-                        # No cached file (cache miss). Evaluate the result.
-                        ret = fn(*args, **kwargs)
-                        _logger.info("Caching result of %s to %s", cache_key, cache_file)
-
-                        # Save results to the cache.
-                        with open(cache_file, "wb") as f:
-                            pickle.dump(ret, f)
-                    return ret
-                return caching_helper
-
-            for cache_key, attr_name in self._cached_funcs.items():
-                original_fn = getattr(self._auto_quant, attr_name)
-                self._original_funcs.append(original_fn)
-                setattr(self._auto_quant, attr_name, _wrap(original_fn, cache_key))
-
-        def __exit__(self, *_):
-            while self._original_funcs:
-                original_fn = self._original_funcs.pop()
-                setattr(self, original_fn.__name__, original_fn)
 
     def __init__( # pylint: disable=too-many-arguments
             self,
@@ -222,13 +199,13 @@ class AutoQuant:
             with _in_eval_mode(model), torch.no_grad():
                 return eval_callback(model, num_samples)
 
-        self._allowed_accuracy_drop = allowed_accuracy_drop
-        self._eval_callback = eval_callback_wrapper
-        self._default_param_bw = default_param_bw
-        self._default_output_bw = default_output_bw
-        self._default_quant_scheme = default_quant_scheme
-        self._default_rounding_mode = default_rounding_mode
-        self._default_config_file = default_config_file
+        self.allowed_accuracy_drop = allowed_accuracy_drop
+        self.eval_callback = eval_callback_wrapper
+        self.default_param_bw = default_param_bw
+        self.default_output_bw = default_output_bw
+        self.default_quant_scheme = default_quant_scheme
+        self.default_rounding_mode = default_rounding_mode
+        self.default_config_file = default_config_file
 
         def forward_pass_callback(model, _: Any = None):
             device = utils.get_device(model)
@@ -241,16 +218,16 @@ class AutoQuant:
                         assert isinstance(input_data, (tuple, list))
                         model(*input_data)
 
-        self._forward_pass_callback = forward_pass_callback
+        self.forward_pass_callback = forward_pass_callback
 
-        self._adaround_params = AdaroundParameters(unlabeled_dataset_iterable,
-                                                   len(unlabeled_dataset_iterable))
+        self.adaround_params = AdaroundParameters(unlabeled_dataset_iterable,
+                                                  len(unlabeled_dataset_iterable))
 
     def _evaluate_model_performance(self, model) -> float:
         """
         Evaluate the model performance.
         """
-        return self._eval_callback(model, NUM_SAMPLES_FOR_PERFORMANCE_EVALUATION)
+        return self.eval_callback(model, NUM_SAMPLES_FOR_PERFORMANCE_EVALUATION)
 
     def set_adaround_params(self, adaround_params: AdaroundParameters) -> None:
         """
@@ -260,7 +237,7 @@ class AutoQuant:
 
         :param adaround_params: Adaround parameters.
         """
-        self._adaround_params = adaround_params
+        self.adaround_params = adaround_params
 
     def _create_quantsim_and_encodings( # pylint: disable=too-many-arguments
             self,
@@ -279,35 +256,35 @@ class AutoQuant:
 
         :param model: Model to quantize.
         :param dummy_input: Dummy input to the model.
-        :param quant_scheme: Quantization scheme. Defaults to self._default_quant_scheme.
-        :param rounding_mode: Rounding mode. Defaults to self._default_rounding_mode.
+        :param quant_scheme: Quantization scheme. Defaults to self.default_quant_scheme.
+        :param rounding_mode: Rounding mode. Defaults to self.default_rounding_mode.
         :param default_output_bw: Default bitwidth (4-31) to use for quantizing layer inputs andoutputs.
-                                  Defaults to self._default_output_bw.
+                                  Defaults to self.default_output_bw.
         :param default_param_bw: Default bitwidth (4-31) to use for quantizing layer parameters.
-                                 Defaults to self._default_param_bw.
+                                 Defaults to self.default_param_bw.
         :param config_file: Path to configuration file for model quantizers.
-                            Defaults to self._default_config_file.
+                            Defaults to self.default_config_file.
         :param encoding_path: Path to parameter encodings file.
         :return: Quantsim model.
         """
         kwargs = dict(
-            quant_scheme=(quant_scheme or self._default_quant_scheme),
-            rounding_mode=(rounding_mode or self._default_rounding_mode),
-            default_output_bw=(default_output_bw or self._default_output_bw),
-            default_param_bw=(default_param_bw or self._default_param_bw),
-            config_file=(config_file or self._default_config_file),
+            quant_scheme=(quant_scheme or self.default_quant_scheme),
+            rounding_mode=(rounding_mode or self.default_rounding_mode),
+            default_output_bw=(default_output_bw or self.default_output_bw),
+            default_param_bw=(default_param_bw or self.default_param_bw),
+            config_file=(config_file or self.default_config_file),
         )
         sim = QuantizationSimModel(model, dummy_input, **kwargs)
 
         if encoding_path:
             sim.set_and_freeze_param_encodings(encoding_path)
 
-        sim.compute_encodings(self._forward_pass_callback, None)
+        sim.compute_encodings(self.forward_pass_callback, None)
 
         return sim
 
     # pylint: disable=no-self-use
-    @Cache.mark("batchnorm_folding")
+    @cache.mark("batchnorm_folding")
     def _apply_batchnorm_folding(
             self,
             model: torch.nn.Module,
@@ -331,7 +308,7 @@ class AutoQuant:
         return model, folded_pairs
 
     # pylint: disable=no-self-use
-    @Cache.mark("cle")
+    @cache.mark("cle")
     def _apply_cross_layer_equalization(
             self,
             model: torch.nn.Module,
@@ -355,7 +332,7 @@ class AutoQuant:
         equalize_model(model, input_shape)
         return model
 
-    @Cache.mark("adaround")
+    @cache.mark("adaround")
     def _apply_adaround(
             self,
             model: torch.nn.Module,
@@ -381,19 +358,35 @@ class AutoQuant:
                                               "{}.encodings".format(filename_prefix))
         model = Adaround.apply_adaround(model,
                                         dummy_input,
-                                        self._adaround_params,
+                                        self.adaround_params,
                                         path=results_dir,
                                         filename_prefix=filename_prefix,
-                                        default_param_bw=self._default_param_bw,
+                                        default_param_bw=self.default_param_bw,
                                         param_bw_override_list=None,
                                         ignore_quant_ops_list=None,
-                                        default_quant_scheme=self._default_quant_scheme,
-                                        default_config_file=self._default_config_file)
+                                        default_quant_scheme=self.default_quant_scheme,
+                                        default_config_file=self.default_config_file)
 
         return model, adaround_encoding_path
 
     def apply( # pylint: disable=protected-access, too-many-locals, too-many-statements
             self,
+            fp32_model: torch.nn.Module,
+            dummy_input_on_cpu: Union[torch.Tensor, Tuple],
+            dummy_input_on_gpu: Optional[Union[torch.Tensor, Tuple]] = None,
+            results_dir: str = "/tmp",
+            cache_id: str = None,
+    ) -> Tuple[torch.nn.Module, float, str]:
+        return self._apply_helper(self._auto_quant_main,
+                                  fp32_model,
+                                  dummy_input_on_cpu,
+                                  dummy_input_on_gpu,
+                                  results_dir,
+                                  cache_id)
+
+    def _apply_helper( # pylint: disable=protected-access, too-many-locals, too-many-statements
+            self,
+            main_fn: Callable,
             fp32_model: torch.nn.Module,
             dummy_input_on_cpu: Union[torch.Tensor, Tuple],
             dummy_input_on_gpu: Optional[Union[torch.Tensor, Tuple]] = None,
@@ -432,41 +425,41 @@ class AutoQuant:
         else:
             cache_dir = os.path.join(results_dir, ".auto_quant_cache", cache_id)
 
-        with _in_eval_mode(fp32_model),\
-                 AutoQuant.Cache(self, cache_dir):
-            _logger.info("Starting AutoQuant")
+        with _in_eval_mode(fp32_model):
+            with cache.enable(cache_dir):
+                _logger.info("Starting AutoQuant")
 
-            fp32_acc = self._evaluate_model_performance(fp32_model)
-            target_acc = fp32_acc - self._allowed_accuracy_drop
+                fp32_acc = self._evaluate_model_performance(fp32_model)
+                target_acc = fp32_acc - self.allowed_accuracy_drop
 
-            _logger.info("Target eval score: %.02f", target_acc)
-            _logger.info("FP32 eval score (W32A32): %.02f", fp32_acc)
+                _logger.info("Target eval score: %.02f", target_acc)
+                _logger.info("FP32 eval score (W32A32): %.02f", fp32_acc)
 
-            eval_manager = _EvalManager(
-                quantsim_factory=self._create_quantsim_and_encodings,
-                eval_func=self._evaluate_model_performance,
-                dummy_input=dummy_input,
-                dummy_input_on_cpu=dummy_input_on_cpu,
-                results_dir=results_dir,
-            )
-
-            ret = self._do_apply(fp32_model, target_acc, dummy_input,
-                                 eval_manager, results_dir)
-
-            _, acc, *_ = ret
-            _logger.info("Best eval score: %.02f", acc)
-
-            if acc < target_acc:
-                _logger.info(
-                    "AutoQuant is unable to match the target accuracy. "
-                    "Consider Quantization Aware Training."
+                eval_manager = _EvalManager(
+                    quantsim_factory=self._create_quantsim_and_encodings,
+                    eval_func=self._evaluate_model_performance,
+                    dummy_input=dummy_input,
+                    dummy_input_on_cpu=dummy_input_on_cpu,
+                    results_dir=results_dir,
                 )
 
-            eval_manager.export_diagnostics()
+                ret = main_fn(fp32_model, target_acc, dummy_input,
+                              eval_manager, results_dir)
 
-            return ret
+                _, acc, *_ = ret
+                _logger.info("Best eval score: %.02f", acc)
 
-    def _do_apply( # pylint: disable=protected-access, too-many-locals, too-many-statements
+                if acc < target_acc:
+                    _logger.info(
+                        "AutoQuant is unable to match the target accuracy. "
+                        "Consider Quantization Aware Training."
+                    )
+
+                eval_manager.export_diagnostics()
+
+                return ret
+
+    def _auto_quant_main( # pylint: disable=protected-access, too-many-locals, too-many-statements
             self,
             fp32_model: torch.nn.Module,
             target_acc: float,
@@ -488,13 +481,13 @@ class AutoQuant:
         with eval_manager.analysis_session("Weight Quantization Sensitivity") as sess:
             acc = sess.eval(fp32_model, default_output_bw=32)
             sess.diagnostics.add(
-                f"Weight-quantized eval score (W{self._default_param_bw}A32): {acc:.02f}"
+                f"Weight-quantized eval score (W{self.default_param_bw}A32): {acc:.02f}"
             )
 
         with eval_manager.analysis_session("Activation Quantization Sensitivity") as sess:
             acc = sess.eval(fp32_model, default_param_bw=32)
             sess.diagnostics.add(
-                f"Activation-quantized eval score (W32A{self._default_output_bw}): {acc:.02f}"
+                f"Activation-quantized eval score (W32A{self.default_output_bw}): {acc:.02f}"
             )
 
         # Batchnorm Folding

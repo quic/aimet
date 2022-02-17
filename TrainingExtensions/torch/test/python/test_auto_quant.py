@@ -218,8 +218,8 @@ class TestAutoQuant:
             unlabeled_dataset_iterable=unlabeled_data_loader,
             eval_callback=MagicMock(),
         )
-        assert auto_quant._adaround_params.data_loader is unlabeled_data_loader
-        assert auto_quant._adaround_params.num_batches is len(unlabeled_data_loader)
+        assert auto_quant.adaround_params.data_loader is unlabeled_data_loader
+        assert auto_quant.adaround_params.num_batches is len(unlabeled_data_loader)
 
     @pytest.mark.parametrize(
         "bn_folded_acc, cle_acc, adaround_acc",
