@@ -245,7 +245,6 @@ class AutoQuant:
 
         self._adaround_params = AdaroundParameters(unlabeled_dataset_iterable,
                                                    len(unlabeled_dataset_iterable))
-        self._amp_args = None
 
     def _evaluate_model_performance(self, model) -> float:
         """
