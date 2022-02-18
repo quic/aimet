@@ -44,7 +44,7 @@ from dataclasses import dataclass
 import functools
 import os
 import pickle
-from typing import Any, Collection, Callable, Dict, List, Optional, Tuple, Union
+from typing import Any, Collection, Callable, List, Optional, Tuple, Union
 import torch
 from torch.utils.data import DataLoader
 import bokeh.model
@@ -118,6 +118,11 @@ class Cache:
 
     @contextlib.contextmanager
     def enable(self, cache_dir: Optional[str]):
+        """
+        Enable caching.
+
+        :param cache_dir: Directory to read/save the cached results from/to.
+        """
         self._cache_dir = cache_dir
         try:
             if self._cache_dir is not None:
@@ -377,6 +382,21 @@ class AutoQuant:
             results_dir: str = "/tmp",
             cache_id: str = None,
     ) -> Tuple[torch.nn.Module, float, str]:
+        """
+        Apply post-training quantization techniques.
+
+        :param fp32_model: Model to apply PTQ techniques.
+        :param dummy_input_on_cpu: Dummy input to the model in CPU memory.
+        :param dummy_input_on_gpu: Dummy input to the model in GPU memory.
+            This parameter is required if and only if the fp32_model is on GPU.
+        :param results_dir: Directory to save the results.
+        :param cache_id: A string that composes a cache id in combination with results_dir.
+            If specified, AutoQuant will load/save the PTQ results from/to the file system
+            if previous PTQ results produced under the same results_dir and cache_id exist,
+        :return: Tuple of  (best model, eval score, encoding path front).
+        :raises:
+            - ValueError if the model is on GPU and dummy_input_on_gpu is not specified.
+        """
         return self._apply_helper(self._auto_quant_main,
                                   fp32_model,
                                   dummy_input_on_cpu,
@@ -386,7 +406,7 @@ class AutoQuant:
 
     def _apply_helper( # pylint: disable=protected-access, too-many-locals, too-many-statements
             self,
-            main_fn: Callable,
+            auto_quant_main_fn: Callable,
             fp32_model: torch.nn.Module,
             dummy_input_on_cpu: Union[torch.Tensor, Tuple],
             dummy_input_on_gpu: Optional[Union[torch.Tensor, Tuple]] = None,
@@ -394,8 +414,9 @@ class AutoQuant:
             cache_id: str = None,
     ) -> Tuple[torch.nn.Module, float, str]:
         """
-        Apply post-training quantization techniques.
+        Helper for self.apply().
 
+        :param auto_quant_main_fn: Function that implements the main logic of AutoQuant.
         :param fp32_model: Model to apply PTQ techniques.
         :param dummy_input_on_cpu: Dummy input to the model in CPU memory.
         :param dummy_input_on_gpu: Dummy input to the model in GPU memory.
@@ -443,8 +464,8 @@ class AutoQuant:
                     results_dir=results_dir,
                 )
 
-                ret = main_fn(fp32_model, target_acc, dummy_input,
-                              eval_manager, results_dir)
+                ret = auto_quant_main_fn(fp32_model, target_acc, dummy_input,
+                                         eval_manager, results_dir)
 
                 _, acc, *_ = ret
                 _logger.info("Best eval score: %.02f", acc)
