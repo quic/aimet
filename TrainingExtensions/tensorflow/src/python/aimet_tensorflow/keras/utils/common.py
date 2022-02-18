@@ -53,8 +53,9 @@ def is_lambda_operator(layer: tf.keras.layers.Layer) -> bool:
     :param layer: Layer to check
     :return True if layer is a known lambda operator, False otherwise
     """
-    if 'function' in layer.get_config():
-        return layer.get_config()['function'] in lambda_operators
+    config = layer.get_config()
+    if 'function' in config:
+        return config['function'] in lambda_operators
     return False
 
 def module_to_name_map(cur_layer: (tf.keras.Model, tf.keras.layers.Layer)) \
