@@ -231,8 +231,6 @@ def fold_all_batch_norms(model: torch.nn.Module, input_shapes: Union[Tuple, List
     :param input_shapes: Input shapes for the model (can be one or multiple inputs)
     :return: A list of pairs of layers [(Conv/Linear, BN layer that got folded)]
     """
-    assert not model.training, "Batch norm fold works on models in evaluation mode"
-
     # Find whether model is on GPU
     device = utils.get_device(model)
 

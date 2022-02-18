@@ -429,3 +429,23 @@ class TestTrainingExtensionsUtils(unittest.TestCase):
         self.assertEqual(2, inout_counts_check.count(False))
         self.assertEqual((1, 2), inout_map[model.layer1])
         self.assertEqual((2, 1), inout_map[model.add])
+
+    def test_model_in_eval_mode(self):
+        """
+        Test in_eval_mode functionality for given model
+        """
+        model = TinyModel()
+        model_input = torch.randn(1, 3, 32, 32)
+        #1 model in eval mode in the beginning
+        model.eval()
+        with utils.in_eval_mode(model):
+            model(model_input)
+            assert model.training == False
+        assert model.training == False
+
+        #2 model in train mode in the beginning
+        model.train()
+        with utils.in_eval_mode(model):
+            model(model_input)
+            assert model.training == False
+        assert model.training == True
