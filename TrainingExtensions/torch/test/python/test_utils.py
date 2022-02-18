@@ -449,3 +449,14 @@ class TestTrainingExtensionsUtils(unittest.TestCase):
             model(model_input)
             assert model.training == False
         assert model.training == True
+
+        #3 model in train mode in the beginning with exception safety check
+        model.train()
+        try:
+            with utils.in_eval_mode(model):
+                model(model_input)
+                assert model.training == False
+                raise AssertionError   # raise an exception
+        except:
+            pass
+        assert model.training == True

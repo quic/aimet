@@ -654,6 +654,11 @@ def get_reused_modules(model: torch.nn.Module, model_input: Union[torch.Tensor, 
 
 @contextlib.contextmanager
 def in_eval_mode(model: torch.nn.Module):
+    """
+    Utility to put model in eval mode with context manager and later in whatever mode it started with.
+    :param model: PyTorch model
+    :return: None
+    """
     training = model.training
     try:
         model.eval()
