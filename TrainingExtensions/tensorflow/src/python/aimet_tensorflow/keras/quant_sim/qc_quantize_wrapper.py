@@ -139,6 +139,7 @@ class QcQuantizeWrapper(tf.keras.layers.Layer):
         self.output_quantizers = output_quantizers
         self.param_quantizers = param_quantizers
         self._shadow_params = shadow_params
+        self._is_lambda_operator_layer = is_lambda_operator(layer_to_wrap)
 
         # Create quantizer variables and quantizers for inputs if not yet existing
         if self.input_quantizers is None:
@@ -216,7 +217,7 @@ class QcQuantizeWrapper(tf.keras.layers.Layer):
         self._quantize_params()
 
         # Special logic for +, -, *, / operators which become lambda layers with kwarg inputs
-        if is_lambda_operator(self._layer_to_wrap) and 'y' in kwargs and len(self.input_quantizers) == 2:
+        if self._is_lambda_operator_layer and 'y' in kwargs and len(self.input_quantizers) == 2:
             inputs = self._quantize_activation(inputs, [self.input_quantizers[0]], True)
             kwargs['y'] = self._quantize_activation(kwargs['y'], [self.input_quantizers[1]], True)
         else:
@@ -245,22 +246,14 @@ class QcQuantizeWrapper(tf.keras.layers.Layer):
             activation = [activation]
 
         if len(activation) != len(quantizers):
-            _logger.error('Mismatch between number of tensors {%s} and number of quantizers {%s} for layer {%s}',
-                          len(activation), len(quantizers), self._layer_to_wrap.name)
-            _logger.error('If this is a layer with multiple outputs, this is not currently supported by Quantsim.')
             if is_input_quantization:
-                _logger.error('Not performing input quantization for {%s}', self._layer_to_wrap.name)
+                _logger.error('Mismatch between number of tensors {%s} and number of input quantizers {%s} for layer '
+                              '{%s}', len(activation), len(quantizers), self._layer_to_wrap.name)
             else:
-                _logger.error('Not performing output quantization for {%s}', self._layer_to_wrap.name)
-
-            for quantizer in quantizers:
-                quantizer.disable()
-
-            # Reformat single activation from list to tensor
-            if len(activation) == 1:
-                activation = activation[0]
-
-            return activation
+                _logger.error('Mismatch between number of tensors {%s} and number of output quantizers {%s} for layer '
+                              '{%s}', len(activation), len(quantizers), self._layer_to_wrap.name)
+                _logger.error('If this is a layer with multiple outputs, this is not currently supported by Quantsim.')
+            raise AssertionError
 
         quantized_activations = []
         for idx, tensor in enumerate(activation):
