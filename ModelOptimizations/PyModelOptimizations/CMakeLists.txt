@@ -78,6 +78,6 @@ set_target_properties(PyModelOptimizations
          LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/artifacts"
       )
 
-install(FILES $<TARGET_FILE:PyModelOptimizations>
-      DESTINATION ${AIMET_INSTALL_DIR}/lib/x86_64-linux-gnu
-      )
+install(TARGETS PyModelOptimizations
+        LIBRARY DESTINATION ${AIMET_INSTALL_DIR}/lib/x86_64-linux-gnu
+)
