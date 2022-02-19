@@ -60,7 +60,7 @@ def add_image_net_computational_nodes_in_graph(session: tf.Session, logits_name:
         y_hat = session.graph.get_tensor_by_name(logits_name)
         y_hat_argmax = tf.argmax(y_hat, axis=1)
 
-        # place holder for the labels
+        # placeholder for the labels
         y = tf.placeholder(tf.int64, shape=[None, num_classes], name='labels')
         y_argmax = tf.argmax(y, axis=1)
 
