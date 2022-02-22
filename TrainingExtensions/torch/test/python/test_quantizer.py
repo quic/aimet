@@ -1850,6 +1850,99 @@ class TestQuantizationSimStaticGrad:
         pretty_data = json.dumps(encodings, indent=2)
         print(pretty_data)
 
+    def test_change_quant_scheme_tf_enhanced_to_tf(self):
+
+        class Model(nn.Module):
+            def __init__(self):
+                super(Model, self).__init__()
+                self.conv1 = nn.Conv2d(10, 10, 5)
+                self.conv2 = nn.Conv2d(10, 20, 5)
+
+            def forward(self, *inputs):
+                x = self.conv1(inputs[0])
+                x = self.conv2(x)
+                return x
+
+        model = Model()
+        dummy_input = torch.rand(1, 10, 24, 24)
+
+        def forward_pass(model, args):
+            model.eval()
+            model(dummy_input)
+
+        sim = QuantizationSimModel(model, dummy_input)
+        sim.compute_encodings(forward_pass, None)
+        assert sim.model.conv2.output_quantizers[0].quant_scheme == QuantScheme.post_training_tf_enhanced
+
+        tensor = torch.rand(1, 10, 24, 24)
+        sim.model.conv2.output_quantizers[0].reset_encoding_stats()
+        sim.model.conv2.output_quantizers[0].update_encoding_stats(tensor)
+        tensor[0, 0, 0, 0] = 1000
+        sim.model.conv2.output_quantizers[0].update_encoding_stats(tensor)
+        sim.model.conv2.output_quantizers[0].compute_encoding()
+        assert sim.model.conv2.output_quantizers[0].encoding.max < 1.0
+
+        sim.model.conv2.output_quantizers[0].quant_scheme = QuantScheme.post_training_tf
+        tensor = torch.rand(1, 10, 24, 24)
+        sim.model.conv2.output_quantizers[0].reset_encoding_stats()
+        sim.model.conv2.output_quantizers[0].update_encoding_stats(tensor)
+        tensor[0, 0, 0, 0] = 1000
+        sim.model.conv2.output_quantizers[0].update_encoding_stats(tensor)
+        sim.model.conv2.output_quantizers[0].compute_encoding()
+        assert sim.model.conv2.output_quantizers[0].encoding.max == pytest.approx(1000.0, rel=0.1)
+
+    def test_change_quant_scheme_tf_enhanced_to_tf_per_channel(self):
+
+        class Model(nn.Module):
+            def __init__(self):
+                super(Model, self).__init__()
+                self.conv1 = nn.Conv2d(10, 10, 5)
+                self.conv2 = nn.Conv2d(10, 20, 5)
+
+            def forward(self, *inputs):
+                x = self.conv1(inputs[0])
+                x = self.conv2(x)
+                return x
+
+        model = Model()
+        dummy_input = torch.rand(1, 10, 24, 24)
+
+        def forward_pass(model, args):
+            model.eval()
+            model(dummy_input)
+
+        sim1 = QuantizationSimModel(model, dummy_input)
+        sim1.model.conv2.enable_per_channel_quantization()
+        sim1.compute_encodings(forward_pass, None)
+        assert sim1.model.conv2.param_quantizers['weight'].quant_scheme == QuantScheme.post_training_tf_enhanced
+
+        tensor = torch.rand(20, 10, 5, 5)
+        sim1.model.conv2.param_quantizers['weight'].reset_encoding_stats()
+        sim1.model.conv2.param_quantizers['weight'].update_encoding_stats(tensor)
+        tensor[0, 0, 0, 0] = 100
+        sim1.model.conv2.param_quantizers['weight'].update_encoding_stats(tensor)
+        sim1.model.conv2.param_quantizers['weight'].compute_encoding()
+        assert sim1.model.conv2.param_quantizers['weight'].encoding[0].max < 1.0
+
+        sim1.model.conv2.param_quantizers['weight'].quant_scheme = QuantScheme.post_training_tf
+        tensor = torch.rand(20, 10, 5, 5)
+        sim1.model.conv2.param_quantizers['weight'].reset_encoding_stats()
+        sim1.model.conv2.param_quantizers['weight'].update_encoding_stats(tensor)
+        tensor[0, 0, 0, 0] = 100
+        sim1.model.conv2.param_quantizers['weight'].update_encoding_stats(tensor)
+        sim1.model.conv2.param_quantizers['weight'].compute_encoding()
+        assert sim1.model.conv2.param_quantizers['weight'].encoding[0].max == pytest.approx(100.0, rel=0.1)
+
+        # Scenario: we set the scheme before a call to compute_encodings
+        sim2 = QuantizationSimModel(model, dummy_input)
+        sim2.model.conv2.enable_per_channel_quantization()
+        sim2.model.conv2.param_quantizers['weight'].quant_scheme = QuantScheme.post_training_tf
+        tensor = torch.rand(20, 10, 5, 5)
+        tensor[0, 0, 0, 0] = 100
+        sim2.model.conv2._module_to_wrap.weight.data = tensor
+        sim2.compute_encodings(forward_pass, None)
+        assert sim2.model.conv2.param_quantizers['weight'].encoding[0].max == pytest.approx(100.0, rel=0.1)
+
 
 class TestQuantizationSimLearnedGrid:
 
