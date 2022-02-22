@@ -51,6 +51,7 @@ import AimetTensorQuantizer     # pylint: disable=import-error
 
 _logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Quant)
 
+
 class TensorQuantizer:
     """
     Base class for Simulation of quantization for a given tensor. This tensor can be a parameter in the model or an
@@ -70,7 +71,7 @@ class TensorQuantizer:
         """
         super(TensorQuantizer, self).__init__()
         self.round_mode = round_mode
-        self.quant_scheme = quant_scheme
+        self._quant_scheme = quant_scheme
         self.use_symmetric_encodings = use_symmetric_encodings
         self.use_strict_symmetric = False
         self.use_unsigned_symmetric = True
@@ -118,7 +119,7 @@ class StaticGridTensorQuantizer(TensorQuantizer):
     def __str__(self):
         stream = io.StringIO(newline='\n')
         stream.write('Static Grid TensorQuantizer:\n')
-        stream.write('  quant-scheme:{}, round_mode={}, bitwidth={}, enabled={}\n'.format(self.quant_scheme,
+        stream.write('  quant-scheme:{}, round_mode={}, bitwidth={}, enabled={}\n'.format(self._quant_scheme,
                                                                                           self.round_mode,
                                                                                           self.bitwidth,
                                                                                           self.enabled))
@@ -149,7 +150,7 @@ class StaticGridTensorQuantizer(TensorQuantizer):
 
         # Create the c++ op
         self._cppOp = []
-        quant_scheme = MAP_QUANT_SCHEME_TO_PYMO[self.quant_scheme]
+        quant_scheme = MAP_QUANT_SCHEME_TO_PYMO[self._quant_scheme]
         for _ in range(state.num_channels):
             self._cppOp.append(AimetTensorQuantizer.AimetTensorQuantizer(quant_scheme))
 
@@ -170,6 +171,27 @@ class StaticGridTensorQuantizer(TensorQuantizer):
                 self._encoding.append(new_encoding)
         else:
             self._encoding = None
+
+    @property
+    def quant_scheme(self) -> QuantScheme:
+        """
+        Property to get quant_scheme
+        :return: QuantScheme
+        """
+        return self._quant_scheme
+
+    @quant_scheme.setter
+    def quant_scheme(self, quant_scheme: QuantScheme):
+        """
+        Property to set quant_scheme. When changing quantization schemes, it is necessary to re-instantiate the
+        underlying C++ op (there is no way currently to set quant-scheme post instantiation for these objects). This
+        will also automatically clear any accumulated statistics - which is a good side-effect.
+        :param quant_scheme: Quantization scheme (see enum)
+        """
+        self._quant_scheme = quant_scheme
+        quant_scheme = MAP_QUANT_SCHEME_TO_PYMO[quant_scheme]
+        assert self._cppOp              # whether per-tensor or per-channel, there needs to be at least 1 op
+        self._cppOp = [AimetTensorQuantizer.AimetTensorQuantizer(quant_scheme) for _ in self._cppOp]
 
     @property
     def encoding(self):
@@ -444,7 +466,7 @@ class LearnedGridTensorQuantizer(TensorQuantizer):
     def __str__(self):
         stream = io.StringIO(newline='\n')
         stream.write('Trainable TensorQuantizer:\n')
-        stream.write('  quant-scheme:{}, round_mode={}, bitwidth={}, enabled={}\n'.format(self.quant_scheme,
+        stream.write('  quant-scheme:{}, round_mode={}, bitwidth={}, enabled={}\n'.format(self._quant_scheme,
                                                                                           self.round_mode,
                                                                                           self.bitwidth,
                                                                                           self.enabled))
