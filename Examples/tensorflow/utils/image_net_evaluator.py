@@ -120,12 +120,13 @@ class ImageNetEvaluator:
         eval_outputs = [session.graph.get_operation_by_name(name).outputs[0] for name in eval_names]
 
         # Run the graph and verify the data is being updated properly for each iteration
-        avg_acc_top1 = 0
-        avg_acc_top5 = 0
+        acc_top1 = 0
+        acc_top5 = 0
 
         logger.info("Evaluating graph for %d iterations with batch_size %d", iterations, self._batch_size)
 
-        curr_iter = 1
+        curr_iter = 0
+        total_samples = 0
         with progressbar.ProgressBar(max_value=iterations) as progress_bar:
             for input_label in self._val_data_loaders:
                 input_label_tensors_dict = dict(zip(input_label_tensors, input_label))
@@ -135,16 +136,19 @@ class ImageNetEvaluator:
                 with session.graph.as_default():
                     output_data = session.run(eval_outputs, feed_dict=feed_dict)
 
-                avg_acc_top1 += output_data[0]
-                avg_acc_top5 += output_data[1]
+                curr_samples = input_label[0].shape[0]
+                acc_top1 += curr_samples * output_data[0]
+                acc_top5 += curr_samples * output_data[1]
+
+                total_samples += curr_samples
 
                 progress_bar.update(curr_iter)
 
                 curr_iter += 1
-                if curr_iter > iterations:
+                if curr_iter >= iterations:
                     break
 
         logger.info('Avg accuracy Top 1: %f Avg accuracy Top 5: %f on validation Dataset',
-                    avg_acc_top1 / iterations, avg_acc_top5 / iterations)
+                    acc_top1 / total_samples, acc_top5 / total_samples)
 
-        return avg_acc_top1 / iterations
+        return acc_top1 / total_samples
