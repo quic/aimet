@@ -214,7 +214,7 @@ class ImageNetTrainer:
 
         for current_epoch in range(1, self._num_epochs + 1):
             avg_loss = 0.0
-            curr_iter = 1
+            curr_iter = 0
             with progressbar.ProgressBar(max_value=iterations) as progress_bar:
                 for input_label in self._train_data_loaders:
                     input_label_tensors_dict = dict(zip(input_label_tensors, input_label))
@@ -235,9 +235,9 @@ class ImageNetTrainer:
                                     avg_loss / curr_iter, eval_accuracy)
 
                     curr_iter += 1
-                    if curr_iter > iterations:
+                    if curr_iter >= iterations:
                         break
 
             eval_accuracy = self._evaluate_(session)
             logger.info('At the end of Epoch #%d/%d: Global Avg Loss=%f, Eval Accuracy=%f',
-                        current_epoch, self._num_epochs, avg_loss / iterations, eval_accuracy)
+                        current_epoch, self._num_epochs, avg_loss / curr_iter, eval_accuracy)
