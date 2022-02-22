@@ -53,4 +53,10 @@ target_compile_options(MoDlCompression
 
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/include)
 
+add_custom_target(copy_dlcompression_headers
+    COMMAND ${CMAKE_COMMAND} -E copy_directory ${CMAKE_CURRENT_LIST_DIR}/include/DlCompression
+    ${AIMET_INSTALL_DIR}/lib/x86_64-linux-gnu/include
+)
+add_dependencies(MoDlCompression copy_dlcompression_headers)
+
 add_subdirectory(test)

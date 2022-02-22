@@ -72,31 +72,12 @@ else (ENABLE_CUDA)
 
 endif (ENABLE_CUDA)
 
-set(PYMO_HEADERS
-    "../DlCompression/include/DlCompression/ISVD.hpp"
-    "../DlEqualization/include/DlEqualization/BatchNormFoldForPython.h"
-    "../DlEqualization/include/DlEqualization/BiasCorrectionForPython.h"
-    "../DlEqualization/include/DlEqualization/CrossLayerScaling.h"
-    "../DlEqualization/include/DlEqualization/HighBiasFoldForPython.h"
-    "../DlEqualization/include/DlEqualization/def.h"
-    "../DlQuantization/include/DlQuantization/EncodingAnalyzerForPython.h"
-    "../DlQuantization/include/DlQuantization/IQuantizationEncodingAnalyzer.hpp"
-    "../DlQuantization/include/DlQuantization/IQuantizer.hpp"
-    "../DlQuantization/include/DlQuantization/Quantization.hpp"
-    "../DlQuantization/include/DlQuantization/QuantizerFactory.hpp"
-    "../DlQuantization/include/DlQuantization/TensorQuantizationSimForPython.h"
-    "../DlQuantization/include/DlQuantization/TensorQuantizer.h"
-    "../DlQuantization/include/DlQuantization/TensorQuantizerOpFacade.h"
-)
-
 set_target_properties(PyModelOptimizations
       PROPERTIES
          OUTPUT_NAME "pymo"
          LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/artifacts"
-         PUBLIC_HEADER "${PYMO_HEADERS}"
       )
 
 install(TARGETS PyModelOptimizations
         LIBRARY DESTINATION ${AIMET_INSTALL_DIR}/lib/x86_64-linux-gnu
-        PUBLIC_HEADER DESTINATION ${AIMET_INSTALL_DIR}/lib/x86_64-linux-gnu/include
 )

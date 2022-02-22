@@ -72,4 +72,10 @@ target_compile_options(MoDlEqualization
 
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/include)
 
+add_custom_target(copy_dlequalization_headers
+    COMMAND ${CMAKE_COMMAND} -E copy_directory ${CMAKE_CURRENT_LIST_DIR}/include/DlEqualization
+    ${AIMET_INSTALL_DIR}/lib/x86_64-linux-gnu/include
+)
+add_dependencies(MoDlEqualization copy_dlequalization_headers)
+
 add_subdirectory(test)
