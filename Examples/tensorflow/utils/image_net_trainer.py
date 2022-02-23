@@ -226,15 +226,15 @@ class ImageNetTrainer:
 
                     avg_loss += batch_loss_val
 
+                    curr_iter += 1
                     progress_bar.update(curr_iter)
 
-                    if curr_iter % debug_steps == 0:
+                    if (curr_iter - 1) % debug_steps == 0:
                         eval_accuracy = self._evaluate_(session)
                         logger.info('Epoch #%d/%d: iteration #%d/%d: Global Avg Loss=%f, Eval Accuracy=%f',
                                     current_epoch, self._num_epochs, curr_iter, iterations,
                                     avg_loss / curr_iter, eval_accuracy)
 
-                    curr_iter += 1
                     if curr_iter >= iterations:
                         break
 
