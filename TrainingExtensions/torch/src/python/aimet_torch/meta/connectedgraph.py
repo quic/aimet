@@ -53,7 +53,7 @@ from aimet_common.connected_graph.product import Product
 from aimet_common.connected_graph.operation import Op, determine_preceding_op_input_product_index_in_multi_input_op
 from aimet_common.model_module import PytorchModelModule
 from aimet_common.utils import AimetLogger
-from aimet_torch.utils import is_leaf_module, run_hook_for_layers_with_given_input
+from aimet_torch.utils import is_leaf_module, run_hook_for_layers_with_given_input, in_eval_mode
 from aimet_torch import onnx_utils
 
 logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.ConnectedGraph)
@@ -128,7 +128,7 @@ class ConnectedGraph(AimetCommonConnectedGraph):
         self.ordered_ops = []
 
         self._generate_module_lookup_table(model)
-        with torch.no_grad():
+        with in_eval_mode(model), torch.no_grad():
             self._construct_graph(model, model_input)
 
         # Maps pytorch modules to connected graph ops
