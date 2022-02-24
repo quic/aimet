@@ -180,7 +180,7 @@ if version.parse(tf.version.VERSION) >= version.parse("2.00"):
 
 
     def replace_relu6_with_relu(
-            model: tf.keras.Model, remain_fusing=True
+            model: tf.keras.Model, remain_fusing: bool = False
     ) -> typing.Tuple[tf.keras.Model, typing.Dict]:
         """
         Replace ReLU6 with ReLU in tf.keras.Model
