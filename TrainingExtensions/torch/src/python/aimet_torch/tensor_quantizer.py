@@ -118,17 +118,17 @@ class StaticGridTensorQuantizer(TensorQuantizer):
 
     def __str__(self):
         stream = io.StringIO(newline='\n')
-        stream.write('Static Grid TensorQuantizer:\n')
-        stream.write('  quant-scheme:{}, round_mode={}, bitwidth={}, enabled={}\n'.format(self._quant_scheme,
-                                                                                          self.round_mode,
-                                                                                          self.bitwidth,
-                                                                                          self.enabled))
+        stream.write('StaticGrid TensorQuantizer:\n')
+        stream.write('    quant-scheme:{}, round_mode={}, bitwidth={}, enabled={}\n'.format(self._quant_scheme,
+                                                                                            self.round_mode,
+                                                                                            self.bitwidth,
+                                                                                            self.enabled))
         if self._encoding:
             for enc in self._encoding:
-                stream.write('  min:{}, max={}, delta={}, offset={}\n'.format(enc.min, enc.max,
-                                                                              enc.delta, enc.offset))
+                stream.write('    min:{}, max={}, delta={}, offset={}\n'.format(enc.min, enc.max,
+                                                                                enc.delta, enc.offset))
         else:
-            stream.write('  no encoding\n')
+            stream.write('    no encoding\n')
 
         return stream.getvalue()
 
@@ -465,16 +465,16 @@ class LearnedGridTensorQuantizer(TensorQuantizer):
 
     def __str__(self):
         stream = io.StringIO(newline='\n')
-        stream.write('Trainable TensorQuantizer:\n')
-        stream.write('  quant-scheme:{}, round_mode={}, bitwidth={}, enabled={}\n'.format(self._quant_scheme,
-                                                                                          self.round_mode,
-                                                                                          self.bitwidth,
-                                                                                          self.enabled))
+        stream.write('LearnedGrid TensorQuantizer:\n')
+        stream.write('    quant-scheme:{}, round_mode={}, bitwidth={}, enabled={}\n'.format(self._quant_scheme,
+                                                                                            self.round_mode,
+                                                                                            self.bitwidth,
+                                                                                            self.enabled))
         if self.encoding:
-            stream.write('  min:{}, max={}, delta={}, offset={}\n'.format(self.encoding.min, self.encoding.max,
-                                                                          self.encoding.delta, self.encoding.offset))
+            stream.write('    min:{}, max={}, delta={}, offset={}\n'.format(self.encoding.min, self.encoding.max,
+                                                                            self.encoding.delta, self.encoding.offset))
         else:
-            stream.write('  no encoding\n')
+            stream.write('    no encoding\n')
 
         return stream.getvalue()
 

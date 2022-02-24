@@ -196,33 +196,45 @@ class QuantizationSimModel:
                     if isinstance(module, QcQuantizeWrapper)]
 
         for name, wrapper in wrappers:
+            stream.write('----------------------------------------------------------\n')
             stream.write('Layer: {}\n'.format(name))
 
             # Inputs
             for index, quantizer in enumerate(wrapper.input_quantizers):
                 if quantizer.enabled:
-                    stream.write('    Input[{}]: bw={}, encoding-present={}\n'.
+                    stream.write('  Input[{}]: bw={}, encoding-present={}\n'.
                                  format(index, quantizer.bitwidth, bool(quantizer.encoding)))
+                    if quantizer.encoding:
+                        stream.write(f'    {quantizer}')
                 else:
-                    stream.write('    Input[{}]: Unquantized\n'.format(index))
+                    stream.write('  Input[{}]: Unquantized\n'.format(index))
+
+                stream.write('  -------\n')
 
             # Params
-            stream.write('    Params:\n')
             for param_name, quantizer in wrapper.param_quantizers.items():
                 if quantizer.enabled:
-                    stream.write('        {}: bw={}, encoding-present={}\n'.format(param_name,
+                    stream.write('  Param:{}: bw={}, encoding-present={}\n'.format(param_name,
                                                                                    quantizer.bitwidth,
                                                                                    bool(quantizer.encoding)))
+                    if quantizer.encoding:
+                        stream.write(f'    {quantizer}')
                 else:
-                    stream.write('        {}: Unquantized\n'.format(param_name))
+                    stream.write('  Param:{}: Unquantized\n'.format(param_name))
+
+                stream.write('  -------\n')
 
             # Outputs
             for index, quantizer in enumerate(wrapper.output_quantizers):
                 if quantizer.enabled:
-                    stream.write('    Output[{}]: bw={}, encoding-present={}\n'.
+                    stream.write('  Output[{}]: bw={}, encoding-present={}\n'.
                                  format(index, quantizer.bitwidth, bool(quantizer.encoding)))
+                    if quantizer.encoding:
+                        stream.write(f'    {quantizer}')
                 else:
-                    stream.write('    Output[{}]: Unquantized\n'.format(index))
+                    stream.write('  Output[{}]: Unquantized\n'.format(index))
+
+                stream.write('  -------\n')
 
         return stream.getvalue()
 

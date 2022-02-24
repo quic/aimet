@@ -2170,6 +2170,7 @@ class TestQuantizationSimLearnedGrid:
         #                        sim.model.conv1_a.output0_encoding_max.data)
 
         forward_pass(sim.model, None)
+        print(sim)
 
     def test_accumulator_overflow(self):
 
