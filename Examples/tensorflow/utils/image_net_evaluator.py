@@ -142,9 +142,9 @@ class ImageNetEvaluator:
 
                 total_samples += curr_samples
 
+                curr_iter += 1
                 progress_bar.update(curr_iter)
 
-                curr_iter += 1
                 if curr_iter >= iterations:
                     break
 
