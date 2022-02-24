@@ -43,7 +43,6 @@ import pytest
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
 import unittest
 import tensorflow as tf
-from packaging import version
 from aimet_tensorflow.examples.test_models import single_residual, single_residual_for_tf2
 from aimet_tensorflow.quantsim import QuantizationSimModel
 from aimet_tensorflow.utils.constants import QuantizeOpIndices
@@ -185,94 +184,94 @@ class TestQuantsimConfig(unittest.TestCase):
         sim.session.close()
         tf.compat.v1.reset_default_graph()
 
+    @pytest.mark.tf2
     def test_parse_config_file_defaults_tf2(self):
         """ Test that default quantization parameters are set correctly when using json config file """
-        if version.parse(tf.version.VERSION) >= version.parse("2.00"):
-            tf.compat.v1.reset_default_graph()
-            sess = tf.compat.v1.Session()
-            with sess.graph.as_default():
-                _ = single_residual_for_tf2()
-                init = tf.compat.v1.global_variables_initializer()
-                sess.run(init)
+        tf.compat.v1.reset_default_graph()
+        sess = tf.compat.v1.Session()
+        with sess.graph.as_default():
+            _ = single_residual_for_tf2()
+            init = tf.compat.v1.global_variables_initializer()
+            sess.run(init)
 
-            quantsim_config = {
-                "defaults": {
-                    "ops": {
-                        "is_output_quantized": "True"
-                    },
-                    "params": {
-                        "is_quantized": "True",
-                        "is_symmetric": "True"
-                    }
+        quantsim_config = {
+            "defaults": {
+                "ops": {
+                    "is_output_quantized": "True"
                 },
-                "params": {},
-                "op_type": {},
-                "supergroups": [],
-                "model_input": {},
-                "model_output": {}
-            }
-            with open('./quantsim_config.json', 'w') as f:
-                json.dump(quantsim_config, f)
+                "params": {
+                    "is_quantized": "True",
+                    "is_symmetric": "True"
+                }
+            },
+            "params": {},
+            "op_type": {},
+            "supergroups": [],
+            "model_input": {},
+            "model_output": {}
+        }
+        with open('./quantsim_config.json', 'w') as f:
+            json.dump(quantsim_config, f)
 
-            sim = QuantizationSimModel(sess, ['input_1'], ['single_residual/Softmax'],
-                                       config_file='./quantsim_config.json')
+        sim = QuantizationSimModel(sess, ['input_1'], ['single_residual/Softmax'],
+                                   config_file='./quantsim_config.json')
 
-            activation_quantizers = [
-                'conv2d/BiasAdd_quantized',
-                'conv2d_1/BiasAdd_quantized',
-                'conv2d_2/BiasAdd_quantized',
-                'conv2d_3/BiasAdd_quantized',
-                'conv2d_4/BiasAdd_quantized',
-                'input_1_quantized',
-                'batch_normalization/FusedBatchNormV3_quantized',
-                'Relu_quantized',
-                'max_pooling2d/MaxPool_quantized',
-                'batch_normalization_1/FusedBatchNormV3_quantized',
-                'Add_quantized',
-                'Relu_2_quantized',
-                'average_pooling2d/AvgPool_quantized',
-                'single_residual/Softmax_quantized',
-                'Relu_1_quantized'
-            ]
+        activation_quantizers = [
+            'conv2d/BiasAdd_quantized',
+            'conv2d_1/BiasAdd_quantized',
+            'conv2d_2/BiasAdd_quantized',
+            'conv2d_3/BiasAdd_quantized',
+            'conv2d_4/BiasAdd_quantized',
+            'input_1_quantized',
+            'batch_normalization/FusedBatchNormV3_quantized',
+            'Relu_quantized',
+            'max_pooling2d/MaxPool_quantized',
+            'batch_normalization_1/FusedBatchNormV3_quantized',
+            'Add_quantized',
+            'Relu_2_quantized',
+            'average_pooling2d/AvgPool_quantized',
+            'single_residual/Softmax_quantized',
+            'Relu_1_quantized'
+        ]
 
-            weight_quantizers = [
-                'conv2d/Conv2D/ReadVariableOp_quantized',
-                'conv2d_1/Conv2D/ReadVariableOp_quantized',
-                'conv2d_2/Conv2D/ReadVariableOp_quantized',
-                'conv2d_3/Conv2D/ReadVariableOp_quantized',
-                'conv2d_4/Conv2D/ReadVariableOp_quantized',
-                'single_residual/MatMul/ReadVariableOp_quantized',
-                'conv2d/BiasAdd/ReadVariableOp_quantized',
-                'conv2d_1/BiasAdd/ReadVariableOp_quantized',
-                'conv2d_2/BiasAdd/ReadVariableOp_quantized',
-                'conv2d_3/BiasAdd/ReadVariableOp_quantized',
-                'conv2d_4/BiasAdd/ReadVariableOp_quantized',
-                'single_residual/BiasAdd/ReadVariableOp_quantized'
-            ]
+        weight_quantizers = [
+            'conv2d/Conv2D/ReadVariableOp_quantized',
+            'conv2d_1/Conv2D/ReadVariableOp_quantized',
+            'conv2d_2/Conv2D/ReadVariableOp_quantized',
+            'conv2d_3/Conv2D/ReadVariableOp_quantized',
+            'conv2d_4/Conv2D/ReadVariableOp_quantized',
+            'single_residual/MatMul/ReadVariableOp_quantized',
+            'conv2d/BiasAdd/ReadVariableOp_quantized',
+            'conv2d_1/BiasAdd/ReadVariableOp_quantized',
+            'conv2d_2/BiasAdd/ReadVariableOp_quantized',
+            'conv2d_3/BiasAdd/ReadVariableOp_quantized',
+            'conv2d_4/BiasAdd/ReadVariableOp_quantized',
+            'single_residual/BiasAdd/ReadVariableOp_quantized'
+        ]
 
-            for op_name in weight_quantizers:
-                op = sim.session.graph.get_operation_by_name(op_name)
-                is_symmetric_tensor = op.inputs[QuantizeOpIndices.use_symmetric_encoding]
-                op_mode_tensor = op.inputs[QuantizeOpIndices.op_mode]
-                self.assertEqual(sim.session.run(is_symmetric_tensor), True)
-                self.assertEqual(sim.session.run(op_mode_tensor),
-                                 int(pymo.TensorQuantizerOpMode.oneShotQuantizeDequantize))
+        for op_name in weight_quantizers:
+            op = sim.session.graph.get_operation_by_name(op_name)
+            is_symmetric_tensor = op.inputs[QuantizeOpIndices.use_symmetric_encoding]
+            op_mode_tensor = op.inputs[QuantizeOpIndices.op_mode]
+            self.assertEqual(sim.session.run(is_symmetric_tensor), True)
+            self.assertEqual(sim.session.run(op_mode_tensor),
+                             int(pymo.TensorQuantizerOpMode.oneShotQuantizeDequantize))
 
-            for op_name in activation_quantizers:
-                op = sim.session.graph.get_operation_by_name(op_name)
-                is_symmetric_tensor = op.inputs[QuantizeOpIndices.use_symmetric_encoding]
-                op_mode_tensor = op.inputs[QuantizeOpIndices.op_mode]
-                if 'input_1' in op_name:
-                    self.assertEqual(sim.session.run(op_mode_tensor), int(pymo.TensorQuantizerOpMode.passThrough))
-                else:
-                    self.assertEqual(sim.session.run(op_mode_tensor), int(pymo.TensorQuantizerOpMode.updateStats))
-                self.assertEqual(sim.session.run(is_symmetric_tensor), False)
+        for op_name in activation_quantizers:
+            op = sim.session.graph.get_operation_by_name(op_name)
+            is_symmetric_tensor = op.inputs[QuantizeOpIndices.use_symmetric_encoding]
+            op_mode_tensor = op.inputs[QuantizeOpIndices.op_mode]
+            if 'input_1' in op_name:
+                self.assertEqual(sim.session.run(op_mode_tensor), int(pymo.TensorQuantizerOpMode.passThrough))
+            else:
+                self.assertEqual(sim.session.run(op_mode_tensor), int(pymo.TensorQuantizerOpMode.updateStats))
+            self.assertEqual(sim.session.run(is_symmetric_tensor), False)
 
-            if os.path.exists('./quantsim_config.json'):
-                os.remove('./quantsim_config.json')
-            sess.close()
-            sim.session.close()
-            tf.compat.v1.reset_default_graph()
+        if os.path.exists('./quantsim_config.json'):
+            os.remove('./quantsim_config.json')
+        sess.close()
+        sim.session.close()
+        tf.compat.v1.reset_default_graph()
 
     def test_parse_config_file_params(self):
         """ Test that param specific quantization parameters are set correctly when using json config file """
@@ -471,134 +470,134 @@ class TestQuantsimConfig(unittest.TestCase):
         sim.session.close()
         tf.compat.v1.reset_default_graph()
 
+    @pytest.mark.tf2
     def test_parse_config_file_op_type_with_tf2(self):
         """ Test that op specific quantization parameters are set correctly when using json config file """
-        if version.parse(tf.version.VERSION) >= version.parse("2.00"):
-            tf.compat.v1.reset_default_graph()
-            sess = tf.compat.v1.Session()
+        tf.compat.v1.reset_default_graph()
+        sess = tf.compat.v1.Session()
 
-            with sess.graph.as_default():
-                _ = single_residual_for_tf2()
-                init = tf.compat.v1.global_variables_initializer()
-                sess.run(init)
+        with sess.graph.as_default():
+            _ = single_residual_for_tf2()
+            init = tf.compat.v1.global_variables_initializer()
+            sess.run(init)
 
-            quantsim_config = {
-                "defaults": {
-                    "ops": {},
-                    "params": {},
-                    "strict_symmetric": "True",
-                    "unsigned_symmetric": "True"
-                },
+        quantsim_config = {
+            "defaults": {
+                "ops": {},
                 "params": {},
-                "op_type": {
-                    "Conv": {
-                        "is_input_quantized": "True",
-                        "params": {
-                            "bias": {
-                                "is_quantized": "True",
-                                "is_symmetric": "True"
-                            }
+                "strict_symmetric": "True",
+                "unsigned_symmetric": "True"
+            },
+            "params": {},
+            "op_type": {
+                "Conv": {
+                    "is_input_quantized": "True",
+                    "params": {
+                        "bias": {
+                            "is_quantized": "True",
+                            "is_symmetric": "True"
                         }
-                    },
-                    "Gemm": {
-                        "is_input_quantized": "True",
-                        "params": {
-                            "bias": {
-                                "is_quantized": "True",
-                                "is_symmetric": "True"
-                            }
-                        }
-                    },
-                    "BatchNormalization": {
-                        "is_input_quantized": "True"
                     }
                 },
-                "supergroups": [],
-                "model_input": {},
-                "model_output": {}
-            }
-            with open('./quantsim_config.json', 'w') as f:
-                json.dump(quantsim_config, f)
-            sim = QuantizationSimModel(sess, ['input_1'], ['single_residual/Softmax'],
-                                       config_file='./quantsim_config.json')
-            for q_config in sim._param_quantizers.values():
-                self.assertTrue(q_config.use_strict_symmetric)
-                self.assertTrue(q_config.use_unsigned_symmetric)
+                "Gemm": {
+                    "is_input_quantized": "True",
+                    "params": {
+                        "bias": {
+                            "is_quantized": "True",
+                            "is_symmetric": "True"
+                        }
+                    }
+                },
+                "BatchNormalization": {
+                    "is_input_quantized": "True"
+                }
+            },
+            "supergroups": [],
+            "model_input": {},
+            "model_output": {}
+        }
+        with open('./quantsim_config.json', 'w') as f:
+            json.dump(quantsim_config, f)
+        sim = QuantizationSimModel(sess, ['input_1'], ['single_residual/Softmax'],
+                                   config_file='./quantsim_config.json')
+        for q_config in sim._param_quantizers.values():
+            self.assertTrue(q_config.use_strict_symmetric)
+            self.assertTrue(q_config.use_unsigned_symmetric)
 
-            for q_config in sim._activation_quantizers.values():
-                self.assertTrue(q_config.use_strict_symmetric)
-                self.assertTrue(q_config.use_unsigned_symmetric)
+        for q_config in sim._activation_quantizers.values():
+            self.assertTrue(q_config.use_strict_symmetric)
+            self.assertTrue(q_config.use_unsigned_symmetric)
 
-            activation_quantizers = [
-                'conv2d/BiasAdd_quantized',
-                'conv2d_1/BiasAdd_quantized',
-                'conv2d_2/BiasAdd_quantized',
-                'conv2d_3/BiasAdd_quantized',
-                'conv2d_4/BiasAdd_quantized',
-                'input_1_quantized',
-                'batch_normalization/FusedBatchNormV3_quantized',
-                'Relu_quantized',
-                'max_pooling2d/MaxPool_quantized',
-                'batch_normalization_1/FusedBatchNormV3_quantized',
-                'Add_quantized',
-                'Relu_2_quantized',
-                'average_pooling2d/AvgPool_quantized',
-                'single_residual/Softmax_quantized',
-                'Relu_1_quantized'
-            ]
+        activation_quantizers = [
+            'conv2d/BiasAdd_quantized',
+            'conv2d_1/BiasAdd_quantized',
+            'conv2d_2/BiasAdd_quantized',
+            'conv2d_3/BiasAdd_quantized',
+            'conv2d_4/BiasAdd_quantized',
+            'input_1_quantized',
+            'batch_normalization/FusedBatchNormV3_quantized',
+            'Relu_quantized',
+            'max_pooling2d/MaxPool_quantized',
+            'batch_normalization_1/FusedBatchNormV3_quantized',
+            'Add_quantized',
+            'Relu_2_quantized',
+            'average_pooling2d/AvgPool_quantized',
+            'single_residual/Softmax_quantized',
+            'Relu_1_quantized'
+        ]
 
-            weight_quantizers = [
-                'conv2d/Conv2D/ReadVariableOp_quantized',
-                'conv2d_1/Conv2D/ReadVariableOp_quantized',
-                'conv2d_2/Conv2D/ReadVariableOp_quantized',
-                'conv2d_3/Conv2D/ReadVariableOp_quantized',
-                'conv2d_4/Conv2D/ReadVariableOp_quantized',
-                'single_residual/MatMul/ReadVariableOp_quantized',
-                'conv2d/BiasAdd/ReadVariableOp_quantized',
-                'conv2d_1/BiasAdd/ReadVariableOp_quantized',
-                'conv2d_2/BiasAdd/ReadVariableOp_quantized',
-                'conv2d_3/BiasAdd/ReadVariableOp_quantized',
-                'conv2d_4/BiasAdd/ReadVariableOp_quantized',
-                'single_residual/BiasAdd/ReadVariableOp_quantized'
-            ]
+        weight_quantizers = [
+            'conv2d/Conv2D/ReadVariableOp_quantized',
+            'conv2d_1/Conv2D/ReadVariableOp_quantized',
+            'conv2d_2/Conv2D/ReadVariableOp_quantized',
+            'conv2d_3/Conv2D/ReadVariableOp_quantized',
+            'conv2d_4/Conv2D/ReadVariableOp_quantized',
+            'single_residual/MatMul/ReadVariableOp_quantized',
+            'conv2d/BiasAdd/ReadVariableOp_quantized',
+            'conv2d_1/BiasAdd/ReadVariableOp_quantized',
+            'conv2d_2/BiasAdd/ReadVariableOp_quantized',
+            'conv2d_3/BiasAdd/ReadVariableOp_quantized',
+            'conv2d_4/BiasAdd/ReadVariableOp_quantized',
+            'single_residual/BiasAdd/ReadVariableOp_quantized'
+        ]
 
-            for activation_quantizer in activation_quantizers:
-                op = sim.session.graph.get_operation_by_name(activation_quantizer)
-                op_mode_tensor = op.inputs[QuantizeOpIndices.op_mode]
-                if activation_quantizer in ['input_1_quantized',
-                                            'conv2d/BiasAdd_quantized',
-                                            'max_pooling2d/MaxPool_quantized',
-                                            'conv2d_2/BiasAdd_quantized',
-                                            'conv2d_3/BiasAdd_quantized',
-                                            'Relu_2_quantized',
-                                            'average_pooling2d/AvgPool_quantized']:
-                    self.assertEqual(sim.session.run(op_mode_tensor), int(pymo.TensorQuantizerOpMode.updateStats))
-                else:
-                    self.assertEqual(sim.session.run(op_mode_tensor), int(pymo.TensorQuantizerOpMode.passThrough))
-            for weight_quantizer in weight_quantizers:
-                op = sim.session.graph.get_operation_by_name(weight_quantizer)
-                is_symmetric_tensor = op.inputs[QuantizeOpIndices.use_symmetric_encoding]
-                op_mode_tensor = op.inputs[QuantizeOpIndices.op_mode]
-                if weight_quantizer in ['conv2d/BiasAdd/ReadVariableOp_quantized',
-                                        'conv2d_1/BiasAdd/ReadVariableOp_quantized',
-                                        'conv2d_2/BiasAdd/ReadVariableOp_quantized',
-                                        'conv2d_3/BiasAdd/ReadVariableOp_quantized',
-                                        'conv2d_4/BiasAdd/ReadVariableOp_quantized',
-                                        'single_residual/BiasAdd/ReadVariableOp_quantized']:
-                    self.assertEqual(sim.session.run(op_mode_tensor),
-                                     int(pymo.TensorQuantizerOpMode.oneShotQuantizeDequantize))
-                    self.assertEqual(sim.session.run(is_symmetric_tensor), True)
-                else:
+        for activation_quantizer in activation_quantizers:
+            op = sim.session.graph.get_operation_by_name(activation_quantizer)
+            op_mode_tensor = op.inputs[QuantizeOpIndices.op_mode]
+            if activation_quantizer in ['input_1_quantized',
+                                        'conv2d/BiasAdd_quantized',
+                                        'max_pooling2d/MaxPool_quantized',
+                                        'conv2d_2/BiasAdd_quantized',
+                                        'conv2d_3/BiasAdd_quantized',
+                                        'Relu_2_quantized',
+                                        'average_pooling2d/AvgPool_quantized']:
+                self.assertEqual(sim.session.run(op_mode_tensor), int(pymo.TensorQuantizerOpMode.updateStats))
+            else:
+                self.assertEqual(sim.session.run(op_mode_tensor), int(pymo.TensorQuantizerOpMode.passThrough))
+        for weight_quantizer in weight_quantizers:
+            op = sim.session.graph.get_operation_by_name(weight_quantizer)
+            is_symmetric_tensor = op.inputs[QuantizeOpIndices.use_symmetric_encoding]
+            op_mode_tensor = op.inputs[QuantizeOpIndices.op_mode]
+            if weight_quantizer in ['conv2d/BiasAdd/ReadVariableOp_quantized',
+                                    'conv2d_1/BiasAdd/ReadVariableOp_quantized',
+                                    'conv2d_2/BiasAdd/ReadVariableOp_quantized',
+                                    'conv2d_3/BiasAdd/ReadVariableOp_quantized',
+                                    'conv2d_4/BiasAdd/ReadVariableOp_quantized',
+                                    'single_residual/BiasAdd/ReadVariableOp_quantized']:
+                self.assertEqual(sim.session.run(op_mode_tensor),
+                                 int(pymo.TensorQuantizerOpMode.oneShotQuantizeDequantize))
+                self.assertEqual(sim.session.run(is_symmetric_tensor), True)
+            else:
 
-                    self.assertEqual(sim.session.run(op_mode_tensor),
-                                     int(pymo.TensorQuantizerOpMode.passThrough))
-                    self.assertEqual(sim.session.run(is_symmetric_tensor), False)
+                self.assertEqual(sim.session.run(op_mode_tensor),
+                                 int(pymo.TensorQuantizerOpMode.passThrough))
+                self.assertEqual(sim.session.run(is_symmetric_tensor), False)
 
-            if os.path.exists('./quantsim_config.json'):
-                os.remove('./quantsim_config.json')
-            sess.close()
-            sim.session.close()
-            tf.compat.v1.reset_default_graph()
+        if os.path.exists('./quantsim_config.json'):
+            os.remove('./quantsim_config.json')
+        sess.close()
+        sim.session.close()
+        tf.compat.v1.reset_default_graph()
 
     @pytest.mark.tf1
     def test_parse_config_file_supergroups(self):
@@ -678,83 +677,83 @@ class TestQuantsimConfig(unittest.TestCase):
         sim.session.close()
         tf.compat.v1.reset_default_graph()
 
+    @pytest.mark.tf2
     def test_parse_config_file_supergroups_with_tf2(self):
         """ Test that supergroup quantization parameters are set correctly when using json config file with tf2 """
-        if version.parse(tf.version.VERSION) >= version.parse("2.00"):
-            tf.compat.v1.reset_default_graph()
-            sess = tf.compat.v1.Session()
+        tf.compat.v1.reset_default_graph()
+        sess = tf.compat.v1.Session()
 
-            with sess.graph.as_default():
-                _ = single_residual_for_tf2()
-                init = tf.compat.v1.global_variables_initializer()
-                sess.run(init)
+        with sess.graph.as_default():
+            _ = single_residual_for_tf2()
+            init = tf.compat.v1.global_variables_initializer()
+            sess.run(init)
 
-            quantsim_config = {
-                "defaults": {
-                    "ops": {
-                        "is_output_quantized": "True"
-                    },
-                    "params": {}
+        quantsim_config = {
+            "defaults": {
+                "ops": {
+                    "is_output_quantized": "True"
                 },
-                "params": {},
-                "op_type": {},
-                "supergroups": [
-                    {
-                        "op_list": ["Conv", "AveragePool"]
-                    },
-                    {
-                        "op_list": ["Add", "Relu"]
-                    },
-                    {
-                        "op_list": ["Conv", "BatchNormalization"]
-                    },
-                    {
-                        "op_list": ["Conv", "Clip"]
-                    },
-                ],
-                "model_input": {},
-                "model_output": {}
-            }
-            with open('./quantsim_config.json', 'w') as f:
-                json.dump(quantsim_config, f)
-            sim = QuantizationSimModel(sess, ['input_1'], ['single_residual/Softmax'],
-                                       config_file='./quantsim_config.json')
+                "params": {}
+            },
+            "params": {},
+            "op_type": {},
+            "supergroups": [
+                {
+                    "op_list": ["Conv", "AveragePool"]
+                },
+                {
+                    "op_list": ["Add", "Relu"]
+                },
+                {
+                    "op_list": ["Conv", "BatchNormalization"]
+                },
+                {
+                    "op_list": ["Conv", "Clip"]
+                },
+            ],
+            "model_input": {},
+            "model_output": {}
+        }
+        with open('./quantsim_config.json', 'w') as f:
+            json.dump(quantsim_config, f)
+        sim = QuantizationSimModel(sess, ['input_1'], ['single_residual/Softmax'],
+                                   config_file='./quantsim_config.json')
 
-            activation_quantizers = [
-                'conv2d/BiasAdd_quantized',
-                'conv2d_1/BiasAdd_quantized',
-                'conv2d_2/BiasAdd_quantized',
-                'conv2d_3/BiasAdd_quantized',
-                'conv2d_4/BiasAdd_quantized',
-                'input_1_quantized',
-                'batch_normalization/FusedBatchNormV3_quantized',
-                'Relu_quantized',
-                'max_pooling2d/MaxPool_quantized',
-                'batch_normalization_1/FusedBatchNormV3_quantized',
-                'Add_quantized',
-                'Relu_2_quantized',
-                'average_pooling2d/AvgPool_quantized',
-                'single_residual/Softmax_quantized',
-                'Relu_1_quantized'
-            ]
-            for op_name in activation_quantizers:
-                op = sim.session.graph.get_operation_by_name(op_name)
-                op_mode_tensor = op.inputs[QuantizeOpIndices.op_mode]
-                if op.name in ['input_1_quantized',
-                               'conv2d/BiasAdd_quantized',
-                               'conv2d_3/BiasAdd_quantized',
-                               'Add_quantized',
-                               'conv2d_4/BiasAdd_quantized'
-                               ]:
-                    self.assertEqual(sim.session.run(op_mode_tensor), int(pymo.TensorQuantizerOpMode.passThrough))
-                else:
-                    self.assertEqual(sim.session.run(op_mode_tensor), int(pymo.TensorQuantizerOpMode.updateStats))
+        activation_quantizers = [
+            'conv2d/BiasAdd_quantized',
+            'conv2d_1/BiasAdd_quantized',
+            'conv2d_2/BiasAdd_quantized',
+            'conv2d_3/BiasAdd_quantized',
+            'conv2d_4/BiasAdd_quantized',
+            'input_1_quantized',
+            'batch_normalization/FusedBatchNormV3_quantized',
+            'Relu_quantized',
+            'max_pooling2d/MaxPool_quantized',
+            'batch_normalization_1/FusedBatchNormV3_quantized',
+            'Add_quantized',
+            'Relu_2_quantized',
+            'average_pooling2d/AvgPool_quantized',
+            'single_residual/Softmax_quantized',
+            'Relu_1_quantized'
+        ]
+        for op_name in activation_quantizers:
+            op = sim.session.graph.get_operation_by_name(op_name)
+            op_mode_tensor = op.inputs[QuantizeOpIndices.op_mode]
+            if op.name in ['input_1_quantized',
+                           'conv2d/BiasAdd_quantized',
+                           'conv2d_3/BiasAdd_quantized',
+                           'Add_quantized',
+                           'conv2d_4/BiasAdd_quantized'
+                           ]:
+                self.assertEqual(sim.session.run(op_mode_tensor), int(pymo.TensorQuantizerOpMode.passThrough))
+            else:
+                self.assertEqual(sim.session.run(op_mode_tensor), int(pymo.TensorQuantizerOpMode.updateStats))
 
-            if os.path.exists('./quantsim_config.json'):
-                os.remove('./quantsim_config.json')
-            sess.close()
-            sim.session.close()
-            tf.compat.v1.reset_default_graph()
+        if os.path.exists('./quantsim_config.json'):
+            os.remove('./quantsim_config.json')
+        sess.close()
+        sim.session.close()
+        tf.compat.v1.reset_default_graph()
 
     def test_parse_config_file_model_inputs(self):
         """ Test that model input quantization parameters are set correctly when using json config file """
