@@ -152,7 +152,7 @@ class TestTrainingExtensionsCrossLayerScaling:
         output = tf.keras.layers.Dense(units=10)(model)
 
         keras_model = tf.keras.Model(inputs=input_layer, outputs=output)
-        graph_search_utils = GraphSearchUtils(keras_model)
+        graph_search_utils = GraphSearchUtils(keras_model, (28, 28, 3))
         layer_groups = graph_search_utils.find_layer_groups_to_scale()
         assert len(layer_groups) == 2
 
@@ -183,7 +183,7 @@ class TestTrainingExtensionsCrossLayerScaling:
             return tf.keras.models.Model([x1, x2], y)
 
         model = generate_model()
-        graph_search_utils = GraphSearchUtils(model)
+        graph_search_utils = GraphSearchUtils(model, (28, 28, 1))
         layer_groups = graph_search_utils.find_layer_groups_to_scale()
 
         assert len(layer_groups) == 3

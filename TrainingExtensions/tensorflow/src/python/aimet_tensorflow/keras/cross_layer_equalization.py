@@ -45,10 +45,17 @@ import tensorflow as tf
 import libpymo
 
 from aimet_common.utils import AimetLogger
+from aimet_tensorflow.keras.batch_norm_fold import fold_all_batch_norms
 from aimet_tensorflow.keras.connectedgraph import ConnectedGraph
+from aimet_tensorflow.keras.utils import model_transform_utils
 from aimet_tensorflow.keras.utils.weight_tensor_utils import WeightTensorUtils
 
 _logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.CrosslayerEqualization)
+
+BatchNormFoldedPair = typing.Union[typing.Tuple[tf.keras.layers.Conv2D,
+                                                tf.keras.layers.BatchNormalization],
+                                   typing.Tuple[tf.keras.layers.Dense,
+                                                tf.keras.layers.BatchNormalization]]
 
 ClsSet = typing.Union[typing.Tuple[tf.keras.layers.Conv2D,
                                    tf.keras.layers.Conv2D],
@@ -118,13 +125,10 @@ class ClsSetInfo:
 class GraphSearchUtils:
     """Implements graph search utils required by CLE feature"""
 
-    def __init__(
-            self,
-            model: tf.keras.Model,
-            input_shapes: typing.Union[
-                None, typing.Tuple, typing.List[typing.Tuple]
-            ] = None,
-    ):
+    def __init__(self,
+                 model: tf.keras.Model,
+                 input_shapes: typing.Union[None, typing.Tuple,
+                                            typing.List[typing.Tuple]]):
         """
         :param model: Keras Model (Sequential, Functional, Subclassing)
         :param input_shapes: Input shape tuple or list of input tuple shape
@@ -505,11 +509,9 @@ class CrossLayerScaling:
         return scale_factor_list
 
     @staticmethod
-    def create_cls_set_info_list(
-            cls_sets: typing.List[ClsSet],
-            scale_factors: typing.List[ScaleFactor],
-            is_relu_activation_in_cls_sets: typing.List[ReluFlag],
-    ) -> typing.List[ClsSetInfo]:
+    def create_cls_set_info_list(cls_sets: typing.List[ClsSet],
+                                 scale_factors: typing.List[ScaleFactor],
+                                 is_relu_activation_in_cls_sets: typing.List[ReluFlag]) -> typing.List[ClsSetInfo]:
         """
         Binds information from there separate lists into one [ClsInfoSet] data structure
 
@@ -546,6 +548,42 @@ class CrossLayerScaling:
                 cls_set_info = ClsSetInfo(cls_pair)
 
             cls_set_info_list.append(cls_set_info)
+
+        return cls_set_info_list
+
+    @staticmethod
+    def scale_model(model: tf.keras.Model,
+                    input_shapes: typing.Union[None,
+                                               typing.Tuple,
+                                               typing.List[typing.Tuple]]) -> typing.List[ClsSetInfo]:
+        """
+        Uses cross-layer scaling to scale all applicable layers in the given model
+
+        :param model: tf.keras.Model
+        :param input_shapes: input_shapes: Input shape tuple or list of input tuple shape
+        :return: CLS information for each CLS set
+        """
+
+        # Find layer groups
+        graph_search_util = GraphSearchUtils(model, input_shapes)
+        layer_groups = graph_search_util.find_layer_groups_to_scale()
+
+        # Find cls sets from the layer groups
+        cls_sets = []
+        for layer_group in layer_groups:
+            cls_set = GraphSearchUtils.convert_layer_group_to_cls_sets(layer_group)
+            cls_sets += cls_set
+
+        # Scale the CLS sets
+        scale_factors = CrossLayerScaling.scale_cls_sets(cls_sets)
+
+        # Find if there were ReLU activations between layers of each cls set
+        is_relu_activation_in_cls_sets = graph_search_util.is_relu_activation_present_in_cls_sets(cls_sets)
+
+        # Convert to a list of cls set info elements
+        cls_set_info_list = CrossLayerScaling.create_cls_set_info_list(cls_sets,
+                                                                       scale_factors,
+                                                                       is_relu_activation_in_cls_sets)
 
         return cls_set_info_list
 
@@ -659,3 +697,47 @@ class HighBiasFold:
         curr_layer_params.weightShape = np.array(curr_layer_weight_tensor.shape)
 
         return prev_layer_params, curr_layer_params
+
+
+def equalize_model(model: tf.keras.Model,
+                   input_shapes: typing.Union[None, typing.Tuple,
+                                              typing.List[typing.Tuple]]) -> tf.keras.Model:
+    """
+    High-level API to perform Cross-Layer Equalization (CLE) on the given model
+
+    :param model: tf.keras.Model
+    :param input_shapes: Input shape tuple or list of input tuple shape
+    :return: CLE applied tf.keras.Model
+    """
+    folded_pairs = fold_all_batch_norms(model)
+    cle_applied_model = equalize_bn_folded_model(model, input_shapes, folded_pairs)
+
+    return cle_applied_model
+
+
+def equalize_bn_folded_model(model: tf.keras.Model,
+                             input_shapes: typing.Union[None, typing.Tuple,
+                                                        typing.List[typing.Tuple]],
+                             folded_pairs: typing.List[BatchNormFoldedPair]) -> tf.keras.Model:
+    """
+    Perform Cross-Layer Scaling (CLS) and High Bias Folding (HBF) on a batchnorm-folded model
+
+    :param model: BatchNorm-folded model to equalize
+    :param input_shapes: Input shape tuple or list of input tuple shape
+    :param folded_pairs: List of pairs of folded layers
+    :return: CLE applied tf.keras.Model
+    """
+    bn_dict = {}
+    for conv_or_linear, bn in folded_pairs:
+        bn_dict[conv_or_linear] = bn
+
+    # replace any ReLU6 layers with ReLU
+    model_for_cle, _ = model_transform_utils.replace_relu6_with_relu(model)
+
+    # perform cross-layer scaling on applicable layer sets
+    cls_set_info_list = CrossLayerScaling.scale_model(model_for_cle, input_shapes)
+
+    # high-bias fold
+    HighBiasFold.bias_fold(cls_set_info_list, bn_dict)
+
+    return model_for_cle
