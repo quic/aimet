@@ -39,7 +39,8 @@ import numpy as np
 import tensorflow as tf
 
 from aimet_tensorflow.keras.batch_norm_fold import fold_all_batch_norms
-from aimet_tensorflow.keras.cross_layer_equalization import CrossLayerScaling, GraphSearchUtils
+from aimet_tensorflow.keras.cross_layer_equalization import CrossLayerScaling, GraphSearchUtils, equalize_model, \
+    HighBiasFold
 from aimet_tensorflow.keras.utils.weight_tensor_utils import WeightTensorUtils
 
 
@@ -140,3 +141,49 @@ def test_cross_layer_scaling_mobile_net_v2():
     conv4_input_range = WeightTensorUtils.get_max_abs_val_per_channel(conv4, axis=(3, 0, 1))
     assert np.allclose(conv3_output_range, depthwise_conv1_output_range)
     assert np.allclose(depthwise_conv1_output_range, conv4_input_range)
+
+
+def test_cross_layer_equalization_stepwise():
+    model = tf.keras.applications.ResNet50(input_shape=(224, 224, 3))
+
+    folded_pairs = fold_all_batch_norms(model)
+    bn_dict = {}
+    for conv_or_linear, bn in folded_pairs:
+        bn_dict[conv_or_linear] = bn
+
+    conv1, conv2, conv3 = model.layers[7], model.layers[10], model.layers[14]
+    w1, _ = conv1.get_weights()
+    w2, _ = conv2.get_weights()
+    w3, _ = conv3.get_weights()
+
+    cls_set_info_list = CrossLayerScaling.scale_model(model, (224, 224, 3))
+    # check if weights are updating
+    assert not np.allclose(conv1.kernel, w1)
+    assert not np.allclose(conv2.kernel, w2)
+    assert not np.allclose(conv3.kernel, w3)
+
+    _, b1 = conv1.get_weights()
+    _, b2 = conv2.get_weights()
+
+    HighBiasFold.bias_fold(cls_set_info_list, bn_dict)
+    # hat of bias1 = bias1 - c, c = max(0, beta - 3 * gamma)
+    # Bias value of previous layer after folding should be less than or equal to the value before folding
+    for bias_val_before, bias_val_after in zip(b1, conv1.bias.numpy()):
+        assert bias_val_after <= bias_val_before
+
+    for bias_val_before, bias_val_after in zip(b2, conv2.bias.numpy()):
+        assert bias_val_after <= bias_val_before
+
+
+def test_cross_layer_equalization_resnet50():
+    model = tf.keras.applications.ResNet50(input_shape=(224, 224, 3))
+
+    cle_applied_model = equalize_model(model, (224, 224, 3))
+    cle_applied_model.summary()
+
+
+def test_cross_layer_equalization_mobile_net_v2():
+    model = tf.keras.applications.MobileNetV2(input_shape=(224, 224, 3))
+
+    cle_applied_model = equalize_model(model, (224, 224, 3))
+    cle_applied_model.summary()
