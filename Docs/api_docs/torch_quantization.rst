@@ -16,4 +16,4 @@ AIMET Quantization for PyTorch Models provides the following functionality.
    - :ref:`Adaptive Rounding API<api-torch-adaround>`: Post-training quantization technique to optimize rounding of weight tensors
    - :ref:`Cross-Layer Equalization API<api-torch-cle>`: Post-training quantization technique to equalize layer parameters
    - :ref:`Bias Correction API<api-torch-bias-correction>`: Post-training quantization technique to correct shift in layer outputs due to quantization noise
-
+   - :ref:`AutoQuant API<api-torch-auto-quant>`: Unified API that integrates the post-training quantization techniques provided by AIMET
