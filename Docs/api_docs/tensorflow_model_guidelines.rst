@@ -18,6 +18,8 @@ then this step is not required::
     model = update_keras_bn_ops_trainable_flag(model, load_save_path="./", trainable=False)
 
 
+.. autofunction:: aimet_tensorflow.utils.graph.update_keras_bn_ops_trainable_flag
+
 **If model has Recurrent (RNN, LSTM etc.) layers**
 
 Recurrent layers (RNN, LSTM) are not supported with TensorFlow 2.x and only supported with TensorFlow 1.x.
