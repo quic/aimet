@@ -1776,6 +1776,106 @@ class TestQuantizationSimStaticGrad:
         assert int(new_encoding_max) == 17
         assert sim2.model.block.add_2.output_quantizer.encoding.bw == 8
 
+    def test_transformer_mask_override_transformers_tf_enhanced(self):
+        """
+        test logic to override mask for a DistilBERT, RoBERTa, GPT-2 models.
+        :return:
+        """
+        torch.manual_seed(10)
+
+        class MultiHeadSelfAttention(nn.Module):
+
+            def __init__(self):
+                super(MultiHeadSelfAttention, self).__init__()
+
+                self.mask_add = elementwise_ops.Add()
+                self.softmax = nn.LogSoftmax(dim=1)
+
+            def forward(self, x1, x2):
+
+                x = self.mask_add(x1, x2)
+                return self.softmax(x)
+
+        class RobertaSelfAttention(nn.Module):
+
+            def __init__(self):
+                super(RobertaSelfAttention, self).__init__()
+
+                self.mask_add = elementwise_ops.Add()
+                self.softmax = nn.LogSoftmax(dim=1)
+
+            def forward(self, x1, x2):
+
+                x = self.mask_add(x1, x2)
+                return self.softmax(x)
+
+        class Attention(nn.Module):
+
+            def __init__(self):
+                super(Attention, self).__init__()
+
+                self.mask_add = elementwise_ops.Add()
+                self.softmax = nn.LogSoftmax(dim=1)
+
+            def forward(self, x1, x2):
+
+                x = self.mask_add(x1, x2)
+                return self.softmax(x)
+
+        class DummyAttnBlockModel(nn.Module):
+            def __init__(self):
+                super(DummyAttnBlockModel, self).__init__()
+                self.distilbert_block = MultiHeadSelfAttention()
+                self.roberta_block = RobertaSelfAttention()
+                self.gpt_block = Attention()
+
+            def forward(self, x1, x2, x3, x4, x5, x6):
+                a = self.distilbert_block(x1, x2)
+                b = self.roberta_block(x3, x4)
+                c = self.gpt_block(x5, x6)
+                return a+b+c
+
+        # update data input to reflect range at add -10000 to ~16.xx
+        # this results in max being mapped to zero when econding grid is computed with 8 bit for mask add
+        dummy_input = (torch.FloatTensor(32, 1, 100, 100).uniform_(-6000, 15),
+                       torch.FloatTensor(32, 1, 100, 100).uniform_(-5000, 17),
+                       torch.FloatTensor(32, 1, 100, 100).uniform_(-6700, 15),
+                       torch.FloatTensor(32, 1, 100, 100).uniform_(-5900, 17),
+                       torch.FloatTensor(32, 1, 100, 100).uniform_(-6100, 15),
+                       torch.FloatTensor(32, 1, 100, 100).uniform_(-5700, 17))
+
+        def forward_pass(sim_model, _):
+            sim_model.eval()
+            with torch.no_grad():
+                sim_model(*dummy_input)
+
+        # use some dummy custom block type
+        model = DummyAttnBlockModel()
+        sim = QuantizationSimModel(model, quant_scheme=QuantScheme.post_training_tf_enhanced,  dummy_input=dummy_input)
+        sim.compute_encodings(forward_pass, None)
+        distil_encoding_min = sim.model.distilbert_block.mask_add.output_quantizer.encoding.min
+        distil_encoding_max = sim.model.distilbert_block.mask_add.output_quantizer.encoding.max
+
+        roberta_encoding_min = sim.model.roberta_block.mask_add.output_quantizer.encoding.min
+        roberta_encoding_max = sim.model.roberta_block.mask_add.output_quantizer.encoding.max
+
+        gpt_encoding_min= sim.model.gpt_block.mask_add.output_quantizer.encoding.min
+        gpt_encoding_max = sim.model.gpt_block.mask_add.output_quantizer.encoding.max
+
+        # check min clamped
+        assert int(distil_encoding_min) == -6
+        assert int(distil_encoding_max) == 17
+
+        assert int(roberta_encoding_min) == -5
+        assert int(roberta_encoding_max) == 15
+
+        assert int(gpt_encoding_min) == -6
+        assert int(gpt_encoding_max) == 16
+
+        assert sim.model.distilbert_block.mask_add.output_quantizer.encoding.bw == 8
+        assert sim.model.roberta_block.mask_add.output_quantizer.encoding.bw == 8
+        assert sim.model.gpt_block.mask_add.output_quantizer.encoding.bw == 8
+
     def test_encodings_propagation_simple_model(self):
         """
         Test encodings are propagated correctly when more than
