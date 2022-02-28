@@ -508,25 +508,30 @@ class QuantizationSimModel:
             self._replace_quantization_wrapper(self.model, device)
 
     def _override_quant_config_for_transformer_layers(self):
-        """Looks specfic ops in a transformer and overrides the quantizer to tf mode
+        """Looks for specfic ops in a transformer and overrides the quantizer to tf mode
         """
         # pylint: disable=protected-access
         attention_with_mask_add_quantizer_dict = transformer_utils.get_attention_with_mask_add_quantizer_dict(self.model)
 
-        for attention_head, (mask_add_quantizer_module, mask_add_name) in attention_with_mask_add_quantizer_dict.items():
+        for attention_head, (mask_add_quantizer_wrapper, mask_add_name) in attention_with_mask_add_quantizer_dict.items():
 
-            if isinstance(mask_add_quantizer_module, StaticGridQuantWrapper):
-                module_to_quantize = mask_add_quantizer_module._module_to_wrap
-                quantizer = qc_quantize_modules_dict.get(type(module_to_quantize), StaticGridQuantWrapper)
+            assert isinstance(mask_add_quantizer_wrapper, StaticGridQuantWrapper)
+
+            # clamping needs to be done only if data type is int
+            if mask_add_quantizer_wrapper.output_quantizer.data_type == QuantizationDataType.int:
+
+                module_to_quantize = mask_add_quantizer_wrapper._module_to_wrap
+
+                quantizer_wrapper_type = qc_quantize_modules_dict.get(type(module_to_quantize), StaticGridQuantWrapper)
 
                 # Add a quantizer set to tf mode and bw to 16 and copy over remaining attributes
                 # we need 16 bit to retain the max representation for this quantizer.
-                quantized_module = quantizer(module_to_quantize, 16, 16,
-                                             MAP_PYMO_TO_ROUND_MODE[mask_add_quantizer_module.output_quantizer.round_mode],
-                                             QuantScheme.post_training_tf,
-                                             num_inputs=len(mask_add_quantizer_module.input_quantizers),
-                                             num_outputs=len(mask_add_quantizer_module.output_quantizers),
-                                             data_type=mask_add_quantizer_module.output_quantizer.data_type)
+                quantized_module = quantizer_wrapper_type(module_to_quantize, 16, 16,
+                                                          MAP_PYMO_TO_ROUND_MODE[mask_add_quantizer_wrapper.output_quantizer.round_mode],
+                                                          QuantScheme.post_training_tf,
+                                                          num_inputs=len(mask_add_quantizer_wrapper.input_quantizers),
+                                                          num_outputs=len(mask_add_quantizer_wrapper.output_quantizers),
+                                                          data_type=mask_add_quantizer_wrapper.output_quantizer.data_type)
 
                 setattr(attention_head, mask_add_name, quantized_module)
 
@@ -539,10 +544,13 @@ class QuantizationSimModel:
         # pylint: disable=protected-access
         attention_with_mask_add_quantizer_dict = transformer_utils.get_attention_with_mask_add_quantizer_dict(self.model)
 
-        for (mask_add_quantizer_module, _) in attention_with_mask_add_quantizer_dict.values():
-            if isinstance(mask_add_quantizer_module, StaticGridQuantWrapper) and \
-                    mask_add_quantizer_module.output_quantizer.enabled:
-                for output_quantizer in mask_add_quantizer_module.output_quantizers:
+        for (mask_add_quantizer_wrapper, _) in attention_with_mask_add_quantizer_dict.values():
+            # we check if quantizer is enabled and data type is set to int before clamping
+            # clamping is not necessary for FP16 mode.
+            assert isinstance(mask_add_quantizer_wrapper, StaticGridQuantWrapper)
+            if mask_add_quantizer_wrapper.output_quantizer.enabled and \
+                    mask_add_quantizer_wrapper.output_quantizer.data_type == QuantizationDataType.int:
+                for output_quantizer in mask_add_quantizer_wrapper.output_quantizers:
                     # get the min/max from accumulated stats associated with this quantizer
                     encoding = output_quantizer.encoding
                     output_quantizer.encoding.min = max(encoding.min,
@@ -558,8 +566,10 @@ class QuantizationSimModel:
 
                     # update encoding of this quantizer
                     output_quantizer.encoding = clamped_encoding
-                    mask_add_quantizer_module.output_quantizer.freeze_encoding()
-
+                    mask_add_quantizer_wrapper.output_quantizer.freeze_encoding()
+            else:
+                logger.debug("Skipping clamp on %s. Quantizer is disabled or not int type",
+                             mask_add_quantizer_wrapper)
 
     @staticmethod
     def _validate_quantsim_inputs(quant_scheme: Union[str, QuantScheme], rounding_mode: str, default_output_bw: int,
@@ -896,7 +906,7 @@ class QuantizationSimModel:
 
         # Set quantizer to be a module replacer if it is in qc_quantize_modules_dict, otherwise set as
         # StaticGridQuantWrapper.
-        quantizer = qc_quantize_modules_dict.get(type(module_to_quantize), StaticGridQuantWrapper)
+        quantizer_wrapper_type = qc_quantize_modules_dict.get(type(module_to_quantize), StaticGridQuantWrapper)
 
         if self._quant_scheme in [QuantScheme.post_training_tf, QuantScheme.post_training_tf_enhanced]:
             quant_scheme_for_initialization = self._quant_scheme
@@ -907,9 +917,9 @@ class QuantizationSimModel:
         elif self._quant_scheme == QuantScheme.training_range_learning_with_tf_enhanced_init:
             quant_scheme_for_initialization = QuantScheme.post_training_tf_enhanced
 
-        quantized_module = quantizer(module_to_quantize, self._default_param_bw, self._default_output_bw,
-                                     self._rounding_mode, quant_scheme_for_initialization, num_inputs=num_in_tensors,
-                                     num_outputs=num_out_tensors, data_type=data_type)
+        quantized_module = quantizer_wrapper_type(module_to_quantize, self._default_param_bw, self._default_output_bw,
+                                                  self._rounding_mode, quant_scheme_for_initialization, num_inputs=num_in_tensors,
+                                                  num_outputs=num_out_tensors, data_type=data_type)
 
         return quantized_module
 
