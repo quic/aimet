@@ -34,39 +34,39 @@
 #
 #  @@-COPYRIGHT-END-@@
 # =============================================================================
-
+import copy
+import json as json
+import os
 import unittest.mock
 from collections import namedtuple
 from typing import Dict
 
+import libpymo
 import numpy as np
+import onnx
 import pytest
+
 import torch
 import torch.nn as nn
-import json as json
-import os
+from torch.profiler import profile, record_function, ProfilerActivity
+
 import yaml
-import onnx
-
-
 from torchvision import models
-from aimet_common.defs import QuantScheme, QuantizationDataType, MAP_ROUND_MODE_TO_PYMO
-from aimet_torch.elementwise_ops import Multiply
 
+from aimet_common.defs import QuantScheme, QuantizationDataType, MAP_ROUND_MODE_TO_PYMO
+from aimet_common.utils import AimetLogger
+from aimet_torch import transformer_utils
+from aimet_torch import utils, elementwise_ops
+from aimet_torch.elementwise_ops import Multiply
 from aimet_torch.examples.test_models import TwoLayerBidirectionalLSTMModel, SingleLayerRNNModel, \
     ModelWithTwoInputs
-
-import libpymo
 from aimet_torch.meta.connectedgraph import ConnectedGraph
-from aimet_torch import transformer_utils
 from aimet_torch.onnx_utils import OnnxExportApiArgs
+from aimet_torch.qc_quantize_op import QcQuantizeWrapper, QcQuantizeStandalone, \
+    StaticGridQuantWrapper, QcQuantizeOpMode, LearnedGridQuantWrapper
 from aimet_torch.qc_quantize_recurrent import QcQuantizeRecurrent
 from aimet_torch.quantsim import QuantizationSimModel, check_accumulator_overflow
 from aimet_torch.quantsim_straight_through_grad import compute_dloss_by_dx
-from aimet_torch import utils, elementwise_ops
-from aimet_torch.qc_quantize_op import QcQuantizeWrapper, QcQuantizeStandalone, \
-    StaticGridQuantWrapper, QcQuantizeOpMode, LearnedGridQuantWrapper
-from aimet_common.utils import AimetLogger
 
 logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Test)
 
@@ -2160,6 +2160,7 @@ class TestQuantizationSimLearnedGrid:
         trainable_module.param_quantizers['bias'].enabled = True
         trainable_module.param_quantizers['bias'].encoding = encodings
 
+        trainable_module.output_quantizer.enabled = True
         trainable_module.output_quantizer.encoding = encodings
 
         inp = torch.rand((1, 1, 5, 5), requires_grad=True)
@@ -2271,6 +2272,56 @@ class TestQuantizationSimLearnedGrid:
 
         forward_pass(sim.model, None)
         print(sim)
+
+    def test_memory_profiler(self):
+
+        class Model(nn.Module):
+            def __init__(self):
+                super(Model, self).__init__()
+                self.conv1 = nn.Conv2d(3, 10, 5, 5)
+                self.conv2 = nn.Conv2d(10, 20, 5, 5)
+                self.conv3 = nn.Conv2d(20, 40, 5, 5)
+
+            def forward(self, input):
+                x = self.conv1(input)
+                x = torch.nn.functional.relu(x)
+                x = self.conv2(x)
+                x = torch.nn.functional.relu(x)
+                x = self.conv3(x)
+                x = torch.nn.functional.relu(x)
+                return x
+
+        # model = models.resnet18()
+        model = Model()
+        from aimet_torch.model_preparer import prepare_model
+
+        model = prepare_model(model)
+
+        in_tensor = torch.rand(32, 3, 224, 224)
+
+        def forward_pass(model, args):
+            model(in_tensor)
+
+        sim = QuantizationSimModel(model, quant_scheme=QuantScheme.training_range_learning_with_tf_init,
+                                   dummy_input=in_tensor)
+
+        # Quantize
+        sim.compute_encodings(forward_pass, None)
+
+        print("Starting")
+        sim.model.train()
+
+        with profile(activities=[ProfilerActivity.CPU],
+                     profile_memory=True, record_shapes=True) as prof:
+
+            for _ in range(1):
+                out = sim.model(in_tensor)
+                out = out.sum().backward()
+
+        memory_stats = [event for event in prof.key_averages() if event.key == '[memory]'][0]
+        assert abs(memory_stats.cpu_memory_usage) < (100 * (10 ** 6))
+
+        print(memory_stats.cpu_memory_usage)
 
     def test_accumulator_overflow(self):
 

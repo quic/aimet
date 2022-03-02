@@ -502,12 +502,48 @@ class LearnedGridTensorQuantizer(TensorQuantizer):
             if encoding_max is None or encoding_min is None:
                 raise RuntimeError("Forward pass used for compute_encodings differs from forward pass used during "
                                    "training")
-            delta = (encoding_max - encoding_min) / (2 ** self.bitwidth - 1)
-            offset = self.round_ste_func(-encoding_min / delta)
-            tensor = torch.clamp(tensor, encoding_min.item(), encoding_max.item())
-            tensor = self.round_ste_func(tensor / delta) + offset
-            tensor = (tensor - offset) * delta
+
+            tensor = QuantizeDequantizeFunc.apply(tensor, encoding_min, encoding_max, self)
         return tensor
+
+
+class QuantizeDequantizeFunc(torch.autograd.Function):
+    """
+    This functional is created explicitly for reducing the amount of intermediate tensors that would need to be
+    maintained if we relied solely on PyTorch autograd for the forward function code.
+    Instead, we specify a backward function that computes grads with respect to the tensor being quantized, and also
+    the max and min learnable encodings.
+    """
+
+    # pylint:disable = arguments-differ
+    @staticmethod
+    def forward(ctx, tensor: torch.Tensor, encoding_min: torch.nn.Parameter,
+                encoding_max: torch.nn.Parameter, tensor_quantizer) -> torch.Tensor:
+
+        ctx.save_for_backward(tensor, encoding_min, encoding_max, tensor_quantizer.n, tensor_quantizer.p,
+                              torch.tensor(tensor_quantizer.bitwidth))
+
+        delta = (encoding_max - encoding_min) / (2 ** tensor_quantizer.bitwidth - 1)
+        offset = torch.round(-encoding_min / delta)
+        tensor = torch.clamp(tensor, encoding_min.item(), encoding_max.item())
+        tensor = torch.round(tensor / delta) + offset
+        tensor = (tensor - offset) * delta
+
+        return tensor
+
+    @staticmethod
+    def backward(ctx, grad):
+        # Retrieve saved tensors for gradient calculations
+        tensor, encoding_min, encoding_max, n, p, bitwidth = ctx.saved_tensors
+
+        scale = (encoding_max - encoding_min) / (2 ** bitwidth.data - 1)
+        offset = torch.round(-encoding_min / scale)
+
+        tensor_grad = ParameterQuantizer.compute_dloss_by_dx(tensor, grad, scale, offset, n, p)
+        tensor_encoding_max_grad = ParameterQuantizer.compute_dloss_by_dmax(tensor, grad, scale, offset, n, p)
+        tensor_encoding_min_grad = ParameterQuantizer.compute_dloss_by_dmin_using_dmax(tensor_encoding_max_grad)
+
+        return tensor_grad, tensor_encoding_min_grad, tensor_encoding_max_grad, None
 
 
 class ParameterQuantizer(torch.autograd.Function):
