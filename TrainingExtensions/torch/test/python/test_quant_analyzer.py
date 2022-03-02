@@ -41,7 +41,7 @@ import torch
 from unittest.mock import MagicMock
 from aimet_torch.examples.test_models import TinyModel
 from aimet_common.defs import QuantScheme
-from aimet_torch.model_analyzer import ModelAnalyzer, CallbackFunc
+from aimet_torch.quant_analyzer import QuantAnalyzer, CallbackFunc
 
 
 def calibrate(model: torch.nn.Module, dummy_input: torch.Tensor):
@@ -66,25 +66,25 @@ def evaluate(model: torch.nn.Module, dummy_input: torch.Tensor):
     return 0.8
 
 
-class TestModelAnalyzer:
+class TestQuantAnalyzer:
 
-    def test_model_analyzer(self):
+    def test_quant_analyzer(self):
         """ test analyze_model_sensitivity API """
         input_shape = (1, 3, 32, 32)
         dummy_input = torch.randn(*input_shape)
         model = TinyModel().eval()
         forward_pass_callback = CallbackFunc(calibrate, dummy_input)
         eval_callback = CallbackFunc(evaluate, dummy_input)
-        analyzer = ModelAnalyzer(model, dummy_input, forward_pass_callback, eval_callback)
+        analyzer = QuantAnalyzer(model, dummy_input, forward_pass_callback, eval_callback)
         analyzer.analyze_model_sensitivity(default_quant_scheme=QuantScheme.post_training_tf_enhanced,
                                            default_param_bw=8, default_output_bw=8)
         assert analyzer._model is model
 
-    def test_model_analyzer_invalid_input(self):
+    def test_quant_analyzer_invalid_input(self):
         """ test invalid inputs """
-        model_analyzer = ModelAnalyzer(MagicMock(), MagicMock(), CallbackFunc(None), CallbackFunc(None))
+        analyzer = QuantAnalyzer(MagicMock(), MagicMock(), CallbackFunc(None), CallbackFunc(None))
         with pytest.raises(ValueError):
-            model_analyzer.analyze_model_sensitivity(default_param_bw=32, default_output_bw=32)
+            analyzer.analyze_model_sensitivity(default_param_bw=32, default_output_bw=32)
 
         with pytest.raises(ValueError):
-            model_analyzer.analyze_model_sensitivity(default_param_bw=2, default_output_bw=2)
+            analyzer.analyze_model_sensitivity(default_param_bw=2, default_output_bw=2)

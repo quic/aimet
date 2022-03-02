@@ -36,7 +36,7 @@
 #  @@-COPYRIGHT-END-@@
 # =============================================================================
 
-""" Model Analyzer """
+""" Quant Analyzer """
 
 from typing import Union, Tuple, Callable
 import torch
@@ -64,9 +64,9 @@ class CallbackFunc:
         self.args = func_callback_args
 
 
-class ModelAnalyzer:
+class QuantAnalyzer:
     """
-    ModelAnalyzer tool provides
+    QuantAnalyzer tool provides
 
      1) model sensitivity to weight and activation quantization
      2) per layer sensitivity analysis
