@@ -15,8 +15,30 @@ AIMET functionality for Keras Cross Layer Equalization supports three techniques
 
 Cross Layer Equalization API
 ============================
-The top level Cross Layer Equalization for Keras API is still under development. For the time being, the Primitive APIs
-can be used to perform each step of Cross Layer Equalization separately.
+Listed below is a comprehensive API to apply all available techniques under cross layer equalization.
+It performs 'auto' detection of candidate layers and applies the techniques.
+If there are no BatchNorm layers in a given model, BatchNorm fold and high bias fold shall be skipped.
+
+**API(s) for Cross Layer Equalization**
+
+.. autofunction:: aimet_tensorflow.keras.cross_layer_equalization.equalize_model
+
+
+Code Example
+============
+
+**Required imports**
+
+.. literalinclude:: ../keras_code_examples/post_training_techniques_examples.py
+    :language: python
+    :lines: 38, 43
+
+**Cross Layer Equalization in auto mode comprehensive**
+
+.. literalinclude:: ../keras_code_examples/post_training_techniques_examples.py
+    :language: python
+    :pyobject: cross_layer_equalization_auto
+
 
 Primitive APIs
 ==============

@@ -28,7 +28,7 @@ Higher Level APIs for Cross Layer Equalization
 
 **API for Cross Layer Scaling**
 
-Under development
+.. autofunction:: aimet_tensorflow.keras.cross_layer_equalization.CrossLayerScaling.scale_model
 
 **API for High Bias Folding**
 
@@ -41,7 +41,7 @@ Code Examples for Higher Level APIs
 
 .. literalinclude:: ../keras_code_examples/post_training_techniques_examples.py
     :language: python
-    :lines: 38, 40
+    :lines: 38, 40, 42, 44
 
 **Perform Cross Layer Equalization in auto mode step by step**
 
@@ -86,7 +86,7 @@ Code Example for Lower level APIs
 
 .. literalinclude:: ../keras_code_examples/post_training_techniques_examples.py
     :language: python
-    :lines: 38, 41, 42, 43
+    :lines: 38, 41, 42, 44
 
 **Perform Cross Layer Equalization in manual mode**
 
@@ -108,3 +108,9 @@ Example helper methods to perform CLE in manual mode
 .. literalinclude:: ../keras_code_examples/post_training_techniques_examples.py
     :language: python
     :pyobject: get_consecutive_layer_list_from_resnet50_for_scaling
+
+**Helper to format data from batchnorm fold and cross layer scaling for usage by high bias fold**
+
+.. literalinclude:: ../keras_code_examples/post_training_techniques_examples.py
+    :language: python
+    :pyobject: format_info_for_high_bias_fold
