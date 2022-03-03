@@ -39,8 +39,16 @@ import tensorflow as tf
 
 from aimet_tensorflow.keras.batch_norm_fold import fold_all_batch_norms
 from aimet_tensorflow.keras.batch_norm_fold import fold_given_batch_norms
-from aimet_tensorflow.keras.cross_layer_equalization import CrossLayerScaling
+from aimet_tensorflow.keras.cross_layer_equalization import HighBiasFold, CrossLayerScaling
+from aimet_tensorflow.keras.cross_layer_equalization import equalize_model
 from aimet_tensorflow.keras.utils.model_transform_utils import replace_relu6_with_relu
+
+
+def cross_layer_equalization_auto():
+    input_shape = (224, 224, 3)
+    model = tf.keras.applications.ResNet50()
+
+    cle_applied_model = equalize_model(model, input_shape)
 
 
 def cross_layer_equalization_auto_stepwise():
@@ -53,16 +61,26 @@ def cross_layer_equalization_auto_stepwise():
     4. Perform high bias fold
     """
 
-    # Note: Cross layer scaling and high bias fold auto stepwise functions still under development.
-
     # Load the model to equalize
     model = tf.keras.applications.resnet50.ResNet50(weights=None, classes=10)
 
     # 1. Replace Relu6 layer with Relu
-    replace_relu6_with_relu(model)
+    model_for_cle, _ = replace_relu6_with_relu(model)
 
     # 2. Fold all batch norms
-    fold_all_batch_norms(model)
+    folded_pairs = fold_all_batch_norms(model_for_cle)
+
+    bn_dict = {}
+    for conv_or_linear, bn in folded_pairs:
+        bn_dict[conv_or_linear] = bn
+
+    # 3. Perform cross-layer scaling on applicable layer groups
+    cls_set_info_list = CrossLayerScaling.scale_model(model_for_cle, (224, 224, 3))
+
+    # 4. Perform high bias fold
+    HighBiasFold.bias_fold(cls_set_info_list, bn_dict)
+
+    return model_for_cle
 
 
 def cross_layer_equalization_manual():
@@ -75,29 +93,35 @@ def cross_layer_equalization_manual():
     4. Perform high bias fold
     """
 
-    # Note: Cross layer scaling and high bias fold manual functions still under development.
-
     # Load the model to equalize
     model = tf.keras.applications.resnet50.ResNet50(weights=None, classes=10)
 
     # replace any ReLU6 layers with ReLU
-    replace_relu6_with_relu(model)
+    model_for_cle, _ = replace_relu6_with_relu(model)
 
     # pick potential pairs of conv and bn ops for fold
-    layer_pairs = get_example_layer_pairs_resnet50_for_folding(model)
+    layer_pairs = get_example_layer_pairs_resnet50_for_folding(model_for_cle)
 
     # fold given layers
-    fold_given_batch_norms(model, layer_pairs=layer_pairs)
+    fold_given_batch_norms(model_for_cle, layer_pairs=layer_pairs)
 
     # Cross Layer Scaling
     # Create a list of consecutive conv layers to be equalized
-    consecutive_layer_list = get_consecutive_layer_list_from_resnet50_for_scaling(model)
+    consecutive_layer_list = get_consecutive_layer_list_from_resnet50_for_scaling(model_for_cle)
 
     # invoke api to perform scaling on given list of cls pairs
     scaling_factor_list = CrossLayerScaling.scale_cls_sets(consecutive_layer_list)
 
+    # get info from bn fold and cross layer scaling in format required for high bias fold
+    folded_pairs, cls_set_info_list = format_info_for_high_bias_fold(layer_pairs,
+                                                                     consecutive_layer_list,
+                                                                     scaling_factor_list)
 
-def get_example_layer_pairs_resnet50_for_folding(model):
+    HighBiasFold.bias_fold(cls_set_info_list, folded_pairs)
+    return model_for_cle
+
+
+def get_example_layer_pairs_resnet50_for_folding(model: tf.keras.Model):
     """
     Function to pick example conv-batchnorm layer pairs for folding.
     :param model: Keras model containing conv batchnorm pairs to fold
@@ -135,3 +159,29 @@ def get_consecutive_layer_list_from_resnet50_for_scaling(model: tf.keras.Model):
 
     consecutive_layer_list = [(conv_op_1, conv_op_2), (conv_op_2, conv_op_3)]
     return consecutive_layer_list
+
+
+def format_info_for_high_bias_fold(layer_pairs, consecutive_layer_list, scaling_factor_list):
+    """
+    Helper function that formats data from cross layer scaling and bn fold for usage by high bias fold
+    :param layer_pairs: info obtained after batchnorm fold
+    :param consecutive_layer_list: info obtained after cross layer scaling
+    :param scaling_factor_list: scaling params corresponding to consecutive_layer_list
+    :return: data formatted for high bias fold
+    """
+
+    # convert info after batch norm fold and cross layer scaling for usage by high bias fold api
+    folded_pairs = []
+    for (conv_op, bn_op_with_meta, _fold_upstream_flag) in layer_pairs:
+        folded_pairs.append((conv_op, bn_op_with_meta.op))
+
+    # List that hold a boolean for if there were relu activations between layers of each cross layer scaling set
+    is_relu_activation_in_cls_sets = []
+    # Note the user is expected to fill in this list manually
+
+    # Convert to a list of cls-set-info elements
+    cls_set_info_list = CrossLayerScaling.create_cls_set_info_list(consecutive_layer_list,
+                                                                   scaling_factor_list,
+                                                                   is_relu_activation_in_cls_sets)
+
+    return folded_pairs, cls_set_info_list
