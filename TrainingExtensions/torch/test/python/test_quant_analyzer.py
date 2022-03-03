@@ -38,6 +38,7 @@
 
 import pytest
 import torch
+from functools import partial
 from unittest.mock import MagicMock
 from aimet_torch.examples.test_models import TinyModel
 from aimet_common.defs import QuantScheme
@@ -68,6 +69,7 @@ def evaluate(model: torch.nn.Module, dummy_input: torch.Tensor):
 
 class TestQuantAnalyzer:
 
+
     def test_quant_analyzer(self):
         """ test analyze_model_sensitivity API """
         input_shape = (1, 3, 32, 32)
@@ -76,15 +78,18 @@ class TestQuantAnalyzer:
         forward_pass_callback = CallbackFunc(calibrate, dummy_input)
         eval_callback = CallbackFunc(evaluate, dummy_input)
         analyzer = QuantAnalyzer(model, dummy_input, forward_pass_callback, eval_callback)
-        analyzer.analyze_model_sensitivity(default_quant_scheme=QuantScheme.post_training_tf_enhanced,
-                                           default_param_bw=8, default_output_bw=8)
+        fp32_acc, weight_quantized_acc, act_quantized_acc = analyzer.analyze_model_sensitivity_to_quantization(
+            default_quant_scheme=QuantScheme.post_training_tf_enhanced, default_param_bw=8, default_output_bw=8)
+
+        assert fp32_acc >= weight_quantized_acc
+        assert fp32_acc >= act_quantized_acc
         assert analyzer._model is model
 
     def test_quant_analyzer_invalid_input(self):
         """ test invalid inputs """
         analyzer = QuantAnalyzer(MagicMock(), MagicMock(), CallbackFunc(None), CallbackFunc(None))
         with pytest.raises(ValueError):
-            analyzer.analyze_model_sensitivity(default_param_bw=32, default_output_bw=32)
+            analyzer.analyze_model_sensitivity_to_quantization(default_param_bw=64, default_output_bw=64)
 
         with pytest.raises(ValueError):
-            analyzer.analyze_model_sensitivity(default_param_bw=2, default_output_bw=2)
+            analyzer.analyze_model_sensitivity_to_quantization(default_param_bw=2, default_output_bw=2)

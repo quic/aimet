@@ -91,31 +91,15 @@ class QuantAnalyzer:
                 performance. This callback function is expected to return scalar value
                 representing the model performance evaluated against entire test/evaluation dataset.
         """
-        assert isinstance(forward_pass_callback, CallbackFunc), 'forward_pass_callback and its argument(s) are not' \
-                                                                ' encapsulated by CallbackFunc class.'
-        assert isinstance(eval_callback, CallbackFunc), 'eval_callback and its argument(s) are not' \
-                                                        ' encapsulated by CallbackFunc class.'
+        if not isinstance(forward_pass_callback, CallbackFunc):
+            raise ValueError('forward_pass_callback and its argument(s) are not encapsulated by CallbackFunc class.')
+        if not isinstance(eval_callback, CallbackFunc):
+            raise ValueError('eval_callback and its argument(s) are not encapsulated by CallbackFunc class.')
+
         self._model = model
         self._dummy_input = dummy_input
         self._forward_pass_callback = forward_pass_callback
         self._eval_callback = eval_callback
-
-    @staticmethod
-    def _create_quantsim(
-            model: torch.nn.Module,
-            dummy_input: Union[torch.Tensor, Tuple],
-            **kwargs,
-    ) -> QuantizationSimModel:
-        """
-        Create Quantsim object
-
-        :param model: Model to analyze.
-        :param dummy_input: Dummy input to the model.
-        :param **kwargs: Additional arguments to the quantsim.
-        :return: Quantsim model.
-        """
-        sim = QuantizationSimModel(model, dummy_input, **kwargs)
-        return sim
 
     @staticmethod
     def _disable_act_quantizers(sim: QuantizationSimModel) -> None:
@@ -152,7 +136,7 @@ class QuantAnalyzer:
         :param **kwargs: Additional arguments to the Quantsim.
         :return: Weight Quantized, Activation in float model performance.
         """
-        sim = self._create_quantsim(self._model, self._dummy_input, **kwargs)
+        sim = QuantizationSimModel(self._model, self._dummy_input, **kwargs)
         self._disable_act_quantizers(sim)
         sim.compute_encodings(self._forward_pass_callback.func, self._forward_pass_callback.args)
         acc = self._eval_model(sim.model)
@@ -166,7 +150,7 @@ class QuantAnalyzer:
         :param **kwargs: Additional arguments to the quantsim.
         :return: Activations Quantized, Weights in float model performance.
         """
-        sim = self._create_quantsim(self._model, self._dummy_input, **kwargs)
+        sim = QuantizationSimModel(self._model, self._dummy_input, **kwargs)
         self._disable_param_quantizers(sim)
         sim.compute_encodings(self._forward_pass_callback.func, self._forward_pass_callback.args)
         acc = self._eval_model(sim.model)
@@ -182,7 +166,7 @@ class QuantAnalyzer:
         with in_eval_mode(model), torch.no_grad():
             return self._eval_callback.func(model, self._eval_callback.args)
 
-    def analyze_model_sensitivity(
+    def analyze_model_sensitivity_to_quantization(
             self,
             default_quant_scheme: QuantScheme = QuantScheme.post_training_tf_enhanced,
             default_rounding_mode: str = 'nearest',
@@ -190,7 +174,7 @@ class QuantAnalyzer:
             default_output_bw: int = 8,
             default_config_file: str = None,
             default_data_type: QuantizationDataType = QuantizationDataType.int,
-    ) -> None:
+    ) -> Tuple[float, float, float]:
         """
         Perform the sensitivity analysis to weight and activation quantization
         individually.
@@ -206,12 +190,12 @@ class QuantAnalyzer:
                                  Note that the mode default_data_type=QuantizationDataType.float is only supported with
                                  default_output_bw=16 and default_param_bw=16.
         """
-        if default_param_bw < 4 or default_param_bw >= 31:
-            raise ValueError('Parameter bitwidth must be between 4 and 31, not ' + str(default_param_bw))
 
-        if default_output_bw < 4 or default_output_bw >= 31:
-            raise ValueError('Activation bitwidth must be between 4 and 31, not ' + str(default_output_bw))
-
+        QuantizationSimModel._validate_quantsim_inputs(default_quant_scheme, # pylint: disable=protected-access
+                                                       default_rounding_mode,
+                                                       default_output_bw,
+                                                       default_param_bw,
+                                                       default_data_type)
         kwargs = dict(
             quant_scheme=default_quant_scheme,
             rounding_mode=default_rounding_mode,
@@ -221,11 +205,13 @@ class QuantAnalyzer:
             default_data_type=default_data_type,
         )
 
-        acc = self._eval_model(self._model)
-        _logger.info("FP32 eval score (W32A32): %.02f", acc)
+        fp32_acc = self._eval_model(self._model)
+        _logger.info("FP32 eval score (W32A32): %.02f", fp32_acc)
 
-        acc = self._eval_model_with_weight_quantized(**kwargs)
-        _logger.info("Weight-quantized eval score (W%dA32): %.02f", default_param_bw, acc)
+        weight_quantized_acc = self._eval_model_with_weight_quantized(**kwargs)
+        _logger.info("Weight-quantized eval score (W%dA32): %.02f", default_param_bw, weight_quantized_acc)
 
-        acc = self._eval_model_with_act_quantized(**kwargs)
-        _logger.info("Activation-quantized eval score (W32A%d): %.02f", default_output_bw, acc)
+        act_quantized_acc = self._eval_model_with_act_quantized(**kwargs)
+        _logger.info("Activation-quantized eval score (W32A%d): %.02f", default_output_bw, act_quantized_acc)
+
+        return fp32_acc, weight_quantized_acc, act_quantized_acc
