@@ -37,31 +37,33 @@
 # =============================================================================
 
 """Automatic Post-Training Quantization"""
-import copy
 from dataclasses import dataclass
-import functools
 import os
-from typing import Any, Collection, Callable, List, Optional, Tuple, Union
-import torch
-from torch.utils.data import DataLoader
+from typing import Any, Callable, List, Optional, Tuple
+import tensorflow as tf
+
 import jinja2
 
-from aimet_torch import utils
-from aimet_torch.adaround.adaround_weight import Adaround, AdaroundParameters
-from aimet_torch.cross_layer_equalization import equalize_model
-from aimet_torch.batch_norm_fold import fold_all_batch_norms
-from aimet_torch.quantsim import QuantizationSimModel
-from aimet_torch.utils import in_eval_mode
+from aimet_tensorflow.adaround.adaround_weight import Adaround, AdaroundParameters
+from aimet_tensorflow.cross_layer_equalization import equalize_model
+from aimet_tensorflow.batch_norm_fold import fold_all_batch_norms
+from aimet_tensorflow.quantsim import QuantizationSimModel
+from aimet_tensorflow.utils.graph_saver import load_model_from_meta
+from aimet_tensorflow.utils.common import (
+    create_input_feed_dict,
+    deepcopy_tf_session,
+    iterate_tf_dataset,
+)
 
-from aimet_common.auto_quant import Cache, Diagnostics
+from aimet_common.auto_quant import Diagnostics
 from aimet_common.defs import QuantScheme
 from aimet_common.utils import AimetLogger
 from aimet_common.quantsim import validate_quantsim_inputs
 
 
-_logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.AutoQuant)
+tf.compat.v1.disable_eager_execution()
 
-cache = Cache()
+_logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.AutoQuant)
 
 
 # The number of samples to be used for performance evaluation.
@@ -82,8 +84,8 @@ class AutoQuant:
     def __init__( # pylint: disable=too-many-arguments
             self,
             allowed_accuracy_drop: float,
-            unlabeled_dataset_iterable: Union[DataLoader, Collection],
-            eval_callback: Callable[[torch.nn.Module, Optional[int]], float],
+            unlabeled_dataset: tf.compat.v1.data.Dataset,
+            eval_callback: Callable[[tf.compat.v1.Session, Optional[int]], float],
             default_param_bw: int = 8,
             default_output_bw: int = 8,
             default_quant_scheme: QuantScheme = QuantScheme.post_training_tf_enhanced,
@@ -92,13 +94,10 @@ class AutoQuant:
     ) -> None:
         """
         :param allowed_accuracy_drop: Maximum allowed accuracy drop.
-        :param unlabeled_dataset_iterable: A collection (i.e. iterable with `__len__`)
-                that iterates over an unlabeled dataset used for encoding computation.
-                The values yielded by this iterable are expected to be able to be
-                passed directly to the model. By default, this iterable will
-                be also used for Adaround unless otherwise specified by
-                `self.set_adaround_params`.
-        :param eval_callback: A function that maps model and the number samples
+        :param unlabeled_dataset: An unlabeled dataset for encoding computation.
+                By default, this dataset will be also used for Adaround unless
+                otherwise specified by `self.set_adaround_params`.
+        :param eval_callback: A function that maps a tf session and the number of samples
                 to the evaluation score. This callback is expected to return a
                 scalar value representing the model performance evaluated
                 against exactly `N` samples, where `N` is the number of samples
@@ -123,59 +122,56 @@ class AutoQuant:
                                  default_output_bw,
                                  default_param_bw)
 
-        @functools.wraps(eval_callback)
-        def eval_callback_wrapper(model: torch.nn.Module,
-                                  num_samples: Optional[int]) -> float:
-            """
-            Wrapper to ensure that model is in eval mode before entering eval_callback.
-            """
-            with in_eval_mode(model), torch.no_grad():
-                return eval_callback(model, num_samples)
-
         self.allowed_accuracy_drop = allowed_accuracy_drop
-        self.eval_callback = eval_callback_wrapper
+        self.eval_callback = eval_callback
         self.default_param_bw = default_param_bw
         self.default_output_bw = default_output_bw
         self.default_quant_scheme = default_quant_scheme
         self.default_rounding_mode = default_rounding_mode
         self.default_config_file = default_config_file
 
-        def forward_pass_callback(model, _: Any = None):
-            device = utils.get_device(model)
-            with in_eval_mode(model), torch.no_grad():
-                for input_data in unlabeled_dataset_iterable:
-                    input_data = utils.change_tensor_device_placement(input_data, device)
-                    if isinstance(input_data, torch.Tensor):
-                        model(input_data)
-                    else:
-                        assert isinstance(input_data, (tuple, list))
-                        model(*input_data)
+        self._unlabeled_dataset = unlabeled_dataset
+        self._unlabled_dataset_length = None
 
-        self.forward_pass_callback = forward_pass_callback
+        self._adaround_params = None
 
-        self.adaround_params = AdaroundParameters(unlabeled_dataset_iterable,
-                                                  len(unlabeled_dataset_iterable))
+    @property
+    def adaround_params(self):
+        """Returns the adaround parameter."""
+        # If adaround_params is manually set, return it.
+        if self._adaround_params is not None:
+            return self._adaround_params
+        # Otherwise, return the default adaround params if the length of the
+        # dataset if known.
+        if self._unlabled_dataset_length is not None:
+            return AdaroundParameters(self._unlabeled_dataset,
+                                      self._unlabled_dataset_length)
+        return None
 
-    def _evaluate_model_performance(self, model) -> float:
+    def _evaluate_model_performance(self, sess: tf.compat.v1.Session) -> float:
         """
         Evaluate the model performance.
+
+        :param sess: tf.Session associated with the model to evaluate.
+        :return: Evaluation score.
         """
-        return self.eval_callback(model, NUM_SAMPLES_FOR_PERFORMANCE_EVALUATION)
+        return self.eval_callback(sess, NUM_SAMPLES_FOR_PERFORMANCE_EVALUATION)
 
     def set_adaround_params(self, adaround_params: AdaroundParameters) -> None:
         """
         Set Adaround parameters.
         If this method is not called explicitly by the user, AutoQuant will use
-        `unlabeled_dataset_iterable` (passed to `__init__`) for Adaround.
+        `unlabeled_dataset` (passed to `__init__`) for Adaround.
 
         :param adaround_params: Adaround parameters.
         """
-        self.adaround_params = adaround_params
+        self._adaround_params = adaround_params
 
     def _create_quantsim_and_encodings( # pylint: disable=too-many-arguments
             self,
-            model: torch.nn.Module,
-            dummy_input: Union[torch.Tensor, Tuple],
+            sess: tf.compat.v1.Session,
+            starting_op_names: List[str],
+            output_op_names: List[str],
             quant_scheme: QuantScheme = None,
             rounding_mode: str = None,
             default_output_bw: int = None,
@@ -187,8 +183,11 @@ class AutoQuant:
         Create a QuantizationSimModel and compute encoding. If `encoding_path` is not None,
         it is prioritized over other arguments (`default_output_bw`, `defalt_param_bw`, ...).
 
-        :param model: Model to quantize.
-        :param dummy_input: Dummy input to the model.
+        NOTE: Input session is not mutated.
+
+        :param sess: The input model as session to add quantize ops to.
+        :param starting_op_names: List of starting op names of the model.
+        :param output_op_names: List of output op names of the model.
         :param quant_scheme: Quantization scheme. Defaults to self.default_quant_scheme.
         :param rounding_mode: Rounding mode. Defaults to self.default_rounding_mode.
         :param default_output_bw: Default bitwidth (4-31) to use for quantizing layer inputs andoutputs.
@@ -207,214 +206,188 @@ class AutoQuant:
             default_param_bw=(default_param_bw or self.default_param_bw),
             config_file=(config_file or self.default_config_file),
         )
-        sim = QuantizationSimModel(model, dummy_input, **kwargs)
+        with deepcopy_tf_session(sess) as sess: # pylint: disable=redefined-argument-from-local
+            sim = QuantizationSimModel(sess, starting_op_names, output_op_names, **kwargs)
 
         if encoding_path:
             sim.set_and_freeze_param_encodings(encoding_path)
 
-        sim.compute_encodings(self.forward_pass_callback, None)
+        def forward_pass_callback(sess: tf.compat.v1.Session, _: Any = None):
+            output_ops = [
+                sess.graph.get_operation_by_name(op_name)
+                for op_name in output_op_names
+            ]
+
+            count = 0
+            for inputs in iterate_tf_dataset(self._unlabeled_dataset):
+                feed_dict = create_input_feed_dict(sess.graph, starting_op_names, inputs)
+                sess.run(output_ops, feed_dict=feed_dict)
+                count += 1
+
+            self._unlabled_dataset_length = count
+
+        sim.compute_encodings(forward_pass_callback, None)
 
         return sim
 
-    # pylint: disable=no-self-use
-    @cache.mark("batchnorm_folding")
-    def _apply_batchnorm_folding(
+    def _apply_batchnorm_folding( # pylint: disable=no-self-use
             self,
-            model: torch.nn.Module,
-            dummy_input: Union[torch.Tensor, Tuple],
-    ) -> Tuple[torch.nn.Module, List[Tuple]]:
+            sess: tf.compat.v1.Session,
+            starting_op_names: List[str],
+            output_op_names: List[str],
+    ) -> Tuple[tf.compat.v1.Session, List[Tuple[tf.Operation, tf.Operation]]]:
         """
         Apply batchnorm folding.
 
-        NOTE: Input model is not mutated.
+        NOTE: Input session is not mutated.
 
-        :param model: Model to apply batchnorm folding.
-        :param dummy_input: Dummy input to the model.
-        :return: Output model and folded pairs.
+        :param sess: tf.Session associated with the model to apply cle.
+        :param starting_op_names: List of starting op names of the model.
+        :param output_op_names: List of output op names of the model.
+        :return: Output session and folded pairs.
         """
-        model = copy.deepcopy(model)
-        if isinstance(dummy_input, torch.Tensor):
-            input_shape = tuple(dummy_input.shape)
-        else:
-            input_shape = [tuple(x.shape) for x in dummy_input]
-        folded_pairs = fold_all_batch_norms(model, input_shape)
-        return model, folded_pairs
+        with deepcopy_tf_session(sess) as sess: # pylint: disable=redefined-argument-from-local
+            return fold_all_batch_norms(sess, starting_op_names, output_op_names)
 
-    # pylint: disable=no-self-use
-    @cache.mark("cle")
-    def _apply_cross_layer_equalization(
+    def _apply_cross_layer_equalization( # pylint: disable=no-self-use
             self,
-            model: torch.nn.Module,
-            dummy_input: Union[torch.Tensor, Tuple],
-    ) -> torch.nn.Module:
+            sess: tf.compat.v1.Session,
+            starting_op_names: List[str],
+            output_op_names: List[str],
+    ) -> tf.compat.v1.Session:
         """
         Apply cross-layer equalization.
 
-        NOTE: Input model is not mutated.
+        NOTE: Input session is not mutated.
 
-        :param model: Model to apply cross-layer-equalization.
-        :param dummy_input: Dummy input to the model.
-        :return: Output model.
+        :param sess: tf.Session associated with the model to apply batchnorm folding.
+        :param starting_op_names: List of starting op names of the model.
+        :param output_op_names: List of output op names of the model.
+        :return: Output session.
         """
-        model = copy.deepcopy(model)
-        if isinstance(dummy_input, torch.Tensor):
-            input_shape = tuple(dummy_input.shape)
-        else:
-            input_shape = [tuple(x.shape) for x in dummy_input]
-        equalize_model(model, input_shape)
-        return model
+        with deepcopy_tf_session(sess) as sess: # pylint: disable=redefined-argument-from-local
+            return equalize_model(sess, starting_op_names, output_op_names)
 
-    @cache.mark("adaround")
     def _apply_adaround(
             self,
-            model: torch.nn.Module,
-            dummy_input: Union[torch.Tensor, Tuple],
+            sess: tf.compat.v1.Session,
+            starting_op_names: List[str],
+            output_op_names: List[str],
             results_dir: str,
-    ) -> Tuple[torch.nn.Module, str]:
+    ) -> Tuple[tf.compat.v1.Session, str]:
         """
         Apply adaround.
 
-        NOTE1: Input model is not mutated.
-        NOTE2: Parameters `param_bw_override_list` and `ignore_quant_ops_list` are always set to None.
-
-        :param model: Model to apply adaround.
-        :param dummy_input: Dummy input to the model.
+        :param sess: tf.Session associated with the model to apply adaround.
+        :param starting_op_names: List of starting op names of the model.
+        :param output_op_names: List of output op names of the model.
         :param results_dir: Directory to save the results of AdaRound.
-        :return: Output model and the path to the parameter encoding file.
+        :return: Output session and the path to the parameter encoding file.
         """
         # NOTE: We dont need to make a deepcopy of model here, since Adaround.apply_adaround
         # internally creates and returns a deepcopy of model.
+        if self.adaround_params is None:
+            raise RuntimeError
 
         filename_prefix = "adaround"
         adaround_encoding_path = os.path.join(results_dir,
                                               "{}.encodings".format(filename_prefix))
-        model = Adaround.apply_adaround(model,
-                                        dummy_input,
-                                        self.adaround_params,
-                                        path=results_dir,
-                                        filename_prefix=filename_prefix,
-                                        default_param_bw=self.default_param_bw,
-                                        param_bw_override_list=None,
-                                        ignore_quant_ops_list=None,
-                                        default_quant_scheme=self.default_quant_scheme,
-                                        default_config_file=self.default_config_file)
+        sess = Adaround.apply_adaround(sess,
+                                       starting_op_names,
+                                       output_op_names,
+                                       self.adaround_params,
+                                       path=results_dir,
+                                       filename_prefix=filename_prefix,
+                                       default_param_bw=self.default_param_bw,
+                                       default_quant_scheme=self.default_quant_scheme,
+                                       default_is_symmetric=False)
 
-        return model, adaround_encoding_path
+        return sess, adaround_encoding_path
 
     def apply( # pylint: disable=protected-access, too-many-locals, too-many-statements
             self,
-            fp32_model: torch.nn.Module,
-            dummy_input_on_cpu: Union[torch.Tensor, Tuple],
-            dummy_input_on_gpu: Optional[Union[torch.Tensor, Tuple]] = None,
+            fp32_sess: tf.compat.v1.Session,
+            starting_op_names: List[str],
+            output_op_names: List[str],
             results_dir: str = "/tmp",
-            cache_id: str = None,
-    ) -> Tuple[torch.nn.Module, float, str]:
+    ) -> Tuple[tf.compat.v1.Session, float, str]:
         """
         Apply post-training quantization techniques.
 
-        :param fp32_model: Model to apply PTQ techniques.
-        :param dummy_input_on_cpu: Dummy input to the model in CPU memory.
-        :param dummy_input_on_gpu: Dummy input to the model in GPU memory.
-            This parameter is required if and only if the fp32_model is on GPU.
+        :param fp32_sess: tf.Session associated with the model to apply PTQ techniques.
+        :param starting_op_names: List of starting op names of the model.
+        :param output_op_names: List of output op names of the model.
         :param results_dir: Directory to save the results.
-        :param cache_id: A string that composes a cache id in combination with results_dir.
-            If specified, AutoQuant will load/save the PTQ results from/to the file system
-            if previous PTQ results produced under the same results_dir and cache_id exist,
-        :return: Tuple of  (best model, eval score, encoding path front).
-        :raises:
-            - ValueError if the model is on GPU and dummy_input_on_gpu is not specified.
+        :return: Tuple of  (best session, eval score, encoding path front).
         """
         return self._apply_helper(self._auto_quant_main,
-                                  fp32_model,
-                                  dummy_input_on_cpu,
-                                  dummy_input_on_gpu,
-                                  results_dir,
-                                  cache_id)
+                                  fp32_sess,
+                                  starting_op_names,
+                                  output_op_names,
+                                  results_dir)
 
     def _apply_helper( # pylint: disable=protected-access, too-many-locals, too-many-statements
             self,
             auto_quant_main_fn: Callable,
-            fp32_model: torch.nn.Module,
-            dummy_input_on_cpu: Union[torch.Tensor, Tuple],
-            dummy_input_on_gpu: Optional[Union[torch.Tensor, Tuple]] = None,
+            fp32_sess: tf.compat.v1.Session,
+            starting_op_names: List[str],
+            output_op_names: List[str],
             results_dir: str = "/tmp",
-            cache_id: str = None,
-    ) -> Tuple[torch.nn.Module, float, str]:
+    ) -> Tuple[tf.compat.v1.Session, float, str]:
         """
         Helper for self.apply().
 
-        :param auto_quant_main_fn: Function that implements the main logic of AutoQuant.
-        :param fp32_model: Model to apply PTQ techniques.
-        :param dummy_input_on_cpu: Dummy input to the model in CPU memory.
-        :param dummy_input_on_gpu: Dummy input to the model in GPU memory.
-            This parameter is required if and only if the fp32_model is on GPU.
+        :param fp32_sess: tf.Session associated with the model to apply PTQ techniques.
+        :param starting_op_names: List of starting op names of the model.
+        :param output_op_names: List of output op names of the model.
         :param results_dir: Directory to save the results.
-        :param cache_id: A string that composes a cache id in combination with results_dir.
-            If specified, AutoQuant will load/save the PTQ results from/to the file system
-            if previous PTQ results produced under the same results_dir and cache_id exist,
-        :return: Tuple of  (best model, eval score, encoding path front).
-        :raises:
-            - ValueError if the model is on GPU and dummy_input_on_gpu is not specified.
+        :return: Tuple of  (best session, eval score, encoding path front).
         """
         results_dir = os.path.abspath(results_dir)
         os.makedirs(results_dir, exist_ok=True)
 
-        if utils.get_device(fp32_model) == torch.device("cpu"):
-            dummy_input = dummy_input_on_cpu
-        else:
-            if dummy_input_on_gpu is None:
-                raise ValueError(
-                    "If model is placed on GPU, dummy_input_on_gpu must be also provided."
-                )
-            dummy_input = dummy_input_on_gpu
+        _logger.info("Starting AutoQuant")
 
-        if cache_id is None:
-            cache_dir = None
-        else:
-            cache_dir = os.path.join(results_dir, ".auto_quant_cache", cache_id)
+        fp32_acc = self._evaluate_model_performance(fp32_sess)
+        target_acc = fp32_acc - self.allowed_accuracy_drop
 
-        with in_eval_mode(fp32_model):
-            with cache.enable(cache_dir):
-                _logger.info("Starting AutoQuant")
+        _logger.info("Target eval score: %.02f", target_acc)
+        _logger.info("FP32 eval score (W32A32): %.02f", fp32_acc)
 
-                fp32_acc = self._evaluate_model_performance(fp32_model)
-                target_acc = fp32_acc - self.allowed_accuracy_drop
+        eval_manager = _EvalManager(
+            quantsim_factory=self._create_quantsim_and_encodings,
+            eval_func=self._evaluate_model_performance,
+            starting_op_names=starting_op_names,
+            output_op_names=output_op_names,
+            results_dir=results_dir,
+        )
 
-                _logger.info("Target eval score: %.02f", target_acc)
-                _logger.info("FP32 eval score (W32A32): %.02f", fp32_acc)
+        ret = auto_quant_main_fn(fp32_sess, target_acc,
+                                 starting_op_names, output_op_names,
+                                 eval_manager, results_dir)
 
-                eval_manager = _EvalManager(
-                    quantsim_factory=self._create_quantsim_and_encodings,
-                    eval_func=self._evaluate_model_performance,
-                    dummy_input=dummy_input,
-                    dummy_input_on_cpu=dummy_input_on_cpu,
-                    results_dir=results_dir,
-                )
+        _, acc, *_ = ret
+        _logger.info("Best eval score: %.02f", acc)
 
-                ret = auto_quant_main_fn(fp32_model, target_acc, dummy_input,
-                                         eval_manager, results_dir)
+        if acc < target_acc:
+            _logger.info(
+                "AutoQuant is unable to match the target accuracy. "
+                "Consider Quantization Aware Training."
+            )
 
-                _, acc, *_ = ret
-                _logger.info("Best eval score: %.02f", acc)
+        eval_manager.export_diagnostics()
 
-                if acc < target_acc:
-                    _logger.info(
-                        "AutoQuant is unable to match the target accuracy. "
-                        "Consider Quantization Aware Training."
-                    )
-
-                eval_manager.export_diagnostics()
-
-                return ret
+        return ret
 
     def _auto_quant_main( # pylint: disable=protected-access, too-many-locals, too-many-statements
             self,
-            fp32_model: torch.nn.Module,
+            fp32_sess: tf.compat.v1.Session,
             target_acc: float,
-            dummy_input: Union[torch.Tensor, Tuple],
+            starting_op_names: List[str],
+            output_op_names: List[str],
             eval_manager: "_EvalManager",
             results_dir: str = "/tmp",
-    ) -> Tuple[torch.nn.Module, float, str]:
+    ) -> Tuple[tf.compat.v1.Session, float, str]:
         """
         Helper function of apply().
 
@@ -426,46 +399,53 @@ class AutoQuant:
         :param results_dir: Directory to save the results.
         :return: Tuple of  (best model, eval score, encoding path).
         """
-        with eval_manager.analysis_session("Weight Quantization Sensitivity") as sess:
-            acc = sess.eval(fp32_model, default_output_bw=32)
-            sess.diagnostics.add(
+        with eval_manager.analysis_session("Weight Quantization Sensitivity") as _sess:
+            acc = _sess.eval(fp32_sess, default_output_bw=32)
+            _sess.diagnostics.add(
                 f"Weight-quantized eval score (W{self.default_param_bw}A32): {acc:.02f}"
             )
 
-        with eval_manager.analysis_session("Activation Quantization Sensitivity") as sess:
-            acc = sess.eval(fp32_model, default_param_bw=32)
-            sess.diagnostics.add(
+        with eval_manager.analysis_session("Activation Quantization Sensitivity") as _sess:
+            acc = _sess.eval(fp32_sess, default_param_bw=32)
+            _sess.diagnostics.add(
                 f"Activation-quantized eval score (W32A{self.default_output_bw}): {acc:.02f}"
             )
 
         # Batchnorm Folding
-        with eval_manager.ptq_session("Batchnorm Folding") as sess:
-            model, folded_pairs = self._apply_batchnorm_folding(fp32_model, dummy_input)
+        with eval_manager.ptq_session("Batchnorm Folding") as _sess:
+            sess, folded_pairs = self._apply_batchnorm_folding(fp32_sess,
+                                                               starting_op_names,
+                                                               output_op_names)
             for conv, bn in folded_pairs:
-                sess.diagnostics.add(f"{conv} was merged with {bn}.")
-            sess.set_ptq_result(model)
+                _sess.diagnostics.add(f"{conv} was merged with {bn}.")
+            _sess.set_ptq_result(sess)
 
-        _, model, encoding_path, acc = eval_manager.get_best_ptq_result()
+        _, sess, encoding_path, acc = eval_manager.get_best_ptq_result()
         if acc >= target_acc:
-            return model, acc, encoding_path
+            return sess, acc, encoding_path
 
         # Cross-Layer Equalization
-        with eval_manager.ptq_session("Cross-Layer Equalization") as sess:
-            model = self._apply_cross_layer_equalization(fp32_model, dummy_input)
-            sess.set_ptq_result(model)
+        with eval_manager.ptq_session("Cross-Layer Equalization") as _sess:
+            sess = self._apply_cross_layer_equalization(fp32_sess,
+                                                        starting_op_names,
+                                                        output_op_names)
+            _sess.set_ptq_result(sess)
 
-        _, model, encoding_path, acc = eval_manager.get_best_ptq_result()
+        _, sess, encoding_path, acc = eval_manager.get_best_ptq_result()
         if acc >= target_acc:
-            return model, acc, encoding_path
+            return sess, acc, encoding_path
 
         # AdaRound
-        with eval_manager.ptq_session("AdaRound") as sess:
-            model, encoding_path = self._apply_adaround(model, dummy_input, results_dir)
-            sess.set_ptq_result(model, encoding_path=encoding_path)
+        with eval_manager.ptq_session("AdaRound") as _sess:
+            sess, encoding_path = self._apply_adaround(sess,
+                                                       starting_op_names,
+                                                       output_op_names,
+                                                       results_dir)
+            _sess.set_ptq_result(sess, encoding_path=encoding_path)
 
-        _, model, encoding_path, acc = eval_manager.get_best_ptq_result()
+        _, sess, encoding_path, acc = eval_manager.get_best_ptq_result()
 
-        return model, acc, encoding_path
+        return sess, acc, encoding_path
 
 
 class _EvalManager:
@@ -474,9 +454,9 @@ class _EvalManager:
     """
     def __init__(self,
                  quantsim_factory: Callable,
-                 eval_func: Callable[[torch.nn.Module], float],
-                 dummy_input: Union[torch.Tensor, Tuple],
-                 dummy_input_on_cpu: Union[torch.Tensor, Tuple],
+                 eval_func: Callable[[tf.compat.v1.Session], float],
+                 starting_op_names: List[str],
+                 output_op_names: List[str],
                  results_dir: str):
         """
         :param quantsim_factory: A factory function that returns QuantizationSimModel.
@@ -487,8 +467,8 @@ class _EvalManager:
         """
         self._quantsim_factory = quantsim_factory
         self._eval_func = eval_func
-        self._dummy_input = dummy_input
-        self._dummy_input_on_cpu = dummy_input_on_cpu
+        self._starting_op_names = starting_op_names
+        self._output_op_names = output_op_names
         self._results_dir = results_dir
 
         os.makedirs(self._results_dir, exist_ok=True)
@@ -496,7 +476,7 @@ class _EvalManager:
         self._all_sessions: List[_EvalSession] = []
         self._ptq_sessions: List[_PtqSession] = []
 
-    def get_best_ptq_result(self) -> Tuple[str, torch.nn.Module, str, float]:
+    def get_best_ptq_result(self) -> Tuple[str, tf.compat.v1.Session, str, float]:
         """
         Get the results with the highest evaluation score among the ptq results evaluated so far.
         :return: The best evaluation result so far, including the tag, model object,
@@ -540,8 +520,8 @@ class _EvalManager:
         session = session_cls(title,
                               self._quantsim_factory,
                               self._eval_func,
-                              self._dummy_input,
-                              self._dummy_input_on_cpu,
+                              self._starting_op_names,
+                              self._output_op_names,
                               results_dir=os.path.join(self._results_dir, ".trace"))
         self._all_sessions.append(session)
         return session
@@ -585,9 +565,9 @@ class _EvalSession:
             self,
             title: str,
             quantsim_factory: Callable,
-            eval_func: Callable[[torch.nn.Module], float],
-            dummy_input: Union[torch.Tensor, Tuple],
-            dummy_input_on_cpu: Union[torch.Tensor, Tuple],
+            eval_func: Callable[[tf.compat.v1.Session], float],
+            starting_op_names: List[str],
+            output_op_names: List[str],
             results_dir: str
     ):
         """
@@ -601,8 +581,8 @@ class _EvalSession:
         self._title = title
         self._quantsim_factory = quantsim_factory
         self._eval_func = eval_func
-        self._dummy_input = dummy_input
-        self._dummy_input_on_cpu = dummy_input_on_cpu
+        self._starting_op_names = starting_op_names
+        self._output_op_names = output_op_names
         self._results_dir = results_dir
 
         os.makedirs(self._results_dir, exist_ok=True)
@@ -624,15 +604,18 @@ class _EvalSession:
         """Getter of self._diagnostics."""
         return self._diagnostics
 
-    def eval(self, model: torch.nn.Module, **kwargs):
+    def eval(self, sess: tf.compat.v1.Session, **kwargs):
         """
         Evaluate the model.
-        :param model: Model to evaluate.
+        :param sess: tf.Session associated with the model to evaluate.
         :param **kwargs: Additional arguments to the quantsim factory.
         :return: Eval score.
         """
-        sim = self._quantsim_factory(model, self._dummy_input, **kwargs)
-        acc = self._eval_func(sim.model)
+        sim = self._quantsim_factory(sess,
+                                     self._starting_op_names,
+                                     self._output_op_names,
+                                     **kwargs)
+        acc = self._eval_func(sim.session)
         return acc
 
     def __enter__(self):
@@ -663,17 +646,17 @@ class _PtqSession(_EvalSession):
         :param accuracy: Accuracy of the model.
         """
         tag: str
-        model_path: str
-        device: torch.device
+        meta_path: str
+        checkpoint_path: str
         encoding_path: str
         accuracy: float
 
-        def load_model(self):
+        def load_model(self) -> tf.compat.v1.Session:
             """
             Load model.
             :return: Loaded model.
             """
-            return torch.load(self.model_path).to(self.device)
+            return load_model_from_meta(self.meta_path, self.checkpoint_path)
 
     def __init__(self, *args, **kwargs):
         super(_PtqSession, self).__init__(*args, **kwargs)
@@ -688,7 +671,7 @@ class _PtqSession(_EvalSession):
 
     def set_ptq_result(
             self,
-            model: torch.nn.Module = None,
+            sess: tf.compat.v1.Session = None,
             sim: QuantizationSimModel = None,
             acc: float = None,
             **kwargs
@@ -700,7 +683,7 @@ class _PtqSession(_EvalSession):
         1) If sim and acc is specified, save them as the result of this session.
         2) If model is specified, evaluate the quantized accuracy of the model and save the result.
 
-        :param model: Result of PTQ.
+        :param sess: Result of PTQ.
         :param sim: Result of PTQ. The quamtization encoding (compute_encodings()) is
                     assumed to have been computed in advance.
         :param acc: Eval score.
@@ -709,12 +692,15 @@ class _PtqSession(_EvalSession):
         """
         if sim is None:
             assert acc is None
-            assert model is not None
-            sim = self._quantsim_factory(model, self._dummy_input, **kwargs)
-            acc = self._eval_func(sim.model)
+            assert sess is not None
+            sim = self._quantsim_factory(sess,
+                                         self._starting_op_names,
+                                         self._output_op_names,
+                                         **kwargs)
+            acc = self._eval_func(sim.session)
         else:
             assert acc is not None
-            assert model is None
+            assert sess is None
 
         self._set_ptq_result(sim, acc)
 
@@ -732,31 +718,29 @@ class _PtqSession(_EvalSession):
                 "sess.eval() can be called only once per each _EvalSession instance."
             )
 
-        device = utils.get_device(sim.model)
-        model_path, encoding_path = self._export(sim)
+        meta_path, checkpoint_path, encoding_path = self._export(sim)
         self._ptq_result = _PtqSession.PtqResult(
             tag=self._filename,
-            model_path=model_path,
-            device=device,
+            meta_path=meta_path,
+            checkpoint_path=checkpoint_path,
             encoding_path=encoding_path,
             accuracy=acc
         )
         return self._ptq_result
 
-    def _export(self, sim: QuantizationSimModel) -> Tuple[str, str]:
+    def _export(self, sim: QuantizationSimModel) -> Tuple[str, str, str]:
         """
         Export quantsim.
         :param sim: QuantizationSimModel object to export.
         :return: The paths where model and encoding are saved
         """
-        sim.export(path=self._results_dir,
-                   filename_prefix=self._filename,
-                   dummy_input=self._dummy_input_on_cpu)
-        model_path = os.path.join(self._results_dir, f"{self._filename}.pth")
-        encoding_path = os.path.join(self._results_dir, f"{self._filename}.encodings")
-        _logger.info("The results of %s is saved in %s and %s.",
-                     self._title, model_path, encoding_path)
-        return model_path, encoding_path
+        sim.export(path=self._results_dir, filename_prefix=self._filename)
+        checkpoint_path = os.path.join(self._results_dir, self._filename)
+        meta_path = f"{checkpoint_path}.meta"
+        encoding_path = f"{checkpoint_path}.encodings"
+        _logger.info("The results of %s is saved in %s, %s, and %s.",
+                     self._title, checkpoint_path, meta_path, encoding_path)
+        return meta_path, checkpoint_path, encoding_path
 
     def __exit__(self, exc_type, exc_value, _):
         """Raises error if set_ptq_result is not called."""

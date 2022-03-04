@@ -51,7 +51,7 @@ import onnx
 import aimet_common
 from aimet_common.utils import AimetLogger, save_json_yaml
 from aimet_common.defs import QuantScheme, QuantizationDataType
-from aimet_common.quantsim import encoding_version
+from aimet_common.quantsim import encoding_version, validate_quantsim_inputs
 from aimet_common.quant_utils import get_conv_accum_bounds
 
 from aimet_torch.quantsim_config.quantsim_config import QuantSimConfigurator
@@ -144,9 +144,9 @@ class QuantizationSimModel:
                                  default_output_bw=16 and default_param_bw=16
         """
         # Perform sanity checks on inputs
+        validate_quantsim_inputs(quant_scheme, rounding_mode, default_output_bw, default_param_bw,
+                                 default_data_type)
 
-        QuantizationSimModel._validate_quantsim_inputs(quant_scheme, rounding_mode, default_output_bw, default_param_bw,
-                                                       default_data_type)
         # save some parameters
         if in_place:
             self.model = model
@@ -576,34 +576,22 @@ class QuantizationSimModel:
                                   default_param_bw: int, data_type: QuantizationDataType = QuantizationDataType.int):
         """
         Perform sanity checks on inputs to QuantSim
+
+        NOTE: This method will be deprecated.
+              Call aimet_common.quantsim.validate_quantsim_inputs directly instead.
+
         :param quant_scheme: Quantization scheme. Supported options are 'tf_enhanced' or 'tf' or using Quant Scheme Enum
                              QuantScheme.post_training_tf or QuantScheme.post_training_tf_enhanced
         :param rounding_mode: Rounding mode. Supported options are 'nearest' or 'stochastic'
         :param default_output_bw: Default bitwidth (4-31) to use for quantizing layer inputs and outputs
         :param default_param_bw: Default bitwidth (4-31) to use for quantizing layer parameters
+        :param data_type: Data type of the quantized values (int or float).
         """
-        # sanity checks
-        if quant_scheme not in ('tf_enhanced', 'tf') and not isinstance(quant_scheme, QuantScheme):
-            raise ValueError('Parameter quantization mode is not a valid selection. Valid selections are tf, '
-                             'tf_enhanced, QuantScheme.post_training_tf, QuantScheme.post_training_tf_enhanced')
-
-        if rounding_mode not in ('nearest', 'stochastic'):
-            raise ValueError('Parameter round mode is not a valid selection. Valid selections are nearest or '
-                             'stochastic')
-
-        if default_param_bw < 4 or default_param_bw > 32:
-            raise ValueError('Default bitwidth for parameters must be between 4 and 32, not ' + str(default_param_bw))
-
-        if default_output_bw < 4 or default_output_bw > 32:
-            raise ValueError('Activation bitwidth must be between 4 and 32, not ' + str(default_output_bw))
-
-        if data_type == QuantizationDataType.float and default_output_bw != 16:
-            raise ValueError(
-                'float data_type can only be used when default_output_bw set to 16, not ' + str(default_output_bw))
-
-        if data_type == QuantizationDataType.float and default_param_bw != 16:
-            raise ValueError(
-                'float data_type can only be used when default_param_bw set to 16, not ' + str(default_output_bw))
+        validate_quantsim_inputs(quant_scheme,
+                                 rounding_mode,
+                                 default_output_bw,
+                                 default_param_bw,
+                                 data_type)
 
     @staticmethod
     def _find_next_downstream_modules(op):
