@@ -182,9 +182,9 @@ class AdaroundOptimizer:
 
             # Graph is created only once
             if cur_iteration == 0:
-                train_op, loss_tensors = self._train_step(wrapper, act_func, optimizer, self._inp_tensor,
-                                                          self._out_tensor, opt_params.reg_param, self._warm_start_tensor,
-                                                          self._beta_tensor, channels_index)
+                train_op, loss_tensors = self.train_step(wrapper, act_func, optimizer, self._inp_tensor,
+                                                         self._out_tensor, opt_params.reg_param, self._warm_start_tensor,
+                                                         self._beta_tensor, channels_index)
                 self._optimizer_session.run(tf.compat.v1.global_variables_initializer())
                 total_loss_tensor, recon_loss_tensor, round_loss_tensor = loss_tensors
 
@@ -206,9 +206,9 @@ class AdaroundOptimizer:
         return hard_rounded_weight, soft_rounded_weight
 
     @staticmethod
-    def _train_step(wrapper: AdaroundWrapper, act_func: Callable, optimizer, inp_tensor: tf.Tensor,
-                    orig_out_tensor: tf.Tensor, reg_param: float, warm_start: Union[bool, tf.Tensor],
-                    beta: Union[float, tf.Tensor], channels_index: int):
+    def train_step(wrapper: AdaroundWrapper, act_func: Callable, optimizer, inp_tensor: tf.Tensor,
+                   orig_out_tensor: tf.Tensor, reg_param: float, warm_start: Union[bool, tf.Tensor],
+                   beta: Union[float, tf.Tensor], channels_index: int):
         """
         Common implementation between TensorFlow eager and graph mode
         :param wrapper: Adaround wrapper

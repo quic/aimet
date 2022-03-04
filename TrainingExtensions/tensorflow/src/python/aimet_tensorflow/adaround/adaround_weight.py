@@ -165,7 +165,7 @@ class Adaround:
             WeightTensorUtils.update_tensor_for_op(session_soft_rounded_weight, soft_rounded_op, soft_rounded_weight)
 
         # Export quantization encodings to JSON-formatted file at provided path
-        cls._export_encoding_to_json(path, filename_prefix, param_encodings)
+        cls.export_encoding_to_json(path, filename_prefix, param_encodings)
 
         # Close intermediate session
         session_hard_rounded_weight.close()
@@ -225,7 +225,7 @@ class Adaround:
         return act_func
 
     @classmethod
-    def _export_encoding_to_json(cls, path: str, filename_prefix: str, param_encodings: Dict):
+    def export_encoding_to_json(cls, path: str, filename_prefix: str, param_encodings: Dict):
         """
         Save Adadrounded op's parameter encodings to JSON file
         :param path: path where to store param encodings
