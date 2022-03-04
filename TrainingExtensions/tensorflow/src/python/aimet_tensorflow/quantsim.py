@@ -45,8 +45,8 @@ import numpy as np
 import tensorflow as tf
 from tensorflow.python.framework import ops as tf_ops
 from packaging import version
-from aimet_common.defs import QuantScheme
-from aimet_common.quantsim import gate_min_max, calculate_delta_offset, encoding_version
+from aimet_common.defs import QuantScheme, QuantizationDataType
+from aimet_common.quantsim import gate_min_max, calculate_delta_offset, encoding_version, validate_quantsim_inputs
 from aimet_common.quant_utils import get_conv_accum_bounds
 from aimet_common.utils import AimetLogger, save_json_yaml
 from aimet_tensorflow import graph_editor
@@ -153,18 +153,11 @@ class QuantizationSimModel:
 
         """
         # sanity checks
-        if quant_scheme not in ['tf_enhanced', 'tf'] and not isinstance(quant_scheme, QuantScheme):
-            raise ValueError('Parameter quantization scheme is not a valid selection. ')
-
-        if rounding_mode not in ('nearest', 'stochastic'):
-            raise ValueError('Parameter round mode is not a valid selection. Valid selections are nearest or '
-                             'stochastic')
-
-        if default_param_bw < 4 or default_param_bw > 32:
-            raise ValueError('Default bitwidth for parameters must be between 4 and 32, not ' + str(default_param_bw))
-
-        if default_output_bw < 4 or default_output_bw > 32:
-            raise ValueError('Activation bitwidth must be between 4 and 32, not ' + str(default_output_bw))
+        validate_quantsim_inputs(quant_scheme,
+                                 rounding_mode,
+                                 default_output_bw,
+                                 default_param_bw,
+                                 data_type=QuantizationDataType.int)
 
         self.session = session
 

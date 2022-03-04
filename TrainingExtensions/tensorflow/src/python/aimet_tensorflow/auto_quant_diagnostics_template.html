@@ -1,0 +1,14 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    {{ head }}
+  </head>
+  <body>
+    {% for title, diagnostics in body.items() %}
+      <h1> {{ title }} </h1>
+      {% for line in diagnostics %}
+        {{ line.get_html_elem() }}
+      {% endfor %}
+    {% endfor %}
+  </body>
+</html>

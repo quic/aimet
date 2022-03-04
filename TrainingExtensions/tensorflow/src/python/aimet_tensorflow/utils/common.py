@@ -36,13 +36,15 @@
 #  @@-COPYRIGHT-END-@@
 # =============================================================================
 """ common TF utilities """
-from typing import List, Union, Tuple, Dict, Set
+from typing import List, Union, Tuple, Dict, Set, Iterable, Iterator, Callable
+import itertools
 
 import pickle
 import os
 import numpy as np
 import tensorflow as tf
 from aimet_common.utils import AimetLogger
+from aimet_tensorflow.utils.graph_saver import save_and_load_graph
 
 logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Utils)
 
@@ -70,44 +72,15 @@ onnx_tf_conn_graph_type_pairs = [
 ]
 
 
-def iter_first_x(dataset: tf.data.Dataset, num_batches: int):
+def iter_first_x(dataset: tf.compat.v1.data.Dataset, num_batches: int):
     """
      Return a generator for the first num_batches batches in a given dataset
     :param dataset: tf.data.Dataset object
     :param num_batches: number of batches
     :return:
     """
-    counter = 0
-
-    # creating one shot iterator ops in same graph as dataset ops
-    # TODO: this will keep adding iterator ops in the same graph every time this function is being called, need
-    #  better solution (reinitializable iterator)
-    # pylint: disable=protected-access
-    with dataset._graph.as_default():
-
-        iterator = tf.compat.v1.data.make_one_shot_iterator(dataset)
-        # create iterator graph element.  This does not actually get the data, but makes a tensor which must be
-        # evaluated.
-        next_element = iterator.get_next()
-
-    # creating session with graph that has dataset and iterator ops
-    with tf.compat.v1.Session(graph=dataset._graph) as sess:
-
-        while counter < num_batches:
-            try:
-                batch_data = sess.run(next_element)
-
-            except tf.errors.OutOfRangeError:
-                # if no data remains in the dataset, instead of throwing out of range error,
-                # treat it as if it were the end of the iteration
-                logger.info('dataset ran out of elements, stopping after %s batches', counter)
-                break
-
-            yield batch_data
-            counter += 1
-
-    # close session
-    sess.close()
+    iterator = iterate_tf_dataset(dataset)
+    yield from itertools.islice(iterator, num_batches)
 
 
 def change_out_act_shape_to_channels_first(op: tf.Operation) -> List:
@@ -430,3 +403,137 @@ def create_rand_tensors_given_shapes(input_shape: Union[Tuple, List[Tuple]]) -> 
         rand_tensors.append(np.random.rand(*shape))
 
     return rand_tensors
+
+
+def deepcopy_tf_session(sess: tf.compat.v1.Session) -> tf.compat.v1.Session:
+    """
+    Create a deep copy of a tensorflow Session.
+    :param sess: Session to copy.
+    :returns: Copied session.
+    """
+    return save_and_load_graph("/tmp/tf_session_copy", sess)
+
+
+_tf_dataset_iterables: Dict[tf.compat.v1.data.Dataset, List["_TfDatasetIterable"]]\
+    = dict()
+
+
+def iterate_tf_dataset(dataset: tf.compat.v1.data.Dataset) -> Iterator[tf.Tensor]:
+    """
+    Get or create a reusable iterator that iterates over the dataset.
+    This function instantiates and caches a tf.data.Iterator object corresponding
+    to the input dataset, and tries to reuse the same tf.data.Iterator if possible
+    to avoid instantiating redundant tf.data.Iterators.
+
+    NOTE1: The type of the returned object is Python iterator, not tf.data.Iterator.
+    NOTE2: This is a stateful function and is not thread-safe.
+
+    :param dataset: Dataset to iterate over.
+    :return: Iterator that iterates over the input dataset.
+    """
+
+    # If there is a free iterable in the cache, use it.
+    if dataset in _tf_dataset_iterables:
+        iterables = _tf_dataset_iterables[dataset]
+        for it in iterables:
+            if not it.is_busy():
+                return iter(it)
+
+    # Create a new iterable.
+    it = _TfDatasetIterable(dataset)
+    if dataset in _tf_dataset_iterables:
+        iterables = _tf_dataset_iterables[dataset]
+    else:
+        iterables = []
+        _tf_dataset_iterables[dataset] = iterables
+
+    iterables.append(it)
+    return iter(it)
+
+
+class _TfDatasetIterable(Iterable[tf.Tensor]):
+    """
+    Iterable object that wraps tf.data.Dataset.
+
+    This is a special kind of iterable that allows at most one iterator
+    associated with it at any given time.
+
+    This restriction is due to the fact that each _TfDatasetIterable owns
+    only one underlying tf.dataset.Iterator object.
+    """
+
+    def __init__(self, dataset: tf.compat.v1.data.Dataset):
+        """
+        :param dataset: Dataset to iterate over.
+        """
+        self._graph = dataset._graph # pylint: disable=protected-access
+
+        with self._graph.as_default():
+            self._tf_dataset_iterator =\
+                tf.compat.v1.data.make_initializable_iterator(dataset)
+            self._get_next = self._tf_dataset_iterator.get_next()
+
+        self._is_busy = False
+
+    def __iter__(self) -> "_IteratorWrapper":
+        """
+        Issues an iterator object.
+
+        At any point of time, each _TfDatasetIterable can have at most one
+        iterator associated with it, and is not allowed to issue another
+        iterator before the existing iterator gets destructed.
+
+        This restriction is due to the fact that each _TfDatasetIterable owns
+        only one underlying tf.dataset.Iterator object.
+        """
+        if self._is_busy:
+            # There already exists another iterator associated with this iterable.
+            # This should not happen.
+            raise RuntimeError
+
+        self._is_busy = True
+
+        def cleanup_fn():
+            self._is_busy = False
+
+        iterator = _IteratorWrapper(self._make_new_iterator(), cleanup_fn)
+        return iterator
+
+    def _make_new_iterator(self) -> Iterator[tf.Tensor]:
+        """
+        Create and return an initialized iterator.
+        The initialized iterator will iterate over the dataset from the beginning.
+        """
+        with tf.compat.v1.Session(graph=self._graph) as sess:
+            sess.run(self._tf_dataset_iterator.initializer)
+
+            while True:
+                try:
+                    yield sess.run(self._get_next)
+                except tf.errors.OutOfRangeError:
+                    break
+
+    def is_busy(self):
+        """
+        Returns True if and only if this iterable is currently busy
+        (i.e. unable to produce another iterator)
+        """
+        return self._is_busy
+
+
+class _IteratorWrapper(Iterator[tf.Tensor]):
+    """Iterator with a cleanup routine"""
+
+    def __init__(self, iterator: Iterator[tf.Tensor], cleanup_fn: Callable[[], None]):
+        """
+        :param iterator: Iterator to wrap.
+        :param cleanup_fn: Cleanup function to be called upon destruction.
+        """
+        self._iterator = iterator
+        self._cleanup_fn = cleanup_fn
+
+    def __next__(self):
+        return next(self._iterator)
+
+    def __del__(self):
+        self._cleanup_fn()

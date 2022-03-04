@@ -87,6 +87,14 @@ class AdaroundParameters:
         self.beta_range = default_beta_range
         self.warm_start = default_warm_start
 
+    def __eq__(self, other: "AdaroundParameters"):
+        return self.data_set == other.data_set and\
+               self.num_batches == other.num_batches and\
+               self.num_iterations == other.num_iterations and\
+               self.reg_param == other.reg_param and\
+               self.beta_range == other.beta_range and\
+               self.warm_start == other.warm_start
+
 
 class Adaround:
     """

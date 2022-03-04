@@ -354,7 +354,7 @@ def fold_given_batch_norms(sess: tf.compat.v1.Session, input_op_names: Union[str
 
 def fold_all_batch_norms(sess: tf.compat.v1.Session, input_op_names: Union[str, List[str]],
                          output_op_names: Union[str, List[str]])\
-        -> (tf.compat.v1.Session, List[Tuple[tf.Operation, tf.Operation]]):
+        -> Tuple[tf.compat.v1.Session, List[Tuple[tf.Operation, tf.Operation]]]:
     """
     Fold all batch_norm layers in a model into corresponding conv layers
 
