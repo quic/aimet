@@ -38,7 +38,10 @@
 
 """ Common utility for Quantization """
 
+from typing import Union, Tuple
 import numpy as np
+
+from aimet_common.defs import QuantScheme, QuantizationDataType
 
 import libpymo
 # Defined below is a quantization encoding format version, which will follow XX.YY.ZZ versioning as described below,
@@ -53,7 +56,7 @@ import libpymo
 encoding_version = '0.5.0'
 
 
-def gate_min_max(min_val: float, max_val: float)-> (float, float):
+def gate_min_max(min_val: float, max_val: float) -> Tuple[float, float]:
     """
     Gates min and max encoding values to retain zero in the range representation.
     Rules : min at maximum can be zero, max at minimum can be zero and
@@ -77,7 +80,7 @@ def gate_min_max(min_val: float, max_val: float)-> (float, float):
     return gated_min, gated_max
 
 
-def calculate_delta_offset(min_val: float, max_val: float, bitwidth: int)-> (float, float):
+def calculate_delta_offset(min_val: float, max_val: float, bitwidth: int) -> Tuple[float, float]:
     """
     calculates delta and offset given min and max.
     :param min_val: min encoding value
@@ -140,3 +143,43 @@ def recompute_grid_params(current_encoding: libpymo.TfEncoding, bitwidth: int,
     updated_encoding.offset = offset
 
     return updated_encoding
+
+
+def validate_quantsim_inputs(
+        quant_scheme: Union[str, QuantScheme],
+        rounding_mode: str,
+        default_output_bw: int,
+        default_param_bw: int,
+        data_type: QuantizationDataType = QuantizationDataType.int
+):
+    """
+    Perform sanity checks on inputs to QuantSim
+    :param quant_scheme: Quantization scheme. Supported options are 'tf_enhanced' or 'tf' or using Quant Scheme Enum
+                         QuantScheme.post_training_tf or QuantScheme.post_training_tf_enhanced
+    :param rounding_mode: Rounding mode. Supported options are 'nearest' or 'stochastic'
+    :param default_output_bw: Default bitwidth (4-31) to use for quantizing layer inputs and outputs
+    :param default_param_bw: Default bitwidth (4-31) to use for quantizing layer parameters
+    :param data_type: Data type of the quantized values (int or float).
+    """
+    # sanity checks
+    if quant_scheme not in ('tf_enhanced', 'tf') and not isinstance(quant_scheme, QuantScheme):
+        raise ValueError('Parameter quantization mode is not a valid selection. Valid selections are tf, '
+                         'tf_enhanced, QuantScheme.post_training_tf, QuantScheme.post_training_tf_enhanced')
+
+    if rounding_mode not in ('nearest', 'stochastic'):
+        raise ValueError('Parameter round mode is not a valid selection. Valid selections are nearest or '
+                         'stochastic')
+
+    if default_param_bw < 4 or default_param_bw > 32:
+        raise ValueError('Default bitwidth for parameters must be between 4 and 32, not ' + str(default_param_bw))
+
+    if default_output_bw < 4 or default_output_bw > 32:
+        raise ValueError('Activation bitwidth must be between 4 and 32, not ' + str(default_output_bw))
+
+    if data_type == QuantizationDataType.float and default_output_bw != 16:
+        raise ValueError(
+            'float data_type can only be used when default_output_bw set to 16, not ' + str(default_output_bw))
+
+    if data_type == QuantizationDataType.float and default_param_bw != 16:
+        raise ValueError(
+            'float data_type can only be used when default_param_bw set to 16, not ' + str(default_output_bw))

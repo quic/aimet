@@ -37,6 +37,7 @@
 # =============================================================================
 """ Module to test TF utils """
 
+import itertools
 import pytest
 import unittest
 from packaging import version
@@ -52,7 +53,8 @@ from tensorflow.keras.applications.resnet50 import ResNet50
 
 from aimet_common.utils import AimetLogger
 from aimet_tensorflow.utils.common import get_ordered_ops, create_input_feed_dict, \
-    iter_first_x, get_ordered_conv_linears, get_training_tensors
+    iter_first_x, get_ordered_conv_linears, get_training_tensors,\
+    iterate_tf_dataset, _tf_dataset_iterables
 from aimet_tensorflow.utils.graph_saver import wrapper_func
 from aimet_tensorflow.examples.test_models import single_residual, multiple_input_model, \
     model_with_multiple_training_tensors, keras_model_functional, keras_model_functional_with_non_fused_batchnorms,\
@@ -96,6 +98,9 @@ def get_bn_params_aimet_api(sess, bn_op):
 
 class TestTrainingExtensionsTfUtils(unittest.TestCase):
     """ Unittest class for testing Tf Utils """
+
+    def setUp(self):
+        _tf_dataset_iterables.clear()
 
     def test_wrapper_func_second_arg_without_args(self):
         """
@@ -876,3 +881,64 @@ class TestBNUtils(unittest.TestCase):
         self.assertTrue(sess.graph.get_operation_by_name('conv2d_1/Conv2D').outputs[0].consumers()[0].type != 'BiasAdd')
 
         sess.close()
+
+    def test_tf_dataset_iterator(self):
+        dataset_content = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
+        dataset = tf.compat.v1.data.Dataset.from_tensor_slices(dataset_content)
+        iterator = iterate_tf_dataset(dataset)
+        _assert_lists_equal(list(iterator), dataset_content)
+
+    def test_tf_dataset_iterator_one_after_another(self):
+        dataset_content = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
+        dataset = tf.compat.v1.data.Dataset.from_tensor_slices(dataset_content)
+
+        iter_1 = iterate_tf_dataset(dataset)
+        iter_1_outputs = list(iter_1)
+
+        iter_2 = iterate_tf_dataset(dataset)
+        iter_2_outputs = list(iter_2)
+
+        assert iter_1 is not iter_2
+        _assert_lists_equal(iter_1_outputs, iter_2_outputs)
+
+    def test_tf_dataset_iterator_interleave(self):
+        dataset_content = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
+        dataset = tf.compat.v1.data.Dataset.from_tensor_slices(dataset_content)
+
+        iter_1 = iterate_tf_dataset(dataset)
+        iter_2 = iterate_tf_dataset(dataset)
+
+        iter_1_outputs = list(iter_1)
+        iter_2_outputs = list(iter_2)
+
+        assert iter_1 is not iter_2
+        _assert_lists_equal(iter_1_outputs, iter_2_outputs)
+
+    def test_tf_dataset_iterator_reuse(self):
+        dataset_content = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
+        dataset = tf.compat.v1.data.Dataset.from_tensor_slices(dataset_content)
+        outputs_1 = list(
+            itertools.islice(iterate_tf_dataset(dataset), 5)
+        )
+        assert outputs_1 == dataset_content[:5]
+
+        outputs_2 = list(
+            itertools.islice(iterate_tf_dataset(dataset), 5)
+        )
+        assert outputs_2 == dataset_content[:5]
+
+        # Should have instantiated and reused only one iterable
+        iterables = _tf_dataset_iterables[dataset]
+        assert len(iterables) == 1
+        # All the associated iterators are destructed;
+        # the iterable should be free by now.
+        iterable = iterables[0]
+        assert not iterable.is_busy()
+
+
+def _assert_lists_equal(iter_1, iter_2):
+    iter_1_outputs = list(iter_1)
+    iter_2_outputs = list(iter_2)
+    assert len(iter_1_outputs) == len(iter_2_outputs)
+    for x, y in zip(iter_1_outputs, iter_2_outputs):
+        assert x == y
