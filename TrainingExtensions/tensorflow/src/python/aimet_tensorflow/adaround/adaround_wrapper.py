@@ -79,7 +79,7 @@ class AdaroundWrapper(keras.layers.Layer):
 
         self.use_soft_rounding = tf.compat.v1.placeholder_with_default(True, shape=[])
 
-        self.encoding = self._compute_encodings(weight, param_bw, is_symmetric, quant_scheme)
+        self.encoding = self.compute_encodings(weight, param_bw, is_symmetric, quant_scheme)
         self.alpha = self._initialize_alpha(self._weight_tensor, self.encoding)
 
     def adaround_weights(self) -> tf.Tensor:
@@ -87,27 +87,39 @@ class AdaroundWrapper(keras.layers.Layer):
         Adaround the weight tensor
         :return: AdaRounded weight tensor
         """
+        return self.get_adarounded_weight(self.alpha, self._weight_tensor, self.encoding, self.use_soft_rounding)
+
+    @staticmethod
+    def get_adarounded_weight(alpha, weight_tensor, encoding, use_soft_rounding) -> tf.Tensor:
+        """
+        Get the adarounded weight
+        :param alpha: Alpha parameter
+        :param weight_tensor: Weight to adaround
+        :param encoding: Encodings corresponding to weights
+        :param use_soft_rounding: True if soft rounding is to be used, False if hard rounding is to be used
+        :return: Adarounded weight tensor
+        """
         # Soft rounding maps alpha parameter between zero and one using rectified sigmoid function
         def compute_soft_rounding():
-            return tf.clip_by_value(tf.sigmoid(self.alpha) * (AdaroundConstants.ZETA - AdaroundConstants.GAMMA) +
+            return tf.clip_by_value(tf.sigmoid(alpha) * (AdaroundConstants.ZETA - AdaroundConstants.GAMMA) +
                                     AdaroundConstants.GAMMA, 0, 1)
 
         # Hard rounding maps alpha to exact zero or one
         def compute_hard_rounding():
-            return tf.cast(self.alpha > 0, dtype=self.alpha.dtype)
+            return tf.cast(alpha > 0, dtype=alpha.dtype)
 
         # Scale the tensor
-        tensor = tf.floor(self._weight_tensor / self.encoding.delta)
+        tensor = tf.floor(weight_tensor / encoding.delta)
 
         # Compute h_alpha depending on soft or hard rounding
-        h_alpha = tf.cond(self.use_soft_rounding, compute_soft_rounding, compute_hard_rounding)
+        h_alpha = tf.cond(use_soft_rounding, compute_soft_rounding, compute_hard_rounding)
 
         # Adaround the tensor
         tensor = tf.add(tensor, h_alpha)
 
         # Quantize and de-quantize the tensor
-        tensor_quant = tf.clip_by_value(tensor - self.encoding.offset, 0, 2 ** self.encoding.bw - 1)
-        tensor_dequant = (tensor_quant + self.encoding.offset) * self.encoding.delta
+        tensor_quant = tf.clip_by_value(tensor - encoding.offset, 0, 2 ** encoding.bw - 1)
+        tensor_dequant = (tensor_quant + encoding.offset) * encoding.delta
 
         return tensor_dequant
 
@@ -187,7 +199,7 @@ class AdaroundWrapper(keras.layers.Layer):
         return weight, bias
 
     @staticmethod
-    def _compute_encodings(weight_data: np.ndarray, param_bw: int, is_symmetric: bool, quant_scheme: QuantScheme) \
+    def compute_encodings(weight_data: np.ndarray, param_bw: int, is_symmetric: bool, quant_scheme: QuantScheme) \
             -> libpymo.TfEncoding:
         """
         :param weight_data: Weight data of Adaround supported ops
