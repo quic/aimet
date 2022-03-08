@@ -552,3 +552,57 @@ class TestAdaround:
         # Delete encodings JSON file
         if os.path.exists("./dummy.encodings"):
             os.remove("./dummy.encodings")
+
+    def test_apply_adaround_with_multi_data_loaders(self):
+        """ Test Adaround with multiple data loaders """
+
+        data_loader_1 = create_fake_data_loader(32, 16, image_size=(3, 32, 32))
+        data_loader_2 = create_fake_data_loader(64, 16, image_size=(3, 32, 32))
+
+        class MultiDataLoaders:
+            """
+            A simple implementation for supporting two data loaders, can be extended
+             to support more than two data loaders as well.
+            """
+            def __init__(self, data_loader1, data_loader2):
+                self._dl1 = iter(data_loader1)
+                self._dl2 = iter(data_loader2)
+
+            def __iter__(self):
+                for dl1_batch, dl2_batch in zip(self._dl1, self._dl2):
+                    yield dl1_batch
+                    yield dl2_batch
+
+                # yield from remaining non-exhausted data loader
+                yield from self._dl1
+                yield from self._dl2
+
+        multi_data_loader = MultiDataLoaders(data_loader_1, data_loader_2)
+
+        net = TinyModel().eval()
+        model = net.to(torch.device('cpu'))
+
+        input_shape = (1, 3, 32, 32)
+        inp_tensor_list = create_rand_tensors_given_shapes(input_shape)
+
+        params = AdaroundParameters(data_loader=multi_data_loader, num_batches=4, default_num_iterations=5)
+
+        ignore_quant_ops_list = [model.relu1, model.bn2]
+        ada_model = Adaround.apply_adaround(model=model, dummy_input=inp_tensor_list, params=params,
+                                            path='./', filename_prefix='dummy',
+                                            ignore_quant_ops_list=ignore_quant_ops_list)
+
+        # Make sure model forwatd pass works.
+        _ = ada_model(*inp_tensor_list)
+
+        # Read exported param encodings JSON file
+        with open('./dummy.encodings') as json_file:
+            encoding_data = json.load(json_file)
+
+        # Verify Conv2 weight encoding bitwidth is set to the default value of 4
+        conv2_encoding = encoding_data["conv2.weight"][0]
+        assert conv2_encoding.get('bitwidth') == 4
+
+        # Delete encodings JSON file
+        if os.path.exists("./dummy.encodings"):
+            os.remove("./dummy.encodings")
