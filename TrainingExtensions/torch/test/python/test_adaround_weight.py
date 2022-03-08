@@ -38,6 +38,7 @@
 
 """ AdaRound Weights Unit Test Cases """
 
+import pytest
 import os
 import json
 import logging
@@ -119,6 +120,28 @@ class ConvTransposeNet(torch.nn.Module):
         x = self.reul1(x)
 
         return x
+
+
+class MultiDataLoaders:
+    """
+    A simple implementation for supporting two data loaders, can be extended
+     to support more than two data loaders as well.
+    """
+    def __init__(self, data_loader1, data_loader2):
+        self._dl1 = iter(data_loader1)
+        self._dl2 = iter(data_loader2)
+
+    def __iter__(self):
+        """
+        yields batches alternatively one after the other from provided data loaders
+        """
+        for dl1_batch, dl2_batch in zip(self._dl1, self._dl2):
+            yield dl1_batch
+            yield dl2_batch
+
+        # yield from remaining non-exhausted data loader
+        yield from self._dl1
+        yield from self._dl2
 
 
 class TestAdaround:
@@ -553,29 +576,40 @@ class TestAdaround:
         if os.path.exists("./dummy.encodings"):
             os.remove("./dummy.encodings")
 
+    def test_multi_data_loaders_example(self):
+        """ Test order of getting data for multi data loader example """
+        data_loader_1 = create_fake_data_loader(32, 16, image_size=(1, 2, 2))
+        data_loader_2 = create_fake_data_loader(64, 16, image_size=(1, 3, 3))
+
+        multi_data_loader = MultiDataLoaders(data_loader_1, data_loader_2)
+        iterator = iter(multi_data_loader)
+        batch, _ = next(iterator)   # batch1 from dl1
+        assert batch.shape == (16, 1, 2, 2)
+
+        batch, _ = next(iterator)   # batch1 from dl2
+        assert batch.shape == (16, 1, 3, 3)
+
+        batch, _ = next(iterator)   # batch2 from dl1
+        assert batch.shape == (16, 1, 2, 2)
+
+        batch, _ = next(iterator)   # batch2 from dl2
+        assert batch.shape == (16, 1, 3, 3)
+
+        batch, _ = next(iterator)   # batch3 from dl2
+        assert batch.shape == (16, 1, 3, 3)
+
+        batch, _ = next(iterator)  # batch4 from dl2
+        assert batch.shape == (16, 1, 3, 3)
+
+        with pytest.raises(StopIteration):
+            batch, _ = next(iterator)  # exhausting dl2
+            assert batch.shape == (16, 1, 3, 3)
+
     def test_apply_adaround_with_multi_data_loaders(self):
         """ Test Adaround with multiple data loaders """
 
         data_loader_1 = create_fake_data_loader(32, 16, image_size=(3, 32, 32))
         data_loader_2 = create_fake_data_loader(64, 16, image_size=(3, 32, 32))
-
-        class MultiDataLoaders:
-            """
-            A simple implementation for supporting two data loaders, can be extended
-             to support more than two data loaders as well.
-            """
-            def __init__(self, data_loader1, data_loader2):
-                self._dl1 = iter(data_loader1)
-                self._dl2 = iter(data_loader2)
-
-            def __iter__(self):
-                for dl1_batch, dl2_batch in zip(self._dl1, self._dl2):
-                    yield dl1_batch
-                    yield dl2_batch
-
-                # yield from remaining non-exhausted data loader
-                yield from self._dl1
-                yield from self._dl2
 
         multi_data_loader = MultiDataLoaders(data_loader_1, data_loader_2)
 
