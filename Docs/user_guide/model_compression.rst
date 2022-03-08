@@ -12,6 +12,8 @@ Overview
 AIMET provides a model compression library that can be used to reduce a model's MAC and memory costs with a minimal
 drop in accuracy. AIMET supports various compression schemes like Weight SVD, Spatial SVD and Channel Pruning.
 
+Please see the :ref:`AIMET Guidebook<ug-comp-guidebook>` - which includes some practical advice on using the compression features, and how to combine the features
+
 Use Case
 ========
 AIMET allows user to take a trained model and compress it to desired compression ratio which can be further fine-tuned and exported to a target.
