@@ -154,8 +154,10 @@ class AdaroundWrapper(keras.layers.Layer):
 
         if layer.data_format == 'channels_last':
             data_format = 'NHWC'
+            strides = [1, layer.strides[0], layer.strides[1], 1]
         else:
             data_format = 'NCHW'
+            strides = [1, 1, layer.strides[0], layer.strides[1]]
 
         if layer.padding == 'valid':
             padding = 'VALID'
@@ -163,7 +165,7 @@ class AdaroundWrapper(keras.layers.Layer):
             padding = 'SAME'
 
         kwargs = {'data_format': data_format,
-                  'strides': layer.strides,
+                  'strides': strides,
                   'padding': padding,
                   'dilations': layer.dilation_rate}
         return kwargs
