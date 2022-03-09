@@ -32,3 +32,4 @@ For best performance, a combination of spatial SVD followed by channel pruning i
 
     b.	Perform fine-tuning to improve model accuracy.
 
+5.  In the final step, a model is selected with MAC ratio relative to the original uncompressed model is close to C and also meets user's accuracy requirements. For example, for ResNet-50 results provided on https://quic.github.io/aimet-pages/index.html, Csvd = 0.75 and Ccp = 0.66 were used to achieve overall compression C = 0.5
