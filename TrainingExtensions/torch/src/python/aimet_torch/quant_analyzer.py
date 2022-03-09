@@ -1,4 +1,4 @@
-# /usr/bin/env python3.5
+# /usr/bin/env python3.6
 # -*- mode: python -*-
 # =============================================================================
 #  @@-COPYRIGHT-START-@@
@@ -44,8 +44,6 @@ import torch
 from aimet_common.utils import AimetLogger
 from aimet_common.defs import QuantScheme, QuantizationDataType
 from aimet_torch.utils import in_eval_mode
-from aimet_torch.qc_quantize_op import QcQuantizeWrapper
-from aimet_torch.qc_quantize_recurrent import QcQuantizeRecurrent
 from aimet_torch.quantsim import QuantizationSimModel
 
 _logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Quant)
@@ -107,14 +105,13 @@ class QuantAnalyzer:
         Disable quantizers for activations for given Quantsim.
         :param sim: Quantsim model.
         """
-        for module in sim.model.modules():
-            if isinstance(module, (QcQuantizeWrapper, QcQuantizeRecurrent)):
-                for quantizer in module.output_quantizers:
-                    if quantizer.enabled:
-                        quantizer.enabled = False
-                for quantizer in module.input_quantizers:
-                    if quantizer.enabled:
-                        quantizer.enabled = False
+        for quant_wrapper in sim.quant_wrappers():
+            for quantizer in quant_wrapper.output_quantizers:
+                if quantizer.enabled:
+                    quantizer.enabled = False
+            for quantizer in quant_wrapper.input_quantizers:
+                if quantizer.enabled:
+                    quantizer.enabled = False
 
     @staticmethod
     def _disable_param_quantizers(sim: QuantizationSimModel) -> None:
@@ -122,11 +119,10 @@ class QuantAnalyzer:
         Disable quantizers for parameters for given Quantsim.
         :param sim: Quantsim model.
         """
-        for module in sim.model.modules():
-            if isinstance(module, (QcQuantizeWrapper, QcQuantizeRecurrent)):
-                for quantizer in module.param_quantizers.values():
-                    if quantizer.enabled:
-                        quantizer.enabled = False
+        for quant_wrapper in sim.quant_wrappers():
+            for quantizer in quant_wrapper.param_quantizers.values():
+                if quantizer.enabled:
+                    quantizer.enabled = False
 
     def _eval_model_with_weight_quantized(self, **kwargs) -> float:
         """
