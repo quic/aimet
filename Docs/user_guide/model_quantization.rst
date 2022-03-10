@@ -12,7 +12,7 @@ It is observed that for some models, running on a 8-bit fixed-precision runtime 
 
 AIMET provides multiple techniques and tools that help to create quantized models with a minimal loss in accuracy relative to floating-point models.
 
-Please see the :ref:`AIMET Guidebook<ug-quant-guidebook>` - which includes some practical advice on using the Quantization features, and how to combine the features.
+Please see the :ref:`Quantization Guidebook<ug-quant-guidebook>` - which includes some practical advice on using the Quantization features, and how to combine the features.
 
 Use Cases
 =========
