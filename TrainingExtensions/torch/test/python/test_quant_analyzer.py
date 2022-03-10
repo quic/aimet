@@ -86,15 +86,6 @@ class TestQuantAnalyzer:
         assert fp32_acc >= act_quantized_acc
         assert analyzer._model is model
 
-    def test_quant_analyzer_invalid_input(self):
-        """ test invalid inputs """
-        analyzer = QuantAnalyzer(MagicMock(), MagicMock(), CallbackFunc(None), CallbackFunc(None))
-        with pytest.raises(ValueError):
-            analyzer.check_model_sensitivity_to_quantization(default_param_bw=64, default_output_bw=64)
-
-        with pytest.raises(ValueError):
-            analyzer.check_model_sensitivity_to_quantization(default_param_bw=2, default_output_bw=2)
-
     def test_sort_quant_wrappers_based_on_occurrence(self):
         """ test sort quant wrappers based on occurrence """
         input_shape = (1, 3, 32, 32)
@@ -102,59 +93,11 @@ class TestQuantAnalyzer:
         model = TinyModel().eval()
         sim = QuantizationSimModel(model, dummy_input)
         analyzer = QuantAnalyzer(model, dummy_input, CallbackFunc(None), CallbackFunc(None))
-        sorted_quant_wrappers = analyzer._sort_quant_wrappers_based_on_occurrence(sim)
-        assert isinstance(sorted_quant_wrappers, dict)
-        for quant_wrapper in sorted_quant_wrappers.values():
-            isinstance(quant_wrapper, QcQuantizeWrapper)
-        assert len(sorted_quant_wrappers) == 12
-
-    def test_toggle_enabled_for_quant_wrapper(self):
-        """ test toggle enabled flag for quant wrapper """
-        wrapper = StaticGridQuantWrapper(torch.nn.Conv2d(1, 10, 5), weight_bw=8, activation_bw=8, round_mode='nearest',
-                                         quant_scheme=QuantScheme.post_training_tf_enhanced)
-
-        analyzer = QuantAnalyzer(MagicMock(), MagicMock(), CallbackFunc(None), CallbackFunc(None))
-        analyzer._toggle_enabled_for_quant_wrapper(wrapper, enabled=True)
-        assert wrapper.output_quantizer.enabled == True
-        assert wrapper.input_quantizer.enabled == True
-        assert wrapper.param_quantizers['weight'].enabled == True
-        assert wrapper.param_quantizers['bias'].enabled == False
-
-        analyzer._toggle_enabled_for_quant_wrapper(wrapper, enabled=False)
-        assert wrapper.output_quantizer.enabled == False
-        assert wrapper.input_quantizer.enabled == False
-        assert wrapper.param_quantizers['weight'].enabled == False
-        assert wrapper.param_quantizers['bias'].enabled == False
-
-    def test_disable_all_act_quantizers_for_sim(self):
-        """ test disable all activation quantizers """
-        input_shape = (1, 3, 32, 32)
-        dummy_input = torch.randn(*input_shape)
-        model = TinyModel().eval()
-        sim = QuantizationSimModel(model, dummy_input)
-        analyzer = QuantAnalyzer(MagicMock(), MagicMock(), CallbackFunc(None), CallbackFunc(None))
-        analyzer._disable_all_act_quantizers_for_sim(sim)
-
-        for quant_wrapper in sim.quant_wrappers():
-            assert quant_wrapper.output_quantizer.enabled == False
-            assert quant_wrapper.input_quantizer.enabled == False
-
-    def test_disable_all_param_quantizers_for_sim(self):
-        """ test disable all param quantizers """
-        input_shape = (1, 3, 32, 32)
-        dummy_input = torch.randn(*input_shape)
-        model = TinyModel().eval()
-        sim = QuantizationSimModel(model, dummy_input)
-        analyzer = QuantAnalyzer(MagicMock(), MagicMock(), CallbackFunc(None), CallbackFunc(None))
-        for quant_wrapper in sim.quant_wrappers():
-            if 'weight' in quant_wrapper.param_quantizers:
-                assert quant_wrapper.param_quantizers['weight'].enabled == True
-
-        analyzer._disable_all_param_quantizers_for_sim(sim)
-
-        for quant_wrapper in sim.quant_wrappers():
-            if 'weight' in quant_wrapper.param_quantizers:
-                assert quant_wrapper.param_quantizers['weight'].enabled == False
+        sorted_quant_wrappers_dict = analyzer._sort_quant_wrappers_based_on_occurrence(sim)
+        assert isinstance(sorted_quant_wrappers_dict, dict)
+        for quant_wrapper in sorted_quant_wrappers_dict.values():
+            assert isinstance(quant_wrapper, QcQuantizeWrapper)
+        assert len(sorted_quant_wrappers_dict) == 12
 
     def test_perform_per_layer_analysis_by_enabling_quant_wrappers(self):
         """ test perform per layer analysis by enabling quant wrappers """

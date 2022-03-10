@@ -102,85 +102,6 @@ class QuantAnalyzer:
         self._forward_pass_callback = forward_pass_callback
         self._eval_callback = eval_callback
 
-    def _disable_all_act_quantizers_for_sim(self, sim: QuantizationSimModel) -> None:
-        """
-        Disable all the quantizers for activations for given Quantsim.
-        :param sim: Quantsim model.
-        """
-        for quant_wrapper in sim.quant_wrappers():
-            self._toggle_enabled_for_act_quantizers(quant_wrapper, enabled=False)
-
-    def _disable_all_param_quantizers_for_sim(self, sim: QuantizationSimModel) -> None:
-        """
-        Disable all the quantizers for parameters for given Quantsim.
-        :param sim: Quantsim model.
-        """
-        for quant_wrapper in sim.quant_wrappers():
-            self._toggle_enabled_for_param_quantizers(quant_wrapper, enabled=False)
-
-    def _toggle_enabled_for_param_quantizers(
-            self,
-            quant_wrapper: Union[QcQuantizeWrapper, QcQuantizeRecurrent],
-            enabled: bool,
-    ) -> None:
-        """
-        Toggle enabled of parameter quantizer for given quant wrapper.
-
-        :param quant_wrapper: Quant wrapper.
-        :param enabled: Enabled flag.
-        :return:
-        """
-        for quantizer in quant_wrapper.param_quantizers.values():
-            quantizer.enabled = enabled
-
-        # Disable bias quantization
-        self._exclude_param_from_quantization(quant_wrapper, "bias")
-
-    @staticmethod
-    def _toggle_enabled_for_act_quantizers(
-            quant_wrapper: Union[QcQuantizeWrapper, QcQuantizeRecurrent],
-            enabled: bool
-    ) -> None:
-        """
-        Toggle enabled of activation quantizers for given quant wrapper.
-
-        :param quant_wrapper: Quant wrapper.
-        :param enabled: Enabled flag.
-        """
-        for quantizer in quant_wrapper.output_quantizers:
-            quantizer.enabled = enabled
-        for quantizer in quant_wrapper.input_quantizers:
-            quantizer.enabled = enabled
-
-    def _toggle_enabled_for_quant_wrapper(
-            self,
-            quant_wrapper: Union[QcQuantizeWrapper, QcQuantizeRecurrent],
-            enabled: bool
-    ) -> None:
-        """
-        Toggle enabled for both parameter and activation quantizers for given quant wrapper.
-
-        :param quant_wrapper: Quant wrapper.
-        :param enabled: Enabled flag.
-        """
-        self._toggle_enabled_for_act_quantizers(quant_wrapper, enabled)
-        self._toggle_enabled_for_param_quantizers(quant_wrapper, enabled)
-
-    @staticmethod
-    def _exclude_param_from_quantization(
-            quant_wrapper: Union[QcQuantizeWrapper, QcQuantizeRecurrent],
-            param_name_to_exclude: str
-    ) -> None:
-        """
-        Exclude all parameters matching 'param_name' from quantization for given quant wrapper.
-
-        :param quant_wrapper: Quant wrapper.
-        :param param_name_to_exclude: Parameter name to be excluded.
-        :return:
-        """
-        if param_name_to_exclude in quant_wrapper.param_quantizers:
-            quant_wrapper.param_quantizers[param_name_to_exclude].enabled = False
-
     def _eval_model_with_weight_quantized(self, **kwargs) -> float:
         """
         Analyze model sensitivity to only parameter (weight) quantization.
@@ -190,7 +111,7 @@ class QuantAnalyzer:
         :return: Weight Quantized, Activation in float model performance.
         """
         sim = QuantizationSimModel(self._model, self._dummy_input, **kwargs)
-        self._disable_all_act_quantizers_for_sim(sim)
+        sim.disable_act_quantizers_for_all_quant_wrappers()
         sim.compute_encodings(self._forward_pass_callback.func, self._forward_pass_callback.args)
         acc = self._eval_model(sim.model)
         return acc
@@ -204,7 +125,7 @@ class QuantAnalyzer:
         :return: Activations Quantized, Weights in float model performance.
         """
         sim = QuantizationSimModel(self._model, self._dummy_input, **kwargs)
-        self._disable_all_param_quantizers_for_sim(sim)
+        sim.disable_param_quantizers_for_all_quant_wrappers()
         sim.compute_encodings(self._forward_pass_callback.func, self._forward_pass_callback.args)
         acc = self._eval_model(sim.model)
         return acc
@@ -221,27 +142,63 @@ class QuantAnalyzer:
 
     def _sort_quant_wrappers_based_on_occurrence(self, sim: QuantizationSimModel) -> Dict:
         """
-        Get sorted list of quant wrappers based on occurrence for given quantsim.
+        Sort quant wrappers based on occurrence for given quantsim model.
 
         :param sim: Quantsim model.
-        :return: Sorted quant wrappers.
+        :return: Dictionary containing sorted quant wrappers. dict[name] = Quant wrapper.
         """
         def sorting_hook(quant_wrapper: torch.nn.Module, *_):
             """
             Hook-function to sort quant wrappers based on occurrence.
 
-            :param quant_wrapper: Quant wrapper
-            :param _: Additional args
+            :param quant_wrapper: Quant wrapper.
+            :param _: Additional args.
             """
-            for name, module in sim.model.named_modules():
-                if module is quant_wrapper:
-                    sorted_quant_wrappers[name] = module
+            quant_wrapper_name = module_to_name_dict[quant_wrapper]
+            sorted_quant_wrappers_dict[quant_wrapper_name] = quant_wrapper
 
-        sorted_quant_wrappers = OrderedDict()
+        module_to_name_dict = {}
+        for name, module in sim.model.named_modules():
+            module_to_name_dict[module] = name
+
+        sorted_quant_wrappers_dict = OrderedDict()
         run_hook_for_layers_with_given_input(sim.model, self._dummy_input, sorting_hook,
                                              module_type_for_attaching_hook=(QcQuantizeWrapper, QcQuantizeRecurrent),
                                              leaf_node_only=False)
-        return sorted_quant_wrappers
+        return sorted_quant_wrappers_dict
+
+    def _perform_per_layer_analysis(
+            self,
+            sim: QuantizationSimModel,
+            enabled_before: bool,
+            enabled_after: bool,
+    ) -> Dict:
+        """
+        Helper function of perform_per_layer_analysis_by_enabling_quant_wrappers() and
+        perform_per_layer_analysis_by_disabling_quant_wrappers()
+
+        :param sim: Quantsim model.
+        :param enabled_before: Flag to toggle parameter and activations quantizers before compute encodings.
+        :param enabled_after: Flag to toggle parameter and activations quantizers after compute encodings.
+        :return: layer wise eval score dictionary. dict[layer_name] = eval_score.
+        """
+        # Sort quant wrappers based on occurrence.
+        sorted_quant_wrappers = self._sort_quant_wrappers_based_on_occurrence(sim)
+
+        layer_wise_eval_score_dict = {}
+        for name, quant_wrapper in sorted_quant_wrappers.items():
+
+            quant_wrapper.set_enabled_for_param_quantizers(enabled=enabled_before)
+            quant_wrapper.set_enabled_for_act_quantizers(enabled=enabled_before)
+
+            # Compute encodings and record eval score.
+            sim.compute_encodings(self._forward_pass_callback.func, self._forward_pass_callback.args)
+            layer_wise_eval_score_dict[name] = self._eval_model(sim.model)
+
+            quant_wrapper.set_enabled_for_param_quantizers(enabled=enabled_after)
+            quant_wrapper.set_enabled_for_act_quantizers(enabled=enabled_after)
+
+        return layer_wise_eval_score_dict
 
     def check_model_sensitivity_to_quantization(
             self,
@@ -268,12 +225,6 @@ class QuantAnalyzer:
                                  default_output_bw=16 and default_param_bw=16.
         :return: FP32 eval score, weight-quantized eval score, act-quantized eval score.
         """
-
-        QuantizationSimModel._validate_quantsim_inputs(default_quant_scheme, # pylint: disable=protected-access
-                                                       default_rounding_mode,
-                                                       default_output_bw,
-                                                       default_param_bw,
-                                                       default_data_type)
         kwargs = dict(
             quant_scheme=default_quant_scheme,
             rounding_mode=default_rounding_mode,
@@ -301,7 +252,7 @@ class QuantAnalyzer:
             default_output_bw: int = 8,
             default_config_file: str = None,
             default_data_type: QuantizationDataType = QuantizationDataType.int,
-    ):
+    ) -> Dict:
         """
         NOTE: Option 1
 
@@ -309,6 +260,7 @@ class QuantAnalyzer:
         One quant wrapper's parameters and activations quantizers are enabled and set to bit-width specified.
         Measure and record eval score on subset of dataset.
         Repeat the above for all the quant wrapper based on occurrence.
+        Returns dictionary containing quant wrapper name and corresponding eval score.
 
         :param default_quant_scheme: Quantization scheme. Supported values are
                 QuantScheme.post_training_tf or QuantScheme.post_training_tf_enhanced.
@@ -320,13 +272,8 @@ class QuantAnalyzer:
                                  Possible options are QuantizationDataType.int and QuantizationDataType.float.
                                  Note that the mode default_data_type=QuantizationDataType.float is only supported with
                                  default_output_bw=16 and default_param_bw=16.
-        :return: layer wise eval score dictionary.
+        :return: layer wise eval score dictionary. dict[layer_name] = eval_score
         """
-        QuantizationSimModel._validate_quantsim_inputs(default_quant_scheme, # pylint: disable=protected-access
-                                                       default_rounding_mode,
-                                                       default_output_bw,
-                                                       default_param_bw,
-                                                       default_data_type)
         kwargs = dict(
             quant_scheme=default_quant_scheme,
             rounding_mode=default_rounding_mode,
@@ -338,29 +285,13 @@ class QuantAnalyzer:
         sim = QuantizationSimModel(self._model, self._dummy_input, **kwargs)
 
         # Disable all quant wrappers' parameter and activation quantizers.
-        self._disable_all_param_quantizers_for_sim(sim)
-        self._disable_all_act_quantizers_for_sim(sim)
-
-        # Sort quant wrappers based on occurrence.
-        sorted_quant_wrappers = self._sort_quant_wrappers_based_on_occurrence(sim)
+        sim.disable_param_quantizers_for_all_quant_wrappers()
+        sim.disable_act_quantizers_for_all_quant_wrappers()
 
         _logger.info("Starting per-layer analysis by enabling quant wrappers.")
-
-        layer_wise_eval_score_dict = {}
-        for name, quant_wrapper in sorted_quant_wrappers.items():
-
-            # Enable both parameter(s) and activation quantizers for given quant wrapper.
-            self._toggle_enabled_for_quant_wrapper(quant_wrapper, enabled=True)
-
-            # Compute encodings and record eval score.
-            sim.compute_encodings(self._forward_pass_callback.func, self._forward_pass_callback.args)
-            layer_wise_eval_score_dict[name] = self._eval_model(sim.model)
-
-            # Disable both parameter(s) and activation quantizers for given quant wrapper.
-            self._toggle_enabled_for_quant_wrapper(quant_wrapper, enabled=False)
-
-            _logger.info("Enabling quantizers for layer: %s, the eval score is: %.02f",
-                         name, layer_wise_eval_score_dict[name])
+        layer_wise_eval_score_dict = self._perform_per_layer_analysis(sim,
+                                                                      enabled_before=True,
+                                                                      enabled_after=False)
 
         return layer_wise_eval_score_dict
 
@@ -372,7 +303,7 @@ class QuantAnalyzer:
             default_output_bw: int = 8,
             default_config_file: str = None,
             default_data_type: QuantizationDataType = QuantizationDataType.int,
-    ):
+    ) -> Dict:
         """
         NOTE: Option 2
 
@@ -380,6 +311,7 @@ class QuantAnalyzer:
         One quant wrapper's parameters and activations quantizers are disabled.
         Measure and record eval score on subset of dataset.
         Repeat the above for all the quant wrappers based on occurrence.
+        Returns dictionary containing quant wrapper name and corresponding eval score.
 
         :param default_quant_scheme: Quantization scheme. Supported values are
                 QuantScheme.post_training_tf or QuantScheme.post_training_tf_enhanced.
@@ -391,13 +323,8 @@ class QuantAnalyzer:
                                  Possible options are QuantizationDataType.int and QuantizationDataType.float.
                                  Note that the mode default_data_type=QuantizationDataType.float is only supported with
                                  default_output_bw=16 and default_param_bw=16.
-        :return: layer wise eval score dictionary.
+        :return: layer wise eval score dictionary. dict[layer_name] = eval_score
         """
-        QuantizationSimModel._validate_quantsim_inputs(default_quant_scheme, # pylint: disable=protected-access
-                                                       default_rounding_mode,
-                                                       default_output_bw,
-                                                       default_param_bw,
-                                                       default_data_type)
         kwargs = dict(
             quant_scheme=default_quant_scheme,
             rounding_mode=default_rounding_mode,
@@ -408,25 +335,8 @@ class QuantAnalyzer:
         )
         sim = QuantizationSimModel(self._model, self._dummy_input, **kwargs)
 
-        # Sort quant wrappers based on occurrence.
-        sorted_quant_wrappers = self._sort_quant_wrappers_based_on_occurrence(sim)
-
         _logger.info("Starting per-layer analysis by disabling quant wrappers.")
-
-        layer_wise_eval_score_dict = {}
-        for name, quant_wrapper in sorted_quant_wrappers.items():
-
-            # Disable both parameter(s) and activation quantizers for given quant wrapper.
-            self._toggle_enabled_for_quant_wrapper(quant_wrapper, enabled=False)
-
-            # Compute encodings and record eval score.
-            sim.compute_encodings(self._forward_pass_callback.func, self._forward_pass_callback.args)
-            layer_wise_eval_score_dict[name] = self._eval_model(sim.model)
-
-            # Enable both parameter(s) and activation quantizers for given quant wrapper.
-            self._toggle_enabled_for_quant_wrapper(quant_wrapper, enabled=True)
-
-            _logger.info("Disabling quantizers for layer: %s, the eval score is: %.02f",
-                         name, layer_wise_eval_score_dict[name])
-
+        layer_wise_eval_score_dict = self._perform_per_layer_analysis(sim,
+                                                                      enabled_before=False,
+                                                                      enabled_after=True)
         return layer_wise_eval_score_dict

@@ -59,7 +59,7 @@ from aimet_torch import transformer_utils
 from aimet_torch import utils, elementwise_ops
 from aimet_torch.elementwise_ops import Multiply
 from aimet_torch.examples.test_models import TwoLayerBidirectionalLSTMModel, SingleLayerRNNModel, \
-    ModelWithTwoInputs
+    ModelWithTwoInputs, TinyModel
 from aimet_torch.meta.connectedgraph import ConnectedGraph
 from aimet_torch.onnx_utils import OnnxExportApiArgs
 from aimet_torch.qc_quantize_op import QcQuantizeWrapper, QcQuantizeStandalone, \
@@ -2410,3 +2410,32 @@ class TestQuantizationSimLearnedGrid:
                                              default_output_bw=4)
             quant_sim.compute_encodings(evaluate, dummy_input)
             quant_sim.model(*dummy_input)
+
+    def test_disable_all_act_quantizers_for_sim(self):
+        """ test disable all activation quantizers """
+        input_shape = (1, 3, 32, 32)
+        dummy_input = torch.randn(*input_shape)
+        model = TinyModel().eval()
+        sim = QuantizationSimModel(model, dummy_input)
+        sim.disable_act_quantizers_for_all_quant_wrappers()
+
+        for quant_wrapper in sim.quant_wrappers():
+            assert quant_wrapper.output_quantizer.enabled == False
+            assert quant_wrapper.input_quantizer.enabled == False
+
+    def test_disable_all_param_quantizers_for_sim(self):
+        """ test disable all param quantizers """
+        input_shape = (1, 3, 32, 32)
+        dummy_input = torch.randn(*input_shape)
+        model = TinyModel().eval()
+        sim = QuantizationSimModel(model, dummy_input)
+
+        for quant_wrapper in sim.quant_wrappers():
+            if 'weight' in quant_wrapper.param_quantizers:
+                assert quant_wrapper.param_quantizers['weight'].enabled == True
+
+        sim.disable_param_quantizers_for_all_quant_wrappers()
+
+        for quant_wrapper in sim.quant_wrappers():
+            if 'weight' in quant_wrapper.param_quantizers:
+                assert quant_wrapper.param_quantizers['weight'].enabled == False

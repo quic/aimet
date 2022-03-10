@@ -39,7 +39,7 @@
 
 import abc
 from enum import Enum
-from typing import Dict
+from typing import Dict, Tuple, Union
 import torch
 from torch import nn
 
@@ -279,6 +279,46 @@ class QcQuantizeWrapper(nn.Module):
         :param mode: Mode for the Quantization Ops. Can be ANALYSIS or ACTIVE
         """
         self._mode = mode
+
+    def set_enabled_for_param_quantizers(self, enabled: bool,
+                                         param_name_to_exclude: Union[None, Tuple[str]] = ("bias", )) -> None:
+        """
+        Note: By default, bias quantization is disabled.
+
+        Sets enabled flag for parameter quantizers.
+        :param enabled: Enabled flag.
+        :param param_name_to_exclude: Param name to be excluded.
+        """
+        if not param_name_to_exclude:
+            param_name_to_exclude = []
+
+        for param_name, param_quantizer in self.param_quantizers.items():
+            if not param_name in param_name_to_exclude:
+                param_quantizer.enabled = enabled
+
+    def set_enabled_for_input_quantizers(self, enabled: bool) -> None:
+        """
+        Sets enabled flag for input quantizers.
+        :param enabled: Enabled flag.
+        """
+        for quantizer in self.input_quantizers:
+            quantizer.enabled = enabled
+
+    def set_enabled_for_output_quantizers(self, enabled: bool) -> None:
+        """
+        Sets enabled flag for output quantizers.
+        :param enabled: Enabled flag.
+        """
+        for quantizer in self.output_quantizers:
+            quantizer.enabled = enabled
+
+    def set_enabled_for_act_quantizers(self, enabled: bool) -> None:
+        """
+        Sets enabled flag for both input and output quantizers.
+        :param enabled: Enabled flag.
+        """
+        self.set_enabled_for_input_quantizers(enabled)
+        self.set_enabled_for_output_quantizers(enabled)
 
     def reset_encodings(self):
         """
