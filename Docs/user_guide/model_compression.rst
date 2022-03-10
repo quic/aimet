@@ -100,10 +100,10 @@ FAQs
 References
 ==========
 
-1.	Xiangyu Zhang, Jianhua Zou, Kaiming He, and Jian Sun. “Accelerating Very Deep Convolutional Networks for Classification and Detection.” IEEE Transactions on Pattern Analysis and Machine Intelligence, vol. 38, no. 10, pp. 1943-1955, 1 Oct. 2016.
+1.	Xiangyu Zhang, Jianhua Zou, Kaiming He, and Jian Sun. "Accelerating Very Deep Convolutional Networks for Classification and Detection." IEEE Transactions on Pattern Analysis and Machine Intelligence, vol. 38, no. 10, pp. 1943-1955, 1 Oct. 2016.
 
-2.	Yihui He, Xiangyu Zhang, and Jian Sun. “Channel Pruning for Accelerating Very Deep Neural Networks.” IEEE International Conference on Computer Vision (ICCV), Venice, 2017, pp. 1398-1406.
+2.	Yihui He, Xiangyu Zhang, and Jian Sun. "Channel Pruning for Accelerating Very Deep Neural Networks." IEEE International Conference on Computer Vision (ICCV), Venice, 2017, pp. 1398-1406.
 
-3.	Max Jaderberg, Andrea Vedaldi, and Andrew Zisserman. “Speeding up Convolutional Neural Networks with Low Rank Expansions.” British Machine Vision Conference, Jan. 2014.
+3.	Max Jaderberg, Andrea Vedaldi, and Andrew Zisserman. "Speeding up Convolutional Neural Networks with Low Rank Expansions." British Machine Vision Conference, Jan. 2014.
 
-4.	Andrey Kuzmin, Markus Nagel, Saurabh Pitre, Sandeep Pendyam, Tijmen Blankevoort, Max Welling. “Taxonomy and Evaluation of Structured Compression of Convolutional Neural Networks.”
+4.	Andrey Kuzmin, Markus Nagel, Saurabh Pitre, Sandeep Pendyam, Tijmen Blankevoort, Max Welling. "Taxonomy and Evaluation of Structured Compression of Convolutional Neural Networks."
