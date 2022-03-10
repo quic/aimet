@@ -10,7 +10,7 @@ AIMET Quantization Features Guidebook
 AIMET supports various neural network quantization techniques. A more in-depth discussion on various techniques and
 their usage is provided in :ref:`User Guide<ug-index>`
 
-After applying an AIMET Quantization feature, if the model’s performance is still not satisfactory, we recommend a set
+After applying an AIMET Quantization feature, if the model's performance is still not satisfactory, we recommend a set
 of diagnostics steps to identify the bottlenecks and improve the performance. While this is not strictly an algorithm,
 these debugging steps can provide insights on why a quantized model underperforms and help to tackle the underlying
 issues. These steps are shown as a flow chart in figure 9 and are described in more detail below:
@@ -55,7 +55,7 @@ distribution at different granularities, e.g. per-channel as in figure 5, and di
 for activations in BERT.
 
 **Fixing individual quantizers**
-The visualization step can reveal the source of the tensor’s sensitivity to quantization. Some common solutions involve
+The visualization step can reveal the source of the tensor's sensitivity to quantization. Some common solutions involve
 custom range setting for this quantizer or allowing a higher bit-width for problematic quantizer. If the problem is
 fixed and the accuracy recovers, we continue to the next quantizer. If not, we may have to resort to other methods,
 such as quantization-aware training (QAT).
