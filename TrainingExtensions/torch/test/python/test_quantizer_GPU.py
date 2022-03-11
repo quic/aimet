@@ -41,11 +41,52 @@ import copy
 import time
 
 import torch
-from aimet_torch.quantsim import QuantizationSimModel
+import torch.nn as nn
+from aimet_torch.quantsim import QuantizationSimModel, QuantScheme
+from aimet_torch import elementwise_ops
 from aimet_common.utils import AimetLogger
 import aimet_torch.examples.mnist_torch_model as mnist_model
 
 logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Test)
+
+
+class ModelWithTwoInputsOneToAdd(nn.Module):
+
+    def __init__(self):
+        super(ModelWithTwoInputsOneToAdd, self).__init__()
+        self.conv1_a = nn.Conv2d(1, 10, kernel_size=5)
+        self.maxpool1_a = nn.MaxPool2d(2)
+        self.relu1_a = nn.ReLU()
+
+        self.conv1_b = nn.Conv2d(10, 10, kernel_size=5)
+        self.maxpool1_b = nn.MaxPool2d(2)
+        self.relu1_b = nn.ReLU()
+
+        self.add = elementwise_ops.Add()
+
+        self.conv2 = nn.Conv2d(10, 20, kernel_size=5)
+        self.maxpool2 = nn.MaxPool2d(2)
+        self.relu2 = nn.ReLU()
+
+        self.fc1 = nn.Linear(320, 50)
+        self.relu3 = nn.ReLU()
+        self.dropout = nn.Dropout()
+        self.fc2 = nn.Linear(50, 10)
+
+        self.softmax = nn.LogSoftmax(dim=1)
+
+    def forward(self, x1, x2):
+        x1 = self.relu1_a(self.maxpool1_a(self.conv1_a(x1)))
+        x1 = self.relu1_b(self.maxpool1_b(self.conv1_b(x1)))
+
+        x = self.add(x1, x2)
+
+        x = self.relu2(self.maxpool2(self.conv2(x)))
+        x = x.view(-1, 320)
+        x = self.relu3(self.fc1(x))
+        x = self.dropout(x)
+        x = self.fc2(x)
+        return self.softmax(x)
 
 
 def forward_pass(model, args):
@@ -118,4 +159,37 @@ class QuantizerCpuGpu(unittest.TestCase):
 
         self.assertEqual(torch.device('cuda:0'), next(model_gpu.parameters()).device)
         self.assertEqual(torch.device('cpu'), next(model_cpu.parameters()).device)
+
+    @pytest.mark.cuda
+    def test_qc_trainable_wrapper_for_model_with_multiple_inputs_with_one_add(self):
+        dummy_input = (torch.rand(32, 1, 100, 100).cuda(), torch.rand(32, 10, 22, 22).cuda())
+
+        def forward_pass(sim_model, _):
+            sim_model.eval()
+            with torch.no_grad():
+                sim_model(*dummy_input)
+
+        model = ModelWithTwoInputsOneToAdd().cuda()
+
+        sim = QuantizationSimModel(model, dummy_input=dummy_input,
+                                   quant_scheme=QuantScheme.training_range_learning_with_tf_init)
+        # Enable input parameters to add (multiple input parameter exist)
+        sim.model.add.input_quantizers[0].enabled = True
+        sim.model.add.input_quantizers[1].enabled = True
+
+        sim.compute_encodings(forward_pass, forward_pass_callback_args=None)
+
+        assert len(sim.model.add.input_quantizers) == 2
+
+        out = sim.model(*dummy_input)
+        for _, params in sim.model.named_parameters():
+            assert params.grad is None
+
+        optimizer = torch.optim.SGD(sim.model.parameters(), lr=0.05, momentum=0.5)
+        loss = out.flatten().sum()
+        loss.backward()
+        optimizer.step()
+        # All parameters should have a gradient
+        for params in sim.model.parameters():
+            assert params.grad is not None
 
