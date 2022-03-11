@@ -498,6 +498,9 @@ class LearnedGridTensorQuantizer(TensorQuantizer):
         :param encoding_max: maximum value of encoding for tensor
         :return: Quantized-dequantized tensor
         """
+        self.p = self.p.to(tensor.device)
+        self.n = self.n.to(tensor.device)
+
         if self.enabled:
             if encoding_max is None or encoding_min is None:
                 raise RuntimeError("Forward pass used for compute_encodings differs from forward pass used during "
