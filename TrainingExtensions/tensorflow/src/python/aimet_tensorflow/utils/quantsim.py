@@ -37,7 +37,7 @@
 # =============================================================================
 """ utilities for quantsim """
 
-from typing import List
+from typing import List, Set, Tuple
 import tensorflow as tf
 
 from aimet_common.utils import AimetLogger
@@ -52,6 +52,9 @@ _logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Quant)
 DTYPES_QUANTIZE_NOT_REQUIRED = [tf.dtypes.int8, tf.dtypes.uint8, tf.dtypes.int16, tf.dtypes.uint16,
                                 tf.dtypes.int32, tf.dtypes.uint32, tf.dtypes.int64, tf.dtypes.uint64,
                                 tf.bool, tf.dtypes.string, tf.dtypes.resource]
+
+# Connected graph types to ignore parameter quantization
+param_quant_conn_op_ignore_list = {'FusedBatchNorm', 'FusedBatchNormV3', 'BatchNorm'}
 
 
 def get_param_quantizer(op: tf.Operation, index: int) -> tf.Operation:
@@ -201,3 +204,47 @@ def create_encoding_from_dict(encoding_dict: dict) -> (libpymo.TfEncoding, bool)
     encoding.offset = encoding_dict.get('offset')
     is_symmetric = encoding_dict.get('is_symmetric')
     return encoding, is_symmetric
+
+
+def get_conn_graph_ops_to_quantize_params_for(conn_graph: ConnectedGraph, valid_ops: Set[tf.Operation])\
+        -> Tuple[List[str], List[int]]:
+    """
+    Retrieve ops that consume the list of parameter tensors
+    :param conn_graph: Connected graph of the model
+    :param valid_ops: list of valid ops in QuantizationSimModel
+    :return: Tuple consisting of list of op names with params to insert quantize ops for as well as list of indices
+    of parameters for each op
+    """
+
+    # Get connected graph parameters
+    valid_conns = [conn for conn in conn_graph.get_all_ops().values()
+                   if conn.type not in param_quant_conn_op_ignore_list]
+
+    conn_ops_with_param_names = []
+    input_indices = []
+
+    # Find consumer of this tensor and also find the index to consumer
+    for conn in valid_conns:
+        for tensor in conn.get_param_tensors():
+            # Parameters should always be ReadVariableOp
+            assert tensor.op.type == 'ReadVariableOp'
+            # Assume that a parameter have a single consumer
+            consumer_index = None
+            for index, consumer in enumerate(tensor.consumers()):
+                if consumer in valid_ops:
+                    assert consumer_index is None
+                    consumer_index = index
+            assert consumer_index is not None
+            consumer = tensor.consumers()[consumer_index]
+
+            index = None
+            for i, consumer_input in enumerate(consumer.inputs):
+                if consumer_input == tensor:
+                    index = i
+                    break
+            assert index is not None
+
+            conn_ops_with_param_names.append(consumer.name)
+            input_indices.append(index)
+
+    return conn_ops_with_param_names, input_indices

@@ -698,10 +698,11 @@ class TestQuantSim(unittest.TestCase):
             """
             return ['conv2d/Relu']
 
-        def get_manual_params(_graph, _starting_ops, _ending_ops):
+        def get_manual_params(_graph, _conn_graph, _starting_ops, _ending_ops):
             """
             Overriding function for getting a list of ops to insert param quantizers for
             :param _graph: Unused argument
+            :param _conn_graph: Unused argument
             :param _starting_ops: Unused argument
             :param _ending_ops: Unused argument
             :return: List of ops to insert param quantizers for, and list of param indices for these ops
