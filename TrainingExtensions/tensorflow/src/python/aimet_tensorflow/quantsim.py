@@ -816,30 +816,20 @@ class QuantizationSimModel:
         :return: Tuple consisting of list of op names with params to insert quantize ops for as well as list of indices
         of parameters for each op
         """
-        # Get the op query module
-        query = core.OpQuery(graph, ops_to_ignore=None)
-        valid_ops = get_valid_ops(graph, starting_op_names, output_op_names)
-        ops_with_param_names = [op.name for op in query.get_weight_ops() if op in valid_ops and
-                                op_not_in_loop_control_flow_context(graph,
-                                                                    graph.get_operation_by_name(op.name))]
-        # op's control_flow_context() will be populated for ops within conditional blocks
-        ops_with_params = [graph.get_operation_by_name(op_name) for op_name in ops_with_param_names]
-        input_indices = query.get_weight_inputs(ops_with_params)
-        if len(ops_with_param_names) != len(input_indices):
-            _logger.error("Length of ops with params and input indices differ")
+        if conn_graph is None:
+            _logger.error("Connected graph is not passed as a parameter")
             raise AssertionError
 
-        # Get connected graph parameters
-        conn_op_names, conn_input_indices = get_conn_graph_ops_to_quantize_params_for(conn_graph, valid_ops)
+        valid_ops = get_valid_ops(graph, starting_op_names, output_op_names)
+        ops_with_param_names = []
+        input_indices = []
 
-        # Only add connected graph parameters if it was not already added in ops_with_param_names
-        existing_set = set(zip(ops_with_param_names, input_indices))
-        for conn_op_name, conn_input_index in zip(conn_op_names, conn_input_indices):
-            op = graph.get_operation_by_name(conn_op_name)
-            if ((conn_op_name, conn_input_index) not in existing_set and
-                    op_not_in_loop_control_flow_context(graph, op) and op in valid_ops):
-                ops_with_param_names.append(conn_op_name)
-                input_indices.append(conn_input_index)
+        # Get connected graph parameters
+        for name, index in list(zip(*get_conn_graph_ops_to_quantize_params_for(conn_graph, valid_ops))):
+            op = graph.get_operation_by_name(name)
+            if op_not_in_loop_control_flow_context(graph, op) and op in valid_ops:
+                ops_with_param_names.append(name)
+                input_indices.append(index)
 
         return ops_with_param_names, input_indices
 
