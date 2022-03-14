@@ -93,6 +93,10 @@ class Op(aimet_common.connected_graph.operation.Op):
         """ Returns the internal ops for the module corresponding to this operation. """
         return self._internal_ops
 
+    def get_param_tensors(self) -> List[tf.Operation]:
+        """ Return tensors of connected graph parameters """
+        return [param.tensor_dict[self] for param in self._parameters.values()]
+
     def get_attribute(self, attribute_name: str):
         """ Get an attribute for this operation, returns None if attribute doesn't exist """
         return self._attributes.get(attribute_name, None)
