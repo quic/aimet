@@ -93,7 +93,7 @@ class Adaround:
         soft_rounded_model = tf.keras.models.clone_model(model)
         soft_rounded_model.set_weights(model.get_weights())
 
-        ordered_layer_indices = cls._get_ordered_layer_indices(model)
+        ordered_layer_indices = cls._get_ordered_adaround_layer_indices(model)
         module_act_func_pair = cls._get_module_act_func_pair(model)
         param_encodings = {}
 
@@ -147,20 +147,25 @@ class Adaround:
     @classmethod
     def _get_module_act_func_pair(cls, model) -> Dict[tf.keras.layers.Layer, Union[None, tf.keras.layers.Layer]]:
         """
-        Get dictionary mapping modules to subsequent activation functions.
+        Get dictionary mapping modules to subsequent activation functions. If the activation function is built into the
+        layer, map None to that layer.
         :param model: Model to obtain module to activation info from
         :return: Dictionary mapping modules to subsequent activation functions
         """
         conn_graph = ConnectedGraph(model)
         module_act_func_pair = {}
-        activation_types = (tf.keras.layers.Softmax, tf.keras.layers.ReLU, tf.keras.layers.Activation)
+        activation_types = (tf.keras.layers.ELU, tf.keras.layers.PReLU, tf.keras.layers.Softmax, tf.keras.layers.ReLU,
+                            tf.keras.layers.LeakyReLU, tf.keras.layers.ThresholdedReLU, tf.keras.layers.Activation)
         for op in conn_graph.get_all_ops().values():
             # Get module associated with op
             cur_module = op.get_module()
-
             if cur_module:
                 module_act_func_pair[cur_module] = None
-
+                if hasattr(cur_module, 'activation'):
+                    if tf.keras.activations.serialize(cur_module.activation) != 'linear':
+                        # If the activation is not passthrough, it is built into the layer. Use None for the associated
+                        # activation since running forward pass on the layer will already include the activation.
+                        continue
                 if op.output:
                     assert op.output.consumers, 'op output should have at least one consumer op.'
                     # Get the next op
@@ -194,14 +199,10 @@ class Adaround:
                                        'bitwidth': encoding.bw,
                                        'is_symmetric': is_symmetric}]
     @staticmethod
-    def _get_ordered_layer_indices(model: tf.keras.Model) -> List[int]:
+    def _get_ordered_adaround_layer_indices(model: tf.keras.Model) -> List[int]:
         """
         Get a list of ordered layer indices corresponding to layers to Adaround.
         :param model: Model to find indices for
         :return: List of ordered layer indices to Adaround
         """
-        # Currently, only support conv, linear layers that don't have activations built in. This is due to not being
-        # able to sample outputs of the layer prior to activation if the layer is combined with activation.
-        # Need to implement a utilily to replace these layers with separated activation layers.
-        return [idx for idx, layer in enumerate(model.layers) if isinstance(layer, AdaroundSupportedOps) and \
-                tf.keras.activations.serialize(layer.activation) == 'linear']
+        return [idx for idx, layer in enumerate(model.layers) if isinstance(layer, AdaroundSupportedOps)]

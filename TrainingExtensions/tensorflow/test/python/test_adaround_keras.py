@@ -64,6 +64,16 @@ def depthwise_conv2d_model():
     model = tf.keras.Model(inputs=inputs, outputs=outputs)
     return model
 
+def varied_activations_model():
+    model = tf.keras.Sequential([
+        tf.keras.layers.Conv2D(8, (2, 2), input_shape=(16, 16, 3,)),
+        tf.keras.layers.Activation('elu'),
+        tf.keras.layers.Conv2D(4, (2, 2), activation=tf.nn.tanh, kernel_regularizer=tf.keras.regularizers.l2(0.5)),
+        tf.keras.layers.Conv2D(2, (2, 2)),
+        tf.keras.layers.Flatten(),
+        tf.keras.layers.Dense(2, activation='softmax', name="keras_model")])
+    return model
+
 
 # Adaround weight tests
 def test_apply_adaround():
@@ -93,6 +103,24 @@ def test_apply_adaround():
     # Delete encodings file
     if os.path.exists("./data/dummy.encodings"):
         os.remove("./data/dummy.encodings")
+
+def test_get_module_act_func_pair():
+    model = varied_activations_model()
+    module_act_func_pairs = Adaround._get_module_act_func_pair(model)
+    conv_layer_1 = model.layers[0]
+    conv_layer_2 = model.layers[2]
+    conv_layer_3 = model.layers[3]
+    dense_layer = model.layers[5]
+    assert module_act_func_pairs[conv_layer_1] == model.layers[1]
+    assert module_act_func_pairs[conv_layer_2] is None
+    assert module_act_func_pairs[conv_layer_3] is None
+    assert module_act_func_pairs[dense_layer] is None
+
+def test_get_ordered_adaround_layer_indices():
+    model = varied_activations_model()
+    ordered_adaround_layer_indices = Adaround._get_ordered_adaround_layer_indices(model)
+    assert len(ordered_adaround_layer_indices) == 4
+    assert ordered_adaround_layer_indices == [0, 2, 3, 5]
 
 
 # Adaround activation sampler tests
