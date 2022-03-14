@@ -50,13 +50,12 @@ from aimet_common.quantsim import gate_min_max, calculate_delta_offset, encoding
 from aimet_common.quant_utils import get_conv_accum_bounds
 from aimet_common.utils import AimetLogger, save_json_yaml
 from aimet_tensorflow import graph_editor
-from aimet_tensorflow.common import core
 from aimet_tensorflow.utils.common import update_variables_with_values, save_data_to_pickle_file, \
     load_data_from_pickle_file, get_valid_ops
 from aimet_tensorflow import utils
 from aimet_tensorflow.utils.constants import QuantizeOpIndices
 from aimet_tensorflow.utils.quantsim import create_op_to_quant_ops_dict, is_op_quantizable, \
-    get_time_steps_tensor_from_rnn_inner_ops, create_encoding_from_dict
+    get_time_steps_tensor_from_rnn_inner_ops, create_encoding_from_dict, get_conn_graph_ops_to_quantize_params_for
 from aimet_tensorflow.utils.graph import updated_graph_flow_context_to_loop_context, set_graph_flow_context, \
     op_not_in_loop_control_flow_context
 from aimet_tensorflow.common.connectedgraph import ConnectedGraph
@@ -590,6 +589,7 @@ class QuantizationSimModel:
 
         # Get list of ops with params to insert quantizers for, as well as the input indices to insert on.
         ops_with_param_names, input_indices = QuantizationSimModel._get_ops_to_quantize_params_for(self.session.graph,
+                                                                                                   self.connected_graph,
                                                                                                    starting_op_names,
                                                                                                    output_op_names)
 
@@ -805,11 +805,12 @@ class QuantizationSimModel:
         return encoding_min_var, encoding_max_var
 
     @staticmethod
-    def _get_ops_to_quantize_params_for(graph: tf.Graph, starting_op_names: List[str], output_op_names: List[str]) \
-            -> Tuple[List[str], List[int]]:
+    def _get_ops_to_quantize_params_for(graph: tf.Graph, conn_graph: ConnectedGraph, starting_op_names: List[str],
+                                        output_op_names: List[str]) -> Tuple[List[str], List[int]]:
         """
         Get names of ops to insert param quantizers for, as well as corresponding indices
         :param graph: TensorFlow graph to get names of ops to quantize weights for
+        :param conn_graph: Connected graph of the model
         :param starting_op_names: List of starting op names of the model
         :param output_op_names: List of output op names of the model
         :return: Tuple consisting of list of op names with params to insert quantize ops for as well as list of indices
@@ -827,6 +828,19 @@ class QuantizationSimModel:
         if len(ops_with_param_names) != len(input_indices):
             _logger.error("Length of ops with params and input indices differ")
             raise AssertionError
+
+        # Get connected graph parameters
+        conn_op_names, conn_input_indices = get_conn_graph_ops_to_quantize_params_for(conn_graph, valid_ops)
+
+        # Only add connected graph parameters if it was not already added in ops_with_param_names
+        existing_set = set(zip(ops_with_param_names, input_indices))
+        for conn_op_name, conn_input_index in zip(conn_op_names, conn_input_indices):
+            op = graph.get_operation_by_name(conn_op_name)
+            if ((conn_op_name, conn_input_index) not in existing_set and
+                    op_not_in_loop_control_flow_context(graph, op) and op in valid_ops):
+                ops_with_param_names.append(conn_op_name)
+                input_indices.append(conn_input_index)
+
         return ops_with_param_names, input_indices
 
     @staticmethod
