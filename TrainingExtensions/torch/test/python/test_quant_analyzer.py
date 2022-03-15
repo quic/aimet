@@ -71,7 +71,7 @@ def evaluate(model: torch.nn.Module, dummy_input: torch.Tensor):
 class TestQuantAnalyzer:
 
 
-    def test_quant_analyzer(self):
+    def test_check_model_sensitivity_to_quantization(self):
         """ test analyze_model_sensitivity API """
         input_shape = (1, 3, 32, 32)
         dummy_input = torch.randn(*input_shape)
@@ -124,3 +124,19 @@ class TestQuantAnalyzer:
         print(layer_wise_eval_score_dict)
         assert type(layer_wise_eval_score_dict) == dict
         assert len(layer_wise_eval_score_dict) == 12
+
+    def test_get_enabled_info_for_all_quantizers(self):
+        """ test sort quant wrappers based on occurrence """
+        input_shape = (1, 3, 32, 32)
+        dummy_input = torch.randn(*input_shape)
+        model = TinyModel().eval()
+        sim = QuantizationSimModel(model, dummy_input)
+        analyzer = QuantAnalyzer(model, dummy_input, CallbackFunc(None), CallbackFunc(None))
+        sorted_quant_wrappers_dict = analyzer._sort_quant_wrappers_based_on_occurrence(sim)
+        enabled_for_all_quantizers = analyzer._get_enabled_info_for_all_quantizers(sorted_quant_wrappers_dict)
+        for layer_name, all_quantizers in enabled_for_all_quantizers.items():
+            assert isinstance(all_quantizers, dict)
+
+        assert enabled_for_all_quantizers["conv1"]["param_quantizers"]["weight"] == True
+        assert enabled_for_all_quantizers["conv1"]["input_quantizers"][0] == True
+        assert enabled_for_all_quantizers["conv1"]["output_quantizers"][0] == True
