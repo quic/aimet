@@ -36,12 +36,12 @@
 #  @@-COPYRIGHT-END-@@
 # =============================================================================
 
-import pytest
+import shutil
+import numpy as np
 import torch
-from unittest.mock import MagicMock
 from aimet_torch.examples.test_models import TinyModel
 from aimet_common.defs import QuantScheme
-from aimet_torch.qc_quantize_op import QcQuantizeWrapper, StaticGridQuantWrapper
+from aimet_torch.qc_quantize_op import QcQuantizeWrapper
 from aimet_torch.quantsim import QuantizationSimModel
 from aimet_torch.quant_analyzer import QuantAnalyzer, CallbackFunc
 
@@ -111,6 +111,7 @@ class TestQuantAnalyzer:
         print(layer_wise_eval_score_dict)
         assert type(layer_wise_eval_score_dict) == dict
         assert len(layer_wise_eval_score_dict) == 12
+        shutil.rmtree("./tmp/")
 
     def test_perform_per_layer_analysis_by_disabling_quant_wrappers(self):
         """ test perform per layer analysis by disabling quant wrappers """
@@ -124,6 +125,7 @@ class TestQuantAnalyzer:
         print(layer_wise_eval_score_dict)
         assert type(layer_wise_eval_score_dict) == dict
         assert len(layer_wise_eval_score_dict) == 12
+        shutil.rmtree("./tmp/")
 
     def test_get_enabled_info_for_all_quantizers(self):
         """ test sort quant wrappers based on occurrence """

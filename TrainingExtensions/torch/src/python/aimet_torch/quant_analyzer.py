@@ -38,8 +38,10 @@
 
 """ Quant Analyzer """
 
+import os
 from collections import OrderedDict, defaultdict
 from typing import Union, Tuple, Callable, Dict
+from bokeh import plotting
 import torch
 
 from aimet_common.utils import AimetLogger
@@ -291,6 +293,35 @@ class QuantAnalyzer:
 
         return layer_wise_eval_score_dict
 
+    @staticmethod
+    def _export_diagnostics(
+            layer_wise_eval_score_dict: Dict,
+            results_dir: str
+    ) -> None:
+        """
+        Export diagnostics in html format.
+
+        :param layer_wise_eval_score_dict: layer wise eval score dictionary. dict[layer_name] = eval_score
+        :param results_dir: Directory to save the results.
+        """
+        filename = os.path.join(results_dir, "per_layer_sensitivity_analysis.html")
+        plotting.output_file(filename)
+
+        layer_names = []
+        eval_scores = []
+        for layer_name, eval_score in layer_wise_eval_score_dict.items():
+            layer_names.append(layer_name)
+            eval_scores.append(eval_score)
+
+        plot = plotting.figure(x_range=layer_names,
+                               height=300,
+                               title="Per layer sensitivity analysis",
+                               x_axis_label="Layers",
+                               y_axis_label="Eval score")
+        plot.line(x=layer_names, y=eval_scores)
+        plot.y_range.start = 0
+        plotting.save(plot)
+
     def check_model_sensitivity_to_quantization(
             self,
             default_quant_scheme: QuantScheme = QuantScheme.post_training_tf_enhanced,
@@ -343,6 +374,7 @@ class QuantAnalyzer:
             default_output_bw: int = 8,
             default_config_file: str = None,
             default_data_type: QuantizationDataType = QuantizationDataType.int,
+            results_dir: str = './tmp/',
     ) -> Dict:
         """
         NOTE: Option 1
@@ -365,8 +397,12 @@ class QuantAnalyzer:
                                  Possible options are QuantizationDataType.int and QuantizationDataType.float.
                                  Note that the mode default_data_type=QuantizationDataType.float is only supported with
                                  default_output_bw=16 and default_param_bw=16.
+        :param results_dir: Directory to save the results.
         :return: layer wise eval score dictionary. dict[layer_name] = eval_score
         """
+        results_dir = os.path.abspath(results_dir)
+        os.makedirs(results_dir, exist_ok=True)
+
         kwargs = dict(
             quant_scheme=default_quant_scheme,
             rounding_mode=default_rounding_mode,
@@ -377,11 +413,13 @@ class QuantAnalyzer:
         )
         sim = QuantizationSimModel(self._model, self._dummy_input, **kwargs)
 
-        _logger.info("OPTION-1: Starting per-layer analysis by enabling quant wrappers.")
+        _logger.info("OPTION-1:\n All the quant wrappers are disabled.\n"
+                     " Starting per-layer analysis by enabling quant wrappers as per config file.")
         layer_wise_eval_score_dict = self._perform_per_layer_analysis(sim,
                                                                       disable_all_quantizers=True,
                                                                       enabled_before=True,
                                                                       enabled_after=False)
+        self._export_diagnostics(layer_wise_eval_score_dict, results_dir)
         return layer_wise_eval_score_dict
 
     def perform_per_layer_analysis_by_disabling_quant_wrappers(
@@ -392,6 +430,7 @@ class QuantAnalyzer:
             default_output_bw: int = 8,
             default_config_file: str = None,
             default_data_type: QuantizationDataType = QuantizationDataType.int,
+            results_dir: str = "./tmp/",
     ) -> Dict:
         """
         NOTE: Option 2
@@ -414,8 +453,12 @@ class QuantAnalyzer:
                                  Possible options are QuantizationDataType.int and QuantizationDataType.float.
                                  Note that the mode default_data_type=QuantizationDataType.float is only supported with
                                  default_output_bw=16 and default_param_bw=16.
+        :param results_dir: Directory to save the results.
         :return: layer wise eval score dictionary. dict[layer_name] = eval_score
         """
+        results_dir = os.path.abspath(results_dir)
+        os.makedirs(results_dir, exist_ok=True)
+
         kwargs = dict(
             quant_scheme=default_quant_scheme,
             rounding_mode=default_rounding_mode,
@@ -426,9 +469,11 @@ class QuantAnalyzer:
         )
         sim = QuantizationSimModel(self._model, self._dummy_input, **kwargs)
 
-        _logger.info("OPTION-2: Starting per-layer analysis by disabling quant wrappers.")
+        _logger.info("OPTION-2:\n All the quant wrappers are enabled as per config file.\n"
+                     " Starting per-layer analysis by disabling quant wrappers.")
         layer_wise_eval_score_dict = self._perform_per_layer_analysis(sim,
                                                                       disable_all_quantizers=False,
                                                                       enabled_before=False,
                                                                       enabled_after=True)
+        self._export_diagnostics(layer_wise_eval_score_dict, results_dir)
         return layer_wise_eval_score_dict
