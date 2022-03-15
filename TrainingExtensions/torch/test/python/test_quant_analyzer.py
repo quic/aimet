@@ -37,7 +37,6 @@
 # =============================================================================
 
 import shutil
-import numpy as np
 import torch
 from aimet_torch.examples.test_models import TinyModel
 from aimet_common.defs import QuantScheme

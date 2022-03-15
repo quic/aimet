@@ -284,6 +284,10 @@ class QuantAnalyzer:
             self._set_enabled_for_quantizers(quant_wrapper, name, modified_quantizers, enabled_for_all_quantizers,
                                              enabled=enabled_before)
 
+            # If quantizers are not updated, skip the performance evaluation.
+            if not modified_quantizers:
+                continue
+
             # Compute encodings and record eval score.
             sim.compute_encodings(self._forward_pass_callback.func, self._forward_pass_callback.args)
             layer_wise_eval_score_dict[name] = self._eval_model(sim.model)
