@@ -49,6 +49,7 @@ from aimet_tensorflow.quantsim import QuantizationSimModel, check_accumulator_ov
 from aimet_tensorflow.quantsim_straight_through_grad import _get_n_and_p
 from aimet_tensorflow.utils.graph_saver import load_model_from_meta
 from aimet_tensorflow.common.graph_eval import initialize_uninitialized_vars
+from aimet_tensorflow.defs import ParameterInfo
 from aimet_tensorflow.examples.test_models import model_with_dtype_int, keras_model
 from aimet_common.defs import QuantScheme
 from aimet_tensorflow.quantsim import save_checkpoint, load_checkpoint
@@ -707,15 +708,14 @@ class TestQuantSim(unittest.TestCase):
             :param _ending_ops: Unused argument
             :return: List of ops to insert param quantizers for, and list of param indices for these ops
             """
-            return ['conv2d_1/Conv2D'], [1]
+            return {'conv2d_1/Conv2D/ReadVariableOp': ParameterInfo('weight', 'conv2d_1/Conv2D')}
 
-        def configure_quantization_ops(self, _conn_graph, _ops_with_param_names, _indices, _activation_op_names):
+        def configure_quantization_ops(self, _conn_graph, _params_to_quantize, _activation_op_names):
             """
             Overriding function for configuring quantization ops inserted by QuantizationSimModel
             :param self: Self refers to QuantizationSimModel object
             :param _conn_graph: Unused argument
-            :param _ops_with_param_names: Unused argument
-            :param _indices: Unused argument
+            :param _params_to_quantize: Unused argument
             :param _activation_op_names: Unused argument
             """
             conv2d_relu_quant_info = self._activation_quantizers['conv2d/Relu_quantized']
