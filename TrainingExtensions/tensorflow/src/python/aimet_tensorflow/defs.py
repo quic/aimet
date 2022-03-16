@@ -176,3 +176,10 @@ class ChannelPruningParameters:
         self.mode = mode
         self.mode_params = params
         self.multiplicity = multiplicity
+
+
+class ParameterInfo:
+    """ Store information required for parameter quantization """
+    def __init__(self, param_type: str, op_with_param_name: str):
+        self.param_type = param_type
+        self.op_with_param_name = op_with_param_name

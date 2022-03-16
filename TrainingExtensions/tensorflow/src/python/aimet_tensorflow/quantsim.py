@@ -55,10 +55,11 @@ from aimet_tensorflow.utils.common import update_variables_with_values, save_dat
 from aimet_tensorflow import utils
 from aimet_tensorflow.utils.constants import QuantizeOpIndices
 from aimet_tensorflow.utils.quantsim import create_op_to_quant_ops_dict, is_op_quantizable, \
-    get_time_steps_tensor_from_rnn_inner_ops, create_encoding_from_dict, get_conn_graph_ops_to_quantize_params_for
+    get_time_steps_tensor_from_rnn_inner_ops, create_encoding_from_dict
 from aimet_tensorflow.utils.graph import updated_graph_flow_context_to_loop_context, set_graph_flow_context, \
     op_not_in_loop_control_flow_context
 from aimet_tensorflow.common.connectedgraph import ConnectedGraph
+from aimet_tensorflow.defs import ParameterInfo
 from aimet_tensorflow.quantizer_info import QuantizerInfo, QuantizerType, quant_scheme_to_libpymo
 from aimet_tensorflow.quantsim_config.quantsim_config import QuantSimConfigurator
 from aimet_tensorflow.quantsim_recurrent import _select_simple_rnn_internal_ops_to_quantize, \
@@ -77,6 +78,9 @@ WORKING_DIR = '/tmp/quantsim/'
 
 # Op types which we will not place quantize ops after
 op_types_to_ignore = {'branch', 'Flatten', 'Shape', 'Identity', 'Reshape'}
+
+# Connected graph types to ignore parameter quantization
+param_quant_conn_op_ignore_list = {'FusedBatchNorm', 'FusedBatchNormV3', 'BatchNorm'}
 
 DTYPES_QUANTIZE_NOT_REQUIRED = [tf.dtypes.int8, tf.dtypes.uint8, tf.dtypes.int16, tf.dtypes.uint16,
                                 tf.dtypes.int32, tf.dtypes.uint32, tf.dtypes.int64, tf.dtypes.uint64,
@@ -225,13 +229,12 @@ class QuantizationSimModel:
         op_var_tensor = quant_op.inputs[var_index]
         return self.session.run(op_var_tensor)
 
-    def configure_quantization_ops(self, conn_graph: ConnectedGraph, ops_with_param_names: List[str],
-                                   indices: List[int], activation_op_names: List[str]):
+    def configure_quantization_ops(self, conn_graph: ConnectedGraph, params_to_quantize: Dict[str, ParameterInfo],
+                                   activation_op_names: List[str]):
         """
         Configure inserted quantize ops using config file
         :param conn_graph: Connected graph of the model
-        :param ops_with_param_names: List of ops for which param quantization ops were inserted for
-        :param indices: List of input indices (one-to-one for each entry in ops)
+        :param params_to_quantize: Dictionary of parameters to quantize
         :param activation_op_names: List of ops for which activation quantization ops were inserted for
         """
         if not conn_graph:
@@ -240,8 +243,7 @@ class QuantizationSimModel:
                           'overriden, please override configure_quantization_ops() as well.')
             raise AssertionError
         op_to_quant_ops_dict = create_op_to_quant_ops_dict(self.session.graph, conn_graph,
-                                                           ops_with_param_names, indices,
-                                                           activation_op_names)
+                                                           params_to_quantize, activation_op_names)
         self._quantsim_configurator.configure_quantizers(op_to_quant_ops_dict, self._param_quantizers,
                                                          self._activation_quantizers)
 
@@ -583,16 +585,16 @@ class QuantizationSimModel:
         """
 
         # Get list of ops with params to insert quantizers for, as well as the input indices to insert on.
-        ops_with_param_names, input_indices = QuantizationSimModel._get_ops_to_quantize_params_for(self.session.graph,
-                                                                                                   self.connected_graph,
-                                                                                                   starting_op_names,
-                                                                                                   output_op_names)
+        params_to_quantize = QuantizationSimModel._get_ops_to_quantize_params_for(self.session.graph,
+                                                                                  self.connected_graph,
+                                                                                  starting_op_names,
+                                                                                  output_op_names)
 
         # Get list of activation ops to insert quantizers for
         activation_op_names = QuantizationSimModel._get_ops_to_quantize_activations_for(self.session.graph,
                                                                                         self.connected_graph)
 
-        self._insert_param_quantization_ops(ops_with_param_names, input_indices, default_param_bw)
+        self._insert_param_quantization_ops(params_to_quantize, default_param_bw)
         self._insert_activation_quantization_ops(activation_op_names, default_output_bw)
 
         # this takes care of quant node insertion in loop context of recurrent layer, which makes a cell
@@ -607,7 +609,7 @@ class QuantizationSimModel:
 
         # Note: at this point, the session used to construct conn_graph is different than the current
         # self.session, however we still use the connected graph to traverse the graph structure.
-        self.configure_quantization_ops(self.connected_graph, ops_with_param_names, input_indices, activation_op_names)
+        self.configure_quantization_ops(self.connected_graph, params_to_quantize, activation_op_names)
 
     @staticmethod
     def _get_quantized_name(op_name: str) -> str:
@@ -654,28 +656,24 @@ class QuantizationSimModel:
 
         return op_to_modify, param_in
 
-    def _insert_param_quantization_ops(self, op_names: List[str], indices: List[int], default_param_bw: int,
+    def _insert_param_quantization_ops(self, params_to_quantize: Dict[str, ParameterInfo], default_param_bw: int,
                                        inner_ops: List[str] = None, in_loop_context: bool = False):
         """
         Inserts quantization ops for individual parameters
-        :param ops: List of ops whose parameters are being quantized
-        :param indices: List of input indices (one-to-one for each entry in ops)
+        :param params_to_quantize: dictionary of parameters to quantize
         :param default_param_bw : default param bitwidth
         :param in_loop_context: True, if the ops belong to loop control flow context
         :return: None
         """
         # pylint: disable=too-many-locals
-        ops = [self.session.graph.get_operation_by_name(op_name) for op_name in op_names]
-        assert len(ops) == len(indices)
-
-        for op, index in zip(ops, indices):
-            # Modify the weight/bias inputs to use the quantized inputs
-            can_modify_op, param_in = QuantizationSimModel._get_op_to_modify_with_param_in(op, index)
+        for param_name, param_info in params_to_quantize.items():
+            param_in = self.session.graph.get_operation_by_name(param_name).outputs[0]
+            can_modify_op = self.session.graph.get_operation_by_name(param_info.op_with_param_name)
 
             if param_in is not None:
                 num_output_channels, quantization_axis = QuantizationSimModel._get_number_of_output_channels(
-                    can_modify_op, index)
-                quant_op_name = self._get_quantized_name(param_in.op.name)
+                    param_in, can_modify_op)
+                quant_op_name = self._get_quantized_name(param_name)
 
                 self._op_name_to_output_channels_axis_dict[quant_op_name] = [num_output_channels, quantization_axis]
                 _logger.info("Adding weight quantization op %s", quant_op_name)
@@ -697,21 +695,21 @@ class QuantizationSimModel:
                     raise ValueError('Input ' + param_in.name + ' not quantized!')
 
     @staticmethod
-    def _get_number_of_output_channels(op: tf.Operation, index: int):
+    def _get_number_of_output_channels(param_in: tf.Tensor, consumer_op: tf.Operation):
         """
         Gets number of output channels and quantization axis for an op for per channel quantization
         """
-        weight_shape = op.inputs[index].get_shape().as_list()
+        weight_shape = param_in.get_shape().as_list()
         # If weight shape length is 1, the parameter is bias
         num_output_channels = None
         axis = None
         if len(weight_shape) == 1:
             num_output_channels = weight_shape[0]
             axis = 0
-        elif op.type in ['Conv2D', 'DepthwiseConv2dNative']:
+        elif consumer_op.type in ['Conv2D', 'DepthwiseConv2dNative']:
             num_output_channels = weight_shape[3]
             axis = 3
-        elif op.type == 'MatMul':
+        elif consumer_op.type == 'MatMul':
             num_output_channels = weight_shape[1]
             axis = 1
         return num_output_channels, axis
@@ -801,32 +799,34 @@ class QuantizationSimModel:
 
     @staticmethod
     def _get_ops_to_quantize_params_for(graph: tf.Graph, conn_graph: ConnectedGraph, starting_op_names: List[str],
-                                        output_op_names: List[str]) -> Tuple[List[str], List[int]]:
+                                        output_op_names: List[str]) -> Dict[str, ParameterInfo]:
         """
         Get names of ops to insert param quantizers for, as well as corresponding indices
         :param graph: TensorFlow graph to get names of ops to quantize weights for
         :param conn_graph: Connected graph of the model
         :param starting_op_names: List of starting op names of the model
         :param output_op_names: List of output op names of the model
-        :return: Tuple consisting of list of op names with params to insert quantize ops for as well as list of indices
-        of parameters for each op
+        :return: Dictionary with name of parameters to quantize as keys and information about parameters as values
         """
         if conn_graph is None:
             _logger.error("Connected graph is not passed as a parameter")
             raise AssertionError
 
+        # Get available connected graphs
+        valid_conns = [conn for conn in conn_graph.get_all_ops().values()
+                       if conn.type not in param_quant_conn_op_ignore_list]
+
         valid_ops = get_valid_ops(graph, starting_op_names, output_op_names)
-        ops_with_param_names = []
-        input_indices = []
 
-        # Get connected graph parameters
-        for name, index in list(zip(*get_conn_graph_ops_to_quantize_params_for(conn_graph, valid_ops))):
-            op = graph.get_operation_by_name(name)
-            if op_not_in_loop_control_flow_context(graph, op) and op in valid_ops:
-                ops_with_param_names.append(name)
-                input_indices.append(index)
+        # Get parameters of connected graphs
+        params_to_quantize = {}
+        for conn in valid_conns:
+            for param_name, param_info in conn.parameters.items():
+                op_with_param = graph.get_operation_by_name(param_info.op_with_param_name)
+                if op_not_in_loop_control_flow_context(graph, op_with_param) and op_with_param in valid_ops:
+                    params_to_quantize[param_name] = param_info
 
-        return ops_with_param_names, input_indices
+        return params_to_quantize
 
     @staticmethod
     def _get_ops_to_quantize_activations_for(graph: tf.Graph, conn_graph: ConnectedGraph) -> List[str]:
