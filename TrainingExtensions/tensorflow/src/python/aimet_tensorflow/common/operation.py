@@ -37,10 +37,11 @@
 # =============================================================================
 """ Tf Operation class and utilities """
 
-from typing import List
+from typing import List, Dict
 import tensorflow as tf
 import aimet_common.connected_graph.operation
 from aimet_tensorflow.common.product import Product
+from aimet_tensorflow.defs import ParameterInfo
 
 
 class OpWithMetaInfoType:
@@ -93,9 +94,23 @@ class Op(aimet_common.connected_graph.operation.Op):
         """ Returns the internal ops for the module corresponding to this operation. """
         return self._internal_ops
 
-    def get_param_tensors(self) -> List[tf.Operation]:
-        """ Return tensors of connected graph parameters """
-        return [param.tensor_dict[self] for param in self._parameters.values()]
+    @property
+    def parameters(self) -> Dict[str, ParameterInfo]:
+        """ Return dictionary with param name as key and param info as value """
+        parameter_info_list = {}
+        for param_type, param in self._parameters.items():
+            param_op = param.tensor_dict[self].op
+            assert param_op.type in ['ReadVariableOp', 'Identity']
+            op_with_param = None
+            for consumer in param_op.outputs[0].consumers():
+                if not consumer.name.startswith('gradients/'):
+                    assert op_with_param is None
+                    op_with_param = consumer
+            assert op_with_param is not None
+            param_type_for_param_info = 'bias' if param_type in ['bias', 'beta'] else 'weight'
+            parameter_info_list[param_op.name] = ParameterInfo(param_type_for_param_info, op_with_param.name)
+
+        return parameter_info_list
 
     def get_attribute(self, attribute_name: str):
         """ Get an attribute for this operation, returns None if attribute doesn't exist """
