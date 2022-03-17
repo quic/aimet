@@ -385,8 +385,8 @@ class GreedyCompRatioSelectAlgo(CompRatioSelectAlgo):
             layer_names = [i.name for i in selected_layers]
 
             progress_bar = ProgressBar(total=num_layers * num_candidates, title="Eval Scores Table", color="green",
-                                       bokeh_session=self.bokeh_session)
-            data_table = DataTable(num_layers, num_candidates, column_names, bokeh_session=self.bokeh_session,
+                                       bokeh_document=self.bokeh_session)
+            data_table = DataTable(num_layers, num_candidates, column_names, bokeh_document=self.bokeh_session,
                                    row_index_names=layer_names)
         else:
             data_table = None
@@ -416,7 +416,7 @@ class GreedyCompRatioSelectAlgo(CompRatioSelectAlgo):
 
             # plot to visualize the evaluation scores as they update for each layer
             layer_wise_eval_scores_plot = LinePlot(x_axis_label="Compression Ratios", y_axis_label="Eval Scores",
-                                                   title=layer.name, bokeh_session=self.bokeh_session)
+                                                   title=layer.name, bokeh_document=self.bokeh_session)
         # Loop over each candidate
         for comp_ratio in self._comp_ratio_candidates:
             logger.info("Analyzing compression ratio: %s =====================>", comp_ratio)
