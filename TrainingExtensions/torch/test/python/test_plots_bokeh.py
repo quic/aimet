@@ -91,7 +91,7 @@ class VisualizeNetwork(unittest.TestCase):
     def test_progress_bar(self):
         visualization_url, process = start_bokeh_server_session(8002)
         bokeh_session = BokehServerSession(url=visualization_url, session_id="test")
-        progress_bar = ProgressBar(total=10, bokeh_session=bokeh_session, title="testing", color="green")
+        progress_bar = ProgressBar(total=10, bokeh_document=bokeh_session, title="testing", color="green")
         for i in range(10):
             progress_bar.update()
         progress_bar.update()
@@ -117,7 +117,7 @@ class VisualizeNetwork(unittest.TestCase):
     def test_invoke_progress_bar(self):
         visualization_url, process = start_bokeh_server_session(8002)
         bokeh_session = BokehServerSession(url=visualization_url, session_id="test")
-        progress_bar = ProgressBar(80, title="Some Title Goes Here", color="green", bokeh_session=bokeh_session)
+        progress_bar = ProgressBar(80, title="Some Title Goes Here", color="green", bokeh_document=bokeh_session)
 
         for i in range(80):
             progress_bar.update()
