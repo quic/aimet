@@ -38,12 +38,15 @@
 # =============================================================================
 
 """ Classes for bokeh plots"""
+import abc
+from typing import Optional
 
 import numpy as np
 import pandas as pd
 from bokeh.client import push_session
 from bokeh.document import Document
 from bokeh.layouts import column
+from bokeh.model import Model
 from bokeh.models import TableColumn
 from bokeh.models import DataTable as BokehDataTable
 from bokeh.models import Div
@@ -55,10 +58,31 @@ from bokeh.models.annotations import Title
 from bokeh.plotting import figure
 
 
-class BokehServerSession:
+class BokehDocument(abc.ABC):
+    """ Creates abstract class to add/remove model from a bokeh document """
+
+    @abc.abstractmethod
+    def add(self, model: Model):
+        """
+        Add a model as a root of this Document.
+        :param model: The model to add as a root of this document.
+        """
+        raise  NotImplementedError()
+
+
+    @abc.abstractmethod
+    def remove(self, model: Model):
+        """
+        Remove a model as root model from this Document.
+        :param model: The model to remove from root of this document.
+        """
+        raise  NotImplementedError()
+
+
+class BokehServerSession(BokehDocument):
     """ Creates a unique bokeh session specified by a bokeh session id as input name and a port number"""
 
-    def __init__(self, url: str, session_id: str = None, display: bool = True) -> object:
+    def __init__(self, url: str, session_id: str = None, display: bool = True):
         """
         Create a BokehServerSession object. We will link this server session with a document, self.document,
         which allows changes to be pushed to the server.
@@ -71,6 +95,22 @@ class BokehServerSession:
         if display:
             self.server_session.show()
 
+    def add(self, model: Model):
+        """
+        Add a model as a root of this Document.
+        :param model: The model to add as a root of this document.
+
+        """
+        self.document.add_root(model)
+
+
+    def remove(self, model: Model):
+        """
+        Remove the model which was set as root model for this Document.
+        :param model: The model to remove from root of this document.
+        """
+        self.document.remove_root(model)
+
 
 class ProgressBar:
     """
@@ -78,13 +118,13 @@ class ProgressBar:
     running operation, providing a visual cue that processing is underway.
     """
 
-    def __init__(self, total: int, title: str, color: str, bokeh_session: object):
+    def __init__(self, total: int, title: str, color: str, bokeh_document: BokehDocument):
         """
         Initialize a ProgressBar instance.
         :param total: number of steps the progress bar is divided into. In other words, the number of times update should be called.
         :param title: the title of the progress bar
         :param color: the color of the progress bar
-        :param bokeh_session: bokeh server session
+        :param bokeh_document: bokeh server session
         """
         self.color = color
         self.title = title
@@ -102,8 +142,9 @@ class ProgressBar:
         self.title_object = Title()
         self.title_object.text = "     " + self.title
         plot.title = self.title_object
+        self.plot = plot
 
-        bokeh_session.document.add_root(plot)
+        bokeh_document.add(plot)
 
     def update(self):
         """
@@ -152,15 +193,14 @@ class DataTable:
     Datatable object synced with a server session that updates on the bokeh server every time update_table is called.
     """
 
-    def __init__(self, num_rows: int, num_columns: int, column_names: list, bokeh_session: object,
+    def __init__(self, num_rows: int, num_columns: int, column_names: list, bokeh_document: Optional[BokehDocument],
                  row_index_names: list = None):
         """
-        initialize a
-        :param num_rows:
-        :param num_columns:
-        :param column_names:
-        :param bokeh_session:
-        :param row_index_names:
+        :param num_rows: number of records in the table
+        :param num_columns: number of columns to create
+        :param column_names: list containing column headers
+        :param bokeh_document: bokeh document to which to add the table if provided
+        :param row_index_names: list containing unique index names for each record
         """
         self.total = num_rows * num_columns
         self.row_names = row_index_names
@@ -176,7 +216,8 @@ class DataTable:
         columns = [TableColumn(field=column_str, title=column_str) for column_str in data_frame.columns]  # bokeh columns
         self.data_table = BokehDataTable(source=self.source, columns=columns, width=1500)
 
-        bokeh_session.document.add_root(self.data_table)
+        if bokeh_document is not None:
+            bokeh_document.add(self.data_table)
 
     def update_table(self, column_name, row, value):
         """
@@ -198,7 +239,6 @@ class DataTable:
         """
         Creates a maping between the user defined index, row_names, and the numerical index that it refers to in the
         'data table
-        :param row_names: list of row names
         :return: mapping between row name strings and a numerical index
         """
         row_name_to_numerical_index_map = {}
@@ -209,30 +249,18 @@ class DataTable:
         return row_name_to_numerical_index_map
 
 
-class LinePlot:
-    """ Creates an updating line plot with x,y coordinates for each point marked with dots."""
+class FigurePlot:
+    """ Creates an updating plot with x,y coordinates for each point marked with dots."""
 
-    def __init__(self, x_axis_label, y_axis_label, title, bokeh_session):
+    def __init__(self, x_axis_label, y_axis_label, title):
         self.x_axis_label = x_axis_label
         self.y_axis_label = y_axis_label
         self.title = title
-        self.bokeh_session = bokeh_session
 
         self.source = ColumnDataSource(data=dict(x=[], y=[]))
 
-        self.plot = figure(x_axis_label=self.x_axis_label, y_axis_label=self.y_axis_label,
-                           title=self.title,
-                           tools="pan,box_zoom, crosshair,reset, save", width=1500)
-        self.plot.circle(x="x", y="y", size=10, alpha=0.7, color="black", source=self.source)
-        self.plot.line(x="x", y="y", source=self.source)
-
         self.title_object = Title()
         self.title_object.text = self.title
-        self.plot.title = self.title_object
-
-        LinePlot.style(self.plot)
-
-        self.bokeh_session.document.add_root(self.plot)
 
     def update(self, new_x_coordinate, new_y_coordinate):
         """
@@ -244,13 +272,6 @@ class LinePlot:
         # has new, identical-length updates for all columns in source
         new_data = {'x': [new_x_coordinate], 'y': [new_y_coordinate]}
         self.source.stream(new_data)
-
-    def remove_plot(self):
-        """
-        Removes current plot object from document
-        :return: None
-        """
-        self.bokeh_session.document.remove_root(self.plot)
 
     def update_title(self, new_title):
         """
@@ -282,6 +303,49 @@ class LinePlot:
 
         return p
 
+class LinePlot(FigurePlot):
+    """ Creates an updating line plot with x,y coordinates for each point marked with dots."""
+
+    def __init__(self, x_axis_label, y_axis_label, title, bokeh_document: BokehDocument):
+        super(LinePlot, self).__init__(x_axis_label, y_axis_label, title)
+        self.bokeh_document = bokeh_document
+
+        self.plot = figure(x_axis_label=self.x_axis_label, y_axis_label=self.y_axis_label,
+                           title=self.title,
+                           tools="pan,box_zoom, crosshair,reset, save", width=1500)
+        self.plot.circle(x="x", y="y", size=10, alpha=0.7, color="black", source=self.source)
+        self.plot.line(x="x", y="y", source=self.source)
+        self.plot.title = self.title_object
+
+        FigurePlot.style(self.plot)
+
+        self.bokeh_document.add(self.plot)
+
+    def remove_plot(self):
+        """
+        Removes current plot object from document
+        :return: None
+        """
+        self.bokeh_document.remove(self.plot)
+
+
+class ScatterPlot(FigurePlot):
+    """ Creates an updating scatter with x,y coordinates for each point marked with dots."""
+
+    def __init__(self, x_axis_label, y_axis_label, title, bokeh_document: BokehDocument):
+        super(ScatterPlot, self).__init__(x_axis_label, y_axis_label, title)
+
+        tooltips = [(f"({self.x_axis_label},{self.y_axis_label})", "($x, $y)")]
+        self.plot = figure(x_axis_label=self.x_axis_label, y_axis_label=self.y_axis_label,
+                           title=self.title,
+                           tools="pan,box_zoom, reset, save", tooltips=tooltips, width=1500)
+        self.plot.scatter(x="x", y="y", size=10, alpha=0.7, color="black", source=self.source)
+
+        self.plot.title = self.title_object
+
+        FigurePlot.style(self.plot)
+
+        bokeh_document.add(self.plot)
 
 
 class PlotsLayout:

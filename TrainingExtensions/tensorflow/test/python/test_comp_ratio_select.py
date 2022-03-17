@@ -97,10 +97,10 @@ class TestTrainingExtensionsCompRatioSelect(unittest.TestCase):
                                                                   saved_eval_scores_dict=None,
                                                                   comp_ratio_rounding_algo=None, use_cuda=False,
                                                                   bokeh_session=bokeh_session)
-        progress_bar = ProgressBar(1, "eval scores", "green", bokeh_session=bokeh_session)
+        progress_bar = ProgressBar(1, "eval scores", "green", bokeh_document=bokeh_session)
         data_table = DataTable(num_columns=3, num_rows=1,
                                column_names=['0.1', '0.2', '0.3', '0.4', '0.5', '0.6', '0.7', '0.8', '0.9'],
-                               row_index_names=[layer1.name], bokeh_session=bokeh_session)
+                               row_index_names=[layer1.name], bokeh_document=bokeh_session)
 
         pruner.prune_model.return_value = layer_db
         eval_dict = greedy_algo._compute_layerwise_eval_score_per_comp_ratio_candidate(data_table, progress_bar, layer1)
