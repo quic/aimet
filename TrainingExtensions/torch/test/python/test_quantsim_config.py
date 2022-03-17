@@ -43,7 +43,7 @@ import libpymo
 from aimet_common.defs import QuantScheme, QuantizationDataType
 from aimet_torch.examples.test_models import SingleResidual, QuantSimTinyModel, MultiInput, SingleResidualWithModuleAdd
 from aimet_torch.quantsim import QuantizationSimModel
-from aimet_torch.quantsim_config.quantsim_config import _get_all_ops_in_neighborhood
+from aimet_torch.quantsim_config.quantsim_config import get_all_ops_in_neighborhood
 from aimet_torch.qc_quantize_op import QcQuantizeWrapper
 from aimet_torch import utils
 from aimet_torch.meta.connectedgraph import ConnectedGraph
@@ -672,7 +672,7 @@ class TestQuantsimConfig:
         starting_op = conn_graph.get_all_ops()['Conv_7']
         add_10_op = conn_graph.get_all_ops()['Add_10']
         adaptive_avg_pool2d_9_op = conn_graph.get_all_ops()['GlobalAveragePool_9']
-        neighborhood = _get_all_ops_in_neighborhood(starting_op, 'output')
+        neighborhood = get_all_ops_in_neighborhood(starting_op, 'output')
         assert len(neighborhood) == 3
         assert starting_op in neighborhood
         assert add_10_op in neighborhood

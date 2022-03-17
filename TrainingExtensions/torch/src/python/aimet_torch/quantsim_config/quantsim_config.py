@@ -47,7 +47,8 @@ from aimet_common.connected_graph.operation import Op
 from aimet_common.connected_graph.connectedgraph_utils import get_all_input_ops, get_all_output_ops
 from aimet_common.quantsim_config.json_config_importer import ConfigDictKeys, ConfigType, SupergroupType, OpType, \
     ParamType, DefaultsType, OpTypeType, ConfigDictType
-from aimet_common.quantsim_config.quantsim_config import QuantSimConfigurator as AimetCommonQuantSimConfigurator
+from aimet_common.quantsim_config.quantsim_config import QuantSimConfigurator as AimetCommonQuantSimConfigurator, \
+    get_all_ops_in_neighborhood
 from aimet_common.quantsim_config.quantsim_config import SupergroupConfigCallback as AimetCommonSupergroupConfigCallback
 from aimet_common.quantsim_config.quantsim_config import get_setting_type
 from aimet_torch.qc_quantize_op import QcQuantizeWrapper
@@ -248,7 +249,7 @@ class QuantSimConfigurator(AimetCommonQuantSimConfigurator):
         quantization disabled.
         """
         tensor_quantizers_for_input_false = []
-        neighboring_input_ops = _get_all_ops_in_neighborhood(op, 'input')
+        neighboring_input_ops = get_all_ops_in_neighborhood(op, 'input')
         for input_op in neighboring_input_ops:
             if input_op.type != 'Split' and input_op.get_module() is not None and input_op.get_module() in \
                     self._module_to_quantsim_wrapper_dict:
@@ -268,7 +269,7 @@ class QuantSimConfigurator(AimetCommonQuantSimConfigurator):
         quantization disabled.
         """
         tensor_quantizers_for_output_false = []
-        neighboring_output_ops = _get_all_ops_in_neighborhood(op, 'output')
+        neighboring_output_ops = get_all_ops_in_neighborhood(op, 'output')
         for output_op in neighboring_output_ops:
             if output_op.type != 'Split' and output_op.get_module() is not None and output_op.get_module() in \
                     self._module_to_quantsim_wrapper_dict:
@@ -491,41 +492,6 @@ def _create_module_to_quantsim_wrapper_dict(model: torch.nn.Module) -> Dict[torc
         if isinstance(module, QcQuantizeWrapper):
             module_to_quantsim_wrapper_dict[module._module_to_wrap] = module      # pylint: disable=protected-access
     return module_to_quantsim_wrapper_dict
-
-
-def _get_all_ops_in_neighborhood(op: Op, direction: str, neighborhood=None):
-    """
-    Given an op and a direction, populate neighborhood dictionary with all ops adjacent to that op, and which direction
-    they are adjacent in.  If a neighboring op has other connections in the same direction as the op we began with, ops
-    connecting to the neighboring op in those other connections will also be part of the same neighborhood.
-    :param op: Op to find neighboring ops from
-    :param direction: Direction to search for neighboring ops (will be 'input' or 'output')
-    :param neighborhood: Dictionary mapping neighboring ops to the direction which they connect to op.
-    """
-    if neighborhood is None:
-        neighborhood = {}
-    neighborhood[op] = direction
-    if direction == 'input' and op.inputs:
-        input_products = [inp for inp in op.inputs if inp.is_inter_module()]
-        input_ops = [inp.producer for inp in input_products]
-        for input_op in input_ops:
-            if input_op not in neighborhood:
-                neighborhood[input_op] = 'output'
-                if input_op.type == 'Split':
-                    _get_all_ops_in_neighborhood(input_op, 'input', neighborhood)
-                    _get_all_ops_in_neighborhood(input_op, 'output', neighborhood)
-                else:
-                    _get_all_ops_in_neighborhood(input_op, 'output', neighborhood)
-    elif op.output:
-        output_ops = [consumer for consumer in op.output.consumers]
-        for output_op in output_ops:
-            if output_op not in neighborhood:
-                neighborhood[output_op] = 'input'
-                if output_op.type == 'Split':
-                    _get_all_ops_in_neighborhood(output_op, 'output', neighborhood)
-                else:
-                    _get_all_ops_in_neighborhood(output_op, 'input', neighborhood)
-    return neighborhood
 
 
 def _set_config_for_param(param_quantizer: TensorQuantizer, param_config: ConfigType):
