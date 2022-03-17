@@ -211,3 +211,38 @@ def get_setting_type(setting_name: str) -> str:
         return ConfigDictKeys.IS_SYMMETRIC
     logger.error('Unrecognized quantizer setter name %s', setting_name)
     raise AssertionError
+
+
+def get_all_ops_in_neighborhood(op: Op, direction: str, neighborhood=None):
+    """
+    Given an op and a direction, populate neighborhood dictionary with all ops adjacent to that op, and which direction
+    they are adjacent in.  If a neighboring op has other connections in the same direction as the op we began with, ops
+    connecting to the neighboring op in those other connections will also be part of the same neighborhood.
+    :param op: Op to find neighboring ops from
+    :param direction: Direction to search for neighboring ops (will be 'input' or 'output')
+    :param neighborhood: Dictionary mapping neighboring ops to the direction which they connect to op.
+    """
+    if neighborhood is None:
+        neighborhood = {}
+    neighborhood[op] = direction
+    if direction == 'input' and op.inputs:
+        input_products = [inp for inp in op.inputs if inp.is_inter_module()]
+        input_ops = [inp.producer for inp in input_products]
+        for input_op in input_ops:
+            if input_op not in neighborhood:
+                neighborhood[input_op] = 'output'
+                if input_op.type == 'Split':
+                    get_all_ops_in_neighborhood(input_op, 'input', neighborhood)
+                    get_all_ops_in_neighborhood(input_op, 'output', neighborhood)
+                else:
+                    get_all_ops_in_neighborhood(input_op, 'output', neighborhood)
+    elif op.output:
+        output_ops = [consumer for consumer in op.output.consumers]
+        for output_op in output_ops:
+            if output_op not in neighborhood:
+                neighborhood[output_op] = 'input'
+                if output_op.type == 'Split':
+                    get_all_ops_in_neighborhood(output_op, 'output', neighborhood)
+                else:
+                    get_all_ops_in_neighborhood(output_op, 'input', neighborhood)
+    return neighborhood
