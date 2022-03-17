@@ -709,35 +709,32 @@ def equalize_model(model: tf.keras.Model,
     :param input_shapes: Input shape tuple or list of input tuple shape
     :return: CLE applied tf.keras.Model
     """
-    folded_pairs = fold_all_batch_norms(model)
-    cle_applied_model = equalize_bn_folded_model(model, input_shapes, folded_pairs)
+    # replace any ReLU6 layers with ReLU
+    model_for_cle, _ = model_transform_utils.replace_relu6_with_relu(model)
 
-    return cle_applied_model
+    folded_pairs = fold_all_batch_norms(model_for_cle)
+    equalize_bn_folded_model(model_for_cle, input_shapes, folded_pairs)
+
+    return model_for_cle
 
 
 def equalize_bn_folded_model(model: tf.keras.Model,
                              input_shapes: typing.Union[None, typing.Tuple,
                                                         typing.List[typing.Tuple]],
-                             folded_pairs: typing.List[BatchNormFoldedPair]) -> tf.keras.Model:
+                             folded_pairs: typing.List[BatchNormFoldedPair]):
     """
-    Perform Cross-Layer Scaling (CLS) and High Bias Folding (HBF) on a batchnorm-folded model
+    Perform Cross-Layer Scaling (CLS) and High Bias Folding (HBF) on a batchnorm-folded model in-place
 
     :param model: BatchNorm-folded model to equalize
     :param input_shapes: Input shape tuple or list of input tuple shape
     :param folded_pairs: List of pairs of folded layers
-    :return: CLE applied tf.keras.Model
     """
     bn_dict = {}
     for conv_or_linear, bn in folded_pairs:
         bn_dict[conv_or_linear] = bn
 
-    # replace any ReLU6 layers with ReLU
-    model_for_cle, _ = model_transform_utils.replace_relu6_with_relu(model)
-
     # perform cross-layer scaling on applicable layer sets
-    cls_set_info_list = CrossLayerScaling.scale_model(model_for_cle, input_shapes)
+    cls_set_info_list = CrossLayerScaling.scale_model(model, input_shapes)
 
     # high-bias fold
     HighBiasFold.bias_fold(cls_set_info_list, bn_dict)
-
-    return model_for_cle
