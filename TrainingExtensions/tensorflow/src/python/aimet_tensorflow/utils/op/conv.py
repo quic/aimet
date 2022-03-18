@@ -389,7 +389,7 @@ class BiasUtils:
         with sess.graph.as_default():
             if not is_bias_none:
                 bias_tensor_as_read_var_op_input = BiasUtils.get_bias_tensor(op)
-                assert len(bias_tensor_as_read_var_op_input.op.inputs) == 7
+                assert len(bias_tensor_as_read_var_op_input.op.inputs) == 8
                 bias_add = bias_tensor_as_read_var_op_input.op.inputs[constants.OP_BIAS_INDICES[op.type]]
                 bias_tensor = bias_add.op.inputs[constants.OP_BIAS_INDICES[op.type]]
                 assert BiasUtils.get_shape(op)[0] == bias_as_numpy_array.size

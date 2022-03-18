@@ -51,6 +51,7 @@ REGISTER_OP("QcQuantize")
     .Input("encoding_max: double")
     .Input("bit_width: int8")
     .Input("use_symmetric_encoding: bool")
+    .Input("is_int_data_type: bool")
     .Output("out_tensor: T")   // list of output tensors (weights/activations)
 
     .Attr("T: {float} = DT_FLOAT")   // attr 'T' specifies which template instantiation of op to use, default float
@@ -60,8 +61,56 @@ REGISTER_OP("QcQuantize")
         return Status::OK();
     });
 
+template <typename Device>
+class QuantizeDequantizeFp16Functor
+{
+    /*
+    class to quantize the input tensor to fp16 and dequantize it to fp32. This class has a specialized implementation
+    for GPUDevice and CPUDevice. Tensorflow internal functions are called for each of them.
+    fp16 type supported as part of this operation is IEEE float16.
+    */
+};
+
+template <>
+class QuantizeDequantizeFp16Functor <CPUDevice>
+{
+    // truncate, if set to true would truncate the inputs before casting to fp16. If set to true, tensorflow backend
+    // calls LSBZeroSetter which does the truncate operation
+    bool _truncate = false;
+
+    public:
+    void operator()(OpKernelContext* context, const Tensor& inTensor, Tensor* outTensor)
+    {
+        Tensor tempTensorFp16;
+        OP_REQUIRES_OK(context, context->allocate_temp(DT_HALF, inTensor.shape(), &tempTensorFp16));
+
+        GetCpuCastFromFloat(DT_HALF)(context, inTensor, &tempTensorFp16, _truncate);
+        GetCpuCastFromHalf(DT_FLOAT)(context, tempTensorFp16, outTensor, _truncate);
+    }
+};
+
+#ifdef GOOGLE_CUDA
+template <>
+class QuantizeDequantizeFp16Functor <GPUDevice>
+{
+    // truncate, if set to true would truncate the inputs before casting to fp16. If set to true, tensorflow backend
+    // calls LSBZeroSetter which does the truncate operation
+    bool _truncate = false;
+
+    public:
+    void operator()(OpKernelContext* context, const Tensor& inTensor, Tensor* outTensor)
+    {
+        Tensor tempTensorFp16;
+        OP_REQUIRES_OK(context, context->allocate_temp(DT_HALF, inTensor.shape(), &tempTensorFp16));
+
+        GetGpuCastFromFloat(DT_HALF)(context, inTensor, &tempTensorFp16, _truncate);
+        GetGpuCastFromHalf(DT_FLOAT)(context, tempTensorFp16, outTensor, _truncate);
+    }
+};
+#endif // GOOGLE_CUDA
+
 template <typename D, typename T>
-void modeSpecificAction(const D& d, const T* inTensor, size_t count, T* outTensor,
+void modeSpecificActionInt(const D& d, const T* inTensor, size_t count, T* outTensor,
                         const uint64* tensorQuantizerRef, const int32* opMode,
                         const double* min, const double* max, const int8* bw,
                         const bool* useSymEncoding)
@@ -119,6 +168,48 @@ void modeSpecificAction(const D& d, const T* inTensor, size_t count, T* outTenso
 
 }
 
+
+template <typename D, typename T>
+void modeSpecificActionFp16(OpKernelContext* context, const Tensor& inTensor, const uint64* tensorQuantizerRef,
+                            const int32* opMode, Tensor* outTensor)
+{
+    auto opModeHost = copyLiteralToHost<int32>(context->eigen_device<D>(), opMode);
+    auto opModeEnum = static_cast<const DlQuantization::TensorQuantizerOpMode>(opModeHost);
+
+    switch (opModeEnum)
+    {
+    case DlQuantization::TensorQuantizerOpMode::oneShotQuantizeDequantize:
+    {
+        QuantizeDequantizeFp16Functor<D> fp16Op;
+        fp16Op(context, inTensor, outTensor);
+        break;
+    }
+    case DlQuantization::TensorQuantizerOpMode::quantizeDequantize:
+    {
+        QuantizeDequantizeFp16Functor<D> fp16Op;
+        fp16Op(context, inTensor, outTensor);
+        break;
+    }
+    case DlQuantization::TensorQuantizerOpMode::updateStats:
+    {
+        copyInputTensorsToOutputTensors(context->eigen_device<D>(), inTensor.flat<T>().data(),
+                                            inTensor.NumElements(), outTensor->flat<T>().data());
+        break;
+    }
+    case DlQuantization::TensorQuantizerOpMode::passThrough:
+    {
+        copyInputTensorsToOutputTensors(context->eigen_device<D>(), inTensor.flat<T>().data(),
+                                            inTensor.NumElements(), outTensor->flat<T>().data());
+        break;
+    }
+    default:
+    {
+        std::cout << "encountered unknown TensorQuantizerOpMode" << std::endl;
+        assert(0);
+    }
+    }
+}
+
 // OpKernel definition.
 // 'Device is templated on the type of device.
 // template parameter <T> is the datatype of the tensors.
@@ -166,13 +257,26 @@ public:
         OP_REQUIRES_OK(context, context->input("use_symmetric_encoding", &useSymmetricEncodingTensor));
         auto useSymmetricEncoding = useSymmetricEncodingTensor->flat<bool>().data();
 
+        // is_int_data_type
+        const Tensor* isIntDataTypeTensor;
+        OP_REQUIRES_OK(context, context->input("is_int_data_type", &isIntDataTypeTensor));
+        auto isIntDataTypeFlat = isIntDataTypeTensor->flat<bool>().data();
+        auto isIntDataType = copyLiteralToHost<bool>(context->eigen_device<Device>(), isIntDataTypeFlat);
+
         // allocate output tensors
         Tensor* outTensor = nullptr;
         OP_REQUIRES_OK(context, context->allocate_output(0, inTensor.shape(), &outTensor));
         auto outTensorFlat = outTensor->flat<T>().data();
 
-        modeSpecificAction(context->eigen_device<Device>(), inTensorFlat, inTensor.NumElements(), outTensorFlat,
+        if(isIntDataType)
+        {
+            modeSpecificActionInt(context->eigen_device<Device>(), inTensorFlat, inTensor.NumElements(), outTensorFlat,
                            quantizerAddr, opMode, encodingMin, encodingMax, bitwidth, useSymmetricEncoding);
+        }
+        else
+        {
+            modeSpecificActionFp16<Device, T>(context, inTensor, quantizerAddr, opMode, outTensor);
+        }
     }
 };
 

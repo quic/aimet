@@ -74,7 +74,7 @@ def _qc_straight_through_estimator_grad(op, grad):
     """
 
     dloss_by_dx = _compute_dloss_by_dx(op, grad)
-    return dloss_by_dx, None, None, None, None, None, None
+    return dloss_by_dx, None, None, None, None, None, None, None
 
 
 @tf_ops.RegisterGradient("QcQuantizeRecurrentParam")
@@ -219,4 +219,4 @@ def quantsim_custom_grad_learned_grid(op, grad):
     # Pass through gradient for skipped ops
     dloss_by_dx = tf.cond(tf.equal(op_mode, 3), lambda: grad, lambda: dloss_by_dx)
 
-    return dloss_by_dx, None, None, dloss_by_dmin, dloss_by_dmax, None, None
+    return dloss_by_dx, None, None, dloss_by_dmin, dloss_by_dmax, None, None, None

@@ -39,11 +39,15 @@
 #ifndef QC_QUANTIZE_OP_HPP
 #define QC_QUANTIZE_OP_HPP
 
+#define EIGEN_USE_THREADS
+
 #include "tensorflow/core/framework/op.h"
 #include "tensorflow/core/framework/op_kernel.h"
 #include "tensorflow/core/framework/shape_inference.h"
 #include "tensorflow/core/platform/logging.h"
+#include "tensorflow/core/kernels/cast_op_impl.h"
 
 #include <DlQuantization/TensorQuantizerOpFacade.h>
+#include <DlQuantization/TensorQuantizer.h>
 #include <DlQuantization/Quantization.hpp>
 #endif   // QC_QUANTIZE_OP_HPP

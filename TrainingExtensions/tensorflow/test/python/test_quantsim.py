@@ -51,7 +51,8 @@ from aimet_tensorflow.utils.graph_saver import load_model_from_meta
 from aimet_tensorflow.common.graph_eval import initialize_uninitialized_vars
 from aimet_tensorflow.defs import ParameterInfo
 from aimet_tensorflow.examples.test_models import model_with_dtype_int, keras_model
-from aimet_common.defs import QuantScheme
+from aimet_common.defs import QuantScheme, QuantizationDataType
+from aimet_common.quantsim import encoding_version
 from aimet_tensorflow.quantsim import save_checkpoint, load_checkpoint
 from aimet_tensorflow.utils.constants import QuantizeOpIndices
 
@@ -203,6 +204,85 @@ class TestQuantSim(unittest.TestCase):
                          sim.session.run(conv2d_weight_quant_op.inputs[1]))
         self.assertEqual(int(libpymo.TensorQuantizerOpMode.quantizeDequantize),
                          sim.session.run(conv2d_output_quant_op.inputs[1]))
+
+    def test_compute_encodings_cpu_model_fp16(self):
+        """
+        Create QuantSim for a CPU model and test that activation encodings are computed
+        """
+        tf.compat.v1.reset_default_graph()
+        with tf.device('/cpu:0'):
+            model = tf.keras.Sequential()
+            model.add(tf.keras.layers.Conv2D(32, kernel_size=3, input_shape=(28, 28, 3), activation='relu'))
+            model.add(tf.keras.layers.MaxPooling2D((2, 2)))
+            model.add(tf.keras.layers.Conv2D(64, kernel_size=3, activation='relu'))
+            model.summary()
+
+        sess = tf.compat.v1.Session()
+        initialize_uninitialized_vars(sess)
+        sim = QuantizationSimModel(sess, ['conv2d_input'], ['conv2d_1/Relu'], use_cuda=False, default_output_bw=16,
+                                   default_param_bw=16, default_data_type=QuantizationDataType.float)
+
+        # Check that op-mode is set correctly
+        conv2d_weight_quant_op = sim.session.graph.get_operation_by_name('conv2d/Conv2D/ReadVariableOp_quantized')
+        conv2d_output_quant_op = sim.session.graph.get_operation_by_name('conv2d/Relu_quantized')
+        self.assertEqual(int(libpymo.TensorQuantizerOpMode.oneShotQuantizeDequantize),
+                         sim.session.run(conv2d_weight_quant_op.inputs[1]))
+        self.assertEqual(int(libpymo.TensorQuantizerOpMode.updateStats),
+                         sim.session.run(conv2d_output_quant_op.inputs[1]))
+
+        def dummy_forward_pass(sess, args):
+            model_output = sess.graph.get_tensor_by_name('conv2d_1/Relu_quantized:0')
+            model_input = sess.graph.get_tensor_by_name('conv2d_input:0')
+            dummy_input = np.random.randn(20, 28, 28, 3)
+            sess.run(model_output, feed_dict={model_input: dummy_input})
+
+        sim.compute_encodings(dummy_forward_pass, None)
+
+        # Check if encodings have been calculated
+        deactivated_quantizers = [
+            'conv2d_input_quantized',
+            'conv2d/BiasAdd_quantized',
+            'conv2d_1/BiasAdd_quantized'
+        ]
+        if version.parse(tf.version.VERSION) >= version.parse("2.00"):
+            op_mode_name_suffix = '_op_mode/Read/ReadVariableOp:0'
+        else:
+            op_mode_name_suffix = '_op_mode/read:0'
+
+        for name, quantizer in sim._activation_quantizers.items():
+            if name in deactivated_quantizers:
+                self.assertTrue(int(libpymo.TensorQuantizerOpMode.passThrough),
+                                sim.session.run(name + op_mode_name_suffix))
+
+        sim.export('/tmp', 'quant_sim_model_fp16')
+
+        with open('/tmp/quant_sim_model_fp16.encodings') as json_file:
+            encoding_data = json.load(json_file)
+
+        generated_encoding_version = encoding_data["version"]
+        self.assertEqual(encoding_version, generated_encoding_version)
+
+        # This is a fp16 sim model. Make sure all the layers contain fp16 encodings
+        activation_keys = list(encoding_data["activation_encodings"].keys())
+        for key in activation_keys:
+            act_encoding_keys = encoding_data["activation_encodings"][key][0]
+            self.assertTrue("bitwidth" in act_encoding_keys)
+            self.assertEqual(act_encoding_keys['bitwidth'], 16)
+            self.assertTrue("dtype" in act_encoding_keys)
+            self.assertEqual(act_encoding_keys['dtype'], 'float')
+
+        param_keys = list(encoding_data["param_encodings"].keys())
+        for key in param_keys:
+            param_encoding_keys = encoding_data["param_encodings"][key][0]
+            self.assertTrue("bitwidth" in param_encoding_keys)
+            self.assertEqual(param_encoding_keys['bitwidth'], 16)
+            self.assertTrue("dtype" in param_encoding_keys)
+            self.assertEqual(param_encoding_keys['dtype'], 'float')
+
+        sess.close()
+        sim.session.close()
+        del sim
+
 
     def _save_to_keras_common_test_code(self, use_cuda):
         tf.compat.v1.reset_default_graph()
