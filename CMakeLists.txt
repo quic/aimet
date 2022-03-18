@@ -162,6 +162,9 @@ if (ENABLE_TENSORFLOW)
     message(FATAL_ERROR "TensorFlow library NOT found at ${TF_LIB_DIR}")
   endif()
 
+  # find the _pywrap_tensorflow_internal.so library. Used for custom ops
+  find_library(PYWRAP_TF_INTERNAL NAMES _pywrap_tensorflow_internal.so HINTS ${TF_LIB_DIR}/python/)
+
   set(AIMET_PYTHONPATH "${AIMET_PYTHONPATH}:${CMAKE_CURRENT_SOURCE_DIR}/TrainingExtensions/tensorflow/src/python")
   list(APPEND TENSORFLOW_INCLUDES "${TF_LIB_DIR}/include")
   add_library(TensorFlow SHARED IMPORTED)
@@ -170,6 +173,11 @@ if (ENABLE_TENSORFLOW)
           "${TF_LIB_FILE}"
         INTERFACE_INCLUDE_DIRECTORIES
           "${TENSORFLOW_INCLUDES}"
+        )
+
+  add_library(PyWrapTensorFlowInternal SHARED IMPORTED)
+  set_target_properties(PyWrapTensorFlowInternal PROPERTIES
+        IMPORTED_LOCATION "${PYWRAP_TF_INTERNAL}"
         )
 
 else (ENABLE_TENSORFLOW)

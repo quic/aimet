@@ -42,7 +42,7 @@ from enum import Enum
 import tensorflow as tf
 import numpy as np
 
-from aimet_common.defs import QuantScheme
+from aimet_common.defs import QuantScheme, QuantizationDataType
 from aimet_common.quantsim import calculate_delta_offset
 from aimet_tensorflow.utils.constants import QuantizeOpIndices
 import libpymo
@@ -97,15 +97,17 @@ class QuantizerInfo:
     """
     Holds information about a given MO Quantizer object and active session
     """
-    __slots__ = ['session', 'tensor_quantizer', 'quant_op_name', 'quantizer_type', '_is_encoding_frozen']
+    __slots__ = ['session', 'tensor_quantizer', 'quant_op_name', 'quantizer_type', '_is_encoding_frozen', 'data_type']
 
     def __init__(self, session: tf.compat.v1.Session, tensor_quantizer: libpymo.TensorQuantizer,
-                 quant_op_name: str, quantizer_type: QuantizerType):
+                 quant_op_name: str, quantizer_type: QuantizerType,
+                 data_type: QuantizationDataType = QuantizationDataType.int):
         self.session = session
         self.tensor_quantizer = tensor_quantizer
         self.quant_op_name = quant_op_name
         self.quantizer_type = quantizer_type
         self._is_encoding_frozen = False
+        self.data_type = data_type
 
     def set_variable(self, var_name, value):
         """
@@ -330,15 +332,18 @@ class QuantizerInfo:
         """
         if not self._is_encoding_frozen:
             encoding = []
-            if isinstance(self.tensor_quantizer, list):
-                for tensor_quantizer in self.tensor_quantizer:
-                    encoding_val = tensor_quantizer.computeEncoding(bitwidth, use_symmetric_encodings, False, False)
-                    if encoding_val:
-                        tensor_quantizer.isEncodingValid = True
-                    encoding.append(encoding_val)
+            if self.data_type == QuantizationDataType.float:
+                encoding = None
             else:
-                encoding.append(self.tensor_quantizer.computeEncoding(bitwidth, use_symmetric_encodings, False, False))
-                encoding = encoding[0]
+                if isinstance(self.tensor_quantizer, list):
+                    for tensor_quantizer in self.tensor_quantizer:
+                        encoding_val = tensor_quantizer.computeEncoding(bitwidth, use_symmetric_encodings, False, False)
+                        if encoding_val:
+                            tensor_quantizer.isEncodingValid = True
+                        encoding.append(encoding_val)
+                else:
+                    encoding.append(self.tensor_quantizer.computeEncoding(bitwidth, use_symmetric_encodings, False, False))
+                    encoding = encoding[0]
         else:
             encoding = self.get_encoding()
 
@@ -349,7 +354,7 @@ class QuantizerInfo:
         Set encoding min and max variable and update isEncodingValid state to True
         :param encoding: Encoding
         """
-        if not self._is_encoding_frozen:
+        if not self._is_encoding_frozen and self.data_type == QuantizationDataType.int:
             encoding_min_var = self.quant_op_name + '_encoding_min'
             encoding_max_var = self.quant_op_name + '_encoding_max'
 
