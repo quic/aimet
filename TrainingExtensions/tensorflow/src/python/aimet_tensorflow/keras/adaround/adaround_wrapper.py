@@ -65,7 +65,12 @@ class AdaroundWrapper(keras.layers.Layer):
         super(AdaroundWrapper, self).__init__()
 
         self._layer = layer
-        self._weight_tensor, self._bias_tensor = layer.get_weights()
+        weights = layer.get_weights()
+        self._weight_tensor = weights[0]
+        self._bias_tensor = None
+        if len(weights) > 1:
+            self._bias_tensor = weights[1]
+
         self.use_soft_rounding = self.add_weight(layer.name + '_use_soft_rounding', dtype=tf.bool,
                                                  initializer=tf.constant_initializer(True), trainable=False)
 
