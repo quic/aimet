@@ -218,9 +218,8 @@ class AutoQuant:
 
         return sim
 
-    # pylint: disable=no-self-use
     @cache.mark("batchnorm_folding")
-    def _apply_batchnorm_folding(
+    def _apply_batchnorm_folding( # pylint: disable=no-self-use
             self,
             model: torch.nn.Module,
             dummy_input: Union[torch.Tensor, Tuple],
@@ -242,9 +241,8 @@ class AutoQuant:
         folded_pairs = fold_all_batch_norms(model, input_shape)
         return model, folded_pairs
 
-    # pylint: disable=no-self-use
     @cache.mark("cle")
-    def _apply_cross_layer_equalization(
+    def _apply_cross_layer_equalization( # pylint: disable=no-self-use
             self,
             model: torch.nn.Module,
             dummy_input: Union[torch.Tensor, Tuple],
@@ -303,7 +301,7 @@ class AutoQuant:
 
         return model, adaround_encoding_path
 
-    def apply( # pylint: disable=protected-access, too-many-locals, too-many-statements
+    def apply(
             self,
             fp32_model: torch.nn.Module,
             dummy_input_on_cpu: Union[torch.Tensor, Tuple],
@@ -336,7 +334,7 @@ class AutoQuant:
                result["accuracy"],\
                result["encoding_path"]
 
-    def _apply_helper( # pylint: disable=protected-access, too-many-locals, too-many-statements
+    def _apply_helper(
             self,
             auto_quant_main_fn: Callable,
             fp32_model: torch.nn.Module,
@@ -412,7 +410,7 @@ class AutoQuant:
 
                 return ret
 
-    def _auto_quant_main( # pylint: disable=protected-access, too-many-locals, too-many-statements
+    def _auto_quant_main(
             self,
             fp32_model: torch.nn.Module,
             target_acc: float,
