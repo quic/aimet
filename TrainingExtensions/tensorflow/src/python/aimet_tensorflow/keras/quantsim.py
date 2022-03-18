@@ -37,6 +37,7 @@
 # =============================================================================
 """ Quantsim for Keras """
 
+import json
 import os
 from typing import Union, Dict
 import tensorflow as tf
@@ -206,6 +207,18 @@ class QuantizationSimModel:
         encodings_dict = self._get_encodings_dict()
         encoding_file_path = os.path.join(path, filename_prefix + '.encodings')
         save_json_yaml(encoding_file_path, encodings_dict)
+
+    def set_and_freeze_param_encodings(self, encoding_path: str):
+        """
+        Set and freeze parameter encodings from encodings JSON file
+        :param encoding_path: path from where to load parameter encodings file
+        """
+        # Load parameter encodings file
+        with open(encoding_path) as json_file:
+            param_encodings = json.load(json_file)
+
+        for quant_wrapper in self.quant_wrappers():
+            quant_wrapper.set_and_freeze_param_encoding(param_encodings)
 
     def quant_wrappers(self):
         """
