@@ -53,12 +53,16 @@ class BNUtils:
 
         :bn: Batch normalization layer that should be worked as passthrough op (no-op)
         """
-
         bn.trainable = False
         gamma = np.ones(shape=bn.gamma.shape, dtype=np.float32)
         beta = np.zeros(shape=bn.beta.shape, dtype=np.float32)
         move_mean = np.zeros(shape=bn.moving_mean.shape, dtype=np.float32)
         move_var = np.ones(shape=bn.moving_variance.shape, dtype=np.float32)
+
+        # Note: The original gamma and beta is used for HighBiasFold, so save it separately
+        original_gamma, original_beta, _, _ = bn.get_weights()
+        setattr(bn, "original_gamma", original_gamma)
+        setattr(bn, "original_beta", original_beta)
 
         bn.set_weights([gamma, beta, move_mean, move_var])
         bn.epsilon = 0

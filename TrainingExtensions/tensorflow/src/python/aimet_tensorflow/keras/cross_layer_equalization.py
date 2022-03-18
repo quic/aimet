@@ -656,7 +656,12 @@ class HighBiasFold:
         """
         bn_params = libpymo.BNParamsHighBiasFold()
 
-        gamma, beta, _, _ = bn_layer.get_weights()
+        # Note: In BatchNormFold, we initialize gamma and beta to 1 and 0 respectively to work as Identity
+        # So if the original value was set, use it for High Bias Fold
+        if hasattr(bn_layer, "original_gamma") and hasattr(bn_layer, "original_beta"):
+            gamma, beta = bn_layer.original_gamma, bn_layer.original_beta
+        else:
+            gamma, beta, _, _ = bn_layer.get_weights()
 
         if len(scaling_parameter) != len(gamma) or len(scaling_parameter) != len(beta):
             raise ValueError("High Bias absorption is not supported for networks with fold-forward BatchNorms")
