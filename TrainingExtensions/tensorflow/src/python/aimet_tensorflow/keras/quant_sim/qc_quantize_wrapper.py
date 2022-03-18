@@ -37,13 +37,15 @@
 # =============================================================================
 """ Qc Quantize wrapper for tf 2 keras """
 
-from typing import Union, List
+from typing import Union, List, Dict
 import tensorflow as tf
 
 from aimet_common.utils import AimetLogger
 from aimet_common.defs import QuantScheme
+import aimet_tensorflow.utils.quantsim as quantsim_utils
 from aimet_tensorflow.keras.quant_sim.tensor_quantizer import ActivationTensorQuantizer, ParamTensorQuantizer
 from aimet_tensorflow.keras.utils.common import is_lambda_operator
+import libpymo
 
 _logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Quant)
 
@@ -275,6 +277,24 @@ class QcQuantizeWrapper(tf.keras.layers.Layer):
 
         for quantizer in self.param_quantizers:
             quantizer.compute_encoding()
+
+    def set_and_freeze_param_encoding(self, param_encodings: Dict):
+        """
+        Set and freeze encoding for parameter from encodings dictionary
+        :param module_name: name of module
+        :param param_encodings: parameter encodings dictionary
+        """
+        for idx, param_quantizer in enumerate(self.param_quantizers):
+            param_name = self._layer_to_wrap.weights[idx].name
+            if param_name in param_encodings:
+                encoding, is_symmetric = quantsim_utils.create_encoding_from_dict(param_encodings[param_name])
+
+                param_quantizer.bitwidth = encoding.bw
+                param_quantizer.use_symmetric_encodings = is_symmetric
+                param_quantizer.encoding = encoding
+                param_quantizer.quant_mode = libpymo.TensorQuantizerOpMode.quantizeDequantize
+                param_quantizer.freeze_encoding()
+                _logger.info("Setting and freezing quantization encodings for parameter: %s", param_name)
 
     def _restore_shadow_params(self):
         """
