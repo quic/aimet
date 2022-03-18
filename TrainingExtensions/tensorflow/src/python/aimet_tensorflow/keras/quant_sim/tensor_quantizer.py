@@ -112,6 +112,11 @@ class TensorQuantizer(tf.keras.layers.Layer, abc.ABC):
         self.reset_quant_mode()
 
     @property
+    def tensor_quantizer(self):
+        """ Tensor quantizer getter """
+        return self._tensor_quantizer
+
+    @property
     def round_mode(self):
         """ Quant scheme getter """
         return self._tensor_quantizer.roundingMode

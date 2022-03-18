@@ -287,8 +287,9 @@ class QcQuantizeWrapper(tf.keras.layers.Layer):
         for idx, param_quantizer in enumerate(self.param_quantizers):
             param_name = self._layer_to_wrap.weights[idx].name
             if param_name in param_encodings:
-                encoding, is_symmetric = quantsim_utils.create_encoding_from_dict(param_encodings[param_name])
+                encoding, is_symmetric = quantsim_utils.create_encoding_from_dict(param_encodings[param_name][0])
 
+                param_quantizer.tensor_quantizer.isEncodingValid = True
                 param_quantizer.bitwidth = encoding.bw
                 param_quantizer.use_symmetric_encodings = is_symmetric
                 param_quantizer.encoding = encoding
