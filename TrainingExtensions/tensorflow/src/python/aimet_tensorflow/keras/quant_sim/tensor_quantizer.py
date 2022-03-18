@@ -65,8 +65,8 @@ class TensorQuantizer(tf.keras.layers.Layer, abc.ABC):
     """ Tensor quantizer class containing cpp tensor quantizer and associated attributes """
     # pylint: disable=too-many-arguments
     # pylint: disable=unused-argument
-    def __init__(self, name: str, op_mode: libpymo.TensorQuantizerOpMode, quant_scheme: libpymo.QuantizationMode,
-                 round_mode: libpymo.RoundingMode, bitwidth: int, is_symmetric: bool, use_strict_symmetric: bool,
+    def __init__(self, name: str, op_mode: libpymo.TensorQuantizerOpMode, quant_scheme: QuantScheme,
+                 round_mode: str, bitwidth: int, is_symmetric: bool, use_strict_symmetric: bool,
                  use_unsigned_symmetric: bool, **kwargs):
         super(TensorQuantizer, self).__init__(name=name)
         self._quant_scheme = quant_scheme
@@ -89,6 +89,13 @@ class TensorQuantizer(tf.keras.layers.Layer, abc.ABC):
         # Can set to False upon changing things like quant scheme, bitwidth, is symmetric, etc.
         self._is_encoding_valid = False
 
+        # Behavior of frozen encoding:
+        # - quant_scheme, round_mode, bitwidth, is_symmetric, use_strict_symmetric, use_unsigned_symmetric, encoding,
+        #       and quant_mode cannot be changed.
+        # - compute_encoding(), reset_quant_mode() will take no effect.
+        # - Tensor quantizer cannot be disabled.
+        self._is_encoding_frozen = False
+
     @property
     def quant_scheme(self):
         """ Quant scheme getter """
@@ -97,6 +104,9 @@ class TensorQuantizer(tf.keras.layers.Layer, abc.ABC):
     @quant_scheme.setter
     def quant_scheme(self, quant_scheme: QuantScheme):
         """ Quant scheme setter """
+        if self._is_encoding_frozen:
+            _logger.info('Tensor quantizer %s encoding is frozen, not setting quant_scheme.', self.name)
+            return
         self._tensor_quantizer.setQuantScheme(MAP_QUANT_SCHEME_TO_PYMO[quant_scheme])
         self._quant_scheme = quant_scheme
         self.reset_quant_mode()
@@ -109,6 +119,9 @@ class TensorQuantizer(tf.keras.layers.Layer, abc.ABC):
     @round_mode.setter
     def round_mode(self, round_mode: str):
         """ Round mode setter """
+        if self._is_encoding_frozen:
+            _logger.info('Tensor quantizer %s encoding is frozen, not setting round_mode.', self.name)
+            return
         self._tensor_quantizer.roundingMode = MAP_ROUND_MODE_TO_PYMO[round_mode]
         self.reset_quant_mode()
 
@@ -120,6 +133,9 @@ class TensorQuantizer(tf.keras.layers.Layer, abc.ABC):
     @bitwidth.setter
     def bitwidth(self, bitwidth: int):
         """ Bitwidth setter """
+        if self._is_encoding_frozen:
+            _logger.info('Tensor quantizer %s encoding is frozen, not setting bitwidth.', self.name)
+            return
         self._bitwidth.assign(bitwidth)
         self.reset_quant_mode()
 
@@ -131,6 +147,9 @@ class TensorQuantizer(tf.keras.layers.Layer, abc.ABC):
     @is_symmetric.setter
     def is_symmetric(self, is_symmetric: bool):
         """ Is symmetric setter """
+        if self._is_encoding_frozen:
+            _logger.info('Tensor quantizer %s encoding is frozen, not setting is_symmetric.', self.name)
+            return
         self._is_symmetric.assign(is_symmetric)
         self.reset_quant_mode()
 
@@ -142,6 +161,9 @@ class TensorQuantizer(tf.keras.layers.Layer, abc.ABC):
     @use_strict_symmetric.setter
     def use_strict_symmetric(self, use_strict_symmetric: bool):
         """ Use strict symmetric setter """
+        if self._is_encoding_frozen:
+            _logger.info('Tensor quantizer %s encoding is frozen, not setting use_strict_symmetric.', self.name)
+            return
         self._tensor_quantizer.setStrictSymmetric(use_strict_symmetric)
         self.reset_quant_mode()
 
@@ -153,6 +175,9 @@ class TensorQuantizer(tf.keras.layers.Layer, abc.ABC):
     @use_unsigned_symmetric.setter
     def use_unsigned_symmetric(self, use_unsigned_symmetric: bool):
         """ Use unsigned symmetric setter """
+        if self._is_encoding_frozen:
+            _logger.info('Tensor quantizer %s encoding is frozen, not setting use_unsigned_symmetric.', self.name)
+            return
         self._tensor_quantizer.setUnsignedSymmetric(use_unsigned_symmetric)
         self.reset_quant_mode()
 
@@ -170,22 +195,22 @@ class TensorQuantizer(tf.keras.layers.Layer, abc.ABC):
         return None
 
     @encoding.setter
-    def encoding(self, encodings: libpymo.TfEncoding):
-        """
-        Sets encoding parameter using values obtained from encodings
-        :param encodings: encodings value
-        """
-        assert encodings is not None, "Encodings cannot be None if Quantizer is enabled"
-        assert isinstance(encodings, libpymo.TfEncoding), "Encodings should be a libpymo.TfEncoding() object"
-        self.bitwidth = encodings.bw
-        self._encoding_min.assign(encodings.min)
-        self._encoding_max.assign(encodings.max)
-        self._is_encoding_valid = True
+    @abc.abstractmethod
+    def encoding(self, encoding: libpymo.TfEncoding):
+        pass
 
     @property
     def quant_mode(self):
         """ Get quant mode """
         return tf.keras.backend.get_value(self._quantizer_mode)
+
+    @quant_mode.setter
+    def quant_mode(self, quant_mode: libpymo.TensorQuantizerOpMode):
+        """ Quant mode setter """
+        if self._is_encoding_frozen:
+            _logger.info('Tensor quantizer %s encoding is frozen, not setting quant_mode.', self.name)
+            return
+        self._quantizer_mode.assign(int(quant_mode))
 
     @abc.abstractmethod
     def enable(self):
@@ -193,15 +218,36 @@ class TensorQuantizer(tf.keras.layers.Layer, abc.ABC):
 
     def disable(self):
         """ Disable the tensor quantizer """
+        if self._is_encoding_frozen:
+            _logger.info('Tensor quantizer %s encoding is frozen, not disabling quantizer.', self.name)
+            return
         self._quantizer_mode.assign(int(libpymo.TensorQuantizerOpMode.passThrough))
 
     def is_enabled(self) -> bool:
         """ Return True if the tensor quantizer is enabled, False otherwise """
         return self.quant_mode != int(libpymo.TensorQuantizerOpMode.passThrough)
 
+    def _set_encoding_values(self, encoding: libpymo.TfEncoding):
+        """
+        Set encoding values.
+        :param encoding: Encoding containing values to set
+        """
+        assert encoding is not None, "Encodings cannot be None if Quantizer is enabled"
+        assert isinstance(encoding, libpymo.TfEncoding), "Encodings should be a libpymo.TfEncoding() object"
+        self.bitwidth = encoding.bw
+        self._encoding_min.assign(encoding.min)
+        self._encoding_max.assign(encoding.max)
+        self._is_encoding_valid = True
+
+    def freeze_encoding(self):
+        """
+        Freeze the encoding
+        """
+        self._is_encoding_frozen = True
+
     def compute_encoding(self):
         """ Compute encoding for the tensor quantizer """
-        if self.quant_mode != int(libpymo.TensorQuantizerOpMode.passThrough):
+        if self.quant_mode != int(libpymo.TensorQuantizerOpMode.passThrough) and not self._is_encoding_frozen:
             # TODO: remove last two parameters after fixing PyModelOptimizations
             encoding = self._tensor_quantizer.computeEncoding(self.bitwidth, self.is_symmetric, False, False)
             if self._tensor_quantizer.isEncodingValid:
@@ -217,6 +263,9 @@ class TensorQuantizer(tf.keras.layers.Layer, abc.ABC):
 
     def reset_quant_mode(self):
         """ Reset quantizer mode if applicable """
+        if self._is_encoding_frozen:
+            _logger.info('Tensor quantizer %s encoding is frozen, not resetting quant_mode.', self.name)
+            return
         if self.quant_mode == int(libpymo.TensorQuantizerOpMode.quantizeDequantize):
             self._quantizer_mode.assign(int(libpymo.TensorQuantizerOpMode.updateStats))
         self._is_encoding_valid = False
@@ -286,9 +335,8 @@ class TensorQuantizer(tf.keras.layers.Layer, abc.ABC):
 class ActivationTensorQuantizer(TensorQuantizer):
     """ Activation tensor quantizer definition """
     # pylint: disable=too-many-arguments
-    def __init__(self, name: str, quant_scheme: libpymo.QuantizationMode,
-                 round_mode: libpymo.RoundingMode, bitwidth: int, is_symmetric: bool, use_strict_symmetric: bool,
-                 use_unsigned_symmetric: bool, enabled: bool):
+    def __init__(self, name: str, quant_scheme: QuantScheme, round_mode: str, bitwidth: int, is_symmetric: bool,
+                 use_strict_symmetric: bool, use_unsigned_symmetric: bool, enabled: bool):
         if enabled:
             op_mode = libpymo.TensorQuantizerOpMode.updateStats
         else:
@@ -303,14 +351,25 @@ class ActivationTensorQuantizer(TensorQuantizer):
         else:
             self._quantizer_mode.assign(int(libpymo.TensorQuantizerOpMode.updateStats))
 
+    @TensorQuantizer.encoding.setter
+    def encoding(self, encoding: libpymo.TfEncoding):
+        """
+        Sets encoding parameter using values obtained from encodings
+        :param encoding: encodings value
+        """
+        if self._is_encoding_frozen:
+            _logger.info('Tensor quantizer %s encoding is frozen, not setting new encoding values.', self.name)
+            return
+        self._set_encoding_values(encoding)
+        self._quantizer_mode.assign(int(libpymo.TensorQuantizerOpMode.quantizeDequantize))
+
 
 # pylint: disable=too-many-ancestors
 class ParamTensorQuantizer(TensorQuantizer):
     """ Parameter tensor quantizer definition """
     # pylint: disable=too-many-arguments
-    def __init__(self, name: str, quant_scheme: libpymo.QuantizationMode,
-                 round_mode: libpymo.RoundingMode, bitwidth: int, is_symmetric: bool, use_strict_symmetric: bool,
-                 use_unsigned_symmetric: bool, enabled: bool):
+    def __init__(self, name: str, quant_scheme: QuantScheme, round_mode: str, bitwidth: int, is_symmetric: bool,
+                 use_strict_symmetric: bool, use_unsigned_symmetric: bool, enabled: bool):
         if enabled:
             op_mode = libpymo.TensorQuantizerOpMode.oneShotQuantizeDequantize
         else:
@@ -319,4 +378,19 @@ class ParamTensorQuantizer(TensorQuantizer):
                                                    use_strict_symmetric, use_unsigned_symmetric)
     def enable(self):
         """ Enable the parameter tensor quantizer """
+        # If encoding is frozen, no need to do anything (and quant mode should already be set to quantizeDequantize,
+        # instead of oneShotQuantizeDequantize)
+        if not self._is_encoding_frozen:
+            self._quantizer_mode.assign(int(libpymo.TensorQuantizerOpMode.oneShotQuantizeDequantize))
+
+    @TensorQuantizer.encoding.setter
+    def encoding(self, encoding: libpymo.TfEncoding):
+        """
+        Sets encoding parameter using values obtained from encodings
+        :param encoding: encodings value
+        """
+        if self._is_encoding_frozen:
+            _logger.info('Tensor quantizer %s encoding is frozen, not setting new encoding values.', self.name)
+            return
+        self._set_encoding_values(encoding)
         self._quantizer_mode.assign(int(libpymo.TensorQuantizerOpMode.oneShotQuantizeDequantize))

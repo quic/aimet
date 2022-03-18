@@ -42,6 +42,7 @@ from packaging import version
 
 from aimet_common.defs import QuantScheme
 from aimet_tensorflow.keras.quant_sim.qc_quantize_wrapper import QcQuantizeWrapper, QuantizerSettings
+import libpymo
 
 def dense_functional():
     inp = tf.keras.layers.Input(shape=(5,))
@@ -67,8 +68,10 @@ class DenseSubclassing(tf.keras.Model):
         x = self.softmax(x)
         return x
 
+
 def test_wrapper():
     if version.parse(tf.version.VERSION) >= version.parse("2.00"):
+        tf.keras.backend.clear_session()
         test_inp = np.array([[1.5, 2.5]])
         inp = tf.keras.layers.Input(shape=(2,))
         dense = tf.keras.layers.Dense(3, kernel_initializer=tf.initializers.Constant([[2.3,-1.4, .5], [-.6, 3.1, -.2]]),
@@ -116,6 +119,7 @@ def test_wrapper():
 
 def test_wrapper_settings():
     if version.parse(tf.version.VERSION) >= version.parse("2.00"):
+        tf.keras.backend.clear_session()
         test_inp = np.array([[-3.0, -2.0, -1.0, 0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0 ,7.0, 8.0]])
         inp = tf.keras.layers.Input(shape=(12,))
         identity = tf.keras.layers.Lambda(lambda x: x)
@@ -157,6 +161,7 @@ def test_wrapper_settings():
 
 def test_keras_add_layer():
     if version.parse(tf.version.VERSION) >= version.parse("2.00"):
+        tf.keras.backend.clear_session()
         inp = tf.keras.layers.Input(shape=(2,))
         inp_2 = tf.keras.layers.Input(shape=(2,))
         x = inp + inp_2
@@ -175,3 +180,33 @@ def test_keras_add_layer():
         assert wrapped_add.input_quantizers[0].encoding is not None
         assert wrapped_add.input_quantizers[1].encoding is not None
         assert wrapped_add.input_quantizers[0].encoding.max != wrapped_add.input_quantizers[1].encoding.max
+
+def test_freeze_encodings():
+    tf.keras.backend.clear_session()
+    test_inp = np.array([[1.5, 2.5]])
+    dense = tf.keras.layers.Dense(3, kernel_initializer=tf.initializers.Constant([[2.3, -1.4, .5], [-.6, 3.1, -.2]]),
+                                  bias_initializer=tf.initializers.Constant([5.0]))
+    # run forward pass on dense to generate weights
+    _ = dense(test_inp)
+    wrapper = QcQuantizeWrapper(dense,
+                                QuantizerSettings(8, 'nearest', 'tf', False, False, False),
+                                QuantizerSettings(8, 'nearest', 'tf', False, False, False),
+                                num_inputs=1)
+    wrapper(test_inp)
+    wrapper.compute_encoding()
+    weight_min = wrapper.param_quantizers[0].encoding.min
+    wrapper._layer_to_wrap.set_weights([np.array([[-5.5, -4.5, -3.5], [3.0, 4.0, 5.0]])] +
+                                       wrapper._layer_to_wrap.get_weights()[1:])
+    wrapper(test_inp)
+    wrapper.compute_encoding()
+    weight_min_2 = wrapper.param_quantizers[0].encoding.min
+    assert weight_min != weight_min_2
+    param_name = wrapper._layer_to_wrap.weights[0].name
+    wrapper.set_and_freeze_param_encoding({param_name: {'bitwidth': 4, 'max': 30.0, 'min': 0.0, 'offset': 0,
+                                                              'scale': 2.0, 'is_symmetric': False}})
+    wrapper(test_inp)
+    wrapper.compute_encoding()
+    weight_min_3 = wrapper.param_quantizers[0].encoding.min
+    assert weight_min_3 == 0.0
+    assert wrapper.param_quantizers[0]._is_encoding_frozen
+    assert wrapper.param_quantizers[0].quant_mode == int(libpymo.TensorQuantizerOpMode.quantizeDequantize)
