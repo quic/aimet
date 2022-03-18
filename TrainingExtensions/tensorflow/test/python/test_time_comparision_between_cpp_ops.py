@@ -310,9 +310,11 @@ class TestTrainingExtensionsQcQuantizeOpPerChannel(unittest.TestCase):
                                        trainable=False, dtype=tf.int32)
                 axis = tf.Variable(initial_value=3, trainable=False, dtype=tf.int32)
 
+                is_int_data_type = tf.Variable(initial_value=True, trainable=False, dtype=tf.bool)
+
                 sess.run([mode_var.initializer, tensor_quant_ref.initializer, encoding_min.initializer,
                           encoding_max.initializer, bit_width.initializer, use_symmetric_encoding.initializer,
-                          axis.initializer])
+                          axis.initializer, is_int_data_type.initializer])
                 # # Giving axis = 3
                 pass_through_op_output = zero_out_module.qc_quantize(name='quant_op', in_tensor=inp,
                                                                      op_mode=mode_var,
@@ -320,7 +322,8 @@ class TestTrainingExtensionsQcQuantizeOpPerChannel(unittest.TestCase):
                                                                      encoding_min=encoding_min,
                                                                      encoding_max=encoding_max,
                                                                      bit_width=bit_width,
-                                                                     use_symmetric_encoding=use_symmetric_encoding)
+                                                                     use_symmetric_encoding=use_symmetric_encoding,
+                                                                     is_int_data_type=is_int_data_type)
 
             inp_tensor = sess.graph.get_tensor_by_name('input:0')
             inp_data = np.ones((10, 10, 20, num_output_channels))
@@ -464,10 +467,11 @@ class TestTrainingExtensionsQcQuantizeOpPerChannel(unittest.TestCase):
             mode_var = tf.Variable(initial_value=int(libpymo.TensorQuantizerOpMode.oneShotQuantizeDequantize),
                                    trainable=False, dtype=tf.int32)
             axis = tf.Variable(initial_value=3, trainable=False, dtype=tf.int32)
+            is_int_data_type = tf.Variable(initial_value=True, trainable=False, dtype=tf.bool)
 
             sess.run([mode_var.initializer, tensor_quant_ref.initializer, encoding_min.initializer,
                       encoding_max.initializer, bit_width.initializer, use_symmetric_encoding.initializer,
-                      axis.initializer])
+                      axis.initializer, is_int_data_type.initializer])
             with tf.device("/device:GPU:0"):
                 # Giving axis = 3
                 pass_through_op_output = zero_out_module.qc_quantize(name='quant_op', in_tensor=inp,
@@ -476,8 +480,8 @@ class TestTrainingExtensionsQcQuantizeOpPerChannel(unittest.TestCase):
                                                                      encoding_min=encoding_min,
                                                                      encoding_max=encoding_max,
                                                                      bit_width=bit_width,
-                                                                     use_symmetric_encoding=use_symmetric_encoding
-                                                                     )
+                                                                     use_symmetric_encoding=use_symmetric_encoding,
+                                                                     is_int_data_type=is_int_data_type)
 
             inp_tensor = sess.graph.get_tensor_by_name('input:0')
             inp_data = np.ones((10, 10, 20, num_output_channels))

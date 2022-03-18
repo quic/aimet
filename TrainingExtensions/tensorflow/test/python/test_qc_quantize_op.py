@@ -74,12 +74,14 @@ class TestTrainingExtensionsQcQuantizeOp(unittest.TestCase):
                 encoding_max = tf.Variable(initial_value=0.0, trainable=True, dtype=tf.double)
                 bit_width = tf.Variable(initial_value=bitwidth, trainable=False, dtype=tf.int8)
                 use_symmetric_encoding = tf.Variable(initial_value=use_symm_encoding, trainable=False, dtype=tf.bool)
+                is_int_data_type = tf.Variable(initial_value=True, trainable=False, dtype=tf.bool)
 
                 mode_var = tf.Variable(initial_value=int(libpymo.TensorQuantizerOpMode.updateStats),
                                        trainable=False, dtype=tf.int32)
 
                 sess.run([mode_var.initializer, tensor_quant_ref.initializer, encoding_min.initializer,
-                         encoding_max.initializer, bit_width.initializer, use_symmetric_encoding.initializer])
+                         encoding_max.initializer, bit_width.initializer, use_symmetric_encoding.initializer,
+                          is_int_data_type.initializer])
 
                 pass_through_op_output = zero_out_module.qc_quantize(name='quant_op', in_tensor=inp,
                                                                      op_mode=mode_var,
@@ -87,15 +89,16 @@ class TestTrainingExtensionsQcQuantizeOp(unittest.TestCase):
                                                                      encoding_min=encoding_min,
                                                                      encoding_max=encoding_max,
                                                                      bit_width=bit_width,
-                                                                     use_symmetric_encoding=use_symmetric_encoding)
+                                                                     use_symmetric_encoding=use_symmetric_encoding,
+                                                                     is_int_data_type=is_int_data_type)
 
         inp_tensor = sess.graph.get_tensor_by_name('input:0')
         inp_data = np.random.rand(10)
 
         # get the output
-        print(inp_data)
+        print("inp_data", inp_data)
         out_data = sess.run(pass_through_op_output, feed_dict={inp_tensor: inp_data})
-        print(out_data)
+        print("out_data", out_data)
 
         # compare qc_quantize op's output with input
         self.assertTrue(np.allclose(out_data, inp_data))
@@ -115,6 +118,118 @@ class TestTrainingExtensionsQcQuantizeOp(unittest.TestCase):
 
         # compare qc_quantize op's output with input
         self.assertFalse(np.allclose(out_data, inp_data))
+        sess.close()
+
+    def test_qc_quantize_op_cpu_fp16_quantize_dequantize(self):
+        """
+        test qc_quantize custom op with CPU with fp16 data type
+        """
+        zero_out_module = tf.load_op_library('libaimet_tf_ops.so')
+        graph = tf.Graph()
+        config = tf.compat.v1.ConfigProto(log_device_placement=False)
+        sess = tf.compat.v1.Session(graph=graph, config=config)
+        bitwidth = 8
+        use_symm_encoding = True
+
+        with graph.as_default():
+            # place holder for the input
+            with tf.device("/device:CPU:0"):
+                inp = tf.compat.v1.placeholder(tf.float32, shape=[10], name='input')
+                tensor_quantizer = libpymo.TensorQuantizer(libpymo.QuantizationMode.QUANTIZATION_TF_ENHANCED,
+                                                           libpymo.RoundingMode.ROUND_NEAREST)
+                tensor_quantizer_val = libpymo.PtrToInt64(tensor_quantizer)
+                tensor_quant_ref = tf.Variable(initial_value=tensor_quantizer_val, trainable=False, dtype=tf.int64)
+
+                encoding_min = tf.Variable(initial_value=0.0, trainable=True, dtype=tf.double)
+                encoding_max = tf.Variable(initial_value=0.0, trainable=True, dtype=tf.double)
+                bit_width = tf.Variable(initial_value=bitwidth, trainable=False, dtype=tf.int8)
+                use_symmetric_encoding = tf.Variable(initial_value=use_symm_encoding, trainable=False, dtype=tf.bool)
+                is_int_data_type = tf.Variable(initial_value=False, trainable=False, dtype=tf.bool)
+                mode_var = tf.Variable(initial_value=int(libpymo.TensorQuantizerOpMode.quantizeDequantize),
+                                       trainable=False, dtype=tf.int32)
+
+                sess.run([mode_var.initializer, tensor_quant_ref.initializer, encoding_min.initializer,
+                         encoding_max.initializer, bit_width.initializer, use_symmetric_encoding.initializer,
+                          is_int_data_type.initializer])
+
+                pass_through_op_output = zero_out_module.qc_quantize(name='quant_op', in_tensor=inp,
+                                                                     op_mode=mode_var,
+                                                                     tensor_quantizer_reference=tensor_quant_ref,
+                                                                     encoding_min=encoding_min,
+                                                                     encoding_max=encoding_max,
+                                                                     bit_width=bit_width,
+                                                                     use_symmetric_encoding=use_symmetric_encoding,
+                                                                     is_int_data_type=is_int_data_type)
+
+        inp_tensor = sess.graph.get_tensor_by_name('input:0')
+
+        inp_data = np.array([0.78027299, 0.44164284, 0.6942797, 0.69774088, 0.55863863, 0.29553034, 0.219199,
+                             0.09483732, 0.55075674, 0.6348504], dtype=np.float32)
+
+        out_exp = np.array([0.78027344, 0.4416504, 0.69433594, 0.6977539, 0.55859375, 0.29541016, 0.21923828,
+                            0.09484863, 0.55078125, 0.6347656], dtype=np.float32)
+
+        # get the output
+        print("inp_data", inp_data)
+        out_data = sess.run(pass_through_op_output, feed_dict={inp_tensor: inp_data})
+        print("out_data", out_data)
+
+        # compare qc_quantize op's output with expected output
+        self.assertTrue(np.allclose(out_data, out_exp))
+
+        sess.close()
+
+    def test_qc_quantize_op_cpu_fp16_pass_through(self):
+        """
+        test qc_quantize custom op with CPU with fp16 data type in pass through mode
+        """
+        zero_out_module = tf.load_op_library('libaimet_tf_ops.so')
+        graph = tf.Graph()
+        config = tf.compat.v1.ConfigProto(log_device_placement=False)
+        sess = tf.compat.v1.Session(graph=graph, config=config)
+        bitwidth = 8
+        use_symm_encoding = True
+
+        with graph.as_default():
+            # place holder for the input
+            with tf.device("/device:CPU:0"):
+                inp = tf.compat.v1.placeholder(tf.float32, shape=[10], name='input')
+                tensor_quantizer = libpymo.TensorQuantizer(libpymo.QuantizationMode.QUANTIZATION_TF_ENHANCED,
+                                                           libpymo.RoundingMode.ROUND_NEAREST)
+                tensor_quantizer_val = libpymo.PtrToInt64(tensor_quantizer)
+                tensor_quant_ref = tf.Variable(initial_value=tensor_quantizer_val, trainable=False, dtype=tf.int64)
+
+                encoding_min = tf.Variable(initial_value=0.0, trainable=True, dtype=tf.double)
+                encoding_max = tf.Variable(initial_value=0.0, trainable=True, dtype=tf.double)
+                bit_width = tf.Variable(initial_value=bitwidth, trainable=False, dtype=tf.int8)
+                use_symmetric_encoding = tf.Variable(initial_value=use_symm_encoding, trainable=False, dtype=tf.bool)
+                is_int_data_type = tf.Variable(initial_value=False, trainable=False, dtype=tf.bool)
+                mode_var = tf.Variable(initial_value=int(libpymo.TensorQuantizerOpMode.passThrough),
+                                       trainable=False, dtype=tf.int32)
+
+                sess.run([mode_var.initializer, tensor_quant_ref.initializer, encoding_min.initializer,
+                         encoding_max.initializer, bit_width.initializer, use_symmetric_encoding.initializer,
+                          is_int_data_type.initializer])
+
+                pass_through_op_output = zero_out_module.qc_quantize(name='quant_op', in_tensor=inp,
+                                                                     op_mode=mode_var,
+                                                                     tensor_quantizer_reference=tensor_quant_ref,
+                                                                     encoding_min=encoding_min,
+                                                                     encoding_max=encoding_max,
+                                                                     bit_width=bit_width,
+                                                                     use_symmetric_encoding=use_symmetric_encoding,
+                                                                     is_int_data_type=is_int_data_type)
+
+        inp_tensor = sess.graph.get_tensor_by_name('input:0')
+
+        inp_data = np.array([0.78027299, 0.44164284, 0.6942797, 0.69774088, 0.55863863, 0.29553034, 0.219199,
+                             0.09483732, 0.55075674, 0.6348504], dtype=np.float32)
+
+        # get the output
+        out_data = sess.run(pass_through_op_output, feed_dict={inp_tensor: inp_data})
+
+        # compare qc_quantize op's output with expected output
+        self.assertTrue(np.allclose(out_data, inp_data))
 
         sess.close()
 
@@ -144,9 +259,11 @@ class TestTrainingExtensionsQcQuantizeOp(unittest.TestCase):
                 encoding_max = tf.Variable(initial_value=0.0, trainable=True, dtype=tf.double)
                 bit_width = tf.Variable(initial_value=bitwidth, trainable=False, dtype=tf.int8)
                 use_symmetric_encoding = tf.Variable(initial_value=use_symm_encoding, trainable=False, dtype=tf.bool)
+                is_int_data_type = tf.Variable(initial_value=True, trainable=False, dtype=tf.bool)
 
                 sess.run([mode_var.initializer, tensor_quant_ref.initializer, encoding_min.initializer,
-                          encoding_max.initializer, bit_width.initializer, use_symmetric_encoding.initializer])
+                          encoding_max.initializer, bit_width.initializer, use_symmetric_encoding.initializer,
+                          is_int_data_type.initializer])
 
                 pass_through_op_output = zero_out_module.qc_quantize(name='quant_op', in_tensor=inp,
                                                                      op_mode=mode_var,
@@ -154,7 +271,8 @@ class TestTrainingExtensionsQcQuantizeOp(unittest.TestCase):
                                                                      encoding_min=encoding_min,
                                                                      encoding_max=encoding_max,
                                                                      bit_width=bit_width,
-                                                                     use_symmetric_encoding=use_symmetric_encoding)
+                                                                     use_symmetric_encoding=use_symmetric_encoding,
+                                                                     is_int_data_type=is_int_data_type)
 
         inp_tensor = sess.graph.get_tensor_by_name('input:0')
         inp_data = np.random.rand(10) * 256
@@ -200,9 +318,11 @@ class TestTrainingExtensionsQcQuantizeOp(unittest.TestCase):
             encoding_max = tf.Variable(initial_value=0.0, trainable=True, dtype=tf.double)
             bit_width = tf.Variable(initial_value=bitwidth, trainable=False, dtype=tf.int8)
             use_symmetric_encoding = tf.Variable(initial_value=use_symm_encoding, trainable=False, dtype=tf.bool)
+            is_int_data_type = tf.Variable(initial_value=True, trainable=False, dtype=tf.bool)
 
             sess.run([mode_var.initializer, tensor_quant_ref.initializer, encoding_min.initializer,
-                      encoding_max.initializer, bit_width.initializer, use_symmetric_encoding.initializer])
+                      encoding_max.initializer, bit_width.initializer, use_symmetric_encoding.initializer,
+                      is_int_data_type.initializer])
 
             # place holder for the input
             with tf.device("/device:GPU:0"):
@@ -213,16 +333,18 @@ class TestTrainingExtensionsQcQuantizeOp(unittest.TestCase):
                                                                      encoding_min=encoding_min,
                                                                      encoding_max=encoding_max,
                                                                      bit_width=bit_width,
-                                                                     use_symmetric_encoding=use_symmetric_encoding)
+                                                                     use_symmetric_encoding=use_symmetric_encoding,
+                                                                     is_int_data_type=is_int_data_type)
 
         inp_tensor = sess.graph.get_tensor_by_name('input:0')
         inp_data = np.random.rand(10)
 
         # get the output
-        print(inp_data)
+
+        print("inp_data", inp_data)
         with tf.device("/device:GPU:0"):
             out_data = sess.run(pass_through_op_output, feed_dict={inp_tensor: inp_data})
-        print(out_data)
+        print("out_data", out_data)
 
         # compare qc_quantize op's output with input
         self.assertTrue(np.allclose(out_data, inp_data))
@@ -235,15 +357,71 @@ class TestTrainingExtensionsQcQuantizeOp(unittest.TestCase):
 
         # get the output
         inp_data = np.random.rand(10) * 2
-        print(inp_data)
+        print("inp_data", inp_data)
         mode_var.load(int(libpymo.TensorQuantizerOpMode.quantizeDequantize), sess)
         with tf.device("/device:GPU:0"):
             out_data = sess.run(pass_through_op_output, feed_dict={inp_tensor: inp_data})
-        print(out_data)
+        print("out_data", out_data)
 
         # compare qc_quantize op's output with input
         self.assertFalse(np.allclose(out_data, inp_data))
 
+        sess.close()
+
+    @pytest.mark.cuda
+    def test_qc_quantize_op_gpu_fp16(self):
+        """
+        test custom op with GPU
+        """
+        zero_out_module = tf.load_op_library('libaimet_tf_ops.so')
+        graph = tf.Graph()
+        config = tf.compat.v1.ConfigProto(log_device_placement=False)
+        sess = tf.compat.v1.Session(graph=graph, config=config)
+        bitwidth = 8
+        use_symm_encoding = False
+        with graph.as_default():
+            inp = tf.compat.v1.placeholder(tf.float32, shape=[10], name='input')
+            tensor_quantizer = libpymo.TensorQuantizer(libpymo.QuantizationMode.QUANTIZATION_TF_ENHANCED,
+                                                       libpymo.RoundingMode.ROUND_NEAREST)
+            tensor_quantizer_val = libpymo.PtrToInt64(tensor_quantizer)
+            tensor_quant_ref = tf.Variable(initial_value=tensor_quantizer_val, trainable=False, dtype=tf.int64)
+
+            mode_var = tf.Variable(initial_value=int(libpymo.TensorQuantizerOpMode.quantizeDequantize),
+                                   trainable=False, dtype=tf.int32)
+
+            encoding_min = tf.Variable(initial_value=0.0, trainable=True, dtype=tf.double)
+            encoding_max = tf.Variable(initial_value=0.0, trainable=True, dtype=tf.double)
+            bit_width = tf.Variable(initial_value=bitwidth, trainable=False, dtype=tf.int8)
+            use_symmetric_encoding = tf.Variable(initial_value=use_symm_encoding, trainable=False, dtype=tf.bool)
+            is_int_data_type = tf.Variable(initial_value=False, trainable=False, dtype=tf.bool)
+
+            sess.run([mode_var.initializer, tensor_quant_ref.initializer, encoding_min.initializer,
+                      encoding_max.initializer, bit_width.initializer, use_symmetric_encoding.initializer,
+                      is_int_data_type.initializer])
+
+            # place holder for the input
+            with tf.device("/device:GPU:0"):
+                pass_through_op_output = zero_out_module.qc_quantize(name='quant_op', in_tensor=inp,
+                                                                     op_mode=mode_var,
+                                                                     tensor_quantizer_reference=tensor_quant_ref,
+                                                                     encoding_min=encoding_min,
+                                                                     encoding_max=encoding_max,
+                                                                     bit_width=bit_width,
+                                                                     use_symmetric_encoding=use_symmetric_encoding,
+                                                                     is_int_data_type=is_int_data_type)
+
+        inp_tensor = sess.graph.get_tensor_by_name('input:0')
+        inp_data = np.array([0.78027299, 0.44164284, 0.6942797, 0.69774088, 0.55863863, 0.29553034, 0.219199,
+                             0.09483732, 0.55075674, 0.6348504], dtype=np.float32)
+
+        out_exp = np.array([0.78027344, 0.4416504, 0.69433594, 0.6977539, 0.55859375, 0.29541016, 0.21923828,
+                            0.09484863, 0.55078125, 0.6347656], dtype=np.float32)
+
+        print("inp_data", inp_data)
+        with tf.device("/device:GPU:0"):
+            out_data = sess.run(pass_through_op_output, feed_dict={inp_tensor: inp_data})
+        print("out_data", out_data)
+        self.assertTrue(np.allclose(out_data, out_exp))
         sess.close()
 
     def test_qc_quantize_static_op_cpu(self):
@@ -433,6 +611,7 @@ class TestTrainingExtensionsQcQuantizeOp(unittest.TestCase):
 
         sess.close()
 
+
     def test_qc_quantize_op_straight_through_gradient_computation(self):
         """
         test to validate tensorflow quantize op straight through estimator gradient computation
@@ -459,9 +638,11 @@ class TestTrainingExtensionsQcQuantizeOp(unittest.TestCase):
             encoding_max = tf.Variable(initial_value=5.0, trainable=True, dtype=tf.double)
             bit_width = tf.Variable(initial_value=8, trainable=False, dtype=tf.int8)
             use_symmetric_encoding = tf.Variable(initial_value=False, trainable=False, dtype=tf.bool)
+            is_int_data_type = tf.Variable(initial_value=True, trainable=False, dtype=tf.bool)
 
             sess.run([mode_var.initializer, tensor_quant_ref.initializer, encoding_min.initializer,
-                      encoding_max.initializer, bit_width.initializer, use_symmetric_encoding.initializer])
+                      encoding_max.initializer, bit_width.initializer, use_symmetric_encoding.initializer,
+                      is_int_data_type.initializer])
 
             # use default gradient
             pass_through_op_output = zero_out_module.qc_quantize(name='quant_op', in_tensor=inp,
@@ -470,7 +651,8 @@ class TestTrainingExtensionsQcQuantizeOp(unittest.TestCase):
                                                                  encoding_min=encoding_min,
                                                                  encoding_max=encoding_max,
                                                                  bit_width=bit_width,
-                                                                 use_symmetric_encoding=use_symmetric_encoding)
+                                                                 use_symmetric_encoding=use_symmetric_encoding,
+                                                                 is_int_data_type=is_int_data_type)
 
             # pass_through_op = graph.get_operation_by_name('quant_op')
 
@@ -608,9 +790,11 @@ class TestTrainingExtensionsQcQuantizeOp(unittest.TestCase):
                 encoding_max = tf.Variable(initial_value=5.0, trainable=True, dtype=tf.double)
                 bit_width = tf.Variable(initial_value=8, trainable=False, dtype=tf.int8)
                 use_symmetric_encoding = tf.Variable(initial_value=False, trainable=False, dtype=tf.bool)
+                is_int_data_type = tf.Variable(initial_value=True, trainable=False, dtype=tf.bool)
 
                 sess.run([mode_var.initializer, tensor_quant_ref.initializer, encoding_min.initializer,
-                          encoding_max.initializer, bit_width.initializer, use_symmetric_encoding.initializer])
+                          encoding_max.initializer, bit_width.initializer, use_symmetric_encoding.initializer,
+                          is_int_data_type.initializer])
 
                 with graph.gradient_override_map(
                         {"QcQuantize": "QcQuantizeRangeLearningCustomGradient"}):
@@ -621,7 +805,8 @@ class TestTrainingExtensionsQcQuantizeOp(unittest.TestCase):
                                                                          encoding_min=encoding_min,
                                                                          encoding_max=encoding_max,
                                                                          bit_width=bit_width,
-                                                                         use_symmetric_encoding=use_symmetric_encoding)
+                                                                         use_symmetric_encoding=use_symmetric_encoding,
+                                                                         is_int_data_type=is_int_data_type)
 
                 pass_through_op = graph.get_operation_by_name('quant_op')
 

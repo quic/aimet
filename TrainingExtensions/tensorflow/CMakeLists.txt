@@ -66,6 +66,7 @@ if (ENABLE_CUDA)
           MoDlQuantizationCuda
           TensorFlow
           TrainingExtensionsTfCuda
+          PyWrapTensorFlowInternal
           )
 
 else(ENABLE_CUDA)
@@ -73,6 +74,7 @@ else(ENABLE_CUDA)
             MoDlCompression
             MoDlQuantization
             TensorFlow
+            PyWrapTensorFlowInternal
             )
 
 endif(ENABLE_CUDA)
