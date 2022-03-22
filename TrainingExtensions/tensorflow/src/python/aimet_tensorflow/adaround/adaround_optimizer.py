@@ -42,6 +42,7 @@ from typing import Union, Callable
 import numpy as np
 import tensorflow as tf
 from tensorflow import keras
+from tqdm import tqdm
 
 # Import AIMET specific modules
 from aimet_common.utils import AimetLogger
@@ -162,7 +163,7 @@ class AdaroundOptimizer:
         # pylint: disable=too-many-locals
         optimizer = keras.optimizers.Adam(learning_rate=1e-3)
 
-        for cur_iteration in range(opt_params.num_iterations):
+        for cur_iteration in tqdm(range(opt_params.num_iterations)):
 
             # During warm start period, rounding loss is zero
             warm_start = cur_iteration < opt_params.num_iterations * opt_params.warm_start

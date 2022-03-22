@@ -45,6 +45,7 @@ from typing import Any, Collection, Callable, List, Optional, Tuple, Union
 import torch
 from torch.utils.data import DataLoader
 import jinja2
+from tqdm import tqdm
 
 from aimet_torch import utils
 from aimet_torch.adaround.adaround_weight import Adaround, AdaroundParameters
@@ -143,7 +144,7 @@ class AutoQuant:
         def forward_pass_callback(model, _: Any = None):
             device = utils.get_device(model)
             with in_eval_mode(model), torch.no_grad():
-                for input_data in unlabeled_dataset_iterable:
+                for input_data in tqdm(unlabeled_dataset_iterable):
                     input_data = utils.change_tensor_device_placement(input_data, device)
                     if isinstance(input_data, torch.Tensor):
                         model(input_data)
