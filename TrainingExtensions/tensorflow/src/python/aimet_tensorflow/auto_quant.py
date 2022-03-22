@@ -41,6 +41,7 @@ from dataclasses import dataclass
 import os
 from typing import Any, Callable, List, Optional, Tuple
 import tensorflow as tf
+from tqdm import tqdm
 
 import jinja2
 
@@ -219,7 +220,8 @@ class AutoQuant:
             ]
 
             count = 0
-            for inputs in iterate_tf_dataset(self._unlabeled_dataset):
+            iterator = iterate_tf_dataset(self._unlabeled_dataset)
+            for inputs in tqdm(iterator, total=self._unlabled_dataset_length):
                 feed_dict = create_input_feed_dict(sess.graph, starting_op_names, inputs)
                 sess.run(output_ops, feed_dict=feed_dict)
                 count += 1

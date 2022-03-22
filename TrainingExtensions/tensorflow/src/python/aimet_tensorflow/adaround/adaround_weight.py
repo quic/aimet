@@ -42,6 +42,7 @@ import os
 import json
 import shutil
 from typing import List, Tuple, Callable, Union, Dict
+from tqdm import tqdm
 import tensorflow as tf
 import libpymo
 
@@ -143,7 +144,7 @@ class Adaround:
         ordered_ops = cls._get_ordered_list_of_ops(session.graph, starting_op_names, output_op_names)
         param_encodings = {}
 
-        for op in ordered_ops:
+        for op in tqdm(ordered_ops):
             logger.info("Started Optimizing weight rounding of op: %s", op.name)
 
             # Using name, get corresponding op
