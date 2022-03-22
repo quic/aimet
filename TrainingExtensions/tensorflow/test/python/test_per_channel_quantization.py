@@ -47,6 +47,7 @@ import tensorflow as tf
 from aimet_tensorflow.common.graph_eval import initialize_uninitialized_vars
 from aimet_tensorflow.quantsim import QuantizationSimModel
 from aimet_tensorflow.examples.test_models import depthwise_conv2d_model
+from aimet_tensorflow.utils.op.conv import WeightTensorUtils
 from aimet_common.quantsim import calculate_delta_offset
 
 tf.compat.v1.disable_eager_execution()
@@ -97,7 +98,7 @@ class TestTrainingExtensionsQcQuantizeOpPerChannel(unittest.TestCase):
                 bit_width = tf.Variable(initial_value=bitwidth, trainable=False, dtype=tf.int8)
                 use_symmetric_encoding = tf.Variable(initial_value=use_symm_encoding, trainable=False, dtype=tf.bool)
 
-                mode_var = tf.Variable(initial_value=int(libpymo.TensorQuantizerOpMode.updateStats),
+                mode_var = tf.Variable(initial_value=int(libpymo.TensorQuantizerOpMode.oneShotQuantizeDequantize),
                                        trainable=False, dtype=tf.int32)
                 axis = tf.Variable(initial_value=3, trainable=False, dtype=tf.int32)
 
@@ -128,7 +129,7 @@ class TestTrainingExtensionsQcQuantizeOpPerChannel(unittest.TestCase):
             expected_output = np.ones((1, 1, 2, num_output_channels))
             expected_output[:, :, :, 1] *= 2
             expected_output[:, :, :, 2] *= 2.5
-            self.assertTrue(np.allclose(out_data, expected_output))
+            self.assertTrue(np.allclose(out_data, expected_output, rtol=0.01))
             sess.close()
 
     @pytest.mark.cuda
@@ -174,7 +175,7 @@ class TestTrainingExtensionsQcQuantizeOpPerChannel(unittest.TestCase):
             bit_width = tf.Variable(initial_value=bitwidth, trainable=False, dtype=tf.int8)
             use_symmetric_encoding = tf.Variable(initial_value=use_symm_encoding, trainable=False, dtype=tf.bool)
 
-            mode_var = tf.Variable(initial_value=int(libpymo.TensorQuantizerOpMode.updateStats),
+            mode_var = tf.Variable(initial_value=int(libpymo.TensorQuantizerOpMode.oneShotQuantizeDequantize),
                                    trainable=False, dtype=tf.int32)
             axis = tf.Variable(initial_value=3, trainable=False, dtype=tf.int32)
 
@@ -198,15 +199,14 @@ class TestTrainingExtensionsQcQuantizeOpPerChannel(unittest.TestCase):
             inp_data[:, :, :, 1] *= 2
             inp_data[:, :, :, 2] *= 3
             out_data = sess.run(pass_through_op_output, feed_dict={inp_tensor: inp_data})
-            for i in range(num_output_channels):
-                encoding = tensor_quantizers[i].computeEncoding(bitwidth, use_symm_encoding, False, False)
+
             mode_var.load(int(libpymo.TensorQuantizerOpMode.quantizeDequantize), sess)
             out_data = sess.run(pass_through_op_output, feed_dict={inp_tensor: inp_data})
             # compare qc_quantize op's output with input
             expected_output = np.ones((1, 1, 2, num_output_channels))
             expected_output[:, :, :, 1] *= 2
             expected_output[:, :, :, 2] *= 2.5
-            self.assertTrue(np.allclose(out_data, expected_output))
+            self.assertTrue(np.allclose(out_data, expected_output, rtol=0.01))
             sess.close()
 
     def test_qc_quantize_op_cpu_linear(self):
@@ -239,15 +239,15 @@ class TestTrainingExtensionsQcQuantizeOpPerChannel(unittest.TestCase):
 
                 tensor_quant_ref = tf.Variable(tensor_quantizer_int64, trainable=False, dtype=tf.int64)
 
-                encoding_min = tf.Variable([1.0, 2.0, 3.0],
+                encoding_min = tf.Variable([0.0, 0.0, 0.0],
                                            trainable=True, dtype=tf.double)
-                encoding_max = tf.Variable([2.0, 3.0, 4.0],
+                encoding_max = tf.Variable([1.0, 2.0, 2.5],
                                            trainable=True, dtype=tf.double)
 
                 bit_width = tf.Variable(initial_value=bitwidth, trainable=False, dtype=tf.int8)
                 use_symmetric_encoding = tf.Variable(initial_value=use_symm_encoding, trainable=False, dtype=tf.bool)
 
-                mode_var = tf.Variable(initial_value=int(libpymo.TensorQuantizerOpMode.updateStats),
+                mode_var = tf.Variable(initial_value=int(libpymo.TensorQuantizerOpMode.oneShotQuantizeDequantize),
                                        trainable=False, dtype=tf.int32)
                 axis = tf.Variable(initial_value=1, trainable=False, dtype=tf.int32)
 
@@ -271,9 +271,15 @@ class TestTrainingExtensionsQcQuantizeOpPerChannel(unittest.TestCase):
 
         out_data = sess.run(pass_through_op_output, feed_dict={inp_tensor: inp_data})
 
+        mode_var.load(int(libpymo.TensorQuantizerOpMode.quantizeDequantize), sess)
+        out_data = sess.run(pass_through_op_output, feed_dict={inp_tensor: inp_data})
         # compare qc_quantize op's output with input
-        self.assertTrue(np.allclose(out_data, inp_data))
+        expected_output = np.ones((2, 3))
+        expected_output[:, 1] *= 2
+        expected_output[:, 2] *= 2.5
+        self.assertTrue(np.allclose(out_data, expected_output, rtol=0.01))
         sess.close()
+
 
     def test_qc_quantize_op_cpu_bias(self):
         """
@@ -377,8 +383,9 @@ class TestTrainingExtensionsQcQuantizeOpPerChannel(unittest.TestCase):
 
             sim.compute_encodings(dummy_forward_pass, None)
             for quant_op_name, quantizer_info in sim._param_quantizers.items():
-                encoding = quantizer_info.get_encoding()
-                assert isinstance(encoding, list)
+                if quantizer_info.get_op_mode() != int(libpymo.TensorQuantizerOpMode.passThrough):
+                    encoding = quantizer_info.get_encoding()
+                    assert isinstance(encoding, list)
 
     def test_export_encodings(self):
         save_config_file_for_per_channel_quantization()
@@ -437,35 +444,41 @@ class TestTrainingExtensionsQcQuantizeOpPerChannel(unittest.TestCase):
         tf.compat.v1.reset_default_graph()
         with tf.device('/gpu:0'):
             model = tf.keras.Sequential()
-            model.add(tf.keras.layers.Conv2D(32, kernel_size=3, input_shape=(28, 28, 3), activation='relu'))
-            model.add(tf.keras.layers.MaxPooling2D((2, 2)))
-            model.add(tf.keras.layers.Conv2D(64, kernel_size=3, activation='relu'))
-            model.add(tf.keras.layers.Dense(2, activation='relu'))
+            model.add(tf.keras.layers.Conv2D(3, kernel_size=2, input_shape=(3, 3, 3)))
             model.summary()
 
         sess = tf.compat.v1.Session()
         initialize_uninitialized_vars(sess)
-        sim = QuantizationSimModel(sess, ['conv2d_input'], ['dense/Relu'], use_cuda=True,
+
+        conv2d_op = sess.graph.get_operation_by_name('conv2d/Conv2D')
+        weight_val = np.random.randn(2, 2, 3, 3)
+        WeightTensorUtils.update_tensor_for_op(sess, conv2d_op, weight_val)
+
+        sim = QuantizationSimModel(sess, ['conv2d_input'], ['conv2d/BiasAdd'], use_cuda=True,
                                    config_file='./quantsim_config.json')
 
-        # Check that op-mode is set correctly
-        conv2d_weight_quant_op = sim.session.graph.get_operation_by_name('conv2d/Conv2D/ReadVariableOp_quantized')
-        conv2d_output_quant_op = sim.session.graph.get_operation_by_name('dense/Relu_quantized')
-        self.assertEqual(int(libpymo.TensorQuantizerOpMode.oneShotQuantizeDequantize),
-                         sim.session.run(conv2d_weight_quant_op.inputs[1]))
-        self.assertEqual(int(libpymo.TensorQuantizerOpMode.updateStats),
-                         sim.session.run(conv2d_output_quant_op.inputs[1]))
-
         def dummy_forward_pass(sess, args):
-            model_output = sess.graph.get_tensor_by_name('dense/Relu_quantized:0')
+            # model_output = sess.graph.get_tensor_by_name('dense/Relu_quantized:0')
+            model_output = sess.graph.get_tensor_by_name('conv2d/BiasAdd_quantized:0')
             model_input = sess.graph.get_tensor_by_name('conv2d_input:0')
-            dummy_input = np.random.randn(20, 28, 28, 3)
+            dummy_input = np.random.randn(1, 3, 3, 3)
             sess.run(model_output, feed_dict={model_input: dummy_input})
 
         sim.compute_encodings(dummy_forward_pass, None)
+
+        encodings = []
         for quant_op_name, quantizer_info in sim._param_quantizers.items():
-            encoding = quantizer_info.get_encoding()
-            assert isinstance(encoding, list)
+            if quantizer_info.get_op_mode() != int(libpymo.TensorQuantizerOpMode.passThrough):
+                encoding = quantizer_info.get_encoding()
+                lst = []
+                for enc in encoding:
+                    lst.append((enc.min, enc.max))
+                encodings.append(lst)
+
+        encoding_numpy = compute_tf_encodings_given_numpy_data(weight_val, axis=3)
+        assert np.allclose(encoding_numpy, encodings, rtol=0.01)
+
+
 
     @pytest.mark.cuda
     def test_to_compare_time_per_channel_and_per_tensor_quantization(self):
@@ -532,8 +545,9 @@ class TestTrainingExtensionsQcQuantizeOpPerChannel(unittest.TestCase):
 
         sim.compute_encodings(dummy_forward_pass, None)
         for quant_op_name, quantizer_info in sim._param_quantizers.items():
-            encoding = quantizer_info.get_encoding()
-            assert isinstance(encoding, list)
+            if quantizer_info.get_op_mode() != int(libpymo.TensorQuantizerOpMode.passThrough):
+                encoding = quantizer_info.get_encoding()
+                assert isinstance(encoding, list)
 
 
 def save_config_file_for_per_channel_quantization():
@@ -545,11 +559,13 @@ def save_config_file_for_per_channel_quantization():
             },
             "params": {
                 "is_quantized": "True",
-                "is_symmetric": "True"
+                "is_symmetric": "False"
             },
             "per_channel_quantization": "True",
         },
-        "params": {},
+        "params": {"bias": {
+            "is_quantized": "False"
+        }},
         "op_type": {},
         "supergroups": [],
         "model_input": {},
@@ -558,3 +574,37 @@ def save_config_file_for_per_channel_quantization():
 
     with open('./quantsim_config.json', 'w') as f:
         json.dump(quantsim_config, f)
+
+def compute_tf_encodings(sess, op, axis):
+
+    data = WeightTensorUtils.get_tensor_as_numpy_data(sess, op)
+    # print(data)
+    data_size = np.size(data, axis)
+    encodings = []
+    for i in range(data_size):
+        if axis == 1:
+            data_flatten = data[:, i]
+        else:
+            data_flatten = data[:, :, :, i].flatten()
+        encoding_min = min(0.0, np.min(data_flatten))
+        encoding_max = max(0.0, np.max(data_flatten))
+        encoding_max = max(encoding_max, encoding_max + 1e-05)
+        encodings.append((encoding_min, encoding_max))
+
+    return encodings
+
+def compute_tf_encodings_given_numpy_data(data, axis):
+
+    data_size = np.size(data, axis)
+    encodings = []
+    for i in range(data_size):
+        if axis == 1:
+            data_flatten = data[:, i]
+        else:
+            data_flatten = data[:, :, :, i].flatten()
+
+        encoding_min = min(0, np.min(data_flatten))
+        encoding_max = max(0, np.max(data_flatten))
+        encodings.append((encoding_min, encoding_max))
+
+    return encodings

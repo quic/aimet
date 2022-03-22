@@ -55,6 +55,9 @@ public:
     virtual void quantizeTensor(const DTYPE* inputTensorData, size_t inputTensorCount, DTYPE* outputTensorData,
                                 double encodingMin, double encodingMax, uint8_t bw, RoundingMode roundMode,
                                 bool use_cuda, bool shiftToSigned) = 0;
+
+    virtual void fillQuantizeInfo(TfEncoding& encoding, DlQuantization::ComputationMode& cpuGpuMode, uint8_t bw,
+                          double encodingMin, double encodingMax, bool use_cuda) = 0;
 };
 
 }   // namespace DlQuantization
