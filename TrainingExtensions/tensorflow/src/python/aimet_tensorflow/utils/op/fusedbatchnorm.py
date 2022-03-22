@@ -52,6 +52,7 @@ _BN_STRUCTURE_ERROR_MSG = "BN op doesn't have the expected structure"
 
 class BNUtils:
     """ Batch Norm/ fused Batch Norm op related utils"""
+    # pylint: disable=too-many-public-methods
 
     @staticmethod
     def skip_bn_op(sess: tf.compat.v1.Session, bn_op: tf.Operation, in_tensor: tf.Tensor, out_tensor: tf.Tensor):

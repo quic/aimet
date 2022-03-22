@@ -137,6 +137,7 @@ class QuantizationSimModel:
 
     """
     # pylint: disable=too-many-arguments
+    # pylint: disable=too-many-instance-attributes
     def __init__(self, session: tf.compat.v1.Session, starting_op_names: List[str], output_op_names: List[str],
                  quant_scheme: Union[str, QuantScheme] = 'tf_enhanced', rounding_mode: str = 'nearest',
                  default_output_bw: int = 8, default_param_bw: int = 8, use_cuda: bool = True, config_file: str = None
