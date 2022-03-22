@@ -80,6 +80,23 @@ void sliceAndStoreTensor(const GPUDevice& d, Tensor* slicedTensor, Tensor tensor
     slicedTensorTwoDim.chip<1>(channel).device(d) = tensorToSlice.tensor<float, 2>().chip<0>(0);
 }
 
+void quantizeDequantize(const GPUDevice& d, TTypes<float>::ConstMatrix inputs,
+                        DlQuantization::TfEncoding encodings, TTypes<float>::Matrix outputs, int channel)
+{
+    float invScale, scale, offset, min, max;
+    // Add epsilon 10-5 to avoid divide by zero error
+    invScale = 1.0f / ((float) encodings.delta + 0.00001);
+    scale    = (float) encodings.delta;
+    offset   = (float) encodings.offset;
+    min      = (float) encodings.min;
+    max      = (float) encodings.max;
+
+    const auto clampedTensor         = inputs.chip<1>(channel).cwiseMax(min).cwiseMin(max);
+    const auto tensor = (clampedTensor * invScale).round() + offset;
+    outputs.chip<1>(channel).device(d) = (tensor - offset) * scale;
+
+};
+
 template void copyInputTensorsToOutputTensors(const GPUDevice& d, const float* inTensor, size_t count, float* outTensor);
 template int8 copyLiteralToHost<int8>(const GPUDevice&, const int8* deviceValue);
 template int32 copyLiteralToHost<int32>(const GPUDevice&, const int32* deviceValue);
