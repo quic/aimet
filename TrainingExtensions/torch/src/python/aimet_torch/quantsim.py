@@ -59,7 +59,7 @@ from aimet_torch.qc_quantize_op import QcQuantizeStandAloneBase, QcQuantizeWrapp
     StaticGridQuantWrapper, LearnedGridQuantWrapper
 from aimet_torch.tensor_quantizer import StaticGridTensorQuantizer
 from aimet_torch import torchscript_utils, utils, transformer_utils
-from aimet_torch.onnx_utils import OnnxSaver, OnnxExportApiArgs
+from aimet_torch.onnx_utils import OnnxSaver, OnnxExportApiArgs, CustomMarker
 from aimet_torch.meta.connectedgraph import ConnectedGraph
 from aimet_torch.qc_quantize_recurrent import QcQuantizeRecurrent
 
@@ -78,6 +78,8 @@ qc_quantize_modules_dict = {
     torch.nn.GRU: QcQuantizeRecurrent
 }
 
+# Length of the string '._module_to_wrap'
+MODULE_TO_WRAP_STRING_REVERSE_INDEX = -16
 
 MAP_PYMO_TO_ROUND_MODE = {libpymo.RoundingMode.ROUND_NEAREST: 'nearest',
                           libpymo.RoundingMode.ROUND_STOCHASTIC: 'stochastic'}
@@ -123,7 +125,7 @@ class QuantizationSimModel:
                  quant_scheme: Union[str, QuantScheme] = QuantScheme.post_training_tf_enhanced,
                  rounding_mode: str = 'nearest', default_output_bw: int = 8, default_param_bw: int = 8,
                  in_place: bool = False, config_file: str = None,
-                 default_data_type: QuantizationDataType = QuantizationDataType.int):
+                 default_data_type: QuantizationDataType = QuantizationDataType.int, is_conditional=False):
         """
         Constructor
 
@@ -168,6 +170,8 @@ class QuantizationSimModel:
         self._default_output_bw = default_output_bw
         self._default_param_bw = default_param_bw
         self._supported_kernels = {}
+        self._is_conditional = is_conditional
+        self._module_marker_map = {}
 
         # Add quantization layers
         num_inout_tensors = utils.find_num_inout_tensors_per_module(self.model, dummy_input)
@@ -254,8 +258,20 @@ class QuantizationSimModel:
 
         # Run forward iterations so we can collect statistics to compute the appropriate encodings
         self.model.eval()
+
+        # If model is conditional, we need to create traced CustomMarkers to be used later during export. Create hooks
+        # here for creating a traced CustomMarker for each leaf module during the forward pass callback.
+        hooks = {}
+        if self._is_conditional:
+            self._add_inputs_hook(hooks)
+
         with torch.no_grad():
             _ = forward_pass_callback(self.model, forward_pass_callback_args)
+
+        # Any hooks that were hit during forward pass callback would have removed themselves. Remove the remaining
+        # hooks that were not run.
+        for h in hooks.values():
+            h.remove()
 
         # Get the computed per-layer encodings and log them
         for name, layer in quantized_layers:
@@ -329,6 +345,9 @@ class QuantizationSimModel:
         :return: None
 
         """
+        if self._is_conditional:
+            if not self._validate_module_marker_map():
+                return
         # save the quantized model and encodings
         model_filename = filename_prefix + '.pth'
         model_path = os.path.join(path, model_filename)
@@ -337,6 +356,7 @@ class QuantizationSimModel:
         model_to_export = copy.deepcopy(self.model).cpu()
         all_modules_in_model_to_export = [module for module in model_to_export.modules()]
         self._remove_quantization_wrappers(model_to_export, all_modules_in_model_to_export)
+
         torch.save(model_to_export, model_path)
 
         if onnx_export_args is None:
@@ -344,7 +364,8 @@ class QuantizationSimModel:
                                                          dummy_input)
         elif isinstance(onnx_export_args, OnnxExportApiArgs):
             self.export_onnx_model_and_encodings(path, filename_prefix, model_to_export, self.model,
-                                                 dummy_input, onnx_export_args, propagate_encodings)
+                                                 dummy_input, onnx_export_args, propagate_encodings,
+                                                 self._module_marker_map, self._is_conditional)
         else:
 
             raise ValueError(f'unsupported opt_args type={type(onnx_export_args)}')
@@ -382,7 +403,9 @@ class QuantizationSimModel:
     @staticmethod
     def export_onnx_model_and_encodings(path: str, filename_prefix: str, original_model: torch.nn.Module,
                                         sim_model: torch.nn.Module, dummy_input: Union[torch.Tensor, Tuple],
-                                        onnx_export_args: OnnxExportApiArgs, propagate_encodings: bool):
+                                        onnx_export_args: OnnxExportApiArgs, propagate_encodings: bool,
+                                        module_marker_map: Dict[torch.nn.Module, torch.Tensor] = None,
+                                        is_conditional: bool = False):
         """
         This method exports a onnx model and the corresponding encodings
 
@@ -391,6 +414,8 @@ class QuantizationSimModel:
         :param original_model: model without the quantsim wrappers
         :param sim_model: model with the quantsim wrappers
         :param dummy_input: Dummy input to the model. Used to parse model graph.
+        :param module_marker_map: Maps module names to traced custom markers (only used for conditional models)
+        :param is_conditional: True if model is conditional, False otherwise
         :param onnx_export_args: Additional onnx export args including export api overrides
         :param propagate_encodings: If True, encoding entries for intermediate ops (when one PyTorch ops results in
                 multiple ONNX nodes) are filled with the same BW and data_type as the output tensor for that series of
@@ -398,6 +423,10 @@ class QuantizationSimModel:
         :return: None
 
         """
+        if module_marker_map is None:
+            module_marker_map = {}
+        if onnx_export_args is None:
+            onnx_export_args = OnnxExportApiArgs()
         # Save model to onnx
         onnx_path = os.path.join(path, filename_prefix + '.onnx')
 
@@ -405,7 +434,8 @@ class QuantizationSimModel:
         utils.replace_modules_of_type1_with_type2(original_model, torch.nn.Dropout, torch.nn.Identity)
         utils.replace_modules_of_type1_with_type2(original_model, torch.nn.Dropout3d, torch.nn.Identity)
 
-        OnnxSaver.set_node_names(onnx_path, original_model, dummy_input, onnx_export_args)
+        OnnxSaver.set_node_names(onnx_path, original_model, dummy_input, is_conditional, module_marker_map,
+                                 onnx_export_args)
         OnnxSaver.set_unique_node_names(onnx_path)
 
         onnx_model = onnx.load(onnx_path)
@@ -1012,6 +1042,65 @@ class QuantizationSimModel:
             if not utils.is_leaf_module(module_ref):
                 cls._remove_quantization_wrappers(module_ref, list_of_modules_to_exclude)
 
+    def _add_inputs_hook(self, hooks):
+        module_to_name_map = {}
+        for name, module in self.model.named_modules():
+            if isinstance(module, QcQuantizeWrapper):
+                # pylint: disable=protected-access
+                module_to_name_map[module._module_to_wrap] = name
+
+        # Add any leaf modules that are not wrapped by QcQuantizeWrapper (like Identity)
+        for name, module in self.model.named_modules():
+            if utils.is_leaf_module(module) and module not in module_to_name_map.keys():
+                module_to_name_map[module] = name
+
+        def inputs_hook(module_ref, inputs, _):
+            # Need to remove hook here, otherwise the jit trace of CustomMarker with module ref will error since the
+            # hook will be recursively hit.
+            hooks[module_ref].remove()
+            del hooks[module_ref]
+            module_name = module_to_name_map[module_ref]
+            marker_layer = torch.jit.trace(CustomMarker(module_ref, module_name),
+                                           inputs)
+            self._module_marker_map[module_name] = marker_layer
+
+        for name, module in self.model.named_modules():
+            if name not in self._module_marker_map and utils.is_leaf_module(module):
+                hooks[module] = module.register_forward_hook(inputs_hook)
+
+    def _validate_module_marker_map(self):
+        """
+        Check to make sure all leaf modules have inputs information associated with them.
+        """
+        all_leaf_modules = set()
+        missing_inputs_entries = []
+        for name, module in self.model.named_modules():
+            if isinstance(module, QcQuantizeWrapper):
+                all_leaf_modules.add(name)
+
+        # Add any modules that are not wrapped by QcQuantizeWrappers (like Identity)
+        for name, module in self.model.named_modules():
+            if utils.is_leaf_module(module) and '_module_to_wrap' not in name:
+                all_leaf_modules.add(name)
+
+        for leaf_module in all_leaf_modules:
+            if leaf_module not in self._module_marker_map.keys():
+                missing_inputs_entries.append(leaf_module)
+
+        if missing_inputs_entries:
+            logger.info('In order to export a conditional model, all leaf modules need to be run with some input so '
+                        'torch trace can be done.')
+            logger.info('The following modules were not run during compute encodings:')
+            logger.info(missing_inputs_entries)
+            logger.info('Please use the sim.run_modules_for_traced_custom_marker(<module list>, dummy_input) api to '
+                        'pass dummy inputs to these modules.')
+            logger.info('Modules which can take the same dummy input can be '
+                        'grouped as a list. For groups of modules with different input shapes, please call '
+                        'sim.run_modules_for_traced_custom_markers() for each group.')
+            logger.info('Exiting quantsim export early.')
+            return False
+        return True
+
     def configure_quantization_ops(self, config_file: str, supported_kernels: Dict):
         """
         Configure inserted quantize ops using config file and fill in all the supported kernels
@@ -1046,6 +1135,30 @@ class QuantizationSimModel:
         for module in self.model.modules():
             if isinstance(module, (QcQuantizeWrapper, QcQuantizeRecurrent)):
                 yield module
+
+    def run_modules_for_traced_custom_marker(self, module_list: List[torch.nn.Module], dummy_input):
+        """
+        Given a list of modules to run and dummy input for the module, create a traced CustomMarker for each module
+        and store it in the module_marker map. The same dummy input will be used for all modules.
+        :param module_list: List of modules to create traced CustomMarkers for
+        :param dummy_input: Dummy input for all modules
+        """
+        module_to_name_map = {}
+        for name, module in self.model.named_modules():
+            if utils.is_leaf_module(module):
+                if '._module_to_wrap' in name:
+                    module_to_name_map[module] = name[:MODULE_TO_WRAP_STRING_REVERSE_INDEX]
+                else:
+                    module_to_name_map[module] = name
+
+        for module in module_list:
+            if isinstance(module, QcQuantizeWrapper):
+                module = getattr(module, '_module_to_wrap')
+            # Only perform init and trace if the given module is a leaf module, and we have not recorded it before
+            if module in module_to_name_map and module_to_name_map[module] not in self._module_marker_map:
+                marker_layer = torch.jit.trace(CustomMarker(module, module_to_name_map[module]),
+                                               dummy_input)
+                self._module_marker_map[module_to_name_map[module]] = marker_layer
 
 
 def save_checkpoint(quant_sim_model: QuantizationSimModel, file_path: str):
