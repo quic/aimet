@@ -43,7 +43,7 @@ import numpy as np
 import tensorflow as tf
 
 # Import AIMET specific modules
-from aimet_tensorflow.utils.common import create_input_feed_dict
+from aimet_tensorflow.utils.common import create_input_feed_dict, iterate_tf_dataset
 from aimet_tensorflow.utils.op.conv import BiasUtils
 
 
@@ -52,18 +52,12 @@ class ActivationSampler:
     Collect op's output activation data from unquantized model and input activation data from quantized model with
     all the preceding op's weights are quantized
     """
-    def __init__(self, data_set: tf.data.Dataset):
+    def __init__(self, data_set: tf.compat.v1.data.Dataset):
         """
         :param data_set: Data set
         """
         # pylint: disable=protected-access
-        with data_set._graph.as_default():
-            self._iterator = tf.compat.v1.data.make_initializable_iterator(data_set)
-
-        self._dataset_session = tf.compat.v1.Session(graph=data_set._graph)
-
-    def __del__(self):
-        self._dataset_session.close()
+        self._dataset = data_set
 
     def sample_activation(self, orig_op: tf.Operation, quant_op: tf.Operation,
                           orig_session: tf.compat.v1.Session, quant_session: tf.compat.v1.Session,
@@ -84,12 +78,12 @@ class ActivationSampler:
         all_out_data = []
 
         # Initialize the iterator
-        self._dataset_session.run(self._iterator.initializer)
+        dataset_iterator = iterate_tf_dataset(self._dataset)
 
         for batch_index in range(num_batches):
 
             try:
-                model_inputs = self._dataset_session.run(self._iterator.get_next())
+                model_inputs = next(dataset_iterator)
 
                 # batch is of shape (model_inputs, labels)
                 if isinstance(model_inputs, (tuple, list)):
