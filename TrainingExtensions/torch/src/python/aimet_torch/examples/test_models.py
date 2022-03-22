@@ -863,3 +863,28 @@ class ModelWithTransposeConv(nn.Module):
         x = self.dropout(x)
         x = self.fc2(x)
         return self.softmax(x)
+
+
+class SimpleConditional(torch.nn.Module):
+    """
+    Model using conditional paths
+    Expected input shape = (1, 3)
+    """
+    def __init__(self):
+        super(SimpleConditional, self).__init__()
+        self.prelu1 = torch.nn.PReLU(init=.3)
+        self.prelu2 = torch.nn.PReLU(init=.4)
+        self.linear1 = torch.nn.Linear(3, 2)
+        self.linear2 = torch.nn.Linear(3, 10)
+        self.softmax = torch.nn.Softmax()
+
+    def forward(self, _input, condition):
+        if condition:
+            x = self.linear1(_input)
+            x = x.view(x.size(0), -1)
+            x = self.prelu1(x)
+            return x
+        x = self.linear2(_input)
+        x = self.prelu2(x)
+        x = self.softmax(x)
+        return x
