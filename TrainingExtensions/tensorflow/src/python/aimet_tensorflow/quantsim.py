@@ -284,7 +284,7 @@ class QuantizationSimModel:
                     ops_with_invalid_encodings.append(op_name)
 
         # For post-training mode, params will always be in one-shot mode
-        op_mode = QuantizationSimModel._param_op_mode_after_analysis(self._quant_scheme)
+        op_mode = self._param_op_mode_after_analysis(self._quant_scheme)
 
         for op_name, quantizer_info in self._param_quantizers.items():
             if quantizer_info.get_op_mode() != int(libpymo.TensorQuantizerOpMode.passThrough):
@@ -425,8 +425,7 @@ class QuantizationSimModel:
                 quantizer_info.set_and_freeze_encoding_and_op_mode(encoding, op_mode)
                 _logger.info("Setting and freezing quantization encodings for parameter: %s", tensor_name)
 
-    @staticmethod
-    def _param_op_mode_after_analysis(quant_scheme) -> libpymo.TensorQuantizerOpMode:
+    def _param_op_mode_after_analysis(self, quant_scheme) -> libpymo.TensorQuantizerOpMode:
         """
         Returns op mode to use for parameters after encodings have been computed
         :param quant_scheme: Quantization scheme to use
@@ -437,6 +436,9 @@ class QuantizationSimModel:
             op_mode = libpymo.TensorQuantizerOpMode.quantizeDequantize
         else:
             op_mode = libpymo.TensorQuantizerOpMode.oneShotQuantizeDequantize
+
+        if self.per_channel_quantization_enabled:
+            op_mode = libpymo.TensorQuantizerOpMode.quantizeDequantize
 
         return op_mode
 

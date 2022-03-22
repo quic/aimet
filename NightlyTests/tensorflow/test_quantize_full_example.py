@@ -354,7 +354,6 @@ class Quantization(unittest.TestCase):
         sess.close()
 
     @pytest.mark.cuda
-    @pytest.mark.skip(reason="OOO memory issue")
     def test_per_channel_quantization(self):
         print('Running Per channel Quantization Test')
         quantsim_config = {
@@ -411,7 +410,6 @@ class Quantization(unittest.TestCase):
         sess.close()
 
     @pytest.mark.cuda
-    @pytest.mark.skip(reason="OOO memory issue")
     def test_per_channel_quantization_sequential_mnist_like_model(self):
         print('Running Per channel Quantization Test')
 

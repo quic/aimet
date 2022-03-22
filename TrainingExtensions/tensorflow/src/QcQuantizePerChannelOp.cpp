@@ -42,7 +42,6 @@
 #include <type_traits>
 #include <algorithm>
 #include <cstdint>
-#include <math.h>
 #include <stdexcept>
 #include <stdlib.h>
 #include <thread>
@@ -55,22 +54,47 @@ using namespace gtl;
 
 REGISTER_OP("QcQuantizePerChannel")
     .Input("in_tensor: T")     // list of input tensors (weights/activations)
-    .Input("op_mode: int32")   //{'ANALYSIS', 'ACTIVE', 'PASSTHROUGH'}")
-    .Input("tensor_quantizer_reference: int64")
-    .Input("encoding_min: double")
-    .Input("encoding_max: double")
-    .Input("bit_width: int8")
-    .Input("use_symmetric_encoding: bool")
-    .Input("axis: int32")
-    .Output("out_tensor: T")   // list of output tensors (weights/activations)
+        .Input("op_mode: int32")   //{'ANALYSIS', 'ACTIVE', 'PASSTHROUGH'}")
+        .Input("tensor_quantizer_reference: int64")
+        .Input("encoding_min: double")
+        .Input("encoding_max: double")
+        .Input("bit_width: int8")
+        .Input("use_symmetric_encoding: bool")
+        .Input("axis: int32")
+        .Output("out_tensor: T")   // list of output tensors (weights/activations)
 
-    .Attr("T: {float} = DT_FLOAT")   // attr 'T' specifies which template instantiation of op to use, default float
-    .Doc(R"doc(QcQuantize Per Channel custom op.)doc")
-    .SetShapeFn([](::tensorflow::shape_inference::InferenceContext* c) {
-        c->set_output(0, c->input(0));
-        return Status::OK();
-    });
+        .Attr("T: {float} = DT_FLOAT")   // attr 'T' specifies which template instantiation of op to use, default float
+        .Doc(R"doc(QcQuantize Per Channel custom op.)doc")
+        .SetShapeFn([](::tensorflow::shape_inference::InferenceContext* c) {
+          c->set_output(0, c->input(0));
+          return Status::OK();
+        });
 
+
+template <typename D, typename T>
+DlQuantization::TfEncoding updateStatsAndComputeEncodings(const D& d, const T* inTensor, size_t count,
+                                                          const uint64* tensorQuantizerRef, const int8* bw,
+                                                          const bool* useSymEncoding)
+{
+    bool useCuda = false;
+    if (std::is_same<D, GPUDevice>::value)
+    {
+        useCuda = true;
+    }
+
+    // Note that all of the pointers to data here could either be pointing to CPU memory or GPU memory
+    // We first copy everything to CPU memory and then use them
+    auto tensorQuantizerRefHost = copyLiteralToHost<uint64>(d, tensorQuantizerRef);
+    auto tensorQuantizer = reinterpret_cast<DlQuantization::TensorQuantizerOpFacade*>(tensorQuantizerRefHost);
+    auto bitwidth = copyLiteralToHost<int8>(d, bw);
+    auto useSymmetricEncoding = copyLiteralToHost<bool>(d, useSymEncoding);
+
+    tensorQuantizer->updateStats(inTensor, count, useCuda);
+
+    DlQuantization::TfEncoding initial_encoding = tensorQuantizer->computeEncoding(bitwidth, useSymmetricEncoding);
+    return initial_encoding;
+
+}
 
 
 template <typename D, typename T>
@@ -131,6 +155,30 @@ void modeSpecificAction(const D& d, const T* inTensor, size_t count, T* outTenso
         assert(0);
     }
     }
+
+}
+
+/*
+ * Get TF encoding format by calculating delta offset from min and max.
+ */
+template <typename D>
+DlQuantization::TfEncoding getTfEncoding(const D& d, const double* min, const double* max, const int8* bw)
+{
+    bool useCuda = false;
+    if (std::is_same<D, GPUDevice>::value)
+    {
+        useCuda = true;
+    }
+    auto encodingMin = copyLiteralToHost<double>(d, min);
+    auto encodingMax = copyLiteralToHost<double>(d, max);
+    auto bitwidth = copyLiteralToHost<int8>(d, bw);
+    std::unique_ptr<DlQuantization::ITensorQuantizationSim<float>> _tensorQuantizationSim;
+    _tensorQuantizationSim = DlQuantization::getTensorQuantizationSim<float>();
+
+    DlQuantization::TfEncoding encoding;
+    DlQuantization::ComputationMode cpuGpuMode;
+    _tensorQuantizationSim->fillQuantizeInfo(encoding, cpuGpuMode, bitwidth, encodingMin, encodingMax, useCuda);
+    return encoding;
 
 }
 
@@ -210,8 +258,7 @@ public:
         {
             auto inTensorFlat  = inTensor.flat<T>().data();
             auto outTensorFlat = outTensor->flat<T>().data();
-            modeSpecificAction(context->eigen_device<Device>(), inTensorFlat, inTensor.NumElements(), outTensorFlat,
-                               quantizerAddr, opMode, encodingMin, encodingMax, bitwidth, useSymmetricEncoding);
+            copyInputTensorsToOutputTensors(context->eigen_device<Device>(), inTensorFlat, inTensor.NumElements(), outTensorFlat);
         }
         else
         {
@@ -226,18 +273,33 @@ public:
                 Tensor temp1, temp2;
                 OP_REQUIRES_OK(context, context->allocate_temp(DT_FLOAT, TensorShape({numElements, 2}), &temp1));
                 OP_REQUIRES_OK(context, context->allocate_temp(DT_FLOAT, TensorShape({numElements, 2}), &temp2));
+                auto inTensorTwoDim = inTensor.flat_inner_dims<float, 2>();
+                auto outTensorTwoDim = outTensor->flat_inner_dims<float, 2>();
 
                 for (int channel = 0; channel < channelShape; channel++)
                 {
-                    // Chip input tensor along last dimension
-                    sliceTensorAlongLastDim(context->eigen_device<Device>(), temp1, inTensor, channel);
-                    auto inpData = temp1.flat<float>().data();
-                    auto outData = temp2.flat<float>().data();
+                    if(opModeEnum == DlQuantization::TensorQuantizerOpMode::oneShotQuantizeDequantize)
+                    {
+                        // Chip input tensor along last dimension
+                        sliceTensorAlongLastDim(context->eigen_device<Device>(), temp1, inTensor, channel);
+                        auto inpData = temp1.flat<float>().data();
 
-                    modeSpecificAction(context->eigen_device<Device>(), inpData, numElements, outData, quantizerAddr++,
-                                       opMode, encodingMin++, encodingMax++, bitwidth, useSymmetricEncoding);
+                        DlQuantization::TfEncoding encodings =
+                            updateStatsAndComputeEncodings(context->eigen_device<Device>(), inpData, numElements, quantizerAddr++,
+                                                           bitwidth, useSymmetricEncoding);
 
-                    sliceAndStoreTensor(context->eigen_device<Device>(), outTensor, temp2, channel);
+                        quantizeDequantize(context->eigen_device<Device>(), inTensorTwoDim, encodings, outTensorTwoDim,
+                                           channel);
+                    }
+                    else if(opModeEnum == DlQuantization::TensorQuantizerOpMode::quantizeDequantize)
+                    {
+                        // When only inference is required, we skip computation of encodings
+                        DlQuantization::TfEncoding encodings = getTfEncoding(context->eigen_device<Device>(),
+                                                                             encodingMin++, encodingMax++, bitwidth);
+                        quantizeDequantize(context->eigen_device<Device>(), inTensorTwoDim, encodings, outTensorTwoDim,
+                                           channel);
+                    }
+
                 }
             }
             else if (numDimensionsTensor == 1)
@@ -255,7 +317,7 @@ public:
             }
         }
 
-        }
+    }
 };
 
 

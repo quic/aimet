@@ -43,6 +43,7 @@
 #include "tensorflow/core/framework/op_kernel.h"
 #include "tensorflow/core/framework/shape_inference.h"
 #include "tensorflow/core/platform/logging.h"
+#include <cmath>
 
 #include <DlQuantization/TensorQuantizerOpFacade.h>
 
@@ -72,5 +73,11 @@ void sliceTensorAlongLastDim(const GPUDevice& d, Tensor slicedTensor, const Tens
 void sliceAndStoreTensor(const CPUDevice& d, Tensor* slicedTensor, Tensor tensorToSlice, int channel);
 
 void sliceAndStoreTensor(const GPUDevice& d, Tensor* slicedTensor, Tensor tensorToSlice, int channel);
+
+void quantizeDequantize(const GPUDevice& d, TTypes<float>::ConstMatrix inputs,
+                        DlQuantization::TfEncoding encodings, TTypes<float>::Matrix outputs, int channel);
+
+void quantizeDequantize(const CPUDevice& d, TTypes<float>::ConstMatrix inputs,
+                        DlQuantization::TfEncoding encodings, TTypes<float>::Matrix outputs, int channel);
 
 #endif   // AIMET_OP_UTILS_H
