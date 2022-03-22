@@ -229,11 +229,13 @@ class QuantizationSimModel:
         op_var_tensor = quant_op.inputs[var_index]
         return self.session.run(op_var_tensor)
 
-    def configure_quantization_ops(self, conn_graph: ConnectedGraph, params_to_quantize: Dict[str, ParameterInfo],
-                                   activation_op_names: List[str]):
+    def configure_quantization_ops(self, conn_graph: ConnectedGraph, ops_with_param_names: List[str], indices: List[int],
+                                   params_to_quantize: Dict[str, ParameterInfo], activation_op_names: List[str]):
         """
         Configure inserted quantize ops using config file
         :param conn_graph: Connected graph of the model
+        :param ops_with_param_names: List of ops for which param quantization ops were inserted for
+        :param indices: List of input indices (one-to-one for each entry in ops)
         :param params_to_quantize: Dictionary of parameters to quantize
         :param activation_op_names: List of ops for which activation quantization ops were inserted for
         """
@@ -242,7 +244,7 @@ class QuantizationSimModel:
                           'quantization ops is being done, and get_ops_to_quantize_activations_for() has been '
                           'overriden, please override configure_quantization_ops() as well.')
             raise AssertionError
-        op_to_quant_ops_dict = create_op_to_quant_ops_dict(self.session.graph, conn_graph,
+        op_to_quant_ops_dict = create_op_to_quant_ops_dict(self.session.graph, conn_graph, ops_with_param_names, indices,
                                                            params_to_quantize, activation_op_names)
         self._quantsim_configurator.configure_quantizers(op_to_quant_ops_dict, self._param_quantizers,
                                                          self._activation_quantizers)
@@ -558,8 +560,8 @@ class QuantizationSimModel:
                     select_internal_ops_to_quantize(self.session.graph, internal_ops)
 
                 # insert the quant nodes
-                self._insert_param_quantization_ops(module_ops_with_param_names, module_op_input_indices,
-                                                    default_param_bw, internal_ops, in_loop_context=True)
+                self._insert_param_quantization_ops_loop_context(module_ops_with_param_names, module_op_input_indices,
+                                                                 default_param_bw, internal_ops)
 
                 self._insert_activation_quantization_ops(module_activation_op_names, default_output_bw,
                                                          in_loop_context=True)
@@ -601,15 +603,13 @@ class QuantizationSimModel:
         recurrent_ops_with_param_names, recurrent_input_indices, recurrent_activation_op_names = \
             self._add_quant_nodes_recurrent(self.connected_graph, default_param_bw, default_output_bw)
 
-        if recurrent_ops_with_param_names and recurrent_input_indices:
-            ops_with_param_names.extend(recurrent_ops_with_param_names)
-            input_indices.extend(recurrent_input_indices)
         if recurrent_activation_op_names:
             activation_op_names.extend(recurrent_activation_op_names)
 
         # Note: at this point, the session used to construct conn_graph is different than the current
         # self.session, however we still use the connected graph to traverse the graph structure.
-        self.configure_quantization_ops(self.connected_graph, params_to_quantize, activation_op_names)
+        self.configure_quantization_ops(self.connected_graph, recurrent_ops_with_param_names, recurrent_input_indices,
+                                        params_to_quantize, activation_op_names)
 
     @staticmethod
     def _get_quantized_name(op_name: str) -> str:
@@ -656,13 +656,11 @@ class QuantizationSimModel:
 
         return op_to_modify, param_in
 
-    def _insert_param_quantization_ops(self, params_to_quantize: Dict[str, ParameterInfo], default_param_bw: int,
-                                       inner_ops: List[str] = None, in_loop_context: bool = False):
+    def _insert_param_quantization_ops(self, params_to_quantize: Dict[str, ParameterInfo], default_param_bw: int):
         """
         Inserts quantization ops for individual parameters
         :param params_to_quantize: dictionary of parameters to quantize
         :param default_param_bw : default param bitwidth
-        :param in_loop_context: True, if the ops belong to loop control flow context
         :return: None
         """
         # pylint: disable=too-many-locals
@@ -672,22 +670,53 @@ class QuantizationSimModel:
 
             if param_in is not None:
                 num_output_channels, quantization_axis = QuantizationSimModel._get_number_of_output_channels(
-                    param_in, can_modify_op)
+                    param_in.get_shape().as_list(), can_modify_op.type)
                 quant_op_name = self._get_quantized_name(param_name)
 
                 self._op_name_to_output_channels_axis_dict[quant_op_name] = [num_output_channels, quantization_axis]
                 _logger.info("Adding weight quantization op %s", quant_op_name)
                 op_mode = libpymo.TensorQuantizerOpMode.oneShotQuantizeDequantize
 
-                if in_loop_context:
-                    q_op_out = self._insert_param_quantizer_loop_context(inner_ops, param_in, quant_op_name,
-                                                                         op_mode, self._param_quantizers,
-                                                                         QuantizerType.param,
-                                                                         default_param_bw)
-                else:
-                    q_op_out = self._insert_post_training_quant_op(param_in, quant_op_name,
-                                                                   op_mode, self._param_quantizers, QuantizerType.param,
-                                                                   default_param_bw)
+                q_op_out = self._insert_post_training_quant_op(param_in, quant_op_name,
+                                                               op_mode, self._param_quantizers, QuantizerType.param,
+                                                               default_param_bw)
+
+                nodes_modified_count = graph_editor.reroute_ts(tf_ops.convert_to_tensor(q_op_out), param_in,
+                                                               can_modify=can_modify_op)
+                if nodes_modified_count != 1:
+                    raise ValueError('Input ' + param_in.name + ' not quantized!')
+
+    def _insert_param_quantization_ops_loop_context(self, op_names: List[str], indices: List[int], default_param_bw: int,
+                                                    inner_ops: List[tf.Operation]):
+        """
+        Inserts quantization ops for individual parameters
+        :param op_names: List of ops whose parameters are being quantized
+        :param indices: List of input indices (one-to-one for each entry in ops)
+        :param default_param_bw : default param bitwidth
+        :param inner_ops: list of tf.Operations inside a RNN op
+        :return: None
+        """
+        # pylint: disable=too-many-locals
+        ops = [self.session.graph.get_operation_by_name(op_name) for op_name in op_names]
+        assert len(ops) == len(indices)
+
+        for op, index in zip(ops, indices):
+            # Modify the weight/bias inputs to use the quantized inputs
+            can_modify_op, param_in = QuantizationSimModel._get_op_to_modify_with_param_in(op, index)
+
+            if param_in is not None:
+                num_output_channels, quantization_axis = QuantizationSimModel._get_number_of_output_channels(
+                    can_modify_op.inputs[index].get_shape().as_list(), can_modify_op.type)
+                quant_op_name = self._get_quantized_name(param_in.op.name)
+
+                self._op_name_to_output_channels_axis_dict[quant_op_name] = [num_output_channels, quantization_axis]
+                _logger.info("Adding weight quantization op %s", quant_op_name)
+                op_mode = libpymo.TensorQuantizerOpMode.oneShotQuantizeDequantize
+
+                q_op_out = self._insert_param_quantizer_loop_context(inner_ops, param_in, quant_op_name,
+                                                                     op_mode, self._param_quantizers,
+                                                                     QuantizerType.param,
+                                                                     default_param_bw)
 
                 nodes_modified_count = graph_editor.reroute_ts(tf_ops.convert_to_tensor(q_op_out), param_in,
                                                                can_modify=can_modify_op)
@@ -695,21 +724,23 @@ class QuantizationSimModel:
                     raise ValueError('Input ' + param_in.name + ' not quantized!')
 
     @staticmethod
-    def _get_number_of_output_channels(param_in: tf.Tensor, consumer_op: tf.Operation):
+    def _get_number_of_output_channels(weight_shape: List[int], consumer_op_type: str):
         """
         Gets number of output channels and quantization axis for an op for per channel quantization
+        :param weight_shape: list containing tensor shape of weight
+        :param consumer_op_type: type of op that consumes weight
+        :return number of output channel and axis from weight_shape
         """
-        weight_shape = param_in.get_shape().as_list()
         # If weight shape length is 1, the parameter is bias
         num_output_channels = None
         axis = None
         if len(weight_shape) == 1:
             num_output_channels = weight_shape[0]
             axis = 0
-        elif consumer_op.type in ['Conv2D', 'DepthwiseConv2dNative']:
+        elif consumer_op_type in ['Conv2D', 'DepthwiseConv2dNative']:
             num_output_channels = weight_shape[3]
             axis = 3
-        elif consumer_op.type == 'MatMul':
+        elif consumer_op_type == 'MatMul':
             num_output_channels = weight_shape[1]
             axis = 1
         return num_output_channels, axis
