@@ -710,11 +710,14 @@ class TestQuantSim(unittest.TestCase):
             """
             return {'conv2d_1/Conv2D/ReadVariableOp': ParameterInfo('weight', 'conv2d_1/Conv2D')}
 
-        def configure_quantization_ops(self, _conn_graph, _params_to_quantize, _activation_op_names):
+        def configure_quantization_ops(self, _conn_graph, _ops_with_param_names, _indices,
+                                       _params_to_quantize, _activation_op_names):
             """
             Overriding function for configuring quantization ops inserted by QuantizationSimModel
             :param self: Self refers to QuantizationSimModel object
             :param _conn_graph: Unused argument
+            :param _ops_with_param_names: Unused argument
+            :param _indices: Unused argument
             :param _params_to_quantize: Unused argument
             :param _activation_op_names: Unused argument
             """

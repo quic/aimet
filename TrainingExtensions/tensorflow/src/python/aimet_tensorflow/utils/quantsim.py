@@ -77,6 +77,7 @@ def get_param_quantizer(op: tf.Operation, index: int) -> tf.Operation:
 
 
 def create_op_to_quant_ops_dict(graph: tf.Graph, conn_graph: ConnectedGraph,
+                                ops_with_param_names: List[str], indices: List[int],
                                 params_to_quantize: Dict[str, ParameterInfo],
                                 activation_op_names: List[str]) -> OpToQuantOpsDictType:
     """
@@ -84,13 +85,24 @@ def create_op_to_quant_ops_dict(graph: tf.Graph, conn_graph: ConnectedGraph,
     and a dictionary mapping param type string to param quantizers.
     :param graph: Tensorflow graph containing inserted quantizers
     :param conn_graph: Connected graph of the original unquantized model
+    :param ops_with_param_names: List of tf operation names for which parameter quantizers were inserted for
+    :param indices: Indices of tf operations of which parameter quantizers were inserted for
     :param params_to_quantize: Dictionary of parameters to quantize
     :param activation_op_names: List of tf operation names for which activation quantizers were inserted for
     :return: Dictionary mapping connected graph ops to a list consisting of the activation quantizer and a dictionary
     mapping param type string to param quantizers.
     """
-
+    # pylint: disable=too-many-locals
     op_to_quant_ops_dict = {}
+    for op_with_param_name, index in zip(ops_with_param_names, indices):
+        op_with_param = graph.get_operation_by_name(op_with_param_name)
+        conn_graph_op = conn_graph.get_op_from_module_name(op_with_param_name)
+        param_type = 'weight'
+        if op_with_param.type == 'BiasAdd':
+            param_type = 'bias'
+        param_quantizer = get_param_quantizer(op_with_param, index)
+        assert param_quantizer.type in ['QcQuantize', 'QcQuantizeRecurrentParam', 'QcQuantizePerChannel']
+        add_op_to_quant_ops_dict_entry(param_quantizer, conn_graph_op, True, param_type, op_to_quant_ops_dict)
     for param_name, param_info in params_to_quantize.items():
         param_op = graph.get_operation_by_name(param_name)
         conn_graph_op = conn_graph.get_op_from_module_name(param_info.op_with_param_name)
