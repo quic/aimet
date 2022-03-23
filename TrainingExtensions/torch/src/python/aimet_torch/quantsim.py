@@ -1047,21 +1047,6 @@ class QuantizationSimModel:
             if isinstance(module, (QcQuantizeWrapper, QcQuantizeRecurrent)):
                 yield module
 
-    def enable_all_param_quantizers(self, enabled: bool) -> None:
-        """
-        Enable/disable parameter quantizers for all quant wrappers.
-        :param enabled: Enabled flag.
-        """
-        for quant_wrapper in self.quant_wrappers():
-            quant_wrapper.enable_param_quantizers(enabled=enabled)
-
-    def enable_all_act_quantizers(self, enabled: bool) -> None:
-        """
-        Enable/disable activation (input and output) quantizers for all quant wrappers.
-        :param enabled: Enabled flag.
-        """
-        for quant_wrapper in self.quant_wrappers():
-            quant_wrapper.enable_act_quantizers(enabled=enabled)
 
 def save_checkpoint(quant_sim_model: QuantizationSimModel, file_path: str):
     """

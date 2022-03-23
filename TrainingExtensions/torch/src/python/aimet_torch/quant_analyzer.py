@@ -109,30 +109,29 @@ class QuantAnalyzer:
         self._forward_pass_callback = forward_pass_callback
         self._eval_callback = eval_callback
 
-    def _eval_model_with_weight_quantized(self, **kwargs) -> float:
+    def _eval_quantized_model(
+            self,
+            disable_param_quantizers: bool,
+            disable_act_quantizers: bool,
+            **kwargs) -> float:
         """
-        Analyze model sensitivity to only parameter (weight) quantization.
-        Disable quantizers for activations.
+        Analyze model sensitivity to either parameter or activation quantization.
 
+        :param disable_param_quantizers: Flag to disable all the param quantizers.
+        :param disable_act_quantizers: Flag to disable all the activation quantizers.
         :param **kwargs: Additional arguments to the Quantsim.
-        :return: Weight Quantized, Activation in float model performance.
+        :return: Quantized model performance.
         """
         sim = QuantizationSimModel(self._model, self._dummy_input, **kwargs)
-        sim.enable_all_act_quantizers(enabled=False)
-        sim.compute_encodings(self._forward_pass_callback.func, self._forward_pass_callback.args)
-        acc = self._eval_model(sim.model)
-        return acc
 
-    def _eval_model_with_act_quantized(self, **kwargs) -> float:
-        """
-        Analyze model sensitivity to only activation quantization.
-        Disable quantizers for parameters.
+        if disable_param_quantizers:
+            for quant_wrapper in sim.quant_wrappers():
+                quant_wrapper.enable_param_quantizers(enabled=False)
 
-        :param **kwargs: Additional arguments to the quantsim.
-        :return: Activations Quantized, Weights in float model performance.
-        """
-        sim = QuantizationSimModel(self._model, self._dummy_input, **kwargs)
-        sim.enable_all_param_quantizers(enabled=False)
+        if disable_act_quantizers:
+            for quant_wrapper in sim.quant_wrappers():
+                quant_wrapper.enable_act_quantizers(enabled=False)
+
         sim.compute_encodings(self._forward_pass_callback.func, self._forward_pass_callback.args)
         acc = self._eval_model(sim.model)
         return acc
@@ -152,7 +151,7 @@ class QuantAnalyzer:
         Sort quant wrappers based on occurrence for given quantsim model.
 
         :param sim: Quantsim model.
-        :return: Dictionary containing sorted quant wrappers. dict[name] = Quant wrapper.
+        :return: Ordered dictionary which maps wrapped module name to quant wrapper.
         """
         def sorting_hook(quant_wrapper: torch.nn.Module, *_):
             """
@@ -319,10 +318,14 @@ class QuantAnalyzer:
         fp32_eval_score = self._eval_model(self._model)
         _logger.info("FP32 eval score (W32A32): %.02f", fp32_eval_score)
 
-        weight_quantized_eval_score = self._eval_model_with_weight_quantized(**kwargs)
+        weight_quantized_eval_score = self._eval_quantized_model(disable_param_quantizers=False,
+                                                                 disable_act_quantizers=True,
+                                                                 **kwargs)
         _logger.info("Weight-quantized eval score (W%dA32): %.02f", default_param_bw, weight_quantized_eval_score)
 
-        act_quantized_eval_score = self._eval_model_with_act_quantized(**kwargs)
+        act_quantized_eval_score = self._eval_quantized_model(disable_param_quantizers=True,
+                                                              disable_act_quantizers=False,
+                                                              **kwargs)
         _logger.info("Activation-quantized eval score (W32A%d): %.02f", default_output_bw, act_quantized_eval_score)
 
         return fp32_eval_score, weight_quantized_eval_score, act_quantized_eval_score

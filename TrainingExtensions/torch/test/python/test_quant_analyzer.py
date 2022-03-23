@@ -115,11 +115,13 @@ class TestQuantAnalyzer:
 
         for quant_wrapper, enabled_quantizers in enabled_quant_wrappers.items():
             assert isinstance(quant_wrapper, QcQuantizeWrapper)
-            assert any(isinstance(quantizer, TensorQuantizer) for quantizer in enabled_quantizers)
+            assert all(isinstance(quantizer, TensorQuantizer) for quantizer in enabled_quantizers)
 
         # Disable all the quantizers and verify enabled_quant_wrappers dictionary should be empty.
-        sim.enable_all_act_quantizers(enabled=False)
-        sim.enable_all_param_quantizers(enabled=False)
+        for quant_wrapper in sim.quant_wrappers():
+            quant_wrapper.enable_act_quantizers(enabled=False)
+            quant_wrapper.enable_param_quantizers(enabled=False)
+
         enabled_quant_wrappers = quant_analyzer._get_enabled_quantizers(sorted_quant_wrappers_dict)
         assert not enabled_quant_wrappers
 
@@ -174,7 +176,7 @@ class TestQuantAnalyzer:
         eval_callback = CallbackFunc(evaluate, dummy_input)
         quant_analyzer = QuantAnalyzer(model, dummy_input, forward_pass_callback, eval_callback)
         try:
-            quant_analyzer.analyze(results_dir="./tmp/")
+            quant_analyzer.analyze(default_param_bw=16, results_dir="./tmp/")
             assert os.path.exists("./tmp/per_layer_sensitivity_analysis.html")
         finally:
             shutil.rmtree("./tmp/")
