@@ -42,10 +42,13 @@ from tensorflow.keras import layers
 
 from aimet_common.connected_graph.operation import Op
 from aimet_common.quantsim_config.json_config_importer import ConfigType, SupergroupType, OpTypeType, ParamType, \
-    DefaultsType
+    DefaultsType, ConfigDictKeys
 from aimet_common.quantsim_config.quantsim_config import QuantSimConfigurator as AimetCommonQuantSimConfigurator, \
     get_all_ops_in_neighborhood
+from aimet_common.utils import AimetLogger
 from aimet_tensorflow.keras.connectedgraph import ConnectedGraph
+
+logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Quant)
 
 LayerAffectedQuantizerTupleType = Tuple[List[Tuple[layers.Layer, str]], List[Tuple[layers.Layer, str]],
                                         List[Tuple[layers.Layer, str]], List[Tuple[layers.Layer, str]]]
@@ -84,6 +87,15 @@ def _get_affected_tensor_quantizers_by_false_setting(op: Op, direction: str) -> 
     return affected_tensor_quantizers_by_false_setting
 
 
+class ConfigDictionary(dict):
+    """
+    A n-ary tree-like autovivification dictionary for storing/updating/fetching configurations
+    """
+    def __missing__(self, key):
+        value = self[key] = type(self)()
+        return value
+
+
 class QuantSimConfigurator(AimetCommonQuantSimConfigurator):
     """ Class for parsing and applying quantsim configurations from json config file """
 
@@ -91,6 +103,9 @@ class QuantSimConfigurator(AimetCommonQuantSimConfigurator):
         super(QuantSimConfigurator, self).__init__(config_file)
         self._connected_graph = connected_graph
         self._layer_to_tensor_quantizers_dict = self._create_layer_to_tensor_quantizers_dict()
+        self._layer_to_config_dict = ConfigDictionary()
+
+        self._set_quantsim_configs()
 
     def _create_layer_to_tensor_quantizers_dict(self) -> Dict[layers.Layer, LayerAffectedQuantizerTupleType]:
         """
@@ -116,7 +131,61 @@ class QuantSimConfigurator(AimetCommonQuantSimConfigurator):
         return layer_to_tensor_quantizers_dict
 
     def _set_default_configs(self, default_configs: DefaultsType):
-        pass
+        """
+        Set default configurations for op and param quantizers in model (first level of specificity in configuration
+        file)
+        :param default_configs: Default configurations for quantizers
+        """
+        optional_configs = [ConfigDictKeys.STRICT_SYMMETRIC,
+                            ConfigDictKeys.UNSIGNED_SYMMETRIC,
+                            ConfigDictKeys.PER_CHANNEL_QUANTIZATION]
+
+        for op in self._connected_graph.ordered_ops:
+            layer = op.get_module()
+
+            # Set default configs for ops
+            for config_key, config_val in default_configs[ConfigDictKeys.OPS].items():
+                self._layer_to_config_dict[layer][config_key]["setting"] = config_val
+                self._layer_to_config_dict[layer][config_key]["affected_quantizers"] = \
+                    self._get_affected_quantizers_by_config(layer, config_key, config_val)
+
+            # Set default configs for params
+            for config_key, config_val in default_configs[ConfigDictKeys.PARAMS].items():
+                self._layer_to_config_dict[layer][ConfigDictKeys.PARAMS][config_key] = config_val
+
+            # Set default configs for optional configs (strict_symmetric, unsigned_symmetric, per_channel_quantization)
+            for optional_config in optional_configs:
+                if optional_config in default_configs:
+                    self._layer_to_config_dict[layer][optional_config] = default_configs[optional_config]
+
+    def _get_affected_quantizers_by_config(self, layer: layers.Layer, setting_name: str,
+                                           quantizer_setting: bool) -> List[Tuple[layers.Layer, str]]:
+        """
+        Return list of tuples containing affected quantizers by given configuration setting
+
+        :param layer: Current layer
+        :param setting_name: Name of quantizer setting
+        :param quantizer_setting: Setting value corresponding to setting_name
+        :return: List of tuples containing layer and direction that would be affected by given quantizer setting
+        """
+
+        input_true_list, output_true_list, input_false_list, output_false_list = \
+            self._layer_to_tensor_quantizers_dict[layer]
+
+        if setting_name == ConfigDictKeys.IS_INPUT_QUANTIZED and quantizer_setting:
+            return input_true_list
+        if setting_name == ConfigDictKeys.IS_OUTPUT_QUANTIZED and quantizer_setting:
+            return output_true_list
+        if setting_name == ConfigDictKeys.IS_INPUT_QUANTIZED and not quantizer_setting:
+            return input_false_list
+        if setting_name == ConfigDictKeys.IS_OUTPUT_QUANTIZED and not quantizer_setting:
+            return output_false_list
+        if setting_name == ConfigDictKeys.IS_SYMMETRIC:
+            # Will modify all input and output quantizers in the False case
+            return input_false_list + output_false_list
+        logger.error('Encountered unrecognized case for setting name %s, setting value %s', setting_name,
+                     quantizer_setting)
+        raise ValueError
 
     def _set_param_configs(self, param_configs: ParamType):
         pass
