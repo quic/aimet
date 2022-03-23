@@ -40,6 +40,7 @@ import os.path
 import shutil
 import torch
 from aimet_torch.examples.test_models import TinyModel
+from aimet_torch.tensor_quantizer import TensorQuantizer
 from aimet_torch.qc_quantize_op import QcQuantizeWrapper
 from aimet_torch.quantsim import QuantizationSimModel
 from aimet_torch.quant_analyzer import QuantAnalyzer, CallbackFunc
@@ -102,7 +103,7 @@ class TestQuantAnalyzer:
         assert layer_names.index("conv1") < layer_names.index("bn1")
         assert layer_names.index("conv4") < layer_names.index("fc")
 
-    def test_get_enabled_info_for_all_quantizers(self):
+    def test_get_enabled_quantizers(self):
         """ test sort quant wrappers based on occurrence """
         input_shape = (1, 3, 32, 32)
         dummy_input = torch.randn(*input_shape)
@@ -110,18 +111,17 @@ class TestQuantAnalyzer:
         sim = QuantizationSimModel(model, dummy_input)
         quant_analyzer = QuantAnalyzer(model, dummy_input, CallbackFunc(None), CallbackFunc(None))
         sorted_quant_wrappers_dict = quant_analyzer._sort_quant_wrappers_based_on_occurrence(sim)
-        enabled_for_all_quantizers = quant_analyzer._get_enabled_info_for_all_quantizers(sorted_quant_wrappers_dict)
-        for all_quantizers in enabled_for_all_quantizers.values():
-            assert isinstance(all_quantizers, dict)
-            keys = list(all_quantizers.keys())
-            assert "param_quantizers" in keys
-            assert "input_quantizers" in keys
-            assert "output_quantizers" in keys
+        enabled_quant_wrappers = quant_analyzer._get_enabled_quantizers(sorted_quant_wrappers_dict)
 
-        # Verify that the first layer should have quantizers' enabled flag.
-        assert enabled_for_all_quantizers["conv1"]["param_quantizers"]["weight"] == True
-        assert enabled_for_all_quantizers["conv1"]["input_quantizers"][0] == True
-        assert enabled_for_all_quantizers["conv1"]["output_quantizers"][0] == True
+        for quant_wrapper, enabled_quantizers in enabled_quant_wrappers.items():
+            assert isinstance(quant_wrapper, QcQuantizeWrapper)
+            assert any(isinstance(quantizer, TensorQuantizer) for quantizer in enabled_quantizers)
+
+        # Disable all the quantizers and verify enabled_quant_wrappers dictionary should be empty.
+        sim.enable_all_act_quantizers(enabled=False)
+        sim.enable_all_param_quantizers(enabled=False)
+        enabled_quant_wrappers = quant_analyzer._get_enabled_quantizers(sorted_quant_wrappers_dict)
+        assert not enabled_quant_wrappers
 
     def test_perform_per_layer_analysis_by_enabling_quant_wrappers(self):
         """ test perform per layer analysis by enabling quant wrappers """
@@ -177,5 +177,4 @@ class TestQuantAnalyzer:
             quant_analyzer.analyze(results_dir="./tmp/")
             assert os.path.exists("./tmp/per_layer_sensitivity_analysis.html")
         finally:
-            # shutil.rmtree("./tmp/")
-            pass
+            shutil.rmtree("./tmp/")

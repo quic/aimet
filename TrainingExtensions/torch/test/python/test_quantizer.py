@@ -2417,7 +2417,7 @@ class TestQuantizationSimLearnedGrid:
         dummy_input = torch.randn(*input_shape)
         model = TinyModel().eval()
         sim = QuantizationSimModel(model, dummy_input)
-        sim.set_enabled_for_all_act_quantizers(enabled=False)
+        sim.enable_all_act_quantizers(enabled=False)
 
         for quant_wrapper in sim.quant_wrappers():
             assert quant_wrapper.output_quantizer.enabled == False
@@ -2434,7 +2434,7 @@ class TestQuantizationSimLearnedGrid:
             if 'weight' in quant_wrapper.param_quantizers:
                 assert quant_wrapper.param_quantizers['weight'].enabled == True
 
-        sim.set_enabled_for_all_param_quantizers(enabled=False)
+        sim.enable_all_param_quantizers(enabled=False)
 
         for quant_wrapper in sim.quant_wrappers():
             if 'weight' in quant_wrapper.param_quantizers:

@@ -795,17 +795,17 @@ class TestQcQuantizeOpLearnedGrid:
                                          quant_scheme=QuantScheme.post_training_tf_enhanced)
         # Disable bias quantization
         wrapper.param_quantizers['bias'].enabled = False
-        wrapper.set_enabled_for_param_quantizers(enabled=True)
+        wrapper.enable_param_quantizers(enabled=True)
 
         assert wrapper.param_quantizers['weight'].enabled == True
         assert wrapper.param_quantizers['bias'].enabled == False
 
-        wrapper.set_enabled_for_param_quantizers(enabled=False, param_name_to_exclude=("weight", ))
+        wrapper.enable_param_quantizers(enabled=False, param_name_to_exclude=("weight",))
         assert wrapper.param_quantizers['weight'].enabled == True
         assert wrapper.param_quantizers['bias'].enabled == False
 
         # Enable bias quantization
         wrapper.param_quantizers['bias'].enabled = True
-        wrapper.set_enabled_for_param_quantizers(enabled=False, param_name_to_exclude=None)
+        wrapper.enable_param_quantizers(enabled=False, param_name_to_exclude=None)
         assert wrapper.param_quantizers['weight'].enabled == False
         assert wrapper.param_quantizers['bias'].enabled == False

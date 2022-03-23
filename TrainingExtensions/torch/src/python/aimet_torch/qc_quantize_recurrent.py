@@ -362,8 +362,8 @@ class QcQuantizeRecurrent(torch.nn.Module):
         """
         self._mode = mode
 
-    def set_enabled_for_param_quantizers(self, enabled: bool,
-                                         param_name_to_exclude: Union[None, Tuple[str]] = ("bias", )) -> None:
+    def enable_param_quantizers(self, enabled: bool,
+                                param_name_to_exclude: Union[None, Tuple[str]] = ("bias", )) -> None:
         """
         Note: By default, bias quantization is disabled.
 
@@ -378,7 +378,7 @@ class QcQuantizeRecurrent(torch.nn.Module):
             if not param_name in param_name_to_exclude:
                 param_quantizer.enabled = enabled
 
-    def set_enabled_for_input_quantizers(self, enabled: bool) -> None:
+    def enable_input_quantizers(self, enabled: bool) -> None:
         """
         Sets enabled flag for input quantizers.
         :param enabled: Enabled flag.
@@ -386,7 +386,7 @@ class QcQuantizeRecurrent(torch.nn.Module):
         for quantizer in self.input_quantizers:
             quantizer.enabled = enabled
 
-    def set_enabled_for_output_quantizers(self, enabled: bool) -> None:
+    def enable_output_quantizers(self, enabled: bool) -> None:
         """
         Sets enabled flag for output quantizers.
         :param enabled: Enabled flag.
@@ -394,13 +394,13 @@ class QcQuantizeRecurrent(torch.nn.Module):
         for quantizer in self.output_quantizers:
             quantizer.enabled = enabled
 
-    def set_enabled_for_act_quantizers(self, enabled: bool) -> None:
+    def enable_act_quantizers(self, enabled: bool) -> None:
         """
         Sets enabled flag for both input and output quantizers.
         :param enabled: Enabled flag.
         """
-        self.set_enabled_for_input_quantizers(enabled)
-        self.set_enabled_for_output_quantizers(enabled)
+        self.enable_input_quantizers(enabled)
+        self.enable_output_quantizers(enabled)
 
     def _quantize_dequantize_params(self) -> Dict[str, torch.Tensor]:
         """
