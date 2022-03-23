@@ -43,13 +43,15 @@ class ActivationSampler:
     Collect op's output activation data from unquantized model and input activation data from quantized model with
     all the preceding op's weights are quantized
     """
-    def __init__(self, data_set: tf.data.Dataset):
+    def __init__(self, data_set: tf.data.Dataset, num_batches: int):
         """
         Activation sampler initializer.
         :param data_set: Data set
+        :param num_batches: Number of batches of data to use during sample activation
         """
         # pylint: disable=protected-access
         self._data_set = data_set
+        self._num_batches = num_batches
 
     def sample_activation(self, orig_module: tf.keras.layers.Layer, orig_model: tf.keras.Model,
                           quant_module: tf.keras.layers.Layer, quant_model: tf.keras.Model):
@@ -63,6 +65,6 @@ class ActivationSampler:
         """
         temp_orig_model = tf.keras.Model(inputs=orig_model.inputs, outputs=[orig_module.output])
         temp_quant_model = tf.keras.Model(inputs=quant_model.inputs, outputs=[quant_module.input])
-        quant_input_data = temp_quant_model.predict(self._data_set)
-        orig_output_data = temp_orig_model.predict(self._data_set)
+        quant_input_data = temp_quant_model.predict(self._data_set, steps=self._num_batches)
+        orig_output_data = temp_orig_model.predict(self._data_set, steps=self._num_batches)
         return quant_input_data, orig_output_data
