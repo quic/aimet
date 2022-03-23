@@ -42,7 +42,7 @@ import os
 import io
 import copy
 import pickle
-from typing import Tuple, List, Union, Dict
+from typing import Tuple, List, Union, Dict, Callable
 from collections.abc import Iterable
 import json
 import torch
@@ -125,7 +125,7 @@ class QuantizationSimModel:
                  quant_scheme: Union[str, QuantScheme] = QuantScheme.post_training_tf_enhanced,
                  rounding_mode: str = 'nearest', default_output_bw: int = 8, default_param_bw: int = 8,
                  in_place: bool = False, config_file: str = None,
-                 default_data_type: QuantizationDataType = QuantizationDataType.int, is_conditional=False):
+                 default_data_type: QuantizationDataType = QuantizationDataType.int):
         """
         Constructor
 
@@ -170,7 +170,7 @@ class QuantizationSimModel:
         self._default_output_bw = default_output_bw
         self._default_param_bw = default_param_bw
         self._supported_kernels = {}
-        self._is_conditional = is_conditional
+        self._is_conditional = False
         self._module_marker_map = {}
 
         # Add quantization layers
@@ -258,20 +258,8 @@ class QuantizationSimModel:
 
         # Run forward iterations so we can collect statistics to compute the appropriate encodings
         self.model.eval()
-
-        # If model is conditional, we need to create traced CustomMarkers to be used later during export. Create hooks
-        # here for creating a traced CustomMarker for each leaf module during the forward pass callback.
-        hooks = {}
-        if self._is_conditional:
-            self._add_inputs_hook(hooks)
-
         with torch.no_grad():
             _ = forward_pass_callback(self.model, forward_pass_callback_args)
-
-        # Any hooks that were hit during forward pass callback would have removed themselves. Remove the remaining
-        # hooks that were not run.
-        for h in hooks.values():
-            h.remove()
 
         # Get the computed per-layer encodings and log them
         for name, layer in quantized_layers:
@@ -345,9 +333,6 @@ class QuantizationSimModel:
         :return: None
 
         """
-        if self._is_conditional:
-            if not self._validate_module_marker_map():
-                return
         # save the quantized model and encodings
         model_filename = filename_prefix + '.pth'
         model_path = os.path.join(path, model_filename)
@@ -1070,7 +1055,7 @@ class QuantizationSimModel:
 
     def _validate_module_marker_map(self):
         """
-        Check to make sure all leaf modules have inputs information associated with them.
+        Check to make sure all leaf modules have traced Custom Markers associated with them.
         """
         all_leaf_modules = set()
         missing_inputs_entries = []
@@ -1100,6 +1085,56 @@ class QuantizationSimModel:
             logger.info('Exiting quantsim export early.')
             return False
         return True
+
+    def _export_conditional(self, path: str, filename_prefix: str, dummy_input: Union[torch.Tensor, Tuple],
+                            forward_pass_callback: Callable, forward_pass_callback_args,
+                            onnx_export_args: Union[OnnxExportApiArgs, None] = OnnxExportApiArgs(),
+                            propagate_encodings: bool = False):
+        """
+        Export function for conditional models. Performs another round of forward passes to create and store traced
+        CustomMarker info for each leaf module to be later used when scripting the model for export.
+        :param path: path where to store model pth and encodings
+        :param filename_prefix: Prefix to use for filenames of the model pth and encodings files
+        :param dummy_input: Dummy input to the model. Used to parse model graph. It is required for the dummy_input to
+                be placed on CPU.
+        :param forward_pass_callback: A callback function that simply runs forward passes on the model. This callback
+            function should use representative data for the forward pass, so the calculated encodings work for all
+            data samples. This callback internally chooses the number of data samples it wants to use for calculating
+            encodings. The callback should exercise all paths of the conditional model.
+        :param forward_pass_callback_args: These argument(s) are passed to the forward_pass_callback as-is. Up to
+            the user to determine the type of this parameter. E.g. could be simply an integer representing the number
+            of data samples to use. Or could be a tuple of parameters or an object representing something more complex.
+            If set to None, forward_pass_callback will be invoked with no parameters.
+        :param onnx_export_args: onnx specific export arguments
+        :param propagate_encodings: If True, encoding entries for intermediate ops (when one PyTorch ops results in
+                multiple ONNX nodes) are filled with the same BW and data_type as the output tensor for that series of
+                ops.
+        :return: None
+        """
+        self._is_conditional = True
+        if onnx_export_args is None:
+            onnx_export_args = OnnxExportApiArgs()
+
+        # If model is conditional, we need to create traced CustomMarkers to be used later during export. Create hooks
+        # here for creating a traced CustomMarker for each leaf module during the forward pass callback.
+        hooks = {}
+        if self._is_conditional:
+            self._add_inputs_hook(hooks)
+
+        self.model.eval()
+        with torch.no_grad():
+            _ = forward_pass_callback(self.model, forward_pass_callback_args)
+
+        # Any hooks that were hit during forward pass callback would have removed themselves. Remove the remaining
+        # hooks that were not run.
+        for h in hooks.values():
+            h.remove()
+
+        # Check that all paths were exercised
+        if not self._validate_module_marker_map():
+            return
+        self.export(path, filename_prefix, dummy_input, onnx_export_args, propagate_encodings)
+
 
     def configure_quantization_ops(self, config_file: str, supported_kernels: Dict):
         """

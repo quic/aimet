@@ -2055,9 +2055,10 @@ class TestQuantizationSimStaticGrad:
             model(inp, true_tensor)
             model(inp, false_tensor)
 
-        qsim = QuantizationSimModel(model, dummy_input=(inp, true_tensor), is_conditional=True)
+        qsim = QuantizationSimModel(model, dummy_input=(inp, true_tensor))
         qsim.compute_encodings(forward_callback, forward_pass_callback_args=None)
-        qsim.export('./data', 'simple_cond', dummy_input=(inp, false_tensor))
+        qsim._export_conditional('./data', 'simple_cond', dummy_input=(inp, false_tensor),
+                                 forward_pass_callback=forward_callback, forward_pass_callback_args=None)
 
         with open('./data/simple_cond.encodings') as f:
             encodings = json.load(f)
