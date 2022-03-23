@@ -33,12 +33,15 @@
 #
 #  @@-COPYRIGHT-END-@@
 # =============================================================================
+import json
+import os
 import pytest
 pytestmark = pytest.mark.skip("Disable tests that requires eager execution")
 from tensorflow.keras.layers import InputLayer
 
+from aimet_common.quantsim_config.json_config_importer import ConfigDictKeys
 from aimet_tensorflow.keras.connectedgraph import ConnectedGraph
-from aimet_tensorflow.quantsim_config.quantsim_config_keras import QuantSimConfigurator
+from aimet_tensorflow.keras.quantsim_config.quantsim_config import QuantSimConfigurator
 from test_models_keras import single_residual, concat_functional
 
 
@@ -46,6 +49,7 @@ class TestQuantSimConfig:
     """
     Class containing unit tests for quantsim config feature
     """
+
     def test_mapping_layer_to_affected_quantizers_for_multi_input(self):
         """
         Test if layer and its affected quantizers are correctly mapped
@@ -149,3 +153,92 @@ class TestQuantSimConfig:
         assert len(layer_to_affected_tensor_quantizers_dict[dense1][1]) == 1
         assert len(layer_to_affected_tensor_quantizers_dict[dense1][2]) == 2
         assert len(layer_to_affected_tensor_quantizers_dict[dense1][3]) == 1
+
+    def test_parse_config_file_defaults(self):
+        """
+        Test that default quantization parameters are set correctly when using json config file
+        """
+        quantsim_config = {
+            "defaults": {
+                "ops": {
+                    "is_output_quantized": "True",
+                    "is_symmetric": "False"
+                },
+                "params": {
+                    "is_quantized": "False",
+                    "is_symmetric": "True"
+                },
+                "per_channel_quantization": "True",
+            },
+            "params": {},
+            "op_type": {},
+            "supergroups": [],
+            "model_input": {},
+            "model_output": {}
+        }
+        with open('./data/quantsim_config.json', 'w') as f:
+            json.dump(quantsim_config, f)
+
+        model = single_residual()
+        connected_graph = ConnectedGraph(model)
+        quant_sim_configurator = QuantSimConfigurator(connected_graph, "./data/quantsim_config.json")
+
+        layer_to_config_dict = quant_sim_configurator._layer_to_config_dict
+        for op in connected_graph.ordered_ops:
+            layer = op.get_module()
+
+            # ops related settings
+            assert not layer_to_config_dict[layer][ConfigDictKeys.IS_INPUT_QUANTIZED]["setting"]
+            assert layer_to_config_dict[layer][ConfigDictKeys.IS_OUTPUT_QUANTIZED]["setting"]
+            assert not layer_to_config_dict[layer][ConfigDictKeys.IS_SYMMETRIC]["setting"]
+
+            # params related setting
+            assert not layer_to_config_dict[layer][ConfigDictKeys.PARAMS][ConfigDictKeys.IS_QUANTIZED]
+            assert layer_to_config_dict[layer][ConfigDictKeys.PARAMS][ConfigDictKeys.IS_SYMMETRIC]
+
+            # per_channel_quantization
+            assert layer_to_config_dict[layer][ConfigDictKeys.PER_CHANNEL_QUANTIZATION]
+
+        layers = model.layers[1:]
+        conv1, add1, dense1 = layers[0], layers[10], layers[14]
+
+        assert (conv1, "output") in layer_to_config_dict[conv1][ConfigDictKeys.IS_OUTPUT_QUANTIZED]["affected_quantizers"]
+        assert (add1, "output") in layer_to_config_dict[add1][ConfigDictKeys.IS_OUTPUT_QUANTIZED]["affected_quantizers"]
+        assert (dense1, "output") in layer_to_config_dict[dense1][ConfigDictKeys.IS_OUTPUT_QUANTIZED]["affected_quantizers"]
+
+        if os.path.exists('./data/quantsim_config.json'):
+            os.remove('./data/quantsim_config.json')
+
+    def test_parse_config_file_symmetric_modes(self):
+        """
+        Test that model output quantization parameters are set correctly when using json config file
+        """
+        quantsim_config = {
+            "defaults": {
+                "ops": {},
+                "params": {},
+                "strict_symmetric": "True",
+                "unsigned_symmetric": "False"
+            },
+            "params": {},
+            "op_type": {},
+            "supergroups": [],
+            "model_input": {},
+            "model_output": {
+            }
+        }
+        with open('./data/quantsim_config.json', 'w') as f:
+            json.dump(quantsim_config, f)
+
+        model = single_residual()
+        connected_graph = ConnectedGraph(model)
+        quant_sim_configurator = QuantSimConfigurator(connected_graph, "./data/quantsim_config.json")
+
+        layer_to_config_dict = quant_sim_configurator._layer_to_config_dict
+        for op in connected_graph.ordered_ops:
+            layer = op.get_module()
+            assert layer_to_config_dict[layer][ConfigDictKeys.STRICT_SYMMETRIC]
+            assert not layer_to_config_dict[layer][ConfigDictKeys.UNSIGNED_SYMMETRIC]
+
+        if os.path.exists('./data/quantsim_config.json'):
+            os.remove('./data/quantsim_config.json')
