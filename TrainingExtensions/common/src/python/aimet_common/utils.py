@@ -47,6 +47,7 @@ import signal
 import socket
 import subprocess
 import time
+import threading
 from enum import Enum
 import json
 import yaml
@@ -280,3 +281,77 @@ class TqdmStreamHandler(logging.StreamHandler):
     def emit(self, record):
         with tqdm.external_write_mode(file=self.stream):
             super(TqdmStreamHandler, self).emit(record)
+
+
+
+class spinner(tqdm):
+    """
+    Simple spinner that displays what's being performed under the hood.
+    This is helpful for providing a cue to the users that something is in
+    progress (not blocked) when showing a progress bar is not always possible,
+    e.g. when there is no loop, when the loop resides in the library, etc.
+
+    NOTE: Being a subclass of tqdm, we should use AimetLogger when spinner is
+          activated to keep the standard output look as neat as it should be.
+
+    Typical usage::
+        >>> def do_something():
+        ...     do_part_1()
+        ...     logger.info("Part 1 done")
+        ...     do_part_2()
+        ...     logger.info("Part 2 done")
+        ...     do_part_3()
+        ...     logger.info("Part 3 done")
+        ...
+        ... with spinner("Doing task A"):
+        ...     do_something()
+        Part 1 done
+        Part 2 done
+        Part 3 done
+        ▖ Doing task A    <- Spinning at the bottom until the end of with block
+
+    This can also be used in a nested manner::
+        >>> with spinner("Doing task A"):
+        ...     with spinner("Part 1 in progress..."):
+        ...         do_part_1()
+        ...     with spinner("Part 2 in progress..."):
+        ...         do_part_2()
+        ...     with spinner("Part 3 in progress..."):
+        ...         do_part_3()
+        ▖ Doing task A             <- Two spinners spinning independently
+        ▗ Part 1 in progress...    <- Two spinners spinning independently
+    """
+    prefixes = ["▖", "▘", "▝", "▗"]
+
+    def __init__(self, title: str, refresh_interval: float = 0.5):
+        """
+        :param title: Title that the spinner will display.
+        :param refresh_interval: Time interval (unit: sec) of refreshing the spinner.
+        """
+        def refresh_in_loop():
+            while not self._stop.is_set():
+                with self._lock:
+                    self._index = (self._index + 1) % len(self.prefixes)
+                    self.refresh(nolock=True)
+                time.sleep(refresh_interval)
+
+        self._index = 0
+        self._stop = threading.Event()
+        self._refresh_thread = threading.Thread(target=refresh_in_loop)
+        self._messages = [
+            f"{prefix} {title}" for prefix in self.prefixes
+        ]
+
+        super(spinner, self).__init__()
+
+    def __str__(self):
+        return self._messages[self._index]
+
+    def __enter__(self):
+        self._refresh_thread.start()
+        return super(spinner, self).__enter__()
+
+    def __exit__(self, *args, **kwargs): # pylint: disable=arguments-differ
+        self._stop.set()
+        self._refresh_thread.join()
+        super(spinner, self).__exit__(*args, **kwargs)
