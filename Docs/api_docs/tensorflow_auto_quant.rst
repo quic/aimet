@@ -9,7 +9,7 @@ AIMET TensorFlow AutoQuant API
 Top-level API
 =============
 .. autoclass:: aimet_tensorflow.auto_quant.AutoQuant
-    :members:
+    :members: apply, set_adaround_params
 
 Code Examples
 =============
