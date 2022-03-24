@@ -3,7 +3,7 @@
 .. _api-tensorflow-auto-quant:
 
 ===========================
-AIMET PyTorch AutoQuant API
+AIMET TensorFlow AutoQuant API
 ===========================
 
 Top-level API
