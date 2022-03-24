@@ -15,8 +15,6 @@ Adaround Parameters
 .. autoclass:: aimet_tensorflow.adaround.adaround_weight.AdaroundParameters
     :members:
 
-Note: num_batches is currently ignored. All data present in data_set will be used in Keras AdaRound.
-
 Enum Definition
 ===============
 **Quant Scheme Enum**

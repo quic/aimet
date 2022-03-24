@@ -86,7 +86,7 @@ class Adaround:
                                              params.warm_start)
 
         # Activation sampler
-        act_sampler = ActivationSampler(params.data_set)
+        act_sampler = ActivationSampler(params.data_set, params.num_batches)
 
         hard_rounded_model = tf.keras.models.clone_model(model)
         hard_rounded_model.set_weights(model.get_weights())
@@ -133,9 +133,9 @@ class Adaround:
         # Get module's next following activation function
         act_func = module_act_func_pair[orig_model.layers[idx]]
         wrapper = AdaroundWrapper(orig_model.layers[idx], default_param_bw, default_is_symmetric, default_quant_scheme)
-        hard_rounded_weight, soft_rounded_weight = AdaroundOptimizer().adaround_wrapper(wrapper, act_func,
-                                                                                        all_inp_data, all_out_data,
-                                                                                        opt_params)
+        hard_rounded_weight, soft_rounded_weight = AdaroundOptimizer.adaround_wrapper(wrapper, act_func,
+                                                                                      all_inp_data, all_out_data,
+                                                                                      opt_params)
         # Update param encodings dictionary
         Adaround._update_param_encodings_dict(param_encodings, orig_model.layers[idx], wrapper.encoding,
                                               default_is_symmetric)
