@@ -55,8 +55,8 @@ class AdaroundOptimizer:
     """
     Optimizes the weight rounding
     """
-    @classmethod
-    def adaround_wrapper(cls, wrapper: AdaroundWrapper, act_func: Callable, all_inp_data: np.ndarray,
+    @staticmethod
+    def adaround_wrapper(wrapper: AdaroundWrapper, act_func: Callable, all_inp_data: np.ndarray,
                          all_orig_out_data: np.ndarray, opt_params: AdaroundHyperParameters) -> \
             (np.ndarray, np.ndarray):
         """
@@ -74,16 +74,16 @@ class AdaroundOptimizer:
 
         # Reconstruction error using hard and soft rounding before optimization
         recons_err_hard,\
-        recons_err_soft = cls._eval_recons_err_metrics(wrapper, act_func, inp_data, orig_out_data)
+        recons_err_soft = AdaroundOptimizer._eval_recons_err_metrics(wrapper, act_func, inp_data, orig_out_data)
         logger.debug("Before opt, Recons. error metrics using soft rounding=%f and hard rounding=%f", recons_err_soft,
                      recons_err_hard)
 
-        hard_rounded_weight, soft_rounded_weight = cls.optimize_rounding(wrapper, act_func, all_inp_data,
-                                                                         all_orig_out_data, opt_params)
+        hard_rounded_weight, soft_rounded_weight = AdaroundOptimizer.optimize_rounding(wrapper, act_func, all_inp_data,
+                                                                                       all_orig_out_data, opt_params)
 
         # Reconstruction error using hard and soft rounding after optimization
         recons_err_hard,\
-        recons_err_soft = cls._eval_recons_err_metrics(wrapper, act_func, inp_data, orig_out_data)
+        recons_err_soft = AdaroundOptimizer._eval_recons_err_metrics(wrapper, act_func, inp_data, orig_out_data)
         logger.debug("After opt, Recons. error metrics using soft rounding=%f and hard rounding=%f", recons_err_soft,
                      recons_err_hard)
 
