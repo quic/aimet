@@ -785,3 +785,27 @@ class TestQcQuantizeOpLearnedGrid:
         wrapper.set_mode(QcQuantizeOpMode.ACTIVE)
         output = wrapper.forward(input_var)
         output += output    # in-place operation should succeed
+
+    def test_set_enabled_for_param_quantizers(self):
+        """
+        Test set enabled flag for parameter quantizers
+        """
+        module = torch.nn.Conv2d(3, 4, 2)
+        wrapper = StaticGridQuantWrapper(module, weight_bw=8, activation_bw=8, round_mode='nearest',
+                                         quant_scheme=QuantScheme.post_training_tf_enhanced)
+        # Disable bias quantization
+        wrapper.param_quantizers['bias'].enabled = False
+        wrapper.enable_param_quantizers(enabled=True)
+
+        assert wrapper.param_quantizers['weight'].enabled == True
+        assert wrapper.param_quantizers['bias'].enabled == False
+
+        wrapper.enable_param_quantizers(enabled=False, param_name_to_exclude=("weight",))
+        assert wrapper.param_quantizers['weight'].enabled == True
+        assert wrapper.param_quantizers['bias'].enabled == False
+
+        # Enable bias quantization
+        wrapper.param_quantizers['bias'].enabled = True
+        wrapper.enable_param_quantizers(enabled=False, param_name_to_exclude=None)
+        assert wrapper.param_quantizers['weight'].enabled == False
+        assert wrapper.param_quantizers['bias'].enabled == False
