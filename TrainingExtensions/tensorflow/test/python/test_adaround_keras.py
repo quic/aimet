@@ -133,6 +133,12 @@ def test_activation_sampler():
     model = keras_model()
     conv_op = model.layers[5]
 
+    activation_sampler = ActivationSampler(dataset, num_batches=16)
+    inp_data, out_data = activation_sampler.sample_activation(conv_op, model, conv_op, model)
+    assert inp_data.shape == (32, 3, 3, 8)
+    assert out_data.shape == (32, 2, 2, 4)
+
+    # Test that passing in more batches than exists causes Keras dataset to still use max number of possible batches
     activation_sampler = ActivationSampler(dataset, num_batches=32)
     inp_data, out_data = activation_sampler.sample_activation(conv_op, model, conv_op, model)
     assert inp_data.shape == (32, 3, 3, 8)
