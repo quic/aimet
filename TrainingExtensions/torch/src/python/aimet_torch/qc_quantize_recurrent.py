@@ -362,6 +362,46 @@ class QcQuantizeRecurrent(torch.nn.Module):
         """
         self._mode = mode
 
+    def enable_param_quantizers(self, enabled: bool,
+                                param_name_to_exclude: Union[None, Tuple[str]] = ("bias", )) -> None:
+        """
+        Note: By default, bias quantization is disabled.
+
+        Sets enabled flag for parameter quantizers.
+        :param enabled: Enabled flag.
+        :param param_name_to_exclude: Param name to be excluded.
+        """
+        if not param_name_to_exclude:
+            param_name_to_exclude = []
+
+        for param_name, param_quantizer in self.param_quantizers.items():
+            if not param_name in param_name_to_exclude:
+                param_quantizer.enabled = enabled
+
+    def enable_input_quantizers(self, enabled: bool) -> None:
+        """
+        Sets enabled flag for input quantizers.
+        :param enabled: Enabled flag.
+        """
+        for quantizer in self.input_quantizers:
+            quantizer.enabled = enabled
+
+    def enable_output_quantizers(self, enabled: bool) -> None:
+        """
+        Sets enabled flag for output quantizers.
+        :param enabled: Enabled flag.
+        """
+        for quantizer in self.output_quantizers:
+            quantizer.enabled = enabled
+
+    def enable_act_quantizers(self, enabled: bool) -> None:
+        """
+        Sets enabled flag for both input and output quantizers.
+        :param enabled: Enabled flag.
+        """
+        self.enable_input_quantizers(enabled)
+        self.enable_output_quantizers(enabled)
+
     def _quantize_dequantize_params(self) -> Dict[str, torch.Tensor]:
         """
         Quantizes and dequantizes a parameter
