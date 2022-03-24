@@ -37,9 +37,10 @@
 # =============================================================================
 
 """Automatic Post-Training Quantization"""
+import contextlib
 from dataclasses import dataclass
 import os
-from typing import Any, Callable, List, Optional, Tuple
+from typing import Any, Callable, Dict, List, Optional, Tuple
 import tensorflow as tf
 from tqdm import tqdm
 
@@ -322,11 +323,14 @@ class AutoQuant:
         :param results_dir: Directory to save the results.
         :return: Tuple of  (best session, eval score, encoding path front).
         """
-        return self._apply_helper(self._auto_quant_main,
-                                  fp32_sess,
-                                  starting_op_names,
-                                  output_op_names,
-                                  results_dir)
+        result = self._apply_helper(self._auto_quant_main,
+                                    fp32_sess,
+                                    starting_op_names,
+                                    output_op_names,
+                                    results_dir)
+        return result["model"],\
+               result["accuracy"],\
+               result["encoding_path"]
 
     def _apply_helper( # pylint: disable=protected-access, too-many-locals, too-many-statements
             self,
@@ -335,7 +339,7 @@ class AutoQuant:
             starting_op_names: List[str],
             output_op_names: List[str],
             results_dir: str = "/tmp",
-    ) -> Tuple[tf.compat.v1.Session, float, str]:
+    ) -> Dict[str, Any]:
         """
         Helper for self.apply().
 
@@ -343,7 +347,7 @@ class AutoQuant:
         :param starting_op_names: List of starting op names of the model.
         :param output_op_names: List of output op names of the model.
         :param results_dir: Directory to save the results.
-        :return: Tuple of  (best session, eval score, encoding path front).
+        :return: The best ptq result as a dictionary.
         """
         results_dir = os.path.abspath(results_dir)
         os.makedirs(results_dir, exist_ok=True)
@@ -368,7 +372,7 @@ class AutoQuant:
                                  starting_op_names, output_op_names,
                                  eval_manager, results_dir)
 
-        _, acc, *_ = ret
+        acc = ret["accuracy"]
         _logger.info("Best eval score: %.02f", acc)
 
         if acc < target_acc:
@@ -389,7 +393,7 @@ class AutoQuant:
             output_op_names: List[str],
             eval_manager: "_EvalManager",
             results_dir: str = "/tmp",
-    ) -> Tuple[tf.compat.v1.Session, float, str]:
+    ) -> Dict[str, Any]:
         """
         Helper function of apply().
 
@@ -399,55 +403,85 @@ class AutoQuant:
             The device of dumyy_input should be same as that of model.
         :param eval_manager: _Evalmanager object.
         :param results_dir: Directory to save the results.
-        :return: Tuple of  (best model, eval score, encoding path).
+        :return: The best ptq result as a dictionary.
         """
-        with eval_manager.analysis_session("Weight Quantization Sensitivity") as _sess:
-            acc = _sess.eval(fp32_sess, default_output_bw=32)
-            _sess.diagnostics.add(
+        with eval_manager.analysis_session("Weight Quantization Sensitivity") as s:
+            acc = s.eval(fp32_sess, default_output_bw=32)
+            s.diagnostics.add(
                 f"Weight-quantized eval score (W{self.default_param_bw}A32): {acc:.02f}"
             )
 
-        with eval_manager.analysis_session("Activation Quantization Sensitivity") as _sess:
-            acc = _sess.eval(fp32_sess, default_param_bw=32)
-            _sess.diagnostics.add(
+        with eval_manager.analysis_session("Activation Quantization Sensitivity") as s:
+            acc = s.eval(fp32_sess, default_param_bw=32)
+            s.diagnostics.add(
                 f"Activation-quantized eval score (W32A{self.default_output_bw}): {acc:.02f}"
             )
 
         # Batchnorm Folding
-        with eval_manager.ptq_session("Batchnorm Folding") as _sess:
+        with eval_manager.ptq_session("Batchnorm Folding") as s:
             sess, folded_pairs = self._apply_batchnorm_folding(fp32_sess,
                                                                starting_op_names,
                                                                output_op_names)
             for conv, bn in folded_pairs:
-                _sess.diagnostics.add(f"{conv} was merged with {bn}.")
-            _sess.set_ptq_result(sess)
+                s.diagnostics.add(f"{conv} was merged with {bn}.")
+            s.set_ptq_result(sess=sess, applied_techniques=["batchnorm_folding"])
 
-        _, sess, encoding_path, acc = eval_manager.get_best_ptq_result()
-        if acc >= target_acc:
-            return sess, acc, encoding_path
+        best_result = eval_manager.get_best_ptq_result()
+        if best_result.accuracy >= target_acc:
+            return best_result.as_dict()
 
         # Cross-Layer Equalization
-        with eval_manager.ptq_session("Cross-Layer Equalization") as _sess:
+        with eval_manager.ptq_session("Cross-Layer Equalization") as s:
             sess = self._apply_cross_layer_equalization(fp32_sess,
                                                         starting_op_names,
                                                         output_op_names)
-            _sess.set_ptq_result(sess)
+            s.set_ptq_result(sess=sess, applied_techniques=["cross_layer_equalization"])
 
-        _, sess, encoding_path, acc = eval_manager.get_best_ptq_result()
-        if acc >= target_acc:
-            return sess, acc, encoding_path
+        best_result = eval_manager.get_best_ptq_result()
+        if best_result.accuracy >= target_acc:
+            return best_result.as_dict()
 
         # AdaRound
-        with eval_manager.ptq_session("AdaRound") as _sess:
-            sess, encoding_path = self._apply_adaround(sess,
+        with eval_manager.ptq_session("AdaRound") as s:
+            sess, encoding_path = self._apply_adaround(best_result.load_model(),
                                                        starting_op_names,
                                                        output_op_names,
                                                        results_dir)
-            _sess.set_ptq_result(sess, encoding_path=encoding_path)
+            s.set_ptq_result(sess=sess,
+                             encoding_path=encoding_path,
+                             applied_techniques=[*best_result.applied_techniques, "adaround"])
 
-        _, sess, encoding_path, acc = eval_manager.get_best_ptq_result()
+        return eval_manager.get_best_ptq_result().as_dict()
 
-        return sess, acc, encoding_path
+
+@dataclass
+class PtqResult:
+    """
+    Evaluation results.
+    :param tag: Identifier string of the evaluation result.
+    :param model_path: Path to the serialized model.
+    :param encoding_path: Path to the encoding file.
+    :param accuracy: Accuracy of the model.
+    """
+    meta_path: str
+    checkpoint_path: str
+    encoding_path: str
+    accuracy: float
+    applied_techniques: List[str]
+
+    def load_model(self) -> tf.compat.v1.Session:
+        """
+        Load model.
+        :return: Loaded model.
+        """
+        return load_model_from_meta(self.meta_path, self.checkpoint_path)
+
+    def as_dict(self):
+        """Convert to dictionary"""
+        return dict(model=self.load_model(),
+                    accuracy=self.accuracy,
+                    encoding_path=self.encoding_path,
+                    applied_techniques=self.applied_techniques)
 
 
 class _EvalManager:
@@ -478,21 +512,16 @@ class _EvalManager:
         self._all_sessions: List[_EvalSession] = []
         self._ptq_sessions: List[_PtqSession] = []
 
-    def get_best_ptq_result(self) -> Tuple[str, tf.compat.v1.Session, str, float]:
+    def get_best_ptq_result(self) -> PtqResult:
         """
         Get the results with the highest evaluation score among the ptq results evaluated so far.
-        :return: The best evaluation result so far, including the tag, model object,
-                 encodings path, and accuracy.
+        :return: The best evaluation result so far.
         """
         if not self._ptq_sessions:
             raise RuntimeError
 
         ptq_results = [sess.ptq_result for sess in self._ptq_sessions]
-        best_ptq_result = max(ptq_results, key=lambda ptq_result: ptq_result.accuracy)
-        return best_ptq_result.tag,\
-               best_ptq_result.load_model(),\
-               best_ptq_result.encoding_path,\
-               best_ptq_result.accuracy
+        return max(ptq_results, key=lambda ptq_result: ptq_result.accuracy)
 
     def analysis_session(self, title: str) -> "_EvalSession":
         """
@@ -637,35 +666,12 @@ class _PtqSession(_EvalSession):
     Each PTQ session object should call `set_ptq_result` exactly once
     inside a with-as block.
     """
-
-    @dataclass
-    class PtqResult:
-        """
-        Evaluation results.
-        :param tag: Identifier string of the evaluation result.
-        :param model_path: Path to the serialized model.
-        :param encoding_path: Path to the encoding file.
-        :param accuracy: Accuracy of the model.
-        """
-        tag: str
-        meta_path: str
-        checkpoint_path: str
-        encoding_path: str
-        accuracy: float
-
-        def load_model(self) -> tf.compat.v1.Session:
-            """
-            Load model.
-            :return: Loaded model.
-            """
-            return load_model_from_meta(self.meta_path, self.checkpoint_path)
-
     def __init__(self, *args, **kwargs):
         super(_PtqSession, self).__init__(*args, **kwargs)
         self._ptq_result = None
 
     @property
-    def ptq_result(self) -> "_PtqSession.PtqResult":
+    def ptq_result(self) -> PtqResult:
         """Getter of self._ptq_result."""
         if self._ptq_result is None:
             raise RuntimeError
@@ -673,6 +679,7 @@ class _PtqSession(_EvalSession):
 
     def set_ptq_result(
             self,
+            applied_techniques: List[str],
             sess: tf.compat.v1.Session = None,
             sim: QuantizationSimModel = None,
             acc: float = None,
@@ -704,9 +711,14 @@ class _PtqSession(_EvalSession):
             assert acc is not None
             assert sess is None
 
-        self._set_ptq_result(sim, acc)
+        self._set_ptq_result(sim, acc, applied_techniques)
 
-    def _set_ptq_result(self, sim: QuantizationSimModel, acc: float) -> "_PtqSession.PtqResult":
+    def _set_ptq_result(
+            self,
+            sim: QuantizationSimModel,
+            acc: float,
+            applied_techniques: List[str],
+    ) -> PtqResult:
         """
         Set the result of PTQ. Should be called exactly once inside a with-as block.
 
@@ -721,12 +733,12 @@ class _PtqSession(_EvalSession):
             )
 
         meta_path, checkpoint_path, encoding_path = self._export(sim)
-        self._ptq_result = _PtqSession.PtqResult(
-            tag=self._filename,
+        self._ptq_result = PtqResult(
             meta_path=meta_path,
             checkpoint_path=checkpoint_path,
             encoding_path=encoding_path,
-            accuracy=acc
+            accuracy=acc,
+            applied_techniques=applied_techniques,
         )
         return self._ptq_result
 
@@ -754,3 +766,53 @@ class _PtqSession(_EvalSession):
 
         _logger.info("Session finished: %s. (eval score: %.02f)",
                      self._title, self._ptq_result.accuracy)
+
+
+@contextlib.contextmanager
+def spy_auto_quant(auto_quant: AutoQuant):
+    """
+    Install a spy that collects the handles to the ptq result of
+    each stage of AutoQuant.
+
+    Typical usage::
+        >>> auto_quant = AutoQuant(...)
+        ... with auto_quant_spy(auto_quant) as spy:
+        ...     _ = auto_quant.apply(...)
+        ...
+        ... for result in spy.get_all_ptq_results():
+        ...     print(result.applied_techniques)
+        ...     print(result.accuracy)
+        ...     print(result.encoding_path)
+        ...     model = result.load_model()
+        ...     ...
+    """
+    # pylint: disable=protected-access
+    class Spy:
+        """
+        Spy that collects the handles to the ptq result of
+        each stage of AutoQuant.
+        """
+        def __init__(self):
+            self._eval_manager = None
+
+        def get_all_ptq_results(self) -> List[PtqResult]:
+            """Return handles to the results of AutoQuant"""
+            if self._eval_manager is None:
+                return []
+            return [sess.ptq_result for sess in self._eval_manager._ptq_sessions]
+
+    spy = Spy()
+
+    _auto_quant_main = auto_quant._auto_quant_main
+
+    def _auto_quant_main_wrapper(fp32_sess, target_acc, starting_op_names,
+                                 output_op_names, eval_manager, results_dir="/tmp"):
+        spy._eval_manager = eval_manager
+        return _auto_quant_main(fp32_sess, target_acc, starting_op_names,
+                                output_op_names, eval_manager, results_dir)
+
+    try:
+        setattr(auto_quant, "_auto_quant_main", _auto_quant_main_wrapper)
+        yield spy
+    finally:
+        setattr(auto_quant, "_auto_quant_main", _auto_quant_main)
