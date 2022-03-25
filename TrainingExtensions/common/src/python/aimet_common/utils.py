@@ -308,7 +308,7 @@ class spinner(tqdm):
         Part 1 done
         Part 2 done
         Part 3 done
-        ▖ Doing task A    <- Spinning at the bottom until the end of with block
+        / Doing task A    <- Spinning at the bottom until the end of with block
 
     This can also be used in a nested manner::
         >>> with spinner("Doing task A"):
@@ -318,10 +318,10 @@ class spinner(tqdm):
         ...         do_part_2()
         ...     with spinner("Part 3 in progress..."):
         ...         do_part_3()
-        ▖ Doing task A             <- Two spinners spinning independently
-        ▗ Part 1 in progress...    <- Two spinners spinning independently
+        / Doing task A             <- Two spinners spinning independently
+        - Part 1 in progress...    <- Two spinners spinning independently
     """
-    prefixes = ["▖", "▘", "▝", "▗"]
+    prefixes = ["/", "-", "\\", "|"]
 
     def __init__(self, title: str, refresh_interval: float = 0.5):
         """
