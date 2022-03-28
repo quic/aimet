@@ -36,9 +36,11 @@
 #  @@-COPYRIGHT-END-@@
 # =============================================================================
 
+import json
 import os.path
 import shutil
 import torch
+
 from aimet_torch.examples.test_models import TinyModel
 from aimet_torch.tensor_quantizer import TensorQuantizer
 from aimet_torch.qc_quantize_op import QcQuantizeWrapper
@@ -79,7 +81,7 @@ class TestQuantAnalyzer:
         forward_pass_callback = CallbackFunc(calibrate, dummy_input)
         eval_callback = CallbackFunc(evaluate, dummy_input)
         quant_analyzer = QuantAnalyzer(model, dummy_input, forward_pass_callback, eval_callback)
-        fp32_acc, weight_quantized_acc, act_quantized_acc = quant_analyzer._check_model_sensitivity_to_quantization()
+        fp32_acc, weight_quantized_acc, act_quantized_acc = quant_analyzer.check_model_sensitivity_to_quantization()
 
         assert fp32_acc >= weight_quantized_acc
         assert fp32_acc >= act_quantized_acc
@@ -119,7 +121,7 @@ class TestQuantAnalyzer:
 
         # Disable all the quantizers and verify enabled_quant_wrappers dictionary should be empty.
         for quant_wrapper in sim.quant_wrappers():
-            quant_wrapper.enable_act_quantizers(enabled=False)
+            quant_wrapper.enable_activation_quantizers(enabled=False)
             quant_wrapper.enable_param_quantizers(enabled=False)
 
         enabled_quant_wrappers = quant_analyzer._get_enabled_quantizers(sorted_quant_wrappers_dict)
@@ -137,14 +139,20 @@ class TestQuantAnalyzer:
         forward_pass_callback = CallbackFunc(calibrate, dummy_input)
         eval_callback = CallbackFunc(evaluate, dummy_input)
         quant_analyzer = QuantAnalyzer(model, dummy_input, forward_pass_callback, eval_callback)
-        layer_wise_eval_score_dict = quant_analyzer._perform_per_layer_analysis_by_enabling_quant_wrappers()
-        print(layer_wise_eval_score_dict)
-        assert type(layer_wise_eval_score_dict) == dict
-        assert len(layer_wise_eval_score_dict) == 12
+        try:
+            layer_wise_eval_score_dict = quant_analyzer.perform_per_layer_analysis_by_enabling_quant_wrappers()
+            print(layer_wise_eval_score_dict)
+            assert type(layer_wise_eval_score_dict) == dict
+            assert len(layer_wise_eval_score_dict) == 12
 
-        # test whether layer_wise_eval_score_dict consists of correct keys (module names).
-        for quant_wrapper_name in layer_wise_eval_score_dict.keys():
-            assert quant_wrapper_name in module_names
+            # test whether layer_wise_eval_score_dict consists of correct keys (module names).
+            for quant_wrapper_name in layer_wise_eval_score_dict.keys():
+                assert quant_wrapper_name in module_names
+
+                # Check if it is exported to correct html file.
+                assert os.path.exists("./tmp/per_layer_quant_enabled.html")
+        finally:
+            shutil.rmtree("./tmp/")
 
     def test_perform_per_layer_analysis_by_disabling_quant_wrappers(self):
         """ test perform per layer analysis by disabling quant wrappers """
@@ -158,14 +166,82 @@ class TestQuantAnalyzer:
         forward_pass_callback = CallbackFunc(calibrate, dummy_input)
         eval_callback = CallbackFunc(evaluate, dummy_input)
         quant_analyzer = QuantAnalyzer(model, dummy_input, forward_pass_callback, eval_callback)
-        layer_wise_eval_score_dict = quant_analyzer._perform_per_layer_analysis_by_disabling_quant_wrappers()
-        print(layer_wise_eval_score_dict)
-        assert type(layer_wise_eval_score_dict) == dict
-        assert len(layer_wise_eval_score_dict) == 12
+        try:
+            layer_wise_eval_score_dict = quant_analyzer.perform_per_layer_analysis_by_disabling_quant_wrappers()
+            print(layer_wise_eval_score_dict)
+            assert type(layer_wise_eval_score_dict) == dict
+            assert len(layer_wise_eval_score_dict) == 12
 
-        # test whether layer_wise_eval_score_dict consists of correct keys (module names).
-        for quant_wrapper_name in layer_wise_eval_score_dict.keys():
-            assert quant_wrapper_name in module_names
+            # test whether layer_wise_eval_score_dict consists of correct keys (module names).
+            for quant_wrapper_name in layer_wise_eval_score_dict.keys():
+                assert quant_wrapper_name in module_names
+
+            # Check if it is exported to correct html file.
+            assert os.path.exists("./tmp/per_layer_quant_disabled.html")
+        finally:
+            shutil.rmtree("./tmp/")
+
+    def test_export_per_layer_stats_histogram(self):
+        """ test export_per_layer_stats_histogram() """
+        input_shape = (1, 3, 32, 32)
+        dummy_input = torch.randn(*input_shape)
+        model = TinyModel().eval()
+        forward_pass_callback = CallbackFunc(calibrate, dummy_input)
+        eval_callback = CallbackFunc(evaluate, dummy_input)
+        quant_analyzer = QuantAnalyzer(model, dummy_input, forward_pass_callback, eval_callback)
+        try:
+            quant_analyzer.export_per_layer_stats_histogram()
+
+            # Check if it is exported to correct html file.
+            assert os.path.exists("./tmp/activations_pdf")
+            assert os.path.exists("./tmp/weights_pdf")
+            assert os.path.isfile("./tmp/activations_pdf/conv1_input_0.html")
+            assert os.path.isfile("./tmp/activations_pdf/conv1_output_0.html")
+            assert os.path.isfile("./tmp/weights_pdf/conv1/conv1_weight_0.html")
+        finally:
+            shutil.rmtree("./tmp/")
+
+    def test_export_per_layer_stats_histogram_per_channel(self):
+        """ test export_per_layer_stats_histogram() for per channel quantization """
+        results_dir = os.path.abspath("./tmp/")
+        os.makedirs(results_dir, exist_ok=True)
+
+        input_shape = (1, 3, 32, 32)
+        dummy_input = torch.randn(*input_shape)
+        model = TinyModel().eval()
+        quantsim_config = {
+            "defaults": {
+                "ops": {
+                    "is_output_quantized": "True"
+                },
+                "params": {
+                    "is_quantized": "True"
+                },
+                "per_channel_quantization": "True",
+            },
+            "params": {},
+            "op_type": {},
+            "supergroups": [],
+            "model_input": {},
+            "model_output": {}
+        }
+        with open("./tmp/quantsim_config.json", 'w') as f:
+            json.dump(quantsim_config, f)
+
+        forward_pass_callback = CallbackFunc(calibrate, dummy_input)
+        eval_callback = CallbackFunc(evaluate, dummy_input)
+        quant_analyzer = QuantAnalyzer(model, dummy_input, forward_pass_callback, eval_callback)
+        try:
+            quant_analyzer.export_per_layer_stats_histogram(config_file="./tmp/quantsim_config.json")
+            assert os.path.exists("./tmp/activations_pdf")
+            assert os.path.exists("./tmp/weights_pdf")
+            assert os.path.isfile("./tmp/activations_pdf/conv1_output_0.html")
+            assert os.path.isfile("./tmp/weights_pdf/conv1/conv1_weight_0.html")
+            assert os.path.isfile("./tmp/weights_pdf/conv1/conv1_weight_31.html")
+            assert os.path.isfile("./tmp/weights_pdf/conv2/conv2_weight_0.html")
+            assert os.path.isfile("./tmp/weights_pdf/conv2/conv2_weight_15.html")
+        finally:
+            shutil.rmtree("./tmp/")
 
     def test_analyze(self):
         """ test end to end for analyze() method """
@@ -176,7 +252,10 @@ class TestQuantAnalyzer:
         eval_callback = CallbackFunc(evaluate, dummy_input)
         quant_analyzer = QuantAnalyzer(model, dummy_input, forward_pass_callback, eval_callback)
         try:
-            quant_analyzer.analyze(default_param_bw=16, results_dir="./tmp/")
-            assert os.path.exists("./tmp/per_layer_sensitivity_analysis.html")
+            quant_analyzer.analyze()
+            assert os.path.exists("./tmp/per_layer_quant_disabled.html")
+            assert os.path.exists("./tmp/per_layer_quant_enabled.html")
+            assert os.path.exists("./tmp/activations_pdf")
+            assert os.path.exists("./tmp/weights_pdf")
         finally:
             shutil.rmtree("./tmp/")
