@@ -42,7 +42,7 @@ import os
 from collections import OrderedDict, defaultdict
 from typing import Union, Tuple, Callable, Dict, List
 from bokeh import plotting
-from bokeh.models import ColumnDataSource, Band, Span
+from bokeh.models import ColumnDataSource, Band, Span, tickers
 import torch
 
 from aimet_common.utils import AimetLogger
@@ -259,7 +259,7 @@ class QuantAnalyzer:
         """
         Export per layer sensitivity analysis in html format.
 
-        :param layer_wise_eval_score_dict: layer wise eval score dictionary. dict[layer_name] = eval_score
+        :param layer_wise_eval_score_dict: layer wise eval score dictionary. dict[layer_name] = eval_score.
         :param results_dir: Directory to save the results.
         :param title: Title of the plot.
         """
@@ -273,13 +273,14 @@ class QuantAnalyzer:
         filename = os.path.join(results_dir, f"{title}.html")
         plotting.output_file(filename)
         plot = plotting.figure(x_range=layer_names,
-                               height=DEFAULT_BOKEH_FIGURE_HEIGHT,
+                               plot_height=DEFAULT_BOKEH_FIGURE_HEIGHT,
                                title=title,
                                x_axis_label="Layers",
                                y_axis_label="Eval score")
-
         plot.line(x=layer_names, y=eval_scores)
         plot.y_range.start = 0
+        plot.xaxis.major_label_orientation = "vertical"
+        plot.sizing_mode = "scale_width"
         plotting.save(plot)
         return plot
 
@@ -304,8 +305,8 @@ class QuantAnalyzer:
         # Configure the output file to be saved.
         filename = os.path.join(results_dir, f"{title}.html")
         plotting.output_file(filename)
-        plot = plotting.figure(plot_height=DEFAULT_BOKEH_FIGURE_HEIGHT, title=title)
-
+        plot = plotting.figure(plot_height=DEFAULT_BOKEH_FIGURE_HEIGHT,
+                               title=title)
         # Add line and underlying color for histogram.
         plot_source = ColumnDataSource(data=dict(entries=entries, pdfs=pdfs))
         plot.line("entries", "pdfs", source=plot_source, color="blue", legend="PDF")
@@ -320,6 +321,39 @@ class QuantAnalyzer:
         plot.line([], [], line_dash='dashed', line_color="red", legend='MAX_VAL')
         plot.add_layout(line)
 
+        plotting.save(plot)
+        return plot
+
+    @staticmethod
+    def _export_per_layer_min_max_ranges_plot(layer_wise_min_max_ranges_dict: Dict, results_dir: str, title: str) \
+            -> plotting.Figure:
+        """
+        Export per layer encoding min-max range in html format.
+
+        :param layer_wise_min_max_ranges_dict: layer wise eval score dictionary.
+         dict[layer_name] = (encoding min, encoding max)
+        :param results_dir:  Directory to save the results.
+        :param title: Title of the plot.
+        :return: Encoding min-max range plot.
+        """
+        layer_names = []
+        enc_min_values = []
+        enc_max_values = []
+        for layer_name, (enc_min, enc_max) in layer_wise_min_max_ranges_dict.items():
+            layer_names.append(layer_name)
+            enc_min_values.append(enc_min)
+            enc_max_values.append(enc_max)
+
+        # Configure the output file to be saved.
+        filename = os.path.join(results_dir, f"{title}.html")
+        plotting.output_file(filename)
+        plot = plotting.figure(x_range=layer_names,
+                               plot_height=DEFAULT_BOKEH_FIGURE_HEIGHT,
+                               title=title)
+        plot.vbar(x=layer_names, width=0.2, bottom=enc_min_values, top=enc_max_values)
+        plot.xaxis.major_label_orientation = "vertical"
+        plot.sizing_mode = "scale_width"
+        plot.yaxis.ticker = tickers.SingleIntervalTicker(interval=1)
         plotting.save(plot)
         return plot
 
@@ -510,6 +544,77 @@ class QuantAnalyzer:
                                                          title="per_layer_quant_disabled")
         return layer_wise_eval_score_dict
 
+    def export_per_layer_encoding_min_max_range( # pylint: disable=too-many-locals
+            self,
+            quant_scheme: QuantScheme = QuantScheme.post_training_tf_enhanced,
+            rounding_mode: str = 'nearest',
+            default_param_bw: int = 8,
+            default_output_bw: int = 8,
+            config_file: str = None,
+            default_data_type: QuantizationDataType = QuantizationDataType.int,
+            results_dir: str = "./tmp/",
+    ) -> (Dict, Dict):
+        """
+        Export encoding min and max range for all weights and activations.
+
+        :param quant_scheme: Quantization scheme. Supported values are
+                QuantScheme.post_training_tf or QuantScheme.post_training_tf_enhanced.
+        :param rounding_mode: Rounding mode. Supported options are 'nearest' or 'stochastic'.
+        :param default_param_bw: Default bitwidth (4-31) to use for quantizing layer parameters.
+        :param default_output_bw: Default bitwidth (4-31) to use for quantizing layer inputs and outputs.
+        :param config_file: Path to configuration file for model quantizers.
+        :param default_data_type: Default data type to use for quantizing all layer inputs, outputs and parameters.
+                                 Possible options are QuantizationDataType.int and QuantizationDataType.float.
+                                 Note that the mode default_data_type=QuantizationDataType.float is only supported with
+                                 default_output_bw=16 and default_param_bw=16.
+        :param results_dir: Directory to save the results.
+        :return: layer wise min-max range for weights and activations.
+        """
+        results_dir = os.path.abspath(results_dir)
+        os.makedirs(results_dir, exist_ok=True)
+
+        kwargs = dict(
+            quant_scheme=quant_scheme,
+            rounding_mode=rounding_mode,
+            default_output_bw=default_output_bw,
+            default_param_bw=default_param_bw,
+            config_file=config_file,
+            default_data_type=default_data_type,
+        )
+        sim = QuantizationSimModel(self._model, self._dummy_input, **kwargs)
+        sim.compute_encodings(self._forward_pass_callback.func, self._forward_pass_callback.args)
+
+        module_to_name_dict = {}
+        for name, module in sim.model.named_modules():
+            module_to_name_dict[module] = name
+
+        min_max_range_for_activations_dict = {}
+        min_max_range_for_weights_dict = {}
+        for quant_wrapper in sim.quant_wrappers():
+            wrapped_module_name = module_to_name_dict[quant_wrapper]
+            for index, quantizer in enumerate(quant_wrapper.input_quantizers):
+                if quantizer.encoding:
+                    name = f"{wrapped_module_name}_input_{index}"
+                    min_max_range_for_activations_dict[name] = (quantizer.encoding.min, quantizer.encoding.max)
+            for index, quantizer in enumerate(quant_wrapper.output_quantizers):
+                if quantizer.encoding:
+                    name = f"{wrapped_module_name}_output_{index}"
+                    min_max_range_for_activations_dict[name] = (quantizer.encoding.min, quantizer.encoding.max)
+            for param_name, quantizer in quant_wrapper.param_quantizers.items():
+                if quantizer.encoding:
+                    # TODO: Add support for per channel quantization.
+                    name = f"{wrapped_module_name}_{param_name}"
+                    min_max_range_for_weights_dict[name] = (quantizer.encoding.min, quantizer.encoding.max)
+
+        self._export_per_layer_min_max_ranges_plot(min_max_range_for_weights_dict,
+                                                   results_dir,
+                                                   title="min_max_range_all_weights")
+        self._export_per_layer_min_max_ranges_plot(min_max_range_for_activations_dict,
+                                                   results_dir,
+                                                   title="min_max_range_all_activations")
+
+        return min_max_range_for_weights_dict, min_max_range_for_activations_dict
+
     def export_per_layer_stats_histogram( # pylint: disable=too-many-locals
             self,
             quant_scheme: QuantScheme = QuantScheme.post_training_tf_enhanced,
@@ -638,6 +743,9 @@ class QuantAnalyzer:
 
         # Perform per layer analysis by disabling each quant wrapper (OPTION-2).
         self.perform_per_layer_analysis_by_disabling_quant_wrappers(results_dir=results_dir, **kwargs)
+
+        # Export encoding min-max range.
+        self.export_per_layer_encoding_min_max_range(results_dir=results_dir, **kwargs)
 
         # Export PDF of statistics.
         if quant_scheme == QuantScheme.post_training_tf_enhanced:

@@ -150,7 +150,7 @@ class TestQuantAnalyzer:
                 assert quant_wrapper_name in module_names
 
                 # Check if it is exported to correct html file.
-                assert os.path.exists("./tmp/per_layer_quant_enabled.html")
+                assert os.path.isfile("./tmp/per_layer_quant_enabled.html")
         finally:
             shutil.rmtree("./tmp/")
 
@@ -177,7 +177,7 @@ class TestQuantAnalyzer:
                 assert quant_wrapper_name in module_names
 
             # Check if it is exported to correct html file.
-            assert os.path.exists("./tmp/per_layer_quant_disabled.html")
+            assert os.path.isfile("./tmp/per_layer_quant_disabled.html")
         finally:
             shutil.rmtree("./tmp/")
 
@@ -243,6 +243,21 @@ class TestQuantAnalyzer:
         finally:
             shutil.rmtree("./tmp/")
 
+    def test_export_per_layer_encoding_min_max_range(self):
+        """ test export_per_layer_encoding_min_max_range() """
+        input_shape = (1, 3, 32, 32)
+        dummy_input = torch.randn(*input_shape)
+        model = TinyModel().eval()
+        forward_pass_callback = CallbackFunc(calibrate, dummy_input)
+        eval_callback = CallbackFunc(evaluate, dummy_input)
+        quant_analyzer = QuantAnalyzer(model, dummy_input, forward_pass_callback, eval_callback)
+        try:
+            quant_analyzer.export_per_layer_encoding_min_max_range()
+            assert os.path.isfile("./tmp/min_max_range_all_weights.html")
+            assert os.path.isfile("./tmp/min_max_range_all_activations.html")
+        finally:
+            shutil.rmtree("./tmp/")
+
     def test_analyze(self):
         """ test end to end for analyze() method """
         input_shape = (1, 3, 32, 32)
@@ -253,9 +268,11 @@ class TestQuantAnalyzer:
         quant_analyzer = QuantAnalyzer(model, dummy_input, forward_pass_callback, eval_callback)
         try:
             quant_analyzer.analyze()
-            assert os.path.exists("./tmp/per_layer_quant_disabled.html")
-            assert os.path.exists("./tmp/per_layer_quant_enabled.html")
+            assert os.path.isfile("./tmp/per_layer_quant_disabled.html")
+            assert os.path.isfile("./tmp/per_layer_quant_enabled.html")
             assert os.path.exists("./tmp/activations_pdf")
             assert os.path.exists("./tmp/weights_pdf")
+            assert os.path.isfile("./tmp/min_max_range_all_weights.html")
+            assert os.path.isfile("./tmp/min_max_range_all_activations.html")
         finally:
             shutil.rmtree("./tmp/")
