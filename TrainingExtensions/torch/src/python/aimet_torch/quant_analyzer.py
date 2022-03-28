@@ -199,10 +199,7 @@ class QuantAnalyzer:
         return enabled_quant_wrappers
 
     @staticmethod
-    def _enable_quantizers(
-            quantizers: List[TensorQuantizer],
-            enabled: bool,
-    ) -> None:
+    def _enable_quantizers(quantizers: List[TensorQuantizer], enabled: bool) -> None:
         """
         For given list of quantizers, set (enable/disable) quantizer's enabled.
 
@@ -257,11 +254,8 @@ class QuantAnalyzer:
         return eval_score_dict
 
     @staticmethod
-    def _export_per_layer_sensitivity_analysis_plot(
-            layer_wise_eval_score_dict: Dict,
-            results_dir: str,
-            title: str
-    ) -> plotting.Figure:
+    def _export_per_layer_sensitivity_analysis_plot(layer_wise_eval_score_dict: Dict, results_dir: str,
+                                                    title: str) -> plotting.Figure:
         """
         Export per layer sensitivity analysis in html format.
 
@@ -290,12 +284,7 @@ class QuantAnalyzer:
         return plot
 
     @staticmethod
-    def _export_stats_histogram_plot(
-            histogram: List,
-            encoding,
-            results_dir: str,
-            title: str
-    ) -> plotting.Figure:
+    def _export_stats_histogram_plot(histogram: List, encoding, results_dir: str, title: str) -> plotting.Figure:
         """
         Export histogram (PDF) of statistics with overlaying encoding min and max
         values in html format.
@@ -521,15 +510,16 @@ class QuantAnalyzer:
                                                          title="per_layer_quant_disabled")
         return layer_wise_eval_score_dict
 
-    def export_per_layer_stats_histogram(self,
-                                         quant_scheme: QuantScheme = QuantScheme.post_training_tf_enhanced,
-                                         rounding_mode: str = 'nearest',
-                                         default_param_bw: int = 8,
-                                         default_output_bw: int = 8,
-                                         config_file: str = None,
-                                         default_data_type: QuantizationDataType = QuantizationDataType.int,
-                                         results_dir: str = "./tmp/",
-                                         ) -> None:
+    def export_per_layer_stats_histogram( # pylint: disable=too-many-locals
+            self,
+            quant_scheme: QuantScheme = QuantScheme.post_training_tf_enhanced,
+            rounding_mode: str = 'nearest',
+            default_param_bw: int = 8,
+            default_output_bw: int = 8,
+            config_file: str = None,
+            default_data_type: QuantizationDataType = QuantizationDataType.int,
+            results_dir: str = "./tmp/",
+    ) -> None:
         """
         NOTE: Not to invoke when quantization scheme is not TF-Enhanced.
 
@@ -583,12 +573,12 @@ class QuantAnalyzer:
 
         for quant_wrapper in sim.quant_wrappers():
             wrapped_module_name = module_to_name_dict[quant_wrapper]
-            for index, quantizer in enumerate(quant_wrapper.input_quantizers):
+            for quantizer in quant_wrapper.input_quantizers:
                 if quantizer.encoding:
                     self._create_and_export_stats_histogram_plot(quantizer,
                                                                  activations_pdf_dir,
                                                                  title=f"{wrapped_module_name}_input")
-            for index, quantizer in enumerate(quant_wrapper.output_quantizers):
+            for quantizer in quant_wrapper.output_quantizers:
                 if quantizer.encoding:
                     self._create_and_export_stats_histogram_plot(quantizer,
                                                                  activations_pdf_dir,
