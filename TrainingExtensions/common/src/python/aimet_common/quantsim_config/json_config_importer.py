@@ -73,6 +73,10 @@ class ConfigDictKeys:
     UNSIGNED_SYMMETRIC = "unsigned_symmetric"
     PER_CHANNEL_QUANTIZATION = "per_channel_quantization"
     SUPPORTED_KERNELS = "supported_kernels"
+    DTYPE = "dtype"
+    ACTIVATION = "activation"
+    PARAM = "param"
+    BITWIDTH = "bitwidth"
 
 
 class JsonConfigImporter:
