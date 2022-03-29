@@ -84,8 +84,7 @@ void quantizeDequantize(const GPUDevice& d, TTypes<float>::ConstMatrix inputs,
                         DlQuantization::TfEncoding encodings, TTypes<float>::Matrix outputs, int channel)
 {
     float invScale, scale, offset, min, max;
-    // Add epsilon 10-5 to avoid divide by zero error
-    invScale = 1.0f / ((float) encodings.delta + 0.00001);
+    invScale = 1.0f / ((float) encodings.delta);
     scale    = (float) encodings.delta;
     offset   = (float) encodings.offset;
     min      = (float) encodings.min;
