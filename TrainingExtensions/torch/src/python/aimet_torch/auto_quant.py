@@ -57,7 +57,7 @@ from aimet_torch.utils import in_eval_mode
 
 from aimet_common.auto_quant import Cache, Diagnostics
 from aimet_common.defs import QuantScheme
-from aimet_common.utils import AimetLogger, spinner
+from aimet_common.utils import AimetLogger, Spinner
 from aimet_common.quantsim import validate_quantsim_inputs
 
 
@@ -669,7 +669,7 @@ class _EvalSession:
         return acc
 
     def __enter__(self):
-        self._spinner = spinner(self._title)
+        self._spinner = Spinner(self._title)
         self._spinner.__enter__()
         return self
 

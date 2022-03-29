@@ -284,7 +284,7 @@ class TqdmStreamHandler(logging.StreamHandler):
 
 
 
-class spinner(tqdm):
+class Spinner(tqdm):
     """
     Simple spinner that displays what's being performed under the hood.
     This is helpful for providing a cue to the users that something is in
@@ -303,7 +303,7 @@ class spinner(tqdm):
         ...     do_part_3()
         ...     logger.info("Part 3 done")
         ...
-        ... with spinner("Doing task A"):
+        ... with Spinner("Doing task A"):
         ...     do_something()
         Part 1 done
         Part 2 done
@@ -311,12 +311,12 @@ class spinner(tqdm):
         / Doing task A    <- Spinning at the bottom until the end of with block
 
     This can also be used in a nested manner::
-        >>> with spinner("Doing task A"):
-        ...     with spinner("Part 1 in progress..."):
+        >>> with Spinner("Doing task A"):
+        ...     with Spinner("Part 1 in progress..."):
         ...         do_part_1()
-        ...     with spinner("Part 2 in progress..."):
+        ...     with Spinner("Part 2 in progress..."):
         ...         do_part_2()
-        ...     with spinner("Part 3 in progress..."):
+        ...     with Spinner("Part 3 in progress..."):
         ...         do_part_3()
         / Doing task A             <- Two spinners spinning independently
         - Part 1 in progress...    <- Two spinners spinning independently
@@ -342,16 +342,16 @@ class spinner(tqdm):
             f"{prefix} {title}" for prefix in self.prefixes
         ]
 
-        super(spinner, self).__init__()
+        super(Spinner, self).__init__()
 
     def __str__(self):
         return self._messages[self._index]
 
     def __enter__(self):
         self._refresh_thread.start()
-        return super(spinner, self).__enter__()
+        return super(Spinner, self).__enter__()
 
     def __exit__(self, *args, **kwargs): # pylint: disable=arguments-differ
         self._stop.set()
         self._refresh_thread.join()
-        super(spinner, self).__exit__(*args, **kwargs)
+        super(Spinner, self).__exit__(*args, **kwargs)
