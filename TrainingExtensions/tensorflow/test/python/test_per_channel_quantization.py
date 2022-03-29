@@ -201,12 +201,15 @@ class TestTrainingExtensionsQcQuantizeOpPerChannel(unittest.TestCase):
             out_data = sess.run(pass_through_op_output, feed_dict={inp_tensor: inp_data})
 
             mode_var.load(int(libpymo.TensorQuantizerOpMode.quantizeDequantize), sess)
-            out_data = sess.run(pass_through_op_output, feed_dict={inp_tensor: inp_data})
+            out_data_8_bits = sess.run(pass_through_op_output, feed_dict={inp_tensor: inp_data})
+            bit_width.load(16, sess)
+            out_data_16_bits = sess.run(pass_through_op_output, feed_dict={inp_tensor: inp_data})
             # compare qc_quantize op's output with input
             expected_output = np.ones((1, 1, 2, num_output_channels))
             expected_output[:, :, :, 1] *= 2
             expected_output[:, :, :, 2] *= 2.5
-            self.assertTrue(np.allclose(out_data, expected_output, rtol=0.01))
+            self.assertTrue(np.allclose(out_data_8_bits, expected_output))
+            self.assertTrue(np.allclose(out_data_16_bits, expected_output))
             sess.close()
 
     def test_qc_quantize_op_cpu_linear(self):
