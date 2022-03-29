@@ -84,6 +84,7 @@ class SerializationProtocolBase(abc.ABC, Generic[T]): # pylint: disable
         Load the saved object.
         :param working_dir: Directory to save the file.
         :param filename_prefix: File name prefix.
+        :return: Loaded object.
         :raises: Cache miss if the combination of working_dir and
             filename_prefix fails to find a previously saved cache entry.
         """
@@ -125,6 +126,7 @@ class _PickleSerializationProtocol(SerializationProtocolBase):
         Load the saved object.
         :param working_dir: Directory to save the file.
         :param filename_prefix: File name prefix.
+        :return: Loaded object.
         :raises: Cache miss if the combination of working_dir and
             filename_prefix fails to find a previously saved cache entry.
         """

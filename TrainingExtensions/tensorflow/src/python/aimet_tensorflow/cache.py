@@ -68,6 +68,7 @@ class TfSessionSerializationProtocol(SerializationProtocolBase[tf.compat.v1.Sess
         Load the saved object.
         :param working_dir: Directory to save the file.
         :param filename_prefix: File name prefix.
+        :return: Loaded object.
         :raises: Cache miss if the combination of working_dir and
             filename_prefix fails to find a previously saved cache entry.
         """
