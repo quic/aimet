@@ -38,78 +38,10 @@
 
 """Automatic Post-Training Quantization"""
 import abc
-import contextlib
-import functools
-import os
-import pickle
-from typing import Any, Callable, Optional, List, Union
+from typing import Any, List, Union
 
 import bokeh.model
 import bokeh.embed
-
-from aimet_common.utils import AimetLogger
-
-
-_logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.AutoQuant)
-
-
-class Cache:
-    """Cache of the outputs of PTQ functions."""
-
-    def __init__(self):
-        self._cache_dir = None
-
-    def mark(self, cache_key: str):
-        """
-        Mark functions that are subject to caching.
-        The functions decorated with this mark will save/load the outputs
-        to/from the cache directory if caching is enabled.
-
-        :param cache_key: Used as a prefix of the name of the file that
-            caches the results of the decorated function.
-        :return: A decorator that registers the decorated functions.
-        """
-        def _wrap(fn: Callable, cache_key: str):
-            @functools.wraps(fn)
-            def caching_helper(*args, **kwargs):
-                # If caching is disabled, Evalaute the result.
-                if self._cache_dir is None:
-                    return fn(*args, **kwargs)
-
-                cache_file = os.path.join(self._cache_dir, f"{cache_key}.pkl")
-                if os.path.exists(cache_file):
-                    _logger.info("Loading result of %s from %s", cache_key, cache_file)
-                    # Cached file exists (cache hit). Load from cache.
-                    with open(cache_file, "rb") as f:
-                        ret = pickle.load(f)
-                else:
-                    # No cached file (cache miss). Evaluate the result.
-                    ret = fn(*args, **kwargs)
-                    _logger.info("Caching result of %s to %s", cache_key, cache_file)
-
-                    # Save results to the cache.
-                    with open(cache_file, "wb") as f:
-                        pickle.dump(ret, f)
-                return ret
-            return caching_helper
-
-        return lambda fn: _wrap(fn, cache_key)
-
-    @contextlib.contextmanager
-    def enable(self, cache_dir: Optional[str]):
-        """
-        Enable caching.
-
-        :param cache_dir: Directory to read/save the cached results from/to.
-        """
-        self._cache_dir = cache_dir
-        try:
-            if self._cache_dir is not None:
-                os.makedirs(self._cache_dir, exist_ok=True)
-                _logger.info("AutoQuant caching is enabled. Cache directory: %s", self._cache_dir)
-            yield
-        finally:
-            self._cache_dir = None
 
 
 class Diagnostics:
