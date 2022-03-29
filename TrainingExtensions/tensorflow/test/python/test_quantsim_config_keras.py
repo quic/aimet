@@ -39,9 +39,10 @@ import pytest
 pytestmark = pytest.mark.skip("Disable tests that requires eager execution")
 from tensorflow.keras.layers import InputLayer
 
-from aimet_common.quantsim_config.json_config_importer import ConfigDictKeys
+from aimet_common.defs import QuantScheme
 from aimet_tensorflow.keras.connectedgraph import ConnectedGraph
-from aimet_tensorflow.keras.quantsim_config.quantsim_config import QuantSimConfigurator
+from aimet_tensorflow.keras.quantsim_config.quantsim_config import QuantSimConfigurator, INPUT_QUANTIZERS, \
+    OUTPUT_QUANTIZERS, PARAM_QUANTIZERS
 from test_models_keras import single_residual, concat_functional
 
 
@@ -56,7 +57,8 @@ class TestQuantSimConfig:
         """
         model = concat_functional()
         connected_graph = ConnectedGraph(model)
-        quant_sim_configurator = QuantSimConfigurator(connected_graph, "")
+        quant_sim_configurator = QuantSimConfigurator(connected_graph, QuantScheme.post_training_tf_enhanced,
+                                                      "nearest", 8, 8, "")
 
         # layers excluding InputLayer
         layers = [x for x in model.layers if not isinstance(x, InputLayer)]
@@ -67,7 +69,7 @@ class TestQuantSimConfig:
         # 1 (Affected quantizers when enabling output quantizer of this layer)
         # 2 (Affected quantizers when disabling input quantizer of this layer)
         # 3 (Affected quantizers when disabling output quantizer of this layer)
-        layer_to_affected_tensor_quantizers_dict = quant_sim_configurator._layer_to_tensor_quantizers_dict
+        layer_to_affected_tensor_quantizers_dict = quant_sim_configurator._layer_to_affected_quantizer_info_dict
 
         # Input layer 1
         assert len(layer_to_affected_tensor_quantizers_dict[dense1][0]) == 1
@@ -108,7 +110,8 @@ class TestQuantSimConfig:
         """
         model = single_residual()
         connected_graph = ConnectedGraph(model)
-        quant_sim_configurator = QuantSimConfigurator(connected_graph, "")
+        quant_sim_configurator = QuantSimConfigurator(connected_graph, QuantScheme.post_training_tf_enhanced,
+                                                      "nearest", 8, 8, "")
 
         # layers excluding InputLayer
         layers = model.layers[1:]
@@ -120,7 +123,7 @@ class TestQuantSimConfig:
         # 1 (Affected quantizers when enabling output quantizer of this layer)
         # 2 (Affected quantizers when disabling input quantizer of this layer)
         # 3 (Affected quantizers when disabling output quantizer of this layer)
-        layer_to_affected_tensor_quantizers_dict = quant_sim_configurator._layer_to_tensor_quantizers_dict
+        layer_to_affected_tensor_quantizers_dict = quant_sim_configurator._layer_to_affected_quantizer_info_dict
 
         # First layer
         assert len(layer_to_affected_tensor_quantizers_dict[conv1][0]) == 1
@@ -181,30 +184,24 @@ class TestQuantSimConfig:
 
         model = single_residual()
         connected_graph = ConnectedGraph(model)
-        quant_sim_configurator = QuantSimConfigurator(connected_graph, "./data/quantsim_config.json")
+        quant_sim_configurator = QuantSimConfigurator(connected_graph, QuantScheme.post_training_tf_enhanced,
+                                                      "nearest", 8, 8, "./data/quantsim_config.json")
 
-        layer_to_config_dict = quant_sim_configurator._layer_to_config_dict
+        layer_to_quantizers_dict = quant_sim_configurator._layer_to_quantizers_dict
         for op in connected_graph.ordered_ops:
             layer = op.get_module()
 
-            # ops related settings
-            assert not layer_to_config_dict[layer][ConfigDictKeys.IS_INPUT_QUANTIZED]["setting"]
-            assert layer_to_config_dict[layer][ConfigDictKeys.IS_OUTPUT_QUANTIZED]["setting"]
-            assert not layer_to_config_dict[layer][ConfigDictKeys.IS_SYMMETRIC]["setting"]
+            for q in layer_to_quantizers_dict[layer][INPUT_QUANTIZERS]:
+                assert not q.is_enabled()
+                assert not q.is_symmetric
 
-            # params related setting
-            assert not layer_to_config_dict[layer][ConfigDictKeys.PARAMS][ConfigDictKeys.IS_QUANTIZED]
-            assert layer_to_config_dict[layer][ConfigDictKeys.PARAMS][ConfigDictKeys.IS_SYMMETRIC]
+            for q in layer_to_quantizers_dict[layer][OUTPUT_QUANTIZERS]:
+                assert q.is_enabled()
+                assert not q.is_symmetric
 
-            # per_channel_quantization
-            assert layer_to_config_dict[layer][ConfigDictKeys.PER_CHANNEL_QUANTIZATION]
-
-        layers = model.layers[1:]
-        conv1, add1, dense1 = layers[0], layers[10], layers[14]
-
-        assert (conv1, "output") in layer_to_config_dict[conv1][ConfigDictKeys.IS_OUTPUT_QUANTIZED]["affected_quantizers"]
-        assert (add1, "output") in layer_to_config_dict[add1][ConfigDictKeys.IS_OUTPUT_QUANTIZED]["affected_quantizers"]
-        assert (dense1, "output") in layer_to_config_dict[dense1][ConfigDictKeys.IS_OUTPUT_QUANTIZED]["affected_quantizers"]
+            for q in layer_to_quantizers_dict[layer][PARAM_QUANTIZERS]:
+                assert not q.is_enabled()
+                assert q.is_symmetric
 
         if os.path.exists('./data/quantsim_config.json'):
             os.remove('./data/quantsim_config.json')
@@ -232,13 +229,24 @@ class TestQuantSimConfig:
 
         model = single_residual()
         connected_graph = ConnectedGraph(model)
-        quant_sim_configurator = QuantSimConfigurator(connected_graph, "./data/quantsim_config.json")
+        quant_sim_configurator = QuantSimConfigurator(connected_graph, QuantScheme.post_training_tf_enhanced,
+                                                      "nearest", 8, 8, "./data/quantsim_config.json")
 
-        layer_to_config_dict = quant_sim_configurator._layer_to_config_dict
+        layer_to_quantizers_dict = quant_sim_configurator._layer_to_quantizers_dict
         for op in connected_graph.ordered_ops:
             layer = op.get_module()
-            assert layer_to_config_dict[layer][ConfigDictKeys.STRICT_SYMMETRIC]
-            assert not layer_to_config_dict[layer][ConfigDictKeys.UNSIGNED_SYMMETRIC]
+
+            for q in layer_to_quantizers_dict[layer][INPUT_QUANTIZERS]:
+                assert q.use_strict_symmetric
+                assert not q.use_unsigned_symmetric
+
+            for q in layer_to_quantizers_dict[layer][OUTPUT_QUANTIZERS]:
+                assert q.use_strict_symmetric
+                assert not q.use_unsigned_symmetric
+
+            for q in layer_to_quantizers_dict[layer][PARAM_QUANTIZERS]:
+                assert q.use_strict_symmetric
+                assert not q.use_unsigned_symmetric
 
         if os.path.exists('./data/quantsim_config.json'):
             os.remove('./data/quantsim_config.json')
