@@ -283,10 +283,10 @@ class StaticGridTensorQuantizer(TensorQuantizer):
         :return: List of buckets where each bucket is (xLeft, PDF).
         """
         if self._quant_scheme != QuantScheme.post_training_tf_enhanced:
-            raise ValueError("get_stats_histogram() can be invoked only when quantization scheme is TF-Enhanced.")
+            raise RuntimeError("get_stats_histogram() can be invoked only when quantization scheme is TF-Enhanced.")
 
         if not self._encoding:
-            raise ValueError("get_stats_histogram() can be invoked only when encoding is computed.")
+            raise RuntimeError("get_stats_histogram() can be invoked only when encoding is computed.")
 
         histogram = []
         for op in self._cppOp:

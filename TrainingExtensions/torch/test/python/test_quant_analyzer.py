@@ -152,7 +152,8 @@ class TestQuantAnalyzer:
                 # Check if it is exported to correct html file.
                 assert os.path.isfile("./tmp/per_layer_quant_enabled.html")
         finally:
-            shutil.rmtree("./tmp/")
+            if os.path.isdir("./tmp/"):
+                shutil.rmtree("./tmp/")
 
     def test_perform_per_layer_analysis_by_disabling_quant_wrappers(self):
         """ test perform per layer analysis by disabling quant wrappers """
@@ -179,7 +180,8 @@ class TestQuantAnalyzer:
             # Check if it is exported to correct html file.
             assert os.path.isfile("./tmp/per_layer_quant_disabled.html")
         finally:
-            shutil.rmtree("./tmp/")
+            if os.path.isdir("./tmp/"):
+                shutil.rmtree("./tmp/")
 
     def test_export_per_layer_stats_histogram(self):
         """ test export_per_layer_stats_histogram() """
@@ -199,7 +201,8 @@ class TestQuantAnalyzer:
             assert os.path.isfile("./tmp/activations_pdf/conv1_output_0.html")
             assert os.path.isfile("./tmp/weights_pdf/conv1/conv1_weight_0.html")
         finally:
-            shutil.rmtree("./tmp/")
+            if os.path.isdir("./tmp/"):
+                shutil.rmtree("./tmp/")
 
     def test_export_per_layer_stats_histogram_per_channel(self):
         """ test export_per_layer_stats_histogram() for per channel quantization """
@@ -241,7 +244,8 @@ class TestQuantAnalyzer:
             assert os.path.isfile("./tmp/weights_pdf/conv2/conv2_weight_0.html")
             assert os.path.isfile("./tmp/weights_pdf/conv2/conv2_weight_15.html")
         finally:
-            shutil.rmtree("./tmp/")
+            if os.path.isdir("./tmp/"):
+                shutil.rmtree("./tmp/")
 
     def test_export_per_layer_encoding_min_max_range(self):
         """ test export_per_layer_encoding_min_max_range() """
@@ -256,7 +260,8 @@ class TestQuantAnalyzer:
             assert os.path.isfile("./tmp/min_max_range_all_weights.html")
             assert os.path.isfile("./tmp/min_max_range_all_activations.html")
         finally:
-            shutil.rmtree("./tmp/")
+            if os.path.isdir("./tmp/"):
+                shutil.rmtree("./tmp/")
 
     def test_analyze(self):
         """ test end to end for analyze() method """
@@ -275,4 +280,5 @@ class TestQuantAnalyzer:
             assert os.path.isfile("./tmp/min_max_range_all_weights.html")
             assert os.path.isfile("./tmp/min_max_range_all_activations.html")
         finally:
-            shutil.rmtree("./tmp/")
+            if os.path.isdir("./tmp/"):
+                shutil.rmtree("./tmp/")

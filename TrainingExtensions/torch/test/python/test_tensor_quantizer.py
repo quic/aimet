@@ -90,12 +90,12 @@ class TestTensorQuantizer:
         quantizer = StaticGridTensorQuantizer(bitwidth=8, round_mode='nearest',
                                               quant_scheme=QuantScheme.post_training_tf_enhanced,
                                               use_symmetric_encodings=False, enabled_by_default=True)
-        with pytest.raises(ValueError):
+        with pytest.raises(RuntimeError):
             quantizer.get_stats_histogram()
 
         # quant scheme should be TF-Enhanced.
         quantizer = StaticGridTensorQuantizer(bitwidth=8, round_mode='nearest',
                                               quant_scheme=QuantScheme.post_training_tf,
                                               use_symmetric_encodings=False, enabled_by_default=True)
-        with pytest.raises(ValueError):
+        with pytest.raises(RuntimeError):
             quantizer.get_stats_histogram()

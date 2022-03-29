@@ -553,7 +553,7 @@ class QuantAnalyzer:
             config_file: str = None,
             default_data_type: QuantizationDataType = QuantizationDataType.int,
             results_dir: str = "./tmp/",
-    ) -> (Dict, Dict):
+    ) -> Tuple[Dict, Dict]:
         """
         Export encoding min and max range for all weights and activations.
 
