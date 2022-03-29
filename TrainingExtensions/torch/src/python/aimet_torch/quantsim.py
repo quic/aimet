@@ -120,7 +120,7 @@ class QuantizationSimModel:
     inference accuracy. Also allows the model to be fine-tuned to counter the effects of quantization.
     """
 
-    # pylint: disable=too-many-arguments
+    # pylint: disable=too-many-arguments, too-many-instance-attributes
     def __init__(self, model: torch.nn.Module, dummy_input: Union[torch.Tensor, Tuple],
                  quant_scheme: Union[str, QuantScheme] = QuantScheme.post_training_tf_enhanced,
                  rounding_mode: str = 'nearest', default_output_bw: int = 8, default_param_bw: int = 8,
@@ -184,7 +184,8 @@ class QuantizationSimModel:
         # override specific quantizers to tf mode in transformer model
         self._override_quant_config_for_transformer_layers()
 
-        self.configure_quantization_ops(config_file, self._supported_kernels)
+        self.configure_quantization_ops(config_file, self._supported_kernels,
+                                        default_output_bw, default_param_bw, default_data_type)
 
     def __str__(self):
         """
@@ -1135,12 +1136,17 @@ class QuantizationSimModel:
             return
         self.export(path, filename_prefix, dummy_input, onnx_export_args, propagate_encodings)
 
-
-    def configure_quantization_ops(self, config_file: str, supported_kernels: Dict):
+    def configure_quantization_ops(self, config_file: str, supported_kernels: Dict,
+                                   default_output_bw: int, default_param_bw: int,
+                                   default_data_type: QuantizationDataType):
         """
         Configure inserted quantize ops using config file and fill in all the supported kernels
         :param config_file: Configuration file to use
         :param supported_kernels: Dict to fill in the supported kernels
+        :param default_output_bw: default bitwidth for activations
+        :param default_param_bw: default bitwidth for params
+        :param default_data_type: default data type
+        :return:
         """
         if self.connected_graph is None:
             logger.error('A connected graph failed to be built.\n'
@@ -1148,7 +1154,8 @@ class QuantizationSimModel:
                          'Please configure quantization ops manually by redefining '
                          'QuantizationSimModel.configure_quantization_ops()')
             raise AssertionError
-        QuantSimConfigurator(self.model, self.connected_graph, config_file, supported_kernels)
+        QuantSimConfigurator(self.model, self.connected_graph, config_file, supported_kernels,
+                             default_output_bw, default_param_bw, default_data_type)
 
     def set_and_freeze_param_encodings(self, encoding_path: str):
         """
