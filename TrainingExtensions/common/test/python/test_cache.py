@@ -103,4 +103,6 @@ def test_cache_none():
 
 
 def test_cache_numpy_array():
-    _test_cache(lambda: np.random.randn(10, 10))
+    def assert_equal(x, y):
+        assert np.array_equal(x, y)
+    _test_cache(lambda: np.random.randn(10, 10), assert_equal_fn=assert_equal)
