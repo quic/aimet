@@ -59,7 +59,7 @@ from aimet_torch import transformer_utils
 from aimet_torch import utils, elementwise_ops
 from aimet_torch.elementwise_ops import Multiply
 from aimet_torch.examples.test_models import TwoLayerBidirectionalLSTMModel, SingleLayerRNNModel, \
-    ModelWithTwoInputs
+    ModelWithTwoInputs, SimpleConditional
 from aimet_torch.meta.connectedgraph import ConnectedGraph
 from aimet_torch.onnx_utils import OnnxExportApiArgs
 from aimet_torch.qc_quantize_op import QcQuantizeWrapper, QcQuantizeStandalone, \
@@ -67,6 +67,7 @@ from aimet_torch.qc_quantize_op import QcQuantizeWrapper, QcQuantizeStandalone, 
 from aimet_torch.qc_quantize_recurrent import QcQuantizeRecurrent
 from aimet_torch.quantsim import QuantizationSimModel, check_accumulator_overflow
 from aimet_torch.quantsim_straight_through_grad import compute_dloss_by_dx
+import libpymo
 
 logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Test)
 
@@ -2042,6 +2043,39 @@ class TestQuantizationSimStaticGrad:
         sim2.model.conv2._module_to_wrap.weight.data = tensor
         sim2.compute_encodings(forward_pass, None)
         assert sim2.model.conv2.param_quantizers['weight'].encoding[0].max == pytest.approx(100.0, rel=0.1)
+
+    def test_conditional_export(self):
+        """ Test exporting a model with conditional paths """
+        model = SimpleConditional()
+        inp = torch.randn(1, 3)
+        true_tensor = torch.tensor([1])
+        false_tensor = torch.tensor([0])
+
+        def forward_callback(model, _):
+            model(inp, true_tensor)
+            model(inp, false_tensor)
+
+        qsim = QuantizationSimModel(model, dummy_input=(inp, true_tensor))
+        qsim.compute_encodings(forward_callback, forward_pass_callback_args=None)
+        qsim._export_conditional('./data', 'simple_cond', dummy_input=(inp, false_tensor),
+                                 forward_pass_callback=forward_callback, forward_pass_callback_args=None)
+
+        with open('./data/simple_cond.encodings') as f:
+            encodings = json.load(f)
+            # verifying the encoding against default eAI HW cfg
+            # activation encodings -- input, linear1 out, prelu1 out, linear2 out, prelu2 out, softmax out
+            assert 6 == len(encodings['activation_encodings'])
+            # param encoding -- linear 1 & 2 weight & bias, prelu 1 & 2 weight
+            assert 6 == len(encodings['param_encodings'])
+
+        if os.path.exists('./data/simple_cond.pth'):
+            os.remove('./data/simple_cond.pth')
+        if os.path.exists('./data/simple_cond.onnx'):
+            os.remove('./data/simple_cond.onnx')
+        if os.path.exists('./data/simple_cond.encodings'):
+            os.remove('./data/simple_cond.encodings')
+        if os.path.exists('./data/simple_cond.encodings.yaml'):
+            os.remove('./data/simple_cond.encodings.yaml')
 
 
 class TestQuantizationSimLearnedGrid:

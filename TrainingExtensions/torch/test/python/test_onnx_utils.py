@@ -98,7 +98,8 @@ class TestOnnxUtils:
         dummy_input = torch.randn(1, 3, 224, 224)
 
         torch.onnx.export(model, dummy_input, './data/' + model_name + '.onnx')
-        onnx_utils.OnnxSaver.set_node_names('./data/' + model_name + '.onnx', model, dummy_input)
+        onnx_utils.OnnxSaver.set_node_names('./data/' + model_name + '.onnx', model, dummy_input, is_conditional=False,
+                                            module_marker_map={})
 
         onnx_model = onnx.load('./data/' + model_name + '.onnx')
         for node in onnx_model.graph.node:
@@ -118,7 +119,8 @@ class TestOnnxUtils:
         model = OutOfOrderModel()
         dummy_input = torch.randn(1, 16, 20, 20)
 
-        onnx_utils.OnnxSaver.set_node_names('./data/' + model_name + '.onnx', model, dummy_input)
+        onnx_utils.OnnxSaver.set_node_names('./data/' + model_name + '.onnx', model, dummy_input, is_conditional=False,
+                                            module_marker_map={})
 
         onnx_model = onnx.load('./data/' + model_name + '.onnx')
         for node in onnx_model.graph.node:
@@ -135,7 +137,8 @@ class TestOnnxUtils:
         model = models.resnet18(pretrained=False)
         dummy_input = torch.randn(1, 3, 224, 224)
         torch.onnx.export(model, dummy_input, './data/resnet18.onnx')
-        onnx_utils.OnnxSaver.set_node_names('./data/resnet18.onnx', model, dummy_input)
+        onnx_utils.OnnxSaver.set_node_names('./data/resnet18.onnx', model, dummy_input, is_conditional=False,
+                                            module_marker_map={})
         onnx_model = onnx.load('./data/resnet18.onnx')
 
         # Get Dict mapping node name to the input and output names
@@ -168,7 +171,8 @@ class TestOnnxUtils:
         dummy_input = torch.randn(10, 1, 3)
 
         torch.onnx.export(model, dummy_input, './data/' + model_name + '.onnx')
-        onnx_utils.OnnxSaver.set_node_names('./data/' + model_name + '.onnx', model, dummy_input)
+        onnx_utils.OnnxSaver.set_node_names('./data/' + model_name + '.onnx', model, dummy_input, is_conditional=False,
+                                            module_marker_map={})
         onnx_model = onnx.load('./data/' + model_name + '.onnx')
 
         lstm_nodes = [node for node in onnx_model.graph.node if node.op_type == 'LSTM']
@@ -288,7 +292,8 @@ class TestOnnxUtils:
 
         model = MyModel()
 
-        onnx_utils.OnnxSaver.set_node_names('./data/MyModel.onnx', model, dummy_input=torch.rand(1, 10, 24, 24))
+        onnx_utils.OnnxSaver.set_node_names('./data/MyModel.onnx', model, dummy_input=torch.rand(1, 10, 24, 24),
+                                            is_conditional=False, module_marker_map={})
         onnx_model = onnx.load('./data/MyModel.onnx')
         expected_conv_names = ['conv1', 'conv2', 'block1.conv1', 'block1.conv2', 'block2.conv1', 'block2.conv2',
                                'block2.conv3', 'block2.conv4', 'block3.conv1', 'block3.conv3', 'block3.conv4']
@@ -326,7 +331,8 @@ class TestOnnxUtils:
 
         model = MyModel()
 
-        onnx_utils.OnnxSaver.set_node_names('./data/MyModel.onnx', model, dummy_input=torch.rand(1, 10, 24, 24))
+        onnx_utils.OnnxSaver.set_node_names('./data/MyModel.onnx', model, dummy_input=torch.rand(1, 10, 24, 24),
+                                            is_conditional=False, module_marker_map={})
         onnx_model = onnx.load('./data/MyModel.onnx')
 
         expected_nodes = ['conv0', 'conv2']
@@ -356,7 +362,8 @@ class TestOnnxUtils:
 
         model = MyModel()
 
-        onnx_utils.OnnxSaver.set_node_names('./data/MyModel.onnx', model, dummy_input=torch.rand(1, 10, 24, 24))
+        onnx_utils.OnnxSaver.set_node_names('./data/MyModel.onnx', model, dummy_input=torch.rand(1, 10, 24, 24),
+                                            is_conditional=False, module_marker_map={})
         onnx_model = onnx.load('./data/MyModel.onnx')
 
         expected_nodes = ['conv0', 'conv2']
@@ -388,7 +395,8 @@ class TestOnnxUtils:
 
         model = MyModel()
 
-        onnx_utils.OnnxSaver.set_node_names('./data/MyModel.onnx', model, dummy_input=torch.rand(1, 10, 24, 24))
+        onnx_utils.OnnxSaver.set_node_names('./data/MyModel.onnx', model, dummy_input=torch.rand(1, 10, 24, 24),
+                                            is_conditional=False, module_marker_map={})
         onnx_model = onnx.load('./data/MyModel.onnx')
 
         expected_nodes = ['conv0', 'conv1', 'conv2']
@@ -418,7 +426,8 @@ class TestOnnxUtils:
 
         model = MyModel()
 
-        onnx_utils.OnnxSaver.set_node_names('./data/MyModel.onnx', model, dummy_input=torch.rand(1, 10, 24, 24))
+        onnx_utils.OnnxSaver.set_node_names('./data/MyModel.onnx', model, dummy_input=torch.rand(1, 10, 24, 24),
+                                            is_conditional=False, module_marker_map={})
         onnx_model = onnx.load('./data/MyModel.onnx')
 
         expected_nodes = ['conv1', 'conv2']
@@ -447,7 +456,8 @@ class TestOnnxUtils:
 
         model = MyModel()
 
-        onnx_utils.OnnxSaver.set_node_names('./data/MyModel.onnx', model, dummy_input=torch.rand(1, 10, 24, 24))
+        onnx_utils.OnnxSaver.set_node_names('./data/MyModel.onnx', model, dummy_input=torch.rand(1, 10, 24, 24),
+                                            is_conditional=False, module_marker_map={})
         onnx_model = onnx.load('./data/MyModel.onnx')
 
         expected_nodes = ['conv1', 'conv2', 'conv3']
@@ -480,7 +490,8 @@ class TestOnnxUtils:
 
         model = MyModel()
 
-        onnx_utils.OnnxSaver.set_node_names('./data/MyModel.onnx', model, dummy_input=torch.rand(1, 10, 24, 24))
+        onnx_utils.OnnxSaver.set_node_names('./data/MyModel.onnx', model, dummy_input=torch.rand(1, 10, 24, 24),
+                                            is_conditional=False, module_marker_map={})
         onnx_model = onnx.load('./data/MyModel.onnx')
 
         expected_nodes = ['conv1', 'conv2', 'conv3']
@@ -512,7 +523,8 @@ class TestOnnxUtils:
         model = GroupNormModel()
 
         onnx_path = './data/MyModel.onnx'
-        onnx_utils.OnnxSaver.set_node_names(onnx_path, model, dummy_input=torch.rand(1, 10, 24, 24))
+        onnx_utils.OnnxSaver.set_node_names(onnx_path, model, dummy_input=torch.rand(1, 10, 24, 24),
+                                            is_conditional=False, module_marker_map={})
         onnx_utils.OnnxSaver.set_unique_node_names(onnx_path)
         onnx_model = onnx.load(onnx_path)
         expected_node_names = ['conv1', 'bn', 'gn', 'add']
