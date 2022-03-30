@@ -34,22 +34,19 @@
 #
 #  @@-COPYRIGHT-END-@@
 # =============================================================================
-import copy
+
 import json as json
 import os
 import unittest.mock
 from collections import namedtuple
 from typing import Dict
-
+from packaging import version
 import libpymo
 import numpy as np
 import onnx
 import pytest
-
 import torch
 import torch.nn as nn
-from torch.profiler import profile, record_function, ProfilerActivity
-
 import yaml
 from torchvision import models
 
@@ -2308,54 +2305,54 @@ class TestQuantizationSimLearnedGrid:
         print(sim)
 
     def test_memory_profiler(self):
+        """ test using memory profiler """
+        # checks PyTorch version before importing torch.profiler (introduced in version 1.8.0), for
+        # older versions this test is passthrough.
+        if version.parse(torch.__version__) >= version.parse("1.8"):
 
-        class Model(nn.Module):
-            def __init__(self):
-                super(Model, self).__init__()
-                self.conv1 = nn.Conv2d(3, 10, 5, 5)
-                self.conv2 = nn.Conv2d(10, 20, 5, 5)
-                self.conv3 = nn.Conv2d(20, 40, 5, 5)
+            from torch.profiler import profile, ProfilerActivity
+            class Model(nn.Module):
+                def __init__(self):
+                    super(Model, self).__init__()
+                    self.conv1 = nn.Conv2d(3, 10, 5, 5)
+                    self.conv2 = nn.Conv2d(10, 20, 5, 5)
+                    self.conv3 = nn.Conv2d(20, 40, 5, 5)
 
-            def forward(self, input):
-                x = self.conv1(input)
-                x = torch.nn.functional.relu(x)
-                x = self.conv2(x)
-                x = torch.nn.functional.relu(x)
-                x = self.conv3(x)
-                x = torch.nn.functional.relu(x)
-                return x
+                def forward(self, input):
+                    x = self.conv1(input)
+                    x = torch.nn.functional.relu(x)
+                    x = self.conv2(x)
+                    x = torch.nn.functional.relu(x)
+                    x = self.conv3(x)
+                    x = torch.nn.functional.relu(x)
+                    return x
 
-        # model = models.resnet18()
-        model = Model()
-        from aimet_torch.model_preparer import prepare_model
+            model = Model()
+            from aimet_torch.model_preparer import prepare_model
+            model = prepare_model(model)
+            in_tensor = torch.rand(32, 3, 224, 224)
 
-        model = prepare_model(model)
+            def forward_pass(model, args):
+                model(in_tensor)
 
-        in_tensor = torch.rand(32, 3, 224, 224)
+            sim = QuantizationSimModel(model, quant_scheme=QuantScheme.training_range_learning_with_tf_init,
+                                       dummy_input=in_tensor)
+            sim.compute_encodings(forward_pass, None)
 
-        def forward_pass(model, args):
-            model(in_tensor)
+            print("Starting")
+            sim.model.train()
 
-        sim = QuantizationSimModel(model, quant_scheme=QuantScheme.training_range_learning_with_tf_init,
-                                   dummy_input=in_tensor)
+            with profile(activities=[ProfilerActivity.CPU],
+                         profile_memory=True, record_shapes=True) as prof:
 
-        # Quantize
-        sim.compute_encodings(forward_pass, None)
+                for _ in range(1):
+                    out = sim.model(in_tensor)
+                    out = out.sum().backward()
 
-        print("Starting")
-        sim.model.train()
+            memory_stats = [event for event in prof.key_averages() if event.key == '[memory]'][0]
+            assert abs(memory_stats.cpu_memory_usage) < (100 * (10 ** 6))
 
-        with profile(activities=[ProfilerActivity.CPU],
-                     profile_memory=True, record_shapes=True) as prof:
-
-            for _ in range(1):
-                out = sim.model(in_tensor)
-                out = out.sum().backward()
-
-        memory_stats = [event for event in prof.key_averages() if event.key == '[memory]'][0]
-        assert abs(memory_stats.cpu_memory_usage) < (100 * (10 ** 6))
-
-        print(memory_stats.cpu_memory_usage)
+            print(memory_stats.cpu_memory_usage)
 
     def test_accumulator_overflow(self):
 
