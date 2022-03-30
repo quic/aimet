@@ -38,7 +38,6 @@
 
 import contextlib
 from dataclasses import dataclass
-import itertools
 from unittest.mock import patch, MagicMock
 import os
 import pytest
@@ -300,7 +299,7 @@ class TestAutoQuant:
 
     @pytest.mark.parametrize(
         "bn_folded_acc, cle_acc, adaround_acc",
-        itertools.permutations([50., 60., 70.])
+        [(50., 60., 70.), (50., 70., 60.), (70., 50., 60.)]
     )
     @pytest.mark.parametrize("allowed_accuracy_drop", [5., 15.])
     def test_auto_quant_cpu(
@@ -314,7 +313,7 @@ class TestAutoQuant:
 
     @pytest.mark.parametrize(
         "bn_folded_acc, cle_acc, adaround_acc",
-        itertools.permutations([50., 60., 70.])
+        [(50., 60., 70.), (50., 70., 60.), (70., 50., 60.)]
     )
     @pytest.mark.parametrize("allowed_accuracy_drop", [5., 15.])
     def test_auto_quant_gpu(
