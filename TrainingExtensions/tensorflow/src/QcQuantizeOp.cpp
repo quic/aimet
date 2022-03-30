@@ -43,6 +43,17 @@
 #define EIGEN_USE_THREADS
 using namespace tensorflow;
 
+// below forward declaration is done to remove the dependency of "cast_op_impl.h" for TF1.15
+namespace tensorflow {
+   typedef std::function<void(OpKernelContext*, const Tensor&, Tensor*,
+                           bool trunc)> CastFunctorType;
+
+   CastFunctorType GetCpuCastFromFloat(DataType dst_dtype);
+   CastFunctorType GetCpuCastFromHalf(DataType dst_dtype);
+   CastFunctorType GetGpuCastFromHalf(DataType dst_dtype);
+   CastFunctorType GetGpuCastFromFloat(DataType dst_dtype);
+}
+
 REGISTER_OP("QcQuantize")
     .Input("in_tensor: T")     // list of input tensors (weights/activations)
     .Input("op_mode: int32")   //{'ANALYSIS', 'ACTIVE', 'PASSTHROUGH'}")
