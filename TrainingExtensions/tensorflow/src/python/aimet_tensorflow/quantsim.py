@@ -1246,9 +1246,9 @@ class QuantizationSimModel:
 
                 clamped_encoding = recompute_grid_params(encoding, self._default_output_bw,
                                                          quantizer_info.use_symmetric_encoding)
-                quantizer_info.set_encoding(clamped_encoding)
                 quantizer_info.bitwidth = self._default_output_bw
                 quantizer_info.quant_scheme = self._quant_scheme
+                quantizer_info.set_encoding(clamped_encoding)
 
 
 # load and save utilities
