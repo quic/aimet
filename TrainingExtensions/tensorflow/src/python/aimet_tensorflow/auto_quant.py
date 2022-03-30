@@ -307,7 +307,7 @@ class AutoQuant:
 
         return sess, adaround_encoding_path
 
-    def apply( # pylint: disable=protected-access, too-many-locals, too-many-statements
+    def apply(
             self,
             fp32_sess: tf.compat.v1.Session,
             starting_op_names: List[str],
@@ -321,7 +321,7 @@ class AutoQuant:
         :param starting_op_names: List of starting op names of the model.
         :param output_op_names: List of output op names of the model.
         :param results_dir: Directory to save the results.
-        :return: Tuple of  (best session, eval score, encoding path front).
+        :return: Tuple of (best session, eval score, encoding path).
         """
         result = self._apply_helper(self._auto_quant_main,
                                     fp32_sess,
@@ -332,7 +332,7 @@ class AutoQuant:
                result["accuracy"],\
                result["encoding_path"]
 
-    def _apply_helper( # pylint: disable=protected-access, too-many-locals, too-many-statements
+    def _apply_helper(
             self,
             auto_quant_main_fn: Callable,
             fp32_sess: tf.compat.v1.Session,
@@ -385,7 +385,7 @@ class AutoQuant:
 
         return ret
 
-    def _auto_quant_main( # pylint: disable=protected-access, too-many-locals, too-many-statements
+    def _auto_quant_main(
             self,
             fp32_sess: tf.compat.v1.Session,
             target_acc: float,
@@ -397,10 +397,10 @@ class AutoQuant:
         """
         Helper function of apply().
 
-        :param fp32_model: Model to apply PTQ techniques.
+        :param fp32_sess: Model to apply PTQ techniques.
         :param target_acc: Target eval score.
-        :param dummy_input: Dummy input to the model.
-            The device of dumyy_input should be same as that of model.
+        :param starting_op_names: List of starting op names of the model.
+        :param output_op_names: List of output op names of the model.
         :param eval_manager: _Evalmanager object.
         :param results_dir: Directory to save the results.
         :return: The best ptq result as a dictionary.

@@ -654,8 +654,7 @@ class BNUtils:
             # epsilon can be derived as attribute value
             numpy_epsilon = bn_op.get_attr("epsilon")
         else:
-            logger.error("Error, unknown BN op")
-            assert False
+            raise RuntimeError(f"Unknown BN op type: {bn_op.type}")
 
         return numpy_epsilon
 
