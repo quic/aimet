@@ -38,11 +38,12 @@
 
 import os
 import shutil
-import numpy as np
+from typing import Callable
 
+import numpy as np
 import tensorflow as tf
 
-from aimet_common.cache import Cache
+from aimet_common.cache import Cache, SerializationProtocolBase
 from aimet_tensorflow.cache import TfSessionSerializationProtocol
 from aimet_tensorflow.examples.test_models import keras_model
 
@@ -85,7 +86,9 @@ def _assert_equal_tf_session(sess: tf.compat.v1.Session,
         assert np.array_equal(v, _v)
 
 
-def _test_cache(fn, protocol=None, assert_equal_fn=None):
+def _test_cache(fn,
+                protocol: SerializationProtocolBase = None,
+                assert_equal_fn: Callable = None):
     if not assert_equal_fn:
         assert_equal_fn = _assert_equal_default
 

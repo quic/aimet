@@ -39,9 +39,11 @@
 import os
 import shutil
 import random
+from typing import Callable
+
 import numpy as np
 
-from aimet_common.cache import Cache
+from aimet_common.cache import Cache, SerializationProtocolBase
 
 
 SEED = 18452
@@ -54,7 +56,9 @@ def _assert_equal_default(output, expected):
     assert output == expected
 
 
-def _test_cache(fn, protocol=None, assert_equal_fn=None):
+def _test_cache(fn,
+                protocol: SerializationProtocolBase = None,
+                assert_equal_fn: Callable = None):
     if not assert_equal_fn:
         assert_equal_fn = _assert_equal_default
 
