@@ -312,7 +312,7 @@ class QcQuantizeWrapper(nn.Module):
         for quantizer in self.output_quantizers:
             quantizer.enabled = enabled
 
-    def enable_act_quantizers(self, enabled: bool) -> None:
+    def enable_activation_quantizers(self, enabled: bool) -> None:
         """
         Sets enabled flag for both input and output quantizers.
         :param enabled: Enabled flag.
