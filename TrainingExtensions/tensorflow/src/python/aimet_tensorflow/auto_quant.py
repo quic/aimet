@@ -59,7 +59,7 @@ from aimet_tensorflow.utils.common import (
 
 from aimet_common.auto_quant import Diagnostics
 from aimet_common.defs import QuantScheme
-from aimet_common.utils import AimetLogger
+from aimet_common.utils import AimetLogger, Spinner
 from aimet_common.quantsim import validate_quantsim_inputs
 
 
@@ -615,6 +615,7 @@ class _EvalSession:
         self._starting_op_names = starting_op_names
         self._output_op_names = output_op_names
         self._results_dir = results_dir
+        self._spinner = None
 
         os.makedirs(self._results_dir, exist_ok=True)
 
@@ -650,13 +651,17 @@ class _EvalSession:
         return acc
 
     def __enter__(self):
-        _logger.info("Session start: %s", self._title)
+        self._spinner = Spinner(self._title)
+        self._spinner.__enter__()
         return self
 
-    def __exit__(self, exc_type, exc_val, _):
-        if exc_val is not None:
-            raise exc_val
-        _logger.info("Session finished: %s.", self._title)
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        try:
+            if self._spinner is not None:
+                self._spinner.__exit__(exc_type, exc_val, exc_tb)
+        finally:
+            if exc_val is not None:
+                raise exc_val
 
 
 class _PtqSession(_EvalSession):
@@ -756,10 +761,9 @@ class _PtqSession(_EvalSession):
                      self._title, checkpoint_path, meta_path, encoding_path)
         return meta_path, checkpoint_path, encoding_path
 
-    def __exit__(self, exc_type, exc_value, _):
+    def __exit__(self, exc_type, exc_val, exc_tb):
         """Raises error if set_ptq_result is not called."""
-        if exc_value is not None:
-            raise exc_value
+        super(_PtqSession, self).__exit__(exc_type, exc_val, exc_tb)
 
         if self._ptq_result is None:
             raise RuntimeError
