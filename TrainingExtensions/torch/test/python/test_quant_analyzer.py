@@ -78,10 +78,12 @@ class TestQuantAnalyzer:
         input_shape = (1, 3, 32, 32)
         dummy_input = torch.randn(*input_shape)
         model = TinyModel().eval()
+        sim = QuantizationSimModel(model, dummy_input)
+        sim.compute_encodings(evaluate, dummy_input)
         forward_pass_callback = CallbackFunc(calibrate, dummy_input)
         eval_callback = CallbackFunc(evaluate, dummy_input)
         quant_analyzer = QuantAnalyzer(model, dummy_input, forward_pass_callback, eval_callback)
-        fp32_acc, weight_quantized_acc, act_quantized_acc = quant_analyzer.check_model_sensitivity_to_quantization()
+        fp32_acc, weight_quantized_acc, act_quantized_acc = quant_analyzer._check_model_sensitivity_to_quantization(sim)
 
         assert fp32_acc >= weight_quantized_acc
         assert fp32_acc >= act_quantized_acc
@@ -127,6 +129,30 @@ class TestQuantAnalyzer:
         enabled_quant_wrappers = quant_analyzer._get_enabled_quantizers(sorted_quant_wrappers_dict)
         assert not enabled_quant_wrappers
 
+    def test_get_enabled_activation_quantizers(self):
+        """ test get_enabled_activation_quantizers()  """
+        input_shape = (1, 3, 32, 32)
+        dummy_input = torch.randn(*input_shape)
+        model = TinyModel().eval()
+        sim = QuantizationSimModel(model, dummy_input)
+        quant_analyzer = QuantAnalyzer(model, dummy_input, CallbackFunc(None), CallbackFunc(None))
+        enabled_quantizers = quant_analyzer._get_enabled_activation_quantizers(sim)
+
+        # total 12 activation quantizers (conv3 + relu3 is a supergroup) are enabled as per default config file.
+        assert len(enabled_quantizers) == 12
+
+    def test_get_enabled_param_quantizers(self):
+        """ test get_enabled_param_quantizers() """
+        input_shape = (1, 3, 32, 32)
+        dummy_input = torch.randn(*input_shape)
+        model = TinyModel().eval()
+        sim = QuantizationSimModel(model, dummy_input)
+        quant_analyzer = QuantAnalyzer(model, dummy_input, CallbackFunc(None), CallbackFunc(None))
+        enabled_quantizers = quant_analyzer._get_enabled_param_quantizers(sim)
+
+        # total 7 param quantizers are enabled as per default config file.
+        assert len(enabled_quantizers) == 7
+
     def test_perform_per_layer_analysis_by_enabling_quant_wrappers(self):
         """ test perform per layer analysis by enabling quant wrappers """
         input_shape = (1, 3, 32, 32)
@@ -136,11 +162,13 @@ class TestQuantAnalyzer:
         for name, _ in model.named_modules():
             module_names.append(name)
 
+        sim = QuantizationSimModel(model, dummy_input)
+        sim.compute_encodings(evaluate, dummy_input)
         forward_pass_callback = CallbackFunc(calibrate, dummy_input)
         eval_callback = CallbackFunc(evaluate, dummy_input)
         quant_analyzer = QuantAnalyzer(model, dummy_input, forward_pass_callback, eval_callback)
         try:
-            layer_wise_eval_score_dict = quant_analyzer.perform_per_layer_analysis_by_enabling_quant_wrappers()
+            layer_wise_eval_score_dict = quant_analyzer._perform_per_layer_analysis_by_enabling_quant_wrappers(sim)
             print(layer_wise_eval_score_dict)
             assert type(layer_wise_eval_score_dict) == dict
             assert len(layer_wise_eval_score_dict) == 12
@@ -164,11 +192,13 @@ class TestQuantAnalyzer:
         for name, _ in model.named_modules():
             module_names.append(name)
 
+        sim = QuantizationSimModel(model, dummy_input)
+        sim.compute_encodings(evaluate, dummy_input)
         forward_pass_callback = CallbackFunc(calibrate, dummy_input)
         eval_callback = CallbackFunc(evaluate, dummy_input)
         quant_analyzer = QuantAnalyzer(model, dummy_input, forward_pass_callback, eval_callback)
         try:
-            layer_wise_eval_score_dict = quant_analyzer.perform_per_layer_analysis_by_disabling_quant_wrappers()
+            layer_wise_eval_score_dict = quant_analyzer._perform_per_layer_analysis_by_disabling_quant_wrappers(sim)
             print(layer_wise_eval_score_dict)
             assert type(layer_wise_eval_score_dict) == dict
             assert len(layer_wise_eval_score_dict) == 12
@@ -188,11 +218,13 @@ class TestQuantAnalyzer:
         input_shape = (1, 3, 32, 32)
         dummy_input = torch.randn(*input_shape)
         model = TinyModel().eval()
+        sim = QuantizationSimModel(model, dummy_input)
+        sim.compute_encodings(evaluate, dummy_input)
         forward_pass_callback = CallbackFunc(calibrate, dummy_input)
         eval_callback = CallbackFunc(evaluate, dummy_input)
         quant_analyzer = QuantAnalyzer(model, dummy_input, forward_pass_callback, eval_callback)
         try:
-            quant_analyzer.export_per_layer_stats_histogram()
+            quant_analyzer._export_per_layer_stats_histogram(sim)
 
             # Check if it is exported to correct html file.
             assert os.path.exists("./tmp/activations_pdf")
@@ -209,9 +241,6 @@ class TestQuantAnalyzer:
         results_dir = os.path.abspath("./tmp/")
         os.makedirs(results_dir, exist_ok=True)
 
-        input_shape = (1, 3, 32, 32)
-        dummy_input = torch.randn(*input_shape)
-        model = TinyModel().eval()
         quantsim_config = {
             "defaults": {
                 "ops": {
@@ -231,11 +260,16 @@ class TestQuantAnalyzer:
         with open("./tmp/quantsim_config.json", 'w') as f:
             json.dump(quantsim_config, f)
 
+        input_shape = (1, 3, 32, 32)
+        dummy_input = torch.randn(*input_shape)
+        model = TinyModel().eval()
+        sim = QuantizationSimModel(model, dummy_input, config_file="./tmp/quantsim_config.json")
+        sim.compute_encodings(evaluate, dummy_input)
         forward_pass_callback = CallbackFunc(calibrate, dummy_input)
         eval_callback = CallbackFunc(evaluate, dummy_input)
         quant_analyzer = QuantAnalyzer(model, dummy_input, forward_pass_callback, eval_callback)
         try:
-            quant_analyzer.export_per_layer_stats_histogram(config_file="./tmp/quantsim_config.json")
+            quant_analyzer._export_per_layer_stats_histogram(sim)
             assert os.path.exists("./tmp/activations_pdf")
             assert os.path.exists("./tmp/weights_pdf")
             assert os.path.isfile("./tmp/activations_pdf/conv1_output_0.html")
@@ -252,11 +286,13 @@ class TestQuantAnalyzer:
         input_shape = (1, 3, 32, 32)
         dummy_input = torch.randn(*input_shape)
         model = TinyModel().eval()
+        sim = QuantizationSimModel(model, dummy_input)
+        sim.compute_encodings(evaluate, dummy_input)
         forward_pass_callback = CallbackFunc(calibrate, dummy_input)
         eval_callback = CallbackFunc(evaluate, dummy_input)
         quant_analyzer = QuantAnalyzer(model, dummy_input, forward_pass_callback, eval_callback)
         try:
-            quant_analyzer.export_per_layer_encoding_min_max_range()
+            quant_analyzer._export_per_layer_encoding_min_max_range(sim)
             assert os.path.isfile("./tmp/min_max_range_all_weights.html")
             assert os.path.isfile("./tmp/min_max_range_all_activations.html")
         finally:

@@ -108,32 +108,41 @@ class QuantAnalyzer:
         self._forward_pass_callback = forward_pass_callback
         self._eval_callback = eval_callback
 
-    def _eval_quantized_model(
+    def _eval_weight_quantized_model(
             self,
-            disable_param_quantizers: bool,
-            disable_act_quantizers: bool,
-            **kwargs) -> float:
+            sim: QuantizationSimModel,
+    )-> float:
         """
-        Analyze model sensitivity to either parameter or activation quantization.
+        Evaluate weight quantized model performance.
+        For weight quantized model performance, disable enabled activation quantizers, measure
+        eval score and enable again.
 
-        :param disable_param_quantizers: Flag to disable all the param quantizers.
-        :param disable_act_quantizers: Flag to disable all the activation quantizers.
-        :param **kwargs: Additional arguments to the Quantsim.
+        :param sim: Quantsim model.
         :return: Quantized model performance.
         """
-        sim = QuantizationSimModel(self._model, self._dummy_input, **kwargs)
+        enabled_activation_quantizers = self._get_enabled_activation_quantizers(sim)
+        self._enable_quantizers(enabled_activation_quantizers, enabled=False)
+        eval_score = self._eval_model(sim.model)
+        self._enable_quantizers(enabled_activation_quantizers, enabled=True)
+        return eval_score
 
-        if disable_param_quantizers:
-            for quant_wrapper in sim.quant_wrappers():
-                quant_wrapper.enable_param_quantizers(enabled=False)
+    def _eval_activation_quantized_model(
+            self,
+            sim: QuantizationSimModel,
+    )-> float:
+        """
+        Evaluate activation quantized model performance.
+        For activation quantized model performance, disable enabled param quantizers, measure
+        eval score and enable again.
 
-        if disable_act_quantizers:
-            for quant_wrapper in sim.quant_wrappers():
-                quant_wrapper.enable_activation_quantizers(enabled=False)
-
-        sim.compute_encodings(self._forward_pass_callback.func, self._forward_pass_callback.args)
-        acc = self._eval_model(sim.model)
-        return acc
+        :param sim: Quantsim model.
+        :return: Quantized model performance.
+        """
+        enabled_param_quantizers = self._get_enabled_param_quantizers(sim)
+        self._enable_quantizers(enabled_param_quantizers, enabled=False)
+        eval_score = self._eval_model(sim.model)
+        self._enable_quantizers(enabled_param_quantizers, enabled=True)
+        return eval_score
 
     def _eval_model(self, model: torch.nn.Module) -> float:
         """
@@ -187,16 +196,47 @@ class QuantAnalyzer:
             for quantizer in quant_wrapper.param_quantizers.values():
                 if quantizer.enabled:
                     enabled_quant_wrappers[quant_wrapper].append(quantizer)
-
             for quantizer in quant_wrapper.output_quantizers:
                 if quantizer.enabled:
                     enabled_quant_wrappers[quant_wrapper].append(quantizer)
-
             for quantizer in quant_wrapper.input_quantizers:
                 if quantizer.enabled:
                     enabled_quant_wrappers[quant_wrapper].append(quantizer)
 
         return enabled_quant_wrappers
+
+    @staticmethod
+    def _get_enabled_param_quantizers(sim: QuantizationSimModel) -> List[TensorQuantizer]:
+        """
+        For given quantsim model, get all enabled param quantizers.
+        :param sim: Quantsim model.
+        :return: List of enabled param quantizers.
+        """
+        enabled_param_quantizers = []
+        for quant_wrapper in sim.quant_wrappers():
+            for quantizer in quant_wrapper.param_quantizers.values():
+                if quantizer.enabled:
+                    enabled_param_quantizers.append(quantizer)
+
+        return enabled_param_quantizers
+
+    @staticmethod
+    def _get_enabled_activation_quantizers(sim: QuantizationSimModel) -> List[TensorQuantizer]:
+        """
+        For given quantsim model, get all enabled activation quantizers.
+        :param sim: Quantsim model.
+        :return: List of enabled activation quantizers.
+        """
+        enabled_activation_quantizers = []
+        for quant_wrapper in sim.quant_wrappers():
+            for quantizer in quant_wrapper.input_quantizers:
+                if quantizer.enabled:
+                    enabled_activation_quantizers.append(quantizer)
+            for quantizer in quant_wrapper.output_quantizers:
+                if quantizer.enabled:
+                    enabled_activation_quantizers.append(quantizer)
+
+        return enabled_activation_quantizers
 
     @staticmethod
     def _enable_quantizers(quantizers: List[TensorQuantizer], enabled: bool) -> None:
@@ -244,12 +284,15 @@ class QuantAnalyzer:
                 enabled_quantizers = enabled_quant_wrappers[quant_wrapper]
                 self._enable_quantizers(enabled_quantizers, enabled=enabled_before)
 
-                # Compute encodings and record eval score.
-                sim.compute_encodings(self._forward_pass_callback.func, self._forward_pass_callback.args)
+                # Record eval score.
                 eval_score_dict[name] = self._eval_model(sim.model)
                 _logger.info("For layer: %s, the eval score is: %.02f", name, eval_score_dict[name])
 
                 self._enable_quantizers(enabled_quantizers, enabled=enabled_after)
+
+        if disable_all_quantizers:
+            for enabled_quantizers in enabled_quant_wrappers.values():
+                self._enable_quantizers(enabled_quantizers, enabled=True)
 
         return eval_score_dict
 
@@ -381,61 +424,34 @@ class QuantAnalyzer:
             filename_suffix = f"{title}_{index}"
             self._export_stats_histogram_plot(histogram, encoding, results_dir, filename_suffix)
 
-    def check_model_sensitivity_to_quantization(
+    def _check_model_sensitivity_to_quantization(
             self,
-            quant_scheme: QuantScheme = QuantScheme.post_training_tf_enhanced,
-            rounding_mode: str = 'nearest',
-            default_param_bw: int = 8,
-            default_output_bw: int = 8,
-            config_file: str = None,
-            default_data_type: QuantizationDataType = QuantizationDataType.int,
+            sim: QuantizationSimModel,
     ) -> Tuple[float, float, float]:
         """
         Perform the sensitivity analysis to weight and activation quantization
         individually.
 
-        :param quant_scheme: Quantization scheme. Supported values are
-                QuantScheme.post_training_tf or QuantScheme.post_training_tf_enhanced.
-        :param rounding_mode: Rounding mode. Supported options are 'nearest' or 'stochastic'.
-        :param default_param_bw: Default bitwidth (4-31) to use for quantizing layer parameters.
-        :param default_output_bw: Default bitwidth (4-31) to use for quantizing layer inputs and outputs.
-        :param config_file: Path to configuration file for model quantizers.
-        :param default_data_type: Default data type to use for quantizing all layer inputs, outputs and parameters.
-                                 Possible options are QuantizationDataType.int and QuantizationDataType.float.
-                                 Note that the mode default_data_type=QuantizationDataType.float is only supported with
-                                 default_output_bw=16 and default_param_bw=16.
+        :param sim: Quantsim model.
         :return: FP32 eval score, weight-quantized eval score, act-quantized eval score.
         """
-        kwargs = dict(
-            quant_scheme=quant_scheme,
-            rounding_mode=rounding_mode,
-            default_output_bw=default_output_bw,
-            default_param_bw=default_param_bw,
-            config_file=config_file,
-            default_data_type=default_data_type,
-        )
+        # pylint: disable=protected-access
         fp32_eval_score = self._eval_model(self._model)
         _logger.info("FP32 eval score (W32A32): %.02f", fp32_eval_score)
 
-        weight_quantized_eval_score = self._eval_quantized_model(disable_param_quantizers=False,
-                                                                 disable_act_quantizers=True,
-                                                                 **kwargs)
-        _logger.info("Weight-quantized eval score (W%dA32): %.02f", default_param_bw, weight_quantized_eval_score)
+        weight_quantized_eval_score = self._eval_weight_quantized_model(sim)
+        _logger.info("Weight-quantized eval score (W%dA32): %.02f", sim._default_param_bw,
+                     weight_quantized_eval_score)
 
-        act_quantized_eval_score = self._eval_quantized_model(disable_param_quantizers=True,
-                                                              disable_act_quantizers=False,
-                                                              **kwargs)
-        _logger.info("Activation-quantized eval score (W32A%d): %.02f", default_output_bw, act_quantized_eval_score)
+        act_quantized_eval_score = self._eval_activation_quantized_model(sim)
+        _logger.info("Activation-quantized eval score (W32A%d): %.02f", sim._default_output_bw,
+                     act_quantized_eval_score)
+
         return fp32_eval_score, weight_quantized_eval_score, act_quantized_eval_score
 
-    def perform_per_layer_analysis_by_enabling_quant_wrappers(
+    def _perform_per_layer_analysis_by_enabling_quant_wrappers(
             self,
-            quant_scheme: QuantScheme = QuantScheme.post_training_tf_enhanced,
-            rounding_mode: str = 'nearest',
-            default_param_bw: int = 8,
-            default_output_bw: int = 8,
-            config_file: str = None,
-            default_data_type: QuantizationDataType = QuantizationDataType.int,
+            sim: QuantizationSimModel,
             results_dir: str = "./tmp/",
     ) -> Dict:
         """
@@ -449,31 +465,12 @@ class QuantAnalyzer:
             iii. Disable enabled quantizers in step i.
         3. Returns dictionary containing quant wrapper name and corresponding eval score.
 
-        :param quant_scheme: Quantization scheme. Supported values are
-                QuantScheme.post_training_tf or QuantScheme.post_training_tf_enhanced.
-        :param rounding_mode: Rounding mode. Supported options are 'nearest' or 'stochastic'.
-        :param default_param_bw: Default bitwidth (4-31) to use for quantizing layer parameters.
-        :param default_output_bw: Default bitwidth (4-31) to use for quantizing layer inputs and outputs.
-        :param config_file: Path to configuration file for model quantizers.
-        :param default_data_type: Default data type to use for quantizing all layer inputs, outputs and parameters.
-                                 Possible options are QuantizationDataType.int and QuantizationDataType.float.
-                                 Note that the mode default_data_type=QuantizationDataType.float is only supported with
-                                 default_output_bw=16 and default_param_bw=16.
+        :param sim: Quantsim model.
         :param results_dir: Directory to save the results.
         :return: layer wise eval score dictionary. dict[layer_name] = eval_score
         """
         results_dir = os.path.abspath(results_dir)
         os.makedirs(results_dir, exist_ok=True)
-
-        kwargs = dict(
-            quant_scheme=quant_scheme,
-            rounding_mode=rounding_mode,
-            default_output_bw=default_output_bw,
-            default_param_bw=default_param_bw,
-            config_file=config_file,
-            default_data_type=default_data_type,
-        )
-        sim = QuantizationSimModel(self._model, self._dummy_input, **kwargs)
 
         _logger.info("\nOPTION-1:\nAll the quant wrappers are disabled.\n"
                      "Starting per-layer analysis by enabling quant wrappers as per config file.")
@@ -486,14 +483,9 @@ class QuantAnalyzer:
                                                          title="per_layer_quant_enabled")
         return layer_wise_eval_score_dict
 
-    def perform_per_layer_analysis_by_disabling_quant_wrappers(
+    def _perform_per_layer_analysis_by_disabling_quant_wrappers(
             self,
-            quant_scheme: QuantScheme = QuantScheme.post_training_tf_enhanced,
-            rounding_mode: str = 'nearest',
-            default_param_bw: int = 8,
-            default_output_bw: int = 8,
-            config_file: str = None,
-            default_data_type: QuantizationDataType = QuantizationDataType.int,
+            sim: QuantizationSimModel,
             results_dir: str = "./tmp/",
     ) -> Dict:
         """
@@ -507,31 +499,12 @@ class QuantAnalyzer:
             iii. Enable disabled quantizers in step i.
         3. Returns dictionary containing quant wrapper name and corresponding eval score.
 
-        :param quant_scheme: Quantization scheme. Supported values are
-                QuantScheme.post_training_tf or QuantScheme.post_training_tf_enhanced.
-        :param rounding_mode: Rounding mode. Supported options are 'nearest' or 'stochastic'.
-        :param default_param_bw: Default bitwidth (4-31) to use for quantizing layer parameters.
-        :param default_output_bw: Default bitwidth (4-31) to use for quantizing layer inputs and outputs.
-        :param config_file: Path to configuration file for model quantizers.
-        :param default_data_type: Default data type to use for quantizing all layer inputs, outputs and parameters.
-                                 Possible options are QuantizationDataType.int and QuantizationDataType.float.
-                                 Note that the mode default_data_type=QuantizationDataType.float is only supported with
-                                 default_output_bw=16 and default_param_bw=16.
+        :param sim: Quantsim model.
         :param results_dir: Directory to save the results.
         :return: layer wise eval score dictionary. dict[layer_name] = eval_score
         """
         results_dir = os.path.abspath(results_dir)
         os.makedirs(results_dir, exist_ok=True)
-
-        kwargs = dict(
-            quant_scheme=quant_scheme,
-            rounding_mode=rounding_mode,
-            default_output_bw=default_output_bw,
-            default_param_bw=default_param_bw,
-            config_file=config_file,
-            default_data_type=default_data_type,
-        )
-        sim = QuantizationSimModel(self._model, self._dummy_input, **kwargs)
 
         _logger.info("\nOPTION-2:\nAll the quant wrappers are enabled as per config file.\n"
                      "Starting per-layer analysis by disabling quant wrappers.")
@@ -544,45 +517,20 @@ class QuantAnalyzer:
                                                          title="per_layer_quant_disabled")
         return layer_wise_eval_score_dict
 
-    def export_per_layer_encoding_min_max_range( # pylint: disable=too-many-locals
+    def _export_per_layer_encoding_min_max_range(
             self,
-            quant_scheme: QuantScheme = QuantScheme.post_training_tf_enhanced,
-            rounding_mode: str = 'nearest',
-            default_param_bw: int = 8,
-            default_output_bw: int = 8,
-            config_file: str = None,
-            default_data_type: QuantizationDataType = QuantizationDataType.int,
+            sim: QuantizationSimModel,
             results_dir: str = "./tmp/",
     ) -> Tuple[Dict, Dict]:
         """
         Export encoding min and max range for all weights and activations.
 
-        :param quant_scheme: Quantization scheme. Supported values are
-                QuantScheme.post_training_tf or QuantScheme.post_training_tf_enhanced.
-        :param rounding_mode: Rounding mode. Supported options are 'nearest' or 'stochastic'.
-        :param default_param_bw: Default bitwidth (4-31) to use for quantizing layer parameters.
-        :param default_output_bw: Default bitwidth (4-31) to use for quantizing layer inputs and outputs.
-        :param config_file: Path to configuration file for model quantizers.
-        :param default_data_type: Default data type to use for quantizing all layer inputs, outputs and parameters.
-                                 Possible options are QuantizationDataType.int and QuantizationDataType.float.
-                                 Note that the mode default_data_type=QuantizationDataType.float is only supported with
-                                 default_output_bw=16 and default_param_bw=16.
+        :param sim: Quantsim model.
         :param results_dir: Directory to save the results.
         :return: layer wise min-max range for weights and activations.
         """
         results_dir = os.path.abspath(results_dir)
         os.makedirs(results_dir, exist_ok=True)
-
-        kwargs = dict(
-            quant_scheme=quant_scheme,
-            rounding_mode=rounding_mode,
-            default_output_bw=default_output_bw,
-            default_param_bw=default_param_bw,
-            config_file=config_file,
-            default_data_type=default_data_type,
-        )
-        sim = QuantizationSimModel(self._model, self._dummy_input, **kwargs)
-        sim.compute_encodings(self._forward_pass_callback.func, self._forward_pass_callback.args)
 
         module_to_name_dict = {}
         for name, module in sim.model.named_modules():
@@ -615,14 +563,9 @@ class QuantAnalyzer:
 
         return min_max_range_for_weights_dict, min_max_range_for_activations_dict
 
-    def export_per_layer_stats_histogram( # pylint: disable=too-many-locals
+    def _export_per_layer_stats_histogram(
             self,
-            quant_scheme: QuantScheme = QuantScheme.post_training_tf_enhanced,
-            rounding_mode: str = 'nearest',
-            default_param_bw: int = 8,
-            default_output_bw: int = 8,
-            config_file: str = None,
-            default_data_type: QuantizationDataType = QuantizationDataType.int,
+            sim: QuantizationSimModel,
             results_dir: str = "./tmp/",
     ) -> None:
         """
@@ -639,36 +582,9 @@ class QuantAnalyzer:
                 -name
                     param_name_{channel_index}.html
 
-        :param quant_scheme: Quantization scheme. Supported values are
-                QuantScheme.post_training_tf or QuantScheme.post_training_tf_enhanced.
-        :param rounding_mode: Rounding mode. Supported options are 'nearest' or 'stochastic'.
-        :param default_param_bw: Default bitwidth (4-31) to use for quantizing layer parameters.
-        :param default_output_bw: Default bitwidth (4-31) to use for quantizing layer inputs and outputs.
-        :param config_file: Path to configuration file for model quantizers.
-        :param default_data_type: Default data type to use for quantizing all layer inputs, outputs and parameters.
-                                 Possible options are QuantizationDataType.int and QuantizationDataType.float.
-                                 Note that the mode default_data_type=QuantizationDataType.float is only supported with
-                                 default_output_bw=16 and default_param_bw=16.
+        :param sim: Quantsim model.
         :param results_dir: Directory to save the results.
         """
-        if quant_scheme != QuantScheme.post_training_tf_enhanced:
-            raise ValueError("export_stats_pdf() can be invoked only when"
-                             " quantization scheme is TF-Enhanced.")
-
-        results_dir = os.path.abspath(results_dir)
-        os.makedirs(results_dir, exist_ok=True)
-
-        kwargs = dict(
-            quant_scheme=quant_scheme,
-            rounding_mode=rounding_mode,
-            default_output_bw=default_output_bw,
-            default_param_bw=default_param_bw,
-            config_file=config_file,
-            default_data_type=default_data_type,
-        )
-        sim = QuantizationSimModel(self._model, self._dummy_input, **kwargs)
-        sim.compute_encodings(self._forward_pass_callback.func, self._forward_pass_callback.args)
-
         weights_pdf_dir = os.path.join(results_dir, "weights_pdf")
         activations_pdf_dir = os.path.join(results_dir, "activations_pdf")
 
@@ -695,7 +611,7 @@ class QuantAnalyzer:
                                                                  title=f"{wrapped_module_name}_{param_name}")
             _logger.info("Exported stats histogram for layer: %s", wrapped_module_name)
 
-    def analyze( # pylint: disable=too-many-locals
+    def analyze(
             self,
             quant_scheme: QuantScheme = QuantScheme.post_training_tf_enhanced,
             rounding_mode: str = 'nearest',
@@ -731,22 +647,24 @@ class QuantAnalyzer:
             config_file=config_file,
             default_data_type=default_data_type,
         )
+        sim = QuantizationSimModel(self._model, self._dummy_input, **kwargs)
+        sim.compute_encodings(self._forward_pass_callback.func, self._forward_pass_callback.args)
 
         results_dir = os.path.abspath(results_dir)
         os.makedirs(results_dir, exist_ok=True)
 
         # Check model sensitivity to weight and activation quantization individually.
-        self.check_model_sensitivity_to_quantization(**kwargs)
+        self._check_model_sensitivity_to_quantization(sim)
 
         # Perform per layer analysis by enabling each quant wrapper (OPTION-1).
-        self.perform_per_layer_analysis_by_enabling_quant_wrappers(results_dir=results_dir, **kwargs)
+        self._perform_per_layer_analysis_by_enabling_quant_wrappers(sim, results_dir)
 
         # Perform per layer analysis by disabling each quant wrapper (OPTION-2).
-        self.perform_per_layer_analysis_by_disabling_quant_wrappers(results_dir=results_dir, **kwargs)
+        self._perform_per_layer_analysis_by_disabling_quant_wrappers(sim, results_dir)
 
         # Export encoding min-max range.
-        self.export_per_layer_encoding_min_max_range(results_dir=results_dir, **kwargs)
+        self._export_per_layer_encoding_min_max_range(sim, results_dir)
 
         # Export PDF of statistics.
         if quant_scheme == QuantScheme.post_training_tf_enhanced:
-            self.export_per_layer_stats_histogram(results_dir=results_dir, **kwargs)
+            self._export_per_layer_stats_histogram(sim, results_dir)
