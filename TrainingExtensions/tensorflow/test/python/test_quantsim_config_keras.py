@@ -250,3 +250,159 @@ class TestQuantSimConfig:
 
         if os.path.exists('./data/quantsim_config.json'):
             os.remove('./data/quantsim_config.json')
+
+    def test_parse_config_file_params(self):
+        """
+        Test that param specific quantization parameters are set correctly when using json config file
+        """
+        quantsim_config = {
+            "defaults": {
+                "ops": {
+                    "is_output_quantized": "True",
+                    "is_symmetric": "False"
+                },
+                "params": {
+                    "is_quantized": "False",
+                    "is_symmetric": "True"
+                }
+            },
+            "params": {
+                "weight": {
+                    "is_quantized": "True",
+                    "is_symmetric": "False"
+                }
+            },
+            "op_type": {},
+            "supergroups": [],
+            "model_input": {},
+            "model_output": {
+            }
+        }
+        with open("./data/quantsim_config.json", "w") as f:
+            json.dump(quantsim_config, f)
+
+        model = single_residual()
+        connected_graph = ConnectedGraph(model)
+        quant_sim_configurator = QuantSimConfigurator(connected_graph, QuantScheme.post_training_tf_enhanced,
+                                                      "nearest", 8, 8, "./data/quantsim_config.json")
+
+        layer_to_quantizers_dict = quant_sim_configurator._layer_to_quantizers_dict
+        for op in connected_graph.ordered_ops:
+            layer = op.get_module()
+
+            for q in layer_to_quantizers_dict[layer][PARAM_QUANTIZERS]:
+                if "bias" in q.name:
+                    assert not q.is_enabled()
+                    assert q.is_symmetric
+                else:
+                    assert q.is_enabled()
+                    assert not q.is_symmetric
+
+        if os.path.exists("./data/quantsim_config.json"):
+            os.remove("./data/quantsim_config.json")
+
+    def test_parse_config_file_op_type(self):
+        """
+        Test that op specific quantization parameters are set correctly when using json config file
+        """
+
+        quantsim_config = {
+            "defaults": {
+                "ops": {
+                    "is_output_quantized": "True",
+                    "is_symmetric": "False"
+                },
+                "params": {
+                    "is_quantized": "False",
+                    "is_symmetric": "True"
+                }
+            },
+            "params": {},
+            "op_type": {
+                "Conv": {
+                    "is_input_quantized": "True",
+                    "is_symmetric": "False",
+                    "params": {
+                        "bias": {
+                            "is_quantized": "True",
+                            "is_symmetric": "False"
+                        }
+                    }
+                }
+            },
+            "supergroups": [],
+            "model_input": {},
+            "model_output": {
+            }
+        }
+        with open("./data/quantsim_config.json", "w") as f:
+            json.dump(quantsim_config, f)
+
+        model = single_residual()
+        connected_graph = ConnectedGraph(model)
+        quant_sim_configurator = QuantSimConfigurator(connected_graph, QuantScheme.post_training_tf_enhanced,
+                                                      "nearest", 8, 8, "./data/quantsim_config.json")
+
+        layer_to_quantizers_dict = quant_sim_configurator._layer_to_quantizers_dict
+        for op in connected_graph.ordered_ops:
+            layer = op.get_module()
+
+            for q in layer_to_quantizers_dict[layer][INPUT_QUANTIZERS]:
+                if op.type == "Conv":
+                    assert q.is_enabled()
+                    assert not q.is_symmetric
+                else:
+                    assert not q.is_enabled()
+                    assert not q.is_symmetric
+
+            for q in layer_to_quantizers_dict[layer][OUTPUT_QUANTIZERS]:
+                assert q.is_enabled()
+                assert not q.is_symmetric
+
+            for q in layer_to_quantizers_dict[layer][PARAM_QUANTIZERS]:
+                if op.type == "Conv" and "bias" in q.name:
+                    assert q.is_enabled()
+                    assert not q.is_symmetric
+                else:
+                    assert not q.is_enabled()
+                    assert q.is_symmetric
+
+        if os.path.exists("./data/quantsim_config.json"):
+            os.remove("./data/quantsim_config.json")
+
+    def test_parse_config_file_op_type_conflict_case(self):
+        """
+        Test that op specific quantization parameters are set correctly when using json config file
+        """
+
+        quantsim_config = {
+            "defaults": {
+                "ops": {},
+                "params": {}
+            },
+            "params": {},
+            "op_type": {
+                "Conv": {
+                    "is_input_quantized": "True",
+                    "is_output_quantized": "False"
+                },
+                "BatchNormalization": {
+                    "is_input_quantized": "True"
+                }
+            },
+            "supergroups": [],
+            "model_input": {},
+            "model_output": {}
+        }
+        with open('./data/quantsim_config.json', 'w') as f:
+            json.dump(quantsim_config, f)
+
+        model = single_residual()
+        connected_graph = ConnectedGraph(model)
+
+        with pytest.raises(RuntimeError):
+            _ = QuantSimConfigurator(connected_graph, QuantScheme.post_training_tf_enhanced, "nearest",
+                                     8, 8, "./data/quantsim_config.json")
+
+        if os.path.exists("./data/quantsim_config.json"):
+            os.remove("./data/quantsim_config.json")
