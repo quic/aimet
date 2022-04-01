@@ -40,14 +40,14 @@
 
 import os
 from collections import OrderedDict, defaultdict
-from typing import Union, Tuple, Callable, Dict, List
+from typing import Union, Tuple, Callable, Dict, List, Any
 from bokeh import plotting
 from bokeh.models import ColumnDataSource, Band, Span, tickers
 import torch
 
 from aimet_common.utils import AimetLogger
 from aimet_common.defs import QuantScheme, QuantizationDataType
-from aimet_torch.utils import in_eval_mode, run_hook_for_layers_with_given_input
+from aimet_torch.utils import in_eval_mode, run_hook_for_layers_with_given_input, is_leaf_module
 from aimet_torch.tensor_quantizer import TensorQuantizer, StaticGridTensorQuantizer
 from aimet_torch.qc_quantize_op import QcQuantizeWrapper
 from aimet_torch.qc_quantize_recurrent import QcQuantizeRecurrent
@@ -400,6 +400,37 @@ class QuantAnalyzer:
         plotting.save(plot)
         return plot
 
+    @staticmethod
+    def _export_per_layer_mse_plot(mse_loss_dict: Dict, results_dir: str, title: str) -> plotting.Figure:
+        """
+        Export per layer MSE loss between fp32 and quantized output activations in html format.
+
+        :param mse_loss_dict: layer wise MSE loss.
+        :param results_dir:  Directory to save the results.
+        :param title: Title of the plot.
+        :return: Layer-wise MSE loss plot.
+        """
+        layer_names = []
+        mse_losses = []
+        for layer_name, mse_loss in mse_loss_dict.items():
+            layer_names.append(layer_name)
+            mse_losses.append(mse_loss)
+
+        # Configure the output file to be saved.
+        filename = os.path.join(results_dir, f"{title}.html")
+        plotting.output_file(filename)
+        plot = plotting.figure(x_range=layer_names,
+                               plot_height=DEFAULT_BOKEH_FIGURE_HEIGHT,
+                               title=title,
+                               x_axis_label="Layers",
+                               y_axis_label="MSE loss")
+        plot.circle(x=layer_names, y=mse_losses, size=10)
+        plot.line(x=layer_names, y=mse_losses)
+        plot.xaxis.major_label_orientation = "vertical"
+        plot.sizing_mode = "scale_width"
+        plotting.save(plot)
+        return plot
+
     def _create_and_export_stats_histogram_plot(
             self,
             quantizer: StaticGridTensorQuantizer,
@@ -423,6 +454,53 @@ class QuantAnalyzer:
         for index, (histogram, encoding) in enumerate(zip(histograms, encodings)):
             filename_suffix = f"{title}_{index}"
             self._export_stats_histogram_plot(histogram, encoding, results_dir, filename_suffix)
+
+    def _run_hooks_to_tap_output_activations(
+            self,
+            model: torch.nn.Module,
+            module_type_for_attaching_hook: Any = None,
+            leaf_module_only: bool = True
+    ) -> Dict:
+        """
+        NOTE: output activations dict has layers added based on occurrence inside
+        forward pass and dictionary preserves order.
+
+        Attach and run hooks to tap output activations for given model.
+
+        :param model: Model to attach hooks.
+        :param module_type_for_attaching_hook: torch.nn module types for which hook has to be attached.
+        :param leaf_module_only: Flag to set only leaf modules vs all modules to attach hooks.
+        """
+        def _hook_to_tap_activations(module, _, out):
+            """
+            Hook-function to tap activation data.
+            :param module: torch.nn.Module type module.
+            :param _: Input activations to module.
+            :param out: Output activations from module.
+            """
+            output_activations_dict[module_to_name_dict[module]].append(out.cpu())
+
+        output_activations_dict = defaultdict(list)
+        hooks = []
+        module_to_name_dict = {}
+        for name, module in model.named_modules():
+            module_to_name_dict[module] = name
+
+        modules = [module for module in model.modules() if not leaf_module_only or is_leaf_module(module)]
+        if module_type_for_attaching_hook:
+            modules = [module for module in modules if isinstance(module, module_type_for_attaching_hook)]
+        for module in modules:
+            hooks.append(module.register_forward_hook(_hook_to_tap_activations))
+
+        # Forward pass.
+        self._eval_model(model)
+
+        # Remove all the added hooks from the model.
+        for hook in hooks:
+            hook.remove()
+
+        output_activations_dict = {name: torch.cat(out_acts, 0) for name, out_acts in output_activations_dict.items()}
+        return output_activations_dict
 
     def _check_model_sensitivity_to_quantization(
             self,
@@ -532,6 +610,7 @@ class QuantAnalyzer:
         results_dir = os.path.abspath(results_dir)
         os.makedirs(results_dir, exist_ok=True)
 
+        _logger.info("\nExporting per layer encoding min-max ranges.")
         module_to_name_dict = {}
         for name, module in sim.model.named_modules():
             module_to_name_dict[module] = name
@@ -588,6 +667,7 @@ class QuantAnalyzer:
         weights_pdf_dir = os.path.join(results_dir, "weights_pdf")
         activations_pdf_dir = os.path.join(results_dir, "activations_pdf")
 
+        _logger.info("\nExporting per layer stats histogram.")
         module_to_name_dict = {}
         for name, module in sim.model.named_modules():
             module_to_name_dict[module] = name
@@ -610,6 +690,40 @@ class QuantAnalyzer:
                                                                  os.path.join(weights_pdf_dir, wrapped_module_name),
                                                                  title=f"{wrapped_module_name}_{param_name}")
             _logger.info("Exported stats histogram for layer: %s", wrapped_module_name)
+
+    def _export_per_layer_mse_loss(
+            self,
+            sim: QuantizationSimModel,
+            results_dir: str = "./tmp/",
+    ) -> None:
+        """
+        NOTE: Need to pass same model input data through both fp32 and quantsim model to
+        tap output activations of each layer.
+
+        Export MSE loss between fp32 and quantized output activations for each layer.
+        """
+        results_dir = os.path.abspath(results_dir)
+        os.makedirs(results_dir, exist_ok=True)
+
+        _logger.info("\nExporting per layer MSE loss.")
+        fp32_output_activations =\
+            self._run_hooks_to_tap_output_activations(self._model,
+                                                      module_type_for_attaching_hook=None,
+                                                      leaf_module_only=True)
+        quantized_output_activations = \
+            self._run_hooks_to_tap_output_activations(sim.model,
+                                                      module_type_for_attaching_hook=(QcQuantizeWrapper,
+                                                                                      QcQuantizeRecurrent),
+                                                      leaf_module_only=False)
+        mse_loss_dict = {}
+        for name, fp32_out_acts in fp32_output_activations.items():
+            quantized_out_acts = quantized_output_activations[name]
+            loss = torch.nn.functional.mse_loss(fp32_out_acts, quantized_out_acts)
+            mse_loss_dict[name] = loss.item()
+
+        self._export_per_layer_mse_plot(mse_loss_dict,
+                                        results_dir,
+                                        title="per_layer_mse_loss")
 
     def analyze(
             self,
@@ -668,3 +782,6 @@ class QuantAnalyzer:
         # Export PDF of statistics.
         if quant_scheme == QuantScheme.post_training_tf_enhanced:
             self._export_per_layer_stats_histogram(sim, results_dir)
+
+        # Export per layer MSE loss between fp32 and quantized output activations.
+        self._export_per_layer_mse_loss(sim, results_dir)

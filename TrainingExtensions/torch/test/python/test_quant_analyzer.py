@@ -299,6 +299,53 @@ class TestQuantAnalyzer:
             if os.path.isdir("./tmp/"):
                 shutil.rmtree("./tmp/")
 
+    def test_run_hooks_to_tap_output_activations(self):
+        """ test _run_hooks_to_tap_output_activations() method """
+        input_shape = (1, 3, 32, 32)
+        dummy_input = torch.randn(*input_shape)
+        model = TinyModel().eval()
+        sim = QuantizationSimModel(model, dummy_input)
+        sim.compute_encodings(evaluate, dummy_input)
+        forward_pass_callback = CallbackFunc(calibrate, dummy_input)
+        eval_callback = CallbackFunc(evaluate, dummy_input)
+        quant_analyzer = QuantAnalyzer(model, dummy_input, forward_pass_callback, eval_callback)
+
+        fp32_out_activations = quant_analyzer._run_hooks_to_tap_output_activations(model)
+        assert len(fp32_out_activations) == 12
+
+        quantized_out_activations = \
+            quant_analyzer._run_hooks_to_tap_output_activations(sim.model,
+                                                                module_type_for_attaching_hook=(QcQuantizeWrapper,),
+                                                                leaf_module_only=False)
+        assert len(quantized_out_activations) == 12
+
+        # verify that both the dictionaries hava same layer names(keys)
+        assert fp32_out_activations.keys() == quantized_out_activations.keys()
+
+        # verify that the output_activations have same tensor shape.
+        for fp32_out_act, quant_out_act in zip(fp32_out_activations.values(), quantized_out_activations.values()):
+            assert fp32_out_act.shape == quant_out_act.shape
+
+    def test_export_per_layer_mse_loss(self):
+        """ test _export_per_layer_mse_loss() """
+        input_shape = (1, 3, 224, 224)
+        dummy_input = torch.randn(*input_shape)
+        from torchvision import models
+        model = models.resnet18(pretrained=True).eval()
+        # model = TinyModel().eval()
+        sim = QuantizationSimModel(model, dummy_input)
+        sim.compute_encodings(evaluate, dummy_input)
+        forward_pass_callback = CallbackFunc(calibrate, dummy_input)
+        eval_callback = CallbackFunc(evaluate, dummy_input)
+        quant_analyzer = QuantAnalyzer(model, dummy_input, forward_pass_callback, eval_callback)
+        try:
+            quant_analyzer._export_per_layer_mse_loss(sim)
+            assert os.path.isfile("./tmp/per_layer_mse_loss.html")
+        finally:
+            # if os.path.isdir("./tmp/"):
+            #     shutil.rmtree("./tmp/")
+            pass
+
     def test_analyze(self):
         """ test end to end for analyze() method """
         input_shape = (1, 3, 32, 32)
@@ -315,6 +362,7 @@ class TestQuantAnalyzer:
             assert os.path.exists("./tmp/weights_pdf")
             assert os.path.isfile("./tmp/min_max_range_all_weights.html")
             assert os.path.isfile("./tmp/min_max_range_all_activations.html")
+            assert os.path.isfile("./tmp/per_layer_mse_loss.html")
         finally:
             if os.path.isdir("./tmp/"):
                 shutil.rmtree("./tmp/")
