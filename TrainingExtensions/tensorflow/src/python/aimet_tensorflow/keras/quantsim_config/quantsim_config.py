@@ -64,6 +64,15 @@ OUTPUT_QUANTIZERS = "output_quantizers"
 PARAM_QUANTIZERS = "param_quantizers"
 
 
+class TreeLikeDictionary(dict):
+    """
+    A n-ary tree-like autovivification dictionary for storing/updating/fetching
+    """
+    def __missing__(self, key):
+        value = self[key] = type(self)()
+        return value
+
+
 def _get_affected_tensor_quantizers_by_true_setting(op: Op, direction: str) -> List[Tuple[layers.Layer, str]]:
     """
     Get a list of tensor quantizers that would be affected if the quantization of target direction of op is enabled
@@ -145,39 +154,38 @@ def _initialize_output_quantizers(layer: layers.Layer, quant_settings: Quantizer
     return output_quantizers
 
 
-def _initialize_param_quantizers(layer: layers.Layer, quant_settings: QuantizerSettings,
-                                 enabled: bool) -> List[ParamTensorQuantizer]:
+def _initialize_param_quantizers(layer: layers.Layer, param_config_dict: TreeLikeDictionary,
+                                 quant_settings: QuantizerSettings) -> List[ParamTensorQuantizer]:
     """
     Initialize param quantizers corresponding to layer using quantizer settings
-
     :param layer: Target tf.keras.layers.Layer
+    :param param_config_dict: Dictionary containing configurations for parameters of certain types
     :param quant_settings: Quantization settings
-    :param enabled: Flag for quantized or not
     :return: Param quantizers corresponding to layer
     """
     param_quantizers = []
     for weight in layer.weights:
-        weight_name = weight.name.split(':')[0]
+        weight_name = weight.name.split(":")[0]
+        param_type = "bias" if "bias" in weight_name else "weight"
+
+        if param_type in param_config_dict:
+            is_symmetric = param_config_dict[param_type][ConfigDictKeys.IS_SYMMETRIC].get(SETTING, False)
+            enabled = param_config_dict[param_type][ConfigDictKeys.IS_QUANTIZED].get(SETTING, False)
+        else:
+            is_symmetric = param_config_dict[ConfigDictKeys.IS_SYMMETRIC].get(SETTING, False)
+            enabled = param_config_dict[ConfigDictKeys.IS_QUANTIZED].get(SETTING, False)
+
         param_tensor_quantizer = ParamTensorQuantizer(weight_name,
                                                       quant_settings.quant_scheme,
                                                       quant_settings.round_mode,
                                                       quant_settings.bitwidth,
-                                                      quant_settings.is_symmetric,
+                                                      is_symmetric,
                                                       quant_settings.use_strict_symmetric,
                                                       quant_settings.use_unsigned_symmetric,
                                                       enabled)
 
         param_quantizers.append(param_tensor_quantizer)
     return param_quantizers
-
-
-class TreeLikeDictionary(dict):
-    """
-    A n-ary tree-like autovivification dictionary for storing/updating/fetching
-    """
-    def __missing__(self, key):
-        value = self[key] = type(self)()
-        return value
 
 
 class QuantSimConfigurator(AimetCommonQuantSimConfigurator):
@@ -275,10 +283,43 @@ class QuantSimConfigurator(AimetCommonQuantSimConfigurator):
         raise ValueError
 
     def _set_param_configs(self, param_configs: ParamType):
-        pass
+        """
+        Set configurations for all params of specific types (second level of specificity in configuration file)
+
+        :param param_configs: Dictionary containing configurations for parameters of certain types
+        """
+        for op in self._connected_graph.ordered_ops:
+            layer = op.get_module()
+            self._update_layer_param_config(layer, param_configs)
 
     def _set_op_type_configs(self, op_configs: OpTypeType):
-        pass
+        """
+        Set configurations for all ops of specific types (third level of specificity in configuration file)
+
+        :param op_configs: Dictionary containing configurations for ops of certain types
+        """
+        for op in self._connected_graph.ordered_ops:
+            layer = op.get_module()
+
+            if op.type in op_configs:
+                for config_key, config_val in op_configs[op.type].items():
+                    if config_key == ConfigDictKeys.PARAMS:
+                        self._update_layer_param_config(layer, config_val)
+                    else:
+                        self._layer_to_config_dict[layer][config_key][SETTING] = config_val
+                        self._layer_to_config_dict[layer][config_key][AFFECTED_QUANTIZERS] = \
+                            self._get_affected_quantizers_by_config(layer, config_key, config_val)
+
+    def _update_layer_param_config(self, layer: layers.Layer, param_configs: ParamType):
+        """
+        Update param config of layer in config dictionary
+
+        :param layer: Target tf.keras.layers.Layer
+        :param param_configs: Dictionary containing configurations for parameters of certain types
+        """
+        for param_type, param_config_dict in param_configs.items():
+            for config_key, config_val in param_config_dict.items():
+                self._layer_to_config_dict[layer][ConfigDictKeys.PARAMS][param_type][config_key][SETTING] = config_val
 
     def _set_supergroup_configs(self, supergroups_configs: List[SupergroupType]):
         pass
@@ -329,14 +370,13 @@ class QuantSimConfigurator(AimetCommonQuantSimConfigurator):
             # Configs for Params
             param_config_dict = config_dict[ConfigDictKeys.PARAMS]
             param_is_symmetric = param_config_dict[ConfigDictKeys.IS_SYMMETRIC].get(SETTING, False)
-            param_quantizer_enabled = param_config_dict[ConfigDictKeys.IS_QUANTIZED].get(SETTING, False)
             param_quant_settings = QuantizerSettings(default_param_bw, rounding_mode,
                                                      quant_scheme, param_is_symmetric,
                                                      use_unsigned_symmetric, use_strict_symmetric)
 
             # Initialize Param Quantizers
             self._layer_to_quantizers_dict[layer][PARAM_QUANTIZERS] = \
-                _initialize_param_quantizers(layer, param_quant_settings, param_quantizer_enabled)
+                _initialize_param_quantizers(layer, param_config_dict, param_quant_settings)
 
     def _check_existence_of_conflict_case(self, layer: layers.Layer, config_key: str, current_setting: bool):
         """
