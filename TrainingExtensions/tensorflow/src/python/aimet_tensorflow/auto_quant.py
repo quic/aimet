@@ -56,8 +56,10 @@ from aimet_tensorflow.utils.common import (
     deepcopy_tf_session,
     iterate_tf_dataset,
 )
+from aimet_tensorflow.cache import TfSessionSerializationProtocol
 
 from aimet_common.auto_quant import Diagnostics
+from aimet_common.cache import Cache
 from aimet_common.defs import QuantScheme
 from aimet_common.utils import AimetLogger, Spinner
 from aimet_common.quantsim import validate_quantsim_inputs
@@ -66,6 +68,9 @@ from aimet_common.quantsim import validate_quantsim_inputs
 tf.compat.v1.disable_eager_execution()
 
 _logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.AutoQuant)
+
+
+cache = Cache()
 
 
 # The number of samples to be used for performance evaluation.
@@ -249,9 +254,16 @@ class AutoQuant:
         :param output_op_names: List of output op names of the model.
         :return: Output session and folded pairs.
         """
+        # NOTE: We don't apply caching to batchnorm folding because caching is
+        #       likely going to have an adverse effect on the performance.
+        #       Since a tf.Operation contains a reference to the graph it belongs
+        #       to, serializing a subset of operations of a tf.Graph requires
+        #       serializing the whole graph, making the serialization cost very
+        #       likely to exceed the evaluation cost.
         with deepcopy_tf_session(sess) as sess: # pylint: disable=redefined-argument-from-local
             return fold_all_batch_norms(sess, starting_op_names, output_op_names)
 
+    @cache.mark("cle", TfSessionSerializationProtocol())
     def _apply_cross_layer_equalization( # pylint: disable=no-self-use
             self,
             sess: tf.compat.v1.Session,
@@ -295,15 +307,19 @@ class AutoQuant:
         filename_prefix = "adaround"
         adaround_encoding_path = os.path.join(results_dir,
                                               "{}.encodings".format(filename_prefix))
-        sess = Adaround.apply_adaround(sess,
-                                       starting_op_names,
-                                       output_op_names,
-                                       self.adaround_params,
-                                       path=results_dir,
-                                       filename_prefix=filename_prefix,
-                                       default_param_bw=self.default_param_bw,
-                                       default_quant_scheme=self.default_quant_scheme,
-                                       default_is_symmetric=False)
+        _apply_adaround_cached =\
+            cache.mark("adaround", TfSessionSerializationProtocol())\
+            (Adaround.apply_adaround)
+
+        sess = _apply_adaround_cached(sess,
+                                      starting_op_names,
+                                      output_op_names,
+                                      self.adaround_params,
+                                      path=results_dir,
+                                      filename_prefix=filename_prefix,
+                                      default_param_bw=self.default_param_bw,
+                                      default_quant_scheme=self.default_quant_scheme,
+                                      default_is_symmetric=False)
 
         return sess, adaround_encoding_path
 
@@ -313,6 +329,7 @@ class AutoQuant:
             starting_op_names: List[str],
             output_op_names: List[str],
             results_dir: str = "/tmp",
+            cache_id: str = None,
     ) -> Tuple[tf.compat.v1.Session, float, str]:
         """
         Apply post-training quantization techniques.
@@ -327,7 +344,8 @@ class AutoQuant:
                                     fp32_sess,
                                     starting_op_names,
                                     output_op_names,
-                                    results_dir)
+                                    results_dir,
+                                    cache_id)
         return result["model"],\
                result["accuracy"],\
                result["encoding_path"]
@@ -339,6 +357,7 @@ class AutoQuant:
             starting_op_names: List[str],
             output_op_names: List[str],
             results_dir: str = "/tmp",
+            cache_id: str = None,
     ) -> Dict[str, Any]:
         """
         Helper for self.apply().
@@ -352,38 +371,44 @@ class AutoQuant:
         results_dir = os.path.abspath(results_dir)
         os.makedirs(results_dir, exist_ok=True)
 
-        _logger.info("Starting AutoQuant")
+        if cache_id is None:
+            cache_dir = None
+        else:
+            cache_dir = os.path.join(results_dir, ".auto_quant_cache", cache_id)
 
-        fp32_acc = self._evaluate_model_performance(fp32_sess)
-        target_acc = fp32_acc - self.allowed_accuracy_drop
+        with cache.enable(cache_dir):
+            _logger.info("Starting AutoQuant")
 
-        _logger.info("Target eval score: %.02f", target_acc)
-        _logger.info("FP32 eval score (W32A32): %.02f", fp32_acc)
+            fp32_acc = self._evaluate_model_performance(fp32_sess)
+            target_acc = fp32_acc - self.allowed_accuracy_drop
 
-        eval_manager = _EvalManager(
-            quantsim_factory=self._create_quantsim_and_encodings,
-            eval_func=self._evaluate_model_performance,
-            starting_op_names=starting_op_names,
-            output_op_names=output_op_names,
-            results_dir=results_dir,
-        )
+            _logger.info("Target eval score: %.02f", target_acc)
+            _logger.info("FP32 eval score (W32A32): %.02f", fp32_acc)
 
-        ret = auto_quant_main_fn(fp32_sess, target_acc,
-                                 starting_op_names, output_op_names,
-                                 eval_manager, results_dir)
-
-        acc = ret["accuracy"]
-        _logger.info("Best eval score: %.02f", acc)
-
-        if acc < target_acc:
-            _logger.info(
-                "AutoQuant is unable to match the target accuracy. "
-                "Consider Quantization Aware Training."
+            eval_manager = _EvalManager(
+                quantsim_factory=self._create_quantsim_and_encodings,
+                eval_func=self._evaluate_model_performance,
+                starting_op_names=starting_op_names,
+                output_op_names=output_op_names,
+                results_dir=results_dir,
             )
 
-        eval_manager.export_diagnostics()
+            ret = auto_quant_main_fn(fp32_sess, target_acc,
+                                     starting_op_names, output_op_names,
+                                     eval_manager, results_dir)
 
-        return ret
+            acc = ret["accuracy"]
+            _logger.info("Best eval score: %.02f", acc)
+
+            if acc < target_acc:
+                _logger.info(
+                    "AutoQuant is unable to match the target accuracy. "
+                    "Consider Quantization Aware Training."
+                )
+
+            eval_manager.export_diagnostics()
+
+            return ret
 
     def _auto_quant_main(
             self,
