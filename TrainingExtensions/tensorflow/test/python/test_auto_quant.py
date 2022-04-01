@@ -379,7 +379,6 @@ class TestAutoQuant:
         with pytest.raises(ValueError):
             _ = AutoQuant(0, MagicMock(), MagicMock(), default_output_bw=64)
 
-    @pytest.mark.skip
     def test_auto_quant_caching(
         self, cpu_session, starting_op_names, output_op_names, unlabeled_dataset,
     ):
@@ -397,8 +396,8 @@ class TestAutoQuant:
             with create_tmp_directory() as results_dir:
                 cache_id = "unittest"
                 cache_files  = [
-                    os.path.join(results_dir, ".auto_quant_cache", cache_id, f"{key}.pkl")
-                    for key in ("batchnorm_folding", "cle", "adaround")
+                    os.path.join(results_dir, ".auto_quant_cache", cache_id, f"{key}.meta")
+                    for key in ("cle", "adaround")
                 ]
 
                 # No previously cached results
@@ -407,7 +406,6 @@ class TestAutoQuant:
                 for cache_file in cache_files:
                     assert os.path.exists(cache_file)
 
-                assert mocks.fold_all_batch_norms.call_count == 1
                 assert mocks.equalize_model.call_count == 1
                 assert mocks.apply_adaround.call_count == 1
 
@@ -416,7 +414,6 @@ class TestAutoQuant:
                                  results_dir=results_dir, cache_id=cache_id)
 
                 # PTQ functions should not be called twice.
-                assert mocks.fold_all_batch_norms.call_count == 1
                 assert mocks.equalize_model.call_count == 1
                 assert mocks.apply_adaround.call_count == 1
 

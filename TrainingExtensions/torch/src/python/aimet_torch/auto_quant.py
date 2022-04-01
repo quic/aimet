@@ -55,7 +55,8 @@ from aimet_torch.batch_norm_fold import fold_all_batch_norms
 from aimet_torch.quantsim import QuantizationSimModel
 from aimet_torch.utils import in_eval_mode
 
-from aimet_common.auto_quant import Cache, Diagnostics
+from aimet_common.auto_quant import Diagnostics
+from aimet_common.cache import Cache
 from aimet_common.defs import QuantScheme
 from aimet_common.utils import AimetLogger, Spinner
 from aimet_common.quantsim import validate_quantsim_inputs
