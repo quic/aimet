@@ -37,11 +37,11 @@
 import torch
 import json
 from aimet_common.defs import MAP_ROUND_MODE_TO_PYMO, QuantizationDataType
-from aimet_torch.qc_quantize_op import StaticGridQuantWrapper
+from aimet_torch.qc_quantize_op import StaticGridQuantWrapper, LearnedGridQuantWrapper
 from aimet_torch.examples.test_models import ModelWithTwoInputs, ModelWithTransposeConv
 from aimet_torch.qc_quantize_op import QuantScheme
 from aimet_torch.quantsim import QuantizationSimModel
-from aimet_torch.tensor_quantizer import StaticGridPerTensorQuantizer, StaticGridPerChannelQuantizer
+from aimet_torch.tensor_quantizer import StaticGridPerTensorQuantizer, StaticGridPerChannelQuantizer, LearnedGridTensorQuantizer
 import libpymo
 
 
@@ -395,3 +395,89 @@ class TestPerChannelQcQuantizeOpStaticGrid:
             expected_output[:, i, :, :] -= 0.5
 
         assert torch.equal(output, expected_output)
+
+
+class TestPerChannelQcQuantizeOpLearnedGrid:
+    def test_tensor_quantizer(self):
+        torch.manual_seed(0)
+        wrapper = create_learned_grid_wrapper()
+        tensor_quantizer = wrapper.param_quantizers['weight']
+
+        encodings = []
+        for _ in range(32):
+            encoding = libpymo.TfEncoding()
+            encoding.bw, encoding.max, encoding.min, encoding.delta, encoding.offset = 8, 3, -2, 1, 0.2
+            encodings.append(encoding)
+
+        # Set encodings for tensor quantizer
+        tensor_quantizer.encoding = encodings
+
+        # Check getting of encodings
+        new_encodings = tensor_quantizer.encoding
+        # Get 1st tf encodings object to compare values
+        enc_0 = new_encodings[0]
+        for enc1, enc2 in zip(encodings, new_encodings):
+            assert enc1.min == enc2.min
+            assert enc1.max == enc2.max
+            # Check that all delta offset got computed correctly
+            assert enc2.delta == enc_0.delta
+            assert enc2.offset == enc_0.offset
+        print(tensor_quantizer)
+
+    def test_quantize_dequantize_tensor_quantizer(self):
+        torch.manual_seed(0)
+        tensor_quantizer = LearnedGridTensorQuantizer(bitwidth=8, round_mode='nearest',
+                                                      quant_scheme=QuantScheme.training_range_learning_with_tf_init,
+                                                      use_symmetric_encodings=True,
+                                                      enabled_by_default=True,
+                                                      data_type=QuantizationDataType.int)
+
+        encoding_min = torch.nn.Parameter(torch.FloatTensor([0.0, 0.0, 0.0]))
+        encoding_max = torch.nn.Parameter(torch.FloatTensor([1.0, 2.5, 3.5]))
+        tensor = torch.ones((3, 1, 1, 2))
+        tensor[0, :, :, :] *= 1.5
+        tensor[2, :, :, :] *= 4
+        quant_dequantized_output = tensor_quantizer.quantize_dequantize(tensor, encoding_min, encoding_max)
+        expected_output = torch.ones((3, 1, 1, 2))
+        expected_output[2, :, :, :] *= 3.5
+        assert torch.all(expected_output.eq(quant_dequantized_output))
+
+    def test_replacement_of_wrapper(self):
+        conv1 = torch.nn.Conv2d(3, 3, kernel_size=5)
+        post_training_module = StaticGridQuantWrapper(conv1, round_mode='nearest',
+                                                      quant_scheme=QuantScheme.post_training_tf, is_symmetric=False,
+                                                      is_output_quantized=False, activation_bw=8, weight_bw=8)
+
+        post_training_module.enable_per_channel_quantization()
+
+        encodings = []
+        for _ in range(3):
+            encoding = libpymo.TfEncoding()
+            encoding.bw, encoding.max, encoding.min, encoding.delta, encoding.offset = 8, 3, -2, 1, 0.2
+            encodings.append(encoding)
+
+        post_training_module.input_quantizer.enabled = True
+        post_training_module.input_quantizer.encoding = encodings[0]
+        post_training_module.param_quantizers['weight'].enabled = True
+        post_training_module.param_quantizers['weight'].encoding = encodings
+        post_training_module.param_quantizers['bias'].enabled = False
+        dummy_input = torch.randn(1, 3, 12, 12)
+        sim = QuantizationSimModel(conv1, quant_scheme=QuantScheme.training_range_learning_with_tf_init,
+                                   dummy_input=dummy_input)
+        # sim.model.conv1.input_quantizer.enabled = True
+        trainable_module = sim._construct_and_initialize_trainable_wrapper(post_training_module, device='cpu')
+
+        assert trainable_module.output_quantizer.use_symmetric_encodings == False
+        assert trainable_module.output_quantizer.enabled == False
+        assert trainable_module.input0_encoding_min.item() == -2.0
+        assert isinstance(trainable_module.param_quantizers['weight'].encoding, list)
+
+
+def create_learned_grid_wrapper():
+    conv1 = torch.nn.Conv2d(2, 32, kernel_size=5)
+
+    wrapper = LearnedGridQuantWrapper(conv1, round_mode='nearest',
+                                      quant_scheme=QuantScheme.training_range_learning_with_tf_init,
+                                      is_symmetric=False, is_output_quantized=True, activation_bw=8,
+                                      weight_bw=8, device='cpu', data_type=QuantizationDataType.int)
+    return wrapper
