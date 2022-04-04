@@ -38,12 +38,13 @@
 """ Custom Tensor Quantizers for PyTorch Op for quantizing weights and activations """
 
 import io
-from typing import List, Dict
+from typing import List
 
 import torch
 from aimet_common.defs import QuantScheme, QuantizationDataType, MAP_QUANT_SCHEME_TO_PYMO
 from aimet_common.utils import AimetLogger
-import aimet_torch.quantsim_straight_through_grad as ste
+import aimet_torch.quantsim_straight_through_grad as grad_fn
+from aimet_torch.quantsim_straight_through_grad import broadcast_to_tensor
 import libpymo                  # pylint: disable=import-error
 
 #TODO Pylint fails due an unknown import issue. We need to debug this later.
@@ -399,6 +400,7 @@ class LearnedGridTensorQuantizer(TensorQuantizer):
         :param quant_scheme: Quantization scheme (e.g. Range Learning)
         :param use_symmetric_encodings: True if symmetric encoding is used.  False otherwise.
         :param enabled_by_default: True if quantization of tensor is enabled.  False otherwise.
+        :param data_type: Type for quantization (e.g. int, float)
         """
 
         if data_type != QuantizationDataType.int:
@@ -408,13 +410,12 @@ class LearnedGridTensorQuantizer(TensorQuantizer):
                                                          enabled_by_default, data_type)
         self.wrapper_ref = None
         self.name = None
-        self.round_ste_func = ste.RoundStraightThrough.apply
+        self.round_ste_func = grad_fn.RoundStraightThrough.apply
         # p is the granularity/ steps (2^bw - 1)
         self.n, self.p = LearnedGridTensorQuantizer.get_n_and_p(self.bitwidth, self.use_symmetric_encodings)
         # Moving n and p device once so that we don't have to move it for every batch
         self.scaling, self.offset = None, None
         self.device = None
-        # TODO pass it when instantiating the tensor quantizer
         self._ch_axis = 0
 
     @staticmethod
@@ -453,10 +454,10 @@ class LearnedGridTensorQuantizer(TensorQuantizer):
         if self.enabled:
             encoding_min = self.wrapper_ref._parameters[self.name + '_encoding_min']
             encoding_max = self.wrapper_ref._parameters[self.name + '_encoding_max']
-            scaling, offsets = self.compute_scaling_offset(encoding_min, encoding_max)
             encodings = []
-            for minimum, maximum, scale, offset in zip(encoding_min, encoding_max, scaling, offsets):
+            for minimum, maximum in zip(encoding_min, encoding_max):
                 tf_encoding = libpymo.TfEncoding()
+                scale, offset = self.compute_scaling_offset(minimum, maximum)
                 tf_encoding.min, tf_encoding.max, tf_encoding.offset, tf_encoding.delta, \
                 tf_encoding.bw = minimum, maximum, offset, scale, self.bitwidth
                 encodings.append(tf_encoding)
@@ -495,16 +496,12 @@ class LearnedGridTensorQuantizer(TensorQuantizer):
                 encodings_max = [encodings.max]
                 self.bitwidth = encodings.bw
 
-            if params[enc_min_param] is None:
-                params[enc_min_param] = torch.nn.Parameter(torch.FloatTensor(encodings_min).to(self.device),
-                                                           requires_grad=True)
+            params[enc_min_param] = torch.nn.Parameter(torch.FloatTensor(encodings_min).to(self.device),
+                                                       requires_grad=True)
 
-                params[enc_max_param] = torch.nn.Parameter(torch.FloatTensor(encodings_max).to(self.device),
-                                                           requires_grad=True)
+            params[enc_max_param] = torch.nn.Parameter(torch.FloatTensor(encodings_max).to(self.device),
+                                                       requires_grad=True)
 
-            else:
-                params[enc_min_param].data = torch.FloatTensor(encodings_min)
-                params[enc_max_param].data = torch.FloatTensor(encodings_max)
 
     def __str__(self):
         stream = io.StringIO(newline='\n')
@@ -572,7 +569,7 @@ class QuantizeDequantizeFunc(torch.autograd.Function):
                 encoding_max: torch.nn.Parameter, tensor_quantizer) -> torch.Tensor:
         # pylint: disable=protected-access
         ctx.save_for_backward(tensor, encoding_min, encoding_max, tensor_quantizer.n, tensor_quantizer.p,
-                              torch.tensor(tensor_quantizer.bitwidth))
+                              torch.tensor(tensor_quantizer.bitwidth), torch.tensor(tensor_quantizer._ch_axis))
 
         delta = (encoding_max - encoding_min) / (2 ** tensor_quantizer.bitwidth - 1)
         offset = torch.round(-encoding_min / delta)
@@ -601,7 +598,8 @@ class QuantizeDequantizeFunc(torch.autograd.Function):
 
     @staticmethod
     def _per_channel_quantize_dequantize(tensor_to_quantize_dequantize: torch.Tensor, encoding_min: torch.nn.Parameter,
-                                         encoding_max: torch.nn.Parameter, delta: torch.Tensor, offset: torch.Tensor, channel_axis: int):
+                                         encoding_max: torch.nn.Parameter, delta: torch.Tensor, offset: torch.Tensor,
+                                         channel_axis: int):
         """
         Clamps tensor wrt min max per output channel
         :param tensor_to_quantize_dequantize: tensor which gets quantized and dequantized
@@ -612,28 +610,36 @@ class QuantizeDequantizeFunc(torch.autograd.Function):
         :param channel_axis: Axis along which per channel quantize dequantize is performed
         :return: quantized dequantized tensor
         """
-        quantized_tensors = []
-        for i, minimum in enumerate(encoding_min):
-            tensor_slice = tensor_to_quantize_dequantize.select(channel_axis, i).contiguous(memory_format=torch.contiguous_format)
-            tensor = torch.clamp(tensor_slice, minimum.item(), encoding_max[i].item())
-            tensor = torch.round(tensor / delta[i].item()) + offset[i].item()
-            tensor = (tensor - offset[i].item()) * delta[i].item()
-            quantized_tensors.append(tensor)
-        quantized_tensor = torch.stack(tuple(quantized_tensors), dim=channel_axis)
+        if len(tensor_to_quantize_dequantize.shape) > 1:
+            encoding_min = grad_fn.broadcast_to_tensor(tensor_to_quantize_dequantize, encoding_min, channel_axis)
+            encoding_max = grad_fn.broadcast_to_tensor(tensor_to_quantize_dequantize, encoding_max, channel_axis)
+            delta = grad_fn.broadcast_to_tensor(tensor_to_quantize_dequantize, delta, channel_axis)
+            offset = grad_fn.broadcast_to_tensor(tensor_to_quantize_dequantize, offset, channel_axis)
 
-        return quantized_tensor
+        tensor = torch.clamp(tensor_to_quantize_dequantize, encoding_min, encoding_max)
+        tensor = torch.round(tensor / delta) + offset
+        tensor = (tensor - offset) * delta
+
+        return tensor
 
     @staticmethod
     def backward(ctx, grad):
         # Retrieve saved tensors for gradient calculations
-        tensor, encoding_min, encoding_max, n, p, bitwidth = ctx.saved_tensors
+        tensor, encoding_min, encoding_max, n, p, bitwidth, channel_axis = ctx.saved_tensors
+        channel_axis = channel_axis.item()
 
         scale = (encoding_max - encoding_min) / (2 ** bitwidth.data - 1)
         offset = torch.round(-encoding_min / scale)
 
-        tensor_grad = ParameterQuantizer.compute_dloss_by_dx(tensor, grad, scale, offset, n, p)
-        tensor_encoding_max_grad = ParameterQuantizer.compute_dloss_by_dmax(tensor, grad, scale, offset, n, p)
-        tensor_encoding_min_grad = ParameterQuantizer.compute_dloss_by_dmin_using_dmax(tensor_encoding_max_grad)
+        if len(scale) > 1 and len(tensor.shape) > 1:
+            scale = broadcast_to_tensor(tensor, scale, channel_axis)
+
+        if len(offset) > 1 and len(tensor.shape) > 1:
+            offset = broadcast_to_tensor(tensor, offset, channel_axis)
+
+        tensor_grad = grad_fn.compute_dloss_by_dx_using_scale_offset(tensor, grad, scale, offset, n, p)
+        tensor_encoding_max_grad = grad_fn.compute_dloss_by_dmax(tensor, grad, scale, offset, n, p, channel_axis)
+        tensor_encoding_min_grad = grad_fn.compute_dloss_by_dmin_using_dmax(tensor_encoding_max_grad)
 
         return tensor_grad, tensor_encoding_min_grad, tensor_encoding_max_grad, None
 
@@ -642,73 +648,6 @@ class ParameterQuantizer(torch.autograd.Function):
     """
     Helper class for simulating quantization for parameters for learned-grid quant wrappers
     """
-
-    @staticmethod
-    def compute_dloss_by_dmin_using_dmax(dloss_by_dmax):
-        """
-        compute derivative of loss w.r.t min, it is sign flipped version of derivative w.r.t max
-        :param dloss_by_dmax derivative w.r.t max
-        :return: derivative of loss w.r.t min
-        """
-
-        return -1 * dloss_by_dmax
-
-    @staticmethod
-    def compute_dloss_by_dmax(x, grad, scaling, offset, n, p):
-        """
-        helper function to compute derivative of loss w.r.t encoding max
-        :param x: input
-        :param grad: gradient
-        :param scaling: scaling factor computed for given encoding min/max
-        :param offset: offset computed
-        :param n: lower bound
-        :param p: upper bound
-        :return: computed derivative of loss w.r.t encoding max
-        """
-
-        r_x_by_s_plus_round_o = torch.round(x / scaling) + torch.round(offset)
-        # R(x/s)-(x/s)
-        r_x_by_s_minus_x_by_s = torch.round(x / scaling) - (x / scaling)
-
-        # compute dq_by_dmax
-        # expr to be used if r_x_by_s_plus_round_o < n or > p
-        false_expr = torch.clamp(r_x_by_s_plus_round_o.data, min=n.data.item(), max=p.data.item()) * (1 / p)
-        inner_cond = torch.where(torch.le(r_x_by_s_plus_round_o.data, p), (r_x_by_s_minus_x_by_s * (1 / p)), false_expr)
-
-        # we need a scalar value for dq_by_dmax, so reduce 4d value computed above
-        # to single value before returning gradient
-        # this uses chain rule, multiply by loss and sum it to get scalar.
-        dq_by_dmax = torch.where(torch.le(n, r_x_by_s_plus_round_o.data), inner_cond, false_expr)
-        dloss_by_dmax = torch.sum((dq_by_dmax * grad).flatten(), dim=0, keepdim=True)
-
-        return dloss_by_dmax
-
-    @staticmethod
-    def compute_dloss_by_dx(x, grad, scaling, offset, n, p):
-        """
-        compute derivative w.r.t input
-        :param grad: gradient
-        :param scaling: scaling factor computed for given encoding min/max
-        :param offset: offset computed
-        :param n: lower bound
-        :param p: upper bound
-        :return: gradient w.r.t input
-        """
-
-        # R(x/s) + R(o)
-        r_x_by_s_plus_round_o = torch.round(x / scaling) + offset
-
-        # compute dloss_by_dx = dq_by_dx * grad
-        inner_cond = torch.where(torch.le(r_x_by_s_plus_round_o.data, p.data),  # condition to check per value
-                                 torch.ones_like(r_x_by_s_plus_round_o),  # execute if true
-                                 torch.zeros_like(r_x_by_s_plus_round_o))  # execute if false
-
-        dloss_by_dx = torch.where(torch.le(n.data, r_x_by_s_plus_round_o.data),  # condition to check per value
-                                  inner_cond,  # execute if true
-                                  torch.zeros_like(r_x_by_s_plus_round_o.data)) * grad
-
-        return dloss_by_dx
-
     @staticmethod
     def compute_gradients(tensor: torch.Tensor, tensor_quantizer: LearnedGridTensorQuantizer, grad: torch.Tensor):
         """
@@ -720,14 +659,25 @@ class ParameterQuantizer(torch.autograd.Function):
         """
         device = tensor.device
         scaling, offset = tensor_quantizer.scaling, tensor_quantizer.offset
-        tensor_quantizer.n, tensor_quantizer.p = tensor_quantizer.n.to(device), tensor_quantizer.p.to(device)
-        tensor_grad = ParameterQuantizer.compute_dloss_by_dx(tensor, grad, scaling, offset, tensor_quantizer.n,
-                                                             tensor_quantizer.p)
-        tensor_encoding_max_grad = ParameterQuantizer.compute_dloss_by_dmax(tensor, grad, scaling, offset,
-                                                                            tensor_quantizer.n, tensor_quantizer.p)
+        # pylint:disable = protected-access
+        channel_axis = tensor_quantizer._ch_axis
+        if len(scaling) > 1 and len(tensor.shape) > 1:
+            scaling = broadcast_to_tensor(tensor, scaling, channel_axis)
 
-        tensor_encoding_min_grad = ParameterQuantizer.compute_dloss_by_dmin_using_dmax(tensor_encoding_max_grad)
-        return tensor_grad, tensor_encoding_min_grad, tensor_encoding_max_grad
+        if len(offset) > 1 and len(tensor.shape) > 1:
+            offset = broadcast_to_tensor(tensor, offset, channel_axis)
+
+        tensor_quantizer.n, tensor_quantizer.p = tensor_quantizer.n.to(device), tensor_quantizer.p.to(device)
+
+        tensor.grad = grad_fn.compute_dloss_by_dx_using_scale_offset(tensor, grad, scaling, offset,
+                                                                     tensor_quantizer.n, tensor_quantizer.p)
+
+        tensor_encoding_max_grad = grad_fn.compute_dloss_by_dmax(tensor, tensor.grad, scaling, offset,
+                                                                 tensor_quantizer.n, tensor_quantizer.p,
+                                                                 channel_axis)
+
+        tensor_encoding_min_grad = grad_fn.compute_dloss_by_dmin_using_dmax(tensor_encoding_max_grad)
+        return tensor_encoding_min_grad, tensor_encoding_max_grad
 
     @staticmethod
     def quantize_parameters(trainable_wrapper, encoding_params: List):
@@ -742,18 +692,18 @@ class ParameterQuantizer(torch.autograd.Function):
             name, param = named_param
             if trainable_wrapper.param_quantizers[name].enabled:
                 encoding_min = encoding_params[index * 2]
+
                 encoding_max = encoding_params[index * 2 + 1]
                 param_quantizer = trainable_wrapper.param_quantizers[name]
                 param_quantizer.scaling, param_quantizer.offset = \
-                    param_quantizer.compute_scaling_offset(encoding_min.item(), encoding_max.item())
+                    param_quantizer.compute_scaling_offset(encoding_min, encoding_max)
                 param.data = param_quantizer.quantize_dequantize(param.data, encoding_min, encoding_max)
 
     @staticmethod
-    def backward_pass_for_parameters(trainable_wrapper, shadow_params: Dict):
+    def backward_pass_for_parameters(trainable_wrapper):
         """
         Calls custom gradient computation for each parameter
         :param trainable_wrapper: LearnedGridQuantWrapper
-        :param shadow_params: Dictionary of original parameters of layer
         :return: Encoding min max params as list
         """
         param_encoding_grads = []
@@ -761,32 +711,25 @@ class ParameterQuantizer(torch.autograd.Function):
         for name, param in trainable_wrapper._module_to_wrap.named_parameters():
             param_quantizer = trainable_wrapper.param_quantizers[name]
             if param_quantizer.enabled:
-                param.grad = ste.compute_dloss_by_dx(param, param.grad, param_quantizer.encoding.min,
-                                                     param_quantizer.encoding.max)
-                output_grad = param.grad
-
-                _, param_encoding_min_grad, param_encoding_max_grad = ParameterQuantizer.compute_gradients(
-                    shadow_params[name], param_quantizer, output_grad)
+                param_encoding_min_grad, param_encoding_max_grad = ParameterQuantizer.compute_gradients(
+                    param, param_quantizer, param.grad)
                 param_encoding_grads.append(param_encoding_min_grad)
                 param_encoding_grads.append(param_encoding_max_grad)
         return param_encoding_grads
 
     # pylint:disable = arguments-differ
     @staticmethod
-    def forward(ctx, input_tensor: torch.Tensor, trainable_wrapper, shadow_params: Dict,
-                *encoding_params):
+    def forward(ctx, input_tensor: torch.Tensor, trainable_wrapper, *encoding_params):
         """
         :param ctx: Context manager
         :param input_tensor: Input to the layer
         :param trainable_wrapper: LearnedGridQuantWrapper Wrapped around the layer
-        :param shadow_params: Dict of original parameter values
         :param encoding_params: Unpacked List of Encoding min and max of parameters
         :return:
         """
 
         ParameterQuantizer.quantize_parameters(trainable_wrapper, encoding_params)
         ctx.trainable_module = trainable_wrapper
-        ctx.shadow_params = shadow_params
 
         return input_tensor
 
@@ -796,10 +739,9 @@ class ParameterQuantizer(torch.autograd.Function):
         trainable_wrapper = ctx.trainable_module
 
         # Custom backward for parameters
-        param_encoding_grads = ParameterQuantizer.backward_pass_for_parameters(trainable_wrapper,
-                                                                               ctx.shadow_params)
+        param_encoding_grads = ParameterQuantizer.backward_pass_for_parameters(trainable_wrapper)
 
-        return (*output_grad, None, None, *param_encoding_grads)
+        return (*output_grad, None, *param_encoding_grads)
 
 
 class QuantizeDequantize(torch.autograd.Function):
@@ -880,8 +822,8 @@ class QuantizeDequantize(torch.autograd.Function):
                 ch_axis = tensor_quantizer._ch_axis
             else:
                 ch_axis = 0
-            grad = ste.compute_dloss_by_dx(tensor[0], output_grad, tensor_quantizer.encoding.min,
-                                           tensor_quantizer.encoding.max, ch_axis)
+            grad = grad_fn.compute_dloss_by_dx(tensor[0], output_grad, tensor_quantizer.encoding.min,
+                                               tensor_quantizer.encoding.max, ch_axis)
         else:
             grad = output_grad
 

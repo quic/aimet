@@ -625,7 +625,7 @@ class LearnedGridQuantWrapper(QcQuantizeWrapper):
             self.output_quantizers[index].device = self.device
 
         # Param Quantizers
-        for name, _ in self._module_to_wrap.named_parameters():
+        for name, param in self._module_to_wrap.named_parameters():
             self.register_parameter(name + '_encoding_min', None)
 
             self.register_parameter(name + '_encoding_max', None)
@@ -634,13 +634,20 @@ class LearnedGridQuantWrapper(QcQuantizeWrapper):
             self.param_quantizers[name].name = name
             self.param_quantizers[name].wrapper_ref = self
             self.param_quantizers[name].device = self.device
+            channel_axis = 0
+            if isinstance(self._module_to_wrap, (torch.nn.ConvTranspose1d,
+                                                 torch.nn.ConvTranspose2d,
+                                                 torch.nn.ConvTranspose3d)):
+                if len(param.shape) > 1:
+                    channel_axis = 1
+            self.param_quantizers[name]._ch_axis = channel_axis
 
     def apply_gating_logic(self):
 
         def _apply_logic(encoding_min, encoding_max):
-            encoding_min.data = min(torch.tensor([0.0], device=self.device), encoding_min.data)
-            encoding_max.data = max(torch.tensor([0.0], device=self.device), encoding_max.data)
-            encoding_max.data = max(encoding_max.data, encoding_min.data + eps)
+            encoding_min.data = torch.minimum(torch.tensor([0.0], device=self.device), encoding_min.data)
+            encoding_max.data = torch.maximum(torch.tensor([0.0], device=self.device), encoding_max.data)
+            encoding_max.data = torch.maximum(encoding_max.data, encoding_min.data + eps)
 
         eps = torch.tensor([1e-5], device=self.device)
 
@@ -689,7 +696,7 @@ class LearnedGridQuantWrapper(QcQuantizeWrapper):
             quantized_inputs = [quantized_inputs]
 
         # Quantize the parameters
-        quantized_inputs[0] = ParameterQuantizer.apply(quantized_inputs[0], self, shadow_params,
+        quantized_inputs[0] = ParameterQuantizer.apply(quantized_inputs[0], self,
                                                        *encoding_list_for_params)
 
         # clone() the outputs of Custom function to avoid incorrect gradient calculation for in-place modification
