@@ -34,6 +34,7 @@
 #
 #  @@-COPYRIGHT-END-@@
 # =============================================================================
+import pytest
 import torch
 import json
 from aimet_common.defs import MAP_ROUND_MODE_TO_PYMO, QuantizationDataType
@@ -41,7 +42,9 @@ from aimet_torch.qc_quantize_op import StaticGridQuantWrapper, LearnedGridQuantW
 from aimet_torch.examples.test_models import ModelWithTwoInputs, ModelWithTransposeConv
 from aimet_torch.qc_quantize_op import QuantScheme
 from aimet_torch.quantsim import QuantizationSimModel
-from aimet_torch.tensor_quantizer import StaticGridPerTensorQuantizer, StaticGridPerChannelQuantizer, LearnedGridTensorQuantizer
+from aimet_torch.tensor_quantizer import StaticGridPerTensorQuantizer, StaticGridPerChannelQuantizer, \
+    LearnedGridTensorQuantizer, ParameterQuantizer, QuantizeDequantize
+from aimet_torch.quantsim_straight_through_grad import broadcast_to_tensor
 import libpymo
 
 
@@ -398,13 +401,14 @@ class TestPerChannelQcQuantizeOpStaticGrid:
 
 
 class TestPerChannelQcQuantizeOpLearnedGrid:
+    @pytest.mark.cuda
     def test_tensor_quantizer(self):
         torch.manual_seed(0)
         wrapper = create_learned_grid_wrapper()
         tensor_quantizer = wrapper.param_quantizers['weight']
 
         encodings = []
-        for _ in range(32):
+        for _ in range(3):
             encoding = libpymo.TfEncoding()
             encoding.bw, encoding.max, encoding.min, encoding.delta, encoding.offset = 8, 3, -2, 1, 0.2
             encodings.append(encoding)
@@ -431,6 +435,7 @@ class TestPerChannelQcQuantizeOpLearnedGrid:
                                                       use_symmetric_encodings=True,
                                                       enabled_by_default=True,
                                                       data_type=QuantizationDataType.int)
+        tensor_quantizer._ch_axis = 0
 
         encoding_min = torch.nn.Parameter(torch.FloatTensor([0.0, 0.0, 0.0]))
         encoding_max = torch.nn.Parameter(torch.FloatTensor([1.0, 2.5, 3.5]))
@@ -441,8 +446,21 @@ class TestPerChannelQcQuantizeOpLearnedGrid:
         expected_output = torch.ones((3, 1, 1, 2))
         expected_output[2, :, :, :] *= 3.5
         assert torch.all(expected_output.eq(quant_dequantized_output))
+        assert encoding_min.grad == None
+        assert encoding_max.grad == None
+
+        optimizer = torch.optim.SGD([encoding_min, encoding_max], lr=0.05, momentum=0.5)
+
+        loss = quant_dequantized_output.sum()
+        loss.backward()
+        optimizer.step()
+        assert encoding_min.grad is not None
+        assert encoding_max.grad is not None
+        assert len(encoding_min.grad) == len(encoding_max) == len(encoding_min) == len(encoding_max.grad)
+
 
     def test_replacement_of_wrapper(self):
+        torch.manual_seed(0)
         conv1 = torch.nn.Conv2d(3, 3, kernel_size=5)
         post_training_module = StaticGridQuantWrapper(conv1, round_mode='nearest',
                                                       quant_scheme=QuantScheme.post_training_tf, is_symmetric=False,
@@ -472,12 +490,121 @@ class TestPerChannelQcQuantizeOpLearnedGrid:
         assert trainable_module.input0_encoding_min.item() == -2.0
         assert isinstance(trainable_module.param_quantizers['weight'].encoding, list)
 
+    @pytest.mark.cuda
+    def test_apply_gating_logic(self):
+        torch.manual_seed(0)
+        wrapper = create_learned_grid_wrapper()
+        encodings = []
+        for _ in range(32):
+            encoding = libpymo.TfEncoding()
+            encoding.bw, encoding.max, encoding.min, encoding.delta, encoding.offset = 8, -3, 2, 1, 0.2
+            encodings.append(encoding)
+
+        wrapper.output_quantizer.encoding = encodings[0]
+        wrapper.input_quantizer.enabled = False
+        wrapper.param_quantizers['weight'].encoding = encodings
+        wrapper.param_quantizers['bias'].enabled = False
+        wrapper.apply_gating_logic()
+        assert wrapper.output_quantizer.encoding.min == 0.0
+        assert abs(wrapper.output_quantizer.encoding.max - 1e-5) < 1e-6
+        for enc in wrapper.param_quantizers['weight'].encoding:
+            assert enc.min == 0.0
+            assert abs(enc.max - 1e-5) < 1e-6
+
+    @pytest.mark.cuda
+    def test_compute_gradients_Parameter_Quantizer(self):
+        torch.manual_seed(0)
+        wrapper = create_learned_grid_wrapper()
+        encodings = []
+        for _ in range(3):
+            encoding = libpymo.TfEncoding()
+            encoding.bw, encoding.max, encoding.min, encoding.delta, encoding.offset = 8, -3, 2, 1, 0.2
+            encodings.append(encoding)
+
+        wrapper.param_quantizers['weight'].encoding = encodings
+        param_quantizer = wrapper.param_quantizers['weight']
+
+        encoding_min = torch.nn.Parameter(torch.FloatTensor([0.0, 0.0, 0.0]).to('cuda'), requires_grad=True)
+        encoding_max = torch.nn.Parameter(torch.FloatTensor([1.0, 2.5, 3.5]).to('cuda'), requires_grad=True)
+
+        param_quantizer.scaling, param_quantizer.offset = param_quantizer.compute_scaling_offset(encoding_min, encoding_max)
+
+        tensor = torch.ones((3, 1, 1, 2)).to('cuda')
+        grad = torch.randn(3, 1, 1, 2).to('cuda')
+        enc_min_grad, enc_max_grad = ParameterQuantizer.compute_gradients(tensor, wrapper.param_quantizers['weight'],
+                                                                          grad)
+
+        assert len(enc_min_grad) == len(enc_max_grad) == 3
+        assert torch.all(torch.eq(enc_max_grad, -enc_min_grad))
+
+    @pytest.mark.cuda
+    def test_compute_gradients_Parameter_Quantizer_bias(self):
+        torch.manual_seed(0)
+        wrapper = create_learned_grid_wrapper()
+
+        param_quantizer = wrapper.param_quantizers['bias']
+
+        encoding_min = torch.nn.Parameter(torch.FloatTensor([0.0, 0.0, 0.0]).to('cuda'), requires_grad=True)
+        encoding_max = torch.nn.Parameter(torch.FloatTensor([1.0, 2.5, 3.5]).to('cuda'), requires_grad=True)
+
+        param_quantizer.scaling, param_quantizer.offset = param_quantizer.compute_scaling_offset(encoding_min, encoding_max)
+
+        tensor = torch.ones(3).to('cuda')
+        grad = torch.randn(3).to('cuda')
+        enc_min_grad, enc_max_grad = ParameterQuantizer.compute_gradients(tensor, param_quantizer,
+                                                                          grad)
+
+        assert len(enc_min_grad) == len(enc_max_grad) == 3
+        assert torch.all(torch.eq(enc_max_grad, -enc_min_grad))
+
+    @pytest.mark.cuda
+    def test_qc_trainable_wrapper(self):
+        torch.manual_seed(0)
+        trainable_module = create_learned_grid_wrapper()
+
+        encodings = []
+        for _ in range(3):
+            encoding = libpymo.TfEncoding()
+            encoding.bw, encoding.max, encoding.min, encoding.delta, encoding.offset = 8, 3, -2, 1, 0.2
+            encodings.append(encoding)
+        trainable_module.input_quantizer.enabled = False
+        # trainable_module.input_quantizer.encoding = encodings[0]
+
+        trainable_module.param_quantizers['weight'].enabled = True
+        trainable_module.param_quantizers['weight'].encoding = encodings
+        trainable_module.param_quantizers['bias'].enabled = True
+        trainable_module.param_quantizers['bias'].encoding = encodings
+
+        trainable_module.output_quantizer.enabled = True
+        trainable_module.output_quantizer.encoding = encodings[0]
+
+        inp = torch.rand((1, 2, 5, 5), requires_grad=True).to('cuda')
+        out = trainable_module(inp)
+        optimizer = torch.optim.SGD(trainable_module.parameters(), lr=0.05, momentum=0.5)
+        loss = out.flatten().sum()
+        loss.backward()
+        optimizer.step()
+
+        # Checking if encoding min max have changed
+        assert not trainable_module.output0_encoding_min.item() == -2.0
+        assert not trainable_module.output0_encoding_max.item() == 3.0
+
+        for val in trainable_module.weight_encoding_min:
+            assert not val.item() == -2.0
+        for val in trainable_module.weight_encoding_max:
+            assert not val.item() == 3.0
+
+        for val in trainable_module.bias_encoding_min:
+            assert not val.item() == -2.0
+        for val in trainable_module.bias_encoding_max:
+            assert not val.item() == 3.0
+
 
 def create_learned_grid_wrapper():
-    conv1 = torch.nn.Conv2d(2, 32, kernel_size=5)
+    conv1 = torch.nn.Conv2d(2, 3, kernel_size=5).to('cuda')
 
     wrapper = LearnedGridQuantWrapper(conv1, round_mode='nearest',
                                       quant_scheme=QuantScheme.training_range_learning_with_tf_init,
                                       is_symmetric=False, is_output_quantized=True, activation_bw=8,
-                                      weight_bw=8, device='cpu', data_type=QuantizationDataType.int)
+                                      weight_bw=8, device='cuda', data_type=QuantizationDataType.int)
     return wrapper

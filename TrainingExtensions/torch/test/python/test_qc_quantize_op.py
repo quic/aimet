@@ -45,6 +45,7 @@ from aimet_common.defs import MAP_ROUND_MODE_TO_PYMO, QuantizationDataType
 from aimet_torch.qc_quantize_op import StaticGridQuantWrapper, LearnedGridQuantWrapper, SteGatingFuncForParameters, \
     QcQuantizeOpMode
 from aimet_torch.qc_quantize_op import QuantScheme
+from aimet_torch.quantsim_straight_through_grad import compute_dloss_by_dx_using_scale_offset, compute_dloss_by_dmin_using_dmax, compute_dloss_by_dmax
 from aimet_torch.tensor_quantizer import StaticGridPerTensorQuantizer, StaticGridPerChannelQuantizer
 from aimet_torch.tensor_quantizer import LearnedGridTensorQuantizer, ParameterQuantizer
 import libpymo
@@ -481,9 +482,9 @@ class CustomFunc(torch.autograd.Function):
         # print('input, min, max passed are ', input, weight_min, weight_max)
         # print('--------------------------------')
 
-        grad_input = ParameterQuantizer.compute_dloss_by_dx(input, grad, ctx.scaling, ctx.offset, ctx.n, ctx.p)
-        grad_max = ParameterQuantizer.compute_dloss_by_dmax(input, grad, ctx.scaling, ctx.offset, ctx.n, ctx.p)
-        grad_min = ParameterQuantizer.compute_dloss_by_dmin_using_dmax(grad_max)
+        grad_input = compute_dloss_by_dx_using_scale_offset(input, grad, ctx.scaling, ctx.offset, ctx.n, ctx.p)
+        grad_max = compute_dloss_by_dmax(input, grad, ctx.scaling, ctx.offset, ctx.n, ctx.p)
+        grad_min = compute_dloss_by_dmin_using_dmax(grad_max)
 
         return grad_input, grad_min, grad_max, None, None
 
