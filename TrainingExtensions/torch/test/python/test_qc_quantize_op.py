@@ -228,28 +228,6 @@ class TestQcQuantizeOpStaticGrid:
         expected_output = torch.tensor([True, True, False, False])
         assert torch.equal(quant_out, expected_output)
 
-    def test_quantizer_ignore_data_type_to_quantize_learned_grid(self):
-        """ Test tensor quantizer quantize only symmetric unsigned functionality on cpu """
-
-        relu = torch.nn.ReLU()
-        quantizer = LearnedGridQuantWrapper(relu, weight_bw=8, activation_bw=8, round_mode='nearest',
-                                            quant_scheme=QuantScheme.training_range_learning_with_tf_init, device='cpu')
-
-        encodings = libpymo.TfEncoding()
-        encodings.bw = 8
-        encodings.max = 5.19
-        encodings.min = 0.0
-        encodings.offset = 0
-
-        # delta is 0.020352941
-        quantizer.encoding = encodings
-
-        inputs = torch.tensor([[True, True, False, False]])
-        quant_out = quantizer._quantize_activation(inputs, quantizer.output_quantizers, 'output')
-        expected_output = torch.tensor([True, True, False, False])
-        assert torch.equal(quant_out, expected_output)
-
-
     def test_quantize_only_symmetric_unsigned_cpu(self):
         """ Test tensor quantizer quantize only symmetric unsigned functionality on cpu """
 
@@ -553,6 +531,16 @@ class TestQcQuantizeOpLearnedGrid:
         loss.backward()
 
         return a_input_tensor.grad, a_enc_min.grad, a_enc_max.grad
+
+    def test_quantizer_ignore_data_type_to_quantize_learned_grid(self):
+        relu = torch.nn.ReLU()
+        quantizer = LearnedGridQuantWrapper(relu, weight_bw=8, activation_bw=8, round_mode='nearest',
+                                            quant_scheme=QuantScheme.training_range_learning_with_tf_init, device='cpu')
+
+        inputs = torch.tensor([[True, True, False, False]])
+        quant_out = quantizer._quantize_activation(inputs, quantizer.output_quantizers, 'output')
+        expected_output = torch.tensor([True, True, False, False])
+        assert torch.equal(quant_out, expected_output)
 
     @staticmethod
     def perform_custom_grad_computation(custom_input, min_value, max_value, bw, sym_flag):

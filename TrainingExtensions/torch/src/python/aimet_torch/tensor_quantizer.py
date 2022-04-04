@@ -390,6 +390,33 @@ class LearnedGridTensorQuantizer(TensorQuantizer):
     initialized and then "learnt" during training
     """
 
+    def __init__(self, bitwidth: int, round_mode: str, quant_scheme: QuantScheme, use_symmetric_encodings: bool,
+                 enabled_by_default: bool, data_type: QuantizationDataType):
+        """
+        Constructor
+        :param bitwidth: Quantization bitwidth
+        :param round_mode: Rounding mode (e.g. Nearest)
+        :param quant_scheme: Quantization scheme (e.g. Range Learning)
+        :param use_symmetric_encodings: True if symmetric encoding is used.  False otherwise.
+        :param enabled_by_default: True if quantization of tensor is enabled.  False otherwise.
+        """
+
+        if data_type != QuantizationDataType.int:
+            raise ValueError('Only QuantizationDataType.int is supported for LearnedGridTensorQuantizer')
+
+        super(LearnedGridTensorQuantizer, self).__init__(bitwidth, round_mode, quant_scheme, use_symmetric_encodings,
+                                                         enabled_by_default, data_type)
+        self.wrapper_ref = None
+        self.name = None
+        self.round_ste_func = ste.RoundStraightThrough.apply
+        # p is the granularity/ steps (2^bw - 1)
+        self.n, self.p = LearnedGridTensorQuantizer.get_n_and_p(self.bitwidth, self.use_symmetric_encodings)
+        # Moving n and p device once so that we don't have to move it for every batch
+        self.scaling, self.offset = None, None
+        self.device = None
+        # TODO pass it when instantiating the tensor quantizer
+        self._ch_axis = 0
+
     @staticmethod
     def get_n_and_p(bitwidth, use_symmetric_encoding):
         """
@@ -416,31 +443,6 @@ class LearnedGridTensorQuantizer(TensorQuantizer):
 
         return n, p
 
-    def __init__(self, bitwidth: int, round_mode: str, quant_scheme: QuantScheme, use_symmetric_encodings: bool,
-                 enabled_by_default: bool, data_type: QuantizationDataType):
-        """
-        Constructor
-        :param bitwidth: Quantization bitwidth
-        :param round_mode: Rounding mode (e.g. Nearest)
-        :param quant_scheme: Quantization scheme (e.g. Range Learning)
-        :param use_symmetric_encodings: True if symmetric encoding is used.  False otherwise.
-        :param enabled_by_default: True if quantization of tensor is enabled.  False otherwise.
-        """
-
-        if data_type != QuantizationDataType.int:
-            raise ValueError('Only QuantizationDataType.int is supported for LearnedGridTensorQuantizer')
-
-        super(LearnedGridTensorQuantizer, self).__init__(bitwidth, round_mode, quant_scheme, use_symmetric_encodings,
-                                                         enabled_by_default, data_type)
-        self.wrapper_ref = None
-        self.name = None
-        self.round_ste_func = ste.RoundStraightThrough.apply
-        # p is the granularity/ steps (2^bw - 1)
-        self.n, self.p = LearnedGridTensorQuantizer.get_n_and_p(self.bitwidth, self.use_symmetric_encodings)
-        # Moving n and p device once so that we don't have to move it for every batch
-        self.scaling, self.offset = None, None
-        self.device = None
-
     @property
     def encoding(self):
         """
@@ -449,12 +451,18 @@ class LearnedGridTensorQuantizer(TensorQuantizer):
         """
         # pylint:disable = protected-access
         if self.enabled:
-            encodings = libpymo.TfEncoding()
-            # pylint: disable = protected-access
-            encodings.min, encodings.max = self.wrapper_ref._parameters[self.name + '_encoding_min'].item(), \
-                                           self.wrapper_ref._parameters[self.name + '_encoding_max'].item()
-            encodings.delta, encodings.offset = self.compute_scaling_offset(encodings.min, encodings.max)
-            encodings.bw = self.bitwidth
+            encoding_min = self.wrapper_ref._parameters[self.name + '_encoding_min']
+            encoding_max = self.wrapper_ref._parameters[self.name + '_encoding_max']
+            scaling, offsets = self.compute_scaling_offset(encoding_min, encoding_max)
+            encodings = []
+            for minimum, maximum, scale, offset in zip(encoding_min, encoding_max, scaling, offsets):
+                tf_encoding = libpymo.TfEncoding()
+                tf_encoding.min, tf_encoding.max, tf_encoding.offset, tf_encoding.delta, \
+                tf_encoding.bw = minimum, maximum, offset, scale, self.bitwidth
+                encodings.append(tf_encoding)
+            # TODO: Remove when using only sequence of encodings (Done for backward compatibility)
+            if len(encodings) == 1:
+                encodings = encodings[0]
             return encodings
         return None
 
@@ -467,24 +475,36 @@ class LearnedGridTensorQuantizer(TensorQuantizer):
         # pylint:disable = protected-access
         if self.enabled:
             assert encodings is not None, "Encodings cannot be None if Quantizer is enabled"
-            assert isinstance(encodings, libpymo.TfEncoding), "Encodings should be a libpymo.TfEncoding() object"
-            self.bitwidth = encodings.bw
 
             # pylint: disable = protected-access
             enc_min_param = self.name + '_encoding_min'
             enc_max_param = self.name + '_encoding_max'
+            # TODO refactor to not call internal state of wrapper
             params = self.wrapper_ref._parameters
 
+            # Todo: Remove this check when encodings is always a sequence
+            if isinstance(encodings, List):
+                assert isinstance(encodings[0], libpymo.TfEncoding), "Encodings should be a libpymo.TfEncoding() object"
+                # Todo: Check for sequence
+                encodings_min = [enc.min for enc in encodings]
+                encodings_max = [enc.max for enc in encodings]
+                self.bitwidth = encodings[0].bw
+            else:
+                assert isinstance(encodings, libpymo.TfEncoding), "Encodings should be a libpymo.TfEncoding() object"
+                encodings_min = [encodings.min]
+                encodings_max = [encodings.max]
+                self.bitwidth = encodings.bw
+
             if params[enc_min_param] is None:
-                params[enc_min_param] = torch.nn.Parameter(torch.FloatTensor([encodings.min]).to(self.device),
+                params[enc_min_param] = torch.nn.Parameter(torch.FloatTensor(encodings_min).to(self.device),
                                                            requires_grad=True)
 
-                params[enc_max_param] = torch.nn.Parameter(torch.FloatTensor([encodings.max]).to(self.device),
+                params[enc_max_param] = torch.nn.Parameter(torch.FloatTensor(encodings_max).to(self.device),
                                                            requires_grad=True)
 
             else:
-                params[enc_min_param].data = torch.FloatTensor([encodings.min])
-                params[enc_max_param].data = torch.FloatTensor([encodings.max])
+                params[enc_min_param].data = torch.FloatTensor(encodings_min)
+                params[enc_max_param].data = torch.FloatTensor(encodings_max)
 
     def __str__(self):
         stream = io.StringIO(newline='\n')
@@ -494,8 +514,13 @@ class LearnedGridTensorQuantizer(TensorQuantizer):
                                                                                             self.bitwidth,
                                                                                             self.enabled))
         if self.encoding:
-            stream.write('    min:{}, max={}, delta={}, offset={}\n'.format(self.encoding.min, self.encoding.max,
-                                                                            self.encoding.delta, self.encoding.offset))
+            encoding = self.encoding
+            # Todo: Remove this check when encodings is always a sequence
+            if isinstance(encoding, libpymo.TfEncoding):
+                encoding = [encoding]
+            for tf_encoding in encoding:
+                stream.write('    min:{}, max={}, delta={}, offset={}\n'.format(tf_encoding.min, tf_encoding.max,
+                                                                                tf_encoding.delta, tf_encoding.offset))
         else:
             stream.write('    no encoding\n')
 
@@ -545,17 +570,58 @@ class QuantizeDequantizeFunc(torch.autograd.Function):
     @staticmethod
     def forward(ctx, tensor: torch.Tensor, encoding_min: torch.nn.Parameter,
                 encoding_max: torch.nn.Parameter, tensor_quantizer) -> torch.Tensor:
-
+        # pylint: disable=protected-access
         ctx.save_for_backward(tensor, encoding_min, encoding_max, tensor_quantizer.n, tensor_quantizer.p,
                               torch.tensor(tensor_quantizer.bitwidth))
 
         delta = (encoding_max - encoding_min) / (2 ** tensor_quantizer.bitwidth - 1)
         offset = torch.round(-encoding_min / delta)
+        if len(encoding_min) > 1:
+            tensor = QuantizeDequantizeFunc._per_channel_quantize_dequantize(tensor, encoding_min, encoding_max, delta, offset, tensor_quantizer._ch_axis)
+        else:
+            tensor = QuantizeDequantizeFunc._per_tensor_quantize_dequantize(tensor, encoding_min, encoding_max, delta, offset)
+        return tensor
+
+    @staticmethod
+    def _per_tensor_quantize_dequantize(tensor: torch.Tensor, encoding_min: torch.nn.Parameter, encoding_max: torch.nn.Parameter,
+                                        delta: float, offset: float):
+        """
+        Quantize dequantize a tensor
+        :param tensor: tensor which gets quantized and dequantized
+        :param encoding_min: encoding's min
+        :param encoding_max: encoding's max
+        :param delta: encoding's delta
+        :param offset: offset tensor
+        :return: quantized dequantized tensor
+        """
         tensor = torch.clamp(tensor, encoding_min.item(), encoding_max.item())
         tensor = torch.round(tensor / delta) + offset
         tensor = (tensor - offset) * delta
-
         return tensor
+
+    @staticmethod
+    def _per_channel_quantize_dequantize(tensor_to_quantize_dequantize: torch.Tensor, encoding_min: torch.nn.Parameter,
+                                         encoding_max: torch.nn.Parameter, delta: torch.Tensor, offset: torch.Tensor, channel_axis: int):
+        """
+        Clamps tensor wrt min max per output channel
+        :param tensor_to_quantize_dequantize: tensor which gets quantized and dequantized
+        :param encoding_min: encoding's min
+        :param encoding_max: encoding's max
+        :param delta: encoding's delta
+        :param offset: offset tensor
+        :param channel_axis: Axis along which per channel quantize dequantize is performed
+        :return: quantized dequantized tensor
+        """
+        quantized_tensors = []
+        for i, minimum in enumerate(encoding_min):
+            tensor_slice = tensor_to_quantize_dequantize.select(channel_axis, i).contiguous(memory_format=torch.contiguous_format)
+            tensor = torch.clamp(tensor_slice, minimum.item(), encoding_max[i].item())
+            tensor = torch.round(tensor / delta[i].item()) + offset[i].item()
+            tensor = (tensor - offset[i].item()) * delta[i].item()
+            quantized_tensors.append(tensor)
+        quantized_tensor = torch.stack(tuple(quantized_tensors), dim=channel_axis)
+
+        return quantized_tensor
 
     @staticmethod
     def backward(ctx, grad):
