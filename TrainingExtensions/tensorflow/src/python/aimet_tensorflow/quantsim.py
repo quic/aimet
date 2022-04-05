@@ -1150,6 +1150,9 @@ class QuantizationSimModel:
 
         def create_quantize_op():
             if self.per_channel_quantization_enabled and quantizer_type == QuantizerType.param:
+
+                is_training = tf.keras.backend.learning_phase()
+
                 op = qcops.qc_quantize_per_channel(name=quant_op_name, in_tensor=preceeding_tensor,
                                                    op_mode=op_mode_var,
                                                    tensor_quantizer_reference=tensor_quant_ref,
@@ -1157,7 +1160,7 @@ class QuantizationSimModel:
                                                    encoding_max=encoding_max,
                                                    bit_width=bit_width,
                                                    use_symmetric_encoding=use_symmetric_encoding,
-                                                   axis=quantization_axis)
+                                                   axis=quantization_axis, is_training=is_training)
             else:
                 op = qcops.qc_quantize(name=quant_op_name, in_tensor=preceeding_tensor,
                                        op_mode=op_mode_var,
