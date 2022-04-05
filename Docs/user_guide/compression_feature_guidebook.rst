@@ -1,5 +1,3 @@
-:orphan:
-
 .. _ug-comp-guidebook:
 
 
@@ -13,6 +11,8 @@ AIMET supports network compression using the following techniques: Weight SVD, S
 For best performance, a combination of spatial SVD followed by channel pruning is recommended.  At high level, following steps should be performed to compress a network using SSVD + CP combination:
 
 .. image:: ../images/compression_flow.png
+   :height: 500
+   :width: 600
 
 1.	Determine the target compression ratio (C), which is the ratio of MACs in final compressed model to the MACs in the original uncompressed model. For example, target compression ratio = 0.5 indicates that the final model MACs are half of the original model MACs.
 
