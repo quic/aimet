@@ -47,7 +47,9 @@ import tensorflow as tf
 from aimet_tensorflow.common.graph_eval import initialize_uninitialized_vars
 from aimet_tensorflow.quantsim import QuantizationSimModel
 from aimet_tensorflow.examples.test_models import depthwise_conv2d_model
+from aimet_tensorflow.utils.constants import QuantizeOpIndices
 from aimet_tensorflow.utils.op.conv import WeightTensorUtils
+from aimet_common.defs import QuantScheme
 from aimet_common.quantsim import calculate_delta_offset
 
 tf.compat.v1.disable_eager_execution()
@@ -482,7 +484,6 @@ class TestTrainingExtensionsQcQuantizeOpPerChannel(unittest.TestCase):
         assert np.allclose(encoding_numpy, encodings, rtol=0.01)
 
 
-
     @pytest.mark.cuda
     def test_to_compare_time_per_channel_and_per_tensor_quantization(self):
         save_config_file_for_per_channel_quantization()
@@ -552,6 +553,153 @@ class TestTrainingExtensionsQcQuantizeOpPerChannel(unittest.TestCase):
                 encoding = quantizer_info.get_encoding()
                 assert isinstance(encoding, list)
 
+    # Mark below test as cuda until per channel on cpu is supported.
+    @pytest.mark.cuda
+    def test_per_channel_range_learning(self):
+        """
+        Test to validate per channel range learning
+        """
+        tf.compat.v1.reset_default_graph()
+        tf.compat.v1.set_random_seed(0)
+        np.random.seed(0)
+        with tf.device('/cpu:0'):
+            inputs = tf.keras.Input(shape=(32, 32, 4,))
+            conv_op = tf.keras.layers.Conv2D(2, (3, 3),
+                                             kernel_initializer=tf.random_uniform_initializer(-1, 2),
+                                             bias_initializer='random_uniform',
+                                             padding='SAME')(inputs)
+            relu_op = tf.nn.relu(conv_op)
+            reshape = tf.keras.layers.Flatten()(relu_op)
+            _ = tf.keras.layers.Dense(10, bias_initializer='random_uniform')(reshape)
+
+        sess = tf.compat.v1.Session(graph=tf.compat.v1.get_default_graph())
+        initialize_uninitialized_vars(sess)
+
+        save_config_file_bias_quantized_for_per_channel_quantization()
+
+        # create quantsim model without config file
+        sim = QuantizationSimModel(sess, ['input_1'], ['dense/BiasAdd'], use_cuda=True,
+                                   quant_scheme=QuantScheme.training_range_learning_with_tf_init,
+                                   config_file='./quantsim_config.json')
+
+        def dummy_forward_pass(sess, _):
+            model_output = sess.graph.get_tensor_by_name('dense/BiasAdd_quantized:0')
+            model_input = sess.graph.get_tensor_by_name('input_1:0')
+            shape = model_input.shape
+            dummy_input = np.random.randn(1, shape[1], shape[2], shape[3])
+            sess.run(model_output, feed_dict={model_input: dummy_input})
+
+        conv2d_weight_quant_op = sim.session.graph.get_operation_by_name('conv2d/Conv2D/ReadVariableOp_quantized')
+        conv2d_output_quant_op = sim.session.graph.get_operation_by_name('conv2d/BiasAdd_quantized')
+        dense_bias_quant_op = sim.session.graph.get_operation_by_name('dense/BiasAdd/ReadVariableOp_quantized')
+
+        # enable input
+        sim.compute_encodings(dummy_forward_pass, None)
+
+        inp_tensor = sim.session.graph.get_tensor_by_name('input_1:0')
+        w_shape = inp_tensor.shape
+        batches = 32
+        inp_data = np.random.rand(batches, w_shape[1], w_shape[2], w_shape[3])
+        logits = sim.session.graph.get_tensor_by_name('dense/BiasAdd_quantized:0')
+
+        labels = np.random.randint(10, size=batches)
+        one_hot_labels = np.eye(10)[labels]
+
+        with sim.session.graph.as_default():
+            var_list = tf.compat.v1.get_collection(tf.compat.v1.GraphKeys.TRAINABLE_VARIABLES)
+            labels_placeholder = tf.compat.v1.placeholder(tf.float32, [None, 10], name='labels')
+            loss = tf.compat.v1.losses.softmax_cross_entropy(onehot_labels=labels_placeholder, logits=logits)
+
+            update_ops = []
+            global_step = tf.compat.v1.train.create_global_step()
+            initialize_uninitialized_vars(sim.session)
+
+            optimizer = tf.compat.v1.train.GradientDescentOptimizer(learning_rate=1e-3)
+            gradients = optimizer.compute_gradients(loss, var_list)
+
+            grad_updates = optimizer.apply_gradients(gradients, global_step=global_step)
+            update_ops.append(grad_updates)
+            update_op = tf.group(*update_ops)
+
+            conv_inp_tensor = conv2d_weight_quant_op.inputs[0]
+            grads = tf.gradients(loss, [conv_inp_tensor,
+                                        conv2d_weight_quant_op.inputs[QuantizeOpIndices.encoding_min],
+                                        conv2d_weight_quant_op.inputs[QuantizeOpIndices.encoding_max],
+                                        dense_bias_quant_op.inputs[QuantizeOpIndices.encoding_min],
+                                        dense_bias_quant_op.inputs[QuantizeOpIndices.encoding_max]])
+            _, conv_dqbydmin, conv_dqbydmax, dense_dqbydmin, dense_dqbydmax = grads
+            conv2d_weight_min_gradient = sim.session.run(conv_dqbydmin,
+                                                         feed_dict={inp_tensor: inp_data,
+                                                                    labels_placeholder: one_hot_labels})
+            conv2d_weight_max_gradient = sim.session.run(conv_dqbydmax,
+                                                         feed_dict={inp_tensor: inp_data,
+                                                                    labels_placeholder: one_hot_labels})
+            dense_bias_min_gradient = sim.session.run(dense_dqbydmin,
+                                                      feed_dict={inp_tensor: inp_data,
+                                                                 labels_placeholder: one_hot_labels})
+            dense_bias_max_gradient = sim.session.run(dense_dqbydmax,
+                                                      feed_dict={inp_tensor: inp_data,
+                                                                 labels_placeholder: one_hot_labels})
+
+            assert len(conv2d_weight_min_gradient) == 2
+            assert len(conv2d_weight_max_gradient) == 2
+            assert len(dense_bias_min_gradient) == 10
+            assert len(dense_bias_max_gradient) == 10
+
+            weights_before_train = sim.session.run(conv2d_weight_quant_op.inputs[0])
+            encoding_min_before_train = sim.session.run(conv2d_weight_quant_op.inputs[QuantizeOpIndices.encoding_min])
+            encoding_max_before_train = sim.session.run(conv2d_weight_quant_op.inputs[QuantizeOpIndices.encoding_max])
+            conv2d_output_encoding_min_before_train = sim.session.run(conv2d_output_quant_op.inputs[
+                                                                          QuantizeOpIndices.encoding_min])
+            conv2d_output_encoding_max_before_train = sim.session.run(conv2d_output_quant_op.inputs[
+                                                                          QuantizeOpIndices.encoding_max])
+            dense_bias_encoding_min_before_train = \
+                sim.session.run(dense_bias_quant_op.inputs[QuantizeOpIndices.encoding_min])
+            dense_bias_encoding_max_before_train = \
+                sim.session.run(dense_bias_quant_op.inputs[QuantizeOpIndices.encoding_max])
+            with tf.control_dependencies([update_op]):
+                train_op = tf.identity(loss, name='train_op')
+
+            for quant_op_name in sim._param_quantizers.keys():
+                print(quant_op_name + '_min_before_train = ' + str(sim.session.run(
+                    sim.session.graph.get_operation_by_name(quant_op_name).inputs[QuantizeOpIndices.encoding_min])))
+                print(quant_op_name + '_max_before_train = ' + str(sim.session.run(
+                    sim.session.graph.get_operation_by_name(quant_op_name).inputs[QuantizeOpIndices.encoding_max])))
+
+            # start training
+            _ = sim.session.run(train_op, feed_dict={inp_tensor: inp_data, labels_placeholder: one_hot_labels})
+
+            for quant_op_name in sim._param_quantizers.keys():
+                print(quant_op_name + '_min = ' + str(sim.session.run(sim.session.graph.get_operation_by_name
+                                                                      (quant_op_name).inputs[
+                                                                          QuantizeOpIndices.encoding_min])))
+                print(quant_op_name + '_max = ' + str(sim.session.run(sim.session.graph.get_operation_by_name
+                                                                      (quant_op_name).inputs[
+                                                                          QuantizeOpIndices.encoding_max])))
+
+            weights_after_train = sim.session.run(conv2d_weight_quant_op.inputs[0])
+            conv2d_output_encoding_min_after_train = sim.session.run(conv2d_output_quant_op.inputs[
+                                                                         QuantizeOpIndices.encoding_min])
+            conv2d_output_encoding_max_after_train = sim.session.run(conv2d_output_quant_op.inputs[
+                                                                         QuantizeOpIndices.encoding_max])
+            encoding_min_after_train = sim.session.run(conv2d_weight_quant_op.inputs[QuantizeOpIndices.encoding_min])
+            encoding_max_after_train = sim.session.run(conv2d_weight_quant_op.inputs[QuantizeOpIndices.encoding_max])
+            dense_bias_encoding_min_after_train = \
+                sim.session.run(dense_bias_quant_op.inputs[QuantizeOpIndices.encoding_min])
+            dense_bias_encoding_max_after_train = \
+                sim.session.run(dense_bias_quant_op.inputs[QuantizeOpIndices.encoding_max])
+
+            assert not np.allclose(weights_before_train, weights_after_train, atol=1e-6)
+            assert not np.array_equal(encoding_min_before_train, encoding_min_after_train)
+            assert not np.array_equal(encoding_max_before_train, encoding_max_after_train)
+            assert not np.array_equal(conv2d_output_encoding_min_before_train, conv2d_output_encoding_min_after_train)
+            assert not np.array_equal(conv2d_output_encoding_max_before_train, conv2d_output_encoding_max_after_train)
+            assert not np.array_equal(dense_bias_encoding_min_before_train, dense_bias_encoding_min_after_train)
+            assert not np.array_equal(dense_bias_encoding_max_before_train, dense_bias_encoding_max_after_train)
+
+        sess.close()
+        sim.session.close()
+
 
 def save_config_file_for_per_channel_quantization():
     quantsim_config = {
@@ -577,6 +725,31 @@ def save_config_file_for_per_channel_quantization():
 
     with open('./quantsim_config.json', 'w') as f:
         json.dump(quantsim_config, f)
+
+
+def save_config_file_bias_quantized_for_per_channel_quantization():
+    quantsim_config = {
+        "defaults": {
+            "ops": {
+                "is_output_quantized": "True",
+                "is_symmetric": "False"
+            },
+            "params": {
+                "is_quantized": "True",
+                "is_symmetric": "False"
+            },
+            "per_channel_quantization": "True",
+        },
+        "params": {},
+        "op_type": {},
+        "supergroups": [],
+        "model_input": {},
+        "model_output": {}
+    }
+
+    with open('./quantsim_config.json', 'w') as f:
+        json.dump(quantsim_config, f)
+
 
 def compute_tf_encodings(sess, op, axis):
 

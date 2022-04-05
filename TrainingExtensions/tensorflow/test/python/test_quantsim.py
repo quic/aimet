@@ -47,7 +47,7 @@ from packaging import version
 import libpymo
 import aimet_tensorflow.utils.quantsim
 from aimet_tensorflow.quantsim import QuantizationSimModel, check_accumulator_overflow
-from aimet_tensorflow.quantsim_straight_through_grad import _get_n_and_p
+from aimet_tensorflow.quantsim_straight_through_grad import _get_n_and_p, _compute_dloss_by_dmax
 from aimet_tensorflow.utils.graph_saver import load_model_from_meta
 from aimet_tensorflow.common.graph_eval import initialize_uninitialized_vars
 from aimet_tensorflow.defs import ParameterInfo
@@ -1259,6 +1259,56 @@ class TestQuantSimRangeLearning:
         assert expected_sym_p == comp_symmetric_p
 
         sess.close()
+
+    def test_compute_dloss_by_dmax_shape(self):
+        """ Test compute_dloss_by_dmax returns tensor with correct shape """
+        tf.compat.v1.set_random_seed(0)
+
+        # Per tensor case
+        tf.compat.v1.reset_default_graph()
+        graph = tf.Graph()
+        sess = tf.compat.v1.Session(graph=graph)
+        with graph.as_default():
+            inputs = tf.random.uniform(shape=[3, 3, 4, 2], dtype=tf.float32)
+            grad = tf.random.uniform(shape=[3, 3, 4, 2], dtype=tf.float32)
+            scaling = tf.random.uniform(shape=[], dtype=tf.float32)
+            offset = tf.random.uniform(shape=[], dtype=tf.float32)
+            bitwidth = tf.constant(8.0, dtype=tf.float32)
+            is_symmetric = tf.constant(False)
+
+            dloss_by_dmax = _compute_dloss_by_dmax(inputs, grad, scaling, offset, bitwidth, is_symmetric)
+            assert sess.run(dloss_by_dmax).shape == ()
+
+        # Per channel case with weights
+        tf.compat.v1.reset_default_graph()
+        graph = tf.Graph()
+        sess = tf.compat.v1.Session(graph=graph)
+        with graph.as_default():
+            inputs = tf.random.uniform(shape=[3, 3, 4, 2], dtype=tf.float32)
+            grad = tf.random.uniform(shape=[3, 3, 4, 2], dtype=tf.float32)
+            scaling = tf.random.uniform(shape=[2,], dtype=tf.float32)
+            offset = tf.random.uniform(shape=[2,], dtype=tf.float32)
+            bitwidth = tf.constant(8.0, dtype=tf.float32)
+            is_symmetric = tf.constant(False)
+
+            dloss_by_dmax = _compute_dloss_by_dmax(inputs, grad, scaling, offset, bitwidth, is_symmetric)
+            assert sess.run(dloss_by_dmax).shape == (2,)
+
+        # Per channel case with bias
+        tf.compat.v1.reset_default_graph()
+        graph = tf.Graph()
+        sess = tf.compat.v1.Session(graph=graph)
+        with graph.as_default():
+            inputs = tf.random.uniform(shape=[10,], dtype=tf.float32)
+            grad = tf.random.uniform(shape=[10,], dtype=tf.float32)
+            scaling = tf.random.uniform(shape=[10,], dtype=tf.float32)
+            offset = tf.random.uniform(shape=[10,], dtype=tf.float32)
+            bitwidth = tf.constant(8.0, dtype=tf.float32)
+            is_symmetric = tf.constant(False)
+
+            dloss_by_dmax = _compute_dloss_by_dmax(inputs, grad, scaling, offset, bitwidth, is_symmetric)
+            assert sess.run(dloss_by_dmax).shape == (10,)
+
 
     def test_qc_custom_gradient_training_loop_range_learning(self, iterations=1):
         """

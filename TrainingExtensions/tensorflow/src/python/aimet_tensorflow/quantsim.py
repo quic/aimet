@@ -1174,7 +1174,8 @@ class QuantizationSimModel:
                 if self._quant_scheme in [QuantScheme.training_range_learning_with_tf_init,
                                           QuantScheme.training_range_learning_with_tf_enhanced_init]:
                     with self.session.graph.gradient_override_map(
-                            {"QcQuantize": "QcQuantizeRangeLearningCustomGradient"}):
+                            {"QcQuantize": "QcQuantizeRangeLearningCustomGradient",
+                             "QcQuantizePerChannel": "QcQuantizePerChannelRangeLearningCustomGradient"}):
                         q_op_out = create_quantize_op()
                 else:
                     q_op_out = create_quantize_op()
@@ -1184,7 +1185,8 @@ class QuantizationSimModel:
             if self._quant_scheme in [QuantScheme.training_range_learning_with_tf_init,
                                       QuantScheme.training_range_learning_with_tf_enhanced_init]:
                 with self.session.graph.gradient_override_map(
-                        {"QcQuantize": "QcQuantizeRangeLearningCustomGradient"}):
+                        {"QcQuantize": "QcQuantizeRangeLearningCustomGradient",
+                         "QcQuantizePerChannel": "QcQuantizePerChannelRangeLearningCustomGradient"}):
                     q_op_out = create_quantize_op()
             else:
                 q_op_out = create_quantize_op()
