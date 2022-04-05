@@ -164,38 +164,43 @@ def _compute_dloss_by_dmax(x, grad, scaling, offset, bitwidth, use_symmetric_enc
     # to single value before returning gradient
     # this uses chain rule, multiply by loss and sum it to get scalar.
     dq_by_dmax = tf.where(tf.less_equal(n, r_x_by_s_plus_round_o), inner_cond, false_expr)
-    dloss_by_dmax = tf.reduce_sum(dq_by_dmax * grad)
 
+    # If per channel is active, scaling tensor will be rank 1 (an array instead of a singular value).
+    # In case of per channel, we reduce by all but the last dimension. Otherwise, we reduce all dimensions.
+    dloss_by_dmax = tf.cond(tf.equal(tf.rank(scaling), 0), lambda: tf.reduce_sum(dq_by_dmax * grad),
+                            lambda: tf.reduce_sum(dq_by_dmax * grad, axis=tf.range(0, tf.rank(x) - 1)))
     return dloss_by_dmax
 
 
-@tf_ops.RegisterGradient("QcQuantizeRangeLearningCustomGradient")
-def quantsim_custom_grad_learned_grid(op, grad):
+# pylint: disable=too-many-locals
+def _compute_dloss_by_dmin_dmax_and_dx(inputs: tf.Tensor, bitwidth: tf.Tensor, op_mode: tf.Tensor,
+                                       encoding_min: tf.Tensor, encoding_max: tf.Tensor, is_symmetric: tf.Tensor,
+                                       grad: tf.Tensor):
     """
-    Performs custom gradient calculations for trained Quantize op
-    :param op: Tf operation for which gradients are to be computed
-    :param grad: Gradient flowing through
+    Return tensors for dloss_by_dmin, dloss_by_dmax, and dloss_by_dx.
+    :param inputs: Inputs to op
+    :param bitwidth: Bitwidth used to quantize
+    :param op_mode: Op mode (if passthrough, gradient is returned as is)
+    :param encoding_min: Encoding min value(s), will be more than one if per channel is active
+    :param encoding_max: Encoding max value(s), will be more than one if per channel is active
+    :param is_symmetric: True if symmetric encodings are used, False otherwise
+    :param grad: Gradient from child layer
+    :return: Tensors for dloss_by_dmin, dloss_by_dmax, and dloss_by_dx
     """
-    # pylint: disable=R0914
-
-    # read bitwidth, use_symmetric_encoding_flag,
-    # encoding_min and encoding_max from the op inputs
-    x = tf.cast(op.inputs[0], tf.float32)
-    bitwidth = tf.cast(op.inputs[int(QuantizeOpIndices.bit_width)], tf.float32)
-    op_mode = tf.cast(op.inputs[int(QuantizeOpIndices.op_mode)], tf.int8)
-
-    encoding_min = tf.cast(op.inputs[int(QuantizeOpIndices.encoding_min)], tf.float32)
-    encoding_max_read = tf.cast(op.inputs[int(QuantizeOpIndices.encoding_max)], tf.float32)
-
+    x = tf.cast(inputs, tf.float32)
+    bitwidth = tf.cast(bitwidth, tf.float32)
+    op_mode = tf.cast(op_mode, tf.int8)
+    encoding_min = tf.cast(encoding_min, tf.float32)
+    encoding_max = tf.cast(encoding_max, tf.float32)
     # handle min == max to avoid divide by zero
     epsilon = tf.constant(1e-5, dtype=tf.float32)
-    encoding_max = tf.math.maximum(encoding_max_read, tf.add(encoding_min, epsilon))
+    encoding_max = tf.math.maximum(encoding_max, tf.add(encoding_min, epsilon))
 
     # compute n, p, scaling and offset params
     # choose n based on symmetric or asymmetric flag
     # symmetric : -two_pow_bw + 1
     # asymmetric : 0
-    n, p = _get_n_and_p(bitwidth, op.inputs[int(QuantizeOpIndices.use_symmetric_encoding)])
+    n, p = _get_n_and_p(bitwidth, is_symmetric)
     steps = tf.cast(tf.pow(tf.cast(tf.constant(2), tf.float32), bitwidth) - 1, tf.float32)
     scaling = tf.cast(((encoding_max - encoding_min) / steps), tf.float32)
     rounded_offset = tf.round(-encoding_min / scaling)  # pylint: disable=invalid-unary-operand-type
@@ -211,12 +216,46 @@ def quantsim_custom_grad_learned_grid(op, grad):
                             inner_cond,  # execute if true
                             tf.zeros_like(r_x_by_s_plus_round_o))) * grad
 
-    dloss_by_dmax = tf.cast(_compute_dloss_by_dmax(x, grad, scaling, rounded_offset, bitwidth,
-                                                   op.inputs[int(QuantizeOpIndices.use_symmetric_encoding)]),
+    dloss_by_dmax = tf.cast(_compute_dloss_by_dmax(x, grad, scaling, rounded_offset, bitwidth, is_symmetric),
                             tf.float64)
     dloss_by_dmin = tf.cast(_compute_dloss_by_dmin_using_dmax(dloss_by_dmax), tf.float64)
 
     # Pass through gradient for skipped ops
     dloss_by_dx = tf.cond(tf.equal(op_mode, 3), lambda: grad, lambda: dloss_by_dx)
+    return dloss_by_dmin, dloss_by_dmax, dloss_by_dx
 
+
+@tf_ops.RegisterGradient("QcQuantizeRangeLearningCustomGradient")
+def quantsim_custom_grad_learned_grid(op, grad):
+    """
+    Performs custom gradient calculations for trained Quantize op
+    :param op: Tf operation for which gradients are to be computed
+    :param grad: Gradient flowing through
+    """
+    dloss_by_dmin, dloss_by_dmax, dloss_by_dx = \
+        _compute_dloss_by_dmin_dmax_and_dx(op.inputs[0],
+                                           op.inputs[int(QuantizeOpIndices.bit_width)],
+                                           op.inputs[int(QuantizeOpIndices.op_mode)],
+                                           op.inputs[int(QuantizeOpIndices.encoding_min)],
+                                           op.inputs[int(QuantizeOpIndices.encoding_max)],
+                                           op.inputs[int(QuantizeOpIndices.use_symmetric_encoding)],
+                                           grad)
+    return dloss_by_dx, None, None, dloss_by_dmin, dloss_by_dmax, None, None, None
+
+
+@tf_ops.RegisterGradient("QcQuantizePerChannelRangeLearningCustomGradient")
+def quantsim_per_channel_custom_grad_learned_grid(op, grad):
+    """
+    Performs custom gradient calculations for trained QcQuantizePerChannel op
+    :param op: Tf operation for which gradients are to be computed
+    :param grad: Gradient flowing through
+    """
+    dloss_by_dmin, dloss_by_dmax, dloss_by_dx = \
+        _compute_dloss_by_dmin_dmax_and_dx(op.inputs[0],
+                                           op.inputs[int(QuantizeOpIndices.bit_width)],
+                                           op.inputs[int(QuantizeOpIndices.op_mode)],
+                                           op.inputs[int(QuantizeOpIndices.encoding_min)],
+                                           op.inputs[int(QuantizeOpIndices.encoding_max)],
+                                           op.inputs[int(QuantizeOpIndices.use_symmetric_encoding)],
+                                           grad)
     return dloss_by_dx, None, None, dloss_by_dmin, dloss_by_dmax, None, None, None
