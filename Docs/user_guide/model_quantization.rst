@@ -1,5 +1,3 @@
-:orphan:
-
 .. _ug-model-quantization:
 
 AIMET Model Quantization
