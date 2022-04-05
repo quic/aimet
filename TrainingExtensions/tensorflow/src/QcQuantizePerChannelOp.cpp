@@ -61,6 +61,7 @@ REGISTER_OP("QcQuantizePerChannel")
         .Input("bit_width: int8")
         .Input("use_symmetric_encoding: bool")
         .Input("axis: int32")
+        .Input("is_training: bool")
         .Output("out_tensor: T")   // list of output tensors (weights/activations)
 
         .Attr("T: {float} = DT_FLOAT")   // attr 'T' specifies which template instantiation of op to use, default float
@@ -234,14 +235,22 @@ public:
         const Tensor* axisTensor;
         OP_REQUIRES_OK(context, context->input("axis", &axisTensor));
         const int32* axis = axisTensor->flat<int32>().data();
+
         // Move axis to correct device and get value
         auto axisVal = copyLiteralToHost<int32>(context->eigen_device<Device>(), axis);
+
         // Get shape along axis for per channel quantization
         int channelShape = shapeVector[axisVal];
+
         // use symmetric encoding
         const Tensor* useSymmetricEncodingTensor;
         OP_REQUIRES_OK(context, context->input("use_symmetric_encoding", &useSymmetricEncodingTensor));
         auto useSymmetricEncoding = useSymmetricEncodingTensor->flat<bool>().data();
+
+        // is_training flag
+        const Tensor* isTrainingTensor;
+        OP_REQUIRES_OK(context, context->input("is_training", &isTrainingTensor));
+        auto isTraining = useSymmetricEncodingTensor->flat<bool>().data();
 
         // allocate output tensors
         Tensor* outTensor = nullptr;
