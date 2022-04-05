@@ -1,5 +1,3 @@
-:orphan:
-
 .. _ug-quant-guidebook:
 
 
@@ -37,6 +35,8 @@ to try:
 
 
 .. image:: /images/quantization_debugging_flow_chart.png
+   :height: 800
+   :width: 700
 
 
 **Fixing activation quantization**
