@@ -258,4 +258,4 @@ def quantsim_per_channel_custom_grad_learned_grid(op, grad):
                                            op.inputs[int(QuantizeOpIndices.encoding_max)],
                                            op.inputs[int(QuantizeOpIndices.use_symmetric_encoding)],
                                            grad)
-    return dloss_by_dx, None, None, dloss_by_dmin, dloss_by_dmax, None, None, None
+    return dloss_by_dx, None, None, dloss_by_dmin, dloss_by_dmax, None, None, None, None
