@@ -40,6 +40,7 @@ from typing import List, Tuple, Dict, Union
 
 from tensorflow.keras import layers
 
+from aimet_common.connected_graph.connectedgraph_utils import get_all_input_ops, get_all_output_ops
 from aimet_common.connected_graph.operation import Op
 from aimet_common.defs import QuantScheme
 from aimet_common.quantsim_config.json_config_importer import ConfigType, SupergroupType, OpTypeType, ParamType, \
@@ -238,6 +239,9 @@ class QuantSimConfigurator(AimetCommonQuantSimConfigurator):
         for op in self._connected_graph.ordered_ops:
             layer = op.get_module()
 
+            # Initialize reserved config dictionary field by layer
+            self._layer_to_config_dict[layer] = TreeLikeDictionary()
+
             # Set default configs for ops
             for config_key, config_val in default_configs[ConfigDictKeys.OPS].items():
                 self._layer_to_config_dict[layer][config_key][SETTING] = config_val
@@ -325,10 +329,32 @@ class QuantSimConfigurator(AimetCommonQuantSimConfigurator):
         pass
 
     def _set_model_input_configs(self, model_input_configs: ConfigType):
-        pass
+        """
+        Set model input specific configurations (fifth level of specificity in configuration file)
+        :param model_input_configs: Configuration for model inputs
+        """
+        input_ops = get_all_input_ops(self._connected_graph)
+        for op in input_ops:
+            layer = op.get_module()
+
+            for config_key, config_val in model_input_configs.items():
+                self._layer_to_config_dict[layer][config_key][SETTING] = config_val
+                self._layer_to_config_dict[layer][config_key][AFFECTED_QUANTIZERS] = \
+                    self._get_affected_quantizers_by_config(layer, config_key, config_val)
 
     def _set_model_output_configs(self, model_output_configs: ConfigType):
-        pass
+        """
+        Set model output specific configurations (sixth level of specificity in configuration file)
+        :param model_output_configs: Configuration for model outputs
+        """
+        output_ops = get_all_output_ops(self._connected_graph)
+        for op in output_ops:
+            layer = op.get_module()
+
+            for config_key, config_val in model_output_configs.items():
+                self._layer_to_config_dict[layer][config_key][SETTING] = config_val
+                self._layer_to_config_dict[layer][config_key][AFFECTED_QUANTIZERS] = \
+                    self._get_affected_quantizers_by_config(layer, config_key, config_val)
 
     def _initialize_quantizers_by_layer(self, quant_scheme: Union[QuantScheme, str], rounding_mode: str,
                                         default_output_bw: int, default_param_bw: int):

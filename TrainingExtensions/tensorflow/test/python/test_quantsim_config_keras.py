@@ -406,3 +406,101 @@ class TestQuantSimConfig:
 
         if os.path.exists("./data/quantsim_config.json"):
             os.remove("./data/quantsim_config.json")
+
+    def test_parse_config_file_model_inputs(self):
+        """
+        Test that model input quantization parameters are set correctly when using json config file
+        """
+        quantsim_config = {
+            "defaults": {
+                "ops": {},
+                "params": {}
+            },
+            "params": {},
+            "op_type": {},
+            "supergroups": [],
+            "model_input": {
+                "is_input_quantized": "True"
+            },
+            "model_output": {}
+        }
+        with open("./data/quantsim_config.json", "w") as f:
+            json.dump(quantsim_config, f)
+
+        model = single_residual()
+        connected_graph = ConnectedGraph(model)
+
+        quant_sim_configurator = QuantSimConfigurator(connected_graph, QuantScheme.post_training_tf_enhanced,
+                                                      "nearest", 8, 8, "./data/quantsim_config.json")
+
+        layer_to_quantizers_dict = quant_sim_configurator._layer_to_quantizers_dict
+        conv1 = model.layers[1]
+        for op in connected_graph.ordered_ops:
+            layer = op.get_module()
+
+            for q in layer_to_quantizers_dict[layer][INPUT_QUANTIZERS]:
+                if layer == conv1:
+                    assert q.is_enabled()
+                else:
+                    assert not q.is_enabled()
+                assert not q.is_symmetric
+
+            for q in layer_to_quantizers_dict[layer][OUTPUT_QUANTIZERS]:
+                assert not q.is_enabled()
+                assert not q.is_symmetric
+
+            for q in layer_to_quantizers_dict[layer][PARAM_QUANTIZERS]:
+                assert not q.is_enabled()
+                assert not q.is_symmetric
+
+        if os.path.exists("./data/quantsim_config.json"):
+            os.remove("./data/quantsim_config.json")
+
+    def test_parse_config_file_model_outputs(self):
+        """
+        Test that model output quantization parameters are set correctly when using json config file
+        """
+        quantsim_config = {
+            "defaults": {
+                "ops": {},
+                "params": {}
+            },
+            "params": {},
+            "op_type": {},
+            "supergroups": [],
+            "model_input": {},
+            "model_output": {
+                "is_output_quantized": "True"
+            }
+        }
+        with open("./data/quantsim_config.json", "w") as f:
+            json.dump(quantsim_config, f)
+
+        model = single_residual()
+        connected_graph = ConnectedGraph(model)
+
+        quant_sim_configurator = QuantSimConfigurator(connected_graph, QuantScheme.post_training_tf_enhanced,
+                                                      "nearest", 8, 8, "./data/quantsim_config.json")
+
+        layer_to_quantizers_dict = quant_sim_configurator._layer_to_quantizers_dict
+        fc = model.layers[-1]
+        for op in connected_graph.ordered_ops:
+            layer = op.get_module()
+
+            for q in layer_to_quantizers_dict[layer][INPUT_QUANTIZERS]:
+                assert not q.is_enabled()
+                assert not q.is_symmetric
+
+            for q in layer_to_quantizers_dict[layer][OUTPUT_QUANTIZERS]:
+                if layer == fc:
+                    assert q.is_enabled()
+                else:
+                    assert not q.is_enabled()
+                assert not q.is_symmetric
+
+            for q in layer_to_quantizers_dict[layer][PARAM_QUANTIZERS]:
+                assert not q.is_enabled()
+                assert not q.is_symmetric
+
+        if os.path.exists("./data/quantsim_config.json"):
+            os.remove("./data/quantsim_config.json")
