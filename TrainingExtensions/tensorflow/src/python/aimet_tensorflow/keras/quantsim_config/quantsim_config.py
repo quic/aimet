@@ -43,6 +43,9 @@ from tensorflow.keras import layers
 from aimet_common.connected_graph.connectedgraph_utils import get_all_input_ops, get_all_output_ops
 from aimet_common.connected_graph.operation import Op
 from aimet_common.defs import QuantScheme
+from aimet_common.graph_pattern_matcher import PatternType
+from aimet_common.graph_searcher import GraphSearcher
+from aimet_common.quantsim_config.quantsim_config import SupergroupConfigCallback as AimetCommonSupergroupConfigCallback
 from aimet_common.quantsim_config.json_config_importer import ConfigType, SupergroupType, OpTypeType, ParamType, \
     DefaultsType, ConfigDictKeys
 from aimet_common.quantsim_config.quantsim_config import QuantSimConfigurator as AimetCommonQuantSimConfigurator, \
@@ -72,6 +75,39 @@ class TreeLikeDictionary(dict):
     def __missing__(self, key):
         value = self[key] = type(self)()
         return value
+
+
+class SupergroupConfigCallback(AimetCommonSupergroupConfigCallback):
+    """
+    Class acting as a callback for when supergroups are found
+    """
+
+    def __init__(self, layer_to_config_dict: TreeLikeDictionary):
+        super().__init__()
+        self._layer_to_config_dict = layer_to_config_dict
+
+    def __call__(self, _, op_list: List[Op]):
+        # Assumes op list is at least of length two
+        for index, op in enumerate(op_list):
+            layer = op.get_module()
+            if index == 0:
+                # turn off only output quantization of first op in the list
+                self._layer_to_config_dict[layer][ConfigDictKeys.IS_OUTPUT_QUANTIZED][SETTING] = False
+                self._layer_to_config_dict[layer][ConfigDictKeys.IS_OUTPUT_QUANTIZED][AFFECTED_QUANTIZERS] = \
+                    _get_affected_tensor_quantizers_by_false_setting(op, "output")
+            elif index == len(op_list) - 1:
+                # turn off only input quantization of last op in the list
+                self._layer_to_config_dict[layer][ConfigDictKeys.IS_INPUT_QUANTIZED][SETTING] = False
+                self._layer_to_config_dict[layer][ConfigDictKeys.IS_INPUT_QUANTIZED][AFFECTED_QUANTIZERS] = \
+                    _get_affected_tensor_quantizers_by_false_setting(op, "input")
+            else:
+                self._layer_to_config_dict[layer][ConfigDictKeys.IS_INPUT_QUANTIZED][SETTING] = False
+                self._layer_to_config_dict[layer][ConfigDictKeys.IS_INPUT_QUANTIZED][AFFECTED_QUANTIZERS] = \
+                    _get_affected_tensor_quantizers_by_false_setting(op, "input")
+
+                self._layer_to_config_dict[layer][ConfigDictKeys.IS_OUTPUT_QUANTIZED][SETTING] = False
+                self._layer_to_config_dict[layer][ConfigDictKeys.IS_OUTPUT_QUANTIZED][AFFECTED_QUANTIZERS] = \
+                    _get_affected_tensor_quantizers_by_false_setting(op, "output")
 
 
 def _get_affected_tensor_quantizers_by_true_setting(op: Op, direction: str) -> List[Tuple[layers.Layer, str]]:
@@ -326,7 +362,19 @@ class QuantSimConfigurator(AimetCommonQuantSimConfigurator):
                 self._layer_to_config_dict[layer][ConfigDictKeys.PARAMS][param_type][config_key][SETTING] = config_val
 
     def _set_supergroup_configs(self, supergroups_configs: List[SupergroupType]):
-        pass
+        """
+        Set supergroup specific configurations (fourth level of specificity in configuration file)
+        :param supergroups_configs: Configurations for supergroups
+        """
+        patterns_with_callbacks = []
+        for supergroup_config in supergroups_configs:
+            callback = SupergroupConfigCallback(self._layer_to_config_dict)
+            op_list = supergroup_config[ConfigDictKeys.OP_LIST]
+            patterns_with_callbacks.append(PatternType(pattern=op_list, action=callback))
+
+        if patterns_with_callbacks:
+            graph_searcher = GraphSearcher(self._connected_graph, patterns_with_callbacks)
+            graph_searcher.find_all_patterns_in_graph_apply_actions()
 
     def _set_model_input_configs(self, model_input_configs: ConfigType):
         """
