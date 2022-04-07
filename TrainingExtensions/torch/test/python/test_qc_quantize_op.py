@@ -798,3 +798,60 @@ class TestQcQuantizeOpLearnedGrid:
         wrapper.enable_param_quantizers(enabled=False, param_name_to_exclude=None)
         assert wrapper.param_quantizers['weight'].enabled == False
         assert wrapper.param_quantizers['bias'].enabled == False
+
+    def test_set_and_freeze_param_encoding_for_static_grid_quant_wrapper(self):
+        """ Test set and freeze parameter encoding  """
+        conv1 = torch.nn.Conv2d(4, 4, 1)
+        quant_wrapper = StaticGridQuantWrapper(conv1, weight_bw=8, activation_bw=8, round_mode='nearest',
+                                               quant_scheme=QuantScheme.post_training_tf_enhanced,
+                                               data_type=QuantizationDataType.int)
+
+        param_encodings = {'conv1.weight': [{'bitwidth': 4, 'is_symmetric': 'False', 'max': 0.3, 'min': -0.2,
+                                             'offset': -7.0, 'scale': 0.038}]}
+
+        quant_wrapper.set_and_freeze_param_encoding('conv1', param_encodings)
+
+        assert quant_wrapper.param_quantizers['weight'].encoding.bw == 4
+        assert quant_wrapper.param_quantizers['weight'].encoding.offset == -7.0
+        assert quant_wrapper.param_quantizers['weight'].encoding.delta == 0.038
+        assert not quant_wrapper.param_quantizers['weight'].use_symmetric_encodings
+        assert quant_wrapper.param_quantizers['weight'].bitwidth == 4
+
+        # Reset encoding, Since encoding are frozen they should not be None after reset encoding
+        quant_wrapper.reset_encodings()
+
+        assert quant_wrapper.param_quantizers['weight'].encoding
+
+    def test_set_and_freeze_param_encoding_for_learned_grid_quant_wrapper(self):
+        """ Test set and freeze parameter encoding  """
+        conv1 = torch.nn.Conv2d(4, 4, 1)
+        quant_wrapper = LearnedGridQuantWrapper(conv1, round_mode='nearest',
+                                                quant_scheme=QuantScheme.training_range_learning_with_tf_init,
+                                                is_output_quantized=True, activation_bw=8,
+                                                weight_bw=8, device='cpu')
+
+        enc_old = libpymo.TfEncoding()
+        enc_old.bw, enc_old.max, enc_old.min, enc_old.delta, enc_old.offset = 4, 0.5, -1, 1, 0.2
+        quant_wrapper.param_quantizers['weight'].encoding = enc_old
+
+        param_encodings = {'conv1.weight': [{'bitwidth': 4, 'is_symmetric': 'False', 'max': 0.3, 'min': -0.2,
+                                             'offset': -7.0, 'scale': 0.038}]}
+
+        quant_wrapper.set_and_freeze_param_encoding('conv1', param_encodings)
+
+        assert quant_wrapper.param_quantizers['weight'].encoding.bw == 4
+        assert np.isclose(quant_wrapper.param_quantizers['weight'].encoding.min, -0.2)
+        assert np.isclose(quant_wrapper.param_quantizers['weight'].encoding.max, 0.3)
+        assert not quant_wrapper.param_quantizers['weight'].use_symmetric_encodings
+
+        # try to set new encoding.
+        with pytest.raises(RuntimeError):
+            enc_new = libpymo.TfEncoding()
+            enc_new.bw, enc_new.max, enc_new.min, enc_new.delta, enc_new.offset = 4, 0.4, -0.98, 1, 0.2
+            quant_wrapper.param_quantizers['weight'].encoding = enc_new
+
+        # Once again verify.
+        assert quant_wrapper.param_quantizers['weight'].encoding.bw == 4
+        assert np.isclose(quant_wrapper.param_quantizers['weight'].encoding.min, -0.2)
+        assert np.isclose(quant_wrapper.param_quantizers['weight'].encoding.max, 0.3)
+        assert not quant_wrapper.param_quantizers['weight'].use_symmetric_encodings
