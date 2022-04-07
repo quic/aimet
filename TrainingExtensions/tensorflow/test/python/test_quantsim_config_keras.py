@@ -43,7 +43,7 @@ from aimet_common.defs import QuantScheme
 from aimet_tensorflow.keras.connectedgraph import ConnectedGraph
 from aimet_tensorflow.keras.quantsim_config.quantsim_config import QuantSimConfigurator, INPUT_QUANTIZERS, \
     OUTPUT_QUANTIZERS, PARAM_QUANTIZERS
-from test_models_keras import single_residual, concat_functional
+from test_models_keras import single_residual, concat_functional, tiny_conv_net
 
 
 class TestQuantSimConfig:
@@ -452,6 +452,78 @@ class TestQuantSimConfig:
             for q in layer_to_quantizers_dict[layer][PARAM_QUANTIZERS]:
                 assert not q.is_enabled()
                 assert not q.is_symmetric
+
+        if os.path.exists("./data/quantsim_config.json"):
+            os.remove("./data/quantsim_config.json")
+
+    def test_parse_config_file_supergroups(self):
+        """
+        Test that supergroup quantization parameters are set correctly when using json config file
+        """
+        quantsim_config = {
+            "defaults": {
+                "ops": {
+                    "is_output_quantized": "True",
+                    "is_symmetric": "False"
+                },
+                "params": {
+                    "is_quantized": "False",
+                    "is_symmetric": "False"
+                }
+            },
+            "params": {},
+            "op_type": {},
+            "supergroups": [
+                {
+                    "op_list": ["Conv", "BatchNormalization"]
+                },
+                {
+                    "op_list": ["Relu", "MaxPool"]
+                },
+                {
+                    "op_list": ["Conv", "Relu", "AveragePool"]
+                }
+            ],
+            "model_input": {},
+            "model_output": {}
+        }
+        with open("./data/quantsim_config.json", "w") as f:
+            json.dump(quantsim_config, f)
+
+        model = tiny_conv_net()
+        connected_graph = ConnectedGraph(model)
+
+        quant_sim_configurator = QuantSimConfigurator(connected_graph, QuantScheme.post_training_tf_enhanced,
+                                                      "nearest", 8, 8, "./data/quantsim_config.json")
+
+        layer_to_quantizers_dict = quant_sim_configurator._layer_to_quantizers_dict
+        conv1, relu1, conv2, conv3 = model.layers[1], model.layers[3], model.layers[5], model.layers[8]
+        relu3 = model.layers[9]
+        bn1, maxpool, bn2, avgpool = model.layers[2], model.layers[4], model.layers[6], model.layers[10]
+        for op in connected_graph.ordered_ops:
+            layer = op.get_module()
+
+            # Check configs for starts of supergroups
+            if layer in [conv1, relu1, conv2, conv3]:
+                for q in layer_to_quantizers_dict[layer][OUTPUT_QUANTIZERS]:
+                    assert not q.is_enabled()
+            # Check configs for middle ops in supergroups
+            elif layer == relu3:
+                for q in layer_to_quantizers_dict[layer][INPUT_QUANTIZERS]:
+                    assert not q.is_enabled()
+                for q in layer_to_quantizers_dict[layer][OUTPUT_QUANTIZERS]:
+                    assert not q.is_enabled()
+            # Check configs for ends of supergroups
+            elif layer in [bn1, maxpool, bn2, avgpool]:
+                for q in layer_to_quantizers_dict[layer][INPUT_QUANTIZERS]:
+                    assert not q.is_enabled()
+                for q in layer_to_quantizers_dict[layer][OUTPUT_QUANTIZERS]:
+                    assert q.is_enabled()
+            else:
+                for q in layer_to_quantizers_dict[layer][INPUT_QUANTIZERS]:
+                    assert not q.is_enabled()
+                for q in layer_to_quantizers_dict[layer][OUTPUT_QUANTIZERS]:
+                    assert q.is_enabled()
 
         if os.path.exists("./data/quantsim_config.json"):
             os.remove("./data/quantsim_config.json")
