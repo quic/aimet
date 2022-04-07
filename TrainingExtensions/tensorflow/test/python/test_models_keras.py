@@ -292,3 +292,31 @@ def sequential_in_functional():
     outputs = tf.keras.layers.MaxPool2D()(x)
 
     return tf.keras.Model(inputs=inputs, outputs=outputs)
+
+
+def tiny_conv_net():
+    """
+    Simple convolution network
+    """
+    inputs = tf.keras.Input(shape=(32, 32, 3))
+    x = tf.keras.layers.Conv2D(
+        32, kernel_size=2, strides=2, padding="same", use_bias=False
+    )(inputs)
+    x = tf.keras.layers.BatchNormalization()(x)
+    x = tf.keras.layers.ReLU()(x)
+    x = tf.keras.layers.MaxPooling2D(strides=2, padding="same")(x)
+    x = tf.keras.layers.Conv2D(
+        16, kernel_size=2, strides=1, padding="same", use_bias=False
+    )(x)
+    x = tf.keras.layers.BatchNormalization()(x)
+    x = tf.keras.layers.ReLU()(x)
+    x = tf.keras.layers.Conv2D(
+        8, kernel_size=2, strides=1, padding="same", use_bias=False
+    )(x)
+    x = tf.keras.layers.ReLU()(x)
+    x = tf.keras.layers.AveragePooling2D(pool_size=(2, 2), strides=3)(x)
+    x = tf.keras.layers.Flatten()(x)
+    outputs = tf.keras.layers.Dense(10)(x)
+
+    return tf.keras.Model(inputs=inputs, outputs=outputs)
+
