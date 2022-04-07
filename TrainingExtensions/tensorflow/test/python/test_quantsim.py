@@ -1021,6 +1021,60 @@ class TestQuantSim(unittest.TestCase):
         del sim
         sess.close()
 
+    def test_save_model_with_embedded_quantization_nodes(self):
+        """
+        Create QuantSim for a CPU model, compute encodings, replace quantization nodes and export out a resulting model
+        """
+        tf.compat.v1.reset_default_graph()
+        with tf.device('/cpu:0'):
+            model = tf.keras.Sequential()
+            model.add(tf.keras.layers.Conv2D(32, kernel_size=3, input_shape=(28, 28, 3), activation='relu'))
+            model.add(tf.keras.layers.MaxPooling2D((2, 2)))
+            model.add(tf.keras.layers.Conv2D(64, kernel_size=3, activation='relu'))
+            model.summary()
+
+        sess = tf.compat.v1.Session()
+        initialize_uninitialized_vars(sess)
+        sim = QuantizationSimModel(sess, [model.input.op.name], [model.output.op.name], use_cuda=False)
+
+        def dummy_forward_pass(sess, args):
+            model_output = sess.graph.get_tensor_by_name(model.output.name)
+            model_output = model_output.consumers()[0].outputs[0]
+            model_input = sess.graph.get_tensor_by_name(model.input.name)
+            dummy_input = np.random.randn(20, 28, 28, 3)
+            sess.run(model_output, feed_dict={model_input: dummy_input})
+
+        sim.compute_encodings(dummy_forward_pass, None)
+
+        # Make some changes to model parameters to see if they are part of the exported model
+        with sim.session.graph.as_default():
+            first_bias_tensor = sim.session.graph.get_tensor_by_name('conv2d/BiasAdd/ReadVariableOp:0')
+            first_bias_tensor_val = sim.session.run(first_bias_tensor)
+            self.assertTrue(np.any(first_bias_tensor_val == 0))
+            first_bias_tensor_var = [var for var in tf.compat.v1.global_variables() if var.name == 'conv2d/bias:0'][0]
+            first_bias_tensor_var.load(np.ones(32), sim.session)
+
+        all_op_types = [op.type for op in sim.session.graph.get_operations()]
+        self.assertIn('QcQuantize', all_op_types)
+        self.assertNotIn('FakeQuantWithMinMaxVars', all_op_types)
+
+        sim.save_model_with_embedded_quantization_nodes('/tmp', 'tf_fakequant_model', [model.output.op.name])
+
+        new_sess = load_model_from_meta('/tmp/tf_fakequant_model.meta')
+        first_bias_tensor = new_sess.graph.get_tensor_by_name('conv2d/BiasAdd/ReadVariableOp:0')
+        first_bias_tensor_val = new_sess.run(first_bias_tensor)
+        self.assertTrue(np.any(first_bias_tensor_val == 1))
+        first_bias_tensor_fakequant_min_tensor = new_sess.graph.get_tensor_by_name('conv2d/BiasAdd/ReadVariableOp_quantized_1/min:0')
+        first_bias_tensor_fakequant_min_val = new_sess.run(first_bias_tensor_fakequant_min_tensor)
+        assert(first_bias_tensor_fakequant_min_val == 0)
+
+        all_op_types = [op.type for op in new_sess.graph.get_operations()]
+        self.assertNotIn('QcQuantize', all_op_types)
+        self.assertIn('FakeQuantWithMinMaxVars', all_op_types)
+        sess.close()
+        sim.session.close()
+        del sim
+
 class TestQuantSimRangeLearning:
     """ Test methods for Quantization Simulation """
 

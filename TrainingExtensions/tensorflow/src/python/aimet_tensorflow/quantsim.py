@@ -445,6 +445,109 @@ class QuantizationSimModel:
         new_sess = utils.graph_saver.save_and_load_graph(temp_dir_path, self.session)
         return new_sess
 
+    def save_model_with_embedded_quantization_nodes(self, path, filename_prefix, output_nodes):
+        """
+        This method is to export model embedded with native tensorflow quantization nodes
+        :param path: path where to store model pth and encodings
+        :param filename_prefix: Prefix to use for filenames of the model pth and encodings files
+        :param output_nodes: A list of the graph's output Tensor Names
+        """
+        self._replace_qcquantize_with_tf_fake_quant_nodes(self.session, self._use_cuda)
+        # save model
+        vars_to_save = {}
+        with self.session.graph.as_default():
+            for var in tf.compat.v1.all_variables():
+                if not var.name[:-2].endswith(('_quantized', '_quantized_op_mode', '_quantized_quant_ref',
+                                               '_quantized_encoding_min', '_quantized_encoding_max',
+                                               '_quantized_bit_width', '_quantized_use_symmetric_encoding',
+                                               '_quantized_axis')):
+                    vars_to_save[var.name] = var
+
+        nodes_sequence = set()
+        init_graph = tf.compat.v1.graph_util.remove_training_nodes(self.session.graph.as_graph_def())
+
+        def iter_add_nodes_sequence(node, nodes_sequence):
+            for inp_node in node.inputs:
+                iter_add_nodes_sequence(inp_node.op, nodes_sequence)
+                nodes_sequence.add(inp_node.op.name)
+        for name in output_nodes:
+            nodes_sequence.add(name)
+            iter_add_nodes_sequence(self.session.graph.get_operation_by_name(name), nodes_sequence)
+        new_graph = tf.compat.v1.GraphDef()
+        # pylint: disable=no-member
+        for node in init_graph.node:
+            if node.name in nodes_sequence:
+                # pylint: disable=no-member
+                new_graph.node.extend([node])
+        with tf.compat.v1.Session(graph=tf.compat.v1.Graph()) as sess:
+            tf.compat.v1.import_graph_def(new_graph, name='')
+            for node in sess.graph_def.node:
+                if node.op == 'VarHandleOp':
+                    op = sess.graph.get_operation_by_name(node.name)
+                    graph_editor.reroute_ts(ts0=[tf.compat.v1.Variable(self.session.run(vars_to_save[op.outputs[0].name]), \
+                        name=node.name).handle], ts1=[op.outputs[0]], can_modify=op.outputs[0].consumers())
+
+            sess.run(tf.compat.v1.global_variables_initializer())
+            saver = tf.compat.v1.train.Saver()
+            saver.save(sess, save_path=os.path.join(path, filename_prefix))
+
+            # export pb
+            tf.compat.v1.train.write_graph(tf.compat.v1.graph_util.convert_variables_to_constants(sess, sess.graph_def, output_nodes),
+                                           logdir=path, name=filename_prefix + '.pb', as_text=False)
+
+    @staticmethod
+    def _replace_qcquantize_with_tf_fake_quant_nodes(session: tf.compat.v1.Session, use_cuda: bool):
+        """
+        This method replaces all QcQuantize with tf fakequantize nodes
+        :param session: The input model as session to add native tensorflow quantization nodes
+        :param use_cuda: If True, places quantization ops on GPU
+        """
+        current_graph = session.graph
+        with current_graph.as_default():
+
+            ops = current_graph.get_operations()
+            for op in ops:
+                if op.type in ['QcQuantize', 'QcQuantizeRecurrentParam', 'QcQuantizePerChannel']:
+
+                    # Read the config
+                    # -----------------
+                    config_tuple = session.run([op.inputs[QuantizeOpIndices.encoding_min],
+                                                op.inputs[QuantizeOpIndices.encoding_max],
+                                                op.inputs[QuantizeOpIndices.bit_width]])
+                    encoding_min, encoding_max, bitwidth = config_tuple
+
+                    # Create tensorflow fakequant op
+                    # --------------------
+                    if not use_cuda:
+                        with tf.device('/cpu:0'):
+                            if op.type == 'QcQuantizePerChannel':
+                                tf_quantization_op = \
+                                    tf.quantization.fake_quant_with_min_max_vars_per_channel(op.inputs[0], min=encoding_min,
+                                                                                             max=encoding_max, num_bits=bitwidth,
+                                                                                             narrow_range=False, name=op.name)
+                            else:
+                                tf_quantization_op = \
+                                    tf.quantization.fake_quant_with_min_max_vars(op.inputs[0], min=encoding_min,
+                                                                                 max=encoding_max, num_bits=bitwidth,
+                                                                                 narrow_range=False, name=op.name)
+                    else:
+                        if op.type == 'QcQuantizePerChannel':
+                            tf_quantization_op = \
+                                tf.quantization.fake_quant_with_min_max_vars_per_channel(op.inputs[0], min=encoding_min,
+                                                                                         max=encoding_max, num_bits=bitwidth,
+                                                                                         narrow_range=False, name=op.name)
+                        else:
+                            tf_quantization_op = \
+                                tf.quantization.fake_quant_with_min_max_vars(op.inputs[0], min=encoding_min,
+                                                                             max=encoding_max, num_bits=bitwidth,
+                                                                             narrow_range=False, name=op.name)
+
+                    # Replace in graph
+                    # -----------------
+                    graph_editor.reroute_ts(ts0=[tf_quantization_op], ts1=[op.outputs[0]],
+                                            can_modify=op.outputs[0].consumers())
+                    graph_editor.detach_inputs(op)
+
     def set_and_freeze_param_encodings(self, encoding_path: str):
         """
         Set and freeze parameter encodings from encodings JSON file
