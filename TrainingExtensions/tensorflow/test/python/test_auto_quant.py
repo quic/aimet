@@ -66,7 +66,6 @@ def output_op_names():
 
 def session(device):
     from aimet_tensorflow.examples.test_models import keras_model
-    tf.compat.v1.reset_default_graph()
     with tf.device(device):
         graph = tf.Graph()
         with graph.as_default():
@@ -90,19 +89,19 @@ def session(device):
     config = tf.compat.v1.ConfigProto()
     config.gpu_options.allow_growth = True
 
-    with tf.compat.v1.Session(graph=graph, config=config) as sess:
-        sess.run(init)
-        yield sess
+    sess = tf.compat.v1.Session(graph=graph, config=config)
+    sess.run(init)
+    return sess
 
 
-@pytest.fixture
+@pytest.fixture(scope="session")
 def cpu_session():
-    yield from session('/cpu:0')
+    return session('/cpu:0')
 
 
-@pytest.fixture
+@pytest.fixture(scope="session")
 def gpu_session():
-    yield from session('/gpu:0')
+    return session('/gpu:0')
 
 
 def _tf_session_set_flag(sess: tf.compat.v1.Session, var_name: str) -> None:
@@ -220,6 +219,18 @@ def patch_ptq_techniques(bn_folded_acc, cle_acc, adaround_acc):
         return session
 
     class _QuantizationSimModel(QuantizationSimModel):
+        def _add_and_configure_quant_nodes(self, *_, **__):
+            pass
+
+        def compute_encodings(self, forward_pass_callback, args):
+            def _forward_pass_callback(sess, args):
+                _run = sess.run
+                sess.run = lambda *_, **__: None
+                ret = forward_pass_callback(sess, args)
+                sess.run = _run
+                return ret
+            return super().compute_encodings(_forward_pass_callback, args)
+
         def set_and_freeze_param_encodings(self, _):
             pass
 

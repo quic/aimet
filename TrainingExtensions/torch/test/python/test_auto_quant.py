@@ -165,6 +165,9 @@ def patch_ptq_techniques(bn_folded_acc, cle_acc, adaround_acc):
         return model
 
     class _QuantizationSimModel(QuantizationSimModel):
+        def compute_encodings(self, *_):
+            pass
+
         def set_and_freeze_param_encodings(self, _):
             pass
 
