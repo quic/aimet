@@ -34,9 +34,10 @@
 #
 #  @@-COPYRIGHT-END-@@
 # =============================================================================
+
 import copy
 import time
-
+import pickle
 import pytest
 import numpy as np
 import torch
@@ -45,9 +46,10 @@ from aimet_common.defs import MAP_ROUND_MODE_TO_PYMO, QuantizationDataType
 from aimet_torch.qc_quantize_op import StaticGridQuantWrapper, LearnedGridQuantWrapper, SteGatingFuncForParameters, \
     QcQuantizeOpMode
 from aimet_torch.qc_quantize_op import QuantScheme
-from aimet_torch.quantsim_straight_through_grad import compute_dloss_by_dx_using_scale_offset, compute_dloss_by_dmin_using_dmax, compute_dloss_by_dmax
-from aimet_torch.tensor_quantizer import StaticGridPerTensorQuantizer, StaticGridPerChannelQuantizer
-from aimet_torch.tensor_quantizer import LearnedGridTensorQuantizer, ParameterQuantizer
+from aimet_torch.quantsim_straight_through_grad import compute_dloss_by_dx_using_scale_offset,\
+    compute_dloss_by_dmin_using_dmax, compute_dloss_by_dmax
+from aimet_torch.tensor_quantizer import StaticGridPerTensorQuantizer
+from aimet_torch.tensor_quantizer import LearnedGridTensorQuantizer
 import libpymo
 
 
@@ -855,3 +857,56 @@ class TestQcQuantizeOpLearnedGrid:
         assert np.isclose(quant_wrapper.param_quantizers['weight'].encoding.min, -0.2)
         assert np.isclose(quant_wrapper.param_quantizers['weight'].encoding.max, 0.3)
         assert not quant_wrapper.param_quantizers['weight'].use_symmetric_encodings
+
+    def test_learned_grid_set_freeze_encoding_pickle_upickle(self):
+        """
+        test freeze_encoding() with pickle and unpickle.
+        """
+        conv = torch.nn.Conv2d(1, 32, 5)
+        quant_wrapper = StaticGridQuantWrapper(conv, weight_bw=8, activation_bw=8, round_mode='nearest',
+                                               quant_scheme=QuantScheme.post_training_tf_enhanced)
+
+        enc = libpymo.TfEncoding()
+        enc.bw, enc.max, enc.min, enc.delta, enc.offset = 8, 0.5, -1, 0.01, 50
+
+        # Set encoding for all - input, output and parameters quantizer.
+        quant_wrapper.input_quantizer.enabled = True
+        quant_wrapper.input_quantizer.encoding = enc
+        quant_wrapper.param_quantizers['weight'].enabled = True
+        quant_wrapper.param_quantizers['weight'].encoding = enc
+        quant_wrapper.param_quantizers['bias'].enabled = True
+        quant_wrapper.param_quantizers['bias'].encoding = enc
+        quant_wrapper.output_quantizer.enabled = True
+        quant_wrapper.output_quantizer.encoding = enc
+
+        enc_cur = quant_wrapper.output_quantizer.encoding
+        assert enc_cur.min == enc.min
+
+        # Freeze encoding only for output quantizer.
+        quant_wrapper.output_quantizer.freeze_encoding()
+
+        # Serialize and De-serialize.
+        pickled = pickle.dumps(quant_wrapper)
+        loaded_quant_wrapper = pickle.loads(pickled)
+
+        # verify that the state _is_encoding_frozen state is maintained.
+        assert loaded_quant_wrapper.output_quantizer._is_encoding_frozen == True
+        assert loaded_quant_wrapper.input_quantizer._is_encoding_frozen == False
+        assert loaded_quant_wrapper.param_quantizers['weight']._is_encoding_frozen == False
+        assert loaded_quant_wrapper.param_quantizers['bias']._is_encoding_frozen == False
+
+        assert loaded_quant_wrapper.param_quantizers['weight'].encoding.max == 0.5
+        assert loaded_quant_wrapper.param_quantizers['bias'].encoding.max == 0.5
+        assert loaded_quant_wrapper.output_quantizer.encoding.max == 0.5
+        assert loaded_quant_wrapper.input_quantizer.encoding.max == 0.5
+
+        enc_new = libpymo.TfEncoding()
+        enc_new.bw, enc_new.max, enc_new.min, enc_new.delta, enc_new.offset = 4, 0.4, -0.98, 1, 0.2
+
+        # try to set new encoding except output quantizer.
+        loaded_quant_wrapper.param_quantizers['weight'].encoding = enc_new
+        loaded_quant_wrapper.param_quantizers['bias'].encoding = enc_new
+        loaded_quant_wrapper.input_quantizer.encoding = enc_new
+        with pytest.raises(RuntimeError):
+            loaded_quant_wrapper.output_quantizer.encoding = enc_new
+
