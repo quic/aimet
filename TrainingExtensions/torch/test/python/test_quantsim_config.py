@@ -40,7 +40,7 @@ import json
 import os
 import torch
 import libpymo
-from aimet_common.defs import QuantScheme, QuantizationDataType
+from aimet_common.defs import QuantScheme, QuantizationDataType, QuantDtypeBwInfo
 from aimet_torch.examples.test_models import SingleResidual, QuantSimTinyModel, MultiInput, SingleResidualWithModuleAdd
 from aimet_torch.quantsim import QuantizationSimModel
 from aimet_torch.quantsim_config import quantsim_config as qsim_config
@@ -989,6 +989,29 @@ class TestQuantsimConfig:
             },
             "op_type": {
                 "Conv": {
+                    "supported_kernels":
+                        [
+                            {
+                                "activation": {
+                                    "bitwidth": 16,
+                                    "dtype": "float"
+                                },
+                                "param": {
+                                    "bitwidth": 16,
+                                    "dtype": "float"
+                                }
+                            },
+                            {
+                                "activation": {
+                                    "bitwidth": 8,
+                                    "dtype": "int"
+                                },
+                                "param": {
+                                    "bitwidth": 16,
+                                    "dtype": "int"
+                                }
+                            },
+                        ],
                     "is_input_quantized": "True",
                     "is_output_quantized": "True",
                     "params": {
@@ -1161,5 +1184,321 @@ class TestQuantsimConfig:
 
         # remove test config created
         qsim_config.ENFORCE_TARGET_DTYPE_BITWIDTH_CONFIG = False
+        if os.path.exists('./data/quantsim_config.json'):
+            os.remove('./data/quantsim_config.json')
+
+    def test_check_correctness_of_dtype_bw_rules_valid_case(self):
+        """
+        Test to check api check_correctness_of_dtype_bw_rules, valid config case
+        :return:
+        """
+
+        model = SingleResidual()
+        model.eval()
+        quantsim_config = {
+            "defaults": {
+                "ops": {
+                    "is_output_quantized": "True"
+                },
+                "params": {
+                    "is_quantized": "True"
+                },
+                "supported_kernels": [
+                    {
+                        "activation": {
+                            "bitwidth": 16,
+                            "dtype": "int"
+                        },
+                        "param": {
+                            "bitwidth": 16,
+                            "dtype": "int"
+                        }
+                    },
+                    {
+                        "activation": {
+                            "bitwidth": 8,
+                            "dtype": "int"
+                        },
+                        "param": {
+                            "bitwidth": 16,
+                            "dtype": "int"
+                        }
+                    }
+                ]
+            },
+            "params": {
+                "bias": {
+                    "is_quantized": "False"
+                }
+            },
+            "op_type": {
+                "Conv": {
+                    "supported_kernels":
+                        [
+                            {
+                                "activation": {
+                                    "bitwidth": 16,
+                                    "dtype": "float"
+                                },
+                                "param": {
+                                    "bitwidth": 16,
+                                    "dtype": "float"
+                                }
+                            },
+                        ],
+                    "is_input_quantized": "True",
+                    "is_output_quantized": "True",
+                    "params": {
+                        "weight": {
+                            "is_quantized": "True"
+                        },
+                        "bias": {
+                            "is_quantized": "False"
+                        }
+                    }
+                }
+            },
+            "supergroups": [
+            ],
+            "model_input": {
+                "is_input_quantized": "True"
+            },
+            "model_output": {}
+        }
+
+        config_file = './data/quantsim_config.json'
+        with open(config_file, 'w') as f:
+            json.dump(quantsim_config, f)
+
+        INPUT_SHAPE = (1, 3, 32, 32)
+        def forward_fn(model, _):
+            torch.manual_seed(10)
+            model.eval()
+            with torch.no_grad():
+                _ = model(torch.randn(INPUT_SHAPE))
+        supported_kernels = {}
+        from aimet_torch.quantsim_config.quantsim_config import QuantSimConfigurator
+        dummy_input = torch.randn(INPUT_SHAPE)
+        connected_graph = ConnectedGraph(model, dummy_input)
+
+        qsim_config = QuantSimConfigurator(model, connected_graph, config_file, supported_kernels,
+                                           quantsim_output_bw=8, quantsim_param_bw=8,
+                                           quantsim_data_type=QuantizationDataType.int)
+
+        qsim_dtype_bw = QuantDtypeBwInfo(data_type=QuantizationDataType.int, act_bw=8 , param_bw=8)
+
+        assert qsim_config.check_correctness_of_dtype_bw_rules(qsim_dtype_bw)
+
+        # remove test config created
+        if os.path.exists('./data/quantsim_config.json'):
+            os.remove('./data/quantsim_config.json')
+
+    def test_check_correctness_of_dtype_bw_rules_default_supported_kernels_exception_case(self):
+        """
+        Test to check api check_correctness_of_dtype_bw_rules, invalid default supported_kernels case
+        :return:
+        """
+
+        model = SingleResidual()
+        model.eval()
+        quantsim_config = {
+            "defaults": {
+                "ops": {
+                    "is_output_quantized": "True"
+                },
+                "params": {
+                    "is_quantized": "True"
+                },
+                "supported_kernels": [
+                    {
+                        "activation": {
+                            "bitwidth": 4,
+                            "dtype": "int"
+                        },
+                        "param": {
+                            "bitwidth": 16,
+                            "dtype": "int"
+                        }
+                    },
+                    {
+                        "activation": {
+                            "bitwidth": 8,
+                            "dtype": "int"
+                        },
+                        "param": {
+                            "bitwidth": 16,
+                            "dtype": "int"
+                        }
+                    }
+                ]
+            },
+            "params": {
+                "bias": {
+                    "is_quantized": "False"
+                }
+            },
+            "op_type": {
+                "Conv": {
+                    "supported_kernels":
+                        [
+                            {
+                                "activation": {
+                                    "bitwidth": 16,
+                                    "dtype": "float"
+                                },
+                                "param": {
+                                    "bitwidth": 16,
+                                    "dtype": "float"
+                                }
+                            },
+                        ],
+                    "is_input_quantized": "True",
+                    "is_output_quantized": "True",
+                    "params": {
+                        "weight": {
+                            "is_quantized": "True"
+                        },
+                        "bias": {
+                            "is_quantized": "False"
+                        }
+                    }
+                }
+            },
+            "supergroups": [
+            ],
+            "model_input": {
+                "is_input_quantized": "True"
+            },
+            "model_output": {}
+        }
+
+        config_file = './data/quantsim_config.json'
+        with open(config_file, 'w') as f:
+            json.dump(quantsim_config, f)
+
+        INPUT_SHAPE = (1, 3, 32, 32)
+        def forward_fn(model, _):
+            torch.manual_seed(10)
+            model.eval()
+            with torch.no_grad():
+                _ = model(torch.randn(INPUT_SHAPE))
+        supported_kernels = {}
+        from aimet_torch.quantsim_config.quantsim_config import QuantSimConfigurator
+        dummy_input = torch.randn(INPUT_SHAPE)
+        connected_graph = ConnectedGraph(model, dummy_input)
+
+        qsim_config = QuantSimConfigurator(model, connected_graph, config_file, supported_kernels,
+                                           quantsim_output_bw=8, quantsim_param_bw=8,
+                                           quantsim_data_type=QuantizationDataType.int)
+
+        qsim_dtype_bw = QuantDtypeBwInfo(data_type=QuantizationDataType.int, act_bw=8 , param_bw=8)
+
+        try:
+            qsim_config.check_correctness_of_dtype_bw_rules(qsim_dtype_bw)
+        except NotImplementedError as exc:
+            print(" Test raised exception as expected ", exc)
+            assert True
+
+        # remove test config created
+        if os.path.exists('./data/quantsim_config.json'):
+            os.remove('./data/quantsim_config.json')
+
+    def test_check_correctness_of_dtype_bw_rules_op_level_supported_kernels_exception_case(self):
+        """
+        Test to check api check_correctness_of_dtype_bw_rules, invalid op level supported_kernels case
+        :return:
+        """
+
+        model = SingleResidual()
+        model.eval()
+        quantsim_config = {
+            "defaults": {
+                "ops": {
+                    "is_output_quantized": "True"
+                },
+                "params": {
+                    "is_quantized": "True"
+                },
+                "supported_kernels": [
+                    {
+                        "activation": {
+                            "bitwidth": 8,
+                            "dtype": "int"
+                        },
+                        "param": {
+                            "bitwidth": 8,
+                            "dtype": "int"
+                        }
+                    }
+                ]
+            },
+            "params": {
+                "bias": {
+                    "is_quantized": "False"
+                }
+            },
+            "op_type": {
+                "Conv": {
+                    "supported_kernels":
+                        [
+                            {
+                                "activation": {
+                                    "bitwidth": 8,
+                                    "dtype": "int"
+                                },
+                                "param": {
+                                    "bitwidth": 4,
+                                    "dtype": "int"
+                                }
+                            },
+                        ],
+                    "is_input_quantized": "True",
+                    "is_output_quantized": "True",
+                    "params": {
+                        "weight": {
+                            "is_quantized": "True"
+                        },
+                        "bias": {
+                            "is_quantized": "False"
+                        }
+                    }
+                }
+            },
+            "supergroups": [
+            ],
+            "model_input": {
+                "is_input_quantized": "True"
+            },
+            "model_output": {}
+        }
+
+        config_file = './data/quantsim_config.json'
+        with open(config_file, 'w') as f:
+            json.dump(quantsim_config, f)
+
+        INPUT_SHAPE = (1, 3, 32, 32)
+        def forward_fn(model, _):
+            torch.manual_seed(10)
+            model.eval()
+            with torch.no_grad():
+                _ = model(torch.randn(INPUT_SHAPE))
+        supported_kernels = {}
+        from aimet_torch.quantsim_config.quantsim_config import QuantSimConfigurator
+        dummy_input = torch.randn(INPUT_SHAPE)
+        connected_graph = ConnectedGraph(model, dummy_input)
+
+        qsim_config = QuantSimConfigurator(model, connected_graph, config_file, supported_kernels,
+                                           quantsim_output_bw=8, quantsim_param_bw=8,
+                                           quantsim_data_type=QuantizationDataType.int)
+
+        qsim_dtype_bw = QuantDtypeBwInfo(data_type=QuantizationDataType.int, act_bw=8 , param_bw=8)
+
+        try:
+            qsim_config.check_correctness_of_dtype_bw_rules(qsim_dtype_bw)
+        except NotImplementedError as exc:
+            print(" Test raised exception as expected ", exc)
+            assert True
+
+        # remove test config created
         if os.path.exists('./data/quantsim_config.json'):
             os.remove('./data/quantsim_config.json')

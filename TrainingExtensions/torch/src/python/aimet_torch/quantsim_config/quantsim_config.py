@@ -44,23 +44,20 @@ from aimet_common.utils import AimetLogger
 from aimet_common.graph_searcher import GraphSearcher
 from aimet_common.graph_pattern_matcher import PatternType
 from aimet_common.connected_graph.operation import Op
-from aimet_common.defs import QuantizationDataType
+from aimet_common.defs import QuantizationDataType, QuantDtypeBwInfo
 from aimet_common.connected_graph.connectedgraph_utils import get_all_input_ops, get_all_output_ops
 from aimet_common.quantsim_config.json_config_importer import ConfigDictKeys, ConfigType, SupergroupType, OpType, \
     ParamType, DefaultsType, OpTypeType, ConfigDictType
 from aimet_common.quantsim_config.quantsim_config import QuantSimConfigurator as AimetCommonQuantSimConfigurator, \
     get_all_ops_in_neighborhood
 from aimet_common.quantsim_config.quantsim_config import SupergroupConfigCallback as AimetCommonSupergroupConfigCallback
-from aimet_common.quantsim_config.quantsim_config import get_setting_type
+from aimet_common.quantsim_config.quantsim_config import get_setting_type, ENFORCE_TARGET_DTYPE_BITWIDTH_CONFIG
 from aimet_torch.qc_quantize_op import QcQuantizeWrapper
 from aimet_torch.tensor_quantizer import TensorQuantizer
 from aimet_torch.meta.connectedgraph import ConnectedGraph
 from aimet_torch.onnx_utils import map_torch_types_to_onnx, pytorch_functional_name_to_onnx_dict
 
 logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Quant)
-
-# Flag to enforce target configs for data type and bit-width for params and activation.
-ENFORCE_TARGET_DTYPE_BITWIDTH_CONFIG = False
 
 MAP_PYTORCH_PARAM_NAME_TO_QUANTSIM_NAME = {
     "bias": "bias",
@@ -122,6 +119,11 @@ class QuantSimConfigurator(AimetCommonQuantSimConfigurator):
         self._elementwise_op_to_tensor_quantizers_dict = self._create_elementwise_op_to_tensor_quantizers_dict()
         self._disable_all_quantizers()
         self._store_supported_kernels(supported_kernels)
+        if ENFORCE_TARGET_DTYPE_BITWIDTH_CONFIG:
+            if self.check_correctness_of_dtype_bw_rules(QuantDtypeBwInfo(self._default_data_type,
+                                                                         self._default_output_bw,
+                                                                         self._default_param_bw)):
+                logger.info("Supported Kernel check for valid dtype and bitwidth overrides completed")
         self._set_quantsim_configs()
 
     def _store_supported_kernels(self, supported_kernels: Dict):
