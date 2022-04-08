@@ -46,7 +46,7 @@ import tensorflow as tf
 
 from aimet_tensorflow.common.graph_eval import initialize_uninitialized_vars
 from aimet_tensorflow.quantsim import QuantizationSimModel
-from aimet_tensorflow.examples.test_models import depthwise_conv2d_model
+from aimet_tensorflow.examples.test_models import depthwise_conv2d_model, transposed_conv2d_model
 from aimet_tensorflow.utils.constants import QuantizeOpIndices
 from aimet_tensorflow.utils.op.conv import WeightTensorUtils
 from aimet_common.defs import QuantScheme
@@ -558,6 +558,42 @@ class TestTrainingExtensionsQcQuantizeOpPerChannel(unittest.TestCase):
                 encoding = quantizer_info.get_encoding()
                 assert isinstance(encoding, list)
 
+    @pytest.mark.cuda
+    def test_compute_encodings_transposed_conv_model(self):
+        save_config_file_for_per_channel_quantization()
+
+        tf.compat.v1.reset_default_graph()
+        sess = tf.compat.v1.Session()
+        with tf.device('/gpu:0'):
+            _ = transposed_conv2d_model()
+            init = tf.compat.v1.global_variables_initializer()
+            sess.run(init)
+        op = sess.graph.get_operations()
+        weight_val = sess.run(sess.graph.get_operation_by_name('conv2d_transpose/kernel/Read/ReadVariableOp').outputs[0])
+
+        sim = QuantizationSimModel(sess, ['input_1'], ['conv2d_transpose/BiasAdd'], use_cuda=True,
+                                   config_file='./quantsim_config.json')
+
+        def dummy_forward_pass(sess, args):
+            model_output = sess.graph.get_tensor_by_name('conv2d_transpose/BiasAdd:0')
+            model_input = sess.graph.get_tensor_by_name('input_1:0')
+            dummy_input = np.random.randn(1, 7, 7, 3)
+            sess.run(model_output, feed_dict={model_input: dummy_input})
+
+        sim.compute_encodings(dummy_forward_pass, None)
+
+        encodings = []
+        for quant_op_name, quantizer_info in sim._param_quantizers.items():
+            if quantizer_info.get_op_mode() != int(libpymo.TensorQuantizerOpMode.passThrough):
+                encoding = quantizer_info.get_encoding()
+                lst = []
+                for enc in encoding:
+                    lst.append((enc.min, enc.max))
+                encodings.append(lst)
+
+        encoding_numpy = compute_tf_encodings_given_numpy_data(weight_val, axis=2)
+        assert np.allclose(encoding_numpy, encodings, rtol=0.01)
+
     # Mark below test as cuda until per channel on cpu is supported.
     @pytest.mark.cuda
     def test_per_channel_range_learning(self):
@@ -781,8 +817,10 @@ def compute_tf_encodings_given_numpy_data(data, axis):
     for i in range(data_size):
         if axis == 1:
             data_flatten = data[:, i]
-        else:
+        elif axis == 3:
             data_flatten = data[:, :, :, i].flatten()
+        elif axis == 2:
+            data_flatten = data[:, :, i, :].flatten()
 
         encoding_min = min(0, np.min(data_flatten))
         encoding_max = max(0, np.max(data_flatten))

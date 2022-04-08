@@ -44,14 +44,16 @@ OP_WEIGHT_INDICES = {'Conv2D': 1,
                      'DepthwiseConv2dNative': 1,
                      'Conv2DTranspose': 1,
                      'BiasAdd': 1,
-                     'Add': 1
+                     'Add': 1,
+                     'Conv2DBackpropInput': 1
                      }
 OP_VAR_WEIGHT_INDEX = 0
 OP_BIAS_TYPES = ['Conv2D', 'VariableV2']
 OP_BIAS_INDICES = {'Conv2D': 0,
                    'VariableV2': 0,
                    'DepthwiseConv2dNative' : 0,
-                   'MatMul': 0
+                   'MatMul': 0,
+                   'Conv2DBackpropInput': 0
                    }
 READ_VAR_OP_BIAS_INDICES = {'Conv2D': 1,
                             'DepthwiseConv2dNative' : 1,
