@@ -68,6 +68,8 @@ RUN apt-get update -y > /dev/null && \
         python3-pip \
         python3.7 \
         python3.7-dev \
+        python3-setuptools \
+        build-essential \
         libffi-dev && \
         rm -rf /var/lib/apt/lists/*
 
@@ -77,11 +79,11 @@ RUN update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.7 1
 RUN update-alternatives --set python3 /usr/bin/python3.7
 
 # Upgrade Python3 pip and install some more packages
-RUN python3 -m pip --no-cache-dir install --upgrade \
-        pip==20.2.4 \
+RUN python3.7 -m pip --no-cache-dir install --upgrade \
+        pip \
+        cython \
         'numpy>=1.19.5' \
-        setuptools==41.0.1 \
-        wheel==0.33.4
+        wheel
 
 ENV DEBIAN_FRONTEND=noninteractive
 
@@ -149,7 +151,7 @@ RUN python3.7 -m pip --no-cache-dir install \
         sphinx==2.1.1 \
         sphinx-jinja==1.1.1 \
         sphinx-autodoc-typehints==1.6.0 \
-        tensorboard==1.15 \
+        tensorboard \
         tensorboardX==1.7 \
         tensorflow-gpu==2.4.3 \
         tensorflow-hub \
@@ -215,8 +217,8 @@ RUN python3.7 -m pip install holoviews==1.12.7 netron jsonschema pandas
 RUN python3.7 -m pip install bokeh==1.2.0 hvplot==0.4.0
 
 # Remove existing Pillow & Pillow-SIMD and replace with correct version of Pillow-SIMD.
-RUN pip3 uninstall -y Pillow Pillow-SIMD
-RUN pip3 --no-cache-dir install Pillow-SIMD==7.0.0.post3
+RUN python3 -m pip uninstall -y Pillow Pillow-SIMD
+RUN python3 -m pip --no-cache-dir install Pillow-SIMD==7.0.0.post3
 
 RUN apt-get update && apt-get install -y gnupg2
 RUN wget -O - http://llvm.org/apt/llvm-snapshot.gpg.key|sudo apt-key add - && echo "deb http://apt.llvm.org/bionic/ llvm-toolchain-bionic-11 main" >> /etc/apt/sources.list
