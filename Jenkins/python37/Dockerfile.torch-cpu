@@ -68,6 +68,8 @@ RUN apt-get update -y > /dev/null && \
         python3-pip \
         python3.7 \
         python3.7-dev \
+        python3-setuptools \
+        build-essential \
         libffi-dev && \
         rm -rf /var/lib/apt/lists/*
 
@@ -77,11 +79,11 @@ RUN update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.7 1
 RUN update-alternatives --set python3 /usr/bin/python3.7
 
 # Upgrade Python3 pip and install some more packages
-RUN python3.7 -m pip install --no-cache-dir install --upgrade \
-        pip==20.2.4 \
+RUN python3.7 -m pip --no-cache-dir install --upgrade \
+        pip \
+        cython \
         'numpy<1.17,>=1.16.6' \
-        setuptools==41.0.1 \
-        wheel==0.33.4
+        wheel
 
 ENV DEBIAN_FRONTEND=noninteractive
 
