@@ -336,7 +336,25 @@ class AdaroundConstants:
     GAMMA = -0.1
     ZETA = 1.1
 
+
 class QuantizationDataType(Enum):
     """ Enumeration of tensor quantizer data types supported """
     int = 1
     float = 2
+
+
+class QuantDtypeBwInfo:
+    """
+    QuantDtypeBwInfo has dtype, act_bw and param_bw
+    """
+
+    def __init__(self, data_type: QuantizationDataType, act_bw: int, param_bw: int):
+        """
+        Data class to hold dtype and bw info
+        :param data_type: Data type (int/ float)
+        :param act_bw: bitiwdth as int
+        :param param_bw: bitdiwth as int
+        """
+        self.data_type = data_type
+        self.act_bw = act_bw
+        self.param_bw = param_bw
