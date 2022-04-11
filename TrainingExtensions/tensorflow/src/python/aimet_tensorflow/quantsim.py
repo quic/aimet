@@ -57,7 +57,7 @@ from aimet_tensorflow import utils
 from aimet_tensorflow.utils import transformer_utils
 from aimet_tensorflow.utils.constants import QuantizeOpIndices
 from aimet_tensorflow.utils.quantsim import create_op_to_quant_ops_dict, is_op_quantizable, \
-    get_time_steps_tensor_from_rnn_inner_ops, create_encoding_from_dict
+    get_time_steps_tensor_from_rnn_inner_ops, create_encoding_from_dict, swap_last_two_dim
 from aimet_tensorflow.utils.graph import updated_graph_flow_context_to_loop_context, set_graph_flow_context, \
     op_not_in_loop_control_flow_context
 from aimet_tensorflow.common.connectedgraph import ConnectedGraph
@@ -373,7 +373,8 @@ class QuantizationSimModel:
             for var in tf.compat.v1.global_variables():
                 if not var.name[:-2].endswith(('_quantized', '_quantized_op_mode', '_quantized_quant_ref',
                                                '_quantized_encoding_min', '_quantized_encoding_max',
-                                               '_quantized_bit_width', '_quantized_use_symmetric_encoding')):
+                                               '_quantized_bit_width', '_quantized_use_symmetric_encoding',
+                                               '_quantized_axis', '_quantized_data_type')):
                     vars_to_save.append(var)
 
             saver = tf.compat.v1.train.Saver(vars_to_save)
@@ -524,6 +525,8 @@ class QuantizationSimModel:
                                                            QuantizeOpIndices.use_symmetric_encoding))
 
             tensor_name = quant_op.inputs[0].name
+            if quant_op.type in ['QcQuantizePerChannel'] and 'EagerPyFunc' in tensor_name:
+                tensor_name = quant_op.inputs[0].op.inputs[0].name
             encoding_dict[tensor_name] = [{'min': min_val,
                                            'max': max_val,
                                            'scale': delta,
@@ -709,7 +712,7 @@ class QuantizationSimModel:
             can_modify_op = self.session.graph.get_operation_by_name(param_info.op_with_param_name)
 
             if param_in is not None:
-                num_output_channels, quantization_axis = QuantizationSimModel._get_number_of_output_channels(
+                num_output_channels, quantization_axis = QuantizationSimModel._get_number_of_output_channels_and_quantization_axis(
                     param_in.get_shape().as_list(), can_modify_op.type)
                 quant_op_name = self._get_quantized_name(param_name)
 
@@ -717,12 +720,24 @@ class QuantizationSimModel:
                 _logger.info("Adding weight quantization op %s", quant_op_name)
                 op_mode = libpymo.TensorQuantizerOpMode.oneShotQuantizeDequantize
 
-                q_op_out = self._insert_post_training_quant_op(param_in, quant_op_name,
-                                                               op_mode, self._param_quantizers, QuantizerType.param,
-                                                               default_param_bw, data_type)
+                # If per channel quantization is enabled we tranpose the weights of tranpose op and then
+                # perform per channel quantization
+                if can_modify_op.type in ['Conv2DTranspose', 'Conv2DBackpropInput'] and self.per_channel_quantization_enabled:
 
+                    fout = tf.py_function(func=swap_last_two_dim, inp=[param_in], Tout=tf.float32)
+
+                    q_op_out = self._insert_post_training_quant_op(fout, quant_op_name,
+                                                                   op_mode, self._param_quantizers, QuantizerType.param,
+                                                                   default_param_bw, data_type)
+
+                    q_op_out = tf.py_function(func=swap_last_two_dim, inp=[q_op_out], Tout=tf.float32)
+                else:
+                    q_op_out = self._insert_post_training_quant_op(param_in, quant_op_name,
+                                                                   op_mode, self._param_quantizers, QuantizerType.param,
+                                                                   default_param_bw, data_type)
                 nodes_modified_count = graph_editor.reroute_ts(tf_ops.convert_to_tensor(q_op_out), param_in,
                                                                can_modify=can_modify_op)
+
                 if nodes_modified_count != 1:
                     raise ValueError('Input ' + param_in.name + ' not quantized!')
 
@@ -748,7 +763,7 @@ class QuantizationSimModel:
             can_modify_op, param_in = QuantizationSimModel._get_op_to_modify_with_param_in(op, index)
 
             if param_in is not None:
-                num_output_channels, quantization_axis = QuantizationSimModel._get_number_of_output_channels(
+                num_output_channels, quantization_axis = QuantizationSimModel._get_number_of_output_channels_and_quantization_axis(
                     can_modify_op.inputs[index].get_shape().as_list(), can_modify_op.type)
                 quant_op_name = self._get_quantized_name(param_in.op.name)
 
@@ -768,7 +783,7 @@ class QuantizationSimModel:
 
 
     @staticmethod
-    def _get_number_of_output_channels(weight_shape: List[int], consumer_op_type: str):
+    def _get_number_of_output_channels_and_quantization_axis(weight_shape: List[int], consumer_op_type: str):
         """
         Gets number of output channels and quantization axis for an op for per channel quantization
         :param weight_shape: list containing tensor shape of weight
@@ -787,6 +802,11 @@ class QuantizationSimModel:
         elif consumer_op_type == 'MatMul':
             num_output_channels = weight_shape[1]
             axis = 1
+        elif consumer_op_type in ['Conv2DTranspose', 'Conv2DBackpropInput']:
+            num_output_channels = weight_shape[2]
+            # Since we will transpose the weights before performing quantization, we will use 3rd axis for
+            # transposed ops as well
+            axis = 3
         return num_output_channels, axis
 
     @staticmethod
