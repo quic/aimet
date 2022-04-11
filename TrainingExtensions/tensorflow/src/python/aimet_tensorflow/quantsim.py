@@ -57,7 +57,7 @@ from aimet_tensorflow import utils
 from aimet_tensorflow.utils import transformer_utils
 from aimet_tensorflow.utils.constants import QuantizeOpIndices
 from aimet_tensorflow.utils.quantsim import create_op_to_quant_ops_dict, is_op_quantizable, \
-    get_time_steps_tensor_from_rnn_inner_ops, create_encoding_from_dict, transpose_op
+    get_time_steps_tensor_from_rnn_inner_ops, create_encoding_from_dict, swap_last_two_dim
 from aimet_tensorflow.utils.graph import updated_graph_flow_context_to_loop_context, set_graph_flow_context, \
     op_not_in_loop_control_flow_context
 from aimet_tensorflow.common.connectedgraph import ConnectedGraph
@@ -721,22 +721,19 @@ class QuantizationSimModel:
                 # perform per channel quantization
                 if can_modify_op.type in ['Conv2DTranspose', 'Conv2DBackpropInput'] and self.per_channel_quantization_enabled:
 
-                    fout = tf.py_function(func=transpose_op, inp=[param_in], Tout=tf.float32)
+                    fout = tf.py_function(func=swap_last_two_dim, inp=[param_in], Tout=tf.float32)
 
                     q_op_out = self._insert_post_training_quant_op(fout, quant_op_name,
                                                                    op_mode, self._param_quantizers, QuantizerType.param,
                                                                    default_param_bw, data_type)
 
-                    fout = tf.py_function(func=transpose_op, inp=[q_op_out], Tout=tf.float32)
-
-                    nodes_modified_count = graph_editor.reroute_ts(tf_ops.convert_to_tensor(fout), param_in,
-                                                                   can_modify=can_modify_op)
+                    q_op_out = tf.py_function(func=swap_last_two_dim, inp=[q_op_out], Tout=tf.float32)
                 else:
                     q_op_out = self._insert_post_training_quant_op(param_in, quant_op_name,
                                                                    op_mode, self._param_quantizers, QuantizerType.param,
                                                                    default_param_bw, data_type)
-                    nodes_modified_count = graph_editor.reroute_ts(tf_ops.convert_to_tensor(q_op_out), param_in,
-                                                                   can_modify=can_modify_op)
+                nodes_modified_count = graph_editor.reroute_ts(tf_ops.convert_to_tensor(q_op_out), param_in,
+                                                               can_modify=can_modify_op)
 
                 if nodes_modified_count != 1:
                     raise ValueError('Input ' + param_in.name + ' not quantized!')

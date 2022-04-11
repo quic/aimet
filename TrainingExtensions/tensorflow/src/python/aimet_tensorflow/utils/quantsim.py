@@ -76,7 +76,7 @@ def get_param_quantizer(op: tf.Operation, index: int) -> tf.Operation:
     return quantized_op
 
 
-def transpose_op(in_tensor: tf.Tensor):
+def swap_last_two_dim(in_tensor: tf.Tensor):
     """
     Transpose op for transposed conv2d
     :param in_tensor: parameters connected to transposed conv2d op
@@ -127,6 +127,9 @@ def create_op_to_quant_ops_dict(graph: tf.Graph, conn_graph: ConnectedGraph,
         if param_quantizer[0].type == 'EagerPyFunc':
             param_quantizer = [consumer for consumer in param_quantizer[0].outputs[0].consumers() if consumer.type in
                                ['QcQuantize', 'QcQuantizeRecurrentParam', 'QcQuantizePerChannel']]
+        if len(param_quantizer) != 1:
+            _logger.error('Expected one parameter quantizer but found %s', len(param_quantizer))
+            raise AssertionError
         add_op_to_quant_ops_dict_entry(param_quantizer[0], conn_graph_op, True,
                                        param_info.param_type, op_to_quant_ops_dict)
     for activation_op_name in activation_op_names:
