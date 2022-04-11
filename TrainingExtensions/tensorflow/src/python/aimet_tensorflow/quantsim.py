@@ -373,7 +373,8 @@ class QuantizationSimModel:
             for var in tf.compat.v1.global_variables():
                 if not var.name[:-2].endswith(('_quantized', '_quantized_op_mode', '_quantized_quant_ref',
                                                '_quantized_encoding_min', '_quantized_encoding_max',
-                                               '_quantized_bit_width', '_quantized_use_symmetric_encoding')):
+                                               '_quantized_bit_width', '_quantized_use_symmetric_encoding',
+                                               '_quantized_axis', '_quantized_data_type')):
                     vars_to_save.append(var)
 
             saver = tf.compat.v1.train.Saver(vars_to_save)
@@ -524,6 +525,8 @@ class QuantizationSimModel:
                                                            QuantizeOpIndices.use_symmetric_encoding))
 
             tensor_name = quant_op.inputs[0].name
+            if quant_op.type in ['QcQuantizePerChannel'] and 'EagerPyFunc' in tensor_name:
+                tensor_name = quant_op.inputs[0].op.inputs[0].name
             encoding_dict[tensor_name] = [{'min': min_val,
                                            'max': max_val,
                                            'scale': delta,

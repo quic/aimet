@@ -572,7 +572,7 @@ class TestTrainingExtensionsQcQuantizeOpPerChannel(unittest.TestCase):
         weight_val = sess.run(sess.graph.get_operation_by_name('conv2d_transpose/kernel/Read/ReadVariableOp').outputs[0])
 
         sim = QuantizationSimModel(sess, ['input_1'], ['conv2d_transpose/BiasAdd'], use_cuda=True,
-                                   config_file='./quantsim_config.json')
+                                   config_file='./quantsim_config.json', quant_scheme='tf')
 
         def dummy_forward_pass(sess, args):
             model_output = sess.graph.get_tensor_by_name('conv2d_transpose/BiasAdd:0')
@@ -593,6 +593,13 @@ class TestTrainingExtensionsQcQuantizeOpPerChannel(unittest.TestCase):
 
         encoding_numpy = compute_tf_encodings_given_numpy_data(weight_val, axis=2)
         assert np.allclose(encoding_numpy, encodings, rtol=0.01)
+        sim.export('/tmp', 'quant_sim_model')
+        with open('/tmp/quant_sim_model.encodings') as json_file:
+            encoding_data = json.load(json_file)
+
+        param_keys = list(encoding_data["param_encodings"].keys())
+        assert param_keys[0] == "conv2d_transpose/conv2d_transpose/ReadVariableOp:0"
+        sess.close()
 
     # Mark below test as cuda until per channel on cpu is supported.
     @pytest.mark.cuda
