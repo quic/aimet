@@ -57,6 +57,8 @@ from aimet_common.quantsim import encoding_version
 from aimet_tensorflow.quantsim import save_checkpoint, load_checkpoint
 from aimet_tensorflow.utils.constants import QuantizeOpIndices
 from aimet_tensorflow.utils import transformer_utils
+from aimet_tensorflow.examples.test_models import transposed_conv2d_model
+
 
 tf.compat.v1.logging.set_verbosity(tf.compat.v1.logging.WARN)
 tf.compat.v1.disable_eager_execution()
@@ -207,6 +209,37 @@ class TestQuantSim(unittest.TestCase):
         self.assertEqual(int(libpymo.TensorQuantizerOpMode.quantizeDequantize),
                          sim.session.run(conv2d_output_quant_op.inputs[1]))
 
+    @pytest.mark.cuda
+    def test_compute_encodings_transposed_conv_model(self):
+        tf.compat.v1.reset_default_graph()
+        sess = tf.compat.v1.Session()
+        with tf.device('/gpu:0'):
+            _ = transposed_conv2d_model()
+            init = tf.compat.v1.global_variables_initializer()
+            sess.run(init)
+
+        sim = QuantizationSimModel(sess, ['input_1'], ['conv2d_transpose/BiasAdd'], use_cuda=True,
+                                   quant_scheme='tf')
+
+        def dummy_forward_pass(sess, args):
+            model_output = sess.graph.get_tensor_by_name('conv2d_transpose/BiasAdd:0')
+            model_input = sess.graph.get_tensor_by_name('input_1:0')
+            dummy_input = np.random.randn(1, 7, 7, 3)
+            sess.run(model_output, feed_dict={model_input: dummy_input})
+
+        sim.compute_encodings(dummy_forward_pass, None)
+
+        conv2d_weight_quant_op = sim.session.graph.get_operation_by_name('conv2d_transpose/conv2d_transpose/ReadVariableOp_quantized')
+        assert int(libpymo.TensorQuantizerOpMode.oneShotQuantizeDequantize) == sim.session.run(conv2d_weight_quant_op.inputs[1])
+
+        sim.export('/tmp', 'quant_sim_model')
+        with open('/tmp/quant_sim_model.encodings') as json_file:
+            encoding_data = json.load(json_file)
+
+        param_keys = list(encoding_data["param_encodings"].keys())
+        assert param_keys[0] == "conv2d_transpose/conv2d_transpose/ReadVariableOp:0"
+        sess.close()
+
     def test_compute_encodings_cpu_model_fp16(self):
         """
         Create QuantSim for a CPU model and test that activation encodings are computed
@@ -284,7 +317,6 @@ class TestQuantSim(unittest.TestCase):
         sess.close()
         sim.session.close()
         del sim
-
 
     def _save_to_keras_common_test_code(self, use_cuda):
         tf.compat.v1.reset_default_graph()
