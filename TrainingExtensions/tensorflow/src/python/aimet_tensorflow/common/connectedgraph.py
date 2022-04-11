@@ -381,7 +381,8 @@ class ConnectedGraph(aimetCommonConnectedGraph):
             "DepthwiseConv2dNative": create_conv2d_dense_type_params,
             "BatchNorm": create_batchnorm_params,
             "FusedBatchNormV3": create_batchnorm_params,
-            "LayerNorm": create_layernorm_params
+            "LayerNorm": create_layernorm_params,
+            "Conv2DTranspose": create_conv2d_dense_type_params
         }
 
         handler = switcher.get(op.type, handle_default)

@@ -76,6 +76,18 @@ def get_param_quantizer(op: tf.Operation, index: int) -> tf.Operation:
     return quantized_op
 
 
+def swap_last_two_dim(in_tensor: tf.Tensor):
+    """
+    Transpose op for transposed conv2d
+    :param in_tensor: parameters connected to transposed conv2d op
+    :return: in tensor with values permuted
+    """
+    if len(in_tensor.shape) == 4:
+        permute = [0, 1, 3, 2]
+        in_tensor = tf.transpose(in_tensor, permute)
+    return in_tensor
+
+
 def create_op_to_quant_ops_dict(graph: tf.Graph, conn_graph: ConnectedGraph,
                                 ops_with_param_names: List[str], indices: List[int],
                                 params_to_quantize: Dict[str, ParameterInfo],
@@ -108,7 +120,13 @@ def create_op_to_quant_ops_dict(graph: tf.Graph, conn_graph: ConnectedGraph,
         conn_graph_op = conn_graph.get_op_from_module_name(param_info.op_with_param_name)
         param_quantizer = \
             [consumer for consumer in param_op.outputs[0].consumers() if consumer.type in
-             ['QcQuantize', 'QcQuantizeRecurrentParam', 'QcQuantizePerChannel']]
+             ['QcQuantize', 'QcQuantizeRecurrentParam', 'QcQuantizePerChannel', 'EagerPyFunc']]
+        if len(param_quantizer) != 1:
+            _logger.error('Expected one parameter quantizer but found %s', len(param_quantizer))
+            raise AssertionError
+        if param_quantizer[0].type == 'EagerPyFunc':
+            param_quantizer = [consumer for consumer in param_quantizer[0].outputs[0].consumers() if consumer.type in
+                               ['QcQuantize', 'QcQuantizeRecurrentParam', 'QcQuantizePerChannel']]
         if len(param_quantizer) != 1:
             _logger.error('Expected one parameter quantizer but found %s', len(param_quantizer))
             raise AssertionError

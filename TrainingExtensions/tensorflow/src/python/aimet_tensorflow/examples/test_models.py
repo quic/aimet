@@ -52,8 +52,8 @@ if not version.parse(tf.version.VERSION) >= version.parse("2.00"):
 
 def transposed_conv2d_model():
     """ Trasposed Conv2D model"""
-    inputs = tf.keras.Input(shape=(7, 7, 1))
-    x = tf.keras.layers.Conv2DTranspose(1, (4, 4), use_bias=True)(inputs)
+    inputs = tf.keras.Input(shape=(7, 7, 3))
+    x = tf.keras.layers.Conv2DTranspose(3, (4, 4), use_bias=True)(inputs)
     return x
 
 
