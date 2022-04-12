@@ -38,6 +38,7 @@
 """ Implementation for simulating models running on Quantized hardware """
 
 from typing import List, Union, Dict, Callable, Any, Tuple
+import enum
 import os
 import shutil
 import json
@@ -87,6 +88,16 @@ param_quant_conn_op_ignore_list = {'FusedBatchNorm', 'FusedBatchNormV3', 'BatchN
 DTYPES_QUANTIZE_NOT_REQUIRED = [tf.dtypes.int8, tf.dtypes.uint8, tf.dtypes.int16, tf.dtypes.uint16,
                                 tf.dtypes.int32, tf.dtypes.uint32, tf.dtypes.int64, tf.dtypes.uint64,
                                 tf.bool, tf.dtypes.string]
+
+# Ways to handle getting number of channels from axes. Default is to get it from the last dimension. For depthwise
+# conv2d, it will be obtained from the last two dimensions.
+class AxisHandling(enum.Enum):
+    """
+    Enum for axis handling used as input variable to QcQuantizePerChannelOp. This defines how to interpret the
+    number of output channels from the weight dimensions.
+    """
+    LAST_AXIS = 0
+    LAST_TWO_AXES = 1
 
 def _load_ops():
     """
@@ -712,11 +723,13 @@ class QuantizationSimModel:
             can_modify_op = self.session.graph.get_operation_by_name(param_info.op_with_param_name)
 
             if param_in is not None:
-                num_output_channels, quantization_axis = QuantizationSimModel._get_number_of_output_channels_and_quantization_axis(
-                    param_in.get_shape().as_list(), can_modify_op.type)
+                num_output_channels, quantization_axis_handling = \
+                    QuantizationSimModel._get_number_of_output_channels_and_quantization_axis_handling(
+                        param_in.get_shape().as_list(), can_modify_op.type)
                 quant_op_name = self._get_quantized_name(param_name)
 
-                self._op_name_to_output_channels_axis_dict[quant_op_name] = [num_output_channels, quantization_axis]
+                self._op_name_to_output_channels_axis_dict[quant_op_name] = [num_output_channels,
+                                                                             quantization_axis_handling]
                 _logger.info("Adding weight quantization op %s", quant_op_name)
                 op_mode = libpymo.TensorQuantizerOpMode.oneShotQuantizeDequantize
 
@@ -763,11 +776,13 @@ class QuantizationSimModel:
             can_modify_op, param_in = QuantizationSimModel._get_op_to_modify_with_param_in(op, index)
 
             if param_in is not None:
-                num_output_channels, quantization_axis = QuantizationSimModel._get_number_of_output_channels_and_quantization_axis(
-                    can_modify_op.inputs[index].get_shape().as_list(), can_modify_op.type)
+                num_output_channels, quantization_axis_handling = \
+                    QuantizationSimModel._get_number_of_output_channels_and_quantization_axis_handling(
+                        can_modify_op.inputs[index].get_shape().as_list(), can_modify_op.type)
                 quant_op_name = self._get_quantized_name(param_in.op.name)
 
-                self._op_name_to_output_channels_axis_dict[quant_op_name] = [num_output_channels, quantization_axis]
+                self._op_name_to_output_channels_axis_dict[quant_op_name] = [num_output_channels,
+                                                                             quantization_axis_handling]
                 _logger.info("Adding weight quantization op %s", quant_op_name)
                 op_mode = libpymo.TensorQuantizerOpMode.oneShotQuantizeDequantize
 
@@ -783,31 +798,23 @@ class QuantizationSimModel:
 
 
     @staticmethod
-    def _get_number_of_output_channels_and_quantization_axis(weight_shape: List[int], consumer_op_type: str):
+    def _get_number_of_output_channels_and_quantization_axis_handling(weight_shape: List[int],
+                                                                      consumer_op_type: str) -> \
+        Tuple[int, AxisHandling]:
         """
         Gets number of output channels and quantization axis for an op for per channel quantization
         :param weight_shape: list containing tensor shape of weight
         :param consumer_op_type: type of op that consumes weight
-        :return number of output channel and axis from weight_shape
+        :return number of output channel and axis handling from weight_shape
         """
-        # If weight shape length is 1, the parameter is bias
-        num_output_channels = None
-        axis = None
-        if len(weight_shape) == 1:
-            num_output_channels = weight_shape[0]
-            axis = 0
-        elif consumer_op_type in ['Conv2D', 'DepthwiseConv2dNative']:
-            num_output_channels = weight_shape[3]
-            axis = 3
-        elif consumer_op_type == 'MatMul':
-            num_output_channels = weight_shape[1]
-            axis = 1
-        elif consumer_op_type in ['Conv2DTranspose', 'Conv2DBackpropInput']:
+        axis_handling = AxisHandling.LAST_AXIS
+        num_output_channels = weight_shape[-1]
+        if consumer_op_type in ['Conv2DTranspose', 'Conv2DBackpropInput']:
             num_output_channels = weight_shape[2]
-            # Since we will transpose the weights before performing quantization, we will use 3rd axis for
-            # transposed ops as well
-            axis = 3
-        return num_output_channels, axis
+        elif consumer_op_type == 'DepthwiseConv2dNative':
+            num_output_channels *= weight_shape[-2]
+            axis_handling = AxisHandling.LAST_TWO_AXES
+        return num_output_channels, axis_handling
 
     @staticmethod
     def _is_op_quantizable(op: tf.Operation) -> bool:
@@ -1025,16 +1032,16 @@ class QuantizationSimModel:
             use_symmetric_encoding = tf.Variable(initial_value=False,
                                                  name=quant_op_name + '_use_symmetric_encoding',
                                                  trainable=False, dtype=tf.bool)
-            # If per channel quantization is disabled, axis = -1
-            axis = -1
+            axis_handling = AxisHandling.LAST_AXIS
             if quantizer_type == QuantizerType.param and self.per_channel_quantization_enabled:
                 tensor_quantizer, tensor_quant_ref, \
-                encoding_min, encoding_max, axis = self._create_per_channel_quantizers_and_encodings(quant_op_name)
+                encoding_min, encoding_max, axis_handling = \
+                    self._create_per_channel_quantizers_and_encodings(quant_op_name)
             else:
                 tensor_quantizer, tensor_quant_ref, \
                 encoding_min, encoding_max = self._create_per_tensor_quantizers_and_encodings(quant_op_name)
 
-            quantization_axis = tf.Variable(initial_value=axis, name=quant_op_name + '_axis',
+            quantization_axis = tf.Variable(initial_value=axis_handling.value, name=quant_op_name + '_axis',
                                             trainable=False, dtype=tf.int32)
 
             is_int_data_type = tf.Variable(initial_value=(data_type == QuantizationDataType.int),
@@ -1051,11 +1058,15 @@ class QuantizationSimModel:
         return op_mode_var, tensor_quant_ref, encoding_min, encoding_max, bit_width, use_symmetric_encoding, \
                quantization_axis, is_int_data_type
 
-    def _create_per_channel_quantizers_and_encodings(self, quant_op_name: str):
+    def _create_per_channel_quantizers_and_encodings(self, quant_op_name: str) -> \
+            Tuple[List[libpymo.TensorQuantizer], tf.Variable, tf.Variable, tf.Variable, AxisHandling]:
         """
         Creates per channel quantizers and encoding min max variables
+        :param quant_op_name: Name of quantization op with parameter to create per channel quantizers for
+        :return: Tensor quantizers, variable with quantizer pointer, encoding min variable, encoding max variable, and
+        axis handling enum
         """
-        num_output_channels, axis = self._op_name_to_output_channels_axis_dict[quant_op_name]
+        num_output_channels, axis_handling = self._op_name_to_output_channels_axis_dict[quant_op_name]
         tensor_quantizer_int64 = [None] * num_output_channels
         tensor_quantizers = [None] * num_output_channels
         # Create a tensor_quantizer per channel
@@ -1073,7 +1084,7 @@ class QuantizationSimModel:
         encoding_min, encoding_max = self._create_encoding_min_max_vars(quant_op_name,
                                                                         quantizer_type=QuantizerType.param)
 
-        return tensor_quantizers, tensor_quant_ref, encoding_min, encoding_max, axis
+        return tensor_quantizers, tensor_quant_ref, encoding_min, encoding_max, axis_handling
 
     def _create_per_tensor_quantizers_and_encodings(self, quant_op_name: str):
         """
