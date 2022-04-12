@@ -1035,6 +1035,12 @@ class TestQuantSim(unittest.TestCase):
 
         sess = tf.compat.v1.Session()
         initialize_uninitialized_vars(sess)
+        # Make some changes to model parameters to see if they are part of the exported model
+        with sess.graph.as_default():
+            first_conv_tensor_var = [var for var in tf.compat.v1.global_variables() if var.name == 'conv2d/kernel:0'][0]
+            first_conv_tensor_var.load(np.ones([3,3,3,32]), sess)
+            saver = tf.compat.v1.train.Saver()
+        saver.save(sess, save_path='/tmp/quantsim/'+'orig_model_before_quantsim')
         sim = QuantizationSimModel(sess, [model.input.op.name], [model.output.op.name], use_cuda=False)
 
         def dummy_forward_pass(sess, args):
@@ -1045,34 +1051,48 @@ class TestQuantSim(unittest.TestCase):
             sess.run(model_output, feed_dict={model_input: dummy_input})
 
         sim.compute_encodings(dummy_forward_pass, None)
-
-        # Make some changes to model parameters to see if they are part of the exported model
-        with sim.session.graph.as_default():
-            first_bias_tensor = sim.session.graph.get_tensor_by_name('conv2d/BiasAdd/ReadVariableOp:0')
-            first_bias_tensor_val = sim.session.run(first_bias_tensor)
-            self.assertTrue(np.any(first_bias_tensor_val == 0))
-            first_bias_tensor_var = [var for var in tf.compat.v1.global_variables() if var.name == 'conv2d/bias:0'][0]
-            first_bias_tensor_var.load(np.ones(32), sim.session)
+        encoding = libpymo.TfEncoding()
+        encoding.bw = 8
+        encoding.max = 1.0
+        sim._param_quantizers['conv2d/Conv2D/ReadVariableOp_quantized'].set_encoding(encoding)
 
         all_op_types = [op.type for op in sim.session.graph.get_operations()]
         self.assertIn('QcQuantize', all_op_types)
         self.assertNotIn('FakeQuantWithMinMaxVars', all_op_types)
 
-        sim.save_model_with_embedded_quantization_nodes('/tmp', 'tf_fakequant_model', [model.output.op.name])
+        # Save model without encodings file
+        sim.save_model_with_embedded_quantization_nodes(os.path.join('/tmp', 'tf_fakequant_model'))
 
-        new_sess = load_model_from_meta('/tmp/tf_fakequant_model.meta')
-        first_bias_tensor = new_sess.graph.get_tensor_by_name('conv2d/BiasAdd/ReadVariableOp:0')
-        first_bias_tensor_val = new_sess.run(first_bias_tensor)
-        self.assertTrue(np.any(first_bias_tensor_val == 1))
-        first_bias_tensor_fakequant_min_tensor = new_sess.graph.get_tensor_by_name('conv2d/BiasAdd/ReadVariableOp_quantized_1/min:0')
-        first_bias_tensor_fakequant_min_val = new_sess.run(first_bias_tensor_fakequant_min_tensor)
-        assert(first_bias_tensor_fakequant_min_val == 0)
+        new_sess = load_model_from_meta('/tmp/tf_fakequant_model_embedded_quant_nodes.meta')
+        first_conv_tensor = new_sess.graph.get_tensor_by_name('conv2d/Conv2D/ReadVariableOp:0')
+        first_conv_tensor_val = new_sess.run(first_conv_tensor)
+        self.assertTrue(np.any(first_conv_tensor_val == 1))
+        first_conv_tensor_fakequant_max_tensor = new_sess.graph.get_tensor_by_name('conv2d/Conv2D/ReadVariableOp_quantized/max:0')
+        first_conv_tensor_fakequant_max_val = new_sess.run(first_conv_tensor_fakequant_max_tensor)
+        self.assertTrue(first_conv_tensor_fakequant_max_val == 1)
+
+        all_op_types = [op.type for op in new_sess.graph.get_operations()]
+        self.assertNotIn('QcQuantize', all_op_types)
+        self.assertIn('FakeQuantWithMinMaxVars', all_op_types)
+
+        # Save model with encodings file
+        sim._export_encodings('/tmp/tf_fakequant_model.encodings')
+        sim.save_model_with_embedded_quantization_nodes(os.path.join('/tmp', 'tf_fakequant_model'), '/tmp/tf_fakequant_model.encodings')
+
+        new_sess = load_model_from_meta('/tmp/tf_fakequant_model_embedded_quant_nodes.meta')
+        first_conv_tensor = new_sess.graph.get_tensor_by_name('conv2d/Conv2D/ReadVariableOp:0')
+        first_conv_tensor_val = new_sess.run(first_conv_tensor)
+        self.assertTrue(np.any(first_conv_tensor_val == 1))
+        first_conv_tensor_fakequant_max_tensor = new_sess.graph.get_tensor_by_name('conv2d/Conv2D/ReadVariableOp_quantized/max:0')
+        first_conv_tensor_fakequant_max_val = new_sess.run(first_conv_tensor_fakequant_max_tensor)
+        self.assertTrue(first_conv_tensor_fakequant_max_val == 1)
 
         all_op_types = [op.type for op in new_sess.graph.get_operations()]
         self.assertNotIn('QcQuantize', all_op_types)
         self.assertIn('FakeQuantWithMinMaxVars', all_op_types)
         sess.close()
         sim.session.close()
+        new_sess.close()
         del sim
 
 class TestQuantSimRangeLearning:
