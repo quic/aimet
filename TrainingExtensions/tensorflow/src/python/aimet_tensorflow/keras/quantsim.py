@@ -45,8 +45,11 @@ import tensorflow as tf
 from aimet_common.defs import QuantScheme
 from aimet_common.utils import AimetLogger, save_json_yaml
 from aimet_common.quantsim import encoding_version
+from aimet_tensorflow.keras.connectedgraph import ConnectedGraph
 from aimet_tensorflow.keras.quant_sim.qc_quantize_wrapper import QcQuantizeWrapper, QuantizerSettings
 from aimet_tensorflow.keras.quant_sim.tensor_quantizer import TensorQuantizer
+from aimet_tensorflow.keras.quantsim_config.quantsim_config import QuantSimConfigurator, INPUT_QUANTIZERS, \
+    OUTPUT_QUANTIZERS, PARAM_QUANTIZERS
 
 _logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Quant)
 
@@ -80,6 +83,10 @@ class QuantizationSimModel:
             self._model_without_wrappers.set_weights(model.get_weights())
         self._layer_name_to_quant_wrapper = {}
         self._validate_model()
+
+        self._quantsim_configurator = self._initialize_quantsim_configurator(quant_scheme, rounding_mode,
+                                                                             default_output_bw, default_param_bw,
+                                                                             config_file)
         self.model = self._add_quantization_wrappers(quant_scheme, rounding_mode, default_output_bw, default_param_bw)
 
     def _validate_model(self):
@@ -97,6 +104,23 @@ class QuantizationSimModel:
                           'reused multiple times in the model definition.')
             _logger.error('Layers with multiple inbound nodes: {%s}', multiple_inbound_node_layers)
             raise NotImplementedError
+
+    def _initialize_quantsim_configurator(self, quant_scheme: Union[QuantScheme, str], rounding_mode: str,
+                                          default_output_bw: int, default_param_bw: int,
+                                          config_file: str) -> QuantSimConfigurator:
+        """
+        Initialize quantsim configurator
+
+        :param quant_scheme: Quantization Scheme
+        :param rounding_mode: The round scheme to used
+        :param default_output_bw: bitwidth to use for activation tensors
+        :param default_param_bw: bitwidth to use for parameter tensors
+        :param config_file: Path to a config file to use to specify rules for placing quant ops in the model
+        :return: QuantSimConfigurator
+        """
+        connected_graph = ConnectedGraph(self._model_without_wrappers)
+        return QuantSimConfigurator(connected_graph, quant_scheme, rounding_mode,
+                                    default_output_bw, default_param_bw, config_file)
 
     def _add_quantization_wrappers(self, quant_scheme, rounding_mode, default_output_bw, default_param_bw):
         """
@@ -119,8 +143,16 @@ class QuantizationSimModel:
             if isinstance(layer, unquantizable_modules) or layer.submodules:
                 return layer
 
+            quantizers_dict = self._quantsim_configurator.get_quantizers_dict(layer)
+            input_quantizers = quantizers_dict.get(INPUT_QUANTIZERS)
+            output_quantizers = quantizers_dict.get(OUTPUT_QUANTIZERS)
+            param_quantizers = quantizers_dict.get(PARAM_QUANTIZERS)
+
             wrapper = QcQuantizeWrapper(layer, activation_quant_settings, param_quant_settings,
-                                        num_inputs=len(layer.inbound_nodes[0].keras_inputs))
+                                        num_inputs=len(layer.inbound_nodes[0].keras_inputs),
+                                        input_quantizers=input_quantizers,
+                                        output_quantizers=output_quantizers,
+                                        param_quantizers=param_quantizers)
             self._layer_name_to_quant_wrapper[layer.name] = wrapper
             return wrapper
 
