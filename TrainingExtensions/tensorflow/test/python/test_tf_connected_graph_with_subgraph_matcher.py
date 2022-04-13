@@ -49,6 +49,8 @@ import tensorflow as tf
 from aimet_tensorflow.graph_editor.edit import detach_inputs
 if not version.parse(tf.version.VERSION) >= version.parse("2.0"):
     from tensorflow.contrib.slim.nets import vgg
+else:
+    import transformers.activations_tf
 from aimet_common.utils import AimetLogger
 from aimet_tensorflow.common.connectedgraph import ConnectedGraph
 from aimet_tensorflow.common.module_identifier import StructureModuleIdentifier
@@ -59,7 +61,6 @@ from aimet_tensorflow.examples.test_models import keras_model, tf_slim_basic_mod
     model_with_global_max_pool2d,transposed_conv2d_model, instance_norm_model,\
     keras_model_functional_for_tf2, keras_model_functional_with_non_fused_batchnorms_for_tf2
 import aimet_tensorflow.winnow.winnow as winnow
-import transformers.activations_tf
 
 tf.compat.v1.logging.set_verbosity(tf.compat.v1.logging.WARN)
 tf.compat.v1.disable_eager_execution()
@@ -507,6 +508,7 @@ class TestTfConnectedGraph(unittest.TestCase):
         # 2 products from parameters
         self.assertEqual(len(conn_graph.get_all_products()), 3)
 
+    @pytest.mark.tf2
     def test_model_with_layernorm(self):
         tf.compat.v1.reset_default_graph()
 
@@ -530,6 +532,7 @@ class TestTfConnectedGraph(unittest.TestCase):
 
         tf.compat.v1.reset_default_graph()
 
+    @pytest.mark.tf2
     def test_model_with_gelu(self):
         tf.compat.v1.reset_default_graph()
 
@@ -553,6 +556,7 @@ class TestTfConnectedGraph(unittest.TestCase):
 
         tf.compat.v1.reset_default_graph()
 
+    @pytest.mark.tf2
     def test_model_with_huggingface_gelu(self):
         tf.compat.v1.reset_default_graph()
 

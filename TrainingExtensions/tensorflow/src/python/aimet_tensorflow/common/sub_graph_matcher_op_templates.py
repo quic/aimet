@@ -52,7 +52,7 @@ op_type_templates = {
         'constructor': "tf.keras.layers.Conv2D(10, (1, 1), use_bias=False)(constants)",
         'module_regex': ['(.+/Conv2D)$', '(.+/separable_conv2d)$', '(.+/convolution)$'],
         'associated_op_regex': ['Conv2D$', 'separable_conv2d$', 'convolution$'],
-        'tf2_support': True
+        'supported_tf_versions': [1, 2]
     },
     'Conv2D_with_bias': {
         'input_shape': (1, 10, 10, 3),
@@ -60,7 +60,7 @@ op_type_templates = {
         'constructor': "tf.keras.layers.Conv2D(10, (1, 1), use_bias=True)(constants)",
         'module_regex': ['(.+/Conv2D)$', '(.+/separable_conv2d)$', '(.+/convolution)$'],
         'associated_op_regex': ['Conv2D$', 'separable_conv2d$', 'convolution$'],
-        'tf2_support': True
+        'supported_tf_versions': [1, 2]
     },
     'DepthwiseConv2dNative': {
         'input_shape': (1, 10, 10, 3),
@@ -68,7 +68,7 @@ op_type_templates = {
         'constructor': "tf.keras.layers.DepthwiseConv2D(3, (1, 1))(constants)",
         'module_regex': ['(.+/depthwise)$', '(.+/DepthwiseConv2dNative)$'],
         'associated_op_regex': ['depthwise$', 'DepthwiseConv2dNative$'],
-        'tf2_support': True
+        'supported_tf_versions': [1, 2]
     },
     'Dense': {
         'input_shape': (1, 10),
@@ -76,7 +76,7 @@ op_type_templates = {
         'constructor': "tf.keras.layers.Dense(10, activation=None)(constants)",
         'module_regex': ['(.+/MatMul)$'],
         'associated_op_regex': ['MatMul$'],
-        'tf2_support': True
+        'supported_tf_versions': [1, 2]
     },
     'Dense_tensordot_known_shape': {
         'input_shape': (1, 10, 10),
@@ -84,7 +84,7 @@ op_type_templates = {
         'constructor': "tf.keras.layers.Dense(10, activation=None)(constants)",
         'module_regex': ['(.+/MatMul)$'],
         'associated_op_regex': ['MatMul$'],
-        'tf2_support': True
+        'supported_tf_versions': [1, 2]
     },
     'Dense_tensordot_unknown_shape': {
         'input_shape': (10, 10),
@@ -92,7 +92,7 @@ op_type_templates = {
         'constructor': "tf.keras.layers.Dense(10, activation=None)(inputs)",
         'module_regex': ['(.+/MatMul)$'],
         'associated_op_regex': ['MatMul$'],
-        'tf2_support': True
+        'supported_tf_versions': [1, 2]
     },
     'BN_keras_with_training_tensor': {
         'input_shape': (10, 10, 3,),
@@ -100,7 +100,7 @@ op_type_templates = {
         'constructor': "tf.keras.layers.BatchNormalization()(inputs)",
         'module_regex': ['(.+)/cond/FusedBatchNormV3_1$'],
         'associated_op_regex': ['FusedBatchNormV3_1$'],
-        'tf2_support': True
+        'supported_tf_versions': [1, 2]
     },
     'BN_keras_with_training_True': {
         'input_shape': (10, 10, 3,),
@@ -108,7 +108,7 @@ op_type_templates = {
         'constructor': "tf.keras.layers.BatchNormalization()(inputs, training=True)",
         'module_regex': ['(.+)/FusedBatchNormV3$'],
         'associated_op_regex': ['FusedBatchNormV3$'],
-        'tf2_support': True
+        'supported_tf_versions': [1, 2]
     },
     'BN_keras_with_training_False': {
         'input_shape': (10, 10, 3,),
@@ -116,7 +116,7 @@ op_type_templates = {
         'constructor': "tf.keras.layers.BatchNormalization()(inputs, training=False)",
         'module_regex': ['(.+)/FusedBatchNormV3$'],
         'associated_op_regex': ['FusedBatchNormV3$'],
-        'tf2_support': True
+        'supported_tf_versions': [1, 2]
     },
     'BN_non_fused_keras_with_training_tensor': {
         'input_shape': (10, 10, 3,),
@@ -124,7 +124,7 @@ op_type_templates = {
         'constructor': "tf.keras.layers.BatchNormalization(fused=False)(inputs)",
         'module_regex': ['(.+)/batchnorm/mul_1$'],
         'associated_op_regex': ['batchnorm/mul_1$'],
-        'tf2_support': True
+        'supported_tf_versions': [1, 2]
     },
     'BN_non_fused_keras_with_training_True': {
         'input_shape': (10, 10, 3,),
@@ -132,7 +132,7 @@ op_type_templates = {
         'constructor': "tf.keras.layers.BatchNormalization(fused=False)(inputs, training=True)",
         'module_regex': ['(.+)/batchnorm/mul_1$'],
         'associated_op_regex': ['batchnorm/mul_1$'],
-        'tf2_support': True
+        'supported_tf_versions': [1, 2]
     },
     'BN_non_fused_keras_with_training_False': {
         'input_shape': (10, 10, 3,),
@@ -141,7 +141,7 @@ op_type_templates = {
         'module_regex': ['(.+)/batchnorm/mul_1$'],
         'associated_op_regex': ['batchnorm/mul_1$'],
         'additional_starting_ops': ['batch_normalization/batchnorm/mul'],
-        'tf2_support': True
+        'supported_tf_versions': [1, 2]
     },
     'BN_slim_with_training_tensor': {
         'input_shape': (10, 10, 3,),
@@ -149,7 +149,7 @@ op_type_templates = {
         'constructor': "slim.batch_norm(inputs, is_training=is_training)",
         'module_regex': ['(.+)/cond/FusedBatchNormV3_1$'],
         'associated_op_regex': ['FusedBatchNormV3_1$'],
-        'tf2_support': False
+        'supported_tf_versions': [1]
     },
     'BN_slim_with_training_True': {
         'input_shape': (10, 10, 3,),
@@ -157,7 +157,7 @@ op_type_templates = {
         'constructor': "slim.batch_norm(inputs, is_training=True)",
         'module_regex': ['(.+)/FusedBatchNormV3$'],
         'associated_op_regex': ['FusedBatchNormV3$'],
-        'tf2_support': False
+        'supported_tf_versions': [1]
     },
     'BN_slim_with_training_False': {
         'input_shape': (10, 10, 3,),
@@ -165,7 +165,7 @@ op_type_templates = {
         'constructor': "slim.batch_norm(inputs, is_training=False)",
         'module_regex': ['(.+)/FusedBatchNormV3$'],
         'associated_op_regex': ['FusedBatchNormV3$'],
-        'tf2_support': False
+        'supported_tf_versions': [1]
     },
     'Softmax_slim': {
         'input_shape': (1, 10),
@@ -173,7 +173,7 @@ op_type_templates = {
         'constructor': "slim.softmax(constants)",
         'module_regex': ['(.+)/Softmax$'],
         'associated_op_regex': ['Softmax$'],
-        'tf2_support': False
+        'supported_tf_versions': [1]
     },
     'Softmax_slim_with_unknown_shape': {
         'input_shape': (10,),
@@ -181,7 +181,7 @@ op_type_templates = {
         'constructor': "slim.softmax(inputs)",
         'module_regex': ['(.+)/Softmax$'],
         'associated_op_regex': ['Softmax$'],
-        'tf2_support': False
+        'supported_tf_versions': [1]
     },
     'Dropout_with_training_tensor': {
         'input_shape': (1, 10, 10, 3),
@@ -189,7 +189,7 @@ op_type_templates = {
         'constructor': "tf.keras.layers.Dropout(rate=.4)(inputs)",
         'module_regex': ['(.+)/cond/dropout/mul_1$'],
         'associated_op_regex': ['cond/dropout/mul_1$'],
-        'tf2_support': True
+        'supported_tf_versions': [1, 2]
     },
     'Dropout_training_True': {
         'input_shape': (1, 10, 10, 3),
@@ -197,7 +197,7 @@ op_type_templates = {
         'constructor': "tf.keras.layers.Dropout(rate=.4)(inputs, training=True)",
         'module_regex': ['(.+)/.+/mul_1$'],
         'associated_op_regex': ['/.+/mul_1$'],
-        'tf2_support': True
+        'supported_tf_versions': [1, 2]
     },
     'Dropout_with_training_tensor_unknown_shape': {
         'input_shape': (1, 10, 10, 3),
@@ -205,7 +205,7 @@ op_type_templates = {
         'constructor': "tf.keras.layers.Dropout(rate=.4)(constants)",
         'module_regex': ['(.+)/cond/dropout/mul_1$'],
         'associated_op_regex': ['cond/dropout/mul_1$'],
-        'tf2_support': True
+        'supported_tf_versions': [1, 2]
     },
     'Dropout_training_True_unknown_shape': {
         'input_shape': (1, 10, 10, 3),
@@ -213,7 +213,7 @@ op_type_templates = {
         'constructor': "tf.keras.layers.Dropout(rate=.4)(constants, training=True)",
         'module_regex': ['(.+)/.+/mul_1$'],
         'associated_op_regex': ['/.+/mul_1$'],
-        'tf2_support': True
+        'supported_tf_versions': [1, 2]
     },
     'Flatten': {
         'input_shape': (10, 10, 3,),
@@ -221,7 +221,7 @@ op_type_templates = {
         'constructor': "tf.keras.layers.Flatten()(inputs)",
         'module_regex': ['(.+/Reshape)$'],
         'associated_op_regex': ['Reshape$'],
-        'tf2_support': True
+        'supported_tf_versions': [1, 2]
     },
     'Reshape_to_3D': {
         'input_shape': (300,),
@@ -229,7 +229,7 @@ op_type_templates = {
         'constructor': "tf.keras.layers.Reshape(target_shape=[10, 10, 3])(inputs)",
         'module_regex': ['(.+)/Reshape$'],
         'associated_op_regex': ['Reshape$'],
-        'tf2_support': True
+        'supported_tf_versions': [1, 2]
     },
     'Upsample2D': {
         'input_shape': (10, 10, 3,),
@@ -237,7 +237,7 @@ op_type_templates = {
         'constructor': "tf.keras.layers.UpSampling2D(size=(2, 3))(inputs)",
         'module_regex': ['(.+)/Shape$'],
         'associated_op_regex': ['Shape$'],
-        'tf2_support': True
+        'supported_tf_versions': [1, 2]
     },
     'GlobalMaxPool2D': {
         'input_shape': (10, 10, 3,),
@@ -245,7 +245,7 @@ op_type_templates = {
         'constructor': "tf.keras.layers.GlobalMaxPool2D()(inputs)",
         'module_regex': ['(.+)/Max$'],
         'associated_op_regex': ['Max$'],
-        'tf2_support': True
+        'supported_tf_versions': [1, 2]
     },
     'SimpleRNN': {
         'input_shape': (3, 100),
@@ -253,7 +253,7 @@ op_type_templates = {
         'constructor': "tf.keras.layers.SimpleRNN(10)(inputs)",
         'module_regex': ['(.+)/while/MatMul$'],
         'associated_op_regex': ['MatMul$'],
-        'tf2_support': False
+        'supported_tf_versions': [1]
     },
     'SimpleRNNWithRelu': {
         'input_shape': (3, 100),
@@ -261,7 +261,7 @@ op_type_templates = {
         'constructor': "tf.keras.layers.SimpleRNN(10, activation='relu')(inputs)",
         'module_regex': ['(.+)/while/MatMul$'],
         'associated_op_regex': ['MatMul$'],
-        'tf2_support': False
+        'supported_tf_versions': [1]
     },
     'SimpleRNNWithSequencesReturned': {
         'input_shape': (3, 100),
@@ -269,7 +269,7 @@ op_type_templates = {
         'constructor': "tf.keras.layers.SimpleRNN(10, return_sequences=True)(inputs)",
         'module_regex': ['(.+)/while/MatMul$'],
         'associated_op_regex': ['MatMul$'],
-        'tf2_support': False
+        'supported_tf_versions': [1]
     },
     'SimpleRNNWithSequencesReturnedRelu': {
         'input_shape': (3, 100),
@@ -277,7 +277,7 @@ op_type_templates = {
         'constructor': "tf.keras.layers.SimpleRNN(10, activation='relu', return_sequences=True)(inputs)",
         'module_regex': ['(.+)/while/MatMul$'],
         'associated_op_regex': ['MatMul$'],
-        'tf2_support': False
+        'supported_tf_versions': [1]
     },
     'LSTM': {
         'input_shape': (3, 100),
@@ -285,7 +285,7 @@ op_type_templates = {
         'constructor': "tf.keras.layers.LSTM(10)(inputs)",
         'module_regex': ['(.+)/while/MatMul$'],
         'associated_op_regex': ['MatMul$'],
-        'tf2_support': False
+        'supported_tf_versions': [1]
     },
     'LSTM_TimeMajor_True': {
         'input_shape': (3, 100),
@@ -293,7 +293,7 @@ op_type_templates = {
         'constructor': "tf.keras.layers.LSTM(10, time_major=True)(inputs)",
         'module_regex': ['(.+)/while/MatMul$'],
         'associated_op_regex': ['MatMul$'],
-        'tf2_support': False
+        'supported_tf_versions': [1]
     },
     'LSTM_Sigmoid': {
         'input_shape': (3, 100),
@@ -301,7 +301,7 @@ op_type_templates = {
         'constructor': "tf.keras.layers.LSTM(10, recurrent_activation='sigmoid')(inputs)",
         'module_regex': ['(.+)/while/MatMul$'],
         'associated_op_regex': ['MatMul$'],
-        'tf2_support': False
+        'supported_tf_versions': [1]
     },
     'LSTM_Stacked_TimeMajor_True': {
         'input_shape': (3, 100),
@@ -310,7 +310,7 @@ op_type_templates = {
                        "return_sequences=True)(inputs)",
         'module_regex': ['(.+)/while/MatMul$'],
         'associated_op_regex': ['MatMul$'],
-        'tf2_support': False
+        'supported_tf_versions': [1]
     },
     'LSTM_Stacked_TimeMajor_True_Sigmoid': {
         'input_shape': (3, 100),
@@ -320,7 +320,7 @@ op_type_templates = {
                        "return_sequences=True)(inputs)",
         'module_regex': ['(.+)/while/MatMul$'],
         'associated_op_regex': ['MatMul$'],
-        'tf2_support': False
+        'supported_tf_versions': [1]
     },
     'LSTM_Stacked': {
         'input_shape': (3, 100),
@@ -328,7 +328,7 @@ op_type_templates = {
         'constructor': "tf.keras.layers.LSTM(10, return_sequences=True)(inputs)",
         'module_regex': ['(.+)/while/MatMul$'],
         'associated_op_regex': ['MatMul$'],
-        'tf2_support': False
+        'supported_tf_versions': [1]
     },
     'PReLU': {
         'input_shape': (1, 10),
@@ -336,7 +336,7 @@ op_type_templates = {
         'constructor': "tf.keras.layers.PReLU()(inputs)",
         'module_regex': ['(.+/Relu)$'],
         'associated_op_regex': ['Relu$'],
-        'tf2_support': True
+        'supported_tf_versions': [1, 2]
     },
     'InstanceNormalization': {
         'input_shape': (10, 10, 3,),
@@ -344,7 +344,7 @@ op_type_templates = {
         'constructor': "tf.contrib.layers.instance_norm(inputs)",
         'module_regex': ['(.+)/instancenorm/add_1$'],
         'associated_op_regex': ['/instancenorm/add_1$'],
-        'tf2_support': False
+        'supported_tf_versions': [1]
     },
     'Conv2DTranspose': {
         'input_shape': (7, 7, 1),
@@ -352,7 +352,7 @@ op_type_templates = {
         'constructor': "tf.keras.layers.Conv2DTranspose(1, (4, 4), use_bias=False)(inputs)",
         'module_regex': ['(.+/conv2d_transpose)$'],
         'associated_op_regex': ['conv2d_transpose/conv2d_transpose$'],
-        'tf2_support': True
+        'supported_tf_versions': [1, 2]
     },
     'Conv2DTranspose_with_bias': {
         'input_shape': (7, 7, 1),
@@ -360,7 +360,7 @@ op_type_templates = {
         'constructor': "tf.keras.layers.Conv2DTranspose(1, (4, 4), use_bias=True)(inputs)",
         'module_regex': ['(.+/conv2d_transpose)$'],
         'associated_op_regex': ['conv2d_transpose/conv2d_transpose$'],
-        'tf2_support': True
+        'supported_tf_versions': [1, 2]
     },
     'LayerNorm_non_fused': {
         'input_shape': (10, 10, 3,),
@@ -370,7 +370,7 @@ op_type_templates = {
         'constructor': "tf.keras.layers.LayerNormalization(epsilon=1e-12)(inputs)",
         'module_regex': ['(.+)/batchnorm/mul_1$'],
         'associated_op_regex': ['batchnorm/mul_1$'],
-        'tf2_support': True
+        'supported_tf_versions': [2]
     },
     'GeLU': {
         'input_shape': (1, 10),
@@ -378,7 +378,7 @@ op_type_templates = {
         'constructor': "tf.keras.activations.gelu(inputs, approximate=False)",
         'module_regex': ['(.+/mul_1)$'],
         'associated_op_regex': ['mul_1$'],
-        'tf2_support': True
+        'supported_tf_versions': [2]
     },
     'GeLU_approximate': {
         'input_shape': (1, 10),
@@ -386,7 +386,7 @@ op_type_templates = {
         'constructor': "tf.keras.activations.gelu(inputs, approximate=True)",
         'module_regex': ['(.+/mul_1)$'],
         'associated_op_regex': ['mul_1$'],
-        'tf2_support': True
+        'supported_tf_versions': [2]
     },
     'HuggingFace_GeLU': {
         'input_shape': (1, 10),
@@ -394,6 +394,6 @@ op_type_templates = {
         'constructor': "transformers.activations_tf._gelu(inputs)",
         'module_regex': ['(.+/mul_1)$'],
         'associated_op_regex': ['mul_1$'],
-        'tf2_support': True
+        'supported_tf_versions': [2]
     },
 }

@@ -45,6 +45,7 @@ os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
 import unittest
 import logging
 import tensorflow as tf
+from packaging import version
 from aimet_tensorflow.quantize import graph_matcher
 
 from aimet_common.utils import AimetLogger
@@ -191,6 +192,9 @@ class TestSubGraph(unittest.TestCase):
         for pattern_name, subgraph_constructor in subgraph_constructors.items():
             input_shape = subgraph_constructor['input_shape']
             constructor_string = subgraph_constructor['constructor']
+            supported_tf_versions = subgraph_constructor['supported_tf_versions']
+            if version.parse(tf.version.VERSION).major in supported_tf_versions:
+                continue
             logger.debug(pattern_name)
             subgraph = create_subgraph_for_op_default(input_shape, constructor_string)
             patterns = create_op_type_patterns_from_subgraph(subgraph, additional_starting_ops=[])

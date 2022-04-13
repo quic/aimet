@@ -47,8 +47,7 @@ import wget
 import zipfile
 import tarfile
 import shutil
-from transformers import BertTokenizer, TFBertModel, BertConfig, DistilBertTokenizer, DistilBertConfig, \
-    TFDistilBertModel
+from transformers import BertTokenizer, DistilBertTokenizer
 from aimet_common.utils import AimetLogger
 
 logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Test)
