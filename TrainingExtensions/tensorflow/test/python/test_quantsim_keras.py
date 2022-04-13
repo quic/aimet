@@ -35,6 +35,7 @@
 # =============================================================================
 
 import json
+import os
 import pytest
 pytestmark = pytest.mark.skip("Disable tests that requires eager execution")
 from packaging import version
@@ -44,6 +45,9 @@ import tensorflow as tf
 from aimet_common.defs import QuantScheme
 from aimet_tensorflow.keras.quantsim import QuantizationSimModel
 import libpymo
+
+from test_models_keras import tiny_conv_net
+
 
 def dense_functional():
     inp = tf.keras.layers.Input(shape=(5,))
@@ -143,6 +147,75 @@ def test_quantsim_basic():
 
         qsim.export('./data', 'test_export')
 
+
+def test_quantsim_with_custom_config_file():
+    quantsim_config = {
+        "defaults": {
+            "ops": {
+                "is_output_quantized": "True",
+                "is_symmetric": "False"
+            },
+            "params": {
+                "is_quantized": "False",
+                "is_symmetric": "False"
+            }
+        },
+        "params": {},
+        "op_type": {},
+        "supergroups": [
+            {
+                "op_list": ["Conv", "BatchNormalization"]
+            },
+            {
+                "op_list": ["Relu", "MaxPool"]
+            },
+            {
+                "op_list": ["Conv", "Relu", "AveragePool"]
+            }
+        ],
+        "model_input": {},
+        "model_output": {}
+    }
+    with open("./data/quantsim_config.json", "w") as f:
+        json.dump(quantsim_config, f)
+
+    model = tiny_conv_net()
+    qsim = QuantizationSimModel(model, quant_scheme='tf', config_file="./data/quantsim_config.json")
+
+    layers = qsim.model.layers
+    conv1, relu1, conv2, conv3 = layers[1], layers[3], layers[5], layers[8]
+    relu3 = layers[9]
+    bn1, maxpool, bn2, avgpool = layers[2], layers[4], layers[6], layers[10]
+    for layer in layers:
+        if isinstance(layer, tf.keras.layers.InputLayer):
+            continue
+
+        # Check configs for starts of supergroups
+        if layer in [conv1, relu1, conv2, conv3]:
+            for q in layer.output_quantizers:
+                assert not q.is_enabled()
+        # Check configs for middle ops in supergroups
+        elif layer == relu3:
+            for q in layer.input_quantizers:
+                assert not q.is_enabled()
+            for q in layer.output_quantizers:
+                assert not q.is_enabled()
+        # Check configs for ends of supergroups
+        elif layer in [bn1, maxpool, bn2, avgpool]:
+            for q in layer.input_quantizers:
+                assert not q.is_enabled()
+            for q in layer.output_quantizers:
+                assert q.is_enabled()
+        else:
+            for q in layer.input_quantizers:
+                assert not q.is_enabled()
+            for q in layer.output_quantizers:
+                assert q.is_enabled()
+
+    if os.path.exists("./data/quantsim_config.json"):
+        os.remove("./data/quantsim_config.json")
+
+
 def test_model_with_lambda_operators():
     if version.parse(tf.version.VERSION) >= version.parse("2.00"):
         model = model_with_lambda_operators()
@@ -159,7 +232,8 @@ def test_model_with_lambda_operators():
             encodings = json.load(encodings_file)
 
         assert len(encodings['activation_encodings']) == 8
-        assert len(encodings['param_encodings']) == 4
+        # Note: Disable bias quantization in default_config.json
+        assert len(encodings['param_encodings']) == 2
 
 def test_qat():
     if version.parse(tf.version.VERSION) >= version.parse("2.00"):
@@ -192,6 +266,8 @@ def test_qat():
 
 def test_range_learning():
     if version.parse(tf.version.VERSION) >= version.parse("2.00"):
+        tf.keras.backend.clear_session()
+
         model = dense_functional()
         rand_inp = np.random.randn(10, 5)
         rand_out = np.random.randn(10, 2)
