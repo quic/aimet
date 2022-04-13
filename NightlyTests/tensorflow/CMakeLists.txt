@@ -46,7 +46,7 @@ else (ENABLE_CUDA)
 endif (ENABLE_CUDA)
 
 if (TF_VERSION MATCHES "^1.15")
-    set(TF_VERSION_FLAG "not blah")
+    set(TF_VERSION_FLAG "not tf2")
 else ()
     set(TF_VERSION_FLAG "not tf1")
 endif ()

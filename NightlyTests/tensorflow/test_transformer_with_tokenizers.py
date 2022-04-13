@@ -35,25 +35,29 @@
 # =============================================================================
 
 import unittest
+import pytest
 import os
 
 import tensorflow as tf
+from packaging import version
 
 from aimet_tensorflow.quantsim import QuantizationSimModel
 from aimet_tensorflow.common.graph_eval import initialize_uninitialized_vars
 from aimet_tensorflow.utils.constants import QuantizeOpIndices
 
-import transformers
-from transformers import BertTokenizer, TFBertModel, BertConfig, DistilBertTokenizer, DistilBertConfig, \
-    TFDistilBertModel
-
 import libpymo
+
+if version.parse(tf.version.VERSION) >= version.parse("2.0"):
+    import transformers
+    from transformers import BertTokenizer, TFBertModel, BertConfig, DistilBertTokenizer, DistilBertConfig, \
+        TFDistilBertModel
 
 tf.compat.v1.logging.set_verbosity(tf.compat.v1.logging.WARN)
 tf.compat.v1.disable_eager_execution()
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
 
 
+@pytest.mark.tf2
 class TransformerQuantizationAcceptanceTests(unittest.TestCase):
     def test_hf_bert_with_tokenizer(self):
         tf.compat.v1.reset_default_graph()

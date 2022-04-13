@@ -35,14 +35,13 @@
 # =============================================================================
 
 import unittest
+import pytest
 import os
 import json
 import tensorflow as tf
 import numpy as np
 import libpymo
-
-import transformers
-from transformers import BertConfig, TFBertModel, DistilBertConfig, TFDistilBertModel, activations_tf
+from packaging import version
 
 from aimet_tensorflow.quantsim import QuantizationSimModel
 from aimet_tensorflow.common.graph_eval import initialize_uninitialized_vars
@@ -55,7 +54,12 @@ tf.compat.v1.logging.set_verbosity(tf.compat.v1.logging.WARN)
 tf.compat.v1.disable_eager_execution()
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
 
+if version.parse(tf.version.VERSION) >= version.parse("2.0"):
+    import transformers
+    from transformers import BertConfig, TFBertModel, DistilBertConfig, TFDistilBertModel, activations_tf
 
+
+@pytest.mark.tf2
 class TransformerQuantizationUnittests(unittest.TestCase):
     def test_hf_bert(self):
         tf.compat.v1.reset_default_graph()

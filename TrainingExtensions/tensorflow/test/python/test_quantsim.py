@@ -977,6 +977,7 @@ class TestQuantSim(unittest.TestCase):
         if os.path.exists("./dummy.encodings"):
             os.remove("./dummy.encodings")
 
+    @pytest.mark.tf2
     def test_transformer_mask_override(self):
         tf.compat.v1.reset_default_graph()
 

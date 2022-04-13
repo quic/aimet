@@ -47,7 +47,6 @@ import re
 from typing import List, Dict, Set, Union
 from collections import OrderedDict
 import tensorflow as tf
-import transformers.activations_tf
 from packaging import version
 
 from aimet_common.utils import AimetLogger
@@ -57,6 +56,8 @@ from aimet_tensorflow.utils.common import get_valid_ops
 
 if not version.parse(tf.version.VERSION) >= version.parse("2.0"):
     from tensorflow_core.contrib import slim # pylint: disable=import-error
+else:
+    import transformers.activations_tf
 
 logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.ConnectedGraph)
 
@@ -104,8 +105,8 @@ def create_patterns_for_ops():
         constructor_string = info_dict['constructor']
         additional_starting_ops = info_dict.get('additional_starting_ops', [])
         op_type = info_dict['op_type']
-        tf2_support = info_dict['tf2_support']
-        if not tf2_support and version.parse(tf.version.VERSION) >= version.parse("2.0"):
+        supported_tf_versions = info_dict['supported_tf_versions']
+        if version.parse(tf.version.VERSION).major not in supported_tf_versions:
             continue
         # generate two  sub-graphs patterns for recurrent ops one with keras input and
         # the other with placeholder type
