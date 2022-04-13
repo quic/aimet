@@ -49,20 +49,26 @@ import libpymo
 # Import AIMET specific modules
 from aimet_common.utils import AimetLogger
 from aimet_common.defs import QuantScheme
-from aimet_common.quantsim_config.utils import get_configs, get_unsigned_symmetric_flag, get_strict_symmetric_flag
+from aimet_common.quantsim_config.json_config_importer import JsonConfigImporter, ConfigDictKeys, ConfigDictType
 from aimet_tensorflow.utils import graph_saver
 from aimet_tensorflow.utils.common import get_ordered_ops
 from aimet_tensorflow.utils.op.conv import WeightTensorUtils
-from aimet_tensorflow.utils.quantsim_config import get_is_symmetric_flag_for_op_param
-from aimet_tensorflow.common.connectedgraph import ConnectedGraph
+from aimet_tensorflow.quantsim_config.quantsim_config import MAP_TF_PARAM_NAME_TO_QUANTSIM_NAME
 from aimet_tensorflow.adaround.activation_sampler import ActivationSampler
 from aimet_tensorflow.adaround.adaround_loss import AdaroundHyperParameters
 from aimet_tensorflow.adaround.adaround_optimizer import AdaroundOptimizer
 from aimet_tensorflow.adaround.adaround_wrapper import AdaroundWrapper
 
 AdaroundSupportedOps = ('Conv2D', 'DepthwiseConv2dNative', 'MatMul')
+
 ActFuncMap = {'Relu': tf.nn.relu, 'Relu6': tf.nn.relu6, 'Tanh': tf.nn.tanh, 'Sigmoid': tf.nn.sigmoid,
               'Softmax': tf.nn.softmax}
+
+tf_op_type_to_onnx_type_dict = {
+        "Conv2D": "Conv",
+        "DepthwiseConv2dNative": "Conv",
+        "MatMul": "Gemm",
+    }
 
 logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Quant)
 WORKING_DIR = '/tmp/adaround/'
@@ -186,10 +192,10 @@ class Adaround:
         session_hard_rounded_weight = graph_saver.save_and_load_graph(WORKING_DIR, session)
         session_soft_rounded_weight = graph_saver.save_and_load_graph(WORKING_DIR, session)
 
-        conn_graph = ConnectedGraph(session.graph, starting_op_names, output_op_names)
-        configs = get_configs(config_file)
-        strict_symmetric = get_strict_symmetric_flag(configs)
-        unsigned_symmetric = get_unsigned_symmetric_flag(configs)
+        configs = JsonConfigImporter.import_json_config_file(config_file)
+        # Strict_symmetric and unsigned_symmetric flags have default value False and True respectively.
+        strict_symmetric = configs[ConfigDictKeys.DEFAULTS].get(ConfigDictKeys.STRICT_SYMMETRIC, False)
+        unsigned_symmetric = configs[ConfigDictKeys.DEFAULTS].get(ConfigDictKeys.UNSIGNED_SYMMETRIC, True)
 
         # Optimization Hyper parameters
         opt_params = AdaroundHyperParameters(params.num_iterations, params.reg_param, params.beta_range,
@@ -212,9 +218,8 @@ class Adaround:
             all_inp_data, all_out_data = act_sampler.sample_activation(op, hard_rounded_op, session,
                                                                        session_hard_rounded_weight, starting_op_names,
                                                                        params.num_batches)
+            is_symmetric = cls._get_is_symmetric_flag_for_op_param(configs, op.type, param_name="weight")
 
-            is_symmetric = get_is_symmetric_flag_for_op_param(configs, conn_graph, tf_op_name=op.name,
-                                                              param_name="weight")
             # Find next following activation function
             act_func = cls._get_act_func(op)
 
@@ -315,3 +320,50 @@ class Adaround:
                                        'offset': encoding.offset,
                                        'bitwidth': encoding.bw,
                                        'is_symmetric': is_symmetric}]
+
+    @staticmethod
+    def _get_is_symmetric_flag_for_op_param(configs: ConfigDictType, tf_op_type: str, param_name: str):
+        """
+        NOTE: Checks config file in reverse order of specificity.
+
+        Returns is_symmetric flag for op's param if it is set in config file else returns
+        False. First check all ops of specific types, second check all params of specific
+        and lastly check for default types. If not specified, it will return default is
+        symmetric False.
+
+        :param configs: Dictionary containing configs.
+        :param tf_op_type: TensorFlow operation type.
+        :param param_name: Parameter name.
+        :return: Is_symmetric flag for given op's param.
+        """
+        assert param_name in MAP_TF_PARAM_NAME_TO_QUANTSIM_NAME.keys(), "param name is invalid."
+
+        # third level of specificity which applies to specific op_type's parameters.
+        try:
+            onnx_type = tf_op_type_to_onnx_type_dict[tf_op_type]
+            return configs[ConfigDictKeys.OP_TYPE] \
+                [onnx_type] \
+                [ConfigDictKeys.PARAMS] \
+                [param_name] \
+                [ConfigDictKeys.IS_SYMMETRIC]
+        except KeyError:
+            pass
+
+        # Second level of specificity which applies to all parameters only.
+        try:
+            return configs[ConfigDictKeys.PARAMS]\
+                [param_name]\
+                [ConfigDictKeys.IS_SYMMETRIC]
+        except KeyError:
+            pass
+
+        # First level of specificity which applies to all the ops and parameters.
+        try:
+            return configs[ConfigDictKeys.DEFAULTS]\
+                [ConfigDictKeys.PARAMS]\
+                [ConfigDictKeys.IS_SYMMETRIC]
+        except KeyError:
+            pass
+
+        # Default is_symmetric False.
+        return False

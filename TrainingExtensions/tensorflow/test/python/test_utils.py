@@ -37,7 +37,6 @@
 # =============================================================================
 """ Module to test TF utils """
 
-import json
 import itertools
 import pytest
 import unittest
@@ -53,11 +52,9 @@ from tensorflow.keras.applications.vgg16 import VGG16
 from tensorflow.keras.applications.resnet50 import ResNet50
 
 from aimet_common.utils import AimetLogger
-from aimet_common.quantsim_config.json_config_importer import JsonConfigImporter
 from aimet_tensorflow.utils.common import get_ordered_ops, create_input_feed_dict, \
     iter_first_x, get_ordered_conv_linears, get_training_tensors,\
     iterate_tf_dataset, _tf_dataset_iterables
-from aimet_tensorflow.common.connectedgraph import ConnectedGraph
 from aimet_tensorflow.utils.graph_saver import wrapper_func
 from aimet_tensorflow.examples.test_models import single_residual, multiple_input_model, \
     model_with_multiple_training_tensors, keras_model_functional, keras_model_functional_with_non_fused_batchnorms,\
@@ -65,7 +62,6 @@ from aimet_tensorflow.examples.test_models import single_residual, multiple_inpu
 from aimet_tensorflow.utils.op.conv import WeightTensorUtils, BiasUtils, get_output_activation_shape
 from aimet_tensorflow.utils.op.fusedbatchnorm import BNUtils
 from aimet_tensorflow.utils.graph_saver import save_and_load_graph
-from aimet_tensorflow.utils.quantsim_config import get_is_symmetric_flag_for_op_param
 
 tf.compat.v1.logging.set_verbosity(tf.compat.v1.logging.WARN)
 tf.compat.v1.disable_eager_execution()
@@ -939,147 +935,6 @@ class TestBNUtils(unittest.TestCase):
         iterable = iterables[0]
         assert not iterable.is_busy()
 
-    def test_get_is_symmetric_flag_for_op_param(self):
-        """ test get_is_symmetric_flag_for_op_param() """
-        tf.compat.v1.reset_default_graph()
-        sess = tf.compat.v1.Session()
-        with sess.graph.as_default():
-            _ = single_residual()
-            init = tf.compat.v1.global_variables_initializer()
-            sess.run(init)
-        connected_graph = ConnectedGraph(sess.graph, ['input_1'], ['single_residual/Softmax'])
-        conv_op = sess.graph.get_operation_by_name("conv2d/Conv2D")
-        matmul_op = sess.graph.get_operation_by_name("single_residual/MatMul")
-
-        # default case
-        config = {
-            "defaults": {
-                "ops": {},
-                "params": {}
-            },
-            "params": {},
-            "op_type": {},
-            "supergroups": [],
-            "model_input": {},
-            "model_output": {
-                "is_output_quantized": "True"
-            }
-        }
-        with open('./config.json', 'w') as f:
-            json.dump(config, f)
-
-        try:
-            configs = JsonConfigImporter.import_json_config_file(config_file='./config.json')
-            assert get_is_symmetric_flag_for_op_param(configs, connected_graph, conv_op.name,
-                                                      param_name="weight") == False
-        finally:
-            if os.path.isfile('./config.json'):
-                os.remove('./config.json')
-
-        # All params having is_symmetric True.
-        config = {
-            "defaults": {
-                "ops": {},
-                "params": {
-                    "is_symmetric": "True"
-                }
-            },
-            "params": {},
-            "op_type": {},
-            "supergroups": [],
-            "model_input": {},
-            "model_output": {
-                "is_output_quantized": "True"
-            }
-        }
-        with open('./config.json', 'w') as f:
-            json.dump(config, f)
-
-        try:
-            configs = JsonConfigImporter.import_json_config_file(config_file='./config.json')
-            assert get_is_symmetric_flag_for_op_param(configs, connected_graph, conv_op.name,
-                                                      param_name="weight") == True
-        finally:
-            if os.path.isfile('./config.json'):
-                os.remove('./config.json')
-
-        # All params having is_symmetric False, but "weight" parameters have is_symmetric True.
-        config = {
-            "defaults": {
-                "ops": {},
-                "params": {
-                    "is_symmetric": "False"
-                }
-            },
-            "params": {
-                "weight": {
-                    "is_symmetric": "True"
-                }
-            },
-            "op_type": {},
-            "supergroups": [],
-            "model_input": {},
-            "model_output": {
-                "is_output_quantized": "True"
-            }
-        }
-        with open('./config.json', 'w') as f:
-            json.dump(config, f)
-
-        try:
-            configs = JsonConfigImporter.import_json_config_file(config_file='./config.json')
-            assert get_is_symmetric_flag_for_op_param(configs, connected_graph, conv_op.name,
-                                                      param_name="weight") == True
-        finally:
-            if os.path.isfile('./config.json'):
-                os.remove('./config.json')
-
-        # All params having is_symmetric False, but "weight" parameters of type Conv have is_symmetric True.
-        config = {
-            "defaults": {
-                "ops": {},
-                "params": {
-                    "is_symmetric": "False"
-                }
-            },
-            "params": {
-                "weight": {
-                    "is_symmetric": "False"
-                }
-            },
-            "op_type": {
-                "Conv": {
-                    "params": {
-                        "weight": {
-                            "is_symmetric": "True"
-                        },
-                        "bias": {
-                            "is_symmetric": "False"
-                        }
-                    }
-                }
-            },
-            "supergroups": [],
-            "model_input": {},
-            "model_output": {
-                "is_output_quantized": "True"
-            }
-        }
-        with open('./config.json', 'w') as f:
-            json.dump(config, f)
-
-        try:
-            configs = JsonConfigImporter.import_json_config_file(config_file='./config.json')
-            assert get_is_symmetric_flag_for_op_param(configs, connected_graph, conv_op.name,
-                                                      param_name="weight") == True
-            # For matmul op, is_symmetric should be False.
-            assert get_is_symmetric_flag_for_op_param(configs, connected_graph, matmul_op.name,
-                                                      param_name="weight") == False
-        finally:
-            if os.path.isfile('./config.json'):
-                os.remove('./config.json')
-
-        sess.close()
 
 def _assert_lists_equal(iter_1, iter_2):
     iter_1_outputs = list(iter_1)

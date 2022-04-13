@@ -41,9 +41,9 @@ import os
 import json
 import unittest
 import jsonschema
-from aimet_common.quantsim_config.json_config_importer import _validate_syntax, _validate_semantics, JsonConfigImporter
+from aimet_common.quantsim_config.json_config_importer import _validate_syntax, _validate_semantics, JsonConfigImporter,\
+    ConfigDictKeys
 from aimet_common.quantsim_config.quantsim_config import _build_list_of_permutations, OnnxConnectedGraphTypeMapper
-from aimet_common.quantsim_config.utils import get_unsigned_symmetric_flag, get_strict_symmetric_flag
 
 
 class TestJsonConfigImporter(unittest.TestCase):
@@ -360,7 +360,7 @@ class TestQuantSimConfig(unittest.TestCase):
 
         try:
             configs = JsonConfigImporter.import_json_config_file(config_file='./config.json')
-            assert get_strict_symmetric_flag(configs) == False
+            assert not configs[ConfigDictKeys.DEFAULTS].get(ConfigDictKeys.STRICT_SYMMETRIC, False)
         finally:
             if os.path.isfile('./config.json'):
                 os.remove('./config.json')
@@ -385,7 +385,7 @@ class TestQuantSimConfig(unittest.TestCase):
 
         try:
             configs = JsonConfigImporter.import_json_config_file(config_file='./config.json')
-            assert get_strict_symmetric_flag(configs) == True
+            assert configs[ConfigDictKeys.DEFAULTS].get(ConfigDictKeys.STRICT_SYMMETRIC, False)
         finally:
             if os.path.isfile('./config.json'):
                 os.remove('./config.json')
@@ -412,7 +412,7 @@ class TestQuantSimConfig(unittest.TestCase):
 
         try:
             configs = JsonConfigImporter.import_json_config_file(config_file='./config.json')
-            assert get_unsigned_symmetric_flag(configs) == True
+            assert configs[ConfigDictKeys.DEFAULTS].get(ConfigDictKeys.UNSIGNED_SYMMETRIC, True)
         finally:
             if os.path.isfile('./config.json'):
                 os.remove('./config.json')
@@ -437,7 +437,7 @@ class TestQuantSimConfig(unittest.TestCase):
 
         try:
             configs = JsonConfigImporter.import_json_config_file(config_file='./config.json')
-            assert get_unsigned_symmetric_flag(configs) == False
+            assert not configs[ConfigDictKeys.DEFAULTS].get(ConfigDictKeys.UNSIGNED_SYMMETRIC, True)
         finally:
             if os.path.isfile('./config.json'):
                 os.remove('./config.json')

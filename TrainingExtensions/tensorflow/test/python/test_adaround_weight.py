@@ -48,7 +48,8 @@ import unittest.mock
 import tensorflow as tf
 
 from aimet_common.utils import AimetLogger
-from aimet_tensorflow.examples.test_models import keras_model
+from aimet_common.quantsim_config.json_config_importer import JsonConfigImporter
+from aimet_tensorflow.examples.test_models import keras_model, single_residual
 from aimet_tensorflow.adaround.adaround_weight import Adaround, AdaroundParameters
 
 logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Test)
@@ -142,3 +143,139 @@ class TestAdaroundWeight(unittest.TestCase):
         """ Test apply adaround and export functionality for CPU """
         device = '/cpu:0'
         self._apply_adaround(device)
+
+    def test_get_is_symmetric_flag_for_op_param(self):
+        """ test get_is_symmetric_flag_for_op_param() """
+        tf.compat.v1.reset_default_graph()
+        sess = tf.compat.v1.Session()
+        with sess.graph.as_default():
+            _ = single_residual()
+            init = tf.compat.v1.global_variables_initializer()
+            sess.run(init)
+        conv_op = sess.graph.get_operation_by_name("conv2d/Conv2D")
+        matmul_op = sess.graph.get_operation_by_name("single_residual/MatMul")
+
+        # default case
+        config = {
+            "defaults": {
+                "ops": {},
+                "params": {}
+            },
+            "params": {},
+            "op_type": {},
+            "supergroups": [],
+            "model_input": {},
+            "model_output": {
+                "is_output_quantized": "True"
+            }
+        }
+        with open('./config.json', 'w') as f:
+            json.dump(config, f)
+
+        try:
+            configs = JsonConfigImporter.import_json_config_file(config_file='./config.json')
+            assert not Adaround._get_is_symmetric_flag_for_op_param(configs, conv_op.type, param_name="weight")
+        finally:
+            if os.path.isfile('./config.json'):
+                os.remove('./config.json')
+
+        # All params having is_symmetric True.
+        config = {
+            "defaults": {
+                "ops": {},
+                "params": {
+                    "is_symmetric": "True"
+                }
+            },
+            "params": {},
+            "op_type": {},
+            "supergroups": [],
+            "model_input": {},
+            "model_output": {
+                "is_output_quantized": "True"
+            }
+        }
+        with open('./config.json', 'w') as f:
+            json.dump(config, f)
+
+        try:
+            configs = JsonConfigImporter.import_json_config_file(config_file='./config.json')
+            assert Adaround._get_is_symmetric_flag_for_op_param(configs, conv_op.type, param_name="weight")
+        finally:
+            if os.path.isfile('./config.json'):
+                os.remove('./config.json')
+
+        # All params having is_symmetric False, but "weight" parameters have is_symmetric True.
+        config = {
+            "defaults": {
+                "ops": {},
+                "params": {
+                    "is_symmetric": "False"
+                }
+            },
+            "params": {
+                "weight": {
+                    "is_symmetric": "True"
+                }
+            },
+            "op_type": {},
+            "supergroups": [],
+            "model_input": {},
+            "model_output": {
+                "is_output_quantized": "True"
+            }
+        }
+        with open('./config.json', 'w') as f:
+            json.dump(config, f)
+
+        try:
+            configs = JsonConfigImporter.import_json_config_file(config_file='./config.json')
+            assert Adaround._get_is_symmetric_flag_for_op_param(configs, conv_op.type, param_name="weight")
+        finally:
+            if os.path.isfile('./config.json'):
+                os.remove('./config.json')
+
+        # All params having is_symmetric False, but "weight" parameters of type Conv have is_symmetric True.
+        config = {
+            "defaults": {
+                "ops": {},
+                "params": {
+                    "is_symmetric": "False"
+                }
+            },
+            "params": {
+                "weight": {
+                    "is_symmetric": "False"
+                }
+            },
+            "op_type": {
+                "Conv": {
+                    "params": {
+                        "weight": {
+                            "is_symmetric": "True"
+                        },
+                        "bias": {
+                            "is_symmetric": "False"
+                        }
+                    }
+                }
+            },
+            "supergroups": [],
+            "model_input": {},
+            "model_output": {
+                "is_output_quantized": "True"
+            }
+        }
+        with open('./config.json', 'w') as f:
+            json.dump(config, f)
+
+        try:
+            configs = JsonConfigImporter.import_json_config_file(config_file='./config.json')
+            assert Adaround._get_is_symmetric_flag_for_op_param(configs, conv_op.type, param_name="weight")
+            # For matmul op, is_symmetric should be False.
+            assert not Adaround._get_is_symmetric_flag_for_op_param(configs, matmul_op.type, param_name="weight")
+        finally:
+            if os.path.isfile('./config.json'):
+                os.remove('./config.json')
+
+        sess.close()

@@ -59,15 +59,15 @@ class AdaroundWrapper(keras.layers.Layer):
     Adaround Wrapper base class
     """
     def __init__(self, session: tf.compat.v1.Session, op: tf.Operation, param_bw: int, quant_scheme: QuantScheme,
-                 is_symmetric: bool, strict_symmetric: bool = False, unsigned_symmetric: bool = True):
+                 is_symmetric: bool, strict_symmetric: bool, unsigned_symmetric: bool):
         """
         :param session: Tf session.
         :param op: Tf op.
         :param param_bw: Bitwidth for weight quantization.
         :param quant_scheme: Quantization scheme.
         :param is_symmetric: Symmetric vs Asymmetric encodings.
-        :param strict_symmetric: Strict symmetric flag. Default is False.
-        :param unsigned_symmetric: Unsigned symmetric flag. Default is True.
+        :param strict_symmetric: Strict symmetric flag.
+        :param unsigned_symmetric: Unsigned symmetric flag.
         """
         super(AdaroundWrapper, self).__init__()
 
@@ -203,7 +203,7 @@ class AdaroundWrapper(keras.layers.Layer):
 
     @staticmethod
     def compute_encodings(weight_data: np.ndarray, param_bw: int, quant_scheme: QuantScheme,
-                          is_symmetric: bool, strict_symmetric: bool = False, unsigned_symmetric: bool = True) \
+                          is_symmetric: bool, strict_symmetric: bool, unsigned_symmetric: bool) \
             -> libpymo.TfEncoding:
         """
         :param weight_data: Weight data of Adaround supported ops
