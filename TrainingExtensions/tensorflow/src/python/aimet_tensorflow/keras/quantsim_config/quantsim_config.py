@@ -474,3 +474,12 @@ class QuantSimConfigurator(AimetCommonQuantSimConfigurator):
                 logger.error("Conflicting tensor quantizer settings for %s, expected: %s, actual: %s", config_key,
                              current_setting, quantizer_setting)
                 raise RuntimeError
+
+    def get_quantizers_dict(self, layer: layers.Layer) -> TreeLikeDictionary:
+        """
+        Get input/output/param quantizer dictionary corresponding to layer
+
+        :param layer: Target layer to obtain quantizer dictionary
+        :return: Dictionary containing input/output/param quantizers
+        """
+        return self._layer_to_quantizers_dict.get(layer)
