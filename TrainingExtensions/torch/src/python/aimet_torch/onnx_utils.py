@@ -554,13 +554,13 @@ class OnnxSaver:
         :param start_marker_map: Map of start marker nodes in the ONNX graph
         :return:
         """
-        unique_node_names = dict()
-        visited = []
+        node_name_count_map = dict()
+        visited = set()
 
         def set_name_for_downstream_nodes(starting_nodes, name, depth):
             for node in starting_nodes:
 
-                if node in visited:
+                if id(node) in visited:
                     continue
 
                 if node.op_type == 'CustomMarker':      # Recursion end condition
@@ -571,12 +571,12 @@ class OnnxSaver:
                 else:
                     node.name = name + "#" + str(depth)
 
-                if node.name in unique_node_names:
-                    reuse_count = unique_node_names[node.name]
-                    unique_node_names[node.name] = reuse_count + 1
+                if node.name in node_name_count_map:
+                    reuse_count = node_name_count_map[node.name]
+                    node_name_count_map[node.name] = reuse_count + 1
                     node.name = f'{node.name}-{reuse_count}' if '#' in node.name else f'{node.name}#0-{reuse_count}'
                 else:
-                    unique_node_names[node.name] = 1
+                    node_name_count_map[node.name] = 1
 
                 for tensor in node.output:
                     downstream_nodes = map_input_tensor_to_node.get(tensor, [])
@@ -587,7 +587,7 @@ class OnnxSaver:
                             if dnode.op_type == 'CustomMarker':  #end marker
                                 node.name += '.end'
                                 break
-                visited.append(node)
+                visited.add(id(node))
 
         for node_name, markers in start_marker_map.items():
             for marker in markers:
