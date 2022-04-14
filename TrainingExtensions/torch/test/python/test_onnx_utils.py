@@ -525,7 +525,6 @@ class TestOnnxUtils:
         onnx_path = './data/MyModel.onnx'
         onnx_utils.OnnxSaver.set_node_names(onnx_path, model, dummy_input=torch.rand(1, 10, 24, 24),
                                             is_conditional=False, module_marker_map={})
-        onnx_utils.OnnxSaver.set_unique_node_names(onnx_path)
         onnx_model = onnx.load(onnx_path)
         expected_node_names = ['conv1', 'bn', 'gn', 'add']
 
@@ -560,7 +559,6 @@ class TestOnnxUtils:
         # Using an input to linear op with dimension != 2 causes torch to use matmul->add instead of gemm op
         onnx_path = './data/MyModel.onnx'
         onnx_utils.OnnxSaver.set_node_names(onnx_path, model, dummy_input=torch.randn(1, 1, 3))
-        onnx_utils.OnnxSaver.set_unique_node_names(onnx_path)
         onnx_model = onnx.load(onnx_path)
         expected_node_names = ['linear', 'linear#1.end']
 
@@ -575,7 +573,6 @@ class TestOnnxUtils:
 
         # Check that gemm still works as expected
         onnx_utils.OnnxSaver.set_node_names(onnx_path, model, dummy_input=torch.randn(1, 3))
-        onnx_utils.OnnxSaver.set_unique_node_names(onnx_path)
         onnx_model = onnx.load(onnx_path)
 
         actual_node_names = [node.name for node in onnx_model.graph.node]
@@ -614,7 +611,6 @@ class TestOnnxUtils:
         torch.onnx.export(model, dummy_input, onnx_path)
         onnx_utils.OnnxSaver.set_node_names(onnx_path, model, dummy_input)
 
-        onnx_utils.OnnxSaver.set_unique_node_names(onnx_path)
         onnx_model = onnx.load(onnx_path)
         self.check_onnx_node_name_uniqueness(onnx_model)
 
