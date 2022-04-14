@@ -422,7 +422,6 @@ class QuantizationSimModel:
 
         OnnxSaver.set_node_names(onnx_path, original_model, dummy_input, is_conditional, module_marker_map,
                                  onnx_export_args)
-        OnnxSaver.set_unique_node_names(onnx_path)
 
         onnx_model = onnx.load(onnx_path)
         onnx_node_to_io_tensor_map, valid_param_set = OnnxSaver.get_onnx_node_to_io_tensor_names_map(onnx_model)
@@ -788,18 +787,30 @@ class QuantizationSimModel:
                 # ------------------
                 # Output activations
                 # ------------------
-                if layer.output_quantizers[0].enabled:
-                    last_op_name, op_names = QuantizationSimModel.find_last_op_name_for_layer(layer_name,
-                                                                                              op_to_io_tensor_map)
-                    if not propagate_encodings:
-                        op_names = [last_op_name]
+                last_op_name, op_names = QuantizationSimModel.find_last_op_name_for_layer(layer_name,
+                                                                                          op_to_io_tensor_map)
+                if not propagate_encodings:
+                    op_names = [last_op_name]
 
-                    for op_name in op_names:
-                        if op_to_io_tensor_map[op_name].outputs:
-                            for output_tensor in op_to_io_tensor_map[op_name].outputs:
-                                propagate_flag = propagate_encodings and op_name != last_op_name
-                                enc = QuantizationSimModel._create_encoding_dict(layer.output_quantizers[0].encoding,
-                                                                                 layer.output_quantizers[0],
+                for op_name in op_names:
+                    if op_to_io_tensor_map[op_name].outputs:
+                        output_tensors = op_to_io_tensor_map[op_name].outputs
+                        for index, output_tensor in enumerate(output_tensors):
+                            propagate_flag = propagate_encodings and op_name != last_op_name
+
+                            quantizer = layer.output_quantizers[0]
+                            if propagate_flag is False:
+                                if index >= len(layer.output_quantizers):
+                                    raise ValueError(f'number of output quantizer: {len(layer.output_quantizers)} '
+                                                     f'available for layer:{layer_name} mis-matches with number of '
+                                                     f'output tensors : {len(output_tensors)} for onnx node: '
+                                                     f'{op_name}')
+
+                                quantizer = layer.output_quantizers[index]
+
+                            if quantizer.enabled:
+                                enc = QuantizationSimModel._create_encoding_dict(quantizer.encoding,
+                                                                                 quantizer,
                                                                                  propagate_encodings=propagate_flag)
                                 activation_encodings[output_tensor] = [enc]
 

@@ -39,6 +39,7 @@ import json as json
 import os
 import unittest.mock
 from collections import namedtuple
+from pprint import pprint
 from typing import Dict
 from packaging import version
 import libpymo
@@ -52,7 +53,7 @@ from torchvision import models
 
 from aimet_common.defs import QuantScheme, QuantizationDataType, MAP_ROUND_MODE_TO_PYMO
 from aimet_common.utils import AimetLogger
-from aimet_torch import transformer_utils
+from aimet_torch import transformer_utils, onnx_utils
 from aimet_torch import utils, elementwise_ops
 from aimet_torch.elementwise_ops import Multiply
 from aimet_torch.examples.test_models import TwoLayerBidirectionalLSTMModel, SingleLayerRNNModel, \
@@ -274,6 +275,40 @@ class PixelShuffleModel(nn.Module):
     def forward(self, x):
         return self.ps(x)
 
+
+class FakeMultiOutputOp(torch.autograd.Function):
+    """
+    This function helps create a custom onnx op to simulate a 5 output tensor onnx node
+    Note: the forward pass has some tensor computation to prevent torch onnx export from removing onnx node.
+    """
+
+    @staticmethod
+    def symbolic(g, inp):
+        """
+        Magic method that helps with exporting a custom ONNX node
+        """
+        return g.op('FakeMultiOutputOp', inp, outputs=5)
+
+    @staticmethod
+    def forward(ctx, x):     # pylint: disable=arguments-differ
+        return x*2, x*4, x*8, x*16, x*32
+
+    @staticmethod
+    def backward(ctx, _grad):                       # pylint: disable=arguments-differ
+        raise NotImplementedError()
+
+
+class ModuleWith5Output(torch.nn.Module):
+    def forward(self, x):
+        return FakeMultiOutputOp.apply(x)
+
+class ModelWith5Output(torch.nn.Module):
+    def __init__(self):
+        super(ModelWith5Output, self).__init__()
+        self.cust = ModuleWith5Output()
+
+    def forward(self, x):
+        return self.cust(x)
 
 class TestQuantizationSimStaticGrad:
     def test_is_leaf_module_positive(self):
@@ -2441,3 +2476,25 @@ class TestQuantizationSimLearnedGrid:
                                              default_output_bw=4)
             quant_sim.compute_encodings(evaluate, dummy_input)
             quant_sim.model(*dummy_input)
+
+    def test_multi_output_onnx_op(self):
+        """
+        Test mapping and exporting of output encodings for multiple output onnx op.
+        """
+
+        net = ModelWith5Output()
+        dummy_input = torch.randn(1, 3, 224, 224)
+
+        sim = QuantizationSimModel(net, dummy_input, quant_scheme=QuantScheme.post_training_tf_enhanced,
+                                         default_param_bw=4, default_output_bw=4)
+
+        sim.model.cust.output_quantizers[0].enabled = False
+        sim.compute_encodings(evaluate, dummy_input)
+
+        sim.export('./data/', 'module_with_5_output', dummy_input,
+                         onnx_export_args=(onnx_utils.OnnxExportApiArgs(opset_version=11)),
+                         propagate_encodings=False)
+        with open('./data/module_with_5_output.encodings') as json_file:
+            activation_encodings = json.load(json_file)['activation_encodings']
+            assert '7' not in activation_encodings
+            assert set(['8', '9', '10', '11', 't.1']).issubset(activation_encodings.keys())
