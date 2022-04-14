@@ -38,7 +38,7 @@
 
 """ Adaround wrapper """
 
-from typing import Union, Dict
+from typing import Union, Dict, List
 import numpy as np
 import tensorflow as tf
 from tensorflow import keras
@@ -58,8 +58,9 @@ class AdaroundWrapper(keras.layers.Layer):
     """
     Adaround Wrapper base class
     """
+    # pylint: disable=too-many-arguments
     def __init__(self, session: tf.compat.v1.Session, op: tf.Operation, param_bw: int, quant_scheme: QuantScheme,
-                 is_symmetric: bool, strict_symmetric: bool, unsigned_symmetric: bool):
+                 is_symmetric: bool, strict_symmetric: bool, unsigned_symmetric: bool, enable_per_channel: bool):
         """
         :param session: Tf session.
         :param op: Tf op.
@@ -68,6 +69,7 @@ class AdaroundWrapper(keras.layers.Layer):
         :param is_symmetric: Symmetric vs Asymmetric encodings.
         :param strict_symmetric: Strict symmetric flag.
         :param unsigned_symmetric: Unsigned symmetric flag.
+        :param enable_per_channel: if set to True, use per channel quantization
         """
         super(AdaroundWrapper, self).__init__()
 
@@ -80,26 +82,33 @@ class AdaroundWrapper(keras.layers.Layer):
             self._bias_tensor = tf.convert_to_tensor(bias, dtype='float32')
 
         self.use_soft_rounding = tf.compat.v1.placeholder_with_default(True, shape=[])
+        self.enable_per_channel = enable_per_channel
 
+        # use the last dimension as the default channel index
+        self.ch_axis = len(list(self._weight_tensor.shape)) - 1
         self.encoding = self.compute_encodings(weight, param_bw, quant_scheme, is_symmetric,
-                                               strict_symmetric, unsigned_symmetric)
-        self.alpha = self._initialize_alpha(self._weight_tensor, self.encoding)
+                                               strict_symmetric, unsigned_symmetric, enable_per_channel, self.ch_axis)
+        self.alpha = self._initialize_alpha(self._weight_tensor, self.encoding, enable_per_channel, self.ch_axis)
 
     def adaround_weights(self) -> tf.Tensor:
         """
         Adaround the weight tensor
         :return: AdaRounded weight tensor
         """
-        return self.get_adarounded_weight(self.alpha, self._weight_tensor, self.encoding, self.use_soft_rounding)
+        return self.get_adarounded_weight(self.alpha, self._weight_tensor, self.encoding, self.use_soft_rounding,
+                                          self.enable_per_channel, self.ch_axis)
 
     @staticmethod
-    def get_adarounded_weight(alpha, weight_tensor, encoding, use_soft_rounding) -> tf.Tensor:
+    def get_adarounded_weight(alpha, weight_tensor, encoding, use_soft_rounding, enable_per_channel: bool,
+                              ch_axis: int) -> tf.Tensor:
         """
         Get the adarounded weight
         :param alpha: Alpha parameter
         :param weight_tensor: Weight to adaround
         :param encoding: Encodings corresponding to weights
         :param use_soft_rounding: True if soft rounding is to be used, False if hard rounding is to be used
+        :param enable_per_channel: True if per-channel mode, else False
+        :param ch_axis: channel axis to be used in the per-channel mode
         :return: Adarounded weight tensor
         """
         # Soft rounding maps alpha parameter between zero and one using rectified sigmoid function
@@ -111,8 +120,21 @@ class AdaroundWrapper(keras.layers.Layer):
         def compute_hard_rounding():
             return tf.cast(alpha > 0, dtype=alpha.dtype)
 
+        if enable_per_channel:
+            assert isinstance(encoding, list), "Per-channel expects encoding to be a list"
+
+            delta = AdaroundWrapper._broadcast_to_tensor(weight_tensor, [enc.delta for enc in encoding],
+                                                         ch_axis)
+            offset = AdaroundWrapper._broadcast_to_tensor(weight_tensor, [enc.offset for enc in encoding],
+                                                          ch_axis)
+            bw = encoding[0].bw
+        else:
+            delta = encoding.delta
+            offset = encoding.offset
+            bw = encoding.bw
+
         # Scale the tensor
-        tensor = tf.floor(weight_tensor / encoding.delta)
+        tensor = tf.floor(weight_tensor / delta)
 
         # Compute h_alpha depending on soft or hard rounding
         h_alpha = tf.cond(use_soft_rounding, compute_soft_rounding, compute_hard_rounding)
@@ -121,8 +143,8 @@ class AdaroundWrapper(keras.layers.Layer):
         tensor = tf.add(tensor, h_alpha)
 
         # Quantize and de-quantize the tensor
-        tensor_quant = tf.clip_by_value(tensor - encoding.offset, 0, 2 ** encoding.bw - 1)
-        tensor_dequant = (tensor_quant + encoding.offset) * encoding.delta
+        tensor_quant = tf.clip_by_value(tensor - offset, 0, 2 ** bw - 1)
+        tensor_dequant = (tensor_quant + offset) * delta
 
         return tensor_dequant
 
@@ -165,16 +187,14 @@ class AdaroundWrapper(keras.layers.Layer):
         return adaround_out_tensor
 
     @staticmethod
-    def _initialize_alpha(tensor: tf.Tensor, encoding: libpymo.TfEncoding) -> tf.Variable:
+    def _create_alpha_var(tensor: tf.Tensor) -> tf.Variable:
         """
-        Initializes alpha parameter, same shape as the weight tensor
-        :param tensor: The weight tensor to be ada rounded
+        Helper method to create the alpha variable
+        :param tensor: tensor to be used to generate alpha
         """
-        tensor_floor = tf.floor(tensor / encoding.delta)
-        tensor = (tensor / encoding.delta) - tensor_floor
-
         # pylint: disable=invalid-unary-operand-type
-        alpha = -tf.math.log((AdaroundConstants.ZETA - AdaroundConstants.GAMMA) / (tensor - AdaroundConstants.GAMMA) - 1)
+        alpha = -tf.math.log(
+            (AdaroundConstants.ZETA - AdaroundConstants.GAMMA) / (tensor - AdaroundConstants.GAMMA) - 1)
 
         # pylint: disable=unexpected-keyword-arg
         # Resource variable is default in TF2.x
@@ -183,6 +203,67 @@ class AdaroundWrapper(keras.layers.Layer):
         else:
             alpha_var = tf.Variable(alpha, trainable=True, use_resource=True, name='alpha')
 
+        return alpha_var
+
+    @staticmethod
+    def _broadcast_to_tensor(tensor: tf.Tensor, encoding: list, ch_axis: int) -> tf.constant:
+        """
+        Broadcast per-channel delta/offset using the encodings array
+        :param tensor: The weight tensor to be ada-rounded
+        :param encoding: list of per-channel encoding delta/offset to generate broadcasted encoding
+        :param ch_axis: dimension to be used for per channel quantization
+        """
+
+        def _get_broadcast_shape() -> List:
+            """
+            compute the broadcast shape based on the channel index
+            """
+            shape = list(tensor.shape)
+            channels = shape.pop(ch_axis)
+            broadcast_shape = shape + [channels]
+            return broadcast_shape
+
+        def _get_encoding_rotate_perm() -> List:
+            """
+            Generate the permutation list to apply on delta/offset(which is broadcasted) to match the original shape
+            """
+            length = len(list(tensor.shape))
+            ret_perm = list(range(length))
+            channel_swap = ret_perm.pop()
+            ret_perm.insert(ch_axis, channel_swap)
+            return ret_perm
+
+        tensor_encoding = tf.constant(encoding, dtype=tensor.dtype)
+        # broadcast delta/offset of shape (num_channels,) to broadcast_shape
+        tensor_encoding = tf.broadcast_to(tensor_encoding, _get_broadcast_shape())
+        tensor_encoding = tf.transpose(tensor_encoding, perm=_get_encoding_rotate_perm())
+        return tensor_encoding
+
+    @staticmethod
+    def _initialize_alpha(tensor: tf.Tensor, encoding: libpymo.TfEncoding, enable_per_channel: bool,
+                          ch_axis: int) -> tf.Variable:
+        """
+        Initializes alpha parameter, same shape as the weight tensor
+        :param tensor: The weight tensor to be ada rounded
+        :param enable_per_channel: if set to True, use per channel quantization
+        :param ch_axis: dimension to be used for per channel quantization. This field is unused for per-tensor flow
+        weight: (A, B, C, D)
+        ch_axis: 2 (this holds good for other values in [0, len(shape)))
+        encodings: (C,)
+        delta/offset: (C,)
+        after broadcast of encoding: (A, B, D, C) -> _get_broadcast_shape
+        after transpose of encoding: (A, B, C, D)
+        """
+
+        if enable_per_channel:
+            assert isinstance(encoding, list), "Per-channel expects encoding to be a list"
+            delta = AdaroundWrapper._broadcast_to_tensor(tensor, [enc.delta for enc in encoding], ch_axis)
+        else:
+            delta = encoding.delta
+
+        tensor_floor = tf.floor(tensor / delta)
+        tensor = (tensor / delta) - tensor_floor
+        alpha_var = AdaroundWrapper._create_alpha_var(tensor)
         return alpha_var
 
     @staticmethod
@@ -202,9 +283,28 @@ class AdaroundWrapper(keras.layers.Layer):
         return weight, bias
 
     @staticmethod
-    def compute_encodings(weight_data: np.ndarray, param_bw: int, quant_scheme: QuantScheme,
-                          is_symmetric: bool, strict_symmetric: bool, unsigned_symmetric: bool) \
-            -> libpymo.TfEncoding:
+    def _generate_weight_transpose_perm(shape: tuple, ch_axis: int) -> List:
+        """
+        Given shape of tensor/np.ndarray and channel axis, this function generates the permutation list to be used for
+        the transpose operation of the tensor/np.ndarray
+        shape = (A, B, C, D)
+        ch_axis = 2
+        return = (C, A, B, D)
+
+        :param shape: tuple representing the shape of the tensor/np.ndarray
+        :ch_axis: dimension to be used for per channel quantization
+        :return permutation list
+        """
+        perm = list(range(len(shape)))
+        ch_dim = perm.pop(ch_axis)
+        # make ch_idx dimension the first one
+        perm.insert(0, ch_dim)
+        return perm
+
+    @staticmethod
+    def compute_encodings(weight_data: np.ndarray, param_bw: int, quant_scheme: QuantScheme, is_symmetric: bool,
+                          strict_symmetric: bool, unsigned_symmetric: bool, enable_per_channel: bool, ch_axis: int) \
+            -> Union[libpymo.TfEncoding, List[libpymo.TfEncoding]]:
         """
         :param weight_data: Weight data of Adaround supported ops
         :param param_bw: bitwidth (4-31) to use for quantizing weight data
@@ -217,17 +317,37 @@ class AdaroundWrapper(keras.layers.Layer):
         have collected are for +ve numbers. If yes, use quantized int values (0:255). This is a special case,
         where we have double the resolution for the computed encodings while still preserving the zero-point to
         be absolute 0.
-        :return: Encodings object. (max, min, delta and offset)
+        :param enable_per_channel: if set to True, use per channel quantization
+        :param ch_axis: dimension to be used for per channel quantization. This field is unused for per-tensor flow
+        :return: Encodings object for per-tensor flow or list of Encoding objects for per-channel flow
+                Encoding object to contain (bw, max, min, delta and offset)
         """
+        # pylint: disable=too-many-locals
         quant_scheme = QUANT_SCHEME_TO_PYMO[quant_scheme]
-
         # Create Encodings Analyzer and collect statistical data to compute encodings
         # Since the weight data is numpy and on CPU memory, useCuda is False
-        analyzer = libpymo.EncodingAnalyzerForPython(quant_scheme)
-        analyzer.updateStats(weight_data, False)
+        if enable_per_channel:
+            encoding = []
+            shape = list(weight_data.shape)
+            assert ch_axis < len(shape), 'ch_axis is pointing to an incorrect dimension'
+            num_channels = shape.pop(ch_axis)
 
-        # Compute the encodings for the weight data using collected stats
-        encoding, _ = analyzer.computeEncoding(param_bw, is_symmetric, strict_symmetric, unsigned_symmetric)
+            # reshape weights based on the ch_axis - ch_axis has to be the first index to slice and be used for encoding
+            weight_data = weight_data.transpose(
+                AdaroundWrapper._generate_weight_transpose_perm(weight_data.shape, ch_axis))
+
+            for ch_idx in range(num_channels):
+                analyzer = libpymo.EncodingAnalyzerForPython(quant_scheme)
+                analyzer.updateStats(weight_data[ch_idx], False)
+                channel_encoding, _ = analyzer.computeEncoding(param_bw, is_symmetric, strict_symmetric,
+                                                               unsigned_symmetric)
+                encoding.append(channel_encoding)
+
+        else:
+            # Compute the encodings for the weight data using collected stats
+            analyzer = libpymo.EncodingAnalyzerForPython(quant_scheme)
+            analyzer.updateStats(weight_data, False)
+            encoding, _ = analyzer.computeEncoding(param_bw, is_symmetric, strict_symmetric, unsigned_symmetric)
 
         return encoding
 

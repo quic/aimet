@@ -178,15 +178,7 @@ class QuantizationSimModel:
                                  rounding_mode,
                                  default_output_bw,
                                  default_param_bw,
-                                 data_type=QuantizationDataType.int)
-
-        if default_data_type == QuantizationDataType.float and default_output_bw != 16:
-            raise ValueError(
-                'float data_type can only be used when default_output_bw set to 16, not ' + str(default_output_bw))
-
-        if default_data_type == QuantizationDataType.float and default_param_bw != 16:
-            raise ValueError(
-                'float data_type can only be used when default_param_bw set to 16, not ' + str(default_output_bw))
+                                 default_data_type)
 
         self.session = session
 
