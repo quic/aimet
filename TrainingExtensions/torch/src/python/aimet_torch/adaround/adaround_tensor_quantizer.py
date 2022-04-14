@@ -112,11 +112,10 @@ class AdaroundTensorQuantizer(TensorQuantizer):
         """
         assert self.encoding, 'Encoding needs to be set before Adaround the weight tensor.'
 
-        def _broadcast_to_tensor(tensor, encoding, ch_axis):
+        def _broadcast_to_tensor(encoding, ch_axis):
             """
             This helper method takes n-dimension tensor and a 1-dimension encoding. And the encoding is broad-casted to
             match the n-dimensional tensor
-            :param tensor: Tensor to use as target for the broadcasting operation
             :param encoding: Encoding 1-dimensional tensor to broadcast
             :return: Broad-casted tensor
             """
@@ -139,9 +138,9 @@ class AdaroundTensorQuantizer(TensorQuantizer):
 
         if isinstance(self.encoding, list):
             delta = [enc.delta for enc in self.encoding]                # pylint: disable=not-an-iterable
-            broadcasted_delta = _broadcast_to_tensor(tensor, delta, 0)
+            broadcasted_delta = _broadcast_to_tensor(delta, 0)
             offset = [enc.offset for enc in self.encoding]              # pylint: disable=not-an-iterable
-            broadcasted_offset = _broadcast_to_tensor(tensor, offset, 0)
+            broadcasted_offset = _broadcast_to_tensor(offset, 0)
         else:
             broadcasted_delta = self.encoding.delta
             broadcasted_offset = self.encoding.offset
