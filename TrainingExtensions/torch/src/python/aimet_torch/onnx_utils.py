@@ -109,8 +109,8 @@ if version.parse(torch.__version__) >= version.parse("1.9"):
         torch.nn.GroupNorm:
             {
                 # '#depth', 'op_type': {input_index: torch module parameter name}
-                ('#2', 'Mul'): {1: 'weight'},
-                ('#3.end', 'Add'): {1: 'bias'}
+                ('#3', 'Mul'): {1: 'weight'},
+                ('#4.end', 'Add'): {1: 'bias'}
             },
         torch.nn.Linear:
             {
@@ -127,8 +127,8 @@ else:
         torch.nn.GroupNorm:
             {
                 # '#depth', 'op_type': {input_index: torch module parameter name}
-                ('#2', 'Mul'): {1: 'weight'},
-                ('#3.end', 'Add'): {1: 'bias'}
+                ('#3', 'Mul'): {1: 'weight'},
+                ('#4.end', 'Add'): {1: 'bias'}
             },
         torch.nn.Linear:
             {
@@ -554,8 +554,14 @@ class OnnxSaver:
         :param start_marker_map: Map of start marker nodes in the ONNX graph
         :return:
         """
+        node_name_count_map = dict()
+        visited = set()
+
         def set_name_for_downstream_nodes(starting_nodes, name, depth):
             for node in starting_nodes:
+
+                if id(node) in visited:
+                    continue
 
                 if node.op_type == 'CustomMarker':      # Recursion end condition
                     return
@@ -564,6 +570,13 @@ class OnnxSaver:
                     node.name = name
                 else:
                     node.name = name + "#" + str(depth)
+
+                if node.name in node_name_count_map:
+                    reuse_count = node_name_count_map[node.name]
+                    node_name_count_map[node.name] = reuse_count + 1
+                    node.name = f'{node.name}-{reuse_count}' if '#' in node.name else f'{node.name}#0-{reuse_count}'
+                else:
+                    node_name_count_map[node.name] = 1
 
                 for tensor in node.output:
                     downstream_nodes = map_input_tensor_to_node.get(tensor, [])
@@ -574,6 +587,7 @@ class OnnxSaver:
                             if dnode.op_type == 'CustomMarker':  #end marker
                                 node.name += '.end'
                                 break
+                visited.add(id(node))
 
         for node_name, markers in start_marker_map.items():
             for marker in markers:
@@ -857,9 +871,15 @@ class OnnxSaver:
                 recurrent_nodes.append(node.name)
 
         # Collection of recurrent nodes that includes only the first layer nodes
-        root_nodes = [node for node in recurrent_nodes if '#' not in node or '#0' in node]
+        root_nodes = dict()
+        # onnx graph is maintained in topological order, the first occurrence of the onnx node with the module name will
+        # be the root node of the recurrent module
+        for node_name in recurrent_nodes:
+            root_name = node_name.split('#')[0]
+            if root_name not in root_nodes:
+                root_nodes[root_name] = node_name
 
-        for root_node in root_nodes:
+        for root_node in root_nodes.values():
             # Find nodes corresponding to all other layers of the recurrent node
             other_layers = [node for node in recurrent_nodes if node.startswith(root_node.split('#')[0])]
 
@@ -954,22 +974,3 @@ class OnnxSaver:
         cls._collate_io_tensors_for_multi_layer_recurrent_nodes(onnx_model, node_to_io_tensor_name_map)
 
         return node_to_io_tensor_name_map, valid_param_set
-
-    @staticmethod
-    def set_unique_node_names(onnx_model_path: str) -> None:
-        """
-        This utility loads a given onnx model file and set the unique names for all the nodes
-        :param onnx_model_path: Path to the saved ONNX model
-        """
-        onnx_model = onnx.load(onnx_model_path)
-
-        unique_node_names = dict()
-        for node in onnx_model.graph.node:  # pylint: disable=no-member
-            if node.name in unique_node_names:
-                reuse_count = unique_node_names[node.name]
-                unique_node_names[node.name] = reuse_count + 1
-                node.name = f'{node.name}-{reuse_count}' if '#' in node.name else f'{node.name}#0-{reuse_count}'
-            else:
-                unique_node_names[node.name] = 1
-
-        onnx.save(onnx_model, onnx_model_path)

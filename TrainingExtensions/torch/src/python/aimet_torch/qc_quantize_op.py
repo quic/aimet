@@ -398,13 +398,9 @@ class StaticGridQuantWrapper(QcQuantizeWrapper):
         self._restore_shadow_params(shadow_params)
 
         # Quantize the outputs
-
-        if not self.output_quantizers[0].enabled:
-            output = wrapped_output
-        else:
-            if isinstance(wrapped_output, torch.Tensor):
-                wrapped_output = [wrapped_output]
-            output = self._quantize_activation(self.output_quantizers, wrapped_output)
+        if isinstance(wrapped_output, torch.Tensor):
+            wrapped_output = [wrapped_output]
+        output = self._quantize_activation(self.output_quantizers, wrapped_output)
 
         return output
 
@@ -483,13 +479,15 @@ class StaticGridQuantWrapper(QcQuantizeWrapper):
             if not isinstance(input_tensor, torch.Tensor):
                 _logger.error('Expecting quantize activation input of type torch.Tensor but got %s', type(input_tensor))
                 raise AssertionError
-            if input_tensor.dtype in utils.torch_dtypes_to_ignore_for_quantization:
-                # Do not quantize tensors of integer or bool data type
-                outputs.append(input_tensor)
-                continue
 
             assert len(tensor_quantizers) > index, \
                 f"Not enough tensor quantizers ({len(tensor_quantizers)}) allocated"
+
+            if input_tensor.dtype in utils.torch_dtypes_to_ignore_for_quantization or \
+                    tensor_quantizers[index].enabled is False:
+                # Do not quantize tensors of integer or bool data type or if the quantizer is disabled
+                outputs.append(input_tensor)
+                continue
 
             if self._mode is QcQuantizeOpMode.ANALYSIS:
 
