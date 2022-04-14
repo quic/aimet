@@ -798,7 +798,7 @@ class TestQuantsimConfig(unittest.TestCase):
             "defaults": {
                 "ops": {
                     "is_output_quantized": "True",
-                    "is_symmetric": "False"
+                    "is_symmetric": "True"
                 },
                 "params": {
                     "is_quantized": "False",

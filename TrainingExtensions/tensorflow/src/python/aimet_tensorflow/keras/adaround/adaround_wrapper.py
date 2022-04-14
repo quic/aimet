@@ -85,7 +85,8 @@ class AdaroundWrapper(keras.layers.Layer):
         :return: AdaRounded weight tensor
         """
         return TfAdaroundWrapper.get_adarounded_weight(self.alpha, self._weight_tensor, self.encoding,
-                                                       self.use_soft_rounding)
+                                                       self.use_soft_rounding, enable_per_channel=False,
+                                                       ch_axis=len(list(self._weight_tensor.shape)) - 1)
 
     def _compute_output_with_adarounded_weights(self, inp_tensor: tf.Tensor, adaround_weight_tensor: tf.Tensor) -> \
             tf.Tensor:
@@ -157,7 +158,8 @@ class AdaroundWrapper(keras.layers.Layer):
         :return: Encodings (max, min, delta and offset)
         """
         return TfAdaroundWrapper.compute_encodings(weight_data, param_bw, quant_scheme, is_symmetric,
-                                                   strict_symmetric, unsigned_symmetric)
+                                                   strict_symmetric, unsigned_symmetric, enable_per_channel=False,
+                                                   ch_axis=len(list(weight_data.shape)) - 1)
 
     @staticmethod
     def _get_conv_args(layer: tf.keras.layers.Conv2D) -> Dict:

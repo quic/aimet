@@ -191,11 +191,13 @@ class Adaround:
         # Create copies which will have model's weights quantized with hard and soft rounding.
         session_hard_rounded_weight = graph_saver.save_and_load_graph(WORKING_DIR, session)
         session_soft_rounded_weight = graph_saver.save_and_load_graph(WORKING_DIR, session)
-
         configs = JsonConfigImporter.import_json_config_file(config_file)
         # Strict_symmetric and unsigned_symmetric flags have default value False and True respectively.
         strict_symmetric = configs[ConfigDictKeys.DEFAULTS].get(ConfigDictKeys.STRICT_SYMMETRIC, False)
         unsigned_symmetric = configs[ConfigDictKeys.DEFAULTS].get(ConfigDictKeys.UNSIGNED_SYMMETRIC, True)
+
+        # read per-channel quantization field. Default = False
+        enable_per_channel = configs[ConfigDictKeys.DEFAULTS].get(ConfigDictKeys.PER_CHANNEL_QUANTIZATION, False)
 
         # Optimization Hyper parameters
         opt_params = AdaroundHyperParameters(params.num_iterations, params.reg_param, params.beta_range,
@@ -205,6 +207,7 @@ class Adaround:
 
         # Get Adaround supported ops based on occurrence in the model
         ordered_ops = cls._get_ordered_list_of_ops(session.graph, starting_op_names, output_op_names)
+
 
         param_encodings = {}
         for op in tqdm(ordered_ops):
@@ -220,6 +223,7 @@ class Adaround:
                                                                        params.num_batches)
             is_symmetric = cls._get_is_symmetric_flag_for_op_param(configs, op.type, param_name="weight")
 
+
             # Find next following activation function
             act_func = cls._get_act_func(op)
 
@@ -227,10 +231,11 @@ class Adaround:
             graph = tf.Graph()
             with graph.as_default():
                 wrapper = AdaroundWrapper(session, op, param_bw, quant_scheme, is_symmetric,
-                                          strict_symmetric, unsigned_symmetric)
-                hard_rounded_weight, \
-                soft_rounded_weight = AdaroundOptimizer().adaround_wrapper(wrapper, act_func, all_inp_data,
-                                                                           all_out_data, opt_params)
+                                          strict_symmetric, unsigned_symmetric, enable_per_channel)
+                hard_rounded_weight, soft_rounded_weight = AdaroundOptimizer().adaround_wrapper(wrapper, act_func,
+                                                                                                all_inp_data,
+                                                                                                all_out_data,
+                                                                                                opt_params)
 
             # Update param encodings dictionary
             cls._update_param_encodings_dict(param_encodings, op, wrapper.encoding, is_symmetric)
@@ -304,7 +309,8 @@ class Adaround:
             json.dump(param_encodings, encoding_fp, sort_keys=True, indent=4)
 
     @staticmethod
-    def _update_param_encodings_dict(encoding_dict: Dict, op: tf.Operation, encoding: libpymo.TfEncoding,
+    def _update_param_encodings_dict(encoding_dict: Dict, op: tf.Operation,
+                                     encoding: Union[libpymo.TfEncoding, List[libpymo.TfEncoding]],
                                      is_symmetric: bool):
         """
         Add op's parameter encoding to dictionary to be used for exporting
@@ -314,12 +320,20 @@ class Adaround:
         :param is_symmetric: Symmetric vs Asymmetric boolean
         """
         tensor_name = op.inputs[1].name
-        encoding_dict[tensor_name] = [{'min': encoding.min,
-                                       'max': encoding.max,
-                                       'scale': encoding.delta,
-                                       'offset': encoding.offset,
-                                       'bitwidth': encoding.bw,
-                                       'is_symmetric': is_symmetric}]
+        if isinstance(encoding, list):
+            encoding_dict[tensor_name] = [{'min': [enc.min for enc in encoding],
+                                           'max': [enc.max for enc in encoding],
+                                           'scale': [enc.delta for enc in encoding],
+                                           'offset': [enc.offset for enc in encoding],
+                                           'bitwidth': encoding[0].bw,
+                                           'is_symmetric': is_symmetric}]
+        else:
+            encoding_dict[tensor_name] = [{'min': encoding.min,
+                                           'max': encoding.max,
+                                           'scale': encoding.delta,
+                                           'offset': encoding.offset,
+                                           'bitwidth': encoding.bw,
+                                           'is_symmetric': is_symmetric}]
 
     @staticmethod
     def _get_is_symmetric_flag_for_op_param(configs: ConfigDictType, tf_op_type: str, param_name: str):
@@ -351,16 +365,16 @@ class Adaround:
 
         # Second level of specificity which applies to all parameters only.
         try:
-            return configs[ConfigDictKeys.PARAMS]\
-                [param_name]\
+            return configs[ConfigDictKeys.PARAMS] \
+                [param_name] \
                 [ConfigDictKeys.IS_SYMMETRIC]
         except KeyError:
             pass
 
         # First level of specificity which applies to all the ops and parameters.
         try:
-            return configs[ConfigDictKeys.DEFAULTS]\
-                [ConfigDictKeys.PARAMS]\
+            return configs[ConfigDictKeys.DEFAULTS] \
+                [ConfigDictKeys.PARAMS] \
                 [ConfigDictKeys.IS_SYMMETRIC]
         except KeyError:
             pass

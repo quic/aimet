@@ -70,7 +70,30 @@ class TestAdaroundWrapper(unittest.TestCase):
 
         with tf.device(device):
             weight_tensor = tf.convert_to_tensor(weight, dtype=tf.float64)
-            alpha = AdaroundWrapper._initialize_alpha(weight_tensor, encoding)
+            alpha = AdaroundWrapper._initialize_alpha(weight_tensor, encoding, enable_per_channel=False,
+                                                      ch_axis=len(list(weight_tensor.shape)) - 1)
+
+        session = tf.compat.v1.Session()
+        session.run(tf.compat.v1.global_variables_initializer())
+
+        self.assertAlmostEqual(float(alpha.eval(session=session)[0, 0, :1, :1]), 1.1715, places=4)
+        session.close()
+
+    def _initialize_alpha_per_channel(self, device):
+        """ test initialize alpha for per-channel"""
+        tf.compat.v1.reset_default_graph()
+        np.random.seed(0)
+        weight = np.random.rand(8, 3, 12, 16)
+        encoding_per_ch = libpymo.TfEncoding()
+        encoding_per_ch.bw = 4
+        encoding_per_ch.offset = -127.0
+        encoding_per_ch.delta = 0.001551126479
+
+        encoding = [encoding_per_ch for _ in range(8)]
+        with tf.device(device):
+            weight_tensor = tf.convert_to_tensor(weight, dtype=tf.float64)
+            alpha = AdaroundWrapper._initialize_alpha(weight_tensor, encoding, enable_per_channel=True,
+                                                      ch_axis=0)
 
         session = tf.compat.v1.Session()
         session.run(tf.compat.v1.global_variables_initializer())
@@ -89,6 +112,11 @@ class TestAdaroundWrapper(unittest.TestCase):
         device = '/cpu:0'
         self._initialize_alpha(device)
 
+    def test_initialize_alpha_per_channel(self):
+        """ test initialize alpha for CPU """
+        device = '/cpu:0'
+        self._initialize_alpha_per_channel(device)
+
     def _adaround_weights(self, device):
         """ test adaround weights """
         tf.compat.v1.reset_default_graph()
@@ -102,16 +130,16 @@ class TestAdaroundWrapper(unittest.TestCase):
 
             # 1) Conv2D
             conv = tf.compat.v1.get_default_graph().get_operation_by_name('conv2d/Conv2D')
-            conv_wrapper = AdaroundWrapper(session, conv, 4, QuantScheme.post_training_tf, False, False, True)
+            conv_wrapper = AdaroundWrapper(session, conv, 4, QuantScheme.post_training_tf, False, False, True, False)
 
             # 2) MatMul
             matmul = tf.compat.v1.get_default_graph().get_operation_by_name('depthwise_conv2d_model/MatMul')
-            matmul_wrapper = AdaroundWrapper(session, matmul, 4, QuantScheme.post_training_tf, False, False, True)
+            matmul_wrapper = AdaroundWrapper(session, matmul, 4, QuantScheme.post_training_tf, False, False, True, False)
 
             # 3) Depthwise Conv2D
             depthwise_conv = tf.compat.v1.get_default_graph().get_operation_by_name('depthwise_conv2d/depthwise')
             depthwise_conv_wrapper = AdaroundWrapper(session, depthwise_conv, 4, QuantScheme.post_training_tf,
-                                                     False, False, True)
+                                                     False, False, True, False)
 
             # Initialize alpha variable
             session.run(conv_wrapper.alpha.initializer)
@@ -156,7 +184,7 @@ class TestAdaroundWrapper(unittest.TestCase):
         session.run(init)
 
         conv = tf.compat.v1.get_default_graph().get_operation_by_name('conv2d/Conv2D')
-        conv_wrapper = AdaroundWrapper(session, conv, 4, QuantScheme.post_training_tf, False, False, True)
+        conv_wrapper = AdaroundWrapper(session, conv, 4, QuantScheme.post_training_tf, False, False, True, False)
 
         # Initialize alpha variable
         session.run(conv_wrapper.alpha.initializer)
@@ -172,3 +200,77 @@ class TestAdaroundWrapper(unittest.TestCase):
         self.assertTrue(np.allclose(orig_weight, soft_rounded_weight, atol=2 * conv_wrapper.encoding.delta))
         self.assertTrue(np.allclose(orig_weight, hard_rounded_weight, atol=2 * conv_wrapper.encoding.delta))
         session.close()
+
+    def _test_broadcast_to_tensor(self, device, ch_axis: int, shape: tuple):
+        """
+        test the function _broadcast_to_tensor for different tensor shapes and channel axes
+
+        - main flow does the following:
+        weight: (A, B, C, D)
+        ch_axis: 2
+        encodings: (C,)
+        delta/offset: slice of encodings which has other params as well (C,)
+        after broadcast of encoding: (A, B, D, C) -> _get_broadcast_shape
+        after transpose of encoding: (A, B, C, D)
+
+        - This test tests broadcast from (C,) to (A, B, C, D)
+        """
+        session = tf.compat.v1.Session()
+        np.random.seed(0)
+        weight = np.random.rand(*shape)
+        # encoding is of length shape[ch_axis]
+        encoding = [np.random.rand() for _ in range(list(shape)[ch_axis])]
+
+        with tf.device(device):
+            weight_tensor = tf.convert_to_tensor(weight, dtype=tf.float64)
+            broadcasted_delta = AdaroundWrapper._broadcast_to_tensor(weight_tensor, encoding, ch_axis=ch_axis)
+
+        t = session.run(broadcasted_delta)
+
+        # verify t is of same shape as shape
+        self.assertEqual(t.shape, shape)
+
+        # verify t has same encodings across all the axis
+        res = np.all(t, axis=ch_axis)
+        self.assertEqual(res.all(), True)
+        session.close()
+
+    def test_broadcast_to_tensor_cpu(self):
+        """
+        test _get_broadcast_shape for different combinations of ch_axis and weight shapes on CPU
+        """
+        device = '/cpu:0'
+        for ch_axis in range(4):
+            self._test_broadcast_to_tensor(device, ch_axis=ch_axis, shape=(2, 3, 4, 5))
+
+        for ch_axis in range(3):
+            self._test_broadcast_to_tensor(device, ch_axis=ch_axis, shape=(5, 6, 7))
+
+    @pytest.mark.cuda
+    def test_broadcast_to_tensor_gpu(self):
+        """
+        test _get_broadcast_shape for different combinations of ch_axis and weight shapes on GPU
+        """
+        device = '/gpu:0'
+        for ch_axis in range(4):
+            self._test_broadcast_to_tensor(device, ch_axis=ch_axis, shape=(2, 3, 4, 5))
+
+        for ch_axis in range(3):
+            self._test_broadcast_to_tensor(device, ch_axis=ch_axis, shape=(5, 6, 7))
+
+
+    def test_generate_weight_transpose_perm(self):
+        """
+        test the function _generate_weight_transpose_perm
+        """
+        res = AdaroundWrapper._generate_weight_transpose_perm(shape=(2, 3, 4, 5), ch_axis=0)
+        self.assertEqual(res, [0, 1, 2, 3])
+
+        res = AdaroundWrapper._generate_weight_transpose_perm(shape=(2, 3, 4, 5), ch_axis=1)
+        self.assertEqual(res, [1, 0, 2, 3])
+
+        res = AdaroundWrapper._generate_weight_transpose_perm(shape=(2, 3, 4, 5), ch_axis=2)
+        self.assertEqual(res, [2, 0, 1, 3])
+
+        res = AdaroundWrapper._generate_weight_transpose_perm(shape=(2, 3, 4, 5), ch_axis=3)
+        self.assertEqual(res, [3, 0, 1, 2])
