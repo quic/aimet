@@ -51,7 +51,7 @@ tf.compat.v1.disable_eager_execution()
 
 
 SEED = 18452
-tf.random.set_seed(SEED)
+tf.compat.v1.random.set_random_seed(SEED)
 
 
 def _assert_equal_default(output, expected):
@@ -62,8 +62,12 @@ def _assert_equal_default(output, expected):
 def _assert_equal_tf_session(sess: tf.compat.v1.Session,
                              expected: tf.compat.v1.Session):
     assert type(sess) == type(expected)
+    ops = sorted(sess.graph.get_operations(), key=lambda op: op.name)
+    _ops = sorted(expected.graph.get_operations(), key=lambda op: op.name)
 
-    for op, _op in zip(sess.graph.get_operations(), expected.graph.get_operations()):
+    assert len(ops) == len(_ops)
+
+    for op, _op in zip(ops, _ops):
         assert op.type == _op.type
         assert op.name == _op.name
 
