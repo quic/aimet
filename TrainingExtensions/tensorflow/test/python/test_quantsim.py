@@ -288,6 +288,9 @@ class TestQuantSim(unittest.TestCase):
             if name in deactivated_quantizers:
                 self.assertTrue(int(libpymo.TensorQuantizerOpMode.passThrough),
                                 sim.session.run(name + op_mode_name_suffix))
+            else:
+                self.assertTrue(int(libpymo.TensorQuantizerOpMode.quantizeDequantize),
+                                sim.session.run(name + op_mode_name_suffix))
 
         sim.export('/tmp', 'quant_sim_model_fp16')
 
