@@ -158,7 +158,7 @@ def test_optimize_rounding_conv2d():
     orig_weight = conv.get_weights()[0]
 
     opt_params = AdaroundHyperParameters(num_iterations=1, reg_param=0.01, beta_range=(20, 2), warm_start=0.2)
-    conv_wrapper = AdaroundWrapper(conv, 4, False, QuantScheme.post_training_tf)
+    conv_wrapper = AdaroundWrapper(conv, 4, QuantScheme.post_training_tf, False)
 
     inp_data = np.random.rand(1, 10, 10, 3).astype('float32')
     out_data = np.random.rand(1, 10, 10, 16).astype('float32')
@@ -179,7 +179,7 @@ def test_optimize_rounding_matmul():
     orig_weight = matmul.get_weights()[0]
 
     opt_params = AdaroundHyperParameters(num_iterations=1, reg_param=0.01, beta_range=(20, 2), warm_start=0.2)
-    matmul_wrapper = AdaroundWrapper(matmul, 4, False, QuantScheme.post_training_tf)
+    matmul_wrapper = AdaroundWrapper(matmul, 4, QuantScheme.post_training_tf, False)
 
     inp_data = np.random.rand(1, 392).astype('float32')
     out_data = np.random.rand(1, 10).astype('float32')
@@ -200,7 +200,7 @@ def test_optimize_rounding_depthwise_conv2d():
     orig_weight = depthwise_conv2d.get_weights()[0]
 
     opt_params = AdaroundHyperParameters(num_iterations=1, reg_param=0.01, beta_range=(20, 2), warm_start=0.2)
-    depthwise_conv_wrapper = AdaroundWrapper(depthwise_conv2d, 4, False, QuantScheme.post_training_tf)
+    depthwise_conv_wrapper = AdaroundWrapper(depthwise_conv2d, 4, QuantScheme.post_training_tf, False)
 
     inp_data = np.random.rand(1, 5, 5, 10).astype('float32')
     out_data = np.random.rand(1, 3, 3, 10).astype('float32')
@@ -238,7 +238,7 @@ def test_compute_output_with_adarounded_weights():
     conv_layer = tf.keras.layers.Conv2D(4, 1, padding='same')
     conv_layer.build(input_shape=(1, 10, 10, 4))
     conv_layer.set_weights([weight_tensor] + conv_layer.get_weights()[1:])
-    conv_wrapper = AdaroundWrapper(conv_layer, weight_bw, False, quant_scheme)
+    conv_wrapper = AdaroundWrapper(conv_layer, weight_bw, quant_scheme, False)
 
     hard_recons_error, soft_recons_error = AdaroundOptimizer._eval_recons_err_metrics(conv_wrapper, None, inp_tensor,
                                                                                       out_tensor)
@@ -288,15 +288,15 @@ def test_adaround_weights():
 
     # 1) Conv2D
     conv = model.layers[1]
-    conv_wrapper = AdaroundWrapper(conv, 4, False, QuantScheme.post_training_tf)
+    conv_wrapper = AdaroundWrapper(conv, 4, QuantScheme.post_training_tf, False)
 
     # 2) MatMul
     matmul = model.layers[6]
-    matmul_wrapper = AdaroundWrapper(matmul, 4, False, QuantScheme.post_training_tf)
+    matmul_wrapper = AdaroundWrapper(matmul, 4, QuantScheme.post_training_tf, False)
 
     # 3) Depthwise Conv2D
     depthwise_conv = model.layers[3]
-    depthwise_conv_wrapper = AdaroundWrapper(depthwise_conv, 4, False, QuantScheme.post_training_tf)
+    depthwise_conv_wrapper = AdaroundWrapper(depthwise_conv, 4, QuantScheme.post_training_tf, False)
 
     matmul_wrapper.use_soft_rounding.assign(False)
     quantized_weight = matmul_wrapper.adaround_weights()

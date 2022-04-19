@@ -102,15 +102,16 @@ class TestAdaroundWrapper(unittest.TestCase):
 
             # 1) Conv2D
             conv = tf.compat.v1.get_default_graph().get_operation_by_name('conv2d/Conv2D')
-            conv_wrapper = AdaroundWrapper(session, conv, 4, False, QuantScheme.post_training_tf)
+            conv_wrapper = AdaroundWrapper(session, conv, 4, QuantScheme.post_training_tf, False, False, True)
 
             # 2) MatMul
             matmul = tf.compat.v1.get_default_graph().get_operation_by_name('depthwise_conv2d_model/MatMul')
-            matmul_wrapper = AdaroundWrapper(session, matmul, 4, False, QuantScheme.post_training_tf)
+            matmul_wrapper = AdaroundWrapper(session, matmul, 4, QuantScheme.post_training_tf, False, False, True)
 
             # 3) Depthwise Conv2D
             depthwise_conv = tf.compat.v1.get_default_graph().get_operation_by_name('depthwise_conv2d/depthwise')
-            depthwise_conv_wrapper = AdaroundWrapper(session, depthwise_conv, 4, False, QuantScheme.post_training_tf)
+            depthwise_conv_wrapper = AdaroundWrapper(session, depthwise_conv, 4, QuantScheme.post_training_tf,
+                                                     False, False, True)
 
             # Initialize alpha variable
             session.run(conv_wrapper.alpha.initializer)
@@ -155,7 +156,7 @@ class TestAdaroundWrapper(unittest.TestCase):
         session.run(init)
 
         conv = tf.compat.v1.get_default_graph().get_operation_by_name('conv2d/Conv2D')
-        conv_wrapper = AdaroundWrapper(session, conv, 4, False, QuantScheme.post_training_tf)
+        conv_wrapper = AdaroundWrapper(session, conv, 4, QuantScheme.post_training_tf, False, False, True)
 
         # Initialize alpha variable
         session.run(conv_wrapper.alpha.initializer)
