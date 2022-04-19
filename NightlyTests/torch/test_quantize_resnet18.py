@@ -38,6 +38,9 @@
 
 from __future__ import print_function
 
+import json
+import os
+
 import pytest
 import torch
 import torch.nn as nn
@@ -48,9 +51,11 @@ from torchvision import models
 from torch.optim import lr_scheduler
 
 from aimet_common.defs import QuantScheme
+from aimet_torch.qc_quantize_op import StaticGridQuantWrapper
 from aimet_torch.quantsim import QuantizationSimModel
 
 from aimet_torch.examples.imagenet_dataloader import ImageNetDataLoader
+from aimet_torch.tensor_quantizer import StaticGridPerChannelQuantizer, StaticGridPerTensorQuantizer
 from aimet_torch.utils import IterFirstX
 from aimet_torch.examples.supervised_classification_pipeline import create_stand_alone_supervised_classification_evaluator,\
     create_supervised_classification_trainer
@@ -84,6 +89,7 @@ def model_train(model, epochs, callback=None):
                                                                   callback=callback)
 
     trainer.run(data_loader.train_loader, max_epochs=epochs)
+    del data_loader
     return trainer.state.metrics['top_1_accuracy'], evaluator.state.metrics['top_1_accuracy']
 
 
@@ -128,6 +134,34 @@ def check_if_layer_weights_are_updating(trainer, model):
         assert not np.allclose(conv1_w_value.cpu().detach().numpy(), f.conv1_w_value_old.numpy())
     else:
         f.conv1_w_value_old = conv1_w_value.cpu().detach().clone()
+
+
+def save_config_file_for_per_channel_quantization():
+    quantsim_config = {
+        "defaults": {
+            "ops": {
+                "is_output_quantized": "True",
+                "is_symmetric": "False"
+            },
+            "params": {
+                "is_quantized": "True",
+                "is_symmetric": "True"
+            },
+            "per_channel_quantization": "True",
+        },
+        "params": {
+            "bias": {
+                "is_quantized": "False"
+            }
+        },
+        "op_type": {},
+        "supergroups": [],
+        "model_input": {},
+        "model_output": {}
+    }
+
+    with open('./quantsim_config.json', 'w') as f:
+        json.dump(quantsim_config, f)
 
 
 class QuantizeAcceptanceTests(unittest.TestCase):
@@ -260,6 +294,58 @@ class QuantizeAcceptanceTests(unittest.TestCase):
         print("AIMET eval delta = {}".format(aimet_model_eval_delta))
 
         self.assertEqual(0, aimet_model_eval_delta)
+
+    @pytest.mark.cuda
+    def test_per_channel_quantization_for_resnet18_range_learning(self):
+        torch.manual_seed(10)
+        save_config_file_for_per_channel_quantization()
+        # Set up trained model
+        base_pre_model_load_mark = torch.cuda.memory_allocated()
+        resnet = models.resnet18()
+        resnet = resnet.to(torch.device('cuda'))
+        resnet.eval()
+        base_model_loaded_mark = torch.cuda.memory_allocated()
+
+        dummy_input = torch.rand(1, 3, 224, 224).cuda()
+        sim = QuantizationSimModel(resnet, quant_scheme=QuantScheme.training_range_learning_with_tf_init,
+                                   default_param_bw=8,
+                                   default_output_bw=8, config_file='./quantsim_config.json',
+                                   dummy_input=dummy_input)
+
+        # Quantize
+        sim.compute_encodings(model_eval, 1)
+
+        aimet_model_quantize_mark = torch.cuda.memory_allocated()
+        aimet_model_quantize_delta = aimet_model_quantize_mark - base_model_loaded_mark
+
+        assert len(sim.model.conv1.param_quantizers['weight'].encoding) == 64
+        assert len(sim.model.fc.param_quantizers['weight'].encoding) == 1000
+
+        # Check that different encodings are computed for different channels
+        assert sim.model.conv1.param_quantizers['weight'].encoding[0] != \
+               sim.model.conv1.param_quantizers['weight'].encoding[1]
+        assert sim.model.fc.param_quantizers['weight'].encoding[0] != \
+               sim.model.fc.param_quantizers['weight'].encoding[1]
+
+        # Train resnet model
+        _ = model_train(sim.model, epochs=1)
+
+        aimet_model_train_mark = torch.cuda.memory_allocated()
+        aimet_model_train_delta = aimet_model_train_mark - aimet_model_quantize_mark
+        assert aimet_model_train_delta < (200 * (10 ** 6))
+
+        sim.export('./data/', 'resnet18_per_channel_quant', dummy_input.cpu())
+
+        with open("./data/resnet18_per_channel_quant.encodings", "r") as encodings_file:
+            encodings = json.load(encodings_file)
+
+        assert len(encodings['param_encodings']) == 62
+        assert encodings['param_encodings']['conv1.weight'][1]['bitwidth'] == 8
+        assert encodings['param_encodings']['conv1.weight'][1]['is_symmetric'] == 'True'
+
+        # Remove config files
+        os.remove('./quantsim_config.json')
+        os.remove("./data/resnet18_per_channel_quant.encodings")
 
     def test_dummy(self):
         # pytest has a 'feature' that returns an error code when all tests for a given suite are not selected
