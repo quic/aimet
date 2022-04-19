@@ -49,9 +49,9 @@ from aimet_common.connected_graph.connectedgraph_utils import get_all_input_ops,
 from aimet_common.quantsim_config.json_config_importer import ConfigDictKeys, ConfigType, SupergroupType, OpType, \
     ParamType, DefaultsType, OpTypeType, ConfigDictType
 from aimet_common.quantsim_config.quantsim_config import QuantSimConfigurator as AimetCommonQuantSimConfigurator, \
-    get_all_ops_in_neighborhood
+    get_all_ops_in_neighborhood, get_setting_type, ENFORCE_TARGET_DTYPE_BITWIDTH_CONFIG, \
+    DEFAULT_OVERRIDE_SUPPORTED_KERNEL_INDEX, is_current_config_same_as_override_option
 from aimet_common.quantsim_config.quantsim_config import SupergroupConfigCallback as AimetCommonSupergroupConfigCallback
-from aimet_common.quantsim_config.quantsim_config import get_setting_type, ENFORCE_TARGET_DTYPE_BITWIDTH_CONFIG
 from aimet_torch.qc_quantize_op import QcQuantizeWrapper
 from aimet_torch.tensor_quantizer import TensorQuantizer
 from aimet_torch.meta.connectedgraph import ConnectedGraph
@@ -416,12 +416,14 @@ class QuantSimConfigurator(AimetCommonQuantSimConfigurator):
             for onnx_type in onnx_types:
                 if onnx_type in op_configs:
                     op_config = op_configs[onnx_type]
+                    logger.info(' Set op level config for op = {%s}', onnx_type)
                     self._set_config_for_module(input_output_tensor_quantizers, op_config, modified_tensor_quantizers,
                                                 module)
         # Set op type configs for elementwise ops
         for op, input_output_tensor_quantizers in self._elementwise_op_to_tensor_quantizers_dict.items():
             if op.type in op_configs:
                 op_config = op_configs[op.type]
+                logger.info(' Set op level config for elementwise op = {%s}', op.type)
                 self._set_config_for_module(input_output_tensor_quantizers, op_config, modified_tensor_quantizers)
 
     def _set_config_for_module(self, input_output_tensor_quantizers: TensorQuantizersTupleType, op_config: OpType,
@@ -459,6 +461,10 @@ class QuantSimConfigurator(AimetCommonQuantSimConfigurator):
                 if quantsim_param_name is not None and quantsim_param_name in op_config[ConfigDictKeys.PARAMS]:
                     param_config = op_config[ConfigDictKeys.PARAMS][quantsim_param_name]
                     _set_config_for_param(quantsim_wrapper.param_quantizers[param_name], param_config)
+
+                # override op level config if it is enforced
+                if ENFORCE_TARGET_DTYPE_BITWIDTH_CONFIG and ConfigDictKeys.SUPPORTED_KERNELS in op_config:
+                    self._apply_overrides_for_module(op_config, quantsim_wrapper)
 
     def _set_supergroup_configs(self, supergroups_configs: List[SupergroupType]):
         """
@@ -501,7 +507,7 @@ class QuantSimConfigurator(AimetCommonQuantSimConfigurator):
 
     # -----------------------------------[ override support begin] --------------------------------------------- #
 
-    def _override_default_param_bw_dtype(self, bitwidth: int, data_type: QuantizationDataType):
+    def _override_default_param_bw_dtype(self, data_type: QuantizationDataType, bitwidth: int):
         """
         overrides data type and bitwidth default config for param quantizers
         :param bitwidth: bitwidth
@@ -510,16 +516,13 @@ class QuantSimConfigurator(AimetCommonQuantSimConfigurator):
         """
         # Set configs for all params
         for quantsim_wrapper in self._module_to_quantsim_wrapper_dict.values():
-            if quantsim_wrapper.param_quantizers:
-                for param_quantizer in quantsim_wrapper.param_quantizers.values():
-                    param_quantizer.data_type = data_type
-                    param_quantizer.bitwidth = bitwidth
+            _override_param_bw_dtype(quantsim_wrapper, data_type, bitwidth)
 
-    def _override_default_act_bw_dtype(self, bitwidth: int, data_type: QuantizationDataType):
+    def _override_default_act_bw_dtype(self, data_type: QuantizationDataType, bitwidth: int):
         """
         overrides data type and bw default config for input/output quantizers.
-        :param bitwidth: bitwidth to be configured
         :param data_type: data type as QuantizationDataType
+        :param bitwidth: bitwidth to be configured
         :return:
         """
 
@@ -538,39 +541,85 @@ class QuantSimConfigurator(AimetCommonQuantSimConfigurator):
         :param default_configs: Default configurations for quantizers.
         :return:
         """
-        if not _current_config_in_supported_kernels(self._default_data_type,
-                                                    self._default_output_bw,
-                                                    self._default_param_bw,
-                                                    default_configs[ConfigDictKeys.SUPPORTED_KERNELS]):
-            config_file_default_act_bw_dtype_config = default_configs[ConfigDictKeys.SUPPORTED_KERNELS][0][ConfigDictKeys.ACTIVATION]
-            config_file_default_param_bw_dtype_config = default_configs[ConfigDictKeys.SUPPORTED_KERNELS][0][ConfigDictKeys.PARAM]
+        if is_current_config_same_as_override_option(QuantDtypeBwInfo(self._default_data_type,
+                                                                      self._default_output_bw,
+                                                                      self._default_param_bw),
+                                                     default_configs[ConfigDictKeys.SUPPORTED_KERNELS]):
+            logger.info('Default quantsim config is same as override option at override index {%s}. Skipping override',
+                        DEFAULT_OVERRIDE_SUPPORTED_KERNEL_INDEX)
+            return
 
-            # keep the updated with defaults, to be used later to apply op level config
-            self._default_data_type = config_file_default_act_bw_dtype_config[ConfigDictKeys.DTYPE]
-            self._default_output_bw = config_file_default_act_bw_dtype_config[ConfigDictKeys.BITWIDTH]
-            self._default_param_bw = config_file_default_param_bw_dtype_config[ConfigDictKeys.BITWIDTH]
+        config_file_default_act_bw_dtype_config = default_configs[ConfigDictKeys.SUPPORTED_KERNELS][DEFAULT_OVERRIDE_SUPPORTED_KERNEL_INDEX][ConfigDictKeys.ACTIVATION]
+        config_file_default_param_bw_dtype_config = default_configs[ConfigDictKeys.SUPPORTED_KERNELS][DEFAULT_OVERRIDE_SUPPORTED_KERNEL_INDEX][ConfigDictKeys.PARAM]
 
-            logger.info('Default quantsim config not in target default supported kernels.'
-                        ' Enforcing target kernel config for act bw = {%s} and dtype = {%s}',
-                        self._default_output_bw,
-                        self._default_data_type)
+        # keep the updated with defaults, to be used later to apply op level config
+        self._default_data_type = config_file_default_act_bw_dtype_config[ConfigDictKeys.DTYPE]
+        self._default_output_bw = config_file_default_act_bw_dtype_config[ConfigDictKeys.BITWIDTH]
+        self._default_param_bw = config_file_default_param_bw_dtype_config[ConfigDictKeys.BITWIDTH]
 
-            self._override_default_act_bw_dtype(self._default_output_bw,
-                                                self._default_data_type)
+        logger.info('Target default supported kernel at override index {%s} is different from quantsim defaults.'
+                    ' Enforcing target kernel config for act bw = {%s} and dtype = {%s}',
+                    DEFAULT_OVERRIDE_SUPPORTED_KERNEL_INDEX,
+                    self._default_output_bw,
+                    self._default_data_type)
 
-            logger.info('Default quantsim config not in target default supported kernels.'
-                        ' Enforcing target kernel config for param bw = {%s} and dtype = {%s}',
-                        self._default_param_bw,
-                        self._default_data_type)
+        self._override_default_act_bw_dtype(self._default_data_type, self._default_output_bw)
 
-            # override param config defaults.
-            self._override_default_param_bw_dtype(self._default_param_bw,
-                                                  self._default_data_type)
+        logger.info('Target default supported kernel at override index {%s} is different from quantsim defaults.'
+                    ' Enforcing target kernel config for param bw = {%s} and dtype = {%s}',
+                    DEFAULT_OVERRIDE_SUPPORTED_KERNEL_INDEX,
+                    self._default_param_bw,
+                    self._default_data_type)
 
-        else:
-            logger.info('Default quantsim config found in default target supported kernel list. Skip override')
+        # override param config defaults.
+        self._override_default_param_bw_dtype(self._default_data_type, self._default_param_bw)
+
+    def _apply_overrides_for_module(self, op_config: OpType, quantsim_wrapper):
+        """
+        Applies op level overrides based on supported_kernels specified for a given module.
+        :param op_config: Op level configs from config file.
+        :param quantsim_wrapper: Op level quantizer that needs to be updated.
+        :return:
+        """
+        # ---------------------------------- [ op level overrides ] ---------------------------------------- #
+        # AIMET applies op level override only when a lower precision kernel is not supported for a given op.
+        # For example, if quantsim is created with a default act: int8, param: int8 quantization
+        # And, if some op has only FP16 kernel support on a given target, this can be specified under
+        # op level config using supported_kernels option.
+        # It must be noted that, AIMET shall not perform conversions ops (such as int8 -> FP16) that is done on-target,
+        # as there is no noise to be simulated while going from lower precision to higher precision.
+        # This means, if an op supports only higher precision kernel, there are two ways it is handled during override :
+        # a. op has params : param quantizers are updated to higher precision (ex: FP 16 in this case),
+        # No override applied to in/out tensor quantizers.
+        # b. op has no params : no override.
+        # --------------------------------------------------------------------------------------------------- #
+
+        if not is_current_config_same_as_override_option(
+                QuantDtypeBwInfo(self._default_data_type, self._default_output_bw,
+                                 self._default_param_bw), op_config[ConfigDictKeys.SUPPORTED_KERNELS]):
+            param_bw = op_config[ConfigDictKeys.SUPPORTED_KERNELS][DEFAULT_OVERRIDE_SUPPORTED_KERNEL_INDEX]['param']['bitwidth']
+            param_dtype = op_config[ConfigDictKeys.SUPPORTED_KERNELS][DEFAULT_OVERRIDE_SUPPORTED_KERNEL_INDEX]['param']['dtype']
+            logger.info(' Enforcing target kernel config for param bw = {%s} and dtype = {%s}',
+                        param_bw,
+                        param_dtype)
+            _override_param_bw_dtype(quantsim_wrapper, param_dtype, param_bw)
 
     # -----------------------------------[ override support end] --------------------------------------------- #
+
+
+def _override_param_bw_dtype(quantsim_wrapper, data_type: QuantizationDataType, bitwidth: int):
+    """
+    overrides data type and bitwidth default config for param quantizers of given quantsim wrapper.
+    :param quantsim_wrapper : Quantizer wrapper that to which param override will be applied to.
+    :param bitwidth: bitwidth
+    :param data_type: data type as QuantizationDataType
+    :return:
+    """
+    # Set configs for all params
+    if quantsim_wrapper.param_quantizers:
+        for param_quantizer in quantsim_wrapper.param_quantizers.values():
+            param_quantizer.data_type = data_type
+            param_quantizer.bitwidth = bitwidth
 
 
 def _create_module_to_quantsim_wrapper_dict(model: torch.nn.Module) -> Dict[torch.nn.Module, QcQuantizeWrapper]:
@@ -707,28 +756,3 @@ def _is_elementwise_functional(op: Op) -> bool:
     :return: True if op is functional elementwise, False otherwise
     """
     return op.type in ['Add', 'Mul', 'Concat', 'Div'] and op.get_module() is None
-
-
-def _current_config_in_supported_kernels(current_dtype, current_act_bw,
-                                         current_param_bw, supported_kernels: Dict) -> bool:
-    """
-    Checks if given bw/dtype config is in (act, param) in supported kernels provided.
-    :param supported_kernels: Configs passed for supported kernels (Default level in config file)
-    :return: True, if current config is part of the supported Kernels, False otherwise.
-    """
-
-    for supported_kernel_config in supported_kernels:
-        # retrieve one set of act/param kernel config support
-        act_config = supported_kernel_config['activation']
-        param_config = supported_kernel_config['param']
-
-        # we need to compare combination of act/param with default user provided config.
-        # Because a given kernel support is valid only as a combination.
-        if act_config['dtype'] == current_dtype and \
-                act_config['bitwidth'] == current_act_bw and \
-                param_config['dtype'] == current_dtype and \
-                param_config['bitwidth'] == current_param_bw:
-
-            return True
-
-    return False
