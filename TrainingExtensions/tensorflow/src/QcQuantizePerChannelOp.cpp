@@ -53,7 +53,7 @@ using namespace tensorflow;
 using namespace std;
 using namespace gtl;
 
-enum AxisHandlings {LAST_AXIS=0, LAST_TWO_AXES};
+enum AxisHandling {LAST_AXIS=0, LAST_TWO_AXES};
 
 REGISTER_OP("QcQuantizePerChannel")
     .Input("in_tensor: T")     // list of input tensors (weights/activations)
@@ -63,7 +63,7 @@ REGISTER_OP("QcQuantizePerChannel")
         .Input("encoding_max: double")
         .Input("bit_width: int8")
         .Input("use_symmetric_encoding: bool")
-        .Input("axis: int32")
+        .Input("axis_handling: int32")
         .Input("is_training: bool")
         .Output("out_tensor: T")   // list of output tensors (weights/activations)
 
@@ -74,25 +74,31 @@ REGISTER_OP("QcQuantizePerChannel")
           return Status::OK();
         });
 
-TTypes<float>::ConstMatrix getInTensorTwoDim(const Tensor& inTensor, const AxisHandlings axisHandling)
+TTypes<float>::ConstMatrix getTwoDimTensor(const Tensor& tensor, const AxisHandling axisHandling)
 {
-    if (axisHandling == AxisHandlings::LAST_TWO_AXES) {
+    if (axisHandling == AxisHandling::LAST_TWO_AXES)
+    {
         // Combine first two dimensions and last two dimensions to isolate number of channels in the final
         // dimension.
-        return inTensor.flat_inner_outer_dims<float, 2>(1);
-    } else {
-        return inTensor.flat_inner_dims<float, 2>();
+        return tensor.flat_inner_outer_dims<float, 2>(1);
+    }
+    else
+    {
+        return tensor.flat_inner_dims<float, 2>();
     }
 }
 
-TTypes<float>::Matrix getOutTensorTwoDim(Tensor* outTensor, const AxisHandlings axisHandling)
+TTypes<float>::Matrix getTwoDimTensor(Tensor* tensor, const AxisHandling axisHandling)
 {
-    if (axisHandling == AxisHandlings::LAST_TWO_AXES) {
+    if (axisHandling == AxisHandling::LAST_TWO_AXES)
+    {
         // Combine first two dimensions and last two dimensions to isolate number of channels in the final
         // dimension.
-        return outTensor->flat_inner_outer_dims<float, 2>(1);
-    } else {
-        return outTensor->flat_inner_dims<float, 2>();
+        return tensor->flat_inner_outer_dims<float, 2>(1);
+    }
+    else
+    {
+        return tensor->flat_inner_dims<float, 2>();
     }
 }
 
@@ -177,6 +183,7 @@ void modeSpecificAction(const D& d, const T* inTensor, size_t count, T* outTenso
     }
     default:
     {
+        std::cout << "Op mode enum is " << (int)opModeEnum << "\n";
         assert(0);
     }
     }
@@ -256,19 +263,22 @@ public:
         const int8* bitwidth = bitwidthTensor->flat<int8>().data();
 
         // Read axis for per channel quantization
-        const Tensor* axisTensor;
-        OP_REQUIRES_OK(context, context->input("axis", &axisTensor));
-        const int32* axis = axisTensor->flat<int32>().data();
+        const Tensor* axisHandlingTensor;
+        OP_REQUIRES_OK(context, context->input("axis_handling", &axisHandlingTensor));
+        const int32* axisHandlingInt = axisHandlingTensor->flat<int32>().data();
 
         // Move axis to correct device and get value
-        auto axisHandling = copyLiteralToHost<int32>(context->eigen_device<Device>(), axis);
-        auto axisHandlingEnum = static_cast<const AxisHandlings>(axisHandling);
+        auto axisHandling = copyLiteralToHost<int32>(context->eigen_device<Device>(), axisHandlingInt);
+        auto axisHandlingEnum = static_cast<const AxisHandling>(axisHandling);
 
         // Get number of channels
         int channelShape;
-        if (axisHandlingEnum == AxisHandlings::LAST_TWO_AXES) {
+        if (axisHandlingEnum == AxisHandling::LAST_TWO_AXES)
+        {
             channelShape = shapeVector[numDimensionsTensor-2] * shapeVector[numDimensionsTensor-1];
-        } else {
+        }
+        else
+        {
             // For normal case, last axis as number of channels.
             // This includes conv transpose since py function will transpose kernel prior to this op.
             channelShape = shapeVector[numDimensionsTensor-1];
@@ -310,11 +320,15 @@ public:
                 // For linear layers
                 int numElements = shapeVector[0];
                 // For conv layers
-                if (numDimensionsTensor == 4) {
-                    if (axisHandlingEnum == AxisHandlings::LAST_TWO_AXES) {
+                if (numDimensionsTensor == 4)
+                {
+                    if (axisHandlingEnum == AxisHandling::LAST_TWO_AXES)
+                    {
                         // In tf nn depthwise case, 3rd and 4th dimensions will be combined as number of channels.
                         numElements = numElements * shapeVector[1];
-                    } else {
+                    }
+                    else
+                    {
                         numElements = numElements * shapeVector[1] * shapeVector[2];
                     }
                 }
@@ -322,8 +336,8 @@ public:
                 OP_REQUIRES_OK(context, context->allocate_temp(DT_FLOAT, TensorShape({numElements, 2}), &temp1));
                 OP_REQUIRES_OK(context, context->allocate_temp(DT_FLOAT, TensorShape({numElements, 2}), &temp2));
 
-                TTypes<float>::ConstMatrix inTensorTwoDim = getInTensorTwoDim(inTensor, axisHandlingEnum);
-                TTypes<float>::Matrix outTensorTwoDim = getOutTensorTwoDim(outTensor, axisHandlingEnum);
+                TTypes<float>::ConstMatrix inTensorTwoDim = getTwoDimTensor(inTensor, axisHandlingEnum);
+                TTypes<float>::Matrix outTensorTwoDim = getTwoDimTensor(outTensor, axisHandlingEnum);
 
                 for (int channel = 0; channel < channelShape; channel++)
                 {

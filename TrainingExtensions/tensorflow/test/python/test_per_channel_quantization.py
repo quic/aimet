@@ -133,7 +133,7 @@ class TestTrainingExtensionsQcQuantizeOpPerChannel(unittest.TestCase):
                                                                                  encoding_max=encoding_max,
                                                                                  bit_width=bit_width,
                                                                                  use_symmetric_encoding=use_symmetric_encoding,
-                                                                                 axis=axis_handling,
+                                                                                 axis_handling=axis_handling,
                                                                                  is_training=is_training)
 
             inp_tensor = sess.graph.get_tensor_by_name('input:0')
@@ -198,12 +198,12 @@ class TestTrainingExtensionsQcQuantizeOpPerChannel(unittest.TestCase):
 
             mode_var = tf.Variable(initial_value=int(libpymo.TensorQuantizerOpMode.oneShotQuantizeDequantize),
                                    trainable=False, dtype=tf.int32)
-            axis = tf.Variable(initial_value=AxisHandling.LAST_AXIS.value, trainable=False, dtype=tf.int32)
+            axis_handling = tf.Variable(initial_value=AxisHandling.LAST_AXIS.value, trainable=False, dtype=tf.int32)
             is_training = tf.keras.backend.learning_phase()
 
             sess.run([mode_var.initializer, tensor_quant_ref.initializer, encoding_min.initializer,
                       encoding_max.initializer, bit_width.initializer, use_symmetric_encoding.initializer,
-                      axis.initializer])
+                      axis_handling.initializer])
             with tf.device("/device:GPU:0"):
                 pass_through_op_output = zero_out_module.qc_quantize_per_channel(name='quant_op', in_tensor=inp,
                                                                                  op_mode=mode_var,
@@ -212,7 +212,7 @@ class TestTrainingExtensionsQcQuantizeOpPerChannel(unittest.TestCase):
                                                                                  encoding_max=encoding_max,
                                                                                  bit_width=bit_width,
                                                                                  use_symmetric_encoding=use_symmetric_encoding,
-                                                                                 axis=axis,
+                                                                                 axis_handling=axis_handling,
                                                                                  is_training=is_training)
 
             inp_tensor = sess.graph.get_tensor_by_name('input:0')
@@ -298,7 +298,7 @@ class TestTrainingExtensionsQcQuantizeOpPerChannel(unittest.TestCase):
                                                                                  encoding_max=encoding_max,
                                                                                  bit_width=bit_width,
                                                                                  use_symmetric_encoding=use_symmetric_encoding,
-                                                                                 axis=axis_handling,
+                                                                                 axis_handling=axis_handling,
                                                                                  is_training=is_training)
 
             inp_tensor = sess.graph.get_tensor_by_name('depthwise_kernel:0')
@@ -381,7 +381,8 @@ class TestTrainingExtensionsQcQuantizeOpPerChannel(unittest.TestCase):
                                                                                  encoding_max=encoding_max,
                                                                                  bit_width=bit_width,
                                                                                  use_symmetric_encoding=use_symmetric_encoding,
-                                                                                 axis=axis_handling, is_training=is_training)
+                                                                                 axis_handling=axis_handling,
+                                                                                 is_training=is_training)
 
         inp_tensor = sess.graph.get_tensor_by_name('input:0')
         inp_data = np.ones((2, 3))
@@ -453,7 +454,8 @@ class TestTrainingExtensionsQcQuantizeOpPerChannel(unittest.TestCase):
                                                                                  encoding_max=encoding_max,
                                                                                  bit_width=bit_width,
                                                                                  use_symmetric_encoding=use_symmetric_encoding,
-                                                                                 axis=axis_handling, is_training=is_training)
+                                                                                 axis_handling=axis_handling,
+                                                                                 is_training=is_training)
 
         inp_tensor = sess.graph.get_tensor_by_name('input:0')
         inp_data = np.ones(3)
