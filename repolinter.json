@@ -19,7 +19,7 @@
           ],
           "skip-paths-matching": {
             "patterns": [
-              "TrainingExtensions/tensorflow/src/python/graph_editor"
+              "TrainingExtensions/tensorflow/src/python/graph_editor/*"
             ]
           },
           "lineCount": 40,
