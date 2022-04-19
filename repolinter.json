@@ -1,0 +1,35 @@
+{
+  "extends": "https://raw.githubusercontent.com/todogroup/repolinter/master/rulesets/default.json",
+  "rules": {
+    "source-license-headers-exist": {
+      "level": "error",
+      "rule": {
+        "type": "file-starts-with",
+        "options": {
+          "globsAll": [
+            "**/*.py",
+            "**/*.js",
+            "**/*.c",
+            "**/*.cc",
+            "**/*.cpp",
+            "**/*.h",
+            "**/*.ts",
+            "**/*.sh",
+            "**/*.rs"
+          ],
+          "skip-paths-matching": {
+            "patterns": [
+              "TrainingExtensions/tensorflow/src/python/graph_editor"
+            ]
+          },
+          "lineCount": 40,
+          "patterns": [
+            "Copyright.*Qualcomm Innovation Center, Inc|©.*Qualcomm Innovation Center, Inc",
+            "SPDX-License-Identifier"
+          ],
+          "flags": "i"
+        }
+      }
+    }
+  }
+}
