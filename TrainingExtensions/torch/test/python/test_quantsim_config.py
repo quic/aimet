@@ -1048,26 +1048,25 @@ class TestQuantsimConfig:
                                    default_data_type=QuantizationDataType.int, default_output_bw=8, default_param_bw=8)
         sim.compute_encodings(forward_fn, forward_pass_callback_args=None)
 
-        # enforce is true, however default quantsim bw / dtype (int 8) is in the config file supported kernels
-        # activation : bw =8 , int
-        # param : bw = 8, int
+        # enforce is true, however default quantsim bw / dtype (fp16) is not the config file supported kernels override at index 0.
+        # apply override 0 # activation : bw = 16, float # param : bw = 16, float
         assert(sim.model.conv1.param_quantizers['weight'].enabled == True)
-        assert(sim.model.conv1.param_quantizers['weight'].bitwidth == 8)
-        assert(sim.model.conv1.param_quantizers['weight'].data_type == QuantizationDataType.int)
+        assert(sim.model.conv1.param_quantizers['weight'].bitwidth == 16)
+        assert(sim.model.conv1.param_quantizers['weight'].data_type == QuantizationDataType.float)
 
-        assert(sim.model.conv1.output_quantizers[0].bitwidth == 8)
-        assert(sim.model.conv1.output_quantizers[0].data_type == QuantizationDataType.int)
+        assert(sim.model.conv1.output_quantizers[0].bitwidth == 16)
+        assert(sim.model.conv1.output_quantizers[0].data_type == QuantizationDataType.float)
 
         assert(sim.model.fc.param_quantizers['weight'].enabled)
         assert(sim.model.fc.param_quantizers['bias'].enabled == False)
-        assert(sim.model.fc.param_quantizers['weight'].bitwidth == 8)
-        assert(sim.model.fc.param_quantizers['weight'].data_type == QuantizationDataType.int)
-        assert(sim.model.fc.param_quantizers['bias'].bitwidth == 8)
-        assert(sim.model.fc.param_quantizers['bias'].data_type == QuantizationDataType.int)
-        assert(sim.model.fc.output_quantizers[0].bitwidth == 8)
-        assert(sim.model.fc.output_quantizers[0].data_type == QuantizationDataType.int)
-        assert(sim.model.relu1.output_quantizers[0].bitwidth == 8)
-        assert(sim.model.relu1.output_quantizers[0].data_type == QuantizationDataType.int)
+        assert(sim.model.fc.param_quantizers['weight'].bitwidth == 16)
+        assert(sim.model.fc.param_quantizers['weight'].data_type == QuantizationDataType.float)
+        assert(sim.model.fc.param_quantizers['bias'].bitwidth == 16)
+        assert(sim.model.fc.param_quantizers['bias'].data_type == QuantizationDataType.float)
+        assert(sim.model.fc.output_quantizers[0].bitwidth == 16)
+        assert(sim.model.fc.output_quantizers[0].data_type == QuantizationDataType.float)
+        assert(sim.model.relu1.output_quantizers[0].bitwidth == 16)
+        assert(sim.model.relu1.output_quantizers[0].data_type == QuantizationDataType.float)
 
         # remove test config created
         qsim_config.ENFORCE_TARGET_DTYPE_BITWIDTH_CONFIG = False
@@ -1377,27 +1376,23 @@ class TestQuantsimConfig:
             json.dump(quantsim_config, f)
 
         INPUT_SHAPE = (1, 3, 32, 32)
-        def forward_fn(model, _):
-            torch.manual_seed(10)
-            model.eval()
-            with torch.no_grad():
-                _ = model(torch.randn(INPUT_SHAPE))
         supported_kernels = {}
         from aimet_torch.quantsim_config.quantsim_config import QuantSimConfigurator
         dummy_input = torch.randn(INPUT_SHAPE)
         connected_graph = ConnectedGraph(model, dummy_input)
-
         qsim_config = QuantSimConfigurator(model, connected_graph, config_file, supported_kernels,
                                            quantsim_output_bw=8, quantsim_param_bw=8,
                                            quantsim_data_type=QuantizationDataType.int)
 
         qsim_dtype_bw = QuantDtypeBwInfo(data_type=QuantizationDataType.int, act_bw=8 , param_bw=8)
-
+        exception_raised = False
         try:
             qsim_config.check_correctness_of_dtype_bw_rules(qsim_dtype_bw)
         except NotImplementedError as exc:
             print(" Test raised exception as expected ", exc)
-            assert True
+            exception_raised = True
+
+        assert exception_raised
 
         # remove test config created
         if os.path.exists('./data/quantsim_config.json'):
@@ -1492,13 +1487,275 @@ class TestQuantsimConfig:
                                            quantsim_data_type=QuantizationDataType.int)
 
         qsim_dtype_bw = QuantDtypeBwInfo(data_type=QuantizationDataType.int, act_bw=8 , param_bw=8)
-
+        exception_raised = False
         try:
             qsim_config.check_correctness_of_dtype_bw_rules(qsim_dtype_bw)
         except NotImplementedError as exc:
             print(" Test raised exception as expected ", exc)
-            assert True
+            exception_raised = True
+        assert exception_raised
 
         # remove test config created
+        if os.path.exists('./data/quantsim_config.json'):
+            os.remove('./data/quantsim_config.json')
+
+    def test_target_rule_enforced_apply_default_and_op_level_overrides_valid_case(self):
+        """
+        validates Config overrides provided are valid combination and application of both default level as well as
+        op level kernel overrides for dtype and bitiwdth.
+        Quantsim created with (int4, int4) defaults
+        Default supported kernels override (at index 0 ) is (int 8, int 8) --> applied.
+        Default at op level override at index 0 of supported_kernels for Conv type is
+        (fp 16, fp16) --> applied to weight param.
+        :return:
+        """
+
+        model = SingleResidual()
+        model.eval()
+
+        # quantsim config has default kernel overrides as well as op level kernel override
+        # we begin with quantsim default config (int 4, int 4), during isntantiation of quantsim object.
+        # Then, using config file we apply two levels of overrides.
+        # 1) default supported_kernels at index 0 , is used to override default act/param bw dtype with int8 / int8
+        # 2) After this, at op level, specifically for Conv types, there is a override provided as fp16/ fp16
+        # So, param quantizers of conv shall be updated to FP16 as a override, while retaining output at int 8 as
+        # configured by default level supported_kernels.
+
+        quantsim_config = {
+            "defaults": {
+                "ops": {
+                    "is_output_quantized": "True"
+                },
+                "params": {
+                    "is_quantized": "True"
+                },
+                "supported_kernels": [
+                    {
+                        "activation": {
+                            "bitwidth": 8,
+                            "dtype": "int"
+                        },
+                        "param": {
+                            "bitwidth": 8,
+                            "dtype": "int"
+                        }
+                    },
+                    {
+                        "activation": {
+                            "bitwidth": 4,
+                            "dtype": "int"
+                        },
+                        "param": {
+                            "bitwidth": 4,
+                            "dtype": "int"
+                        }
+                    }
+                ]
+            },
+            "params": {
+                "bias": {
+                    "is_quantized": "False"
+                }
+            },
+            "op_type": {
+                "Conv": {
+                    "is_input_quantized": "True",
+                    "is_output_quantized": "True",
+                    "params": {
+                        "weight": {
+                            "is_quantized": "True"
+                        },
+                        "bias": {
+                            "is_quantized": "False"
+                        }
+                    },
+                    "supported_kernels":
+                        [
+                            {
+                                "activation": {
+                                    "bitwidth": 16,
+                                    "dtype": "float"
+                                },
+                                "param": {
+                                    "bitwidth": 16,
+                                    "dtype": "float"
+                                }
+                            },
+                        ]
+                }
+            },
+            "supergroups": [
+            ],
+            "model_input": {
+                "is_input_quantized": "True"
+            },
+            "model_output": {}
+        }
+
+        with open('./data/quantsim_config.json', 'w') as f:
+            json.dump(quantsim_config, f)
+
+        INPUT_SHAPE = (1, 3, 32, 32)
+        def forward_fn(model, _):
+            torch.manual_seed(10)
+            model.eval()
+            with torch.no_grad():
+                _ = model(torch.randn(INPUT_SHAPE))
+
+        # set enforce to true for this test
+        qsim_config.ENFORCE_TARGET_DTYPE_BITWIDTH_CONFIG = True
+        sim = QuantizationSimModel(model, quant_scheme=QuantScheme.post_training_tf_enhanced,
+                                   config_file='./data/quantsim_config.json',
+                                   dummy_input=torch.rand(1, 3, 32, 32), in_place=True,
+                                   default_data_type=QuantizationDataType.int, default_output_bw=4, default_param_bw=4)
+        sim.compute_encodings(forward_fn, forward_pass_callback_args=None)
+
+        # enforce is set to true
+        # default supported kernels at index DEFAULT_OVERRIDE_SUPPORTED_KERNEL_INDEX (=0 in this case)
+        # is not same as default quantsim bw and dtype(int 4/int4), apply default overrides (int8/ int8).
+
+        assert(sim.model.fc.param_quantizers['weight'].enabled)
+        assert(sim.model.fc.param_quantizers['bias'].enabled == False)
+        assert(sim.model.fc.param_quantizers['weight'].bitwidth == 8)
+        assert(sim.model.fc.param_quantizers['weight'].data_type == QuantizationDataType.int)
+        assert(sim.model.fc.param_quantizers['bias'].bitwidth == 8)
+        assert(sim.model.fc.param_quantizers['bias'].data_type == QuantizationDataType.int)
+        assert(sim.model.fc.output_quantizers[0].bitwidth == 8)
+        assert(sim.model.fc.output_quantizers[0].data_type == QuantizationDataType.int)
+        assert(sim.model.relu1.output_quantizers[0].bitwidth == 8)
+        assert(sim.model.relu1.output_quantizers[0].data_type == QuantizationDataType.int)
+
+        # at op level (for Conv) check param quantizers are updated to fp16 while output is still retained at int8
+        assert(sim.model.conv1.param_quantizers['weight'].enabled == True)
+        assert(sim.model.conv1.param_quantizers['weight'].bitwidth == 16)
+        assert(sim.model.conv1.param_quantizers['weight'].data_type == QuantizationDataType.float)
+
+        assert(sim.model.conv1.output_quantizers[0].bitwidth == 8)
+        assert(sim.model.conv1.output_quantizers[0].data_type == QuantizationDataType.int)
+
+        # remove test config created
+        qsim_config.ENFORCE_TARGET_DTYPE_BITWIDTH_CONFIG = False
+        if os.path.exists('./data/quantsim_config.json'):
+            os.remove('./data/quantsim_config.json')
+
+    def test_target_rule_enforced_apply_default_and_op_level_overrides_invalid_case(self):
+        """
+        Tests application of override config rule that is not valid.
+        :return:
+        """
+        model = SingleResidual()
+        model.eval()
+
+        # quantsim config has default kernel overrides as well as op lebel kernel override
+        # we begin with quantsim default config (int 4, int 4), during isntantiation of quantsim object.
+        # Then, using config file we apply two levels of overrides.
+        # 1) default supported_kernels at index 0 , is used to override default act/param bw dtype with int8 / int8
+        # 2) After this, at op level, specifically for Conv types, there is a override provided as fp16/ fp16
+        # So, param quantizers of conv shall be updated to FP16 as a override, while retaining output at int 8 as
+        # configured by default level supported_kernels.
+
+        quantsim_config = {
+            "defaults": {
+                "ops": {
+                    "is_output_quantized": "True"
+                },
+                "params": {
+                    "is_quantized": "True"
+                },
+                "supported_kernels": [
+                    {
+                        "activation": {
+                            "bitwidth": 16,
+                            "dtype": "float"
+                        },
+                        "param": {
+                            "bitwidth": 16,
+                            "dtype": "float"
+                        }
+                    },
+                    {
+                        "activation": {
+                            "bitwidth": 4,
+                            "dtype": "int"
+                        },
+                        "param": {
+                            "bitwidth": 4,
+                            "dtype": "int"
+                        }
+                    }
+                ]
+            },
+            "params": {
+                "bias": {
+                    "is_quantized": "False"
+                }
+            },
+            "op_type": {
+                "Conv": {
+                    "is_input_quantized": "True",
+                    "is_output_quantized": "True",
+                    "params": {
+                        "weight": {
+                            "is_quantized": "True"
+                        },
+                        "bias": {
+                            "is_quantized": "False"
+                        }
+                    },
+                    "supported_kernels":
+                        [
+                            {
+                                "activation": {
+                                    "bitwidth": 8,
+                                    "dtype": "int"
+                                },
+                                "param": {
+                                    "bitwidth": 8,
+                                    "dtype": "int"
+                                }
+                            },
+                        ]
+                }
+            },
+            "supergroups": [
+            ],
+            "model_input": {
+                "is_input_quantized": "True"
+            },
+            "model_output": {}
+        }
+
+        with open('./data/quantsim_config.json', 'w') as f:
+            json.dump(quantsim_config, f)
+
+        INPUT_SHAPE = (1, 3, 32, 32)
+        def forward_fn(model, _):
+            torch.manual_seed(10)
+            model.eval()
+            with torch.no_grad():
+                _ = model(torch.randn(INPUT_SHAPE))
+
+        # set enforce to true for this test
+        qsim_config.ENFORCE_TARGET_DTYPE_BITWIDTH_CONFIG = True
+
+        # enforce is set to true
+        # default supported kernels at index DEFAULT_OVERRIDE_SUPPORTED_KERNEL_INDEX (=0 in this case)
+        # is not same as default quantsim bw and dtype(int4/int4), apply default overrides (fp16/ fp16).
+        # so, default qsim is created with fp16/fp16 as per default level supported_kernel at override index/
+        # But, op level has a kernel that is lower precision (int 8,int8) as compared to this.
+        # so, rule checker should flag and cause exception in this case.
+        exception_raised = False
+        try:
+            sim = QuantizationSimModel(model, quant_scheme=QuantScheme.post_training_tf_enhanced,
+                                       config_file='./data/quantsim_config.json',
+                                       dummy_input=torch.rand(1, 3, 32, 32), in_place=True,
+                                       default_data_type=QuantizationDataType.int, default_output_bw=4, default_param_bw=4)
+        except NotImplementedError as exc:
+            exception_raised = True
+            print(" Test raised exception as expected ", exc)
+
+        assert exception_raised
+
+        qsim_config.ENFORCE_TARGET_DTYPE_BITWIDTH_CONFIG = False
         if os.path.exists('./data/quantsim_config.json'):
             os.remove('./data/quantsim_config.json')
