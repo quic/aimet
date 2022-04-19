@@ -795,9 +795,7 @@ class QuantizeDequantize(torch.autograd.Function):
         :return: Resulting tensor
         """
         if tensor_quantizer.enabled:
-
-            # pylint: disable=protected-access
-            if len(tensor_quantizer._cppOp) > 1:
+            if isinstance(tensor_quantizer, StaticGridPerChannelQuantizer):
                 quantized_tensor = QuantizeDequantize._per_channel_quantize_dequantize(tensor, tensor_quantizer,
                                                                                        round_mode)
             else:
@@ -818,7 +816,7 @@ class QuantizeDequantize(torch.autograd.Function):
         if tensor_quantizer.enabled and tensor_quantizer.data_type == QuantizationDataType.int:
             tensor = ctx.saved_tensors
             # pylint: disable=protected-access
-            if len(tensor_quantizer._cppOp) > 1:
+            if isinstance(tensor_quantizer, StaticGridPerChannelQuantizer):
                 ch_axis = tensor_quantizer._ch_axis
             else:
                 ch_axis = 0
