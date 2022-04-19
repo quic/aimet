@@ -310,12 +310,17 @@ class QuantizationSimModel:
             if quantizer_info.get_op_mode() != int(libpymo.TensorQuantizerOpMode.passThrough):
                 op_bitwidth, op_use_symmetric_encodings = quantizer_info.bitwidth, quantizer_info.use_symmetric_encoding
                 encoding = quantizer_info.compute_encoding(op_bitwidth, op_use_symmetric_encodings)
-                if quantizer_info.is_encoding_valid():
-                    quantizer_info.set_encoding(encoding)
+                # encoding would be invalid for dtype=fp because there is no encoding computed in float mode through the
+                # tensor_quantizer
+                if quantizer_info.data_type == QuantizationDataType.float:
                     quantizer_info.set_op_mode(libpymo.TensorQuantizerOpMode.quantizeDequantize)
                 else:
-                    quantizer_info.set_op_mode(libpymo.TensorQuantizerOpMode.passThrough)
-                    ops_with_invalid_encodings.append(op_name)
+                    if quantizer_info.is_encoding_valid():
+                        quantizer_info.set_encoding(encoding)
+                        quantizer_info.set_op_mode(libpymo.TensorQuantizerOpMode.quantizeDequantize)
+                    else:
+                        quantizer_info.set_op_mode(libpymo.TensorQuantizerOpMode.passThrough)
+                        ops_with_invalid_encodings.append(op_name)
 
         # For post-training mode, params will always be in one-shot mode
         op_mode = self._param_op_mode_after_analysis(self._quant_scheme)
@@ -324,12 +329,17 @@ class QuantizationSimModel:
             if quantizer_info.get_op_mode() != int(libpymo.TensorQuantizerOpMode.passThrough):
                 op_bitwidth, op_use_symmetric_encodings = quantizer_info.bitwidth, quantizer_info.use_symmetric_encoding
                 encoding = quantizer_info.compute_encoding(op_bitwidth, op_use_symmetric_encodings)
-                if quantizer_info.is_encoding_valid():
-                    quantizer_info.set_encoding(encoding)
-                    quantizer_info.set_op_mode(op_mode)
+                # encoding would be invalid for dtype=fp because there is no encoding computed in float mode through the
+                # tensor_quantizer
+                if quantizer_info.data_type == QuantizationDataType.float:
+                    quantizer_info.set_op_mode(libpymo.TensorQuantizerOpMode.quantizeDequantize)
                 else:
-                    quantizer_info.set_op_mode(libpymo.TensorQuantizerOpMode.passThrough)
-                    ops_with_invalid_encodings.append(op_name)
+                    if quantizer_info.is_encoding_valid():
+                        quantizer_info.set_encoding(encoding)
+                        quantizer_info.set_op_mode(op_mode)
+                    else:
+                        quantizer_info.set_op_mode(libpymo.TensorQuantizerOpMode.passThrough)
+                        ops_with_invalid_encodings.append(op_name)
 
         if ops_with_invalid_encodings:
             _logger.info('The following quantizers did not have valid encodings and have been set to passThrough mode: '
@@ -610,7 +620,7 @@ class QuantizationSimModel:
 
                 # insert the quant nodes
                 self._insert_param_quantization_ops_loop_context(module_ops_with_param_names, module_op_input_indices,
-                                                                 default_param_bw, internal_ops, )
+                                                                 default_param_bw, internal_ops)
 
                 self._insert_activation_quantization_ops(module_activation_op_names, default_output_bw,
                                                          in_loop_context=True)
