@@ -319,7 +319,7 @@ class AutoQuant:
                                       filename_prefix=filename_prefix,
                                       default_param_bw=self.default_param_bw,
                                       default_quant_scheme=self.default_quant_scheme,
-                                      default_is_symmetric=False)
+                                      default_config_file=self.default_config_file)
 
         return sess, adaround_encoding_path
 

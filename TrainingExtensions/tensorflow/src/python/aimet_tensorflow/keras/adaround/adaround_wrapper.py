@@ -54,13 +54,12 @@ class AdaroundWrapper(keras.layers.Layer):
     """
     Adaround Wrapper base class
     """
-    def __init__(self, layer: tf.keras.layers.Layer, param_bw: int, is_symmetric: bool, quant_scheme: QuantScheme):
+    def __init__(self, layer: tf.keras.layers.Layer, param_bw: int, quant_scheme: QuantScheme, is_symmetric: bool):
         """
-        :param session: Tf session
-        :param op: Tf op
+        :param layer: Tf keras layer.
         :param param_bw: Bitwidth for weight quantization
-        :param is_symmetric: Symmetric vs Asymmetric encodings
         :param quant_scheme: Quantization scheme
+        :param is_symmetric: Symmetric vs Asymmetric encodings
         """
         super(AdaroundWrapper, self).__init__()
 
@@ -74,7 +73,8 @@ class AdaroundWrapper(keras.layers.Layer):
         self.use_soft_rounding = self.add_weight(layer.name + '_use_soft_rounding', dtype=tf.bool,
                                                  initializer=tf.constant_initializer(True), trainable=False)
 
-        self.encoding = self.compute_encodings(self._weight_tensor, param_bw, is_symmetric, quant_scheme)
+        self.encoding = self.compute_encodings(self._weight_tensor, param_bw, quant_scheme, is_symmetric,
+                                               strict_symmetric=False, unsigned_symmetric=True)
         alpha = self._calculate_alpha(self._weight_tensor, self.encoding)
         self.alpha = self.add_weight(self._layer.name + '_alpha', trainable=True, shape=alpha.shape)
         self.alpha.assign(alpha)
@@ -139,16 +139,25 @@ class AdaroundWrapper(keras.layers.Layer):
         return alpha
 
     @staticmethod
-    def compute_encodings(weight_data: np.ndarray, param_bw: int, is_symmetric: bool, quant_scheme: QuantScheme) \
+    def compute_encodings(weight_data: np.ndarray, param_bw: int, quant_scheme: QuantScheme, is_symmetric: bool,
+                          strict_symmetric: bool, unsigned_symmetric: bool) \
             -> libpymo.TfEncoding:
         """
         :param weight_data: Weight data of Adaround supported ops
         :param param_bw: bitwidth (4-31) to use for quantizing weight data
         :param quant_scheme: Quantization scheme
         :param is_symmetric: True if symmetric encodings is used, else asymmetric encodings.
+        :param strict_symmetric: If true, and if is_symmetric is true, calculate encodings exactly centered
+        around 0. E.g. if bw==8, then this results in quantized int values (-127:127). If this is not set, then
+        quantized int values would be (-128:127) to use the entire range.
+        :param unsigned_symmetric: If true, and if is_symmetric is true, check if the entire statistics we
+        have collected are for +ve numbers. If yes, use quantized int values (0:255). This is a special case,
+        where we have double the resolution for the computed encodings while still preserving the zero-point to
+        be absolute 0.
         :return: Encodings (max, min, delta and offset)
         """
-        return TfAdaroundWrapper.compute_encodings(weight_data, param_bw, is_symmetric, quant_scheme)
+        return TfAdaroundWrapper.compute_encodings(weight_data, param_bw, quant_scheme, is_symmetric,
+                                                   strict_symmetric, unsigned_symmetric)
 
     @staticmethod
     def _get_conv_args(layer: tf.keras.layers.Conv2D) -> Dict:

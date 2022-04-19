@@ -132,7 +132,7 @@ class Adaround:
                                                                    hard_rounded_model)
         # Get module's next following activation function
         act_func = module_act_func_pair[orig_model.layers[idx]]
-        wrapper = AdaroundWrapper(orig_model.layers[idx], default_param_bw, default_is_symmetric, default_quant_scheme)
+        wrapper = AdaroundWrapper(orig_model.layers[idx], default_param_bw, default_quant_scheme, default_is_symmetric)
         hard_rounded_weight, soft_rounded_weight = AdaroundOptimizer.adaround_wrapper(wrapper, act_func,
                                                                                       all_inp_data, all_out_data,
                                                                                       opt_params)

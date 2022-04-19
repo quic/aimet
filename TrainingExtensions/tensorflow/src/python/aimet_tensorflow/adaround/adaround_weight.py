@@ -49,17 +49,26 @@ import libpymo
 # Import AIMET specific modules
 from aimet_common.utils import AimetLogger
 from aimet_common.defs import QuantScheme
+from aimet_common.quantsim_config.json_config_importer import JsonConfigImporter, ConfigDictKeys, ConfigDictType
 from aimet_tensorflow.utils import graph_saver
 from aimet_tensorflow.utils.common import get_ordered_ops
 from aimet_tensorflow.utils.op.conv import WeightTensorUtils
+from aimet_tensorflow.quantsim_config.quantsim_config import MAP_TF_PARAM_NAME_TO_QUANTSIM_NAME
 from aimet_tensorflow.adaround.activation_sampler import ActivationSampler
 from aimet_tensorflow.adaround.adaround_loss import AdaroundHyperParameters
 from aimet_tensorflow.adaround.adaround_optimizer import AdaroundOptimizer
 from aimet_tensorflow.adaround.adaround_wrapper import AdaroundWrapper
 
 AdaroundSupportedOps = ('Conv2D', 'DepthwiseConv2dNative', 'MatMul')
+
 ActFuncMap = {'Relu': tf.nn.relu, 'Relu6': tf.nn.relu6, 'Tanh': tf.nn.tanh, 'Sigmoid': tf.nn.sigmoid,
               'Softmax': tf.nn.softmax}
+
+tf_op_type_to_onnx_type_dict = {
+        "Conv2D": "Conv",
+        "DepthwiseConv2dNative": "Conv",
+        "MatMul": "Gemm",
+    }
 
 logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Quant)
 WORKING_DIR = '/tmp/adaround/'
@@ -105,7 +114,7 @@ class Adaround:
     def apply_adaround(cls, session: tf.compat.v1.Session, starting_op_names: List[str], output_op_names: List[str],
                        params: AdaroundParameters, path: str, filename_prefix: str, default_param_bw: int = 4,
                        default_quant_scheme: QuantScheme = QuantScheme.post_training_tf_enhanced,
-                       default_is_symmetric: bool = False) -> tf.compat.v1.Session:
+                       default_config_file: str = None) -> tf.compat.v1.Session:
         """
         Returns Tf session - model with optimized weight rounding of every op (Conv and Linear) and also saves the
         corresponding quantization encodings to a separate JSON-formatted file that can then be imported by
@@ -120,19 +129,73 @@ class Adaround:
         :param default_param_bw: Default bitwidth (4-31) to use for quantizing layer parameters. Default 4
         :param default_quant_scheme:  Quantization scheme. Supported options are QuantScheme.post_training_tf or
          QuantScheme.post_training_tf_enhanced. Default QuantScheme.post_training_tf_enhanced
-        :param default_is_symmetric: True if symmetric encodings is used, else asymmetric encodings.
-         Default False.
+        :param default_config_file: Default configuration file for model quantizers
         :return: Tf session with Adarounded weight and saves corresponding parameter encodings JSON file
          at provided path
         """
         # pylint: disable=too-many-arguments
-        # pylint: disable=too-many-locals
         if not os.path.exists(WORKING_DIR):
             os.makedirs(WORKING_DIR)
 
-        # Create copies which will have model's weights quantized with hard and soft rounding
+        param_encodings,\
+        session_soft_rounded_weight = cls._apply_adaround_helper(session,
+                                                                 starting_op_names,
+                                                                 output_op_names,
+                                                                 params,
+                                                                 default_param_bw,
+                                                                 default_quant_scheme,
+                                                                 default_config_file)
+
+        # Export quantization encodings to JSON-formatted file at provided path
+        cls.export_encoding_to_json(path, filename_prefix, param_encodings)
+
+        if os.path.exists(WORKING_DIR):
+            logger.info('Deleting temporary working directory %s', WORKING_DIR)
+            shutil.rmtree(WORKING_DIR)
+
+        logger.info('Completed Adarounding Model')
+
+        return session_soft_rounded_weight
+
+    @classmethod
+    def _apply_adaround_helper( # pylint: disable=too-many-locals
+            cls,
+            session: tf.compat.v1.Session,
+            starting_op_names: List[str],
+            output_op_names: List[str],
+            params: AdaroundParameters,
+            param_bw: int,
+            quant_scheme: QuantScheme,
+            config_file: str,
+    ) -> Tuple[Dict, tf.compat.v1.Session]:
+        """
+        Helper for apply_adaround().
+
+        NOTE: Soft rounding is only used for op-wise optimization procedure as we need gradients
+         for the rounding to be learned and after that we switch to hard rounding (i.e. using
+         true fixed point numbers) to be used for collecting later layers activations data.
+
+        When optimization is fully converged (i.e. wrapper.alpha is always exact 0 or 1), there
+        is no difference between soft rounding and hard rounding.
+
+        :param session: Tf session with model to adaround.
+        :param starting_op_names: List of starting op names of the model.
+        :param output_op_names: List of output op names of the model.
+        :param params: Parameters for adaround.
+        :param param_bw: bitwidth (4-31) to use for quantizing layer parameters.
+        :param quant_scheme: Quantization scheme.
+        :param config_file: configuration file.
+        :return: Dictionary containing encoding for adarounded parameters,
+         TF session with soft rounding weights.
+        """
+        # Create copies which will have model's weights quantized with hard and soft rounding.
         session_hard_rounded_weight = graph_saver.save_and_load_graph(WORKING_DIR, session)
         session_soft_rounded_weight = graph_saver.save_and_load_graph(WORKING_DIR, session)
+
+        configs = JsonConfigImporter.import_json_config_file(config_file)
+        # Strict_symmetric and unsigned_symmetric flags have default value False and True respectively.
+        strict_symmetric = configs[ConfigDictKeys.DEFAULTS].get(ConfigDictKeys.STRICT_SYMMETRIC, False)
+        unsigned_symmetric = configs[ConfigDictKeys.DEFAULTS].get(ConfigDictKeys.UNSIGNED_SYMMETRIC, True)
 
         # Optimization Hyper parameters
         opt_params = AdaroundHyperParameters(params.num_iterations, params.reg_param, params.beta_range,
@@ -142,12 +205,12 @@ class Adaround:
 
         # Get Adaround supported ops based on occurrence in the model
         ordered_ops = cls._get_ordered_list_of_ops(session.graph, starting_op_names, output_op_names)
-        param_encodings = {}
 
+        param_encodings = {}
         for op in tqdm(ordered_ops):
             logger.info("Started Optimizing weight rounding of op: %s", op.name)
 
-            # Using name, get corresponding op
+            # Using name, get corresponding op from session with soft and hard rounded weights.
             hard_rounded_op = session_hard_rounded_weight.graph.get_operation_by_name(op.name)
             soft_rounded_op = session_soft_rounded_weight.graph.get_operation_by_name(op.name)
 
@@ -155,37 +218,31 @@ class Adaround:
             all_inp_data, all_out_data = act_sampler.sample_activation(op, hard_rounded_op, session,
                                                                        session_hard_rounded_weight, starting_op_names,
                                                                        params.num_batches)
+            is_symmetric = cls._get_is_symmetric_flag_for_op_param(configs, op.type, param_name="weight")
+
             # Find next following activation function
             act_func = cls._get_act_func(op)
 
             # Perform Adaround optimization in separate graph
             graph = tf.Graph()
             with graph.as_default():
-                wrapper = AdaroundWrapper(session, op, default_param_bw, default_is_symmetric, default_quant_scheme)
-                hard_rounded_weight,\
+                wrapper = AdaroundWrapper(session, op, param_bw, quant_scheme, is_symmetric,
+                                          strict_symmetric, unsigned_symmetric)
+                hard_rounded_weight, \
                 soft_rounded_weight = AdaroundOptimizer().adaround_wrapper(wrapper, act_func, all_inp_data,
                                                                            all_out_data, opt_params)
 
             # Update param encodings dictionary
-            cls._update_param_encodings_dict(param_encodings, op, wrapper.encoding, default_is_symmetric)
+            cls._update_param_encodings_dict(param_encodings, op, wrapper.encoding, is_symmetric)
 
             # Update with hard and soft rounded weights
             WeightTensorUtils.update_tensor_for_op(session_hard_rounded_weight, hard_rounded_op, hard_rounded_weight)
             WeightTensorUtils.update_tensor_for_op(session_soft_rounded_weight, soft_rounded_op, soft_rounded_weight)
 
-        # Export quantization encodings to JSON-formatted file at provided path
-        cls.export_encoding_to_json(path, filename_prefix, param_encodings)
-
         # Close intermediate session
         session_hard_rounded_weight.close()
 
-        if os.path.exists(WORKING_DIR):
-            logger.info('Deleting temporary working directory %s', WORKING_DIR)
-            shutil.rmtree(WORKING_DIR)
-
-        logger.info('Completed Adarounding Model')
-
-        return session_soft_rounded_weight
+        return param_encodings, session_soft_rounded_weight
 
     @staticmethod
     def _get_ordered_list_of_ops(graph: tf.Graph, input_op_names: List[str], output_op_names: List[str]) \
@@ -263,3 +320,50 @@ class Adaround:
                                        'offset': encoding.offset,
                                        'bitwidth': encoding.bw,
                                        'is_symmetric': is_symmetric}]
+
+    @staticmethod
+    def _get_is_symmetric_flag_for_op_param(configs: ConfigDictType, tf_op_type: str, param_name: str):
+        """
+        NOTE: Checks config file in reverse order of specificity.
+
+        Returns is_symmetric flag for op's param if it is set in config file else returns
+        False. First check all ops of specific types, second check all params of specific
+        and lastly check for default types. If not specified, it will return default is
+        symmetric False.
+
+        :param configs: Dictionary containing configs.
+        :param tf_op_type: TensorFlow operation type.
+        :param param_name: Parameter name.
+        :return: Is_symmetric flag for given op's param.
+        """
+        assert param_name in MAP_TF_PARAM_NAME_TO_QUANTSIM_NAME.keys(), "param name is invalid."
+
+        # third level of specificity which applies to specific op_type's parameters.
+        try:
+            onnx_type = tf_op_type_to_onnx_type_dict[tf_op_type]
+            return configs[ConfigDictKeys.OP_TYPE] \
+                [onnx_type] \
+                [ConfigDictKeys.PARAMS] \
+                [param_name] \
+                [ConfigDictKeys.IS_SYMMETRIC]
+        except KeyError:
+            pass
+
+        # Second level of specificity which applies to all parameters only.
+        try:
+            return configs[ConfigDictKeys.PARAMS]\
+                [param_name]\
+                [ConfigDictKeys.IS_SYMMETRIC]
+        except KeyError:
+            pass
+
+        # First level of specificity which applies to all the ops and parameters.
+        try:
+            return configs[ConfigDictKeys.DEFAULTS]\
+                [ConfigDictKeys.PARAMS]\
+                [ConfigDictKeys.IS_SYMMETRIC]
+        except KeyError:
+            pass
+
+        # Default is_symmetric False.
+        return False
