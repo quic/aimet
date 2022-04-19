@@ -47,6 +47,16 @@ from aimet_torch.tensor_quantizer import StaticGridPerTensorQuantizer, StaticGri
 from aimet_torch.quantsim_straight_through_grad import broadcast_to_tensor
 import libpymo
 
+class ModelSingleChannel(torch.nn.Module):
+
+    def __init__(self):
+        super(ModelSingleChannel, self).__init__()
+        self.conv1_a = torch.nn.Conv2d(3, 1, kernel_size=2)
+
+    def forward(self, inp):
+        x = self.conv1_a(inp)
+        return x
+
 
 class TestPerChannelQcQuantizeOpStaticGrid:
     def test_per_channel_symmetric_qdq(self):
@@ -218,6 +228,23 @@ class TestPerChannelQcQuantizeOpStaticGrid:
         assert len(encodings['param_encodings']['conv1_a.weight']) == 10
         assert encodings['param_encodings']['conv1_a.weight'][1]['bitwidth'] == 8
         assert encodings['param_encodings']['conv1_a.weight'][1]['is_symmetric'] == 'False'
+
+    def test_model_per_channel_single_channel(self):
+        """Model with single channel conv """
+        dummy_input = (torch.rand(1, 3, 28, 28),)
+
+        def forward_pass(model, _):
+            model.eval()
+            with torch.no_grad():
+                model(*dummy_input)
+
+        model = ModelSingleChannel()
+        sim = QuantizationSimModel(model, dummy_input=dummy_input)
+        sim.model.conv1_a.enable_per_channel_quantization()
+
+        # Quantize
+        sim.compute_encodings(forward_pass, None)
+        assert sim.model.conv1_a.param_quantizers['weight'].encoding[0] is not None
 
     def test_set_and_freeze_param_encoding_per_channel(self):
         """ Test set and freeze parameter encoding for per-channel encodings """
