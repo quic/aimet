@@ -70,6 +70,10 @@ void sliceTensorAlongLastDim(const GPUDevice& d, Tensor slicedTensor, const Tens
 {
     // K x K x I x O -> N x O
     auto tensorToSliceTwoDim = tensorToSlice.flat_inner_dims<float, 2>();
+    // Tensor.chip<dimension>(offset) means it slice tensor and get sub-tensor at the given offset in the dimension dim
+    // For example, if tensor has 16x3 shape, the result tensor of
+    // chip<0>(0) will take sub-tensor 0th tensor from row dimension having 1x3 shape tensor
+    // chip<1>(2) will take sub-tensor 2nd tensor from column dimension having 16x1 shape tensor
     slicedTensor.tensor<float, 2>().chip<0>(0).device(d) = tensorToSliceTwoDim.chip<1>(channel);
 
 }

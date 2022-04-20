@@ -332,9 +332,8 @@ public:
                         numElements = numElements * shapeVector[1] * shapeVector[2];
                     }
                 }
-                Tensor temp1, temp2;
-                OP_REQUIRES_OK(context, context->allocate_temp(DT_FLOAT, TensorShape({numElements, 2}), &temp1));
-                OP_REQUIRES_OK(context, context->allocate_temp(DT_FLOAT, TensorShape({numElements, 2}), &temp2));
+                Tensor temp1;
+                OP_REQUIRES_OK(context, context->allocate_temp(DT_FLOAT, TensorShape({2, numElements}), &temp1));
 
                 TTypes<float>::ConstMatrix inTensorTwoDim = getTwoDimTensor(inTensor, axisHandlingEnum);
                 TTypes<float>::Matrix outTensorTwoDim = getTwoDimTensor(outTensor, axisHandlingEnum);
