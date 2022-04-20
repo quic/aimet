@@ -795,17 +795,17 @@ class QuantizationSimModel:
                 for op_name in op_names:
                     if op_to_io_tensor_map[op_name].outputs:
                         output_tensors = op_to_io_tensor_map[op_name].outputs
+                        if len(output_tensors) != len(layer.output_quantizers):
+                            raise ValueError(f'number of output quantizer: {len(layer.output_quantizers)} '
+                                             f'available for layer:{layer_name} mis-matches with number of '
+                                             f'output tensors : {len(output_tensors)} for onnx node: '
+                                             f'{op_name}')
+
                         for index, output_tensor in enumerate(output_tensors):
                             propagate_flag = propagate_encodings and op_name != last_op_name
 
                             quantizer = layer.output_quantizers[0]
                             if propagate_flag is False:
-                                if index >= len(layer.output_quantizers):
-                                    raise ValueError(f'number of output quantizer: {len(layer.output_quantizers)} '
-                                                     f'available for layer:{layer_name} mis-matches with number of '
-                                                     f'output tensors : {len(output_tensors)} for onnx node: '
-                                                     f'{op_name}')
-
                                 quantizer = layer.output_quantizers[index]
 
                             if quantizer.enabled:
