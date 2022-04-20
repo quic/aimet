@@ -519,6 +519,11 @@ class TestTrainingExtensionsQcQuantizeOpPerChannel(unittest.TestCase):
 
             sess = tf.compat.v1.Session()
             initialize_uninitialized_vars(sess)
+
+            conv2d_op = sess.graph.get_operation_by_name('conv2d/Conv2D')
+            weight_val = np.random.randn(3, 3, 3, 2)
+            WeightTensorUtils.update_tensor_for_op(sess, conv2d_op, weight_val)
+
             sim = QuantizationSimModel(sess, [model.input.op.name], [model.output.op.name], use_cuda=False,
                                        config_file='./quantsim_config.json')
 
@@ -529,11 +534,10 @@ class TestTrainingExtensionsQcQuantizeOpPerChannel(unittest.TestCase):
                 op = sim.session.graph.get_operation_by_name(quant_op_name)
                 assert op.type == 'QcQuantizePerChannel'
                 shape = op.inputs[0].shape.as_list()
-                assert  len(quantizer_info.tensor_quantizer) == shape[-1]
-
+                assert len(quantizer_info.tensor_quantizer) == shape[-1]
 
             def dummy_forward_pass(sess, args):
-                model_output = sess.graph.get_tensor_by_name('conv2d_input:0')
+                model_output = sess.graph.get_tensor_by_name('conv2d/BiasAdd_quantized:0')
 
                 model_input = sess.graph.get_tensor_by_name('conv2d_input:0')
                 np.random.seed(0)
@@ -541,10 +545,19 @@ class TestTrainingExtensionsQcQuantizeOpPerChannel(unittest.TestCase):
                 sess.run(model_output, feed_dict={model_input: dummy_input})
 
             sim.compute_encodings(dummy_forward_pass, None)
+
+            encodings = []
             for quant_op_name, quantizer_info in sim._param_quantizers.items():
                 if quantizer_info.get_op_mode() != int(libpymo.TensorQuantizerOpMode.passThrough):
                     encoding = quantizer_info.get_encoding()
                     assert isinstance(encoding, list)
+                    lst = []
+                    for enc in encoding:
+                        lst.append((enc.min, enc.max))
+                    encodings.append(lst)
+
+            encoding_numpy = compute_tf_encodings_given_numpy_data(weight_val, axis=3)
+            assert np.allclose(encoding_numpy, encodings, rtol=0.01)
 
     def test_export_encodings(self):
         save_config_file_for_per_channel_quantization()
