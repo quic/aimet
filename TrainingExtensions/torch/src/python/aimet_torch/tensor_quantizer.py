@@ -488,7 +488,9 @@ class LearnedGridTensorQuantizer(TensorQuantizer):
     @encoding.setter
     def encoding(self, encoding: Union[libpymo.TfEncoding, List[libpymo.TfEncoding]]):
         """
-        Property to set encoding as well as encoding min and max parameters.
+        Property to set encoding.
+        encoding.setter also sets encoding min and max parameters and recompute
+        p and n tensors.
         :param encoding: encodings.
         """
         if self.enabled:
@@ -497,6 +499,7 @@ class LearnedGridTensorQuantizer(TensorQuantizer):
                 raise RuntimeError("Encoding can be set only when it is not frozen.")
             self._encoding = encoding
             self._set_encoding_min_max_parameters(encoding)
+            self._set_p_and_n(encoding)
 
     def __str__(self):
         stream = io.StringIO(newline='\n')
@@ -600,6 +603,15 @@ class LearnedGridTensorQuantizer(TensorQuantizer):
                                                    requires_grad=True)
         params[enc_max_param] = torch.nn.Parameter(torch.FloatTensor(encodings_max).to(self.device),
                                                    requires_grad=True)
+
+    def _set_p_and_n(self, encodings: Union[libpymo.TfEncoding, List[libpymo.TfEncoding]]) -> None:
+        """
+        Recompute and set p and n bound tensors.
+        """
+        bitwidth = encodings[0].bw if isinstance(encodings, List) else encodings.bw
+        assert bitwidth == self.bitwidth, "Bitwidth mismatched."
+
+        self.n, self.p = self.get_n_and_p(self.bitwidth, self.use_symmetric_encodings)
 
     def freeze_encoding(self):
         """

@@ -358,7 +358,7 @@ class QcQuantizeWrapper(nn.Module):
 
                 param_quantizer.bitwidth = encodings[0].bw
                 param_quantizer.use_symmetric_encodings = is_symmetric
-                if len(encodings) > 1:
+                if isinstance(param_quantizer, StaticGridPerChannelQuantizer):
                     param_quantizer.encoding = encodings            # per-channel quant
                 else:
                     param_quantizer.encoding = encodings[0]         # per-tensor quant
