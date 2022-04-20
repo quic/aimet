@@ -38,7 +38,7 @@
 
 # pylint: disable=too-many-lines
 """ Custom PyTorch Op for quantizing weights and activations """
-
+# pylint: disable=too-many-lines
 import abc
 from enum import Enum
 from typing import Dict, Tuple, Union, List, Callable, Type
@@ -53,7 +53,7 @@ from aimet_common.defs import QuantScheme, QuantizationDataType, MAP_ROUND_MODE_
 from aimet_torch.custom import custom_tensor_utils
 from aimet_torch import utils
 from aimet_torch.tensor_quantizer import StaticGridPerTensorQuantizer, StaticGridPerChannelQuantizer, TensorQuantizer, \
-    LearnedGridTensorQuantizer, set_encoding_min_max_gating_threshold
+    LearnedGridTensorQuantizer, set_encoding_min_max_gating_threshold, TorchQuantizer
 import aimet_torch.quantsim_straight_through_grad as ste
 
 _logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Quant)
@@ -965,6 +965,96 @@ def _linear_forward_with_recompute(quant_wrapper: LearnedGridQuantWrapper, input
     return FusedQdqLinear.apply(inp, weight, bias,
                                 quant_wrapper.weight_encoding_min, quant_wrapper.weight_encoding_max,
                                 quant_wrapper.param_quantizers['weight'])
+
+
+class NativeTorchQuantWrapper(nn.Module):
+    """
+    A custom PyTorch module for inserting native PyToch quantization nodes
+    """
+    def __init__(self, post_training_module: StaticGridQuantWrapper, module_name: str, device: torch.device):
+        """
+        Constructor
+        :param post_training_module: StaticGridQuantWrapper wrapped module
+        :param module_name: name of module
+        :param device: device on which model is
+        """
+        super(NativeTorchQuantWrapper, self).__init__()
+
+        self._module_to_wrap = getattr(post_training_module, module_name)
+        # pylint: disable=protected-access
+        self._mode = post_training_module._mode
+
+        self.output_quantizers = [TorchQuantizer(quantizer, device) for quantizer in post_training_module.output_quantizers]
+
+        self.input_quantizers = [TorchQuantizer(quantizer, device) for quantizer in post_training_module.input_quantizers]
+
+        self.param_quantizers = {}
+        for name, quantizer in post_training_module.param_quantizers.items():
+            self.param_quantizers[name] = TorchQuantizer(quantizer, device)
+
+    def _quantize_dequantize(self, tensor_quantizers, tensors_to_quantize):
+        """
+        Forward-pass routine. This quantizes the weights before delegating to the wrapped module and
+        then quantizes the output before returning the same
+        :param tensor_quantizers: Tensor quantizers to use for updating stats or quantizing
+        :param tensors_to_quantize: Inputs passed to the module in the forward pass
+        :return: Quantized output from the wrapped module
+        """
+        outputs = []
+        for index, input_tensor in enumerate(tensors_to_quantize):
+            if not isinstance(input_tensor, torch.Tensor):
+                _logger.error('Expecting quantize activation input of type torch.Tensor but got %s', type(input_tensor))
+                raise AssertionError
+            if input_tensor.dtype in utils.torch_dtypes_to_ignore_for_quantization:
+                # Do not quantize integer tensors
+                outputs.append(input_tensor)
+                continue
+
+            assert len(tensor_quantizers) > index, \
+                f"Not enough tensor quantizers ({len(tensor_quantizers)}) allocated"
+
+            if self._mode is QcQuantizeOpMode.ACTIVE:
+                output = tensor_quantizers[index].quantize_dequantize(input_tensor)
+            else:
+                output = input_tensor
+
+            outputs.append(output)
+
+        # Flatten if there is only one output - which is by far the most common case
+        if len(outputs) == 1:
+            outputs = outputs[0]
+
+        return outputs
+
+    def forward(self, *inputs):
+        """
+        Forward-pass routine. This quantizes the weights before delegating to the wrapped module and
+        then quantizes the output before returning the same
+        :param inputs: Inputs passed to the module in the forward pass
+        :return: Quantized output from the wrapped module
+        """
+        # Quantize inputs
+        quantized_inputs = self._quantize_dequantize(self.input_quantizers, inputs)
+        if isinstance(quantized_inputs, torch.Tensor):
+            quantized_inputs = [quantized_inputs]
+
+        # Quantize params
+        for name, param in self._module_to_wrap.named_parameters():
+            param_quantizer = self.param_quantizers[name]
+            if param_quantizer.enabled:
+                setattr(self._module_to_wrap, name,
+                        torch.nn.parameter.Parameter(param_quantizer.quantize_dequantize(param)))
+        wrapped_output = self._module_to_wrap(*quantized_inputs)
+
+        # Quantize the outputs
+        if not self.output_quantizers[0].enabled:
+            output = wrapped_output
+        else:
+            if isinstance(wrapped_output, torch.Tensor):
+                wrapped_output = [wrapped_output]
+            output = self._quantize_dequantize(self.output_quantizers, wrapped_output)
+
+        return output
 
 
 class QcQuantizeStandalone(QcQuantizeStandAloneBase):

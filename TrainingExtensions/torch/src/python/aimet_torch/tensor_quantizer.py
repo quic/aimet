@@ -1054,6 +1054,46 @@ class ParameterQuantizer(torch.autograd.Function):
         return (*output_grad, None, *param_encoding_grads)
 
 
+class TorchQuantizer:
+    """
+    A Quantizer using native torch quantization nodes
+    """
+    def __init__(self, quantizer: Union[StaticGridPerChannelQuantizer, StaticGridPerTensorQuantizer],
+                 device: torch.device):
+        """
+        Constructor
+        :param post_training_module: StaticGridQuantWrapper wrapped module
+        :param device: device on which model is
+        """
+        super(TorchQuantizer, self).__init__()
+        self.device, self.enabled, self.data_type, self.bitwidth = device, quantizer.enabled, quantizer.data_type, quantizer.bitwidth
+        self.per_channel_enabled = False
+        if hasattr(quantizer, '_ch_axis'):
+            # pylint: disable=protected-access
+            self._ch_axis = quantizer._ch_axis
+            self.per_channel_enabled = True
+        if quantizer.enabled and quantizer.encoding:
+            self.scale, self.zero_point, self.q_max, self.q_min = calc_params_for_native_torch_quantizer(quantizer, self.per_channel_enabled, device)
+
+    def quantize_dequantize(self, tensor: torch.Tensor):
+        """
+        Quantize-dequantize the tensor, using the saved encoding for this tensor
+        :param tensor: Tensor passed to the module in the forward pass
+        :return: Quantized output from the wrapped module
+        """
+        if self.enabled:
+            if self.data_type == QuantizationDataType.float:
+                quantized_tensor = tensor.half()
+                quantized_tensor = quantized_tensor.float()
+                return quantized_tensor
+            if self.per_channel_enabled:
+                return torch.fake_quantize_per_channel_affine(tensor, self.scale, self.zero_point,
+                                                              self._ch_axis, self.q_min, self.q_max)
+            return torch.fake_quantize_per_tensor_affine(tensor, self.scale, self.zero_point,
+                                                         self.q_min, self.q_max)
+        return tensor
+
+
 # pylint: disable=abstract-method
 class QuantizeDequantize(torch.autograd.Function):
     """
