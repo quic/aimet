@@ -39,6 +39,7 @@
 """ Quant Analyzer """
 
 import os
+import shutil
 from collections import OrderedDict, defaultdict
 from typing import Union, Tuple, Callable, Dict, List, Any
 from bokeh import plotting
@@ -455,12 +456,13 @@ class QuantAnalyzer:
             filename_suffix = f"{title}_{index}"
             self._export_stats_histogram_plot(histogram, encoding, results_dir, filename_suffix)
 
-    def _run_hooks_to_tap_output_activations(
+    def _collect_and_save_output_acts(
             self,
             model: torch.nn.Module,
-            module_type_for_attaching_hook: Any = None,
-            leaf_module_only: bool = True
-    ) -> Dict:
+            module_type_for_attaching_hook: Any,
+            leaf_module_only: bool,
+            results_dir: str,
+    ) -> None:
         """
         NOTE: output activations dict has layers added based on occurrence inside
         forward pass and dictionary preserves order.
@@ -470,6 +472,7 @@ class QuantAnalyzer:
         :param model: Model to attach hooks.
         :param module_type_for_attaching_hook: torch.nn module types for which hook has to be attached.
         :param leaf_module_only: Flag to set only leaf modules vs all modules to attach hooks.
+        :param results_dir: Directory to save the results.
         """
         def _hook_to_tap_activations(module, _, out):
             """
@@ -478,9 +481,11 @@ class QuantAnalyzer:
             :param _: Input activations to module.
             :param out: Output activations from module.
             """
-            output_activations_dict[module_to_name_dict[module]].append(out.cpu())
+            filename = os.path.join(results_dir, module_to_name_dict[module])
+            with open(filename, 'wb') as f:
+                torch.save(out.cpu(), f)
 
-        output_activations_dict = defaultdict(list)
+        os.makedirs(results_dir, exist_ok=True)
         hooks = []
         module_to_name_dict = {}
         for name, module in model.named_modules():
@@ -499,8 +504,18 @@ class QuantAnalyzer:
         for hook in hooks:
             hook.remove()
 
-        output_activations_dict = {name: torch.cat(out_acts, 0) for name, out_acts in output_activations_dict.items()}
-        return output_activations_dict
+    @staticmethod
+    def _load_out_acts(results_dir: str, name: str) -> torch.Tensor:
+        """
+        Load output activations from results_dir for given name.
+        :param results_dir: Directory to load the output activations.
+        :param name: Name of the file.
+        :return: Output activations tensor.
+        """
+        filename = os.path.join(results_dir, name)
+        with open(filename, 'rb') as f:
+            out_acts = torch.load(f)
+        return out_acts
 
     def _check_model_sensitivity_to_quantization(
             self,
@@ -705,21 +720,29 @@ class QuantAnalyzer:
         results_dir = os.path.abspath(results_dir)
         os.makedirs(results_dir, exist_ok=True)
 
+        fp32_out_acts_dir = os.path.join(results_dir, "fp32_out_acts")
+        quantized_out_acts_dir = os.path.join(results_dir, "quantized_out_acts")
+
         _logger.info("\nExporting per layer MSE loss.")
-        fp32_output_activations =\
-            self._run_hooks_to_tap_output_activations(self._model,
-                                                      module_type_for_attaching_hook=None,
-                                                      leaf_module_only=True)
-        quantized_output_activations = \
-            self._run_hooks_to_tap_output_activations(sim.model,
-                                                      module_type_for_attaching_hook=(QcQuantizeWrapper,
-                                                                                      QcQuantizeRecurrent),
-                                                      leaf_module_only=False)
+        self._collect_and_save_output_acts(self._model,
+                                           module_type_for_attaching_hook=None,
+                                           leaf_module_only=True,
+                                           results_dir=fp32_out_acts_dir)
+        self._collect_and_save_output_acts(sim.model,
+                                           module_type_for_attaching_hook=(QcQuantizeWrapper,
+                                                                           QcQuantizeRecurrent),
+                                           leaf_module_only=False,
+                                           results_dir=quantized_out_acts_dir)
         mse_loss_dict = {}
-        for name, fp32_out_acts in fp32_output_activations.items():
-            quantized_out_acts = quantized_output_activations[name]
+        for name in os.listdir(quantized_out_acts_dir):
+            fp32_out_acts = self._load_out_acts(fp32_out_acts_dir, name)
+            quantized_out_acts = self._load_out_acts(quantized_out_acts_dir, name)
             loss = torch.nn.functional.mse_loss(fp32_out_acts, quantized_out_acts)
             mse_loss_dict[name] = loss.item()
+
+        # Delete temporary directories.
+        shutil.rmtree(fp32_out_acts_dir, ignore_errors=True)
+        shutil.rmtree(quantized_out_acts_dir, ignore_errors=True)
 
         self._export_per_layer_mse_plot(mse_loss_dict,
                                         results_dir,
