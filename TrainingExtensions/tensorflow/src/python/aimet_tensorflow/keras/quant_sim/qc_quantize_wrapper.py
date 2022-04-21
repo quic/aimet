@@ -194,6 +194,11 @@ class QcQuantizeWrapper(tf.keras.layers.Layer):
         if self._shadow_params is None:
             self._shadow_params = [tf.Variable(param, trainable=False) for param in self._layer_to_wrap.weights]
 
+    @property
+    def original_layer(self):
+        """ layer to wrap (original layer) getter """
+        return self._layer_to_wrap
+
     def get_config(self):
         """ Override get_config """
         return {"layer_to_wrap": self._layer_to_wrap,
