@@ -158,7 +158,7 @@ class AdaroundAcceptanceTests(unittest.TestCase):
 
         adarounded_session = Adaround.apply_adaround(session, starting_op_names, output_op_names, params, path='./',
                                                      filename_prefix='dummy', default_param_bw=param_bw,
-                                                     default_quant_scheme=quant_scheme, default_is_symmetric=False)
+                                                     default_quant_scheme=quant_scheme, default_config_file=None)
 
         # Read exported param encodings JSON file
         with open('./dummy.encodings') as json_file:
