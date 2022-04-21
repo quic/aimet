@@ -514,8 +514,8 @@ class QuantizationSimModel:
                                                                                      name=self._get_quantized_name(op.name))
                 # Replace in graph
                 # -----------------
-                graph_editor.reroute_ts(ts0=tf_ops.convert_to_tensor(tf_quantization_op),
-                                        ts1=[op.outputs[0]], can_modify=consumers)
+                graph_editor.reroute_ts(ts0=tf_quantization_op, ts1=[op.outputs[0]],
+                                        can_modify=consumers)
             utils.graph_saver.save_model_to_meta(orig_sess, os.path.join(checkpoint_path + '_embedded_quant_nodes'))
 
     def set_and_freeze_param_encodings(self, encoding_path: str):
