@@ -19,6 +19,8 @@ jobs:
           files: "repolint.json"
       - name: Run Repolinter with local repolint.json
         if: steps.check_files.outputs.files_exists == 'true'
+        with:
+          config_file: "repolint.json"
         uses: newrelic/repolinter-action@v1
       - name: Run Repolinter with default ruleset
         if: steps.check_files.outputs.files_exists == 'false'
