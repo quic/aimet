@@ -1,5 +1,3 @@
-# /usr/bin/env python3
-# -*- mode: python -*-
 # =============================================================================
 #  @@-COPYRIGHT-START-@@
 #
@@ -659,9 +657,33 @@ def in_eval_mode(model: torch.nn.Module):
     :param model: PyTorch model
     :return: None
     """
-    training = model.training
+    if not model.training:
+        yield
+    else:
+        with _in_mode(model, train=False):
+            yield
+
+
+@contextlib.contextmanager
+def in_train_mode(model: torch.nn.Module):
+    """
+    Utility to put model in eval mode with context manager and later in whatever mode it started with.
+    :param model: PyTorch model
+    :return: None
+    """
+    if model.training:
+        yield
+    else:
+        with _in_mode(model, train=True):
+            yield
+
+
+@contextlib.contextmanager
+def _in_mode(model: torch.nn.Module, train: bool):
+    train_orig = model.training
+
     try:
-        model.eval()
+        model.train(mode=train)
         yield
     finally:
-        model.train(mode=training)
+        model.train(mode=train_orig)
