@@ -47,7 +47,7 @@ from bokeh.models import ColumnDataSource, Band, Span, tickers
 import torch
 
 from aimet_common.utils import AimetLogger
-from aimet_common.defs import QuantScheme, QuantizationDataType
+from aimet_common.defs import QuantScheme
 from aimet_torch.utils import in_eval_mode, run_hook_for_layers_with_given_input, is_leaf_module
 from aimet_torch.tensor_quantizer import TensorQuantizer, StaticGridTensorQuantizer
 from aimet_torch.qc_quantize_op import QcQuantizeWrapper
