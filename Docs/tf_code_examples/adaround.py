@@ -102,7 +102,7 @@ def apply_adaround_example():
     # Returns session with adarounded weights and their corresponding encodings
     adarounded_session = Adaround.apply_adaround(session, starting_op_names, output_op_names, params, path='./',
                                                  filename_prefix='dummy', default_param_bw=param_bw,
-                                                 default_quant_scheme=quant_scheme, default_is_symmetric=False)
+                                                 default_quant_scheme=quant_scheme, default_config_file=None)
 
     # Create QuantSim using adarounded_session
     sim = QuantizationSimModel(adarounded_session, starting_op_names, output_op_names, quant_scheme,
