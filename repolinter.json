@@ -19,9 +19,8 @@
           ],
           "skip-paths-matching": {
             "patterns": [
-              "TrainingExtensions/tensorflow/src/python/aimet_tensorflow/graph_editor/*",
-              "TrainingExtensions/tensorflow/src/python/aimet_tensorflow/quantize/*"
-
+              "aimet_tensorflow/graph_editor/*",
+              "aimet_tensorflow/quantize/*"
             ]
           },
           "lineCount": 40,
