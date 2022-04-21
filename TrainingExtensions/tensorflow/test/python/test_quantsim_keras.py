@@ -37,6 +37,9 @@
 import json
 import os
 import pytest
+
+from aimet_tensorflow.keras.cross_layer_equalization import equalize_model
+
 pytestmark = pytest.mark.skip("Disable tests that requires eager execution")
 from packaging import version
 import numpy as np
@@ -210,6 +213,54 @@ def test_quantsim_with_custom_config_file():
             for q in layer.input_quantizers:
                 assert not q.is_enabled()
             for q in layer.output_quantizers:
+                assert q.is_enabled()
+
+    if os.path.exists("./data/quantsim_config.json"):
+        os.remove("./data/quantsim_config.json")
+
+
+def test_quantsim_handling_folded_bn_layer():
+    quantsim_config = {
+        "defaults": {
+            "ops": {
+                "is_output_quantized": "True",
+                "is_symmetric": "False"
+            },
+            "params": {
+                "is_quantized": "True",
+                "is_symmetric": "False"
+            }
+        },
+        "params": {},
+        "op_type": {},
+        "supergroups": [],
+        "model_input": {},
+        "model_output": {}
+    }
+    with open("./data/quantsim_config.json", "w") as f:
+        json.dump(quantsim_config, f)
+
+    model = tiny_conv_net()
+    cle_applied_model = equalize_model(model, input_shapes=(32, 32, 3))
+    qsim = QuantizationSimModel(cle_applied_model, quant_scheme='tf', config_file="./data/quantsim_config.json")
+
+    layers = qsim.model.layers
+    bn1, bn2 = layers[2], layers[6]
+    for layer in layers:
+        if isinstance(layer, tf.keras.layers.InputLayer):
+            continue
+
+        # Folded batch normalization layer
+        if layer in [bn1, bn2]:
+            for q in layer.output_quantizers:
+                assert not q.is_enabled()
+            for q in layer.param_quantizers:
+                assert not q.is_enabled()
+        # other layers follows default quantsim config rule
+        else:
+            for q in layer.output_quantizers:
+                assert q.is_enabled()
+            for q in layer.param_quantizers:
                 assert q.is_enabled()
 
     if os.path.exists("./data/quantsim_config.json"):

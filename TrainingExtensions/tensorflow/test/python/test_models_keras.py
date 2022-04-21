@@ -302,13 +302,13 @@ def tiny_conv_net():
     x = tf.keras.layers.Conv2D(
         32, kernel_size=2, strides=2, padding="same", use_bias=False
     )(inputs)
-    x = tf.keras.layers.BatchNormalization()(x)
+    x = tf.keras.layers.BatchNormalization(beta_initializer="glorot_uniform", gamma_initializer="glorot_uniform")(x)
     x = tf.keras.layers.ReLU()(x)
     x = tf.keras.layers.MaxPooling2D(strides=2, padding="same")(x)
     x = tf.keras.layers.Conv2D(
         16, kernel_size=2, strides=1, padding="same", use_bias=False
     )(x)
-    x = tf.keras.layers.BatchNormalization()(x)
+    x = tf.keras.layers.BatchNormalization(beta_initializer="glorot_uniform", gamma_initializer="glorot_uniform")(x)
     x = tf.keras.layers.ReLU()(x)
     x = tf.keras.layers.Conv2D(
         8, kernel_size=2, strides=1, padding="same", use_bias=False

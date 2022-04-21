@@ -39,15 +39,17 @@
 
 import json
 import os
-from typing import Union, Dict
+from typing import Union, Dict, Tuple, Optional
 import tensorflow as tf
 
 from aimet_common.defs import QuantScheme
 from aimet_common.utils import AimetLogger, save_json_yaml
 from aimet_common.quantsim import encoding_version
 from aimet_tensorflow.keras.connectedgraph import ConnectedGraph
+from aimet_tensorflow.keras.cross_layer_equalization import GraphSearchUtils
 from aimet_tensorflow.keras.quant_sim.qc_quantize_wrapper import QcQuantizeWrapper, QuantizerSettings
-from aimet_tensorflow.keras.quant_sim.tensor_quantizer import TensorQuantizer
+from aimet_tensorflow.keras.quant_sim.tensor_quantizer import TensorQuantizer, ActivationTensorQuantizer, \
+    ParamTensorQuantizer
 from aimet_tensorflow.keras.quantsim_config.quantsim_config import QuantSimConfigurator, INPUT_QUANTIZERS, \
     OUTPUT_QUANTIZERS, PARAM_QUANTIZERS
 
@@ -88,6 +90,7 @@ class QuantizationSimModel:
                                                                              default_output_bw, default_param_bw,
                                                                              config_file)
         self.model = self._add_quantization_wrappers(quant_scheme, rounding_mode, default_output_bw, default_param_bw)
+        self._disable_quantizers_in_folded_batchnorm()
 
     def _validate_model(self):
         """
@@ -143,11 +146,7 @@ class QuantizationSimModel:
             if isinstance(layer, unquantizable_modules) or layer.submodules:
                 return layer
 
-            quantizers_dict = self._quantsim_configurator.get_quantizers_dict(layer)
-            input_quantizers = quantizers_dict.get(INPUT_QUANTIZERS)
-            output_quantizers = quantizers_dict.get(OUTPUT_QUANTIZERS)
-            param_quantizers = quantizers_dict.get(PARAM_QUANTIZERS)
-
+            input_quantizers, output_quantizers, param_quantizers = self._get_quantizers_by_layer(layer)
             wrapper = QcQuantizeWrapper(layer, activation_quant_settings, param_quant_settings,
                                         num_inputs=len(layer.inbound_nodes[0].keras_inputs),
                                         input_quantizers=input_quantizers,
@@ -157,6 +156,41 @@ class QuantizationSimModel:
             return wrapper
 
         return tf.keras.models.clone_model(self._model_without_wrappers, clone_function=wrap_layer)
+
+    def _get_quantizers_by_layer(self, layer: tf.keras.layers.Layer) -> Tuple[Optional[ActivationTensorQuantizer],
+                                                                              Optional[ActivationTensorQuantizer],
+                                                                              Optional[ParamTensorQuantizer]]:
+        """
+        Get input/output/param quantizers from quantizers dictionary or initialize quantizers if layer is not found
+
+        :param layer: Target layer
+        :return: tuple of input, output, param quantizers
+        """
+        quantizers_dict = self._quantsim_configurator.get_quantizers_dict(layer)
+        if quantizers_dict is None:
+            _logger.warning("%s not found in quantizers dict, will generate quantizers automatically", layer.name)
+            input_quantizers = None
+            output_quantizers = None
+            param_quantizers = None
+        else:
+            input_quantizers = quantizers_dict.get(INPUT_QUANTIZERS)
+            output_quantizers = quantizers_dict.get(OUTPUT_QUANTIZERS)
+            param_quantizers = quantizers_dict.get(PARAM_QUANTIZERS)
+
+        return input_quantizers, output_quantizers, param_quantizers
+
+    def _disable_quantizers_in_folded_batchnorm(self):
+        """
+        Disable input/output/param quantizers if layer is folded batch normalization
+        """
+        for quantsim_wrapper in self._layer_name_to_quant_wrapper.values():
+            if GraphSearchUtils.is_folded_batch_normalization(quantsim_wrapper.original_layer):
+                for q in quantsim_wrapper.input_quantizers:
+                    q.disable()
+                for q in quantsim_wrapper.output_quantizers:
+                    q.disable()
+                for q in quantsim_wrapper.param_quantizers:
+                    q.disable()
 
     @staticmethod
     def _get_encoding_dict_for_quantizer(quantizer: TensorQuantizer) -> Dict[str, Union[str, int, float]]:

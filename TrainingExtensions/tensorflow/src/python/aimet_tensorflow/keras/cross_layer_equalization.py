@@ -226,10 +226,16 @@ class GraphSearchUtils:
         """
         return isinstance(layer, (cls_supported_layers + zero_padding_layers)) or \
             GraphSearchUtils._is_supported_activations(layer) or \
-            GraphSearchUtils._is_folded_batch_normalization(layer)
+            GraphSearchUtils.is_folded_batch_normalization(layer)
 
     @staticmethod
-    def _is_folded_batch_normalization(layer: tf.keras.layers.Layer) -> bool:
+    def is_folded_batch_normalization(layer: tf.keras.layers.Layer) -> bool:
+        """
+        Method to check if layer is folded batchnorm or not
+
+        :param layer: layer to check if it is folded batch norm
+        :return: True if it is folded batch norm, False if not
+        """
         if not isinstance(layer, tf.keras.layers.BatchNormalization):
             return False
 
