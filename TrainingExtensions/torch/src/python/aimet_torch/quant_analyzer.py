@@ -464,10 +464,7 @@ class QuantAnalyzer:
             results_dir: str,
     ) -> None:
         """
-        NOTE: output activations dict has layers added based on occurrence inside
-        forward pass and dictionary preserves order.
-
-        Attach and run hooks to tap output activations for given model.
+        Collect and save output activations for given model.
 
         :param model: Model to attach hooks.
         :param module_type_for_attaching_hook: torch.nn module types for which hook has to be attached.
