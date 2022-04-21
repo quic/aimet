@@ -751,11 +751,9 @@ class QuantAnalyzer:
     def analyze(
             self,
             quant_scheme: QuantScheme = QuantScheme.post_training_tf_enhanced,
-            rounding_mode: str = 'nearest',
             default_param_bw: int = 8,
             default_output_bw: int = 8,
             config_file: str = None,
-            default_data_type: QuantizationDataType = QuantizationDataType.int,
             results_dir: str = "./tmp/",
     ) -> None:
         """
@@ -766,23 +764,16 @@ class QuantAnalyzer:
 
         :param quant_scheme: Quantization scheme. Supported values are
                 QuantScheme.post_training_tf or QuantScheme.post_training_tf_enhanced.
-        :param rounding_mode: Rounding mode. Supported options are 'nearest' or 'stochastic'.
         :param default_param_bw: Default bitwidth (4-31) to use for quantizing layer parameters.
         :param default_output_bw: Default bitwidth (4-31) to use for quantizing layer inputs and outputs.
         :param config_file: Path to configuration file for model quantizers.
-        :param default_data_type: Default data type to use for quantizing all layer inputs, outputs and parameters.
-                                 Possible options are QuantizationDataType.int and QuantizationDataType.float.
-                                 Note that the mode default_data_type=QuantizationDataType.float is only supported with
-                                 default_output_bw=16 and default_param_bw=16.
         :param results_dir: Directory to save the results.
         """
         kwargs = dict(
             quant_scheme=quant_scheme,
-            rounding_mode=rounding_mode,
             default_output_bw=default_output_bw,
             default_param_bw=default_param_bw,
             config_file=config_file,
-            default_data_type=default_data_type,
         )
         sim = QuantizationSimModel(self._model, self._dummy_input, **kwargs)
         sim.compute_encodings(self._forward_pass_callback.func, self._forward_pass_callback.args)
