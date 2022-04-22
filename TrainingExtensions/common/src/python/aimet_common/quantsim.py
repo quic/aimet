@@ -38,7 +38,7 @@
 
 """ Common utility for Quantization """
 
-from typing import Union, Tuple
+from typing import Union, Tuple, List
 import numpy as np
 
 from aimet_common.defs import QuantScheme, QuantizationDataType
@@ -80,7 +80,8 @@ def gate_min_max(min_val: float, max_val: float) -> Tuple[float, float]:
     return gated_min, gated_max
 
 
-def calculate_delta_offset(min_val: float, max_val: float, bitwidth: int) -> Tuple[float, float]:
+def calculate_delta_offset(min_val: Union[float, np.ndarray], max_val: Union[float, np.ndarray], bitwidth: int) -> \
+        Union[Tuple[float, float], Tuple[List, List]]:
     """
     calculates delta and offset given min and max.
     :param min_val: min encoding value
@@ -88,15 +89,14 @@ def calculate_delta_offset(min_val: float, max_val: float, bitwidth: int) -> Tup
     :param bitwidth: bitwidth used for quantization
     :return: delta and offset values computed
     """
+    min_val, max_val = gate_min_max(min_val, max_val)
     delta = (max_val - min_val) / (2 ** bitwidth - 1)
 
     if isinstance(delta, np.ndarray):
-        delta = np.clip(delta, 0.01, None)
         offset = np.around(min_val/delta)
         delta = delta.tolist()
         offset = offset.tolist()
     else:
-        delta = max(delta, 0.01)
         offset = round(min_val / delta)
 
     return delta, offset
