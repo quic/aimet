@@ -1178,7 +1178,7 @@ class QuantizationSimModel:
             param_encodings = json.load(json_file)
 
         for name, quant_module in self.model.named_modules():
-            if isinstance(quant_module, StaticGridQuantWrapper):
+            if isinstance(quant_module, QcQuantizeWrapper):
                 quant_module.set_and_freeze_param_encoding(name, param_encodings)
 
     def quant_wrappers(self):

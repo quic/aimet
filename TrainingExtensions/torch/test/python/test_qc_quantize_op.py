@@ -34,9 +34,10 @@
 #
 #  @@-COPYRIGHT-END-@@
 # =============================================================================
+
 import copy
 import time
-
+import pickle
 import pytest
 import numpy as np
 import torch
@@ -45,9 +46,10 @@ from aimet_common.defs import MAP_ROUND_MODE_TO_PYMO, QuantizationDataType
 from aimet_torch.qc_quantize_op import StaticGridQuantWrapper, LearnedGridQuantWrapper, SteGatingFuncForParameters, \
     QcQuantizeOpMode
 from aimet_torch.qc_quantize_op import QuantScheme
-from aimet_torch.quantsim_straight_through_grad import compute_dloss_by_dx_using_scale_offset, compute_dloss_by_dmin_using_dmax, compute_dloss_by_dmax
-from aimet_torch.tensor_quantizer import StaticGridPerTensorQuantizer, StaticGridPerChannelQuantizer
-from aimet_torch.tensor_quantizer import LearnedGridTensorQuantizer, ParameterQuantizer
+from aimet_torch.quantsim_straight_through_grad import compute_dloss_by_dx_using_scale_offset,\
+    compute_dloss_by_dmin_using_dmax, compute_dloss_by_dmax
+from aimet_torch.tensor_quantizer import StaticGridPerTensorQuantizer
+from aimet_torch.tensor_quantizer import LearnedGridTensorQuantizer
 import libpymo
 
 
@@ -798,3 +800,113 @@ class TestQcQuantizeOpLearnedGrid:
         wrapper.enable_param_quantizers(enabled=False, param_name_to_exclude=None)
         assert wrapper.param_quantizers['weight'].enabled == False
         assert wrapper.param_quantizers['bias'].enabled == False
+
+    def test_set_and_freeze_param_encoding_for_static_grid_quant_wrapper(self):
+        """ Test set and freeze parameter encoding  """
+        conv1 = torch.nn.Conv2d(4, 4, 1)
+        quant_wrapper = StaticGridQuantWrapper(conv1, weight_bw=8, activation_bw=8, round_mode='nearest',
+                                               quant_scheme=QuantScheme.post_training_tf_enhanced,
+                                               data_type=QuantizationDataType.int)
+
+        param_encodings = {'conv1.weight': [{'bitwidth': 4, 'is_symmetric': 'False', 'max': 0.3, 'min': -0.2,
+                                             'offset': -7.0, 'scale': 0.038}]}
+
+        quant_wrapper.set_and_freeze_param_encoding('conv1', param_encodings)
+
+        assert quant_wrapper.param_quantizers['weight'].encoding.bw == 4
+        assert quant_wrapper.param_quantizers['weight'].encoding.offset == -7.0
+        assert quant_wrapper.param_quantizers['weight'].encoding.delta == 0.038
+        assert not quant_wrapper.param_quantizers['weight'].use_symmetric_encodings
+        assert quant_wrapper.param_quantizers['weight'].bitwidth == 4
+
+        # Reset encoding, Since encoding are frozen they should not be None after reset encoding
+        quant_wrapper.reset_encodings()
+
+        assert quant_wrapper.param_quantizers['weight'].encoding
+
+    def test_set_and_freeze_param_encoding_for_learned_grid_quant_wrapper(self):
+        """ Test set and freeze parameter encoding  """
+        conv1 = torch.nn.Conv2d(4, 4, 1)
+        quant_wrapper = LearnedGridQuantWrapper(conv1, round_mode='nearest',
+                                                quant_scheme=QuantScheme.training_range_learning_with_tf_init,
+                                                is_output_quantized=True, activation_bw=8,
+                                                weight_bw=8, device='cpu')
+
+        enc_old = libpymo.TfEncoding()
+        enc_old.bw, enc_old.max, enc_old.min, enc_old.delta, enc_old.offset = 4, 0.5, -1, 1, 0.2
+        quant_wrapper.param_quantizers['weight'].encoding = enc_old
+
+        param_encodings = {'conv1.weight': [{'bitwidth': 4, 'is_symmetric': 'False', 'max': 0.3, 'min': -0.2,
+                                             'offset': -7.0, 'scale': 0.038}]}
+
+        quant_wrapper.set_and_freeze_param_encoding('conv1', param_encodings)
+
+        assert quant_wrapper.param_quantizers['weight'].encoding.bw == 4
+        assert np.isclose(quant_wrapper.param_quantizers['weight'].encoding.min, -0.2)
+        assert np.isclose(quant_wrapper.param_quantizers['weight'].encoding.max, 0.3)
+        assert not quant_wrapper.param_quantizers['weight'].use_symmetric_encodings
+
+        # try to set new encoding.
+        with pytest.raises(RuntimeError):
+            enc_new = libpymo.TfEncoding()
+            enc_new.bw, enc_new.max, enc_new.min, enc_new.delta, enc_new.offset = 4, 0.4, -0.98, 1, 0.2
+            quant_wrapper.param_quantizers['weight'].encoding = enc_new
+
+        # Once again verify.
+        assert quant_wrapper.param_quantizers['weight'].encoding.bw == 4
+        assert np.isclose(quant_wrapper.param_quantizers['weight'].encoding.min, -0.2)
+        assert np.isclose(quant_wrapper.param_quantizers['weight'].encoding.max, 0.3)
+        assert not quant_wrapper.param_quantizers['weight'].use_symmetric_encodings
+
+    def test_learned_grid_set_freeze_encoding_pickle_upickle(self):
+        """
+        test freeze_encoding() with pickle and unpickle.
+        """
+        conv = torch.nn.Conv2d(1, 32, 5)
+        quant_wrapper = StaticGridQuantWrapper(conv, weight_bw=8, activation_bw=8, round_mode='nearest',
+                                               quant_scheme=QuantScheme.post_training_tf_enhanced)
+
+        enc = libpymo.TfEncoding()
+        enc.bw, enc.max, enc.min, enc.delta, enc.offset = 8, 0.5, -1, 0.01, 50
+
+        # Set encoding for all - input, output and parameters quantizer.
+        quant_wrapper.input_quantizer.enabled = True
+        quant_wrapper.input_quantizer.encoding = enc
+        quant_wrapper.param_quantizers['weight'].enabled = True
+        quant_wrapper.param_quantizers['weight'].encoding = enc
+        quant_wrapper.param_quantizers['bias'].enabled = True
+        quant_wrapper.param_quantizers['bias'].encoding = enc
+        quant_wrapper.output_quantizer.enabled = True
+        quant_wrapper.output_quantizer.encoding = enc
+
+        enc_cur = quant_wrapper.output_quantizer.encoding
+        assert enc_cur.min == enc.min
+
+        # Freeze encoding only for output quantizer.
+        quant_wrapper.output_quantizer.freeze_encoding()
+
+        # Serialize and De-serialize.
+        pickled = pickle.dumps(quant_wrapper)
+        loaded_quant_wrapper = pickle.loads(pickled)
+
+        # verify that the state _is_encoding_frozen state is maintained.
+        assert loaded_quant_wrapper.output_quantizer._is_encoding_frozen == True
+        assert loaded_quant_wrapper.input_quantizer._is_encoding_frozen == False
+        assert loaded_quant_wrapper.param_quantizers['weight']._is_encoding_frozen == False
+        assert loaded_quant_wrapper.param_quantizers['bias']._is_encoding_frozen == False
+
+        assert loaded_quant_wrapper.param_quantizers['weight'].encoding.max == 0.5
+        assert loaded_quant_wrapper.param_quantizers['bias'].encoding.max == 0.5
+        assert loaded_quant_wrapper.output_quantizer.encoding.max == 0.5
+        assert loaded_quant_wrapper.input_quantizer.encoding.max == 0.5
+
+        enc_new = libpymo.TfEncoding()
+        enc_new.bw, enc_new.max, enc_new.min, enc_new.delta, enc_new.offset = 4, 0.4, -0.98, 1, 0.2
+
+        # try to set new encoding except output quantizer.
+        loaded_quant_wrapper.param_quantizers['weight'].encoding = enc_new
+        loaded_quant_wrapper.param_quantizers['bias'].encoding = enc_new
+        loaded_quant_wrapper.input_quantizer.encoding = enc_new
+        with pytest.raises(RuntimeError):
+            loaded_quant_wrapper.output_quantizer.encoding = enc_new
+
