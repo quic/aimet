@@ -38,8 +38,10 @@
 
 import pytest
 import torch
+import libpymo
 
 from aimet_common.defs import QuantScheme
+from aimet_torch.qc_quantize_op import LearnedGridQuantWrapper
 from aimet_torch.tensor_quantizer import StaticGridPerTensorQuantizer, StaticGridPerChannelQuantizer,\
     StaticGridTensorQuantizer
 
@@ -99,3 +101,93 @@ class TestTensorQuantizer:
                                               use_symmetric_encodings=False, enabled_by_default=True)
         with pytest.raises(RuntimeError):
             quantizer.get_stats_histogram()
+
+    def test_learned_grid_set_and_freeze_param_encoding(self):
+        """
+        test freeze_encoding() method for LearnedGridQuantWrapper.
+        """
+        conv = torch.nn.Conv2d(1, 32, 5)
+        quant_wrapper = LearnedGridQuantWrapper(conv, round_mode='nearest',
+                                                quant_scheme=QuantScheme.training_range_learning_with_tf_init,
+                                                is_output_quantized=True, activation_bw=8,
+                                                weight_bw=8, device='cpu')
+
+        enc_old = libpymo.TfEncoding()
+        enc_old.bw, enc_old.max, enc_old.min, enc_old.delta, enc_old.offset = 8, 0.5, -1, 1, 0.2
+
+        enc_new = libpymo.TfEncoding()
+        enc_new.bw, enc_new.max, enc_new.min, enc_new.delta, enc_new.offset = 8, 0.4, -0.98, 1, 0.2
+
+        # Set encoding for output quantizer and freeze it.
+        quant_wrapper.output_quantizer.encoding = enc_old
+        quant_wrapper.output_quantizer.freeze_encoding()
+
+        enc_cur = quant_wrapper.output_quantizer.encoding
+        assert enc_cur.min == enc_old.min
+
+        # set encoding one more time but can not set it since it is frozen.
+        with pytest.raises(RuntimeError):
+            quant_wrapper.output_quantizer.encoding = enc_new
+
+        enc_cur = quant_wrapper.output_quantizer.encoding
+        assert enc_cur.min == enc_old.min
+
+    def test_learned_grid_set_freeze_encoding(self):
+        """
+        test freeze_encoding() method for LearnedGridQuantWrapper.
+        """
+        conv = torch.nn.Conv2d(1, 32, 5)
+        quant_wrapper = LearnedGridQuantWrapper(conv, round_mode='nearest',
+                                                quant_scheme=QuantScheme.training_range_learning_with_tf_init,
+                                                is_output_quantized=True, activation_bw=8,
+                                                weight_bw=8, device='cpu')
+
+        enc = libpymo.TfEncoding()
+        enc.bw, enc.max, enc.min, enc.delta, enc.offset = 8, 0.5, -1, 0.01, 50
+
+        # Set encoding for all - input, output and parameters quantizer.
+        quant_wrapper.input_quantizer.enabled = True
+        quant_wrapper.input_quantizer.encoding = enc
+        quant_wrapper.param_quantizers['weight'].enabled = True
+        quant_wrapper.param_quantizers['weight'].encoding = enc
+        quant_wrapper.param_quantizers['bias'].enabled = True
+        quant_wrapper.param_quantizers['bias'].encoding = enc
+        quant_wrapper.output_quantizer.enabled = True
+        quant_wrapper.output_quantizer.encoding = enc
+
+        enc_cur = quant_wrapper.output_quantizer.encoding
+        assert enc_cur.min == enc.min
+
+        # Freeze encoding only for output quantizer.
+        quant_wrapper.output_quantizer.freeze_encoding()
+
+        inp = torch.rand((1, 1, 5, 5), requires_grad=True)
+        optimizer = torch.optim.SGD(quant_wrapper.parameters(), lr=0.05, momentum=0.5)
+        for _ in range(2):
+            optimizer.zero_grad()
+            out = quant_wrapper(inp)
+            loss = out.flatten().sum()
+            loss.backward()
+            optimizer.step()
+
+        # Check if the min and max parameters have changed.
+        assert not quant_wrapper.input0_encoding_min.item() == -1
+        assert not quant_wrapper.input0_encoding_max.item() == 0.5
+        assert not quant_wrapper.weight_encoding_min.item() == -1
+        assert not quant_wrapper.weight_encoding_max.item() == 0.5
+        assert not quant_wrapper.bias_encoding_min.item() == -1
+        assert not quant_wrapper.bias_encoding_max.item() == 0.5
+        # For output quantizer, it should be same as before.
+        assert quant_wrapper.output0_encoding_min.item() == -1
+        assert quant_wrapper.output0_encoding_max.item() == 0.5
+
+        # Check encoding.getter property.
+        assert not quant_wrapper.input_quantizer.encoding.min == -1
+        assert not quant_wrapper.input_quantizer.encoding.max == 0.5
+        assert not quant_wrapper.param_quantizers["weight"].encoding.min == -1
+        assert not quant_wrapper.param_quantizers["weight"].encoding.max == 0.5
+        assert not quant_wrapper.param_quantizers["bias"].encoding.min == -1
+        assert not quant_wrapper.param_quantizers["bias"].encoding.max == 0.5
+        # For output quantizer, it should be same as before.
+        assert quant_wrapper.output_quantizer.encoding.min == -1
+        assert quant_wrapper.output_quantizer.encoding.max == 0.5

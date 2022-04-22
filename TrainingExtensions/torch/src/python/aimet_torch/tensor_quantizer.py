@@ -38,7 +38,7 @@
 """ Custom Tensor Quantizers for PyTorch Op for quantizing weights and activations """
 
 import io
-from typing import List
+from typing import List, Union
 
 import torch
 from aimet_common.defs import QuantScheme, QuantizationDataType, MAP_QUANT_SCHEME_TO_PYMO
@@ -69,6 +69,7 @@ class TensorQuantizer:
         :param quant_scheme: Quantization scheme (e.g. Range Learning)
         :param use_symmetric_encodings: True if symmetric encoding is used.  False otherwise.
         :param enabled_by_default: True if quantization of tensor is enabled.  False otherwise.
+        :param data_type: Data type for quantization (e.g. int, float)
         """
         super(TensorQuantizer, self).__init__()
         self.round_mode = round_mode
@@ -79,6 +80,17 @@ class TensorQuantizer:
         self.bitwidth = bitwidth
         self.enabled = enabled_by_default
         self.data_type = data_type
+        self._encoding = None
+        self._is_encoding_frozen = False
+
+    def freeze_encoding(self) -> None:
+        """
+        Freeze the encoding.
+        """
+        if not self._encoding:
+            raise RuntimeError("Encoding can be frozen only when it is not None.")
+
+        self._is_encoding_frozen = True
 
 
 class PickableState:
@@ -114,8 +126,6 @@ class StaticGridTensorQuantizer(TensorQuantizer):
         super(StaticGridTensorQuantizer, self).__init__(bitwidth, round_mode, quant_scheme, use_symmetric_encodings,
                                                         enabled_by_default, data_type)
         self._cppOp = None
-        self._encoding = None
-        self._is_encoding_frozen = False
 
     def __str__(self):
         stream = io.StringIO(newline='\n')
@@ -195,17 +205,23 @@ class StaticGridTensorQuantizer(TensorQuantizer):
         self._cppOp = [AimetTensorQuantizer.AimetTensorQuantizer(quant_scheme) for _ in self._cppOp]
 
     @property
-    def encoding(self):
+    def encoding(self) -> Union[None, libpymo.TfEncoding, List[libpymo.TfEncoding]]:
         """
-        Property to get encoding
-        :return: One (per-tensor) or list of many (per-channel) encodings
+        Property to get encoding.
+        :return: One (per-tensor) or list of many (per-channel) encoding(s).
         """
         return self._encoding
 
     @encoding.setter
-    def encoding(self, encoding):
-        if not self._is_encoding_frozen:
-            self._encoding = encoding
+    def encoding(self, encoding) -> None:
+        """
+        Property to set encoding.
+        :param encoding: One (per-tensor) or list of many (per-channel) encoding(s).
+        """
+        if self._is_encoding_frozen:
+            raise RuntimeError("Encoding can be set only when it is not frozen.")
+
+        self._encoding = encoding
 
     def compute_encoding(self):
         """
@@ -266,12 +282,6 @@ class StaticGridTensorQuantizer(TensorQuantizer):
                 op.resetEncodingStats()
             self._encoding = None
 
-    def freeze_encoding(self):
-        """
-        Freeze the encoding
-        """
-        self._is_encoding_frozen = True
-
     def get_stats_histogram(self) -> List[List]:
         """
         NOTE: Not to invoke when quantization scheme is not TF-Enhanced.
@@ -316,20 +326,28 @@ class StaticGridPerTensorQuantizer(StaticGridTensorQuantizer):
 
         quant_scheme = MAP_QUANT_SCHEME_TO_PYMO[quant_scheme]
         self._cppOp = [AimetTensorQuantizer.AimetTensorQuantizer(quant_scheme)]
-        self._encoding = None
-        self._is_encoding_frozen = False
 
     @property
-    def encoding(self):
+    def encoding(self) -> Union[None, libpymo.TfEncoding]:
+        """
+        Property to get encoding.
+        :return: Encoding.
+        """
         if self._encoding:
             return self._encoding[0]
 
         return None
 
     @encoding.setter
-    def encoding(self, encoding: libpymo.TfEncoding):
-        if not self._is_encoding_frozen:
-            self._encoding = [encoding]
+    def encoding(self, encoding: libpymo.TfEncoding) -> None:
+        """
+        Property to set encoding.
+        :param encoding: Encoding.
+        """
+        if self._is_encoding_frozen:
+            raise RuntimeError("Encoding can be set only when it is not frozen.")
+
+        self._encoding = [encoding]
 
     def update_encoding_stats(self, tensor):
         """
@@ -362,17 +380,25 @@ class StaticGridPerChannelQuantizer(StaticGridTensorQuantizer):
         quant_scheme = MAP_QUANT_SCHEME_TO_PYMO[quant_scheme]
         self._cppOp = [AimetTensorQuantizer.AimetTensorQuantizer(quant_scheme) for _ in range(num_channels)]
         self._ch_axis = ch_axis
-        self._encoding = None
-        self._is_encoding_frozen = False
 
     @property
-    def encoding(self):
+    def encoding(self) -> Union[None, List[libpymo.TfEncoding]]:
+        """
+        Property to get encoding.
+        :return: List of Encoding(s).
+        """
         return self._encoding
 
     @encoding.setter
-    def encoding(self, encoding: List[libpymo.TfEncoding]):
-        if not self._is_encoding_frozen:
-            self._encoding = encoding
+    def encoding(self, encoding: List[libpymo.TfEncoding]) -> None:
+        """
+        Property to set encoding.
+        :param encoding: List of Encoding(s).
+        """
+        if self._is_encoding_frozen:
+            raise RuntimeError("Encoding can be set only when it is not frozen.")
+
+        self._encoding = encoding
 
     def update_encoding_stats(self, tensor):
         """
@@ -390,7 +416,7 @@ class LearnedGridTensorQuantizer(TensorQuantizer):
     Simulates quantization for a given tensor in the model, such that the scale/offset encodings are
     initialized and then "learnt" during training
     """
-
+    # pylint: disable=too-many-instance-attributes
     def __init__(self, bitwidth: int, round_mode: str, quant_scheme: QuantScheme, use_symmetric_encodings: bool,
                  enabled_by_default: bool, data_type: QuantizationDataType):
         """
@@ -447,61 +473,33 @@ class LearnedGridTensorQuantizer(TensorQuantizer):
     @property
     def encoding(self):
         """
-        Gets the encodings from wrapper
-        :return: encodings
+        NOTE: encoding.getter first compute updated encoding and then return it.
+
+        Property to get learned (up-to-date) encoding computed from encoding min and max parameters.
+        :return: encoding(s).
         """
-        # pylint:disable = protected-access
+        # pylint:disable=protected-access
         if self.enabled:
-            encoding_min = self.wrapper_ref._parameters[self.name + '_encoding_min']
-            encoding_max = self.wrapper_ref._parameters[self.name + '_encoding_max']
-            encodings = []
-            for minimum, maximum in zip(encoding_min, encoding_max):
-                tf_encoding = libpymo.TfEncoding()
-                scale, offset = self.compute_scaling_offset(minimum, maximum)
-                tf_encoding.min, tf_encoding.max, tf_encoding.offset, tf_encoding.delta, \
-                tf_encoding.bw = minimum, maximum, offset, scale, self.bitwidth
-                encodings.append(tf_encoding)
-            # TODO: Remove when using only sequence of encodings (Done for backward compatibility)
-            if len(encodings) == 1:
-                encodings = encodings[0]
-            return encodings
+            self._encoding = self._compute_updated_encoding()
+            return self._encoding
+
         return None
 
     @encoding.setter
-    def encoding(self, encodings):
+    def encoding(self, encoding: Union[libpymo.TfEncoding, List[libpymo.TfEncoding]]):
         """
-        Sets encoding parameter using values obtained from encodings
-        :param encodings: encodings value
+        Property to set encoding.
+        encoding.setter also sets encoding min and max parameters and recompute
+        p and n tensors.
+        :param encoding: encodings.
         """
-        # pylint:disable = protected-access
         if self.enabled:
-            assert encodings is not None, "Encodings cannot be None if Quantizer is enabled"
-
-            # pylint: disable = protected-access
-            enc_min_param = self.name + '_encoding_min'
-            enc_max_param = self.name + '_encoding_max'
-            # TODO refactor to not call internal state of wrapper
-            params = self.wrapper_ref._parameters
-
-            # Todo: Remove this check when encodings is always a sequence
-            if isinstance(encodings, List):
-                assert isinstance(encodings[0], libpymo.TfEncoding), "Encodings should be a libpymo.TfEncoding() object"
-                # Todo: Check for sequence
-                encodings_min = [enc.min for enc in encodings]
-                encodings_max = [enc.max for enc in encodings]
-                self.bitwidth = encodings[0].bw
-            else:
-                assert isinstance(encodings, libpymo.TfEncoding), "Encodings should be a libpymo.TfEncoding() object"
-                encodings_min = [encodings.min]
-                encodings_max = [encodings.max]
-                self.bitwidth = encodings.bw
-
-            params[enc_min_param] = torch.nn.Parameter(torch.FloatTensor(encodings_min).to(self.device),
-                                                       requires_grad=True)
-
-            params[enc_max_param] = torch.nn.Parameter(torch.FloatTensor(encodings_max).to(self.device),
-                                                       requires_grad=True)
-
+            assert encoding is not None, "Encodings cannot be None if Quantizer is enabled."
+            if self._is_encoding_frozen:
+                raise RuntimeError("Encoding can be set only when it is not frozen.")
+            self._encoding = encoding
+            self._set_encoding_min_max_parameters(encoding)
+            self._set_p_and_n(encoding)
 
     def __str__(self):
         stream = io.StringIO(newline='\n')
@@ -553,6 +551,84 @@ class LearnedGridTensorQuantizer(TensorQuantizer):
 
             tensor = QuantizeDequantizeFunc.apply(tensor, encoding_min, encoding_max, self)
         return tensor
+
+    def _compute_updated_encoding(self):
+        """
+        Computes updated encoding from encoding min and max parameters.
+        :return: Up-to-date (learned) encoding(s).
+        """
+        # pylint:disable=protected-access
+        encoding_min = self.wrapper_ref._parameters[self.name + '_encoding_min']
+        encoding_max = self.wrapper_ref._parameters[self.name + '_encoding_max']
+
+        encodings = []
+        for minimum, maximum in zip(encoding_min, encoding_max):
+            tf_encoding = libpymo.TfEncoding()
+            scale, offset = self.compute_scaling_offset(minimum, maximum)
+            tf_encoding.min, tf_encoding.max, tf_encoding.offset, tf_encoding.delta, \
+            tf_encoding.bw = minimum, maximum, offset, scale, self.bitwidth
+            encodings.append(tf_encoding)
+
+        # TODO: Remove when using only sequence of encodings (Done for backward compatibility)
+        if len(encodings) == 1:
+            encodings = encodings[0]
+
+        return encodings
+
+    def _set_encoding_min_max_parameters(self, encodings: Union[libpymo.TfEncoding, List[libpymo.TfEncoding]]):
+        """
+        Set encoding min and max parameters.
+        :param encodings: Encoding(s).
+        """
+        # pylint: disable=protected-access
+        enc_min_param = self.name + '_encoding_min'
+        enc_max_param = self.name + '_encoding_max'
+        # TODO: refactor to not call internal state of wrapper
+        params = self.wrapper_ref._parameters
+
+        # TODO: Remove this check when encodings is always a sequence
+        if isinstance(encodings, List):
+            assert isinstance(encodings[0], libpymo.TfEncoding), "Encodings should be a libpymo.TfEncoding() object"
+            # TODO: Check for sequence
+            encodings_min = [enc.min for enc in encodings]
+            encodings_max = [enc.max for enc in encodings]
+            self.bitwidth = encodings[0].bw
+        else:
+            assert isinstance(encodings, libpymo.TfEncoding), "Encodings should be a libpymo.TfEncoding() object"
+            encodings_min = [encodings.min]
+            encodings_max = [encodings.max]
+            self.bitwidth = encodings.bw
+
+        params[enc_min_param] = torch.nn.Parameter(torch.FloatTensor(encodings_min).to(self.device),
+                                                   requires_grad=True)
+        params[enc_max_param] = torch.nn.Parameter(torch.FloatTensor(encodings_max).to(self.device),
+                                                   requires_grad=True)
+
+    def _set_p_and_n(self, encodings: Union[libpymo.TfEncoding, List[libpymo.TfEncoding]]) -> None:
+        """
+        Recompute and set p and n bound tensors.
+        """
+        bitwidth = encodings[0].bw if isinstance(encodings, List) else encodings.bw
+        assert bitwidth == self.bitwidth, "Bitwidth mismatched."
+
+        self.n, self.p = self.get_n_and_p(self.bitwidth, self.use_symmetric_encodings)
+
+    def freeze_encoding(self):
+        """
+        Freeze the encoding and freeze encoding min and max parameters.
+        """
+        # pylint:disable=protected-access
+        if not self._encoding:
+            raise RuntimeError("Encoding can be frozen only when it is not None.")
+
+        self._is_encoding_frozen = True
+
+        enc_min_param = self.name + '_encoding_min'
+        enc_max_param = self.name + '_encoding_max'
+        # TODO: refactor to not call internal state of wrapper
+        params = self.wrapper_ref._parameters
+        params[enc_min_param].requires_grad = False
+        params[enc_max_param].requires_grad = False
 
 
 class QuantizeDequantizeFunc(torch.autograd.Function):
