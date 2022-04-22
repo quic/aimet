@@ -381,6 +381,7 @@ class TransformerQuantizationUnittests(unittest.TestCase):
         attention_tensor = sess.graph.get_tensor_by_name(
             'tf_bert_model/bert/encoder/layer_._0/attention/output/LayerNorm/batchnorm/add_1:0')
         matmul_tensor = sess.graph.get_tensor_by_name('tf_bert_model/bert/encoder/layer_._0/attention/self/MatMul_1:0')
+        np.random.seed(0)
         random_input = np.random.randint(16384, size=(2, 512))
 
         attention_result, matmul_result, result = sess.run([attention_tensor, matmul_tensor, output_tensor], {
@@ -421,6 +422,7 @@ class TransformerQuantizationUnittests(unittest.TestCase):
 
         def dummy_forward_pass(sess, args):
             model_output = sess.graph.get_tensor_by_name('tf_bert_model/bert/pooler/dense/Tanh_quantized:0')
+            np.random.seed(0)
             model_inputs = {
                 sess.graph.get_tensor_by_name('input_ids:0'): np.random.randint(16384, size=[1, 512]),
                 sess.graph.get_tensor_by_name('input_masks:0'): np.random.randint(1, size=[1, 512])
@@ -603,6 +605,7 @@ def check_encoding(quant_op, sim, enabled):
 
 
 def random_input_forward_pass(sess, args):
+    np.random.seed(0)
     model_output = sess.graph.get_tensor_by_name(args['output_tensor'])
     data = np.random.randint(16384, size=args['input_shape']) if args['int'] else np.random.rand(*args['input_shape'])
     model_inputs = {
