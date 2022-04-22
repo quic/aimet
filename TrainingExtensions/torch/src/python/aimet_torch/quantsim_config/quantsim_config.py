@@ -462,9 +462,13 @@ class QuantSimConfigurator(AimetCommonQuantSimConfigurator):
                     param_config = op_config[ConfigDictKeys.PARAMS][quantsim_param_name]
                     _set_config_for_param(quantsim_wrapper.param_quantizers[param_name], param_config)
 
-                # override op level config if it is enforced
-                if ENFORCE_TARGET_DTYPE_BITWIDTH_CONFIG and ConfigDictKeys.SUPPORTED_KERNELS in op_config:
-                    self._apply_overrides_for_module(op_config, quantsim_wrapper)
+        # override op level supported kernel config if it is enforced
+        if ENFORCE_TARGET_DTYPE_BITWIDTH_CONFIG and ConfigDictKeys.SUPPORTED_KERNELS in op_config:
+            if module is None:
+                logger.error('No module provided to set params for')
+                raise AssertionError
+            quantsim_wrapper = self._module_to_quantsim_wrapper_dict[module]
+            self._apply_overrides_for_module(op_config, quantsim_wrapper)
 
     def _set_supergroup_configs(self, supergroups_configs: List[SupergroupType]):
         """
