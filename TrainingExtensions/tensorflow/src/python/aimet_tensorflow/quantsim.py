@@ -47,7 +47,7 @@ import tensorflow as tf
 from tensorflow.python.framework import ops as tf_ops
 from packaging import version
 from aimet_common.defs import QuantScheme, QuantizationDataType
-from aimet_common.quantsim import gate_min_max, calculate_delta_offset, encoding_version, validate_quantsim_inputs, \
+from aimet_common.quantsim import calculate_delta_offset, encoding_version, validate_quantsim_inputs, \
     recompute_grid_params
 from aimet_common.quant_utils import get_conv_accum_bounds
 from aimet_common.utils import AimetLogger, save_json_yaml
@@ -525,7 +525,6 @@ class QuantizationSimModel:
             quant_op = self.session.graph.get_operation_by_name(quant_op_name)
             min_val, max_val = self.read_min_max(quant_op_name, variable_dict)
             # if per channel quantization is enabled, then min and max are numpy arrays, and this function gates the array
-            min_val, max_val = gate_min_max(min_val, max_val)
             op_bitwidth = int(self._get_op_variable_value(quant_op, QuantizeOpIndices.bit_width))
             delta, offset = calculate_delta_offset(min_val, max_val, op_bitwidth)
             # Min and max will be numpy arrays, so to make them JSON serializable
