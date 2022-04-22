@@ -50,6 +50,25 @@ from aimet_torch import utils
 from aimet_torch.meta.connectedgraph import ConnectedGraph
 
 
+class ModelWithBertCustomLayerNormGelu(torch.nn.Module):
+    """ Model with PyTorch LayerNorm and gelu """
+
+    def __init__(self):
+        super(ModelWithBertCustomLayerNormGelu, self).__init__()
+        self.linear1 = torch.nn.Linear(4, 4)
+        # default attribute -
+        # eps = 1e-05 and elementwise_affine = True
+        # parameters : weight and bias
+        self.customln1 = torch.nn.LayerNorm(4)
+        self.gelu1 = torch.nn.GELU()
+
+    def forward(self, x):
+        x = self.linear1(x)
+        x = self.customln1(x)
+        x = self.gelu1(x)
+        return x
+
+
 # pylint: disable=protected-access
 class TestQuantsimConfig:
     """ Class containing unit tests for quantsim config feature """
@@ -1756,6 +1775,108 @@ class TestQuantsimConfig:
 
         assert exception_raised
 
+        qsim_config.ENFORCE_TARGET_DTYPE_BITWIDTH_CONFIG = False
+        if os.path.exists('./data/quantsim_config.json'):
+            os.remove('./data/quantsim_config.json')
+
+    def test_target_rule_enforced_apply_op_level_overrides_fp16(self):
+        """
+        validates Config overrides provided are valid combination and application of aic100 specific rules.
+        No dfeualt supported kernel override and op level FP16 support for LayerNorm and GeLU.
+        Quantsim created with (int8, int8) defaults
+        a) Default supported kernels override not provided.
+        b) op level override at index 0 of supported_kernels for LayerNorm/GeLU type is
+        (fp 16, fp16) --> applied to params.
+        For GeLu, nothing is applied, as it has not params. output is retained at int 8.
+        :return:
+        """
+
+        # aic100, no default supported kernels, op level for layernorm and gelu
+        quantsim_config = {
+            "defaults": {
+                "ops": {
+                    "is_output_quantized": "True"
+                },
+                "params": {
+                    "is_quantized": "True"
+                }
+            },
+            "params": {},
+            "op_type": {
+                "LayerNorm": {
+                    "supported_kernels":
+                        [
+                            {
+                                "activation": {
+                                    "bitwidth": 16,
+                                    "dtype": "float"
+                                },
+                                "param": {
+                                    "bitwidth": 16,
+                                    "dtype": "float"
+                                }
+                            },
+                        ]
+                },
+                "GELU": {
+                    "is_output_quantized": "True",
+                    "supported_kernels":
+                        [
+                            {
+                                "activation": {
+                                    "bitwidth": 16,
+                                    "dtype": "float"
+                                },
+                                "param": {
+                                    "bitwidth": 16,
+                                    "dtype": "float"
+                                }
+                            },
+                        ]
+                }
+            },
+            "supergroups": [],
+            "model_input": {},
+            "model_output": {}
+        }
+
+
+        with open('./data/quantsim_config.json', 'w') as f:
+            json.dump(quantsim_config, f)
+
+        torch.manual_seed(10)
+        model = ModelWithBertCustomLayerNormGelu()
+        model.eval()
+
+        random_input = torch.rand(1, 4, 4)
+
+        def forward_pass(model, args):
+            model.eval()
+            with torch.no_grad():
+                model(*random_input)
+
+        qsim_config.ENFORCE_TARGET_DTYPE_BITWIDTH_CONFIG = True
+        sim = QuantizationSimModel(model, quant_scheme=QuantScheme.post_training_tf,
+                                   dummy_input=random_input, default_data_type=QuantizationDataType.int,
+                                   default_output_bw=8, default_param_bw=8,
+                                   config_file='./data/quantsim_config.json')
+
+
+        # enforce is set to true
+        # LayerNorm params should be set to FP 16, while output is maintained at quantsim defaults (int8)
+        assert(sim.model.customln1.output_quantizer.data_type == QuantizationDataType.int)
+        assert(sim.model.customln1.output_quantizer.bitwidth == 8)
+
+        # override this with custom config (matches aic100_config.json)
+        assert(sim.model.customln1.param_quantizers['weight'].data_type == QuantizationDataType.float)
+        assert(sim.model.customln1.param_quantizers['weight'].bitwidth == 16)
+
+        # gelu output should be retained at quantsim defaults (int8) although it has supported_kernels = FP16
+        # as this op doesn't have params
+        assert(sim.model.gelu1.output_quantizer.data_type == QuantizationDataType.int)
+        assert(sim.model.gelu1.output_quantizer.bitwidth == 8)
+
+        # remove test config created
         qsim_config.ENFORCE_TARGET_DTYPE_BITWIDTH_CONFIG = False
         if os.path.exists('./data/quantsim_config.json'):
             os.remove('./data/quantsim_config.json')

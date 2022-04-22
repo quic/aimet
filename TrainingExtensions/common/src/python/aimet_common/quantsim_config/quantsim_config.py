@@ -194,11 +194,19 @@ class QuantSimConfigurator(ABC):
                     quantsim_dtype_bw_info = get_override_from_supported_kernels(default_supported_kernels)
 
                 else:
-                    logger.info(' Default supported_kernels override check failed, one way to rectify is to include \n'
-                                ' default quantsim data type and bit-width {act_bw = %s, param_bw = %s, data_type = %s} \n '
-                                ' in supported_kernels list under default section of target specific config file \n',
-                                quantsim_dtype_bw_info.act_bw, quantsim_dtype_bw_info.param_bw, quantsim_dtype_bw_info.data_type)
+                    logger.error(' Default supported_kernels override check failed, one way to rectify is to include \n'
+                                 ' default quantsim data type and bit-width {act_bw = %s, param_bw = %s, data_type = %s} \n '
+                                 ' in supported_kernels list under default section of target specific config file \n',
+                                 quantsim_dtype_bw_info.act_bw, quantsim_dtype_bw_info.param_bw, quantsim_dtype_bw_info.data_type)
                     raise NotImplementedError
+        else:
+            # user has not provided default supported_kernels, log quantsim defaults treated as default target kernel support
+            default_valid = True
+            logger.info(' Default supported_kernels not specified in given target specific config file. \n'
+                        ' Using default quantsim data type and bit-width {act_bw = %s, param_bw = %s, data_type = %s} \n '
+                        ' as default target support\n',
+                        quantsim_dtype_bw_info.act_bw, quantsim_dtype_bw_info.param_bw, quantsim_dtype_bw_info.data_type)
+
         # in either case, validate op level override options
         if self._quantsim_configs[ConfigDictKeys.OP_TYPE]:
             op_level_valid = validate_all_op_level_dtype_bw_overrides(self._quantsim_configs[ConfigDictKeys.OP_TYPE],
