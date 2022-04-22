@@ -66,8 +66,9 @@ def evaluate(model: torch.nn.Module, dummy_input: torch.Tensor):
     :param dummy_input: dummy input to model.
     """
     model.eval()
-    with torch.no_grad():
-        model(dummy_input)
+    for i in range(2):
+        with torch.no_grad():
+            model(dummy_input)
     return 0.8
 
 
@@ -302,7 +303,7 @@ class TestQuantAnalyzer:
 
     def test_run_hooks_to_tap_output_activations(self):
         """ test _run_hooks_to_tap_output_activations() method """
-        input_shape = (1, 3, 32, 32)
+        input_shape = (4, 3, 32, 32)
         dummy_input = torch.randn(*input_shape)
         model = TinyModel().eval()
         sim = QuantizationSimModel(model, dummy_input)
@@ -331,6 +332,8 @@ class TestQuantAnalyzer:
                 fp32_out_act = quant_analyzer._load_out_acts(fp32_out_acts_dir, name)
                 quant_out_act = quant_analyzer._load_out_acts(quantized_out_acts_dir, name)
                 assert fp32_out_act.shape == quant_out_act.shape
+                # batch_size=4, number_of_batches=2
+                assert fp32_out_act.size(dim=0) == 8
         finally:
             if os.path.isdir(fp32_out_acts_dir):
                 shutil.rmtree(fp32_out_acts_dir)
@@ -375,3 +378,21 @@ class TestQuantAnalyzer:
         finally:
             if os.path.isdir("./tmp/"):
                 shutil.rmtree("./tmp/")
+
+    def test_p(self):
+        import pickle
+        for i in range(2):
+            f = open("./test.dat", "ab")
+            t = torch.randn(1, 2)
+            pickle.dump(t, f)
+        f.close()
+
+        f = open("./test.dat", "rb")
+        results = []
+        while True:
+            try:
+                results.append(pickle.load(f))
+            except EOFError:
+                break
+        print(results)
+        os.remove("./test.dat")

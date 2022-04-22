@@ -39,6 +39,7 @@
 """ Quant Analyzer """
 
 import os
+import pickle
 import shutil
 from collections import OrderedDict, defaultdict
 from typing import Union, Tuple, Callable, Dict, List, Any
@@ -473,14 +474,15 @@ class QuantAnalyzer:
         """
         def _hook_to_tap_activations(module, _, out):
             """
-            Hook-function to tap activation data.
+            Hook-function to tap and append output activations separately for
+            every module.
             :param module: torch.nn.Module type module.
             :param _: Input activations to module.
             :param out: Output activations from module.
             """
             filename = os.path.join(results_dir, module_to_name_dict[module])
-            with open(filename, 'wb') as f:
-                torch.save(out.cpu(), f)
+            with open(filename, 'ab') as f:
+                pickle.dump(out.cpu(), f)
 
         os.makedirs(results_dir, exist_ok=True)
         hooks = []
@@ -504,15 +506,21 @@ class QuantAnalyzer:
     @staticmethod
     def _load_out_acts(results_dir: str, name: str) -> torch.Tensor:
         """
-        Load output activations from results_dir for given name.
+        Load and return output activations from results_dir for given name,
+        by concatenating along 0 dimension.
         :param results_dir: Directory to load the output activations.
         :param name: Name of the file.
         :return: Output activations tensor.
         """
         filename = os.path.join(results_dir, name)
+        tensors = []
         with open(filename, 'rb') as f:
-            out_acts = torch.load(f)
-        return out_acts
+            while True:
+                try:
+                    tensors.append(pickle.load(f))
+                except EOFError:
+                    break
+        return torch.cat(tensors, dim=0)
 
     def _check_model_sensitivity_to_quantization(
             self,
