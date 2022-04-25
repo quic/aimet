@@ -80,17 +80,7 @@ class TensorQuantizer:
         self.bitwidth = bitwidth
         self.enabled = enabled_by_default
         self.data_type = data_type
-        self._encoding = None
         self._is_encoding_frozen = False
-
-    def freeze_encoding(self) -> None:
-        """
-        Freeze the encoding.
-        """
-        if not self._encoding:
-            raise RuntimeError("Encoding can be frozen only when it is not None.")
-
-        self._is_encoding_frozen = True
 
 
 class PickableState:
@@ -126,6 +116,7 @@ class StaticGridTensorQuantizer(TensorQuantizer):
         super(StaticGridTensorQuantizer, self).__init__(bitwidth, round_mode, quant_scheme, use_symmetric_encodings,
                                                         enabled_by_default, data_type)
         self._cppOp = None
+        self._encoding = None
 
     def __str__(self):
         stream = io.StringIO(newline='\n')
@@ -305,6 +296,15 @@ class StaticGridTensorQuantizer(TensorQuantizer):
 
         return histogram
 
+    def freeze_encoding(self) -> None:
+        """
+        Freeze the encoding.
+        """
+        if not self._encoding:
+            raise RuntimeError("Encoding can be frozen only when it is not None.")
+
+        self._is_encoding_frozen = True
+
 
 class StaticGridPerTensorQuantizer(StaticGridTensorQuantizer):
     """
@@ -471,7 +471,7 @@ class LearnedGridTensorQuantizer(TensorQuantizer):
         return n, p
 
     @property
-    def encoding(self):
+    def encoding(self) -> Union[None, libpymo.TfEncoding, List[libpymo.TfEncoding]]:
         """
         NOTE: encoding.getter first compute updated encoding and then return it.
 
@@ -480,8 +480,8 @@ class LearnedGridTensorQuantizer(TensorQuantizer):
         """
         # pylint:disable=protected-access
         if self.enabled:
-            self._encoding = self._compute_updated_encoding()
-            return self._encoding
+            encoding = self._compute_updated_encoding()
+            return encoding
 
         return None
 
@@ -497,7 +497,6 @@ class LearnedGridTensorQuantizer(TensorQuantizer):
             assert encoding is not None, "Encodings cannot be None if Quantizer is enabled."
             if self._is_encoding_frozen:
                 raise RuntimeError("Encoding can be set only when it is not frozen.")
-            self._encoding = encoding
             self._set_encoding_min_max_parameters(encoding)
             self._set_p_and_n(encoding)
 
@@ -552,7 +551,7 @@ class LearnedGridTensorQuantizer(TensorQuantizer):
             tensor = QuantizeDequantizeFunc.apply(tensor, encoding_min, encoding_max, self)
         return tensor
 
-    def _compute_updated_encoding(self):
+    def _compute_updated_encoding(self) -> Union[libpymo.TfEncoding, List[libpymo.TfEncoding]]:
         """
         Computes updated encoding from encoding min and max parameters.
         :return: Up-to-date (learned) encoding(s).
@@ -575,7 +574,7 @@ class LearnedGridTensorQuantizer(TensorQuantizer):
 
         return encodings
 
-    def _set_encoding_min_max_parameters(self, encodings: Union[libpymo.TfEncoding, List[libpymo.TfEncoding]]):
+    def _set_encoding_min_max_parameters(self, encodings: Union[libpymo.TfEncoding, List[libpymo.TfEncoding]]) -> None:
         """
         Set encoding min and max parameters.
         :param encodings: Encoding(s).
@@ -615,18 +614,18 @@ class LearnedGridTensorQuantizer(TensorQuantizer):
 
     def freeze_encoding(self):
         """
-        Freeze the encoding and freeze encoding min and max parameters.
+        Freeze encoding min and max parameters.
         """
         # pylint:disable=protected-access
-        if not self._encoding:
+        enc_min_param = self.name + '_encoding_min'
+        enc_max_param = self.name + '_encoding_max'
+        # TODO: refactor to not call internal state of wrapper.
+        params = self.wrapper_ref._parameters
+
+        if not params[enc_min_param] and not params[enc_max_param]:
             raise RuntimeError("Encoding can be frozen only when it is not None.")
 
         self._is_encoding_frozen = True
-
-        enc_min_param = self.name + '_encoding_min'
-        enc_max_param = self.name + '_encoding_max'
-        # TODO: refactor to not call internal state of wrapper
-        params = self.wrapper_ref._parameters
         params[enc_min_param].requires_grad = False
         params[enc_max_param].requires_grad = False
 
