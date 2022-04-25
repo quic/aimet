@@ -378,21 +378,3 @@ class TestQuantAnalyzer:
         finally:
             if os.path.isdir("./tmp/"):
                 shutil.rmtree("./tmp/")
-
-    def test_p(self):
-        import pickle
-        for i in range(2):
-            f = open("./test.dat", "ab")
-            t = torch.randn(1, 2)
-            pickle.dump(t, f)
-        f.close()
-
-        f = open("./test.dat", "rb")
-        results = []
-        while True:
-            try:
-                results.append(pickle.load(f))
-            except EOFError:
-                break
-        print(results)
-        os.remove("./test.dat")
