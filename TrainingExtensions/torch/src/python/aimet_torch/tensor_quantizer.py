@@ -713,8 +713,9 @@ class QuantizeDequantizeFunc(torch.autograd.Function):
             offset = broadcast_to_tensor(tensor, offset, channel_axis)
 
         tensor_grad = grad_fn.compute_dloss_by_dx_using_scale_offset(tensor, grad, scale, offset, n, p)
-        tensor_encoding_max_grad = grad_fn.compute_dloss_by_dmax(tensor, grad, scale, offset, n, p, channel_axis)
-        tensor_encoding_min_grad = grad_fn.compute_dloss_by_dmin_using_dmax(tensor_encoding_max_grad)
+        tensor_encoding_min_grad, tensor_encoding_max_grad = grad_fn.compute_dloss_by_dmin_dmax(
+            tensor, grad, scale, offset, n, p, channel_axis
+        )
 
         return tensor_grad, tensor_encoding_min_grad, tensor_encoding_max_grad, None
 
@@ -747,11 +748,9 @@ class ParameterQuantizer(torch.autograd.Function):
         tensor.grad = grad_fn.compute_dloss_by_dx_using_scale_offset(tensor, grad, scaling, offset,
                                                                      tensor_quantizer.n, tensor_quantizer.p)
 
-        tensor_encoding_max_grad = grad_fn.compute_dloss_by_dmax(tensor, tensor.grad, scaling, offset,
-                                                                 tensor_quantizer.n, tensor_quantizer.p,
-                                                                 channel_axis)
-
-        tensor_encoding_min_grad = grad_fn.compute_dloss_by_dmin_using_dmax(tensor_encoding_max_grad)
+        tensor_encoding_min_grad, tensor_encoding_max_grad = grad_fn.compute_dloss_by_dmin_dmax(
+            tensor, grad, scaling, offset, tensor_quantizer.n, tensor_quantizer.p, channel_axis
+        )
         return tensor_encoding_min_grad, tensor_encoding_max_grad
 
     @staticmethod
@@ -785,11 +784,14 @@ class ParameterQuantizer(torch.autograd.Function):
         # pylint:disable = protected-access
         for name, param in trainable_wrapper._module_to_wrap.named_parameters():
             param_quantizer = trainable_wrapper.param_quantizers[name]
-            if param_quantizer.enabled:
+            if param_quantizer.enabled and param.grad is not None:
                 param_encoding_min_grad, param_encoding_max_grad = ParameterQuantizer.compute_gradients(
                     param, param_quantizer, param.grad)
                 param_encoding_grads.append(param_encoding_min_grad)
                 param_encoding_grads.append(param_encoding_max_grad)
+            elif param_quantizer.enabled:
+                param_encoding_grads.append(None)
+                param_encoding_grads.append(None)
         return param_encoding_grads
 
     # pylint:disable = arguments-differ
