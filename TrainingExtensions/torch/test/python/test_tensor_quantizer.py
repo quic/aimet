@@ -132,6 +132,10 @@ class TestTensorQuantizer:
         enc_cur = quant_wrapper.output_quantizer.encoding
         assert enc_cur.min == enc_old.min
 
+        # Freeze encoding for input quantizer without initializing.
+        with pytest.raises(RuntimeError):
+            quant_wrapper.input_quantizer.freeze_encoding()
+
     def test_learned_grid_set_freeze_encoding(self):
         """
         test freeze_encoding() method for LearnedGridQuantWrapper.
