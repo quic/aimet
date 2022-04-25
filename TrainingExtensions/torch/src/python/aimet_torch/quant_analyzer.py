@@ -484,6 +484,11 @@ class QuantAnalyzer:
             with open(filename, 'ab') as f:
                 pickle.dump(out.cpu(), f)
 
+        # If the directory already exists, remove it to start clean to avoid appending inside
+        # unknown directory.
+        if os.path.isdir(results_dir):
+            shutil.rmtree(results_dir, ignore_errors=True)
+
         os.makedirs(results_dir, exist_ok=True)
         hooks = []
         module_to_name_dict = {}
