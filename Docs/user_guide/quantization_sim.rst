@@ -69,28 +69,8 @@ Simulation API is called. The section below explains how per channel quantizatio
 
 Configuring quantization simulation ops in the model
 =====================================================
-AIMET allows the configuration of quantizer placement in accordance with a set of rules specified in a json configuration file if provided when the Quantization Simulation API is called.
-In the configuration file, quantizers can be turned on and off, and/or configured with asymmetric or symmetric encodings.
-The general use case for this file would be for users to match the quantization rules for a particular runtime they would like to simulate.
 
-The configuration file contains six main sections, in increasing amounts of specificity:
-
-.. image:: ../images/quantsim_config_file.png
-
-Rules defined in a more general section can be overruled by subsequent rules defined in a more specific case.
-For example, one may specify in "defaults" for no layers to be quantized, but then turn on quantization for specific layers in the "op_type" section.
-
-It is advised for the user to begin with the default configuration file under
-
-|default-quantsim-config-file|
-
-Below is an example of the default configuration.
-
-.. image:: ../images/quantsim_config.PNG
-
-This config file enables quantization for all outputs and parameters. The per channel quantization is disabled but it can be enabled by
-setting the flag to True.
-
+Please see the :ref:`Quantization Simulation Configuration <ug-quantsim-config>` page which describes the configuration options in detail.
 
 .. _qat_recommendations:
 
