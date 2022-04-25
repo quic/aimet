@@ -54,6 +54,8 @@ using namespace tensorflow;
 using CPUDevice = Eigen::ThreadPoolDevice;
 using GPUDevice = Eigen::GpuDevice;
 
+enum AxisHandling {LAST_AXIS=0, LAST_TWO_AXES};
+
 template <typename T>
 void copyInputTensorsToOutputTensors(const CPUDevice& d, const T* inTensor, size_t count, T* outTensor);
 
@@ -66,9 +68,11 @@ void copyInputTensorsToOutputTensors(const GPUDevice& d, const T* inTensor, size
 template <typename T>
 T copyLiteralToHost(const GPUDevice& d, const T* deviceValue);
 
-void sliceTensorAlongLastDim(const CPUDevice& d, Tensor slicedTensor, const Tensor& tensorToSlice, int channel);
+void sliceTensorAlongLastDims(const CPUDevice& d, Tensor slicedTensor, const Tensor& tensorToSlice, int channel,
+                              const AxisHandling);
 
-void sliceTensorAlongLastDim(const GPUDevice& d, Tensor slicedTensor, const Tensor& tensorToSlice, int channel);
+void sliceTensorAlongLastDims(const GPUDevice& d, Tensor slicedTensor, const Tensor& tensorToSlice, int channel,
+                              const AxisHandling);
 
 void sliceAndStoreTensor(const CPUDevice& d, Tensor* slicedTensor, Tensor tensorToSlice, int channel);
 

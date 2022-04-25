@@ -38,7 +38,6 @@
 
 #include "QcQuantizePerChannelOp.hpp"
 #include "AimetOpUtils.h"
-#include <iostream>
 #include <type_traits>
 #include <algorithm>
 #include <cstdint>
@@ -52,8 +51,6 @@
 using namespace tensorflow;
 using namespace std;
 using namespace gtl;
-
-enum AxisHandling {LAST_AXIS=0, LAST_TWO_AXES};
 
 REGISTER_OP("QcQuantizePerChannel")
     .Input("in_tensor: T")     // list of input tensors (weights/activations)
@@ -342,8 +339,9 @@ public:
                 {
                     if(opModeEnum == DlQuantization::TensorQuantizerOpMode::oneShotQuantizeDequantize)
                     {
-                        // Chip input tensor along last dimension
-                        sliceTensorAlongLastDim(context->eigen_device<Device>(), temp1, inTensor, channel);
+                        // Chip input tensor along last dimensions
+                        sliceTensorAlongLastDims(context->eigen_device<Device>(), temp1, inTensor, channel,
+                                                 axisHandlingEnum);
                         auto inpData = temp1.flat<float>().data();
 
                         DlQuantization::TfEncoding encodings =

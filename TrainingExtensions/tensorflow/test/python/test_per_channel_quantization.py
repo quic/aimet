@@ -691,9 +691,43 @@ class TestTrainingExtensionsQcQuantizeOpPerChannel(unittest.TestCase):
         # per_tensor_time = create_sim_run_compute_encodings(None)
         # print(per_tensor_time)
 
+    def test_compute_encodings_cpu_model_depthwise_model(self):
+        """
+        Create QuantSim for a CPU model and test that activation encodings are computed
+        """
+        save_config_file_for_per_channel_quantization()
+
+        tf.compat.v1.reset_default_graph()
+        sess = tf.compat.v1.Session()
+        with tf.device('/cpu:0'):
+            _ = depthwise_conv2d_model()
+            init = tf.compat.v1.global_variables_initializer()
+            sess.run(init)
+
+        sim = QuantizationSimModel(sess, ['input_1'], ['depthwise_conv2d_model/Softmax'], use_cuda=False,
+                                   config_file='./quantsim_config.json')
+
+        def dummy_forward_pass(sess, _):
+            model_output = sess.graph.get_tensor_by_name('depthwise_conv2d/BiasAdd:0')
+            model_input = sess.graph.get_tensor_by_name('input_1:0')
+            dummy_input = np.random.randn(1, 10, 10, 3)
+            sess.run(model_output, feed_dict={model_input: dummy_input})
+
+        sim.compute_encodings(dummy_forward_pass, None)
+        for quant_op_name, quantizer_info in sim._param_quantizers.items():
+            if quantizer_info.get_op_mode() != int(libpymo.TensorQuantizerOpMode.passThrough):
+                encoding = quantizer_info.get_encoding()
+                assert isinstance(encoding, list)
+
+        assert len(sim._param_quantizers['conv2d/Conv2D/ReadVariableOp_quantized'].tensor_quantizer) == 16
+        assert len(sim._param_quantizers['conv2d/BiasAdd/ReadVariableOp_quantized'].tensor_quantizer) == 16
+        assert len(sim._param_quantizers['separable_conv2d/separable_conv2d/ReadVariableOp_quantized'].tensor_quantizer) == 16
+        assert len(sim._param_quantizers['separable_conv2d/separable_conv2d/ReadVariableOp_1_quantized'].tensor_quantizer) == 10
+        assert len(sim._param_quantizers['separable_conv2d/BiasAdd/ReadVariableOp_quantized'].tensor_quantizer) == 10
+        assert len(sim._param_quantizers['depthwise_conv2d/depthwise/ReadVariableOp_quantized'].tensor_quantizer) == 10
+        assert len(sim._param_quantizers['depthwise_conv2d/BiasAdd/ReadVariableOp_quantized'].tensor_quantizer) == 10
 
     @pytest.mark.cuda
-    @pytest.mark.skip("Disable while debugging occasional opModeEnum unexpected value.")
     def test_compute_encodings_gpu_model_depthwise_model(self):
         """
         Create QuantSim for a CPU model and test that activation encodings are computed
@@ -710,8 +744,8 @@ class TestTrainingExtensionsQcQuantizeOpPerChannel(unittest.TestCase):
         sim = QuantizationSimModel(sess, ['input_1'], ['depthwise_conv2d_model/Softmax'], use_cuda=True,
                                    config_file='./quantsim_config.json')
 
-        def dummy_forward_pass(sess, args):
-            model_output = sess.graph.get_tensor_by_name('depthwise_conv2d_model/Softmax:0')
+        def dummy_forward_pass(sess, _):
+            model_output = sess.graph.get_tensor_by_name('depthwise_conv2d/BiasAdd:0')
             model_input = sess.graph.get_tensor_by_name('input_1:0')
             dummy_input = np.random.randn(1, 10, 10, 3)
             sess.run(model_output, feed_dict={model_input: dummy_input})
