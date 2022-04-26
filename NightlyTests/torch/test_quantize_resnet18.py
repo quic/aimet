@@ -57,7 +57,8 @@ from aimet_torch.quantsim import QuantizationSimModel
 from aimet_torch.examples.imagenet_dataloader import ImageNetDataLoader
 from aimet_torch.tensor_quantizer import StaticGridPerChannelQuantizer, StaticGridPerTensorQuantizer
 from aimet_torch.utils import IterFirstX
-from aimet_torch.examples.supervised_classification_pipeline import create_stand_alone_supervised_classification_evaluator,\
+from aimet_torch.examples.supervised_classification_pipeline import \
+    create_stand_alone_supervised_classification_evaluator, \
     create_supervised_classification_trainer
 
 two_class_image_dir = './data/tiny-imagenet-2'
@@ -168,7 +169,6 @@ class QuantizeAcceptanceTests(unittest.TestCase):
 
     @pytest.mark.cuda
     def test_quantize_resnet18(self):
-
         torch.cuda.empty_cache()
 
         # Train the model using tiny imagenet data
@@ -189,10 +189,9 @@ class QuantizeAcceptanceTests(unittest.TestCase):
         print("Quantized model accuracy=", quantized_model_accuracy)
         self.assertGreaterEqual(quantized_model_accuracy, 0.5)
 
-    #TODO @pytest.mark.cuda
+    # TODO @pytest.mark.cuda
     @pytest.mark.skip(reason="test fails with new versions of pytorch-ignite (0.4.4)")
     def test_memory_leak_during_quantization_train(self):
-
         # First get baseline numbers
         base_pre_model_load_mark = torch.cuda.memory_allocated()
         model = models.vgg16(pretrained=True)
@@ -246,10 +245,9 @@ class QuantizeAcceptanceTests(unittest.TestCase):
         # The tolerance is bumped up to take care of the situation where all tests are run.
         self.assertLessEqual(leaked_memory, 2000000)
 
-    #TODO @pytest.mark.cuda
+    # TODO @pytest.mark.cuda
     @pytest.mark.skip(reason="test fails with new versions of pytorch-ignite (0.4.4)")
     def test_memory_leak_during_quantization_eval(self):
-
         # First get baseline numbers
         base_pre_model_load_mark = torch.cuda.memory_allocated()
         model = models.vgg16(pretrained=True)
@@ -347,11 +345,52 @@ class QuantizeAcceptanceTests(unittest.TestCase):
         os.remove('./quantsim_config.json')
         os.remove("./data/resnet18_per_channel_quant.encodings")
 
+    def test_per_channel_quantization_for_resnet18(self):
+        save_config_file_for_per_channel_quantization()
+        # Set up trained model
+        resnet = models.resnet18()
+        resnet = resnet.to(torch.device('cuda'))
+        resnet.eval()
+
+        dummy_input = torch.rand(1, 3, 224, 224).cuda()
+        sim = QuantizationSimModel(resnet, quant_scheme=QuantScheme.post_training_tf, default_param_bw=8,
+                                   default_output_bw=8, config_file='./quantsim_config.json',
+                                   dummy_input=dummy_input)
+
+        assert isinstance(sim.model.conv1.param_quantizers['weight'], StaticGridPerChannelQuantizer)
+        assert isinstance(sim.model.conv1.output_quantizers[0], StaticGridPerTensorQuantizer)
+
+        assert isinstance(sim.model.fc.param_quantizers['weight'], StaticGridPerChannelQuantizer)
+        assert isinstance(sim.model.fc.param_quantizers['bias'], StaticGridPerChannelQuantizer)
+        assert isinstance(sim.model.fc.output_quantizers[0], StaticGridPerTensorQuantizer)
+
+        # Quantize
+        sim.compute_encodings(model_eval, None)
+
+        assert len(sim.model.conv1.param_quantizers['weight'].encoding) == 64
+        assert len(sim.model.fc.param_quantizers['weight'].encoding) == 1000
+
+        # Check that different encodings are computed for different channels
+        assert sim.model.conv1.param_quantizers['weight'].encoding[0] != \
+               sim.model.conv1.param_quantizers['weight'].encoding[1]
+        assert sim.model.fc.param_quantizers['weight'].encoding[0] != \
+           sim.model.fc.param_quantizers['weight'].encoding[1]
+
+        sim.export('./data/', 'resnet18_per_channel_quant', dummy_input.cpu())
+
+        with open("./data/resnet18_per_channel_quant.encodings", "r") as encodings_file:
+            encodings = json.load(encodings_file)
+
+        assert len(encodings['param_encodings']) == 62
+        assert encodings['param_encodings']['conv1.weight'][1]['bitwidth'] == 8
+        assert encodings['param_encodings']['conv1.weight'][1]['is_symmetric'] == 'True'
+
+        # Remove config files
+        os.remove('./quantsim_config.json')
+        os.remove("./data/resnet18_per_channel_quant.encodings")
+
     def test_dummy(self):
         # pytest has a 'feature' that returns an error code when all tests for a given suite are not selected
         # to be executed
         # So adding a dummy test to satisfy pytest
         pass
-
-
-
