@@ -43,6 +43,7 @@ import os
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
 import json
 import tensorflow as tf
+import libpymo
 
 from aimet_tensorflow.common.graph_eval import initialize_uninitialized_vars
 from aimet_tensorflow.quantsim import QuantizationSimModel, AxisHandling
@@ -52,10 +53,10 @@ from aimet_tensorflow.utils.op.conv import WeightTensorUtils
 from aimet_common.defs import QuantScheme
 from aimet_common.quantsim import calculate_delta_offset
 
+
 tf.compat.v1.disable_eager_execution()
 tf.compat.v1.logging.set_verbosity(tf.compat.v1.logging.WARN)
 
-import libpymo
 
 def nn_depthwise_conv2d_model():
     """ Returns a model with depthwise conv2d """
@@ -89,7 +90,7 @@ class TestTrainingExtensionsQcQuantizeOpPerChannel(unittest.TestCase):
         use_symm_encoding = True
 
         with graph.as_default():
-            # place holder for the input
+            # placeholder for the input
             with tf.device("/device:CPU:0"):
                 num_output_channels = 3
                 inp = tf.compat.v1.placeholder(tf.float32, shape=[1, 1, 2, num_output_channels], name='input')
