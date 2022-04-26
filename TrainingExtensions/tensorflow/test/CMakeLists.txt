@@ -49,16 +49,34 @@ endif ()
 
 string(APPEND MARKER_FLAG ${CUDA_FLAG} " and " ${TF_VERSION_FLAG})
 
-add_test(TfTrainingExtensionTest
+add_test(TfTrainingExtensionPythonTest
         pytest ${CMAKE_CURRENT_SOURCE_DIR} -m ${MARKER_FLAG} --junitxml=${CMAKE_CURRENT_BINARY_DIR}/py_test_output.xml
         )
 
-set_property(TEST TfTrainingExtensionTest
+set_property(TEST TfTrainingExtensionPythonTest
       APPEND PROPERTY ENVIRONMENT "${AIMET_LD_LIBRARY_PATH}")
-set_property(TEST TfTrainingExtensionTest
+set_property(TEST TfTrainingExtensionPythonTest
       APPEND PROPERTY ENVIRONMENT "${AIMET_PYTHONPATH}")
 
 if(DEFINED ENV{DEPENDENCY_DATA_PATH})
-set_property(TEST TfTrainingExtensionTest
+set_property(TEST TfTrainingExtensionPythonTest
       APPEND PROPERTY ENVIRONMENT "${DEPENDENCY_DATA_PATH}")
 endif(DEFINED ENV{DEPENDENCY_DATA_PATH})
+
+find_package(GTest)
+
+include_directories(BEFORE
+        ${gtest_SOURCE_DIR}/include
+        ${gtest_SOURCE_DIR}
+        )
+
+add_executable(TfTrainingExtensionCppTest
+    TestTfTensorOps.cpp)
+
+target_link_libraries(TfTrainingExtensionCppTest
+        gtest gtest_main
+        TensorFlow
+        )
+
+add_test(TfTrainingExtensionCppTest
+        TfTrainingExtensionCppTest --gtest_output=xml:cpp_test_output.xml)
