@@ -136,10 +136,10 @@ void modeSpecificActionInt(const D& d, const T* inTensor, size_t count, T* outTe
     // We first copy everything to CPU memory and then use them
     auto tensorQuantizerRefHost = copyLiteralToHost<uint64>(d, tensorQuantizerRef);
     auto opModeHost = copyLiteralToHost<int32>(d, opMode);
+    auto opModeEnum = static_cast<const DlQuantization::TensorQuantizerOpMode>(opModeHost);
     auto encodingMin = copyLiteralToHost<double>(d, min);
     auto encodingMax = copyLiteralToHost<double>(d, max);
     auto tensorQuantizer = reinterpret_cast<DlQuantization::TensorQuantizerOpFacade*>(tensorQuantizerRefHost);
-    auto opModeEnum = static_cast<const DlQuantization::TensorQuantizerOpMode>(opModeHost);
     auto bitwidth = copyLiteralToHost<int8>(d, bw);
     auto useSymmetricEncoding = copyLiteralToHost<bool>(d, useSymEncoding);
 
