@@ -66,25 +66,14 @@ T copyLiteralToHost(const GPUDevice& d, const T* deviceValue)
     return hostValue;
 }
 
-void sliceTensorAlongLastDims(const GPUDevice& d, Tensor slicedTensor, const Tensor& tensorToSlice, int channel,
-                             const AxisHandling axisHandling)
+void chipAndCopyPerChannelValues(const GPUDevice& d, Tensor tensorToCopyInto,
+                                 TTypes<float>::ConstMatrix tensorToCopyFrom, int channel)
 {
     // Tensor.chip<dimension>(offset) means it slice tensor and get sub-tensor at the given offset in the dimension dim
     // For example, if tensor has 16x3 shape, the result tensor of
     // chip<0>(0) will take sub-tensor 0th tensor from row dimension having 1x3 shape tensor
     // chip<1>(2) will take sub-tensor 2nd tensor from column dimension having 16x1 shape tensor
-    if (axisHandling == AxisHandling::LAST_TWO_AXES)
-    {
-        // Combine last two dimensions to get output channels as second dimension
-        auto tensorToSliceTwoDim = tensorToSlice.flat_inner_outer_dims<float, 2>(1);
-        slicedTensor.tensor<float, 2>().chip<0>(0).device(d) = tensorToSliceTwoDim.chip<1>(channel);
-    }
-    else
-    {
-        // Combine all but the last axis to get output channels as second dimension
-        auto tensorToSliceTwoDim = tensorToSlice.flat_inner_dims<float, 2>();
-        slicedTensor.tensor<float, 2>().chip<0>(0).device(d) = tensorToSliceTwoDim.chip<1>(channel);
-    }
+    tensorToCopyInto.tensor<float, 2>().chip<0>(0).device(d) = tensorToCopyFrom.chip<1>(channel);
 }
 
 void sliceAndStoreTensor(const GPUDevice& d, Tensor* slicedTensor, Tensor tensorToSlice, int channel)

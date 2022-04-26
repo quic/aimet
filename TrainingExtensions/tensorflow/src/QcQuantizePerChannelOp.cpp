@@ -52,6 +52,8 @@ using namespace tensorflow;
 using namespace std;
 using namespace gtl;
 
+enum AxisHandling {LAST_AXIS=0, LAST_TWO_AXES};
+
 REGISTER_OP("QcQuantizePerChannel")
     .Input("in_tensor: T")     // list of input tensors (weights/activations)
         .Input("op_mode: int32")   //{'ANALYSIS', 'ACTIVE', 'PASSTHROUGH'}")
@@ -308,7 +310,8 @@ public:
         {
             auto inTensorFlat  = inTensor.flat<T>().data();
             auto outTensorFlat = outTensor->flat<T>().data();
-            copyInputTensorsToOutputTensors(context->eigen_device<Device>(), inTensorFlat, inTensor.NumElements(), outTensorFlat);
+            copyInputTensorsToOutputTensors(context->eigen_device<Device>(), inTensorFlat, inTensor.NumElements(),
+                                            outTensorFlat);
         }
         else
         {
@@ -340,13 +343,12 @@ public:
                     if(opModeEnum == DlQuantization::TensorQuantizerOpMode::oneShotQuantizeDequantize)
                     {
                         // Chip input tensor along last dimensions
-                        sliceTensorAlongLastDims(context->eigen_device<Device>(), temp1, inTensor, channel,
-                                                 axisHandlingEnum);
+                        chipAndCopyPerChannelValues(context->eigen_device<Device>(), temp1, inTensorTwoDim, channel);
                         auto inpData = temp1.flat<float>().data();
 
                         DlQuantization::TfEncoding encodings =
-                            updateStatsAndComputeEncodings(context->eigen_device<Device>(), inpData, numElements, quantizerAddr++,
-                                                           bitwidth, useSymmetricEncoding);
+                            updateStatsAndComputeEncodings(context->eigen_device<Device>(), inpData, numElements,
+                                                           quantizerAddr++, bitwidth, useSymmetricEncoding);
 
                         quantizeDequantize(context->eigen_device<Device>(), inTensorTwoDim, encodings, outTensorTwoDim,
                                            channel);
