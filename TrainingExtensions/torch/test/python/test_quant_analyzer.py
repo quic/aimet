@@ -36,6 +36,7 @@
 #  @@-COPYRIGHT-END-@@
 # =============================================================================
 
+import pytest
 import json
 import os.path
 import shutil
@@ -65,8 +66,9 @@ def evaluate(model: torch.nn.Module, dummy_input: torch.Tensor):
     :param dummy_input: dummy input to model.
     """
     model.eval()
-    with torch.no_grad():
-        model(dummy_input)
+    for i in range(2):
+        with torch.no_grad():
+            model(dummy_input)
     return 0.8
 
 
@@ -301,7 +303,7 @@ class TestQuantAnalyzer:
 
     def test_run_hooks_to_tap_output_activations(self):
         """ test _run_hooks_to_tap_output_activations() method """
-        input_shape = (1, 3, 32, 32)
+        input_shape = (4, 3, 32, 32)
         dummy_input = torch.randn(*input_shape)
         model = TinyModel().eval()
         sim = QuantizationSimModel(model, dummy_input)
@@ -309,30 +311,40 @@ class TestQuantAnalyzer:
         forward_pass_callback = CallbackFunc(calibrate, dummy_input)
         eval_callback = CallbackFunc(evaluate, dummy_input)
         quant_analyzer = QuantAnalyzer(model, dummy_input, forward_pass_callback, eval_callback)
+        fp32_out_acts_dir = os.path.join("./fp32_out_acts")
+        quantized_out_acts_dir = os.path.join("./quantized_out_acts")
+        try:
+            quant_analyzer._collect_and_save_output_acts(model, module_type_for_attaching_hook=None,
+                                                         leaf_module_only=True, results_dir=fp32_out_acts_dir)
+            fp32_out_acts = [name for name in os.listdir(fp32_out_acts_dir)]
+            assert len(fp32_out_acts) == 12
+            quant_analyzer._collect_and_save_output_acts(sim.model,
+                                                         module_type_for_attaching_hook=(QcQuantizeWrapper,),
+                                                         leaf_module_only=False, results_dir=quantized_out_acts_dir)
+            quantized_out_acts = [name for name in os.listdir(quantized_out_acts_dir)]
+            assert len(quantized_out_acts) == 12
 
-        fp32_out_activations = quant_analyzer._run_hooks_to_tap_output_activations(model)
-        assert len(fp32_out_activations) == 12
+            # verify that both the lists hava same layer names.
+            assert fp32_out_acts == quantized_out_acts
 
-        quantized_out_activations = \
-            quant_analyzer._run_hooks_to_tap_output_activations(sim.model,
-                                                                module_type_for_attaching_hook=(QcQuantizeWrapper,),
-                                                                leaf_module_only=False)
-        assert len(quantized_out_activations) == 12
-
-        # verify that both the dictionaries hava same layer names(keys)
-        assert fp32_out_activations.keys() == quantized_out_activations.keys()
-
-        # verify that the output_activations have same tensor shape.
-        for fp32_out_act, quant_out_act in zip(fp32_out_activations.values(), quantized_out_activations.values()):
-            assert fp32_out_act.shape == quant_out_act.shape
+            # verify that the output_activations have same tensor shape.
+            for name in os.listdir(quantized_out_acts_dir):
+                fp32_out_act = quant_analyzer._load_out_acts(fp32_out_acts_dir, name)
+                quant_out_act = quant_analyzer._load_out_acts(quantized_out_acts_dir, name)
+                assert fp32_out_act.shape == quant_out_act.shape
+                # batch_size=4, number_of_batches=2
+                assert fp32_out_act.size(dim=0) == 8
+        finally:
+            if os.path.isdir(fp32_out_acts_dir):
+                shutil.rmtree(fp32_out_acts_dir)
+            if os.path.isdir(quantized_out_acts_dir):
+                shutil.rmtree(quantized_out_acts_dir)
 
     def test_export_per_layer_mse_loss(self):
         """ test _export_per_layer_mse_loss() """
-        input_shape = (1, 3, 224, 224)
+        input_shape = (1, 3, 32, 32)
         dummy_input = torch.randn(*input_shape)
-        from torchvision import models
-        model = models.resnet18(pretrained=True).eval()
-        # model = TinyModel().eval()
+        model = TinyModel().eval()
         sim = QuantizationSimModel(model, dummy_input)
         sim.compute_encodings(evaluate, dummy_input)
         forward_pass_callback = CallbackFunc(calibrate, dummy_input)
@@ -342,15 +354,15 @@ class TestQuantAnalyzer:
             quant_analyzer._export_per_layer_mse_loss(sim)
             assert os.path.isfile("./tmp/per_layer_mse_loss.html")
         finally:
-            # if os.path.isdir("./tmp/"):
-            #     shutil.rmtree("./tmp/")
-            pass
+            if os.path.isdir("./tmp/"):
+                shutil.rmtree("./tmp/")
 
+    @pytest.mark.cuda
     def test_analyze(self):
         """ test end to end for analyze() method """
         input_shape = (1, 3, 32, 32)
-        dummy_input = torch.randn(*input_shape)
-        model = TinyModel().eval()
+        dummy_input = torch.randn(*input_shape).cuda()
+        model = TinyModel().eval().cuda()
         forward_pass_callback = CallbackFunc(calibrate, dummy_input)
         eval_callback = CallbackFunc(evaluate, dummy_input)
         quant_analyzer = QuantAnalyzer(model, dummy_input, forward_pass_callback, eval_callback)
