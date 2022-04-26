@@ -38,7 +38,6 @@
 
 #include "QcQuantizePerChannelOp.hpp"
 #include "AimetOpUtils.h"
-#include <iostream>
 #include <type_traits>
 #include <algorithm>
 #include <cstdint>
@@ -311,7 +310,8 @@ public:
         {
             auto inTensorFlat  = inTensor.flat<T>().data();
             auto outTensorFlat = outTensor->flat<T>().data();
-            copyInputTensorsToOutputTensors(context->eigen_device<Device>(), inTensorFlat, inTensor.NumElements(), outTensorFlat);
+            copyInputTensorsToOutputTensors(context->eigen_device<Device>(), inTensorFlat, inTensor.NumElements(),
+                                            outTensorFlat);
         }
         else
         {
@@ -342,13 +342,13 @@ public:
                 {
                     if(opModeEnum == DlQuantization::TensorQuantizerOpMode::oneShotQuantizeDequantize)
                     {
-                        // Chip input tensor along last dimension
-                        sliceTensorAlongLastDim(context->eigen_device<Device>(), temp1, inTensor, channel);
+                        // Chip input tensor along last dimensions
+                        chipAndCopyPerChannelValues(context->eigen_device<Device>(), temp1, inTensorTwoDim, channel);
                         auto inpData = temp1.flat<float>().data();
 
                         DlQuantization::TfEncoding encodings =
-                            updateStatsAndComputeEncodings(context->eigen_device<Device>(), inpData, numElements, quantizerAddr++,
-                                                           bitwidth, useSymmetricEncoding);
+                            updateStatsAndComputeEncodings(context->eigen_device<Device>(), inpData, numElements,
+                                                           quantizerAddr++, bitwidth, useSymmetricEncoding);
 
                         quantizeDequantize(context->eigen_device<Device>(), inTensorTwoDim, encodings, outTensorTwoDim,
                                            channel);

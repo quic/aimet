@@ -66,9 +66,11 @@ void copyInputTensorsToOutputTensors(const GPUDevice& d, const T* inTensor, size
 template <typename T>
 T copyLiteralToHost(const GPUDevice& d, const T* deviceValue);
 
-void sliceTensorAlongLastDim(const CPUDevice& d, Tensor slicedTensor, const Tensor& tensorToSlice, int channel);
+void chipAndCopyPerChannelValues(const CPUDevice& d, Tensor tensorToCopyInto,
+                                 TTypes<float>::ConstMatrix tensorToCopyFrom, int channel);
 
-void sliceTensorAlongLastDim(const GPUDevice& d, Tensor slicedTensor, const Tensor& tensorToSlice, int channel);
+void chipAndCopyPerChannelValues(const GPUDevice& d, Tensor tensorToCopyInto,
+                                 TTypes<float>::ConstMatrix tensorToCopyFrom, int channel);
 
 void sliceAndStoreTensor(const CPUDevice& d, Tensor* slicedTensor, Tensor tensorToSlice, int channel);
 
