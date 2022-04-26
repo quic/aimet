@@ -453,6 +453,8 @@ class QuantizationSimModel:
         :param encoding_path: optional param to pass the path from where to load parameter encodings file
         :param orig_sess: optional param to pass in original session without quant nodes
         """
+        # pylint: disable=too-many-branches
+
         # Load encodings file
         encodings_dicts = {}
         if encoding_path and os.path.exists(encoding_path):
@@ -468,6 +470,7 @@ class QuantizationSimModel:
             for op_name, quantizer_info in dict(self._param_quantizers, **self._activation_quantizers).items():
                 tensor_name = self.session.graph.get_operation_by_name(op_name).inputs[0].name
                 op = orig_sess.graph.get_tensor_by_name(tensor_name).op
+                consumers = [consumer for consumer in op.outputs[0].consumers() if 'gradients' not in consumer.name]
                 if tensor_name in encodings_dicts:
                     encoding_max = encodings_dicts[tensor_name][0].get('max')
                     encoding_min = encodings_dicts[tensor_name][0].get('min')
@@ -477,17 +480,28 @@ class QuantizationSimModel:
                         encoding_min = np.array(encoding_min)
                 else:
                     if not quantizer_info.is_encoding_valid():
+                        if  quantizer_info.data_type == QuantizationDataType.float and quantizer_info.get_op_mode() in\
+                            [int(libpymo.TensorQuantizerOpMode.oneShotQuantizeDequantize),
+                             int(libpymo.TensorQuantizerOpMode.quantizeDequantize)]:
+                            # Cast input tensor to data_type and dequant it to fp32
+                            if not self._use_cuda:
+                                with tf.device('/cpu:0'):
+                                    tf_quantization_op = tf.cast(tf.cast(op.outputs[0], tf.float16), tf.float32)
+                            else:
+                                tf_quantization_op = tf.cast(tf.cast(op.outputs[0], tf.float16), tf.float32)
+                            # Replace in graph
+                            # -----------------
+                            graph_editor.reroute_ts(ts0=tf_quantization_op, ts1=[op.outputs[0]],
+                                                    can_modify=consumers)
                         continue
                     _logger.info("Can't find %s in encodings file, encodings in QuantizationSimModel will be used",
                                  self._get_quantized_name(op.name))
                     encoding_min, encoding_max = self.read_min_max(self._get_quantized_name(op.name))
                     # if per channel quantization is enabled, then min and max are numpy arrays, and this function gates the array
-                    encoding_min, encoding_max = gate_min_max(encoding_min, encoding_max)
                     encoding_bw = int(self._get_op_variable_value(self.session.graph.get_operation_by_name(op_name),
                                                                   QuantizeOpIndices.bit_width))
 
                 _logger.info("Adding native tensorflow quantization op %s", self._get_quantized_name(op.name))
-                consumers = [consumer for consumer in op.outputs[0].consumers() if 'gradients' not in consumer.name]
                 # inser native tensorflow quantization nodes into graph
                 if not self._use_cuda:
                     with tf.device('/cpu:0'):
@@ -517,6 +531,7 @@ class QuantizationSimModel:
                 graph_editor.reroute_ts(ts0=tf_quantization_op, ts1=[op.outputs[0]],
                                         can_modify=consumers)
             utils.graph_saver.save_model_to_meta(orig_sess, os.path.join(checkpoint_path + '_embedded_quant_nodes'))
+            return utils.graph_saver.load_model_from_meta(meta_path=str(checkpoint_path + '_embedded_quant_nodes.meta'))
 
     def set_and_freeze_param_encodings(self, encoding_path: str):
         """

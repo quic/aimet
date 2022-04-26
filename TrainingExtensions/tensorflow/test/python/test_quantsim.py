@@ -1095,6 +1095,41 @@ class TestQuantSim(unittest.TestCase):
         new_sess.close()
         del sim
 
+    def test_save_model_with_embedded_quantization_nodes_fp16(self):
+        """
+        Create QuantSim for a CPU model, compute encodings, replace quantization nodes to cast
+        and compare the results of the generated session is same as quant sim model
+        """
+        tf.compat.v1.reset_default_graph()
+        with tf.device('/cpu:0'):
+            model = tf.keras.Sequential()
+            model.add(tf.keras.layers.Conv2D(32, kernel_size=3, input_shape=(28, 28, 3), activation='relu'))
+            model.add(tf.keras.layers.MaxPooling2D((2, 2)))
+            model.add(tf.keras.layers.Conv2D(64, kernel_size=3, activation='relu'))
+            model.summary()
+
+        sess = tf.compat.v1.Session()
+        initialize_uninitialized_vars(sess)
+        sim = QuantizationSimModel(sess, ['conv2d_input'], ['conv2d_1/Relu'], use_cuda=False, default_output_bw=16,
+                                    default_param_bw=16, default_data_type=QuantizationDataType.float)
+
+        def dummy_forward_pass_quant_sim(sess, dummy_input):
+            model_output = sess.graph.get_tensor_by_name('conv2d_1/Relu_quantized:0')
+            model_input = sess.graph.get_tensor_by_name('conv2d_input:0')
+            return sess.run(model_output, feed_dict={model_input: dummy_input})
+
+        def dummy_forward_pass_quant_embedded_native_nodes(sess, dummy_input):
+            model_output = sess.graph.get_tensor_by_name('conv2d_1/Relu:0')
+            model_input = sess.graph.get_tensor_by_name('conv2d_input:0')
+            return sess.run(model_output, feed_dict={model_input: dummy_input})
+
+        dummy_input = np.random.randn(20, 28, 28, 3)
+
+        output_aimet_fk_fp16 = dummy_forward_pass_quant_sim(sim.session, dummy_input)
+        orig_sess = sim.save_model_with_embedded_quantization_nodes(os.path.join('data', 'quant_sim_model_fp16'))
+        output_embedded_fk_fp16 = dummy_forward_pass_quant_embedded_native_nodes(orig_sess, dummy_input)
+        self.assertTrue(np.all(output_embedded_fk_fp16 == output_aimet_fk_fp16))
+
 class TestQuantSimRangeLearning:
     """ Test methods for Quantization Simulation """
 
