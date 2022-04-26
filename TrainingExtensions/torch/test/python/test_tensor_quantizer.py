@@ -40,10 +40,10 @@ import pytest
 import torch
 import aimet_common.libpymo as libpymo
 
-from aimet_common.defs import QuantScheme
+from aimet_common.defs import QuantScheme, QuantizationDataType
 from aimet_torch.qc_quantize_op import LearnedGridQuantWrapper
 from aimet_torch.tensor_quantizer import StaticGridPerTensorQuantizer, StaticGridPerChannelQuantizer,\
-    StaticGridTensorQuantizer
+    StaticGridTensorQuantizer, LearnedGridTensorQuantizer
 
 BUCKET_SIZE = 512
 
@@ -195,3 +195,39 @@ class TestTensorQuantizer:
         # For output quantizer, it should be same as before.
         assert quant_wrapper.output_quantizer.encoding.min == -1
         assert quant_wrapper.output_quantizer.encoding.max == 0.5
+
+    def test_learned_grid_n_and_p_up_to_date(self):
+        tensor_quantizer = LearnedGridTensorQuantizer(bitwidth=8,
+                                                      round_mode="nearest",
+                                                      quant_scheme=QuantScheme.training_range_learning,
+                                                      use_symmetric_encodings=True,
+                                                      enabled_by_default=True,
+                                                      data_type=QuantizationDataType.int)
+
+        assert tensor_quantizer.n() == 0.0
+        assert tensor_quantizer.p() == 255.0
+
+        tensor_quantizer.bitwidth = 16
+
+        assert tensor_quantizer.n() == 0.0
+        assert tensor_quantizer.p() == 65535.0
+
+        tensor_quantizer.use_strict_symmetric = True
+
+        assert tensor_quantizer.n() == 0.0
+        assert tensor_quantizer.p() == 65534.0
+
+    def test_learned_grid_update_encoding_invalid_input(self):
+        tensor_quantizer = LearnedGridTensorQuantizer(bitwidth=8,
+                                                      round_mode="nearest",
+                                                      quant_scheme=QuantScheme.training_range_learning,
+                                                      use_symmetric_encodings=True,
+                                                      enabled_by_default=True,
+                                                      data_type=QuantizationDataType.int)
+
+
+        enc_new = libpymo.TfEncoding()
+        enc_new.bw, enc_new.max, enc_new.min, enc_new.delta, enc_new.offset = 4, 0.4, -0.98, 1, 0.2
+
+        with pytest.raises(RuntimeError):
+            tensor_quantizer.encoding = enc_new

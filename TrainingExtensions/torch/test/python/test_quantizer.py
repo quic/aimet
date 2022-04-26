@@ -2471,10 +2471,8 @@ class TestQuantizationSimLearnedGrid:
         encodings.offset = 0.2
 
         # If enabled encoding cannot be None
-        try:
+        with pytest.raises(RuntimeError):
             trainable_module.input_quantizer.encoding = None
-        except AssertionError:
-            print("Assert successful")
         trainable_module.input_quantizer.encoding = encodings
 
         # Check if quantizer.encoding is accessible
