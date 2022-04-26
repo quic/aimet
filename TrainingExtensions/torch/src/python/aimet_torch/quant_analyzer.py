@@ -39,6 +39,8 @@
 """ Quant Analyzer """
 
 import os
+import pickle
+import shutil
 from collections import OrderedDict, defaultdict
 from typing import Union, Tuple, Callable, Dict, List, Any
 from bokeh import plotting
@@ -46,7 +48,7 @@ from bokeh.models import ColumnDataSource, Band, Span, tickers
 import torch
 
 from aimet_common.utils import AimetLogger
-from aimet_common.defs import QuantScheme, QuantizationDataType
+from aimet_common.defs import QuantScheme
 from aimet_torch.utils import in_eval_mode, run_hook_for_layers_with_given_input, is_leaf_module
 from aimet_torch.tensor_quantizer import TensorQuantizer, StaticGridTensorQuantizer
 from aimet_torch.qc_quantize_op import QcQuantizeWrapper
@@ -455,32 +457,39 @@ class QuantAnalyzer:
             filename_suffix = f"{title}_{index}"
             self._export_stats_histogram_plot(histogram, encoding, results_dir, filename_suffix)
 
-    def _run_hooks_to_tap_output_activations(
+    def _collect_and_save_output_acts(
             self,
             model: torch.nn.Module,
-            module_type_for_attaching_hook: Any = None,
-            leaf_module_only: bool = True
-    ) -> Dict:
+            module_type_for_attaching_hook: Any,
+            leaf_module_only: bool,
+            results_dir: str,
+    ) -> None:
         """
-        NOTE: output activations dict has layers added based on occurrence inside
-        forward pass and dictionary preserves order.
-
-        Attach and run hooks to tap output activations for given model.
+        Collect and save output activations for given model.
 
         :param model: Model to attach hooks.
         :param module_type_for_attaching_hook: torch.nn module types for which hook has to be attached.
         :param leaf_module_only: Flag to set only leaf modules vs all modules to attach hooks.
+        :param results_dir: Directory to save the results.
         """
         def _hook_to_tap_activations(module, _, out):
             """
-            Hook-function to tap activation data.
+            Hook-function to tap and append output activations separately for
+            every module.
             :param module: torch.nn.Module type module.
             :param _: Input activations to module.
             :param out: Output activations from module.
             """
-            output_activations_dict[module_to_name_dict[module]].append(out.cpu())
+            filename = os.path.join(results_dir, module_to_name_dict[module])
+            with open(filename, 'ab') as f:
+                pickle.dump(out.cpu(), f)
 
-        output_activations_dict = defaultdict(list)
+        # If the directory already exists, remove it to start clean to avoid appending inside
+        # unknown directory.
+        if os.path.isdir(results_dir):
+            shutil.rmtree(results_dir, ignore_errors=True)
+
+        os.makedirs(results_dir, exist_ok=True)
         hooks = []
         module_to_name_dict = {}
         for name, module in model.named_modules():
@@ -499,8 +508,24 @@ class QuantAnalyzer:
         for hook in hooks:
             hook.remove()
 
-        output_activations_dict = {name: torch.cat(out_acts, 0) for name, out_acts in output_activations_dict.items()}
-        return output_activations_dict
+    @staticmethod
+    def _load_out_acts(results_dir: str, name: str) -> torch.Tensor:
+        """
+        Load and return output activations from results_dir for given name,
+        by concatenating along 0 dimension.
+        :param results_dir: Directory to load the output activations.
+        :param name: Name of the file.
+        :return: Output activations tensor.
+        """
+        filename = os.path.join(results_dir, name)
+        tensors = []
+        with open(filename, 'rb') as f:
+            while True:
+                try:
+                    tensors.append(pickle.load(f))
+                except EOFError:
+                    break
+        return torch.cat(tensors, dim=0)
 
     def _check_model_sensitivity_to_quantization(
             self,
@@ -705,21 +730,29 @@ class QuantAnalyzer:
         results_dir = os.path.abspath(results_dir)
         os.makedirs(results_dir, exist_ok=True)
 
+        fp32_out_acts_dir = os.path.join(results_dir, "fp32_out_acts")
+        quantized_out_acts_dir = os.path.join(results_dir, "quantized_out_acts")
+
         _logger.info("\nExporting per layer MSE loss.")
-        fp32_output_activations =\
-            self._run_hooks_to_tap_output_activations(self._model,
-                                                      module_type_for_attaching_hook=None,
-                                                      leaf_module_only=True)
-        quantized_output_activations = \
-            self._run_hooks_to_tap_output_activations(sim.model,
-                                                      module_type_for_attaching_hook=(QcQuantizeWrapper,
-                                                                                      QcQuantizeRecurrent),
-                                                      leaf_module_only=False)
+        self._collect_and_save_output_acts(self._model,
+                                           module_type_for_attaching_hook=None,
+                                           leaf_module_only=True,
+                                           results_dir=fp32_out_acts_dir)
+        self._collect_and_save_output_acts(sim.model,
+                                           module_type_for_attaching_hook=(QcQuantizeWrapper,
+                                                                           QcQuantizeRecurrent),
+                                           leaf_module_only=False,
+                                           results_dir=quantized_out_acts_dir)
         mse_loss_dict = {}
-        for name, fp32_out_acts in fp32_output_activations.items():
-            quantized_out_acts = quantized_output_activations[name]
+        for name in os.listdir(quantized_out_acts_dir):
+            fp32_out_acts = self._load_out_acts(fp32_out_acts_dir, name)
+            quantized_out_acts = self._load_out_acts(quantized_out_acts_dir, name)
             loss = torch.nn.functional.mse_loss(fp32_out_acts, quantized_out_acts)
             mse_loss_dict[name] = loss.item()
+
+        # Delete temporary directories.
+        shutil.rmtree(fp32_out_acts_dir, ignore_errors=True)
+        shutil.rmtree(quantized_out_acts_dir, ignore_errors=True)
 
         self._export_per_layer_mse_plot(mse_loss_dict,
                                         results_dir,
@@ -728,11 +761,9 @@ class QuantAnalyzer:
     def analyze(
             self,
             quant_scheme: QuantScheme = QuantScheme.post_training_tf_enhanced,
-            rounding_mode: str = 'nearest',
             default_param_bw: int = 8,
             default_output_bw: int = 8,
             config_file: str = None,
-            default_data_type: QuantizationDataType = QuantizationDataType.int,
             results_dir: str = "./tmp/",
     ) -> None:
         """
@@ -743,23 +774,16 @@ class QuantAnalyzer:
 
         :param quant_scheme: Quantization scheme. Supported values are
                 QuantScheme.post_training_tf or QuantScheme.post_training_tf_enhanced.
-        :param rounding_mode: Rounding mode. Supported options are 'nearest' or 'stochastic'.
         :param default_param_bw: Default bitwidth (4-31) to use for quantizing layer parameters.
         :param default_output_bw: Default bitwidth (4-31) to use for quantizing layer inputs and outputs.
         :param config_file: Path to configuration file for model quantizers.
-        :param default_data_type: Default data type to use for quantizing all layer inputs, outputs and parameters.
-                                 Possible options are QuantizationDataType.int and QuantizationDataType.float.
-                                 Note that the mode default_data_type=QuantizationDataType.float is only supported with
-                                 default_output_bw=16 and default_param_bw=16.
         :param results_dir: Directory to save the results.
         """
         kwargs = dict(
             quant_scheme=quant_scheme,
-            rounding_mode=rounding_mode,
             default_output_bw=default_output_bw,
             default_param_bw=default_param_bw,
             config_file=config_file,
-            default_data_type=default_data_type,
         )
         sim = QuantizationSimModel(self._model, self._dummy_input, **kwargs)
         sim.compute_encodings(self._forward_pass_callback.func, self._forward_pass_callback.args)
