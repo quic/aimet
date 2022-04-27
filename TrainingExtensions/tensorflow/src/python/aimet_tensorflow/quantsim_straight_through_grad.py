@@ -73,7 +73,8 @@ def _qc_straight_through_estimator_grad(op, grad):
     :return: gradients computed per input
     """
 
-    dloss_by_dx = _compute_dloss_by_dx(op, grad)
+    dloss_by_dx = tf.cond(op.inputs[int(QuantizeOpIndices.is_int_data_type)], lambda: _compute_dloss_by_dx(op, grad),
+                          lambda: grad)
     return dloss_by_dx, None, None, None, None, None, None, None
 
 
