@@ -114,6 +114,7 @@ class AimetLogger(metaclass=SingletonType):
         AutoQuant = 'AutoQuant'
         Nas = 'Nas'
         NasPipeline = 'NasPipeline'
+        DeviceFramework = 'DeviceFramework'
 
     def __init__(self):
         self._logger = logging.getLogger()
