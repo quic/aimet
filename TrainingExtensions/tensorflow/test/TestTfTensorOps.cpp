@@ -91,7 +91,6 @@ TEST(TestTfTensorOps, TensorPerChannelMinMax)
 
     std::cout << minTensor.dims() << '\n';
 
-    std::cout << "Num dimensions: " << flat2dTensor.dimensions() << "\n";
     EXPECT_EQ(2, flat2dTensor.dimensions().size());
     EXPECT_EQ(24, flat2dTensor.dimensions()[0]);
     EXPECT_EQ(5, flat2dTensor.dimensions()[1]);
