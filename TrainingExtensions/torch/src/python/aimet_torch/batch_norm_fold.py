@@ -44,6 +44,7 @@ import numpy as np
 import torch
 import torch.nn
 from torch.nn.modules.batchnorm import BatchNorm1d, BatchNorm2d
+from torch.nn.modules.conv import _ConvTransposeNd
 
 import libpymo
 
@@ -56,6 +57,8 @@ from aimet_torch.defs import PassThroughOp
 from aimet_torch import utils
 from aimet_torch.meta.connectedgraph import ConnectedGraph
 from aimet_torch.quantsim import QuantizationSimModel
+from aimet_torch.qc_quantize_op import QcQuantizeWrapper
+from aimet_torch.tensor_quantizer import LearnedGridTensorQuantizer
 
 
 LayerType = Union[
@@ -141,68 +144,94 @@ def _call_mo_batch_norm_fold(weight: torch.Tensor,
         )
 
 
-def _fold_to_scale(conv_linear, bn):
+def _fold_to_scale(conv_wrapper: QcQuantizeWrapper, bn_wrapper: QcQuantizeWrapper):
     """
     Fold BatchNorm into the scale and bias of the given layer.
 
-    :param conv_linear: Layer to fold BatchNorm into.
-    :param bn: BatchNorm to be folded.
+    :param conv_wrapper: QcQuantizeWrapper that wraps conv or linear layer.
+    :param bn_wrapper: QcQuantizeWrapper that wraps bn.
     """
-    assert conv_linear.bias is not None
-    raise NotImplementedError
+    # pylint: disable=protected-access
+    weight_quantizer = conv_wrapper.param_quantizers["weight"]
+
+    if not isinstance(weight_quantizer, LearnedGridTensorQuantizer):
+        raise RuntimeError(
+            "BatchNorm folding to scale supports LearnedGridTensorQuantizer only; "
+            f"got {type(weight_quantizer)}."
+        )
+
+    output_quantizer = conv_wrapper.output_quantizers[0]
+
+    if output_quantizer.enabled:
+        raise RuntimeError("Can't fold unless conv and bn belongs to the same supergroup.")
+
+    if "bias" in conv_wrapper.param_quantizers:
+        bias_quantizer = conv_wrapper.param_quantizers["bias"]
+        if bias_quantizer.enabled:
+            raise RuntimeError("Can't fold to scale if bias quantizer is enabled.")
+
+    encodings = weight_quantizer.encoding
+
+    if encodings is None:
+        raise RuntimeError
+
+    if isinstance(encodings, libpymo.TfEncoding):
+        encodings = [encodings]
+
+    conv = conv_wrapper._module_to_wrap
+    bn = bn_wrapper._module_to_wrap
+
+    if isinstance(conv, _ConvTransposeNd):
+        raise RuntimeError("Can't fold to scale if ConvTransposeNd.")
+
+    # Add quantization noise to the BN params (bn weight & bn bias) before folding.
+    with bn_wrapper._quantize_params():
+        _fold_to_weight(conv, bn, fold_backward=True)
+
+        gamma = bn.weight
+        sigma = torch.sqrt(bn.running_var + bn.eps)
+
+        new_encodings = []
+        for old_encoding, c in zip(encodings, gamma/sigma):
+            new_encoding = libpymo.TfEncoding()
+            new_encoding.delta = old_encoding.delta * c
+            new_encoding.max = old_encoding.max * c
+            new_encoding.min = old_encoding.min * c
+            new_encoding.offset = old_encoding.offset * c
+            new_encoding.bw = old_encoding.bw
+            new_encodings.append(new_encoding)
+
+        weight_quantizer.encoding = new_encodings
+
+    if "bias" not in conv_wrapper.param_quantizers:
+        bias_quantizer = LearnedGridTensorQuantizer(weight_quantizer.bitwidth,
+                                                    weight_quantizer.round_mode,
+                                                    weight_quantizer.quant_scheme,
+                                                    weight_quantizer.use_symmetric_encodings,
+                                                    enabled_by_default=False,
+                                                    data_type=weight_quantizer.data_type)
+        conv_wrapper.param_quantizers["bias"] = bias_quantizer
 
 
-def _fold_to_weight(conv_linear, bn, fold_backward: bool):
-    """
-    Fold BatchNorm into the weight and bias of the given layer.
-
-    :param conv_linear: Layer to fold BatchNorm into.
-    :param bn: BatchNorm to be folded.
-    :param fold_backward: If True, perform backward folding.
-                          Otherwise, perform forwawrd folding.
-    """
-    assert conv_linear.bias is not None
-
+def _fold_to_weight(conv_linear: LayerType, bn: BatchNormType, fold_backward: bool):
     # Transpose weights to C, N, H, W from N, C, H, W since axis are flipped for transposed conv
     # However depthwise conv layers are always N, 1, H, W whether transposed-conv or not, so no need to transpose
     if isinstance(conv_linear, torch.nn.ConvTranspose2d) and conv_linear.groups == 1:
         conv_linear.weight.data = conv_linear.weight.data.permute(1, 0, 2, 3)
+
+    if conv_linear.bias is None:
+        out_channels = conv_linear.out_features if isinstance(conv_linear, torch.nn.Linear)\
+                       else conv_linear.out_channels
+        bias = torch.zeros(out_channels,
+                           device=conv_linear.weight.device,
+                           dtype=conv_linear.weight.dtype)
+        conv_linear.bias = torch.nn.Parameter(bias)
 
     _call_mo_batch_norm_fold(conv_linear.weight, conv_linear.bias, bn, fold_backward=fold_backward)
 
     # Transpose weight back to N, C, H, W for transposed Conv2D, for non-depthwise layers
     if isinstance(conv_linear, torch.nn.ConvTranspose2d) and conv_linear.groups == 1:
         conv_linear.weight.data = conv_linear.weight.data.permute(1, 0, 2, 3)
-
-
-def _fold(conv_linear, bn, fold_backward: bool, fold_to_scale: bool):
-    """
-    Fold BatchNorm into the given layer.
-
-    :param conv_linear: Layer to fold BatchNorm into.
-    :param bn: BatchNorm to be folded.
-    :param fold_backward: If True, perform backward folding.
-                          Otherwise, perform forwawrd folding.
-    :param fold_to_scale: If True, fold BatchNorms to quantization scale parameter.
-    :return: None
-    """
-    if not fold_backward and fold_to_scale:
-        raise RuntimeError("Forward folding to scale is not possible.")
-
-    assert isinstance(conv_linear, _supported_layers)
-
-    if conv_linear.bias is None:
-        out_channels = conv_linear.out_features if isinstance(conv_linear, torch.nn.Linear)\
-                       else conv_linear.out_channels
-        bias_data = torch.zeros(out_channels,
-                                device=conv_linear.weight.device,
-                                dtype=conv_linear.weight.dtype)
-        conv_linear.bias = torch.nn.Parameter(bias_data)
-
-    if fold_to_scale:
-        _fold_to_scale(conv_linear, bn)
-    else:
-        _fold_to_weight(conv_linear, bn, fold_backward=fold_backward)
 
 
 def fold_given_batch_norms(model, layer_pairs):
@@ -213,56 +242,74 @@ def fold_given_batch_norms(model, layer_pairs):
     :param layer_pairs: Pairs of conv and batch_norm layers to use for folding
     :return: None
     """
+    # pylint: disable=protected-access
     conv_bn_pairs = []
     bn_conv_pairs = []
+
+    def is_batchnorm(module: torch.nn.Module) -> bool:
+        if isinstance(module, QcQuantizeWrapper):
+            module = module._module_to_wrap
+        return isinstance(module, _supported_batchnorms)
+
+    def is_conv_linear(module: torch.nn.Module) -> bool:
+        if isinstance(module, QcQuantizeWrapper):
+            module = module._module_to_wrap
+        return isinstance(module, _supported_layers)
+
     for x, y in layer_pairs:
-        if isinstance(x, _supported_batchnorms):
-            assert isinstance(y, _supported_layers)
+        if is_batchnorm(x):
+            assert is_conv_linear(y)
             bn = x
             conv = y
             bn_conv_pairs.append((bn, conv))
         else:
-            assert isinstance(x, _supported_layers)
-            assert isinstance(y, _supported_batchnorms)
+            assert is_conv_linear(x)
+            assert is_batchnorm(y)
             conv = x
             bn = y
             conv_bn_pairs.append((conv, bn))
 
-    _fold_given_batch_norms(model, conv_bn_pairs, bn_conv_pairs)
+    _fold_given_batch_norms(model, conv_bn_pairs, bn_conv_pairs,)
 
 
 def _fold_given_batch_norms(model,
-                            conv_bn_pairs: List[Tuple[LayerType, BatchNormType]],
-                            bn_conv_pairs: List[Tuple[BatchNormType, LayerType]],
-                            fold_to_scale: bool = False):
+                            conv_bn_pairs: Iterable[Tuple[torch.nn.Module, torch.nn.Module]],
+                            bn_conv_pairs: Iterable[Tuple[torch.nn.Module, torch.nn.Module]]):
     """
     Fold a given set of batch_norm layers into conv layers
 
     :param model: Model
     :param conv_bn_pairs: List of (conv, bn) pairs to fold
     :param bn_conv_pairs: List of (bn, conv) pairs to fold
-    :param fold_to_scale: If True, fold BatchNorms to quantization scale parameter.
     :return: None
     """
+    # pylint: disable=protected-access
 
-    with utils.in_eval_mode(model), torch.no_grad():
-        device = utils.get_device(model)
+    for bn, conv in bn_conv_pairs:
+        if isinstance(conv, QcQuantizeWrapper):
+            raise RuntimeError(f"Forward folding to scale is not possible. Got {conv}")
 
-        try:
-            # If model is not on CPU, convert it to CPU
-            model.cpu()
+    def _fold(conv, bn, fold_backward):
+        if isinstance(conv, QcQuantizeWrapper) or isinstance(bn, QcQuantizeWrapper):
+            assert isinstance(conv, QcQuantizeWrapper) and isinstance(bn, QcQuantizeWrapper)
+            _fold_to_scale(conv, bn)
+        else:
+            _fold_to_weight(conv, bn, fold_backward=fold_backward)
 
-            for conv, bn in conv_bn_pairs:
-                _fold(conv, bn, fold_backward=True, fold_to_scale=fold_to_scale)
 
-            for bn, conv in bn_conv_pairs:
-                _fold(conv, bn, fold_backward=False, fold_to_scale=fold_to_scale)
+    with utils.on_cpu(model), utils.in_eval_mode(model), torch.no_grad():
+        for conv, bn in conv_bn_pairs:
+            _fold(conv, bn, fold_backward=True)
 
-            bn_modules = [bn for _, bn in conv_bn_pairs] + [bn for bn, _ in bn_conv_pairs]
-            _delete_bn_from_model(model, bn_modules)
+        for bn, conv in bn_conv_pairs:
+            _fold(conv, bn, fold_backward=False)
 
-        finally:
-            model.to(device)
+        bn_modules = [bn for _, bn in conv_bn_pairs] + [bn for bn, _ in bn_conv_pairs]
+        bn_modules = [
+            bn._module_to_wrap if isinstance(bn, QcQuantizeWrapper) else bn
+            for bn in bn_modules
+        ]
+        _delete_bn_from_model(model, bn_modules)
 
 
 def find_all_batch_norms_to_fold(model, input_shapes):
@@ -290,6 +337,7 @@ def _find_all_batch_norms_to_fold(
     means bn will be forward-folded into layer and (layer, bn) means bn will be backward-folded into layer
     :param model: Model to search
     :param input_shapes: Input shapes to use for the model (can be one or multiple inputs)
+    :param connected_graph: Connected graph associated with the model.
     :return: A list of (layer, bn) pairs and a list of (bn, layer) pairs,
              where `bn` can be folded into to `layer`.
     """
@@ -320,31 +368,6 @@ def _find_all_batch_norms_to_fold(
     return conv_bn_pairs, bn_conv_pairs
 
 
-def _fold_all_batch_norms(model: torch.nn.Module,
-                          input_shapes,
-                          connected_graph: ConnectedGraph,
-                          fold_to_scale: bool) -> List[Tuple[LayerType, BatchNormType]]:
-    """
-    Fold all batch_norm layers in a model.
-
-    :param model: Model
-    :param input_shapes: Input shapes for the model (can be one or multiple inputs)
-    :param fold_to_scale: If True, fold BatchNorms to quantization scale parameter.
-    :return: A list of pairs of layers [(Conv/Linear, BN layer that got folded)]
-    """
-    with utils.in_eval_mode(model), torch.no_grad():
-        device = utils.get_device(model)
-
-        try:
-            # If model is not on CPU, convert it to CPU
-            model.cpu()
-            conv_bn_pairs, bn_conv_pairs = _find_all_batch_norms_to_fold(model, input_shapes, connected_graph)
-            _fold_given_batch_norms(model, conv_bn_pairs, bn_conv_pairs, fold_to_scale=fold_to_scale)
-            return conv_bn_pairs + [(conv, bn) for bn, conv in bn_conv_pairs]
-        finally:
-            model.to(device=device)
-
-
 def fold_all_batch_norms_to_weight(
         model: torch.nn.Module,
         input_shapes: Union[Tuple, List[Tuple]],
@@ -354,11 +377,17 @@ def fold_all_batch_norms_to_weight(
 
     :param model: Model
     :param input_shapes: Input shapes for the model (can be one or multiple inputs)
+    :param fold_to_scale: If True, fold BatchNorms to quantization scale parameter.
     :return: A list of pairs of layers [(Conv/Linear, BN layer that got folded)]
     """
-    inp_tensor_list = utils.create_rand_tensors_given_shapes(input_shapes)
-    connected_graph = ConnectedGraph(model, inp_tensor_list)
-    return _fold_all_batch_norms(model, input_shapes, connected_graph, fold_to_scale=False)
+    with utils.on_cpu(model), utils.in_eval_mode(model), torch.no_grad():
+        inp_tensor_list = utils.create_rand_tensors_given_shapes(input_shapes)
+        connected_graph = ConnectedGraph(model, inp_tensor_list)
+        conv_bn_pairs, bn_conv_pairs = _find_all_batch_norms_to_fold(model, input_shapes, connected_graph)
+
+        _fold_given_batch_norms(model, conv_bn_pairs, bn_conv_pairs)
+
+        return conv_bn_pairs + [(conv, bn) for bn, conv in bn_conv_pairs]
 
 
 fold_all_batch_norms = fold_all_batch_norms_to_weight
@@ -367,7 +396,7 @@ fold_all_batch_norms = fold_all_batch_norms_to_weight
 def fold_all_batch_norms_to_scale(
         sim: QuantizationSimModel,
         input_shapes: Union[Tuple, List[Tuple]],
-) -> List[Tuple[LayerType, BatchNormType]]:
+) -> List[Tuple[QcQuantizeWrapper, QcQuantizeWrapper]]:
     """
     Fold all batch_norm layers in a model into the quantization scale parameter
     of the corresponding conv layers
@@ -376,7 +405,29 @@ def fold_all_batch_norms_to_scale(
     :param input_shapes: Input shapes for the model (can be one or multiple inputs)
     :return: A list of pairs of layers [(Conv/Linear, BN layer that got folded)]
     """
-    return _fold_all_batch_norms(sim.model, input_shapes, sim.connected_graph, fold_to_scale=True)
+    # pylint: disable=protected-access
+    assert sim.model is not None
+    assert sim.connected_graph is not None
+
+    model = sim.model
+    connected_graph = sim.connected_graph
+
+    with utils.on_cpu(model), utils.in_eval_mode(model), torch.no_grad():
+        quant_wrappers = {
+            quant_wrapper._module_to_wrap: quant_wrapper
+            for quant_wrapper in sim.quant_wrappers()
+        }
+        conv_bn_pairs, bn_conv_pairs = _find_all_batch_norms_to_fold(model, input_shapes, connected_graph)
+        conv_bn_pairs = [
+            (quant_wrappers[conv], quant_wrappers[bn]) for conv, bn in conv_bn_pairs
+        ]
+        bn_conv_pairs = [
+            (quant_wrappers[bn], quant_wrappers[conv]) for bn, conv in bn_conv_pairs
+        ]
+
+        _fold_given_batch_norms(model, conv_bn_pairs, bn_conv_pairs)
+
+        return conv_bn_pairs + [(conv, bn) for bn, conv in bn_conv_pairs]
 
 
 def find_all_conv_bn_with_activation(model: torch.nn.Module, input_shape: Tuple) -> Dict:

@@ -687,3 +687,18 @@ def _in_mode(model: torch.nn.Module, train: bool):
         yield
     finally:
         model.train(mode=train_orig)
+
+
+@contextlib.contextmanager
+def on_cpu(model: torch.nn.Module):
+    """
+    Utility to put model in eval mode with context manager and later in whatever mode it started with.
+    :param model: PyTorch model
+    :return: None
+    """
+    device = get_device(model)
+    try:
+        model.cpu()
+        yield
+    finally:
+        model.to(device)
