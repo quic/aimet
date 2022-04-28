@@ -91,25 +91,33 @@ class TransformerQuantizationAcceptanceTests(unittest.TestCase):
         quant_ops = {op.name: op for op in sim.session.graph.get_operations() if op.type == 'QcQuantize'}
         quant_ops_to_check = []
 
+        # Add Embedding quant ops
+        embedding_path = 'tf_bert_model/bert/embeddings'
+        embedding_add_1_quant = ('{}/add/add_1_quantized'.format(embedding_path), True)
+        embedding_add_quant = ('{}/add/add_quantized'.format(embedding_path), True)
+        embedding_token_quant = ('{}/Gather_2_quantized'.format(embedding_path), True)
+        embedding_position_quant = ('{}/Identity_1_quantized'.format(embedding_path), True)
+        embedding_word_quant = ('{}/Gather_quantized'.format(embedding_path), True)
+
+        quant_ops_to_check += [embedding_add_1_quant, embedding_add_quant, embedding_word_quant, embedding_token_quant,
+                               embedding_position_quant]
+
         # Add LayerNorm quant ops
         layernorm_paths = ['tf_bert_model/bert/embeddings', 'tf_bert_model/bert/encoder/layer_._0/attention/output',
                            'tf_bert_model/bert/encoder/layer_._0/output']
 
         for layernorm_path in layernorm_paths:
-            input_quant_op = ('{}/add/add_1_quantized'.format(layernorm_path) if layernorm_path.endswith('embeddings')
-                              else '{}/add_quantized'.format(layernorm_path), True)
             output_quant_op = ('{}/LayerNorm/batchnorm/add_1_quantized'.format(layernorm_path), True)
             beta_quant_op = ('{}/LayerNorm/batchnorm/ReadVariableOp_quantized'.format(layernorm_path), False)
             gamma_quant_op = ('{}/LayerNorm/batchnorm/mul/ReadVariableOp_quantized'.format(layernorm_path), True)
 
-            quant_ops_to_check += [input_quant_op, output_quant_op, beta_quant_op, gamma_quant_op]
+            quant_ops_to_check += [output_quant_op, beta_quant_op, gamma_quant_op]
 
         # Add GeLU quant ops
         gelu_path = 'tf_bert_model/bert/encoder/layer_._0/intermediate'
-        input_quant_op = ('{}/dense/BiasAdd_quantized'.format(gelu_path), True)
         output_quant_op = ('{}/Gelu/mul_1_quantized'.format(gelu_path), True)
 
-        quant_ops_to_check += [input_quant_op, output_quant_op]
+        quant_ops_to_check += [output_quant_op]
 
         # Add Query, Key, and Value quant ops
         self_attention_path = 'tf_bert_model/bert/encoder/layer_._0/attention/self'
