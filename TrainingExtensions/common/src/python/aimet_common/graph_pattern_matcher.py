@@ -177,12 +177,7 @@ class PatternMatcher:
         """
 
         # we slice the given sub pattern and then compare against reference pattern set
-        matched_patterns_start_indices = self._get_all_sliced_patterns_and_match(sliding_window_op_type_pattern)
-
-        if matched_patterns_start_indices:
-            return matched_patterns_start_indices
-
-        return matched_patterns_start_indices
+        return self._get_all_sliced_patterns_and_match(sliding_window_op_type_pattern)
 
     @staticmethod
     def apply_custom_action(*args, **create_time_kwds):
