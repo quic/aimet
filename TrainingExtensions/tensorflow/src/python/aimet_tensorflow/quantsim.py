@@ -57,6 +57,7 @@ from aimet_tensorflow.utils.common import update_variables_with_values, save_dat
 from aimet_tensorflow import utils
 from aimet_tensorflow.utils import transformer_utils
 from aimet_tensorflow.utils.constants import QuantizeOpIndices
+from aimet_tensorflow.utils.op.embedding import get_embedding_params_using_patterns
 from aimet_tensorflow.utils.quantsim import create_op_to_quant_ops_dict, is_op_quantizable, \
     get_time_steps_tensor_from_rnn_inner_ops, create_encoding_from_dict, swap_last_two_dim
 from aimet_tensorflow.utils.graph import updated_graph_flow_context_to_loop_context, set_graph_flow_context, \
@@ -933,6 +934,8 @@ class QuantizationSimModel:
                 op_with_param = graph.get_operation_by_name(param_info.op_with_param_name)
                 if op_not_in_loop_control_flow_context(graph, op_with_param) and op_with_param in valid_ops:
                     params_to_quantize[param_name] = param_info
+
+        params_to_quantize.update(get_embedding_params_using_patterns(conn_graph))
 
         return params_to_quantize
 

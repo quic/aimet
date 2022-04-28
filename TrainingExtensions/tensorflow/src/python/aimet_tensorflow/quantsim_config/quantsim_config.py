@@ -189,7 +189,8 @@ class QuantSimConfigurator(AimetCommonQuantSimConfigurator):
             for param_quantize_op_set in param_dict.values():
                 for param_quantize_op in param_quantize_op_set:
                     vars_with_value[param_quantize_op.name + '_op_mode'] = int(pymo.TensorQuantizerOpMode.passThrough)
-            vars_with_value[output_quantizer.name + '_op_mode'] = int(pymo.TensorQuantizerOpMode.passThrough)
+            if output_quantizer:
+                vars_with_value[output_quantizer.name + '_op_mode'] = int(pymo.TensorQuantizerOpMode.passThrough)
 
         update_variables_with_values(self._sess, vars_with_value)
 
@@ -406,6 +407,8 @@ class QuantSimConfigurator(AimetCommonQuantSimConfigurator):
 
         quantize_ops_to_modify = _get_quantize_ops_to_modify(input_output_quantize_ops, setting_name)
         for quantize_op in quantize_ops_to_modify:
+            if not quantize_op:
+                continue
             if quantize_op in modified_quantize_ops and \
                     setting_type in modified_quantize_ops[quantize_op]:
                 # Tensor quantizer's setting has already been modified
