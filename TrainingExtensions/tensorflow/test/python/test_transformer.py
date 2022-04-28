@@ -88,25 +88,33 @@ class TransformerQuantizationUnittests(unittest.TestCase):
         quant_ops = {op.name: op for op in sim.session.graph.get_operations() if op.type == 'QcQuantize'}
         quant_ops_to_check = []
 
+        # Add Embedding quant ops
+        embedding_path = 'tf_bert_model/bert/embeddings'
+        embedding_add_1_quant = ('{}/add/add_1_quantized'.format(embedding_path), True)
+        embedding_add_quant = ('{}/add/add_quantized'.format(embedding_path), True)
+        embedding_token_quant = ('{}/Gather_2_quantized'.format(embedding_path), True)
+        embedding_position_quant = ('{}/Identity_1_quantized'.format(embedding_path), True)
+        embedding_word_quant = ('{}/Gather_quantized'.format(embedding_path), True)
+
+        quant_ops_to_check += [embedding_add_1_quant, embedding_add_quant, embedding_word_quant, embedding_token_quant,
+                               embedding_position_quant]
+
         # Add LayerNorm quant ops
         layernorm_paths = ['tf_bert_model/bert/embeddings', 'tf_bert_model/bert/encoder/layer_._0/attention/output',
                            'tf_bert_model/bert/encoder/layer_._0/output']
 
         for layernorm_path in layernorm_paths:
-            input_quant_op = ('{}/add/add_1_quantized'.format(layernorm_path) if layernorm_path.endswith('embeddings')
-                              else '{}/add_quantized'.format(layernorm_path), True)
             output_quant_op = ('{}/LayerNorm/batchnorm/add_1_quantized'.format(layernorm_path), True)
             beta_quant_op = ('{}/LayerNorm/batchnorm/ReadVariableOp_quantized'.format(layernorm_path), False)
             gamma_quant_op = ('{}/LayerNorm/batchnorm/mul/ReadVariableOp_quantized'.format(layernorm_path), True)
 
-            quant_ops_to_check += [input_quant_op, output_quant_op, beta_quant_op, gamma_quant_op]
+            quant_ops_to_check += [output_quant_op, beta_quant_op, gamma_quant_op]
 
         # Add GeLU quant ops
         gelu_path = 'tf_bert_model/bert/encoder/layer_._0/intermediate'
-        input_quant_op = ('{}/dense/BiasAdd_quantized'.format(gelu_path), True)
         output_quant_op = ('{}/Gelu/mul_1_quantized'.format(gelu_path), True)
 
-        quant_ops_to_check += [input_quant_op, output_quant_op]
+        quant_ops_to_check += [output_quant_op]
 
         # Add Query, Key, and Value quant ops
         self_attention_path = 'tf_bert_model/bert/encoder/layer_._0/attention/self'
@@ -162,32 +170,39 @@ class TransformerQuantizationUnittests(unittest.TestCase):
         with open('/tmp/tf_hf_bert_model.encodings') as json_file:
             encoding_data = json.load(json_file)
 
+        activation_tensors = []
+        parameter_tensors = []
+        bias_tensors = []
+
+        # Add Embedding quant ops
+        embedding_path = 'tf_bert_model/bert/embeddings'
+        embedding_add_1_tensor = '{}/add/add_1:0'.format(embedding_path)
+        embedding_add_tensor = '{}/add/add:0'.format(embedding_path)
+        embedding_token_tensor = '{}/Gather_2:0'.format(embedding_path)
+        embedding_position_tensor = '{}/Identity_1:0'.format(embedding_path)
+        embedding_word_tensor = '{}/Gather:0'.format(embedding_path)
+
+        activation_tensors += [embedding_add_tensor, embedding_add_1_tensor]
+        parameter_tensors += [embedding_token_tensor, embedding_word_tensor, embedding_position_tensor]
 
         # Add LayerNorm quant ops
         layernorm_paths = ['tf_bert_model/bert/embeddings', 'tf_bert_model/bert/encoder/layer_._0/attention/output',
                            'tf_bert_model/bert/encoder/layer_._0/output']
 
-        activation_tensors = []
-        parameter_tensors = []
-        bias_tensors = []
-
         for layernorm_path in layernorm_paths:
-            input_tensor = '{}/add/add_1:0'.format(layernorm_path) if layernorm_path.endswith('embeddings') \
-                else '{}/add:0'.format(layernorm_path)
             output_tensor = '{}/LayerNorm/batchnorm/add_1:0'.format(layernorm_path)
             beta_tensor = '{}/LayerNorm/batchnorm/ReadVariableOp:0'.format(layernorm_path)
             gamma_tensor = '{}/LayerNorm/batchnorm/mul/ReadVariableOp:0'.format(layernorm_path)
 
-            activation_tensors += [input_tensor, output_tensor]
+            activation_tensors += [output_tensor]
             parameter_tensors += [gamma_tensor]
             bias_tensors += [beta_tensor]
 
         # Add GeLU quant ops
         gelu_path = 'tf_bert_model/bert/encoder/layer_._0/intermediate'
-        input_tensor = '{}/dense/BiasAdd:0'.format(gelu_path)
         output_tensor = '{}/Gelu/mul_1:0'.format(gelu_path)
 
-        activation_tensors += [input_tensor, output_tensor]
+        activation_tensors += [output_tensor]
 
         # Add Query, Key, and Value quant ops
         self_attention_path = 'tf_bert_model/bert/encoder/layer_._0/attention/self'
@@ -318,25 +333,33 @@ class TransformerQuantizationUnittests(unittest.TestCase):
         quant_ops = {op.name: op for op in sim.session.graph.get_operations() if op.type == 'QcQuantize'}
         quant_ops_to_check = []
 
+        # Add Embedding quant ops
+        embedding_path = 'tf_bert_model/bert/embeddings'
+        embedding_add_1_quant = ('{}/add/add_1_quantized'.format(embedding_path), True)
+        embedding_add_quant = ('{}/add/add_quantized'.format(embedding_path), True)
+        embedding_token_quant = ('{}/Gather_2_quantized'.format(embedding_path), True)
+        embedding_position_quant = ('{}/Identity_1_quantized'.format(embedding_path), True)
+        embedding_word_quant = ('{}/Gather_quantized'.format(embedding_path), True)
+
+        quant_ops_to_check += [embedding_add_1_quant, embedding_add_quant, embedding_word_quant, embedding_token_quant,
+                               embedding_position_quant]
+
         # Add LayerNorm quant ops
         layernorm_paths = ['tf_bert_model/bert/embeddings', 'tf_bert_model/bert/encoder/layer_._0/attention/output',
                            'tf_bert_model/bert/encoder/layer_._0/output']
 
         for layernorm_path in layernorm_paths:
-            input_quant_op = ('{}/add/add_1_quantized'.format(layernorm_path) if layernorm_path.endswith('embeddings')
-                              else '{}/add_quantized'.format(layernorm_path), True)
             output_quant_op = ('{}/LayerNorm/batchnorm/add_1_quantized'.format(layernorm_path), False)
             beta_quant_op = ('{}/LayerNorm/batchnorm/ReadVariableOp_quantized'.format(layernorm_path), False)
             gamma_quant_op = ('{}/LayerNorm/batchnorm/mul/ReadVariableOp_quantized'.format(layernorm_path), False)
 
-            quant_ops_to_check += [input_quant_op, output_quant_op, beta_quant_op, gamma_quant_op]
+            quant_ops_to_check += [output_quant_op, beta_quant_op, gamma_quant_op]
 
         # Add GeLU quant ops
         gelu_path = 'tf_bert_model/bert/encoder/layer_._0/intermediate'
-        input_quant_op = ('{}/dense/BiasAdd_quantized'.format(gelu_path), False)
         output_quant_op = ('{}/Gelu/mul_1_quantized'.format(gelu_path), False)
 
-        quant_ops_to_check += [input_quant_op, output_quant_op]
+        quant_ops_to_check += [output_quant_op]
 
         # Add Query, Key, and Value quant ops
         self_attention_path = 'tf_bert_model/bert/encoder/layer_._0/attention/self'
@@ -576,6 +599,111 @@ class TransformerQuantizationUnittests(unittest.TestCase):
                 self.assertTrue(check_quant_info(quant_info, True))
             else:
                 self.assertTrue(name in ['input_1_quantized', 'conv2d/BiasAdd_quantized'])
+
+        del sim
+        sess.close()
+
+    def test_hf_bert_embedding(self):
+        tf.compat.v1.reset_default_graph()
+
+        input_ids = tf.keras.Input([512], dtype=tf.int32, name='input_ids')
+        token_type_ids = tf.constant(0, dtype=tf.int32, shape=(1, 512))
+        embedding = transformers.models.bert.modeling_tf_bert.TFBertEmbeddings(BertConfig())
+
+        outputs = embedding(input_ids=input_ids, token_type_ids=token_type_ids)
+
+        sess = tf.compat.v1.Session()
+        initialize_uninitialized_vars(sess)
+
+        sim = QuantizationSimModel(sess, [input_ids.op.name, token_type_ids.op.name], [outputs.op.name], use_cuda=False)
+
+        sim.compute_encodings(random_input_forward_pass, {
+            'input_tensor': 'input_ids:0',
+            'input_shape': (1, 512),
+            'output_tensor': 'tf_bert_embeddings/dropout/Identity:0',
+            'int': True
+        })
+
+        quant_ops = {op.name: op for op in sim.session.graph.get_operations() if op.type == 'QcQuantize'}
+        quant_ops_to_check = []
+
+        layernorm_quant = 'tf_bert_embeddings/LayerNorm/batchnorm/add_1_quantized'
+        add_1_quant = 'tf_bert_embeddings/add/add_1_quantized'
+        add_quant = 'tf_bert_embeddings/add/add_quantized'
+
+        quant_ops_to_check += [(layernorm_quant, True), (add_1_quant, True), (add_quant, True)]
+
+        token_quant = 'tf_bert_embeddings/Gather_2_quantized'
+        position_quant = 'tf_bert_embeddings/Identity_1_quantized'
+        word_quant = 'tf_bert_embeddings/Gather_quantized'
+        beta_quant = 'tf_bert_embeddings/LayerNorm/batchnorm/ReadVariableOp_quantized'
+        gamma_quant = 'tf_bert_embeddings/LayerNorm/batchnorm/mul/ReadVariableOp_quantized'
+
+        quant_ops_to_check += [(token_quant, True), (position_quant, True), (word_quant, True), (gamma_quant, True),
+                               (beta_quant, False)]
+
+        # Check if quant op exists and check encoding
+        # Pop quantizer from quant_ops list if it is found
+        for quant_op_name, enabled in quant_ops_to_check:
+            quant_op = quant_ops.pop(quant_op_name)
+            self.assertTrue(quant_op)
+            self.assertTrue(check_encoding(quant_op, sim, enabled))
+
+        self.assertTrue(len(quant_ops) == 0)
+
+        del sim
+        sess.close()
+
+    def test_hf_bert_embedding_custom_config(self):
+        tf.compat.v1.reset_default_graph()
+
+        input_ids = tf.keras.Input([512], dtype=tf.int32, name='input_ids')
+        token_type_ids = tf.constant(0, dtype=tf.int32, shape=(1, 512))
+        embedding = transformers.models.bert.modeling_tf_bert.TFBertEmbeddings(BertConfig())
+
+        outputs = embedding(input_ids=input_ids, token_type_ids=token_type_ids)
+
+        sess = tf.compat.v1.Session()
+        initialize_uninitialized_vars(sess)
+
+        file_path = "/tmp/tf_hf_custom_quantsim_config.json"
+        generate_custom_quantsim_config(file_path)
+
+        sim = QuantizationSimModel(sess, [input_ids.op.name, token_type_ids.op.name], [outputs.op.name], use_cuda=False, config_file=file_path)
+
+        sim.compute_encodings(random_input_forward_pass, {
+            'input_tensor': 'input_ids:0',
+            'input_shape': (1, 512),
+            'output_tensor': 'tf_bert_embeddings/dropout/Identity:0',
+            'int': True
+        })
+
+        quant_ops = {op.name: op for op in sim.session.graph.get_operations() if op.type == 'QcQuantize'}
+        quant_ops_to_check = []
+
+        layernorm_quant = 'tf_bert_embeddings/LayerNorm/batchnorm/add_1_quantized'
+        add_1_quant = 'tf_bert_embeddings/add/add_1_quantized'
+        add_quant = 'tf_bert_embeddings/add/add_quantized'
+
+        quant_ops_to_check += [(layernorm_quant, False), (add_1_quant, True), (add_quant, True)]
+
+        token_quant = 'tf_bert_embeddings/Gather_2_quantized'
+        position_quant = 'tf_bert_embeddings/Identity_1_quantized'
+        word_quant = 'tf_bert_embeddings/Gather_quantized'
+        beta_quant = 'tf_bert_embeddings/LayerNorm/batchnorm/ReadVariableOp_quantized'
+        gamma_quant = 'tf_bert_embeddings/LayerNorm/batchnorm/mul/ReadVariableOp_quantized'
+
+        quant_ops_to_check += [(token_quant, True), (position_quant, True), (word_quant, True), (gamma_quant, False),
+                               (beta_quant, False)]
+
+        # Check if quant op exists and check encoding
+        # Pop quantizer from quant_ops list if it is found
+        for quant_op_name, enabled in quant_ops_to_check:
+            quant_op = quant_ops.pop(quant_op_name)
+            self.assertTrue(quant_op)
+            self.assertTrue(check_encoding(quant_op, sim, enabled))
+
+        self.assertTrue(len(quant_ops) == 0)
 
         del sim
         sess.close()
