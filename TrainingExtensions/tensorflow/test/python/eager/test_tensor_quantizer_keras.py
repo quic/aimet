@@ -35,9 +35,10 @@
 # =============================================================================
 """ Unit tests for Keras tensor quantizer """
 import tensorflow as tf
+import aimet_common.libpymo as libpymo
 from aimet_tensorflow.keras.quant_sim.tensor_quantizer import ActivationTensorQuantizer, ParamTensorQuantizer
 from aimet_common.defs import QuantScheme
-import libpymo
+
 
 def test_set_encodings():
     tf.keras.backend.clear_session()

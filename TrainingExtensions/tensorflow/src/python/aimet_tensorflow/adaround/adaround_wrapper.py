@@ -43,9 +43,9 @@ import numpy as np
 import tensorflow as tf
 from tensorflow import keras
 from packaging import version
-import libpymo
 
 # Import AIMET specific modules
+import aimet_common.libpymo as libpymo
 from aimet_common.defs import AdaroundConstants
 from aimet_common.defs import QuantScheme
 from aimet_tensorflow.utils.op.conv import WeightTensorUtils, BiasUtils

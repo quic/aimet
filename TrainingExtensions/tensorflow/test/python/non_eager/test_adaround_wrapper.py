@@ -44,8 +44,8 @@ import pytest
 import unittest.mock
 import numpy as np
 import tensorflow as tf
-import libpymo
 
+import aimet_common.libpymo as libpymo
 from aimet_common.utils import AimetLogger
 from aimet_common.defs import QuantScheme
 from aimet_tensorflow.adaround.adaround_wrapper import AdaroundWrapper

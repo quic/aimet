@@ -40,13 +40,13 @@
 from typing import List, Dict, Union
 import tensorflow as tf
 
+import aimet_common.libpymo as libpymo
 from aimet_common.utils import AimetLogger
 from aimet_tensorflow.common.connectedgraph import ConnectedGraph
 from aimet_tensorflow.common.operation import Op
 from aimet_tensorflow.common import core
 from aimet_tensorflow.defs import ParameterInfo
 from aimet_tensorflow.quantsim_config.quantsim_config import OpToQuantOpsDictType
-import libpymo
 
 _logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Quant)
 

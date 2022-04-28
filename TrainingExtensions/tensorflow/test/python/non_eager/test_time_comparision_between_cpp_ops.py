@@ -36,19 +36,16 @@
 
 import pytest
 import unittest
-import random
 import numpy as np
-import time
 import os
+import time
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
 import tensorflow as tf
+import aimet_common.libpymo as libpymo
 from aimet_tensorflow.quantsim import AxisHandling
 
 tf.compat.v1.disable_eager_execution()
 tf.compat.v1.logging.set_verbosity(tf.compat.v1.logging.WARN)
-
-import libpymo
-import time
 
 
 class TestTrainingExtensionsQcQuantizeOpPerChannel(unittest.TestCase):

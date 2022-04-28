@@ -44,8 +44,10 @@ import pytest
 import unittest.mock
 import tensorflow as tf
 from packaging import version
-import libpymo
-import aimet_tensorflow.utils.quantsim
+
+import aimet_common.libpymo as libpymo
+from aimet_common.defs import QuantScheme, QuantizationDataType
+from aimet_common.quantsim import encoding_version
 from aimet_tensorflow.quantsim import QuantizationSimModel, check_accumulator_overflow
 from aimet_tensorflow.quantsim_straight_through_grad import _get_n_and_p, _compute_dloss_by_dmax, \
     compute_intermediate_result_for_learned_grid, LearnedGridParams
@@ -53,8 +55,6 @@ from aimet_tensorflow.utils.graph_saver import load_model_from_meta
 from aimet_tensorflow.common.graph_eval import initialize_uninitialized_vars
 from aimet_tensorflow.defs import ParameterInfo
 from aimet_tensorflow.examples.test_models import model_with_dtype_int, keras_model
-from aimet_common.defs import QuantScheme, QuantizationDataType
-from aimet_common.quantsim import encoding_version
 from aimet_tensorflow.quantsim import save_checkpoint, load_checkpoint
 from aimet_tensorflow.utils.constants import QuantizeOpIndices
 from aimet_tensorflow.utils import transformer_utils

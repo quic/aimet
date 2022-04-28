@@ -42,8 +42,8 @@ import typing
 
 import numpy as np
 import tensorflow as tf
-import libpymo
 
+import aimet_common.libpymo as libpymo
 from aimet_common.utils import AimetLogger
 from aimet_tensorflow.keras.batch_norm_fold import fold_all_batch_norms
 from aimet_tensorflow.keras.connectedgraph import ConnectedGraph

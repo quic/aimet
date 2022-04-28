@@ -35,9 +35,11 @@
 #  
 #  @@-COPYRIGHT-END-@@
 # =============================================================================
+
 import unittest
-import libpymo
 import numpy as np
+
+import aimet_common.libpymo as libpymo
 
 
 class TestHighBiasFold(unittest.TestCase):

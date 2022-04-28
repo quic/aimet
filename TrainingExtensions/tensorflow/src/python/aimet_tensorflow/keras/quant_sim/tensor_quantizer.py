@@ -39,12 +39,12 @@
 import abc
 import tensorflow as tf
 
+import aimet_common.libpymo as libpymo
 from aimet_common.defs import MAP_QUANT_SCHEME_TO_PYMO, MAP_ROUND_MODE_TO_PYMO, QuantScheme
 from aimet_common.quantsim import calculate_delta_offset
 from aimet_common.utils import AimetLogger
 from aimet_tensorflow.keras.quant_sim.quantsim_straight_through_grad import qc_straight_through_estimator_grad, \
     quantsim_custom_grad_learned_grid
-import libpymo  # pylint: disable=import-error
 
 _logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Quant)
 
