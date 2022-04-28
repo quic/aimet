@@ -48,12 +48,11 @@ import numpy as np
 import torch
 
 import aimet_common.libpymo as libpymo      # pylint: disable=import-error
-
+from aimet_common.utils import AimetLogger
 from aimet_torch import utils
 from aimet_torch.meta.connectedgraph import ConnectedGraph
 from aimet_torch.batch_norm_fold import fold_all_batch_norms
 from aimet_torch.utils import get_device, get_ordered_list_of_modules
-from aimet_common.utils import AimetLogger
 
 logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Quant)
 
