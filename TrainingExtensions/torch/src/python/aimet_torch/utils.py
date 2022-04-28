@@ -47,7 +47,7 @@ from torchvision import datasets, transforms
 
 from aimet_common.defs import QuantScheme, QuantizationDataType, MAP_QUANT_SCHEME_TO_PYMO
 from aimet_common.utils import AimetLogger
-import libpymo
+import aimet_common.libpymo as libpymo
 
 
 logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Utils)

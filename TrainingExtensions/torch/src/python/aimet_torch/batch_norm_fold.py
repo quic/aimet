@@ -46,7 +46,7 @@ import torch.nn
 from torch.nn.modules.batchnorm import BatchNorm1d, BatchNorm2d
 from torch.nn.modules.conv import _ConvTransposeNd
 
-import libpymo
+import aimet_common.libpymo as libpymo
 
 from aimet_common.bias_correction import ConvBnPatternHandler
 from aimet_common.graph_pattern_matcher import PatternType

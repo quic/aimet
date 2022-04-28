@@ -42,14 +42,13 @@ from typing import List, Union
 
 import torch
 
+import aimet_common.libpymo as libpymo  # pylint: disable=import-error
 from aimet_common.defs import QuantScheme, QuantizationDataType, MAP_QUANT_SCHEME_TO_PYMO
 from aimet_common.utils import AimetLogger
 import aimet_torch.quantsim_straight_through_grad as grad_fn
 from aimet_torch.quantsim_straight_through_grad import broadcast_to_tensor
-import libpymo                  # pylint: disable=import-error
-
 #TODO Pylint fails due an unknown import issue. We need to debug this later.
-import AimetTensorQuantizer     # pylint: disable=import-error
+import aimet_torch.AimetTensorQuantizer as AimetTensorQuantizer # pylint: disable=import-error
 
 _logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Quant)
 

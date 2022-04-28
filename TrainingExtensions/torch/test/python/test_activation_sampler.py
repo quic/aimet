@@ -41,8 +41,8 @@
 import unittest
 import logging
 import torch
-import libpymo
 
+import aimet_common.libpymo as libpymo
 from aimet_common.utils import AimetLogger
 from aimet_torch.quantsim import QuantizationSimModel
 from aimet_torch.qc_quantize_op import QcQuantizeWrapper

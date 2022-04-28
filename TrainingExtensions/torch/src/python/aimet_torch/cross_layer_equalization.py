@@ -47,7 +47,7 @@ from typing import Tuple, List, Union, Dict
 import numpy as np
 import torch
 
-import libpymo      # pylint: disable=import-error
+import aimet_common.libpymo as libpymo      # pylint: disable=import-error
 
 from aimet_torch import utils
 from aimet_torch.meta.connectedgraph import ConnectedGraph

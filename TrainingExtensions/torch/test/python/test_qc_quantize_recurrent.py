@@ -35,15 +35,13 @@
 #  @@-COPYRIGHT-END-@@
 # =============================================================================
 
-import pytest
 import unittest
-
 import copy
 import torch
 import tempfile
 from torch.nn.utils.rnn import pack_padded_sequence
 
-import libpymo
+import aimet_common.libpymo as libpymo
 from aimet_common.defs import QuantScheme, QuantizationDataType
 from aimet_common.utils import AimetLogger
 from aimet_torch.qc_quantize_recurrent import QcQuantizeRecurrent

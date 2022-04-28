@@ -40,7 +40,7 @@
 from typing import List
 import torch
 
-import libpymo as pymo
+import aimet_common.libpymo as pymo
 from aimet_torch.layer_database import Layer
 from aimet_common.defs import CostMetric
 from aimet_common.utils import AimetLogger
