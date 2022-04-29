@@ -713,9 +713,8 @@ class QuantizeDequantizeFunc(torch.autograd.Function):
             offset = broadcast_to_tensor(tensor, offset, channel_axis)
 
         tensor_grad = grad_fn.compute_dloss_by_dx_using_scale_offset(tensor, grad, scale, offset, n, p)
-        tensor_encoding_min_grad, tensor_encoding_max_grad = grad_fn.compute_dloss_by_dmin_dmax(
-            tensor, grad, scale, offset, n, p, channel_axis
-        )
+        tensor_encoding_max_grad = grad_fn.compute_dloss_by_dmax(tensor, grad, scale, offset, n, p, channel_axis)
+        tensor_encoding_min_grad = grad_fn.compute_dloss_by_dmin(tensor, grad, scale, offset, n, p, channel_axis)
 
         return tensor_grad, tensor_encoding_min_grad, tensor_encoding_max_grad, None
 
@@ -747,10 +746,11 @@ class ParameterQuantizer(torch.autograd.Function):
 
         tensor.grad = grad_fn.compute_dloss_by_dx_using_scale_offset(tensor, grad, scaling, offset,
                                                                      tensor_quantizer.n, tensor_quantizer.p)
+        tensor_encoding_max_grad = grad_fn.compute_dloss_by_dmax(tensor, grad, scaling, offset,
+                                                                 tensor_quantizer.n, tensor_quantizer.p, channel_axis)
+        tensor_encoding_min_grad = grad_fn.compute_dloss_by_dmin(tensor, grad, scaling, offset,
+                                                                 tensor_quantizer.n, tensor_quantizer.p, channel_axis)
 
-        tensor_encoding_min_grad, tensor_encoding_max_grad = grad_fn.compute_dloss_by_dmin_dmax(
-            tensor, grad, scaling, offset, tensor_quantizer.n, tensor_quantizer.p, channel_axis
-        )
         return tensor_encoding_min_grad, tensor_encoding_max_grad
 
     @staticmethod

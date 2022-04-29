@@ -36,6 +36,7 @@
 #  @@-COPYRIGHT-END-@@
 # =============================================================================
 """ Implements straight through gradient computation for Quant op"""
+import typing
 
 import torch
 
@@ -66,53 +67,6 @@ def broadcast_to_tensor(tensor, encoding, ch_axis):
     encoding = encoding.permute(permute_dims)
 
     return encoding
-
-
-def compute_dloss_by_dmin_dmax(x, grad, scaling, offset, n, p, ch_axis=0):
-    """
-    implemenatation based on LSQ+
-    reference: https://arxiv.org/pdf/2004.09576.pdf
-
-    in_cond:
-        dqdmax = (round(x/s) - x/s) / p
-        dqdmin = (round(x/s) - x/s) / -p
-
-    out_cond (n>fw):
-        dqdmax = n/p + o/p - round(o)/p
-        dqdmin = -n/p + 1 - (o/p - round(o)/p)
-
-    """
-
-    fw = torch.round(x / scaling) + torch.round(offset)
-    rounding_error_q = torch.round(x / scaling) - (x / scaling)
-    rounding_error_o = torch.round(offset) - offset
-
-    dqdmax = torch.where(
-        torch.le(fw.data, p), rounding_error_q / p, torch.ones_like(p) - rounding_error_o / p,
-    )
-    dqdmax = torch.where(
-        torch.le(n, fw.data), dqdmax, n / p - rounding_error_o / p,
-    )
-
-    dqdmin = torch.where(
-        torch.le(fw.data, p), -rounding_error_q / p, rounding_error_o / p
-    )
-    dqdmin = torch.where(
-        torch.le(n, fw.data), dqdmin, -n/p + 1 + rounding_error_o / p
-    )
-    dloss_by_dmax = dqdmax * grad
-    dloss_by_dmin = dqdmin * grad
-    if len(scaling) > 1 and len(x.shape) > 1:
-        dim = list(range(len(x.shape)))
-        # Remove the output axis
-        dim.pop(ch_axis)
-        dloss_by_dmax = torch.sum(dloss_by_dmax, dim=dim)
-        dloss_by_dmin = torch.sum(dloss_by_dmin, dim=dim)
-    elif len(scaling) == 1:
-        dloss_by_dmax = torch.sum((dloss_by_dmax).flatten(), dim=0, keepdim=True)
-        dloss_by_dmin = torch.sum((dloss_by_dmin).flatten(), dim=0, keepdim=True)
-
-    return dloss_by_dmin, dloss_by_dmax
 
 
 def compute_dloss_by_dx(x, grad, encoding_min, encoding_max, ch_axis=0):
@@ -146,6 +100,130 @@ def compute_dloss_by_dx(x, grad, encoding_min, encoding_max, ch_axis=0):
                               torch.zeros_like(x)) * grad
 
     return dloss_by_dx
+
+
+def _compute_derivative_of_loss_function(x: torch.Tensor,
+                                         derivative_of_quantizer: torch.Tensor,
+                                         grad: torch.Tensor,
+                                         scaling: torch.Tensor,
+                                         ch_axis: int) -> torch.Tensor:
+    """
+    Compute derivative of the loss function like dloss_by_dmin or dloss_by_dmax
+
+    :param x: input
+    :param derivative_of_quantizer: derivative of the quantizer function like dq_by_dmin or dq_by_dmax
+    :param grad: gradient
+    :param scaling: scaling factor computed for given encoding min/max
+    :param ch_axis: channel axis along which sum is computed for gradient calculation
+    :return: computed derivative of loss w.r.t derivative of quantizer
+    """
+    derivative_of_loss_function = derivative_of_quantizer * grad
+    if len(scaling) > 1 and len(x.shape) > 1:
+        dim = list(range(len(x.shape)))
+        # Remove the output axis
+        dim.pop(ch_axis)
+        derivative_of_loss_function = torch.sum(derivative_of_loss_function, dim=dim)
+    elif len(scaling) == 1:
+        derivative_of_loss_function = torch.sum(derivative_of_loss_function.flatten(), dim=0, keepdim=True)
+
+    return derivative_of_loss_function
+
+
+def compute_rounding_errors(x: torch.Tensor,
+                            scaling: torch.Tensor,
+                            offset: torch.Tensor) -> typing.Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    """
+    helper function to compute forward result and rounding error before derivative
+    :param x: input
+    :param scaling: scaling factor computed for given encoding min/max
+    :param offset: offset computed
+    :return: forward result, rounding error of quantizer, rounding error of offset tuple
+    """
+    forward_result = torch.round(x / scaling) + torch.round(offset)
+    rounding_error_q = torch.round(x / scaling) - (x / scaling)
+    rounding_error_o = torch.round(offset) - offset
+
+    return forward_result, rounding_error_q, rounding_error_o
+
+
+def compute_dloss_by_dmin(x: torch.Tensor,
+                          grad: torch.Tensor,
+                          scaling: torch.Tensor,
+                          offset: torch.Tensor,
+                          n: torch.Tensor,
+                          p: torch.Tensor,
+                          ch_axis: int = 0) -> torch.Tensor:
+    """
+    helper function to compute derivative of loss w.r.t encoding min
+    Implementation based on LSQ+ ( https://arxiv.org/pdf/2004.09576.pdf )
+
+    Inner condition ( n <= fw <= p ):
+        dq_by_dmin = (round(x/s) - x/s) / -p
+    Outer condition ( fw < n ):
+        dq_by_dmin = -n/p + 1 - (o/p - round(o)/p)
+    Outer condition ( p < fw ):
+        dq_by_dmin = round(o) / p
+
+    :param x: input
+    :param grad: gradient
+    :param scaling: scaling factor computed for given encoding min/max
+    :param offset: offset computed
+    :param n: lower bound
+    :param p: upper bound
+    :param ch_axis: channel axis along which sum is computed for gradient calculation
+    :return: computed derivative of loss w.r.t encoding min
+    """
+    forward_result, rounding_error_q, rounding_error_o = compute_rounding_errors(x, scaling, offset)
+
+    dq_by_dmin = torch.where(
+        torch.le(forward_result.data, p), -rounding_error_q / p, rounding_error_o / p
+    )
+    dq_by_dmin = torch.where(
+        torch.le(n, forward_result.data), dq_by_dmin, -n/p + 1 + rounding_error_o / p
+    )
+
+    dloss_by_dmin = _compute_derivative_of_loss_function(x, dq_by_dmin, grad, scaling, ch_axis)
+    return dloss_by_dmin
+
+
+def compute_dloss_by_dmax(x: torch.Tensor,
+                          grad: torch.Tensor,
+                          scaling: torch.Tensor,
+                          offset: torch.Tensor,
+                          n: torch.Tensor,
+                          p: torch.Tensor,
+                          ch_axis: int = 0) -> torch.Tensor:
+    """
+    helper function to compute derivative of loss w.r.t encoding max
+    Implementation based on LSQ+ ( https://arxiv.org/pdf/2004.09576.pdf )
+
+    Inner condition ( n <= fw <= p ):
+        dq_by_dmax = (round(x/s) - x/s) / p
+    Outer condition ( fw < n ):
+        dq_by_dmax = n/p + o/p - round(o)/p
+    Outer condition ( p < fw ):
+        dq_by_dmax = 1 - round(o) / p
+
+    :param x: input
+    :param grad: gradient
+    :param scaling: scaling factor computed for given encoding min/max
+    :param offset: offset computed
+    :param n: lower bound
+    :param p: upper bound
+    :param ch_axis: channel axis along which sum is computed for gradient calculation
+    :return: computed derivative of loss w.r.t encoding max
+    """
+    forward_result, rounding_error_q, rounding_error_o = compute_rounding_errors(x, scaling, offset)
+
+    dq_by_dmax = torch.where(
+        torch.le(forward_result.data, p), rounding_error_q / p, torch.ones_like(p) - rounding_error_o / p,
+    )
+    dq_by_dmax = torch.where(
+        torch.le(n, forward_result.data), dq_by_dmax, n / p - rounding_error_o / p,
+    )
+
+    dloss_by_dmax = _compute_derivative_of_loss_function(x, dq_by_dmax, grad, scaling, ch_axis)
+    return dloss_by_dmax
 
 
 def compute_dloss_by_dx_using_scale_offset(x, grad, scaling, offset, n, p):
