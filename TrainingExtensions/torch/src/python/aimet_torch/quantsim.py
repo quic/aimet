@@ -51,7 +51,7 @@ import onnx
 import aimet_common
 from aimet_common.utils import AimetLogger, save_json_yaml
 from aimet_common.defs import QuantScheme, QuantizationDataType
-from aimet_common.quantsim import encoding_version, validate_quantsim_inputs
+from aimet_common.quantsim import encoding_version, validate_quantsim_inputs, calculate_delta_offset
 from aimet_common.quant_utils import get_conv_accum_bounds
 
 from aimet_torch.quantsim_config.quantsim_config import QuantSimConfigurator
@@ -961,22 +961,6 @@ class QuantizationSimModel:
                 self._add_quantization_wrappers(module_ref, num_inout_tensors, default_data_type)
 
     @staticmethod
-    def _recompute_scale_offset(min_val: float, max_val: float, bitwidth: int) -> (float, float):
-        """
-        calculates delta and offset given min and max.
-        :param min_val: min encoding value
-        :param max_val: max encoding value
-        :param bitwidth: bitwidth used for quantization
-        :return: delta and offset values computed
-        """
-
-        delta = (max_val - min_val) / (2 ** bitwidth - 1)
-        # For the case where min==max==0 to avoid division by zero
-        delta = max(delta, 0.01)
-        offset = round(min_val / delta)
-        return delta, offset
-
-    @staticmethod
     def _create_encoding_dict(encoding: libpymo.TfEncoding, quantizer, propagate_encodings: bool) -> Union[Dict, None]:
         """
         Create encoding dictionary from encoding object
@@ -997,7 +981,7 @@ class QuantizationSimModel:
                                                                 encoding.delta, encoding.offset
                 is_symmetric = quantizer.use_symmetric_encodings
                 if not isinstance(quantizer, StaticGridTensorQuantizer):
-                    scale, offset = QuantizationSimModel._recompute_scale_offset(encoding_min, encoding_max, bw)
+                    scale, offset = calculate_delta_offset(encoding_min, encoding_max, bitwidth)
 
                 if propagate_encodings:
                     # Shortened encodings will be filled into a layer that only exists due to expansion of PyTorch ops

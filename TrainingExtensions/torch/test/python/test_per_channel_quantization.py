@@ -626,6 +626,45 @@ class TestPerChannelQcQuantizeOpLearnedGrid:
         for val in trainable_module.bias_encoding_max:
             assert not val.item() == 3.0
 
+    def test_export_model_with_two_inputs(self):
+        """Model with more than 1 input"""
+
+        dummy_input = (torch.rand(32, 1, 28, 28), torch.rand(32, 1, 28, 28))
+        save_config_file_for_per_channel_quantization()
+        def forward_pass(model, args):
+            model.eval()
+            with torch.no_grad():
+                model(*dummy_input)
+
+        model = ModelWithTwoInputs()
+
+        sim = QuantizationSimModel(model, dummy_input=dummy_input,
+                                   quant_scheme=QuantScheme.training_range_learning_with_tf_init,
+                                   config_file='./data/quantsim_config.json')
+
+        # Quantize
+        sim.compute_encodings(forward_pass, None)
+
+        assert len(sim.model.conv1_a.param_quantizers['weight'].encoding) == 10
+        assert len(sim.model.fc2.param_quantizers['weight'].encoding) == 10
+
+        model(*dummy_input)
+
+        # Check that different encodings are computed for different channels
+        assert sim.model.conv1_a.param_quantizers['weight'].encoding[0] != \
+               sim.model.conv1_a.param_quantizers['weight'].encoding[1]
+        assert sim.model.fc2.param_quantizers['weight'].encoding[0] != \
+               sim.model.fc2.param_quantizers['weight'].encoding[1]
+
+        sim.export('./data/', 'two_input_model_per_channel', dummy_input)
+
+        with open("./data/two_input_model_per_channel.encodings", "r") as encodings_file:
+            encodings = json.load(encodings_file)
+        assert len(encodings['param_encodings']) == 10
+        assert len(encodings['param_encodings']['conv1_a.bias']) == 1
+        assert len(encodings['param_encodings']['conv1_a.weight']) == 10
+        assert encodings['param_encodings']['conv1_a.weight'][1]['bitwidth'] == 8
+
 
 def create_learned_grid_wrapper():
     conv1 = torch.nn.Conv2d(2, 3, kernel_size=5).to('cuda')
@@ -635,3 +674,31 @@ def create_learned_grid_wrapper():
                                       is_symmetric=False, is_output_quantized=True, activation_bw=8,
                                       weight_bw=8, device='cuda', data_type=QuantizationDataType.int)
     return wrapper
+
+
+def save_config_file_for_per_channel_quantization():
+    quantsim_config = {
+        "defaults": {
+            "ops": {
+                "is_output_quantized": "True",
+                "is_symmetric": "False"
+            },
+            "params": {
+                "is_quantized": "True",
+                "is_symmetric": "True"
+            },
+            "per_channel_quantization": "True",
+        },
+        "params": {
+            "bias": {
+                "is_quantized": "False"
+            }
+        },
+        "op_type": {},
+        "supergroups": [],
+        "model_input": {},
+        "model_output": {}
+    }
+
+    with open('./data/quantsim_config.json', 'w') as f:
+        json.dump(quantsim_config, f)
