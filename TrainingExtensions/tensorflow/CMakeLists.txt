@@ -67,7 +67,7 @@ if (ENABLE_CUDA)
           TensorFlow
           TrainingExtensionsTfCuda
           PyWrapTensorFlowInternal
-          /usr/lib/x86_64-linux-gnu/libpython3.6m.so
+          ${Python_LIBRARIES}
           )
 
 else(ENABLE_CUDA)
@@ -76,6 +76,7 @@ else(ENABLE_CUDA)
             MoDlQuantization
             TensorFlow
             PyWrapTensorFlowInternal
+            ${Python_LIBRARIES}
             )
 
 endif(ENABLE_CUDA)
