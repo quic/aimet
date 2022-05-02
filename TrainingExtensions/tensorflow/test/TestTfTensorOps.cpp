@@ -37,10 +37,16 @@
 //==============================================================================
 
 #include <gtest/gtest.h>
+#include <limits>
 
 #include "tensorflow/core/framework/tensor.h"
+#include <DlQuantization/Quantization.hpp>
 
 using namespace tensorflow;
+
+
+DlQuantization::TfEncoding updateStatsAndComputeEncodingsTfFunctions(const Tensor inTensor, const int8 bw,
+                                                                     const bool useSymEncoding);
 
 
 class TestTfTensorOps : public ::testing::Test
@@ -123,4 +129,42 @@ TEST(TestTfTensorOps, TensorPerTensorMinMax)
 
     EXPECT_NEAR(-2.60564, min, 0.0001);
     EXPECT_NEAR(7.35337, max, 0.0001);
+}
+
+
+TEST(TestTfTensorOps, OneShotComputeEncodings)
+{
+    Tensor input(DT_FLOAT, TensorShape({2, 3, 4, 5}));
+    std::vector<float> inputData(2 * 3 * 4 * 5, 5);
+    float mean   = 2;
+    float stddev = 2;
+    std::normal_distribution<float> distribution(mean, stddev);
+    std::mt19937 generator(10);
+    float running_min = std::numeric_limits<float>::max();
+    float running_max = std::numeric_limits<float>::min();
+    for (int i = 0; i < inputData.size(); i++)
+    {
+        inputData[i] = distribution(generator);
+        if (inputData[i] > running_max)
+            running_max = inputData[i];
+        if (inputData[i] < running_min)
+            running_min = inputData[i];
+    }
+
+    std::copy_n(inputData.data(), inputData.size(), input.flat<float>().data());
+    auto enc = updateStatsAndComputeEncodingsTfFunctions(input, 8, false);
+
+    std::cout << "Min: " << enc.min << ", running_min: " << running_min << "\n";
+    std::cout << "Max: " << enc.max << ", running_max: " << running_max << "\n";
+    std::cout << "Scale: " << enc.delta << "\n";
+    std::cout << "Offset: " << enc.offset << "\n";
+
+    EXPECT_LE(enc.min, running_min);
+    EXPECT_LE(running_min - enc.min, enc.delta);
+
+    EXPECT_LE(enc.max, running_max);
+    EXPECT_LE(running_max - enc.max, enc.delta);
+
+    EXPECT_FLOAT_EQ((enc.max - enc.min) / 255, enc.delta);
+    EXPECT_EQ(enc.offset, round(enc.min / enc.delta));
 }
