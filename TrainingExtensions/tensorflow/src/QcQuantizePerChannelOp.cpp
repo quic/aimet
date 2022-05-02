@@ -111,7 +111,7 @@ TTypes<float>::Matrix getTwoDimTensor(Tensor* tensor, const AxisHandling axisHan
 
 
 DlQuantization::TfEncoding updateStatsAndComputeEncodingsTfFunctions(const Tensor inTensor, const int8 bw,
-                                                          const bool useSymEncoding)
+                                                                     const bool useSymEncoding)
 {
     Tensor someScalar(DT_FLOAT, TensorShape({}));;
     auto scalar = someScalar.scalar<float>();
