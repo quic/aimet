@@ -76,6 +76,7 @@ add_executable(TfTrainingExtensionCppTest
 target_link_libraries(TfTrainingExtensionCppTest
         gtest gtest_main
         TensorFlow
+        TrainingExtensionsTf
         )
 
 add_test(TfTrainingExtensionCppTest

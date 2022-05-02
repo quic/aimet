@@ -67,6 +67,7 @@ if (ENABLE_CUDA)
           TensorFlow
           TrainingExtensionsTfCuda
           PyWrapTensorFlowInternal
+          /usr/lib/x86_64-linux-gnu/libpython3.6m.so
           )
 
 else(ENABLE_CUDA)
