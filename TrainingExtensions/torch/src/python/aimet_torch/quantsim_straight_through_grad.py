@@ -160,9 +160,9 @@ def compute_dloss_by_dmin(x: torch.Tensor,
     Inner condition ( n <= fw <= p ):
         dq_by_dmin = (round(x/s) - x/s) / -p
     Outer condition ( fw < n ):
-        dq_by_dmin = -n/p + 1 - (o/p - round(o)/p)
+        dq_by_dmin = -n/p + 1 + (round(o) - o)/p
     Outer condition ( p < fw ):
-        dq_by_dmin = round(o) / p
+        dq_by_dmin = (round(o) - o)/p
 
     :param x: input
     :param grad: gradient
@@ -200,9 +200,9 @@ def compute_dloss_by_dmax(x: torch.Tensor,
     Inner condition ( n <= fw <= p ):
         dq_by_dmax = (round(x/s) - x/s) / p
     Outer condition ( fw < n ):
-        dq_by_dmax = n/p + o/p - round(o)/p
+        dq_by_dmax = n/p - (round(o) - o)/p
     Outer condition ( p < fw ):
-        dq_by_dmax = 1 - round(o) / p
+        dq_by_dmax = 1 - (round(o) - o)/p
 
     :param x: input
     :param grad: gradient
