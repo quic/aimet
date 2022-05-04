@@ -700,6 +700,7 @@ class QuantizeDequantizeFunc(torch.autograd.Function):
 
     @staticmethod
     def backward(ctx, grad):
+        # pylint: disable=too-many-locals
         # Retrieve saved tensors for gradient calculations
         tensor, encoding_min, encoding_max, n, p, bitwidth, channel_axis = ctx.saved_tensors
         channel_axis = channel_axis.item()

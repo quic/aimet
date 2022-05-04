@@ -36,9 +36,9 @@
 #  @@-COPYRIGHT-END-@@
 # =============================================================================
 """ Implements straight through gradient computation for Quant op"""
+from dataclasses import dataclass
 
 import torch
-from dataclasses import dataclass
 
 
 @dataclass
@@ -194,7 +194,7 @@ def compute_dloss_by_dmin(x: torch.Tensor,
     :param ch_axis: channel axis along which sum is computed for gradient calculation
     :return: computed derivative of loss w.r.t encoding min
     """
-    scaling, offset, n, p = grid_params.scaling, grid_params.offset, grid_params.n, grid_params.p
+    scaling, _, n, p = grid_params.scaling, grid_params.offset, grid_params.n, grid_params.p
     forward_result = intermediate_result.forward_result
     rounding_error_q = intermediate_result.rounding_error_q
     rounding_error_o = intermediate_result.rounding_error_o
@@ -233,7 +233,7 @@ def compute_dloss_by_dmax(x: torch.Tensor,
     :param ch_axis: channel axis along which sum is computed for gradient calculation
     :return: computed derivative of loss w.r.t encoding max
     """
-    scaling, offset, n, p = grid_params.scaling, grid_params.offset, grid_params.n, grid_params.p
+    scaling, _, n, p = grid_params.scaling, grid_params.offset, grid_params.n, grid_params.p
     forward_result = intermediate_result.forward_result
     rounding_error_q = intermediate_result.rounding_error_q
     rounding_error_o = intermediate_result.rounding_error_o
