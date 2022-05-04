@@ -83,6 +83,7 @@ RUN python3.7 -m pip --no-cache-dir install --upgrade \
         pip \
         cython \
         'numpy>=1.19.5' \
+        setuptools==41.0.1 \
         wheel
 
 ENV DEBIAN_FRONTEND=noninteractive
@@ -131,7 +132,7 @@ RUN python3.7 -m pip --no-cache-dir install \
         grpcio-tools \
         h5py \
         ipykernel \
-        Jinja2>=2.9 \
+        'Jinja2>=2.9, <3.1' \
         jupyter \
         keras==2.2.4 \
         lmdb==1.2.1 \
