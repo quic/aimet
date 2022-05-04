@@ -36,9 +36,34 @@
 #  @@-COPYRIGHT-END-@@
 # =============================================================================
 """ Implements straight through gradient computation for Quant op"""
-import typing
 
 import torch
+from dataclasses import dataclass
+
+
+@dataclass
+class LearnedGridParams:
+    """
+    Data carrier containing parameters for learned grid
+    """
+    scaling: torch.Tensor
+    offset: torch.Tensor
+    n: torch.Tensor
+    p: torch.Tensor
+
+
+@dataclass
+class IntermediateResultForLearnedGrid:
+    """
+    Data carrier containing intermediate result for learned grid backward computation
+
+    forward_result: Round(x / scaling) + Round(offset)
+    rounding_error_q: Round(x / scaling) - (x / scaling)
+    rounding_error_o: Round(offset) - offset
+    """
+    forward_result: torch.Tensor
+    rounding_error_q: torch.Tensor
+    rounding_error_o: torch.Tensor
 
 
 def broadcast_to_tensor(tensor, encoding, ch_axis):
@@ -129,9 +154,9 @@ def _compute_derivative_of_loss_function(x: torch.Tensor,
     return derivative_of_loss_function
 
 
-def compute_rounding_errors(x: torch.Tensor,
-                            scaling: torch.Tensor,
-                            offset: torch.Tensor) -> typing.Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+def compute_intermediate_result_for_learned_grid(x: torch.Tensor,
+                                                 scaling: torch.Tensor,
+                                                 offset: torch.Tensor) -> IntermediateResultForLearnedGrid:
     """
     helper function to compute forward result and rounding error before derivative
     :param x: input
@@ -143,15 +168,13 @@ def compute_rounding_errors(x: torch.Tensor,
     rounding_error_q = torch.round(x / scaling) - (x / scaling)
     rounding_error_o = torch.round(offset) - offset
 
-    return forward_result, rounding_error_q, rounding_error_o
+    return IntermediateResultForLearnedGrid(forward_result, rounding_error_q, rounding_error_o)
 
 
 def compute_dloss_by_dmin(x: torch.Tensor,
                           grad: torch.Tensor,
-                          scaling: torch.Tensor,
-                          offset: torch.Tensor,
-                          n: torch.Tensor,
-                          p: torch.Tensor,
+                          intermediate_result: IntermediateResultForLearnedGrid,
+                          grid_params: LearnedGridParams,
                           ch_axis: int = 0) -> torch.Tensor:
     """
     helper function to compute derivative of loss w.r.t encoding min
@@ -166,14 +189,15 @@ def compute_dloss_by_dmin(x: torch.Tensor,
 
     :param x: input
     :param grad: gradient
-    :param scaling: scaling factor computed for given encoding min/max
-    :param offset: offset computed
-    :param n: lower bound
-    :param p: upper bound
+    :param intermediate_result: data carrier containing intermediate result (forward result, rounding error q and o)
+    :param grid_params: data carrier containing parameters for learned grid (scale, offset, n, p)
     :param ch_axis: channel axis along which sum is computed for gradient calculation
     :return: computed derivative of loss w.r.t encoding min
     """
-    forward_result, rounding_error_q, rounding_error_o = compute_rounding_errors(x, scaling, offset)
+    scaling, offset, n, p = grid_params.scaling, grid_params.offset, grid_params.n, grid_params.p
+    forward_result = intermediate_result.forward_result
+    rounding_error_q = intermediate_result.rounding_error_q
+    rounding_error_o = intermediate_result.rounding_error_o
 
     dq_by_dmin = torch.where(
         torch.le(forward_result.data, p), -rounding_error_q / p, rounding_error_o / p
@@ -188,10 +212,8 @@ def compute_dloss_by_dmin(x: torch.Tensor,
 
 def compute_dloss_by_dmax(x: torch.Tensor,
                           grad: torch.Tensor,
-                          scaling: torch.Tensor,
-                          offset: torch.Tensor,
-                          n: torch.Tensor,
-                          p: torch.Tensor,
+                          intermediate_result: IntermediateResultForLearnedGrid,
+                          grid_params: LearnedGridParams,
                           ch_axis: int = 0) -> torch.Tensor:
     """
     helper function to compute derivative of loss w.r.t encoding max
@@ -206,14 +228,15 @@ def compute_dloss_by_dmax(x: torch.Tensor,
 
     :param x: input
     :param grad: gradient
-    :param scaling: scaling factor computed for given encoding min/max
-    :param offset: offset computed
-    :param n: lower bound
-    :param p: upper bound
+    :param intermediate_result: data carrier containing intermediate result tensors (forward result, rounding errors)
+    :param grid_params: data carrier containing parameters for learned grid (scale, offset, n, p)
     :param ch_axis: channel axis along which sum is computed for gradient calculation
     :return: computed derivative of loss w.r.t encoding max
     """
-    forward_result, rounding_error_q, rounding_error_o = compute_rounding_errors(x, scaling, offset)
+    scaling, offset, n, p = grid_params.scaling, grid_params.offset, grid_params.n, grid_params.p
+    forward_result = intermediate_result.forward_result
+    rounding_error_q = intermediate_result.rounding_error_q
+    rounding_error_o = intermediate_result.rounding_error_o
 
     dq_by_dmax = torch.where(
         torch.le(forward_result.data, p), rounding_error_q / p, torch.ones_like(p) - rounding_error_o / p,
@@ -226,17 +249,17 @@ def compute_dloss_by_dmax(x: torch.Tensor,
     return dloss_by_dmax
 
 
-def compute_dloss_by_dx_using_scale_offset(x, grad, scaling, offset, n, p):
+def compute_dloss_by_dx_using_scale_offset(x: torch.Tensor,
+                                           grad: torch.Tensor,
+                                           grid_params: LearnedGridParams) -> torch.Tensor:
     """
     compute derivative w.r.t input
+    :param x: input
     :param grad: gradient
-    :param scaling: scaling factor computed for given encoding min/max
-    :param offset: offset computed
-    :param n: lower bound
-    :param p: upper bound
+    :param grid_params: data carrier containing parameters for learned grid (scale, offset, n, p)
     :return: gradient w.r.t input
     """
-
+    scaling, offset, n, p = grid_params.scaling, grid_params.offset, grid_params.n, grid_params.p
     # R(x/s) + R(o)
     r_x_by_s_plus_round_o = torch.round(x / scaling) + offset
 

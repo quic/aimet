@@ -41,6 +41,7 @@ import io
 from typing import List, Union
 
 import torch
+
 from aimet_common.defs import QuantScheme, QuantizationDataType, MAP_QUANT_SCHEME_TO_PYMO
 from aimet_common.utils import AimetLogger
 import aimet_torch.quantsim_straight_through_grad as grad_fn
@@ -712,9 +713,14 @@ class QuantizeDequantizeFunc(torch.autograd.Function):
         if len(offset) > 1 and len(tensor.shape) > 1:
             offset = broadcast_to_tensor(tensor, offset, channel_axis)
 
-        tensor_grad = grad_fn.compute_dloss_by_dx_using_scale_offset(tensor, grad, scale, offset, n, p)
-        tensor_encoding_max_grad = grad_fn.compute_dloss_by_dmax(tensor, grad, scale, offset, n, p, channel_axis)
-        tensor_encoding_min_grad = grad_fn.compute_dloss_by_dmin(tensor, grad, scale, offset, n, p, channel_axis)
+        grid_params = grad_fn.LearnedGridParams(scale, offset, n, p)
+        intermediate_result = grad_fn.compute_intermediate_result_for_learned_grid(tensor, scale, offset)
+
+        tensor_grad = grad_fn.compute_dloss_by_dx_using_scale_offset(tensor, grad, grid_params)
+        tensor_encoding_max_grad = grad_fn.compute_dloss_by_dmax(tensor, grad, intermediate_result,
+                                                                 grid_params, channel_axis)
+        tensor_encoding_min_grad = grad_fn.compute_dloss_by_dmin(tensor, grad, intermediate_result,
+                                                                 grid_params, channel_axis)
 
         return tensor_grad, tensor_encoding_min_grad, tensor_encoding_max_grad, None
 
@@ -744,12 +750,14 @@ class ParameterQuantizer(torch.autograd.Function):
 
         tensor_quantizer.n, tensor_quantizer.p = tensor_quantizer.n.to(device), tensor_quantizer.p.to(device)
 
-        tensor.grad = grad_fn.compute_dloss_by_dx_using_scale_offset(tensor, grad, scaling, offset,
-                                                                     tensor_quantizer.n, tensor_quantizer.p)
-        tensor_encoding_max_grad = grad_fn.compute_dloss_by_dmax(tensor, grad, scaling, offset,
-                                                                 tensor_quantizer.n, tensor_quantizer.p, channel_axis)
-        tensor_encoding_min_grad = grad_fn.compute_dloss_by_dmin(tensor, grad, scaling, offset,
-                                                                 tensor_quantizer.n, tensor_quantizer.p, channel_axis)
+        grid_params = grad_fn.LearnedGridParams(scaling, offset, tensor_quantizer.n, tensor_quantizer.p)
+        intermediate_result = grad_fn.compute_intermediate_result_for_learned_grid(tensor, scaling, offset)
+
+        tensor.grad = grad_fn.compute_dloss_by_dx_using_scale_offset(tensor, grad, grid_params)
+        tensor_encoding_max_grad = grad_fn.compute_dloss_by_dmax(tensor, grad, intermediate_result,
+                                                                 grid_params, channel_axis)
+        tensor_encoding_min_grad = grad_fn.compute_dloss_by_dmin(tensor, grad, intermediate_result,
+                                                                 grid_params, channel_axis)
 
         return tensor_encoding_min_grad, tensor_encoding_max_grad
 
