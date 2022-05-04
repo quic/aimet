@@ -88,6 +88,8 @@ map_torch_types_to_onnx = {
     nn.LeakyReLU: ['LeakyRelu'],
     nn.Flatten: ['Flatten'],
     nn.Softmax: ['Softmax'],
+    nn.Tanh: ['Tanh'],
+    nn.Softplus: ['Softplus'],
     elementwise_ops.Add: ['Add'],
     elementwise_ops.Subtract: ['Sub'],
     elementwise_ops.Multiply: ['Mul'],
