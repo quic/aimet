@@ -338,9 +338,8 @@ def get_all_ops_in_neighborhood(op: Op, direction: str, neighborhood=None):
             if input_op not in neighborhood:
                 neighborhood[input_op] = 'output'
                 if input_op.type == 'Split':
+                    # Neighborhood ops include input of split, as well as all other consumers of split
                     get_all_ops_in_neighborhood(input_op, 'input', neighborhood)
-                    get_all_ops_in_neighborhood(input_op, 'output', neighborhood)
-                else:
                     get_all_ops_in_neighborhood(input_op, 'output', neighborhood)
     elif op.output:
         output_ops = [consumer for consumer in op.output.consumers]
@@ -348,9 +347,8 @@ def get_all_ops_in_neighborhood(op: Op, direction: str, neighborhood=None):
             if output_op not in neighborhood:
                 neighborhood[output_op] = 'input'
                 if output_op.type == 'Split':
+                    # Neighborhood ops include all consumers of split
                     get_all_ops_in_neighborhood(output_op, 'output', neighborhood)
-                else:
-                    get_all_ops_in_neighborhood(output_op, 'input', neighborhood)
     return neighborhood
 
 

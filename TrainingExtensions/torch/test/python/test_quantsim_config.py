@@ -691,12 +691,10 @@ class TestQuantsimConfig:
         conn_graph = ConnectedGraph(model, random_inputs)
         starting_op = conn_graph.get_all_ops()['Conv_7']
         add_10_op = conn_graph.get_all_ops()['Add_10']
-        adaptive_avg_pool2d_9_op = conn_graph.get_all_ops()['GlobalAveragePool_9']
         neighborhood = get_all_ops_in_neighborhood(starting_op, 'output')
-        assert len(neighborhood) == 3
+        assert len(neighborhood) == 2
         assert starting_op in neighborhood
         assert add_10_op in neighborhood
-        assert adaptive_avg_pool2d_9_op in neighborhood
 
     @pytest.mark.cuda
     def test_parse_config_file_defaults_gpu(self):
