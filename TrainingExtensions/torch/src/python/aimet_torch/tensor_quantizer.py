@@ -41,6 +41,7 @@ import io
 from typing import List, Union
 
 import torch
+
 from aimet_common.defs import QuantScheme, QuantizationDataType, MAP_QUANT_SCHEME_TO_PYMO
 from aimet_common.utils import AimetLogger
 import aimet_torch.quantsim_straight_through_grad as grad_fn
@@ -699,6 +700,7 @@ class QuantizeDequantizeFunc(torch.autograd.Function):
 
     @staticmethod
     def backward(ctx, grad):
+        # pylint: disable=too-many-locals
         # Retrieve saved tensors for gradient calculations
         tensor, encoding_min, encoding_max, n, p, bitwidth, channel_axis = ctx.saved_tensors
         channel_axis = channel_axis.item()
@@ -712,9 +714,14 @@ class QuantizeDequantizeFunc(torch.autograd.Function):
         if len(offset) > 1 and len(tensor.shape) > 1:
             offset = broadcast_to_tensor(tensor, offset, channel_axis)
 
-        tensor_grad = grad_fn.compute_dloss_by_dx_using_scale_offset(tensor, grad, scale, offset, n, p)
-        tensor_encoding_max_grad = grad_fn.compute_dloss_by_dmax(tensor, grad, scale, offset, n, p, channel_axis)
-        tensor_encoding_min_grad = grad_fn.compute_dloss_by_dmin_using_dmax(tensor_encoding_max_grad)
+        grid_params = grad_fn.LearnedGridParams(scale, offset, n, p)
+        intermediate_result = grad_fn.compute_intermediate_result_for_learned_grid(tensor, scale, offset)
+
+        tensor_grad = grad_fn.compute_dloss_by_dx_using_scale_offset(tensor, grad, grid_params)
+        tensor_encoding_max_grad = grad_fn.compute_dloss_by_dmax(tensor, grad, intermediate_result,
+                                                                 grid_params, channel_axis)
+        tensor_encoding_min_grad = grad_fn.compute_dloss_by_dmin(tensor, grad, intermediate_result,
+                                                                 grid_params, channel_axis)
 
         return tensor_grad, tensor_encoding_min_grad, tensor_encoding_max_grad, None
 
@@ -744,14 +751,15 @@ class ParameterQuantizer(torch.autograd.Function):
 
         tensor_quantizer.n, tensor_quantizer.p = tensor_quantizer.n.to(device), tensor_quantizer.p.to(device)
 
-        tensor.grad = grad_fn.compute_dloss_by_dx_using_scale_offset(tensor, grad, scaling, offset,
-                                                                     tensor_quantizer.n, tensor_quantizer.p)
+        grid_params = grad_fn.LearnedGridParams(scaling, offset, tensor_quantizer.n, tensor_quantizer.p)
+        intermediate_result = grad_fn.compute_intermediate_result_for_learned_grid(tensor, scaling, offset)
 
-        tensor_encoding_max_grad = grad_fn.compute_dloss_by_dmax(tensor, tensor.grad, scaling, offset,
-                                                                 tensor_quantizer.n, tensor_quantizer.p,
-                                                                 channel_axis)
+        tensor.grad = grad_fn.compute_dloss_by_dx_using_scale_offset(tensor, grad, grid_params)
+        tensor_encoding_max_grad = grad_fn.compute_dloss_by_dmax(tensor, grad, intermediate_result,
+                                                                 grid_params, channel_axis)
+        tensor_encoding_min_grad = grad_fn.compute_dloss_by_dmin(tensor, grad, intermediate_result,
+                                                                 grid_params, channel_axis)
 
-        tensor_encoding_min_grad = grad_fn.compute_dloss_by_dmin_using_dmax(tensor_encoding_max_grad)
         return tensor_encoding_min_grad, tensor_encoding_max_grad
 
     @staticmethod
@@ -785,11 +793,14 @@ class ParameterQuantizer(torch.autograd.Function):
         # pylint:disable = protected-access
         for name, param in trainable_wrapper._module_to_wrap.named_parameters():
             param_quantizer = trainable_wrapper.param_quantizers[name]
-            if param_quantizer.enabled:
+            if param_quantizer.enabled and param.grad is not None:
                 param_encoding_min_grad, param_encoding_max_grad = ParameterQuantizer.compute_gradients(
                     param, param_quantizer, param.grad)
                 param_encoding_grads.append(param_encoding_min_grad)
                 param_encoding_grads.append(param_encoding_max_grad)
+            elif param_quantizer.enabled:
+                param_encoding_grads.append(None)
+                param_encoding_grads.append(None)
         return param_encoding_grads
 
     # pylint:disable = arguments-differ
