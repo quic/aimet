@@ -203,8 +203,10 @@ class QuantizationSimModel:
         self._quantsim_configurator = QuantSimConfigurator(session, self.connected_graph, config_file)
         self.per_channel_quantization_enabled = self._quantsim_configurator.per_channel_quantization_flag
         self._op_name_to_output_channels_axis_handling_dict = {}
-        self._add_and_configure_quant_nodes(starting_op_names, output_op_names, default_param_bw, default_output_bw,
-                                            default_data_type)
+
+        with self.session.graph.as_default():
+            self._add_and_configure_quant_nodes(starting_op_names, output_op_names, default_param_bw, default_output_bw,
+                                                default_data_type)
 
         self._override_quant_config_for_transformer_mask_add()
         # Save and load the session so the graph changes can take effect
