@@ -40,6 +40,7 @@ Load a trained network and modify it to enable BFS. Add in beta switches after
 the relu layers. Create a new solver which includes an architecture loss.
 """
 
+from itertools import compress
 import tensorflow as tf
 
 from aimet_common.utils import AimetLogger
@@ -56,14 +57,14 @@ def initialize_uninitialized_vars(sess):
     :param sess: tf.compat.v1.Session
     :return:
     """
-    from itertools import compress
-    global_vars = tf.compat.v1.global_variables()
-    is_not_initialized = sess.run([~(tf.compat.v1.is_variable_initialized(var)) for var in global_vars])
-    uninitialized_vars = list(compress(global_vars, is_not_initialized))
+    with sess.graph.as_default():
+        global_vars = tf.compat.v1.global_variables()
+        is_not_initialized = sess.run([~(tf.compat.v1.is_variable_initialized(var)) for var in global_vars])
+        uninitialized_vars = list(compress(global_vars, is_not_initialized))
 
-    if uninitialized_vars:
-        log.info('Initializing uninitialized variables')
-        sess.run(tf.compat.v1.variables_initializer(uninitialized_vars))
+        if uninitialized_vars:
+            log.info('Initializing uninitialized variables')
+            sess.run(tf.compat.v1.variables_initializer(uninitialized_vars))
 
 
 def default_eval_func(data):
