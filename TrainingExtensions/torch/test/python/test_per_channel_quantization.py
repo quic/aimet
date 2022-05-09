@@ -255,16 +255,17 @@ class TestPerChannelQcQuantizeOpStaticGrid:
         quant_module.enable_per_channel_quantization()
 
         param_encodings = {'conv1.weight': [{'bitwidth': 4, 'is_symmetric': 'False', 'max': 0.3, 'min': -0.2,
-                                             'offset': -7.0, 'scale': 0.038},
+                                             'offset': -7.0, 'scale': 0.038, 'dtype': 'int'},
                                             {'bitwidth': 4, 'is_symmetric': 'False', 'max': 0.3, 'min': -0.2,
-                                             'offset': -7.0, 'scale': 0.038},
+                                             'offset': -7.0, 'scale': 0.038, 'dtype': 'int'},
                                             {'bitwidth': 4, 'is_symmetric': 'False', 'max': 0.3, 'min': -0.2,
-                                             'offset': -7.0, 'scale': 0.038},
+                                             'offset': -7.0, 'scale': 0.038, 'dtype': 'int'},
                                             {'bitwidth': 4, 'is_symmetric': 'False', 'max': 0.3, 'min': -0.2,
-                                             'offset': -7.0, 'scale': 0.038}
+                                             'offset': -7.0, 'scale': 0.038, 'dtype': 'int'}
                                             ]}
 
-        quant_module.set_and_freeze_param_encoding('conv1', param_encodings)
+        quant_module.set_param_encoding('conv1', param_encodings)
+        quant_module.freeze_param_encoding('conv1', param_encodings)
 
         assert len(quant_module.param_quantizers['weight'].encoding) == 4
         assert quant_module.param_quantizers['weight'].encoding[0].bw == 4

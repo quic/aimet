@@ -34,7 +34,7 @@
 #
 #  @@-COPYRIGHT-END-@@
 # =============================================================================
-
+import copy
 import json as json
 import os
 import unittest.mock
@@ -63,7 +63,7 @@ from aimet_torch.onnx_utils import OnnxExportApiArgs
 from aimet_torch.qc_quantize_op import QcQuantizeWrapper, QcQuantizeStandalone, \
     StaticGridQuantWrapper, QcQuantizeOpMode, LearnedGridQuantWrapper
 from aimet_torch.qc_quantize_recurrent import QcQuantizeRecurrent
-from aimet_torch.quantsim import QuantizationSimModel, check_accumulator_overflow
+from aimet_torch.quantsim import QuantizationSimModel, check_accumulator_overflow, load_encodings_to_sim
 from aimet_torch.quantsim_straight_through_grad import compute_dloss_by_dx
 import libpymo
 
@@ -343,7 +343,6 @@ class TestQuantizationSimStaticGrad:
         conv1 = StaticGridQuantWrapper(nn.Conv2d(1, 10, 5), weight_bw=8, activation_bw=8, round_mode='nearest',
                                        quant_scheme=QuantScheme.post_training_tf_enhanced, data_type=QuantizationDataType.int)
         assert not QuantizationSimModel._is_quantizable_module(conv1)
-
 
     # ------------------------------------------------------------
     def verify_quantization_wrappers(self, original_model, quantized_model, quant_scheme=QuantScheme.post_training_tf_enhanced):
@@ -659,9 +658,25 @@ class TestQuantizationSimStaticGrad:
         sim.compute_encodings(forward_pass, None)
 
         # save encodings
-        sim.export('./data/', 'two_input_model_fp16', dummy_input)
+        sim.export('./data', 'two_input_model_fp16', dummy_input)
+        encoding_file_path_pytorch = os.path.join('./data', 'two_input_model_fp16' + '_torch' + '.encodings')
+        load_encodings_to_sim(sim, encoding_file_path_pytorch)
 
-    # -------------------------------------------
+        layer = sim.model.conv1_a
+        if isinstance(layer, QcQuantizeWrapper):
+            for input_quantizer in layer.input_quantizers:
+                if input_quantizer.enabled:
+                    assert input_quantizer.encoding is None
+                    assert input_quantizer.data_type is QuantizationDataType.float
+            for output_quantizer in layer.output_quantizers:
+                if output_quantizer.enabled:
+                    assert output_quantizer.encoding is None
+                    assert output_quantizer.data_type is QuantizationDataType.float
+            for name in layer.param_quantizers:
+                if layer.param_quantizers[name].enabled:
+                    assert layer.param_quantizers[name].encoding is None
+                    assert layer.param_quantizers[name].data_type is QuantizationDataType.float
+
     # -------------------------------------------
     def test_model_with_two_inputs_one_to_add(self):
         """Model with more than 1 input"""
@@ -2086,6 +2101,39 @@ class TestQuantizationSimStaticGrad:
         if os.path.exists('./data/simple_cond.encodings.yaml'):
             os.remove('./data/simple_cond.encodings.yaml')
 
+    def test_export_prelu_encoding_and_check_load_encodings(self):
+        """ Test that prelu weight is exported correctly """
+        model = PreluModel()
+        dummy_input = torch.rand(1, 3, 8, 8)
+        sim = QuantizationSimModel(model, dummy_input=dummy_input)
+        sim.compute_encodings(lambda model, _: model(dummy_input), None)
+        sim.export('./data', 'prelu_model', dummy_input=dummy_input)
+        with open('./data/prelu_model.encodings') as json_file:
+            encoding_data = json.load(json_file)
+        assert 'prelu.weight' in encoding_data['param_encodings'].keys()
+
+        output = sim.model(copy.deepcopy(dummy_input))
+        del sim
+
+        sim = QuantizationSimModel(model, dummy_input=dummy_input)
+        encoding_file_path_pytorch = os.path.join('./data', 'prelu_model' + '_torch' + '.encodings')
+        load_encodings_to_sim(sim, encoding_file_path_pytorch)
+
+        layer = sim.model.prelu
+        if isinstance(layer, QcQuantizeWrapper):
+            for input_quantizer in layer.input_quantizers:
+                if input_quantizer.enabled:
+                    assert input_quantizer.encoding is not None
+            for output_quantizer in layer.output_quantizers:
+                if output_quantizer.enabled:
+                    assert output_quantizer.encoding is not None
+            for name in layer.param_quantizers:
+                if layer.param_quantizers[name].enabled:
+                    assert layer.param_quantizers[name].encoding is not None
+
+        output1 = sim.model(copy.deepcopy(dummy_input))
+        assert sum(output1.flatten() - output.flatten()) == 0.0
+
 
 class TestQuantizationSimLearnedGrid:
 
@@ -2376,16 +2424,74 @@ class TestQuantizationSimLearnedGrid:
 
         # self.assertAlmostEqual(100 * range_used, 0.263623, places=3)
 
-    def test_export_prelu_weight_encoding(self):
+    def test_export_prelu_encoding_and_check_load_encodings(self):
         """ Test that prelu weight is exported correctly """
         model = PreluModel()
         dummy_input = torch.rand(1, 3, 8, 8)
-        sim = QuantizationSimModel(model, dummy_input=dummy_input)
+        sim = QuantizationSimModel(model, dummy_input=dummy_input,
+                                   quant_scheme=QuantScheme.training_range_learning_with_tf_init)
         sim.compute_encodings(lambda model, _: model(dummy_input), None)
         sim.export('./data', 'prelu_model', dummy_input=dummy_input)
         with open('./data/prelu_model.encodings') as json_file:
             encoding_data = json.load(json_file)
         assert 'prelu.weight' in encoding_data['param_encodings'].keys()
+
+        output = sim.model(copy.deepcopy(dummy_input))
+        del sim
+
+        sim = QuantizationSimModel(model, dummy_input=dummy_input,
+                                   quant_scheme=QuantScheme.training_range_learning_with_tf_init)
+        encoding_file_path_pytorch = os.path.join('./data', 'prelu_model' + '_torch' + '.encodings')
+        load_encodings_to_sim(sim, encoding_file_path_pytorch)
+
+        layer = sim.model.prelu
+        if isinstance(layer, QcQuantizeWrapper):
+            for input_quantizer in layer.input_quantizers:
+                if input_quantizer.enabled:
+                    assert input_quantizer.encoding is not None
+            for output_quantizer in layer.output_quantizers:
+                if output_quantizer.enabled:
+                    assert output_quantizer.encoding is not None
+            for name in layer.param_quantizers:
+                if layer.param_quantizers[name].enabled:
+                    assert layer.param_quantizers[name].encoding is not None
+
+        output1 = sim.model(copy.deepcopy(dummy_input))
+        assert sum(output1.flatten() - output.flatten()) == 0.0
+
+    def test_load_encodings_multi_input_multi_output_model(self):
+        net = ModelWith5Output()
+        dummy_input = torch.randn(1, 3, 224, 224)
+
+        sim = QuantizationSimModel(net, dummy_input, quant_scheme=QuantScheme.post_training_tf_enhanced,
+                                   default_param_bw=4, default_output_bw=4)
+
+        sim.model.cust.output_quantizers[0].enabled = False
+        sim.compute_encodings(evaluate, dummy_input)
+
+        sim.export('./data/', 'module_with_5_output', dummy_input,
+                   onnx_export_args=(onnx_utils.OnnxExportApiArgs(opset_version=11)),
+                   propagate_encodings=False)
+
+        del sim
+
+        sim = QuantizationSimModel(net, dummy_input, quant_scheme=QuantScheme.post_training_tf_enhanced,
+                                   default_param_bw=4, default_output_bw=4)
+        sim.model.cust.output_quantizers[0].enabled = False
+        encoding_file_path_pytorch = os.path.join('./data', 'module_with_5_output' + '_torch' + '.encodings')
+        load_encodings_to_sim(sim, encoding_file_path_pytorch)
+
+        layer = sim.model.cust
+        if isinstance(layer, QcQuantizeWrapper):
+            for input_quantizer in layer.input_quantizers:
+                if input_quantizer.enabled:
+                    assert input_quantizer.encoding is not None
+            for output_quantizer in layer.output_quantizers:
+                if output_quantizer.enabled:
+                    assert output_quantizer.encoding is not None
+            for name in layer.param_quantizers:
+                if layer.param_quantizers[name].enabled:
+                    assert layer.param_quantizers[name].encoding is not None
 
     def test_inplace_modification_with_relu(self):
         """

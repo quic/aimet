@@ -813,9 +813,10 @@ class TestQcQuantizeOpLearnedGrid:
                                                data_type=QuantizationDataType.int)
 
         param_encodings = {'conv1.weight': [{'bitwidth': 4, 'is_symmetric': 'False', 'max': 0.3, 'min': -0.2,
-                                             'offset': -7.0, 'scale': 0.038}]}
+                                             'offset': -7.0, 'scale': 0.038, 'dtype': 'int'}]}
 
-        quant_wrapper.set_and_freeze_param_encoding('conv1', param_encodings)
+        quant_wrapper.set_param_encoding('conv1', param_encodings)
+        quant_wrapper.freeze_param_encoding('conv1', param_encodings)
 
         assert quant_wrapper.param_quantizers['weight'].encoding.bw == 4
         assert quant_wrapper.param_quantizers['weight'].encoding.offset == -7.0
@@ -841,9 +842,10 @@ class TestQcQuantizeOpLearnedGrid:
         quant_wrapper.param_quantizers['weight'].encoding = enc_old
 
         param_encodings = {'conv1.weight': [{'bitwidth': 4, 'is_symmetric': 'False', 'max': 0.3, 'min': -0.2,
-                                             'offset': -7.0, 'scale': 0.038}]}
+                                             'offset': -7.0, 'scale': 0.038, 'dtype': 'int'}]}
 
-        quant_wrapper.set_and_freeze_param_encoding('conv1', param_encodings)
+        quant_wrapper.set_param_encoding('conv1', param_encodings)
+        quant_wrapper.freeze_param_encoding('conv1', param_encodings)
 
         assert quant_wrapper.param_quantizers['weight'].encoding.bw == 4
         assert np.isclose(quant_wrapper.param_quantizers['weight'].encoding.min, -0.2)
@@ -905,7 +907,7 @@ class TestQcQuantizeOpLearnedGrid:
         assert loaded_quant_wrapper.input_quantizer.encoding.max == 0.5
 
         enc_new = libpymo.TfEncoding()
-        enc_new.bw, enc_new.max, enc_new.min, enc_new.delta, enc_new.offset = 4, 0.4, -0.98, 1, 0.2
+        enc_new.bw, enc_new.max, enc_new.min, enc_new.delta, enc_new.offset = 8, 0.4, -0.98, 1, 0.2
 
         # try to set new encoding except output quantizer.
         loaded_quant_wrapper.param_quantizers['weight'].encoding = enc_new
