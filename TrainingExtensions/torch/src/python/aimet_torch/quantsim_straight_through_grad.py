@@ -199,12 +199,10 @@ def compute_dloss_by_dmin(x: torch.Tensor,
     rounding_error_q = intermediate_result.rounding_error_q
     rounding_error_o = intermediate_result.rounding_error_o
 
-    dq_by_dmin = torch.where(
-        torch.le(forward_result.data, p), -rounding_error_q / p, rounding_error_o / p
-    )
-    dq_by_dmin = torch.where(
-        torch.le(n, forward_result.data), dq_by_dmin, -n/p + 1 + rounding_error_o / p
-    )
+    dq_by_dmin = torch.where(torch.le(forward_result.data, p),
+                             -rounding_error_q / p, rounding_error_o / p)
+    dq_by_dmin = torch.where(torch.le(n, forward_result.data),
+                             dq_by_dmin, -n / p + 1 + rounding_error_o / p)
 
     dloss_by_dmin = _compute_derivative_of_loss_function(x, dq_by_dmin, grad, scaling, ch_axis)
     return dloss_by_dmin
@@ -238,12 +236,10 @@ def compute_dloss_by_dmax(x: torch.Tensor,
     rounding_error_q = intermediate_result.rounding_error_q
     rounding_error_o = intermediate_result.rounding_error_o
 
-    dq_by_dmax = torch.where(
-        torch.le(forward_result.data, p), rounding_error_q / p, torch.ones_like(p) - rounding_error_o / p,
-    )
-    dq_by_dmax = torch.where(
-        torch.le(n, forward_result.data), dq_by_dmax, n / p - rounding_error_o / p,
-    )
+    dq_by_dmax = torch.where(torch.le(forward_result.data, p),
+                             rounding_error_q / p, torch.ones_like(p) - rounding_error_o / p)
+    dq_by_dmax = torch.where(torch.le(n, forward_result.data),
+                             dq_by_dmax, n / p - rounding_error_o / p)
 
     dloss_by_dmax = _compute_derivative_of_loss_function(x, dq_by_dmax, grad, scaling, ch_axis)
     return dloss_by_dmax
