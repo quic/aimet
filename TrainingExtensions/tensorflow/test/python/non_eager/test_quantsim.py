@@ -47,7 +47,8 @@ from packaging import version
 import libpymo
 import aimet_tensorflow.utils.quantsim
 from aimet_tensorflow.quantsim import QuantizationSimModel, check_accumulator_overflow
-from aimet_tensorflow.quantsim_straight_through_grad import _get_n_and_p, _compute_dloss_by_dmax
+from aimet_tensorflow.quantsim_straight_through_grad import _get_n_and_p, _compute_dloss_by_dmax, \
+    compute_intermediate_result_for_learned_grid, LearnedGridParams
 from aimet_tensorflow.utils.graph_saver import load_model_from_meta
 from aimet_tensorflow.common.graph_eval import initialize_uninitialized_vars
 from aimet_tensorflow.defs import ParameterInfo
@@ -1469,7 +1470,10 @@ class TestQuantSimRangeLearning:
             bitwidth = tf.constant(8.0, dtype=tf.float32)
             is_symmetric = tf.constant(False)
 
-            dloss_by_dmax = _compute_dloss_by_dmax(inputs, grad, scaling, offset, bitwidth, is_symmetric)
+            intermediate_result = compute_intermediate_result_for_learned_grid(inputs, scaling, offset)
+            n, p = _get_n_and_p(bitwidth, is_symmetric)
+            grid_params = LearnedGridParams(scaling, offset, n, p)
+            dloss_by_dmax = _compute_dloss_by_dmax(inputs, grad, intermediate_result, grid_params)
             assert sess.run(dloss_by_dmax).shape == ()
 
         # Per channel case with weights
@@ -1484,7 +1488,10 @@ class TestQuantSimRangeLearning:
             bitwidth = tf.constant(8.0, dtype=tf.float32)
             is_symmetric = tf.constant(False)
 
-            dloss_by_dmax = _compute_dloss_by_dmax(inputs, grad, scaling, offset, bitwidth, is_symmetric)
+            intermediate_result = compute_intermediate_result_for_learned_grid(inputs, scaling, offset)
+            n, p = _get_n_and_p(bitwidth, is_symmetric)
+            grid_params = LearnedGridParams(scaling, offset, n, p)
+            dloss_by_dmax = _compute_dloss_by_dmax(inputs, grad, intermediate_result, grid_params)
             assert sess.run(dloss_by_dmax).shape == (2,)
 
         # Per channel case with bias
@@ -1499,7 +1506,10 @@ class TestQuantSimRangeLearning:
             bitwidth = tf.constant(8.0, dtype=tf.float32)
             is_symmetric = tf.constant(False)
 
-            dloss_by_dmax = _compute_dloss_by_dmax(inputs, grad, scaling, offset, bitwidth, is_symmetric)
+            intermediate_result = compute_intermediate_result_for_learned_grid(inputs, scaling, offset)
+            n, p = _get_n_and_p(bitwidth, is_symmetric)
+            grid_params = LearnedGridParams(scaling, offset, n, p)
+            dloss_by_dmax = _compute_dloss_by_dmax(inputs, grad, intermediate_result, grid_params)
             assert sess.run(dloss_by_dmax).shape == (10,)
 
     def test_qat_fp16(self, iterations=5):
@@ -1804,7 +1814,7 @@ class TestQuantSimRangeLearning:
             sess.run(model_output, feed_dict={model_input: dummy_input})
 
         conv2d_weight_quant_op = sim.session.graph.get_operation_by_name('conv2d/Conv2D/ReadVariableOp_quantized')
-        conv2d_output_quant_op = sim.session.graph.get_operation_by_name('conv2d/BiasAdd_quantized')
+        relu_output_quant_op = sim.session.graph.get_operation_by_name('Relu_quantized')
 
         # enable input
         sim.compute_encodings(dummy_forward_pass, None)
@@ -1851,10 +1861,10 @@ class TestQuantSimRangeLearning:
             weights_before_train = sim.session.run(conv2d_weight_quant_op.inputs[0])
             encoding_min_before_train = sim.session.run(conv2d_weight_quant_op.inputs[QuantizeOpIndices.encoding_min])
             encoding_max_before_train = sim.session.run(conv2d_weight_quant_op.inputs[QuantizeOpIndices.encoding_max])
-            conv2d_output_encoding_min_before_train = sim.session.run(conv2d_output_quant_op.inputs[
-                                                                          QuantizeOpIndices.encoding_min])
-            conv2d_output_encoding_max_before_train = sim.session.run(conv2d_output_quant_op.inputs[
-                                                                          QuantizeOpIndices.encoding_max])
+            relu_output_encoding_min_before_train = sim.session.run(relu_output_quant_op.inputs[
+                                                                        QuantizeOpIndices.encoding_min])
+            relu_output_encoding_max_before_train = sim.session.run(relu_output_quant_op.inputs[
+                                                                        QuantizeOpIndices.encoding_max])
             with tf.control_dependencies([update_op]):
                 train_op = tf.identity(loss, name='train_op')
 
@@ -1876,18 +1886,18 @@ class TestQuantSimRangeLearning:
                                                                           QuantizeOpIndices.encoding_max])))
 
             weights_after_train = sim.session.run(conv2d_weight_quant_op.inputs[0])
-            conv2d_output_encoding_min_after_train = sim.session.run(conv2d_output_quant_op.inputs[
-                                                                         QuantizeOpIndices.encoding_min])
-            conv2d_output_encoding_max_after_train = sim.session.run(conv2d_output_quant_op.inputs[
-                                                                         QuantizeOpIndices.encoding_max])
+            relu_output_encoding_min_after_train = sim.session.run(relu_output_quant_op.inputs[
+                                                                       QuantizeOpIndices.encoding_min])
+            relu_output_encoding_max_after_train = sim.session.run(relu_output_quant_op.inputs[
+                                                                       QuantizeOpIndices.encoding_max])
             encoding_min_after_train = sim.session.run(conv2d_weight_quant_op.inputs[QuantizeOpIndices.encoding_min])
             encoding_max_after_train = sim.session.run(conv2d_weight_quant_op.inputs[QuantizeOpIndices.encoding_max])
 
             assert not np.allclose(weights_before_train, weights_after_train, atol=1e-6)
             assert encoding_min_before_train != encoding_min_after_train
             assert encoding_max_before_train != encoding_max_after_train
-            assert conv2d_output_encoding_min_before_train != conv2d_output_encoding_min_after_train
-            assert conv2d_output_encoding_max_before_train != conv2d_output_encoding_max_after_train
+            assert relu_output_encoding_min_before_train != relu_output_encoding_min_after_train
+            assert relu_output_encoding_max_before_train != relu_output_encoding_max_after_train
 
         sess.close()
         sim.session.close()

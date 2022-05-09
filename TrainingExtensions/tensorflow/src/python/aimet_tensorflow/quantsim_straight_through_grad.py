@@ -36,10 +36,37 @@
 # =============================================================================
 
 """ implements straight through graident computation for Quantize Op"""
+from dataclasses import dataclass
 
 import tensorflow as tf
 from tensorflow.python.framework import ops as tf_ops
+
 from aimet_tensorflow.utils.constants import QuantizeOpIndices
+
+
+@dataclass
+class LearnedGridParams:
+    """
+    Data carrier containing parameters for learned grid
+    """
+    scaling: tf.Tensor
+    offset: tf.Tensor
+    n: tf.Tensor
+    p: tf.Tensor
+
+
+@dataclass
+class IntermediateResultForLearnedGrid:
+    """
+    Data carrier containing intermediate result for learned grid backward computation
+
+    forward_result: Round(x / scaling) + Round(offset)
+    rounding_error_q: Round(x / scaling) - (x / scaling)
+    rounding_error_o: Round(offset) - offset
+    """
+    forward_result: tf.Tensor
+    rounding_error_q: tf.Tensor
+    rounding_error_o: tf.Tensor
 
 
 def _compute_dloss_by_dx(op, grad):
@@ -127,49 +154,113 @@ def _get_n_and_p(bitwidth, use_symmetric_encoding):
     return n, p
 
 
-def _compute_dloss_by_dmin_using_dmax(dloss_by_dmax):
+def compute_intermediate_result_for_learned_grid(x: tf.Tensor,
+                                                 scaling: tf.Tensor,
+                                                 offset: tf.Tensor) -> IntermediateResultForLearnedGrid:
     """
-    compute derivative of loss w.r.t min, it is sign flipped version of derivative w.r.t max
-    :param dq_by_dmax derivative w.r.t max
-    :return: derivative w.r.t min
+    helper function to compute forward result and rounding error before derivative
+    :param x: input
+    :param scaling: scaling factor computed for given encoding min/max
+    :param offset: offset computed
+    :return: forward result, rounding error of quantizer, rounding error of offset tuple
     """
+    forward_result = tf.round(x / scaling) + tf.round(offset)
+    rounding_error_q = tf.round(x / scaling) - (x / scaling)
+    rounding_error_o = tf.round(offset) - offset
 
-    return tf.negative(dloss_by_dmax)
+    return IntermediateResultForLearnedGrid(forward_result, rounding_error_q, rounding_error_o)
 
 
-def _compute_dloss_by_dmax(x, grad, scaling, offset, bitwidth, use_symmetric_encoding):
+def _compute_derivative_of_loss_function(x: tf.Tensor,
+                                         derivative_of_quantizer: tf.Tensor,
+                                         grad: tf.Tensor,
+                                         scaling: tf.Tensor) -> tf.Tensor:
     """
-    helper function to compute derivative of loss w.r.t encoding max
-    :param grad: gradient param
-    :param scaling: scaling factor as tf tensor computed for given encoding min/max
-    :param offset: offset computed as tf tensor
-    :param bitwidth: bit-width as tf tensor
-    :param use_symmetric_encoding: bool flag to indicate symmetric/asymmetric encoding
-    :return: computed derivative w.r.t encoding max
+    Compute derivative of the loss function like dloss_by_dmin or dloss_by_dmax
+
+    :param x: input
+    :param derivative_of_quantizer: derivative of the quantizer function like dq_by_dmin or dq_by_dmax
+    :param grad: gradient
+    :param scaling: scaling factor computed for given encoding min/max
+    :return: computed derivative of loss w.r.t derivative of quantizer
     """
-
-    steps = tf.cast(tf.pow(tf.cast(tf.constant(2), tf.float32), bitwidth) - 1, tf.float32)
-    r_x_by_s_plus_round_o = tf.round(x / scaling) + tf.round(offset)
-    # R(x/s)-(x/s)
-    r_x_by_s_minus_x_by_s = tf.round(x / scaling) - (x / scaling)
-
-    # compute dq_by_dmax
-    # expr to be used if r_x_by_s_plus_round_o < n or > p
-    n, p = _get_n_and_p(bitwidth, use_symmetric_encoding)
-    false_expr = tf.multiply(tf.clip_by_value(r_x_by_s_plus_round_o, n, p), tf.cast(1 / steps, tf.float32))
-    inner_cond = tf.where(tf.less_equal(r_x_by_s_plus_round_o, p), tf.multiply(r_x_by_s_minus_x_by_s,
-                                                                               tf.cast(1 / steps, tf.float32)),
-                          false_expr)
-
-    # we need a scalar value for dq_by_dmax, so reduce 4d value computed above
-    # to single value before returning gradient
-    # this uses chain rule, multiply by loss and sum it to get scalar.
-    dq_by_dmax = tf.where(tf.less_equal(n, r_x_by_s_plus_round_o), inner_cond, false_expr)
 
     # If per channel is active, scaling tensor will be rank 1 (an array instead of a singular value).
     # In case of per channel, we reduce by all but the last dimension. Otherwise, we reduce all dimensions.
-    dloss_by_dmax = tf.cond(tf.equal(tf.rank(scaling), 0), lambda: tf.reduce_sum(dq_by_dmax * grad),
-                            lambda: tf.reduce_sum(dq_by_dmax * grad, axis=tf.range(0, tf.rank(x) - 1)))
+    derivative_of_loss_function = tf.cond(tf.equal(tf.rank(scaling), 0),
+                                          lambda: tf.reduce_sum(derivative_of_quantizer * grad),
+                                          lambda: tf.reduce_sum(derivative_of_quantizer * grad,
+                                                                axis=tf.range(0, tf.rank(x) - 1)))
+    return derivative_of_loss_function
+
+
+def _compute_dloss_by_dmin(x: tf.Tensor,
+                           grad: tf.Tensor,
+                           intermediate_result: IntermediateResultForLearnedGrid,
+                           grid_params: LearnedGridParams) -> tf.Tensor:
+    """
+    helper function to compute derivative of loss w.r.t encoding min
+    Implementation based on LSQ+ ( https://arxiv.org/pdf/2004.09576.pdf )
+
+    Inner condition ( n <= fw <= p ):
+        dq_by_dmin = (round(x/s) - x/s) / -p
+    Outer condition ( fw < n ):
+        dq_by_dmin = -n/p + 1 + (round(o) - o)/p
+    Outer condition ( p < fw ):
+        dq_by_dmin = (round(o) - o)/p
+
+    :param x: input
+    :param grad: gradient
+    :param intermediate_result: data carrier containing intermediate result (forward result, rounding error q and o)
+    :param grid_params: data carrier containing parameters for learned grid (scale, offset, n, p)
+    :return: computed derivative of loss w.r.t encoding min
+    """
+    scaling, _, n, p = grid_params.scaling, grid_params.offset, grid_params.n, grid_params.p
+    forward_result = intermediate_result.forward_result
+    rounding_error_q = intermediate_result.rounding_error_q
+    rounding_error_o = intermediate_result.rounding_error_o
+
+    dq_by_dmin = tf.where(tf.less_equal(forward_result, p),
+                          -rounding_error_q / p, rounding_error_o / p)
+    dq_by_dmin = tf.where(tf.less_equal(n, forward_result),
+                          dq_by_dmin, -n/p + 1 + rounding_error_o / p)
+
+    dloss_by_dmin = _compute_derivative_of_loss_function(x, dq_by_dmin, grad, scaling)
+    return dloss_by_dmin
+
+
+def _compute_dloss_by_dmax(x: tf.Tensor,
+                           grad: tf.Tensor,
+                           intermediate_result: IntermediateResultForLearnedGrid,
+                           grid_params: LearnedGridParams) -> tf.Tensor:
+    """
+    helper function to compute derivative of loss w.r.t encoding max
+    Implementation based on LSQ+ ( https://arxiv.org/pdf/2004.09576.pdf )
+
+    Inner condition ( n <= fw <= p ):
+        dq_by_dmax = (round(x/s) - x/s) / p
+    Outer condition ( fw < n ):
+        dq_by_dmax = n/p - (round(o) - o)/p
+    Outer condition ( p < fw ):
+        dq_by_dmax = 1 - (round(o) - o)/p
+
+    :param x: input
+    :param grad: gradient
+    :param intermediate_result: data carrier containing intermediate result tensors (forward result, rounding errors)
+    :param grid_params: data carrier containing parameters for learned grid (scale, offset, n, p)
+    :return: computed derivative of loss w.r.t encoding max
+    """
+    scaling, _, n, p = grid_params.scaling, grid_params.offset, grid_params.n, grid_params.p
+    forward_result = intermediate_result.forward_result
+    rounding_error_q = intermediate_result.rounding_error_q
+    rounding_error_o = intermediate_result.rounding_error_o
+
+    dq_by_dmax = tf.where(tf.less_equal(forward_result, p),
+                          rounding_error_q / p, tf.ones_like(p) - rounding_error_o / p)
+    dq_by_dmax = tf.where(tf.less_equal(n, forward_result),
+                          dq_by_dmax, n / p - rounding_error_o / p)
+
+    dloss_by_dmax = _compute_derivative_of_loss_function(x, dq_by_dmax, grad, scaling)
     return dloss_by_dmax
 
 
@@ -217,9 +308,10 @@ def _compute_dloss_by_dmin_dmax_and_dx(inputs: tf.Tensor, bitwidth: tf.Tensor, o
                             inner_cond,  # execute if true
                             tf.zeros_like(r_x_by_s_plus_round_o))) * grad
 
-    dloss_by_dmax = tf.cast(_compute_dloss_by_dmax(x, grad, scaling, rounded_offset, bitwidth, is_symmetric),
-                            tf.float64)
-    dloss_by_dmin = tf.cast(_compute_dloss_by_dmin_using_dmax(dloss_by_dmax), tf.float64)
+    grid_params = LearnedGridParams(scaling, rounded_offset, n, p)
+    intermediate_result = compute_intermediate_result_for_learned_grid(x, scaling, rounded_offset)
+    dloss_by_dmax = tf.cast(_compute_dloss_by_dmax(x, grad, intermediate_result, grid_params), tf.float64)
+    dloss_by_dmin = tf.cast(_compute_dloss_by_dmin(x, grad, intermediate_result, grid_params), tf.float64)
 
     # Pass through gradient for skipped ops
     dloss_by_dx = tf.cond(tf.equal(op_mode, 3), lambda: grad, lambda: dloss_by_dx)
