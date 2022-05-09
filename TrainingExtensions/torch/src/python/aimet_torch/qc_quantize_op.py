@@ -39,16 +39,16 @@
 
 import abc
 from enum import Enum
-from typing import Dict, Tuple, Union
+from typing import Dict, Tuple, Union, List
 import torch
 from torch import nn
 
 import libpymo
 from aimet_common.utils import AimetLogger
-from aimet_common.defs import QuantScheme, QuantizationDataType, MAP_ROUND_MODE_TO_PYMO, MAP_QUANT_SCHEME_TO_PYMO
+from aimet_common.defs import QuantScheme, QuantizationDataType, MAP_ROUND_MODE_TO_PYMO
 from aimet_torch import utils
-from aimet_torch.tensor_quantizer import StaticGridPerTensorQuantizer, StaticGridPerChannelQuantizer
-from aimet_torch.tensor_quantizer import LearnedGridTensorQuantizer, ParameterQuantizer
+from aimet_torch.tensor_quantizer import StaticGridPerTensorQuantizer, StaticGridPerChannelQuantizer, TensorQuantizer, \
+    LearnedGridTensorQuantizer, ParameterQuantizer
 import aimet_torch.quantsim_straight_through_grad as ste
 
 _logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Quant)
@@ -61,6 +61,10 @@ class QcQuantizeOpMode(Enum):
     PASSTHROUGH = 1
     ANALYSIS = 2
     ACTIVE = 3
+
+
+QUANTIZER_TYPE_INPUT = 'input'
+QUANTIZER_TYPE_OUTPUT = 'output'
 
 
 def tensor_quantizer_factory(bitwidth: int, round_mode: str, quant_scheme: QuantScheme,
@@ -341,9 +345,47 @@ class QcQuantizeWrapper(nn.Module):
         supported for learned-grid
         """
 
-    def set_and_freeze_param_encoding(self, module_name: str, param_encodings: Dict):
+    def set_activation_encoding(self, module_name: str, activation_encodings: Dict):
         """
-        Set and freeze encoding for parameter from encodings dictionary
+        Set encoding for activations from encodings dictionary
+        :param module_name: name of module
+        :param activation_encodings: activation encodings dictionary
+        :return:
+        """
+
+        def _set_quantizer_encodings(type_of_quantizer: str, quantizers: List[TensorQuantizer]):
+            """
+            Sets bitwidth, symmetric mode and encodings for quantizer of type input or output
+            :param type_of_quantizer: input or output
+            :param quantizers: input or output quantizers
+            """
+            if type_of_quantizer in activation_encodings[module_name]:
+                encodings = activation_encodings[module_name][type_of_quantizer]
+                # The number of quantizers and encodings might not be same, suppose 1st output quantizer is disabled out of 4,
+                # number of encodings will be 3 but number of output quantizers will still be 4
+                for index, quantizer in enumerate(quantizers):
+                    ind = str(index)
+                    if ind in encodings and quantizer.enabled is False:
+                        raise RuntimeError("The quantsim passed for loading encodings does not have the same configuration as the"
+                                           "quantsim which was used to export the encodings")
+                    elif quantizer.enabled:
+                        if encodings[ind]['dtype'] == 'int':
+                            encoding, is_symmetric = utils.create_encoding_from_dict(encodings[ind])
+                            quantizer.bitwidth = encoding.bw
+                            quantizer.use_symmetric_encodings = is_symmetric
+                            quantizer.encoding = encoding
+                        elif encodings[ind]['dtype'] == 'float':
+                            quantizer.bitwidth = encodings[ind]['bitwidth']
+                            quantizer.data_type = QuantizationDataType.float
+
+        _logger.info("Setting quantization encodings for activation quantizers of: %s", module_name)
+
+        _set_quantizer_encodings(QUANTIZER_TYPE_INPUT, self.input_quantizers)
+        _set_quantizer_encodings(QUANTIZER_TYPE_OUTPUT, self.output_quantizers)
+
+    def set_param_encoding(self, module_name: str, param_encodings: Dict):
+        """
+        Set encoding for parameter from encodings dictionary
         :param module_name: name of module
         :param param_encodings: parameter encodings dictionary
         """
@@ -351,20 +393,34 @@ class QcQuantizeWrapper(nn.Module):
             param_name = module_name + '.' + orig_param_name
             if param_name in param_encodings:
                 encodings = []
-                is_symmetric = False
-                for encoding_dict in param_encodings[param_name]:
-                    encoding, is_symmetric = utils.create_encoding_from_dict(encoding_dict)
-                    encodings.append(encoding)
-
-                param_quantizer.bitwidth = encodings[0].bw
-                param_quantizer.use_symmetric_encodings = is_symmetric
-                if isinstance(param_quantizer, StaticGridPerChannelQuantizer):
-                    param_quantizer.encoding = encodings            # per-channel quant
+                if param_encodings[param_name][0]['dtype'] == 'int':
+                    is_symmetric = False
+                    for encoding_dict in param_encodings[param_name]:
+                        if encoding_dict['dtype'] == 'int':
+                            encoding, is_symmetric = utils.create_encoding_from_dict(encoding_dict)
+                            encodings.append(encoding)
+                    param_quantizer.bitwidth = encodings[0].bw
+                    param_quantizer.use_symmetric_encodings = is_symmetric
+                    param_quantizer.encoding = encodings
+                elif param_encodings[param_name][0]['dtype'] == 'float':
+                    param_quantizer.bitwidth = param_encodings[param_name][0]['bitwidth']
+                    param_quantizer.data_type = QuantizationDataType.float
                 else:
-                    param_quantizer.encoding = encodings[0]         # per-tensor quant
+                    raise RuntimeError("Data type does not match int or float in encodings file")
 
+                _logger.info("Setting quantization encodings for parameter: %s", param_name)
+
+    def freeze_param_encoding(self, module_name: str, param_encodings: Dict):
+        """
+        Freeze encodings for parameter
+        :param module_name: name of module
+        :param param_encodings: parameter encodings dictionary
+        """
+        for orig_param_name, param_quantizer in self.param_quantizers.items():
+            param_name = module_name + '.' + orig_param_name
+            if param_name in param_encodings:
                 param_quantizer.freeze_encoding()
-                _logger.info("Setting and freezing quantization encodings for parameter: %s", param_name)
+                _logger.info("Freezing quantization encodings for parameter: %s", param_name)
 
 
 class StaticGridQuantWrapper(QcQuantizeWrapper):

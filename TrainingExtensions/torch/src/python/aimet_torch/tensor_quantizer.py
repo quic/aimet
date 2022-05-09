@@ -340,15 +340,17 @@ class StaticGridPerTensorQuantizer(StaticGridTensorQuantizer):
         return None
 
     @encoding.setter
-    def encoding(self, encoding: libpymo.TfEncoding) -> None:
+    def encoding(self, encoding: Union[libpymo.TfEncoding, List[libpymo.TfEncoding]]) -> None:
         """
         Property to set encoding.
         :param encoding: Encoding.
         """
         if self._is_encoding_frozen:
             raise RuntimeError("Encoding can be set only when it is not frozen.")
-
-        self._encoding = [encoding]
+        if isinstance(encoding, list) and len(encoding) == 1:
+            self._encoding = encoding
+        else:
+            self._encoding = [encoding]
 
     def update_encoding_stats(self, tensor):
         """
