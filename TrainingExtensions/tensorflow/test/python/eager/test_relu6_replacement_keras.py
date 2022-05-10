@@ -40,13 +40,10 @@ Unit test about ReLU6 replacement
 """
 import numpy as np
 import pytest
-pytestmark = pytest.mark.skip("Disable tests that requires eager execution")
 import tensorflow as tf
-from packaging import version
 from tensorflow.keras import layers
 
-# if version.parse(tf.version.VERSION) >= version.parse("2.00"):
-#     from aimet_tensorflow.keras.utils.model_transform_utils import replace_relu6_with_relu
+from aimet_tensorflow.keras.utils.model_transform_utils import replace_relu6_with_relu
 
 
 def _simple_conv_model(model_type="functional"):
@@ -82,16 +79,12 @@ def _get_layers(model, model_type="functional"):
         return model.layers
 
 
-@pytest.mark.skipif(
-    version.parse(tf.version.VERSION) < version.parse("2.00"),
-    reason="Enable with TF 2.4",
-)
 class TestReluReplacement:
     @pytest.mark.parametrize("model_type", ["sequential", "functional"])
     def test_relu6_replacement_remain_fusing(self, model_type):
         model = _simple_conv_model(model_type)
 
-        transformed_model, _ = replace_relu6_with_relu(model)
+        transformed_model, _ = replace_relu6_with_relu(model, True)
         conv1, activation1, conv2, activation2, _, dense1, dense2 = _get_layers(
             transformed_model, model_type
         )
