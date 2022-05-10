@@ -1367,7 +1367,7 @@ class QuantizationSimModel:
         Find transformer mask add op and change bitwidth to 16 and quant_scheme to tf
         """
         for quant_op_name, quantizer_info in self._activation_quantizers.items():
-            if self._is_op_transformer_mask(quant_op_name):
+            if self._is_op_transformer_mask(quant_op_name) and quantizer_info.data_type == QuantizationDataType.int:
                 quantizer_info.bitwidth = 16
                 quantizer_info.quant_scheme = QuantScheme.post_training_tf
 
@@ -1376,7 +1376,8 @@ class QuantizationSimModel:
         Clamp the quantizer encoding min associated with mask adder op within an attention head.
         """
         for quant_op_name, quantizer_info in self._activation_quantizers.items():
-            if self._is_op_transformer_mask(quant_op_name) and quantizer_info.enabled:
+            if self._is_op_transformer_mask(quant_op_name) and quantizer_info.enabled \
+                    and quantizer_info.data_type == QuantizationDataType.int:
                 encoding = quantizer_info.get_encoding()
                 encoding.min = max(encoding.min, transformer_utils.MASK_OVERRIDE_VALUE)
 
@@ -1385,6 +1386,7 @@ class QuantizationSimModel:
                 quantizer_info.bitwidth = self._default_output_bw
                 quantizer_info.quant_scheme = self._quant_scheme
                 quantizer_info.set_encoding(clamped_encoding)
+                quantizer_info.freeze_encoding()
 
 
 # load and save utilities
