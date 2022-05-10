@@ -1,6 +1,6 @@
 :orphan:
 
-.. _api-tensorflow-auto-quant:
+.. _api-tf-auto-quant:
 
 ===========================
 AIMET TensorFlow AutoQuant API
