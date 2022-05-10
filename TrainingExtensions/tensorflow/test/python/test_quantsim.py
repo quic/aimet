@@ -1021,6 +1021,115 @@ class TestQuantSim(unittest.TestCase):
         del sim
         sess.close()
 
+    def test_save_model_with_embedded_quantization_nodes(self):
+        """
+        Create QuantSim for a CPU model, compute encodings, replace quantization nodes and export out a resulting model
+        """
+        tf.compat.v1.reset_default_graph()
+        with tf.device('/cpu:0'):
+            model = tf.keras.Sequential()
+            model.add(tf.keras.layers.Conv2D(32, kernel_size=3, input_shape=(28, 28, 3), activation='relu'))
+            model.add(tf.keras.layers.MaxPooling2D((2, 2)))
+            model.add(tf.keras.layers.Conv2D(64, kernel_size=3, activation='relu'))
+            model.summary()
+
+        sess = tf.compat.v1.Session()
+        initialize_uninitialized_vars(sess)
+        # Make some changes to model parameters to see if they are part of the exported model
+        with sess.graph.as_default():
+            first_conv_tensor_var = [var for var in tf.compat.v1.global_variables() if var.name == 'conv2d/kernel:0'][0]
+            first_conv_tensor_var.load(np.ones([3,3,3,32]), sess)
+            saver = tf.compat.v1.train.Saver()
+        saver.save(sess, save_path='/tmp/quantsim/'+'orig_model_before_quantsim')
+        sim = QuantizationSimModel(sess, [model.input.op.name], [model.output.op.name], use_cuda=False)
+
+        def dummy_forward_pass(sess, args):
+            model_output = sess.graph.get_tensor_by_name(model.output.name)
+            model_output = model_output.consumers()[0].outputs[0]
+            model_input = sess.graph.get_tensor_by_name(model.input.name)
+            dummy_input = np.random.randn(20, 28, 28, 3)
+            sess.run(model_output, feed_dict={model_input: dummy_input})
+
+        sim.compute_encodings(dummy_forward_pass, None)
+        encoding = libpymo.TfEncoding()
+        encoding.bw = 8
+        encoding.max = 1.0
+        sim._param_quantizers['conv2d/Conv2D/ReadVariableOp_quantized'].set_encoding(encoding)
+
+        all_op_types = [op.type for op in sim.session.graph.get_operations()]
+        self.assertIn('QcQuantize', all_op_types)
+        self.assertNotIn('FakeQuantWithMinMaxVars', all_op_types)
+
+        # Save model without encodings file
+        sim.save_model_with_embedded_quantization_nodes(os.path.join('/tmp', 'tf_fakequant_model'))
+
+        new_sess = load_model_from_meta('/tmp/tf_fakequant_model_embedded_quant_nodes.meta')
+        first_conv_tensor = new_sess.graph.get_tensor_by_name('conv2d/Conv2D/ReadVariableOp:0')
+        first_conv_tensor_val = new_sess.run(first_conv_tensor)
+        self.assertTrue(np.any(first_conv_tensor_val == 1))
+        first_conv_tensor_fakequant_max_tensor = new_sess.graph.get_tensor_by_name('conv2d/Conv2D/ReadVariableOp_quantized/max:0')
+        first_conv_tensor_fakequant_max_val = new_sess.run(first_conv_tensor_fakequant_max_tensor)
+        self.assertTrue(first_conv_tensor_fakequant_max_val == 1)
+
+        all_op_types = [op.type for op in new_sess.graph.get_operations()]
+        self.assertNotIn('QcQuantize', all_op_types)
+        self.assertIn('FakeQuantWithMinMaxVars', all_op_types)
+
+        # Save model with encodings file
+        sim._export_encodings('/tmp/tf_fakequant_model.encodings')
+        sim.save_model_with_embedded_quantization_nodes(os.path.join('/tmp', 'tf_fakequant_model'), '/tmp/tf_fakequant_model.encodings')
+
+        new_sess = load_model_from_meta('/tmp/tf_fakequant_model_embedded_quant_nodes.meta')
+        first_conv_tensor = new_sess.graph.get_tensor_by_name('conv2d/Conv2D/ReadVariableOp:0')
+        first_conv_tensor_val = new_sess.run(first_conv_tensor)
+        self.assertTrue(np.any(first_conv_tensor_val == 1))
+        first_conv_tensor_fakequant_max_tensor = new_sess.graph.get_tensor_by_name('conv2d/Conv2D/ReadVariableOp_quantized/max:0')
+        first_conv_tensor_fakequant_max_val = new_sess.run(first_conv_tensor_fakequant_max_tensor)
+        self.assertTrue(first_conv_tensor_fakequant_max_val == 1)
+
+        all_op_types = [op.type for op in new_sess.graph.get_operations()]
+        self.assertNotIn('QcQuantize', all_op_types)
+        self.assertIn('FakeQuantWithMinMaxVars', all_op_types)
+        sess.close()
+        sim.session.close()
+        new_sess.close()
+        del sim
+
+    def test_save_model_with_embedded_quantization_nodes_fp16(self):
+        """
+        Create QuantSim for a CPU model, compute encodings, replace quantization nodes to cast
+        and compare the results of the generated session is same as quant sim model
+        """
+        tf.compat.v1.reset_default_graph()
+        with tf.device('/cpu:0'):
+            model = tf.keras.Sequential()
+            model.add(tf.keras.layers.Conv2D(32, kernel_size=3, input_shape=(28, 28, 3), activation='relu'))
+            model.add(tf.keras.layers.MaxPooling2D((2, 2)))
+            model.add(tf.keras.layers.Conv2D(64, kernel_size=3, activation='relu'))
+            model.summary()
+
+        sess = tf.compat.v1.Session()
+        initialize_uninitialized_vars(sess)
+        sim = QuantizationSimModel(sess, ['conv2d_input'], ['conv2d_1/Relu'], use_cuda=False, default_output_bw=16,
+                                    default_param_bw=16, default_data_type=QuantizationDataType.float)
+
+        def dummy_forward_pass_quant_sim(sess, dummy_input):
+            model_output = sess.graph.get_tensor_by_name('conv2d_1/Relu_quantized:0')
+            model_input = sess.graph.get_tensor_by_name('conv2d_input:0')
+            return sess.run(model_output, feed_dict={model_input: dummy_input})
+
+        def dummy_forward_pass_quant_embedded_native_nodes(sess, dummy_input):
+            model_output = sess.graph.get_tensor_by_name('conv2d_1/Relu:0')
+            model_input = sess.graph.get_tensor_by_name('conv2d_input:0')
+            return sess.run(model_output, feed_dict={model_input: dummy_input})
+
+        dummy_input = np.random.randn(20, 28, 28, 3)
+
+        output_aimet_fk_fp16 = dummy_forward_pass_quant_sim(sim.session, dummy_input)
+        orig_sess = sim.save_model_with_embedded_quantization_nodes(os.path.join('data', 'quant_sim_model_fp16'))
+        output_embedded_fk_fp16 = dummy_forward_pass_quant_embedded_native_nodes(orig_sess, dummy_input)
+        self.assertTrue(np.all(output_embedded_fk_fp16 == output_aimet_fk_fp16))
+
 class TestQuantSimRangeLearning:
     """ Test methods for Quantization Simulation """
 

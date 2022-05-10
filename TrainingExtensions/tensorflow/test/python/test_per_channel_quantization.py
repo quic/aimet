@@ -50,6 +50,7 @@ from aimet_tensorflow.quantsim import QuantizationSimModel, AxisHandling
 from aimet_tensorflow.examples.test_models import depthwise_conv2d_model, transposed_conv2d_model
 from aimet_tensorflow.utils.constants import QuantizeOpIndices
 from aimet_tensorflow.utils.op.conv import WeightTensorUtils
+from aimet_tensorflow.utils.graph_saver import load_model_from_meta
 from aimet_common.defs import QuantScheme
 from aimet_common.quantsim import calculate_delta_offset
 
@@ -985,6 +986,94 @@ class TestTrainingExtensionsQcQuantizeOpPerChannel(unittest.TestCase):
 
         sess.close()
         sim.session.close()
+
+    def test_save_model_with_embedded_quantization_nodes_per_channel(self):
+        save_config_file_for_per_channel_quantization()
+
+        tf.compat.v1.reset_default_graph()
+        with tf.device('/cpu:0'):
+            model = tf.keras.Sequential()
+            model.add(tf.keras.layers.Conv2D(32, kernel_size=3, input_shape=(5, 5, 3), activation='relu'))
+            model.summary()
+
+        sess = tf.compat.v1.Session()
+        initialize_uninitialized_vars(sess)
+        with sess.graph.as_default():
+            first_conv_tensor_var = [var for var in tf.compat.v1.global_variables() if var.name == 'conv2d/kernel:0'][0]
+            first_conv_tensor_var.load(np.ones([3,3,3,32]), sess)
+            saver = tf.compat.v1.train.Saver()
+        saver.save(sess, save_path='/tmp/quantsim/'+'orig_model_before_quantsim')
+        sim = QuantizationSimModel(sess, [model.input.op.name], [model.output.op.name], use_cuda=False,
+                                   config_file='./quantsim_config.json')
+
+        def create_encoding():
+            _encoding = libpymo.TfEncoding()
+            _encoding.min = random.uniform(0, 1)
+            _encoding.max = random.uniform(1, 3)
+            _encoding.bw = 8
+            _encoding.delta, _encoding.offset = calculate_delta_offset(_encoding.min, _encoding.max, 8)
+            return _encoding
+
+        # Set the encodings for activation quantizers
+        for quant_op_name, quantizer_info in sim._activation_quantizers.items():
+            _encoding = create_encoding()
+            quantizer_info.set_encoding(_encoding)
+
+        # Set encodings for parameter quantizers
+        for quant_op_name, quantizer_info in sim._param_quantizers.items():
+            encoding = []
+            for i in range(len(quantizer_info.tensor_quantizer)):
+                _encoding = create_encoding()
+                encoding.append(_encoding)
+            quantizer_info.set_encoding(encoding)
+
+        # Make some changes to model parameters to see if they are part of the exported model
+        quantizer_info = sim._param_quantizers['conv2d/Conv2D/ReadVariableOp_quantized']
+        encoding = []
+        for i in range(len(quantizer_info.tensor_quantizer)):
+            _encoding = libpymo.TfEncoding()
+            _encoding.min = 0
+            _encoding.max = 1
+            _encoding.bw = 8
+            encoding.append(_encoding)
+        quantizer_info.set_encoding(encoding)
+        all_op_types = [op.type for op in sim.session.graph.get_operations()]
+        self.assertIn('QcQuantize', all_op_types)
+        self.assertNotIn('FakeQuantWithMinMaxVarsPerChannel', all_op_types)
+
+        # Save model without encodings file
+        sim.save_model_with_embedded_quantization_nodes(os.path.join('/tmp', 'tf_fakequant_model'))
+        new_sess = load_model_from_meta('/tmp/tf_fakequant_model_embedded_quant_nodes.meta')
+        all_op_types = [op.type for op in new_sess.graph.get_operations()]
+        self.assertNotIn('QcQuantize', all_op_types)
+        self.assertIn('FakeQuantWithMinMaxVarsPerChannel', all_op_types)
+        first_conv_tensor = new_sess.graph.get_tensor_by_name('conv2d/Conv2D/ReadVariableOp:0')
+        first_conv_tensor_val = new_sess.run(first_conv_tensor)
+        self.assertTrue(np.any(first_conv_tensor_val == 1))
+        first_conv_tensor_fakequant_max_tensor = new_sess.graph.get_tensor_by_name('conv2d/Conv2D/ReadVariableOp_quantized/max:0')
+        first_conv_tensor_fakequant_max_val = new_sess.run(first_conv_tensor_fakequant_max_tensor)
+        self.assertTrue(np.any(first_conv_tensor_fakequant_max_val == 1))
+        self.assertTrue(isinstance(first_conv_tensor_fakequant_max_val, np.ndarray))
+
+        # Save model with encodings file
+        sim._export_encodings(os.path.join('/tmp', 'quant_sim_model.encodings'))
+        sim.save_model_with_embedded_quantization_nodes(os.path.join('/tmp', 'tf_fakequant_model'), '/tmp/quant_sim_model.encodings')
+        new_sess = load_model_from_meta('/tmp/tf_fakequant_model_embedded_quant_nodes.meta')
+        all_op_types = [op.type for op in new_sess.graph.get_operations()]
+        self.assertNotIn('QcQuantize', all_op_types)
+        self.assertIn('FakeQuantWithMinMaxVarsPerChannel', all_op_types)
+        first_conv_tensor = new_sess.graph.get_tensor_by_name('conv2d/Conv2D/ReadVariableOp:0')
+        first_conv_tensor_val = new_sess.run(first_conv_tensor)
+        self.assertTrue(np.any(first_conv_tensor_val == 1))
+        first_conv_tensor_fakequant_max_tensor = new_sess.graph.get_tensor_by_name('conv2d/Conv2D/ReadVariableOp_quantized/max:0')
+        first_conv_tensor_fakequant_max_val = new_sess.run(first_conv_tensor_fakequant_max_tensor)
+        self.assertTrue(np.any(first_conv_tensor_fakequant_max_val == 1))
+        self.assertTrue(isinstance(first_conv_tensor_fakequant_max_val, np.ndarray))
+
+        sess.close()
+        sim.session.close()
+        new_sess.close()
+        del sim
 
 
 def save_config_file_for_per_channel_quantization():
