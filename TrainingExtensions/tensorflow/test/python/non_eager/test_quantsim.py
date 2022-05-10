@@ -1014,9 +1014,47 @@ class TestQuantSim(unittest.TestCase):
 
         sim.compute_encodings(dummy_forward_pass, None)
         mask_quantizer = sim.quantizer_config(mask_add_name + '_quantized')
+        self.assertTrue(mask_quantizer._is_encoding_frozen)
         encoding_min = mask_quantizer.get_variable_from_op(QuantizeOpIndices.encoding_min)
 
         self.assertAlmostEqual(encoding_min, transformer_utils.MASK_OVERRIDE_VALUE, places=1)
+
+        del sim
+        sess.close()
+
+    @pytest.mark.tf2
+    def test_transformer_mask_override_f16_skip(self):
+        tf.compat.v1.reset_default_graph()
+
+        mask_add_name = 'dummy_attention/mask_add'
+        np.random.seed(0)
+        dummy_input_0 = np.random.uniform(low=-10.0, high=10.0, size=(28, 28, 3))
+        dummy_input_1 = np.random.uniform(low=-10000.0, high=10.0, size=(28, 28, 3))
+        with tf.device('/cpu:0'):
+            input_0 = tf.Variable(initial_value=dummy_input_0, shape=(28, 28, 3), dtype=tf.float32)
+            input_1 = tf.Variable(initial_value=dummy_input_1, shape=(28, 28, 3), dtype=tf.float32)
+            mask_add = tf.math.add(input_0, input_1, name=mask_add_name)
+
+        sess = tf.compat.v1.Session()
+        initialize_uninitialized_vars(sess)
+        transformer_utils.register_attention_mask_override(mask_add_name)
+        sim = QuantizationSimModel(sess, [input_0.op.name, input_1.op.name], [mask_add.op.name], use_cuda=False,
+                                   default_data_type=QuantizationDataType.float, default_output_bw=16, default_param_bw=16)
+
+        def dummy_forward_pass(sess, args):
+            mask_add_tensor = sess.graph.get_operation_by_name(mask_add.op.name + '_quantized').outputs[0]
+            sess.run(mask_add_tensor)
+
+        sim.compute_encodings(dummy_forward_pass, None)
+        mask_quantizer = sim.quantizer_config(mask_add_name + '_quantized')
+        self.assertFalse(mask_quantizer._is_encoding_frozen)
+        is_int_data_type = mask_quantizer.get_variable_from_op(QuantizeOpIndices.is_int_data_type)
+        self.assertFalse(is_int_data_type)
+        # No encoding is computed for float mode
+        encoding_min = mask_quantizer.get_variable_from_op(QuantizeOpIndices.encoding_min)
+        encoding_max = mask_quantizer.get_variable_from_op(QuantizeOpIndices.encoding_max)
+        self.assertEqual(encoding_min, 0)
+        self.assertEqual(encoding_max, 0)
 
         del sim
         sess.close()
