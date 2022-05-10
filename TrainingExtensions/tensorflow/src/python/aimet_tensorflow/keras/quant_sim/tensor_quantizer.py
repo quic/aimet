@@ -308,7 +308,8 @@ class TensorQuantizer(tf.keras.layers.Layer, abc.ABC):
                                  encoding_min=self._encoding_min,
                                  encoding_max=self._encoding_max,
                                  bit_width=self._bitwidth,
-                                 use_symmetric_encoding=self._is_symmetric), grad
+                                 use_symmetric_encoding=self._is_symmetric,
+                                 is_int_data_type=True), grad
 
     @tf.custom_gradient
     def call_quantsim_custom_grad_learned_grid(self, tensor):
@@ -334,7 +335,8 @@ class TensorQuantizer(tf.keras.layers.Layer, abc.ABC):
                                  encoding_min=self._encoding_min,
                                  encoding_max=self._encoding_max,
                                  bit_width=self._bitwidth,
-                                 use_symmetric_encoding=self._is_symmetric), grad
+                                 use_symmetric_encoding=self._is_symmetric,
+                                 is_int_data_type=True), grad
 
 # pylint: disable=too-many-ancestors
 class ActivationTensorQuantizer(TensorQuantizer):
