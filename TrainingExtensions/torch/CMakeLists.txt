@@ -79,18 +79,7 @@ add_dependencies(BuildTorchExtensions TorchCppOps)
 add_subdirectory(src/python)
 add_subdirectory(test)
 
-install(DIRECTORY ${CMAKE_BINARY_DIR}/artifacts/
-      DESTINATION ${AIMET_INSTALL_DIR}/lib/x86_64-linux-gnu
+install(DIRECTORY ${CMAKE_BINARY_DIR}/artifacts/aimet_torch/
+      DESTINATION ${AIMET_INSTALL_DIR}/lib/python/aimet_torch
       FILES_MATCHING PATTERN "AimetTensorQuantizer*.so"
-      PATTERN "__pycache*" EXCLUDE
-      )
-
-install(DIRECTORY ${CMAKE_BINARY_DIR}/artifacts/
-      DESTINATION ${AIMET_INSTALL_DIR}/lib/x86_64-linux-gnu
-      FILES_MATCHING PATTERN "AimetTensorQuantizer*.py"
-      PATTERN "__pycache*" EXCLUDE
-      )
-
-install(FILES ${CMAKE_BINARY_DIR}/artifacts/easy-install.pth ${CMAKE_BINARY_DIR}/artifacts/site.py
-      DESTINATION ${AIMET_INSTALL_DIR}/lib/x86_64-linux-gnu
       )

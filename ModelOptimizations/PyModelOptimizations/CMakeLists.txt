@@ -80,5 +80,5 @@ set_target_properties(PyModelOptimizations
       )
 
 install(TARGETS PyModelOptimizations
-        LIBRARY DESTINATION ${AIMET_INSTALL_DIR}/lib/x86_64-linux-gnu
+        LIBRARY DESTINATION ${AIMET_INSTALL_DIR}/lib/python/aimet_common
 )

@@ -102,7 +102,6 @@ find_package(Python COMPONENTS Interpreter Development)
 set(PYTHON_DIST_PACKAGES "/usr/local/lib/python${Python_VERSION_MAJOR}.${Python_VERSION_MINOR}/dist-packages/")
 message("Found python: ${Python_FOUND}, at ${Python_LIBRARIES}")
 EXECUTE_PROCESS( COMMAND "uname" "-m" OUTPUT_VARIABLE ARCHITECTURE OUTPUT_STRIP_TRAILING_WHITESPACE)
-message(STATUS "Operating system architecture: ${ARCHITECTURE}")
 
 if (NOT (DEFINED ENABLE_TORCH))
   message("AIMET Torch build not explicitly disabled. Enabling implicitly")
