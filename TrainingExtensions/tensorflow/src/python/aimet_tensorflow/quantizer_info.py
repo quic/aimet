@@ -97,17 +97,15 @@ class QuantizerInfo:
     """
     Holds information about a given MO Quantizer object and active session
     """
-    __slots__ = ['session', 'tensor_quantizer', 'quant_op_name', 'quantizer_type', '_is_encoding_frozen', 'data_type']
+    __slots__ = ['session', 'tensor_quantizer', 'quant_op_name', 'quantizer_type', '_is_encoding_frozen']
 
     def __init__(self, session: tf.compat.v1.Session, tensor_quantizer: libpymo.TensorQuantizer,
-                 quant_op_name: str, quantizer_type: QuantizerType,
-                 data_type: QuantizationDataType = QuantizationDataType.int):
+                 quant_op_name: str, quantizer_type: QuantizerType):
         self.session = session
         self.tensor_quantizer = tensor_quantizer
         self.quant_op_name = quant_op_name
         self.quantizer_type = quantizer_type
         self._is_encoding_frozen = False
-        self.data_type = data_type
 
     def set_variable(self, var_name, value):
         """
@@ -130,6 +128,25 @@ class QuantizerInfo:
         quantize_op = self.session.graph.get_operation_by_name(self.quant_op_name)
         op_var_tensor = quantize_op.inputs[var_index]
         return self.session.run(op_var_tensor)
+
+    @property
+    def data_type(self) -> QuantizationDataType:
+        """
+        Reads data_type from Quantize op and converts to variable of type QuantizationDataType before returning
+        :return: data_type setting of the op
+        """
+        is_int_data_type = self.get_variable_from_op(QuantizeOpIndices.is_int_data_type)
+        return QuantizationDataType.int if is_int_data_type else QuantizationDataType.float
+
+    @data_type.setter
+    def data_type(self, data_type: QuantizationDataType):
+        """
+        Sets the data type of the op
+        :param data_type: data type of type QuantizationDataType
+        """
+        var_name = self.quant_op_name + '_data_type'
+        self.set_variable(var_name, data_type == QuantizationDataType.int)
+        self._invalidate_tensor_quantizer_encodings()
 
     @property
     def bitwidth(self) -> int:
@@ -427,6 +444,8 @@ class QuantizerInfo:
         Return bool if encoding is valid or not
         :return: Boolean
         """
+        if self.data_type == QuantizationDataType.float:
+            return False
         if isinstance(self.tensor_quantizer, list):
             return self.tensor_quantizer[0].isEncodingValid
         return self.tensor_quantizer.isEncodingValid
