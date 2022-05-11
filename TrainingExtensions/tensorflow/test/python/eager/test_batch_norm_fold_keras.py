@@ -38,8 +38,6 @@
 """
 This file contains unit tests for testing batch norm folding
 """
-import pytest
-pytestmark = pytest.mark.skip("Disable tests that requires eager execution")
 import unittest
 import tensorflow as tf
 import numpy as np

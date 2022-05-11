@@ -36,8 +36,6 @@
 #  @@-COPYRIGHT-END-@@
 # =============================================================================
 """ This file contains unit tests for testing high bias fold feature of CLE """
-import pytest
-pytestmark = pytest.mark.skip("Disable tests that requires eager execution")
 import numpy as np
 import tensorflow as tf
 

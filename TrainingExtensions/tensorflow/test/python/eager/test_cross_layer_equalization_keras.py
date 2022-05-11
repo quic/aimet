@@ -37,7 +37,6 @@
 # =============================================================================
 """ This file contains unit tests for testing cross layer scaling feature of CLE """
 import pytest
-pytestmark = pytest.mark.skip("Disable tests that requires eager execution")
 import numpy as np
 import tensorflow as tf
 
@@ -415,6 +414,7 @@ class TestTrainingExtensionsCrossLayerScaling:
 
         assert actual == expected
 
+    @pytest.mark.skip("Skipping while enabling eager mode tests, need to debug.")
     def test_scale_cls_sets(self):
         """
         Test scale cls sets

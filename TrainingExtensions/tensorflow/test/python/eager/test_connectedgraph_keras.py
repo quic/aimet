@@ -39,19 +39,11 @@
 This file contains unit tests for testing ConnectedGraph
 """
 import pytest
-pytestmark = pytest.mark.skip("Disable tests that requires eager execution")
-import tensorflow as tf
-from packaging import version
 
 import test_models_keras
 from aimet_common.connected_graph.connectedgraph_utils import get_all_input_ops, get_all_output_ops
 from aimet_tensorflow.keras.connectedgraph import ConnectedGraph
 
-
-@pytest.mark.skipif(
-    version.parse(tf.version.VERSION) < version.parse("2.00"),
-    reason="Enable with TF 2.4",
-)
 class TestConnectedGraph:
     """
     Test methods for ConnectedGraph

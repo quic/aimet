@@ -37,8 +37,6 @@
 # =============================================================================
 
 """ AdaRound Weights for Keras Unit Test Cases """
-import pytest
-pytestmark = pytest.mark.skip("Disable tests that requires eager execution")
 import json
 import os
 import numpy as np

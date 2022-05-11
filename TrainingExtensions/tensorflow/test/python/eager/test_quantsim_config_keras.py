@@ -36,7 +36,6 @@
 import json
 import os
 import pytest
-pytestmark = pytest.mark.skip("Disable tests that requires eager execution")
 from tensorflow.keras.layers import InputLayer
 
 from aimet_common.defs import QuantScheme
@@ -83,9 +82,8 @@ class TestQuantSimConfig:
         assert len(layer_to_affected_tensor_quantizers_dict[dense2][0]) == 1
         assert len(layer_to_affected_tensor_quantizers_dict[dense2][1]) == 1
         assert len(layer_to_affected_tensor_quantizers_dict[dense2][2]) == 1
-        assert len(layer_to_affected_tensor_quantizers_dict[dense2][3]) == 3
+        assert len(layer_to_affected_tensor_quantizers_dict[dense2][3]) == 2
         assert (dense2, "output") in layer_to_affected_tensor_quantizers_dict[dense2][3]
-        assert (dense3, "output") in layer_to_affected_tensor_quantizers_dict[dense2][3]
         assert (concat1, "input") in layer_to_affected_tensor_quantizers_dict[dense2][3]
 
         # Layer having multiple producers (Concat layer)

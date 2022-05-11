@@ -39,14 +39,11 @@
 """ Unit tests for keras utils """
 
 import os
-import pytest
-pytestmark = pytest.mark.skip("Disable tests that requires eager execution")
 import numpy as np
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 import tensorflow as tf
 from aimet_tensorflow.keras.utils.common import replace_layer_in_functional_model
 
-@pytest.mark.skip(reason="Enable with TF 2.4")
 def test_replace_middle_layers():
     # Create model
     inp = tf.keras.layers.Input(shape=(2,))
@@ -84,7 +81,6 @@ def test_replace_middle_layers():
     assert new_model.layers[3].weights[0].shape == [4, 2]
     assert new_model.layers[3].weights[0][0][0] == 5.
 
-@pytest.mark.skip(reason="Enable with TF 2.4")
 def test_replace_output_layer():
     inp = tf.keras.layers.Input(shape=(2,))
     x = tf.keras.layers.Dense(units=1)(inp)
@@ -103,7 +99,6 @@ def test_replace_output_layer():
     out = new_model(test_inp)
     assert out.shape == [1, 3]
 
-@pytest.mark.skip(reason="Enable with TF 2.4")
 def test_replace_multi_input_layer():
     inp = tf.keras.layers.Input(shape=(2,))
     inp2 = tf.keras.layers.Input(shape=(2,))
@@ -123,7 +118,6 @@ def test_replace_multi_input_layer():
     out = new_model([test_inp, test_inp2])
     assert np.array_equal(out, np.array([[-1, -1]]))
 
-@pytest.mark.skip(reason="Enable with TF 2.4")
 def test_replace_layer_with_multiple_children():
     inp = tf.keras.layers.Input(shape=(2,))
     x = tf.keras.layers.ReLU()(inp)
@@ -148,7 +142,6 @@ def test_replace_layer_with_multiple_children():
     assert not new_model.layers[4].inbound_nodes
     assert not new_model.layers[4].outbound_nodes
 
-@pytest.mark.skip(reason="Enable with TF 2.4")
 def test_replace_layer_in_internal_model():
     inp = tf.keras.layers.Input(shape=(2,))
     out = tf.keras.layers.PReLU(alpha_initializer='ones')(inp)
