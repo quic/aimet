@@ -200,7 +200,10 @@ class QuantizationSimModel:
         with self.session.graph.as_default():
             saver = tf.compat.v1.train.Saver()
         saver.save(self.session, save_path=WORKING_DIR+'orig_model_before_quantsim')
-        self._quantsim_configurator = QuantSimConfigurator(session, self.connected_graph, config_file)
+        self._supported_kernels = {}
+        self._quantsim_configurator = QuantSimConfigurator(session, self.connected_graph, config_file,
+                                                           self._supported_kernels, default_output_bw, default_param_bw,
+                                                           default_data_type)
         self.per_channel_quantization_enabled = self._quantsim_configurator.per_channel_quantization_flag
         self._op_name_to_output_channels_axis_handling_dict = {}
 
