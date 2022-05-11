@@ -46,6 +46,9 @@ import tensorflow as tf
 from aimet_tensorflow.examples.test_models import single_residual, single_residual_for_tf2
 from aimet_tensorflow.quantsim import QuantizationSimModel
 from aimet_tensorflow.utils.constants import QuantizeOpIndices
+from aimet_tensorflow.quantsim_config.quantsim_config import QuantSimConfigurator
+from aimet_tensorflow.common.connectedgraph import ConnectedGraph
+from aimet_common.defs import QuantizationDataType, QuantDtypeBwInfo
 import libpymo as pymo
 
 tf.compat.v1.logging.set_verbosity(tf.compat.v1.logging.WARN)
@@ -867,3 +870,112 @@ class TestQuantsimConfig(unittest.TestCase):
         sess.close()
         sim.session.close()
         tf.compat.v1.reset_default_graph()
+
+    def test_check_correct_of_dtype_bw_rulese(self):
+        quantsim_config = {
+            "defaults": {
+                "ops": {
+                    "is_output_quantized": "True"
+                },
+                "params": {
+                    "is_quantized": "True"
+                },
+                "supported_kernels": [
+                    {
+                        "activation": {
+                            "bitwidth": 4,
+                            "dtype": "int"
+                        },
+                        "param": {
+                            "bitwidth": 16,
+                            "dtype": "int"
+                        }
+                    },
+                    {
+                        "activation": {
+                            "bitwidth": 8,
+                            "dtype": "int"
+                        },
+                        "param": {
+                            "bitwidth": 16,
+                            "dtype": "int"
+                        }
+                    }
+                ]
+            },
+            "params": {
+                "bias": {
+                    "is_quantized": "False"
+                }
+            },
+            "op_type": {
+                "Conv": {
+                    "supported_kernels":
+                        [
+                            {
+                                "activation": {
+                                    "bitwidth": 16,
+                                    "dtype": "float"
+                                },
+                                "param": {
+                                    "bitwidth": 16,
+                                    "dtype": "float"
+                                }
+                            },
+                        ],
+                    "is_input_quantized": "True",
+                    "is_output_quantized": "True",
+                    "params": {
+                        "weight": {
+                            "is_quantized": "True"
+                        },
+                        "bias": {
+                            "is_quantized": "False"
+                        }
+                    }
+                }
+            },
+            "supergroups": [
+            ],
+            "model_input": {
+                "is_input_quantized": "True"
+            },
+            "model_output": {}
+        }
+
+        config_file = '/tmp/quantsim_config.json'
+        with open(config_file, 'w') as f:
+            json.dump(quantsim_config, f)
+
+        tf.compat.v1.reset_default_graph()
+        with tf.device('/cpu:0'):
+            model = tf.keras.Sequential()
+            model.add(tf.keras.layers.Conv2D(32, kernel_size=3, input_shape=(28, 28, 3), activation='relu'))
+            model.add(tf.keras.layers.MaxPooling2D((2, 2)))
+            model.add(tf.keras.layers.Conv2D(64, kernel_size=3, activation='relu'))
+            model.summary()
+
+        sess = tf.compat.v1.Session()
+
+        starting_op_names = [input.op.name for input in model.inputs]
+        output_op_names = [output.op.name for output in model.outputs]
+        connected_graph = ConnectedGraph(sess.graph, starting_op_names, output_op_names)
+
+        supported_kernels = {}
+        qsim_config = QuantSimConfigurator(sess.graph, connected_graph, config_file, supported_kernels,
+                                           quantsim_output_bw=8, quantsim_param_bw=8,
+                                           quantsim_data_type=QuantizationDataType.int)
+
+        qsim_dtype_bw = QuantDtypeBwInfo(data_type=QuantizationDataType.int, act_bw=8, param_bw=8)
+        exception_raised = False
+        try:
+            qsim_config.check_correctness_of_dtype_bw_rules(qsim_dtype_bw)
+        except NotImplementedError as exc:
+            print(" Test raised exception as expected ", exc)
+            exception_raised = True
+
+        assert exception_raised
+
+        # remove test config created
+        if os.path.exists(config_file):
+            os.remove(config_file)
