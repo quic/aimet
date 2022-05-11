@@ -34,9 +34,6 @@
 #  @@-COPYRIGHT-END-@@
 # =============================================================================
 """ Unit tests for Keras tensor quantizer """
-
-import pytest
-pytestmark = pytest.mark.skip("Disable tests that requires eager execution")
 import tensorflow as tf
 from aimet_tensorflow.keras.quant_sim.tensor_quantizer import ActivationTensorQuantizer, ParamTensorQuantizer
 from aimet_common.defs import QuantScheme

@@ -40,7 +40,6 @@ import pytest
 
 from aimet_tensorflow.keras.cross_layer_equalization import equalize_model
 
-pytestmark = pytest.mark.skip("Disable tests that requires eager execution")
 from packaging import version
 import numpy as np
 import tensorflow as tf

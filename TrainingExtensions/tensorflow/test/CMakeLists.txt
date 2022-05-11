@@ -49,19 +49,36 @@ endif ()
 
 string(APPEND MARKER_FLAG ${CUDA_FLAG} " and " ${TF_VERSION_FLAG})
 
-add_test(TfTrainingExtensionPythonTest
-        pytest ${CMAKE_CURRENT_SOURCE_DIR} -m ${MARKER_FLAG} --junitxml=${CMAKE_CURRENT_BINARY_DIR}/py_test_output.xml
+add_test(TfNonEagerTrainingExtensionPythonTest
+        pytest ${CMAKE_CURRENT_SOURCE_DIR}/python/non_eager -m ${MARKER_FLAG} --junitxml=${CMAKE_CURRENT_BINARY_DIR}/py_test_non_eager_output.xml
         )
 
-set_property(TEST TfTrainingExtensionPythonTest
+set_property(TEST TfNonEagerTrainingExtensionPythonTest
       APPEND PROPERTY ENVIRONMENT "${AIMET_LD_LIBRARY_PATH}")
-set_property(TEST TfTrainingExtensionPythonTest
+set_property(TEST TfNonEagerTrainingExtensionPythonTest
       APPEND PROPERTY ENVIRONMENT "${AIMET_PYTHONPATH}")
 
 if(DEFINED ENV{DEPENDENCY_DATA_PATH})
-set_property(TEST TfTrainingExtensionPythonTest
+set_property(TEST TfNonEagerTrainingExtensionPythonTest
       APPEND PROPERTY ENVIRONMENT "${DEPENDENCY_DATA_PATH}")
 endif(DEFINED ENV{DEPENDENCY_DATA_PATH})
+
+if (NOT TF_VERSION MATCHES "^1.15")
+    add_test(TfEagerTrainingExtensionTest
+            pytest ${CMAKE_CURRENT_SOURCE_DIR}/python/eager -m ${MARKER_FLAG} --junitxml=${CMAKE_CURRENT_BINARY_DIR}/py_test_eager_output.xml
+            )
+
+    set_property(TEST TfEagerTrainingExtensionTest
+          APPEND PROPERTY ENVIRONMENT "${AIMET_LD_LIBRARY_PATH}")
+    set_property(TEST TfEagerTrainingExtensionTest
+          APPEND PROPERTY ENVIRONMENT "${AIMET_PYTHONPATH}")
+
+    if(DEFINED ENV{DEPENDENCY_DATA_PATH})
+    set_property(TEST TfEagerTrainingExtensionTest
+          APPEND PROPERTY ENVIRONMENT "${DEPENDENCY_DATA_PATH}")
+    endif(DEFINED ENV{DEPENDENCY_DATA_PATH})
+
+endif ()
 
 find_package(GTest)
 
