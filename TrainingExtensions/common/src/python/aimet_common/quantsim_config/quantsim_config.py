@@ -160,7 +160,7 @@ class QuantSimConfigurator(ABC):
 
     def check_correctness_of_dtype_bw_rules(self, quantsim_dtype_bw_info: QuantDtypeBwInfo):
         """
-        Validates correctness of data type and bitdiwth rules specified using config file supported_kernels option.
+        Validates correctness of data type and bitwidth rules specified using config file supported_kernels option.
         :param quantsim_dtype_bw_info: data type (int or float) as QuantizationDataType and act/param bit-width info.
         :return:
         """

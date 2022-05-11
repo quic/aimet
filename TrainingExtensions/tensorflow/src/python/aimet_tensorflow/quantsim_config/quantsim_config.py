@@ -43,10 +43,12 @@ from packaging import version
 from aimet_common.quantsim_config.json_config_importer import DefaultsType, OpType, ParamType, OpTypeType, \
     SupergroupType, ConfigType, ConfigDictKeys
 from aimet_common.connected_graph.connectedgraph_utils import get_all_input_ops, get_all_output_ops
+from aimet_common.defs import QuantizationDataType, QuantDtypeBwInfo
 from aimet_common.graph_searcher import GraphSearcher
 from aimet_common.quantsim_config.quantsim_config import QuantSimConfigurator as AimetCommonQuantSimConfigurator
 from aimet_common.quantsim_config.quantsim_config import SupergroupConfigCallback as AimetCommonSupergroupConfigCallback
-from aimet_common.quantsim_config.quantsim_config import get_setting_type, OnnxConnectedGraphTypeMapper
+from aimet_common.quantsim_config.quantsim_config import get_setting_type, OnnxConnectedGraphTypeMapper,\
+    ENFORCE_TARGET_DTYPE_BITWIDTH_CONFIG
 from aimet_common.utils import AimetLogger
 from aimet_tensorflow.quantizer_info import QuantizerInfo
 from aimet_tensorflow.common.connectedgraph import ConnectedGraph
@@ -96,8 +98,8 @@ class SupergroupConfigCallback(AimetCommonSupergroupConfigCallback):
 class QuantSimConfigurator(AimetCommonQuantSimConfigurator):
     """ Class for parsing and applying
     quantsim configurations from json config file """
-    def __init__(self, sess: tf.compat.v1.Session, conn_graph: ConnectedGraph,
-                 config_file: str):
+    def __init__(self, sess: tf.compat.v1.Session, conn_graph: ConnectedGraph, config_file: str, supported_kernels: Dict,
+                 quantsim_output_bw: int, quantsim_param_bw: int, quantsim_data_type: QuantizationDataType):
         super().__init__(config_file)
 
         self._sess = sess
@@ -108,6 +110,11 @@ class QuantSimConfigurator(AimetCommonQuantSimConfigurator):
         self._op_to_quantizer_lists_dict = None
         self._onnx_conn_graph_name_mapper = OnnxConnectedGraphTypeMapper(onnx_tf_conn_graph_type_pairs)
         self.per_channel_quantization_flag = self._get_per_channel_quantization_flag()
+        if ENFORCE_TARGET_DTYPE_BITWIDTH_CONFIG:
+            if self.check_correctness_of_dtype_bw_rules(QuantDtypeBwInfo(quantsim_data_type, quantsim_output_bw,
+                                                                         quantsim_param_bw)):
+                logger.info("Supported Kernel check for valid dtype and bitwidth overrides completed")
+
 
     def configure_quantizers(self, op_to_quant_ops_dict: OpToQuantOpsDictType,
                              param_quantizer_dict: Dict[str, QuantizerInfo],
