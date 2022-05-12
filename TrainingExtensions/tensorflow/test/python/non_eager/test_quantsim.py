@@ -1347,11 +1347,12 @@ class TestQuantSim(unittest.TestCase):
             return sess.run(model_output, feed_dict={model_input: dummy_input})
 
         def dummy_forward_pass_quant_embedded_native_nodes(sess, dummy_input):
-            model_output = sess.graph.get_tensor_by_name('conv2d_1/Relu:0')
+            model_output = sess.graph.get_tensor_by_name('Cast_11:0')
             model_input = sess.graph.get_tensor_by_name('conv2d_input:0')
             return sess.run(model_output, feed_dict={model_input: dummy_input})
 
         dummy_input = np.random.randn(20, 28, 28, 3)
+        sim.compute_encodings(dummy_forward_pass_quant_sim, dummy_input)
 
         output_aimet_fk_fp16 = dummy_forward_pass_quant_sim(sim.session, dummy_input)
         orig_sess = sim.save_model_with_embedded_quantization_nodes(os.path.join('data', 'quant_sim_model_fp16'))
