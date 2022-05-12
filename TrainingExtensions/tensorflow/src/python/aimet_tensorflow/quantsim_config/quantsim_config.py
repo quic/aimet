@@ -110,6 +110,10 @@ class QuantSimConfigurator(AimetCommonQuantSimConfigurator):
         self._op_to_quantizer_lists_dict = None
         self._onnx_conn_graph_name_mapper = OnnxConnectedGraphTypeMapper(onnx_tf_conn_graph_type_pairs)
         self.per_channel_quantization_flag = self._get_per_channel_quantization_flag()
+
+        self._default_data_type = quantsim_data_type
+        self._default_output_bw = quantsim_output_bw
+        self._default_param_bw = quantsim_param_bw
         self._supported_kernels = self._parse_supported_kernels()
         if ENFORCE_TARGET_DTYPE_BITWIDTH_CONFIG:
             if self.check_correctness_of_dtype_bw_rules(QuantDtypeBwInfo(quantsim_data_type, quantsim_output_bw,
@@ -233,10 +237,36 @@ class QuantSimConfigurator(AimetCommonQuantSimConfigurator):
         """
         self._set_default_configs_for_ops(default_configs[ConfigDictKeys.OPS])
         self._set_default_configs_for_params(default_configs[ConfigDictKeys.PARAMS])
+        if ENFORCE_TARGET_DTYPE_BITWIDTH_CONFIG and ConfigDictKeys.SUPPORTED_KERNELS in default_configs:
+            self._override_default_dtype_bw_act_param(default_configs)
         if ConfigDictKeys.STRICT_SYMMETRIC in default_configs:
             self._set_strict_symmetric(default_configs[ConfigDictKeys.STRICT_SYMMETRIC])
         if ConfigDictKeys.UNSIGNED_SYMMETRIC in default_configs:
             self._set_unsigned_symmetric(default_configs[ConfigDictKeys.UNSIGNED_SYMMETRIC])
+
+    def _override_default_act_bw_dtype(self, data_type: QuantizationDataType, bitwidth: int):
+        """
+        overrides data type and bitwidth default config for param quantizers
+        :param bitwidth: bitwidth
+        :param data_type: data type as QuantizationDataType
+        :return:
+        """
+
+        for act_quantizer_config in self._activation_quantizer_dict.values():
+            act_quantizer_config.data_type = data_type
+            act_quantizer_config.bitwidth = bitwidth
+
+    def _override_default_param_bw_dtype(self, data_type: QuantizationDataType, bitwidth: int):
+        """
+        overrides data type and bw default config for input/output quantizers.
+        :param data_type: data type as QuantizationDataType
+        :param bitwidth: bitwidth to be configured
+        :return:
+        """
+
+        for param_quantizer_config in self._param_quantizer_dict.values():
+            param_quantizer_config.data_type = data_type
+            param_quantizer_config.bitwidth = bitwidth
 
     def _set_default_configs_for_ops(self, default_op_configs: ConfigType):
         """
