@@ -39,6 +39,8 @@
 
 import io
 from enum import Enum
+from typing import Union, List
+
 import tensorflow as tf
 import numpy as np
 
@@ -349,10 +351,11 @@ class QuantizerInfo:
 
         return encoding
 
-    def set_encoding(self, encoding: libpymo.TfEncoding):
+    def set_encoding(self, encoding: Union[libpymo.TfEncoding, List[libpymo.TfEncoding]]):
         """
         Set encoding min and max variable and update isEncodingValid state to True
-        :param encoding: Encoding
+        :param encoding: Encoding object in case of per-tensor flow
+                         Encoding object array in case of per-channel flow
         """
         if not self._is_encoding_frozen and self.data_type == QuantizationDataType.int:
             encoding_min_var = self.quant_op_name + '_encoding_min'
