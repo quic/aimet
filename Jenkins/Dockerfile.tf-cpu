@@ -91,7 +91,7 @@ RUN apt-get update && apt-get install -y python-pip && rm -rf /var/lib/apt/lists
 # Upgrade Python3 pip and install some more packages
 RUN python3 -m pip --no-cache-dir install --upgrade \
         pip \
-        'numpy<1.17,>=1.16.6' \
+        numpy==1.19.5 \
         setuptools==41.0.1 \
         wheel==0.33.4
 
