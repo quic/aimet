@@ -1292,12 +1292,11 @@ class TestQuantsimConfig:
             model.eval()
             with torch.no_grad():
                 _ = model(torch.randn(INPUT_SHAPE))
-        supported_kernels = {}
         from aimet_torch.quantsim_config.quantsim_config import QuantSimConfigurator
         dummy_input = torch.randn(INPUT_SHAPE)
         connected_graph = ConnectedGraph(model, dummy_input)
 
-        qsim_config = QuantSimConfigurator(model, connected_graph, config_file, supported_kernels,
+        qsim_config = QuantSimConfigurator(model, connected_graph, config_file,
                                            quantsim_output_bw=8, quantsim_param_bw=8,
                                            quantsim_data_type=QuantizationDataType.int)
 
@@ -1393,11 +1392,10 @@ class TestQuantsimConfig:
             json.dump(quantsim_config, f)
 
         INPUT_SHAPE = (1, 3, 32, 32)
-        supported_kernels = {}
         from aimet_torch.quantsim_config.quantsim_config import QuantSimConfigurator
         dummy_input = torch.randn(INPUT_SHAPE)
         connected_graph = ConnectedGraph(model, dummy_input)
-        qsim_config = QuantSimConfigurator(model, connected_graph, config_file, supported_kernels,
+        qsim_config = QuantSimConfigurator(model, connected_graph, config_file,
                                            quantsim_output_bw=8, quantsim_param_bw=8,
                                            quantsim_data_type=QuantizationDataType.int)
 
@@ -1494,12 +1492,11 @@ class TestQuantsimConfig:
             model.eval()
             with torch.no_grad():
                 _ = model(torch.randn(INPUT_SHAPE))
-        supported_kernels = {}
         from aimet_torch.quantsim_config.quantsim_config import QuantSimConfigurator
         dummy_input = torch.randn(INPUT_SHAPE)
         connected_graph = ConnectedGraph(model, dummy_input)
 
-        qsim_config = QuantSimConfigurator(model, connected_graph, config_file, supported_kernels,
+        qsim_config = QuantSimConfigurator(model, connected_graph, config_file,
                                            quantsim_output_bw=8, quantsim_param_bw=8,
                                            quantsim_data_type=QuantizationDataType.int)
 
