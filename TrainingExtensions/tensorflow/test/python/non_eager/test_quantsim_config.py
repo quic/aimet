@@ -871,7 +871,7 @@ class TestQuantsimConfig(unittest.TestCase):
         sim.session.close()
         tf.compat.v1.reset_default_graph()
 
-    def test_check_correct_of_dtype_bw_rulese(self):
+    def test_check_correctness_of_dtype_bw_rules_default_supported_kernels_exception_case(self):
         quantsim_config = {
             "defaults": {
                 "ops": {
@@ -974,6 +974,109 @@ class TestQuantsimConfig(unittest.TestCase):
             exception_raised = True
 
         assert exception_raised
+
+        # remove test config created
+        if os.path.exists(config_file):
+            os.remove(config_file)
+
+    def test_target_rule_enforced_apply_default_and_op_level_overrides_valid_case(self):
+        quantsim_config = {
+            "defaults": {
+                "ops": {
+                    "is_output_quantized": "True"
+                },
+                "params": {
+                    "is_quantized": "True"
+                },
+                "supported_kernels": [
+                    {
+                        "activation": {
+                            "bitwidth": 8,
+                            "dtype": "int"
+                        },
+                        "param": {
+                            "bitwidth": 8,
+                            "dtype": "int"
+                        }
+                    },
+                    {
+                        "activation": {
+                            "bitwidth": 4,
+                            "dtype": "int"
+                        },
+                        "param": {
+                            "bitwidth": 4,
+                            "dtype": "int"
+                        }
+                    }
+                ]
+            },
+            "params": {
+                "bias": {
+                    "is_quantized": "False"
+                }
+            },
+            "op_type": {
+                "Conv": {
+                    "is_input_quantized": "True",
+                    "is_output_quantized": "True",
+                    "params": {
+                        "weight": {
+                            "is_quantized": "True"
+                        },
+                        "bias": {
+                            "is_quantized": "False"
+                        }
+                    },
+                    "supported_kernels":
+                        [
+                            {
+                                "activation": {
+                                    "bitwidth": 16,
+                                    "dtype": "float"
+                                },
+                                "param": {
+                                    "bitwidth": 16,
+                                    "dtype": "float"
+                                }
+                            },
+                        ]
+                }
+            },
+            "supergroups": [
+            ],
+            "model_input": {
+                "is_input_quantized": "True"
+            },
+            "model_output": {}
+        }
+
+        config_file = '/tmp/quantsim_config.json'
+        with open(config_file, 'w') as f:
+            json.dump(quantsim_config, f)
+
+        tf.compat.v1.reset_default_graph()
+        with tf.device('/cpu:0'):
+            model = tf.keras.Sequential()
+            model.add(tf.keras.layers.Conv2D(32, kernel_size=3, input_shape=(28, 28, 3), activation='relu'))
+            model.add(tf.keras.layers.MaxPooling2D((2, 2)))
+            model.add(tf.keras.layers.Conv2D(64, kernel_size=3, activation='relu'))
+            model.summary()
+
+        starting_op_names = [input.op.name for input in model.inputs]
+        output_op_names = [output.op.name for output in model.outputs]
+
+        from aimet_tensorflow.quantsim_config import quantsim_config as qsim_config
+        from aimet_tensorflow.common.graph_eval import initialize_uninitialized_vars
+        qsim_config.ENFORCE_TARGET_DTYPE_BITWIDTH_CONFIG = True
+
+        sess = tf.compat.v1.Session()
+        initialize_uninitialized_vars(sess)
+
+        sim = QuantizationSimModel(sess, starting_op_names, output_op_names, default_data_type=QuantizationDataType.int,
+                                   default_output_bw=4, default_param_bw=4,
+                                   config_file=config_file)
+
 
         # remove test config created
         if os.path.exists(config_file):
