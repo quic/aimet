@@ -37,7 +37,7 @@
 # =============================================================================
 """ utilities for quantsim """
 
-from typing import List, Dict
+from typing import List, Dict, Union
 import tensorflow as tf
 
 from aimet_common.utils import AimetLogger
@@ -220,17 +220,47 @@ def get_time_steps_tensor_from_rnn_inner_ops(inner_ops: List[tf.Operation]) -> t
     return time_steps_tensor
 
 
-def create_encoding_from_dict(encoding_dict: dict) -> (libpymo.TfEncoding, bool):
+def create_encoding_from_dict(encoding_dict: dict) -> (Union[libpymo.TfEncoding, List[libpymo.TfEncoding]], bool):
     """
     Create encoding object from encoding dictionary
     :param encoding_dict: Dictionary containing encodings
-    :return: Encoding object, is_symmetric
+    :return: Encoding object or list of encoding objects, is_symmetric
     """
-    encoding = libpymo.TfEncoding()
-    encoding.bw = encoding_dict.get('bitwidth')
-    encoding.max = encoding_dict.get('max')
-    encoding.min = encoding_dict.get('min')
-    encoding.delta = encoding_dict.get('scale')
-    encoding.offset = encoding_dict.get('offset')
-    is_symmetric = encoding_dict.get('is_symmetric')
+
+    def _create_tf_encoding_object(bw: int, max_enc: float, min_enc: float, offset_enc: float,
+                                   delta_enc: float) -> libpymo.TfEncoding:
+        """
+        helper function to create TfEncoding object
+        :param bw: bitwidth to be filled in encoding
+        :param max_enc: max value to be filled in encoding
+        :param min_enc: min value to be filled in encoding
+        :param offset_enc: offset to be filled in encoding
+        :param delta_enc: delta to be filled in encoding
+        :return encoding of type libpymo.TfEncoding()
+        """
+        enc = libpymo.TfEncoding()
+        enc.bw = bw
+        enc.max = max_enc
+        enc.min = min_enc
+        enc.offset = offset_enc
+        enc.delta = delta_enc
+        return enc
+
+    # make a distinction between the per-channel and per-tensor flow
+    if isinstance(encoding_dict.get('max'), List):
+        encoding = []
+        for i in range(len(encoding_dict.get('max'))):
+            encoding.append(_create_tf_encoding_object(encoding_dict.get('bitwidth'),
+                                                       encoding_dict.get('max')[i],
+                                                       encoding_dict.get('min')[i],
+                                                       encoding_dict.get('offset')[i],
+                                                       encoding_dict.get('scale')[i]))
+        is_symmetric = encoding_dict.get('is_symmetric')
+    else:
+        encoding = _create_tf_encoding_object(encoding_dict.get('bitwidth'),
+                                              encoding_dict.get('max'),
+                                              encoding_dict.get('min'),
+                                              encoding_dict.get('offset'),
+                                              encoding_dict.get('scale'))
+        is_symmetric = encoding_dict.get('is_symmetric')
     return encoding, is_symmetric
