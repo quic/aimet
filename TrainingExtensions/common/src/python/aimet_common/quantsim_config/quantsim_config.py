@@ -146,6 +146,7 @@ class QuantSimConfigurator(ABC):
     """ Class for parsing and applying quantsim configurations from json config file """
     def __init__(self, config_file: str):
         self._quantsim_configs = JsonConfigImporter.import_json_config_file(config_file)
+        self._supported_kernels = {}
 
     def _set_quantsim_configs(self):
         """
@@ -157,6 +158,37 @@ class QuantSimConfigurator(ABC):
         self._set_supergroup_configs(self._quantsim_configs[ConfigDictKeys.SUPERGROUPS])
         self._set_model_input_configs(self._quantsim_configs[ConfigDictKeys.MODEL_INPUT])
         self._set_model_output_configs(self._quantsim_configs[ConfigDictKeys.MODEL_OUTPUT])
+
+    def get_supported_kernels(self) -> Dict:
+        """
+        Return _supported_kernels parsed from the config file
+        :return: Dictionary containing supported_kernels
+        """
+        return self._supported_kernels
+
+    def _parse_supported_kernels(self) -> Dict:
+        """
+        Parse the layer overrides present in default and op_type section of the config file
+        :return: Dict of the supported_kernels parsed from the config file
+        """
+
+        supported_kernels = {}
+        if ConfigDictKeys.SUPPORTED_KERNELS in self._quantsim_configs[ConfigDictKeys.DEFAULTS]:
+            default_supported_kernels = self._quantsim_configs[ConfigDictKeys.DEFAULTS][ConfigDictKeys.SUPPORTED_KERNELS]
+            if default_supported_kernels:
+                supported_kernels[ConfigDictKeys.DEFAULTS] = default_supported_kernels
+            else:
+                # TODO make this an assert
+                logger.debug("supported_kernels is a required argument in the defaults section")
+
+        op_type_configs = self._quantsim_configs[ConfigDictKeys.OP_TYPE]
+        for op_type in op_type_configs:
+            if ConfigDictKeys.SUPPORTED_KERNELS in op_type_configs[op_type]:
+                op_type_supported_kernels = op_type_configs[op_type][ConfigDictKeys.SUPPORTED_KERNELS]
+                if op_type_supported_kernels:
+                    supported_kernels[op_type] = op_type_supported_kernels
+
+        return supported_kernels
 
     def check_correctness_of_dtype_bw_rules(self, quantsim_dtype_bw_info: QuantDtypeBwInfo):
         """

@@ -961,8 +961,7 @@ class TestQuantsimConfig(unittest.TestCase):
         output_op_names = [output.op.name for output in model.outputs]
         connected_graph = ConnectedGraph(sess.graph, starting_op_names, output_op_names)
 
-        supported_kernels = {}
-        qsim_config = QuantSimConfigurator(sess.graph, connected_graph, config_file, supported_kernels,
+        qsim_config = QuantSimConfigurator(sess.graph, connected_graph, config_file,
                                            quantsim_output_bw=8, quantsim_param_bw=8,
                                            quantsim_data_type=QuantizationDataType.int)
 

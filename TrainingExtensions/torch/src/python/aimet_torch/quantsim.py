@@ -169,7 +169,6 @@ class QuantizationSimModel:
         self._rounding_mode = rounding_mode
         self._default_output_bw = default_output_bw
         self._default_param_bw = default_param_bw
-        self._supported_kernels = {}
         self._is_conditional = False
         self._module_marker_map = {}
 
@@ -184,8 +183,9 @@ class QuantizationSimModel:
         # override specific quantizers to tf mode in transformer model
         self._override_quant_config_for_transformer_layers()
 
-        self.configure_quantization_ops(config_file, self._supported_kernels,
-                                        default_output_bw, default_param_bw, default_data_type)
+        self._quantsim_configurator = self.configure_quantization_ops(config_file, default_output_bw, default_param_bw,
+                                                                      default_data_type)
+        self._supported_kernels = self._quantsim_configurator.get_supported_kernels()
 
     def __str__(self):
         """
@@ -1158,17 +1158,15 @@ class QuantizationSimModel:
             return
         self.export(path, filename_prefix, dummy_input, onnx_export_args, propagate_encodings)
 
-    def configure_quantization_ops(self, config_file: str, supported_kernels: Dict,
-                                   default_output_bw: int, default_param_bw: int,
-                                   default_data_type: QuantizationDataType):
+    def configure_quantization_ops(self, config_file: str, default_output_bw: int, default_param_bw: int,
+                                   default_data_type: QuantizationDataType) -> QuantSimConfigurator:
         """
         Configure inserted quantize ops using config file and fill in all the supported kernels
         :param config_file: Configuration file to use
-        :param supported_kernels: Dict to fill in the supported kernels
         :param default_output_bw: default bitwidth for activations
         :param default_param_bw: default bitwidth for params
         :param default_data_type: default data type
-        :return:
+        :return: QuantSimConfigurator object
         """
         if self.connected_graph is None:
             logger.error('A connected graph failed to be built.\n'
@@ -1176,8 +1174,8 @@ class QuantizationSimModel:
                          'Please configure quantization ops manually by redefining '
                          'QuantizationSimModel.configure_quantization_ops()')
             raise AssertionError
-        QuantSimConfigurator(self.model, self.connected_graph, config_file, supported_kernels,
-                             default_output_bw, default_param_bw, default_data_type)
+        return QuantSimConfigurator(self.model, self.connected_graph, config_file, default_output_bw,
+                                    default_param_bw, default_data_type)
 
     def set_and_freeze_param_encodings(self, encoding_path: str):
         """
