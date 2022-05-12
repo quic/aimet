@@ -497,8 +497,6 @@ class QuantizationSimModel:
         :param encoding_path: optional param to pass the path from where to load parameter encodings file
         :param orig_sess: optional param to pass in original session without quant nodes
         """
-        # pylint: disable=too-many-branches
-
         # Load encodings file
         encodings_dicts = {}
         if encoding_path and os.path.exists(encoding_path):
@@ -519,19 +517,13 @@ class QuantizationSimModel:
                     encoding_max = encodings_dicts[tensor_name][0].get('max')
                     encoding_min = encodings_dicts[tensor_name][0].get('min')
                     encoding_bw = encodings_dicts[tensor_name][0].get('bitwidth')
-                    if isinstance(encoding_max, list):
-                        encoding_max = np.array(encoding_max)
-                        encoding_min = np.array(encoding_min)
                 else:
                     if not quantizer_info.is_encoding_valid():
                         if  quantizer_info.data_type == QuantizationDataType.float and quantizer_info.get_op_mode() in\
                             [int(libpymo.TensorQuantizerOpMode.oneShotQuantizeDequantize),
                              int(libpymo.TensorQuantizerOpMode.quantizeDequantize)]:
                             # Cast input tensor to data_type and dequant it to fp32
-                            if not self._use_cuda:
-                                with tf.device('/cpu:0'):
-                                    tf_quantization_op = tf.cast(tf.cast(op.outputs[0], tf.float16), tf.float32)
-                            else:
+                            with tf.device('' if self._use_cuda else '/cpu:0'):
                                 tf_quantization_op = tf.cast(tf.cast(op.outputs[0], tf.float16), tf.float32)
                             # Replace in graph
                             # -----------------
@@ -547,33 +539,23 @@ class QuantizationSimModel:
 
                 _logger.info("Adding native tensorflow quantization op %s", self._get_quantized_name(op.name))
                 # inser native tensorflow quantization nodes into graph
-                if not self._use_cuda:
-                    with tf.device('/cpu:0'):
-                        if not isinstance(encoding_max, np.ndarray):
-                            tf_quantization_op = \
-                                tf.quantization.fake_quant_with_min_max_vars(op.outputs[0], min=encoding_min, max=encoding_max,
-                                                                             num_bits=encoding_bw, narrow_range=False,
-                                                                             name=self._get_quantized_name(op.name))
-                        else:
-                            tf_quantization_op = \
-                                tf.quantization.fake_quant_with_min_max_vars_per_channel(op.outputs[0], min=encoding_min, max=encoding_max,
-                                                                                         num_bits=encoding_bw, narrow_range=False,
-                                                                                         name=self._get_quantized_name(op.name))
-                else:
-                    if not isinstance(encoding_max, np.ndarray):
+                with tf.device('' if self._use_cuda else '/cpu:0'):
+                    if not isinstance(encoding_max, (list, np.ndarray)):
                         tf_quantization_op = \
                             tf.quantization.fake_quant_with_min_max_vars(op.outputs[0], min=encoding_min, max=encoding_max,
                                                                          num_bits=encoding_bw, narrow_range=False,
                                                                          name=self._get_quantized_name(op.name))
                     else:
                         tf_quantization_op = \
-                            tf.quantization.fake_quant_with_min_max_vars_per_channel(op.outputs[0], min=encoding_min, max=encoding_max,
-                                                                                     num_bits=encoding_bw, narrow_range=False,
-                                                                                     name=self._get_quantized_name(op.name))
+                            tf.quantization.fake_quant_with_min_max_vars_per_channel(op.outputs[0], min=np.array(encoding_min),
+                                                                                     max=np.array(encoding_max), num_bits=encoding_bw,
+                                                                                     narrow_range=False, name=self._get_quantized_name(op.name))
+
                 # Replace in graph
                 # -----------------
                 graph_editor.reroute_ts(ts0=tf_quantization_op, ts1=[op.outputs[0]],
                                         can_modify=consumers)
+
             utils.graph_saver.save_model_to_meta(orig_sess, os.path.join(checkpoint_path + '_embedded_quant_nodes'))
             return utils.graph_saver.load_model_from_meta(meta_path=str(checkpoint_path + '_embedded_quant_nodes.meta'))
 
