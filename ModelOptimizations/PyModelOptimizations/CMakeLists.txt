@@ -75,7 +75,7 @@ endif (ENABLE_CUDA)
 set_target_properties(PyModelOptimizations
       PROPERTIES
          OUTPUT_NAME "pymo"
-         SUFFIX ".cpython-${Python_VERSION_MAJOR}${Python_VERSION_MINOR}m-${ARCHITECTURE}-linux-gnu.so"
+         SUFFIX ".cpython-${Python_VERSION_MAJOR}${Python_VERSION_MINOR}${ABI_FLAGS}-${ARCHITECTURE}-linux-gnu.so"
          LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/artifacts/aimet_common/"
       )
 
