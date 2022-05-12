@@ -246,6 +246,69 @@ class QuantSimConfigurator(ABC):
 
         return default_valid and op_level_valid
 
+    def _override_default_dtype_bw_act_param(self, default_configs: Dict):
+        """
+        Applies dtype/bw overrides specified as default supported kernels in config file in place of quantsim defaults.
+        (first level of specificity in configuration file).
+        :param default_configs: Default configurations for quantizers.
+        :return:
+        """
+
+        # TODO self._default_.... might be invalid
+        if is_current_config_same_as_override_option(QuantDtypeBwInfo(self._default_data_type,
+                                                                      self._default_output_bw,
+                                                                      self._default_param_bw),
+                                                     default_configs[ConfigDictKeys.SUPPORTED_KERNELS]):
+            logger.info('Default quantsim config is same as override option at override index {%s}. Skipping override',
+                        DEFAULT_OVERRIDE_SUPPORTED_KERNEL_INDEX)
+            return
+
+        config_file_default_act_bw_dtype_config = \
+            default_configs[ConfigDictKeys.SUPPORTED_KERNELS][DEFAULT_OVERRIDE_SUPPORTED_KERNEL_INDEX][
+                ConfigDictKeys.ACTIVATION]
+        config_file_default_param_bw_dtype_config = \
+            default_configs[ConfigDictKeys.SUPPORTED_KERNELS][DEFAULT_OVERRIDE_SUPPORTED_KERNEL_INDEX][ConfigDictKeys.PARAM]
+
+        # keep the updated with defaults, to be used later to apply op level config
+        self._default_data_type = config_file_default_act_bw_dtype_config[ConfigDictKeys.DTYPE]
+        self._default_output_bw = config_file_default_act_bw_dtype_config[ConfigDictKeys.BITWIDTH]
+        self._default_param_bw = config_file_default_param_bw_dtype_config[ConfigDictKeys.BITWIDTH]
+
+        logger.info('Target default supported kernel at override index {%s} is different from quantsim defaults.'
+                    ' Enforcing target kernel config for act bw = {%s} and dtype = {%s}',
+                    DEFAULT_OVERRIDE_SUPPORTED_KERNEL_INDEX,
+                    self._default_output_bw,
+                    self._default_data_type)
+
+        self._override_default_act_bw_dtype(self._default_data_type, self._default_output_bw)
+
+        logger.info('Target default supported kernel at override index {%s} is different from quantsim defaults.'
+                    ' Enforcing target kernel config for param bw = {%s} and dtype = {%s}',
+                    DEFAULT_OVERRIDE_SUPPORTED_KERNEL_INDEX,
+                    self._default_param_bw,
+                    self._default_data_type)
+
+        # override param config defaults.
+        self._override_default_param_bw_dtype(self._default_data_type, self._default_param_bw)
+
+    @abstractmethod
+    def _override_default_act_bw_dtype(self, data_type: QuantizationDataType, bitwidth: int):
+        """
+        overrides data type and bw default config for input/output quantizers.
+        :param data_type: data type as QuantizationDataType
+        :param bitwidth: bitwidth to be configured
+        :return:
+        """
+
+    @abstractmethod
+    def _override_default_param_bw_dtype(self, data_type: QuantizationDataType, bitwidth: int):
+        """
+        overrides data type and bitwidth default config for param quantizers
+        :param bitwidth: bitwidth
+        :param data_type: data type as QuantizationDataType
+        :return:
+        """
+
     @abstractmethod
     def _set_default_configs(self, default_configs: DefaultsType):
         """
