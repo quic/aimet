@@ -816,10 +816,10 @@ class QuantizationSimModel:
                     if op_to_io_tensor_map[op_name].outputs:
                         output_tensors = op_to_io_tensor_map[op_name].outputs
                         if len(output_tensors) != len(layer.output_quantizers):
-                            raise ValueError(f'number of output quantizer: {len(layer.output_quantizers)} '
-                                             f'available for layer:{layer_name} mis-matches with number of '
-                                             f'output tensors : {len(output_tensors)} for onnx node: '
-                                             f'{op_name}')
+                            logger.error("For ONNX node: %s, encodings are not generated. "
+                                         "Number of output quantizers: %d available for layer: %s "
+                                         "doesn't match with number of output tensors: %d for ONNX node: %s",
+                                         op_name, len(layer.output_quantizers), layer_name, len(output_tensors), op_name)
 
                         for index, output_tensor in enumerate(output_tensors):
                             propagate_flag = propagate_encodings and op_name != last_op_name
