@@ -59,10 +59,8 @@ tf.compat.v1.logging.set_verbosity(tf.compat.v1.logging.WARN)
 logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Test)
 AimetLogger.set_level_for_all_areas(logging.DEBUG)
 tf.compat.v1.disable_eager_execution()
-np.random.seed(42)
-tf.compat.v1.set_random_seed(42)
-tf.compat.v1.disable_eager_execution()
-
+np.random.seed(0)
+tf.compat.v1.set_random_seed(0)
 
 def get_all_status(
         sess,
@@ -131,32 +129,14 @@ def sessions(device):
     with tf.device(device):
         graph = tf.Graph()
         with graph.as_default():
-            tf.compat.v1.set_random_seed(0)
-            np.random.seed(0)
-            # is_training_placeholder = tf.compat.v1.placeholder_with_default(tf.constant(True), shape=(),
-            # name='is_training')
             bn_momentum_var = tf.compat.v1.Variable(0.3, name='bn_momentum_var')
             bn_momentum_var1 = tf.compat.v1.Variable(0.4, name='bn_momentum_var1')
             bn_training_var = tf.compat.v1.Variable(tf.compat.v1.constant(True), name='bn_training_var')
             bn_training_var1 = tf.compat.v1.Variable(tf.compat.v1.constant(True), name='bn_training_var1')
             bn_trainable_var = True
             bn_trainable_var1 = True
-            # bn_trainable_var =tf.compat.v1.Variable(tf.constant(True), name='bn_trainable_var')
-            # E tensorflow.python.framework.errors_impl.OperatorNotAllowedInGraphError: using a `tf.Tensor` as a
-            # Python `bool` is not allowed in Graph  execution.Use Eager  execution or decorate this function with @
-            # tf.function.
-            # tf.compat.v1.placeholder_with_default(tf.constant(True), shape=(), name='bn_trainable_var')
-
-            # bn_op0 = tf.compat.v1.layers.batch_normalization(inputs, momentum=bn_momentum_var,
-            #                                                moving_mean_initializer=tf.compat.v1.zeros_initializer(),
-            #                                                moving_variance_initializer=tf.compat.v1.ones_initializer(),
-            #                                                fused=True, training=bn_training_var,
-            #                                                trainable=bn_trainable_var)
-
             inputs = tf.keras.Input(shape=(32, 32, 3,))
             conv_op = tf.keras.layers.Conv2D(32, (3, 3))(inputs)
-            # bn_op = tf.keras.layers.BatchNormalization(momentum=bn_momentum_var, epsilon=.65, fused=False,
-            # moving_mean_initializer='ones',moving_variance_initializer='zeros',trainable=True)(conv_op,training=True)
             bn_op = tf.compat.v1.layers.batch_normalization(conv_op, momentum=bn_momentum_var,
                                                             moving_mean_initializer=tf.compat.v1.zeros_initializer(),
                                                             moving_variance_initializer=tf.compat.v1.ones_initializer(),

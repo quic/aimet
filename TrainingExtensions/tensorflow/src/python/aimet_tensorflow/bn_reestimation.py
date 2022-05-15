@@ -185,27 +185,27 @@ def reestimate_bn_stats(sess_sim: QuantizationSimModel, start_op_names: List[str
     # 2 per batch forward and BN re-estimation
     sess = Tf_State.sim.session
     with sess.graph.as_default():
-        output_op = sess.graph.get_operation_by_name(Tf_State.output_op_names[0])
-        output_tensor = sess.graph.get_tensor_by_name(output_op.name + ':0')
+        output_ops = [sess.graph.get_operation_by_name(name) for name in Tf_State.output_op_names]
+        output_tensors = [sess.graph.get_tensor_by_name(output_op.name + ':0') for output_op in output_ops]
         bn_dataset_iterator = iterate_tf_dataset(Tf_State.bn_re_estimation_dataset)
         update_ops = tf.compat.v1.get_collection(tf.compat.v1.GraphKeys.UPDATE_OPS)
         with tf.compat.v1.control_dependencies(update_ops):
-            output_tensor = tf.compat.v1.identity(output_tensor)
+            output_tensors = tf.compat.v1.identity(output_tensors)
         initialize_uninitialized_vars(sess)
         # (1)intilization
         sum_dict = {v.name: np.zeros(v.shape, dtype=v.dtype.as_numpy_dtype) for v in Tf_State.bn_mean_var_tf_var_list}
-        # (2) forward and accumalate man and var
+        # (2)forward and accumulate mean and var
     for batch_index in range(Tf_State.bn_num_batches):
         try:
             batch_data = next(bn_dataset_iterator)
             feed_dict = create_input_feed_dict(sess.graph, Tf_State.start_op_names, batch_data)
-            sess.run(output_tensor, feed_dict=feed_dict)
+            sess.run(output_tensors, feed_dict=feed_dict)
             for v in Tf_State.bn_mean_var_tf_var_list:
                 sum_dict[v.name] += sess.run(v)
             if batch_index == Tf_State.bn_num_batches - 1:
                 break
         except tf.errors.OutOfRangeError:
-            raise StopIteration("========>tf.errors.OutOfRangeErro::: no data from BN dataset.")
+            raise StopIteration("========>tf.errors.OutOfRangeError:: no data from BN dataset.")
     # (3) average mean&var
     for k in sum_dict.keys():
         sum_dict[k] = sum_dict[k] / Tf_State.bn_num_batches
