@@ -87,8 +87,8 @@ Once the installation step is complete, the AIMET package is created at `$WORKSP
 ## Setup paths
 Setup the package and library paths as follows:
 ```bash
-export PYTHONPATH=$WORKSPACE/build/staging/universal/lib/x86_64-linux-gnu:$WORKSPACE/build/staging/universal/lib/python:$PYTHONPATH
-export LD_LIBRARY_PATH=$WORKSPACE/build/staging/universal/lib/x86_64-linux-gnu:$WORKSPACE/build/staging/universal/lib/python:$LD_LIBRARY_PATH
+export PYTHONPATH=$WORKSPACE/build/staging/universal/lib/python:$PYTHONPATH
+export LD_LIBRARY_PATH=$WORKSPACE/build/staging/universal/lib/python:$LD_LIBRARY_PATH
 ```
 At this point, we are all set to use AIMET!
 
