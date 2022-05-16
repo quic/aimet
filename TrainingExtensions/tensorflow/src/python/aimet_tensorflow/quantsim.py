@@ -297,6 +297,8 @@ class QuantizationSimModel:
 
         """
 
+        self._compute_and_set_parameter_encodings()
+
         ops_with_invalid_encodings = []
 
         # Run data through the quantsim so we can compute activation encodings
@@ -380,6 +382,36 @@ class QuantizationSimModel:
 
         self._remove_quantization_nodes_and_save_graph(path, filename_prefix)
         self._export_encodings(os.path.join(path, filename_prefix) + '.encodings')
+
+    def _compute_and_set_parameter_encodings(self):
+
+        for quantizer_info in self._param_quantizers.values():
+
+            if quantizer_info.enabled and quantizer_info.data_type == QuantizationDataType.int:
+                # 0th input to our quant op is the tensor being quantized - in this case the parameter tensor
+                weight_tensor = quantizer_info.get_variable_from_op(0)
+
+                # Per-channel
+                if isinstance(quantizer_info.tensor_quantizer, list):
+                    for index, tensor_quantizer in enumerate(quantizer_info.tensor_quantizer):
+                        if quantizer_info.axis_handling == AxisHandling.LAST_TWO_AXES:
+                            last_two_axes_combined_shape = list(weight_tensor.shape[:-2]) + [-1]
+                            channel_slice = weight_tensor.reshape(*last_two_axes_combined_shape)
+                            channel_slice = channel_slice.take(index, channel_slice.ndim - 1)
+                            tensor_quantizer.updateStats(channel_slice, False)
+                        else:
+                            channel_slice = weight_tensor.take(index, weight_tensor.ndim - 1)
+                            tensor_quantizer.updateStats(channel_slice, False)
+
+                # Per-tensor
+                else:
+                    tensor_quantizer = quantizer_info.tensor_quantizer
+                    tensor_quantizer.updateStats(weight_tensor, False)
+
+                encoding = quantizer_info.compute_encoding(quantizer_info.bitwidth,
+                                                           quantizer_info.use_symmetric_encoding)
+
+                quantizer_info.set_encoding(encoding)
 
     def _remove_quantization_nodes_and_save_graph(self, path: str, filename_prefix: str):
         """
@@ -1134,8 +1166,7 @@ class QuantizationSimModel:
                                                  trainable=False, dtype=tf.bool)
             axis_handling = AxisHandling.LAST_AXIS
             if quantizer_type == QuantizerType.param and self.per_channel_quantization_enabled:
-                tensor_quantizer, tensor_quant_ref, \
-                encoding_min, encoding_max, axis_handling = \
+                tensor_quantizer, tensor_quant_ref, encoding_min, encoding_max, axis_handling = \
                     self._create_per_channel_quantizers_and_encodings(quant_op_name)
             else:
                 tensor_quantizer, tensor_quant_ref, \
@@ -1149,7 +1180,8 @@ class QuantizationSimModel:
                                            name=quant_op_name + '_data_type', trainable=False, dtype=tf.bool)
 
             # Add to quantizer dict
-            quantizer_info = QuantizerInfo(self.session, tensor_quantizer, quant_op_name, quantizer_type, data_type)
+            quantizer_info = QuantizerInfo(self.session, tensor_quantizer, quant_op_name, quantizer_type, data_type,
+                                           axis_handling)
             quantizer_dict[quant_op_name] = quantizer_info
 
             self.session.run([op_mode_var.initializer, tensor_quant_ref.initializer, encoding_min.initializer,

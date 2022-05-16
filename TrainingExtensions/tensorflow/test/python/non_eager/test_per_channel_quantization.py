@@ -144,7 +144,7 @@ class TestTrainingExtensionsQcQuantizeOpPerChannel(unittest.TestCase):
             inp_data[:, :, :, 2] *= 3
             out_data = sess.run(pass_through_op_output, feed_dict={inp_tensor: inp_data})
             for i in range(num_output_channels):
-                encoding = tensor_quantizers[i].computeEncoding(bitwidth, use_symm_encoding, False, False)
+                encoding = tensor_quantizers[i].computeEncoding(bitwidth, use_symm_encoding)
             mode_var.load(int(libpymo.TensorQuantizerOpMode.quantizeDequantize), sess)
             out_data = sess.run(pass_through_op_output, feed_dict={inp_tensor: inp_data})
             # compare qc_quantize op's output with input
