@@ -105,7 +105,7 @@ endif(ENABLE_CUDA)
 
 
 install(FILES $<TARGET_FILE:TrainingExtensionsTf>
-      DESTINATION ${AIMET_INSTALL_DIR}/lib/python/aimet_tensorflow
+      DESTINATION ${AIMET_INSTALL_DIR}/lib/python/aimet_common
       )
 
 add_subdirectory(src/python)

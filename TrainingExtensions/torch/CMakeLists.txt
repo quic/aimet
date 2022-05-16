@@ -70,8 +70,7 @@ add_custom_target(TorchCppOps ALL
 set(FILE_PATH "${CMAKE_BINARY_DIR}/artifacts/aimet_tensor_quantizer*.egg/AimetTensorQuantizer*.so")
 
 add_custom_target(BuildTorchExtensions ALL
-    COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_BINARY_DIR}/artifacts/aimet_torch
-    COMMAND ${CMAKE_COMMAND} -E copy ${FILE_PATH} ${CMAKE_BINARY_DIR}/artifacts/aimet_torch)
+    COMMAND ${CMAKE_COMMAND} -E copy ${FILE_PATH} ${CMAKE_BINARY_DIR}/artifacts/aimet_common)
 
 add_dependencies(TorchCppOps PyModelOptimizations)
 add_dependencies(BuildTorchExtensions TorchCppOps)
@@ -79,7 +78,7 @@ add_dependencies(BuildTorchExtensions TorchCppOps)
 add_subdirectory(src/python)
 add_subdirectory(test)
 
-install(DIRECTORY ${CMAKE_BINARY_DIR}/artifacts/aimet_torch/
-      DESTINATION ${AIMET_INSTALL_DIR}/lib/python/aimet_torch
+install(DIRECTORY ${CMAKE_BINARY_DIR}/artifacts/aimet_common/
+      DESTINATION ${AIMET_INSTALL_DIR}/lib/python/aimet_common
       FILES_MATCHING PATTERN "AimetTensorQuantizer*.so"
       )
