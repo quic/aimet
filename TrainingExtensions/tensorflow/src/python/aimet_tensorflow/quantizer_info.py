@@ -99,17 +99,19 @@ class QuantizerInfo:
     """
     Holds information about a given MO Quantizer object and active session
     """
-    __slots__ = ['session', 'tensor_quantizer', 'quant_op_name', 'quantizer_type', '_is_encoding_frozen', 'data_type']
+    __slots__ = ['session', 'tensor_quantizer', 'quant_op_name', 'quantizer_type', '_is_encoding_frozen', 'data_type',
+                 'axis_handling']
 
     def __init__(self, session: tf.compat.v1.Session, tensor_quantizer: libpymo.TensorQuantizer,
                  quant_op_name: str, quantizer_type: QuantizerType,
-                 data_type: QuantizationDataType = QuantizationDataType.int):
+                 data_type: QuantizationDataType = QuantizationDataType.int, axis_handling=0):
         self.session = session
         self.tensor_quantizer = tensor_quantizer
         self.quant_op_name = quant_op_name
         self.quantizer_type = quantizer_type
         self._is_encoding_frozen = False
         self.data_type = data_type
+        self.axis_handling = axis_handling
 
     def set_variable(self, var_name, value):
         """
@@ -339,12 +341,12 @@ class QuantizerInfo:
             else:
                 if isinstance(self.tensor_quantizer, list):
                     for tensor_quantizer in self.tensor_quantizer:
-                        encoding_val = tensor_quantizer.computeEncoding(bitwidth, use_symmetric_encodings, False, False)
+                        encoding_val = tensor_quantizer.computeEncoding(bitwidth, use_symmetric_encodings)
                         if encoding_val:
                             tensor_quantizer.isEncodingValid = True
                         encoding.append(encoding_val)
                 else:
-                    encoding.append(self.tensor_quantizer.computeEncoding(bitwidth, use_symmetric_encodings, False, False))
+                    encoding.append(self.tensor_quantizer.computeEncoding(bitwidth, use_symmetric_encodings))
                     encoding = encoding[0]
         else:
             encoding = self.get_encoding()

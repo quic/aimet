@@ -121,11 +121,14 @@ void TensorQuantizer::updateStats(const float* tensor, std::size_t tensorSize, b
 
 void TensorQuantizer::updateStats(py::array_t<float> tensor, bool useCuda)
 {
-    auto npArr        = tensor.mutable_unchecked<4>();
-    size_t tensorSize = npArr.shape(0) * npArr.shape(1) * npArr.shape(2) * npArr.shape(3);
+    auto npArr        = tensor.mutable_unchecked();
+
+    size_t tensorSize = 1;
+    for (int i = 0; i < npArr.ndim(); i++)
+        tensorSize *= npArr.shape(i);
 
     // Get a pointer to the tensor data
-    auto tensorPtr = (float*) npArr.mutable_data(0, 0, 0, 0);
+    auto tensorPtr = (float*) npArr.mutable_data();
 
     // Delegate
     updateStats(tensorPtr, tensorSize, useCuda);

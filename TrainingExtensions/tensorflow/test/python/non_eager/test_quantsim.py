@@ -1189,7 +1189,7 @@ class TestQuantSimRangeLearning:
 
         sess = tf.compat.v1.Session()
         initialize_uninitialized_vars(sess)
-        sim = QuantizationSimModel(sess, ['conv2d_input'], ['conv2d_1/Relu'], use_cuda=True,
+        sim = QuantizationSimModel(sess, ['conv2d_input'], ['conv2d_1/Relu'], use_cuda=False,
                                    default_output_bw=6,
                                    quant_scheme=QuantScheme.training_range_learning_with_tf_init)
 
@@ -1358,7 +1358,7 @@ class TestQuantSimRangeLearning:
 
         sess = tf.compat.v1.Session(graph=tf.compat.v1.get_default_graph())
         initialize_uninitialized_vars(sess)
-        sim = QuantizationSimModel(sess, ['input_1'], ['Relu'], use_cuda=True,
+        sim = QuantizationSimModel(sess, ['input_1'], ['Relu'], use_cuda=False,
                                    quant_scheme=QuantScheme.training_range_learning_with_tf_init)
         np.random.seed(0)
 
@@ -1533,7 +1533,7 @@ class TestQuantSimRangeLearning:
         initialize_uninitialized_vars(sess)
 
         # create quantsim model without config file
-        sim = QuantizationSimModel(sess, ['input_1'], ['dense/BiasAdd'], use_cuda=True,
+        sim = QuantizationSimModel(sess, ['input_1'], ['dense/BiasAdd'], use_cuda=False,
                                    quant_scheme=QuantScheme.post_training_tf, default_output_bw=16, default_param_bw=16,
                                    default_data_type=QuantizationDataType.float)
 
@@ -1605,7 +1605,7 @@ class TestQuantSimRangeLearning:
         sess = tf.compat.v1.Session(graph=tf.compat.v1.get_default_graph())
         initialize_uninitialized_vars(sess)
 
-        sim = QuantizationSimModel(sess, ['input_1'], ['dense/BiasAdd'], use_cuda=True,
+        sim = QuantizationSimModel(sess, ['input_1'], ['dense/BiasAdd'], use_cuda=False,
                                    quant_scheme=QuantScheme.training_range_learning_with_tf_init)
 
         np.random.seed(0)
@@ -1684,7 +1684,7 @@ class TestQuantSimRangeLearning:
         sess = tf.compat.v1.Session(graph=tf.compat.v1.get_default_graph())
         initialize_uninitialized_vars(sess)
 
-        sim = QuantizationSimModel(sess, ['input_1'], ['dense/BiasAdd'], use_cuda=True,
+        sim = QuantizationSimModel(sess, ['input_1'], ['dense/BiasAdd'], use_cuda=False,
                                    quant_scheme=QuantScheme.training_range_learning_with_tf_enhanced_init)
 
         np.random.seed(0)
@@ -1797,7 +1797,7 @@ class TestQuantSimRangeLearning:
         initialize_uninitialized_vars(sess)
 
         # create quantsim model without config file
-        sim = QuantizationSimModel(sess, ['input_1'], ['dense/BiasAdd'], use_cuda=True,
+        sim = QuantizationSimModel(sess, ['input_1'], ['dense/BiasAdd'], use_cuda=False,
                                    quant_scheme=QuantScheme.training_range_learning_with_tf_init)
 
         for quant_op_name in sim._param_quantizers.keys():
