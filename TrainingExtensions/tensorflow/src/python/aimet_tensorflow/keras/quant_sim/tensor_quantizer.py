@@ -254,7 +254,7 @@ class TensorQuantizer(tf.keras.layers.Layer, abc.ABC):
         """ Compute encoding for the tensor quantizer """
         if self.quant_mode != int(libpymo.TensorQuantizerOpMode.passThrough) and not self._is_encoding_frozen:
             # TODO: remove last two parameters after fixing PyModelOptimizations
-            encoding = self._tensor_quantizer.computeEncoding(self.bitwidth, self.is_symmetric, False, False)
+            encoding = self._tensor_quantizer.computeEncoding(self.bitwidth, self.is_symmetric)
             if self._tensor_quantizer.isEncodingValid:
                 self._encoding_min.assign(encoding.min)
                 self._encoding_max.assign(encoding.max)
