@@ -107,7 +107,7 @@ class QuantSimConfigurator(AimetCommonQuantSimConfigurator):
     """ Class for parsing and applying quantsim configurations from json config file """
     def __init__(self, model, connected_graph: ConnectedGraph, config_file: str, quantsim_output_bw: int,
                  quantsim_param_bw: int, quantsim_data_type: QuantizationDataType):
-        super().__init__(config_file)
+        super().__init__(config_file, quantsim_data_type, quantsim_output_bw, quantsim_param_bw)
         _report_unsupported_ops(self._quantsim_configs)
         self._default_param_bw = quantsim_param_bw
         self._default_output_bw = quantsim_output_bw
