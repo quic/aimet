@@ -82,13 +82,12 @@ class QuantAnalyzer:
      3) per layer encoding (min - max range) and PDF analysis and
      4) per layer MSE analysis
     """
-    def __init__(
-            self,
-            model: torch.nn.Module,
-            dummy_input: Union[torch.Tensor, Tuple],
-            forward_pass_callback: CallbackFunc,
-            eval_callback: CallbackFunc,
-    ) -> None:
+    def __init__(self,
+                 model: torch.nn.Module,
+                 dummy_input: Union[torch.Tensor, Tuple],
+                 forward_pass_callback: CallbackFunc,
+                 eval_callback: CallbackFunc,
+                 ):
         """
         :param model: FP32 model to analyze for quantization.
         :param dummy_input: Dummy input to model.
@@ -110,10 +109,59 @@ class QuantAnalyzer:
         self._forward_pass_callback = forward_pass_callback
         self._eval_callback = eval_callback
 
-    def _eval_weight_quantized_model(
-            self,
-            sim: QuantizationSimModel,
-    )-> float:
+    def analyze(self,
+                quant_scheme: QuantScheme = QuantScheme.post_training_tf_enhanced,
+                default_param_bw: int = 8,
+                default_output_bw: int = 8,
+                config_file: str = None,
+                results_dir: str = "./tmp/",
+                ):
+        """
+        Analyze model for quantization and point out sensitive parts/hotspots of the model by performing
+            1) model sensitivity to quantization,
+            2) perform per layer sensitivity analysis by enabling and disabling quant wrappers,
+            3) export per layer statistics histogram (PDF) when quant scheme is TF-Enhanced.
+            4) per layer MSE analysis
+
+        :param quant_scheme: Quantization scheme. Supported values are
+                QuantScheme.post_training_tf or QuantScheme.post_training_tf_enhanced.
+        :param default_param_bw: Default bitwidth (4-31) to use for quantizing layer parameters.
+        :param default_output_bw: Default bitwidth (4-31) to use for quantizing layer inputs and outputs.
+        :param config_file: Path to configuration file for model quantizers.
+        :param results_dir: Directory to save the results.
+        """
+        kwargs = dict(
+            quant_scheme=quant_scheme,
+            default_output_bw=default_output_bw,
+            default_param_bw=default_param_bw,
+            config_file=config_file,
+        )
+        sim = QuantizationSimModel(self._model, self._dummy_input, **kwargs)
+        sim.compute_encodings(self._forward_pass_callback.func, self._forward_pass_callback.args)
+
+        results_dir = os.path.abspath(results_dir)
+        os.makedirs(results_dir, exist_ok=True)
+
+        # Check model sensitivity to weight and activation quantization individually.
+        self._check_model_sensitivity_to_quantization(sim)
+
+        # Perform per layer analysis by enabling each quant wrapper (OPTION-1).
+        self._perform_per_layer_analysis_by_enabling_quant_wrappers(sim, results_dir)
+
+        # Perform per layer analysis by disabling each quant wrapper (OPTION-2).
+        self._perform_per_layer_analysis_by_disabling_quant_wrappers(sim, results_dir)
+
+        # Export encoding min-max range.
+        self._export_per_layer_encoding_min_max_range(sim, results_dir)
+
+        # Export PDF of statistics.
+        if quant_scheme == QuantScheme.post_training_tf_enhanced:
+            self._export_per_layer_stats_histogram(sim, results_dir)
+
+        # Export per layer MSE loss between fp32 and quantized output activations.
+        self._export_per_layer_mse_loss(sim, results_dir)
+
+    def _eval_weight_quantized_model(self, sim: QuantizationSimModel)-> float:
         """
         Evaluate weight quantized model performance.
         For weight quantized model performance, disable enabled activation quantizers, measure
@@ -123,15 +171,12 @@ class QuantAnalyzer:
         :return: Quantized model performance.
         """
         enabled_activation_quantizers = self._get_enabled_activation_quantizers(sim)
-        self._enable_quantizers(enabled_activation_quantizers, enabled=False)
+        self._enable_disable_quantizers(enabled_activation_quantizers, enabled=False)
         eval_score = self._eval_model(sim.model)
-        self._enable_quantizers(enabled_activation_quantizers, enabled=True)
+        self._enable_disable_quantizers(enabled_activation_quantizers, enabled=True)
         return eval_score
 
-    def _eval_activation_quantized_model(
-            self,
-            sim: QuantizationSimModel,
-    )-> float:
+    def _eval_activation_quantized_model(self, sim: QuantizationSimModel)-> float:
         """
         Evaluate activation quantized model performance.
         For activation quantized model performance, disable enabled param quantizers, measure
@@ -141,9 +186,9 @@ class QuantAnalyzer:
         :return: Quantized model performance.
         """
         enabled_param_quantizers = self._get_enabled_param_quantizers(sim)
-        self._enable_quantizers(enabled_param_quantizers, enabled=False)
+        self._enable_disable_quantizers(enabled_param_quantizers, enabled=False)
         eval_score = self._eval_model(sim.model)
-        self._enable_quantizers(enabled_param_quantizers, enabled=True)
+        self._enable_disable_quantizers(enabled_param_quantizers, enabled=True)
         return eval_score
 
     def _eval_model(self, model: torch.nn.Module) -> float:
@@ -241,7 +286,7 @@ class QuantAnalyzer:
         return enabled_activation_quantizers
 
     @staticmethod
-    def _enable_quantizers(quantizers: List[TensorQuantizer], enabled: bool) -> None:
+    def _enable_disable_quantizers(quantizers: List[TensorQuantizer], enabled: bool):
         """
         For given list of quantizers, set (enable/disable) quantizer's enabled.
 
@@ -251,13 +296,12 @@ class QuantAnalyzer:
         for quantizer in quantizers:
             quantizer.enabled = enabled
 
-    def _perform_per_layer_analysis(
-            self,
-            sim: QuantizationSimModel,
-            disable_all_quantizers: bool,
-            enabled_before: bool,
-            enabled_after: bool,
-        ) -> Dict:
+    def _perform_per_layer_analysis(self,
+                                    sim: QuantizationSimModel,
+                                    disable_all_quantizers: bool,
+                                    enabled_before: bool,
+                                    enabled_after: bool,
+                                    ) -> Dict:
         """
         Helper function for perform_per_layer_analysis_by_enabling_quant_wrappers() and
         perform_per_layer_analysis_by_disabling_quant_wrappers()
@@ -278,23 +322,23 @@ class QuantAnalyzer:
 
         if disable_all_quantizers:
             for enabled_quantizers in enabled_quant_wrappers.values():
-                self._enable_quantizers(enabled_quantizers, enabled=False)
+                self._enable_disable_quantizers(enabled_quantizers, enabled=False)
 
         eval_score_dict = {}
         for name, quant_wrapper in sorted_quant_wrappers.items():
             if quant_wrapper in enabled_quant_wrappers:
                 enabled_quantizers = enabled_quant_wrappers[quant_wrapper]
-                self._enable_quantizers(enabled_quantizers, enabled=enabled_before)
+                self._enable_disable_quantizers(enabled_quantizers, enabled=enabled_before)
 
                 # Record eval score.
                 eval_score_dict[name] = self._eval_model(sim.model)
                 _logger.info("For layer: %s, the eval score is: %.02f", name, eval_score_dict[name])
 
-                self._enable_quantizers(enabled_quantizers, enabled=enabled_after)
+                self._enable_disable_quantizers(enabled_quantizers, enabled=enabled_after)
 
         if disable_all_quantizers:
             for enabled_quantizers in enabled_quant_wrappers.values():
-                self._enable_quantizers(enabled_quantizers, enabled=True)
+                self._enable_disable_quantizers(enabled_quantizers, enabled=True)
 
         return eval_score_dict
 
@@ -433,12 +477,11 @@ class QuantAnalyzer:
         plotting.save(plot)
         return plot
 
-    def _create_and_export_stats_histogram_plot(
-            self,
-            quantizer: StaticGridTensorQuantizer,
-            results_dir: str,
-            title: str,
-    ) -> None:
+    def _create_and_export_stats_histogram_plot(self,
+                                                quantizer: StaticGridTensorQuantizer,
+                                                results_dir: str,
+                                                title: str,
+                                                ):
         """
         For given quantizer, create and export histogram (PDF) of statistics in html format.
 
@@ -457,13 +500,12 @@ class QuantAnalyzer:
             filename_suffix = f"{title}_{index}"
             self._export_stats_histogram_plot(histogram, encoding, results_dir, filename_suffix)
 
-    def _collect_and_save_output_acts(
-            self,
-            model: torch.nn.Module,
-            module_type_for_attaching_hook: Any,
-            leaf_module_only: bool,
-            results_dir: str,
-    ) -> None:
+    def _collect_and_save_output_acts(self,
+                                      model: torch.nn.Module,
+                                      module_type_for_attaching_hook: Any,
+                                      leaf_module_only: bool,
+                                      results_dir: str,
+                                      ):
         """
         Collect and save output activations for given model.
 
@@ -527,10 +569,9 @@ class QuantAnalyzer:
                     break
         return torch.cat(tensors, dim=0)
 
-    def _check_model_sensitivity_to_quantization(
-            self,
-            sim: QuantizationSimModel,
-    ) -> Tuple[float, float, float]:
+    def _check_model_sensitivity_to_quantization(self,
+                                                 sim: QuantizationSimModel,
+                                                 ) -> Tuple[float, float, float]:
         """
         Perform the sensitivity analysis to weight and activation quantization
         individually.
@@ -552,11 +593,10 @@ class QuantAnalyzer:
 
         return fp32_eval_score, weight_quantized_eval_score, act_quantized_eval_score
 
-    def _perform_per_layer_analysis_by_enabling_quant_wrappers(
-            self,
-            sim: QuantizationSimModel,
-            results_dir: str = "./tmp/",
-    ) -> Dict:
+    def _perform_per_layer_analysis_by_enabling_quant_wrappers(self,
+                                                               sim: QuantizationSimModel,
+                                                               results_dir: str = "./tmp/",
+                                                               ) -> Dict:
         """
         NOTE: Option 1
 
@@ -586,11 +626,10 @@ class QuantAnalyzer:
                                                          title="per_layer_quant_enabled")
         return layer_wise_eval_score_dict
 
-    def _perform_per_layer_analysis_by_disabling_quant_wrappers(
-            self,
-            sim: QuantizationSimModel,
-            results_dir: str = "./tmp/",
-    ) -> Dict:
+    def _perform_per_layer_analysis_by_disabling_quant_wrappers(self,
+                                                                sim: QuantizationSimModel,
+                                                                results_dir: str = "./tmp/",
+                                                                ) -> Dict:
         """
         NOTE: Option 2
 
@@ -620,11 +659,10 @@ class QuantAnalyzer:
                                                          title="per_layer_quant_disabled")
         return layer_wise_eval_score_dict
 
-    def _export_per_layer_encoding_min_max_range(
-            self,
-            sim: QuantizationSimModel,
-            results_dir: str = "./tmp/",
-    ) -> Tuple[Dict, Dict]:
+    def _export_per_layer_encoding_min_max_range(self,
+                                                 sim: QuantizationSimModel,
+                                                 results_dir: str = "./tmp/",
+                                                 ) -> Tuple[Dict, Dict]:
         """
         Export encoding min and max range for all weights and activations.
 
@@ -667,11 +705,10 @@ class QuantAnalyzer:
 
         return min_max_range_for_weights_dict, min_max_range_for_activations_dict
 
-    def _export_per_layer_stats_histogram(
-            self,
-            sim: QuantizationSimModel,
-            results_dir: str = "./tmp/",
-    ) -> None:
+    def _export_per_layer_stats_histogram(self,
+                                          sim: QuantizationSimModel,
+                                          results_dir: str = "./tmp/",
+                                          ):
         """
         NOTE: Not to invoke when quantization scheme is not TF-Enhanced.
 
@@ -716,11 +753,10 @@ class QuantAnalyzer:
                                                                  title=f"{wrapped_module_name}_{param_name}")
             _logger.info("Exported stats histogram for layer: %s", wrapped_module_name)
 
-    def _export_per_layer_mse_loss(
-            self,
-            sim: QuantizationSimModel,
-            results_dir: str = "./tmp/",
-    ) -> None:
+    def _export_per_layer_mse_loss(self,
+                                   sim: QuantizationSimModel,
+                                   results_dir: str = "./tmp/",
+                                   ):
         """
         NOTE: Need to pass same model input data through both fp32 and quantsim model to
         tap output activations of each layer.
@@ -757,55 +793,3 @@ class QuantAnalyzer:
         self._export_per_layer_mse_plot(mse_loss_dict,
                                         results_dir,
                                         title="per_layer_mse_loss")
-
-    def analyze(
-            self,
-            quant_scheme: QuantScheme = QuantScheme.post_training_tf_enhanced,
-            default_param_bw: int = 8,
-            default_output_bw: int = 8,
-            config_file: str = None,
-            results_dir: str = "./tmp/",
-    ) -> None:
-        """
-        Analyze model for quantization and point out sensitive parts/hotspots of the model by performing
-            1) model sensitivity to quantization,
-            2) perform per layer sensitivity analysis by enabling and disabling quant wrappers,
-            3) export per layer statistics histogram (PDF) when quant scheme is TF-Enhanced.
-
-        :param quant_scheme: Quantization scheme. Supported values are
-                QuantScheme.post_training_tf or QuantScheme.post_training_tf_enhanced.
-        :param default_param_bw: Default bitwidth (4-31) to use for quantizing layer parameters.
-        :param default_output_bw: Default bitwidth (4-31) to use for quantizing layer inputs and outputs.
-        :param config_file: Path to configuration file for model quantizers.
-        :param results_dir: Directory to save the results.
-        """
-        kwargs = dict(
-            quant_scheme=quant_scheme,
-            default_output_bw=default_output_bw,
-            default_param_bw=default_param_bw,
-            config_file=config_file,
-        )
-        sim = QuantizationSimModel(self._model, self._dummy_input, **kwargs)
-        sim.compute_encodings(self._forward_pass_callback.func, self._forward_pass_callback.args)
-
-        results_dir = os.path.abspath(results_dir)
-        os.makedirs(results_dir, exist_ok=True)
-
-        # Check model sensitivity to weight and activation quantization individually.
-        self._check_model_sensitivity_to_quantization(sim)
-
-        # Perform per layer analysis by enabling each quant wrapper (OPTION-1).
-        self._perform_per_layer_analysis_by_enabling_quant_wrappers(sim, results_dir)
-
-        # Perform per layer analysis by disabling each quant wrapper (OPTION-2).
-        self._perform_per_layer_analysis_by_disabling_quant_wrappers(sim, results_dir)
-
-        # Export encoding min-max range.
-        self._export_per_layer_encoding_min_max_range(sim, results_dir)
-
-        # Export PDF of statistics.
-        if quant_scheme == QuantScheme.post_training_tf_enhanced:
-            self._export_per_layer_stats_histogram(sim, results_dir)
-
-        # Export per layer MSE loss between fp32 and quantized output activations.
-        self._export_per_layer_mse_loss(sim, results_dir)
