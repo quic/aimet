@@ -100,7 +100,7 @@ class QuantSimConfigurator(AimetCommonQuantSimConfigurator):
     quantsim configurations from json config file """
     def __init__(self, sess: tf.compat.v1.Session, conn_graph: ConnectedGraph, config_file: str, quantsim_output_bw: int,
                  quantsim_param_bw: int, quantsim_data_type: QuantizationDataType):
-        super().__init__(config_file)
+        super().__init__(config_file, quantsim_data_type, quantsim_output_bw, quantsim_param_bw)
 
         self._sess = sess
         self._conn_graph = conn_graph
@@ -111,9 +111,6 @@ class QuantSimConfigurator(AimetCommonQuantSimConfigurator):
         self._onnx_conn_graph_name_mapper = OnnxConnectedGraphTypeMapper(onnx_tf_conn_graph_type_pairs)
         self.per_channel_quantization_flag = self._get_per_channel_quantization_flag()
 
-        self._default_data_type = quantsim_data_type
-        self._default_output_bw = quantsim_output_bw
-        self._default_param_bw = quantsim_param_bw
         self._supported_kernels = self._parse_supported_kernels()
         if ENFORCE_TARGET_DTYPE_BITWIDTH_CONFIG:
             if self.check_correctness_of_dtype_bw_rules(QuantDtypeBwInfo(quantsim_data_type, quantsim_output_bw,

@@ -230,7 +230,8 @@ class QuantSimConfigurator(AimetCommonQuantSimConfigurator):
 
     def __init__(self, connected_graph: ConnectedGraph, quant_scheme: Union[QuantScheme, str], rounding_mode: str,
                  default_output_bw: int, default_param_bw: int, config_file: str):
-        super(QuantSimConfigurator, self).__init__(config_file)
+        # TODO when keras supports fp16, pass default_data_type to below line
+        super(QuantSimConfigurator, self).__init__(config_file, QuantizationDataType.int, default_output_bw, default_param_bw)
         self._connected_graph = connected_graph
         self._layer_to_affected_quantizer_info_dict = self._create_layer_to_affected_quantizer_info_dict()
         self._layer_to_config_dict = TreeLikeDictionary()
