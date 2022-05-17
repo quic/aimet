@@ -1222,8 +1222,15 @@ class TestTrainingExtensionBnFoldToScale(unittest.TestCase):
         sim = quantsim(model, (10, 10 ,4, 4))
         model = sim.model
 
-        with pytest.raises(RuntimeError):
-            fold_all_batch_norms_to_scale(sim, (10, 10, 4, 4))
+        random_input = torch.rand((10, 10, 4, 4))
+        baseline_output = model(random_input).detach().numpy()
+        folded_pairs = fold_all_batch_norms_to_scale(sim, (10, 10, 4, 4))
+        output_after_fold = model(random_input).detach().numpy()
+
+        assert not isinstance(model.bn1._module_to_wrap, torch.nn.BatchNorm2d)
+
+        assert sum(baseline_output.reshape(-1) - output_after_fold.reshape(-1)) < 1e-5
+        assert len(folded_pairs) == 2
 
     def test_bn_fold_auto_mode(self):
         torch.manual_seed(10)

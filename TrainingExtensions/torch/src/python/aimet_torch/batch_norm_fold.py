@@ -181,8 +181,8 @@ def _fold_to_scale(conv_wrapper: QcQuantizeWrapper, bn_wrapper: QcQuantizeWrappe
     conv = conv_wrapper._module_to_wrap
     bn = bn_wrapper._module_to_wrap
 
-    if isinstance(conv, _ConvTransposeNd):
-        raise RuntimeError("Can't fold to scale if ConvTransposeNd.")
+    if isinstance(conv, _ConvTransposeNd) and conv.groups != 1:
+        raise RuntimeError("BN folding to scale is not supported for grouped ConvTransposeNd.")
 
     # Add quantization noise to the BN params (bn weight & bn bias) before folding.
     with bn_wrapper._quantize_params():
@@ -210,6 +210,7 @@ def _fold_to_scale(conv_wrapper: QcQuantizeWrapper, bn_wrapper: QcQuantizeWrappe
                                                     weight_quantizer.use_symmetric_encodings,
                                                     enabled_by_default=False,
                                                     data_type=weight_quantizer.data_type)
+        bias_quantizer._ch_axis = weight_quantizer._ch_axis
         conv_wrapper.param_quantizers["bias"] = bias_quantizer
 
 
