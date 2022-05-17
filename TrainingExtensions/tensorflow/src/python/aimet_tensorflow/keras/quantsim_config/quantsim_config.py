@@ -42,7 +42,7 @@ from tensorflow.keras import layers
 
 from aimet_common.connected_graph.connectedgraph_utils import get_all_input_ops, get_all_output_ops
 from aimet_common.connected_graph.operation import Op
-from aimet_common.defs import QuantScheme
+from aimet_common.defs import QuantScheme, QuantizationDataType
 from aimet_common.graph_pattern_matcher import PatternType
 from aimet_common.graph_searcher import GraphSearcher
 from aimet_common.quantsim_config.quantsim_config import SupergroupConfigCallback as AimetCommonSupergroupConfigCallback
@@ -483,3 +483,19 @@ class QuantSimConfigurator(AimetCommonQuantSimConfigurator):
         :return: Dictionary containing input/output/param quantizers
         """
         return self._layer_to_quantizers_dict.get(layer)
+
+    def _override_default_act_bw_dtype(self, data_type: QuantizationDataType, bitwidth: int):
+        """
+        overrides data type and bw default config for input/output quantizers.
+        :param data_type: data type as QuantizationDataType
+        :param bitwidth: bitwidth to be configured
+        :return:
+        """
+
+    def _override_default_param_bw_dtype(self, data_type: QuantizationDataType, bitwidth: int):
+        """
+        overrides data type and bitwidth default config for param quantizers
+        :param bitwidth: bitwidth
+        :param data_type: data type as QuantizationDataType
+        :return:
+        """
