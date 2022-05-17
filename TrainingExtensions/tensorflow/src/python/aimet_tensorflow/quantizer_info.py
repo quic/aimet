@@ -99,18 +99,16 @@ class QuantizerInfo:
     """
     Holds information about a given MO Quantizer object and active session
     """
-    __slots__ = ['session', 'tensor_quantizer', 'quant_op_name', 'quantizer_type', '_is_encoding_frozen', 'data_type',
+    __slots__ = ['session', 'tensor_quantizer', 'quant_op_name', 'quantizer_type', '_is_encoding_frozen',
                  'axis_handling']
 
     def __init__(self, session: tf.compat.v1.Session, tensor_quantizer: libpymo.TensorQuantizer,
-                 quant_op_name: str, quantizer_type: QuantizerType,
-                 data_type: QuantizationDataType = QuantizationDataType.int, axis_handling=0):
+                 quant_op_name: str, quantizer_type: QuantizerType, axis_handling=0):
         self.session = session
         self.tensor_quantizer = tensor_quantizer
         self.quant_op_name = quant_op_name
         self.quantizer_type = quantizer_type
         self._is_encoding_frozen = False
-        self.data_type = data_type
         self.axis_handling = axis_handling
 
     def set_variable(self, var_name, value):
@@ -153,6 +151,41 @@ class QuantizerInfo:
         var_name = self.quant_op_name + '_bit_width'
         self.set_variable(var_name, bitwidth)
         self._invalidate_tensor_quantizer_encodings()
+
+    @property
+    def data_type(self) -> QuantizationDataType:
+        """
+        Reads data_type from Quantize op and converts to variable of type QuantizationDataType before returning
+        :return: data_type setting of the op
+        """
+        # data_type is a property of only QcQuantizeOp. For other ops, the data_type is assumed to be
+        # QuantizationDataType.int
+        ret_dtype = QuantizationDataType.int
+        if self.session.graph.get_operation_by_name(self.quant_op_name).type == 'QcQuantize':
+            is_int_data_type = self.get_variable_from_op(QuantizeOpIndices.is_int_data_type)
+            ret_dtype = QuantizationDataType.int if is_int_data_type else QuantizationDataType.float
+
+        return ret_dtype
+
+    @data_type.setter
+    def data_type(self, data_type: QuantizationDataType):
+        """
+        Sets the data type of the op
+        :param data_type: data type of type QuantizationDataType
+        """
+
+        if self.session.graph.get_operation_by_name(self.quant_op_name).type == 'QcQuantize':
+            var_name = self.quant_op_name + '_data_type'
+            self.set_variable(var_name, data_type == QuantizationDataType.int)
+            self._invalidate_tensor_quantizer_encodings()
+        else:
+            # only QcQuantize op supports QuantizationDataType.float. All other ops(QcQuantizePerChannelOp,
+            # QcQuantizeRecurrentParamOp) dont support fp16 yet. if data_type is equal to QuantizationDataType.int, then
+            # nothing needs to be done
+            if data_type != QuantizationDataType.int:
+                raise AssertionError('QuantizationDataType.int is the only data_type supported in ',
+                                     self.session.graph.get_operation_by_name(self.quant_op_name).type)
+
 
     def _invalidate_tensor_quantizer_encodings(self):
         """
@@ -468,11 +501,12 @@ class QuantizerInfo:
     def __str__(self):
         stream = io.StringIO(newline='\n')
         stream.write('Quantizer Info:\n')
-        stream.write(' quantize_op_name:{}\n quantizer_type:{}\n bitwidth={}\n use_symmetric_encoding={}\n'
+        stream.write(' quantize_op_name:{}\n quantizer_type:{}\n bitwidth={}\n datatype={}\n use_symmetric_encoding={}\n'
                      ' round_mode={}\n quant_scheme={}\n use_strict_symmetric={}\n use_unsigned_symmetric={}\n'
                      ' enabled:{}\n'.format(self.quant_op_name,
                                             self.quantizer_type,
                                             self.bitwidth,
+                                            self.data_type,
                                             self.use_symmetric_encoding,
                                             self.rounding_mode,
                                             self.quant_scheme,

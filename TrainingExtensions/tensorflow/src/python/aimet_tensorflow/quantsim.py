@@ -1180,8 +1180,7 @@ class QuantizationSimModel:
                                            name=quant_op_name + '_data_type', trainable=False, dtype=tf.bool)
 
             # Add to quantizer dict
-            quantizer_info = QuantizerInfo(self.session, tensor_quantizer, quant_op_name, quantizer_type, data_type,
-                                           axis_handling)
+            quantizer_info = QuantizerInfo(self.session, tensor_quantizer, quant_op_name, quantizer_type, axis_handling)
             quantizer_dict[quant_op_name] = quantizer_info
 
             self.session.run([op_mode_var.initializer, tensor_quant_ref.initializer, encoding_min.initializer,
