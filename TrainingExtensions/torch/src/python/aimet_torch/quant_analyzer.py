@@ -442,7 +442,7 @@ class QuantAnalyzer:
         plot.vbar(x=layer_names, width=0.2, bottom=enc_min_values, top=enc_max_values)
         plot.xaxis.major_label_orientation = "vertical"
         plot.sizing_mode = "scale_width"
-        plot.yaxis.ticker = tickers.SingleIntervalTicker(interval=1)
+        plot.yaxis.ticker = tickers.SingleIntervalTicker(interval=0.1)
         plotting.save(plot)
         return plot
 
@@ -477,6 +477,32 @@ class QuantAnalyzer:
         plotting.save(plot)
         return plot
 
+    def _create_and_export_min_max_ranges_plot(self,
+                                               min_max_ranges_dict: Dict,
+                                               results_dir: str,
+                                               title: str
+                                               ):
+        """
+        Create and export per layer encoding(s) min-max ranges in html format.
+
+        :param min_max_ranges_dict: Dictionary containing encoding min and max ranges.
+        :param results_dir: Directory to save the results.
+        :param title: Title of the plot.
+        """
+        os.makedirs(results_dir, exist_ok=True)
+
+        if set(map(type, min_max_ranges_dict.values())) == {dict}:
+            for name, per_channel_encodings_dict in min_max_ranges_dict.items():
+                self._export_per_layer_min_max_ranges_plot(per_channel_encodings_dict,
+                                                           results_dir=results_dir,
+                                                           title=name)
+        elif set(map(type, min_max_ranges_dict.values())) == {tuple}:
+            self._export_per_layer_min_max_ranges_plot(min_max_ranges_dict,
+                                                       results_dir=results_dir,
+                                                       title=title)
+        else:
+            raise RuntimeError("Per channel quantization should be enabled for all the layers.")
+
     def _create_and_export_stats_histogram_plot(self,
                                                 quantizer: StaticGridTensorQuantizer,
                                                 results_dir: str,
@@ -497,8 +523,8 @@ class QuantAnalyzer:
             encodings = [encodings]
 
         for index, (histogram, encoding) in enumerate(zip(histograms, encodings)):
-            filename_suffix = f"{title}_{index}"
-            self._export_stats_histogram_plot(histogram, encoding, results_dir, filename_suffix)
+            self._export_stats_histogram_plot(histogram, encoding, results_dir,
+                                              title=f"{title}_{index}")
 
     def _collect_and_save_output_acts(self,
                                       model: torch.nn.Module,
@@ -664,14 +690,25 @@ class QuantAnalyzer:
                                                  results_dir: str = "./tmp/",
                                                  ) -> Tuple[Dict, Dict]:
         """
-        Export encoding min and max range for all weights and activations.
+        Export encoding min and max range for all weights and activations. results_dir should have
+        html files in following format.
+
+        -results_dir
+            -activations.html
+            -weights.html
+
+        If per channel quantization(PCQ) is enabled then,
+
+        -results_dir
+            -activations.html
+            -{wrapped_module_name}_{param_name}.html
 
         :param sim: Quantsim model.
         :param results_dir: Directory to save the results.
         :return: layer wise min-max range for weights and activations.
         """
-        results_dir = os.path.abspath(results_dir)
-        os.makedirs(results_dir, exist_ok=True)
+        # pylint: disable=too-many-locals
+        min_max_ranges_dir = os.path.join(results_dir, "min_max_ranges")
 
         _logger.info("\nExporting per layer encoding min-max ranges.")
         module_to_name_dict = {}
@@ -683,25 +720,30 @@ class QuantAnalyzer:
         for quant_wrapper in sim.quant_wrappers():
             wrapped_module_name = module_to_name_dict[quant_wrapper]
             for index, quantizer in enumerate(quant_wrapper.input_quantizers):
-                if quantizer.encoding:
+                if quantizer.enabled:
                     name = f"{wrapped_module_name}_input_{index}"
                     min_max_range_for_activations_dict[name] = (quantizer.encoding.min, quantizer.encoding.max)
             for index, quantizer in enumerate(quant_wrapper.output_quantizers):
-                if quantizer.encoding:
+                if quantizer.enabled:
                     name = f"{wrapped_module_name}_output_{index}"
                     min_max_range_for_activations_dict[name] = (quantizer.encoding.min, quantizer.encoding.max)
             for param_name, quantizer in quant_wrapper.param_quantizers.items():
-                if quantizer.encoding:
-                    # TODO: Add support for per channel quantization.
+                if quantizer.enabled:
                     name = f"{wrapped_module_name}_{param_name}"
-                    min_max_range_for_weights_dict[name] = (quantizer.encoding.min, quantizer.encoding.max)
+                    if isinstance(quantizer.encoding, List): # per-channel
+                        per_channel_encodings = {}
+                        for index, encoding in enumerate(quantizer.encoding):
+                            per_channel_encodings[f"{name}_{index}"] = (encoding.min, encoding.max)
+                        min_max_range_for_weights_dict[name] = per_channel_encodings
+                    else: # per-tensor
+                        min_max_range_for_weights_dict[name] = (quantizer.encoding.min, quantizer.encoding.max)
 
-        self._export_per_layer_min_max_ranges_plot(min_max_range_for_weights_dict,
-                                                   results_dir,
-                                                   title="min_max_range_all_weights")
-        self._export_per_layer_min_max_ranges_plot(min_max_range_for_activations_dict,
-                                                   results_dir,
-                                                   title="min_max_range_all_activations")
+        self._create_and_export_min_max_ranges_plot(min_max_range_for_weights_dict,
+                                                    min_max_ranges_dir,
+                                                    title="weights")
+        self._create_and_export_min_max_ranges_plot(min_max_range_for_activations_dict,
+                                                    min_max_ranges_dir,
+                                                    title="activations")
 
         return min_max_range_for_weights_dict, min_max_range_for_activations_dict
 

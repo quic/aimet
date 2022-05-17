@@ -295,8 +295,53 @@ class TestQuantAnalyzer:
         quant_analyzer = QuantAnalyzer(model, dummy_input, forward_pass_callback, eval_callback)
         try:
             quant_analyzer._export_per_layer_encoding_min_max_range(sim)
-            assert os.path.isfile("./tmp/min_max_range_all_weights.html")
-            assert os.path.isfile("./tmp/min_max_range_all_activations.html")
+            assert os.path.isfile("./tmp/min_max_ranges/weights.html")
+            assert os.path.isfile("./tmp/min_max_ranges/activations.html")
+        finally:
+            if os.path.isdir("./tmp/"):
+                shutil.rmtree("./tmp/")
+
+    def test_export_per_layer_encoding_min_max_range_per_channel(self):
+        """ test export_per_layer_encoding_min_max_range() for per channel quantization """
+        results_dir = os.path.abspath("./tmp/")
+        os.makedirs(results_dir, exist_ok=True)
+
+        quantsim_config = {
+            "defaults": {
+                "ops": {
+                    "is_output_quantized": "True"
+                },
+                "params": {
+                    "is_quantized": "True"
+                },
+                "per_channel_quantization": "True",
+            },
+            "params": {
+                "bias": {
+                    "is_quantized": "False"
+                }
+            },
+            "op_type": {},
+            "supergroups": [],
+            "model_input": {},
+            "model_output": {}
+        }
+        with open("./tmp/quantsim_config.json", 'w') as f:
+            json.dump(quantsim_config, f)
+
+        input_shape = (1, 3, 32, 32)
+        dummy_input = torch.randn(*input_shape)
+        model = TinyModel().eval()
+        sim = QuantizationSimModel(model, dummy_input, config_file="./tmp/quantsim_config.json")
+        sim.compute_encodings(evaluate, dummy_input)
+        forward_pass_callback = CallbackFunc(calibrate, dummy_input)
+        eval_callback = CallbackFunc(evaluate, dummy_input)
+        quant_analyzer = QuantAnalyzer(model, dummy_input, forward_pass_callback, eval_callback)
+        try:
+            quant_analyzer._export_per_layer_encoding_min_max_range(sim)
+            assert os.path.isfile("./tmp/min_max_ranges/activations.html")
+            assert os.path.isfile("./tmp/min_max_ranges/conv1_weight.html")
+            assert os.path.isfile("./tmp/min_max_ranges/fc_weight.html")
         finally:
             if os.path.isdir("./tmp/"):
                 shutil.rmtree("./tmp/")
@@ -372,8 +417,8 @@ class TestQuantAnalyzer:
             assert os.path.isfile("./tmp/per_layer_quant_enabled.html")
             assert os.path.exists("./tmp/activations_pdf")
             assert os.path.exists("./tmp/weights_pdf")
-            assert os.path.isfile("./tmp/min_max_range_all_weights.html")
-            assert os.path.isfile("./tmp/min_max_range_all_activations.html")
+            assert os.path.isfile("./tmp/min_max_ranges/weights.html")
+            assert os.path.isfile("./tmp/min_max_ranges/activations.html")
             assert os.path.isfile("./tmp/per_layer_mse_loss.html")
         finally:
             if os.path.isdir("./tmp/"):
