@@ -144,9 +144,12 @@ class OnnxConnectedGraphTypeMapper:
 
 class QuantSimConfigurator(ABC):
     """ Class for parsing and applying quantsim configurations from json config file """
-    def __init__(self, config_file: str):
+    def __init__(self, config_file: str, default_data_type: QuantizationDataType, default_output_bw: int, default_param_bw: int):
         self._quantsim_configs = JsonConfigImporter.import_json_config_file(config_file)
         self._supported_kernels = {}
+        self._default_data_type = default_data_type
+        self._default_output_bw = default_output_bw
+        self._default_param_bw = default_param_bw
 
     def _set_quantsim_configs(self):
         """
@@ -254,7 +257,6 @@ class QuantSimConfigurator(ABC):
         :return:
         """
 
-        # TODO self._default_.... might be invalid
         if is_current_config_same_as_override_option(QuantDtypeBwInfo(self._default_data_type,
                                                                       self._default_output_bw,
                                                                       self._default_param_bw),
