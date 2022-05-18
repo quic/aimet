@@ -50,7 +50,8 @@ MASK_OVERRIDE_VALUE = -6
 SUPPORTED_ATTENTION_MASK_OVERRIDE_DICT = {'BertSelfAttention': 'mask_add',  #BERT
                                           'MultiHeadSelfAttention': 'mask_add',  #DistilBERT
                                           'Attention': 'mask_add',  # GPT-2
-                                          'RobertaSelfAttention': 'mask_add'}  #RoBERTa
+                                          'RobertaSelfAttention': 'mask_add',  #RoBERTa
+                                          'QuantizableMultiheadAttention': 'mask_add'} #PT
 
 
 def register_attention_mask_override(attention_type_name: str = None,
