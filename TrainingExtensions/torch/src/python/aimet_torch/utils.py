@@ -454,7 +454,10 @@ def replace_modules_of_type1_with_type2(model: torch.nn.Module,
     for module_name, module_ref in model.named_children():
 
         if isinstance(module_ref, type1):
-            setattr(model, module_name, type2())
+            if type1 is torch.nn.MultiheadAttention:
+                setattr(model, module_name, type2(module_ref.embed_dim, module_ref.num_heads))
+            else:
+                setattr(model, module_name, type2())
 
         children_module_list = list(module_ref.modules())
         if len(children_module_list) != 1:
