@@ -258,8 +258,7 @@ class QuantizationSimModel:
             layer.set_mode(QcQuantizeOpMode.ANALYSIS)
 
         # Run forward iterations so we can collect statistics to compute the appropriate encodings
-        self.model.eval()
-        with torch.no_grad():
+        with utils.in_eval_mode(self.model), torch.no_grad():
             _ = forward_pass_callback(self.model, forward_pass_callback_args)
 
         # Get the computed per-layer encodings and log them
@@ -371,7 +370,7 @@ class QuantizationSimModel:
         :param dummy_input: Dummy input to the model. Used to parse model graph.
         :return: None
         """
-        with torch.no_grad():
+        with utils.in_eval_mode(original_model), torch.no_grad():
             trace = torch.jit.trace(original_model, dummy_input)
             ts_path = os.path.join(path, filename_prefix + '.torchscript.pth')
             trace.save(ts_path)
@@ -1144,8 +1143,7 @@ class QuantizationSimModel:
         if self._is_conditional:
             self._add_inputs_hook(hooks)
 
-        self.model.eval()
-        with torch.no_grad():
+        with utils.in_eval_mode(self.model), torch.no_grad():
             _ = forward_pass_callback(self.model, forward_pass_callback_args)
 
         # Any hooks that were hit during forward pass callback would have removed themselves. Remove the remaining
@@ -1221,8 +1219,9 @@ class QuantizationSimModel:
                 module = getattr(module, '_module_to_wrap')
             # Only perform init and trace if the given module is a leaf module, and we have not recorded it before
             if module in module_to_name_map and module_to_name_map[module] not in self._module_marker_map:
-                marker_layer = torch.jit.trace(CustomMarker(module, module_to_name_map[module]),
-                                               dummy_input)
+                with utils.in_eval_mode(module), torch.no_grad():
+                    marker_layer = torch.jit.trace(CustomMarker(module, module_to_name_map[module]),
+                                                   dummy_input)
                 self._module_marker_map[module_to_name_map[module]] = marker_layer
 
 
