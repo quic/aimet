@@ -197,7 +197,7 @@ def _fold_to_scale(conv_wrapper: QcQuantizeWrapper, bn_wrapper: QcQuantizeWrappe
             new_encoding.delta = old_encoding.delta * c
             new_encoding.max = old_encoding.max * c
             new_encoding.min = old_encoding.min * c
-            new_encoding.offset = old_encoding.offset * c
+            new_encoding.offset = old_encoding.offset
             new_encoding.bw = old_encoding.bw
             new_encodings.append(new_encoding)
 
