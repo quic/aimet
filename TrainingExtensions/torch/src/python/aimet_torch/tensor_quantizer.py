@@ -85,6 +85,7 @@ class TensorQuantizer:
 
     @property
     def quant_scheme(self):
+        """Accessor to self._quant_scheme"""
         return self._quant_scheme
 
 
