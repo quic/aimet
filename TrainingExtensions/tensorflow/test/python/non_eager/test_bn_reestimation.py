@@ -268,7 +268,7 @@ def _test_reestimation(sess_sim, sess_fp32, bn_re_restimation_dataset, bn_num_ba
                                                                            bn_momentum_tf_var_list,
                                                                            bn_training_tf_var_list)
         # Sanity check(apply_bn_re_estimation):  re-estimation , update runing mean &var, set training with False for
-        # eval(), momentum no change
+        # eval(), momentum  no change
         assert not is_two_dict_close_numpy_array(bn_mean_var_ori, bn_mean_var_est)
         assert not is_dict_close_numpy_array_zeros(bn_mean_var_est)
         assert is_two_dict_close_float(bn_momentum_ori, bn_momentum_est)
