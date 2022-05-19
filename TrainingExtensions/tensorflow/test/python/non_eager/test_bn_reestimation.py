@@ -169,8 +169,6 @@ def sessions(device):
             input_op_names = ["input_1"]
             output_op_names = ['dense/BiasAdd']
 
-            #bn_conv_linear_pairs = find_all_batch_norms_to_fold(sess, input_op_names, output_op_names)
-
             quantsim_config = {
                 "defaults": {
                     "ops": {

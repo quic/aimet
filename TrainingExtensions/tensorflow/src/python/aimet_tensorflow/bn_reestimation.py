@@ -103,39 +103,32 @@ def _get_all_tf_bn_vars_list(sess: tf.compat.v1.Session, momentum_names: List[st
 # pylint: disable=too-many-arguments
 # pylint: disable=not-an-iterable
 # pylint: disable=unsubscriptable-object
-def _reset_bn_stats(sess: tf.compat.v1.Session, bn_mean_var_tf_var_list: List[tf.compat.v1.Variable],
-                    bn_momentum_tf_var_list: List[tf.compat.v1.Variable],
-                    bn_training_tf_var_list: List[tf.compat.v1.Variable], bn_momentum_checkpoints: Dict,
+def _reset_bn_stats(sess: tf.compat.v1.Session, bn_mean_var_checkpoints: Dict, bn_momentum_checkpoints: Dict,
                     bn_training_checkpoints: Dict) -> _Handle:
     """
     reset bn stats
     :param sess: tf session
-    :param bn_mean_var_tf_var_list: tf variable list for bn mean&var
-    :param bn_momentum_tf_var_list: tf variable list for bn momentum
-    :param bn_training_tf_var_list: tf variable list for bn training
+    :param bn_mean_var_checkpoints: Dict for original mean&var
     :param bn_momentum_checkpoints: Dict for original bn momentum
     :param bn_training_checkpoints: Dict for original bn training
-    :return: Handle that restores the original BN momentum upon handle.remove().    """
-
-    with sess.graph.as_default():
-        # 1  switch to bn_re_estimation mode and set momentum=0
-        bn_mean_var_checkpoints = {v.name: sess.run(v) for v in bn_mean_var_tf_var_list}
+    :return:
+    """
 
     def cleanup():
         with sess.graph.as_default():
-            for v in bn_mean_var_tf_var_list:
-                sess.run(tf.compat.v1.assign(v, bn_mean_var_checkpoints[v.name]))
-            for v in bn_momentum_tf_var_list:
-                sess.run(tf.compat.v1.assign(v, bn_momentum_checkpoints[v.name]))
-            for v in bn_training_tf_var_list:
-                sess.run(tf.compat.v1.assign(v, bn_training_checkpoints[v.name]))
+            for k in bn_mean_var_checkpoints.keys():
+                sess.run(tf.compat.v1.assign(k, bn_mean_var_checkpoints[k]))
+            for k in bn_momentum_checkpoints.keys():
+                sess.run(tf.compat.v1.assign(k, bn_momentum_checkpoints[k]))
+            for k in bn_training_checkpoints.keys():
+                sess.run(tf.compat.v1.assign(k, bn_training_checkpoints[k]))
 
     try:
         with sess.graph.as_default():
-            for v in bn_momentum_tf_var_list:
-                sess.run(tf.compat.v1.assign(v, 0.0))
-            for v in bn_training_tf_var_list:
-                sess.run(tf.compat.v1.assign(v, tf.compat.v1.constant(True)))
+            for k in bn_momentum_checkpoints.keys():
+                sess.run(tf.compat.v1.assign(k, 0.0))
+            for k in bn_training_checkpoints.keys():
+                sess.run(tf.compat.v1.assign(k, tf.compat.v1.constant(True)))
         return _Handle(cleanup)
     except:
         cleanup()
@@ -165,15 +158,13 @@ def reestimate_bn_stats(sess: tf.compat.v1.Session, start_op_names: List[str],
 
     with sess.graph.as_default():
         # save checkpoints
-        bn_momentum_checkpoints = {v.name: sess.run(v) for v in bn_momentum_tf_var_list}
-        bn_training_checkpoints = {v.name: sess.run(v) for v in bn_training_tf_var_list}
+        bn_momentum_checkpoints = {v: sess.run(v) for v in bn_momentum_tf_var_list}
+        bn_training_checkpoints = {v: sess.run(v) for v in bn_training_tf_var_list}
+        bn_mean_var_checkpoints = {v: sess.run(v) for v in bn_mean_var_tf_var_list}
 
     # 1. switch to re-estimation mode and setup remove
-    handle = _reset_bn_stats(sess, bn_mean_var_tf_var_list, bn_momentum_tf_var_list, bn_training_tf_var_list,
-                             bn_momentum_checkpoints, bn_training_checkpoints)
-
+    handle = _reset_bn_stats(sess, bn_mean_var_checkpoints, bn_momentum_checkpoints, bn_training_checkpoints)
     # 2 per batch forward and BN re-estimation
-
     with sess.graph.as_default():
         output_ops = [sess.graph.get_operation_by_name(name) for name in output_op_names]
         output_tensors = [sess.graph.get_tensor_by_name(output_op.name + ':0') for output_op in output_ops]
@@ -183,7 +174,7 @@ def reestimate_bn_stats(sess: tf.compat.v1.Session, start_op_names: List[str],
             output_tensors = tf.compat.v1.identity(output_tensors)
         initialize_uninitialized_vars(sess)
         # (1)intilization
-        sum_dict = {v.name: np.zeros(v.shape, dtype=v.dtype.as_numpy_dtype) for v in bn_mean_var_tf_var_list}
+        sum_dict = {v: np.zeros(v.shape, dtype=v.dtype.as_numpy_dtype) for v in bn_mean_var_tf_var_list}
         # (2)forward and accumulate mean and var
     for batch_index in range(bn_num_batches):
         try:
@@ -191,22 +182,23 @@ def reestimate_bn_stats(sess: tf.compat.v1.Session, start_op_names: List[str],
             feed_dict = create_input_feed_dict(sess.graph, start_op_names, batch_data)
             sess.run(output_tensors, feed_dict=feed_dict)
             for v in bn_mean_var_tf_var_list:
-                sum_dict[v.name] += sess.run(v)
+                # sum_dict[v.name] += sess.run(v)
+                sum_dict[v] += sess.run(v)
             if batch_index == bn_num_batches - 1:
                 break
         except tf.errors.OutOfRangeError:
-            raise StopIteration("========>tf.errors.OutOfRangeError:: no data from BN dataset.")
+            print("tf.errors.OutOfRangeError:: no data from BN dataset.")  # ==> "End of dataset"
+            break
     # (3) average mean&var
     for k in sum_dict.keys():
         sum_dict[k] = sum_dict[k] / bn_num_batches
     # (4) apply result: a.update BN stats with new  b.restore momentum  c. restore training
-
     with sess.graph.as_default():
-        for v in bn_mean_var_tf_var_list:
-            sess.run(tf.compat.v1.assign(v, sum_dict[v.name]))
-        for v in bn_momentum_tf_var_list:
-            sess.run(tf.compat.v1.assign(v, bn_momentum_checkpoints[v.name]))
-        for v in bn_training_tf_var_list:
-            sess.run(tf.compat.v1.assign(v, bn_training_checkpoints[v.name]))
+        for k in bn_mean_var_checkpoints.keys():
+            sess.run(tf.compat.v1.assign(k, sum_dict[k]))
+        for k in bn_momentum_checkpoints.keys():
+            sess.run(tf.compat.v1.assign(k, bn_momentum_checkpoints[k]))
+        for k in bn_training_checkpoints.keys():
+            sess.run(tf.compat.v1.assign(k, bn_training_checkpoints[k]))
 
     return handle
