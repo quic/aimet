@@ -36,7 +36,6 @@
 #  @@-COPYRIGHT-END-@@
 # =============================================================================
 
-# import pudb; pudb.set_trace()
 import pytest
 import unittest.mock
 import json
@@ -58,8 +57,18 @@ from aimet_torch.utils import create_rand_tensors_given_shapes
 from aimet_torch.quantsim import QuantizationSimModel
 from aimet_common.defs import QuantScheme
 
+from torch.nn.modules.batchnorm import _BatchNorm
+
 
 torch.manual_seed(1228)
+
+
+def _initialize_bn_params(model: torch.nn.Module):
+    for module in model.modules():
+        if isinstance(module, _BatchNorm) and module.affine:
+            with torch.no_grad():
+                module.weight.copy_(torch.randn_like(module.weight))
+                module.bias.copy_(torch.randn_like(module.bias))
 
 
 class MyModel(torch.nn.Module):
@@ -139,11 +148,12 @@ class TwoInputs(torch.nn.Module):
         return x
 
 
-class TestTrainingExtensionBnFold(unittest.TestCase):
+class TestTrainingExtensionBnFold:
 
     def test_fold_two_conv_layers(self):
         torch.manual_seed(10)
         model = models.resnet18()
+        _initialize_bn_params(model)
 
         model = model.eval()
         random_input = torch.rand(1, 3, 224, 224)
@@ -180,6 +190,7 @@ class TestTrainingExtensionBnFold(unittest.TestCase):
 
         torch.manual_seed(10)
         model = MyModel()
+        _initialize_bn_params(model)
 
         model = model.eval()
         random_input = torch.rand(20, 10, 4, 4)
@@ -224,6 +235,7 @@ class TestTrainingExtensionBnFold(unittest.TestCase):
 
         torch.manual_seed(10)
         model = MyModel()
+        _initialize_bn_params(model)
 
         model = model.eval()
         random_input = torch.rand(2, 10, 24, 24)
@@ -263,6 +275,7 @@ class TestTrainingExtensionBnFold(unittest.TestCase):
 
         torch.manual_seed(10)
         model = MyModel()
+        _initialize_bn_params(model)
 
         model = model.eval()
         random_input = torch.rand(2, 10, 24, 24)
@@ -305,6 +318,7 @@ class TestTrainingExtensionBnFold(unittest.TestCase):
 
         torch.manual_seed(10)
         model = MyModel()
+        _initialize_bn_params(model)
 
         model = model.eval()
         random_input = torch.rand(2, 10, 24, 24)
@@ -342,6 +356,7 @@ class TestTrainingExtensionBnFold(unittest.TestCase):
 
         torch.manual_seed(10)
         model = MyModel()
+        _initialize_bn_params(model)
 
         model = model.eval()
         random_input = torch.rand(2, 10, 24, 24)
@@ -379,6 +394,7 @@ class TestTrainingExtensionBnFold(unittest.TestCase):
 
         torch.manual_seed(10)
         model = MyModel()
+        _initialize_bn_params(model)
 
         model = model.eval()
         random_input = torch.rand(2, 10, 24, 24)
@@ -416,6 +432,7 @@ class TestTrainingExtensionBnFold(unittest.TestCase):
 
         torch.manual_seed(10)
         model = MyModel()
+        _initialize_bn_params(model)
 
         random_input = torch.randn((32, 10))
 
@@ -455,6 +472,7 @@ class TestTrainingExtensionBnFold(unittest.TestCase):
 
         torch.manual_seed(10)
         model = MyModel()
+        _initialize_bn_params(model)
 
         random_input = torch.randn((32, 10))
 
@@ -491,6 +509,7 @@ class TestTrainingExtensionBnFold(unittest.TestCase):
 
         torch.manual_seed(10)
         model = MyModel()
+        _initialize_bn_params(model)
 
         random_input = torch.randn((32, 10))
 
@@ -530,6 +549,7 @@ class TestTrainingExtensionBnFold(unittest.TestCase):
 
         torch.manual_seed(10)
         model = MyModel()
+        _initialize_bn_params(model)
 
         random_input = torch.randn((32, 10))
 
@@ -552,6 +572,7 @@ class TestTrainingExtensionBnFold(unittest.TestCase):
     def test_find_batch_norms_to_fold(self):
 
         model = MyModel()
+        _initialize_bn_params(model)
         model.eval()
 
         input_shape = (2, 10, 24, 24)
@@ -563,8 +584,9 @@ class TestTrainingExtensionBnFold(unittest.TestCase):
         assert (model.bn2, model.conv3) in bn_conv_pairs
 
     def test_bn_fold_auto_mode_transposed_conv2d(self):
-        torch.manual_seed(0)
+        torch.manual_seed(10)
         model = TransposedConvModel()
+        _initialize_bn_params(model)
         model = model.eval()
 
         random_input = torch.rand((10, 10, 4, 4))
@@ -577,12 +599,13 @@ class TestTrainingExtensionBnFold(unittest.TestCase):
 
         assert not isinstance(model.bn1, torch.nn.BatchNorm2d)
 
-        assert sum(baseline_output.reshape(-1) - output_after_fold.reshape(-1)) < 1e-5
+        assert np.allclose(baseline_output, output_after_fold, rtol=1.e-2)
         assert len(folded_pairs) == 2
 
     def test_find_batch_norms_to_fold_multi_input(self):
 
         model = TwoInputs()
+        _initialize_bn_params(model)
         model.eval()
         inp_shapes = [(1, 3, 32, 32), (1, 3, 20, 20)]
 
@@ -598,6 +621,7 @@ class TestTrainingExtensionBnFold(unittest.TestCase):
         torch.manual_seed(10)
 
         model = MyModel()
+        _initialize_bn_params(model)
 
         model = model.eval()
         random_input = torch.rand(2, 10, 24, 24)
@@ -627,6 +651,7 @@ class TestTrainingExtensionBnFold(unittest.TestCase):
                 return x
 
         model = MyModel()
+        _initialize_bn_params(model)
         model.eval()
 
         random_input = torch.randn((2, 10, 32))
@@ -663,6 +688,7 @@ class TestTrainingExtensionBnFold(unittest.TestCase):
                 return x
 
         model = MyModel()
+        _initialize_bn_params(model)
         model.eval()
 
         random_input = torch.randn((2, 10, 32))
@@ -701,6 +727,7 @@ class TestTrainingExtensionBnFold(unittest.TestCase):
 
         torch.manual_seed(10)
         model = MyModel()
+        _initialize_bn_params(model)
 
         random_input = torch.randn((2, 10, 32))
 
@@ -736,6 +763,7 @@ class TestTrainingExtensionBnFold(unittest.TestCase):
 
         torch.manual_seed(10)
         model = MyModel()
+        _initialize_bn_params(model)
 
         random_input = torch.randn((2, 4, 4))
 
@@ -809,11 +837,12 @@ def quantsim(model, input_shape):
             pass
 
 
-class TestTrainingExtensionBnFoldToScale(unittest.TestCase):
+class TestTrainingExtensionBnFoldToScale:
 
     def test_fold_two_conv_layers(self):
         torch.manual_seed(10)
         model = models.resnet18()
+        _initialize_bn_params(model)
         input_shape = (1, 3, 224, 224)
 
         model = model.eval()
@@ -854,6 +883,7 @@ class TestTrainingExtensionBnFoldToScale(unittest.TestCase):
 
         torch.manual_seed(10)
         model = MyModel()
+        _initialize_bn_params(model)
 
         model = model.eval()
 
@@ -891,6 +921,7 @@ class TestTrainingExtensionBnFoldToScale(unittest.TestCase):
 
         torch.manual_seed(10)
         model = MyModel()
+        _initialize_bn_params(model)
 
         model = model.eval()
 
@@ -926,6 +957,7 @@ class TestTrainingExtensionBnFoldToScale(unittest.TestCase):
 
         torch.manual_seed(10)
         model = MyModel()
+        _initialize_bn_params(model)
 
         model = model.eval()
         random_input = torch.rand(2, 10, 24, 24)
@@ -973,6 +1005,7 @@ class TestTrainingExtensionBnFoldToScale(unittest.TestCase):
 
         torch.manual_seed(10)
         model = MyModel()
+        _initialize_bn_params(model)
 
         model = model.eval()
         random_input = torch.rand(2, 10, 24, 24)
@@ -1013,6 +1046,7 @@ class TestTrainingExtensionBnFoldToScale(unittest.TestCase):
 
         torch.manual_seed(10)
         model = MyModel()
+        _initialize_bn_params(model)
 
         model = model.eval()
 
@@ -1046,6 +1080,7 @@ class TestTrainingExtensionBnFoldToScale(unittest.TestCase):
 
         torch.manual_seed(10)
         model = MyModel()
+        _initialize_bn_params(model)
 
         model = model.eval()
         random_input = torch.rand(2, 10, 24, 24)
@@ -1086,6 +1121,7 @@ class TestTrainingExtensionBnFoldToScale(unittest.TestCase):
 
         torch.manual_seed(10)
         model = MyModel()
+        _initialize_bn_params(model)
 
         # Set the batch norm params to something non-zero with a random batch
         model.train()
@@ -1117,6 +1153,7 @@ class TestTrainingExtensionBnFoldToScale(unittest.TestCase):
 
         torch.manual_seed(10)
         model = MyModel()
+        _initialize_bn_params(model)
 
         # Set the batch norm params to something non-zero with a random batch
         model.train()
@@ -1148,6 +1185,7 @@ class TestTrainingExtensionBnFoldToScale(unittest.TestCase):
 
         torch.manual_seed(10)
         model = MyModel()
+        _initialize_bn_params(model)
 
         random_input = torch.randn((32, 10))
 
@@ -1192,6 +1230,7 @@ class TestTrainingExtensionBnFoldToScale(unittest.TestCase):
 
         torch.manual_seed(10)
         model = MyModel()
+        _initialize_bn_params(model)
 
         random_input = torch.randn((32, 10))
 
@@ -1215,8 +1254,9 @@ class TestTrainingExtensionBnFoldToScale(unittest.TestCase):
         assert np.allclose(baseline_output, output_after_fold, rtol=1.e-2)
 
     def test_bn_fold_auto_mode_transposed_conv2d(self):
-        torch.manual_seed(0)
+        torch.manual_seed(10)
         model = TransposedConvModel()
+        _initialize_bn_params(model)
         model = model.eval()
 
         sim = quantsim(model, (10, 10 ,4, 4))
@@ -1229,13 +1269,14 @@ class TestTrainingExtensionBnFoldToScale(unittest.TestCase):
 
         assert not isinstance(model.bn1._module_to_wrap, torch.nn.BatchNorm2d)
 
-        assert sum(baseline_output.reshape(-1) - output_after_fold.reshape(-1)) < 1e-5
+        assert np.allclose(baseline_output, output_after_fold, rtol=1.e-2)
         assert len(folded_pairs) == 2
 
     def test_bn_fold_auto_mode(self):
         torch.manual_seed(10)
 
         model = MyModel()
+        _initialize_bn_params(model)
 
         model = model.eval()
         sim = quantsim(model, (2, 10, 24, 24))
@@ -1258,6 +1299,7 @@ class TestTrainingExtensionBnFoldToScale(unittest.TestCase):
                 return x
 
         model = MyModel()
+        _initialize_bn_params(model)
         model.eval()
 
         random_input = torch.randn((2, 10, 32))
@@ -1297,6 +1339,7 @@ class TestTrainingExtensionBnFoldToScale(unittest.TestCase):
                 return x
 
         model = MyModel()
+        _initialize_bn_params(model)
         model.eval()
 
         random_input = torch.randn((2, 10, 32))
@@ -1340,6 +1383,7 @@ class TestTrainingExtensionBnFoldToScale(unittest.TestCase):
 
         torch.manual_seed(10)
         model = MyModel()
+        _initialize_bn_params(model)
 
         # Set the batch norm params to something non-zero with a random batch
         model.train()
@@ -1368,6 +1412,7 @@ class TestTrainingExtensionBnFoldToScale(unittest.TestCase):
 
         torch.manual_seed(10)
         model = MyModel()
+        _initialize_bn_params(model)
 
         # Set the batch norm params to something non-zero with a random batch
         model.train()

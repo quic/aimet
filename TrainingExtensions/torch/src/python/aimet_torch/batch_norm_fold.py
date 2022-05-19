@@ -194,9 +194,13 @@ def _fold_to_scale(conv_wrapper: QcQuantizeWrapper, bn_wrapper: QcQuantizeWrappe
         new_encodings = []
         for old_encoding, c in zip(encodings, gamma/sigma):
             new_encoding = libpymo.TfEncoding()
-            new_encoding.delta = old_encoding.delta * c
-            new_encoding.max = old_encoding.max * c
-            new_encoding.min = old_encoding.min * c
+            new_encoding.delta = old_encoding.delta * abs(c)
+            if c >= 0:
+                new_encoding.max = old_encoding.max * c
+                new_encoding.min = old_encoding.min * c
+            else:
+                new_encoding.max = old_encoding.min * c
+                new_encoding.min = old_encoding.max * c
             new_encoding.offset = old_encoding.offset
             new_encoding.bw = old_encoding.bw
             new_encodings.append(new_encoding)
