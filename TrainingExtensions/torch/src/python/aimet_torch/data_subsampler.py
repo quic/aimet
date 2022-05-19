@@ -167,8 +167,6 @@ class DataSubSampler:
         :param model: model
         :param batch: batch
         """
-        # keep the model in eval mode
-        model.eval()
 
         # get the model's device placement information
         device = utils.get_device(model)
@@ -179,7 +177,8 @@ class DataSubSampler:
             batch = [batch]
 
         try:
-            with torch.no_grad():
+            # keep the model in eval mode
+            with utils.in_eval_mode(model), torch.no_grad():
                 _ = model(*batch)
         except StopForwardException:
             pass

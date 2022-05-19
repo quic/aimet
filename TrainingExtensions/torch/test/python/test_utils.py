@@ -244,6 +244,7 @@ class TestTrainingExtensionsUtils(unittest.TestCase):
 
     def _collect_inp_out_data(self, device):
         model = TinyModel().to(device=device)
+        model.eval()
         model_input = torch.randn(1, 3, 32, 32).to(device=device)
 
         module_data = utils.ModuleData(model, model.conv1)
@@ -287,6 +288,7 @@ class TestTrainingExtensionsUtils(unittest.TestCase):
 
     def _collect_inp_out_data_multi_input(self, device):
         model = MultiInput().to(device=device)
+        model.eval()
         inp_shape_1 = (1, 3, 32, 32)
         inp_shape_2 = (1, 3, 20, 20)
         model_input = utils.create_rand_tensors_given_shapes([inp_shape_1, inp_shape_2])

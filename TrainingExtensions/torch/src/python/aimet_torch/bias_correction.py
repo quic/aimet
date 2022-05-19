@@ -76,12 +76,11 @@ def forward_pass(model: torch.nn.Module, batch: torch.Tensor):
     :param batch: batch
     :return: Nothing
     """
-    model.eval()
     # first check if the model is on GPU or not
     if utils.is_model_on_gpu(model):
         batch = batch.cuda()
     try:
-        with torch.no_grad():
+        with utils.in_eval_mode(model), torch.no_grad():
             _ = model(batch)
     except StopForwardException:
         pass
