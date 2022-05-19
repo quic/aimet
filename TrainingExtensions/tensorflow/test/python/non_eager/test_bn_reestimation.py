@@ -52,9 +52,7 @@ import tensorflow as tf
 from aimet_common.utils import AimetLogger
 from aimet_common.defs import QuantScheme
 from aimet_tensorflow.quantsim import QuantizationSimModel
-from aimet_tensorflow.batch_norm_fold import find_all_batch_norms_to_fold
 from aimet_tensorflow.bn_reestimation import reestimate_bn_stats, _get_all_tf_bn_vars_list
-
 tf.compat.v1.logging.set_verbosity(tf.compat.v1.logging.WARN)
 logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Test)
 AimetLogger.set_level_for_all_areas(logging.DEBUG)
@@ -171,7 +169,7 @@ def sessions(device):
             input_op_names = ["input_1"]
             output_op_names = ['dense/BiasAdd']
 
-            bn_conv_linear_pairs = find_all_batch_norms_to_fold(sess, input_op_names, output_op_names)
+            #bn_conv_linear_pairs = find_all_batch_norms_to_fold(sess, input_op_names, output_op_names)
 
             quantsim_config = {
                 "defaults": {
@@ -206,7 +204,7 @@ def sessions(device):
                 sess.run(model_output, feed_dict={model_input: dummy_val})
 
             sim.compute_encodings(dummy_forward_pass, None)
-    return sim, sess, bn_conv_linear_pairs
+    return sim, sess
 
 
 @pytest.fixture(scope="session")
@@ -242,7 +240,7 @@ def bn_re_restimation_dataset(bn_num_batches, batch_size):
 def test_reestimation_with_quantsim_model(gpu_sessions, bn_re_restimation_dataset,
                                           bn_num_batches,
                                           bn_momentum_names, bn_training_names):
-    sess_sim, sess_fp32, bn_conv_linear_pairs = gpu_sessions
+    sess_sim, sess_fp32 = gpu_sessions
     _test_reestimation(sess_sim, sess_fp32, bn_re_restimation_dataset, bn_num_batches,
                        bn_momentum_names, bn_training_names)
 

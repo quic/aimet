@@ -43,7 +43,6 @@ import numpy as np
 import tensorflow as tf
 from aimet_common.utils import AimetLogger
 from aimet_tensorflow.common.graph_eval import initialize_uninitialized_vars
-from aimet_tensorflow.quantsim import QuantizationSimModel
 from aimet_tensorflow.utils.common import create_input_feed_dict, iterate_tf_dataset
 
 logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Quant)
