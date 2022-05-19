@@ -387,14 +387,13 @@ def fold_all_batch_norms_to_weight(
     :param fold_to_scale: If True, fold BatchNorms to quantization scale parameter.
     :return: A list of pairs of layers [(Conv/Linear, BN layer that got folded)]
     """
-    with utils.on_cpu(model), utils.in_eval_mode(model), torch.no_grad():
-        inp_tensor_list = utils.create_rand_tensors_given_shapes(input_shapes)
-        connected_graph = ConnectedGraph(model, inp_tensor_list)
-        conv_bn_pairs, bn_conv_pairs = _find_all_batch_norms_to_fold(model, input_shapes, connected_graph)
+    inp_tensor_list = utils.create_rand_tensors_given_shapes(input_shapes)
+    connected_graph = ConnectedGraph(model, inp_tensor_list)
+    conv_bn_pairs, bn_conv_pairs = _find_all_batch_norms_to_fold(model, input_shapes, connected_graph)
 
-        _fold_given_batch_norms(model, conv_bn_pairs, bn_conv_pairs)
+    _fold_given_batch_norms(model, conv_bn_pairs, bn_conv_pairs)
 
-        return conv_bn_pairs + [(conv, bn) for bn, conv in bn_conv_pairs]
+    return conv_bn_pairs + [(conv, bn) for bn, conv in bn_conv_pairs]
 
 
 fold_all_batch_norms = fold_all_batch_norms_to_weight
@@ -419,22 +418,21 @@ def fold_all_batch_norms_to_scale(
     model = sim.model
     connected_graph = sim.connected_graph
 
-    with utils.on_cpu(model), utils.in_eval_mode(model), torch.no_grad():
-        quant_wrappers = {
-            quant_wrapper._module_to_wrap: quant_wrapper
-            for quant_wrapper in sim.quant_wrappers()
-        }
-        conv_bn_pairs, bn_conv_pairs = _find_all_batch_norms_to_fold(model, input_shapes, connected_graph)
-        conv_bn_pairs = [
-            (quant_wrappers[conv], quant_wrappers[bn]) for conv, bn in conv_bn_pairs
-        ]
-        bn_conv_pairs = [
-            (quant_wrappers[bn], quant_wrappers[conv]) for bn, conv in bn_conv_pairs
-        ]
+    quant_wrappers = {
+        quant_wrapper._module_to_wrap: quant_wrapper
+        for quant_wrapper in sim.quant_wrappers()
+    }
+    conv_bn_pairs, bn_conv_pairs = _find_all_batch_norms_to_fold(model, input_shapes, connected_graph)
+    conv_bn_pairs = [
+        (quant_wrappers[conv], quant_wrappers[bn]) for conv, bn in conv_bn_pairs
+    ]
+    bn_conv_pairs = [
+        (quant_wrappers[bn], quant_wrappers[conv]) for bn, conv in bn_conv_pairs
+    ]
 
-        _fold_given_batch_norms(model, conv_bn_pairs, bn_conv_pairs)
+    _fold_given_batch_norms(model, conv_bn_pairs, bn_conv_pairs)
 
-        return conv_bn_pairs + [(conv, bn) for bn, conv in bn_conv_pairs]
+    return conv_bn_pairs + [(conv, bn) for bn, conv in bn_conv_pairs]
 
 
 def find_all_conv_bn_with_activation(model: torch.nn.Module, input_shape: Tuple) -> Dict:
