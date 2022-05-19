@@ -656,7 +656,8 @@ class OnnxSaver:
         cls._add_markers(model, module_name_map, module_marker_map, is_conditional)
         temp_file = os.path.join(working_dir, 'temp_onnx_model_with_markers.onnx')
         if is_conditional:
-            dummy_output = model(*dummy_input)
+            with aimet_torch.utils.in_eval_mode(model), torch.no_grad():
+                dummy_output = model(*dummy_input)
             scripted_model = torch.jit.script(model)
             torch.onnx.export(scripted_model, dummy_input, temp_file, example_outputs=dummy_output,
                               enable_onnx_checker=False, **onnx_export_args.kwargs)

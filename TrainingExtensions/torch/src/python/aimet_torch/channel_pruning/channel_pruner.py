@@ -51,6 +51,7 @@ from aimet_common.channel_pruner import select_channels_to_prune
 from aimet_torch.layer_database import LayerDatabase, Layer
 from aimet_torch.data_subsampler import DataSubSampler
 from aimet_torch.channel_pruning.weight_reconstruction import WeightReconstructor
+from aimet_torch import utils
 from aimet_torch.winnow.winnow import winnow_model
 
 
@@ -150,7 +151,7 @@ class InputChannelPruner(Pruner):
             handles.append(pair.layer.module.register_forward_hook(sorting_hook))
 
         # run one forward pass with hooks
-        with torch.no_grad():
+        with utils.in_eval_mode(model), torch.no_grad():
             _ = model(input_data)
 
         # remove hooks

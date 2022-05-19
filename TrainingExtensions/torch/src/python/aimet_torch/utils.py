@@ -114,9 +114,6 @@ class ModuleData:
 
         handle = self._module.register_forward_hook(_hook_to_collect_inp_out_data)
 
-        # keep the model in eval mode
-        self._model.eval()
-
         # get the model's device placement information
         device = get_device(self._model)
 
@@ -127,7 +124,7 @@ class ModuleData:
             model_input = [model_input]
 
         try:
-            with torch.no_grad():
+            with in_eval_mode(self._model), torch.no_grad():
                 _ = self._model(*model_input)
 
         except StopForwardException:
@@ -234,7 +231,7 @@ def run_hook_for_layers(model: torch.nn.Module, input_shapes: Union[Tuple, List[
     device = get_device(model)
     dummy_tensors = create_rand_tensors_given_shapes(input_shapes)
     dummy_tensors = [tensor.to(device) for tensor in dummy_tensors]
-    with torch.no_grad():
+    with in_eval_mode(model), torch.no_grad():
         _ = model(*dummy_tensors)
 
     # --------------------------
@@ -271,7 +268,7 @@ def run_hook_for_layers_with_given_input(model: torch.nn.Module, input_tensor: U
     # ------------------------------------------------
     # Run forward pass to execute the hook functions
     # ------------------------------------------------
-    with torch.no_grad():
+    with in_eval_mode(model), torch.no_grad():
         if isinstance(input_tensor, (list, tuple)):
             _ = model(*input_tensor)
         else:
