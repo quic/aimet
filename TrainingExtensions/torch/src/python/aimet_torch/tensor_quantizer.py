@@ -83,6 +83,10 @@ class TensorQuantizer:
         self.data_type = data_type
         self._is_encoding_frozen = False
 
+    @property
+    def quant_scheme(self):
+        return self._quant_scheme
+
 
 class PickableState:
     """
@@ -446,7 +450,6 @@ class LearnedGridTensorQuantizer(TensorQuantizer):
         self.scaling, self.offset = None, None
         self.device = None
         self._ch_axis = 0
-        self.quant_scheme = quant_scheme
 
     @staticmethod
     def get_n_and_p(bitwidth, use_symmetric_encoding):

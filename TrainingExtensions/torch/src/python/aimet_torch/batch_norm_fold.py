@@ -215,6 +215,12 @@ def _fold_to_scale(conv_wrapper: QcQuantizeWrapper, bn_wrapper: QcQuantizeWrappe
 
 
 def _fold_to_weight(conv_linear: LayerType, bn: BatchNormType, fold_backward: bool):
+    """
+    Fold BatchNorm into the weight and bias of the given layer.
+
+    :param conv_linear: Conv or linear layer to fold BN into.
+    :param bn: BatchNorm to fold.
+    """
     # Transpose weights to C, N, H, W from N, C, H, W since axis are flipped for transposed conv
     # However depthwise conv layers are always N, 1, H, W whether transposed-conv or not, so no need to transpose
     if isinstance(conv_linear, torch.nn.ConvTranspose2d) and conv_linear.groups == 1:
@@ -402,7 +408,7 @@ def fold_all_batch_norms_to_scale(
     Fold all batch_norm layers in a model into the quantization scale parameter
     of the corresponding conv layers
 
-    :param model: Model
+    :param sim: QuantizationSimModel
     :param input_shapes: Input shapes for the model (can be one or multiple inputs)
     :return: A list of pairs of layers [(Conv/Linear, BN layer that got folded)]
     """
