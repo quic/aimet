@@ -46,6 +46,8 @@ import numpy as np
 import tensorflow as tf
 from tensorflow.python.framework import ops as tf_ops
 from packaging import version
+
+import aimet_common.libpymo as libpymo
 from aimet_common.defs import QuantScheme, QuantizationDataType
 from aimet_common.quantsim import calculate_delta_offset, encoding_version, validate_quantsim_inputs, \
     recompute_grid_params
@@ -71,7 +73,6 @@ from aimet_tensorflow.quantsim_recurrent import _select_simple_rnn_internal_ops_
 
 # this is required to associate gradient with QcQuantize op
 from aimet_tensorflow import quantsim_straight_through_grad      # pylint: disable=unused-import
-import libpymo
 
 
 # pylint: disable=too-many-lines

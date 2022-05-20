@@ -41,11 +41,11 @@ import os
 import tensorflow as tf
 from packaging import version
 
+import aimet_common.libpymo as libpymo
 from aimet_tensorflow.quantsim import QuantizationSimModel
 from aimet_tensorflow.common.graph_eval import initialize_uninitialized_vars
 from aimet_tensorflow.utils.constants import QuantizeOpIndices
 
-import libpymo
 
 if version.parse(tf.version.VERSION) >= version.parse("2.0"):
     import transformers

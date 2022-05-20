@@ -39,10 +39,10 @@ import os
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
 import tensorflow as tf
 
+import aimet_common.libpymo as libpymo
 from aimet_tensorflow.examples.test_models import keras_model
 from aimet_tensorflow.quantsim import QuantizationSimModel
 from aimet_tensorflow.quantizer_info import QuantizeOpIndices
-import libpymo
 
 tf.compat.v1.logging.set_verbosity(tf.compat.v1.logging.WARN)
 tf.compat.v1.disable_eager_execution()

@@ -40,6 +40,8 @@
 from typing import List, Dict, Tuple, Set, Union
 import tensorflow as tf
 from packaging import version
+
+import aimet_common.libpymo as pymo
 from aimet_common.quantsim_config.json_config_importer import DefaultsType, OpType, ParamType, OpTypeType, \
     SupergroupType, ConfigType, ConfigDictKeys
 from aimet_common.connected_graph.connectedgraph_utils import get_all_input_ops, get_all_output_ops
@@ -54,8 +56,6 @@ from aimet_tensorflow.quantizer_info import QuantizerInfo
 from aimet_tensorflow.common.connectedgraph import ConnectedGraph
 from aimet_tensorflow.common.operation import Op
 from aimet_tensorflow.utils.common import update_variables_with_values, onnx_tf_conn_graph_type_pairs
-
-import libpymo as pymo
 
 
 logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Quant)

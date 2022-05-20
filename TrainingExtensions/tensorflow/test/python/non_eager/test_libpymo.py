@@ -38,5 +38,5 @@
 
 
 def testLibPymo():
-  import libpymo
+  import aimet_common.libpymo as libpymo
 

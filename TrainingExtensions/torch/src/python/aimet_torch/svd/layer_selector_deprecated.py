@@ -40,8 +40,7 @@
 
 from torch import nn
 
-import libpymo as pymo
-
+import aimet_common.libpymo as pymo
 from aimet_common.utils import AimetLogger
 from aimet_common import cost_calculator as cc
 from aimet_torch.svd.svd_intf_defs_deprecated import LayerSelectionScheme, CostMetric

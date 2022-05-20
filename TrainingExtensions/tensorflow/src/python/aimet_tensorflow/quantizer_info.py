@@ -44,10 +44,10 @@ from typing import Union, List
 import tensorflow as tf
 import numpy as np
 
+import aimet_common.libpymo as libpymo
 from aimet_common.defs import QuantScheme, QuantizationDataType
 from aimet_common.quantsim import calculate_delta_offset
 from aimet_tensorflow.utils.constants import QuantizeOpIndices
-import libpymo
 
 
 quant_scheme_to_libpymo = {QuantScheme.post_training_tf: libpymo.QuantizationMode.QUANTIZATION_TF,

@@ -46,21 +46,20 @@ import torch.nn.functional as functional
 import numpy as np
 import pytest
 import copy
-import libpymo as pymo
 
+import aimet_common.libpymo as pymo
 import aimet_common.defs
+from aimet_common import cost_calculator as cc
+from aimet_common.defs import LayerCompRatioPair
+from aimet_common.utils import AimetLogger
 import aimet_torch.svd.svd_intf_defs_deprecated
 from aimet_torch.examples import mnist_torch_model as mnist_model
-from aimet_common.utils import AimetLogger
-
 from aimet_torch.utils import create_rand_tensors_given_shapes
 from aimet_torch import pymo_utils
 from aimet_torch.svd import layer_selector_deprecated as ls, svd as svd_intf, svd_impl as s
 from aimet_torch.layer_database import LayerDatabase, Layer
 from aimet_torch.svd import svd_pruner_deprecated
 from aimet_torch.svd import rank_selector as rank_select
-from aimet_common import cost_calculator as cc
-from aimet_common.defs import LayerCompRatioPair
 from aimet_torch.svd.svd_pruner import WeightSvdPruner
 
 logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Test)

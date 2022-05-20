@@ -42,8 +42,7 @@ from enum import Enum
 from torch import cuda
 
 # Import AIMET specific modules
-import libpymo as pymo
-
+import aimet_common.libpymo as pymo
 import aimet_common.defs
 from aimet_common.utils import AimetLogger
 from aimet_common import statistics_util as stats_u, cost_calculator as cc

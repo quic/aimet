@@ -137,7 +137,7 @@ source /usr/local/lib/python3.6/dist-packages/aimet_common/bin/envsetup.sh
 
 Add the AIMET package location to the environment paths as follows:
 ```bash
-export LD_LIBRARY_PATH=/usr/local/lib/python3.6/dist-packages/aimet_common/x86_64-linux-gnu:/usr/local/lib/python3.6/dist-packages/aimet_common:$LD_LIBRARY_PATH
+export LD_LIBRARY_PATH=/usr/local/lib/python3.6/dist-packages/aimet_common:$LD_LIBRARY_PATH
 
-if [[ $PYTHONPATH = "" ]]; then export PYTHONPATH=/usr/local/lib/python3.6/dist-packages/aimet_common/x86_64-linux-gnu; else export PYTHONPATH=/usr/local/lib/python3.6/dist-packages/aimet_common/x86_64-linux-gnu:$PYTHONPATH; fi
+if [[ $PYTHONPATH = "" ]]; then export PYTHONPATH=/usr/local/lib/python3.6/dist-packages/aimet_common; else export PYTHONPATH=/usr/local/lib/python3.6/dist-packages/aimet_common:$PYTHONPATH; fi
 ```

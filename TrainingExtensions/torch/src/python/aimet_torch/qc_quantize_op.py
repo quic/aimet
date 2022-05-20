@@ -44,7 +44,7 @@ from typing import Dict, Tuple, Union, List
 import torch
 from torch import nn
 
-import libpymo
+import aimet_common.libpymo as libpymo
 from aimet_common.utils import AimetLogger
 from aimet_common.defs import QuantScheme, QuantizationDataType, MAP_ROUND_MODE_TO_PYMO
 from aimet_torch import utils

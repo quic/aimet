@@ -44,9 +44,9 @@ import shutil
 from typing import List, Tuple, Callable, Union, Dict
 from tqdm import tqdm
 import tensorflow as tf
-import libpymo
 
 # Import AIMET specific modules
+import aimet_common.libpymo as libpymo
 from aimet_common.utils import AimetLogger
 from aimet_common.defs import QuantScheme
 from aimet_common.quantsim_config.json_config_importer import JsonConfigImporter, ConfigDictKeys, ConfigDictType

@@ -40,10 +40,10 @@
 from typing import List
 import torch
 
-import libpymo as pymo
-from aimet_torch.layer_database import Layer
+import aimet_common.libpymo as pymo
 from aimet_common.defs import CostMetric
 from aimet_common.utils import AimetLogger
+from aimet_torch.layer_database import Layer
 
 logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Svd)
 

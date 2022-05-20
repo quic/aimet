@@ -41,7 +41,7 @@ import copy
 import numpy as np
 import json
 
-import libpymo
+import aimet_common.libpymo as libpymo
 
 import torch
 import torch.nn as nn

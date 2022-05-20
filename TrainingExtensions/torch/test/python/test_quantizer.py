@@ -39,10 +39,8 @@ import json as json
 import os
 import unittest.mock
 from collections import namedtuple
-from pprint import pprint
 from typing import Dict
 from packaging import version
-import libpymo
 import numpy as np
 import onnx
 import pytest
@@ -51,6 +49,7 @@ import torch.nn as nn
 import yaml
 from torchvision import models
 
+import aimet_common.libpymo as libpymo
 from aimet_common.defs import QuantScheme, QuantizationDataType, MAP_ROUND_MODE_TO_PYMO
 from aimet_common.utils import AimetLogger
 from aimet_torch import transformer_utils, onnx_utils
@@ -65,7 +64,6 @@ from aimet_torch.qc_quantize_op import QcQuantizeWrapper, QcQuantizeStandalone, 
 from aimet_torch.qc_quantize_recurrent import QcQuantizeRecurrent
 from aimet_torch.quantsim import QuantizationSimModel, check_accumulator_overflow, load_encodings_to_sim
 from aimet_torch.quantsim_straight_through_grad import compute_dloss_by_dx
-import libpymo
 
 logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Test)
 

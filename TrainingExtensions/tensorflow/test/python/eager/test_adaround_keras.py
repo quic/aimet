@@ -42,6 +42,7 @@ import os
 import numpy as np
 import tensorflow as tf
 
+import aimet_common.libpymo as libpymo
 from aimet_common.defs import QuantScheme
 from aimet_tensorflow.examples.test_models import keras_model
 from aimet_tensorflow.adaround.adaround_loss import AdaroundHyperParameters
@@ -49,7 +50,7 @@ from aimet_tensorflow.keras.adaround.adaround_wrapper import AdaroundWrapper
 from aimet_tensorflow.keras.adaround.adaround_optimizer import AdaroundOptimizer
 from aimet_tensorflow.keras.adaround_weight import Adaround, AdaroundParameters
 from aimet_tensorflow.keras.adaround.activation_sampler import ActivationSampler
-import libpymo
+
 
 def depthwise_conv2d_model():
     inputs = tf.keras.Input(shape=(10, 10, 3,))

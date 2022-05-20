@@ -42,8 +42,7 @@ from typing import Union, Tuple, List
 import numpy as np
 
 from aimet_common.defs import QuantScheme, QuantizationDataType
-
-import libpymo
+import aimet_common.libpymo as libpymo
 # Defined below is a quantization encoding format version, which will follow XX.YY.ZZ versioning as described below,
 #
 #    XX = Major Revision

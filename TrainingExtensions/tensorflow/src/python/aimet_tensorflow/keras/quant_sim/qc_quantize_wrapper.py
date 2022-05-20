@@ -40,12 +40,12 @@
 from typing import Union, List, Dict
 import tensorflow as tf
 
+import aimet_common.libpymo as libpymo
 from aimet_common.utils import AimetLogger
 from aimet_common.defs import QuantScheme
 import aimet_tensorflow.utils.quantsim as quantsim_utils
 from aimet_tensorflow.keras.quant_sim.tensor_quantizer import ActivationTensorQuantizer, ParamTensorQuantizer
 from aimet_tensorflow.keras.utils.common import is_lambda_operator
-import libpymo
 
 _logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Quant)
 

@@ -45,7 +45,7 @@ import math
 import pickle
 import statistics
 import os
-import libpymo as pymo
+import aimet_common.libpymo as pymo
 
 from aimet_common.bokeh_plots import DataTable
 from aimet_common.bokeh_plots import LinePlot
