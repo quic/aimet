@@ -47,7 +47,6 @@ from aimet_tensorflow.utils.common import create_input_feed_dict, iterate_tf_dat
 
 logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Quant)
 
-
 class _Handle:
     """ Removable handle. """
 
@@ -99,8 +98,6 @@ def _get_all_tf_bn_vars_list(sess: tf.compat.v1.Session, momentum_names: List[st
 
     return mean_var_tf_var_list, momentum_tf_var_list, training_tf_var_list
 
-
-# pylint: disable=too-many-arguments
 # pylint: disable=not-an-iterable
 # pylint: disable=unsubscriptable-object
 def _reset_bn_stats(sess: tf.compat.v1.Session, bn_mean_var_checkpoints: Dict, bn_momentum_checkpoints: Dict,
@@ -115,6 +112,9 @@ def _reset_bn_stats(sess: tf.compat.v1.Session, bn_mean_var_checkpoints: Dict, b
     """
 
     def cleanup():
+        """
+        Restore Bn stats
+        """
         with sess.graph.as_default():
             for k in bn_mean_var_checkpoints.keys():
                 sess.run(tf.compat.v1.assign(k, bn_mean_var_checkpoints[k]))
@@ -143,7 +143,7 @@ def reestimate_bn_stats(sess: tf.compat.v1.Session, start_op_names: List[str],
                         output_op_names: List[str], bn_momentum_names: List[str], bn_training_names: List[str],
                         bn_re_estimation_dataset: tf.compat.v1.data.Dataset, bn_num_batches: int = 100):
     """
-    top lavel api for end user directly call for eval()
+    top level api for end user directly call for eval()
     :param sess_sim: tf quantized model
     :param start_op_names: List of starting op names of the model
     :param output_op_names: List of output op names of the model
@@ -187,7 +187,7 @@ def reestimate_bn_stats(sess: tf.compat.v1.Session, start_op_names: List[str],
             if batch_index == bn_num_batches - 1:
                 break
         except tf.errors.OutOfRangeError:
-            print("tf.errors.OutOfRangeError:: no data from BN dataset.")  # ==> "End of dataset"
+            logger.info("tf.errors.OutOfRangeError:: no data from BN dataset.")  # ==> "End of dataset"
             break
     # (3) average mean&var
     for k in sum_dict.keys():
