@@ -38,6 +38,7 @@
 """ Custom PyTorch Op for quantizing weights and activations """
 
 import abc
+import contextlib
 from enum import Enum
 from typing import Dict, Tuple, Union, List
 import torch
@@ -730,37 +731,16 @@ class LearnedGridQuantWrapper(QcQuantizeWrapper):
         :return: Quantized output from the wrapped module
         """
 
-        shadow_params = {}
-        encoding_list_for_params = []
-
         self.apply_gating_logic()
-
-        for name, param in self._module_to_wrap.named_parameters():
-
-            # Store current weight for use later on
-            shadow_params[name] = param.detach().clone()
-            # Create a list of encoding parameters for params
-            if self.param_quantizers[name].enabled:
-                encoding_list_for_params.append(self._parameters[name + '_encoding_min'])
-                encoding_list_for_params.append(self._parameters[name + '_encoding_max'])
 
         # Quantize inputs
         quantized_inputs = self._quantize_activation(inputs, self.input_quantizers, 'input')
         if isinstance(quantized_inputs, torch.Tensor):
             quantized_inputs = [quantized_inputs]
 
-        # Quantize the parameters
-        quantized_inputs[0] = ParameterQuantizer.apply(quantized_inputs[0], self,
-                                                       *encoding_list_for_params)
-
-        # clone() the outputs of Custom function to avoid incorrect gradient calculation for in-place modification
-        # of view (view is created since Custom function's forward return input as-is)
-        quantized_inputs[0] = quantized_inputs[0].clone()
-
-        # Call the forward of the wrapped module
-        wrapped_output = self._module_to_wrap(*quantized_inputs)
-
-        self._restore_shadow_params(shadow_params)
+        with self._quantize_params(quantized_inputs):
+            # Call the forward of the wrapped module
+            wrapped_output = self._module_to_wrap(*quantized_inputs)
 
         # Quantize the outputs
         # pylint: disable=all
@@ -773,6 +753,33 @@ class LearnedGridQuantWrapper(QcQuantizeWrapper):
         output = self._quantize_activation(wrapped_output, self.output_quantizers, 'output')
 
         return output
+
+    @contextlib.contextmanager
+    def _quantize_params(self, inputs=None):
+        inputs = inputs or [torch.empty(1).to(self.device)]
+        shadow_params = {}
+        encoding_list_for_params = []
+
+        try:
+            for name, param in self._module_to_wrap.named_parameters():
+                # Store current weight for use later on
+                shadow_params[name] = param.detach().clone()
+                # Create a list of encoding parameters for params
+                if self.param_quantizers[name].enabled:
+                    encoding_list_for_params.append(self._parameters[name + '_encoding_min'])
+                    encoding_list_for_params.append(self._parameters[name + '_encoding_max'])
+
+            # Quantize the parameters
+            inputs[0] = ParameterQuantizer.apply(inputs[0], self, *encoding_list_for_params)
+
+            # clone() the outputs of Custom function to avoid incorrect gradient calculation for in-place modification
+            # of view (view is created since Custom function's forward return input as-is)
+            inputs[0] = inputs[0].clone()
+            yield
+        finally:
+            for name, param in self._module_to_wrap.named_parameters():
+                if name in shadow_params:
+                    param.data.copy_(shadow_params[name].data)
 
     def _quantize_activation(self, tensors_to_quantize, tensor_quantizers, type_of_quantizer):
         quantized_tensors = []
@@ -791,13 +798,6 @@ class LearnedGridQuantWrapper(QcQuantizeWrapper):
         if len(quantized_tensors) == 1:
             quantized_tensors = quantized_tensors[0]
         return quantized_tensors
-
-    def _restore_shadow_params(self, shadow_params):
-
-        # Restore the parameters
-        for name, param in self._module_to_wrap.named_parameters():
-            param.data.zero_()
-            param.data.add_(shadow_params[name].data)
 
 
 class QcQuantizeStandalone(QcQuantizeStandAloneBase):

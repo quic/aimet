@@ -50,10 +50,10 @@ class TestJsonConfigImporter(unittest.TestCase):
     """ Class containing unit tests for json config importer feature """
     def test_import_file(self):
         """ Test that asserts are raised if config file does not exist or is not parsable by json """
-        with self.assertRaises(AssertionError):
+        with self.assertRaises(FileNotFoundError):
             JsonConfigImporter.import_json_config_file('./missing_file')
 
-        with self.assertRaises(AssertionError):
+        with self.assertRaises(FileNotFoundError):
             JsonConfigImporter.import_json_config_file('./test_quantsim_config.py')
 
     def test_validate_syntax(self):
