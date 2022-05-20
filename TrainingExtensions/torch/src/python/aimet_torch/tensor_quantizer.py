@@ -453,6 +453,7 @@ class LearnedGridTensorQuantizer(TensorQuantizer):
 
     @property
     def device(self):
+        """Alias of self.wrapper_def.device"""
         return self.wrapper_ref.device
 
     @staticmethod
