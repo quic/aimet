@@ -1,42 +1,40 @@
-# /usr/bin/env python3.5
+# /usr/bin/env python3.6
 # -*- mode: python -*-
 # =============================================================================
 #  @@-COPYRIGHT-START-@@
-#  
+#
 #  Copyright (c) 2017-2018, Qualcomm Innovation Center, Inc. All rights reserved.
-#  
-#  Redistribution and use in source and binary forms, with or without 
+#
+#  Redistribution and use in source and binary forms, with or without
 #  modification, are permitted provided that the following conditions are met:
-#  
-#  1. Redistributions of source code must retain the above copyright notice, 
+#
+#  1. Redistributions of source code must retain the above copyright notice,
 #     this list of conditions and the following disclaimer.
-#  
-#  2. Redistributions in binary form must reproduce the above copyright notice, 
-#     this list of conditions and the following disclaimer in the documentation 
+#
+#  2. Redistributions in binary form must reproduce the above copyright notice,
+#     this list of conditions and the following disclaimer in the documentation
 #     and/or other materials provided with the distribution.
-#  
-#  3. Neither the name of the copyright holder nor the names of its contributors 
-#     may be used to endorse or promote products derived from this software 
+#
+#  3. Neither the name of the copyright holder nor the names of its contributors
+#     may be used to endorse or promote products derived from this software
 #     without specific prior written permission.
-#  
-#  THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" 
-#  AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE 
-#  IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE 
-#  ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE 
-#  LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR 
-#  CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF 
-#  SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS 
-#  INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN 
-#  CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) 
+#
+#  THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+#  AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+#  IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+#  ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE
+#  LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+#  CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+#  SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+#  INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+#  CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
 #  ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 #  POSSIBILITY OF SUCH DAMAGE.
-#  
+#
 #  SPDX-License-Identifier: BSD-3-Clause
-#  
+#
 #  @@-COPYRIGHT-END-@@
 # =============================================================================
-
-from __future__ import print_function
 
 import json
 import os
@@ -51,19 +49,25 @@ from torchvision import models
 from torch.optim import lr_scheduler
 
 from aimet_common.defs import QuantScheme
-from aimet_torch.qc_quantize_op import StaticGridQuantWrapper
 from aimet_torch.quantsim import QuantizationSimModel
 
 from aimet_torch.examples.imagenet_dataloader import ImageNetDataLoader
-from aimet_torch.tensor_quantizer import StaticGridPerChannelQuantizer, StaticGridPerTensorQuantizer
 from aimet_torch.utils import IterFirstX
 from aimet_torch.examples.supervised_classification_pipeline import create_stand_alone_supervised_classification_evaluator,\
     create_supervised_classification_trainer
+from aimet_torch.bn_reestimation import reestimate_bn_stats
+from aimet_torch.batch_norm_fold import fold_all_batch_norms_to_scale
+from torch.nn.modules.batchnorm import _BatchNorm
+
 
 two_class_image_dir = './data/tiny-imagenet-2'
 image_size = 224
 batch_size = 50
 num_workers = 1
+
+
+def _get_data_loader():
+    return ImageNetDataLoader(two_class_image_dir, image_size, batch_size, num_workers)
 
 
 def model_train(model, epochs, callback=None):
@@ -73,7 +77,7 @@ def model_train(model, epochs, callback=None):
     :return: accuracy after each epoch on training , validation data
     """
 
-    data_loader = ImageNetDataLoader(two_class_image_dir, image_size, batch_size, num_workers)
+    data_loader = _get_data_loader()
     criterion = nn.CrossEntropyLoss().cuda()
     lr = 0.01
     momentum = 0.9
@@ -89,7 +93,6 @@ def model_train(model, epochs, callback=None):
                                                                   callback=callback)
 
     trainer.run(data_loader.train_loader, max_epochs=epochs)
-    del data_loader
     return trainer.state.metrics['top_1_accuracy'], evaluator.state.metrics['top_1_accuracy']
 
 
@@ -102,7 +105,7 @@ def model_eval(model, early_stopping_iterations):
 
     use_cuda = next(model.parameters()).is_cuda
 
-    data_loader = ImageNetDataLoader(two_class_image_dir, image_size, batch_size, num_workers)
+    data_loader = _get_data_loader()
     if early_stopping_iterations is not None:
         # wrapper around validation data loader to run only 'X' iterations to save time
         val_loader = IterFirstX(data_loader.val_loader, early_stopping_iterations)
@@ -155,7 +158,15 @@ def save_config_file_for_per_channel_quantization():
             }
         },
         "op_type": {},
-        "supergroups": [],
+        "supergroups": [
+            { "op_list": ["Conv", "Relu"] },
+            { "op_list": ["Conv", "Clip"] },
+            { "op_list": ["Add", "Relu"] },
+            { "op_list": ["Gemm", "Relu"] },
+            { "op_list": ["Conv", "BatchNormalization"] },
+            { "op_list": ["Gemm", "BatchNormalization"] },
+            { "op_list": ["ConvTranspose", "BatchNormalization"] }
+        ],
         "model_input": {},
         "model_output": {}
     }
@@ -297,6 +308,13 @@ class QuantizeAcceptanceTests(unittest.TestCase):
 
     @pytest.mark.cuda
     def test_per_channel_quantization_for_resnet18_range_learning(self):
+        self._test_per_channel_quantization_for_resnet18_range_learning(apply_bn_reestimation=False)
+
+    @pytest.mark.cuda
+    def test_per_channel_quantization_for_resnet18_range_learning_with_bn_reestimation(self):
+        self._test_per_channel_quantization_for_resnet18_range_learning(apply_bn_reestimation=True)
+
+    def _test_per_channel_quantization_for_resnet18_range_learning(self, apply_bn_reestimation: bool):
         torch.manual_seed(10)
         save_config_file_for_per_channel_quantization()
         # Set up trained model
@@ -334,12 +352,27 @@ class QuantizeAcceptanceTests(unittest.TestCase):
         aimet_model_train_delta = aimet_model_train_mark - aimet_model_quantize_mark
         assert aimet_model_train_delta < (200 * (10 ** 6))
 
+        num_param_encodings = 41
+
+        if apply_bn_reestimation:
+            def forward_fn(model, data):
+                img, _ = data
+                return model(img.cuda())
+
+            reestimate_bn_stats(sim.model,
+                                _get_data_loader().train_loader,
+                                num_batches=100,
+                                forward_fn=forward_fn)
+
+            num_param_encodings -= len([x for x in sim.model.modules() if isinstance(x, _BatchNorm)])
+            fold_all_batch_norms_to_scale(sim, dummy_input.shape)
+
         sim.export('./data/', 'resnet18_per_channel_quant', dummy_input.cpu())
 
         with open("./data/resnet18_per_channel_quant.encodings", "r") as encodings_file:
             encodings = json.load(encodings_file)
 
-        assert len(encodings['param_encodings']) == 41
+        assert len(encodings['param_encodings']) == num_param_encodings
         assert encodings['param_encodings']['conv1.weight'][1]['bitwidth'] == 8
         assert encodings['param_encodings']['conv1.weight'][1]['is_symmetric'] == 'True'
 
@@ -352,6 +385,3 @@ class QuantizeAcceptanceTests(unittest.TestCase):
         # to be executed
         # So adding a dummy test to satisfy pytest
         pass
-
-
-

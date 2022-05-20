@@ -53,12 +53,10 @@ class Model(torch.nn.Module):
 
     def __init__(self):
         super(Model, self).__init__()
-        self._conv_0 = torch.nn.Conv2d(in_channels=3, out_channels=3, kernel_size=(3, 3), padding=1)
-        self._relu = torch.nn.ReLU()
         self._bn = torch.nn.BatchNorm2d(3)
 
     def forward(self, x: torch.Tensor):
-        return self._bn(self._relu(self._conv_0(x)))
+        return self._bn(x)
 
 
 @pytest.fixture
@@ -92,61 +90,69 @@ def data_loader(dummy_input):
         def __len__(self):
             return len(self.data)
 
-    dataset = MyDataset([dummy_input[0, :] for _ in range(10)])
+    dataset = MyDataset([torch.randn_like(dummy_input[0]) for _ in range(1)])
     return DataLoader(dataset)
 
 
 def test_reestimation_with_fp32_model(fp32_model, data_loader):
-    _test_reestimation(fp32_model, data_loader)
+    expected_mean = [torch.mean(data, dim=(0,2,3)) for data in data_loader]
+    expected_mean = sum(expected_mean) / len(data_loader)
+    expected_var = [torch.var(data, dim=(0,2,3)) for data in data_loader]
+    expected_var = sum(expected_var) / len(data_loader)
+    _test_reestimation(fp32_model, data_loader, expected_mean, expected_var)
 
 
 def test_reestimation_with_quantsim_model(quantsim_model, data_loader):
-    _test_reestimation(quantsim_model, data_loader)
+    def quantize_input(data):
+        input_quantizer = quantsim_model._bn.input_quantizer
+        encoding = input_quantizer.encoding
+        encoding_min = torch.tensor([encoding.min])
+        encoding_max = torch.tensor([encoding.max])
+        return input_quantizer.quantize_dequantize(data, encoding_min, encoding_max)
+
+    expected_mean = [torch.mean(quantize_input(data), dim=(0,2,3)) for data in data_loader]
+    expected_mean = sum(expected_mean) / len(data_loader)
+    expected_var = [torch.var(quantize_input(data), dim=(0,2,3)) for data in data_loader]
+    expected_var = sum(expected_var) / len(data_loader)
+    _test_reestimation(quantsim_model, data_loader, expected_mean, expected_var)
 
 
-def _test_reestimation(model, data_loader):
+def _test_reestimation(model, data_loader, expected_mean, expected_var):
     old_params = list(model.named_parameters())
 
     with torch.no_grad():
         for data in data_loader:
             model(data)
 
-    bn_stats_orig = [
+    mean_orig, var_orig = [
         ( bn.running_mean.clone().detach(), bn.running_var.clone().detach() )
         for bn in _get_active_bn_modules(model)
-    ]
+    ][0]
 
     with reestimate_bn_stats(model, data_loader):
         for bn in _get_active_bn_modules(model):
             assert bn.momentum != 1.0
 
-        bn_stats_reestimated = [
+        mean_reestimated, var_reestimated = [
             ( bn.running_mean.clone().detach(), bn.running_var.clone().detach() )
             for bn in _get_active_bn_modules(model)
-        ]
+        ][0]
+
+        assert torch.equal(mean_reestimated, expected_mean)
+        assert torch.equal(var_reestimated, expected_var)
 
     new_params = list(model.named_parameters())
 
     # All the model parameters should remain the same
     assert old_params == new_params
 
-    bn_stats_restored = [
+    mean_restored, var_restored = [
         ( bn.running_mean.clone().detach(), bn.running_var.clone().detach() )
         for bn in _get_active_bn_modules(model)
-    ]
+    ][0]
 
-    # Sanity check: The re-estimated statistics must be non-zero.
-    for mean_reestimated, var_reestimated in bn_stats_reestimated:
-        assert torch.all(mean_reestimated != 0.0)
-        assert torch.all(var_reestimated != 0.0)
+    assert not torch.equal(mean_orig, mean_reestimated)
+    assert torch.equal(mean_orig, mean_restored)
 
-    for (mean_orig, var_orig),\
-        (mean_reestimated, var_reestimated),\
-        (mean_restored, var_restored) in zip(bn_stats_orig,
-                                             bn_stats_reestimated,
-                                             bn_stats_restored):
-        assert not torch.equal(mean_orig, mean_reestimated)
-        assert torch.equal(mean_orig, mean_restored)
-
-        assert not torch.equal(var_orig, var_reestimated)
-        assert torch.equal(var_orig, var_restored)
+    assert not torch.equal(var_orig, var_reestimated)
+    assert torch.equal(var_orig, var_restored)
