@@ -653,7 +653,7 @@ def get_reused_modules(model: torch.nn.Module, model_input: Union[torch.Tensor, 
 @contextlib.contextmanager
 def in_eval_mode(model: torch.nn.Module):
     """
-    Utility to put model in eval mode with context manager and later in whatever mode it started with.
+    Utility to temporarily put model in eval mode using context manager.
     :param model: PyTorch model
     :return: None
     """
@@ -667,7 +667,7 @@ def in_eval_mode(model: torch.nn.Module):
 @contextlib.contextmanager
 def in_train_mode(model: torch.nn.Module):
     """
-    Utility to put model in eval mode with context manager and later in whatever mode it started with.
+    Utility to temporarily put model in train mode using context manager.
     :param model: PyTorch model
     :return: None
     """
@@ -687,3 +687,18 @@ def _in_mode(model: torch.nn.Module, train: bool):
         yield
     finally:
         model.train(mode=train_orig)
+
+
+@contextlib.contextmanager
+def on_cpu(model: torch.nn.Module):
+    """
+    Utility to temporarily put model on cpu using context manager.
+    :param model: PyTorch model
+    :return: None
+    """
+    device = get_device(model)
+    try:
+        model.cpu()
+        yield
+    finally:
+        model.to(device)

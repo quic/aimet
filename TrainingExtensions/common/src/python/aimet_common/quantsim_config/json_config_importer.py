@@ -94,16 +94,11 @@ class JsonConfigImporter:
             config_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'default_config.json')
             logger.info('No config file provided, defaulting to config file at %s', config_file)
 
-        try:
-            with open(config_file) as configs:
-                try:
-                    quantsim_configs = json.load(configs)
-                except json.decoder.JSONDecodeError:
-                    logger.error('Error parsing json config file')
-                    raise AssertionError
-        except IOError:
-            logger.error('Could not open json config file')
-            raise AssertionError
+        with open(config_file) as configs:
+            try:
+                quantsim_configs = json.load(configs)
+            except json.decoder.JSONDecodeError as e:
+                raise RuntimeError('Error parsing json config file') from e
 
         _validate_syntax(quantsim_configs)
         _convert_configs_values_to_bool(quantsim_configs)

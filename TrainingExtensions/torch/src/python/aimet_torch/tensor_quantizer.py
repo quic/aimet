@@ -83,6 +83,11 @@ class TensorQuantizer:
         self.data_type = data_type
         self._is_encoding_frozen = False
 
+    @property
+    def quant_scheme(self):
+        """Accessor to self._quant_scheme"""
+        return self._quant_scheme
+
 
 class PickableState:
     """
