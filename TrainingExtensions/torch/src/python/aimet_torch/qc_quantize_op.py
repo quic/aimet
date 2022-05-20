@@ -669,7 +669,6 @@ class LearnedGridQuantWrapper(QcQuantizeWrapper):
             # Input quantizer
             self.input_quantizers[index].name = 'input' + str(index)
             self.input_quantizers[index].wrapper_ref = self
-            self.input_quantizers[index].device = self.device
 
         for index in range(num_outputs):
             self.register_parameter('output' + str(index) + '_encoding_min', None)
@@ -677,7 +676,6 @@ class LearnedGridQuantWrapper(QcQuantizeWrapper):
             # Output quantizer
             self.output_quantizers[index].name = 'output' + str(index)
             self.output_quantizers[index].wrapper_ref = self
-            self.output_quantizers[index].device = self.device
 
         # Param Quantizers
         for name, param in self._module_to_wrap.named_parameters():
@@ -688,7 +686,6 @@ class LearnedGridQuantWrapper(QcQuantizeWrapper):
             # Pass name of tensor quantizer and reference of Wrapper to tensor quantizer
             self.param_quantizers[name].name = name
             self.param_quantizers[name].wrapper_ref = self
-            self.param_quantizers[name].device = self.device
             channel_axis = 0
             if isinstance(self._module_to_wrap, (torch.nn.ConvTranspose1d,
                                                  torch.nn.ConvTranspose2d,
