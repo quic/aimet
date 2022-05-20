@@ -43,13 +43,13 @@ import pytest
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
 import unittest
 import tensorflow as tf
+import aimet_common.libpymo as pymo
 from aimet_tensorflow.examples.test_models import single_residual, single_residual_for_tf2
 from aimet_tensorflow.quantsim import QuantizationSimModel
 from aimet_tensorflow.utils.constants import QuantizeOpIndices
 from aimet_tensorflow.quantsim_config.quantsim_config import QuantSimConfigurator
 from aimet_tensorflow.common.connectedgraph import ConnectedGraph
 from aimet_common.defs import QuantizationDataType, QuantDtypeBwInfo
-import libpymo as pymo
 
 tf.compat.v1.logging.set_verbosity(tf.compat.v1.logging.WARN)
 tf.compat.v1.disable_eager_execution()

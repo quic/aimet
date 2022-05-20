@@ -35,9 +35,11 @@
 #
 #  @@-COPYRIGHT-END-@@
 # =============================================================================
+
 import unittest
 import numpy as np
-import libpymo
+import aimet_common.libpymo as libpymo
+
 
 class TestTensorQuantizer(unittest.TestCase):
     """

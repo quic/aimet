@@ -42,8 +42,7 @@ from typing import List, Union, Tuple, Dict
 import numpy as np
 import tensorflow as tf
 
-import libpymo
-
+import aimet_common.libpymo as libpymo
 from aimet_common.bias_correction import ConvBnInfoType
 from aimet_common.defs import ActivationType, QuantScheme
 from aimet_common.utils import AimetLogger

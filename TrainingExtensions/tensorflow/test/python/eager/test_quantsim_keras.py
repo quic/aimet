@@ -44,9 +44,9 @@ from packaging import version
 import numpy as np
 import tensorflow as tf
 
+import aimet_common.libpymo as libpymo
 from aimet_common.defs import QuantScheme
 from aimet_tensorflow.keras.quantsim import QuantizationSimModel
-import libpymo
 
 from test_models_keras import tiny_conv_net
 

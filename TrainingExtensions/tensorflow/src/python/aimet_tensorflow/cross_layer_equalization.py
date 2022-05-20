@@ -41,8 +41,9 @@
 from typing import Tuple, List, Union, Dict
 import numpy as np
 import tensorflow as tf
-import libpymo
 
+from aimet_common.utils import AimetLogger
+import aimet_common.libpymo as libpymo
 from aimet_tensorflow.common.connectedgraph import ConnectedGraph
 from aimet_tensorflow.common.operation import Op
 from aimet_tensorflow.batch_norm_fold import fold_all_batch_norms
@@ -50,7 +51,6 @@ from aimet_tensorflow.utils.graph_saver import save_and_load_graph
 from aimet_tensorflow.utils.op.conv import WeightTensorUtils, BiasUtils
 import aimet_tensorflow.utils.op.relu as ReluUtils
 from aimet_tensorflow.utils.op.fusedbatchnorm import BNUtils
-from aimet_common.utils import AimetLogger
 
 logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.CrosslayerEqualization)
 

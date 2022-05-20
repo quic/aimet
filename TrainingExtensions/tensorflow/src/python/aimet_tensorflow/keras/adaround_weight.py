@@ -40,6 +40,7 @@
 from typing import Dict, List, Union
 import tensorflow as tf
 
+import aimet_common.libpymo as libpymo
 from aimet_common.utils import AimetLogger
 from aimet_common.defs import QuantScheme
 from aimet_tensorflow.adaround.adaround_weight import AdaroundParameters
@@ -49,11 +50,11 @@ from aimet_tensorflow.keras.adaround.activation_sampler import ActivationSampler
 from aimet_tensorflow.keras.adaround.adaround_wrapper import AdaroundWrapper
 from aimet_tensorflow.keras.adaround.adaround_optimizer import AdaroundOptimizer
 from aimet_tensorflow.keras.connectedgraph import ConnectedGraph
-import libpymo
 
 _logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Quant)
 
 AdaroundSupportedOps = (tf.keras.layers.Conv2D, tf.keras.layers.Dense)
+
 
 class Adaround:
     """

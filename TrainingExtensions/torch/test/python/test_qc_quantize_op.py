@@ -42,6 +42,7 @@ import pytest
 import numpy as np
 import torch
 
+import aimet_common.libpymo as libpymo
 from aimet_common.defs import MAP_ROUND_MODE_TO_PYMO, QuantizationDataType
 from aimet_torch.qc_quantize_op import StaticGridQuantWrapper, LearnedGridQuantWrapper, SteGatingFuncForParameters, \
     QcQuantizeOpMode
@@ -50,7 +51,6 @@ from aimet_torch.quantsim_straight_through_grad import compute_dloss_by_dmax, co
     compute_dloss_by_dx_using_scale_offset, LearnedGridParams, compute_intermediate_result_for_learned_grid
 from aimet_torch.tensor_quantizer import StaticGridPerTensorQuantizer
 from aimet_torch.tensor_quantizer import LearnedGridTensorQuantizer
-import libpymo
 
 
 class TestQcQuantizeOpStaticGrid:

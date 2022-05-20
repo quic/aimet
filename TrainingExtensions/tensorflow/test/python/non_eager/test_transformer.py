@@ -37,12 +37,13 @@
 import unittest
 import pytest
 import os
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
 import json
 import tensorflow as tf
 import numpy as np
-import libpymo
 from packaging import version
 
+import aimet_common.libpymo as libpymo
 from aimet_tensorflow.quantsim import QuantizationSimModel
 from aimet_tensorflow.common.graph_eval import initialize_uninitialized_vars
 from aimet_tensorflow.utils import transformer_utils
@@ -52,7 +53,6 @@ from aimet_tensorflow.quantsim import save_checkpoint, load_checkpoint
 
 tf.compat.v1.logging.set_verbosity(tf.compat.v1.logging.WARN)
 tf.compat.v1.disable_eager_execution()
-os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
 
 if version.parse(tf.version.VERSION) >= version.parse("2.0"):
     import transformers

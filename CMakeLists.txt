@@ -101,6 +101,8 @@ set(OPENCV_LIBRARY /usr/local/lib/libopencv_core.a)
 find_package(Python COMPONENTS Interpreter Development)
 set(PYTHON_DIST_PACKAGES "/usr/local/lib/python${Python_VERSION_MAJOR}.${Python_VERSION_MINOR}/dist-packages/")
 message("Found python: ${Python_FOUND}, at ${Python_LIBRARIES}")
+EXECUTE_PROCESS( COMMAND "uname" "-m" OUTPUT_VARIABLE ARCHITECTURE OUTPUT_STRIP_TRAILING_WHITESPACE)
+execute_process(COMMAND "python" "-c" "import sys; print(sys.abiflags)" OUTPUT_VARIABLE ABI_FLAGS OUTPUT_STRIP_TRAILING_WHITESPACE)
 
 if (NOT (DEFINED ENABLE_TORCH))
   message("AIMET Torch build not explicitly disabled. Enabling implicitly")

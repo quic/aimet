@@ -49,6 +49,7 @@ import torch
 import onnx
 
 import aimet_common
+import aimet_common.libpymo as libpymo
 from aimet_common.utils import AimetLogger, save_json_yaml
 from aimet_common.defs import QuantScheme, QuantizationDataType
 from aimet_common.quantsim import encoding_version, validate_quantsim_inputs, calculate_delta_offset
@@ -63,7 +64,6 @@ from aimet_torch.onnx_utils import OnnxSaver, OnnxExportApiArgs, CustomMarker
 from aimet_torch.meta.connectedgraph import ConnectedGraph
 from aimet_torch.qc_quantize_recurrent import QcQuantizeRecurrent
 
-import libpymo
 
 logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Quant)
 

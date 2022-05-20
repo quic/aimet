@@ -47,7 +47,7 @@ import copy
 import torch
 import torch.nn
 import numpy as np
-import libpymo
+import aimet_common.libpymo as libpymo
 
 from aimet_common.graph_pattern_matcher import PatternType
 from aimet_common.graph_searcher import GraphSearcher

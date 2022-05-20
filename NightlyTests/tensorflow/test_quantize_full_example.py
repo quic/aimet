@@ -43,9 +43,8 @@ import os
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
 import numpy as np
 import tensorflow as tf
-from packaging import version
 # Import the tensorflow quantizer
-import libpymo
+import aimet_common.libpymo as libpymo
 from aimet_common.connected_graph.connectedgraph_utils import get_all_input_ops
 from aimet_tensorflow import quantsim
 from aimet_tensorflow.common import tfrecord_generator as tf_gen
@@ -54,7 +53,6 @@ from aimet_tensorflow.common.connectedgraph import ConnectedGraph
 from aimet_tensorflow.utils import graph_saver
 from aimet_tensorflow.examples.test_models import multiple_input_model, single_residual
 
-import libpymo as pymo
 tf.compat.v1.disable_eager_execution()
 
 mnist_model_path = os.path.join(os.environ.get('DEPENDENCY_DATA_PATH'), 'mnist/models/')
@@ -200,17 +198,17 @@ class Quantization(unittest.TestCase):
             op_mode_tensor = sim.session.graph.get_tensor_by_name(quantize_op.name + '_op_mode:0')
             conn_graph_op = conn_graph.get_op_from_module_name(quantize_op.inputs[0].op.name)
             if conn_graph_op.name in ops_with_deactivated_output_quantizers_names:
-                self.assertEqual(sim.session.run(op_mode_tensor), int(pymo.TensorQuantizerOpMode.passThrough))
+                self.assertEqual(sim.session.run(op_mode_tensor), int(libpymo.TensorQuantizerOpMode.passThrough))
             else:
-                self.assertEqual(sim.session.run(op_mode_tensor), int(pymo.TensorQuantizerOpMode.updateStats))
+                self.assertEqual(sim.session.run(op_mode_tensor), int(libpymo.TensorQuantizerOpMode.updateStats))
 
         for quantize_op in param_quantizers:
             op_mode_tensor = sim.session.graph.get_tensor_by_name(quantize_op.name + '_op_mode:0')
             if 'BiasAdd' in quantize_op.name:
-                self.assertEqual(sim.session.run(op_mode_tensor), int(pymo.TensorQuantizerOpMode.passThrough))
+                self.assertEqual(sim.session.run(op_mode_tensor), int(libpymo.TensorQuantizerOpMode.passThrough))
             else:
                 self.assertEqual(sim.session.run(op_mode_tensor),
-                                 int(pymo.TensorQuantizerOpMode.oneShotQuantizeDequantize))
+                                 int(libpymo.TensorQuantizerOpMode.oneShotQuantizeDequantize))
 
         def dummy_forward_pass(session: tf.compat.v1.Session, args):
             out_tensor = session.graph.get_tensor_by_name(model.outputs[0].name)

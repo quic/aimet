@@ -41,7 +41,6 @@
 from typing import List, Tuple, Union
 import numpy as np
 import tensorflow as tf
-import libpymo
 
 from aimet_tensorflow.common.connectedgraph import ConnectedGraph
 from aimet_tensorflow.common.operation import OpWithMetaInfoType
@@ -54,6 +53,7 @@ from aimet_common.graph_searcher import GraphSearcher
 from aimet_common.bias_correction import ConvBnPatternHandler
 from aimet_common.graph_pattern_matcher import PatternType
 from aimet_common.utils import AimetLogger
+import aimet_common.libpymo as libpymo
 
 logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.CrosslayerEqualization)
 

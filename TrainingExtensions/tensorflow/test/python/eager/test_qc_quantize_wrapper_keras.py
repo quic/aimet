@@ -37,9 +37,10 @@ import tensorflow as tf
 import numpy as np
 from packaging import version
 
+import aimet_common.libpymo as libpymo
 from aimet_common.defs import QuantScheme
 from aimet_tensorflow.keras.quant_sim.qc_quantize_wrapper import QcQuantizeWrapper, QuantizerSettings
-import libpymo
+
 
 def dense_functional():
     inp = tf.keras.layers.Input(shape=(5,))

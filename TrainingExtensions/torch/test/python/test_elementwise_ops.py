@@ -41,9 +41,9 @@ import unittest.mock
 import torch
 import torch.nn as nn
 import numpy as np
+import aimet_common.libpymo as libpymo
 from aimet_torch.elementwise_ops import Add, Subtract, Multiply, Divide, Concat, MatMul
 from aimet_torch.quantsim import QuantizationSimModel
-import libpymo
 
 
 class Model(nn.Module):

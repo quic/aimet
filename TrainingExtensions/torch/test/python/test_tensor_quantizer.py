@@ -38,7 +38,7 @@
 
 import pytest
 import torch
-import libpymo
+import aimet_common.libpymo as libpymo
 
 from aimet_common.defs import QuantScheme
 from aimet_torch.qc_quantize_op import LearnedGridQuantWrapper

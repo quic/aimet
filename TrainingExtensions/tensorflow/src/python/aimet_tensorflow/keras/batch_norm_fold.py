@@ -42,7 +42,7 @@ from typing import Tuple, Union, List, Dict, Set
 
 import numpy as np
 import tensorflow as tf
-import libpymo
+import aimet_common.libpymo as libpymo
 from aimet_common.utils import AimetLogger
 from aimet_tensorflow.keras.utils import common
 from aimet_tensorflow.keras.utils.op.batchnorm import BNUtils

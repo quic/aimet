@@ -40,7 +40,7 @@
 
 import copy
 
-import libpymo as pymo
+import aimet_common.libpymo as pymo
 
 from aimet_common.utils import AimetLogger
 from aimet_common.defs import CostMetric

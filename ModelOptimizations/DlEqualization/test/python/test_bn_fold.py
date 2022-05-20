@@ -35,11 +35,12 @@
 #  
 #  @@-COPYRIGHT-END-@@
 # =============================================================================
+
 import unittest
+import numpy as np
 import copy
 
-import libpymo
-import numpy as np
+import aimet_common.libpymo as libpymo
 
 
 class TestBNFold(unittest.TestCase):

@@ -46,7 +46,7 @@ import signal
 
 from torch import nn
 import torch.nn.functional as functional
-import libpymo as pymo
+import aimet_common.libpymo as pymo
 
 from aimet_common.defs import CostMetric, LayerCompRatioPair
 from aimet_common.cost_calculator import SpatialSvdCostCalculator,WeightSvdCostCalculator

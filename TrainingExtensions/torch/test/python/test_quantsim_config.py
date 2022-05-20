@@ -39,7 +39,7 @@ import pytest
 import json
 import os
 import torch
-import libpymo
+import aimet_common.libpymo as libpymo
 from aimet_common.defs import QuantScheme, QuantizationDataType, QuantDtypeBwInfo
 from aimet_torch.examples.test_models import SingleResidual, QuantSimTinyModel, MultiInput, SingleResidualWithModuleAdd
 from aimet_torch.quantsim import QuantizationSimModel
@@ -753,9 +753,9 @@ class TestQuantsimConfig:
         """
 
         import json
+        import aimet_common.libpymo as libpymo
         from aimet_common.defs import QuantScheme
         from aimet_torch.quantsim import QuantizationSimModel
-        import libpymo
 
         class ModelWithGeluLayerNorm(torch.nn.Module):
             def __init__(self):

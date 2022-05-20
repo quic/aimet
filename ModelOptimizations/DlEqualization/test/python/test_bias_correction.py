@@ -35,12 +35,13 @@
 #  
 #  @@-COPYRIGHT-END-@@
 # =============================================================================
+
 import unittest
 from enum import Enum
-
-import libpymo
 import numpy as np
 from scipy.stats import norm
+
+import aimet_common.libpymo as libpymo
 
 
 class TestBiasCorrection(unittest.TestCase):

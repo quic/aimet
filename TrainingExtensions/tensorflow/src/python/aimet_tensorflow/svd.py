@@ -45,11 +45,11 @@ from functools import reduce
 import operator
 from enum import Enum
 import numpy as np
-
 import tensorflow as tf
+
 from aimet_tensorflow import graph_editor
 from aimet_tensorflow.common import core, graph_eval
-import libpymo as pymo
+import aimet_common.libpymo as pymo
 from aimet_common import statistics_util as stats_u
 from aimet_common.utils import AimetLogger
 
