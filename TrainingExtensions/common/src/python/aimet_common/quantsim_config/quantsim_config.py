@@ -43,7 +43,7 @@ from aimet_common.defs import QuantizationDataType, QuantDtypeBwInfo
 from aimet_common.connected_graph.operation import Op
 from aimet_common.graph_pattern_matcher import PatternType
 from aimet_common.quantsim_config.json_config_importer import JsonConfigImporter, ConfigDictKeys, DefaultsType, \
-    ParamType, OpTypeType, SupergroupType, ConfigType
+    ParamType, OpTypeType, SupergroupType, ConfigType, OpType
 from aimet_common.utils import AimetLogger
 
 logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Quant)
@@ -292,6 +292,46 @@ class QuantSimConfigurator(ABC):
 
         # override param config defaults.
         self._override_default_param_bw_dtype(self._default_data_type, self._default_param_bw)
+
+    def _apply_overrides_for_op(self, op_config: OpType, quantizer_data):
+        """
+        Applies op level overrides based on supported_kernels specified for a given module.
+        :param op_config: Op level configs from config file.
+        :param quantizer_data: Op level quantizer that needs to be updated.
+        :return:
+        """
+        # ---------------------------------- [ op level overrides ] ---------------------------------------- #
+        # AIMET applies op level override only when a lower precision kernel is not supported for a given op.
+        # For example, if quantsim is created with a default act: int8, param: int8 quantization
+        # And, if some op has only FP16 kernel support on a given target, this can be specified under
+        # op level config using supported_kernels option.
+        # It must be noted that, AIMET shall not perform conversions ops (such as int8 -> FP16) that is done on-target,
+        # as there is no noise to be simulated while going from lower precision to higher precision.
+        # This means, if an op supports only higher precision kernel, there are two ways it is handled during override :
+        # a. op has params : param quantizers are updated to higher precision (ex: FP 16 in this case),
+        # No override applied to in/out tensor quantizers.
+        # b. op has no params : no override.
+        # --------------------------------------------------------------------------------------------------- #
+
+        if not is_current_config_same_as_override_option(
+                QuantDtypeBwInfo(self._default_data_type, self._default_output_bw,
+                                 self._default_param_bw), op_config[ConfigDictKeys.SUPPORTED_KERNELS]):
+            param_bw = op_config[ConfigDictKeys.SUPPORTED_KERNELS][DEFAULT_OVERRIDE_SUPPORTED_KERNEL_INDEX]['param']['bitwidth']
+            param_dtype = op_config[ConfigDictKeys.SUPPORTED_KERNELS][DEFAULT_OVERRIDE_SUPPORTED_KERNEL_INDEX]['param']['dtype']
+            logger.info(' Enforcing target kernel config for param bw = {%s} and dtype = {%s}',
+                        param_bw,
+                        param_dtype)
+            self._override_param_bw_dtype(quantizer_data, param_dtype, param_bw)
+
+    @abstractmethod
+    def _override_param_bw_dtype(self, quantizer_data, data_type: QuantizationDataType, bitwidth: int):
+        """
+        overrides data type and bitwidth default config for param quantizers of given data
+        :param quantizer_data: object containing which param override will be applied to
+        :param bitwidth: bitwidth
+        :param data_type: data type as QuantizationDataType
+        :return:
+        """
 
     @abstractmethod
     def _override_default_act_bw_dtype(self, data_type: QuantizationDataType, bitwidth: int):

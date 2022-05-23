@@ -241,30 +241,6 @@ class QuantSimConfigurator(AimetCommonQuantSimConfigurator):
         if ConfigDictKeys.UNSIGNED_SYMMETRIC in default_configs:
             self._set_unsigned_symmetric(default_configs[ConfigDictKeys.UNSIGNED_SYMMETRIC])
 
-    def _override_default_act_bw_dtype(self, data_type: QuantizationDataType, bitwidth: int):
-        """
-        overrides data type and bitwidth default config for param quantizers
-        :param bitwidth: bitwidth
-        :param data_type: data type as QuantizationDataType
-        :return:
-        """
-
-        for act_quantizer_config in self._activation_quantizer_dict.values():
-            act_quantizer_config.data_type = data_type
-            act_quantizer_config.bitwidth = bitwidth
-
-    def _override_default_param_bw_dtype(self, data_type: QuantizationDataType, bitwidth: int):
-        """
-        overrides data type and bw default config for input/output quantizers.
-        :param data_type: data type as QuantizationDataType
-        :param bitwidth: bitwidth to be configured
-        :return:
-        """
-
-        for param_quantizer_config in self._param_quantizer_dict.values():
-            param_quantizer_config.data_type = data_type
-            param_quantizer_config.bitwidth = bitwidth
-
     def _set_default_configs_for_ops(self, default_op_configs: ConfigType):
         """
         Set default configurations for all ops in the model.
@@ -328,6 +304,14 @@ class QuantSimConfigurator(AimetCommonQuantSimConfigurator):
                     param_config = op_config[ConfigDictKeys.PARAMS][quantsim_param_name]
                     for param_quantize_op in param_quantize_ops_dict[param_name]:
                         self._set_config_for_param(param_quantize_op, param_config)
+
+        # override op level supported kernel config if it is enforced
+        if ENFORCE_TARGET_DTYPE_BITWIDTH_CONFIG and ConfigDictKeys.SUPPORTED_KERNELS in op_config:
+            if op is None:
+                logger.error('No module provided to set params for')
+                raise AssertionError
+            param_quantize_ops_dict, _ = self._op_to_quant_ops_dict[op]
+            self._apply_overrides_for_op(op_config, param_quantize_ops_dict)
 
     def _set_config_for_param(self, param_quantize_op: tf.Operation, param_config: ConfigType):
         """
@@ -481,6 +465,49 @@ class QuantSimConfigurator(AimetCommonQuantSimConfigurator):
                 else:
                     modified_quantize_ops[quantize_op].add(setting_type)
 
+    # -----------------------------------[ override support begin] --------------------------------------------- #
+
+    def _override_default_act_bw_dtype(self, data_type: QuantizationDataType, bitwidth: int):
+        """
+        overrides data type and bitwidth default config for param quantizers
+        :param bitwidth: bitwidth
+        :param data_type: data type as QuantizationDataType
+        :return:
+        """
+
+        for act_quantizer_config in self._activation_quantizer_dict.values():
+            act_quantizer_config.data_type = data_type
+            act_quantizer_config.bitwidth = bitwidth
+
+    def _override_default_param_bw_dtype(self, data_type: QuantizationDataType, bitwidth: int):
+        """
+        overrides data type and bw default config for input/output quantizers.
+        :param data_type: data type as QuantizationDataType
+        :param bitwidth: bitwidth to be configured
+        :return:
+        """
+
+        for param_quantizer_config in self._param_quantizer_dict.values():
+            param_quantizer_config.data_type = data_type
+            param_quantizer_config.bitwidth = bitwidth
+
+    def _override_param_bw_dtype(self, quantizer_data, data_type: QuantizationDataType, bitwidth: int):
+        """
+        overrides data type and bitwidth default config for param quantizers of given param_quantize_ops_dict
+        :param quantizer_data: dictionary containing parameters to modify bitwidth
+        :param bitwidth: bitwidth
+        :param data_type: data type as QuantizationDataType
+        :return:
+        """
+        for _, param_op_list in quantizer_data.items():
+            for param_op in param_op_list:
+                if param_op.name not in self._param_quantizer_dict:
+                    continue
+                quantizer_config = self._param_quantizer_dict[param_op.name]
+                quantizer_config.data_type = data_type
+                quantizer_config.bitwidth = bitwidth
+
+    # -----------------------------------[ override support end] --------------------------------------------- #
 
 def _get_quantize_ops_to_modify(input_output_quantize_ops: QuantizerListType, setting_name: str) -> List[tf.Operation]:
     """
