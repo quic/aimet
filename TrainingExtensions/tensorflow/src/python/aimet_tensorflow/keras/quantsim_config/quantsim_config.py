@@ -500,3 +500,12 @@ class QuantSimConfigurator(AimetCommonQuantSimConfigurator):
         :param data_type: data type as QuantizationDataType
         :return:
         """
+
+    def _override_param_bw_dtype(self, quantizer_data, data_type: QuantizationDataType, bitwidth: int):
+        """
+        overrides data type and bitwidth default config for param quantizers of given data
+        :param quantizer_data: object containing which param override will be applied to
+        :param bitwidth: bitwidth
+        :param data_type: data type as QuantizationDataType
+        :return:
+        """
