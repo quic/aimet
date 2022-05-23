@@ -81,14 +81,14 @@ def tensor_quantizer_factory(bitwidth: int, round_mode: str, quant_scheme: Quant
     :return: An instance of StaticGridPerTensorQuantizer
     """
 
-    if quant_scheme == QuantScheme.post_training_tf_enhanced or quant_scheme == QuantScheme.post_training_tf:
+    if quant_scheme in (QuantScheme.post_training_tf_enhanced, QuantScheme.post_training_tf):
 
         tensor_quantizer = StaticGridPerTensorQuantizer(bitwidth, round_mode, quant_scheme,
                                                         use_symmetric_encodings, enabled_by_default,
                                                         data_type=data_type)
 
-    elif quant_scheme == QuantScheme.training_range_learning_with_tf_init or \
-            quant_scheme == QuantScheme.training_range_learning_with_tf_enhanced_init:
+    elif quant_scheme in (QuantScheme.training_range_learning_with_tf_init,
+                          QuantScheme.training_range_learning_with_tf_enhanced_init):
 
         tensor_quantizer = LearnedGridTensorQuantizer(bitwidth, round_mode, quant_scheme, use_symmetric_encodings,
                                                       enabled_by_default, data_type)
@@ -96,19 +96,6 @@ def tensor_quantizer_factory(bitwidth: int, round_mode: str, quant_scheme: Quant
         raise AssertionError("Unsupported quant_scheme: " + str(quant_scheme))
 
     return tensor_quantizer
-
-
-def module_has_weights(module):
-    """
-    Check if the module has a parameter called "weight"
-    :param module: Module
-    :return: True, if module has a parameter called "weight", False otherwise
-    """
-    for name, _ in module.named_parameters():
-        if name == "weight":
-            return True
-
-    return False
 
 
 class QcQuantizeStandAloneBase(nn.Module):
@@ -366,18 +353,18 @@ class QcQuantizeWrapper(nn.Module):
                 # number of encodings will be 3 but number of output quantizers will still be 4
                 for index, quantizer in enumerate(quantizers):
                     ind = str(index)
-                    if ind in encodings and quantizer.enabled is False:
+                    if ind in encodings and not quantizer.enabled:
                         raise RuntimeError("The quantsim passed for loading encodings does not have the same configuration as the"
                                            "quantsim which was used to export the encodings")
-                    elif quantizer.enabled:
-                        if encodings[ind]['dtype'] == 'int':
-                            encoding, is_symmetric = utils.create_encoding_from_dict(encodings[ind])
-                            quantizer.bitwidth = encoding.bw
-                            quantizer.use_symmetric_encodings = is_symmetric
-                            quantizer.encoding = encoding
-                        elif encodings[ind]['dtype'] == 'float':
-                            quantizer.bitwidth = encodings[ind]['bitwidth']
-                            quantizer.data_type = QuantizationDataType.float
+
+                    if quantizer.enabled and encodings[ind]['dtype'] == 'int':
+                        encoding, is_symmetric = utils.create_encoding_from_dict(encodings[ind])
+                        quantizer.bitwidth = encoding.bw
+                        quantizer.use_symmetric_encodings = is_symmetric
+                        quantizer.encoding = encoding
+                    elif quantizer.enabled and encodings[ind]['dtype'] == 'float':
+                        quantizer.bitwidth = encodings[ind]['bitwidth']
+                        quantizer.data_type = QuantizationDataType.float
 
         _logger.info("Setting quantization encodings for activation quantizers of: %s", module_name)
 
@@ -472,7 +459,7 @@ class StaticGridQuantWrapper(QcQuantizeWrapper):
 
         # clone() the outputs of Custom function to avoid incorrect gradient calculation for in-place modification
         # of view (view is created since Custom function's forward return input as-is)
-        quantized_inputs = [quantized_input.clone() for quantized_input in quantized_inputs]
+        quantized_inputs = [inp.clone() if isinstance(inp, torch.Tensor) else inp for inp in quantized_inputs]
 
         # Call the forward of the wrapped module
         wrapped_output = self._module_to_wrap(*quantized_inputs)
@@ -558,18 +545,19 @@ class StaticGridQuantWrapper(QcQuantizeWrapper):
 
         outputs = []
         for index, input_tensor in enumerate(tensors_to_quantize):
-            if not isinstance(input_tensor, torch.Tensor):
-                _logger.error('Expecting quantize activation input of type torch.Tensor but got %s', type(input_tensor))
-                raise AssertionError
-
             assert len(tensor_quantizers) > index, \
                 f"Not enough tensor quantizers ({len(tensor_quantizers)}) allocated"
 
-            if input_tensor.dtype in utils.torch_dtypes_to_ignore_for_quantization or \
-                    tensor_quantizers[index].enabled is False:
-                # Do not quantize tensors of integer or bool data type or if the quantizer is disabled
+            if isinstance(input_tensor, utils.dtypes_to_ignore_for_quantization) or\
+                    input_tensor.dtype in utils.torch_dtypes_to_ignore_for_quantization or\
+                    not tensor_quantizers[index].enabled:
+                # Do not quantize tensors of integer or bool data type or if the quantizer is disabled.
                 outputs.append(input_tensor)
                 continue
+
+            if not isinstance(input_tensor, torch.Tensor):
+                _logger.error('Expecting quantize activation input of type torch.Tensor but got %s', type(input_tensor))
+                raise AssertionError
 
             if self._mode is QcQuantizeOpMode.ANALYSIS:
 
@@ -692,10 +680,12 @@ class LearnedGridQuantWrapper(QcQuantizeWrapper):
                                                  torch.nn.ConvTranspose3d)):
                 if len(param.shape) > 1:
                     channel_axis = 1
-            self.param_quantizers[name]._ch_axis = channel_axis
+            self.param_quantizers[name]._ch_axis = channel_axis # pylint: disable = protected-access
 
     def apply_gating_logic(self):
-
+        """
+        Apply gating logic.
+        """
         def _apply_logic(encoding_min, encoding_max):
             encoding_min.data = torch.minimum(torch.tensor([0.0], device=self.device), encoding_min.data)
             encoding_max.data = torch.maximum(torch.tensor([0.0], device=self.device), encoding_max.data)
@@ -740,11 +730,6 @@ class LearnedGridQuantWrapper(QcQuantizeWrapper):
             wrapped_output = self._module_to_wrap(*quantized_inputs)
 
         # Quantize the outputs
-        # pylint: disable=all
-        # Since type of quantizer is dynamically decided based on range-learning mode or not, pylint is getting
-        # confused
-        # Unfortunately doing a 'pylint: disable=too-many-function-args' does not work
-        # Seems like a pylint bug
         if isinstance(wrapped_output, torch.Tensor):
             wrapped_output = [wrapped_output]
         output = self._quantize_activation(wrapped_output, self.output_quantizers, 'output')
@@ -781,16 +766,25 @@ class LearnedGridQuantWrapper(QcQuantizeWrapper):
     def _quantize_activation(self, tensors_to_quantize, tensor_quantizers, type_of_quantizer):
         quantized_tensors = []
         for index, tensor_to_quantize in enumerate(tensors_to_quantize):
-            assert len(tensor_quantizers) > index, f"Not enough tensor quantizers ({len(tensor_quantizers)}) allocated"
-            if tensor_to_quantize.dtype in utils.torch_dtypes_to_ignore_for_quantization:
-                # Do not quantize tensors of integer or bool data type
+            assert len(tensor_quantizers) > index,\
+                f"Not enough tensor quantizers ({len(tensor_quantizers)}) allocated"
+
+            if isinstance(tensor_to_quantize, utils.dtypes_to_ignore_for_quantization) or\
+                    tensor_to_quantize.dtype in utils.torch_dtypes_to_ignore_for_quantization or\
+                    not tensor_quantizers[index].enabled:
+                # Do not quantize tensors of integer or bool data type or if the quantizer is disabled.
                 quantized_tensors.append(tensor_to_quantize)
                 continue
-            else:
-                encoding_min = self._parameters[type_of_quantizer + str(index) + '_encoding_min']
-                encoding_max = self._parameters[type_of_quantizer + str(index) + '_encoding_max']
-                quantized_tensors.append(tensor_quantizers[index].quantize_dequantize(tensor_to_quantize, encoding_min,
-                                                                                      encoding_max))
+
+            if not isinstance(tensor_to_quantize, torch.Tensor):
+                _logger.error('Expecting quantize activation input of type torch.Tensor but got %s',
+                              type(tensor_to_quantize))
+                raise AssertionError
+
+            encoding_min = self._parameters[type_of_quantizer + str(index) + '_encoding_min']
+            encoding_max = self._parameters[type_of_quantizer + str(index) + '_encoding_max']
+            quantized_tensors.append(tensor_quantizers[index].quantize_dequantize(tensor_to_quantize, encoding_min,
+                                                                                  encoding_max))
         # Flatten if there is only one output - which is by far the most common case
         if len(quantized_tensors) == 1:
             quantized_tensors = quantized_tensors[0]
