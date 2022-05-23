@@ -295,6 +295,9 @@ def _fold_given_batch_norms(model,
     :return: None
     """
     # pylint: disable=protected-access
+    device = utils.get_device(model)
+    if device != torch.device("cpu"):
+        raise RuntimeError(f"Expected model to be on cpu, not {device}.")
 
     for bn, conv in bn_conv_pairs:
         if isinstance(conv, QcQuantizeWrapper):
@@ -308,7 +311,7 @@ def _fold_given_batch_norms(model,
             _fold_to_weight(conv, bn, fold_backward=fold_backward)
 
 
-    with utils.on_cpu(model), utils.in_eval_mode(model), torch.no_grad():
+    with utils.in_eval_mode(model), torch.no_grad():
         for conv, bn in conv_bn_pairs:
             _fold(conv, bn, fold_backward=True)
 
