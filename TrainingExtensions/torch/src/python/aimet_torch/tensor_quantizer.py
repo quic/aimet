@@ -447,8 +447,12 @@ class LearnedGridTensorQuantizer(TensorQuantizer):
         self.n, self.p = LearnedGridTensorQuantizer.get_n_and_p(self.bitwidth, self.use_symmetric_encodings)
         # Moving n and p device once so that we don't have to move it for every batch
         self.scaling, self.offset = None, None
-        self.device = None
         self._ch_axis = 0
+
+    @property
+    def device(self):
+        """Alias of self.wrapper_def.device"""
+        return self.wrapper_ref.device
 
     @staticmethod
     def get_n_and_p(bitwidth, use_symmetric_encoding):

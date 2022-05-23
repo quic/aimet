@@ -2314,7 +2314,6 @@ class TestQuantizationSimLearnedGrid:
                                                    weight_bw=8, device='cpu', data_type=QuantizationDataType.int)
 
         trainable_module.input_quantizer.enabled = True
-        trainable_module.input_quantizer.device = trainable_module.device
 
         encodings = libpymo.TfEncoding()
         encodings.bw = 8
