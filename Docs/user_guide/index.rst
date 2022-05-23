@@ -48,6 +48,8 @@ Please visit the generated AIMET API documentation here
 
     API Documentation<../api_docs/index>
 
+- :ref:`Examples Documentation <ug-examples>`:Browse and use the Jupyter Notebooks that provide examples of using AIMET features.
+
 |
 
 |
