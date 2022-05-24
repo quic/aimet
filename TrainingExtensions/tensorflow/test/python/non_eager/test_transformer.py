@@ -61,6 +61,7 @@ if version.parse(tf.version.VERSION) >= version.parse("2.0"):
 
 @pytest.mark.tf2
 class TransformerQuantizationUnittests(unittest.TestCase):
+    @pytest.mark.skip
     def test_hf_bert(self):
         tf.compat.v1.reset_default_graph()
 
@@ -141,6 +142,7 @@ class TransformerQuantizationUnittests(unittest.TestCase):
         del sim
         sess.close()
 
+    @pytest.mark.skip
     def test_export_hf_bert(self):
         tf.compat.v1.reset_default_graph()
 
@@ -302,6 +304,7 @@ class TransformerQuantizationUnittests(unittest.TestCase):
         if os.path.exists('/tmp/orig_tf_hf_bert_model'):
             os.remove('/tmp/orig_tf_hf_bert_model')
 
+    @pytest.mark.skip
     def test_custom_hw_config_hf_bert(self):
         tf.compat.v1.reset_default_graph()
 
@@ -422,6 +425,7 @@ class TransformerQuantizationUnittests(unittest.TestCase):
 
         sess.close()
 
+    @pytest.mark.skip
     def test_hf_bert_mask(self):
         tf.compat.v1.reset_default_graph()
 
@@ -603,6 +607,7 @@ class TransformerQuantizationUnittests(unittest.TestCase):
         del sim
         sess.close()
 
+    @pytest.mark.skip
     def test_hf_bert_embedding(self):
         tf.compat.v1.reset_default_graph()
 
@@ -654,6 +659,7 @@ class TransformerQuantizationUnittests(unittest.TestCase):
         del sim
         sess.close()
 
+    @pytest.mark.skip
     def test_hf_bert_embedding_custom_config(self):
         tf.compat.v1.reset_default_graph()
 
