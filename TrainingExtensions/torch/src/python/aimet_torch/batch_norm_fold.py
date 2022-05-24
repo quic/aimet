@@ -113,20 +113,20 @@ def _call_mo_batch_norm_fold(weight: torch.Tensor,
     """
     with torch.no_grad():
         bn_params = libpymo.BNParams()
-        bn_params.gamma = bn.weight.detach().numpy().reshape(-1)
-        bn_params.beta = bn.bias.detach().numpy().reshape(-1)
-        bn_params.runningMean = bn.running_mean.detach().numpy().reshape(-1)
+        bn_params.gamma = bn.weight.detach().cpu().numpy().reshape(-1)
+        bn_params.beta = bn.bias.detach().cpu().numpy().reshape(-1)
+        bn_params.runningMean = bn.running_mean.detach().cpu().numpy().reshape(-1)
         sigma = torch.sqrt(bn.running_var + bn.eps)
-        bn_params.runningVar = sigma.detach().numpy().reshape(-1)
+        bn_params.runningVar = sigma.detach().cpu().numpy().reshape(-1)
 
         weight_tensor = libpymo.TensorParams()
 
-        weight_tensor.data = weight.detach().numpy().reshape(-1)
+        weight_tensor.data = weight.detach().cpu().numpy().reshape(-1)
         weight_tensor.shape = np.array(weight.shape)
 
         bias_tensor = libpymo.TensorParams()
 
-        bias_tensor.data = bias.detach().numpy().reshape(-1)
+        bias_tensor.data = bias.detach().cpu().numpy().reshape(-1)
         bias_tensor.shape = np.array(bias.shape)
         is_bias_valid = True
 
@@ -295,10 +295,6 @@ def _fold_given_batch_norms(model,
     :return: None
     """
     # pylint: disable=protected-access
-    device = utils.get_device(model)
-    if device != torch.device("cpu"):
-        raise RuntimeError(f"Expected model to be on cpu, not {device}.")
-
     for bn, conv in bn_conv_pairs:
         if isinstance(conv, QcQuantizeWrapper):
             raise RuntimeError(f"Forward folding to scale is not possible. Got {conv}")
@@ -334,8 +330,9 @@ def find_all_batch_norms_to_fold(model, input_shapes):
     :param input_shapes: Input shapes to use for the model (can be one or multiple inputs)
     :return: List of pairs of bn and layers to fold bn into
     """
-    connected_graph = ConnectedGraph(model,
-                                     utils.create_rand_tensors_given_shapes(input_shapes))
+    device = utils.get_device(model)
+    inp_tensor_list = [t.to(device) for t in utils.create_rand_tensors_given_shapes(input_shapes)]
+    connected_graph = ConnectedGraph(model, inp_tensor_list)
     conv_bn_pairs, bn_conv_pairs = _find_all_batch_norms_to_fold(model, input_shapes, connected_graph)
     return conv_bn_pairs + bn_conv_pairs
 
@@ -394,7 +391,8 @@ def fold_all_batch_norms_to_weight(
     :param fold_to_scale: If True, fold BatchNorms to quantization scale parameter.
     :return: A list of pairs of layers [(Conv/Linear, BN layer that got folded)]
     """
-    inp_tensor_list = utils.create_rand_tensors_given_shapes(input_shapes)
+    device = utils.get_device(model)
+    inp_tensor_list = [t.to(device) for t in utils.create_rand_tensors_given_shapes(input_shapes)]
     connected_graph = ConnectedGraph(model, inp_tensor_list)
     conv_bn_pairs, bn_conv_pairs = _find_all_batch_norms_to_fold(model, input_shapes, connected_graph)
 
@@ -449,7 +447,8 @@ def find_all_conv_bn_with_activation(model: torch.nn.Module, input_shape: Tuple)
     :param input_shape: shape of input to the model
     :return: dictionary of conv/linear layers with associated bn op / activation info
     """
-    inp_tensor_list = utils.create_rand_tensors_given_shapes(input_shape)
+    device = utils.get_device(model)
+    inp_tensor_list = [t.to(device) for t in utils.create_rand_tensors_given_shapes(input_shape)]
     connected_graph = ConnectedGraph(model, inp_tensor_list)
     return _find_all_conv_bn_with_activation(connected_graph)
 
