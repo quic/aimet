@@ -136,7 +136,6 @@ def sessions(device):
             bn_trainable_var = True
             inputs = tf.keras.Input(shape=(32, 32, 3,))
             conv_op = tf.keras.layers.Conv2D(32, (3, 3))(inputs)
-
             bn_op = tf.compat.v1.layers.batch_normalization(conv_op, momentum=bn_momentum_var, name="any_name1",
                                                             moving_mean_initializer=tf.compat.v1.zeros_initializer(),
                                                             moving_variance_initializer=tf.compat.v1.ones_initializer(),
