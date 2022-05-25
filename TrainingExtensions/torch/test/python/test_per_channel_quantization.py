@@ -658,14 +658,55 @@ class TestPerChannelQcQuantizeOpLearnedGrid:
         assert sim.model.fc2.param_quantizers['weight'].encoding[0] != \
                sim.model.fc2.param_quantizers['weight'].encoding[1]
 
-        sim.export('./data/', 'two_input_model_per_channel', dummy_input)
+        sim.export('/tmp/', 'two_input_model_per_channel', dummy_input)
 
-        with open("./data/two_input_model_per_channel.encodings", "r") as encodings_file:
+        with open("/tmp/two_input_model_per_channel.encodings", "r") as encodings_file:
+            encodings = json.load(encodings_file)
+        # assert len(encodings['param_encodings']) == 10
+        # assert len(encodings['param_encodings']['conv1_a.bias']) == 1
+        # assert len(encodings['param_encodings']['conv1_a.weight']) == 10
+        # assert encodings['param_encodings']['conv1_a.weight'][1]['bitwidth'] == 8
+
+
+    def test_model_with_two_inputs_in_manual_mixed_precision_mode(self):
+        """
+        Test manual mixed precision for a model with more than 1 input
+        - set per-channel configuration
+        - change the bitwidth and dtype of one of the layers to fp16
+        - verify it is set correctly after compute_encodings and export of encodings
+        """
+
+        dummy_input = (torch.rand(32, 1, 28, 28), torch.rand(32, 1, 28, 28))
+        save_config_file_for_per_channel_quantization()
+        def forward_pass(model, args):
+            model.eval()
+            with torch.no_grad():
+                model(*dummy_input)
+
+        model = ModelWithTwoInputs()
+
+        sim = QuantizationSimModel(model, dummy_input=dummy_input, config_file='./data/quantsim_config.json')
+
+        sim.model.conv1_a.param_quantizers['weight'].bitwidth = 16
+        sim.model.conv1_a.param_quantizers['weight'].data_type = QuantizationDataType.float
+
+        # Quantize
+        sim.compute_encodings(forward_pass, None)
+
+        model(*dummy_input)
+
+        sim.export('/tmp/', 'two_input_model_per_channel_manual_mixed_precision', dummy_input)
+
+        with open("/tmp/two_input_model_per_channel_manual_mixed_precision.encodings", "r") as encodings_file:
             encodings = json.load(encodings_file)
         assert len(encodings['param_encodings']) == 10
         assert len(encodings['param_encodings']['conv1_a.bias']) == 1
-        assert len(encodings['param_encodings']['conv1_a.weight']) == 10
-        assert encodings['param_encodings']['conv1_a.weight'][1]['bitwidth'] == 8
+        assert len(encodings['param_encodings']['conv1_a.weight']) == 1
+
+        #verify the modified conv1_a params are set correctly
+        assert len(encodings['param_encodings']['conv1_a.weight'][0]) == 2
+        assert encodings['param_encodings']['conv1_a.weight'][0]['bitwidth'] == 16
+        assert encodings['param_encodings']['conv1_a.weight'][0]['dtype'] == 'float'
 
 
 def create_learned_grid_wrapper():
