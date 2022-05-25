@@ -201,7 +201,6 @@ def sessions(device):
                 shape = model_input.shape
                 dummy_val = np.random.randn(1, shape[1], shape[2], shape[3])
                 sess.run(model_output, feed_dict={model_input: dummy_val})
-
             sim.compute_encodings(dummy_forward_pass, None)
 
     return sim, sess
