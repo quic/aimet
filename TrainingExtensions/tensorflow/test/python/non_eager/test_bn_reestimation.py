@@ -124,7 +124,6 @@ def starting_op_names():
 def output_op_names():
     return ['dense/BiasAdd']
 
-
 def sessions(device):
     with tf.device(device):
         graph = tf.Graph()
