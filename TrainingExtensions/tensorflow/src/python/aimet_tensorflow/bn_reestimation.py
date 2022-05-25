@@ -37,15 +37,17 @@
 # =============================================================================
 
 """BatchNorm Reestimation"""
-import fnmatch
 from typing import List, Tuple, Dict
 import numpy as np
 import tensorflow as tf
 from aimet_common.utils import AimetLogger
+from aimet_tensorflow.batch_norm_fold import find_all_batch_norms_to_fold
 from aimet_tensorflow.common.graph_eval import initialize_uninitialized_vars
+from aimet_tensorflow.quantsim import QuantizationSimModel
 from aimet_tensorflow.utils.common import create_input_feed_dict, iterate_tf_dataset
 
 logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Quant)
+
 
 class _Handle:
     """ Removable handle. """
@@ -68,35 +70,57 @@ class _Handle:
 
 
 # pylint: disable=not-an-iterable
-def _get_all_tf_bn_vars_list(sess: tf.compat.v1.Session, momentum_names: List[str],
+# pylint: disable=too-many-locals
+def _get_all_tf_bn_vars_list(sim: QuantizationSimModel, start_op_names: List[str],
+                             output_op_names: List[str], momentum_names: List[str],
                              training_names: List[str]) -> Tuple:
     """
     find tf varaible list to access
-    :param sess: tf session
+    :param sim: tf quantized model
+    :param start_op_names: List of starting op names of the model
+    :param output_op_names: List of output op names of the model
     :param momentum_names: BN's momentum name list
     :param training_names: BN's training_names list
     :return: tf.variable lists to access bn layers's mean,var,momentum,training
     """
-    with sess.graph.as_default():
+    sim.export("/tmp/", "sim_model")
+    config = tf.compat.v1.ConfigProto()
+    new_sess = tf.compat.v1.Session(graph=tf.compat.v1.Graph(), config=config)
+    with new_sess.graph.as_default():
+        saver = tf.compat.v1.train.import_meta_graph("/tmp/sim_model" + '.meta')
+    saver.restore(new_sess, "/tmp/sim_model")
+    bn_conv_linear_pairs = find_all_batch_norms_to_fold(new_sess, start_op_names, output_op_names)
+
+    with sim.session.graph.as_default():
+        mean_var_tf_var_name_list = []
+        for pair in bn_conv_linear_pairs:
+            _, batchnorm, _ = pair
+            bn_prefix = batchnorm.op.name.split("/")[0]
+            bn_mean_tf_var_name = bn_prefix + "/moving_mean:0"
+            bn_var_tf_var_name = bn_prefix + "/moving_variance:0"
+            mean_var_tf_var_name_list.append(bn_mean_tf_var_name)
+            mean_var_tf_var_name_list.append(bn_var_tf_var_name)
+
         mean_var_tf_var_list = []
         momentum_tf_var_list = []
         training_tf_var_list = []
         tf_global_vars = tf.compat.v1.get_collection(tf.compat.v1.GraphKeys.GLOBAL_VARIABLES)
         for v in tf_global_vars:
-            if (fnmatch.fnmatch(v.name, "batch_normalization*moving_mean:0") or fnmatch.fnmatch(
-                    v.name,
-                    "batch_normalization*moving_variance:0")):
-                mean_var_tf_var_list.append(v)
+
+            for tf_var_name in mean_var_tf_var_name_list:
+                if v.name == tf_var_name:
+                    mean_var_tf_var_list.append(v)
             for momentum_name in momentum_names:
                 tf_var_name = momentum_name + ":0"
-                if fnmatch.fnmatch(v.name, tf_var_name):
+                if v.name == tf_var_name:
                     momentum_tf_var_list.append(v)
             for training_name in training_names:
                 tf_var_name = training_name + ":0"
-                if fnmatch.fnmatch(v.name, tf_var_name):
+                if v.name == tf_var_name:
                     training_tf_var_list.append(v)
 
     return mean_var_tf_var_list, momentum_tf_var_list, training_tf_var_list
+
 
 # pylint: disable=not-an-iterable
 # pylint: disable=unsubscriptable-object
@@ -139,12 +163,12 @@ def _reset_bn_stats(sess: tf.compat.v1.Session, bn_mean_var_checkpoints: Dict, b
 # pylint: disable=not-an-iterable
 # pylint: disable=unsubscriptable-object
 # pylint: disable=too-many-locals
-def reestimate_bn_stats(sess: tf.compat.v1.Session, start_op_names: List[str],
+def reestimate_bn_stats(sim: QuantizationSimModel, start_op_names: List[str],
                         output_op_names: List[str], bn_momentum_names: List[str], bn_training_names: List[str],
                         bn_re_estimation_dataset: tf.compat.v1.data.Dataset, bn_num_batches: int = 100):
     """
     top level api for end user directly call for eval()
-    :param sess_sim: tf quantized model
+    :param sim: tf quantized model
     :param start_op_names: List of starting op names of the model
     :param output_op_names: List of output op names of the model
     :param bn_momentum_names: BN's momentum name list
@@ -153,14 +177,16 @@ def reestimate_bn_stats(sess: tf.compat.v1.Session, start_op_names: List[str],
     :param bn_num_batches: The number of batches to be used for reestimation
     """
     # setup tf varaible list to access
-    bn_mean_var_tf_var_list, bn_momentum_tf_var_list, bn_training_tf_var_list = \
-        _get_all_tf_bn_vars_list(sess, bn_momentum_names, bn_training_names)
 
+    bn_mean_var_tf_var_list, bn_momentum_tf_var_list, bn_training_tf_var_list = \
+        _get_all_tf_bn_vars_list(sim, start_op_names, output_op_names, bn_momentum_names, bn_training_names)
+
+    sess = sim.session
     with sess.graph.as_default():
         # save checkpoints
+        bn_mean_var_checkpoints = {v: sess.run(v) for v in bn_mean_var_tf_var_list}
         bn_momentum_checkpoints = {v: sess.run(v) for v in bn_momentum_tf_var_list}
         bn_training_checkpoints = {v: sess.run(v) for v in bn_training_tf_var_list}
-        bn_mean_var_checkpoints = {v: sess.run(v) for v in bn_mean_var_tf_var_list}
 
     # 1. switch to re-estimation mode and setup remove
     handle = _reset_bn_stats(sess, bn_mean_var_checkpoints, bn_momentum_checkpoints, bn_training_checkpoints)
@@ -182,7 +208,6 @@ def reestimate_bn_stats(sess: tf.compat.v1.Session, start_op_names: List[str],
             feed_dict = create_input_feed_dict(sess.graph, start_op_names, batch_data)
             sess.run(output_tensors, feed_dict=feed_dict)
             for v in bn_mean_var_tf_var_list:
-                # sum_dict[v.name] += sess.run(v)
                 sum_dict[v] += sess.run(v)
             if batch_index == bn_num_batches - 1:
                 break

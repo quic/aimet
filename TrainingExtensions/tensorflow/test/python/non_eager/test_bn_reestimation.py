@@ -53,6 +53,7 @@ from aimet_common.utils import AimetLogger
 from aimet_common.defs import QuantScheme
 from aimet_tensorflow.quantsim import QuantizationSimModel
 from aimet_tensorflow.bn_reestimation import reestimate_bn_stats, _get_all_tf_bn_vars_list
+
 tf.compat.v1.logging.set_verbosity(tf.compat.v1.logging.WARN)
 logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Test)
 AimetLogger.set_level_for_all_areas(logging.DEBUG)
@@ -133,23 +134,25 @@ def sessions(device):
             bn_training_var = tf.compat.v1.Variable(tf.compat.v1.constant(True), name='bn_training_var')
             bn_training_var1 = tf.compat.v1.Variable(tf.compat.v1.constant(True), name='bn_training_var1')
             bn_trainable_var = True
-            bn_trainable_var1 = True
+            bn_trainable_var = True
             inputs = tf.keras.Input(shape=(32, 32, 3,))
             conv_op = tf.keras.layers.Conv2D(32, (3, 3))(inputs)
-            bn_op = tf.compat.v1.layers.batch_normalization(conv_op, momentum=bn_momentum_var,
+
+            bn_op = tf.compat.v1.layers.batch_normalization(conv_op, momentum=bn_momentum_var, name="any_name1",
                                                             moving_mean_initializer=tf.compat.v1.zeros_initializer(),
                                                             moving_variance_initializer=tf.compat.v1.ones_initializer(),
                                                             fused=True, training=bn_training_var,
                                                             trainable=bn_trainable_var)
+
             relu_op = tf.nn.relu(bn_op)  # tf.keras.layers.ReLU(bn_op)
             conv_op1 = tf.keras.layers.Conv2D(32, (3, 3))(relu_op)
 
-            bn_op1 = tf.keras.layers.BatchNormalization(momentum=bn_momentum_var1,
+            bn_op1 = tf.keras.layers.BatchNormalization(momentum=bn_momentum_var1, name="any_name2",
                                                         beta_initializer=tf.compat.v1.random_uniform_initializer(),
                                                         gamma_initializer=tf.compat.v1.random_uniform_initializer(),
                                                         moving_mean_initializer=tf.compat.v1.random_uniform_initializer(),
                                                         moving_variance_initializer=tf.compat.v1.random_uniform_initializer(),
-                                                        fused=True)(conv_op, training=bn_training_var1)
+                                                        fused=True)(conv_op1, training=bn_training_var1)
 
             relu_op1 = tf.nn.relu(bn_op1)
             reshape = tf.keras.layers.Flatten()(relu_op1)
@@ -202,6 +205,7 @@ def sessions(device):
                 sess.run(model_output, feed_dict={model_input: dummy_val})
 
             sim.compute_encodings(dummy_forward_pass, None)
+
     return sim, sess
 
 
@@ -252,11 +256,11 @@ def _test_reestimation(sess_sim, sess_fp32, bn_re_restimation_dataset, bn_num_ba
     sess_sim.session.run(model_output, feed_dict={model_input: dummy_val})
 
     bn_mean_var_tf_var_list, bn_momentum_tf_var_list, bn_training_tf_var_list = _get_all_tf_bn_vars_list(
-        sess_sim.session, bn_momentum_names, bn_training_names)
+        sess_sim, ['input_1'], ['dense/BiasAdd'], bn_momentum_names, bn_training_names)
     bn_mean_var_ori, bn_momentum_ori, bn_training_ori = get_all_status(sess_sim.session, bn_mean_var_tf_var_list,
                                                                        bn_momentum_tf_var_list, bn_training_tf_var_list)
 
-    with reestimate_bn_stats(sess=sess_sim.session, start_op_names=["input_1"], output_op_names=['dense/BiasAdd'],
+    with reestimate_bn_stats(sim=sess_sim, start_op_names=["input_1"], output_op_names=['dense/BiasAdd'],
                              bn_momentum_names=bn_momentum_names, bn_training_names=bn_training_names,
                              bn_re_estimation_dataset=bn_re_restimation_dataset,
                              bn_num_batches=bn_num_batches):
