@@ -695,6 +695,7 @@ class QuantizeDequantizeFunc(torch.autograd.Function):
         :param channel_axis: Axis along which per channel quantize dequantize is performed
         :return: quantized dequantized tensor
         """
+
         if len(tensor_to_quantize_dequantize.shape) > 1:
             encoding_min = grad_fn.broadcast_to_tensor(tensor_to_quantize_dequantize, encoding_min, channel_axis)
             encoding_max = grad_fn.broadcast_to_tensor(tensor_to_quantize_dequantize, encoding_max, channel_axis)
@@ -864,19 +865,21 @@ class QuantizeDequantize(torch.autograd.Function):
 
     @staticmethod
     def _per_channel_quantize_dequantize(tensor, tensor_quantizer, round_mode):
-        quantized_tensors = []
-
         if tensor_quantizer.data_type == QuantizationDataType.float:
-            raise ValueError('float data_type is not supported for per channel quantize-dequantize')
-
-        # pylint:disable = protected-access
-        for index, op in enumerate(tensor_quantizer._cppOp):
-            tensor_slice = tensor.select(tensor_quantizer._ch_axis, index).contiguous(memory_format=torch.contiguous_format)
-            # pylint:disable = protected-access
-            computed_tensor = op.quantizeDequantize(tensor_slice, tensor_quantizer._encoding[index],
-                                                    round_mode, tensor.is_cuda)
-            quantized_tensors.append(computed_tensor)
-        quantized_tensor = torch.stack(tuple(quantized_tensors), dim=tensor_quantizer._ch_axis)
+            if tensor_quantizer.bitwidth != 16:
+                raise ValueError('float data_type only supports bitwidth=16')
+            quantized_tensor = tensor.half()
+            quantized_tensor = quantized_tensor.float()
+        else:
+            quantized_tensors = []
+            # pylint: disable=protected-access
+            for index, op in enumerate(tensor_quantizer._cppOp):
+                # pylint: disable=protected-access
+                tensor_slice = tensor.select(tensor_quantizer._ch_axis, index).contiguous(memory_format=torch.contiguous_format)
+                computed_tensor = op.quantizeDequantize(tensor_slice, tensor_quantizer._encoding[index],
+                                                        round_mode, tensor.is_cuda)
+                quantized_tensors.append(computed_tensor)
+            quantized_tensor = torch.stack(tuple(quantized_tensors), dim=tensor_quantizer._ch_axis)
         return quantized_tensor
 
     # pylint:disable = arguments-differ
