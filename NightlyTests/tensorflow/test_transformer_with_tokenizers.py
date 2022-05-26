@@ -59,6 +59,7 @@ os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
 
 @pytest.mark.tf2
 class TransformerQuantizationAcceptanceTests(unittest.TestCase):
+    @pytest.mark.skip
     def test_hf_bert_with_tokenizer(self):
         tf.compat.v1.reset_default_graph()
 
@@ -144,6 +145,7 @@ class TransformerQuantizationAcceptanceTests(unittest.TestCase):
         del sim
         sess.close()
 
+    @pytest.mark.skip
     def test_hf_distilbert_with_tokenizer(self):
         tf.compat.v1.reset_default_graph()
 
