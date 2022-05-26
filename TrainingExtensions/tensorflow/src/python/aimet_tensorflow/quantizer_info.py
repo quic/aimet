@@ -131,6 +131,10 @@ class QuantizerInfo:
         """
         quantize_op = self.session.graph.get_operation_by_name(self.quant_op_name)
         op_var_tensor = quantize_op.inputs[var_index]
+        if op_var_tensor.op.type == 'ResourceGather':
+            op_var_tensor = self._get_readvar_from_embedding_layer(op_var_tensor)
+        elif op_var_tensor.op.type == 'Identity' and op_var_tensor.op.inputs[0].op.type == 'ResourceGather':
+            op_var_tensor = self._get_readvar_from_embedding_layer(op_var_tensor.op.inputs[0])
         return self.session.run(op_var_tensor)
 
     @property
@@ -515,3 +519,23 @@ class QuantizerInfo:
                                             self.enabled))
 
         return stream.getvalue()
+
+    @staticmethod
+    def _get_readvar_from_embedding_layer(gather_tensor: tf.Tensor) -> tf.Tensor:
+        """
+        Return read variable tensor of embedding layer gather tensor
+        :param gather_tensor: Tensor of gather op associated with embedding layer
+        :return: Tensor of read variable op associated with the gather_tensor
+        """
+        assert gather_tensor.op.type == 'ResourceGather'
+
+        varhandle_tensor = gather_tensor.op.inputs[0]
+        assert varhandle_tensor.op.type == 'VarHandleOp'
+        varhandle_list = varhandle_tensor.consumers()
+        assert len(varhandle_list) >= 3
+
+        readvariable_op = varhandle_list[2]
+        assert readvariable_op.type == 'ReadVariableOp'
+        assert len(readvariable_op.outputs) == 1
+
+        return readvariable_op.outputs[0]
