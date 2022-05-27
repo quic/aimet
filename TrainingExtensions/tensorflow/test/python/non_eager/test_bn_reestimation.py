@@ -70,9 +70,9 @@ def get_all_status(
     get current all stats (momentum,training, mean,var) for debug and unit test
    ."""
     with sess.graph.as_default():
-        bn_stats_dict = {v.name: sess.run(v) for v in bn_mean_var_tf_var_list}
-        bn_momentum_dict = {v.name: sess.run(v) for v in bn_momentum_tf_var_list}
-        bn_traning_dict = {v.name: sess.run(v) for v in bn_training_tf_var_list}
+        bn_stats_dict = dict(zip(bn_mean_var_tf_var_list, sess.run([v for v in bn_mean_var_tf_var_list])))
+        bn_momentum_dict = dict(zip(bn_momentum_tf_var_list, sess.run([v for v in bn_momentum_tf_var_list])))
+        bn_traning_dict = dict(zip(bn_training_tf_var_list, sess.run([v for v in bn_training_tf_var_list])))
     return bn_stats_dict, bn_momentum_dict, bn_traning_dict
 
 
@@ -118,7 +118,6 @@ def bn_training_names():
 @pytest.fixture
 def starting_op_names():
     return ["input_1"]
-
 
 @pytest.fixture
 def output_op_names():
@@ -242,7 +241,6 @@ def test_reestimation_with_quantsim_model(gpu_sessions, bn_re_restimation_datase
     sess_sim, sess_fp32 = gpu_sessions
     _test_reestimation(sess_sim, sess_fp32, bn_re_restimation_dataset, bn_num_batches,
                        bn_momentum_names, bn_training_names)
-
 
 def _test_reestimation(sess_sim, sess_fp32, bn_re_restimation_dataset, bn_num_batches,
                        bn_momentum_names, bn_training_names):

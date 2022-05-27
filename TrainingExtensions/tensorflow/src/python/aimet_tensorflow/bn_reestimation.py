@@ -48,6 +48,7 @@ from aimet_tensorflow.utils.common import create_input_feed_dict, iterate_tf_dat
 
 logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Quant)
 
+
 class _Handle:
     """ Removable handle. """
 
@@ -145,21 +146,14 @@ def _reset_bn_stats(sess: tf.compat.v1.Session, bn_mean_var_checkpoints: Dict, b
         Restore Bn stats
         """
         with sess.graph.as_default():
-
-            for k in bn_mean_var_checkpoints.keys():
-                sess.run(tf.compat.v1.assign(k, bn_mean_var_checkpoints[k]))
-            # sess.run(tf.compat.v1.assign(k, bn_mean_var_checkpoints[k]) for k in bn_mean_var_checkpoints.keys())
-            for k in bn_momentum_checkpoints.keys():
-                sess.run(tf.compat.v1.assign(k, bn_momentum_checkpoints[k]))
-            for k in bn_training_checkpoints.keys():
-                sess.run(tf.compat.v1.assign(k, bn_training_checkpoints[k]))
+            sess.run([tf.compat.v1.assign(k, bn_mean_var_checkpoints[k]) for k in bn_mean_var_checkpoints.keys()])
+            sess.run([tf.compat.v1.assign(k, bn_momentum_checkpoints[k]) for k in bn_momentum_checkpoints.keys()])
+            sess.run([tf.compat.v1.assign(k, bn_training_checkpoints[k]) for k in bn_training_checkpoints.keys()])
 
     try:
         with sess.graph.as_default():
-            for k in bn_momentum_checkpoints.keys():
-                sess.run(tf.compat.v1.assign(k, 0.0))
-            for k in bn_training_checkpoints.keys():
-                sess.run(tf.compat.v1.assign(k, tf.compat.v1.constant(True)))
+            sess.run([tf.compat.v1.assign(k, 0.0) for k in bn_momentum_checkpoints.keys()])
+            sess.run([tf.compat.v1.assign(k, tf.compat.v1.constant(True)) for k in bn_training_checkpoints.keys()])
         return _Handle(cleanup)
     except:
         cleanup()
@@ -224,11 +218,8 @@ def reestimate_bn_stats(sim: QuantizationSimModel, start_op_names: List[str],
         sum_dict[k] = sum_dict[k] / bn_num_batches
     # (4) apply result: a.update BN stats with new  b.restore momentum  c. restore training
     with sess.graph.as_default():
-        for k in bn_mean_var_checkpoints.keys():
-            sess.run(tf.compat.v1.assign(k, sum_dict[k]))
-        for k in bn_momentum_checkpoints.keys():
-            sess.run(tf.compat.v1.assign(k, bn_momentum_checkpoints[k]))
-        for k in bn_training_checkpoints.keys():
-            sess.run(tf.compat.v1.assign(k, bn_training_checkpoints[k]))
+        sess.run([tf.compat.v1.assign(k, sum_dict[k]) for k in bn_mean_var_checkpoints.keys()])
+        sess.run([tf.compat.v1.assign(k, bn_momentum_checkpoints[k]) for k in bn_momentum_checkpoints.keys()])
+        sess.run([tf.compat.v1.assign(k, bn_training_checkpoints[k]) for k in bn_training_checkpoints.keys()])
 
     return handle
