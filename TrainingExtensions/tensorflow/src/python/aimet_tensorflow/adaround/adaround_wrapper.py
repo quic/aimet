@@ -45,10 +45,12 @@ from tensorflow import keras
 from packaging import version
 
 # Import AIMET specific modules
+from aimet_common.utils import AimetLogger
 import aimet_common.libpymo as libpymo
 from aimet_common.defs import AdaroundConstants
 from aimet_common.defs import QuantScheme
 from aimet_tensorflow.utils.op.conv import WeightTensorUtils, BiasUtils
+logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Quant)
 
 QUANT_SCHEME_TO_PYMO = {QuantScheme.post_training_tf_enhanced: libpymo.QuantizationMode.QUANTIZATION_TF_ENHANCED,
                         QuantScheme.post_training_tf: libpymo.QuantizationMode.QUANTIZATION_TF}
@@ -85,7 +87,7 @@ class AdaroundWrapper(keras.layers.Layer):
         self.enable_per_channel = enable_per_channel
 
         # use the last dimension as the default channel index
-        self.ch_axis = len(list(self._weight_tensor.shape)) - 1
+        self.ch_axis = self._get_channel_axis(self._op)
         self.encoding = self.compute_encodings(weight, param_bw, quant_scheme, is_symmetric,
                                                strict_symmetric, unsigned_symmetric, enable_per_channel, self.ch_axis)
         self.alpha = self._initialize_alpha(self._weight_tensor, self.encoding, enable_per_channel, self.ch_axis)
@@ -97,6 +99,20 @@ class AdaroundWrapper(keras.layers.Layer):
         """
         return self.get_adarounded_weight(self.alpha, self._weight_tensor, self.encoding, self.use_soft_rounding,
                                           self.enable_per_channel, self.ch_axis)
+
+    @staticmethod
+    def _get_channel_axis(op: tf.Operation) -> int:
+        """
+        Get channel axis corresponding to num_channels
+        :param op: Tf Operation to get channel axis for
+        :return: Channel axis for the tf operation
+        """
+        ch_axis = 3
+        if op.type == 'Conv2DBackpropInput':
+            ch_axis = 2
+        elif op.type == 'MatMul':
+            ch_axis = 1
+        return ch_axis
 
     @staticmethod
     def get_adarounded_weight(alpha, weight_tensor, encoding, use_soft_rounding, enable_per_channel: bool,
@@ -148,12 +164,13 @@ class AdaroundWrapper(keras.layers.Layer):
 
         return tensor_dequant
 
-    def _compute_output_with_adarounded_weights(self, inp_tensor: tf.Tensor, adaround_weight_tensor: tf.Tensor) ->\
-            tf.Tensor:
+    def _compute_output_with_adarounded_weights(self, inp_tensor: tf.Tensor, adaround_weight_tensor: tf.Tensor,
+                                                out_shape) -> tf.Tensor:
         """
         Compute output of AdaroundSupportedModules with adarounded weights
         :param inp_tensor: The input tensor to be used for computing the output
         :param adaround_weight_tensor: The adarounded weight
+        :param out_shape: Shape of output of self._op
         :return: output of the op computed with AdaRounded weights
         """
         if self._op.type == 'Conv2D':
@@ -167,6 +184,11 @@ class AdaroundWrapper(keras.layers.Layer):
         elif self._op.type == 'MatMul':
             adaround_out_tensor = tf.matmul(inp_tensor, adaround_weight_tensor)
 
+        elif self._op.type == 'Conv2DBackpropInput':
+            kwargs = self._get_conv_args(self._op)
+            kwargs['output_shape'] = out_shape
+            adaround_out_tensor = tf.nn.conv2d_transpose(inp_tensor, adaround_weight_tensor, **kwargs)
+
         else:
             raise ValueError('Op type not supported')
 
@@ -179,7 +201,8 @@ class AdaroundWrapper(keras.layers.Layer):
         :return: Adarounded output tensor
         """
         adaround_weight_tensor = self.adaround_weights()
-        adaround_out_tensor = self._compute_output_with_adarounded_weights(inputs, adaround_weight_tensor)
+        out_shape = kwargs['out_shape']
+        adaround_out_tensor = self._compute_output_with_adarounded_weights(inputs, adaround_weight_tensor, out_shape)
 
         if self._bias_tensor is not None:
             adaround_out_tensor = adaround_out_tensor + self._bias_tensor
