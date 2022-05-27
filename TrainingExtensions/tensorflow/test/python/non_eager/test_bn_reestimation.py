@@ -253,12 +253,11 @@ def _test_reestimation(sess_sim, sess_fp32, bn_re_restimation_dataset, bn_num_ba
     sess_sim.session.run(model_output, feed_dict={model_input: dummy_val})
 
     bn_mean_var_tf_var_list, bn_momentum_tf_var_list, bn_training_tf_var_list = _get_all_tf_bn_vars_list(
-        sess_sim, ['input_1'], ['dense/BiasAdd'], bn_momentum_names, bn_training_names)
+        sess_sim, ['input_1'], ['dense/BiasAdd'])
     bn_mean_var_ori, bn_momentum_ori, bn_training_ori = get_all_status(sess_sim.session, bn_mean_var_tf_var_list,
                                                                        bn_momentum_tf_var_list, bn_training_tf_var_list)
 
     with reestimate_bn_stats(sim=sess_sim, start_op_names=["input_1"], output_op_names=['dense/BiasAdd'],
-                             bn_momentum_names=bn_momentum_names, bn_training_names=bn_training_names,
                              bn_re_estimation_dataset=bn_re_restimation_dataset,
                              bn_num_batches=bn_num_batches):
         bn_mean_var_est, bn_momentum_est, bn_training_est = get_all_status(sess_sim.session, bn_mean_var_tf_var_list,
