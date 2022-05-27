@@ -57,14 +57,6 @@ from aimet_tensorflow.adaround.adaround_weight import Adaround, AdaroundParamete
 logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Test)
 tf.compat.v1.disable_eager_execution()
 
-def conv2d_transpose_model():
-    """ Function for returning a basic keras model """
-
-    model = Sequential([
-                Conv2DTranspose(8, (2, 2), input_shape=(16, 16, 3,))
-            ])
-    return model
-
 
 class TestAdaroundWeight(unittest.TestCase):
     """

@@ -103,15 +103,13 @@ class AdaroundWrapper(keras.layers.Layer):
     @staticmethod
     def _get_channel_axis(op: tf.Operation) -> int:
         """
-        Get channel axis corresponding to num_channels
+        Get channel axis corresponding to tf op
         :param op: Tf Operation to get channel axis for
         :return: Channel axis for the tf operation
         """
-        ch_axis = 3
+        ch_axis = len(op.outputs[0].shape) - 1
         if op.type == 'Conv2DBackpropInput':
             ch_axis = 2
-        elif op.type == 'MatMul':
-            ch_axis = 1
         return ch_axis
 
     @staticmethod
@@ -165,7 +163,7 @@ class AdaroundWrapper(keras.layers.Layer):
         return tensor_dequant
 
     def _compute_output_with_adarounded_weights(self, inp_tensor: tf.Tensor, adaround_weight_tensor: tf.Tensor,
-                                                out_shape) -> tf.Tensor:
+                                                out_shape: tuple) -> tf.Tensor:
         """
         Compute output of AdaroundSupportedModules with adarounded weights
         :param inp_tensor: The input tensor to be used for computing the output
@@ -197,10 +195,14 @@ class AdaroundWrapper(keras.layers.Layer):
     def call(self, inputs, **kwargs): # pylint: disable=unused-argument
         """
         :param inputs: Input tensor
-        :param kwargs: Additional keyword arguments
+        :param kwargs: Additional keyword arguments. out_shape is expected to be a provided keywork argument.
         :return: Adarounded output tensor
         """
         adaround_weight_tensor = self.adaround_weights()
+        if 'out_shape' not in kwargs:
+            logger.error('Wrapper call expects out_shape keyword argument containing a tuple of the shape of the '
+                         'output tensor of the wrapped op.')
+            assert 'out_shape' in kwargs
         out_shape = kwargs['out_shape']
         adaround_out_tensor = self._compute_output_with_adarounded_weights(inputs, adaround_weight_tensor, out_shape)
 
