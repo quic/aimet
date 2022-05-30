@@ -1728,3 +1728,114 @@ class TestQuantsimConfig(unittest.TestCase):
         qsim_config.ENFORCE_TARGET_DTYPE_BITWIDTH_CONFIG = False
         if os.path.exists(config_file):
             os.remove(config_file)
+
+    def test_target_rule_enforced_apply_op_level_overrides_fp16(self):
+        """
+        validates Config overrides provided are valid combination and application of aic100 specific rules.
+        No dfeualt supported kernel override and op level FP16 support for LayerNorm and GeLU.
+        Quantsim created with (int8, int8) defaults
+        a) Default supported kernels override not provided.
+        b) op level override at index 0 of supported_kernels for LayerNorm/GeLU type is
+        (fp 16, fp16) --> applied to params.
+        For GeLu, nothing is applied, as it has not params. output is retained at int 8.
+        :return:
+        """
+
+        # aic100, no default supported kernels, op level for layernorm and gelu
+        quantsim_config = {
+            "defaults": {
+                "ops": {
+                    "is_output_quantized": "True"
+                },
+                "params": {
+                    "is_quantized": "True"
+                }
+            },
+            "params": {},
+            "op_type": {
+                "LayerNorm": {
+                    "supported_kernels":
+                        [
+                            {
+                                "activation": {
+                                    "bitwidth": 16,
+                                    "dtype": "float"
+                                },
+                                "param": {
+                                    "bitwidth": 16,
+                                    "dtype": "float"
+                                }
+                            },
+                        ]
+                },
+                "GELU": {
+                    "is_output_quantized": "True",
+                    "supported_kernels":
+                        [
+                            {
+                                "activation": {
+                                    "bitwidth": 16,
+                                    "dtype": "float"
+                                },
+                                "param": {
+                                    "bitwidth": 16,
+                                    "dtype": "float"
+                                }
+                            },
+                        ]
+                }
+            },
+            "supergroups": [],
+            "model_input": {},
+            "model_output": {}
+        }
+
+        config_file = '/tmp/quantsim_config.json'
+        with open(config_file, 'w') as f:
+            json.dump(quantsim_config, f)
+
+        tf.compat.v1.reset_default_graph()
+        with tf.device('/cpu:0'):
+            model = tf.keras.Sequential()
+            model.add(tf.keras.layers.Conv2D(32, kernel_size=3, input_shape=(28, 28, 3), activation='gelu'))
+            model.add(tf.keras.layers.LayerNormalization(epsilon=1e-12))
+            model.summary()
+
+        starting_op_names = [input.op.name for input in model.inputs]
+        output_op_names = [output.op.name for output in model.outputs]
+
+        qsim_config.ENFORCE_TARGET_DTYPE_BITWIDTH_CONFIG = True
+
+        sess = tf.compat.v1.Session()
+        initialize_uninitialized_vars(sess)
+
+        sim = QuantizationSimModel(sess, starting_op_names, output_op_names, default_data_type=QuantizationDataType.int,
+                                   default_output_bw=8, default_param_bw=8,
+                                   config_file=config_file)
+
+        # LayerNorm params should be set to FP 16, while output is maintained at quantsim defaults (int8)
+        ln_output_name = 'layer_normalization/batchnorm/add_1_quantized'
+        ln_output_quantinfo = sim._activation_quantizers[ln_output_name]
+        self.assertEqual(ln_output_quantinfo.bitwidth, 8)
+        self.assertEqual(ln_output_quantinfo.data_type, QuantizationDataType.int)
+
+        beta_name = 'layer_normalization/batchnorm/ReadVariableOp_quantized'
+        beta_quantinfo = sim._param_quantizers[beta_name]
+        self.assertEqual(beta_quantinfo.bitwidth, 16)
+        self.assertEqual(beta_quantinfo.data_type, QuantizationDataType.float)
+        gamma_name = 'layer_normalization/batchnorm/mul/ReadVariableOp_quantized'
+        gamma_quantinfo = sim._param_quantizers[gamma_name]
+        self.assertEqual(gamma_quantinfo.bitwidth, 16)
+        self.assertEqual(gamma_quantinfo.data_type, QuantizationDataType.float)
+
+        # gelu output should be retained at quantsim defaults (int8) although it has supported_kernels = FP16
+        # as this op doesn't have params
+        gelu_name = 'conv2d/Gelu/mul_1_quantized'
+        gelu_quantinfo = sim._activation_quantizers[gelu_name]
+        self.assertEqual(gelu_quantinfo.bitwidth, 8)
+        self.assertEqual(gelu_quantinfo.data_type, QuantizationDataType.int)
+
+        # remove test config created
+        qsim_config.ENFORCE_TARGET_DTYPE_BITWIDTH_CONFIG = False
+        if os.path.exists(config_file):
+            os.remove(config_file)
