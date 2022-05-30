@@ -327,15 +327,12 @@ class QuantizationSimModel:
 
         for op_name, quantizer_info in self._param_quantizers.items():
             if quantizer_info.get_op_mode() != int(libpymo.TensorQuantizerOpMode.passThrough):
-                op_bitwidth, op_use_symmetric_encodings = quantizer_info.bitwidth, quantizer_info.use_symmetric_encoding
-                encoding = quantizer_info.compute_encoding(op_bitwidth, op_use_symmetric_encodings)
                 # encoding would be invalid for dtype=fp because there is no encoding computed in float mode through the
                 # tensor_quantizer
                 if quantizer_info.data_type == QuantizationDataType.float:
                     quantizer_info.set_op_mode(libpymo.TensorQuantizerOpMode.quantizeDequantize)
                 else:
                     if quantizer_info.is_encoding_valid():
-                        quantizer_info.set_encoding(encoding)
                         quantizer_info.set_op_mode(op_mode)
                     else:
                         quantizer_info.set_op_mode(libpymo.TensorQuantizerOpMode.passThrough)
