@@ -423,7 +423,9 @@ class TestAdaroundWeight(unittest.TestCase):
             json.dump(quantsim_config, f)
 
         with tf.device(device):
-            adarounded_session = Adaround.apply_adaround(session, starting_op_names, output_op_names, params, path='./', filename_prefix='conv2d_transpose', default_config_file='./config.json')
+            adarounded_session = Adaround.apply_adaround(session, starting_op_names, output_op_names, params, path='./',
+                                                         filename_prefix='conv2d_transpose',
+                                                         default_config_file='./config.json')
         session.close()
 
         # Test export functionality

@@ -199,8 +199,7 @@ class TestAdaroundOptimizer(unittest.TestCase):
         self.assertAlmostEqual(conv_wrapper.encoding.delta, 0.003772232448682189, places=3)
 
         # Get reconstruction error tensor
-        recons_error_tensor = AdaroundOptimizer._get_recons_err_tensor(conv_wrapper, None, inp_tensor, out_tensor,
-                                                                       orig_out_shape=(1, 4, 10, 10))
+        recons_error_tensor = AdaroundOptimizer._get_recons_err_tensor(conv_wrapper, None, inp_tensor, out_tensor)
 
         recons_err_soft = session.run(recons_error_tensor, feed_dict={conv_wrapper.use_soft_rounding: True})
         recons_err_hard = session.run(recons_error_tensor, feed_dict={conv_wrapper.use_soft_rounding: False})
@@ -243,7 +242,7 @@ class TestAdaroundOptimizer(unittest.TestCase):
         session.run(conv_wrapper.alpha.initializer)
 
         # Adaround forward pass
-        adaround_out_tensor = conv_wrapper(inp_tensor, out_shape=(1, 4, 10, 10))
+        adaround_out_tensor = conv_wrapper(inp_tensor)
 
         # Compute mse loss
         mse_loss_tensor = tf.reduce_mean(tf.math.squared_difference(adaround_out_tensor, out_tensor))

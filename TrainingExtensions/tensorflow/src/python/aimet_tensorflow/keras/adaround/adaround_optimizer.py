@@ -157,8 +157,7 @@ class AdaroundOptimizer:
             _, (total_loss, recon_loss, round_loss) = TfAdaroundOptimizer.train_step(wrapper, act_func, optimizer,
                                                                                      inp_data, orig_out_data,
                                                                                      opt_params.reg_param, warm_start,
-                                                                                     beta, channels_index,
-                                                                                     orig_out_data.shape)
+                                                                                     beta, channels_index)
             if cur_iteration == 0 or cur_iteration % 100 == 0:
                 logger.debug("After iterations=%d, Total loss=%5f, Recons. loss=%5f, Rounding loss=%5f",
                              cur_iteration, float(total_loss), float(recon_loss), float(round_loss))

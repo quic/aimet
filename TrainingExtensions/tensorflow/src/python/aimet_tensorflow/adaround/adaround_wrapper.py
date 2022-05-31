@@ -45,12 +45,10 @@ from tensorflow import keras
 from packaging import version
 
 # Import AIMET specific modules
-from aimet_common.utils import AimetLogger
 import aimet_common.libpymo as libpymo
 from aimet_common.defs import AdaroundConstants
 from aimet_common.defs import QuantScheme
 from aimet_tensorflow.utils.op.conv import WeightTensorUtils, BiasUtils
-logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Quant)
 
 QUANT_SCHEME_TO_PYMO = {QuantScheme.post_training_tf_enhanced: libpymo.QuantizationMode.QUANTIZATION_TF_ENHANCED,
                         QuantScheme.post_training_tf: libpymo.QuantizationMode.QUANTIZATION_TF}
@@ -162,13 +160,12 @@ class AdaroundWrapper(keras.layers.Layer):
 
         return tensor_dequant
 
-    def _compute_output_with_adarounded_weights(self, inp_tensor: tf.Tensor, adaround_weight_tensor: tf.Tensor,
-                                                out_shape: tuple) -> tf.Tensor:
+    def _compute_output_with_adarounded_weights(self, inp_tensor: tf.Tensor, adaround_weight_tensor: tf.Tensor) \
+            -> tf.Tensor:
         """
         Compute output of AdaroundSupportedModules with adarounded weights
         :param inp_tensor: The input tensor to be used for computing the output
         :param adaround_weight_tensor: The adarounded weight
-        :param out_shape: Shape of output of self._op
         :return: output of the op computed with AdaRounded weights
         """
         if self._op.type == 'Conv2D':
@@ -184,7 +181,17 @@ class AdaroundWrapper(keras.layers.Layer):
 
         elif self._op.type == 'Conv2DBackpropInput':
             kwargs = self._get_conv_args(self._op)
-            kwargs['output_shape'] = out_shape
+            inputs_shape = tf.shape(inp_tensor)
+            batch_size = inputs_shape[0]
+
+            if kwargs['data_format'] == 'NCHW':
+                output_shape = (batch_size, adaround_weight_tensor.shape[2], self._op.outputs[0].shape[2],
+                                self._op.outputs[0].shape[3])
+            else:
+                output_shape = (batch_size, self._op.outputs[0].shape[1], self._op.outputs[0].shape[2],
+                                adaround_weight_tensor.shape[2])
+
+            kwargs['output_shape'] = output_shape
             adaround_out_tensor = tf.nn.conv2d_transpose(inp_tensor, adaround_weight_tensor, **kwargs)
 
         else:
@@ -195,16 +202,11 @@ class AdaroundWrapper(keras.layers.Layer):
     def call(self, inputs, **kwargs): # pylint: disable=unused-argument
         """
         :param inputs: Input tensor
-        :param kwargs: Additional keyword arguments. out_shape is expected to be a provided keywork argument.
+        :param kwargs: Additional keyword arguments
         :return: Adarounded output tensor
         """
         adaround_weight_tensor = self.adaround_weights()
-        if 'out_shape' not in kwargs:
-            logger.error('Wrapper call expects out_shape keyword argument containing a tuple of the shape of the '
-                         'output tensor of the wrapped op.')
-            assert 'out_shape' in kwargs
-        out_shape = kwargs['out_shape']
-        adaround_out_tensor = self._compute_output_with_adarounded_weights(inputs, adaround_weight_tensor, out_shape)
+        adaround_out_tensor = self._compute_output_with_adarounded_weights(inputs, adaround_weight_tensor)
 
         if self._bias_tensor is not None:
             adaround_out_tensor = adaround_out_tensor + self._bias_tensor
