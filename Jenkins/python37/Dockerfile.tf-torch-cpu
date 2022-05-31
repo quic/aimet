@@ -141,7 +141,7 @@ RUN python3.7 -m pip --no-cache-dir install \
         Pillow==8.4.0 \
         pluggy==0.12.0 \
         progressbar2 \
-        protobuf \
+        protobuf==3.19.4 \
         psutil \
         ptflops \
         pybind11 \
