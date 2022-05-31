@@ -34,6 +34,8 @@
 #
 #  @@-COPYRIGHT-END-@@
 # =============================================================================
+import os
+import shutil
 
 import pytest
 import torch
@@ -662,11 +664,57 @@ class TestPerChannelQcQuantizeOpLearnedGrid:
 
         with open("/tmp/two_input_model_per_channel.encodings", "r") as encodings_file:
             encodings = json.load(encodings_file)
-        # assert len(encodings['param_encodings']) == 10
-        # assert len(encodings['param_encodings']['conv1_a.bias']) == 1
-        # assert len(encodings['param_encodings']['conv1_a.weight']) == 10
-        # assert encodings['param_encodings']['conv1_a.weight'][1]['bitwidth'] == 8
+        assert len(encodings['param_encodings']) == 10
+        assert len(encodings['param_encodings']['conv1_a.bias']) == 1
+        assert len(encodings['param_encodings']['conv1_a.weight']) == 10
+        assert encodings['param_encodings']['conv1_a.weight'][1]['bitwidth'] == 8
 
+    def test_export_model_with_two_inputs_fp16(self):
+        """Model with more than 1 input, fp16 mode"""
+
+        dummy_input = (torch.rand(32, 1, 28, 28), torch.rand(32, 1, 28, 28))
+        save_config_file_for_per_channel_quantization()
+        def forward_pass(model, args):
+            model.eval()
+            with torch.no_grad():
+                model(*dummy_input)
+
+        model = ModelWithTwoInputs()
+
+        sim = QuantizationSimModel(model, dummy_input=dummy_input,
+                                   default_param_bw=16, default_output_bw=16,
+                                   default_data_type=QuantizationDataType.float,
+                                   config_file='./data/quantsim_config.json')
+
+        # Quantize
+        sim.compute_encodings(forward_pass, None)
+        model(*dummy_input)
+
+        results_dir = '/tmp/two_input_model_per_channel_fp16'
+        if not os.path.exists(results_dir):
+            os.makedirs(results_dir)
+
+        sim.export(results_dir, 'results', dummy_input)
+
+        with open("/tmp/two_input_model_per_channel_fp16/results.encodings", "r") as encodings_file:
+            encodings = json.load(encodings_file)
+        assert len(encodings['param_encodings']) == 10
+        assert len(encodings['activation_encodings']) == 15
+
+        for key in encodings['param_encodings'].keys():
+            assert len(encodings['param_encodings'][key]) == 1
+            assert len(encodings['param_encodings'][key][0]) == 2
+            assert encodings['param_encodings'][key][0]['bitwidth'] == 16
+            assert encodings['param_encodings'][key][0]['dtype'] == 'float'
+
+        for key in encodings['activation_encodings'].keys():
+            assert len(encodings['activation_encodings'][key]) == 1
+            assert len(encodings['activation_encodings'][key][0]) == 2
+            assert encodings['activation_encodings'][key][0]['bitwidth'] == 16
+            assert encodings['activation_encodings'][key][0]['dtype'] == 'float'
+
+        if os.path.exists(results_dir):
+            shutil.rmtree(results_dir)
 
     def test_model_with_two_inputs_in_manual_mixed_precision_mode(self):
         """
@@ -695,9 +743,13 @@ class TestPerChannelQcQuantizeOpLearnedGrid:
 
         model(*dummy_input)
 
-        sim.export('/tmp/', 'two_input_model_per_channel_manual_mixed_precision', dummy_input)
+        results_dir = '/tmp/two_input_model_per_channel_manual_mixed_precision'
+        if not os.path.exists(results_dir):
+            os.makedirs(results_dir)
 
-        with open("/tmp/two_input_model_per_channel_manual_mixed_precision.encodings", "r") as encodings_file:
+        sim.export(results_dir, 'results', dummy_input)
+
+        with open("/tmp/two_input_model_per_channel_manual_mixed_precision/results.encodings", "r") as encodings_file:
             encodings = json.load(encodings_file)
         assert len(encodings['param_encodings']) == 10
         assert len(encodings['param_encodings']['conv1_a.bias']) == 1
@@ -707,6 +759,9 @@ class TestPerChannelQcQuantizeOpLearnedGrid:
         assert len(encodings['param_encodings']['conv1_a.weight'][0]) == 2
         assert encodings['param_encodings']['conv1_a.weight'][0]['bitwidth'] == 16
         assert encodings['param_encodings']['conv1_a.weight'][0]['dtype'] == 'float'
+
+        if os.path.exists(results_dir):
+            shutil.rmtree(results_dir)
 
 
 def create_learned_grid_wrapper():
