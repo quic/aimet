@@ -370,8 +370,10 @@ class StaticGridPerChannelQuantizer(StaticGridTensorQuantizer):
     Simulates quantization for the given tensor using a per-channel scale/offset
     """
 
+    # pylint: disable=too-many-arguments
     def __init__(self, bitwidth: int, round_mode: str, quant_scheme: QuantScheme, use_symmetric_encodings: bool,
-                 num_channels: int, enabled_by_default: bool, ch_axis: int = 0):
+                 num_channels: int, enabled_by_default: bool, ch_axis: int = 0,
+                 data_type: QuantizationDataType = QuantizationDataType.int):
         """
         Constructor
         :param bitwidth: Quantization bitwidth
@@ -380,9 +382,10 @@ class StaticGridPerChannelQuantizer(StaticGridTensorQuantizer):
         :param use_symmetric_encodings: True if symmetric encoding is used.  False otherwise.
         :param enabled_by_default: True if quantization of tensor is enabled.  False otherwise.
         :param ch_axis: Channel Axis to use for per-channel quantization
+        :param data_type: data type of type QuantizationDataType to be used
         """
         super(StaticGridPerChannelQuantizer, self).__init__(bitwidth, round_mode, quant_scheme, use_symmetric_encodings,
-                                                            enabled_by_default, data_type=QuantizationDataType.int)
+                                                            enabled_by_default, data_type=data_type)
         quant_scheme = MAP_QUANT_SCHEME_TO_PYMO[quant_scheme]
         self._cppOp = [AimetTensorQuantizer.AimetTensorQuantizer(quant_scheme) for _ in range(num_channels)]
         self._ch_axis = ch_axis
