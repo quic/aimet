@@ -136,4 +136,6 @@ class ActivationSampler:
         :return: Input tensor
         """
         input_tensor = op.inputs[0]
+        if op.type == 'Conv2DBackpropInput':
+            input_tensor = op.inputs[2]
         return input_tensor

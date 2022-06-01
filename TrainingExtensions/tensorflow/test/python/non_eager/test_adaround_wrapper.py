@@ -44,6 +44,8 @@ import pytest
 import unittest.mock
 import numpy as np
 import tensorflow as tf
+from tensorflow.python.keras.models import Sequential
+from tensorflow.python.keras.layers import Conv2DTranspose
 
 import aimet_common.libpymo as libpymo
 from aimet_common.utils import AimetLogger
@@ -274,3 +276,29 @@ class TestAdaroundWrapper(unittest.TestCase):
 
         res = AdaroundWrapper._generate_weight_transpose_perm(shape=(2, 3, 4, 5), ch_axis=3)
         self.assertEqual(res, [3, 0, 1, 2])
+
+    def test_conv_transpose_adaround_wrapper(self):
+        """
+        Test wrapper generation for conv transpose
+        """
+        tf.compat.v1.reset_default_graph()
+
+        with tf.device('/cpu:0'):
+            graph = tf.Graph()
+            with graph.as_default():
+                tf.compat.v1.set_random_seed(1)
+                _ = Sequential([Conv2DTranspose(8, (2, 2), input_shape=(16, 16, 3,))])
+                init = tf.compat.v1.global_variables_initializer()
+
+        session = tf.compat.v1.Session(graph=graph)
+        session.run(init)
+
+        conv2d_transpose_op = session.graph.get_operation_by_name('conv2d_transpose/conv2d_transpose')
+
+        graph = tf.Graph()
+        with graph.as_default():
+            wrapper = AdaroundWrapper(session, conv2d_transpose_op, param_bw=8,
+                                      quant_scheme=QuantScheme.post_training_tf, is_symmetric=True,
+                                      strict_symmetric=False, unsigned_symmetric=False, enable_per_channel=True)
+        assert len(wrapper.encoding) == 8
+        assert wrapper.ch_axis == 2

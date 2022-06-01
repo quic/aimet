@@ -95,7 +95,6 @@ class WeightTensorUtils:
         """
 
         wt_tensor_index = WeightTensorUtils.get_tensor_index_in_given_op(op)
-        assert len(op.inputs) == 2
         wt_var_read_op = op.inputs[wt_tensor_index].op
 
         wt_tensor = wt_var_read_op.inputs[constants.OP_VAR_WEIGHT_INDEX]
@@ -113,7 +112,6 @@ class WeightTensorUtils:
         """
 
         wt_tensor_index = WeightTensorUtils.get_tensor_index_in_given_op(op)
-        assert len(op.inputs) == 2
         get_wt_as_read_var_tensor = op.inputs[wt_tensor_index]
 
         return get_wt_as_read_var_tensor
