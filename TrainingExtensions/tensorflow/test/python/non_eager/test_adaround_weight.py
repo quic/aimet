@@ -46,6 +46,8 @@ import json
 import numpy as np
 import unittest.mock
 import tensorflow as tf
+from tensorflow.python.keras.models import Sequential
+from tensorflow.python.keras.layers import Conv2DTranspose
 
 from aimet_common.utils import AimetLogger
 from aimet_common.quantsim_config.json_config_importer import JsonConfigImporter
@@ -365,3 +367,120 @@ class TestAdaroundWeight(unittest.TestCase):
         # Delete encodings file
         if os.path.exists("./dummy.encodings"):
             os.remove("./dummy.encodings")
+
+    def test_apply_adaround_per_channel_conv2d_transpose(self):
+        """
+        Test apply per channel adaround and export functionality for conv transpose
+        """
+        device = '/cpu:0'
+        np.random.seed(1)
+        AimetLogger.set_level_for_all_areas(logging.DEBUG)
+        tf.compat.v1.reset_default_graph()
+
+        with tf.device(device):
+            graph = tf.Graph()
+            with graph.as_default():
+                tf.compat.v1.set_random_seed(1)
+                _ = Sequential([Conv2DTranspose(8, (2, 2), input_shape=(16, 16, 3,))])
+                init = tf.compat.v1.global_variables_initializer()
+
+        session = tf.compat.v1.Session(graph=graph)
+        session.run(init)
+
+        dataset_size = 32
+        batch_size = 16
+        possible_batches = dataset_size // batch_size
+        input_data = np.random.rand(dataset_size, 16, 16, 3)
+        input_data = input_data.astype(dtype=np.float64)
+
+        graph = tf.Graph()
+        with graph.as_default():
+            dataset = tf.data.Dataset.from_tensor_slices(input_data)
+            dataset = dataset.batch(batch_size=batch_size)
+
+        params = AdaroundParameters(data_set=dataset, num_batches=possible_batches, default_num_iterations=10)
+        starting_op_names = ['conv2d_transpose_input']
+        output_op_names = ['conv2d_transpose/BiasAdd']
+
+        quantsim_config = {
+            "defaults": {
+                "ops": {},
+                "params": {
+                    "is_symmetric": "True"
+                },
+                "per_channel_quantization": "True",
+            },
+            "params": {},
+            "op_type": {},
+            "supergroups": [],
+            "model_input": {},
+            "model_output": {
+                "is_output_quantized": "True"
+            }
+        }
+
+        with open('./config.json', 'w') as f:
+            json.dump(quantsim_config, f)
+
+        with tf.device(device):
+            adarounded_session = Adaround.apply_adaround(session, starting_op_names, output_op_names, params, path='./',
+                                                         filename_prefix='conv2d_transpose',
+                                                         default_config_file='./config.json')
+        session.close()
+
+        # Test export functionality
+
+        with open('./conv2d_transpose.encodings') as json_file:
+            encoding_data = json.load(json_file)
+
+        param_keys = list(encoding_data.keys())
+
+        self.assertTrue(param_keys[0] == "conv2d_transpose/conv2d_transpose/ReadVariableOp:0")
+        conv_transpose_encoding_data = encoding_data["conv2d_transpose/conv2d_transpose/ReadVariableOp:0"]
+        self.assertTrue(isinstance(conv_transpose_encoding_data, list))
+        param_encoding_keys = conv_transpose_encoding_data[0].keys()
+
+        self.assertTrue("max" in param_encoding_keys)
+        self.assertTrue(isinstance(conv_transpose_encoding_data[0]['max'], list))
+        self.assertTrue(len(conv_transpose_encoding_data[0]['max']) == 8)
+
+        self.assertTrue("min" in param_encoding_keys)
+        self.assertTrue(isinstance(conv_transpose_encoding_data[0]['min'], list))
+        self.assertTrue(len(conv_transpose_encoding_data[0]['min']) == 8)
+
+        self.assertTrue("offset" in param_encoding_keys)
+        self.assertTrue(isinstance(conv_transpose_encoding_data[0]['offset'], list))
+        self.assertTrue(len(conv_transpose_encoding_data[0]['offset']) == 8)
+
+        self.assertTrue("scale" in param_encoding_keys)
+        self.assertTrue(isinstance(conv_transpose_encoding_data[0]['scale'], list))
+        self.assertTrue(len(conv_transpose_encoding_data[0]['scale']) == 8)
+
+        def dummy_forward_pass(session: tf.compat.v1.Session, _):
+            """
+            This is intended to be the user-defined model evaluation function.
+            AIMET requires the above signature. So if the user's eval function does not
+            match this signature, please create a simple wrapper.
+            :param session: Session with model to be evaluated
+            :param _: These argument(s) are passed to the forward_pass_callback as-is. Up to
+                    the user to determine the type of this parameter. E.g. could be simply an integer representing the number
+                    of data samples to use. Or could be a tuple of parameters or an object representing something more complex.
+                    If set to None, forward_pass_callback will be invoked with no parameters.
+            :return: single float number (accuracy) representing model's performance
+            """
+            input_data = np.random.rand(1, 16, 16, 3)
+            input_tensor = session.graph.get_tensor_by_name('conv2d_transpose_input:0')
+            output_tensor = session.graph.get_tensor_by_name('conv2d_transpose/BiasAdd:0')
+            output = session.run(output_tensor, feed_dict={input_tensor: input_data})
+            return output
+
+        from aimet_tensorflow.quantsim import QuantizationSimModel, QuantScheme
+        qsim = QuantizationSimModel(adarounded_session, starting_op_names, output_op_names,
+                                    quant_scheme=QuantScheme.post_training_tf, config_file='./config.json')
+        # Set and freeze encodings to use same quantization grid and then invoke compute encodings
+        qsim.set_and_freeze_param_encodings(encoding_path='./conv2d_transpose.encodings')
+        qsim.compute_encodings(dummy_forward_pass, None)
+
+        # Delete encodings file
+        if os.path.exists("./conv2d_transpose.encodings"):
+            os.remove("./conv2d_transpose.encodings")

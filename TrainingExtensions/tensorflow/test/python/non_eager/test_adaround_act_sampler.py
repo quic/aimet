@@ -44,6 +44,8 @@ import logging
 import unittest.mock
 import tensorflow as tf
 import numpy as np
+from tensorflow.python.keras.models import Sequential
+from tensorflow.python.keras.layers import Conv2DTranspose
 
 from aimet_common.utils import AimetLogger
 from aimet_tensorflow.examples.test_models import keras_model
@@ -108,3 +110,15 @@ class TestAdaroundActivationSampler(unittest.TestCase):
         output_tensor = ActivationSampler._get_output_tensor(op)
         self.assertEqual(output_tensor.op.type, 'BiasAdd')
         self.assertNotEqual(output_tensor.op.type, 'Conv2D')
+
+    def test_get_conv_transpose_input_tensor(self):
+        AimetLogger.set_level_for_all_areas(logging.DEBUG)
+        tf.compat.v1.reset_default_graph()
+        graph = tf.Graph()
+        with graph.as_default():
+            _ = Sequential([Conv2DTranspose(8, (2, 2), input_shape=(16, 16, 3,))])
+
+        op = graph.get_operation_by_name('conv2d_transpose/conv2d_transpose')
+
+        inp_tensor = ActivationSampler._get_input_tensor(op)
+        assert inp_tensor == graph.get_tensor_by_name('conv2d_transpose_input:0')

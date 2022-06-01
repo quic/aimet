@@ -184,8 +184,8 @@ class AdaroundOptimizer:
             # Graph is created only once
             if cur_iteration == 0:
                 train_op, loss_tensors = self.train_step(wrapper, act_func, optimizer, self._inp_tensor,
-                                                         self._out_tensor, opt_params.reg_param, self._warm_start_tensor,
-                                                         self._beta_tensor, channels_index)
+                                                         self._out_tensor, opt_params.reg_param,
+                                                         self._warm_start_tensor, self._beta_tensor, channels_index)
                 self._optimizer_session.run(tf.compat.v1.global_variables_initializer())
                 total_loss_tensor, recon_loss_tensor, round_loss_tensor = loss_tensors
 

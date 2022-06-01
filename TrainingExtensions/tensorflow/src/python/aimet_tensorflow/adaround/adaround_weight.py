@@ -59,7 +59,7 @@ from aimet_tensorflow.adaround.adaround_loss import AdaroundHyperParameters
 from aimet_tensorflow.adaround.adaround_optimizer import AdaroundOptimizer
 from aimet_tensorflow.adaround.adaround_wrapper import AdaroundWrapper
 
-AdaroundSupportedOps = ('Conv2D', 'DepthwiseConv2dNative', 'MatMul')
+AdaroundSupportedOps = ('Conv2D', 'DepthwiseConv2dNative', 'MatMul', 'Conv2DBackpropInput')
 
 ActFuncMap = {'Relu': tf.nn.relu, 'Relu6': tf.nn.relu6, 'Tanh': tf.nn.tanh, 'Sigmoid': tf.nn.sigmoid,
               'Softmax': tf.nn.softmax}
@@ -277,22 +277,22 @@ class Adaround:
         :param op: Tf op
         :return: Callable Tf activation function or None
         """
+        act_func = None
         consumer_ops = op.outputs[0].consumers()
+
+        if not consumer_ops:
+            return act_func
 
         # op -> act_func
         if consumer_ops[0].type in ActFuncMap:
             act_func = ActFuncMap[consumer_ops[0].type]
 
         # op -> bias_add -> act_func
-        elif consumer_ops[0].type in ['Add', 'BiasAdd'] and\
-                consumer_ops[0].outputs[0].consumers()[0].type in ActFuncMap:
-            act_func = ActFuncMap[consumer_ops[0].outputs[0].consumers()[0].type]
-
-        else:
-            act_func = None
+        elif consumer_ops[0].type in ['Add', 'BiasAdd']:
+            if consumer_ops[0].outputs[0].consumers() and consumer_ops[0].outputs[0].consumers()[0].type in ActFuncMap:
+                act_func = ActFuncMap[consumer_ops[0].outputs[0].consumers()[0].type]
 
         logger.info("op: %s 's next following act func: %s", op.name, act_func)
-
         return act_func
 
     @classmethod
