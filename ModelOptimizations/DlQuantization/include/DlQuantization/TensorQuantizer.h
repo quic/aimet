@@ -2,7 +2,7 @@
 //
 //  @@-COPYRIGHT-START-@@
 //
-//  Copyright (c) 2020, Qualcomm Innovation Center, Inc. All rights reserved.
+//  Copyright (c) 2020 - 2022, Qualcomm Innovation Center, Inc. All rights reserved.
 //
 //  Redistribution and use in source and binary forms, with or without
 //  modification, are permitted provided that the following conditions are met:
@@ -40,16 +40,13 @@
 #define AIMET_TENSOR_QUANTIZER_H
 
 #include <memory>
-#include <pybind11/numpy.h>
 
 #include <DlQuantization/IQuantizationEncodingAnalyzer.hpp>
 #include <DlQuantization/ITensorQuantizationSim.h>
 #include <DlQuantization/Quantization.hpp>
 #include <DlQuantization/QuantizerFactory.hpp>
-
 #include "DlQuantization/TensorQuantizerOpFacade.h"
 
-namespace py = pybind11;
 
 namespace DlQuantization
 {
@@ -82,13 +79,6 @@ public:
     void updateStats(const float* tensor, std::size_t tensorSize, bool useCuda) override;
 
     /**
-     * Update stats being collected to compute encoding. Overloaded version that accepts a numpy tensor.
-     * @param tensor Tensor to update the stats with
-     * @param useCuda If true, the tensor is assumed to be in CUDA memory
-     */
-    void updateStats(py::array_t<float> tensor, bool useCuda);
-
-    /**
      * Compute the encoding for this tensor using stats collected so far
      * @param bitwidth to be used
      * @param flag to indicate symmetric/asymmetric encoding is to be used
@@ -107,18 +97,6 @@ public:
      */
     void quantizeDequantize(const float* input, std::size_t tensorSize, float* output,
                             double encodingMin, double encodingMax, unsigned int bitwidth, bool useCuda) override;
-
-    /**
-    * Convert a tensor from float to quantized int and back to float. Overloaded version that accepts numpy tensors.
-    * @param input Input tensor
-    * @param output Output tensor
-    * @param encodingMin minimum value of encoding range
-    * @param encodingMax maximum value of encoding range
-    * @param bitwidth bitwidth to be used
-    * @param useCuda If true, both the input and output tensors are assumed to be in CUDA memory
-    */
-    void quantizeDequantize(py::array_t<float> inputTensor, py::array_t<float> outputTensor,
-                            double encodingMin, double encodingMax, unsigned int bitwidth, bool useCuda);
 
     /**
     * sets quantScheme and creates new encoding analyzer instance

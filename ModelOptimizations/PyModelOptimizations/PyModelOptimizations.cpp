@@ -2,7 +2,7 @@
 //
 //  @@-COPYRIGHT-START-@@
 //
-//  Copyright (c) 2020, Qualcomm Innovation Center, Inc. All rights reserved.
+//  Copyright (c) 2020 - 2022, Qualcomm Innovation Center, Inc. All rights reserved.
 //
 //  Redistribution and use in source and binary forms, with or without
 //  modification, are permitted provided that the following conditions are met:
@@ -49,10 +49,10 @@
 #include "DlQuantization/EncodingAnalyzerForPython.h"
 #include "DlQuantization/IQuantizationEncodingAnalyzer.hpp"
 #include "DlQuantization/IQuantizer.hpp"
+#include "PyTensorQuantizer.hpp"
 #include "DlQuantization/Quantization.hpp"
 #include "DlQuantization/QuantizerFactory.hpp"
 #include "DlQuantization/TensorQuantizationSimForPython.h"
-#include "DlQuantization/TensorQuantizer.h"
 #include "DlQuantization/TensorQuantizerOpFacade.h"
 
 namespace py = pybind11;
@@ -150,23 +150,23 @@ PYBIND11_MODULE(libpymo, m)
         .value("quantizeDequantize", DlQuantization::TensorQuantizerOpMode::quantizeDequantize)
         .value("passThrough", DlQuantization::TensorQuantizerOpMode::passThrough);
 
-    py::class_<DlQuantization::TensorQuantizer>(m, "TensorQuantizer")
+    py::class_<DlQuantization::PyTensorQuantizer>(m, "TensorQuantizer")
         .def(py::init<DlQuantization::QuantizationMode, DlQuantization::RoundingMode>())
         .def("updateStats",
-             (void (TensorQuantizer::*)(py::array_t<float>, bool)) & DlQuantization::TensorQuantizer::updateStats)
-        .def("resetEncodingStats", &DlQuantization::TensorQuantizer::resetEncodingStats)
-        .def("setQuantScheme", (void (TensorQuantizer::*)(DlQuantization::QuantizationMode)) &DlQuantization::TensorQuantizer::setQuantScheme)
-        .def("getQuantScheme", (DlQuantization::QuantizationMode (TensorQuantizer::*)()) &DlQuantization::TensorQuantizer::getQuantScheme)
-        .def("setStrictSymmetric", (void (TensorQuantizer::*)(bool)) &DlQuantization::TensorQuantizer::setStrictSymmetric)
-        .def("getStrictSymmetric", (bool (TensorQuantizer::*)()) &DlQuantization::TensorQuantizer::getStrictSymmetric)
-        .def("setUnsignedSymmetric", (void (TensorQuantizer::*)(bool)) &DlQuantization::TensorQuantizer::setUnsignedSymmetric)
-        .def("getUnsignedSymmetric", (bool (TensorQuantizer::*)()) &DlQuantization::TensorQuantizer::getUnsignedSymmetric)
-        .def("computeEncoding", (DlQuantization::TfEncoding(TensorQuantizer::*)(unsigned int, bool)) &DlQuantization::TensorQuantizer::computeEncoding)
-        .def("quantizeDequantize", (void (TensorQuantizer::*)(py::array_t<float>, py::array_t<float>, double, double,
-                                                              unsigned int, bool)) &DlQuantization::TensorQuantizer::quantizeDequantize)
-        .def("getStatsHistogram", (std::vector<std::tuple<double, double>>(TensorQuantizer::*)())&DlQuantization::TensorQuantizer::getStatsHistogram)
-        .def_readwrite("roundingMode", &DlQuantization::TensorQuantizer::roundingMode)
-        .def_readwrite("isEncodingValid", &DlQuantization::TensorQuantizer::isEncodingValid);
+             (void (PyTensorQuantizer::*)(py::array_t<float>, bool)) & DlQuantization::PyTensorQuantizer::updateStats)
+        .def("computeEncoding",  &DlQuantization::PyTensorQuantizer::computeEncoding)
+        .def("quantizeDequantize", (void (PyTensorQuantizer::*)(py::array_t<float>, py::array_t<float>, double, double,
+                                                              unsigned int, bool)) &DlQuantization::PyTensorQuantizer::quantizeDequantize)
+        .def("resetEncodingStats", &DlQuantization::PyTensorQuantizer::resetEncodingStats)
+        .def("setQuantScheme", &DlQuantization::PyTensorQuantizer::setQuantScheme)
+        .def("getQuantScheme", &DlQuantization::PyTensorQuantizer::getQuantScheme)
+        .def("setStrictSymmetric", &DlQuantization::PyTensorQuantizer::setStrictSymmetric)
+        .def("getStrictSymmetric", &DlQuantization::PyTensorQuantizer::getStrictSymmetric)
+        .def("setUnsignedSymmetric", &DlQuantization::PyTensorQuantizer::setUnsignedSymmetric)
+        .def("getUnsignedSymmetric", &DlQuantization::PyTensorQuantizer::getUnsignedSymmetric)
+        .def("getStatsHistogram", &DlQuantization::PyTensorQuantizer::getStatsHistogram)
+        .def_readwrite("roundingMode", &DlQuantization::PyTensorQuantizer::roundingMode)
+        .def_readwrite("isEncodingValid", &DlQuantization::PyTensorQuantizer::isEncodingValid);
 
     m.def("PtrToInt64", [](void* ptr) { return (uint64_t) ptr; });
 
