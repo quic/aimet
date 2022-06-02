@@ -45,10 +45,18 @@ import torch
 import torch.fx
 from aimet_common.utils import AimetLogger
 from aimet_torch.utils import get_device
+
 import aimet_torch.elementwise_ops as elementwise_ops
 
 logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Quant)
 
+# this is a map of torch.nn.functional type to corresponding module type
+functional_op_to_module_map = {
+    torch.nn.functional.relu: torch.nn.ReLU,
+    torch.nn.functional.gelu: torch.nn.GELU
+}
+
+# this is a map of torch.fx node based functional names to module.
 functional_to_module_map = {
 
     # Non Linear activation functions
@@ -377,3 +385,31 @@ def _get_module_for_dotted_name(module: torch.fx.GraphModule, dotted_name: str) 
         return _get_module_for_dotted_name(module._modules[module_name], remainder) # pylint: disable=protected-access
 
     return getattr(module, dotted_name)
+
+
+def get_module_for_activation_fn(act_fn: torch.nn.functional):
+    """
+    returns module instance for functional tyoe handled within PT transformers for activation functions.
+    :param act_fn: activation function implemented as a functional.
+    :return: module equivalent for the activation function.
+    """
+
+    if act_fn not in functional_op_to_module_map:
+        logger.error("Unsupported activation function {%s}", act_fn)
+        return None
+    module = functional_op_to_module_map[act_fn]()
+    return module
+
+
+def prepare_pt_transformer_for_quantsim(transformer_model: torch.nn.Module):
+    """
+    Replaces functionals with modules for activation function, updates model in-place.
+    :param transformer_model: model with PyTorch nn.Transformer layer
+    :return: updated model with modules for activation function.
+    """
+    for module in transformer_model.modules():
+        if isinstance(module, torch.nn.Transformer):
+            for i in range(0, module.encoder.num_layers):
+                module.encoder.layers[i].activation = get_module_for_activation_fn(module.encoder.layers[i].activation)
+            for i in range(0, module.decoder.num_layers):
+                module.decoder.layers[i].activation = get_module_for_activation_fn(module.decoder.layers[i].activation)
