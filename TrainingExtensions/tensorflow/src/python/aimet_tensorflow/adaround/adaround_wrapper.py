@@ -38,7 +38,7 @@
 
 """ Adaround wrapper """
 
-from typing import Union, Dict, List
+from typing import Union, Dict, List, Tuple
 import numpy as np
 import tensorflow as tf
 from tensorflow import keras
@@ -74,18 +74,18 @@ class AdaroundWrapper(keras.layers.Layer):
         super(AdaroundWrapper, self).__init__()
 
         self._op = op
-        weight, bias = self._get_weight_bias(session, op)
+        self.enable_per_channel = enable_per_channel
 
+        self._orig_weight_tensor_shape, weight, bias = self._get_weight_bias(session)
         self._weight_tensor = tf.convert_to_tensor(weight, dtype='float32')
         self._bias_tensor = None
         if bias is not None:
             self._bias_tensor = tf.convert_to_tensor(bias, dtype='float32')
 
         self.use_soft_rounding = tf.compat.v1.placeholder_with_default(True, shape=[])
-        self.enable_per_channel = enable_per_channel
 
         # use the last dimension as the default channel index
-        self.ch_axis = self._get_channel_axis(self._op)
+        self.ch_axis = self._get_channel_axis(self._op, weight.shape)
         self.encoding = self.compute_encodings(weight, param_bw, quant_scheme, is_symmetric,
                                                strict_symmetric, unsigned_symmetric, enable_per_channel, self.ch_axis)
         self.alpha = self._initialize_alpha(self._weight_tensor, self.encoding, enable_per_channel, self.ch_axis)
@@ -95,20 +95,52 @@ class AdaroundWrapper(keras.layers.Layer):
         Adaround the weight tensor
         :return: AdaRounded weight tensor
         """
-        return self.get_adarounded_weight(self.alpha, self._weight_tensor, self.encoding, self.use_soft_rounding,
-                                          self.enable_per_channel, self.ch_axis)
+        adaround_tensor = self.get_adarounded_weight(self.alpha, self._weight_tensor, self.encoding,
+                                                     self.use_soft_rounding, self.enable_per_channel, self.ch_axis)
+
+        return self._post_process_adaround_weight(adaround_tensor)
+
+
+    def _post_process_adaround_weight(self, adaround_tensor: tf.Tensor) -> tf.Tensor:
+        """
+        Helper function to post process adaround weight
+        :param adaround_tensor: tf.Tensor to be post processed
+        :return: Post-processed AdaRounded weight tensor
+        """
+        if self.enable_per_channel and self._op.type == 'DepthwiseConv2dNative':
+            adaround_tensor = tf.reshape(adaround_tensor, self._orig_weight_tensor_shape)
+
+        return adaround_tensor
+
 
     @staticmethod
-    def _get_channel_axis(op: tf.Operation) -> int:
+    def _get_channel_axis(op: tf.Operation, shape: Tuple) -> int:
         """
         Get channel axis corresponding to tf op
         :param op: Tf Operation to get channel axis for
+        :param shape: shape of the op
         :return: Channel axis for the tf operation
         """
-        ch_axis = len(op.outputs[0].shape) - 1
+        ch_axis = len(shape) - 1
         if op.type == 'Conv2DBackpropInput':
             ch_axis = 2
         return ch_axis
+
+    @staticmethod
+    def _transform_input_ndarray_for_depthwise_conv_2d(input_arr: Union[np.ndarray]) -> Union[np.ndarray]:
+        """
+        For DepthwiseConv2d op, if per-channel is enabled, we need to use the last two axes as channel axis.
+        This helper function basically merges the last two dimensions into one, so that the rest of the flow would work
+        just fine
+        Example: if tf.shape = (2, 2, 3, 8), output tensor = (2, 2, 24)
+
+        :param input_arr: input array of type np.ndarray which needs to be transformed to the new shape
+        """
+
+        assert len(input_arr.shape) >= 3
+        shape = list(input_arr.shape[:-2])
+        shape.append(input_arr.shape[-2] * input_arr.shape[-1])
+        return input_arr.reshape(tuple(shape))
 
     @staticmethod
     def get_adarounded_weight(alpha, weight_tensor, encoding, use_soft_rounding, enable_per_channel: bool,
@@ -293,21 +325,27 @@ class AdaroundWrapper(keras.layers.Layer):
         alpha_var = AdaroundWrapper._create_alpha_var(tensor)
         return alpha_var
 
-    @staticmethod
-    def _get_weight_bias(session: tf.compat.v1.Session, op: tf.Operation) -> (np.ndarray, Union[None, np.ndarray]):
+    def _get_weight_bias(self, session: tf.compat.v1.Session) -> (Tuple, np.ndarray, Union[None, np.ndarray]):
         """
         :param session: Tf session
-        :param op: Tf op
-        :return: weight and bias
+        :return: shape of orig weight, weight and bias
         """
         # Get weight tensor of an op as numpy data
-        weight = WeightTensorUtils.get_tensor_as_numpy_data(session, op)
+        weight = WeightTensorUtils.get_tensor_as_numpy_data(session, self._op)
+
+        # store the weight tensor shape for depthwiseConv2D in per-channel mode. This is done because the shape is
+        # modified first to combine the last two axes, used in the adaround flow, and then the output tensor (which is
+        # of updated shape) needs to be changed to the original tensor's shape
+        orig_weight_shape = weight.shape
 
         bias = None
-        if not BiasUtils.is_bias_none(op):
-            bias = BiasUtils.get_bias_as_numpy_data(session, op)
+        if not BiasUtils.is_bias_none(self._op):
+            bias = BiasUtils.get_bias_as_numpy_data(session, self._op)
 
-        return weight, bias
+        if self.enable_per_channel and self._op.type == 'DepthwiseConv2dNative':
+            weight = AdaroundWrapper._transform_input_ndarray_for_depthwise_conv_2d(weight)
+
+        return orig_weight_shape, weight, bias
 
     @staticmethod
     def _generate_weight_transpose_perm(shape: tuple, ch_axis: int) -> List:
