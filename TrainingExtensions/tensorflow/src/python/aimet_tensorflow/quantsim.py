@@ -38,7 +38,6 @@
 """ Implementation for simulating models running on Quantized hardware """
 
 from typing import List, Union, Dict, Callable, Any, Tuple
-import enum
 import os
 import shutil
 import json
@@ -65,7 +64,7 @@ from aimet_tensorflow.utils.quantsim import create_op_to_quant_ops_dict, is_op_q
 from aimet_tensorflow.utils.graph import updated_graph_flow_context_to_loop_context, set_graph_flow_context, \
     op_not_in_loop_control_flow_context
 from aimet_tensorflow.common.connectedgraph import ConnectedGraph
-from aimet_tensorflow.defs import ParameterInfo
+from aimet_tensorflow.defs import ParameterInfo, AxisHandling
 from aimet_tensorflow.quantizer_info import QuantizerInfo, QuantizerType, quant_scheme_to_libpymo
 from aimet_tensorflow.quantsim_config.quantsim_config import QuantSimConfigurator
 from aimet_tensorflow.quantsim_recurrent import _select_simple_rnn_internal_ops_to_quantize, \
@@ -90,16 +89,6 @@ param_quant_conn_op_ignore_list = {'FusedBatchNorm', 'FusedBatchNormV3', 'BatchN
 DTYPES_QUANTIZE_NOT_REQUIRED = [tf.dtypes.int8, tf.dtypes.uint8, tf.dtypes.int16, tf.dtypes.uint16,
                                 tf.dtypes.int32, tf.dtypes.uint32, tf.dtypes.int64, tf.dtypes.uint64,
                                 tf.bool, tf.dtypes.string]
-
-# Ways to handle getting number of channels from axes. Default is to get it from the last dimension. For depthwise
-# conv2d, it will be obtained from the last two dimensions.
-class AxisHandling(enum.Enum):
-    """
-    Enum for axis handling used as input variable to QcQuantizePerChannelOp. This defines how to interpret the
-    number of output channels from the weight dimensions.
-    """
-    LAST_AXIS = 0
-    LAST_TWO_AXES = 1
 
 def _load_ops():
     """

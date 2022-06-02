@@ -1134,7 +1134,6 @@ class TestTrainingExtensionsQcQuantizeOpPerChannel(unittest.TestCase):
         sess.close()
         sim.session.close()
 
-    @pytest.mark.skip("Skipping per-channel range learning for depthwise conv model before fixing")
     def test_per_channel_range_learning_depthwise_conv_model(self):
         """
         Test to validate per channel range learning depthwise conv model

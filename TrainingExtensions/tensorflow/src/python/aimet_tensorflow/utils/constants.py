@@ -89,6 +89,7 @@ class QuantizeOpIndices():
     use_symmetric_encoding = 6
     time_steps = 7
     is_int_data_type = 7
+    axis_handling = 7
 
 class BNOpParamType():
     """ BN OP Param types """
