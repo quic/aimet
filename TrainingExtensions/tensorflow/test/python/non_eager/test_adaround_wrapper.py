@@ -45,7 +45,7 @@ import unittest.mock
 import numpy as np
 import tensorflow as tf
 from tensorflow.python.keras.models import Sequential
-from tensorflow.python.keras.layers import Conv2DTranspose
+from tensorflow.python.keras.layers import Conv2DTranspose, DepthwiseConv2D
 
 import aimet_common.libpymo as libpymo
 from aimet_common.utils import AimetLogger
@@ -277,6 +277,16 @@ class TestAdaroundWrapper(unittest.TestCase):
         res = AdaroundWrapper._generate_weight_transpose_perm(shape=(2, 3, 4, 5), ch_axis=3)
         self.assertEqual(res, [3, 0, 1, 2])
 
+    def test_transform_input_ndarray_for_depthwise_conv_2d(self):
+        """
+        test the function _transform_input_ndarray_for_depthwise_conv_2d
+        """
+        shape = (2, 2, 3, 4)
+        a = np.random.rand(*shape)
+        b = AdaroundWrapper._transform_input_ndarray_for_depthwise_conv_2d(a)
+        assert b.shape == (2, 2, 12)
+        assert (a - b.reshape(*shape)).all() == 0
+
     def test_conv_transpose_adaround_wrapper(self):
         """
         Test wrapper generation for conv transpose
@@ -301,4 +311,31 @@ class TestAdaroundWrapper(unittest.TestCase):
                                       quant_scheme=QuantScheme.post_training_tf, is_symmetric=True,
                                       strict_symmetric=False, unsigned_symmetric=False, enable_per_channel=True)
         assert len(wrapper.encoding) == 8
+        assert wrapper.ch_axis == 2
+
+
+    def test_depthwise_conv_adaround_wrapper(self):
+        """
+        Test wrapper generation for conv transpose
+        """
+        tf.compat.v1.reset_default_graph()
+
+        with tf.device('/cpu:0'):
+            graph = tf.Graph()
+            with graph.as_default():
+                tf.compat.v1.set_random_seed(1)
+                _ = Sequential([DepthwiseConv2D(8, (2, 2), input_shape=(16, 16, 4,))])
+                init = tf.compat.v1.global_variables_initializer()
+
+        session = tf.compat.v1.Session(graph=graph)
+        session.run(init)
+
+        depthwise_conv2d_op = session.graph.get_operation_by_name('depthwise_conv2d/depthwise')
+
+        graph = tf.Graph()
+        with graph.as_default():
+            wrapper = AdaroundWrapper(session, depthwise_conv2d_op, param_bw=8,
+                                      quant_scheme=QuantScheme.post_training_tf, is_symmetric=True,
+                                      strict_symmetric=False, unsigned_symmetric=False, enable_per_channel=True)
+        assert len(wrapper.encoding) == 4
         assert wrapper.ch_axis == 2
