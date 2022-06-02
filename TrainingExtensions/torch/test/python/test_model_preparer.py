@@ -40,6 +40,7 @@ import pytest
 import json
 import random
 import os
+import re
 import copy
 import numpy as np
 import onnx
@@ -64,7 +65,8 @@ from aimet_torch.batch_norm_fold import fold_all_batch_norms
 from aimet_torch.cross_layer_equalization import  equalize_model
 from aimet_torch.adaround.adaround_weight import Adaround, AdaroundParameters
 from aimet_torch import bias_correction
-
+from aimet_torch.meta import connectedgraph_utils
+from aimet_torch.model_preparer import prepare_pt_transformer_for_quantsim
 
 def train(model: torch.nn.Module, data_loader: DataLoader) -> torch.Tensor:
     """
@@ -1089,3 +1091,45 @@ class TestFX:
         quant_sim.compute_encodings(evaluate, input_tensor)
         quant_sim.model(input_tensor)
 
+    def test_prepare_model_with_pytorch_transformer_layer(self):
+        """
+        Test that validates auto replacement of functional activation functions in
+        PyTorch nn.Transformer layer with modules.
+        :return:
+        """
+
+        src = torch.rand(10, 32, 512)
+        dummy_input = torch.rand(10, 32, 512)
+
+        def forward_pass(model, args):
+            model.eval()
+            with torch.no_grad():
+                model(dummy_input, dummy_input)
+
+        num_encoder_layers = 12
+
+        # start with a vanilla PyTorch transformer layer
+        transformer_model = torch.nn.Transformer(nhead=16, num_encoder_layers=num_encoder_layers)
+        transformer_model.eval()
+
+        ops_with_missing_modules = connectedgraph_utils.get_ops_with_missing_modules(transformer_model, (src, src))
+
+        # first validate there are relu to be replaced
+        r = re.compile("relu_*")
+        find_relus = list(filter(r.match, ops_with_missing_modules))
+        assert (find_relus)
+
+        # auto replace functional activation with module for nn.Transformer layers
+        prepare_pt_transformer_for_quantsim(transformer_model)
+        ops_with_missing_modules = connectedgraph_utils.get_ops_with_missing_modules(transformer_model, (src, src))
+
+        # validate there are no activations with missing modules
+        # check there are no Add
+        r = re.compile("relu_*")
+        find_relus = list(filter(r.match, ops_with_missing_modules))
+        assert (not find_relus)
+
+        # sanity check, in case there are any default gelu
+        r = re.compile("gelu_*")
+        find_gelus = list(filter(r.match, ops_with_missing_modules))
+        assert (not find_gelus)
