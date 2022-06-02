@@ -2,7 +2,7 @@
 //
 //  @@-COPYRIGHT-START-@@
 //
-//  Copyright (c) 2020, Qualcomm Innovation Center, Inc. All rights reserved.
+//  Copyright (c) 2020 - 2022, Qualcomm Innovation Center, Inc. All rights reserved.
 //
 //  Redistribution and use in source and binary forms, with or without
 //  modification, are permitted provided that the following conditions are met:
@@ -119,22 +119,6 @@ void TensorQuantizer::updateStats(const float* tensor, std::size_t tensorSize, b
     _encodingAnalyzer->updateStats(tensor, tensorSize, cpuGpuMode);
 }
 
-void TensorQuantizer::updateStats(py::array_t<float> tensor, bool useCuda)
-{
-    auto npArr        = tensor.mutable_unchecked();
-
-    size_t tensorSize = 1;
-    for (int i = 0; i < npArr.ndim(); i++)
-        tensorSize *= npArr.shape(i);
-
-    // Get a pointer to the tensor data
-    auto tensorPtr = (float*) npArr.mutable_data();
-
-    // Delegate
-    updateStats(tensorPtr, tensorSize, useCuda);
-
-    _validStats = true;
-}
 
 TfEncoding TensorQuantizer::computeEncoding(unsigned int bitwidth, bool useSymmetricEncoding)
 {
@@ -156,20 +140,6 @@ void TensorQuantizer::quantizeDequantize(const float* input, std::size_t tensorS
     assert(isEncodingValid);
     _tensorQuantizationSim->quantizeDequantizeTensor(input, tensorSize, output, encodingMin,
             encodingMax, bitwidth, roundingMode, useCuda);
-}
-
-void TensorQuantizer::quantizeDequantize(py::array_t<float> inputTensor, py::array_t<float> outputTensor,
-                                         double encodingMin, double encodingMax, unsigned int  bitwidth, bool useCuda)
-{
-    auto inputArr     = inputTensor.mutable_unchecked<4>();
-    auto outputArr    = outputTensor.mutable_unchecked<4>();
-    size_t tensorSize = inputArr.shape(0) * inputArr.shape(1) * inputArr.shape(2) * inputArr.shape(3);
-
-    auto inputTensorPtr  = static_cast<float*>(inputArr.mutable_data(0, 0, 0, 0));
-    auto outputTensorPtr = static_cast<float*>(outputArr.mutable_data(0, 0, 0, 0));
-
-    // Delegate
-    quantizeDequantize(inputTensorPtr, tensorSize, outputTensorPtr, encodingMin, encodingMax, bitwidth, useCuda);
 }
 
 std::vector<std::tuple<double, double>> TensorQuantizer::getStatsHistogram()
