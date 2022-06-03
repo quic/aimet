@@ -2,7 +2,7 @@
 ![Qualcomm Innovation Center, Inc.](Docs/images/logo-quic-on@h68.png)
 
 [![AIMET on GitHub Pages](Docs/images/button-overview.png)](https://quic.github.io/aimet-pages/index.html)
-[![Documentation](Docs/images/button-docs.png)](https://quic.github.io/aimet-pages/releases/1.19.1/user_guide/index.html)
+[![Documentation](Docs/images/button-docs.png)](https://quic.github.io/aimet-pages/releases/1.21.0/user_guide/index.html)
 [![Install instructions](Docs/images/button-install.png)](#installation-instructions)
 [![Discussion Forums](Docs/images/button-forums.png)](https://forums.quicinc.com)
 [![What's New](Docs/images/button-whats-new.png)](#whats-new)
@@ -212,8 +212,8 @@ To build, modify (*optionally*) and use the latest AIMET source code, please fol
 - [Instructions to build, install and run AIMET in *Google Colab* environment](./packaging/google_colab/google_colab_development.md)
 
 ## Resources
-* [User Guide](https://quic.github.io/aimet-pages/releases/1.19.1/user_guide/index.html)
-* [API Docs](https://quic.github.io/aimet-pages/releases/1.19.1/api_docs/index.html)
+* [User Guide](https://quic.github.io/aimet-pages/releases/1.21.0/user_guide/index.html)
+* [API Docs](https://quic.github.io/aimet-pages/releases/1.21.0/api_docs/index.html)
 * [Discussion Forums](https://forums.quicinc.com/)
 * [Tutorial Videos](https://quic.github.io/aimet-pages/index.html#video)
 * [Example Code](Examples/README.md)
