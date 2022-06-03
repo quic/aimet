@@ -68,7 +68,21 @@ logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Test)
 
 
 class TestTfConnectedGraph(unittest.TestCase):
+    def test_multiple_transpose_conv2d(self):
+        """ Test connected graph with multiple transpose conv2d """
 
+        tf.compat.v1.reset_default_graph()
+        with tf.device('/cpu:0'):
+            model = tf.keras.Sequential()
+            model.add(tf.keras.layers.Conv2DTranspose(1, (4, 4), input_shape=(28, 28, 3)))
+            model.add(tf.keras.layers.MaxPooling2D((2, 2)))
+            model.add(tf.keras.layers.Conv2DTranspose(1, (4, 4), input_shape=(28, 28, 3)))
+            model.add(tf.keras.layers.MaxPooling2D((2, 2)))
+            model.summary()
+
+        conn_graph = ConnectedGraph(tf.compat.v1.get_default_graph(), [model.input.op.name], [model.output.op.name])
+        self.assertEqual(conn_graph.get_all_ops()['conv2d_transpose/conv2d_transpose'].type, 'Conv2DTranspose')
+        self.assertEqual(conn_graph.get_all_ops()['conv2d_transpose_1/conv2d_transpose'].type, 'Conv2DTranspose')
 
     def test_transposed_conv2d_model(self):
         """ Test connected graph construction on transposed conv2D model """

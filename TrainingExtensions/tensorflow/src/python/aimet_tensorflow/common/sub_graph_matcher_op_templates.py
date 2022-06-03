@@ -351,7 +351,7 @@ op_type_templates = {
         'op_type': 'Conv2DTranspose',
         'constructor': "tf.keras.layers.Conv2DTranspose(1, (4, 4), use_bias=False)(inputs)",
         'module_regex': ['(.+/conv2d_transpose)$'],
-        'associated_op_regex': ['conv2d_transpose/conv2d_transpose$'],
+        'associated_op_regex': ['/conv2d_transpose$'],
         'supported_tf_versions': [1, 2]
     },
     'Conv2DTranspose_with_bias': {
@@ -359,7 +359,7 @@ op_type_templates = {
         'op_type': 'Conv2DTranspose',
         'constructor': "tf.keras.layers.Conv2DTranspose(1, (4, 4), use_bias=True)(inputs)",
         'module_regex': ['(.+/conv2d_transpose)$'],
-        'associated_op_regex': ['conv2d_transpose/conv2d_transpose$'],
+        'associated_op_regex': ['/conv2d_transpose$'],
         'supported_tf_versions': [1, 2]
     },
     'LayerNorm_non_fused': {
