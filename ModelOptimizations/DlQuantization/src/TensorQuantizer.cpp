@@ -172,5 +172,10 @@ void TensorQuantizer::quantizeDequantize(py::array_t<float> inputTensor, py::arr
     quantizeDequantize(inputTensorPtr, tensorSize, outputTensorPtr, encodingMin, encodingMax, bitwidth, useCuda);
 }
 
+std::vector<std::tuple<double, double>> TensorQuantizer::getStatsHistogram()
+{
+    auto histogram = _encodingAnalyzer->getStatsHistogram();
+    return histogram;
+}
 
 }
