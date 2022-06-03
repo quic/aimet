@@ -34,18 +34,22 @@
 #  @@-COPYRIGHT-END-@@
 # =============================================================================
 
+import pytest
 import unittest
 import os
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
 import tensorflow as tf
 
 import aimet_common.libpymo as libpymo
+from aimet_common.defs import QuantScheme
 from aimet_tensorflow.examples.test_models import keras_model
 from aimet_tensorflow.quantsim import QuantizationSimModel
 from aimet_tensorflow.quantizer_info import QuantizeOpIndices
 
 tf.compat.v1.logging.set_verbosity(tf.compat.v1.logging.WARN)
 tf.compat.v1.disable_eager_execution()
+
+BUCKET_SIZE = 512
 
 
 class TestQuantizerInfo(unittest.TestCase):
@@ -146,5 +150,72 @@ class TestQuantizerInfo(unittest.TestCase):
         quantizer = sim.quantizer_config('conv2d/Conv2D/ReadVariableOp_quantized')
 
         self.assertRaises(AssertionError, lambda: quantizer.get_encoding())
+
+        session.close()
+
+    def test_get_stats_histogram(self):
+        """ test get_stats_histogram() for per tensor """
+        tf.compat.v1.reset_default_graph()
+        with tf.device('/cpu:0'):
+            _ = keras_model()
+            init = tf.compat.v1.global_variables_initializer()
+
+        session = tf.compat.v1.Session()
+        session.run(init)
+
+        sim = QuantizationSimModel(session, ['conv2d_input'], ['keras_model/Softmax'], use_cuda=False)
+        quantizer_info = sim.quantizer_config('conv2d/Conv2D/ReadVariableOp_quantized')
+        weight = quantizer_info.get_variable_from_op(0)
+
+        # compute encoding.
+        quantizer_info.tensor_quantizer.updateStats(weight, False)
+        quantizer_info.compute_encoding(8, False)
+        assert quantizer_info.is_encoding_valid()
+
+        histograms = quantizer_info.get_stats_histogram()
+        assert len(histograms) == 1
+        for histogram in histograms:
+            assert len(histogram) == BUCKET_SIZE
+
+        session.close()
+
+    def test_get_stats_histogram_with_invalid_quant_scheme(self):
+        """
+        test get_stats_histogram() with invalid inputs.
+        """
+        tf.compat.v1.reset_default_graph()
+        with tf.device('/cpu:0'):
+            _ = keras_model()
+            init = tf.compat.v1.global_variables_initializer()
+
+        session = tf.compat.v1.Session()
+        session.run(init)
+
+        sim = QuantizationSimModel(session, ['conv2d_input'], ['keras_model/Softmax'], use_cuda=False,
+                                   quant_scheme=QuantScheme.post_training_tf)
+        quantizer_info = sim.quantizer_config('conv2d/Conv2D/ReadVariableOp_quantized')
+
+        with pytest.raises(RuntimeError):
+            quantizer_info.get_stats_histogram()
+
+        session.close()
+
+    def test_get_stats_histogram_with_invalid_combination(self):
+        """
+        test get_stats_histogram() without computing encodings.
+        """
+        tf.compat.v1.reset_default_graph()
+        with tf.device('/cpu:0'):
+            _ = keras_model()
+            init = tf.compat.v1.global_variables_initializer()
+
+        session = tf.compat.v1.Session()
+        session.run(init)
+
+        sim = QuantizationSimModel(session, ['conv2d_input'], ['keras_model/Softmax'], use_cuda=False)
+        quantizer_info = sim.quantizer_config('conv2d/Conv2D/ReadVariableOp_quantized')
+
+        with pytest.raises(RuntimeError):
+            quantizer_info.get_stats_histogram()
 
         session.close()

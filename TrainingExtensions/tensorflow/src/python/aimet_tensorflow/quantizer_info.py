@@ -469,6 +469,33 @@ class QuantizerInfo:
             return self.tensor_quantizer[0].isEncodingValid
         return self.tensor_quantizer.isEncodingValid
 
+    def get_stats_histogram(self) -> List[List]:
+        """
+        NOTE: Not to invoke when quantization scheme is not TF-Enhanced.
+
+        Get histogram of statistics. Returns list of buckets where each bucket is
+        tuple of two values - the float value representing the left edge of the
+        bucket and a PDF of the values in this bucket relative to all the values
+        seen across all buckets.
+
+        :return: List of buckets where each bucket is (xLeft, PDF).
+        """
+        if self.quant_scheme.name != "QUANTIZATION_TF_ENHANCED":
+            raise RuntimeError("get_stats_histogram() can be invoked only when quantization scheme is TF-Enhanced.")
+
+        if not self.is_encoding_valid():
+            raise RuntimeError("get_stats_histogram() can be invoked only when encoding is computed.")
+
+        tensor_quantizers = self.tensor_quantizer
+        if not isinstance(tensor_quantizers, list):
+            tensor_quantizers = [tensor_quantizers]
+
+        histogram = []
+        for tensor_quantizer in tensor_quantizers:
+            histogram.append(tensor_quantizer.getStatsHistogram())
+
+        return histogram
+
     def __getstate__(self):
         # convert tensor quantizer state to pickle-able form
         state = PickleableTensorQuantizerState(self.quant_op_name,
