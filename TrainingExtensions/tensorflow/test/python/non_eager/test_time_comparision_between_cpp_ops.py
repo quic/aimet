@@ -42,7 +42,7 @@ import time
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
 import tensorflow as tf
 import aimet_common.libpymo as libpymo
-from aimet_tensorflow.quantsim import AxisHandling
+from aimet_tensorflow.defs import AxisHandling
 
 tf.compat.v1.disable_eager_execution()
 tf.compat.v1.logging.set_verbosity(tf.compat.v1.logging.WARN)

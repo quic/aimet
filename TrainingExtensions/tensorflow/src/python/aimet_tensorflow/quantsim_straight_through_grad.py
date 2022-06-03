@@ -37,10 +37,12 @@
 
 """ implements straight through graident computation for Quantize Op"""
 from dataclasses import dataclass
+from typing import Tuple
 
 import tensorflow as tf
 from tensorflow.python.framework import ops as tf_ops
 
+from aimet_tensorflow.defs import AxisHandling
 from aimet_tensorflow.utils.constants import QuantizeOpIndices
 
 
@@ -318,6 +320,82 @@ def _compute_dloss_by_dmin_dmax_and_dx(inputs: tf.Tensor, bitwidth: tf.Tensor, o
     return dloss_by_dmin, dloss_by_dmax, dloss_by_dx
 
 
+# pylint: disable=too-many-locals
+def _compute_dloss_by_dmin_dmax_and_dx_for_per_channel(inputs: tf.Tensor, bitwidth: tf.Tensor, op_mode: tf.Tensor,
+                                                       encoding_min: tf.Tensor, encoding_max: tf.Tensor,
+                                                       is_symmetric: tf.Tensor, axis_handling: tf.Tensor,
+                                                       grad: tf.Tensor) -> Tuple[tf.Tensor, tf.Tensor, tf.Tensor]:
+    """
+    Return tensors for dloss_by_dmin, dloss_by_dmax, and dloss_by_dx in the case of per channel.
+    :param inputs: Inputs to op
+    :param bitwidth: Bitwidth used to quantize
+    :param op_mode: Op mode (if passthrough, gradient is returned as is)
+    :param encoding_min: Encoding min value(s), will be more than one if per channel is active
+    :param encoding_max: Encoding max value(s), will be more than one if per channel is active
+    :param is_symmetric: True if symmetric encodings are used, False otherwise
+    :param axis_handling: Determines behavior for reshaping inputs and gradients based on axis handling value.
+    :param grad: Gradient from child layer
+    :return: Tensors for dloss_by_dmin, dloss_by_dmax, and dloss_by_dx
+    """
+    @tf.function
+    def reshape_input_and_grad_for_axis_handling(inputs, grad, axis_handling) -> Tuple[tf.Tensor, tf.Tensor]:
+        """
+        Reshape input and grad tensors from (H, W, channels, depth multiplier) to (H, W, channels * depth multiplier) in
+        the case of axis_handling = LAST_TWO_AXES to get all channel elements in last dimension only.
+        :param inputs: inputs to reshape
+        :param grad: gradient to reshape
+        :param axis_handling: Axis handling to determine reshape behavior
+        :return: reshaped inputs and grad tensors
+        """
+        if tf.equal(axis_handling, tf.constant([AxisHandling.LAST_TWO_AXES.value])):
+            # Even when in the case of inputs being a bias tensor, and axis handling will not be LAST_TWO_AXES, TF will
+            # still execute both paths of the conditional branch to construct the graph. When doing so, if there are not
+            # 4 dimensions to the tensor, the below code will fail, even though during session run we would not be going
+            # down this path.
+            # To fix this, add 3 dummy dimensions to the left side dimensions of the tensor such that we are guaranteed
+            # to have at least 4 dimensions. Then continue with taking the rightmost 4 dimensions for the shape to
+            # reshape to.
+            inputs = tf.expand_dims(inputs, axis=0)
+            inputs = tf.expand_dims(inputs, axis=0)
+            inputs = tf.expand_dims(inputs, axis=0)
+            orig_shape = tf.shape(inputs)
+            inputs = tf.reshape(inputs, [orig_shape[-4], orig_shape[-3], orig_shape[-2] * orig_shape[-1]])
+            grad = tf.reshape(grad, [orig_shape[-4], orig_shape[-3], orig_shape[-2] * orig_shape[-1]])
+        return inputs, grad
+
+    @tf.function
+    def reshape_dloss_by_dx_for_axis_handling(inputs, dloss_by_dx, axis_handling) -> tf.Tensor:
+        """
+        Reshape dloss_by_dx tensor from (H, W, channels * depth multiplier) to (H, W, channels, depth multiplier) in
+        the case of axis_handling = LAST_TWO_AXES to match shape with that of the weight tensor to update.
+        :param inputs: inputs tensor to get original shape from
+        :param dloss_by_dx: dloss_by_dx tensor to reshape
+        :param axis_handling: Axis handling to determine reshape behavior
+        :return: reshaped dloss_by_dx tensor
+        """
+        if tf.equal(axis_handling, tf.constant([AxisHandling.LAST_TWO_AXES.value])):
+            # Even when in the case of inputs being a bias tensor, and axis handling will not be LAST_TWO_AXES, TF will
+            # still execute both paths of the conditional branch to construct the graph. When doing so, if there are not
+            # 4 dimensions to the tensor, the below code will fail, even though during session run we would not be going
+            # down this path.
+            # To fix this, add 3 dummy dimensions to the left side dimensions of the tensor such that we are guaranteed
+            # to have at least 4 dimensions. Then continue with taking the rightmost 4 dimensions for the shape to
+            # reshape to.
+            inputs = tf.expand_dims(inputs, axis=0)
+            inputs = tf.expand_dims(inputs, axis=0)
+            inputs = tf.expand_dims(inputs, axis=0)
+            orig_shape = tf.shape(inputs)
+            dloss_by_dx = tf.reshape(dloss_by_dx, [orig_shape[-4], orig_shape[-3], orig_shape[-2], orig_shape[-1]])
+        return dloss_by_dx
+
+    reshaped_inputs, grad = reshape_input_and_grad_for_axis_handling(inputs, grad, axis_handling)
+    dloss_by_dmin, dloss_by_dmax, dloss_by_dx = \
+        _compute_dloss_by_dmin_dmax_and_dx(reshaped_inputs, bitwidth, op_mode, encoding_min, encoding_max, is_symmetric,
+                                           grad)
+    dloss_by_dx = reshape_dloss_by_dx_for_axis_handling(inputs, dloss_by_dx, axis_handling)
+    return dloss_by_dmin, dloss_by_dmax, dloss_by_dx
+
+
 @tf_ops.RegisterGradient("QcQuantizeRangeLearningCustomGradient")
 def quantsim_custom_grad_learned_grid(op, grad):
     """
@@ -344,11 +422,12 @@ def quantsim_per_channel_custom_grad_learned_grid(op, grad):
     :param grad: Gradient flowing through
     """
     dloss_by_dmin, dloss_by_dmax, dloss_by_dx = \
-        _compute_dloss_by_dmin_dmax_and_dx(op.inputs[0],
-                                           op.inputs[int(QuantizeOpIndices.bit_width)],
-                                           op.inputs[int(QuantizeOpIndices.op_mode)],
-                                           op.inputs[int(QuantizeOpIndices.encoding_min)],
-                                           op.inputs[int(QuantizeOpIndices.encoding_max)],
-                                           op.inputs[int(QuantizeOpIndices.use_symmetric_encoding)],
-                                           grad)
+        _compute_dloss_by_dmin_dmax_and_dx_for_per_channel(op.inputs[0],
+                                                           op.inputs[int(QuantizeOpIndices.bit_width)],
+                                                           op.inputs[int(QuantizeOpIndices.op_mode)],
+                                                           op.inputs[int(QuantizeOpIndices.encoding_min)],
+                                                           op.inputs[int(QuantizeOpIndices.encoding_max)],
+                                                           op.inputs[int(QuantizeOpIndices.use_symmetric_encoding)],
+                                                           op.inputs[int(QuantizeOpIndices.axis_handling)],
+                                                           grad)
     return dloss_by_dx, None, None, dloss_by_dmin, dloss_by_dmax, None, None, None, None
