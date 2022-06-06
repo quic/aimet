@@ -46,7 +46,7 @@
 #include <type_traits>
 #include <vector>
 
-#include "AimetOpUtils.h"
+#include "AimetFp16OpUtils.h"
 #include "QcQuantizePerChannelOp.hpp"
 
 #define EIGEN_USE_THREADS
@@ -68,6 +68,7 @@ REGISTER_OP("QcQuantizePerChannel")
     .Input("encoding_max: double")
     .Input("bit_width: int8")
     .Input("use_symmetric_encoding: bool")
+    .Input("is_int_data_type: bool")
     .Input("axis_handling: int32")
     .Input("is_training: bool")
     .Output("out_tensor: T")   // list of output tensors (weights/activations)
@@ -338,91 +339,104 @@ public:
         OP_REQUIRES_OK(context, context->input("use_symmetric_encoding", &useSymmetricEncodingTensor));
         auto useSymmetricEncoding = useSymmetricEncodingTensor->flat<bool>().data();
 
+        // is_int_data_type
+        const Tensor* isIntDataTypeTensor;
+        OP_REQUIRES_OK(context, context->input("is_int_data_type", &isIntDataTypeTensor));
+        auto isIntDataType = isIntDataTypeTensor->flat<bool>().data();
+
         // is_training flag
         const Tensor* isTrainingTensor;
         OP_REQUIRES_OK(context, context->input("is_training", &isTrainingTensor));
-        auto isTraining = useSymmetricEncodingTensor->flat<bool>().data();
+        auto isTraining = isTrainingTensor->flat<bool>().data();
 
         // allocate output tensors
         Tensor* outTensor = nullptr;
         OP_REQUIRES_OK(context, context->allocate_output(0, inTensor.shape(), &outTensor));
 
-        // Performs per layer quantization
-        // For parameters in convolution layers or linear layers
-        // TODO: transposed conv2d
-
-        auto opModeHost = copyLiteralToHost<int32>(context->eigen_device<Device>(), opMode);
-        auto opModeEnum = static_cast<const DlQuantization::TensorQuantizerOpMode>(opModeHost);
-
-        if (opModeEnum == DlQuantization::TensorQuantizerOpMode::passThrough)
+        if(!copyLiteralToHost<bool>(context->eigen_device<Device>(), isIntDataType))
         {
-            auto inTensorFlat  = inTensor.flat<T>().data();
-            auto outTensorFlat = outTensor->flat<T>().data();
-            copyInputTensorsToOutputTensors(context->eigen_device<Device>(), inTensorFlat, inTensor.NumElements(),
-                                            outTensorFlat);
+            assert(copyLiteralToHost<int8>(context->eigen_device<Device>(), bitwidth) == 16);
+            modeSpecificActionFp16<Device, T>(context, inTensor, quantizerAddr, opMode, outTensor);
         }
         else
         {
-            if (numDimensionsTensor == 4 or numDimensionsTensor == 2)
+            // Performs per layer quantization
+            // For parameters in convolution layers or linear layers
+            // TODO: transposed conv2d
+
+            auto opModeHost = copyLiteralToHost<int32>(context->eigen_device<Device>(), opMode);
+            auto opModeEnum = static_cast<const DlQuantization::TensorQuantizerOpMode>(opModeHost);
+
+            if (opModeEnum == DlQuantization::TensorQuantizerOpMode::passThrough)
             {
-                // For linear layers
-                int numElements = shapeVector[0];
-                // For conv layers
-                if (numDimensionsTensor == 4)
-                {
-                    if (axisHandlingEnum == AxisHandling::LAST_TWO_AXES)
-                    {
-                        // In tf nn depthwise case, 3rd and 4th dimensions will be combined as number of channels.
-                        numElements = numElements * shapeVector[1];
-                    }
-                    else
-                    {
-                        numElements = numElements * shapeVector[1] * shapeVector[2];
-                    }
-                }
-                Tensor temp1;
-                OP_REQUIRES_OK(context, context->allocate_temp(DT_FLOAT, TensorShape({2, numElements}), &temp1));
-
-                TTypes<float>::ConstMatrix inTensorTwoDim = getTwoDimTensor(inTensor, axisHandlingEnum);
-                TTypes<float>::Matrix outTensorTwoDim     = getTwoDimTensor(outTensor, axisHandlingEnum);
-
-                for (int channel = 0; channel < channelShape; channel++)
-                {
-                    if (opModeEnum == DlQuantization::TensorQuantizerOpMode::oneShotQuantizeDequantize)
-                    {
-                        // Chip input tensor along last dimensions
-                        chipAndCopyPerChannelValues(context->eigen_device<Device>(), temp1, inTensorTwoDim, channel);
-                        auto inpData = temp1.flat<float>().data();
-
-                        DlQuantization::TfEncoding encodings = updateStatsAndComputeEncodings(context->eigen_device<Device>(),
-                                                                                              inpData, numElements,
-                                                                                              quantizerAddr++,
-                                                                                              bitwidth, useSymmetricEncoding);
-
-                        quantizeDequantize(context->eigen_device<Device>(), inTensorTwoDim, encodings, outTensorTwoDim,
-                                           channel);
-                    }
-                    else if (opModeEnum == DlQuantization::TensorQuantizerOpMode::quantizeDequantize)
-                    {
-                        // When only inference is required, we skip computation of encodings
-                        DlQuantization::TfEncoding encodings = getTfEncoding(context->eigen_device<Device>(),
-                                                                             encodingMin++, encodingMax++, bitwidth);
-                        quantizeDequantize(context->eigen_device<Device>(), inTensorTwoDim, encodings, outTensorTwoDim,
-                                           channel);
-                    }
-                }
-            }
-            else if (numDimensionsTensor == 1)
-            {
-                // Per channel quantization for Bias
-                int numElements    = 1;
                 auto inTensorFlat  = inTensor.flat<T>().data();
                 auto outTensorFlat = outTensor->flat<T>().data();
-                for (int channel = 0; channel < channelShape; channel++)
+                copyInputTensorsToOutputTensors(context->eigen_device<Device>(), inTensorFlat, inTensor.NumElements(),
+                                                outTensorFlat);
+            }
+            else
+            {
+                if (numDimensionsTensor == 4 or numDimensionsTensor == 2)
                 {
-                    modeSpecificAction(context->eigen_device<Device>(), inTensorFlat++, numElements, outTensorFlat++,
-                                       quantizerAddr++, opMode, encodingMin++, encodingMax++, bitwidth,
-                                       useSymmetricEncoding);
+                    // For linear layers
+                    int numElements = shapeVector[0];
+                    // For conv layers
+                    if (numDimensionsTensor == 4)
+                    {
+                        if (axisHandlingEnum == AxisHandling::LAST_TWO_AXES)
+                        {
+                            // In tf nn depthwise case, 3rd and 4th dimensions will be combined as number of channels.
+                            numElements = numElements * shapeVector[1];
+                        }
+                        else
+                        {
+                            numElements = numElements * shapeVector[1] * shapeVector[2];
+                        }
+                    }
+                    Tensor temp1;
+                    OP_REQUIRES_OK(context, context->allocate_temp(DT_FLOAT, TensorShape({2, numElements}), &temp1));
+
+                    TTypes<float>::ConstMatrix inTensorTwoDim = getTwoDimTensor(inTensor, axisHandlingEnum);
+                    TTypes<float>::Matrix outTensorTwoDim     = getTwoDimTensor(outTensor, axisHandlingEnum);
+
+                    for (int channel = 0; channel < channelShape; channel++)
+                    {
+                        if (opModeEnum == DlQuantization::TensorQuantizerOpMode::oneShotQuantizeDequantize)
+                        {
+                            // Chip input tensor along last dimensions
+                            chipAndCopyPerChannelValues(context->eigen_device<Device>(), temp1, inTensorTwoDim, channel);
+                            auto inpData = temp1.flat<float>().data();
+
+                            DlQuantization::TfEncoding encodings = updateStatsAndComputeEncodings(context->eigen_device<Device>(),
+                                                                                                  inpData, numElements,
+                                                                                                  quantizerAddr++,
+                                                                                                  bitwidth, useSymmetricEncoding);
+
+                            quantizeDequantize(context->eigen_device<Device>(), inTensorTwoDim, encodings, outTensorTwoDim,
+                                               channel);
+                        }
+                        else if (opModeEnum == DlQuantization::TensorQuantizerOpMode::quantizeDequantize)
+                        {
+                            // When only inference is required, we skip computation of encodings
+                            DlQuantization::TfEncoding encodings = getTfEncoding(context->eigen_device<Device>(),
+                                                                                 encodingMin++, encodingMax++, bitwidth);
+                            quantizeDequantize(context->eigen_device<Device>(), inTensorTwoDim, encodings, outTensorTwoDim,
+                                               channel);
+                        }
+                    }
+                }
+                else if (numDimensionsTensor == 1)
+                {
+                    // Per channel quantization for Bias
+                    int numElements    = 1;
+                    auto inTensorFlat  = inTensor.flat<T>().data();
+                    auto outTensorFlat = outTensor->flat<T>().data();
+                    for (int channel = 0; channel < channelShape; channel++)
+                    {
+                        modeSpecificAction(context->eigen_device<Device>(), inTensorFlat++, numElements, outTensorFlat++,
+                                           quantizerAddr++, opMode, encodingMin++, encodingMax++, bitwidth,
+                                           useSymmetricEncoding);
+                    }
                 }
             }
         }
