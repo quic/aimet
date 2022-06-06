@@ -168,7 +168,7 @@ def compute_intermediate_result_for_learned_grid(x: tf.Tensor,
     """
     forward_result = tf.round(x / scaling) + tf.round(offset)
     rounding_error_q = tf.round(x / scaling) - (x / scaling)
-    rounding_error_o = tf.round(offset) - offset
+    rounding_error_o = tf.ones_like(x) * (tf.round(offset) - offset)
 
     return IntermediateResultForLearnedGrid(forward_result, rounding_error_q, rounding_error_o)
 
