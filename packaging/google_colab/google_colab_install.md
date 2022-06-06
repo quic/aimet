@@ -47,11 +47,11 @@ Runtime -> Restart runtime
 
 ```python
 import sys
-sys.path.append('/usr/local/lib/python3.8/dist-packages/aimet_common/x86_64-linux-gnu')
-sys.path.append('/usr/local/lib/python3.8/dist-packages/aimet_common/x86_64-linux-gnu/aimet_tensor_quantizer-0.0.0-py3.6-linux-x86_64.egg/')
+sys.path.append('/usr/local/lib/python3.8/dist-packages/aimet_common')
+sys.path.append('/usr/local/lib/python3.8/dist-packages/aimet_common/aimet_tensor_quantizer-0.0.0-py3.8-linux-x86_64.egg/')
 
 import os
-os.environ['LD_LIBRARY_PATH'] +=':/usr/local/lib/python3.8/dist-packages/aimet_common/x86_64-linux-gnu'
+os.environ['LD_LIBRARY_PATH'] +=':/usr/local/lib/python3.8/dist-packages/aimet_common'
 ```
 
 ## Usage

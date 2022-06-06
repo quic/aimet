@@ -135,9 +135,7 @@ Set the common environment variables as follows:
 source /usr/local/lib/python3.8/dist-packages/aimet_common/bin/envsetup.sh
 ```
 
-Add the AIMET package location to the environment paths as follows:
+Add the AIMET package location to the environment path as follows:
 ```bash
 export LD_LIBRARY_PATH=/usr/local/lib/python3.8/dist-packages/aimet_common:$LD_LIBRARY_PATH
-
-if [[ $PYTHONPATH = "" ]]; then export PYTHONPATH=/usr/local/lib/python3.8/dist-packages/aimet_common; else export PYTHONPATH=/usr/local/lib/python3.8/dist-packages/aimet_common:$PYTHONPATH; fi
 ```
