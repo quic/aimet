@@ -321,10 +321,12 @@ def _compute_dloss_by_dmin_dmax_and_dx(inputs: tf.Tensor, bitwidth: tf.Tensor, o
 
 
 # pylint: disable=too-many-locals
+# pylint: disable=too-many-arguments
 def _compute_dloss_by_dmin_dmax_and_dx_for_per_channel(inputs: tf.Tensor, bitwidth: tf.Tensor, op_mode: tf.Tensor,
                                                        encoding_min: tf.Tensor, encoding_max: tf.Tensor,
-                                                       is_symmetric: tf.Tensor, axis_handling: tf.Tensor,
-                                                       grad: tf.Tensor) -> Tuple[tf.Tensor, tf.Tensor, tf.Tensor]:
+                                                       is_symmetric: tf.Tensor, is_int_data_type: tf.Tensor,
+                                                       axis_handling: tf.Tensor, grad: tf.Tensor) -> \
+                                                       Tuple[tf.Tensor, tf.Tensor, tf.Tensor]:
     """
     Return tensors for dloss_by_dmin, dloss_by_dmax, and dloss_by_dx in the case of per channel.
     :param inputs: Inputs to op
@@ -333,6 +335,7 @@ def _compute_dloss_by_dmin_dmax_and_dx_for_per_channel(inputs: tf.Tensor, bitwid
     :param encoding_min: Encoding min value(s), will be more than one if per channel is active
     :param encoding_max: Encoding max value(s), will be more than one if per channel is active
     :param is_symmetric: True if symmetric encodings are used, False otherwise
+    :param is_int_data_type: True if op needs to operate with int data type, else False
     :param axis_handling: Determines behavior for reshaping inputs and gradients based on axis handling value.
     :param grad: Gradient from child layer
     :return: Tensors for dloss_by_dmin, dloss_by_dmax, and dloss_by_dx
@@ -393,6 +396,9 @@ def _compute_dloss_by_dmin_dmax_and_dx_for_per_channel(inputs: tf.Tensor, bitwid
         _compute_dloss_by_dmin_dmax_and_dx(reshaped_inputs, bitwidth, op_mode, encoding_min, encoding_max, is_symmetric,
                                            grad)
     dloss_by_dx = reshape_dloss_by_dx_for_axis_handling(inputs, dloss_by_dx, axis_handling)
+
+    #return grad in case of floating-point mode
+    dloss_by_dx = tf.cond(is_int_data_type, lambda: dloss_by_dx, lambda: grad)
     return dloss_by_dmin, dloss_by_dmax, dloss_by_dx
 
 
@@ -428,6 +434,7 @@ def quantsim_per_channel_custom_grad_learned_grid(op, grad):
                                                            op.inputs[int(QuantizeOpIndices.encoding_min)],
                                                            op.inputs[int(QuantizeOpIndices.encoding_max)],
                                                            op.inputs[int(QuantizeOpIndices.use_symmetric_encoding)],
+                                                           op.inputs[int(QuantizeOpIndices.is_int_data_type)],
                                                            op.inputs[int(QuantizeOpIndices.axis_handling)],
                                                            grad)
-    return dloss_by_dx, None, None, dloss_by_dmin, dloss_by_dmax, None, None, None, None
+    return dloss_by_dx, None, None, dloss_by_dmin, dloss_by_dmax, None, None, None, None, None

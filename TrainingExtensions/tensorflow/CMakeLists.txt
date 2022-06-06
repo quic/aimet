@@ -46,7 +46,7 @@ add_library(TrainingExtensionsTf SHARED
         src/QcQuantizeRecurrentParamOp.cpp
         src/QcQuantizeOp.hpp
         src/QcQuantizeOp.cpp
-        )
+        src/AimetFp16OpUtils.h)
 
 target_include_directories(TrainingExtensionsTf PRIVATE
         ${TF_LIB_DIR}/include

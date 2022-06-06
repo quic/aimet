@@ -1336,6 +1336,7 @@ class QuantizationSimModel:
                                                    encoding_min=encoding_min,
                                                    encoding_max=encoding_max,
                                                    bit_width=bit_width,
+                                                   is_int_data_type=is_int_data_type,
                                                    use_symmetric_encoding=use_symmetric_encoding,
                                                    axis_handling=quantization_axis_handling, is_training=is_training)
             else:

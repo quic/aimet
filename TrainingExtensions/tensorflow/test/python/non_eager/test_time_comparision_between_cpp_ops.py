@@ -219,6 +219,7 @@ class TestTrainingExtensionsQcQuantizeOpPerChannel(unittest.TestCase):
 
                 bit_width = tf.Variable(initial_value=bitwidth, trainable=False, dtype=tf.int8)
                 use_symmetric_encoding = tf.Variable(initial_value=use_symm_encoding, trainable=False, dtype=tf.bool)
+                is_int_data_type = tf.Variable(initial_value=True, trainable=False, dtype=tf.bool)
 
                 mode_var = tf.Variable(initial_value=int(libpymo.TensorQuantizerOpMode.oneShotQuantizeDequantize),
                                        trainable=False, dtype=tf.int32)
@@ -227,7 +228,7 @@ class TestTrainingExtensionsQcQuantizeOpPerChannel(unittest.TestCase):
 
                 sess.run([mode_var.initializer, tensor_quant_ref.initializer, encoding_min.initializer,
                           encoding_max.initializer, bit_width.initializer, use_symmetric_encoding.initializer,
-                          axis_handling.initializer])
+                          is_int_data_type.initializer, axis_handling.initializer])
 
                 pass_through_op_output = zero_out_module.qc_quantize_per_channel(name='quant_op', in_tensor=inp,
                                                                                  op_mode=mode_var,
@@ -236,6 +237,7 @@ class TestTrainingExtensionsQcQuantizeOpPerChannel(unittest.TestCase):
                                                                                  encoding_max=encoding_max,
                                                                                  bit_width=bit_width,
                                                                                  use_symmetric_encoding=use_symmetric_encoding,
+                                                                                 is_int_data_type=is_int_data_type,
                                                                                  axis_handling=axis_handling,
                                                                                  is_training=is_training)
 
@@ -377,6 +379,7 @@ class TestTrainingExtensionsQcQuantizeOpPerChannel(unittest.TestCase):
 
             bit_width = tf.Variable(initial_value=bitwidth, trainable=False, dtype=tf.int8)
             use_symmetric_encoding = tf.Variable(initial_value=use_symm_encoding, trainable=False, dtype=tf.bool)
+            is_int_data_type = tf.Variable(initial_value=True, trainable=False, dtype=tf.bool)
 
             mode_var = tf.Variable(initial_value=int(libpymo.TensorQuantizerOpMode.oneShotQuantizeDequantize),
                                    trainable=False, dtype=tf.int32)
@@ -385,7 +388,7 @@ class TestTrainingExtensionsQcQuantizeOpPerChannel(unittest.TestCase):
 
             sess.run([mode_var.initializer, tensor_quant_ref.initializer, encoding_min.initializer,
                       encoding_max.initializer, bit_width.initializer, use_symmetric_encoding.initializer,
-                      axis_handling.initializer])
+                      is_int_data_type.initializer, axis_handling.initializer])
             with tf.device("/device:GPU:0"):
                 pass_through_op_output = zero_out_module.qc_quantize_per_channel(name='quant_op', in_tensor=inp,
                                                                                  op_mode=mode_var,
@@ -394,6 +397,7 @@ class TestTrainingExtensionsQcQuantizeOpPerChannel(unittest.TestCase):
                                                                                  encoding_max=encoding_max,
                                                                                  bit_width=bit_width,
                                                                                  use_symmetric_encoding=use_symmetric_encoding,
+                                                                                 is_int_data_type=is_int_data_type,
                                                                                  axis_handling=axis_handling,
                                                                                  is_training=is_training)
 
