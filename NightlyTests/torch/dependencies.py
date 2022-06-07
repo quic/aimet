@@ -47,6 +47,7 @@ import csv
 import pickle
 import wget
 import torch
+from transformers import BertTokenizer
 from aimet_torch.examples import mnist_torch_model
 from aimet_common.utils import AimetLogger
 import subprocess
@@ -232,3 +233,11 @@ if not os.path.isfile(eval_score_pkl_file):
         pickle.dump(model_eval_scores_dict, file)
 else:
     logger.info('Resnet18 eval score pickle file exists. No need to generate it.')
+
+huggingface_dir = os.path.join('./', 'data', 'huggingface')
+if not os.path.exists(huggingface_dir):
+    os.makedirs(huggingface_dir, exist_ok=True)
+    tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
+    tokenizer.save_pretrained('{}/bert-base-uncased'.format(huggingface_dir))
+else:
+    logger.info("Huggingface data exists. No need to download")
