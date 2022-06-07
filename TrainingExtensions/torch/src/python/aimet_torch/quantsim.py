@@ -592,6 +592,8 @@ class QuantizationSimModel:
                     mask_add_quantizer_wrapper.output_quantizer.data_type == QuantizationDataType.int:
                 for output_quantizer in mask_add_quantizer_wrapper.output_quantizers:
                     # get the min/max from accumulated stats associated with this quantizer
+                    if output_quantizer.is_encoding_frozen:
+                        continue
                     encoding = output_quantizer.encoding
                     output_quantizer.encoding.min = max(encoding.min,
                                                         transformer_utils.MASK_OVERRIDE_VALUE)
