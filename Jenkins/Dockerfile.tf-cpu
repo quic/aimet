@@ -147,7 +147,7 @@ RUN python3 -m pip --no-cache-dir install \
         Pillow==8.4.0 \
         pluggy==0.12.0 \
         progressbar2 \
-        protobuf==3.19.4 \
+        protobuf \
         psutil \
         ptflops \
         pybind11 \
@@ -186,7 +186,7 @@ ENV PATH=/usr/local/bin:$PATH
 
 # Opencv
 # Ref: https://docs.opencv.org/3.2.0/d7/d9f/tutorial_linux_install.html
-COPY Jenkins/opencv_320_python38.patch /tmp
+COPY opencv_320_python38.patch /tmp
 RUN wget -q https://github.com/Itseez/opencv/archive/3.2.0.tar.gz -O /tmp/3.2.0.tar.gz > /dev/null && \
     tar -C /tmp -xvf /tmp/3.2.0.tar.gz > /dev/null && \
     patch /tmp/opencv-3.2.0/modules/python/src2/cv2.cpp /tmp/opencv_320_python38.patch && \
