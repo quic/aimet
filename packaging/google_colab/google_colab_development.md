@@ -1,6 +1,8 @@
 # AIMET Build, Installation and Usage in Google Colab
 This page provides instructions to build, install and use the AIMET software in Google colab environment. Please follow the instructions in the order provided, unless specified otherwise. 
 
+> **_NOTE:_** These instructions are *out of date* and may NOT work with the latest code.
+
 - [Google colab set up](#google-colab-set-up)
 - [Install package dependencies](#install-package-dependencies)
 - [Reset Google colab envrionment](#reset-google-colab-environment)
@@ -35,7 +37,7 @@ Please run below commands to install dependencies to build AIMET:
 
 !apt-get update
 
-!apt-get install python3.6
+!apt-get install python3.8
 
 !apt-get install python3-dev
 
@@ -211,7 +213,7 @@ sys.path.append(r'/content/aimet_code/build/staging/universal/lib/python')
 
 sys.path.append(r'/content/aimet_code/build/staging/universal/lib/x86_64-linux-gnu')
 
-sys.path.append(r'/usr/local/lib/python3.6/dist-packages')
+sys.path.append(r'/usr/local/lib/python3.8/dist-packages')
 
 sys.path.append(r'/content/aimet_code/build/artifacts')
 

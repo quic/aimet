@@ -1,6 +1,8 @@
 # AIMET Installation in Google Colab
 This page provides instructions to install AIMET package in Google colab environment. Please follow the instructions in the order provided, unless specified otherwise. 
 
+> **_NOTE:_** These instructions are *out of date* and may NOT work with the latest releases.
+ 
 - [Google colab set up](#google-colab-set-up)
 - [Install Dependencies](#Install-Dependency-packages)
 - [Install AIMET packages](#Install-AIMET-packages)
@@ -45,11 +47,11 @@ Runtime -> Restart runtime
 
 ```python
 import sys
-sys.path.append('/usr/local/lib/python3.6/dist-packages/aimet_common/x86_64-linux-gnu')
-sys.path.append('/usr/local/lib/python3.6/dist-packages/aimet_common/x86_64-linux-gnu/aimet_tensor_quantizer-0.0.0-py3.6-linux-x86_64.egg/')
+sys.path.append('/usr/local/lib/python3.8/dist-packages/aimet_common/x86_64-linux-gnu')
+sys.path.append('/usr/local/lib/python3.8/dist-packages/aimet_common/x86_64-linux-gnu/aimet_tensor_quantizer-0.0.0-py3.6-linux-x86_64.egg/')
 
 import os
-os.environ['LD_LIBRARY_PATH'] +=':/usr/local/lib/python3.6/dist-packages/aimet_common/x86_64-linux-gnu'
+os.environ['LD_LIBRARY_PATH'] +=':/usr/local/lib/python3.8/dist-packages/aimet_common/x86_64-linux-gnu'
 ```
 
 ## Usage

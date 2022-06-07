@@ -13,13 +13,13 @@ This page provides instructions to install AIMET package on ***Ubuntu 18.04 LTS 
 
 > **_NOTE:_**  
  1. Please pre-pend the "apt-get install" and "pip3 install" commands with "sudo -H" as appropriate.
- 2. These instructions assume that pip packages will be installed in the path: /usr/local/lib/python3.6/dist-packages. If that is not the case, please modify it accordingly.
+ 2. These instructions assume that pip packages will be installed in the path: /usr/local/lib/python3.8/dist-packages. If that is not the case, please modify it accordingly.
 
 ### Install prerequisite packages
 Install the basic pre-requisite packages as follows:
 ```bash
 apt-get update
-apt-get install python3.6 python3.6-dev python3-pip
+apt-get install python3.8 python3.8-dev python3-pip
 python3 -m pip install --upgrade pip
 ```
 
@@ -89,7 +89,7 @@ python3 -m pip install ${download_url}/Aimet-${AIMET_VARIANT}_${release_tag}-${w
 ### Install common debian packages
 Install the common debian packages as follows:
 ```bash
-cat /usr/local/lib/python3.6/dist-packages/aimet_common/bin/reqs_deb_common.txt | xargs apt-get --assume-yes install
+cat /usr/local/lib/python3.8/dist-packages/aimet_common/bin/reqs_deb_common.txt | xargs apt-get --assume-yes install
 ```
 
 ### Install tensorflow GPU debian packages
@@ -97,7 +97,7 @@ cat /usr/local/lib/python3.6/dist-packages/aimet_common/bin/reqs_deb_common.txt 
 
 Install the tensorflow GPU debian packages as follows:
 ```bash
-cat /usr/local/lib/python3.6/dist-packages/aimet_tensorflow/bin/reqs_deb_tf_gpu.txt | xargs apt-get --assume-yes install
+cat /usr/local/lib/python3.8/dist-packages/aimet_tensorflow/bin/reqs_deb_tf_gpu.txt | xargs apt-get --assume-yes install
 ```
 
 ### Install torch GPU debian packages
@@ -105,7 +105,7 @@ cat /usr/local/lib/python3.6/dist-packages/aimet_tensorflow/bin/reqs_deb_tf_gpu.
 
 Install the torch GPU debian packages as follows:
 ```bash
-cat /usr/local/lib/python3.6/dist-packages/aimet_torch/bin/reqs_deb_torch_gpu.txt | xargs apt-get --assume-yes install
+cat /usr/local/lib/python3.8/dist-packages/aimet_torch/bin/reqs_deb_torch_gpu.txt | xargs apt-get --assume-yes install
 ```
 
 #### Replace Pillow with Pillow-SIMD
@@ -132,12 +132,12 @@ ln -s /usr/local/cuda-10.0 /usr/local/cuda
 ## Environment setup
 Set the common environment variables as follows:
 ```bash
-source /usr/local/lib/python3.6/dist-packages/aimet_common/bin/envsetup.sh
+source /usr/local/lib/python3.8/dist-packages/aimet_common/bin/envsetup.sh
 ```
 
 Add the AIMET package location to the environment paths as follows:
 ```bash
-export LD_LIBRARY_PATH=/usr/local/lib/python3.6/dist-packages/aimet_common:$LD_LIBRARY_PATH
+export LD_LIBRARY_PATH=/usr/local/lib/python3.8/dist-packages/aimet_common:$LD_LIBRARY_PATH
 
-if [[ $PYTHONPATH = "" ]]; then export PYTHONPATH=/usr/local/lib/python3.6/dist-packages/aimet_common; else export PYTHONPATH=/usr/local/lib/python3.6/dist-packages/aimet_common:$PYTHONPATH; fi
+if [[ $PYTHONPATH = "" ]]; then export PYTHONPATH=/usr/local/lib/python3.8/dist-packages/aimet_common; else export PYTHONPATH=/usr/local/lib/python3.8/dist-packages/aimet_common:$PYTHONPATH; fi
 ```

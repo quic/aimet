@@ -167,14 +167,15 @@ fi
 
 # Select the docker file based on the build variant
 if [ -n "$AIMET_VARIANT" ]; then
-    docker_file="${dockerfile_path}/Dockerfile.${AIMET_VARIANT}"
+    docker_file="Dockerfile.${AIMET_VARIANT}"
     docker_image_name="aimet-dev-docker:${AIMET_VARIANT}"
 else
-    docker_file="${dockerfile_path}/Dockerfile"
+    docker_file="Dockerfile"
     docker_image_name="aimet-dev-docker:latest"
 fi
 
 echo -e "Building docker image${loading_symbol} \n"
+pushd ${dockerfile_path}
 DOCKER_BUILD_CMD="docker build -t ${docker_image_name} -f ${docker_file} ."
 if [ $interactive_mode -eq 1 ] && [ $dry_run -eq 1 ]; then
 	echo ${DOCKER_BUILD_CMD}
@@ -182,6 +183,7 @@ if [ $interactive_mode -eq 1 ] && [ $dry_run -eq 1 ]; then
 else
 	eval ${DOCKER_BUILD_CMD}
 fi
+popd
 
 if [[ -z "${BUILD_NUMBER}" ]]; then
     # If invoked from command line by user, use a timestamp suffix
