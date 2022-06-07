@@ -155,7 +155,7 @@ RUN python3 -m pip --no-cache-dir install \
         pybind11 \
         pyDOE2 \
         pylint==2.3.1 \
-        pymoo==0.4.2.1 \
+        pymoo==0.4.1 \
         pytest==4.6.5 \
         pytest-cov==2.6.1 \
         pytorch-ignite \
