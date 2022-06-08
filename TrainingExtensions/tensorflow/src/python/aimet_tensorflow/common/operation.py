@@ -98,12 +98,13 @@ class Op(aimet_common.connected_graph.operation.Op):
     def parameters(self) -> Dict[str, ParameterInfo]:
         """ Return dictionary with param name as key and param info as value """
         parameter_info_list = {}
+        valid_ops = self.internal_ops if self.internal_ops else [self.output_op_node]
         for param_type, param in self._parameters.items():
             param_op = param.tensor_dict[self].op
-            assert param_op.type in ['ReadVariableOp', 'Identity']
+            assert param_op.type in ['ReadVariableOp', 'Identity', 'Const']
             op_with_param = None
             for consumer in param_op.outputs[0].consumers():
-                if not consumer.name.startswith('gradients/'):
+                if consumer in valid_ops:
                     assert op_with_param is None
                     op_with_param = consumer
             assert op_with_param is not None
