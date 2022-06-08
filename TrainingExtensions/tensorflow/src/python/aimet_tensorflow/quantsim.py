@@ -235,6 +235,13 @@ class QuantizationSimModel:
         _logger.error('Could not find  Quantizer for given op {%s} ', quant_op_name)
         return None
 
+    def get_supported_kernels(self) -> Dict:
+        """
+        Return _supported_kernels parsed from the config file
+        :return: Dictionary containing supported_kernels
+        """
+        return self._supported_kernels
+
     def _get_op_variable_value(self, quant_op: tf.Operation, var_index: int):
         """
         Utility to load variable values from quant op

@@ -187,6 +187,13 @@ class QuantizationSimModel:
                                                                       default_data_type)
         self._supported_kernels = self._quantsim_configurator.get_supported_kernels()
 
+    def get_supported_kernels(self) -> Dict:
+        """
+        Return _supported_kernels parsed from the config file
+        :return: Dictionary containing supported_kernels
+        """
+        return self._supported_kernels
+
     def __str__(self):
         """
         Pretty-printed output indicating where in the model, quantizers have been activated

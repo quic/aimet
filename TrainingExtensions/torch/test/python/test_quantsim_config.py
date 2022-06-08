@@ -248,7 +248,7 @@ class TestQuantsimConfig:
                                    config_file='./data/quantsim_config.json',
                                    dummy_input=torch.rand(1, 3, 32, 32))
 
-        supported_kernels_in_defaults = sim._supported_kernels["defaults"]
+        supported_kernels_in_defaults = sim.get_supported_kernels()["defaults"]
         assert len(supported_kernels_in_defaults) == 2
         assert supported_kernels_in_defaults == expected_supported_kernels
 
@@ -393,7 +393,7 @@ class TestQuantsimConfig:
                                    config_file='./data/quantsim_config.json',
                                    dummy_input=torch.rand(1, 3, 32, 32))
 
-        supported_kernels_in_defaults = sim._supported_kernels["Conv"]
+        supported_kernels_in_defaults = sim.get_supported_kernels()["Conv"]
         assert len(supported_kernels_in_defaults) == 1
         assert supported_kernels_in_defaults == expected_supported_kernels
 
