@@ -411,6 +411,7 @@ class TestQuantAnalyzer:
         forward_pass_callback = CallbackFunc(calibrate, dummy_input)
         eval_callback = CallbackFunc(evaluate, dummy_input)
         quant_analyzer = QuantAnalyzer(model, dummy_input, forward_pass_callback, eval_callback)
+        quant_analyzer.enable_per_layer_mse_loss()
         try:
             quant_analyzer.analyze()
             assert os.path.isfile("./tmp/per_layer_quant_disabled.html")
