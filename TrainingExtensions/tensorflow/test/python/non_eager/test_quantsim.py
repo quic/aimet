@@ -1169,6 +1169,67 @@ class TestQuantSim(unittest.TestCase):
         output_embedded_fk_fp16 = dummy_forward_pass_quant_embedded_native_nodes(orig_sess, dummy_input)
         self.assertTrue(np.all(output_embedded_fk_fp16 == output_aimet_fk_fp16))
 
+    def test_model_with_const_param(self):
+        """
+        Create Quantsim model with a const weight
+        """
+        tf.compat.v1.reset_default_graph()
+
+        input = tf.keras.Input([28, 28, 3], dtype=tf.float32, name='input')
+        const_kernel = tf.constant(np.random.randn(3, 3, 3, 32), dtype=tf.float32)
+        conv2d = tf.nn.conv2d(input, const_kernel, strides=[1, 1, 2, 1], padding='VALID', name='conv2d')
+        maxpool = tf.keras.layers.MaxPooling2D((2, 2))(conv2d)
+        output = tf.keras.layers.Conv2D(64, kernel_size=3, activation='relu')(maxpool)
+
+        sess = tf.compat.v1.Session()
+        initialize_uninitialized_vars(sess)
+        sim = QuantizationSimModel(sess, [input.op.name], [output.op.name], use_cuda=False)
+
+        const_kernel_quantizer = 'Const_quantized'
+        self.assertTrue(const_kernel_quantizer in sim._param_quantizers)
+
+        del sim
+        sess.close()
+
+    def test_model_with_multiple_param_outputs(self):
+        """
+        Create Quantsim model with param having multiple consumers
+        """
+        tf.compat.v1.reset_default_graph()
+
+        tf.compat.v1.set_random_seed(0)
+        with tf.device('/cpu:0'):
+            inputs = tf.keras.Input(shape=(32, 32, 1,))
+            conv_op = tf.keras.layers.Conv2D(1, (2, 2))(inputs)
+            relu_op = tf.nn.relu(conv_op)
+            reshape = tf.keras.layers.Flatten()(relu_op)
+            output = tf.keras.layers.Dense(10)(reshape)
+
+        var_list = tf.compat.v1.get_collection(tf.compat.v1.GraphKeys.TRAINABLE_VARIABLES)
+        labels_placeholder = tf.compat.v1.placeholder(tf.float32, [None, 10], name='labels')
+        loss = tf.compat.v1.losses.softmax_cross_entropy(onehot_labels=labels_placeholder, logits=output)
+
+        with tf.name_scope('custom_gradient_name'):
+            optimizer = tf.compat.v1.train.GradientDescentOptimizer(learning_rate=1e-3)
+            gradients = optimizer.compute_gradients(loss, var_list)
+
+        sess = tf.compat.v1.Session()
+        initialize_uninitialized_vars(sess)
+        sim = QuantizationSimModel(sess, [inputs.op.name], [output.op.name], use_cuda=True)
+
+        conv2d_weight = sim.session.graph.get_tensor_by_name('conv2d/Conv2D/ReadVariableOp:0')
+        conv2d_weight_quantizer = sim.session.graph.get_operation_by_name('conv2d/Conv2D/ReadVariableOp_quantized')
+        consumers = conv2d_weight.consumers()
+        self.assertGreater(len(consumers), 1)
+        self.assertTrue(conv2d_weight_quantizer in consumers)
+
+        dense_weight = sim.session.graph.get_tensor_by_name('dense/MatMul/ReadVariableOp:0')
+        dense_weight_quantizer = sim.session.graph.get_operation_by_name('dense/MatMul/ReadVariableOp_quantized')
+        consumers = dense_weight.consumers()
+        self.assertGreater(len(consumers), 1)
+        self.assertTrue(dense_weight_quantizer in consumers)
+
+
 class TestQuantSimRangeLearning:
     """ Test methods for Quantization Simulation """
 
