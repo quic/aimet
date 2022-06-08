@@ -767,37 +767,61 @@ class QuantizationSimModel:
                 # ------------------
                 last_op_name, op_names = QuantizationSimModel.find_last_op_name_for_layer(layer_name,
                                                                                           op_to_io_tensor_map)
-                if not propagate_encodings:
-                    op_names = [last_op_name]
 
-                for op_name in op_names:
-                    if op_to_io_tensor_map[op_name].outputs:
-                        output_tensors = op_to_io_tensor_map[op_name].outputs
-                        if len(output_tensors) != len(layer.output_quantizers):
-                            logger.error("For ONNX node: %s, encodings are not generated. "
-                                         "Number of output quantizers: %d available for layer: %s "
-                                         "doesn't match with number of output tensors: %d for ONNX node: %s",
-                                         op_name, len(layer.output_quantizers), layer_name, len(output_tensors), op_name)
+                logger.debug("last_op_name: %s, op_names: %s", last_op_name, op_names)
+                if last_op_name is None:
+                    # This the scenario where there are no .end markings but there are multiple outputs.
+                    print("\n&&&&&&&&&&&&&&&&&&&&&&&&&&&& last_op_name is None\n", op_names)
+                    num_onnx_ops = len(op_names)
+                    num_pytorch_output_quantizers = len(layer.output_quantizers)
+                    print("\n%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%", num_onnx_ops, num_pytorch_output_quantizers)
 
-                        for index, output_tensor in enumerate(output_tensors):
-                            propagate_flag = propagate_encodings and op_name != last_op_name
+                    if num_onnx_ops == num_pytorch_output_quantizers:
+                        # Assumption: The order is exactly matching. Add a check to verify this.
+                        for index, (op_name, out_quantizer) in enumerate(zip(op_names, layer.output_quantizers)):
+                            print("\n * * * ", index, op_name, out_quantizer)
+                            onnx_output_tensor = op_to_io_tensor_map[op_name].outputs[0]
+                            enc = QuantizationSimModel._create_encoding_dict(out_quantizer.encoding,
+                                                                             out_quantizer,
+                                                                             propagate_encodings=False)
+                            activation_encodings_onnx[onnx_output_tensor] = [enc]
+                    else:
+                        logger.warning("\nThe number of ONNX OPs: %s, doesn't match with the number of "
+                                       "PyTorch Output Quantizers: %s. Encodings are not generated for layer %s",
+                                       num_onnx_ops, num_pytorch_output_quantizers, layer_name)
+                else:
+                    # There are one or more last op names
+                    if not propagate_encodings:
+                        op_names = [last_op_name]
 
-                            quantizer = layer.output_quantizers[0]
-                            if propagate_flag is False:
-                                quantizer = layer.output_quantizers[index]
+                    for op_name in op_names:
+                        if op_to_io_tensor_map[op_name].outputs:
+                            output_tensors = op_to_io_tensor_map[op_name].outputs
+                            if len(output_tensors) != len(layer.output_quantizers):
+                                logger.error("For ONNX node: %s, encodings are not generated. "
+                                             "Number of output quantizers: %d available for layer: %s "
+                                             "doesn't match with number of output tensors: %d for ONNX node: %s",
+                                             op_name, len(layer.output_quantizers), layer_name, len(output_tensors), op_name)
 
-                            if quantizer.enabled:
-                                enc = QuantizationSimModel._create_encoding_dict(quantizer.encoding,
-                                                                                 quantizer,
-                                                                                 propagate_encodings=propagate_flag)
-                                activation_encodings_onnx[output_tensor] = [enc]
+                            for index, output_tensor in enumerate(output_tensors):
+                                propagate_flag = propagate_encodings and op_name != last_op_name
 
-                                # Check if layer exists in the pytorch encoding dictionary
-                                if layer_name not in activation_encodings_torch:
-                                    activation_encodings_torch[layer_name] = {}
-                                if QUANTIZER_TYPE_OUTPUT not in activation_encodings_torch[layer_name]:
-                                    activation_encodings_torch[layer_name][QUANTIZER_TYPE_OUTPUT] = {}
-                                activation_encodings_torch[layer_name][QUANTIZER_TYPE_OUTPUT][index] = enc
+                                quantizer = layer.output_quantizers[0]
+                                if propagate_flag is False:
+                                    quantizer = layer.output_quantizers[index]
+
+                                if quantizer.enabled:
+                                    enc = QuantizationSimModel._create_encoding_dict(quantizer.encoding,
+                                                                                     quantizer,
+                                                                                     propagate_encodings=propagate_flag)
+                                    activation_encodings_onnx[output_tensor] = [enc]
+
+                                    # Check if layer exists in the pytorch encoding dictionary
+                                    if layer_name not in activation_encodings_torch:
+                                        activation_encodings_torch[layer_name] = {}
+                                    if QUANTIZER_TYPE_OUTPUT not in activation_encodings_torch[layer_name]:
+                                        activation_encodings_torch[layer_name][QUANTIZER_TYPE_OUTPUT] = {}
+                                    activation_encodings_torch[layer_name][QUANTIZER_TYPE_OUTPUT][index] = enc
 
                 # ------------------
                 # Params
@@ -861,10 +885,16 @@ class QuantizationSimModel:
             return last_op_name, op_names
 
         end_op_names = [op_name for op_name in op_names if op_name.endswith('.end')]
-        if len(end_op_names) != 1:
-            logger.warning('Could not determine the last op in the sub-graph for layer=%s, candidates=%s',
-                           layer_name, end_op_names)
-            last_op_name = op_names[0]
+        # if len(end_op_names) == 0:
+        if not end_op_names:
+            # logger.warning('Could not determine the last op in the sub-graph for layer=%s, candidates=%s',
+            #                layer_name, end_op_names)
+            logger.debug('Number of end Ops are 0 for layer=%s, op_names=%s', layer_name, op_names)
+            last_op_name = None
+        elif len(end_op_names) > 1:
+            logger.debug('Number of end Ops are %s for layer=%s, op_names=%s', len(end_op_names), layer_name,
+                         end_op_names)
+            last_op_name = None
         else:
             last_op_name = end_op_names[0]
 

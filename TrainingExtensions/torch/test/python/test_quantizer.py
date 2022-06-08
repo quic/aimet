@@ -35,6 +35,7 @@
 #  @@-COPYRIGHT-END-@@
 # =============================================================================
 import copy
+import logging
 import json as json
 import os
 import unittest.mock
@@ -2541,3 +2542,109 @@ class TestQuantizationSimLearnedGrid:
             activation_encodings = json.load(json_file)['activation_encodings']
             assert '7' not in activation_encodings
             assert set(['8', '9', '10', '11', 't.1']).issubset(activation_encodings.keys())
+
+    def test_custom_op_simple(self):
+        """
+
+        :return:
+        """
+        AimetLogger.set_level_for_all_areas(logging.DEBUG)
+
+        cust_model = CustModelV1Simple()
+
+        input_shape = (1, 10, 24, 24)
+        dummy_input = torch.randn(*input_shape)
+
+        output = cust_model(dummy_input)
+
+        quant_sim = QuantizationSimModel(cust_model, dummy_input, quant_scheme=QuantScheme.post_training_tf_enhanced,
+                                         default_param_bw=8, default_output_bw=8)
+
+        quant_sim.compute_encodings(evaluate, dummy_input)
+
+        print(quant_sim)
+        print(quant_sim.model)
+
+        quant_sim.export('./data/', 'cust_v1_simple', dummy_input,
+                         onnx_export_args=(onnx_utils.OnnxExportApiArgs(opset_version=11)),
+                         propagate_encodings=True)
+
+    def test_custom_op_simple_v2(self):
+        """
+
+        :return:
+        """
+        AimetLogger.set_level_for_all_areas(logging.DEBUG)
+
+        cust_model = CustModelV2Simple()
+
+        input_shape = (1, 10, 24, 24)
+        dummy_input = torch.randn(*input_shape)
+
+        output = cust_model(dummy_input)
+
+        quant_sim = QuantizationSimModel(cust_model, dummy_input, quant_scheme=QuantScheme.post_training_tf_enhanced,
+                                         default_param_bw=4, default_output_bw=4)
+
+        quant_sim.compute_encodings(evaluate, dummy_input)
+
+        print(quant_sim)
+        print(quant_sim.model)
+
+        a, b, c, d, e = quant_sim.model(dummy_input)
+        # print(a, b, c)
+
+        quant_sim.export('./data/', 'cust_v2_simple', dummy_input,
+                         onnx_export_args=(onnx_utils.OnnxExportApiArgs(opset_version=11)),
+                         propagate_encodings=False)
+
+
+class CustModelV1Simple(torch.nn.Module):
+    def __init__(self):
+        super(CustModelV1Simple, self).__init__()
+        self.cust = CustomOp()
+
+    def forward(self, x):
+        k1, k2  = self.cust(x)
+        return k1, k2 
+
+
+class CustomOp(torch.nn.Module):
+    """
+    """
+    def __init__(self):
+        super().__init__()
+        self.size = 8
+
+    def forward(self, x):
+        y = x*self.size
+        z = x*5
+        return y, z
+
+
+class CustModelV2Simple(torch.nn.Module):
+    def __init__(self):
+        super(CustModelV2Simple, self).__init__()
+        self.cust = CustomOpV2()
+
+    def forward(self, x):
+        k1, k2, k3, k4, k5 = self.cust(x)
+        return k1, k2, k3, k4, k5
+
+
+class CustomOpV2(torch.nn.Module):
+    """
+    """
+    def __init__(self):
+        super().__init__()
+        self.size = 8
+
+    def forward(self, x):
+        y = x*self.size
+        z = x*5
+        a = z.clamp(0)
+        b = y + z
+        c = y - z
+        return y, z, a, b, c
+
+
