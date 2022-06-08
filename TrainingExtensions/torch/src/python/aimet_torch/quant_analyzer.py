@@ -108,6 +108,7 @@ class QuantAnalyzer:
         self._dummy_input = dummy_input
         self._forward_pass_callback = forward_pass_callback
         self._eval_callback = eval_callback
+        self._enable_per_layer_mse_loss = False
 
     def analyze(self,
                 quant_scheme: QuantScheme = QuantScheme.post_training_tf_enhanced,
@@ -159,7 +160,9 @@ class QuantAnalyzer:
             self._export_per_layer_stats_histogram(sim, results_dir)
 
         # Export per layer MSE loss between fp32 and quantized output activations.
-        self._export_per_layer_mse_loss(sim, results_dir)
+        #TODO: The following check will be removed, once MSE loss calculation is refactored.
+        if self._enable_per_layer_mse_loss:
+            self._export_per_layer_mse_loss(sim, results_dir)
 
     def _eval_weight_quantized_model(self, sim: QuantizationSimModel)-> float:
         """
@@ -835,3 +838,9 @@ class QuantAnalyzer:
         self._export_per_layer_mse_plot(mse_loss_dict,
                                         results_dir,
                                         title="per_layer_mse_loss")
+
+    def enable_per_layer_mse_loss(self):
+        """
+        Enable per layer MSE analysis.
+        """
+        self._enable_per_layer_mse_loss = True
