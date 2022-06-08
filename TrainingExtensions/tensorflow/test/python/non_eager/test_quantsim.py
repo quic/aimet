@@ -405,6 +405,194 @@ class TestQuantSim(unittest.TestCase):
         sim.session.close()
         del sim
 
+    def test_parse_config_file_default_supported_kernels(self):
+        """
+        Test that the supported_kernels in the defaults section is parsed correctly and its values are added
+        in the dict _supported_kernels
+        """
+        tf.compat.v1.reset_default_graph()
+        with tf.device('/cpu:0'):
+            model = tf.keras.Sequential()
+            model.add(tf.keras.layers.Conv2D(32, kernel_size=3, input_shape=(28, 28, 3), activation='relu'))
+            model.add(tf.keras.layers.MaxPooling2D((2, 2)))
+            model.add(tf.keras.layers.Conv2D(64, kernel_size=3, activation='relu'))
+            model.summary()
+
+        sess = tf.compat.v1.Session()
+        initialize_uninitialized_vars(sess)
+
+        quantsim_config = {
+            "defaults": {
+                "ops": {
+                    "is_output_quantized": "True",
+                    "is_symmetric": "False"
+                },
+                "params": {
+                    "is_quantized": "False",
+                    "is_symmetric": "True"
+                },
+                "supported_kernels":[
+                    {
+                        "activation": {
+                            "bitwidth": 16,
+                            "dtype": "int"
+                        },
+                        "param": {
+                            "bitwidth": 8,
+                            "dtype": "int"
+                        }
+                    },
+                    {
+                        "activation": {
+                            "bitwidth": 16,
+                            "dtype": "float"
+                        },
+                        "param": {
+                            "bitwidth": 16,
+                            "dtype": "float"
+                        }
+                    }
+                ]
+            },
+            "params": {
+                "weight": {
+                    "is_quantized": "True",
+                    "is_symmetric": "False"
+                }
+            },
+            "op_type": {},
+            "supergroups": [],
+            "model_input": {},
+            "model_output": {}
+        }
+
+        expected_supported_kernels = [
+            {
+                "activation": {
+                    "bitwidth": 16,
+                    "dtype": QuantizationDataType.int
+                },
+                "param": {
+                    "bitwidth": 8,
+                    "dtype": QuantizationDataType.int
+                }
+            },
+            {
+                "activation": {
+                    "bitwidth": 16,
+                    "dtype": QuantizationDataType.float
+                },
+                "param": {
+                    "bitwidth": 16,
+                    "dtype": QuantizationDataType.float
+                }
+            }
+        ]
+
+        if not os.path.exists("data"):
+            os.mkdir("data")
+
+        with open('data/quantsim_config.json', 'w') as f:
+            json.dump(quantsim_config, f)
+
+        sim = QuantizationSimModel(sess, ['conv2d_input'], ['conv2d_1/Relu'], use_cuda=False, default_output_bw=16,
+                                   default_param_bw=16, default_data_type=QuantizationDataType.float,
+                                   config_file='data/quantsim_config.json')
+
+        supported_kernels_in_defaults = sim.get_supported_kernels()["defaults"]
+        assert len(supported_kernels_in_defaults) == 2
+        assert supported_kernels_in_defaults == expected_supported_kernels
+
+    def test_parse_config_file_op_type_supported_kernels(self):
+        """
+        Test that the supported_kernels in the op_type section is parsed correctly and its values are added
+        in the dict _supported_kernels
+        """
+        tf.compat.v1.reset_default_graph()
+        with tf.device('/cpu:0'):
+            model = tf.keras.Sequential()
+            model.add(tf.keras.layers.Conv2D(32, kernel_size=3, input_shape=(28, 28, 3), activation='relu'))
+            model.add(tf.keras.layers.MaxPooling2D((2, 2)))
+            model.add(tf.keras.layers.Conv2D(64, kernel_size=3, activation='relu'))
+            model.summary()
+
+        sess = tf.compat.v1.Session()
+        initialize_uninitialized_vars(sess)
+
+        quantsim_config = {
+            "defaults": {
+                "ops": {
+                    "is_output_quantized": "True",
+                    "is_symmetric": "False"
+                },
+                "params": {
+                    "is_quantized": "False",
+                    "is_symmetric": "True"
+                },
+                "supported_kernels": [
+                    {
+                        "activation": {
+                            "bitwidth": 16,
+                            "dtype": "int"
+                        },
+                        "param": {
+                            "bitwidth": 16,
+                            "dtype": "int"
+                        }
+                    }
+                ]
+            },
+            "params": {
+                "weight": {
+                    "is_quantized": "True",
+                    "is_symmetric": "False"
+                }
+            },
+            "op_type": {
+                "Conv": {
+                    "supported_kernels": [
+                        {
+                            "activation": {
+                                "bitwidth": 16,
+                                "dtype": "int"
+                            },
+                            "param": {
+                                "bitwidth": 8,
+                                "dtype": "int"
+                            }
+                        }
+                    ]
+                }
+            },
+            "supergroups": [],
+            "model_input": {},
+            "model_output": {}
+        }
+
+        expected_supported_kernels = [
+                    {
+                        "activation": {
+                            "bitwidth": 16,
+                            "dtype": QuantizationDataType.int
+                        },
+                        "param": {
+                            "bitwidth": 8,
+                            "dtype": QuantizationDataType.int
+                        }
+                    }
+                ]
+
+        with open('./data/quantsim_config.json', 'w') as f:
+            json.dump(quantsim_config, f)
+        sim = QuantizationSimModel(sess, ['conv2d_input'], ['conv2d_1/Relu'], use_cuda=False, default_output_bw=16,
+                                   default_param_bw=16, default_data_type=QuantizationDataType.float,
+                                   config_file='data/quantsim_config.json')
+
+        supported_kernels_in_defaults = sim.get_supported_kernels()["Conv"]
+        assert len(supported_kernels_in_defaults) == 1
+        assert supported_kernels_in_defaults == expected_supported_kernels
+
+
     def test_save_to_keras_cpu_model(self):
         """
         Create sim model for a keras pipeline
