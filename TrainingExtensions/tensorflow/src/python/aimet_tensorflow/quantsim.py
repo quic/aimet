@@ -357,7 +357,8 @@ class QuantizationSimModel:
         :return: None
 
         """
-
+        # Recompute encodings before export for parameters
+        self._compute_and_set_parameter_encodings()
         # save session without quant nodes
         if orig_sess is not None:
             with orig_sess.graph.as_default():
