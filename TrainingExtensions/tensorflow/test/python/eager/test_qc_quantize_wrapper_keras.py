@@ -118,6 +118,7 @@ def test_wrapper():
 def test_wrapper_settings():
     if version.parse(tf.version.VERSION) >= version.parse("2.00"):
         tf.keras.backend.clear_session()
+        tf.random.set_seed(10)
         test_inp = np.array([[-3.0, -2.0, -1.0, 0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0 ,7.0, 8.0]])
         inp = tf.keras.layers.Input(shape=(12,))
         identity = tf.keras.layers.Lambda(lambda x: x)
