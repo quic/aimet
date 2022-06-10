@@ -64,6 +64,11 @@ class TensorQuantizerOpFacade
 {
 public:
     /**
+     * Reset stats being collected to compute encoding
+     */
+    virtual void resetEncodingStats() = 0;
+
+    /**
      * Update stats being collected to compute encoding
      * @param tensor Tensor to update the stats with
      * @param tensorSize Size of the tensor (number of tensor elements)
