@@ -288,6 +288,11 @@ class QuantizationSimModel:
 
         self._compute_and_set_parameter_encodings()
 
+        # At the beginning before we do forward pass we want to set parameters to quantize dequantize mode and once we
+        # compute the encodings for activations we set it to the required op mode based on quant scheme & if per channel
+        # quantization is enabled
+        self._set_op_mode_parameters(libpymo.TensorQuantizerOpMode.quantizeDequantize, [])
+
         ops_with_invalid_encodings = []
 
         # Run data through the quantsim so we can compute activation encodings
@@ -314,18 +319,7 @@ class QuantizationSimModel:
         # For post-training mode, params will always be in one-shot mode
         op_mode = self._param_op_mode_after_analysis(self._quant_scheme)
 
-        for op_name, quantizer_info in self._param_quantizers.items():
-            if quantizer_info.get_op_mode() != int(libpymo.TensorQuantizerOpMode.passThrough):
-                # encoding would be invalid for dtype=fp because there is no encoding computed in float mode through the
-                # tensor_quantizer
-                if quantizer_info.data_type == QuantizationDataType.float:
-                    quantizer_info.set_op_mode(libpymo.TensorQuantizerOpMode.quantizeDequantize)
-                else:
-                    if quantizer_info.is_encoding_valid():
-                        quantizer_info.set_op_mode(op_mode)
-                    else:
-                        quantizer_info.set_op_mode(libpymo.TensorQuantizerOpMode.passThrough)
-                        ops_with_invalid_encodings.append(op_name)
+        self._set_op_mode_parameters(op_mode, ops_with_invalid_encodings)
 
         if ops_with_invalid_encodings:
             _logger.info('The following quantizers did not have valid encodings and have been set to passThrough mode: '
@@ -339,6 +333,26 @@ class QuantizationSimModel:
                          'to be evaluated, and recompute encodings.')
 
         self._clamp_transformer_attention_mask_encoding()
+
+    def _set_op_mode_parameters(self, op_mode: libpymo.TensorQuantizerOpMode,
+                                ops_with_invalid_encodings: List):
+        """
+        Sets op mode for parameters and if the encodings are invalid, then adds those ops to ops_with_invalid_encodings
+        :param op_mode: libpymo.TensorQuantizerOpMode
+        :param ops_with_invalid_encodings: list of ops that don't have vallid encodings
+        """
+        for op_name, quantizer_info in self._param_quantizers.items():
+            if quantizer_info.get_op_mode() != int(libpymo.TensorQuantizerOpMode.passThrough):
+                # encoding would be invalid for dtype=fp because there is no encoding computed in float mode through the
+                # tensor_quantizer
+                if quantizer_info.data_type == QuantizationDataType.float:
+                    quantizer_info.set_op_mode(libpymo.TensorQuantizerOpMode.quantizeDequantize)
+                else:
+                    if quantizer_info.is_encoding_valid():
+                        quantizer_info.set_op_mode(op_mode)
+                    else:
+                        quantizer_info.set_op_mode(libpymo.TensorQuantizerOpMode.passThrough)
+                        ops_with_invalid_encodings.append(op_name)
 
     def export(self, path: str, filename_prefix: str, orig_sess: tf.compat.v1.Session = None):
         """
