@@ -848,12 +848,14 @@ class QuantizationSimModel:
         # pylint: disable=too-many-locals
         for param_name, param_info in params_to_quantize.items():
             param_in = self.session.graph.get_operation_by_name(param_name).outputs[0]
-            can_modify_op = self.session.graph.get_operation_by_name(param_info.op_with_param_name)
-
+            can_modify_ops = [self.session.graph.get_operation_by_name(consumer) \
+                              for consumer in param_info.op_with_param_name]
+            # Assume all ops that are consumers of the param are of the same type for axis handling purposes
+            can_modify_op_type = can_modify_ops[0].type
             if param_in is not None:
                 num_output_channels, quantization_axis_handling = \
                     QuantizationSimModel._get_number_of_output_channels_and_quantization_axis_handling(
-                        param_in.get_shape().as_list(), can_modify_op.type)
+                        param_in.get_shape().as_list(), can_modify_op_type)
                 quant_op_name = self._get_quantized_name(param_name)
 
                 self._op_name_to_output_channels_axis_handling_dict[quant_op_name] = [num_output_channels,
@@ -863,7 +865,8 @@ class QuantizationSimModel:
 
                 # If per channel quantization is enabled we tranpose the weights of tranpose op and then
                 # perform per channel quantization
-                if can_modify_op.type in ['Conv2DTranspose', 'Conv2DBackpropInput'] and self.per_channel_quantization_enabled:
+                if can_modify_op_type in ['Conv2DTranspose', 'Conv2DBackpropInput'] and \
+                        self.per_channel_quantization_enabled:
 
                     fout = tf.py_function(func=swap_last_two_dim, inp=[param_in], Tout=tf.float32)
 
@@ -876,11 +879,12 @@ class QuantizationSimModel:
                     q_op_out = self._insert_post_training_quant_op(param_in, quant_op_name,
                                                                    op_mode, self._param_quantizers, QuantizerType.param,
                                                                    default_param_bw, data_type)
-                nodes_modified_count = graph_editor.reroute_ts(tf_ops.convert_to_tensor(q_op_out), param_in,
-                                                               can_modify=can_modify_op)
 
-                if nodes_modified_count != 1:
-                    raise ValueError('Input ' + param_in.name + ' not quantized!')
+                nodes_modified_count = graph_editor.reroute_ts(tf_ops.convert_to_tensor(q_op_out), param_in,
+                                                               can_modify=can_modify_ops)
+
+                if nodes_modified_count != len(can_modify_ops):
+                    raise ValueError(f'Issue quantizing {param_in.name}')
 
     def _insert_param_quantization_ops_loop_context(self, op_names: List[str], indices: List[int],
                                                     default_param_bw: int,
@@ -1057,9 +1061,16 @@ class QuantizationSimModel:
         params_to_quantize = {}
         for conn in valid_conns:
             for param_name, param_info in conn.parameters.items():
-                op_with_param = graph.get_operation_by_name(param_info.op_with_param_name)
-                if op_not_in_loop_control_flow_context(graph, op_with_param) and op_with_param in valid_ops:
-                    params_to_quantize[param_name] = param_info
+                for consumer_name in param_info.op_with_param_name:
+                    consumer = graph.get_operation_by_name(consumer_name)
+                    if op_not_in_loop_control_flow_context(graph, consumer) and consumer in valid_ops:
+                        if param_name in params_to_quantize:
+                            # Parameter can be a weight shared parameter, that was used for a different op that was
+                            # processed earlier. In this case, there will already be a parameter info entry for this
+                            # parameter, and we need to update the op_with_param_name list to include the current op.
+                            params_to_quantize[param_name].op_with_param_name.extend(param_info.op_with_param_name)
+                        else:
+                            params_to_quantize[param_name] = param_info
 
         params_to_quantize.update(get_embedding_params_using_patterns(conn_graph))
 

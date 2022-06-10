@@ -48,6 +48,7 @@ from packaging import version
 import aimet_common.libpymo as libpymo
 from aimet_common.defs import QuantScheme, QuantizationDataType
 from aimet_common.quantsim import encoding_version
+from aimet_tensorflow import graph_editor
 from aimet_tensorflow.quantsim import QuantizationSimModel, check_accumulator_overflow
 from aimet_tensorflow.quantsim_straight_through_grad import _get_n_and_p, _compute_dloss_by_dmax, \
     compute_intermediate_result_for_learned_grid, LearnedGridParams
@@ -836,7 +837,7 @@ class TestQuantSim(unittest.TestCase):
             :param _ending_ops: Unused argument
             :return: List of ops to insert param quantizers for, and list of param indices for these ops
             """
-            return {'conv2d_1/Conv2D/ReadVariableOp': ParameterInfo('weight', 'conv2d_1/Conv2D')}
+            return {'conv2d_1/Conv2D/ReadVariableOp': ParameterInfo('weight', ['conv2d_1/Conv2D'])}
 
         def configure_quantization_ops(self, _conn_graph, _ops_with_param_names, _indices,
                                        _params_to_quantize, _activation_op_names):
@@ -1229,6 +1230,49 @@ class TestQuantSim(unittest.TestCase):
         self.assertGreater(len(consumers), 1)
         self.assertTrue(dense_weight_quantizer in consumers)
 
+    def test_weight_sharing_quantization(self):
+        """
+        Test that quantizers are inserted correctly for a model with weight sharing.
+        """
+        rand_inp = np.random.randn(1, 16, 16, 3)
+        w = np.random.randn(2, 2, 3, 8)
+
+        inp = tf.compat.v1.placeholder(tf.float32, shape=(1, 16, 16, 3))
+        w_var = tf.Variable(w, dtype=tf.float32)
+        c1 = tf.nn.conv2d(inp, w_var, strides=[1, 1, 1, 1], padding='VALID')
+        c2 = tf.nn.conv2d(inp, w_var, strides=[1, 1, 1, 1], padding='VALID')
+        relu = tf.nn.relu(w_var)
+        _ = tf.add(c1, c2)
+        session = tf.compat.v1.Session()
+
+        # Even though only one variable was used, TF creates three read variable ops between the variable and the two
+        # convs and relu ops. Rewire the inputs of one of the convs and the relu op to be the same as that of the first
+        # conv to simulate weight sharing.
+        graph_editor.reroute_ts([c1.op.inputs[1]], [c2.op.inputs[1]])
+        graph_editor.reroute_ts([c1.op.inputs[1]], [relu.op.inputs[0]])
+
+        # Check that weight was rewired correctly.
+        assert c1.op.inputs[1] == c2.op.inputs[1]
+        assert c1.op.inputs[1] == relu.op.inputs[0]
+
+        init = tf.compat.v1.global_variables_initializer()
+        session.run(init)
+        _ = session.run(session.graph.get_tensor_by_name('Add:0'),
+                          feed_dict={session.graph.get_tensor_by_name('Placeholder:0'): rand_inp})
+
+        qsim = QuantizationSimModel(session, starting_op_names=['Placeholder'], output_op_names=['Add', 'Relu'])
+        new_c1 = qsim.session.graph.get_operation_by_name('Conv2D')
+        new_c2 = qsim.session.graph.get_operation_by_name('Conv2D_1')
+        new_relu = qsim.session.graph.get_operation_by_name('Relu')
+        orig_param_tensor = qsim.session.graph.get_tensor_by_name('Conv2D/ReadVariableOp:0')
+        quantized_param_tensor = qsim.session.graph.get_tensor_by_name('Conv2D/ReadVariableOp_quantized:0')
+
+        # Check quantize op was inserted correctly. Quantize op should only be connected to the two conv ops, and not
+        # the relu op, since it is not a parameter of the relu.
+        assert new_c1.inputs[1] == quantized_param_tensor
+        assert new_c2.inputs[1] == quantized_param_tensor
+        assert new_relu.inputs[0] == orig_param_tensor
+        assert quantized_param_tensor.op.inputs[0] == orig_param_tensor
 
 class TestQuantSimRangeLearning:
     """ Test methods for Quantization Simulation """
