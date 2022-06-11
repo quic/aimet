@@ -2526,6 +2526,8 @@ class TestQuantizationSimLearnedGrid:
         Test mapping and exporting of output encodings for multiple output onnx op.
         """
 
+        AimetLogger.set_level_for_all_areas(logging.DEBUG)
+
         net = ModelWith5Output()
         dummy_input = torch.randn(1, 3, 224, 224)
 
