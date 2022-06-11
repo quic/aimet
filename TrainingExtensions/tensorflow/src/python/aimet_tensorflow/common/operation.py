@@ -101,15 +101,15 @@ class Op(aimet_common.connected_graph.operation.Op):
         valid_ops = self.internal_ops if self.internal_ops else [self.output_op_node]
         for param_type, param in self._parameters.items():
             param_op = param.tensor_dict[self].op
-            assert param_op.type in ['ReadVariableOp', 'Identity', 'Const']
-            op_with_param = None
-            for consumer in param_op.outputs[0].consumers():
-                if consumer in valid_ops:
-                    assert op_with_param is None
-                    op_with_param = consumer
-            assert op_with_param is not None
-            param_type_for_param_info = 'bias' if param_type in ['bias', 'beta'] else 'weight'
-            parameter_info_list[param_op.name] = ParameterInfo(param_type_for_param_info, op_with_param.name)
+            if param_op.type in ['ReadVariableOp', 'Identity', 'Const']:
+                op_with_param = None
+                for consumer in param_op.outputs[0].consumers():
+                    if consumer in valid_ops:
+                        op_with_param = consumer
+                        break
+                assert op_with_param is not None
+                param_type_for_param_info = 'bias' if param_type in ['bias', 'beta'] else 'weight'
+                parameter_info_list[param_op.name] = ParameterInfo(param_type_for_param_info, [op_with_param.name])
 
         return parameter_info_list
 

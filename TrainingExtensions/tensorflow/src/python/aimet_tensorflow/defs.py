@@ -180,7 +180,7 @@ class ChannelPruningParameters:
 
 class ParameterInfo:
     """ Store information required for parameter quantization """
-    def __init__(self, param_type: str, op_with_param_name: str):
+    def __init__(self, param_type: str, op_with_param_name: List):
         self.param_type = param_type
         self.op_with_param_name = op_with_param_name
 

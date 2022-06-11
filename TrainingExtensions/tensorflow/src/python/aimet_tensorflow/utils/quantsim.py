@@ -106,9 +106,11 @@ def create_op_to_quant_ops_dict(graph: tf.Graph, conn_graph: ConnectedGraph,
     """
     # pylint: disable=too-many-locals
     op_to_quant_ops_dict = {}
+    # TODO: the first for loop below seems to deal with recurrent parameters only. Refactor the variable names to make
+    # this more clear.
     for op_with_param_name, index in zip(ops_with_param_names, indices):
         op_with_param = graph.get_operation_by_name(op_with_param_name)
-        conn_graph_op = conn_graph.get_op_from_module_name(op_with_param_name)
+        conn_graph_op = [conn_graph.get_op_from_module_name(op_with_param_name)]
         param_type = 'weight'
         if op_with_param.type == 'BiasAdd':
             param_type = 'bias'
@@ -117,7 +119,8 @@ def create_op_to_quant_ops_dict(graph: tf.Graph, conn_graph: ConnectedGraph,
         add_op_to_quant_ops_dict_entry(param_quantizer, conn_graph_op, True, param_type, op_to_quant_ops_dict)
     for param_name, param_info in params_to_quantize.items():
         param_op = graph.get_operation_by_name(param_name)
-        conn_graph_op = conn_graph.get_op_from_module_name(param_info.op_with_param_name)
+        conn_graph_op = [conn_graph.get_op_from_module_name(op_with_param_name)
+                         for op_with_param_name in param_info.op_with_param_name]
         param_quantizer = \
             [consumer for consumer in param_op.outputs[0].consumers() if consumer.type in
              ['QcQuantize', 'QcQuantizeRecurrentParam', 'QcQuantizePerChannel', 'EagerPyFunc']]
@@ -144,8 +147,8 @@ def create_op_to_quant_ops_dict(graph: tf.Graph, conn_graph: ConnectedGraph,
     return op_to_quant_ops_dict
 
 
-def add_op_to_quant_ops_dict_entry(qc_quantize_op: tf.Operation, conn_graph_op: Op, is_param: bool, param_type: str,
-                                   op_to_quant_ops_dict: OpToQuantOpsDictType):
+def add_op_to_quant_ops_dict_entry(qc_quantize_op: tf.Operation, conn_graph_op: Union[List[Op], Op], is_param: bool,
+                                   param_type: str, op_to_quant_ops_dict: OpToQuantOpsDictType):
     """
     Add an entry to the op_to_quant_ops_dict
     :param qc_quantize_op: Qc quantize op to add to the dictionary
@@ -156,16 +159,19 @@ def add_op_to_quant_ops_dict_entry(qc_quantize_op: tf.Operation, conn_graph_op: 
     of param types to param qc quantize ops, and activation qc quantize op
     """
     if is_param:
-        if conn_graph_op in op_to_quant_ops_dict:
-            param_quant_op_dict, _ = op_to_quant_ops_dict[conn_graph_op]
-            if param_type in param_quant_op_dict:
-                param_quant_op_dict[param_type].add(qc_quantize_op)
+        assert isinstance(conn_graph_op, List)
+        for op in conn_graph_op:
+            if op in op_to_quant_ops_dict:
+                param_quant_op_dict, _ = op_to_quant_ops_dict[op]
+                if param_type in param_quant_op_dict:
+                    param_quant_op_dict[param_type].add(qc_quantize_op)
+                else:
+                    param_quant_op_dict[param_type] = {qc_quantize_op}
             else:
-                param_quant_op_dict[param_type] = {qc_quantize_op}
-        else:
-            param_quant_op_dict = {param_type: {qc_quantize_op}}
-            op_to_quant_ops_dict[conn_graph_op] = [param_quant_op_dict, None]
+                param_quant_op_dict = {param_type: {qc_quantize_op}}
+                op_to_quant_ops_dict[op] = [param_quant_op_dict, None]
     else:
+        assert isinstance(conn_graph_op, Op)
         if conn_graph_op in op_to_quant_ops_dict:
             op_to_quant_ops_dict[conn_graph_op][1] = qc_quantize_op
         else:
