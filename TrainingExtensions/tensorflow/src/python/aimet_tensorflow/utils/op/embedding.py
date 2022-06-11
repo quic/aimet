@@ -119,7 +119,7 @@ class BertEmbeddingPatternHandler:
                         assert op_with_param is None
                         op_with_param = consumer
                 assert op_with_param is not None
-                parameter_info_list[param_tensor.op.name] = ParameterInfo('weight', op_with_param.name)
+                parameter_info_list[param_tensor.op.name] = ParameterInfo('weight', [op_with_param.name])
 
         return parameter_info_list
 
