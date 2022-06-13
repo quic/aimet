@@ -47,12 +47,7 @@ Runtime -> Restart runtime
 
 ```python
 import sys
-<<<<<<< HEAD
 sys.path.append('/usr/local/lib/python3.8/dist-packages/aimet_common')
-sys.path.append('/usr/local/lib/python3.8/dist-packages/aimet_common/aimet_tensor_quantizer-0.0.0-py3.8-linux-x86_64.egg/')
-=======
-sys.path.append('/usr/local/lib/python3.6/dist-packages/aimet_common')
->>>>>>> Removed redundant path from google collab file
 
 import os
 os.environ['LD_LIBRARY_PATH'] +=':/usr/local/lib/python3.8/dist-packages/aimet_common'
