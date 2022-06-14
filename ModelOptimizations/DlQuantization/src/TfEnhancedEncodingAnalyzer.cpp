@@ -2,7 +2,7 @@
 //
 //  @@-COPYRIGHT-START-@@
 //
-//  Copyright (c) 2019-2021, Qualcomm Innovation Center, Inc. All rights reserved.
+//  Copyright (c) 2019-2022, Qualcomm Innovation Center, Inc. All rights reserved.
 //
 //  Redistribution and use in source and binary forms, with or without
 //  modification, are permitted provided that the following conditions are met:
@@ -52,20 +52,8 @@ namespace DlQuantization
 template <typename DTYPE>
 std::vector<std::tuple<double, double>> TfEnhancedEncodingAnalyzer<DTYPE>::getStatsHistogram() const
 {
-    // Allocate a vector to hold tuples of left edges and pdf for each bucket
-    std::vector<std::tuple<double, double>> histogram;
-    histogram.reserve(this->_stats.xLeft.size());
-
-    // Assert that the stats structure is well formed
-    assert(this->_stats.xLeft.size() == this->_stats.pdf.size());
-
-    unsigned index = 0;
-    for (auto entry: this->_stats.xLeft)
-    {
-        histogram.push_back(std::make_tuple(entry, this->_stats.pdf[index]));
-        index++;
-    }
-    return histogram;
+    // Return the collected histogram data.
+    return getCollectedHistogram(this->_stats);
 }
 
 template <typename DTYPE>

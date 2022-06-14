@@ -2,7 +2,7 @@
 //
 //  @@-COPYRIGHT-START-@@
 //
-//  Copyright (c) 2018, Qualcomm Innovation Center, Inc. All rights reserved.
+//  Copyright (c) 2018-2022, Qualcomm Innovation Center, Inc. All rights reserved.
 //
 //  Redistribution and use in source and binary forms, with or without
 //  modification, are permitted provided that the following conditions are met:
@@ -140,6 +140,14 @@ public:
         return histogram;
     }
 
+    void setPercentileValue(float percentile)
+    {
+        // Set percentile value only when quant scheme is percentile.
+        if (_quantizationScheme == DlQuantization::QuantizationMode::QUANTIZATION_PERCENTILE) {
+            _encodingAnalyzer->setPercentileValue(percentile);
+        }
+    }
+
 private:
     bool _isEncodingValid;
     DlQuantization::QuantizationMode _quantizationScheme;
@@ -157,5 +165,6 @@ PYBIND11_MODULE(TORCH_EXTENSION_NAME, m)
         .def("quantize", &AimetTensorQuantizer::quantize)
         .def("getEncoding", &AimetTensorQuantizer::getEncoding)
         .def("resetEncodingStats", &AimetTensorQuantizer::resetEncodingStats)
-        .def("getStatsHistogram", &AimetTensorQuantizer::getStatsHistogram);
+        .def("getStatsHistogram", &AimetTensorQuantizer::getStatsHistogram)
+        .def("setPercentileValue", &AimetTensorQuantizer::setPercentileValue);
 }

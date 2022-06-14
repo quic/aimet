@@ -2,7 +2,7 @@
 //
 //  @@-COPYRIGHT-START-@@
 //
-//  Copyright (c) 2019, Qualcomm Innovation Center, Inc. All rights reserved.
+//  Copyright (c) 2019-2022, Qualcomm Innovation Center, Inc. All rights reserved.
 //
 //  Redistribution and use in source and binary forms, with or without
 //  modification, are permitted provided that the following conditions are met:
@@ -40,6 +40,7 @@
 #define I_QUANTIZATION_ENCODING_ANALYZER_HPP
 
 #include "Quantization.hpp"
+#include <cassert>
 #include <cstdint>
 
 namespace DlQuantization
@@ -89,6 +90,18 @@ public:
      * relative to all the values seen across all buckets
      */
     virtual std::vector<std::tuple<double, double>> getStatsHistogram() const = 0;
+
+    /**
+     * @brief Set the percentile value
+     *
+     * @param percentile Percentile value to be used while adjusting min and max
+     */
+    virtual void setPercentileValue(float percentile)
+    {
+        // TODO - check if there is a better way to do this.
+        // This method is applicable only for TfPercentileEncodingAnalyzer.
+        assert(0);
+    }
 };
 
 

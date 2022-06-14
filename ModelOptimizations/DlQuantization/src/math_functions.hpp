@@ -2,7 +2,7 @@
 //
 //  @@-COPYRIGHT-START-@@
 //
-//  Copyright (c) 2016-2021, Qualcomm Innovation Center, Inc. All rights reserved.
+//  Copyright (c) 2016-2022, Qualcomm Innovation Center, Inc. All rights reserved.
 //
 //  Redistribution and use in source and binary forms, with or without
 //  modification, are permitted provided that the following conditions are met:
@@ -149,6 +149,15 @@ void UpdatePdfSigned_cpu(const DTYPE* data, int cnt, bool signed_vals, PDF& pdf)
 
 template <typename DTYPE>
 void UpdatePdfUnsigned_cpu(const DTYPE* data, int cnt, bool signed_vals, PDF& pdf);
+
+/**
+ * @brief Returns a histogram that represents a PDF of tensor values seen so far.
+ * @param pdf Probability density function.
+ */
+std::vector<std::tuple<double, double>> getCollectedHistogram(const PDF& pdf);
+
+template <typename DTYPE>
+std::tuple<DTYPE, DTYPE> findOriginalRange(const PDF& pdf);
 
 // GPU implementations...
 #ifdef GPU_QUANTIZATION_ENABLED
