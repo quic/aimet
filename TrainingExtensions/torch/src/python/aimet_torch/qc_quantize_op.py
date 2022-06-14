@@ -3,7 +3,7 @@
 # =============================================================================
 #  @@-COPYRIGHT-START-@@
 #
-#  Copyright (c) 2018-2020, Qualcomm Innovation Center, Inc. All rights reserved.
+#  Copyright (c) 2018-2022, Qualcomm Innovation Center, Inc. All rights reserved.
 #
 #  Redistribution and use in source and binary forms, with or without
 #  modification, are permitted provided that the following conditions are met:
@@ -81,7 +81,8 @@ def tensor_quantizer_factory(bitwidth: int, round_mode: str, quant_scheme: Quant
     :return: An instance of StaticGridPerTensorQuantizer
     """
 
-    if quant_scheme in (QuantScheme.post_training_tf_enhanced, QuantScheme.post_training_tf):
+    if quant_scheme in (QuantScheme.post_training_tf_enhanced, QuantScheme.post_training_tf,
+                        QuantScheme.post_training_percentile):
 
         tensor_quantizer = StaticGridPerTensorQuantizer(bitwidth, round_mode, quant_scheme,
                                                         use_symmetric_encodings, enabled_by_default,
@@ -501,6 +502,9 @@ class StaticGridQuantWrapper(QcQuantizeWrapper):
                 if self._module_to_wrap.training or param_quantizer.encoding is None:
                     param_quantizer.reset_encoding_stats()
                     param_quantizer.update_encoding_stats(param.data)
+                    # Todo: Remove this once we know adjusting parameters encodings will not be an issue.
+                    if param_quantizer.quant_scheme == QuantScheme.post_training_percentile:
+                        param_quantizer.set_percentile_value(100)
                     param_quantizer.compute_encoding()
 
                 # if we are not in training, then only nearest rounding should be used
@@ -533,6 +537,16 @@ class StaticGridQuantWrapper(QcQuantizeWrapper):
 
         for quantizer in self.output_quantizers:
             quantizer.compute_encoding()
+
+    def set_percentile_value(self, percentile_value: float):
+        """
+        Set the percentile value to be used while computing encodings
+        """
+        for quantizer in self.input_quantizers:
+            quantizer.set_percentile_value(percentile_value)
+
+        for quantizer in self.output_quantizers:
+            quantizer.set_percentile_value(percentile_value)
 
     def _quantize_activation(self, tensor_quantizers, tensors_to_quantize):
         """

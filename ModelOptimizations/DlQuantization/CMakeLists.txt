@@ -1,7 +1,7 @@
 #==============================================================================
 #  @@-COPYRIGHT-START-@@
 #  
-#  Copyright (c) 2016-2017, Qualcomm Innovation Center, Inc. All rights reserved.
+#  Copyright (c) 2016-2022, Qualcomm Innovation Center, Inc. All rights reserved.
 #  
 #  Redistribution and use in source and binary forms, with or without 
 #  modification, are permitted provided that the following conditions are met:
@@ -42,6 +42,8 @@ add_library(MoDlQuantization STATIC
       src/MainQuantizationClass.hpp
       src/math_functions.cpp
       src/math_functions.hpp
+      src/quantization_utils.cpp
+      src/quantization_utils.hpp
       src/QuantizerFactory.cpp
       src/TfEnhancedQuantizer.cpp
       src/TfEnhancedQuantizer.hpp
@@ -50,6 +52,8 @@ add_library(MoDlQuantization STATIC
       src/trim_functions.cpp
       src/trim_functions.hpp
 
+      src/PercentileEncodingAnalyzer.cpp
+      src/PercentileEncodingAnalyzer.h
       src/TfEnhancedEncodingAnalyzer.cpp
       src/TfEnhancedEncodingAnalyzer.h
       src/TfEncodingAnalyzer.h

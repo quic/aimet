@@ -3,7 +3,7 @@
 # =============================================================================
 #  @@-COPYRIGHT-START-@@
 #
-#  Copyright (c) 2019-2020, Qualcomm Innovation Center, Inc. All rights reserved.
+#  Copyright (c) 2019-2022, Qualcomm Innovation Center, Inc. All rights reserved.
 #
 #  Redistribution and use in source and binary forms, with or without
 #  modification, are permitted provided that the following conditions are met:
@@ -165,12 +165,15 @@ class QuantizationSimModel:
                 quant_scheme = QuantScheme.post_training_tf
             elif quant_scheme == 'tf_enhanced':
                 quant_scheme = QuantScheme.post_training_tf_enhanced
+            elif quant_scheme == 'percentile':
+                quant_scheme = QuantScheme.post_training_percentile
         self._quant_scheme = quant_scheme
         self._rounding_mode = rounding_mode
         self._default_output_bw = default_output_bw
         self._default_param_bw = default_param_bw
         self._is_conditional = False
         self._module_marker_map = {}
+        self._percentile_value = 100 # default percentile value
 
         # Add quantization layers
         num_inout_tensors = utils.find_num_inout_tensors_per_module(self.model, dummy_input)
@@ -257,6 +260,11 @@ class QuantizationSimModel:
             # And set the mode to analysis
             layer.set_mode(QcQuantizeOpMode.ANALYSIS)
 
+        for _, layer in quantized_layers:
+            # call only when quant scheme is percentile
+            if self._quant_scheme == QuantScheme.post_training_percentile:
+                layer.set_percentile_value(self._percentile_value)
+
         # Run forward iterations so we can collect statistics to compute the appropriate encodings
         with utils.in_eval_mode(self.model), torch.no_grad():
             _ = forward_pass_callback(self.model, forward_pass_callback_args)
@@ -305,6 +313,14 @@ class QuantizationSimModel:
                                  encoding.delta, encoding.offset, encoding.bw)
 
         layer.set_mode(QcQuantizeOpMode.ACTIVE)
+
+    def set_percentile_value(self, percentile_value: float):
+        """
+        Set the percentile value to be used while computing encodings
+        """
+        if percentile_value < 90 or percentile_value > 100:
+            raise ValueError("Percentile value must be in range [90, 100]")
+        self._percentile_value = percentile_value
 
     def export(self, path: str, filename_prefix: str, dummy_input: Union[torch.Tensor, Tuple],
                onnx_export_args: Union[OnnxExportApiArgs, None] = OnnxExportApiArgs(),
@@ -939,7 +955,8 @@ class QuantizationSimModel:
         """
         assert self._quant_scheme in [QuantScheme.post_training_tf, QuantScheme.post_training_tf_enhanced,
                                       QuantScheme.training_range_learning_with_tf_enhanced_init,
-                                      QuantScheme.training_range_learning_with_tf_init]
+                                      QuantScheme.training_range_learning_with_tf_init,
+                                      QuantScheme.post_training_percentile]
 
         # We lookup the number of input and output tensors already determined
         # Special case, we are adding a wrapper for a module not in the forward pass: Use default of 1, 1
@@ -949,7 +966,8 @@ class QuantizationSimModel:
         # StaticGridQuantWrapper.
         quantizer_wrapper_type = qc_quantize_modules_dict.get(type(module_to_quantize), StaticGridQuantWrapper)
 
-        if self._quant_scheme in [QuantScheme.post_training_tf, QuantScheme.post_training_tf_enhanced]:
+        if self._quant_scheme in [QuantScheme.post_training_tf, QuantScheme.post_training_tf_enhanced,
+                                  QuantScheme.post_training_percentile]:
             quant_scheme_for_initialization = self._quant_scheme
 
         elif self._quant_scheme == QuantScheme.training_range_learning_with_tf_init:

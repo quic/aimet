@@ -2,7 +2,7 @@
 //
 //  @@-COPYRIGHT-START-@@
 //
-//  Copyright (c) 2016-2017, Qualcomm Innovation Center, Inc. All rights reserved.
+//  Copyright (c) 2016-2022, Qualcomm Innovation Center, Inc. All rights reserved.
 //
 //  Redistribution and use in source and binary forms, with or without
 //  modification, are permitted provided that the following conditions are met:
@@ -67,6 +67,10 @@ enum QuantizationMode
 
     // Ranges (min, max) are learnt during training
     QUANTIZATION_RANGE_LEARNING,
+
+    // Percentile calibration. Compute the encoding by adjusting the min/max range of the tensor
+    // by clipping percentile of outliers.
+    QUANTIZATION_PERCENTILE,
 };
 
 /**

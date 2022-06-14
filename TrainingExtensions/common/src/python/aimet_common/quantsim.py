@@ -3,7 +3,7 @@
 # =============================================================================
 #  @@-COPYRIGHT-START-@@
 #
-#  Copyright (c) 2020, Qualcomm Innovation Center, Inc. All rights reserved.
+#  Copyright (c) 2020-2022, Qualcomm Innovation Center, Inc. All rights reserved.
 #
 #  Redistribution and use in source and binary forms, with or without
 #  modification, are permitted provided that the following conditions are met:
@@ -153,17 +153,19 @@ def validate_quantsim_inputs(
 ):
     """
     Perform sanity checks on inputs to QuantSim
-    :param quant_scheme: Quantization scheme. Supported options are 'tf_enhanced' or 'tf' or using Quant Scheme Enum
-                         QuantScheme.post_training_tf or QuantScheme.post_training_tf_enhanced
+    :param quant_scheme: Quantization scheme. Supported options are 'tf_enhanced' or 'tf' or 'percentile'
+                         or using Quant Scheme Enum QuantScheme.post_training_tf or QuantScheme.post_training_tf_enhanced
+                         or QuantScheme.post_training_percentile
     :param rounding_mode: Rounding mode. Supported options are 'nearest' or 'stochastic'
     :param default_output_bw: Default bitwidth (4-31) to use for quantizing layer inputs and outputs
     :param default_param_bw: Default bitwidth (4-31) to use for quantizing layer parameters
     :param data_type: Data type of the quantized values (int or float).
     """
     # sanity checks
-    if quant_scheme not in ('tf_enhanced', 'tf') and not isinstance(quant_scheme, QuantScheme):
-        raise ValueError('Parameter quantization mode is not a valid selection. Valid selections are tf, '
-                         'tf_enhanced, QuantScheme.post_training_tf, QuantScheme.post_training_tf_enhanced')
+    if quant_scheme not in ('tf_enhanced', 'tf', 'percentile') and not isinstance(quant_scheme, QuantScheme):
+        raise ValueError('Parameter quantization mode is not a valid selection. Valid selections are '
+                         'tf, tf_enhanced, percentile, QuantScheme.post_training_tf, '
+                         'QuantScheme.post_training_tf_enhanced, QuantScheme.post_training_percentile')
 
     if rounding_mode not in ('nearest', 'stochastic'):
         raise ValueError('Parameter round mode is not a valid selection. Valid selections are nearest or '

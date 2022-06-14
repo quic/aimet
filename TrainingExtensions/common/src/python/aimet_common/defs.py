@@ -3,7 +3,7 @@
 # =============================================================================
 #  @@-COPYRIGHT-START-@@
 #
-#  Copyright (c) 2019, Qualcomm Innovation Center, Inc. All rights reserved.
+#  Copyright (c) 2019-2022, Qualcomm Innovation Center, Inc. All rights reserved.
 #
 #  Redistribution and use in source and binary forms, with or without
 #  modification, are permitted provided that the following conditions are met:
@@ -63,6 +63,9 @@ class QuantScheme(Enum):
     """ For a Tensor, the encoding values are initialized with the post_training_tf_enhanced scheme. Then, the encodings
     are learned during training. """
     training_range_learning = 5
+    post_training_percentile = 6
+    """ For a Tensor, adjusted minimum and maximum values are selected based on the percentile value passed.
+    The Quantization encodings are calculated using the adjusted minimum and maximum value."""
 
 MAP_QUANT_SCHEME_TO_PYMO = {QuantScheme.post_training_tf: libpymo.QuantizationMode.QUANTIZATION_TF,
                             QuantScheme.post_training_tf_enhanced:
@@ -70,7 +73,9 @@ MAP_QUANT_SCHEME_TO_PYMO = {QuantScheme.post_training_tf: libpymo.QuantizationMo
                             QuantScheme.training_range_learning_with_tf_init:
                                 libpymo.QuantizationMode.QUANTIZATION_TF,
                             QuantScheme.training_range_learning_with_tf_enhanced_init:
-                                libpymo.QuantizationMode.QUANTIZATION_TF_ENHANCED}
+                                libpymo.QuantizationMode.QUANTIZATION_TF_ENHANCED,
+                            QuantScheme.post_training_percentile:
+                                libpymo.QuantizationMode.QUANTIZATION_PERCENTILE}
 MAP_ROUND_MODE_TO_PYMO = {'nearest': libpymo.RoundingMode.ROUND_NEAREST,
                           'stochastic': libpymo.RoundingMode.ROUND_STOCHASTIC}
 
