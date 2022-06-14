@@ -2570,6 +2570,9 @@ class TestQuantizationSimLearnedGrid:
         quant_sim.export('./data/', 'cust_v1_simple', dummy_input,
                          onnx_export_args=(onnx_utils.OnnxExportApiArgs(opset_version=11)),
                          propagate_encodings=True)
+        with open('./data/cust_v1_simple.encodings') as json_file:
+            activation_encodings = json.load(json_file)['activation_encodings']
+            assert set(['6', '7', 't.1']).issubset(activation_encodings.keys())
 
     def test_custom_op_simple_v2(self):
         """
@@ -2594,11 +2597,14 @@ class TestQuantizationSimLearnedGrid:
         print(quant_sim.model)
 
         a, b, c, d, e = quant_sim.model(dummy_input)
-        # print(a, b, c)
 
         quant_sim.export('./data/', 'cust_v2_simple', dummy_input,
                          onnx_export_args=(onnx_utils.OnnxExportApiArgs(opset_version=11)),
                          propagate_encodings=False)
+
+        with open('./data/cust_v2_simple.encodings') as json_file:
+            activation_encodings = json.load(json_file)['activation_encodings']
+            assert set(['13', '14', '15', '16', '17', 't.1']).issubset(activation_encodings.keys())
 
 
 class CustModelV1Simple(torch.nn.Module):

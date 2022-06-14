@@ -831,7 +831,8 @@ class QuantizationSimModel:
             num_onnx_ops = len(op_names)
             num_pytorch_output_quantizers = len(layer.output_quantizers)
 
-            if num_onnx_ops == num_pytorch_output_quantizers:
+            if num_onnx_ops == num_pytorch_output_quantizers and \
+                    all([len((op_to_io_tensor_map[op_name]).outputs) == 1 for op_name in op_names]):
                 for index, (op_name, out_quantizer) in enumerate(zip(op_names, layer.output_quantizers)):
                     if out_quantizer.enabled:
                         onnx_output_tensor = op_to_io_tensor_map[op_name].outputs[0]
