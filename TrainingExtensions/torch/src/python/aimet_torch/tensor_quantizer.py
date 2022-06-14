@@ -3,7 +3,7 @@
 # =============================================================================
 #  @@-COPYRIGHT-START-@@
 #
-#  Copyright (c) 2020, Qualcomm Innovation Center, Inc. All rights reserved.
+#  Copyright (c) 2020-2022, Qualcomm Innovation Center, Inc. All rights reserved.
 #
 #  Redistribution and use in source and binary forms, with or without
 #  modification, are permitted provided that the following conditions are met:
@@ -308,6 +308,13 @@ class StaticGridTensorQuantizer(TensorQuantizer):
             raise RuntimeError("Encoding can be frozen only when it is not None.")
 
         self._is_encoding_frozen = True
+
+    def set_percentile_value(self, percentile_value: float):
+        """
+        Set the percentile value to be used while computing encodings
+        """
+        for op in self._cppOp:
+            op.setPercentileValue(percentile_value)
 
 
 class StaticGridPerTensorQuantizer(StaticGridTensorQuantizer):

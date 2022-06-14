@@ -2,7 +2,7 @@
 //
 //  @@-COPYRIGHT-START-@@
 //
-//  Copyright (c) 2016-2017, Qualcomm Innovation Center, Inc. All rights reserved.
+//  Copyright (c) 2016-2022, Qualcomm Innovation Center, Inc. All rights reserved.
 //
 //  Redistribution and use in source and binary forms, with or without
 //  modification, are permitted provided that the following conditions are met:
@@ -46,6 +46,7 @@
 #include "DlQuantization/Quantization.hpp"
 #include "DlQuantization/QuantizerFactory.hpp"
 #include "MainQuantizationClass.hpp"
+#include "PercentileEncodingAnalyzer.h"
 #include "TensorQuantizationSim.h"
 #include "TfEncodingAnalyzer.h"
 #include "TfEnhancedEncodingAnalyzer.h"
@@ -68,6 +69,10 @@ std::unique_ptr<IQuantizationEncodingAnalyzer<DTYPE>> getEncodingAnalyzerInstanc
     if (quantization_mode == QUANTIZATION_TF_ENHANCED)
     {
         return std::unique_ptr<IQuantizationEncodingAnalyzer<DTYPE>>(new TfEnhancedEncodingAnalyzer<DTYPE>);
+    }
+    else if (quantization_mode == QUANTIZATION_PERCENTILE)
+    {
+        return std::unique_ptr<IQuantizationEncodingAnalyzer<DTYPE>>(new PercentileEncodingAnalyzer<DTYPE>);
     }
     else
     {

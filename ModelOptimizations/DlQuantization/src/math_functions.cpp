@@ -2,7 +2,7 @@
 //
 //  @@-COPYRIGHT-START-@@
 //
-//  Copyright (c) 2016-2021, Qualcomm Innovation Center, Inc. All rights reserved.
+//  Copyright (c) 2016-2022, Qualcomm Innovation Center, Inc. All rights reserved.
 //
 //  Redistribution and use in source and binary forms, with or without
 //  modification, are permitted provided that the following conditions are met:
@@ -37,6 +37,7 @@
 //==============================================================================
 
 
+#include <cassert>
 #include <cmath>
 #include <limits>
 #include <map>
@@ -418,6 +419,61 @@ void UpdatePdfUnsigned_cpu(const DTYPE* data, int cnt, PDF& pdf)
     pdf.iterations++;
 }
 
+std::vector<std::tuple<double, double>> getCollectedHistogram(const PDF& pdf)
+{
+    // Allocate a vector to hold tuples of left edges and pdf for each bucket
+    std::vector<std::tuple<double, double>> histogram;
+    histogram.reserve(pdf.xLeft.size());
+
+    // Assert that the stats structure is well formed
+    assert(pdf.xLeft.size() == pdf.pdf.size());
+
+    unsigned index = 0;
+    for (auto entry: pdf.xLeft)
+    {
+        histogram.push_back(std::make_tuple(entry, pdf.pdf[index]));
+        index++;
+    }
+    return histogram;
+}
+
+template <typename DTYPE>
+std::tuple<DTYPE, DTYPE> findOriginalRange(const PDF& pdf)
+{
+    DTYPE minVal = pdf.xLeft[0];
+    DTYPE maxVal = pdf.xLeft[PDF_SIZE - 1];
+
+    // To do so we search for the smallest and largest value from the pdf
+    // Search for the lowest bucket which has probability > 0.
+    for (int i = 0; i < PDF_SIZE; ++i)
+    {
+        if (pdf.pdf[i] > 0)
+        {
+            minVal = pdf.xLeft[i];
+            break;
+        }
+    }
+
+    // Search for the highest bucket which has probability > 0.
+    for (int i = PDF_SIZE - 1; i > 0; --i)
+    {
+        if (pdf.pdf[i] > 0)
+        {
+            maxVal = pdf.xLeft[i];
+            break;
+        }
+    }
+
+    // Make sure we include zero in range.
+    minVal = std::min(minVal, (DTYPE) 0);
+    maxVal = std::max(maxVal, (DTYPE) 0);
+
+    // Make sure we have a real range.
+    maxVal = std::max(maxVal, minVal + (DTYPE) 0.01);
+
+    return std::tuple<DTYPE, DTYPE>(minVal, maxVal);
+}
+
 // Explicit instantiations
 template double GetMax(const double* data, int cnt, ComputationMode mode_cpu_gpu);
 
@@ -430,5 +486,9 @@ template float GetMin(const float* data, int cnt, ComputationMode mode_cpu_gpu);
 template void UpdatePdf(const double* data, int cnt, ComputationMode mode_cpu_gpu, bool signed_vals, PDF& pdf);
 
 template void UpdatePdf(const float* data, int cnt, ComputationMode mode_cpu_gpu, bool signed_vals, PDF& pdf);
+
+template std::tuple<double, double> findOriginalRange(const PDF& pdf);
+
+template std::tuple<float, float> findOriginalRange(const PDF& pdf);
 
 }   // End of namespace DlQuantization
