@@ -240,6 +240,7 @@ def _get_bn_params(sess: tf.compat.v1.Session, bn: tf.Operation) -> libpymo.BNPa
         bn_params.runningMean = BNUtils.get_moving_mean_as_numpy_data(sess, bn).reshape(-1)
         bn_params.runningVar = BNUtils.get_moving_variance_as_numpy_data(sess, bn).reshape(-1)
         if bn.type == 'Identity':
+            # can't find a way to read epsilon if BN type is Identity
             epsilon = 1.0009999641624745e-05
         else:
             epsilon = BNUtils.get_epsilon(bn)
@@ -442,6 +443,7 @@ def _fold_given_auto_selected_batch_norms_scale(sim: QuantizationSimModel, layer
                 is_bias_valid = True
             assert batchnorm_tf_op.type in ['FusedBatchNormV3', 'Identity']
             if batchnorm_tf_op.type == 'Identity':
+                # It is safeguard for Bn type 'Identity'  normal behavior. Bn type'FusedBatchNormV3' does not need since training&momentum are immutable
                 bn_momentum_tf_var_name = sess.graph.get_operation_by_name(batchnorm_tf_op.name.split("/")[0] + "/cond_1").outputs[0].op.inputs[1].name
                 bn_training_tf_var_name = batchnorm_tf_op.inputs[0].op.inputs[0].op.inputs[0].name
                 for v in tf.compat.v1.get_collection(tf.compat.v1.GraphKeys.GLOBAL_VARIABLES):

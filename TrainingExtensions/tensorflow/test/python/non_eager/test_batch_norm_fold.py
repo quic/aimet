@@ -972,7 +972,6 @@ class TestTrainingExtensionBnFoldToScale:
                              tf.compat.v1.assign(bn_training_tf_var, tf.compat.v1.constant(False))])
 
 
-
         sim_relu_in = sim.session.run(sim_relu_op.inputs[0], feed_dict={sim_conv_op.inputs[0]: numpy_data})
         sim_relu_out = sim.session.run(sim_relu_op.outputs[0], feed_dict={sim_conv_op.inputs[0]: numpy_data})
 
