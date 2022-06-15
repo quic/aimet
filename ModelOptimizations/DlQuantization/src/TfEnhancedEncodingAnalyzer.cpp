@@ -97,37 +97,8 @@ TfEncoding TfEnhancedEncodingAnalyzer<DTYPE>::computeEncoding(uint8_t bw, bool u
         }
     }
 
-    // Find the range of our collected stats
-    DTYPE minVal, maxVal;
-    std::tie(minVal, maxVal) = _findRangeOfAggregateStats();
-
-    // Find test candidates
-    std::vector<std::tuple<DTYPE, int>> testCandidates;
-
-    if (useSymmetricEncodings)
-    {
-        // For strict symmetric mode, we make even number of buckets
-        if (useStrictSymmetric)
-            numSteps -= 1;
-
-        _pickTestCandidatesSymmetric(minVal, maxVal, numSteps, testCandidates, useUnsignedSymmetric);
-    }
-    else
-    {
-        _pickTestCandidatesAsymmetric(minVal, maxVal, numSteps, testCandidates);
-    }
-
-    // Find the best candidate
-    DTYPE bestDelta;
-    int bestOffset;
-    std::tie(bestDelta, bestOffset) = _findBestCandidate(bw, testCandidates);
-
-    // Using the best delta and offset, calculate the encoding.
-    encoding.delta  = bestDelta;
-    encoding.offset = bestOffset;
-    encoding.bw     = bw;
-    encoding.min    = bestDelta * bestOffset;
-    encoding.max    = bestDelta * (float) numSteps + encoding.min;
+    // Use Min and Max values to compute a valid encoding
+    getComputedEncodings( bw, encoding, useSymmetricEncodings, useStrictSymmetric, useUnsignedSymmetric);
 
     return encoding;
 }
@@ -368,6 +339,45 @@ DTYPE TfEnhancedEncodingAnalyzer<DTYPE>::_quantAndSatCost(const PDF& pdf, int bw
     // Calculate the total cost as the sum of quantization and saturation cost.
     DTYPE sqnr = GAMMA * (satCostBottom + satCostTop) + quantCost;
     return sqnr;
+}
+
+template <typename DTYPE>
+void TfEnhancedEncodingAnalyzer<DTYPE>::getComputedEncodings(int bw, TfEncoding& encoding, bool useSymmetricEncodings,
+                                                             bool useStrictSymmetric, bool useUnsignedSymmetric) const
+{
+    // Find the range of our collected stats
+    DTYPE minVal, maxVal;
+    std::tie(minVal, maxVal) = _findRangeOfAggregateStats();
+
+    DTYPE numSteps = pow(2, bw) - 1;
+
+    // Find test candidates
+    std::vector<std::tuple<DTYPE, int>> testCandidates;
+
+    if (useSymmetricEncodings)
+    {
+        // For strict symmetric mode, we make even number of buckets
+        if (useStrictSymmetric)
+            numSteps -= 1;
+
+        _pickTestCandidatesSymmetric(minVal, maxVal, numSteps, testCandidates, useUnsignedSymmetric);
+    }
+    else
+    {
+        _pickTestCandidatesAsymmetric(minVal, maxVal, numSteps, testCandidates);
+    }
+
+   // Find the best candidate
+   DTYPE bestDelta;
+   int bestOffset;
+   std::tie(bestDelta, bestOffset) = _findBestCandidate( bw, testCandidates);
+
+    // Using the best delta and offset, calculate the encoding.
+    encoding.delta  = bestDelta;
+    encoding.offset = bestOffset;
+    encoding.bw     = bw;
+    encoding.min    = bestDelta * bestOffset;
+    encoding.max    = bestDelta * (float) numSteps + encoding.min;
 }
 
 

@@ -134,6 +134,26 @@ TfEncoding TensorQuantizer::computeEncoding(unsigned int bitwidth, bool useSymme
     return encoding;
 }
 
+void TensorQuantizer::computeEncodingFromData(uint8_t bw, const float* data, size_t count, TfEncoding& encoding,
+                                              ComputationMode cpuGpuMode, bool useSymmetricEncodings,
+                                              bool useUnsignedSymmetric, bool useStrictSymmetric)
+{
+    // Forget all settings except the choice of encoding analyzer
+    if (encoding.delta == 0 && bw != 0)
+    {
+        resetEncodingStats();
+        // Use data to compute min, max statistics (forget any accumulated/updated stats)ze
+        // To avoid duplication use update stats since internal functions rely on this->_stats
+        _encodingAnalyzer->updateStats(data, count, cpuGpuMode);
+
+       encoding = _encodingAnalyzer->computeEncoding(bw, useSymmetricEncodings, useStrictSymmetric, useUnsignedSymmetric);
+    }
+    else {
+        throw std::runtime_error("This function is only valid when encodings must be computed"
+                                 " from data");
+    }
+}
+
 void TensorQuantizer::quantizeDequantize(const float* input, std::size_t tensorSize, float* output,
                                          double encodingMin, double encodingMax, unsigned int bitwidth, bool useCuda)
 {

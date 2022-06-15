@@ -81,7 +81,6 @@ public:
     virtual TfEncoding computeEncoding(uint8_t bw, bool useSymmetricEncodings,
                                        bool useStrictSymmetric, bool useUnsignedSymmetric) const = 0;
 
-
     /**
      * @brief Returns a histogram that represents a PDF of tensor values seen by this encoding analyzer so far
      *

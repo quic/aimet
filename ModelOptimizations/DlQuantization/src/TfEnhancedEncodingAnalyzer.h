@@ -1,7 +1,7 @@
 //
 //  @@-COPYRIGHT-START-@@
 //
-//  Copyright (c) 2019-2021, Qualcomm Innovation Center, Inc. All rights reserved.
+//  Copyright (c) 2019-2022, Qualcomm Innovation Center, Inc. All rights reserved.
 //
 //  Redistribution and use in source and binary forms, with or without
 //  modification, are permitted provided that the following conditions are met:
@@ -72,6 +72,13 @@ public:
      */
     TfEncoding computeEncoding(uint8_t bw, bool useSymmetricEncodings, bool useStrictSymmetric,
                                bool useUnsignedSymmetric) const override;
+
+    /**
+     *  Adjusts min and max according quant scheme and determines an acceptable range
+     *  for a meaningful scale and offset
+     */
+    void getComputedEncodings(int bw, TfEncoding& encoding, bool useSymmetricEncodings,
+                              bool useStrictSymmetric, bool useUnsignedSymmetric) const;
 
 
     /**
