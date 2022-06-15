@@ -2,7 +2,7 @@
 //
 //  @@-COPYRIGHT-START-@@
 //
-//  Copyright (c) 2019, Qualcomm Innovation Center, Inc. All rights reserved.
+//  Copyright (c) 2019 - 2022, Qualcomm Innovation Center, Inc. All rights reserved.
 //
 //  Redistribution and use in source and binary forms, with or without
 //  modification, are permitted provided that the following conditions are met:
@@ -51,7 +51,7 @@ template <typename DTYPE>
 class TfEncodingAnalyzer : public IQuantizationEncodingAnalyzer<DTYPE>
 {
 public:
-    void updateStats(const DTYPE* tensor, const size_t tensorSize, ComputationMode tensorCpuGpuMode) override;
+    void updateStats(const DTYPE* tensor, size_t tensorSize, ComputationMode tensorCpuGpuMode) override;
 
     /**
      * @brief Given a number distribution in CPU memory, compute the TensorFlow

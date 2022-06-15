@@ -86,6 +86,16 @@ public:
     TfEncoding computeEncoding(unsigned int bitwidth, bool useSymmetricEncoding) override;
 
     /**
+     * @brief Calculate an encoding entirely from the data provided
+     *
+     * Don't remember anything (forget the statistical data and forget the
+     * encoding).
+     */
+    void computeEncodingFromData(uint8_t bw, const float* data, size_t count, TfEncoding& encoding,
+                                 ComputationMode cpuGpuMode, bool useSymmetricEncodings,
+                                 bool useUnsignedSymmetric, bool useStrictSymmetric);
+
+    /**
      * Convert a tensor from float to quantized int and back to float
      * @param input Input tensor
      * @param tensorSize Size of the input tensor (number of tensor elements)
