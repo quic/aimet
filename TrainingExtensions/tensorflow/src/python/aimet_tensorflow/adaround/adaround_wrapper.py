@@ -405,6 +405,7 @@ class AdaroundWrapper(keras.layers.Layer):
             # reshape weights based on the ch_axis - ch_axis has to be the first index to slice and be used for encoding
             weight_data = weight_data.transpose(
                 AdaroundWrapper._generate_weight_transpose_perm(weight_data.shape, ch_axis))
+            weight_data = np.ascontiguousarray(weight_data, weight_data.dtype)
 
             for ch_idx in range(num_channels):
                 analyzer = libpymo.EncodingAnalyzerForPython(quant_scheme)
