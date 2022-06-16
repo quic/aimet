@@ -132,16 +132,19 @@ class TestAdaroundWrapper(unittest.TestCase):
 
             # 1) Conv2D
             conv = tf.compat.v1.get_default_graph().get_operation_by_name('conv2d/Conv2D')
-            conv_wrapper = AdaroundWrapper(session, conv, 4, QuantScheme.post_training_tf, False, False, True, False)
+            conv_wrapper = AdaroundWrapper(session, conv, 4, QuantScheme.post_training_tf, False, False, True, False,
+                                           output_height=None, output_width=None, output_channels=None)
 
             # 2) MatMul
             matmul = tf.compat.v1.get_default_graph().get_operation_by_name('depthwise_conv2d_model/MatMul')
-            matmul_wrapper = AdaroundWrapper(session, matmul, 4, QuantScheme.post_training_tf, False, False, True, False)
+            matmul_wrapper = AdaroundWrapper(session, matmul, 4, QuantScheme.post_training_tf, False, False, True,
+                                             False, output_height=None, output_width=None, output_channels=None)
 
             # 3) Depthwise Conv2D
             depthwise_conv = tf.compat.v1.get_default_graph().get_operation_by_name('depthwise_conv2d/depthwise')
             depthwise_conv_wrapper = AdaroundWrapper(session, depthwise_conv, 4, QuantScheme.post_training_tf,
-                                                     False, False, True, False)
+                                                     False, False, True, False, output_height=None, output_width=None,
+                                                     output_channels=None)
 
             # Initialize alpha variable
             session.run(conv_wrapper.alpha.initializer)
@@ -186,7 +189,8 @@ class TestAdaroundWrapper(unittest.TestCase):
         session.run(init)
 
         conv = tf.compat.v1.get_default_graph().get_operation_by_name('conv2d/Conv2D')
-        conv_wrapper = AdaroundWrapper(session, conv, 4, QuantScheme.post_training_tf, False, False, True, False)
+        conv_wrapper = AdaroundWrapper(session, conv, 4, QuantScheme.post_training_tf, False, False, True, False,
+                                       output_height=None, output_width=None, output_channels=None)
 
         # Initialize alpha variable
         session.run(conv_wrapper.alpha.initializer)
@@ -309,7 +313,8 @@ class TestAdaroundWrapper(unittest.TestCase):
         with graph.as_default():
             wrapper = AdaroundWrapper(session, conv2d_transpose_op, param_bw=8,
                                       quant_scheme=QuantScheme.post_training_tf, is_symmetric=True,
-                                      strict_symmetric=False, unsigned_symmetric=False, enable_per_channel=True)
+                                      strict_symmetric=False, unsigned_symmetric=False, enable_per_channel=True,
+                                      output_height=None, output_width=None, output_channels=None)
         assert len(wrapper.encoding) == 8
         assert wrapper.ch_axis == 2
 
@@ -336,6 +341,7 @@ class TestAdaroundWrapper(unittest.TestCase):
         with graph.as_default():
             wrapper = AdaroundWrapper(session, depthwise_conv2d_op, param_bw=8,
                                       quant_scheme=QuantScheme.post_training_tf, is_symmetric=True,
-                                      strict_symmetric=False, unsigned_symmetric=False, enable_per_channel=True)
+                                      strict_symmetric=False, unsigned_symmetric=False, enable_per_channel=True,
+                                      output_height=None, output_width=None, output_channels=None)
         assert len(wrapper.encoding) == 4
         assert wrapper.ch_axis == 2

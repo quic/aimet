@@ -83,7 +83,8 @@ class TestAdaroundOptimizer(unittest.TestCase):
         # Adaround optimization in separate graph
         with tf.Graph().as_default():
             conv_wrapper = AdaroundWrapper(session, conv, 4, QuantScheme.post_training_tf, is_symmetric=False,
-                                           strict_symmetric=False, unsigned_symmetric=True, enable_per_channel=False)
+                                           strict_symmetric=False, unsigned_symmetric=True, enable_per_channel=False,
+                                           output_height=None, output_width=None, output_channels=None)
             hard_rounded_weight, soft_rounded_weight = AdaroundOptimizer().optimize_rounding(conv_wrapper, tf.nn.relu,
                                                                                              inp_data, out_data,
                                                                                              opt_params)
@@ -117,7 +118,8 @@ class TestAdaroundOptimizer(unittest.TestCase):
         # Adaround optimization in separate graph
         with tf.Graph().as_default():
             matmul_wrapper = AdaroundWrapper(session, matmul, 4, QuantScheme.post_training_tf, is_symmetric=False,
-                                             strict_symmetric=False, unsigned_symmetric=True, enable_per_channel=False)
+                                             strict_symmetric=False, unsigned_symmetric=True, enable_per_channel=False,
+                                             output_height=None, output_width=None, output_channels=None)
             hard_rounded_weight, soft_rounded_weight = AdaroundOptimizer().optimize_rounding(matmul_wrapper, tf.nn.relu,
                                                                                              inp_data, out_data,
                                                                                              opt_params)
@@ -152,7 +154,8 @@ class TestAdaroundOptimizer(unittest.TestCase):
         with tf.Graph().as_default():
             depthwise_conv_wrapper = AdaroundWrapper(session, depthwise_conv2d, 4, QuantScheme.post_training_tf,
                                                      is_symmetric=False, strict_symmetric=False, unsigned_symmetric=True,
-                                                     enable_per_channel=False)
+                                                     enable_per_channel=False, output_height=None, output_width=None,
+                                                     output_channels=None)
             hard_rounded_weight, soft_rounded_weight = AdaroundOptimizer().optimize_rounding(depthwise_conv_wrapper,
                                                                                              tf.nn.relu, inp_data,
                                                                                              out_data, opt_params)
@@ -191,7 +194,8 @@ class TestAdaroundOptimizer(unittest.TestCase):
 
         conv = session.graph.get_operation_by_name('Conv2D')
         conv_wrapper = AdaroundWrapper(session, conv, weight_bw, quant_scheme, is_symmetric=False,
-                                       strict_symmetric=False, unsigned_symmetric=True, enable_per_channel=False)
+                                       strict_symmetric=False, unsigned_symmetric=True, enable_per_channel=False,
+                                       output_height=None, output_width=None, output_channels=None)
         session.run(init)
         session.run(conv_wrapper.alpha.initializer)
 
@@ -237,7 +241,8 @@ class TestAdaroundOptimizer(unittest.TestCase):
 
         conv = session.graph.get_operation_by_name('Conv2D')
         conv_wrapper = AdaroundWrapper(session, conv, weight_bw, quant_scheme, is_symmetric=False,
-                                       strict_symmetric=False, unsigned_symmetric=True, enable_per_channel=False)
+                                       strict_symmetric=False, unsigned_symmetric=True, enable_per_channel=False,
+                                       output_height=None, output_width=None, output_channels=None)
         session.run(init)
         session.run(conv_wrapper.alpha.initializer)
 
