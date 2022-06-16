@@ -745,7 +745,7 @@ class TestQuantizationSimStaticGrad:
         assert isinstance(encoding_data["activation_encodings"]["124"], list)
 
         param_keys = list(encoding_data["param_encodings"].keys())
-        assert param_keys[2] == "conv1.weight"
+        assert param_keys[1] == "conv1.weight"
         assert isinstance(encoding_data["param_encodings"]["conv1.weight"], list)
 
     def test_export_to_torch_script(self):
@@ -776,7 +776,7 @@ class TestQuantizationSimStaticGrad:
         assert isinstance(encoding_data["activation_encodings"]["103"], list)
 
         param_keys = list(encoding_data["param_encodings"].keys())
-        assert param_keys[2] == "conv1.weight"
+        assert param_keys[1] == "conv1.weight"
         assert isinstance(encoding_data["param_encodings"]["conv1.weight"], list)
 
         with open('./data/resnet50.encodings.yaml') as yaml_file:
@@ -787,7 +787,7 @@ class TestQuantizationSimStaticGrad:
         assert isinstance(encoding_data["activation_encodings"]["103"], list)
 
         param_keys = list(encoding_data["param_encodings"].keys())
-        assert param_keys[2] == "conv1.weight"
+        assert param_keys[1] == "conv1.weight"
         assert isinstance(encoding_data["param_encodings"]["conv1.weight"], list)
 
     
@@ -822,8 +822,6 @@ class TestQuantizationSimStaticGrad:
             activation_encodings = encodings['activation_encodings']
             param_encodings = encodings['param_encodings']
             assert 16 == len(activation_encodings)
-            assert 'conv1_a.bias' in param_encodings
-            assert param_encodings['conv1_a.bias'][0]['bitwidth'] == 32
             assert 7 == len(param_encodings['conv1_a.weight'][0])
             assert 10 == param_encodings['conv1_a.weight'][0]['max']
 
@@ -833,8 +831,6 @@ class TestQuantizationSimStaticGrad:
             activation_encodings = encodings['activation_encodings']
             param_encodings = encodings['param_encodings']
             assert 16 == len(activation_encodings)
-            assert 'conv1_a.bias' in param_encodings
-            assert param_encodings['conv1_a.bias'][0]['bitwidth'] == 32
             assert 7 == len(param_encodings['conv1_a.weight'][0])
             assert 10 == param_encodings['conv1_a.weight'][0]['max']
 
@@ -1545,39 +1541,6 @@ class TestQuantizationSimStaticGrad:
             os.remove('./data/recurrent_save.onnx')
             os.remove('./data/recurrent_save.encodings')
 
-    def test_compute_encoding_with_given_bitwidth(self):
-        """
-        Test functionality to compute encoding for given bitwidth
-        """
-
-        encoding_dict = QuantizationSimModel.generate_symmetric_encoding_dict_for_disabled_param(
-            torch.as_tensor(np.array([1.203197181224823, 0], dtype='float32')),
-            data_type=QuantizationDataType.int)
-        assert -2147483648 == encoding_dict['offset']
-        assert -1.2031972414 == round(encoding_dict['min'], 10)
-        assert 1.2031972408 == round(encoding_dict['max'], 10)
-        assert round(encoding_dict['scale'], 14) == 5.6028e-10
-
-        encoding_dict = QuantizationSimModel.generate_symmetric_encoding_dict_for_disabled_param(
-            torch.as_tensor(np.array([0.7796169519533523, -0.9791506528745285], dtype='float32')),
-            data_type=QuantizationDataType.int)
-        assert -2147483648 == encoding_dict['offset']
-        assert -0.9791506533 == round(encoding_dict['min'], 10)
-        assert 0.9791506529 == round(encoding_dict['max'], 10)
-        assert round(encoding_dict['scale'], 14) == 4.5595e-10
-
-        encoding_dict = QuantizationSimModel.generate_symmetric_encoding_dict_for_disabled_param(
-            torch.as_tensor(np.array([-0.7796169519533523, -0.9791506528745285], dtype='float32')),
-            data_type=QuantizationDataType.int)
-        assert -2147483648 == encoding_dict['offset']
-        assert round(encoding_dict['scale'], 14) == 4.5595e-10
-
-        encoding_dict = QuantizationSimModel.generate_symmetric_encoding_dict_for_disabled_param(
-            torch.as_tensor(np.array([-0.7796169519533523, -0.9791506528745285], dtype='float32')),
-            data_type=QuantizationDataType.float)
-        assert 16 == encoding_dict['bitwidth']
-        assert 'float' == encoding_dict['dtype']
-
     def test_export_dict_input_output(self):
         """ test export functionality on dictionary input and output """
 
@@ -2088,7 +2051,7 @@ class TestQuantizationSimStaticGrad:
             # activation encodings -- input, linear1 out, prelu1 out, linear2 out, prelu2 out, softmax out
             assert 6 == len(encodings['activation_encodings'])
             # param encoding -- linear 1 & 2 weight & bias, prelu 1 & 2 weight
-            assert 6 == len(encodings['param_encodings'])
+            assert 4 == len(encodings['param_encodings'])
 
         if os.path.exists('./data/simple_cond.pth'):
             os.remove('./data/simple_cond.pth')

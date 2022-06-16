@@ -226,8 +226,7 @@ class TestPerChannelQcQuantizeOpStaticGrid:
 
         with open("./data/two_input_model_per_channel.encodings", "r") as encodings_file:
             encodings = json.load(encodings_file)
-        assert len(encodings['param_encodings']) == 10
-        assert len(encodings['param_encodings']['conv1_a.bias']) == 1
+        assert len(encodings['param_encodings']) == 5
         assert len(encodings['param_encodings']['conv1_a.weight']) == 10
         assert encodings['param_encodings']['conv1_a.weight'][1]['bitwidth'] == 8
         assert encodings['param_encodings']['conv1_a.weight'][1]['is_symmetric'] == 'False'
@@ -664,8 +663,7 @@ class TestPerChannelQcQuantizeOpLearnedGrid:
 
         with open("/tmp/two_input_model_per_channel.encodings", "r") as encodings_file:
             encodings = json.load(encodings_file)
-        assert len(encodings['param_encodings']) == 10
-        assert len(encodings['param_encodings']['conv1_a.bias']) == 1
+        assert len(encodings['param_encodings']) == 5
         assert len(encodings['param_encodings']['conv1_a.weight']) == 10
         assert encodings['param_encodings']['conv1_a.weight'][1]['bitwidth'] == 8
 
@@ -698,7 +696,7 @@ class TestPerChannelQcQuantizeOpLearnedGrid:
 
         with open("/tmp/two_input_model_per_channel_fp16/results.encodings", "r") as encodings_file:
             encodings = json.load(encodings_file)
-        assert len(encodings['param_encodings']) == 10
+        assert len(encodings['param_encodings']) == 5
         assert len(encodings['activation_encodings']) == 15
 
         for key in encodings['param_encodings'].keys():
@@ -751,8 +749,7 @@ class TestPerChannelQcQuantizeOpLearnedGrid:
 
         with open("/tmp/two_input_model_per_channel_manual_mixed_precision/results.encodings", "r") as encodings_file:
             encodings = json.load(encodings_file)
-        assert len(encodings['param_encodings']) == 10
-        assert len(encodings['param_encodings']['conv1_a.bias']) == 1
+        assert len(encodings['param_encodings']) == 5
         assert len(encodings['param_encodings']['conv1_a.weight']) == 1
 
         #verify the modified conv1_a params are set correctly
