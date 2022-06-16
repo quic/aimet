@@ -686,65 +686,6 @@ class QuantizationSimModel:
         save_json_yaml(encoding_file_path_pytorch, encodings_dict_pytorch)
 
     @staticmethod
-    def generate_symmetric_encoding_dict_for_disabled_param(data: torch.Tensor,
-                                                            data_type: QuantizationDataType) -> Dict:
-        """
-        Return encoding dictionary for the disabled parameter
-        :param data: torch Tensor
-        :param bitwidth: bitwidth (4-32) to use for quantizing data
-        :param data_type: data type of the tensor quantizer
-        :return: Encoding Dictionary
-        """
-
-        if data_type == QuantizationDataType.float:
-            encoding_dict = {
-                'bitwidth': 16,
-                'dtype': 'float'
-            }
-        else:
-            # if the param quantizer is disabled, generate encoding assumes a bitwidth of 32 for the int data type
-            bitwidth = 32
-            # forcing a conversion from float32 to python float which should have 64bit resolution.
-            min_val = float(min(0, data.min()))
-            max_val = float(max(0, data.max(), (min_val + 1e-5)))
-
-            abs_max_val = max(abs(max_val), abs(min_val))
-            num_positive_steps = 2 ** (bitwidth - 1) - 1
-            scale = abs_max_val / num_positive_steps
-            offset = - (num_positive_steps + 1)
-            # recompute min/max values
-            min_val = scale * offset
-            max_val = scale * num_positive_steps
-            encoding_dict = {
-                'min': min_val,
-                'max': max_val,
-                'scale': scale,
-                'offset': offset,
-                'bitwidth': bitwidth,
-                'is_symmetric': str(True),
-                'dtype': 'int'
-            }
-        return encoding_dict
-
-    @staticmethod
-    def _retrieve_named_params_and_update_encodings(layer: torch.nn.Module, layer_name: str, param_encodings: Dict,
-                                                    disabled_param_quantizers: list):
-        # retrieve the appropriate param generator
-        if isinstance(layer, QcQuantizeWrapper):
-            # pylint: disable=protected-access
-            named_parameters = layer._module_to_wrap.named_parameters()
-        else:
-            named_parameters = layer.named_parameters(recurse=False)
-
-        for name, param in named_parameters:
-            if name in disabled_param_quantizers:
-                param_name = layer_name + '.' + name
-                encoding = QuantizationSimModel.generate_symmetric_encoding_dict_for_disabled_param(param,
-                                                                                                    layer.param_quantizers[
-                                                                                                        name].data_type)
-                param_encodings[param_name] = [encoding]
-
-    @staticmethod
     def _update_param_encodings_dict_for_layer(layer: torch.nn.Module, layer_name: str, param_encodings: Dict,
                                                valid_param_set: set):
         """
@@ -754,12 +695,10 @@ class QuantizationSimModel:
         :param valid_param_set: a set of valid param input names in model
         """
 
-        disabled_param_quantizers = []
         for orig_param_name, param_quantizer in layer.param_quantizers.items():
             param_name = layer_name + '.' + orig_param_name
 
             if not param_quantizer.enabled:
-                disabled_param_quantizers.append(orig_param_name)
                 continue
             elif param_name not in valid_param_set:
                 logger.error('Param tensor {%s} not found in valid param set', param_name)
@@ -774,9 +713,6 @@ class QuantizationSimModel:
                 enc_dict = QuantizationSimModel._create_encoding_dict(param_quantizer.encoding, param_quantizer,
                                                                       propagate_encodings=False)
                 param_encodings[param_name] = [enc_dict]
-
-        QuantizationSimModel._retrieve_named_params_and_update_encodings(layer, layer_name, param_encodings,
-                                                                         disabled_param_quantizers)
 
     @staticmethod
     def _update_encoding_dicts_for_layer(layer: torch.nn.Module, layer_name: str, activation_encodings_onnx: Dict,
