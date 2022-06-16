@@ -42,6 +42,7 @@ import os
 import json
 import shutil
 from typing import List, Tuple, Callable, Union, Dict
+import numpy as np
 from tqdm import tqdm
 import tensorflow as tf
 
@@ -230,8 +231,14 @@ class Adaround:
             # Perform Adaround optimization in separate graph
             graph = tf.Graph()
             with graph.as_default():
+                output_height, output_width, output_channels = None, None, None
+                if op.type == 'Conv2DBackpropInput':
+                    output_height, output_width, output_channels = \
+                        cls._get_conv2d_transpose_output_tensor_shape(op.get_attr("data_format").decode('utf-8'),
+                                                                      all_out_data)
                 wrapper = AdaroundWrapper(session, op, param_bw, quant_scheme, is_symmetric,
-                                          strict_symmetric, unsigned_symmetric, enable_per_channel)
+                                          strict_symmetric, unsigned_symmetric, enable_per_channel, output_height,
+                                          output_width, output_channels)
                 hard_rounded_weight, soft_rounded_weight = AdaroundOptimizer().adaround_wrapper(wrapper, act_func,
                                                                                                 all_inp_data,
                                                                                                 all_out_data,
@@ -381,3 +388,21 @@ class Adaround:
 
         # Default is_symmetric False.
         return False
+
+    @staticmethod
+    def _get_conv2d_transpose_output_tensor_shape(data_format: str, output_data: np.ndarray):
+        """
+        Get output height, width, and channels from output_data for use in adarounding conv2d transpose op.
+        :param data_format: Data format for the op (NHWC or NCHW)
+        :param output_data: numpy array containing sampled output of the op
+        :return: Tuple containing output height, width, and channels of the op
+        """
+        if data_format == 'NHWC':
+            output_height = output_data.shape[1]
+            output_width = output_data.shape[2]
+            output_channels = output_data.shape[3]
+        else:
+            output_height = output_data.shape[2]
+            output_width = output_data.shape[3]
+            output_channels = output_data.shape[1]
+        return output_height, output_width, output_channels

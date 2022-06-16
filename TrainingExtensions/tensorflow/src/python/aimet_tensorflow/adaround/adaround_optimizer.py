@@ -47,10 +47,9 @@ from tqdm import tqdm
 # Import AIMET specific modules
 from aimet_common.utils import AimetLogger
 from aimet_tensorflow.adaround.adaround_loss import AdaroundLoss, AdaroundHyperParameters
-from aimet_tensorflow.adaround.adaround_wrapper import AdaroundWrapper
+from aimet_tensorflow.adaround.adaround_wrapper import AdaroundWrapper, BATCH_SIZE
 
 logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Quant)
-BATCH_SIZE = 32
 
 
 class AdaroundOptimizer:
