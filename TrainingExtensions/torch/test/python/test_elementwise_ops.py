@@ -129,7 +129,7 @@ class TestTrainingExtensionElementwiseOps(unittest.TestCase):
             data = json.load(f)
 
         self.assertTrue(len(data['activation_encodings']) == 3)
-        self.assertTrue(len(data['param_encodings']) == 2)
+        self.assertTrue(len(data['param_encodings']) == 1)
 
     def test_subtract_op(self):
         torch.manual_seed(10)
