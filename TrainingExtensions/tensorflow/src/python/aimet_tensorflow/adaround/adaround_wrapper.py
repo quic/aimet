@@ -50,6 +50,7 @@ from aimet_common.defs import AdaroundConstants
 from aimet_common.defs import QuantScheme
 from aimet_tensorflow.utils.op.conv import WeightTensorUtils, BiasUtils
 
+BATCH_SIZE = 32
 QUANT_SCHEME_TO_PYMO = {QuantScheme.post_training_tf_enhanced: libpymo.QuantizationMode.QUANTIZATION_TF_ENHANCED,
                         QuantScheme.post_training_tf: libpymo.QuantizationMode.QUANTIZATION_TF}
 
@@ -59,8 +60,10 @@ class AdaroundWrapper(keras.layers.Layer):
     Adaround Wrapper base class
     """
     # pylint: disable=too-many-arguments
+    # pylint: disable=too-many-instance-attributes
     def __init__(self, session: tf.compat.v1.Session, op: tf.Operation, param_bw: int, quant_scheme: QuantScheme,
-                 is_symmetric: bool, strict_symmetric: bool, unsigned_symmetric: bool, enable_per_channel: bool):
+                 is_symmetric: bool, strict_symmetric: bool, unsigned_symmetric: bool, enable_per_channel: bool,
+                 output_height: Union[int, None], output_width: Union[int, None], output_channels: Union[int, None]):
         """
         :param session: Tf session.
         :param op: Tf op.
@@ -89,6 +92,9 @@ class AdaroundWrapper(keras.layers.Layer):
         self.encoding = self.compute_encodings(weight, param_bw, quant_scheme, is_symmetric,
                                                strict_symmetric, unsigned_symmetric, enable_per_channel, self.ch_axis)
         self.alpha = self._initialize_alpha(self._weight_tensor, self.encoding, enable_per_channel, self.ch_axis)
+        self._output_height = output_height
+        self._output_width = output_width
+        self._output_channels = output_channels
 
     def adaround_weights(self) -> tf.Tensor:
         """
@@ -213,15 +219,14 @@ class AdaroundWrapper(keras.layers.Layer):
 
         elif self._op.type == 'Conv2DBackpropInput':
             kwargs = self._get_conv_args(self._op)
-            inputs_shape = tf.shape(inp_tensor)
-            batch_size = inputs_shape[0]
+            assert self._output_height is not None, 'Output height required for conv2d transpose'
+            assert self._output_width is not None, 'Output width required for conv2d transpose'
+            assert self._output_channels is not None, 'Output channels required for conv2d transpose'
 
             if kwargs['data_format'] == 'NCHW':
-                output_shape = (batch_size, adaround_weight_tensor.shape[2], self._op.outputs[0].shape[2],
-                                self._op.outputs[0].shape[3])
+                output_shape = (BATCH_SIZE, self._output_channels, self._output_height, self._output_width)
             else:
-                output_shape = (batch_size, self._op.outputs[0].shape[1], self._op.outputs[0].shape[2],
-                                adaround_weight_tensor.shape[2])
+                output_shape = (BATCH_SIZE, self._output_height, self._output_width, self._output_channels)
 
             kwargs['output_shape'] = output_shape
             adaround_out_tensor = tf.nn.conv2d_transpose(inp_tensor, adaround_weight_tensor, **kwargs)
