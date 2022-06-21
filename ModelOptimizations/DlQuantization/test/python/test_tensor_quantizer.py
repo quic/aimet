@@ -81,17 +81,14 @@ class TestTensorQuantizer(unittest.TestCase):
         :param x_min:
         :return:
         """
-
-        n_levels = 2 ** n_bits
         scaling = self.get_delta(n_bits, x_min, x_max)
         offset = self.get_offset_qat(x_min, scaling) #zero_point
 
-        # R_o = (-x_min / delta) # zero_point without round
-        x_int = np.round(x / scaling) + offset
-        # zero_point is R(o) , x_int = (R(x/s) + R(o)
-        # x_int = np.round((x / delta) + R_o)
-        x_quant = np.clip(x_int, 0, n_levels - 1) # clip(R(x/s) + R(o) , n, p)
-        x_float_q = (x_quant - offset) * scaling # Q(x,s)
+        x = np.where(x <= x_max, x, x_max)
+        x = np.where(x >= x_min, x, x_min)
+        x_int = x/scaling + offset
+        x_int = np.round(x_int)
+        x_float_q = (x_int - offset) * scaling
 
         return x_float_q
 
@@ -146,7 +143,7 @@ class TestTensorQuantizer(unittest.TestCase):
         quantizer = libpymo.TensorQuantizer(libpymo.QuantizationMode.QUANTIZATION_TF,
                                             libpymo.RoundingMode.ROUND_NEAREST)
 
-        np.random.seed(10)
+        np.random.seed(11)
         # random_input = np.random.randn(1, 3, 224, 224).astype(np.float32)
         random_input = 5 * (np.random.normal(size=[1,
                                               3,
