@@ -145,12 +145,13 @@ inline void quantizeValueCpu(const DTYPE* in, DTYPE* out,
 {
     *out = fmax(fmin(*in, encoding_max), encoding_min);
     // Scale and add offset to get something in the range [0,2^bw-1]
-    *out = round(*out / encoding_delta) - encoding_offset;
+    *out = *out / encoding_delta - encoding_offset;
 
     switch (rounding_mode)
     {
         case ROUND_NEAREST:
         {
+            *out = round(*out);
             break;
         }
         case ROUND_STOCHASTIC:

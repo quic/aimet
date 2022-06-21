@@ -156,7 +156,7 @@ def test_wrapper_settings():
         out_values = set()
         for num in quant_out[0]:
             out_values.add(num)
-        assert len(out_values) == 4
+        assert len(out_values) == 3 or len(out_values) == 4
 
 def test_keras_add_layer():
     if version.parse(tf.version.VERSION) >= version.parse("2.00"):
