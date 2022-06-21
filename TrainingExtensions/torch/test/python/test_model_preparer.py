@@ -934,6 +934,36 @@ class TestFX:
         quant_sim = QuantizationSimModel(model_transformed, dummy_input=input_tensor)
         assert quant_sim.model.module_cat.output_quantizer.enabled == True
 
+    def test_fx_with_elementwise_cat_input_as_list_and_dim_as_kwargs(self):
+        """
+        test torch fx with elementwise op - torch.cat with input as list and dim as kwargs
+        """
+        class ModelWithCatOp(torch.nn.Module):
+            def __init__(self):
+                super(ModelWithCatOp, self).__init__()
+                self.conv1 = torch.nn.Conv2d(3, 4, kernel_size=2, stride=2, padding=2, bias=False)
+                self.conv2 = torch.nn.Conv2d(3, 4, kernel_size=2, stride=2, padding=2)
+
+            def forward(self, *inputs):
+                x1 = self.conv1(inputs[0])
+                x2 = self.conv2(inputs[1])
+                x = torch.cat([x1, x2], dim=1)
+                return x
+
+        input_shape = (1, 3, 8, 8)
+        input_tensor = [torch.randn(*input_shape), torch.randn(*input_shape)]
+        model = ModelWithCatOp().eval()
+        model_transformed = prepare_model(model)
+        print(model_transformed)
+
+        assert torch.allclose(model_transformed(*input_tensor),
+                              model(*input_tensor))
+
+        assert isinstance(model_transformed.module_cat, elementwise_ops.Concat)
+
+        quant_sim = QuantizationSimModel(model_transformed, dummy_input=input_tensor)
+        assert quant_sim.model.module_cat.output_quantizer.enabled == True
+
     def test_fx_with_elementwise_scalar_add(self):
         """
         test torch fx with elementwise op - Scalar torch.add

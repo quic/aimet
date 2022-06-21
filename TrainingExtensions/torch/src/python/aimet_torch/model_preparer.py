@@ -113,14 +113,9 @@ def concat_create_node(symbolic_traced_model: torch.fx.GraphModule, module_name:
     """
 
     with symbolic_traced_model.graph.inserting_after(node):
-        num_args = len(node.args)
-        if num_args == 1:
-            # Handle torch.cat being called with default parameter dim
-            forward_args = node.args[0]
-            new_node = symbolic_traced_model.graph.call_module(module_name, args=forward_args)
-        else:
-            forward_args = tuple(node.args[0])
-            new_node = symbolic_traced_model.graph.call_module(module_name, args=forward_args)
+        # call_module only accepts tuple as args but node.args[0] can be a list. Convert it into a tuple
+        # If node.args[0] is already a tuple, tuple() will do nothing
+        new_node = symbolic_traced_model.graph.call_module(module_name, args=tuple(node.args[0]))
         return new_node
 
 
@@ -133,13 +128,14 @@ def concat_create_module(node: torch.fx.node) -> torch.nn.Module:
     """
 
     num_args = len(node.args)
-    if num_args == 1:
+    if num_args == 1 and 'dim' not in node.kwargs:
         # Handle torch.cat being called with default parameter dim
         kwargs = node.kwargs
         module = elementwise_ops.Concat()
     else:
-        module = elementwise_ops.Concat(node.args[1])
-        kwargs = {'axis': node.args[1]}
+        axis = node.args[1] if num_args > 1 else node.kwargs['dim']
+        module = elementwise_ops.Concat(axis)
+        kwargs = {'axis': axis}
 
     for key, value in kwargs.items():
         setattr(module, key, value)
