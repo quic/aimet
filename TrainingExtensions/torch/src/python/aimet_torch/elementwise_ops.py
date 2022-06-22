@@ -108,3 +108,13 @@ class MatMul(torch.nn.Module):
         Forward-pass routine for matmul op
         """
         return torch.matmul(x, y)
+
+
+class Interpolate(torch.nn.Module):
+    """ Interpolate module for a functional interpolate"""
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        """
+        Forward-pass routine for interpolate op
+        """
+        return torch.nn.functional.interpolate(x, self.size, self.scale_factor, self.mode, self.align_corners,
+                                               self.recompute_scale_factor)
