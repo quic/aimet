@@ -991,6 +991,29 @@ class TestFX:
 
         assert isinstance(model_transformed.module_add, elementwise_ops.Add)
 
+    def test_fx_with_interpolate(self):
+        """
+        test torch fx with interpolate functional
+        """
+        class ModelWithInterpolate(torch.nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.conv = torch.nn.Conv2d(3, 4, kernel_size=2, stride=2, padding=2)
+
+            def forward(self, x):
+                x = self.conv(x)
+                return torch.nn.functional.interpolate(x, scale_factor=2)
+
+        input_shape = (1, 3, 32, 32)
+        input_tensor = torch.randn(input_shape)
+        model = ModelWithInterpolate().eval()
+        model_transformed = prepare_model(model)
+        print(model_transformed)
+
+        assert torch.allclose(model_transformed(input_tensor), model(input_tensor))
+
+        assert isinstance(model_transformed.module_interpolate, elementwise_ops.Interpolate)
+
     def test_fx_with_duplicate_conv(self):
         """
         test torch fx with reused/duplicate - torch.nn.Conv2d

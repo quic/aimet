@@ -91,7 +91,8 @@ functional_to_module_map = {
     'subtract'      : elementwise_ops.Subtract,
     'mul'           : elementwise_ops.Multiply,
     'div'           : elementwise_ops.Divide,
-    'matmul'        : elementwise_ops.MatMul
+    'matmul'        : elementwise_ops.MatMul,
+    'interpolate'   : elementwise_ops.Interpolate
 }
 
 functional_to_module_special_handling_map = {
