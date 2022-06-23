@@ -45,6 +45,25 @@ set(build_packaging_dir "${CMAKE_BINARY_DIR}/packaging")
 # First delete the existing packaging directory if it exists
 file(REMOVE_RECURSE ${build_packaging_dir})
 
+# set varinat name
+if(DEFINED ENV{AIMET_VARIANT})
+  set(variant_name ENV{AIMET_VARIANT})
+else()
+  if(ENABLE_TORCH)
+    set(variant_name "torch")
+  elseif(ENABLE_TENSORFLOW)
+    set(variant_name "tf")
+  else()
+    set(variant_name "tf-torch")
+  endif()
+
+  if(ENABLE_CUDA)
+    set(variant_name $variant_name"-gpu")
+  else()
+    set(variant_name $variant_name"-cpu")
+  endif()
+endif()
+
 # Copy NOTICE, README, INSTALL, etc files to build folder for package creation
 configure_file("${src_packaging_dir}/NOTICE.txt" "${build_packaging_dir}/NOTICE.txt" COPYONLY)
 configure_file("${src_packaging_dir}/README.txt" "${build_packaging_dir}/README.txt" COPYONLY)
@@ -105,7 +124,7 @@ list(APPEND package_name_list aimet)
 # Loop over the package array list to generate wheel files
 foreach(package ${package_name_list})
 
-  # Rename the package setup script 
+  # Rename the package setup script
   configure_file("${src_packaging_dir}/setup_${package}.py" "${build_packaging_dir}/setup.py" COPYONLY)
   # Location of the package folder
   set(package_dir "${build_packaging_dir}/${package}")
@@ -116,11 +135,11 @@ foreach(package ${package_name_list})
   file(MAKE_DIRECTORY "${package_deps_dir}")
   foreach(dependency_file ${deps_name_list_${package}})
     message(VERBOSE "*** Copied ${src_deps_dir}/${dependency_file} to ${package_deps_dir}/ ***")
-    configure_file("${src_deps_dir}/${dependency_file}" "${package_deps_dir}/" COPYONLY)
+    configure_file("${src_deps_dir}/${variant_name}/${dependency_file}" "${package_deps_dir}/" COPYONLY)
   endforeach()
 
   if("${package}" STREQUAL "aimet_common")
-    # NOTE: MANIFEST file is different for different packages 
+    # NOTE: MANIFEST file is different for different packages
     file(WRITE "${build_packaging_dir}/MANIFEST.ini" "graft ${package}/x86_64-linux-gnu")
     # Populate the python code
     file(COPY ${AIMET_PACKAGE_PATH}/lib/python/${package} DESTINATION ${build_packaging_dir}/)

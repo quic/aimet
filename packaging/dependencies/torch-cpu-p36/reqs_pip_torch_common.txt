@@ -1,0 +1,5 @@
+holoviews==1.12.7
+matplotlib>=3
+onnx==1.8.1
+scikit-learn
+tensorboardX==2.4
