@@ -339,7 +339,7 @@ class QuantizeAcceptanceTests(unittest.TestCase):
         with open("./data/resnet18_per_channel_quant.encodings", "r") as encodings_file:
             encodings = json.load(encodings_file)
 
-        assert len(encodings['param_encodings']) == 62
+        assert len(encodings['param_encodings']) == 41
         assert encodings['param_encodings']['conv1.weight'][1]['bitwidth'] == 8
         assert encodings['param_encodings']['conv1.weight'][1]['is_symmetric'] == 'True'
 
