@@ -37,14 +37,16 @@
 # =============================================================================
 """ This file contains unit tests for testing ConnectedGraph module for PyTorch. """
 
+import pytest
 import unittest
 import torch
+
 from aimet_common.connected_graph.connectedgraph_utils import get_all_input_ops, get_all_output_ops
 from aimet_torch.examples import test_models
-
-from aimet_torch.meta.connectedgraph import ConnectedGraph
+from aimet_torch.meta.connectedgraph import ConnectedGraph, _find_nodes_in_forward_pass
 from aimet_torch.meta import connectedgraph_utils
 from aimet_torch.utils import create_rand_tensors_given_shapes
+from aimet_torch import elementwise_ops
 
 
 class TestConnectedGraph(unittest.TestCase):
@@ -524,3 +526,131 @@ class TestConnectedGraphUtils(unittest.TestCase):
         rand_inp = torch.randn(1, 3, 32, 32)
         ops_with_missing_modules = connectedgraph_utils.get_ops_with_missing_modules(model, rand_inp)
         self.assertEqual(2, len(ops_with_missing_modules))
+
+    def test_find_nodes_in_forward_pass_for_elementwise_ops(self):
+        """ Check _find_nodes_in_forward_pass() method for elementwise_ops """
+        # 1) elementwise_ops.Add()
+        dummy_input = (torch.randn(1, 3, 4, 4), torch.randn(1, 3, 4, 4))
+        trace = torch.jit.trace(elementwise_ops.Add(), dummy_input)
+        nodes =  _find_nodes_in_forward_pass(trace)
+        assert len(nodes) == 1
+
+        # 2) elementwise_ops.Subtract()
+        dummy_input = (torch.randn(1, 3, 4, 4), torch.randn(1, 3, 4, 4))
+        trace = torch.jit.trace(elementwise_ops.Subtract(), dummy_input)
+        nodes = _find_nodes_in_forward_pass(trace)
+        assert len(nodes) == 1
+
+        # 3) elementwise_ops.Multiply()
+        dummy_input = (torch.randn(1, 3, 4, 4), torch.randn(1, 3, 4, 4))
+        trace = torch.jit.trace(elementwise_ops.Multiply(), dummy_input)
+        nodes = _find_nodes_in_forward_pass(trace)
+        assert len(nodes) == 1
+
+        # 4) elementwise_ops.Divide()
+        dummy_input = (torch.randn(1, 3, 4, 4), torch.randn(1, 3, 4, 4))
+        trace = torch.jit.trace(elementwise_ops.Divide(), dummy_input)
+        nodes = _find_nodes_in_forward_pass(trace)
+        assert len(nodes) == 1
+
+        # 5) elementwise_ops.MatMul()
+        dummy_input = (torch.randn(1, 3, 4, 4), torch.randn(1, 3, 4, 4))
+        trace = torch.jit.trace(elementwise_ops.MatMul(), dummy_input)
+        nodes = _find_nodes_in_forward_pass(trace)
+        assert len(nodes) == 1
+
+        # 6) elementwise_ops.Concat()
+        dummy_input = (torch.randn(1, 3, 4, 4), torch.randn(1, 3, 4, 4))
+        trace = torch.jit.trace(elementwise_ops.Concat(), dummy_input)
+        nodes = _find_nodes_in_forward_pass(trace)
+        assert len(nodes) == 1
+
+    @pytest.mark.cuda
+    def test_find_nodes_in_forward_pass_for_custom_module(self):
+        """ Check _find_nodes_in_forward_pass() method for custom module """
+
+        class CustomModule(torch.nn.Module):
+            @staticmethod
+            def forward(x: torch.Tensor):
+                y = x.detach()
+                return y * torch.nn.functional.softplus(x).relu()
+
+        dummy_input = torch.randn(1, 3, 4, 4)
+        trace = torch.jit.trace(CustomModule().cuda(), dummy_input.cuda())
+        nodes = _find_nodes_in_forward_pass(trace)
+        # mulitply, softplus and relu ops.
+        # detach is considered as passthrough op.
+        assert len(nodes) == 3
+
+    def test_find_nodes_in_forward_pass_for_torch_nn_module(self):
+        """ Check _find_nodes_in_forward_pass() method for torch.nn modules """
+
+        # 1) Conv2d
+        dummy_input = torch.randn(1, 3, 4, 4)
+        conv = torch.nn.Conv2d(3, 3, 2)
+        trace = torch.jit.trace(conv, dummy_input)
+        nodes = _find_nodes_in_forward_pass(trace)
+        assert len(nodes) == 1
+
+        # 2) ReLU
+        dummy_input = torch.randn(1, 3, 4, 4)
+        relu = torch.nn.ReLU(inplace=True)
+        trace = torch.jit.trace(relu, dummy_input)
+        nodes = _find_nodes_in_forward_pass(trace)
+        assert len(nodes) == 1
+
+        # 3) BatchNorm2d
+        dummy_input = torch.randn(1, 3, 4, 4)
+        bn = torch.nn.BatchNorm2d(3)
+        trace = torch.jit.trace(bn, dummy_input)
+        nodes = _find_nodes_in_forward_pass(trace)
+        assert len(nodes) == 1
+
+    def test_find_nodes_in_forward_pass_for_unused_module(self):
+        """ test _find_nodes_in_forward_pass() for unused module """
+
+        class MultiOutputWithUnuseModel(torch.nn.Module):
+            """
+            Model with Tuple of Tensors as output with one output tensor unused
+            """
+            def __init__(self):
+                super(MultiOutputWithUnuseModel, self).__init__()
+                self.layer = test_models.TupleOutputModel()
+                self.conv1 = torch.nn.Conv2d(2, 4, kernel_size=3, padding=1)
+                self.conv2 = torch.nn.Conv2d(6, 4, kernel_size=3, padding=1)
+
+            def forward(self, *inputs):
+                x, _, z = self.layer(inputs[0])
+                x1 = self.conv1(x)
+                z1 = self.conv2(z)
+                return torch.cat([x1, z1], 1)
+
+        dummy_input = torch.rand(1, 3, 8, 8)
+        model = MultiOutputWithUnuseModel().eval()
+        trace = torch.jit.trace(model, dummy_input)
+        trace = getattr(trace, "layer")
+
+        # Conv2 is unused in forward pass.
+        conv2_trace = getattr(trace, "conv2")
+        nodes = _find_nodes_in_forward_pass(conv2_trace)
+        assert len(nodes) == 0
+
+        # Conv1 and Conv3 are used in forward pass.
+        conv1_trace = getattr(trace, "conv1")
+        nodes = _find_nodes_in_forward_pass(conv1_trace)
+        assert len(nodes) == 1
+
+    def test_find_nodes_in_forward_pass_for_undefined_graph(self):
+        """ test _find_nodes_in_forward_pass() for undefined trace graph """
+
+        dummy_input = torch.rand(1, 3, 8, 8)
+        model = test_models.NestedSequentialModel().eval()
+        trace = torch.jit.trace(model, dummy_input)
+
+        inner_seq_trace = getattr(trace, "inner_seq")
+        bn_trace = getattr(inner_seq_trace, "1")
+        nodes = _find_nodes_in_forward_pass(bn_trace)
+        assert len(nodes) == 0
+
+        with pytest.raises(RuntimeError):
+            _ = bn_trace.graph

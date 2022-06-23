@@ -284,7 +284,7 @@ class ConnectedGraph(AimetCommonConnectedGraph):
         _ = self._parse_trace_graph(trace, model, ir_nodes_list=ir_nodes_list, output_map=output_map)
         return ir_nodes_list, output_map
 
-    def _parse_trace_graph(self,
+    def _parse_trace_graph(self, # pylint: disable=too-many-locals
                            trace: Union[torch.jit.TopLevelTracedModule, torch.jit.TracedModule],
                            model: torch.nn.Module,
                            ir_nodes_list: List[IrNode],
@@ -303,7 +303,11 @@ class ConnectedGraph(AimetCommonConnectedGraph):
         :param inputs_map: Dictionary mapping low recursion level inputs to higher level equivalent inputs
         :return: the outputs of the traced module
         """
-        if is_leaf_module(model):
+        # Create a single IrNode if the module is leaf module and the trace has only one node in forward pass.
+        # These checks are needed because even though the module is leaf module but forward pass
+        # might have more than one node. In that case, we can't handle the module as a single IrNode and further
+        # parsing is needed.
+        if is_leaf_module(model) and len(_find_nodes_in_forward_pass(trace)) <= 1:
             return self._parse_single_module_model(model, trace.graph, ir_nodes_list)
         if inputs_map is None:
             inputs_map = {}
@@ -313,8 +317,11 @@ class ConnectedGraph(AimetCommonConnectedGraph):
 
         # A map of sub-graph models and node name that requires recursive parsing
         node_name_to_subgraph_model = {}
-        # modules that are being referenced within the sub-graph
+        # modules that are being referenced within the sub-graph.
         node_name_to_module = {curr_inputs[0].debugName(): model}
+        # trace graphs that are being referenced with the sub-graph trace.
+        node_name_to_trace = {curr_inputs[0].debugName(): trace}
+
         for node in trace.graph.nodes():
             outputs = [output for output in node.outputs()]
 
@@ -327,15 +334,23 @@ class ConnectedGraph(AimetCommonConnectedGraph):
                     getattr_node_info.node_input = None
 
                 subgraph_model = ConnectedGraph._get_module_instance(node, node_name_to_module)
+                subgraph_trace = ConnectedGraph._get_module_instance(node, node_name_to_trace)
+
                 if isinstance(subgraph_model, torch.Tensor):
                     continue
                 if getattr_node_info.node_alias not in node_name_to_module:
                     node_name_to_module[getattr_node_info.node_alias] = subgraph_model
+                    node_name_to_trace[getattr_node_info.node_alias] = subgraph_trace
                 else:
                     raise ValueError("duplicate model for {0} -> {1} and {2}".format(
                         getattr_node_info.node_alias, node_name_to_module[getattr_node_info.node_alias],
                         subgraph_model))
-                if not is_leaf_module(subgraph_model):
+
+                # Recursive parsing is needed if the module is not leaf module or
+                # the forward method of trace has more than one node (functional operations).
+                # If the module is leaf module but has multiple functional operations in
+                # forward method, that also requires further parsing.
+                if not is_leaf_module(subgraph_model) or not len(_find_nodes_in_forward_pass(subgraph_trace)) <= 1:
                     node_name_to_subgraph_model[getattr_node_info.node_alias] = (subgraph_model, getattr_node_info)
 
             # invoking forward method
@@ -1175,3 +1190,25 @@ def _get_module_tensor_shapes_entry(tensors: Union[torch.Tensor, List, Dict, Non
     logger.debug('Unexpected data type for tensor %s. Supported types include tensors, or Lists, Tuples, and Dicts of '
                  'tensors.', type(tensors))
     return None
+
+
+def _find_nodes_in_forward_pass(trace: Union[torch.jit.TopLevelTracedModule, torch.jit.TracedModule]) \
+        -> List[torch._C.Node]:
+    """
+    Find all the valid nodes in forward pass for given trace of model or submodule.
+    Three possible outcomes:
+    1) When the forward method has multiple functional operations and valid nodes are returned.
+    2) When the forward method is not defined which causes RuntimeError and empty list is returned.
+    3) When the module is unused, empty list is returned.
+
+    :param trace: trace of model or submodule.
+    :return: List of trace graph nodes if node.kind() starts with "aten::".
+    """
+    # pylint: disable=protected-access
+    nodes = []
+    try:
+        nodes = [node for node in trace.graph.nodes() if "aten::" in node.kind() and
+                 ConnectedGraph._parse_op_type(node) not in ConnectedGraph.passthrough_graph_nodes]
+    except RuntimeError:
+        pass
+    return nodes
