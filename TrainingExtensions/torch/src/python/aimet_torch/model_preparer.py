@@ -98,8 +98,91 @@ functional_to_module_map = {
 functional_to_module_special_handling_map = {
 
     # Operations that require special transformation
-    'cat'           : elementwise_ops.Concat
+    'cat'           : elementwise_ops.Concat,
+    'conv2d'        : torch.nn.Conv2d
 }
+
+
+def conv2d_create_node(symbolic_traced_model: torch.fx.GraphModule, module_name: str, node: torch.fx.node) \
+        -> torch.fx.node:
+    """
+    Create the node to be inserted in the graph model.
+
+    :param symbolic_traced_model: Symbolically traced model
+    :param module_name: Qualified module name in symbolic_traced_model hierarchy corresponding to new node
+    :param node: Current node in the graph after which new node will be inserted
+    :return: torch.fx.node to be inserted in the graph
+    """
+
+    with symbolic_traced_model.graph.inserting_after(node):
+        n_args = len(node.args)
+        input_tensor = node.args[0] if n_args > 0 else node.kwargs.get('input')
+        new_node = symbolic_traced_model.graph.call_module(module_name, args=tuple([input_tensor]))
+        return new_node
+
+
+def conv2d_create_module(node: torch.fx.node) -> torch.nn.Module:
+    """
+    Create the replacement module.
+
+    :param node: Current node in the graph after which new node will be inserted
+    :return:
+    """
+
+    n_args = len(node.args)
+
+    # Get weight and bias from argument
+    params = {}
+    for index, key in {1: 'weight', 2: 'bias'}.items():
+        param_node = node.args[index] if n_args > index else node.kwargs.get(key, None)
+        if param_node:
+            # Convert node to parameter
+            params[key] = get_node_attr(param_node)
+
+    # Convert F.Conv2D arguments to nn.Conv2D arguments
+    kwargs = {}
+    for index, key in {3: 'stride', 4: 'padding', 5: 'dilation', 6: 'groups'}.items():
+        if n_args > index:
+            kwargs[key] = node.args[index]
+        elif key in node.kwargs:
+            kwargs[key] = node.kwargs[key]
+
+    # Fetch additional info using parameters
+    out_channels, in_channels, kernel_size, _ = params['weight'].shape
+    bias = 'bias' in params
+
+    kwargs['in_channels'] = in_channels
+    kwargs['out_channels'] = out_channels
+    kwargs['kernel_size'] = kernel_size
+    kwargs['bias'] = bias
+
+    module = torch.nn.Conv2d(**kwargs)
+    # Replace nn.Conv2D params using F.Conv2D arguments
+    module.weight = params['weight']
+    if bias:
+        module.bias = params['bias']
+    return module
+
+
+def get_node_attr(node: torch.fx.node):
+    """
+    Codes modified from https://pytorch.org/docs/stable/fx.html#the-interpreter-pattern
+
+    :param node: node to fetch data from
+    :return: value returned from node
+    """
+    def fetch_attr(target: str):
+        target_atoms = target.split('.')
+        attr_itr = node.graph.owning_module
+        for i, atom in enumerate(target_atoms):
+            if not hasattr(attr_itr, atom):
+                raise RuntimeError(f"Node referenced nonexistant target {'.'.join(target_atoms[:i])}")
+            attr_itr = getattr(attr_itr, atom)
+        return attr_itr
+
+    assert node.op == 'get_attr'
+
+    return fetch_attr(node.target)
 
 
 def concat_create_node(symbolic_traced_model: torch.fx.GraphModule, module_name: str, node: torch.fx.node) \
@@ -146,7 +229,8 @@ def concat_create_module(node: torch.fx.node) -> torch.nn.Module:
 
 special_handler_functions = {
     # Special handling functions for creating node and module
-    'cat': {'node_fn': concat_create_node, 'module_fn': concat_create_module}
+    'cat': {'node_fn': concat_create_node, 'module_fn': concat_create_module},
+    'conv2d': {'node_fn': conv2d_create_node, 'module_fn': conv2d_create_module}
 }
 
 
