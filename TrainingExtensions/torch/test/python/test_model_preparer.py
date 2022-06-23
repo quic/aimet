@@ -769,6 +769,54 @@ class TestFX:
         assert model_transformed.module_elu_1.inplace == True
         assert model_transformed.module_elu_1.training == False
 
+    def test_fx_with_functional_conv(self):
+        class ModelWithFunctionalConv(torch.nn.Module):
+            """ Use this model for unit testing purposes. Expect input shape (1, 3, 32, 32) """
+            def __init__(self):
+                super().__init__()
+                self.w1 = torch.nn.parameter.Parameter(torch.randn(10, 10, 1, 1))
+                self.b1 = torch.nn.parameter.Parameter(torch.randn(10))
+                self.w2 = torch.nn.parameter.Parameter(torch.randn(5, 10, 1, 1))
+                self.b2 = torch.nn.parameter.Parameter(torch.randn(5))
+                self.conv = torch.nn.Conv2d(10, 10, 1)
+                self.stride = self.conv.stride
+                self.stride_2 = 2
+                self.padding_2 = 2
+
+            def forward(self, x):
+                x = self.conv(x)
+                x = torch.nn.functional.conv2d(x, self.w1, self.b1, self.stride)
+                x = torch.nn.functional.conv2d(x, self.w1, stride=self.stride)
+                x = torch.nn.functional.conv2d(x, self.w1, None)
+                x = torch.nn.functional.conv2d(x, self.w1, bias=None)
+                x = torch.nn.functional.conv2d(weight=self.w2, bias=self.b2, input=x, stride=self.padding_2, padding=self.padding_2)
+                return x
+
+        input_shape = (1, 10, 10, 1)
+        input_tensor = torch.randn(input_shape)
+        model = ModelWithFunctionalConv().eval()
+        model_transformed = prepare_model(model)
+
+        assert torch.allclose(model_transformed(input_tensor),
+                              model(input_tensor))
+
+        assert isinstance(model_transformed.module_conv2d, torch.nn.Conv2d)
+        assert isinstance(model_transformed.module_conv2d_1, torch.nn.Conv2d)
+        assert isinstance(model_transformed.module_conv2d_2, torch.nn.Conv2d)
+        assert isinstance(model_transformed.module_conv2d_3, torch.nn.Conv2d)
+        assert isinstance(model_transformed.module_conv2d_4, torch.nn.Conv2d)
+
+        assert model_transformed.module_conv2d_4.padding == (model.padding_2, model.padding_2)
+        assert model_transformed.module_conv2d_4.stride == (model.stride_2, model.stride_2)
+
+        sim = QuantizationSimModel(model_transformed, input_tensor)
+
+        def dummy_forward(model, args):
+            model.eval()
+            model(input_tensor)
+        sim.compute_encodings(dummy_forward, None)
+        sim.model(input_tensor)
+
     def test_fx_with_elementwise_cat(self):
         """
         test torch fx with elementwise op - torch.cat
