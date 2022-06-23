@@ -850,6 +850,36 @@ class TestFX:
         sim.compute_encodings(dummy_forward, None)
         sim.model(input_tensor)
 
+    def test_fx_with_conv2d_weight_as_activation(self):
+        class ModelWithFunctionalConv(torch.nn.Module):
+            """ Use this model for unit testing purposes. Expect input shape (1, 3, 32, 32) """
+            def __init__(self):
+                super().__init__()
+                self.conv = torch.nn.Conv2d(10, 10, 1)
+
+            def forward(self, x):
+                weight = self.conv(x)
+                x = torch.nn.functional.conv2d(x, weight)
+                return x
+
+        input_shape = (1, 10, 10, 1)
+        input_tensor = torch.randn(input_shape)
+        model = ModelWithFunctionalConv().eval()
+        model_transformed = prepare_model(model)
+
+        assert torch.allclose(model_transformed(input_tensor),
+                              model(input_tensor))
+
+        assert isinstance(model_transformed.module_conv2d, elementwise_ops.DynamicConv2d)
+
+        sim = QuantizationSimModel(model_transformed, input_tensor)
+
+        def dummy_forward(model, args):
+            model.eval()
+            model(input_tensor)
+        sim.compute_encodings(dummy_forward, None)
+        sim.model(input_tensor)
+
     def test_fx_with_elementwise_cat(self):
         """
         test torch fx with elementwise op - torch.cat

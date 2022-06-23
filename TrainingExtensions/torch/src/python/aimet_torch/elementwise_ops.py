@@ -118,3 +118,16 @@ class Interpolate(torch.nn.Module):
         """
         return torch.nn.functional.interpolate(x, self.size, self.scale_factor, self.mode, self.align_corners,
                                                self.recompute_scale_factor)
+
+
+class DynamicConv2d(torch.nn.Module):
+    """ Conv2d module for a functional conv2d"""
+    def __init__(self, stride=1, padding=0, dilation=1, groups=1):
+        super().__init__()
+        self.stride, self.padding, self.dilation, self.groups = stride, padding, dilation, groups
+
+    def forward(self, x: torch.Tensor, weight: torch.Tensor, bias: torch.Tensor = None) -> torch.Tensor:
+        """
+        Forward-pass routine for conv2d op
+        """
+        return torch.nn.functional.conv2d(x, weight, bias, self.stride, self.padding, self.dilation, self.groups)
