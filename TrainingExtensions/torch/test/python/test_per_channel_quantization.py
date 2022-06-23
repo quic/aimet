@@ -198,7 +198,7 @@ class TestPerChannelQcQuantizeOpStaticGrid:
         model = ModelWithTwoInputs()
 
         sim = QuantizationSimModel(model, dummy_input=dummy_input)
-        for wrapper in sim.quant_wrappers():
+        for _, wrapper in sim.quant_wrappers():
             wrapper.enable_per_channel_quantization()
 
         assert isinstance(sim.model.conv1_a.param_quantizers['weight'], StaticGridPerChannelQuantizer)
@@ -306,7 +306,7 @@ class TestPerChannelQcQuantizeOpStaticGrid:
         model = ModelWithTwoInputs()
 
         sim = QuantizationSimModel(model, dummy_input=dummy_input)
-        for wrapper in sim.quant_wrappers():
+        for _, wrapper in sim.quant_wrappers():
             wrapper.enable_per_channel_quantization()
 
         assert isinstance(sim.model.conv1_a.param_quantizers['weight'], StaticGridPerChannelQuantizer)
@@ -341,7 +341,7 @@ class TestPerChannelQcQuantizeOpStaticGrid:
         sim = QuantizationSimModel(model, dummy_input=dummy_input, default_output_bw=16, default_param_bw=16,
                                    default_data_type=QuantizationDataType.float)
 
-        for wrapper in sim.quant_wrappers():
+        for _, wrapper in sim.quant_wrappers():
             wrapper.enable_per_channel_quantization()
 
         assert isinstance(sim.model.conv1_a.param_quantizers['weight'], StaticGridPerChannelQuantizer)
@@ -372,7 +372,7 @@ class TestPerChannelQcQuantizeOpStaticGrid:
         model = ModelWithTransposeConv()
 
         sim = QuantizationSimModel(model, dummy_input=dummy_input)
-        for wrapper in sim.quant_wrappers():
+        for _, wrapper in sim.quant_wrappers():
             wrapper.enable_per_channel_quantization()
 
         assert isinstance(sim.model.conv1_a.param_quantizers['weight'], StaticGridPerChannelQuantizer)

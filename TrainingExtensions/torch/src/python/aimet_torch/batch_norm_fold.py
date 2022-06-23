@@ -448,7 +448,7 @@ def fold_all_batch_norms_to_scale(
 
     quant_wrappers = {
         quant_wrapper._module_to_wrap: quant_wrapper
-        for quant_wrapper in sim.quant_wrappers()
+        for _, quant_wrapper in sim.quant_wrappers()
     }
     conv_bn_pairs, bn_conv_pairs = _find_all_batch_norms_to_fold(model, input_shapes, connected_graph)
     conv_bn_pairs = [

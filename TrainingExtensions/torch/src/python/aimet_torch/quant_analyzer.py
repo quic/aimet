@@ -295,7 +295,7 @@ class QuantAnalyzer:
         :return: List of enabled param quantizers.
         """
         enabled_param_quantizers = []
-        for quant_wrapper in sim.quant_wrappers():
+        for _, quant_wrapper in sim.quant_wrappers():
             for quantizer in quant_wrapper.param_quantizers.values():
                 if quantizer.enabled:
                     enabled_param_quantizers.append(quantizer)
@@ -310,7 +310,7 @@ class QuantAnalyzer:
         :return: List of enabled activation quantizers.
         """
         enabled_activation_quantizers = []
-        for quant_wrapper in sim.quant_wrappers():
+        for _, quant_wrapper in sim.quant_wrappers():
             for quantizer in quant_wrapper.input_quantizers:
                 if quantizer.enabled:
                     enabled_activation_quantizers.append(quantizer)
@@ -758,7 +758,7 @@ class QuantAnalyzer:
 
         min_max_range_for_activations_dict = {}
         min_max_range_for_weights_dict = {}
-        for quant_wrapper in sim.quant_wrappers():
+        for _, quant_wrapper in sim.quant_wrappers():
             wrapped_module_name = module_to_name_dict[quant_wrapper]
             for index, quantizer in enumerate(quant_wrapper.input_quantizers):
                 if quantizer.enabled:
@@ -820,7 +820,7 @@ class QuantAnalyzer:
         for name, module in sim.model.named_modules():
             module_to_name_dict[module] = name
 
-        for quant_wrapper in sim.quant_wrappers():
+        for _, quant_wrapper in sim.quant_wrappers():
             wrapped_module_name = module_to_name_dict[quant_wrapper]
             for quantizer in quant_wrapper.input_quantizers:
                 if quantizer.encoding:

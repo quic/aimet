@@ -168,6 +168,7 @@ PYBIND11_MODULE(libpymo, m)
         .def("setUnsignedSymmetric", &DlQuantization::PyTensorQuantizer::setUnsignedSymmetric)
         .def("getUnsignedSymmetric", &DlQuantization::PyTensorQuantizer::getUnsignedSymmetric)
         .def("getStatsHistogram", &DlQuantization::PyTensorQuantizer::getStatsHistogram)
+        .def("computePartialEncoding", &DlQuantization::PyTensorQuantizer::computePartialEncoding)
         .def_readwrite("roundingMode", &DlQuantization::PyTensorQuantizer::roundingMode)
         .def_readwrite("isEncodingValid", &DlQuantization::PyTensorQuantizer::isEncodingValid);
 

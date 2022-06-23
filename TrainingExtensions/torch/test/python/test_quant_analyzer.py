@@ -124,7 +124,7 @@ class TestQuantAnalyzer:
             assert all(isinstance(quantizer, TensorQuantizer) for quantizer in enabled_quantizers)
 
         # Disable all the quantizers and verify enabled_quant_wrappers dictionary should be empty.
-        for quant_wrapper in sim.quant_wrappers():
+        for _, quant_wrapper in sim.quant_wrappers():
             quant_wrapper.enable_activation_quantizers(enabled=False)
             quant_wrapper.enable_param_quantizers(enabled=False)
 
