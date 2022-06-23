@@ -114,10 +114,28 @@ def conv2d_create_node(symbolic_traced_model: torch.fx.GraphModule, module_name:
     :return: torch.fx.node to be inserted in the graph
     """
 
+    n_args = len(node.args)
+    # input tensors must be passed as args, not kwargs for QcQuantizeWrapper
+    input_tensor = []
+    # input and weight is guaranteed to exist, but bias can be None
+    # Since None cannot be passed as args in QcQuantizeWrapper, do not add it to input_tensor
+    for index, key in [[0, 'input'], [1, 'weight'], [2, ' bias']]:
+        value = None
+        if n_args > index:
+            value = node.args[index]
+        elif key in node.kwargs:
+            value = node.kwargs[key]
+
+        if value is not None:
+            input_tensor.append(value)
+        else:
+            break
+
     with symbolic_traced_model.graph.inserting_after(node):
-        n_args = len(node.args)
-        input_tensor = node.args[0] if n_args > 0 else node.kwargs.get('input')
-        new_node = symbolic_traced_model.graph.call_module(module_name, args=tuple([input_tensor]))
+        if isinstance(getattr(symbolic_traced_model, module_name), elementwise_ops.DynamicConv2d):
+            new_node = symbolic_traced_model.graph.call_module(module_name, args=tuple(input_tensor))
+        else:
+            new_node = symbolic_traced_model.graph.call_module(module_name, args=tuple([input_tensor[0]]))
         return new_node
 
 
@@ -129,41 +147,63 @@ def conv2d_create_module(node: torch.fx.node) -> torch.nn.Module:
     :return:
     """
 
-    n_args = len(node.args)
-
     # Get weight and bias from argument
-    params = {}
-    for index, key in {1: 'weight', 2: 'bias'}.items():
-        param_node = node.args[index] if n_args > index else node.kwargs.get(key, None)
-        if param_node:
-            # Convert node to parameter
-            params[key] = get_node_attr(param_node)
+    params = merge_args_and_kwargs(node, {1: 'weight', 2: 'bias'})
 
     # Convert F.Conv2D arguments to nn.Conv2D arguments
-    kwargs = {}
-    for index, key in {3: 'stride', 4: 'padding', 5: 'dilation', 6: 'groups'}.items():
-        if n_args > index:
-            kwargs[key] = node.args[index]
-        elif key in node.kwargs:
-            kwargs[key] = node.kwargs[key]
+    kwargs = merge_args_and_kwargs(node, {3: 'stride', 4: 'padding', 5: 'dilation', 6: 'groups'})
 
-    # Fetch additional info using parameters
-    out_channels, in_channels, kernel_size, _ = params['weight'].shape
-    bias = 'bias' in params
+    # If weight or bias is from activation of another layer, use dynamic_conv2d
+    use_dynamic_conv2d = False
+    for key, param in params.items():
+        if param.op != 'get_attr':
+            use_dynamic_conv2d = True
+            break
 
-    # For Depthwise Conv, multiply in_channels by number of groups
-    # if groups is not passed as arg, use its default value 1
-    kwargs['in_channels'] = in_channels * kwargs.get('groups', 1)
-    kwargs['out_channels'] = out_channels
-    kwargs['kernel_size'] = kernel_size
-    kwargs['bias'] = bias
+    if use_dynamic_conv2d:
+        module = elementwise_ops.DynamicConv2d(**kwargs)
+    else:
+        for key, param_node in params.items():
+            params[key] = get_node_attr(param_node)
 
-    module = torch.nn.Conv2d(**kwargs)
-    # Replace nn.Conv2D params using F.Conv2D arguments
-    module.weight = params['weight']
-    if bias:
-        module.bias = params['bias']
+        # Fetch additional info using parameters
+        out_channels, in_channels, kernel_size, _ = params['weight'].shape
+        bias = 'bias' in params
+
+        # For Depthwise Conv, multiply in_channels by number of groups
+        # if groups is not passed as arg, use its default value 1
+        kwargs['in_channels'] = in_channels * kwargs.get('groups', 1)
+        kwargs['out_channels'] = out_channels
+        kwargs['kernel_size'] = kernel_size
+        kwargs['bias'] = bias
+
+        module = torch.nn.Conv2d(**kwargs)
+        # Replace nn.Conv2D params using F.Conv2D arguments
+        module.weight = params['weight']
+        if bias:
+            module.bias = params['bias']
     return module
+
+
+def merge_args_and_kwargs(node: torch.fx.node, arguments_to_fetch: Dict) -> Dict:
+    """
+    Merge args and kwargs into a single kwargs and return it
+    :param node: node to fetch args and kwargs from
+    :param arguments_to_fetch: dictionary containing arguments' indices in args and keys in kwargs
+    :return: single merged kwargs
+    """
+    n_args = len(node.args)
+    kwargs = {}
+    for index, key in arguments_to_fetch.items():
+        value = None
+        if n_args > index:
+            value = node.args[index]
+        elif key in node.kwargs:
+            value = node.kwargs[key]
+
+        if value is not None:
+            kwargs[key] = value
+    return kwargs
 
 
 def get_node_attr(node: torch.fx.node):
