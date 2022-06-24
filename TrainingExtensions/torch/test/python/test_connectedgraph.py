@@ -40,10 +40,11 @@
 import pytest
 import unittest
 import torch
+import torch.nn.functional as F
 
 from aimet_common.connected_graph.connectedgraph_utils import get_all_input_ops, get_all_output_ops
 from aimet_torch.examples import test_models
-from aimet_torch.meta.connectedgraph import ConnectedGraph, _find_nodes_in_forward_pass
+from aimet_torch.meta.connectedgraph import ConnectedGraph, _find_nodes_in_forward_pass, _is_torch_nn_module
 from aimet_torch.meta import connectedgraph_utils
 from aimet_torch.utils import create_rand_tensors_given_shapes
 from aimet_torch import elementwise_ops
@@ -595,12 +596,29 @@ class TestConnectedGraphUtils(unittest.TestCase):
         # detach is considered as passthrough op.
         assert len(nodes) == 3
 
+    def test_find_nodes_in_forward_pass_for_custom_conv2d_module(self):
+        """ Check _find_nodes_in_forward_pass() method for custom module """
+
+        class CustomModule(torch.nn.Module):
+            @staticmethod
+            def forward(inp: torch.Tensor, weight: torch.Tensor, bias: torch.Tensor):
+                return torch.nn.functional.conv2d(inp, weight, bias)
+
+        dummy_input = torch.randn(1, 3, 4, 4)
+        dummy_weight = torch.randn(32, 3, 1, 1)
+        dummy_bias = torch.randn((32,))
+        dummy_input = (dummy_input, dummy_weight, dummy_bias)
+        trace = torch.jit.trace(CustomModule(), dummy_input)
+        nodes = _find_nodes_in_forward_pass(trace)
+        assert len(nodes) == 1
+
     def test_find_nodes_in_forward_pass_for_torch_nn_module(self):
         """ Check _find_nodes_in_forward_pass() method for torch.nn modules """
 
         # 1) Conv2d
         dummy_input = torch.randn(1, 3, 4, 4)
         conv = torch.nn.Conv2d(3, 3, 2)
+        print(conv.__class__)
         trace = torch.jit.trace(conv, dummy_input)
         nodes = _find_nodes_in_forward_pass(trace)
         assert len(nodes) == 1
@@ -640,6 +658,7 @@ class TestConnectedGraphUtils(unittest.TestCase):
 
         dummy_input = torch.rand(1, 3, 8, 8)
         model = MultiOutputWithUnuseModel().eval()
+        print(model.conv1.__class__)
         trace = torch.jit.trace(model, dummy_input)
         trace = getattr(trace, "layer")
 
@@ -658,6 +677,7 @@ class TestConnectedGraphUtils(unittest.TestCase):
 
         dummy_input = torch.rand(1, 3, 8, 8)
         model = test_models.NestedSequentialModel().eval()
+        print(model.inner_seq[1].__class__)
         trace = torch.jit.trace(model, dummy_input)
 
         inner_seq_trace = getattr(trace, "inner_seq")
@@ -667,3 +687,24 @@ class TestConnectedGraphUtils(unittest.TestCase):
 
         with pytest.raises(RuntimeError):
             _ = bn_trace.graph
+
+    def test_is_torch_module(self):
+        """ test _is_torch_nn_module() utility """
+        assert _is_torch_nn_module(torch.nn.Conv2d(3, 3, 2))
+        assert _is_torch_nn_module(torch.nn.Linear(3, 10))
+        assert _is_torch_nn_module(torch.nn.BatchNorm2d(3))
+        assert _is_torch_nn_module(torch.nn.RNN(input_size=3, hidden_size=5, num_layers=1))
+        assert _is_torch_nn_module(torch.nn.LSTM(input_size=3, hidden_size=5, num_layers=1, bidirectional=True))
+        assert _is_torch_nn_module(torch.nn.Sequential(torch.nn.Conv2d(3, 16, 2), torch.nn.BatchNorm2d(16)))
+        assert _is_torch_nn_module(torch.nn.ModuleList([torch.nn.MaxPool2d(kernel_size=2, stride=2, padding=1),
+            torch.nn.ReLU(inplace=True), torch.nn.Conv2d(16, 8, kernel_size=2, stride=2, padding=2)]))
+        assert not _is_torch_nn_module(elementwise_ops.Add())
+        assert not _is_torch_nn_module(elementwise_ops.Multiply())
+        assert not _is_torch_nn_module(elementwise_ops.Concat())
+
+        class CustomModule(torch.nn.Module):
+            @staticmethod
+            def forward(x):
+                return x * F.softplus(x).sigmoid()
+
+        assert not _is_torch_nn_module(CustomModule())
