@@ -54,6 +54,44 @@ class BNUtils:
     """ Batch Norm/ fused Batch Norm op related utils"""
     # pylint: disable=too-many-public-methods
 
+    # pylint: disable=too-many-locals
+    @staticmethod
+    def modify_bn_params_to_make_as_passthrough(sess: tf.compat.v1.Session, bn_op: tf.Operation):
+        """
+        To change the batch normalization parameters to work as no-op operation
+        :param sess:
+        :param bn_op: Batch normalization op that should be worked as passthrough op (no-op)
+        """
+        assert bn_op.type in ['FusedBatchNormV3', 'Identity']
+        if bn_op.type == 'FusedBatchNormV3':
+            bn_gamma_tf_var_name = bn_op.inputs[1].op.inputs[0].name
+            bn_beta_tf_var_name = bn_op.inputs[2].op.inputs[0].name
+            bn_mean_tf_var_name = bn_op.inputs[3].op.inputs[0].name
+            bn_var_tf_var_name = bn_op.inputs[4].op.inputs[0].name
+        else:
+            bn_gamma_tf_var_name = bn_op.inputs[0].op.inputs[1].name
+            bn_beta_tf_var_name = bn_op.inputs[0].op.inputs[2].name
+            bn_mean_tf_var_name = bn_op.inputs[0].op.inputs[3].name
+            bn_var_tf_var_name = bn_op.inputs[0].op.inputs[4].name
+
+
+        with sess.graph.as_default():
+            tf_global_vars = tf.compat.v1.get_collection(tf.compat.v1.GraphKeys.GLOBAL_VARIABLES)
+            for v in tf_global_vars:
+                if v.name == bn_gamma_tf_var_name:
+                    bn_gamma_tf_var = v
+                if v.name == bn_beta_tf_var_name:
+                    bn_beta_tf_var = v
+                if v.name == bn_mean_tf_var_name:
+                    bn_mean_tf_var = v
+                if v.name == bn_var_tf_var_name:
+                    bn_var_tf_var = v
+
+            sess.run([tf.compat.v1.assign(bn_gamma_tf_var, np.ones(bn_gamma_tf_var.shape, dtype=bn_gamma_tf_var.dtype.as_numpy_dtype)),
+                      tf.compat.v1.assign(bn_beta_tf_var, np.zeros(bn_beta_tf_var.shape, dtype=bn_beta_tf_var.dtype.as_numpy_dtype)),
+                      tf.compat.v1.assign(bn_mean_tf_var, np.zeros(bn_mean_tf_var.shape, dtype=bn_mean_tf_var.dtype.as_numpy_dtype)),
+                      tf.compat.v1.assign(bn_var_tf_var, np.ones(bn_var_tf_var.shape, dtype=bn_var_tf_var.dtype.as_numpy_dtype))])
+
     @staticmethod
     def skip_bn_op(sess: tf.compat.v1.Session, bn_op: tf.Operation, in_tensor: tf.Tensor, out_tensor: tf.Tensor):
         """

@@ -43,14 +43,19 @@ import unittest
 import pytest
 import tensorflow as tf
 import numpy as np
-
+import json
 from tensorflow.keras.models import Sequential
 from tensorflow.keras.layers import Dense, Conv2D, BatchNormalization, Flatten, AvgPool2D, MaxPool2D
-from aimet_tensorflow.batch_norm_fold import  fold_all_batch_norms, find_all_batch_norms_to_fold
+from aimet_tensorflow.batch_norm_fold import fold_all_batch_norms, find_all_batch_norms_to_fold, \
+    fold_all_batch_norms_to_scale
 from aimet_tensorflow.common.connectedgraph import ConnectedGraph
 from aimet_tensorflow.examples.test_models import tf_slim_basic_model
 from aimet_tensorflow.utils.op.conv import WeightTensorUtils
 from aimet_tensorflow.utils.graph import update_keras_bn_ops_trainable_flag
+from aimet_tensorflow.quantsim import QuantizationSimModel
+from aimet_common.defs import QuantScheme
+from aimet_tensorflow.utils.op.fusedbatchnorm import BNUtils
+from aimet_tensorflow.utils.op.conv import WeightTensorUtils, BiasUtils, get_output_activation_shape
 
 
 tf.compat.v1.logging.set_verbosity(tf.compat.v1.logging.WARN)
@@ -466,7 +471,519 @@ class TestBatchNormFold(unittest.TestCase):
 
         _ = update_keras_bn_ops_trainable_flag(model, False, "./data")
         sess = tf.compat.v1.keras.backend.get_session()
-
         new_sess, folded_bn_conv_pairs = fold_all_batch_norms(sess, "conv2d_input", 'keras_model/Softmax')
         self.assertTrue(len(folded_bn_conv_pairs) == 2)
 
+
+def get_sim_model_conv2d_FusedBatchNormV3():
+    tf.compat.v1.reset_default_graph()
+    inputs = tf.keras.Input(shape=(32, 32, 3,))
+    conv_op = tf.keras.layers.Conv2D(32, (3, 3))(inputs)
+    bn_op = tf.keras.layers.BatchNormalization(epsilon=1e-5, momentum=1.0,
+                                               moving_mean_initializer=tf.compat.v1.random_uniform_initializer(),
+                                               moving_variance_initializer=tf.compat.v1.random_uniform_initializer(),
+                                               beta_initializer=tf.compat.v1.random_uniform_initializer(),
+                                               gamma_initializer=tf.compat.v1.random_uniform_initializer(),
+                                               fused=True)(conv_op, training=False)
+    rulu_op = tf.nn.relu(bn_op)
+    init = tf.compat.v1.global_variables_initializer()
+    sess = tf.compat.v1.Session()
+    sess.run(init)
+
+
+    quantsim_config = {
+        "defaults": {
+            "ops": {"is_output_quantized": "True"},
+            "params": {"is_quantized": "True"},
+            "strict_symmetric": "False",
+            "unsigned_symmetric": "True",
+            "per_channel_quantization": "True"
+        },
+        "params": {
+            "bias": {"is_quantized": "False"}
+        },
+        "op_type": {},
+        "supergroups": [
+            {"op_list": ["Conv", "BatchNormalization"]},
+            {"op_list": ["Gemm", "BatchNormalization"]}
+
+        ],
+        "model_input": {"is_input_quantized": "True"},
+        "model_output": {}
+    }
+
+    with open('./quantsim_config.json', 'w') as f:
+        json.dump(quantsim_config, f)
+
+
+    sim = QuantizationSimModel(sess, ["input_1"], ['Relu'], use_cuda=True,
+                               quant_scheme=QuantScheme.training_range_learning_with_tf_init,
+                               config_file='./quantsim_config.json')
+
+    fp32_conv_op = sess.graph.get_operation_by_name('conv2d/Conv2D')
+    w_shape = fp32_conv_op.inputs[0].shape
+    numpy_data = np.random.rand(128, w_shape[1], w_shape[2], w_shape[3])
+
+    def dummy_forward_pass(sess, args):
+        model_input = sess.graph.get_tensor_by_name('input_1:0')
+        model_output = sess.graph.get_tensor_by_name('Relu:0')
+        sess.run(model_output, feed_dict={model_input: numpy_data})
+
+    sim.compute_encodings(dummy_forward_pass, None)
+
+    return sim, numpy_data
+
+def get_sim_model_conv2d_no_bias_FusedBatchNormV3():
+    tf.compat.v1.reset_default_graph()
+    inputs = tf.keras.Input(shape=(32, 32, 3,))
+    conv_op = tf.keras.layers.Conv2D(32, (3, 3),use_bias=False)(inputs)
+    bn_op = tf.keras.layers.BatchNormalization(epsilon=0, momentum=1.0,
+                                               moving_mean_initializer=tf.compat.v1.random_uniform_initializer(),
+                                               moving_variance_initializer=tf.compat.v1.random_uniform_initializer(),
+                                               beta_initializer=tf.compat.v1.random_uniform_initializer(),
+                                               gamma_initializer=tf.compat.v1.random_uniform_initializer(),
+                                               fused=True)(conv_op, training=False)
+    rulu_op = tf.nn.relu(bn_op)
+    init = tf.compat.v1.global_variables_initializer()
+    sess = tf.compat.v1.Session()
+    sess.run(init)
+
+    # Check that outputs of conv2d and conv2d_1 have no biases
+    conv = sess.graph.get_operation_by_name('conv2d/Conv2D')
+    assert (sess.graph.get_operation_by_name('conv2d/Conv2D').outputs[0].consumers()[0].type != 'BiasAdd')
+  
+    sess = BiasUtils.initialize_model_with_bias(sess, ['input_1'], ['conv2d/Conv2D'])
+    # Check that conv2d has a bias inserted but not conv2d_1
+    new_conv = sess.graph.get_operation_by_name('conv2d/Conv2D')
+    assert(sess.graph.get_operation_by_name('conv2d/Conv2D').outputs[0].consumers()[0].type == 'BiasAdd')
+
+    quantsim_config = {
+        "defaults": {
+            "ops": {"is_output_quantized": "True"},
+            "params": {"is_quantized": "True"},
+            "strict_symmetric": "False",
+            "unsigned_symmetric": "True",
+            "per_channel_quantization": "True"
+        },
+        "params": {
+            "bias": {"is_quantized": "False"}
+        },
+        "op_type": {},
+        "supergroups": [
+            {"op_list": ["Conv", "BatchNormalization"]},
+            {"op_list": ["Gemm", "BatchNormalization"]}
+
+        ],
+        "model_input": {"is_input_quantized": "True"},
+        "model_output": {}
+    }
+
+    with open('./quantsim_config.json', 'w') as f:
+        json.dump(quantsim_config, f)
+
+    sim = QuantizationSimModel(sess, ["input_1"], ['Relu'], use_cuda=True,
+                               quant_scheme=QuantScheme.training_range_learning_with_tf_init,
+                               config_file='./quantsim_config.json')
+
+    fp32_conv_op = sess.graph.get_operation_by_name('conv2d/Conv2D')
+    w_shape = fp32_conv_op.inputs[0].shape
+    numpy_data = np.random.rand(128, w_shape[1], w_shape[2], w_shape[3])
+
+    def dummy_forward_pass(sess, args):
+        model_input = sess.graph.get_tensor_by_name('input_1:0')
+        model_output = sess.graph.get_tensor_by_name('Relu:0')
+        sess.run(model_output, feed_dict={model_input: numpy_data})
+
+    sim.compute_encodings(dummy_forward_pass, None)
+
+    return sim, numpy_data
+
+def get_sim_model_depthwise_conv_FusedBatchNormV3():
+    tf.compat.v1.reset_default_graph()
+    inputs = tf.keras.Input(shape=(32, 32, 3,))
+    conv_op = tf.keras.layers.DepthwiseConv2D(
+        kernel_size=(3, 3),
+        strides=(1, 1),
+        padding='valid',
+        depth_multiplier=1,
+        data_format=None,
+        dilation_rate=(1, 1),
+        activation=None,
+        use_bias=True,
+        depthwise_initializer='glorot_uniform',
+        bias_initializer='zeros',
+        depthwise_regularizer=None,
+        bias_regularizer=None,
+        activity_regularizer=None,
+        depthwise_constraint=None,
+        bias_constraint=None,
+
+    )(inputs)
+
+    bn_op = tf.keras.layers.BatchNormalization(epsilon=0.0, momentum=1.0,
+                                               moving_mean_initializer=tf.compat.v1.random_uniform_initializer(),
+                                               moving_variance_initializer=tf.compat.v1.random_uniform_initializer(),
+                                               beta_initializer=tf.compat.v1.random_uniform_initializer(),
+                                               gamma_initializer=tf.compat.v1.random_uniform_initializer(),
+                                               fused=True)(conv_op, training=False)
+
+    rulu_op = tf.nn.relu(bn_op)
+    init = tf.compat.v1.global_variables_initializer()
+    sess = tf.compat.v1.Session()
+    sess.run(init)
+
+    quantsim_config = {
+        "defaults": {
+            "ops": {"is_output_quantized": "True"},
+            "params": {"is_quantized": "True"},
+            "strict_symmetric": "False",
+            "unsigned_symmetric": "True",
+            "per_channel_quantization": "True"
+        },
+        "params": {
+            "bias": {"is_quantized": "False"}
+        },
+        "op_type": {},
+        "supergroups": [
+            {"op_list": ["Conv", "BatchNormalization"]},
+            {"op_list": ["Gemm", "BatchNormalization"]}
+
+        ],
+        "model_input": {"is_input_quantized": "True"},
+        "model_output": {}
+    }
+
+    with open('./quantsim_config.json', 'w') as f:
+        json.dump(quantsim_config, f)
+
+    sim = QuantizationSimModel(sess, ["input_1"], ['Relu'], use_cuda=True,
+                               quant_scheme=QuantScheme.training_range_learning_with_tf_init,
+                               config_file='./quantsim_config.json')
+
+    fp32_conv_op = sess.graph.get_operation_by_name('depthwise_conv2d/depthwise')
+    w_shape = fp32_conv_op.inputs[0].shape
+    numpy_data = np.random.rand(128, w_shape[1], w_shape[2], w_shape[3])
+
+    def dummy_forward_pass(sess, args):
+        model_input = sess.graph.get_tensor_by_name('input_1:0')
+        model_output = sess.graph.get_tensor_by_name('Relu:0')
+        sess.run(model_output, feed_dict={model_input: numpy_data})
+
+    sim.compute_encodings(dummy_forward_pass, None)
+
+    return sim, numpy_data
+
+def get_sim_model_conv2d_Identity():
+    tf.compat.v1.reset_default_graph()
+    inputs = tf.keras.Input(shape=(32, 32, 3,))
+    conv_op = tf.keras.layers.Conv2D(32, (3, 3),bias_initializer=tf.compat.v1.random_uniform_initializer())(inputs)
+
+    bn_momentum_var = tf.compat.v1.Variable(1.0, name='bn_momentum_var')
+    bn_training_var = tf.compat.v1.Variable(tf.compat.v1.constant(True), name='bn_training_var')
+    #bn_training_var = tf.compat.v1.placeholder_with_default(tf.compat.v1.constant(True),shape=(), name='bn_training_var' )
+    #is_training = tf.compat.v1.placeholder_with_default(True, (), 'is_training')
+    bn_epsilon_var = tf.compat.v1.Variable(1.0009999641624745e-05, name='bn_epsilon_var')
+    bn_op = tf.keras.layers.BatchNormalization(epsilon= 1.0009999641624745e-05 , momentum=bn_momentum_var,
+                                               moving_mean_initializer=tf.compat.v1.random_uniform_initializer(),
+                                               moving_variance_initializer=tf.compat.v1.random_uniform_initializer(),
+                                               beta_initializer=tf.compat.v1.random_uniform_initializer(),
+                                               gamma_initializer=tf.compat.v1.random_uniform_initializer(),
+                                               fused=True)(conv_op, training=bn_training_var)
+
+    rulu_op = tf.nn.relu(bn_op)
+    init = tf.compat.v1.global_variables_initializer()
+    sess = tf.compat.v1.Session()
+    sess.run(init)
+
+    quantsim_config = {
+        "defaults": {
+            "ops": {"is_output_quantized": "True"},
+            "params": {"is_quantized": "True"},
+            "strict_symmetric": "False",
+            "unsigned_symmetric": "True",
+            "per_channel_quantization": "True"
+        },
+        "params": {
+            "bias": {"is_quantized": "False"}
+        },
+        "op_type": {},
+        "supergroups": [
+            {"op_list": ["Conv", "BatchNormalization"]},
+            {"op_list": ["Gemm", "BatchNormalization"]}
+
+        ],
+        "model_input": {"is_input_quantized": "True"},
+        "model_output": {}
+    }
+
+    with open('./quantsim_config.json', 'w') as f:
+        json.dump(quantsim_config, f)
+
+    sim = QuantizationSimModel(sess, ["input_1"], ['Relu'], use_cuda=True,
+                               quant_scheme=QuantScheme.training_range_learning_with_tf_init,
+                               config_file='./quantsim_config.json')
+
+    fp32_conv_op = sess.graph.get_operation_by_name('conv2d/Conv2D')
+    w_shape = fp32_conv_op.inputs[0].shape
+    numpy_data = np.random.rand(128, w_shape[1], w_shape[2], w_shape[3])
+
+    def dummy_forward_pass(sess, args):
+        model_input = sess.graph.get_tensor_by_name('input_1:0')
+        model_output = sess.graph.get_tensor_by_name('Relu:0')
+        sess.run(model_output, feed_dict={model_input: numpy_data})
+
+    sim.compute_encodings(dummy_forward_pass, None)
+
+    return sim, numpy_data
+
+def get_sim_model_depthwise_conv_Identity():
+    tf.compat.v1.reset_default_graph()
+    inputs = tf.keras.Input(shape=(32, 32, 3,))
+    conv_op = tf.keras.layers.DepthwiseConv2D(
+        kernel_size=(3, 3),
+        strides=(1, 1),
+        padding='valid',
+        depth_multiplier=1,
+        data_format=None,
+        dilation_rate=(1, 1),
+        activation=None,
+        use_bias=True,
+        depthwise_initializer='glorot_uniform',
+        bias_initializer=tf.compat.v1.random_uniform_initializer(),
+        depthwise_regularizer=None,
+        bias_regularizer=None,
+        activity_regularizer=None,
+        depthwise_constraint=None,
+        bias_constraint=None,
+
+    )(inputs)
+
+    bn_momentum_var = tf.compat.v1.Variable(1.0, name='bn_momentum_var')
+    bn_training_var = tf.compat.v1.Variable(tf.compat.v1.constant(True), name='bn_training_var')
+    bn_epsilon_var = tf.compat.v1.Variable(0.0, name='bn_epsilon_var')
+    bn_op = tf.keras.layers.BatchNormalization(epsilon=0.0, momentum=bn_momentum_var,
+                                               moving_mean_initializer=tf.compat.v1.random_uniform_initializer(),
+                                               moving_variance_initializer=tf.compat.v1.random_uniform_initializer(),
+                                               beta_initializer=tf.compat.v1.random_uniform_initializer(),
+                                               gamma_initializer=tf.compat.v1.random_uniform_initializer(),
+                                               fused=True)(conv_op, training=bn_training_var)
+
+    rulu_op = tf.nn.relu(bn_op)
+    init = tf.compat.v1.global_variables_initializer()
+    sess = tf.compat.v1.Session()
+    sess.run(init)
+
+    quantsim_config = {
+        "defaults": {
+            "ops": {"is_output_quantized": "True"},
+            "params": {"is_quantized": "True"},
+            "strict_symmetric": "False",
+            "unsigned_symmetric": "True",
+            "per_channel_quantization": "True"
+        },
+        "params": {
+            "bias": {"is_quantized": "False"}
+        },
+        "op_type": {},
+        "supergroups": [
+            {"op_list": ["Conv", "BatchNormalization"]},
+            {"op_list": ["Gemm", "BatchNormalization"]}
+
+        ],
+        "model_input": {"is_input_quantized": "True"},
+        "model_output": {}
+    }
+
+    with open('./quantsim_config.json', 'w') as f:
+        json.dump(quantsim_config, f)
+
+    sim = QuantizationSimModel(sess, ["input_1"], ['Relu'], use_cuda=True,
+                               quant_scheme=QuantScheme.training_range_learning_with_tf_init,
+                               config_file='./quantsim_config.json')
+
+    fp32_conv_op = sess.graph.get_operation_by_name('depthwise_conv2d/depthwise')
+    w_shape = fp32_conv_op.inputs[0].shape
+    numpy_data = np.random.rand(128, w_shape[1], w_shape[2], w_shape[3])
+
+    def dummy_forward_pass(sess, args):
+        model_input = sess.graph.get_tensor_by_name('input_1:0')
+        model_output = sess.graph.get_tensor_by_name('Relu:0')
+        sess.run(model_output, feed_dict={model_input: numpy_data})
+
+    sim.compute_encodings(dummy_forward_pass, None)
+    return sim, numpy_data
+
+
+class TestTrainingExtensionBnFoldToScale:
+    """ Test methods for BatchNormFold with QuantizationSimModel"""
+    def test_batch_norm_fold_scale_conv2d_FusedBatchNormV3(self):
+        """
+        test_batch_norm_fold_scale for conv2d_FusedBatchNormV3
+        """
+        sim, numpy_data = get_sim_model_conv2d_FusedBatchNormV3()
+
+        sim_conv_op = sim.session.graph.get_operation_by_name('conv2d/Conv2D')
+        sim_relu_op = sim.session.graph.get_operation_by_name('Relu')
+        bn_quantizer_name = "batch_normalization/FusedBatchNormV3" + "_quantized"
+        bn_quantizer = sim.quantizer_config(bn_quantizer_name)
+        bn_quantizer.enabled = False
+
+        sim_relu_in = sim.session.run(sim_relu_op.inputs[0], feed_dict={sim_conv_op.inputs[0]: numpy_data})
+        sim_relu_out = sim.session.run(sim_relu_op.outputs[0], feed_dict={sim_conv_op.inputs[0]: numpy_data})
+
+        fold_all_batch_norms_to_scale(sim, "input_1", 'Relu')
+
+        new_conv_op = sim.session.graph.get_operation_by_name('conv2d/Conv2D')
+        new_conv_op_add = sim.session.graph.get_operation_by_name('conv2d/BiasAdd')
+        new_bn_op = sim.session.graph.get_operation_by_name('batch_normalization/FusedBatchNormV3')
+
+        new_conv_out = sim.session.run(new_conv_op_add.outputs[0], feed_dict={new_conv_op.inputs[0]: numpy_data})
+        new_bn_in = sim.session.run(new_bn_op.inputs[0], feed_dict={new_conv_op.inputs[0]: numpy_data})
+        new_bn_out = sim.session.run(new_bn_op.outputs[0], feed_dict={new_conv_op.inputs[0]: numpy_data})
+        assert np.allclose(new_conv_out, new_bn_in)
+        new_relu_op = sim.session.graph.get_operation_by_name('Relu')
+        new_relu_input = sim.session.run(new_relu_op.inputs[0], feed_dict={new_conv_op.inputs[0]: numpy_data})
+        new_relu_output = sim.session.run(new_relu_op.outputs[0], feed_dict={new_conv_op.inputs[0]: numpy_data})
+        assert np.allclose(new_bn_out, new_relu_input)
+
+        assert np.allclose(sim_relu_out, new_relu_output, atol=1e-4)
+        #assert np.allclose(sim_relu_in, new_relu_input, atol=1e-4)
+
+        sim.session.close()
+
+    def test_batch_norm_fold_scale_conv2d_no_bias_FusedBatchNormV3(self):
+        """
+        test_batch_norm_fold_scale  for conv2d_no_bias_FusedBatchNormV3
+        """
+        sim, numpy_data = get_sim_model_conv2d_no_bias_FusedBatchNormV3()
+        sim_conv_op = sim.session.graph.get_operation_by_name('conv2d/Conv2D')
+        sim_relu_op = sim.session.graph.get_operation_by_name('Relu')
+        bn_quantizer_name = "batch_normalization/FusedBatchNormV3" + "_quantized"
+        bn_quantizer = sim.quantizer_config(bn_quantizer_name)
+        bn_quantizer.enabled = False
+
+        sim_relu_in = sim.session.run(sim_relu_op.inputs[0], feed_dict={sim_conv_op.inputs[0]: numpy_data})
+        sim_relu_out = sim.session.run(sim_relu_op.outputs[0], feed_dict={sim_conv_op.inputs[0]: numpy_data})
+
+        fold_all_batch_norms_to_scale(sim, "input_1", 'Relu')
+
+        new_conv_op = sim.session.graph.get_operation_by_name('conv2d/Conv2D')
+
+        new_bn_op = sim.session.graph.get_operation_by_name('batch_normalization/FusedBatchNormV3')
+        new_bn_out = sim.session.run(new_bn_op.outputs[0], feed_dict={new_conv_op.inputs[0]: numpy_data})
+
+        new_relu_op = sim.session.graph.get_operation_by_name('Relu')
+        new_relu_input = sim.session.run(new_relu_op.inputs[0], feed_dict={new_conv_op.inputs[0]: numpy_data})
+        new_relu_output = sim.session.run(new_relu_op.outputs[0], feed_dict={new_conv_op.inputs[0]: numpy_data})
+        assert np.allclose(sim_relu_out, new_relu_output, atol=1e-4)
+        sim.session.close()
+
+
+    def test_batch_norm_fold_scale_depthwise_conv_FusedBatchNormV3(self):
+        """
+        test_batch_norm_fold_scale for depthwise_conv_FusedBatchNormV3
+        """
+        sim, numpy_data = get_sim_model_depthwise_conv_FusedBatchNormV3()
+        sim_conv_op = sim.session.graph.get_operation_by_name('depthwise_conv2d/depthwise')
+        sim_relu_op = sim.session.graph.get_operation_by_name('Relu')
+        bn_quantizer_name = "batch_normalization/FusedBatchNormV3" + "_quantized"
+        bn_quantizer = sim.quantizer_config(bn_quantizer_name)
+        bn_quantizer.enabled = False
+
+        sim_relu_in = sim.session.run(sim_relu_op.inputs[0], feed_dict={sim_conv_op.inputs[0]: numpy_data})
+        sim_relu_out = sim.session.run(sim_relu_op.outputs[0], feed_dict={sim_conv_op.inputs[0]: numpy_data})
+
+        fold_all_batch_norms_to_scale(sim, "input_1", 'Relu')
+
+        new_conv_op = sim.session.graph.get_operation_by_name('depthwise_conv2d/depthwise')
+        new_conv_op_add = sim.session.graph.get_operation_by_name('depthwise_conv2d/BiasAdd')
+        new_bn_op = sim.session.graph.get_operation_by_name('batch_normalization/FusedBatchNormV3')
+        new_conv_out = sim.session.run(new_conv_op_add.outputs[0], feed_dict={new_conv_op.inputs[0]: numpy_data})
+        new_bn_out = sim.session.run(new_bn_op.outputs[0], feed_dict={new_conv_op.inputs[0]: numpy_data})
+        new_relu_op = sim.session.graph.get_operation_by_name('Relu')
+        new_relu_input = sim.session.run(new_relu_op.inputs[0], feed_dict={new_conv_op.inputs[0]: numpy_data})
+        new_relu_output = sim.session.run(new_relu_op.outputs[0], feed_dict={new_conv_op.inputs[0]: numpy_data})
+        assert np.allclose(sim_relu_out, new_relu_output, atol=1e-4)
+        sim.session.close()
+
+    def test_batch_norm_fold_scale_conv2d_Identity(self):
+        """
+        test_batch_norm_fold_scale for conv2d_Identity
+        """
+        sim, numpy_data = get_sim_model_conv2d_Identity()
+
+        with sim.session.graph.as_default():
+            tf_global_vars = tf.compat.v1.get_collection(tf.compat.v1.GraphKeys.GLOBAL_VARIABLES)
+        sim_conv_op = sim.session.graph.get_operation_by_name('conv2d/Conv2D')
+        sim_relu_op = sim.session.graph.get_operation_by_name('Relu')
+
+        bn_quantizer_name = "batch_normalization/cond/Identity_quantized"
+        bn_quantizer = sim.quantizer_config(bn_quantizer_name)
+        bn_quantizer.enabled = False
+
+        with sim.session.graph.as_default():
+            tf_global_vars = tf.compat.v1.get_collection(tf.compat.v1.GraphKeys.GLOBAL_VARIABLES)
+            for v in tf_global_vars:
+                if v.name == 'bn_training_var:0':
+                    bn_training_tf_var = v
+                if v.name == 'bn_momentum_var:0':
+                    bn_momentum_tf_var = v
+            sim.session.run([tf.compat.v1.assign(bn_momentum_tf_var, 1.0),
+                             tf.compat.v1.assign(bn_training_tf_var, tf.compat.v1.constant(False))])
+
+
+        sim_relu_out = sim.session.run(sim_relu_op.outputs[0], feed_dict={sim_conv_op.inputs[0]: numpy_data})
+
+        fold_all_batch_norms_to_scale(sim, "input_1", 'Relu')
+
+        new_conv_op = sim.session.graph.get_operation_by_name('conv2d/Conv2D')
+        new_bn_op = sim.session.graph.get_operation_by_name("batch_normalization/cond/Identity")
+        new_bn_out = sim.session.run(new_bn_op.outputs[0], feed_dict={new_conv_op.inputs[0]: numpy_data})
+        new_relu_op = sim.session.graph.get_operation_by_name('Relu')
+        new_relu_input = sim.session.run(new_relu_op.inputs[0], feed_dict={new_conv_op.inputs[0]: numpy_data})
+        new_relu_output = sim.session.run(new_relu_op.outputs[0], feed_dict={new_conv_op.inputs[0]: numpy_data})
+        assert np.allclose(new_bn_out, new_relu_input)
+        assert np.allclose(sim_relu_out, new_relu_output, atol=1e-4)
+        sim.session.close()
+
+    def test_batch_norm_fold_scale_depthwise_conv_Identity(self):
+        """
+        test_batch_norm_fold_scale for depthwise_conv_Identity
+        """
+        sim, numpy_data = get_sim_model_depthwise_conv_Identity()
+
+        with sim.session.graph.as_default():
+            tf_global_vars = tf.compat.v1.get_collection(tf.compat.v1.GraphKeys.GLOBAL_VARIABLES)
+        sim_conv_op = sim.session.graph.get_operation_by_name('depthwise_conv2d/depthwise')
+        sim_relu_op = sim.session.graph.get_operation_by_name('Relu')
+
+        bn_quantizer_name = "batch_normalization/cond/Identity_quantized"
+        bn_quantizer = sim.quantizer_config(bn_quantizer_name)
+        bn_quantizer.enabled = False
+
+        with sim.session.graph.as_default():
+            tf_global_vars = tf.compat.v1.get_collection(tf.compat.v1.GraphKeys.GLOBAL_VARIABLES)
+            for v in tf_global_vars:
+                if v.name == 'bn_training_var:0':
+                    bn_training_tf_var = v
+                if v.name == 'bn_momentum_var:0':
+                    bn_momentum_tf_var = v
+            sim.session.run([tf.compat.v1.assign(bn_momentum_tf_var, 1.0),
+                             tf.compat.v1.assign(bn_training_tf_var, tf.compat.v1.constant(False))])
+
+
+        sim_relu_in = sim.session.run(sim_relu_op.inputs[0], feed_dict={sim_conv_op.inputs[0]: numpy_data})
+        sim_relu_out = sim.session.run(sim_relu_op.outputs[0], feed_dict={sim_conv_op.inputs[0]: numpy_data})
+
+        fold_all_batch_norms_to_scale(sim, "input_1", 'Relu')
+
+        new_conv_op = sim.session.graph.get_operation_by_name('depthwise_conv2d/depthwise')
+        new_bn_op = sim.session.graph.get_operation_by_name("batch_normalization/cond/Identity")
+        new_bn_out = sim.session.run(new_bn_op.outputs[0], feed_dict={new_conv_op.inputs[0]: numpy_data})
+        new_relu_op = sim.session.graph.get_operation_by_name('Relu')
+        new_relu_input = sim.session.run(new_relu_op.inputs[0], feed_dict={new_conv_op.inputs[0]: numpy_data})
+        new_relu_output = sim.session.run(new_relu_op.outputs[0], feed_dict={new_conv_op.inputs[0]: numpy_data})
+        assert np.allclose(new_bn_out, new_relu_input)
+
+        assert np.allclose(sim_relu_out, new_relu_output, atol=1e-4)
+        sim.session.close()
