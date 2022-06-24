@@ -284,7 +284,7 @@ class ConnectedGraph(AimetCommonConnectedGraph):
         _ = self._parse_trace_graph(trace, model, ir_nodes_list=ir_nodes_list, output_map=output_map)
         return ir_nodes_list, output_map
 
-    def _parse_trace_graph(self, # pylint: disable=too-many-locals
+    def _parse_trace_graph(self, # pylint: disable=too-many-locals, too-many-branches
                            trace: Union[torch.jit.TopLevelTracedModule, torch.jit.TracedModule],
                            model: torch.nn.Module,
                            ir_nodes_list: List[IrNode],
@@ -346,11 +346,16 @@ class ConnectedGraph(AimetCommonConnectedGraph):
                         getattr_node_info.node_alias, node_name_to_module[getattr_node_info.node_alias],
                         subgraph_model))
 
-                # Recursive parsing is needed if the module is not leaf module or
-                # the forward method of trace has more than one node (functional operations).
-                # If the module is leaf module but has multiple functional operations in
-                # forward method, that also requires further parsing.
-                if not is_leaf_module(subgraph_model) or not len(_find_nodes_in_forward_pass(subgraph_trace)) <= 1:
+                # Recursive parsing is not needed 1) if the module is leaf module and
+                # module is from torch.nn (Conv2d, Linear etc.) 2) if the module is leaf module and
+                # custom module whose forward method has only one functional operation (elementwise_ops.Add()).
+                # Recursive parsing is needed 1) if the module is not leaf module.
+                # 2) If the module is leaf module but has multiple functional operations in
+                # forward method.
+                if (is_leaf_module(subgraph_model) and _is_torch_nn_module(subgraph_model)) or\
+                        (is_leaf_module(subgraph_model) and len(_find_nodes_in_forward_pass(subgraph_trace)) <= 1):
+                    continue
+                else:
                     node_name_to_subgraph_model[getattr_node_info.node_alias] = (subgraph_model, getattr_node_info)
 
             # invoking forward method
@@ -1212,3 +1217,17 @@ def _find_nodes_in_forward_pass(trace: Union[torch.jit.TopLevelTracedModule, tor
     except RuntimeError:
         pass
     return nodes
+
+
+def _is_torch_nn_module(module: torch.nn.Module) -> bool:
+    """
+    Utility function to determine if the given module is from torch.nn class or not.
+    For modules like torch.nn.Conv2d, the utility will return True.
+
+    :param module: PyTorch module.
+    :return: True if the module from torch.nn class, False otherwise
+    """
+    torch_nn_module = False
+    if "torch.nn" in str(module.__class__):
+        torch_nn_module = True
+    return torch_nn_module
