@@ -130,6 +130,27 @@ class WeightTensorUtils:
         return numpy_data
 
     @staticmethod
+    def update_tensor_for_sim_op(sess: tf.compat.v1.Session, op: tf.Operation, tensor_as_numpy_array):
+        """
+        updated existing weight tensor variable in given op with new value.
+        :param sess: active tf.compat.v1.Session
+        :param op: op for which the weight tensor is to be updated
+        :param tensor_as_numpy_array: new weight tensor as numpy array
+        :return: None
+        """
+        # validate the shapes are same
+        assert WeightTensorUtils.get_tensor_shape(op) == tensor_as_numpy_array.shape
+        # update the weight tensor
+        with sess.graph.as_default():
+            wt_tensor_index = WeightTensorUtils.get_tensor_index_in_given_op(op)
+            wt_var_read_op = op.inputs[wt_tensor_index].op.inputs[0].op
+            wt_tensor = wt_var_read_op.inputs[constants.OP_VAR_WEIGHT_INDEX]
+            assert wt_tensor is not None, ('Error, no weight tensor found for this op', op.name)
+            wt_as_var = [var for var in tf.compat.v1.global_variables() if var.name == wt_tensor.name][0]
+            wt_as_var.load(tensor_as_numpy_array, sess)
+
+
+    @staticmethod
     def update_tensor_for_op(sess: tf.compat.v1.Session, op: tf.Operation, tensor_as_numpy_array):
         """
         updated existing weight tensor variable in given op with new value.
@@ -285,7 +306,7 @@ class BiasUtils:
                     # check if one of the inputs is ReadVariableOp type or Identity type
                     # when we add BiasAdd op to a conv op programmatically, the read op is 'Identity' type.
                     if consumer.inputs[constants.BIAS_ADD_CONSUMERS_INPUT_BIAS_READ_INDEX].op.type in \
-                            ['ReadVariableOp', 'Identity', 'QcQuantize']:
+                            ['ReadVariableOp', 'Identity', 'QcQuantize', 'QcQuantizePerChannel']:
                         is_bias_none = False
                     break
         return is_bias_none
@@ -404,6 +425,37 @@ class BiasUtils:
                 assert bias_tensor is not None, ('Error, bias tensor lookup failed for op ', op.name)
                 bias_as_var = [var for var in tf.compat.v1.global_variables() if var.name == bias_tensor.name][0]
                 bias_as_var.load(bias_as_numpy_array, sess)
+
+    @staticmethod
+    def update_bias_for_sim_op(sess: tf.compat.v1.Session, op: tf.Operation, bias_as_numpy_array,
+                               bias_name="bias_value"):
+        """
+        update existing bias in given op with new bias value
+        creates and adds new bias if it does not exist.
+        Note :
+        Caller needs to perform a load and save of the graph
+        if this api is invoked for an op without existing bias.
+        :param sess: TensorFlow session
+        :param op:op for which the bias is to be updated
+        :param bias_as_numpy_array: new bias as a numpy array
+        :param bias_name: optional name can be specified by user
+        :return: None
+        """
+        with sess.graph.as_default():
+            if not BiasUtils.is_bias_none(op):
+                bias_quant_op = BiasUtils.get_bias_tensor(op)
+                bias_tensor_as_read_var_quant_op_input = bias_quant_op.op.inputs[0]
+                # assert len(bias_tensor_as_read_var_op_input.op.inputs) == 1
+                bias_tensor = bias_tensor_as_read_var_quant_op_input.op.inputs[constants.OP_BIAS_INDICES[op.type]]
+                assert BiasUtils.get_shape(op)[0] == bias_as_numpy_array.size
+                # use tensor name to lookup var type associated with it
+                assert bias_tensor is not None, ('Error, bias tensor lookup failed for op ', op.name)
+                bias_as_var = [var for var in tf.compat.v1.global_variables() if var.name == bias_tensor.name][0]
+                bias_as_var.load(bias_as_numpy_array, sess)
+            else:
+                # _create_bias_add_op_and_insert
+                new_bias_var = tf.Variable(initial_value=bias_as_numpy_array, name=bias_name, dtype=tf.float32)
+                BiasUtils._create_bias_add_op_and_insert(sess, op, new_bias_var, bias_name)
 
     @staticmethod
     def update_bias_for_op(sess: tf.compat.v1.Session, op: tf.Operation, bias_as_numpy_array,

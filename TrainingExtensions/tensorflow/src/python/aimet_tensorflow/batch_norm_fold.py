@@ -39,11 +39,14 @@
 """ TF Code to fold batch-norm layers """
 
 from typing import List, Tuple, Union
+import os
 import numpy as np
 import tensorflow as tf
 
 from aimet_tensorflow.common.connectedgraph import ConnectedGraph
 from aimet_tensorflow.common.operation import OpWithMetaInfoType
+from aimet_tensorflow.quantsim import QuantizationSimModel
+from aimet_tensorflow.utils import graph_saver
 from aimet_tensorflow.utils.op.conv import WeightTensorUtils, BiasUtils
 from aimet_tensorflow.utils.op.fusedbatchnorm import BNUtils
 from aimet_tensorflow.utils.graph_saver import save_and_load_graph
@@ -229,7 +232,6 @@ def _get_bn_params(sess: tf.compat.v1.Session, bn: tf.Operation) -> libpymo.BNPa
     :param bn: BatchNorm or a FusedBatch Norm op
     :return: bn_params
     """
-    # make sure you define the session and graph scope before loading vars from graph.
     with sess.graph.as_default():
         # create BNParams type and populate
         bn_params = libpymo.BNParams()
@@ -237,13 +239,17 @@ def _get_bn_params(sess: tf.compat.v1.Session, bn: tf.Operation) -> libpymo.BNPa
         bn_params.gamma = BNUtils.get_gamma_as_numpy_data(sess, bn).reshape(-1)
         bn_params.runningMean = BNUtils.get_moving_mean_as_numpy_data(sess, bn).reshape(-1)
         bn_params.runningVar = BNUtils.get_moving_variance_as_numpy_data(sess, bn).reshape(-1)
-        epsilon = BNUtils.get_epsilon(bn)
+        if bn.type == 'Identity':
+            # can't find a way to read epsilon if BN type is Identity
+            epsilon = 1.0009999641624745e-05
+        else:
+            epsilon = BNUtils.get_epsilon(bn)
+
         var = BNUtils.get_moving_variance_as_numpy_data(sess, bn).reshape(-1)
         var_with_epsilon = var + epsilon
         sigma = np.sqrt(var_with_epsilon)
         # sigma = tf.sqrt(BNUtils.get_moving_variance_as_numpy_data(sess, bn).reshape(-1) + epsilon)
-        bn_params.runningVar = sigma        # sess.run(sigma).reshape(-1)
-
+        bn_params.runningVar = sigma
     return bn_params
 
 
@@ -392,3 +398,101 @@ def fold_all_batch_norms(sess: tf.compat.v1.Session, input_op_names: Union[str, 
         pairs_to_return.append((pair[0], pair[1].op))
 
     return after_fold_sess, pairs_to_return
+
+def fold_all_batch_norms_to_scale(sim: QuantizationSimModel, input_op_names: Union[str, List[str]],
+                                  output_op_names: Union[str, List[str]]):
+    """
+    Fold all batch_norm layers in a model into corresponding conv layers
+
+    :param sim: tf quantized model
+    :param input_op_names: Name of the starting op in the given graph or a list of names in case of multi-input model
+    :param output_op_names: List of output op names of the model, used to help ConnectedGraph determine valid ops
+           (to ignore training ops for example).  If None, all ops in the model are considered valid.
+    :return: A new session with edited graph and a list of pairs of layers [(Conv/Linear, BN layer that got folded)]
+
+    """
+    # check for valid types
+    if not isinstance(input_op_names, (str, List)):
+        logger.error('start op names must be passed as a string or a List of strings')
+    # if passed start op name is only a string - create a list for connected graph
+    if isinstance(input_op_names, str):
+        input_op_names = [input_op_names]
+    # if passed output op name is only a string - create a list for connected graph
+    if isinstance(output_op_names, str):
+        output_op_names = [output_op_names]
+
+    sim.export("/tmp/", "sim_model")
+    new_sess = graph_saver.load_model_from_meta(meta_path=os.path.join("/tmp/", 'sim_model.meta'))
+    bn_conv_linear_pairs = find_all_batch_norms_to_fold(new_sess, input_op_names, output_op_names)
+    _fold_given_auto_selected_batch_norms_scale(sim, bn_conv_linear_pairs)
+
+def _fold_given_auto_selected_batch_norms_scale(sim: QuantizationSimModel, layer_pairs: List[PairType]):
+    """
+     Fold a given set of batch_norm layers into conv layers
+    :param sim: tf quantized model
+    :param layer_pairs: layer_pairs: pair of conv and bn layers
+    """
+    sess = sim.session
+    with sess.graph.as_default():
+        for pair in layer_pairs:
+            batchnorm_tf_op = sess.graph.get_operation_by_name(pair[1].op.name)
+            conv_linear_tf_op = sess.graph.get_operation_by_name(pair[0].name)
+            #  check flag
+            is_bias_valid = False
+            if not BiasUtils.is_bias_none(conv_linear_tf_op):
+                is_bias_valid = True
+            assert batchnorm_tf_op.type in ['FusedBatchNormV3', 'Identity']
+            if batchnorm_tf_op.type == 'Identity':
+                # It is safeguard for Bn type 'Identity'  normal behavior. Bn type'FusedBatchNormV3' does not need since training&momentum are immutable
+                bn_momentum_tf_var_name = sess.graph.get_operation_by_name(batchnorm_tf_op.name.split("/")[0] + "/cond_1").outputs[0].op.inputs[1].name
+                bn_training_tf_var_name = batchnorm_tf_op.inputs[0].op.inputs[0].op.inputs[0].name
+                for v in tf.compat.v1.get_collection(tf.compat.v1.GraphKeys.GLOBAL_VARIABLES):
+                    if v.name == bn_momentum_tf_var_name:
+                        sess.run(tf.compat.v1.assign(v, 1.0))
+                    if v.name == bn_training_tf_var_name:
+                        sess.run(tf.compat.v1.assign(v, tf.compat.v1.constant(False)))
+            bn_params = _get_bn_params(sess, batchnorm_tf_op)
+            weight_tensor = _get_weight_tensor_transpose_reshape(sess, conv_linear_tf_op)
+            bias_tensor = _get_bias_tensor(sess, conv_linear_tf_op)
+            bias = libpymo.fold(bn_params, weight_tensor, bias_tensor, is_bias_valid, pair[2])
+            # converting back to TF format [kh, kw, Nic, Noc] before updating weight tensor value
+            if conv_linear_tf_op.type == 'DepthwiseConv2dNative':
+                # Depthwise conv layers in TF have outputs(Noc) set to 1.
+                # we send in format [Nic, Noc, kh, kw]
+                numpy_weight_reshaped = np.reshape(weight_tensor.data, weight_tensor.shape).transpose((2, 3, 0, 1))
+            elif conv_linear_tf_op.type == 'MatMul':
+                # o, i - convert to i , o
+                numpy_weight_reshaped = np.reshape(weight_tensor.data,
+                                                   [weight_tensor.shape[0], weight_tensor.shape[1]]).transpose(1, 0)
+            else:
+                # conv2D case
+                # we sent in format [Noc, Nic, kh, kw]
+                numpy_weight_reshaped = np.reshape(weight_tensor.data, weight_tensor.shape).transpose((2, 3, 1, 0))
+            WeightTensorUtils.update_tensor_for_sim_op(sess, conv_linear_tf_op, numpy_weight_reshaped)
+            BiasUtils.update_bias_for_sim_op(sess, conv_linear_tf_op, np.reshape(bias, [weight_tensor.shape[0]]))
+            BNUtils.modify_bn_params_to_make_as_passthrough(sess, batchnorm_tf_op)
+            _fold_pair_scale(sim, conv_linear_tf_op, bn_params)
+
+
+def _fold_pair_scale(sim: QuantizationSimModel, conv_linear_tf_op: tf.Operation, bn_params: libpymo.BNParams()):
+    """
+     Fold a batch_norm layer into conv layer's scale
+    :param sim: tf quantized model
+    :param conv_linear_tf_op: conv layer
+    :param bn_params: bn_params
+    """
+    conv_linear_quantizer_w = sim.quantizer_config(conv_linear_tf_op.name + "/ReadVariableOp_quantized")
+    encodings = conv_linear_quantizer_w.get_encoding()
+    new_encodings = []
+    for old_encoding, c in zip(encodings, np.array(bn_params.gamma) * (1.0 / np.array(bn_params.runningVar))):
+        new_encoding = libpymo.TfEncoding()
+        if c >= 0:
+            new_encoding.max = old_encoding.max * c
+            new_encoding.min = old_encoding.min * c
+        else:
+            new_encoding.max = old_encoding.min * c
+            new_encoding.min = old_encoding.max * c
+        new_encoding.offset = old_encoding.offset
+        new_encoding.bw = old_encoding.bw
+        new_encodings.append(new_encoding)
+    conv_linear_quantizer_w.set_encoding(new_encodings)
