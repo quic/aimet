@@ -65,7 +65,7 @@ Follow these instructions to build the AIMET code:
 
 > NOTE: **If you are inside the docker, set `WORKSPACE="<absolute_path_to_workspace>"` again.**
 ```bash
-cd $WORKSPACE 
+cd $WORKSPACE/aimet 
 mkdir build && cd build
 
 # Run cmake (be sure to set the flags in the below command depending on your variant)
@@ -79,7 +79,7 @@ make -j8
 
 After a successful build, install the package using the following instructions:
 ```bash
-cd $WORKSPACE/build
+cd $WORKSPACE/aimet/build
 make install
 ```
 Once the installation step is complete, the AIMET package is created at `$WORKSPACE/build/staging/universal/lib/`.
@@ -96,7 +96,7 @@ At this point, we are all set to use AIMET!
 The following steps would generate AIMET documentation including the user guide, examples and API documentation at `$WORKSPACE/build/staging/universal/Docs`:
 
 ```bash
-cd $WORKSPACE/build
+cd $WORKSPACE/aimet/build
 make doc
 ```
 
