@@ -65,7 +65,7 @@ Follow these instructions to build the AIMET code:
 
 > NOTE: **If you are inside the docker, set `WORKSPACE="<absolute_path_to_workspace>"` again.**
 ```bash
-cd $WORKSPACE 
+cd $WORKSPACE/aimet
 mkdir build && cd build
 
 # Run cmake (be sure to set the flags in the below command depending on your variant)
