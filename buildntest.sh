@@ -78,10 +78,11 @@ usage() {
   echo "            variables, use the same option multiple times ex. -e <var1> -e <var2> ...)"
   echo "    -y --> set any custom script/command as entrypoint for docker (default is dobuildntest.sh)"
   echo "    -n --> dry run mode (just display the docker command)"
+  echo "    -l --> skip docker image build and pull from code linaro instead"
 }
 
 
-while getopts "o:abce:im:npghsuvy:" opt;
+while getopts "o:abce:ilm:npghsuvy:" opt;
    do
       case $opt in
          a)
@@ -117,6 +118,9 @@ while getopts "o:abce:im:npghsuvy:" opt;
              ;;
          m)
              USER_MOUNT_DIRS+=("$OPTARG")
+             ;;
+         l)
+             USE_LINARO=1
              ;;
          n)
              dry_run=1
@@ -169,21 +173,29 @@ fi
 if [ -n "$AIMET_VARIANT" ]; then
     docker_file="Dockerfile.${AIMET_VARIANT}"
     docker_image_name="aimet-dev-docker:${AIMET_VARIANT}"
+    linaro_docker_image_name="artifacts.codelinaro.org/codelinaro-aimet/aimet-dev:latest.${AIMET_VARIANT}"
 else
     docker_file="Dockerfile"
     docker_image_name="aimet-dev-docker:latest"
+    linaro_docker_image_name="artifacts.codelinaro.org/codelinaro-aimet/aimet:latest"
 fi
 
-echo -e "Building docker image${loading_symbol} \n"
-pushd ${dockerfile_path}
-DOCKER_BUILD_CMD="docker build -t ${docker_image_name} -f ${docker_file} ."
-if [ $interactive_mode -eq 1 ] && [ $dry_run -eq 1 ]; then
-	echo ${DOCKER_BUILD_CMD}
-	echo
+# Either use code linaro docker image or build it from scratch
+if [ -n "$USE_LINARO" ]; then
+    docker_image_name=$linaro_docker_image_name
+    echo -e "Using linaro docker image: $docker_image_name \n"
 else
-	eval ${DOCKER_BUILD_CMD}
+    echo -e "Building docker image${loading_symbol} \n"
+    pushd ${dockerfile_path}
+    DOCKER_BUILD_CMD="docker build -t ${docker_image_name} -f ${docker_file} ."
+    if [ $interactive_mode -eq 1 ] && [ $dry_run -eq 1 ]; then
+        echo ${DOCKER_BUILD_CMD}
+        echo
+    else
+        eval ${DOCKER_BUILD_CMD}
+    fi
+    popd
 fi
-popd
 
 if [[ -z "${BUILD_NUMBER}" ]]; then
     # If invoked from command line by user, use a timestamp suffix
