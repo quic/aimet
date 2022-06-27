@@ -45,7 +45,7 @@ import torch
 from torch import nn
 
 import aimet_common.libpymo as libpymo
-from aimet_common.utils import AimetLogger
+from aimet_common.utils import AimetLogger, SingletonType
 from aimet_common.defs import QuantScheme, QuantizationDataType, MAP_ROUND_MODE_TO_PYMO
 from aimet_torch import utils
 from aimet_torch.tensor_quantizer import StaticGridPerTensorQuantizer, StaticGridPerChannelQuantizer, TensorQuantizer, \
@@ -53,6 +53,12 @@ from aimet_torch.tensor_quantizer import StaticGridPerTensorQuantizer, StaticGri
 import aimet_torch.quantsim_straight_through_grad as ste
 
 _logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Quant)
+
+
+class _ConstantTensor(metaclass=SingletonType):
+    def __init__(self, device):
+        self.eps = torch.tensor([1e-5], device=device)
+        self.zero = torch.tensor([0.0], device=device)
 
 
 class QcQuantizeOpMode(Enum):
@@ -736,12 +742,13 @@ class LearnedGridQuantWrapper(QcQuantizeWrapper):
         """
         Apply gating logic.
         """
-        def _apply_logic(encoding_min, encoding_max):
-            encoding_min.data = torch.minimum(torch.tensor([0.0], device=self.device), encoding_min.data)
-            encoding_max.data = torch.maximum(torch.tensor([0.0], device=self.device), encoding_max.data)
-            encoding_max.data = torch.maximum(encoding_max.data, encoding_min.data + eps)
+        zero_tensor = _ConstantTensor(self.device).zero
+        eps_tensor = _ConstantTensor(self.device).eps
 
-        eps = torch.tensor([1e-5], device=self.device)
+        def _apply_logic(encoding_min, encoding_max):
+            encoding_min.data = torch.minimum(zero_tensor, encoding_min.data)
+            encoding_max.data = torch.maximum(zero_tensor, encoding_max.data)
+            encoding_max.data = torch.maximum(encoding_max.data, encoding_min.data + eps_tensor)
 
         # Gating input encodings
         for index, input_quantizer in enumerate(self.input_quantizers):
