@@ -56,9 +56,19 @@ _logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Quant)
 
 
 class _ConstantTensor(metaclass=SingletonType):
-    def __init__(self, device):
+    def __init__(self, device: Union[str, torch.device]):
+        self.device = device
         self.eps = torch.tensor([1e-5], device=device)
         self.zero = torch.tensor([0.0], device=device)
+
+    def synchronize_with(self, device: Union[str, torch.device]):
+        """
+        Synchronize constant tensors with provided device
+        :param device: device for synchronization
+        """
+        self.device = device
+        self.eps = self.eps.to(device)
+        self.zero = self.zero.to(device)
 
 
 class QcQuantizeOpMode(Enum):
@@ -742,6 +752,10 @@ class LearnedGridQuantWrapper(QcQuantizeWrapper):
         """
         Apply gating logic.
         """
+        # Synchronize if the constant tensor are on different device
+        if _ConstantTensor(self.device).device != self.device:
+            _ConstantTensor(self.device).synchronize_with(self.device)
+
         zero_tensor = _ConstantTensor(self.device).zero
         eps_tensor = _ConstantTensor(self.device).eps
 
