@@ -2096,6 +2096,34 @@ class TestQuantizationSimStaticGrad:
         output1 = sim.model(copy.deepcopy(dummy_input))
         assert sum(output1.flatten() - output.flatten()) == 0.0
 
+    def test_fetching_varaible_from_module(self):
+        class Model(nn.Module):
+            def __init__(self, in_channels, out_channels, kernel_size):
+                super(Model, self).__init__()
+                self.conv = nn.Conv2d(in_channels, out_channels, kernel_size)
+
+            def forward(self, inputs):
+                x = self.conv(inputs)
+                return x
+
+        in_channels = out_channels = 10
+        model = Model(in_channels, out_channels, 5)
+        dummy_input = torch.rand(1, 10, 24, 24)
+
+        def forward_pass(model, args):
+            model.eval()
+            model(dummy_input)
+
+        sim = QuantizationSimModel(model, dummy_input)
+        sim.compute_encodings(forward_pass, None)
+
+        assert hasattr(sim.model.conv, 'in_channels')
+        assert getattr(sim.model.conv, 'in_channels') == 10
+        assert hasattr(sim.model.conv, 'out_channels')
+        assert getattr(sim.model.conv, 'out_channels') == 10
+
+        del sim
+
 
 class TestQuantizationSimLearnedGrid:
 

@@ -249,6 +249,12 @@ class QcQuantizeWrapper(nn.Module):
                                  for _ in range(num_inputs)]
         self.input_quantizer = self.input_quantizers[0]
 
+    def __getattr__(self, name):
+        try:
+            return super().__getattr__(name)
+        except AttributeError:
+            return getattr(self._module_to_wrap, name)
+
     @abc.abstractmethod
     def forward(self, *inputs):
         """
