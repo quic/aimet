@@ -248,6 +248,7 @@ class QcQuantizeWrapper(nn.Module):
                                                           data_type=data_type)
                                  for _ in range(num_inputs)]
         self.input_quantizer = self.input_quantizers[0]
+        self._quant_scheme = quant_scheme
 
     def __getattr__(self, name):
         try:
@@ -581,8 +582,13 @@ class StaticGridQuantWrapper(QcQuantizeWrapper):
                 raise AssertionError(error_msg)
 
             if self._mode is QcQuantizeOpMode.ANALYSIS:
-
-                tensor_quantizers[index].update_encoding_stats(input_tensor)
+                if self._quant_scheme == QuantScheme.post_training_tf_enhanced:
+                    stride = 2
+                else:
+                    stride = 1
+                input_tensor_flatten = input_tensor.reshape(-1)
+                downsampled_input = input_tensor_flatten[0::stride].contiguous()
+                tensor_quantizers[index].update_encoding_stats(downsampled_input)
                 output = input_tensor
 
             elif self._mode is QcQuantizeOpMode.ACTIVE:
