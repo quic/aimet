@@ -721,9 +721,10 @@ class Mask:
             self._set_default_masks_for_null_and_stop_connectivity_ops(in_channels, out_channels,
                                                                        is_null_connectivity=False)
         else:
-            logger.error("Unsupported op_type %s, dotted %s, input_ops: %s",
-                         self._op_type, self._dotted_name, self._op_input_ops)
-            raise NotImplementedError()
+            error_msg = (f'Unsupported op_type {self._op_type}, dotted {self._dotted_name}, input_ops: '
+                         f'{self._op_input_ops}')
+            logger.error(error_msg)
+            raise NotImplementedError(error_msg)
 
     def _update_input_output_channels_to_winnow(self, channel_type: ChannelType, total_num_channels: int,
                                                 winnow_channels: List[int]):

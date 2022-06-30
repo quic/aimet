@@ -296,7 +296,7 @@ class QuantSimConfigurator(AimetCommonQuantSimConfigurator):
         if ConfigDictKeys.PARAMS in op_config:
             if op is None:
                 logger.error('No module provided to set params for')
-                raise AssertionError
+                raise AssertionError('No module provided to set params for')
             param_quantize_ops_dict, _ = self._op_to_quant_ops_dict[op]
             for param_name in param_quantize_ops_dict.keys():
                 quantsim_param_name = MAP_TF_PARAM_NAME_TO_QUANTSIM_NAME.get(param_name, None)
@@ -309,7 +309,7 @@ class QuantSimConfigurator(AimetCommonQuantSimConfigurator):
         if ENFORCE_TARGET_DTYPE_BITWIDTH_CONFIG and ConfigDictKeys.SUPPORTED_KERNELS in op_config:
             if op is None:
                 logger.error('No module provided to set params for')
-                raise AssertionError
+                raise AssertionError('No module provided to set params for')
             param_quantize_ops_dict, _ = self._op_to_quant_ops_dict[op]
             self._apply_overrides_for_op(op_config, param_quantize_ops_dict)
 
@@ -448,7 +448,7 @@ class QuantSimConfigurator(AimetCommonQuantSimConfigurator):
                     current_setting = self._sess.run(op_mode_tensor)
                 if current_setting != quantizer_setting:
                     logger.error('Conflicting tensor quantizer settings for symmetric encodings')
-                    raise AssertionError
+                    raise AssertionError('Conflicting tensor quantizer settings for symmetric encodings')
             else:
                 vars_with_value = {}
                 if setting_name in [ConfigDictKeys.IS_INPUT_QUANTIZED, ConfigDictKeys.IS_OUTPUT_QUANTIZED]:
@@ -528,5 +528,6 @@ def _get_quantize_ops_to_modify(input_output_quantize_ops: QuantizerListType, se
     if setting_name == ConfigDictKeys.IS_SYMMETRIC:
         # Will modify all input and output quantizers in the False case
         return input_list + output_list
-    logger.error('Encountered unrecognized case for setting name %s', setting_name)
-    raise AssertionError
+    error_msg = f'Encountered unrecognized case for setting name {setting_name}'
+    logger.error(error_msg)
+    raise AssertionError(error_msg)

@@ -283,7 +283,7 @@ class GraphSearchUtils:
                 # DepthwiseConv layer right after DepthwiseConv layer is not currently supported
                 if isinstance(next_non_depthwise_conv_layer, tf.keras.layers.DepthwiseConv2D):
                     _logger.error("Consecutive DepthwiseConv layer not currently supported")
-                    raise NotImplementedError
+                    raise NotImplementedError("Consecutive DepthwiseConv layer not currently supported")
 
                 cls_sets.append(
                     (prev_layer_to_scale, next_layer_to_scale, next_non_depthwise_conv_layer))
