@@ -1214,11 +1214,12 @@ class QuantizationSimModel:
         :return: QuantSimConfigurator object
         """
         if self.connected_graph is None:
-            logger.error('A connected graph failed to be built.\n'
+            error_msg = ('A connected graph failed to be built.\n'
                          'Unable to proceed with automatically configuring quantization ops using the config file.\n'
                          'Please configure quantization ops manually by redefining '
                          'QuantizationSimModel.configure_quantization_ops()')
-            raise AssertionError
+            logger.error(error_msg)
+            raise AssertionError(error_msg)
         return QuantSimConfigurator(self.model, self.connected_graph, config_file, default_output_bw,
                                     default_param_bw, default_data_type)
 

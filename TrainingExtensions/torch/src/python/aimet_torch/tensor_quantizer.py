@@ -969,4 +969,4 @@ class Quantize(torch.autograd.Function):
     @staticmethod
     def backward(ctx, output_grad):
         _logger.error('Backward pass for quantize only not implemented')
-        raise AssertionError
+        raise AssertionError('Backward pass for quantize only not implemented')

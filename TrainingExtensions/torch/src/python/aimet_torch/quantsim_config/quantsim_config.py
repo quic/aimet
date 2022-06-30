@@ -431,7 +431,7 @@ class QuantSimConfigurator(AimetCommonQuantSimConfigurator):
         if ConfigDictKeys.PARAMS in op_config:
             if module is None:
                 logger.error('No module provided to set params for')
-                raise AssertionError
+                raise AssertionError('No module provided to set params for')
             quantsim_wrapper = self._module_to_quantsim_wrapper_dict[module]
             for param_name in quantsim_wrapper.param_quantizers.keys():
                 quantsim_param_name = MAP_PYTORCH_PARAM_NAME_TO_QUANTSIM_NAME.get(param_name, None)
@@ -443,7 +443,7 @@ class QuantSimConfigurator(AimetCommonQuantSimConfigurator):
         if ENFORCE_TARGET_DTYPE_BITWIDTH_CONFIG and ConfigDictKeys.SUPPORTED_KERNELS in op_config:
             if module is None:
                 logger.error('No module provided to set params for')
-                raise AssertionError
+                raise AssertionError('No module provided to set params for')
             quantsim_wrapper = self._module_to_quantsim_wrapper_dict[module]
             self._apply_overrides_for_op(op_config, quantsim_wrapper)
 
@@ -586,7 +586,7 @@ def _modify_tensor_quantizers(input_output_tensor_quantizers: TensorQuantizersTu
                 current_setting = tensor_quantizer.use_symmetric_encodings
             if current_setting != quantizer_setting:
                 logger.error('Conflicting tensor quantizer settings for symmetric encodings')
-                raise AssertionError
+                raise AssertionError('Conflicting tensor quantizer settings for symmetric encodings')
         else:
             if setting_name in [ConfigDictKeys.IS_INPUT_QUANTIZED, ConfigDictKeys.IS_OUTPUT_QUANTIZED]:
                 tensor_quantizer.enabled = quantizer_setting
@@ -625,8 +625,9 @@ def _get_tensor_quantizers_to_modify(input_output_tensor_quantizers: TensorQuant
     if setting_name == ConfigDictKeys.IS_SYMMETRIC:
         # Will modify all input and output quantizers in the False case
         return input_false_list + output_false_list
-    logger.error('Encountered unrecognized case for setting name %s, setting value %s', setting_name, quantizer_setting)
-    raise AssertionError
+    error_msg = f'Encountered unrecognized case for setting name {setting_name}, setting value {quantizer_setting}'
+    logger.error(error_msg)
+    raise AssertionError(error_msg)
 
 
 def _report_unsupported_ops(quantsim_config: ConfigDictType):
@@ -653,9 +654,10 @@ def _report_unsupported_ops(quantsim_config: ConfigDictType):
             for val in map_torch_types_to_onnx.values():
                 known_onnx_types.extend(val)
             if op not in known_onnx_types:
-                logger.error('Unsupported op type %s', op)
+                error_msg = f'Unsupported op type {op}'
+                logger.error(error_msg)
                 # Raising an error here since an unrecognized op will cause supergroup graph matching to fail
-                raise AssertionError
+                raise AssertionError(error_msg)
 
 
 def _is_elementwise_functional(op: Op) -> bool:

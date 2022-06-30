@@ -182,9 +182,8 @@ class MaskPropagationWinnower(aimetCommonMaskPropagationWinnower):
 
         input_index = 0     # Using op index 0 to examine input to op
         if module_op.inputs[input_index].is_model_input:
-            logger.critical("Winnowing the first module of a model is NOT supported. Please ignore the first "
-                            "module and try again. First module: %s, shape %s, channels to winnow: %s",
-                            module_op.dotted_name,
-                            module_op.inputs[input_index].shape,
-                            list_of_channels_to_winnow)
-            raise NotImplementedError(module_op.dotted_name)
+            error_msg = (f'Winnowing the first module of a model is NOT supported. Please ignore the first '
+                         f'module and try again. First module: {module_op.dotted_name}, shape '
+                         f'{module_op.inputs[input_index].shape}, channels to winnow: {list_of_channels_to_winnow}')
+            logger.error(error_msg)
+            raise NotImplementedError(error_msg)

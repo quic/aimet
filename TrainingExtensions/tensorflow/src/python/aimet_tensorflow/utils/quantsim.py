@@ -125,14 +125,16 @@ def create_op_to_quant_ops_dict(graph: tf.Graph, conn_graph: ConnectedGraph,
             [consumer for consumer in param_op.outputs[0].consumers() if consumer.type in
              ['QcQuantize', 'QcQuantizeRecurrentParam', 'QcQuantizePerChannel', 'EagerPyFunc']]
         if len(param_quantizer) != 1:
-            _logger.error('Expected one parameter quantizer but found %s', len(param_quantizer))
-            raise AssertionError
+            error_msg = f'Expected one parameter quantizer but found {len(param_quantizer)}'
+            _logger.error(error_msg)
+            raise AssertionError(error_msg)
         if param_quantizer[0].type == 'EagerPyFunc':
             param_quantizer = [consumer for consumer in param_quantizer[0].outputs[0].consumers() if consumer.type in
                                ['QcQuantize', 'QcQuantizeRecurrentParam', 'QcQuantizePerChannel']]
         if len(param_quantizer) != 1:
-            _logger.error('Expected one parameter quantizer but found %s', len(param_quantizer))
-            raise AssertionError
+            error_msg = f'Expected one parameter quantizer but found {len(param_quantizer)}'
+            _logger.error(error_msg)
+            raise AssertionError(error_msg)
         add_op_to_quant_ops_dict_entry(param_quantizer[0], conn_graph_op, True,
                                        param_info.param_type, op_to_quant_ops_dict)
     for activation_op_name in activation_op_names:
@@ -141,8 +143,9 @@ def create_op_to_quant_ops_dict(graph: tf.Graph, conn_graph: ConnectedGraph,
         activation_quantizer = \
             [consumer for consumer in activation_op.outputs[0].consumers() if consumer.type == 'QcQuantize']
         if len(activation_quantizer) != 1:
-            _logger.error('Expected one activation quantizer but found %s', len(activation_quantizer))
-            raise AssertionError
+            error_msg = f'Expected one activation quantizer but found {len(activation_quantizer)}'
+            _logger.error(error_msg)
+            raise AssertionError(error_msg)
         add_op_to_quant_ops_dict_entry(activation_quantizer[0], conn_graph_op, False, '', op_to_quant_ops_dict)
     return op_to_quant_ops_dict
 
@@ -191,7 +194,7 @@ def get_op_input_indices(graph: tf.Graph, ops_with_param_names: List) -> List[in
     input_indices = query.get_weight_inputs(ops_with_params)
     if len(ops_with_param_names) != len(input_indices):
         _logger.error("Length of ops with params and input indices differ")
-        raise AssertionError
+        raise AssertionError("Length of ops with params and input indices differ")
     return input_indices
 
 

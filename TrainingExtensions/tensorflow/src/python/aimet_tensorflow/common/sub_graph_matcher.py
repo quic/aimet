@@ -555,7 +555,7 @@ class SubGraphMatcher:
                 # in self._valid_ops.
                 if not ops_list:
                     logger.error('Valid matched ops list should not be empty')
-                    raise AssertionError
+                    raise AssertionError('Valid matched ops list should not be empty')
                 # Check if any ops in ops_list were already matched with a larger pattern. If so, no need to change
                 # existing entries in op_to_module_dict.
                 if not SubGraphMatcher._is_subset_of_already_matched_op(template_pattern_type, ops_list,

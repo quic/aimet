@@ -103,10 +103,11 @@ class QuantizationSimModel:
                 multiple_inbound_node_layers.append(layer.name)
 
         if multiple_inbound_node_layers:
-            _logger.error('Layers with more than one inbound nodes are unsupported. This may occur if a layer is '
-                          'reused multiple times in the model definition.')
-            _logger.error('Layers with multiple inbound nodes: {%s}', multiple_inbound_node_layers)
-            raise NotImplementedError
+            error_msg = (f'Layers with more than one inbound nodes are unsupported. This may occur if a layer is '
+                         f'reused multiple times in the model definition.\n'
+                         f'Layers with multiple inbound nodes: {multiple_inbound_node_layers}')
+            _logger.error(error_msg)
+            raise NotImplementedError(error_msg)
 
     def _initialize_quantsim_configurator(self, quant_scheme: Union[QuantScheme, str], rounding_mode: str,
                                           default_output_bw: int, default_param_bw: int,

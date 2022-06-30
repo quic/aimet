@@ -166,10 +166,10 @@ class MaskPropagationWinnower(AimetCommonMaskPropagationWinnower):
         """
 
         if not isinstance(module, torch.nn.Conv2d):
-            logger.critical("Winnowing is currently only supported for torch.nn.Conv2d modules. Attempting to winnow "
-                            "module of type %s",
-                            type(module))
-            raise NotImplementedError(type(module))
+            error_msg = (f'Winnowing is currently only supported for torch.nn.Conv2d modules. Attempting to winnow '
+                         f'module of type {type(module)}')
+            logger.error(error_msg)
+            raise NotImplementedError(error_msg)
 
         # Validate the list of channels.
         num_channels_to_winnow = len(list_of_channels_to_winnow)
@@ -188,12 +188,11 @@ class MaskPropagationWinnower(AimetCommonMaskPropagationWinnower):
         module_op = self._graph.get_op_from_module_name(name)
         input_index = 0     # Using op index 0 to examine input to op
         if module_op.inputs[input_index].is_model_input:
-            logger.critical("Winnowing the first module of a model is NOT supported. Please ignore the first "
-                            "module and try again. First module: %s, shape %s, channels to winnow: %s",
-                            module_op.dotted_name,
-                            module_op.inputs[input_index].shape,
-                            list_of_channels_to_winnow)
-            raise NotImplementedError(module_op.dotted_name)
+            error_msg = (f'Winnowing the first module of a model is NOT supported. Please ignore the first '
+                         f'module and try again. First module: {module_op.dotted_name}, shape '
+                         f'{module_op.inputs[input_index].shape}, channels to winnow: {list_of_channels_to_winnow}')
+            logger.error(error_msg)
+            raise NotImplementedError(error_msg)
 
 
 def generate_and_add_module_winnow_list_with_names(model: torch.nn.Module,

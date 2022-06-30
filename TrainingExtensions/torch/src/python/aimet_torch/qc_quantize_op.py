@@ -576,8 +576,9 @@ class StaticGridQuantWrapper(QcQuantizeWrapper):
                 continue
 
             if not isinstance(input_tensor, torch.Tensor):
-                _logger.error('Expecting quantize activation input of type torch.Tensor but got %s', type(input_tensor))
-                raise AssertionError
+                error_msg = f'Expecting quantize activation input of type torch.Tensor but got {type(input_tensor)}'
+                _logger.error(error_msg)
+                raise AssertionError(error_msg)
 
             if self._mode is QcQuantizeOpMode.ANALYSIS:
 
@@ -798,9 +799,10 @@ class LearnedGridQuantWrapper(QcQuantizeWrapper):
                 continue
 
             if not isinstance(tensor_to_quantize, torch.Tensor):
-                _logger.error('Expecting quantize activation input of type torch.Tensor but got %s',
-                              type(tensor_to_quantize))
-                raise AssertionError
+                error_msg = (f'Expecting quantize activation input of type torch.Tensor but got '
+                             f'{type(tensor_to_quantize)}')
+                _logger.error(error_msg)
+                raise AssertionError(error_msg)
 
             encoding_min = self._parameters[type_of_quantizer + str(index) + '_encoding_min']
             encoding_max = self._parameters[type_of_quantizer + str(index) + '_encoding_max']

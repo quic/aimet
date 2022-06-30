@@ -238,11 +238,11 @@ def replace_layer_in_functional_model(model: tf.keras.Model, old_layer: tf.keras
     # pylint: disable=protected-access
     if old_layer in model._input_layers:
         _logger.error('Replacement for input layers not currently supported')
-        raise NotImplementedError
+        raise NotImplementedError('Replacement for input layers not currently supported')
 
     if len(old_layer.inbound_nodes) > 1:
         _logger.error('Replacement for layers used multiple times not currently supported')
-        raise NotImplementedError
+        raise NotImplementedError('Replacement for layers used multiple times not currently supported')
 
     if not isinstance(new_layers, list):
         new_layers = [new_layers]
