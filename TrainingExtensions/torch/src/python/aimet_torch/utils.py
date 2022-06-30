@@ -197,7 +197,9 @@ class CachedDataset(Dataset):
                     pickle.dump(batch, file)
 
             except StopIteration:
-                raise ValueError('Can not fetch {} batches from data loader.'.format(self._num_batches))
+                error_msg = f'Can not fetch {self._num_batches} batches from data loader.'
+                logger.error(error_msg)
+                raise ValueError(error_msg)
 
         logger.info('Caching %d batches from data loader at path location: %s', self._num_batches, self._path)
 

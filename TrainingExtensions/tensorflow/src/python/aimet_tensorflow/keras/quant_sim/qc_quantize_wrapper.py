@@ -61,8 +61,9 @@ class QuantizerSettings:
             elif quant_scheme == 'tf_enhanced':
                 quant_scheme = QuantScheme.post_training_tf_enhanced
             else:
-                _logger.error('Unsupported quant scheme: {%s}', quant_scheme)
-                raise AssertionError
+                error_msg = f'Unsupported quant scheme: {quant_scheme}'
+                _logger.error(error_msg)
+                raise AssertionError(error_msg)
         self._quant_scheme = quant_scheme
         self._is_symmetric = is_symmetric
         self._use_unsigned_symmetric = use_unsigned_symmetric
@@ -254,13 +255,15 @@ class QcQuantizeWrapper(tf.keras.layers.Layer):
 
         if len(activation) != len(quantizers):
             if is_input_quantization:
-                _logger.error('Mismatch between number of tensors {%s} and number of input quantizers {%s} for layer '
-                              '{%s}', len(activation), len(quantizers), self._layer_to_wrap.name)
+                error_msg = (f'Mismatch between number of tensors ({len(activation)}) and number of input quantizers '
+                             f'({len(quantizers)}) for layer {self._layer_to_wrap.name}')
+                _logger.error(error_msg)
             else:
-                _logger.error('Mismatch between number of tensors {%s} and number of output quantizers {%s} for layer '
-                              '{%s}', len(activation), len(quantizers), self._layer_to_wrap.name)
-                _logger.error('If this is a layer with multiple outputs, this is not currently supported by Quantsim.')
-            raise AssertionError
+                error_msg = (f'Mismatch between number of tensors ({len(activation)}) and number of output quantizers '
+                             f'({len(quantizers)}) for layer {self._layer_to_wrap.name}\n'
+                             f'If this is a layer with multiple outputs, this is not currently supported by Quantsim.')
+                _logger.error(error_msg)
+            raise AssertionError(error_msg)
 
         quantized_activations = []
         for idx, tensor in enumerate(activation):

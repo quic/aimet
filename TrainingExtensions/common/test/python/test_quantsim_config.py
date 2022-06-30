@@ -53,8 +53,15 @@ class TestJsonConfigImporter(unittest.TestCase):
         with self.assertRaises(FileNotFoundError):
             JsonConfigImporter.import_json_config_file('./missing_file')
 
-        with self.assertRaises(FileNotFoundError):
-            JsonConfigImporter.import_json_config_file('./test_quantsim_config.py')
+
+        with open('./temp.py', 'w') as f:
+            f.write('print("hello world")')
+
+        with self.assertRaises(RuntimeError):
+            JsonConfigImporter.import_json_config_file('./temp.py')
+
+        if os.path.exists('./temp.py'):
+            os.remove('./temp.py')
 
     def test_validate_syntax(self):
         """ Test syntactic validation for config files """

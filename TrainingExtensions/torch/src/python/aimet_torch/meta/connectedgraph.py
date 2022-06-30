@@ -894,9 +894,10 @@ class ConnectedGraph(AimetCommonConnectedGraph):
                         inp_op_name = None
                         if connections_to_ir_nodes_dict[output][0].module is not None:
                             inp_op_name = self._module_to_name[connections_to_ir_nodes_dict[output][0].module]
-                        logger.error('Input of %s with name %s already exists. Ensure that no modules are being reused '
-                                     'in the model.', output, inp_op_name)
-                        raise AssertionError
+                        error_msg = (f'Input of {output} with name {inp_op_name} already exists. Ensure that no '
+                                     f'modules are being reused in the model.')
+                        logger.error(error_msg)
+                        raise AssertionError(error_msg)
                     connections_to_ir_nodes_dict[output][0] = ir_node
                 else:
                     connections_to_ir_nodes_dict[output] = [ir_node, []]

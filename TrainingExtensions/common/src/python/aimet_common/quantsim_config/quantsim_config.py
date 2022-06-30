@@ -229,11 +229,13 @@ class QuantSimConfigurator(ABC):
                     quantsim_dtype_bw_info = get_override_from_supported_kernels(default_supported_kernels)
 
                 else:
-                    logger.error(' Default supported_kernels override check failed, one way to rectify is to include \n'
-                                 ' default quantsim data type and bit-width {act_bw = %s, param_bw = %s, data_type = %s} \n '
-                                 ' in supported_kernels list under default section of target specific config file \n',
-                                 quantsim_dtype_bw_info.act_bw, quantsim_dtype_bw_info.param_bw, quantsim_dtype_bw_info.data_type)
-                    raise NotImplementedError
+                    error_msg = (f'Default supported_kernels override check failed, one way to rectify is to include \n'
+                                 f'default quantsim data type and bit-width (act_bw = {quantsim_dtype_bw_info.act_bw}, '
+                                 f'param_bw = {quantsim_dtype_bw_info.param_bw}, data_type = '
+                                 f'{quantsim_dtype_bw_info.data_type}) \n'
+                                 f'in supported_kernels list under default section of target specific config file \n')
+                    logger.error(error_msg)
+                    raise NotImplementedError(error_msg)
         else:
             # user has not provided default supported_kernels, log quantsim defaults treated as default target kernel support
             default_valid = True
@@ -452,8 +454,9 @@ def get_setting_type(setting_name: str) -> str:
         return ConfigDictKeys.IS_QUANTIZED
     if setting_name == ConfigDictKeys.IS_SYMMETRIC:
         return ConfigDictKeys.IS_SYMMETRIC
-    logger.error('Unrecognized quantizer setter name %s', setting_name)
-    raise AssertionError
+    error_msg = f'Unrecognized quantizer setter name {setting_name}'
+    logger.error(error_msg)
+    raise AssertionError(error_msg)
 
 
 def get_all_ops_in_neighborhood(op: Op, direction: str, neighborhood=None):
@@ -612,17 +615,18 @@ def validate_all_op_level_dtype_bw_overrides(op_configs: OpTypeType, default_dty
                 # will be applied during override.
                 override_dtype_bw_info = get_override_from_supported_kernels(op_level_supported_kernels)
                 if not is_override_dtype_bw_valid(override_dtype_bw_info, default_dtype_bw):
-                    logger.info(' Op level supported_kernels override check failed for op {%s} \n'
-                                ' Op level override only with higher precision kernel is supported \n'
-                                ' (please check both quantsim defaults and default supported_kernels in config file specified at override index {%s})\n'
-                                ' One way to rectify this is to specify lower precision data type and bit-width as defaults '
-                                '  \n ex : {act_bw = %s, param_bw = %s, data_type = %s} and'
-                                ' use op level supported_kernels override \n'
-                                ' for this op to indicate higher precision kernel that is supported on given target \n'
-                                ' ex: { act_bw = %s, param_bw = %s , data_type = %s} \n',
-                                op_name,
-                                DEFAULT_OVERRIDE_SUPPORTED_KERNEL_INDEX,
-                                override_dtype_bw_info.act_bw, override_dtype_bw_info.param_bw, override_dtype_bw_info.data_type,
-                                default_dtype_bw.act_bw, default_dtype_bw.param_bw, default_dtype_bw.data_type)
-                    raise NotImplementedError
+                    error_msg = (f'Op level supported_kernels override check failed for op {op_name} \n'
+                                 f'Op level override only with higher precision kernel is supported \n'
+                                 f'(please check both quantsim defaults and default supported_kernels in config file '
+                                 f'specified at override index {DEFAULT_OVERRIDE_SUPPORTED_KERNEL_INDEX})\n'
+                                 f'One way to rectify this is to specify lower precision data type and bit-width as defaults'
+                                 f'\nex : (act_bw = {override_dtype_bw_info.act_bw}, param_bw = '
+                                 f'{override_dtype_bw_info.param_bw}, data_type = {override_dtype_bw_info.data_type}) and '
+                                 f'use op level supported_kernels override \n'
+                                 f'for this op to indicate higher precision kernel that is supported on given target \n'
+                                 f'ex: (act_bw = {default_dtype_bw.act_bw}, param_bw ='
+                                 f'{override_dtype_bw_info.param_bw} , data_type = {override_dtype_bw_info.data_type}) \n')
+
+                    logger.info(error_msg)
+                    raise NotImplementedError(error_msg)
     return True

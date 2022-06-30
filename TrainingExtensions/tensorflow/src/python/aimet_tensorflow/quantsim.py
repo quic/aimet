@@ -264,10 +264,11 @@ class QuantizationSimModel:
         :param activation_op_names: List of ops for which activation quantization ops were inserted for
         """
         if not conn_graph:
-            _logger.error('Connected graph passed into configure_quantization_ops() is None. If manual insertion of '
-                          'quantization ops is being done, and get_ops_to_quantize_activations_for() has been '
-                          'overriden, please override configure_quantization_ops() as well.')
-            raise AssertionError
+            error_msg = (f'Connected graph passed into configure_quantization_ops() is None. If manual insertion of '
+                         f'quantization ops is being done, and get_ops_to_quantize_activations_for() has been '
+                         f'overriden, please override configure_quantization_ops() as well.')
+            _logger.error(error_msg)
+            raise AssertionError(error_msg)
         op_to_quant_ops_dict = create_op_to_quant_ops_dict(self.session.graph, conn_graph, ops_with_param_names, indices,
                                                            params_to_quantize, activation_op_names)
         self._quantsim_configurator.configure_quantizers(op_to_quant_ops_dict, self._param_quantizers,
@@ -991,8 +992,9 @@ class QuantizationSimModel:
             consumers = [consumer for consumer in op.outputs[0].consumers() if 'gradients' not in consumer.name]
 
             if not QuantizationSimModel._is_op_quantizable(op):
-                _logger.error('Unsupported dtype {%s} detected for op {%s}.', op.outputs[0].dtype, op_name)
-                raise AssertionError
+                error_msg = f'Unsupported dtype {op.outputs[0].dtype} detected for op {op_name}.'
+                _logger.error(error_msg)
+                raise AssertionError(error_msg)
 
             if in_loop_context:
                 q_op_out = self._insert_post_training_quant_op_in_loop_context(op.outputs[0], quant_op_name,
@@ -1056,7 +1058,7 @@ class QuantizationSimModel:
         """
         if conn_graph is None:
             _logger.error("Connected graph is not passed as a parameter")
-            raise AssertionError
+            raise AssertionError("Connected graph is not passed as a parameter")
 
         # Get available connected graphs
         valid_conns = [conn for conn in conn_graph.get_all_ops().values()
