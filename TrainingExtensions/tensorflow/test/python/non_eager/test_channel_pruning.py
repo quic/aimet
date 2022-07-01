@@ -142,6 +142,7 @@ class TestTrainingExtensionsChannelPruning(unittest.TestCase):
 
     # Need to mark this for CUDA because TF CPU Conv does not support NCHW
     @pytest.mark.cuda
+    @pytest.mark.skip('Skip while investigating intermittent failure')
     def test_find_input_match_for_pixel_from_output_data_baseline_channels_first(self):
         """
         Test find input match for output pixel implementation with channels_first (NCHW) format
