@@ -45,7 +45,7 @@ import torch
 from torch import nn
 
 import aimet_common.libpymo as libpymo
-from aimet_common.utils import AimetLogger, SingletonType
+from aimet_common.utils import AimetLogger
 from aimet_common.defs import QuantScheme, QuantizationDataType, MAP_ROUND_MODE_TO_PYMO
 from aimet_torch import utils
 from aimet_torch.tensor_quantizer import StaticGridPerTensorQuantizer, StaticGridPerChannelQuantizer, TensorQuantizer, \
@@ -55,20 +55,26 @@ import aimet_torch.quantsim_straight_through_grad as ste
 _logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Quant)
 
 
-class _ConstantTensor(metaclass=SingletonType):
+class _ConstantTensor:
     def __init__(self, device: Union[str, torch.device]):
-        self.device = device
         self.eps = torch.tensor([1e-5], device=device)
         self.zero = torch.tensor([0.0], device=device)
 
-    def synchronize_with(self, device: Union[str, torch.device]):
-        """
-        Synchronize constant tensors with provided device
-        :param device: device for synchronization
-        """
-        self.device = device
-        self.eps = self.eps.to(device)
-        self.zero = self.zero.to(device)
+
+_device_map: Dict[torch.device, _ConstantTensor] = {}
+def _constant_tensor(device: Union[str, torch.device]) -> _ConstantTensor:
+    """
+    Factory function to generate constant tensor or return cached object
+    :param device: device str ('cpu', 'cuda', ...) or torch.device
+    :return: Constant tensor
+    """
+    if isinstance(device, str):
+        device = torch.device(device)
+    if device in _device_map:
+        return _device_map[device]
+    ret = _ConstantTensor(device)
+    _device_map[device] = ret
+    return ret
 
 
 class QcQuantizeOpMode(Enum):
@@ -752,12 +758,9 @@ class LearnedGridQuantWrapper(QcQuantizeWrapper):
         """
         Apply gating logic.
         """
-        # Synchronize if the constant tensor are on different device
-        if _ConstantTensor(self.device).device != self.device:
-            _ConstantTensor(self.device).synchronize_with(self.device)
-
-        zero_tensor = _ConstantTensor(self.device).zero
-        eps_tensor = _ConstantTensor(self.device).eps
+        constant_tensor = _constant_tensor(self.device)
+        zero_tensor = constant_tensor.zero
+        eps_tensor = constant_tensor.eps
 
         def _apply_logic(encoding_min, encoding_max):
             encoding_min.data = torch.minimum(zero_tensor, encoding_min.data)
