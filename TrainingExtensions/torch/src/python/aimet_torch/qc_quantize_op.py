@@ -66,6 +66,7 @@ class QcQuantizeOpMode(Enum):
 
 QUANTIZER_TYPE_INPUT = 'input'
 QUANTIZER_TYPE_OUTPUT = 'output'
+TF_ENHANCED_STRIDE_FACTOR = 2
 
 
 def tensor_quantizer_factory(bitwidth: int, round_mode: str, quant_scheme: QuantScheme,
@@ -584,9 +585,8 @@ class StaticGridQuantWrapper(QcQuantizeWrapper):
             if self._mode is QcQuantizeOpMode.ANALYSIS:
                 if self._quant_scheme == QuantScheme.post_training_tf_enhanced:
                     # Update stats using downsampled output to speed up tf enhanced
-                    stride = 2
                     input_tensor_flatten = input_tensor.reshape(-1)
-                    downsampled_input = input_tensor_flatten[0::stride].contiguous()
+                    downsampled_input = input_tensor_flatten[0::TF_ENHANCED_STRIDE_FACTOR].contiguous()
                     tensor_quantizers[index].update_encoding_stats(downsampled_input)
                 else:
                     tensor_quantizers[index].update_encoding_stats(input_tensor)
