@@ -582,12 +582,14 @@ class StaticGridQuantWrapper(QcQuantizeWrapper):
 
             if self._mode is QcQuantizeOpMode.ANALYSIS:
                 if self._quant_scheme == QuantScheme.post_training_tf_enhanced:
+                    # Update stats using downsampled output to speed up tf enhanced
                     stride = 2
+                    input_tensor_flatten = input_tensor.reshape(-1)
+                    downsampled_input = input_tensor_flatten[0::stride].contiguous()
+                    tensor_quantizers[index].update_encoding_stats(downsampled_input)
                 else:
-                    stride = 1
-                input_tensor_flatten = input_tensor.reshape(-1)
-                downsampled_input = input_tensor_flatten[0::stride].contiguous()
-                tensor_quantizers[index].update_encoding_stats(downsampled_input)
+                    tensor_quantizers[index].update_encoding_stats(input_tensor)
+
                 output = input_tensor
 
             elif self._mode is QcQuantizeOpMode.ACTIVE:
