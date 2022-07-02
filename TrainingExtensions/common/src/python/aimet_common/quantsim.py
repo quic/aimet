@@ -52,7 +52,7 @@ import aimet_common.libpymo as libpymo
 # Change in major revision should indicate substantial change to the format, updates to minor version indicates
 # additional information element being added to encoding format and might require update to fully consume the encodings.
 # The patching version shall be updated to indicate minor updates to quantization simulation e.g. bug fix etc.
-encoding_version = '0.5.0'
+encoding_version = '0.5.1'
 
 
 def gate_min_max(min_val: float, max_val: float) -> Tuple[float, float]:
