@@ -112,11 +112,14 @@ class ConnectedGraph(AimetCommonConnectedGraph):
         either module or functional) as producers and consumers of tensors.
         Note that the graph has two kinds of nodes: operations and products."""
 
-    def __init__(self, model: torch.nn.Module, model_input: Union[torch.Tensor, Tuple]):
+    def __init__(self, model: torch.nn.Module, model_input: Union[torch.Tensor, Tuple],
+                 trace_leaf_module: bool = False):
         """
         Init function for connected graph
         :param model: Pytorch model to create connected graph from
         :param model_input: Example input to model.  Can be a single tensor or a list/tuple of input tensors
+        :param trace_leaf_module: If True, then the leaf module (non torch.nn) will be further traced.
+         Default is False.
         """
         super().__init__()
         self._model_name = type(model).__name__
@@ -129,6 +132,8 @@ class ConnectedGraph(AimetCommonConnectedGraph):
 
         # List of ops in the order they are traversed using the forward function
         self.ordered_ops = []
+        # Boolean to decide whether to trace custom leaf modules or not.
+        self._trace_leaf_module = trace_leaf_module
 
         self._generate_module_lookup_table(model)
         with in_eval_mode(model), torch.no_grad():
@@ -310,8 +315,13 @@ class ConnectedGraph(AimetCommonConnectedGraph):
         # These checks are needed because even though the module is leaf module but forward pass
         # might have more than one node. In that case, we can't handle the module as a single IrNode and further
         # parsing is needed.
-        if is_leaf_module(model) and len(_find_nodes_in_forward_pass(trace)) <= 1:
-            return self._parse_single_module_model(model, trace.graph, ir_nodes_list)
+        if self._trace_leaf_module:
+            if is_leaf_module(model) and len(_find_nodes_in_forward_pass(trace)) <= 1:
+                return self._parse_single_module_model(model, trace.graph, ir_nodes_list)
+        else:
+            if is_leaf_module(model):
+                return self._parse_single_module_model(model, trace.graph, ir_nodes_list)
+
         if inputs_map is None:
             inputs_map = {}
         curr_inputs = [inp for inp in trace.graph.inputs()]
@@ -355,11 +365,15 @@ class ConnectedGraph(AimetCommonConnectedGraph):
                 # Recursive parsing is needed 1) if the module is not leaf module.
                 # 2) If the module is leaf module but has multiple functional operations in
                 # forward method.
-                if (is_leaf_module(subgraph_model) and _is_torch_nn_module(subgraph_model)) or\
-                        (is_leaf_module(subgraph_model) and len(_find_nodes_in_forward_pass(subgraph_trace)) <= 1):
-                    continue
+                if self._trace_leaf_module:
+                    if (is_leaf_module(subgraph_model) and _is_torch_nn_module(subgraph_model)) or\
+                            (is_leaf_module(subgraph_model) and len(_find_nodes_in_forward_pass(subgraph_trace)) <= 1):
+                        continue
+                    else:
+                        node_name_to_subgraph_model[getattr_node_info.node_alias] = (subgraph_model, getattr_node_info)
                 else:
-                    node_name_to_subgraph_model[getattr_node_info.node_alias] = (subgraph_model, getattr_node_info)
+                    if not is_leaf_module(subgraph_model):
+                        node_name_to_subgraph_model[getattr_node_info.node_alias] = (subgraph_model, getattr_node_info)
 
             # invoking forward method
             elif 'CallMethod' in node.kind():
