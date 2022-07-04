@@ -155,16 +155,16 @@ if [ ! -d "../aimet" ] && [ ! -d "../aimet-main" ]; then
 fi
 
 # Set the docker file path
-# This is the default value (for python 3.6 docker files)
+# This is the default value (for python 3.8 docker files)
 dockerfile_path=${scriptPath}/Jenkins
 if [ -n "$PYTHON_VER" ]; then
     # If the python version variable was set, then switch the path
     if [ "${PYTHON_VER}" == "3.7" ]; then
-        # The pythjon 3.7 docker files are located in a sub-directory
+        # The python 3.7 docker files are located in a sub-directory
         dockerfile_path="${scriptPath}/Jenkins/python37"
-    elif [ "${PYTHON_VER}" != "3.6" ]; then
-        # We only support python 3.6 or 3.7 versions.
-        echo "ERROR: Invalid PYTHON_VER (${PYTHON_VER}). Must be either 3.6 or 3.7!"
+    elif [ "${PYTHON_VER}" != "3.8" ]; then
+        # We only support python 3.8 or 3.7 versions.
+        echo "ERROR: Invalid PYTHON_VER (${PYTHON_VER}). Must be either 3.8 or 3.7!"
         exit 3
     fi
 fi
