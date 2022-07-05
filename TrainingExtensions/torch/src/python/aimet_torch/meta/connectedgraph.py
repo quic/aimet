@@ -50,9 +50,10 @@ import torch
 
 from aimet_common.connected_graph.connectedgraph import ConnectedGraph as AimetCommonConnectedGraph
 from aimet_common.connected_graph.product import Product
-from aimet_common.connected_graph.operation import Op, determine_preceding_op_input_product_index_in_multi_input_op
+from aimet_common.connected_graph.operation import determine_preceding_op_input_product_index_in_multi_input_op
 from aimet_common.model_module import PytorchModelModule
 from aimet_common.utils import AimetLogger
+from aimet_torch.meta.operation import Op
 from aimet_torch.utils import is_leaf_module, run_hook_for_layers_with_given_input, in_eval_mode
 from aimet_torch import onnx_utils
 
@@ -69,11 +70,13 @@ class IrNode:
     Representation for a module in torch graph.
     """
     def __init__(self, node_type: str, inputs: List[Union[List, torch._C.TensorType]],
-                 outputs: List[Union[List, torch._C.TensorType]], module: torch.nn.Module):
+                 outputs: List[Union[List, torch._C.TensorType]], module: Union[torch.nn.Module, None],
+                 residing_module: Union[str, None] = None):
         self.node_type = node_type
         self.inputs = inputs
         self.outputs = outputs
         self.module = module
+        self.residing_module = residing_module
 
     def __str__(self):
         return self.node_type
@@ -341,11 +344,12 @@ class ConnectedGraph(AimetCommonConnectedGraph):
             # invoking forward method
             elif 'CallMethod' in node.kind():
                 self.parse_callmethod_node(node, trace, node_name_to_module, node_name_to_subgraph_model,
-                                           ir_nodes_list, inputs_map, output_map)
+                                           ir_nodes_list, inputs_map, output_map, self._module_to_name[model])
 
             # functional operations e.g. cat, size etc
             else:
-                ir_nodes_list.append(_create_functional_ir_node(node, inputs_map))
+                ir_nodes_list.append(_create_functional_ir_node(node, inputs_map,
+                                                                residing_module=self._module_to_name[model]))
 
         # return output connections
         return [output for output in trace.graph.return_node().inputs()]
@@ -368,7 +372,8 @@ class ConnectedGraph(AimetCommonConnectedGraph):
                               node_name_to_subgraph_model: Dict[str, Tuple[torch.jit.TracedModule, torch._C.Node]],
                               ir_nodes_list: List[IrNode],
                               inputs_map: Dict[torch._C.TensorType, torch._C.TensorType],
-                              output_map: Dict[torch._C.TensorType, torch._C.TensorType]):
+                              output_map: Dict[torch._C.TensorType, torch._C.TensorType],
+                              residing_module: str):
         # pylint: disable=too-many-locals
         """
         The call method node signifies invocation of the forward method, this method extracts an IrNode representation
@@ -382,6 +387,7 @@ class ConnectedGraph(AimetCommonConnectedGraph):
         :param ir_nodes_list: List of IrNodes created from traversing the trace graph
         :param inputs_map: Dictionary mapping low recursion level inputs to higher level equivalent inputs
         :param output_map: Dictionary mapping high recursion level outputs to lower level equivalent outputs
+        :param residing_module: Torch module name which the current node is situated in
         """
         inputs = [inp for inp in node.inputs()]
         # 1st input is a reference on which the call method is being invoked.
@@ -430,7 +436,8 @@ class ConnectedGraph(AimetCommonConnectedGraph):
                 ir_node = IrNode(node_type=op_type,
                                  inputs=[inputs_map.get(inp, inp) for inp in node_inputs[1:]],
                                  outputs=outputs,
-                                 module=node_name_to_module[input_name])
+                                 module=node_name_to_module[input_name],
+                                 residing_module=residing_module)
                 ir_nodes_list.append(ir_node)
 
     def _parse_single_module_model(self, module: torch.nn.Module,
@@ -565,7 +572,7 @@ class ConnectedGraph(AimetCommonConnectedGraph):
         for idx, node in enumerate(ir_nodes_list):
             op_name = node.node_type + '_' + str(idx)
             op = Op(name=op_name, dotted_name=op_name, output_shape=None, is_anonymous=node.module is None,
-                    op_type=node.node_type)
+                    op_type=node.node_type, residing_module=node.residing_module)
             if node.module is not None:
                 op.model_module = PytorchModelModule(node.module)
                 if node.module in module_tensor_shapes_map:
@@ -733,7 +740,7 @@ class ConnectedGraph(AimetCommonConnectedGraph):
         split_dotted_name = '.'.join(split_dotted_name_parts)
         is_anonymous = True
         split_op = Op(name=split_name, dotted_name=split_dotted_name, output_shape=op.output_shape,
-                      is_anonymous=is_anonymous, op_type='Split')
+                      is_anonymous=is_anonymous, op_type='Split', residing_module=None)
         self._ops[split_name] = split_op
         return split_op
 
@@ -1101,8 +1108,8 @@ def _update_op_output_with_product(op: Op, product: Product):
                      op.name)
 
 
-def _create_functional_ir_node(node: torch._C.Node, inputs_map: Dict[torch._C.TensorType, torch._C.TensorType]) \
-        -> IrNode:
+def _create_functional_ir_node(node: torch._C.Node, inputs_map: Dict[torch._C.TensorType, torch._C.TensorType],
+                               residing_module: str) -> IrNode:
     """
     Create an IrNode containing input and output connections information given a torch graph node.
     :param node: trace graph node
@@ -1117,7 +1124,8 @@ def _create_functional_ir_node(node: torch._C.Node, inputs_map: Dict[torch._C.Te
     ir_node = IrNode(node_type=op_type,
                      inputs=[inputs_map.get(inp, inp) for inp in node.inputs()],
                      outputs=outputs,
-                     module=None)
+                     module=None,
+                     residing_module=residing_module)
     return ir_node
 
 
