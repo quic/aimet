@@ -70,7 +70,8 @@ class QuantAnalyzer:
 
      1) model sensitivity to weight and activation quantization
      2) per layer sensitivity analysis
-     3) per layer encoding (min - max range) and PDF analysis and
+     3) per layer encoding (min - max range)
+     4) per PDF analysis and
      4) per layer MSE analysis
     """
     def __init__(self,
@@ -87,12 +88,14 @@ class QuantAnalyzer:
                 that iterates over a dataset used for finding quantization parameters.
                 The values yielded by this dataloader are expected to be representative of
                 entire dataset and able to be passed directly to the model. Roughly 1000 data samples
-                are enough for calibration.
+                are enough for calibration. This data loader will also be used for per
+                layer MSE analysis.
         :param eval_callback: A callback function for model evaluation that determines model
                 performance. This callback function is expected to return scalar value
                 representing the model performance evaluated against entire test/evaluation dataset.
                 Eval callback function should have only model to be evaluated as first argument. If eval
                 callback function requires additional arguments, user should use functools.partial to
+                hand over the additional arguments.
                 hand over the arguments.
         :param modules_to_ignore: Excludes certain modules from being analyzed.
         """
@@ -112,6 +115,7 @@ class QuantAnalyzer:
                     # if Dataset stores data samples and corresponding labels (model_inputs, labels).
                     if isinstance(model_inputs, (tuple, list)):
                         model_inputs, _ = model_inputs
+                    assert isinstance(model_inputs, (torch.Tensor, tuple, list))
                     model_inputs = utils.change_tensor_device_placement(model_inputs, device)
                     if isinstance(model_inputs, torch.Tensor):
                         model_inputs = [model_inputs]
@@ -132,8 +136,9 @@ class QuantAnalyzer:
         Analyze model for quantization and point out sensitive parts/hotspots of the model by performing
             1) model sensitivity to quantization,
             2) perform per layer sensitivity analysis by enabling and disabling quant wrappers,
-            3) export per layer statistics histogram (PDF) when quant scheme is TF-Enhanced.
-            4) per layer MSE analysis
+            3) export per layer encodings min - max ranges,
+            4) export per layer statistics histogram (PDF) when quant scheme is TF-Enhanced,
+            5) per layer MSE analysis
 
         :param quant_scheme: Quantization scheme. Supported values are
                 QuantScheme.post_training_tf or QuantScheme.post_training_tf_enhanced.
@@ -355,7 +360,7 @@ class QuantAnalyzer:
         # maps wrapped module name to a quant wrapper.
         sorted_quant_wrappers = self._sort_quant_wrappers_based_on_occurrence(sim)
 
-        # Enabled quant wrappers.
+        # quant wrappers and it's enabled quantizers.
         # maps quant wrapper to a list of enabled quantizers in it.
         enabled_quant_wrappers = self._get_enabled_quantizers(sorted_quant_wrappers)
 
