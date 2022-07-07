@@ -222,17 +222,21 @@ void UpdatePdf(const DTYPE* data, int cnt, ComputationMode mode_cpu_gpu, bool si
     {
 #ifdef GPU_QUANTIZATION_ENABLED
         // Fall back to CPU mode.
-        DTYPE* data_h = (DTYPE*) malloc(sizeof(DTYPE) * cnt);
-        CudaMemCpy(data_h, data, cnt * sizeof(DTYPE), CudaMemcpyDirection::DEVICE_TO_HOST);
+        // DTYPE* data_h = (DTYPE*) malloc(sizeof(DTYPE) * cnt);
+        // CudaMemCpy(data_h, data, cnt * sizeof(DTYPE), CudaMemcpyDirection::DEVICE_TO_HOST);
+
         if (signed_vals)
         {
-            UpdatePdfSigned_cpu(data_h, cnt, pdf);
+            UpdatePdfSigned_gpu(data, cnt, pdf);
+            // UpdatePdfSigned_cpu(data_h, cnt, pdf);
         }
         else
         {
-            UpdatePdfUnsigned_cpu(data_h, cnt, pdf);
+            UpdatePdfUnsigned_gpu(data, cnt, pdf);
+            // UpdatePdfUnsigned_cpu(data_h, cnt, pdf);
         }
-        free(data_h);
+
+        // free(data_h);
 #else
         throw runtime_error("Not compiled for GPU mode.");
 #endif
@@ -351,6 +355,7 @@ void UpdatePdfSigned_cpu(const DTYPE* data, int cnt, PDF& pdf)
         // Average this PDF into the running average.
         pdf.pdf[i] = (pdf.pdf[i] * pdf.iterations + pdf_this_iter[i]) / (pdf.iterations + 1);
     }
+
     pdf.iterations++;
 }
 

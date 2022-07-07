@@ -155,10 +155,10 @@ void* MemoryAllocation_cpu(size_t bytes);
 void MemoryFree_cpu(void* data);
 
 template <typename DTYPE>
-void UpdatePdfSigned_cpu(const DTYPE* data, int cnt, bool signed_vals, PDF& pdf);
+void UpdatePdfSigned_cpu(const DTYPE* data, int cnt, PDF& pdf);
 
 template <typename DTYPE>
-void UpdatePdfUnsigned_cpu(const DTYPE* data, int cnt, bool signed_vals, PDF& pdf);
+void UpdatePdfUnsigned_cpu(const DTYPE* data, int cnt, PDF& pdf);
 
 /**
  * @brief Returns a histogram that represents a PDF of tensor values seen so far.
@@ -211,6 +211,12 @@ bool GemmFloat_gpu(int M, int N, int K, const float* A, const float* B, float* C
 void* MemoryAllocation_gpu(size_t bytes);
 
 bool MemoryFree_gpu(void* data);
+
+template <typename DTYPE>
+void UpdatePdfSigned_gpu(const DTYPE* data, int cnt, PDF& pdf);
+
+template <typename DTYPE>
+void UpdatePdfUnsigned_gpu(const DTYPE* data, int cnt, PDF& pdf);
 
 #endif   // GPU_QUANTIZATION_ENABLED
 
