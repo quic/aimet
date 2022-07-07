@@ -467,8 +467,13 @@ class QuantizationSimModel:
         # Save the excluded layer names. Do not save the modules since the wrapper removal depends on
         # reference count to automatically remove the layers.
         # pylint: disable=protected-access
+
+        model_name = self.model.__class__.__name__
         for layer in layers_to_exclude:
-            excluded_name = self.connected_graph._module_to_name.get(layer._module_to_wrap, None)
+            excluded_name_with_model_name = self.connected_graph._module_to_name.get(layer._module_to_wrap, None)
+
+            # Remove the model name
+            excluded_name = excluded_name_with_model_name.replace((model_name+'.'), '')
             self._excluded_layer_names.append(excluded_name)
 
         self._remove_quantization_wrappers(self.model, layers_to_exclude)
