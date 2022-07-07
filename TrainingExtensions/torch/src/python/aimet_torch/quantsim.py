@@ -174,7 +174,7 @@ class QuantizationSimModel:
         self._is_conditional = False
         self._module_marker_map = {}
         self._percentile_value = 100 # default percentile value
-        self._excluded_layers = None
+        self._excluded_layer_names = []
 
         # Add quantization layers
         num_inout_tensors = utils.find_num_inout_tensors_per_module(self.model, dummy_input)
@@ -370,11 +370,11 @@ class QuantizationSimModel:
 
         if onnx_export_args is None:
             self.export_torch_script_model_and_encodings(path, filename_prefix, model_to_export, self.model,
-                                                         dummy_input, self._excluded_layers)
+                                                         dummy_input, self._excluded_layer_names)
         elif isinstance(onnx_export_args, OnnxExportApiArgs):
             self.export_onnx_model_and_encodings(path, filename_prefix, model_to_export, self.model,
                                                  dummy_input, onnx_export_args, propagate_encodings,
-                                                 self._module_marker_map, self._is_conditional, self._excluded_layers)
+                                                 self._module_marker_map, self._is_conditional, self._excluded_layer_names)
         else:
 
             raise ValueError(f'unsupported opt_args type={type(onnx_export_args)}')
@@ -384,7 +384,7 @@ class QuantizationSimModel:
                                                 original_model: torch.nn.Module,
                                                 sim_model: torch.nn.Module,
                                                 dummy_input: Union[torch.Tensor, Tuple],
-                                                excluded_layers: List = None):
+                                                excluded_layer_names: List = None):
         """
         This method exports  a onnx mode and the corresponding encodings
 
@@ -393,6 +393,7 @@ class QuantizationSimModel:
         :param original_model: model without the quantsim wrappers
         :param sim_model: model with the quantsim wrappers
         :param dummy_input: Dummy input to the model. Used to parse model graph.
+        :param excluded_layer_names: List of names of layers that have been excluded from quantization.
         :return: None
         """
         with utils.in_eval_mode(original_model), torch.no_grad():
@@ -408,14 +409,14 @@ class QuantizationSimModel:
         # Export encodings
         QuantizationSimModel._export_encodings_to_files(sim_model, path, filename_prefix,
                                                         torch_script_node_io_tensor_map, valid_param_set,
-                                                        excluded_layers, propagate_encodings=False, )
+                                                        excluded_layer_names, propagate_encodings=False, )
 
     @staticmethod
     def export_onnx_model_and_encodings(path: str, filename_prefix: str, original_model: torch.nn.Module,
                                         sim_model: torch.nn.Module, dummy_input: Union[torch.Tensor, Tuple],
                                         onnx_export_args: OnnxExportApiArgs, propagate_encodings: bool,
                                         module_marker_map: Dict[torch.nn.Module, torch.Tensor] = None,
-                                        is_conditional: bool = False, excluded_layers: List = None):
+                                        is_conditional: bool = False, excluded_layer_names: List = None):
         """
         This method exports a onnx model and the corresponding encodings
 
@@ -424,12 +425,13 @@ class QuantizationSimModel:
         :param original_model: model without the quantsim wrappers
         :param sim_model: model with the quantsim wrappers
         :param dummy_input: Dummy input to the model. Used to parse model graph.
-        :param module_marker_map: Maps module names to traced custom markers (only used for conditional models)
-        :param is_conditional: True if model is conditional, False otherwise
         :param onnx_export_args: Additional onnx export args including export api overrides
         :param propagate_encodings: If True, encoding entries for intermediate ops (when one PyTorch ops results in
-                multiple ONNX nodes) are filled with the same BW and data_type as the output tensor for that series of
-                ops.
+               multiple ONNX nodes) are filled with the same BW and data_type as the output tensor for that series of
+               ops.
+        :param module_marker_map: Maps module names to traced custom markers (only used for conditional models)
+        :param is_conditional: True if model is conditional, False otherwise
+        :param excluded_layer_names: List of names of layers that have been excluded from quantization.
         :return: None
 
         """
@@ -453,7 +455,7 @@ class QuantizationSimModel:
         # Export encodings
         QuantizationSimModel._export_encodings_to_files(sim_model, path, filename_prefix,
                                                         onnx_node_to_io_tensor_map, valid_param_set,
-                                                        excluded_layers, propagate_encodings)
+                                                        excluded_layer_names, propagate_encodings)
 
     def exclude_layers_from_quantization(self, layers_to_exclude: List[torch.nn.Module]):
         """
@@ -461,7 +463,14 @@ class QuantizationSimModel:
         :param layers_to_exclude: List of torch layers to exclude
         :return: None
         """
-        self._excluded_layers = layers_to_exclude
+
+        # Save the excluded layer names. Do not save the modules since the wrapper removal depends on
+        # reference count to automatically remove the layers.
+        # pylint: disable=protected-access
+        for layer in layers_to_exclude:
+            excluded_name = self.connected_graph._module_to_name.get(layer._module_to_wrap, None)
+            self._excluded_layer_names.append(excluded_name)
+
         self._remove_quantization_wrappers(self.model, layers_to_exclude)
 
     def exclude_param_from_quantization(self, param_name_to_exclude: str):
@@ -652,7 +661,7 @@ class QuantizationSimModel:
 
     @staticmethod
     def _export_encodings_to_files(model: torch.nn.Module, path: str, filename_prefix: str, op_to_io_tensor_map: Dict,
-                                   valid_param_set: set, excluded_layers, propagate_encodings: bool):
+                                   valid_param_set: set, excluded_layer_names, propagate_encodings: bool):
         """
         Save the quantized model weight encodings
 
@@ -660,6 +669,7 @@ class QuantizationSimModel:
         :param filename_prefix: filename to store exported weight encodings in json format
         :param op_to_io_tensor_map: Dictionary of layer to I/O tensor mapping from onnx or torch script model
         :param valid_param_set: a set of valid param input names in model
+        :param excluded_layer_names: List of names of layers that have been excluded from quantization.
         :param propagate_encodings: If True, encoding entries for intermediate ops (when one PyTorch ops results in
                 multiple ONNX nodes) are filled with the same BW and data_type as the output tensor for that series of
                 ops.
@@ -681,12 +691,14 @@ class QuantizationSimModel:
         encodings_dict_onnx = {'version': encoding_version,
                                'activation_encodings': activation_encodings_onnx,
                                'param_encodings': param_encodings,
-                               'excluded_layers': excluded_layers}
+                               'excluded_layers': excluded_layer_names}
 
         encodings_dict_pytorch = {'version': encoding_version,
                                   'activation_encodings': activation_encodings_torch,
                                   'param_encodings': param_encodings,
-                                  'excluded_layers': excluded_layers}
+                                  'excluded_layers': excluded_layer_names}
+
+        logger.info("Layers excluded from quantization: %s", excluded_layer_names)
 
         # export weight encodings to output json file
         encoding_file_path = os.path.join(path, filename_prefix + '.encodings')
@@ -705,6 +717,7 @@ class QuantizationSimModel:
         """
 
         for orig_param_name, param_quantizer in layer.param_quantizers.items():
+            param_name = layer_name + '.' + orig_param_name
             param_name = layer_name + '.' + orig_param_name
 
             if not param_quantizer.enabled:
