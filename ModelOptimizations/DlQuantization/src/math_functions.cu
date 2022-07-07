@@ -113,14 +113,12 @@ template double GetMin_gpu(const double* data, int cnt);
 template float GetMin_gpu(const float* data, int cnt);
 
 
-using pdf_elem_type = float;
-
 template <typename DTYPE>
-__global__ void UpdatePdfKernel(const DTYPE* data,
-                                pdf_elem_type* pdf_this_iter,
-                                const size_t cnt,
-                                const DTYPE pdf_offset,
-                                const DTYPE bucket_size)
+__global__ void countKernel(const DTYPE* data,
+                            DTYPE* pdf_per_thread,
+                            const size_t cnt,
+                            const DTYPE pdf_offset,
+                            const DTYPE bucket_size)
 {
     // This offset is used to help map numbers to histogram buckets.
     // Go through all data points and add them to the histogram.
@@ -132,10 +130,35 @@ __global__ void UpdatePdfKernel(const DTYPE* data,
         if (index >= 0 && index < PDF_SIZE)
         {
             int idx = PDF_SIZE * (blockIdx.x * blockDim.x + threadIdx.x) + index;
-            pdf_this_iter[idx] += 1;
+            pdf_per_thread[idx] += 1;
         }
     }
 }
+
+
+template <typename DTYPE>
+__global__ void reduceSumKernel(const DTYPE* pdf_per_thread,
+                                DTYPE* pdf_this_iter,
+                                const size_t cnt,
+                                const size_t stride)
+{
+    if (blockIdx.x == 0 && threadIdx.x < stride)
+    {
+        for (int i = threadIdx.x; i < cnt; i += stride)
+        {
+            pdf_this_iter[threadIdx.x] += pdf_per_thread[i];
+        }
+    }
+}
+
+
+static const int PDF_MAX_BUFF_BYTES = (1 << 25); // 32MB
+
+#define GET_PDF_BUFF_SIZE(tensor_size, DTYPE)\
+    sizeof(DTYPE) * CUDA_NUM_BLOCKS(tensor_size) * CUDA_NUM_THREADS * PDF_SIZE < PDF_MAX_BUFF_BYTES ?\
+    CUDA_NUM_BLOCKS(tensor_size) :\
+    PDF_MAX_BUFF_BYTES / (sizeof(DTYPE) * PDF_SIZE * CUDA_NUM_THREADS)
+
 
 template <typename DTYPE>
 void UpdatePdfSigned_gpu(const DTYPE* data, int cnt, PDF& pdf)
@@ -180,119 +203,49 @@ void UpdatePdfSigned_gpu(const DTYPE* data, int cnt, PDF& pdf)
     DTYPE min_val     = pdf.xLeft[0];
     DTYPE bucket_size = pdf.xLeft[1] - pdf.xLeft[0];
 
-    uint32_t pdf_size = PDF_SIZE * CUDA_NUM_BLOCKS(cnt) * CUDA_NUM_THREADS;
-    pdf_elem_type* pdf_this_iter = (pdf_elem_type*) MemoryAllocation_gpu(sizeof(pdf_elem_type) * pdf_size);
-    cudaMemset(pdf_this_iter, 0x00, sizeof(pdf_elem_type) * pdf_size);
+    // Limit the number of thread blocks for performance based on heuristics
+    const size_t CUDA_NUM_BLOCKS_ = GET_PDF_BUFF_SIZE(cnt, DTYPE);
+    const size_t buff_size = PDF_SIZE * CUDA_NUM_BLOCKS_ * CUDA_NUM_THREADS;
+
+    DTYPE* pdf_per_thread = (DTYPE*) MemoryAllocation_gpu(sizeof(DTYPE) * buff_size);
+    cudaMemset(pdf_per_thread, 0x00, sizeof(DTYPE) * buff_size);
 
     // This offset is used to help map numbers to histogram buckets.
     DTYPE pdf_offset = min_val / bucket_size;
     // Go through all data points and add them to the histogram.
-    UpdatePdfKernel<<<CUDA_NUM_BLOCKS(cnt), CUDA_NUM_THREADS>>>(data,
-                                                                pdf_this_iter,
-                                                                cnt,
-                                                                pdf_offset,
-                                                                bucket_size);
+    countKernel<<<CUDA_NUM_BLOCKS_, CUDA_NUM_THREADS>>>(data,
+                                                        pdf_per_thread,
+                                                        cnt,
+                                                        pdf_offset,
+                                                        bucket_size);
 
-    // pdf_elem_type* pdf_this_iter_cpu = pdf_this_iter;
-    pdf_elem_type* pdf_this_iter_cpu = (pdf_elem_type*) malloc(sizeof(pdf_elem_type) * pdf_size);
+    DTYPE* pdf_this_iter = (DTYPE*) MemoryAllocation_gpu(sizeof(DTYPE) * PDF_SIZE);
+    cudaMemset(pdf_this_iter, 0x00, sizeof(DTYPE) * PDF_SIZE);
+
+    reduceSumKernel<<<1, PDF_SIZE>>>(pdf_per_thread, pdf_this_iter, buff_size, PDF_SIZE);
+
+    DTYPE pdf_this_iter_cpu[PDF_SIZE];
     cudaMemcpy(pdf_this_iter_cpu,
                pdf_this_iter,
-               sizeof(pdf_elem_type) * pdf_size,
+               sizeof(DTYPE) * PDF_SIZE,
                cudaMemcpyDefault);
 
-    std::vector<pdf_elem_type> pdf_sum(PDF_SIZE, 0);
-
-    for (int i = 0; i < CUDA_NUM_BLOCKS(cnt) * CUDA_NUM_THREADS; i++) {
-        for (int j = 0; j < PDF_SIZE; j++) {
-            pdf_sum.at(j) += pdf_this_iter_cpu[i * PDF_SIZE + j];
-        }
-    }
-
     // Average this histogram into the average of all batches.
-    // DTYPE sum = 0.0;
     for (int i = 0; i < PDF_SIZE; ++i)
     {
-        // Convert histogram to probability density function.
-        pdf_sum[i] /= cnt;
         // Average this PDF into the running average.
-        pdf.pdf.at(i) = (pdf.pdf.at(i) * pdf.iterations + pdf_sum[i]) / (pdf.iterations + 1);
-        // sum += pdf.pdf.at(i);
+        pdf.pdf.at(i) = (pdf.pdf.at(i) * pdf.iterations + pdf_this_iter_cpu[i] / cnt) / (pdf.iterations + 1);
     }
-    // assert(0.999 < sum);
-    // assert(sum < 1.001);
         
     pdf.iterations++;
     MemoryFree_gpu(pdf_this_iter);
+    MemoryFree_gpu(pdf_per_thread);
 }
 
 template <typename DTYPE>
 void UpdatePdfUnsigned_gpu(const DTYPE* data, int cnt, PDF& pdf)
 {
-    // Check if we need to initialize the PDF.
-    // if (0 == pdf.xLeft.size())
-    // {
-    //     // Define the range over which we want to calculate the PDF.
-    //     DTYPE min_val = GetMin(data, cnt, COMP_MODE_GPU);
-    //     DTYPE max_val = GetMax(data, cnt, COMP_MODE_GPU);
-
-    //     if ((min_val == 0) && (max_val == 0))
-    //     {
-    //         // Special case, we don't have a histogram initialized, but we have a zero tensor here
-    //         // No point in trying to initialize the histogram using this
-    //         return;
-    //     }
-
-    //     // Make sure we have a non-zero range.
-    //     if (min_val == max_val)
-    //     {
-    //         max_val = std::max(max_val, min_val + static_cast<DTYPE>(0.01));
-    //     }
-    //     // Enlarge the range by factor 3, to be on the safe side.
-    //     DTYPE center = (max_val + min_val) / 2;
-    //     min_val      = center - 3 * (center - min_val);
-    //     max_val      = center + 3 * (max_val - center);
-    //     // Initialize the PDF's buckets.
-    //     DTYPE max_abs_val = std::max(std::abs(max_val), std::abs(min_val));
-    //     DTYPE bucket_size = max_abs_val / PDF_SIZE;
-    //     pdf.xLeft.resize(PDF_SIZE);
-    //     for (int i = 0; i < PDF_SIZE; ++i)
-    //     {
-    //         pdf.xLeft[i] = i * bucket_size;
-    //     }
-    //     // Initialize the rest of the PDF structure.
-    //     pdf.pdf.resize(PDF_SIZE);
-    //     pdf.iterations = 0;
-    // }
-
-    // // Create the histogram of this number distribution.
-    // DTYPE bucket_size = pdf.xLeft[1] - pdf.xLeft[0];
-
-    // DTYPE* pdf_this_iter = (DTYPE*) MemoryAllocation_gpu(sizeof(DTYPE) * PDF_SIZE);
-    // cudaMemset(pdf_this_iter, 0, sizeof(DTYPE) * PDF_SIZE);
-
-    // UpdatePdfKernel<<<CUDA_NUM_BLOCKS(cnt), CUDA_NUM_THREADS>>>(data,
-    //                                                             pdf_this_iter,
-    //                                                             cnt,
-    //                                                             static_cast<DTYPE>(0.0),
-    //                                                             bucket_size);
-
-    // DTYPE* pdf_this_iter_cpu = (DTYPE*) malloc(sizeof(DTYPE) * PDF_SIZE);
-    // CudaMemCpy(pdf_this_iter_cpu,
-    //            pdf_this_iter,
-    //            sizeof(DTYPE) * PDF_SIZE,
-    //            CudaMemcpyDirection::DEVICE_TO_HOST);
-
-    // // Average this histogram into the average of all batches.
-    // for (int i = 0; i < PDF_SIZE; ++i)
-    // {
-    //     // Convert histogram to probability density function.
-    //     pdf_this_iter_cpu[i] /= cnt;
-    //     // Average this PDF into the running average.
-    //     pdf.pdf[i] = (pdf.pdf[i] * pdf.iterations + pdf_this_iter_cpu[i]) / (pdf.iterations + 1);
-    // }
-    // pdf.iterations++;
-    // MemoryFree_gpu(pdf_this_iter);
-    // free(pdf_this_iter_cpu);
+    // TODO
 }
 
 template void UpdatePdfSigned_gpu(const float* data, int cnt, PDF& pdf);
