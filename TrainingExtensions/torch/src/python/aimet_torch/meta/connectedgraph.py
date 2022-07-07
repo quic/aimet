@@ -112,14 +112,11 @@ class ConnectedGraph(AimetCommonConnectedGraph):
         either module or functional) as producers and consumers of tensors.
         Note that the graph has two kinds of nodes: operations and products."""
 
-    def __init__(self, model: torch.nn.Module, model_input: Union[torch.Tensor, Tuple],
-                 trace_leaf_module: bool = False):
+    def __init__(self, model: torch.nn.Module, model_input: Union[torch.Tensor, Tuple]):
         """
         Init function for connected graph
         :param model: Pytorch model to create connected graph from
         :param model_input: Example input to model.  Can be a single tensor or a list/tuple of input tensors
-        :param trace_leaf_module: If True, then the leaf module (non torch.nn) will be further traced.
-         Default is False.
         """
         super().__init__()
         self._model_name = type(model).__name__
@@ -132,8 +129,6 @@ class ConnectedGraph(AimetCommonConnectedGraph):
 
         # List of ops in the order they are traversed using the forward function
         self.ordered_ops = []
-        # Boolean to decide whether to trace custom leaf modules or not.
-        self._trace_leaf_module = trace_leaf_module
 
         self._generate_module_lookup_table(model)
         with in_eval_mode(model), torch.no_grad():
@@ -292,7 +287,7 @@ class ConnectedGraph(AimetCommonConnectedGraph):
         _ = self._parse_trace_graph(trace, model, ir_nodes_list=ir_nodes_list, output_map=output_map)
         return ir_nodes_list, output_map
 
-    def _parse_trace_graph(self, # pylint: disable=too-many-locals, too-many-branches
+    def _parse_trace_graph(self, # pylint: disable=too-many-locals
                            trace: Union[torch.jit.TopLevelTracedModule, torch.jit.TracedModule],
                            model: torch.nn.Module,
                            ir_nodes_list: List[IrNode],
@@ -315,12 +310,8 @@ class ConnectedGraph(AimetCommonConnectedGraph):
         # These checks are needed because even though the module is leaf module but forward pass
         # might have more than one node. In that case, we can't handle the module as a single IrNode and further
         # parsing is needed.
-        if self._trace_leaf_module:
-            if is_leaf_module(model) and len(_find_nodes_in_forward_pass(trace)) <= 1:
-                return self._parse_single_module_model(model, trace.graph, ir_nodes_list)
-        else:
-            if is_leaf_module(model):
-                return self._parse_single_module_model(model, trace.graph, ir_nodes_list)
+        if not self._is_recursive_parsing_needed(model, trace):
+            return self._parse_single_module_model(model, trace.graph, ir_nodes_list)
 
         if inputs_map is None:
             inputs_map = {}
@@ -365,15 +356,8 @@ class ConnectedGraph(AimetCommonConnectedGraph):
                 # Recursive parsing is needed 1) if the module is not leaf module.
                 # 2) If the module is leaf module but has multiple functional operations in
                 # forward method.
-                if self._trace_leaf_module:
-                    if (is_leaf_module(subgraph_model) and _is_torch_nn_module(subgraph_model)) or\
-                            (is_leaf_module(subgraph_model) and len(_find_nodes_in_forward_pass(subgraph_trace)) <= 1):
-                        continue
-                    else:
-                        node_name_to_subgraph_model[getattr_node_info.node_alias] = (subgraph_model, getattr_node_info)
-                else:
-                    if not is_leaf_module(subgraph_model):
-                        node_name_to_subgraph_model[getattr_node_info.node_alias] = (subgraph_model, getattr_node_info)
+                if self._is_recursive_parsing_needed(subgraph_model, subgraph_trace):
+                    node_name_to_subgraph_model[getattr_node_info.node_alias] = (subgraph_model, getattr_node_info)
 
             # invoking forward method
             elif 'CallMethod' in node.kind():
@@ -963,6 +947,26 @@ class ConnectedGraph(AimetCommonConnectedGraph):
                 _handle_passthrough_ir_node(ir_node, connections_to_ir_nodes_dict)
             elif ir_node.node_type in input_ops_to_ignore:
                 _handle_input_ir_node_to_ignore(ir_node, connections_to_ir_nodes_dict)
+
+    @staticmethod
+    def _is_recursive_parsing_needed(module: torch.nn.Module,
+                                     trace: Union[torch.jit.TopLevelTracedModule, torch.jit.TracedModule]) -> bool:
+        """
+        Utility to decide whether recursive parsing is needed for given module and it's jit trace.
+        Recursive parsing is not needed
+        1) if the module is leaf module and from torch.nn class (nn.Conv2d, nn.ReLU, nn.rNN etc.)
+        2) if the module is leaf module and has only one aten node inside forward method (elementwise_ops.Add etc.)
+
+        :param module: PyTorch module.
+        :param trace: Jit trace.
+        :return: Boolean whether recursive parsing needed or not. If needed returns True, False otherwise.
+        """
+        recursive_parsing_needed = True
+        if (is_leaf_module(module) and _is_torch_nn_module(module)) or \
+                (is_leaf_module(module) and len(_find_nodes_in_forward_pass(trace)) <= 1):
+            recursive_parsing_needed = False
+
+        return recursive_parsing_needed
 
 
 def _create_module_to_op_dict(ops: List[Op]) -> Dict[torch.nn.Module, Op]:
