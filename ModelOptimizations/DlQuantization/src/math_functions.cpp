@@ -43,7 +43,6 @@
 #include <map>
 #include <stdexcept>
 #include <stdlib.h>
-#include <iostream>
 
 #include "DlQuantization/Quantization.hpp"
 #include "math_functions.hpp"
