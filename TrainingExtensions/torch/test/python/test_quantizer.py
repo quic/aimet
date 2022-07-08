@@ -854,6 +854,60 @@ class TestQuantizationSimStaticGrad:
         # try one forward pass
         dummy_forward_pass(sim.model, None)
 
+    @pytest.mark.cuda
+    def test_multi_gpu_qat(self):
+        """"""
+        seed = 1
+        torch.manual_seed(seed)
+        torch.cuda.manual_seed(seed)
+        torch.cuda.manual_seed_all(seed)
+
+        class OneConvLayerModel(nn.Module):
+            def __init__(self):
+                super(OneConvLayerModel, self).__init__()
+                self.conv1 = nn.Conv2d(1, 5, kernel_size=2)
+
+            def forward(self, x):
+                x = self.conv1(x)
+                return x
+
+        model = OneConvLayerModel().to('cuda:0')
+        model = model.to('cuda:0')
+
+        dummy_input = torch.ones(2, 1, 3, 3).to('cuda:0')
+        dummy_input[1] += 1
+
+        sim = QuantizationSimModel(model, quant_scheme=QuantScheme.post_training_tf,
+                                   dummy_input=dummy_input)
+
+        original_weight = sim.model.conv1._module_to_wrap.weight
+
+        def forward_pass(model, args):
+            model.eval()
+            with torch.no_grad():
+                output = model(torch.randn((2, 1, 3, 3)).to('cuda:0'))
+            return output
+
+        sim.compute_encodings(forward_pass, None)
+        output_single_gpu = sim.model(copy.deepcopy(dummy_input))
+        loss = output_single_gpu.flatten().sum()
+        loss.backward()
+        grad_single_gpu = sim.model.conv1._module_to_wrap.weight.grad
+
+
+        sim.model = torch.nn.DataParallel(sim.model)
+
+        output_multi_gpu = sim.model(copy.deepcopy(dummy_input))
+
+        weight = sim.model.module.conv1._module_to_wrap.weight
+
+        assert torch.allclose(output_multi_gpu, output_single_gpu)
+        assert torch.allclose(original_weight, weight)
+
+        loss = output_multi_gpu.flatten().sum()
+        loss.backward()
+        assert torch.allclose(sim.model.module.conv1._module_to_wrap.weight.grad, grad_single_gpu)
+
     # -------------------------------------------
     def test_input_quantization(self):
         """"""
