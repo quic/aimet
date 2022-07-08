@@ -111,6 +111,21 @@ double logBase2(double d);
 template <typename DTYPE>
 void UpdatePdf(const DTYPE* data, int cnt, ComputationMode mode_cpu_gpu, bool signed_vals, PDF& pdf);
 
+template <typename DTYPE>
+void UpdatePdfSigned(const DTYPE* data, int cnt, ComputationMode mode_cpu_gpu, PDF& pdf);
+
+template <typename DTYPE>
+void UpdatePdfUnsigned(const DTYPE* data, int cnt, ComputationMode mode_cpu_gpu, PDF& pdf);
+
+template <typename DTYPE>
+void GetHistogram(const DTYPE* data,
+                  const int cnt,
+                  uint32_t histogram[PDF_SIZE],
+                  const DTYPE bucket_size,
+                  const DTYPE pdf_offset,
+                  const ComputationMode mode_cpu_gpu,
+                  const bool is_signed);
+
 /**
  * @brief Allocate memory.
  * @param modeCpuGpu Allocate memory for CPU or GPU.
@@ -155,10 +170,12 @@ void* MemoryAllocation_cpu(size_t bytes);
 void MemoryFree_cpu(void* data);
 
 template <typename DTYPE>
-void UpdatePdfSigned_cpu(const DTYPE* data, int cnt, PDF& pdf);
-
-template <typename DTYPE>
-void UpdatePdfUnsigned_cpu(const DTYPE* data, int cnt, PDF& pdf);
+void GetHistogram_cpu(const DTYPE* data,
+                      int cnt,
+                      uint32_t histogram[PDF_SIZE],
+                      const DTYPE bucket_size,
+                      const DTYPE pdf_offset,
+                      const bool is_signed);
 
 /**
  * @brief Returns a histogram that represents a PDF of tensor values seen so far.
@@ -213,10 +230,12 @@ void* MemoryAllocation_gpu(size_t bytes);
 bool MemoryFree_gpu(void* data);
 
 template <typename DTYPE>
-void UpdatePdfSigned_gpu(const DTYPE* data, int cnt, PDF& pdf);
-
-template <typename DTYPE>
-void UpdatePdfUnsigned_gpu(const DTYPE* data, int cnt, PDF& pdf);
+void GetHistogram_gpu(const DTYPE* data,
+                      int cnt,
+                      uint32_t histogram[PDF_SIZE],
+                      const DTYPE bucket_size,
+                      const DTYPE pdf_offset,
+                      const bool is_signed);
 
 #endif   // GPU_QUANTIZATION_ENABLED
 

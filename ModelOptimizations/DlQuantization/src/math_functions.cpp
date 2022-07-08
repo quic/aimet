@@ -43,6 +43,7 @@
 #include <map>
 #include <stdexcept>
 #include <stdlib.h>
+#include <iostream>
 
 #include "DlQuantization/Quantization.hpp"
 #include "math_functions.hpp"
@@ -206,47 +207,131 @@ void GemmFloat(ComputationMode modeCpuGpu, bool transposeB, size_t m, size_t n, 
 template <typename DTYPE>
 void UpdatePdf(const DTYPE* data, int cnt, ComputationMode mode_cpu_gpu, bool signed_vals, PDF& pdf)
 {
+    if (signed_vals)
+    {
+        UpdatePdfSigned(data, cnt, mode_cpu_gpu, pdf);
+    }
+    else
+    {
+        UpdatePdfUnsigned(data, cnt, mode_cpu_gpu, pdf);
+    }
+}
+
+template <typename DTYPE>
+void UpdatePdfSigned(const DTYPE* data, int cnt, ComputationMode mode_cpu_gpu, PDF& pdf)
+{
+    // Check if we need to initialize the PDF
+    if (0 == pdf.xLeft.size())
+    {
+        // Define the range over which we want to calculate the PDF.
+        DTYPE min_val = GetMin(data, cnt, mode_cpu_gpu);
+        DTYPE max_val = GetMax(data, cnt, mode_cpu_gpu);
+
+        if ((min_val == 0) && (max_val == 0))
+        {
+            // Special case, we don't have a histogram initialized, but we have a zero tensor here
+            // No point in trying to initialize the histogram using this
+            return;
+        }
+
+        // Make sure we have a non-zero range.
+        if (min_val == max_val)
+        {
+            max_val = std::max(max_val, min_val + static_cast<DTYPE>(0.01));
+        }
+        // Enlarge the range by factor 3, to be on the safe side.
+        DTYPE center = (max_val + min_val) / 2;
+        min_val      = center - 3 * (center - min_val);
+        max_val      = center + 3 * (max_val - center);
+        // Initialize the PDF's buckets.
+        DTYPE bucket_size = (max_val - min_val) / PDF_SIZE;
+        pdf.xLeft.resize(PDF_SIZE);
+        for (int i = 0; i < PDF_SIZE; ++i)
+        {
+            pdf.xLeft[i] = min_val + i * bucket_size;
+        }
+        // Initialize the rest of the PDF structure.
+        pdf.pdf.resize(PDF_SIZE);
+        pdf.iterations = 0;
+    }
+
+    // Create the histogram of this number distribution.
+    // The histogram's range is min_val to max_val.
+    DTYPE min_val     = pdf.xLeft[0];
+    DTYPE bucket_size = pdf.xLeft[1] - pdf.xLeft[0];
+    // This offset is used to help map numbers to histogram buckets.
+    DTYPE pdf_offset = min_val / bucket_size;
+
+    uint32_t histogram[PDF_SIZE];
+    for (int i = 0; i < PDF_SIZE; i++) {
+        histogram[i] = 0;
+    }
+
+    GetHistogram(data,
+                 cnt,
+                 histogram,
+                 bucket_size,
+                 pdf_offset,
+                 mode_cpu_gpu,
+                 /* is_signed= */ true);
+
+    // Average this histogram into the average of all batches.
+    for (int i = 0; i < PDF_SIZE; ++i)
+    {
+        // Convert histogram to probability density function.
+        double prob = static_cast<double>(histogram[i]) / static_cast<double>(cnt);
+        // Average this PDF into the running average.
+        pdf.pdf[i] = (pdf.pdf[i] * pdf.iterations + prob) / (pdf.iterations + 1);
+    }
+    pdf.iterations++;
+}
+
+template <typename DTYPE>
+void GetHistogram(const DTYPE* data,
+                  int cnt,
+                  uint32_t histogram[PDF_SIZE],
+                  const DTYPE bucket_size,
+                  const DTYPE pdf_offset,
+                  const ComputationMode mode_cpu_gpu,
+                  const bool is_signed)
+{
+    const char* use_gpu = std::getenv("AIMET_TFE_USE_GPU");
+    string use_gpu_string = use_gpu ? use_gpu : "";
+
+    if (!use_gpu_string.empty() && "0" != use_gpu_string && "1" != use_gpu_string)
+    {
+        throw runtime_error("Variable `AIMET_TFE_USE_GPU` allows only 0 or 1.");
+    }
+
     switch (mode_cpu_gpu)
     {
     case COMP_MODE_CPU:
-        if (signed_vals)
-        {
-            UpdatePdfSigned_cpu(data, cnt, pdf);
-        }
-        else
-        {
-            UpdatePdfUnsigned_cpu(data, cnt, pdf);
-        }
+        GetHistogram_cpu(data, cnt, histogram, bucket_size, pdf_offset, is_signed);
         break;
     case COMP_MODE_GPU:
-    {
 #ifdef GPU_QUANTIZATION_ENABLED
-        // Fall back to CPU mode.
-        // DTYPE* data_h = (DTYPE*) malloc(sizeof(DTYPE) * cnt);
-        // CudaMemCpy(data_h, data, cnt * sizeof(DTYPE), CudaMemcpyDirection::DEVICE_TO_HOST);
-
-        if (signed_vals)
-        {
-            UpdatePdfSigned_gpu(data, cnt, pdf);
-            // UpdatePdfSigned_cpu(data_h, cnt, pdf);
+        if (use_gpu_string.empty() || "1" == use_gpu_string) {
+            // Use GPU by default
+            GetHistogram_gpu(data, cnt, histogram, bucket_size, pdf_offset, is_signed);
         }
         else
         {
-            UpdatePdfUnsigned_gpu(data, cnt, pdf);
-            // UpdatePdfUnsigned_cpu(data_h, cnt, pdf);
+            // Fall back to CPU mode
+            DTYPE* data_h = (DTYPE*) malloc(sizeof(DTYPE) * cnt);
+            CudaMemCpy(data_h, data, cnt * sizeof(DTYPE), CudaMemcpyDirection::DEVICE_TO_HOST);
+            GetHistogram_cpu(data_h, cnt, histogram, bucket_size, pdf_offset, is_signed);
+            free(data_h);
         }
-
-        // free(data_h);
 #else
         throw runtime_error("Not compiled for GPU mode.");
 #endif
-    }
-    break;
+        break;
     default:
         throw runtime_error("Unknown computation mode.");
         break;
     }
 }
+
 
 // CPU mode implementations
 
@@ -291,76 +376,31 @@ void MemoryFree_cpu(void* data)
 }
 
 template <typename DTYPE>
-void UpdatePdfSigned_cpu(const DTYPE* data, int cnt, PDF& pdf)
+void GetHistogram_cpu(const DTYPE* data,
+                      int cnt,
+                      uint32_t histogram[PDF_SIZE],
+                      const DTYPE bucket_size,
+                      const DTYPE pdf_offset,
+                      const bool is_signed)
 {
-    // Check if we need to initialize the PDF
-    if (0 == pdf.xLeft.size())
-    {
-        // Define the range over which we want to calculate the PDF.
-        DTYPE min_val = GetMin(data, cnt, COMP_MODE_CPU);
-        DTYPE max_val = GetMax(data, cnt, COMP_MODE_CPU);
-
-        if ((min_val == 0) && (max_val == 0))
-        {
-            // Special case, we don't have a histogram initialized, but we have a zero tensor here
-            // No point in trying to initialize the histogram using this
-            return;
-        }
-
-        // Make sure we have a non-zero range.
-        if (min_val == max_val)
-        {
-            max_val = std::max(max_val, min_val + (DTYPE) 0.01);
-        }
-        // Enlarge the range by factor 3, to be on the safe side.
-        DTYPE center = (max_val + min_val) / 2;
-        min_val      = center - 3 * (center - min_val);
-        max_val      = center + 3 * (max_val - center);
-        // Initialize the PDF's buckets.
-        DTYPE bucket_size = (max_val - min_val) / PDF_SIZE;
-        pdf.xLeft.resize(PDF_SIZE);
-        for (int i = 0; i < PDF_SIZE; ++i)
-        {
-            pdf.xLeft[i] = min_val + i * bucket_size;
-        }
-        // Initialize the rest of the PDF structure.
-        pdf.pdf.resize(PDF_SIZE);
-        pdf.iterations = 0;
-    }
-
-    // Create the histogram of this number distribution.
-    // The histogram's range is min_val to max_val.
-    DTYPE min_val     = pdf.xLeft[0];
-    DTYPE bucket_size = pdf.xLeft[1] - pdf.xLeft[0];
-    vector<DTYPE> pdf_this_iter(PDF_SIZE, 0);
-    // This offset is used to help map numbers to histogram buckets.
-    DTYPE pdf_offset = min_val / bucket_size;
     // Go through all data points and add them to the histogram.
     for (int i = 0; i < cnt; ++i)
     {
         // Map a floating point number to the appropriate bucket.
-        int index = round(data[i] / bucket_size - pdf_offset);
+        int index = is_signed ?
+                    round(data[i] / bucket_size - pdf_offset) :
+                    round(std::abs(data[i]) / bucket_size - pdf_offset);
+
         // Add to histogram, if inside the histogram range.
         if (index >= 0 && index < PDF_SIZE)
         {
-            pdf_this_iter[index] += 1;
+            histogram[index] += 1;
         }
     }
-
-    // Average this histogram into the average of all batches.
-    for (int i = 0; i < PDF_SIZE; ++i)
-    {
-        // Convert histogram to probability density function.
-        pdf_this_iter[i] /= cnt;
-        // Average this PDF into the running average.
-        pdf.pdf[i] = (pdf.pdf[i] * pdf.iterations + pdf_this_iter[i]) / (pdf.iterations + 1);
-    }
-
-    pdf.iterations++;
 }
 
 template <typename DTYPE>
-void UpdatePdfUnsigned_cpu(const DTYPE* data, int cnt, PDF& pdf)
+void UpdatePdfUnsigned(const DTYPE* data, int cnt, ComputationMode mode_cpu_gpu, PDF& pdf)
 {
     // Check if we need to initialize the PDF.
     if (0 == pdf.xLeft.size())
@@ -400,26 +440,28 @@ void UpdatePdfUnsigned_cpu(const DTYPE* data, int cnt, PDF& pdf)
 
     // Create the histogram of this number distribution.
     DTYPE bucket_size = pdf.xLeft[1] - pdf.xLeft[0];
-    vector<DTYPE> pdf_this_iter(PDF_SIZE, 0);
-    // Go through all data points and add them to the histogram.
-    for (int i = 0; i < cnt; ++i)
-    {
-        // Map a floating point number to the appropriate bucket.
-        int index = round(std::abs(data[i]) / bucket_size);
-        // Add to histogram, if inside the histogram range.
-        if (index >= 0 && index < PDF_SIZE)
-        {
-            pdf_this_iter[index] += 1;
-        }
+    DTYPE pdf_offset = 0;
+
+    uint32_t histogram[PDF_SIZE];
+    for (int i = 0; i < PDF_SIZE; i++) {
+        histogram[i] = 0;
     }
+
+    GetHistogram(data,
+                 cnt,
+                 histogram,
+                 bucket_size,
+                 pdf_offset,
+                 mode_cpu_gpu,
+                 /* is_signed= */ false);
 
     // Average this histogram into the average of all batches.
     for (int i = 0; i < PDF_SIZE; ++i)
     {
         // Convert histogram to probability density function.
-        pdf_this_iter[i] /= cnt;
+        double prob = static_cast<double>(histogram[i]) / static_cast<double>(cnt);
         // Average this PDF into the running average.
-        pdf.pdf[i] = (pdf.pdf[i] * pdf.iterations + pdf_this_iter[i]) / (pdf.iterations + 1);
+        pdf.pdf[i] = (pdf.pdf[i] * pdf.iterations + prob) / (pdf.iterations + 1);
     }
     pdf.iterations++;
 }
