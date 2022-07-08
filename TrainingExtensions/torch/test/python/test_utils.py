@@ -40,8 +40,10 @@ import pytest
 import unittest.mock
 import numpy as np
 import shutil
+import math
 import torch
 import torchvision
+import torch.nn.functional as F
 
 import aimet_torch.model_validator.validation_checks
 import aimet_torch.utils
@@ -462,3 +464,25 @@ class TestTrainingExtensionsUtils(unittest.TestCase):
         except:
             pass
         assert model.training == True
+
+    def test_is_torch_module(self):
+        """ test _is_torch_nn_module() utility """
+        assert utils.is_torch_nn_module(torch.nn.Conv2d(3, 3, 2))
+        assert utils.is_torch_nn_module(torch.nn.Linear(3, 10))
+        assert utils.is_torch_nn_module(torch.nn.BatchNorm2d(3))
+        assert utils.is_torch_nn_module(torch.nn.RNN(input_size=3, hidden_size=5, num_layers=1))
+        assert utils.is_torch_nn_module(torch.nn.LSTM(input_size=3, hidden_size=5, num_layers=1, bidirectional=True))
+        assert utils.is_torch_nn_module(torch.nn.Sequential(torch.nn.Conv2d(3, 16, 2), torch.nn.BatchNorm2d(16)))
+        assert utils.is_torch_nn_module(torch.nn.ModuleList([torch.nn.MaxPool2d(kernel_size=2, stride=2, padding=1),
+                                                             torch.nn.ReLU(inplace=True),
+                                                             torch.nn.Conv2d(16, 8, kernel_size=2)]))
+        assert not utils.is_torch_nn_module(elementwise_ops.Add())
+        assert not utils.is_torch_nn_module(elementwise_ops.Multiply())
+        assert not utils.is_torch_nn_module(elementwise_ops.Concat())
+
+        class CustomModule(torch.nn.Module):
+            @staticmethod
+            def forward(x):
+                return x * F.softplus(x).sigmoid()
+
+        assert not utils.is_torch_nn_module(CustomModule())

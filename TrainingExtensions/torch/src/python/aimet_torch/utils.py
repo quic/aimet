@@ -690,3 +690,29 @@ def _in_mode(model: torch.nn.Module, train: bool):
         yield
     finally:
         model.train(mode=train_orig)
+
+
+def is_torch_nn_module(module: torch.nn.Module) -> bool:
+    """
+    Utility function to determine if the given module is from torch.nn class or not.
+    For modules like torch.nn.Conv2d, the utility will return True.
+
+    :param module: PyTorch module.
+    :return: True if the module from torch.nn class, False otherwise
+    """
+    torch_nn_module = False
+    if "torch.nn" in str(module.__class__):
+        torch_nn_module = True
+    return torch_nn_module
+
+
+def is_torch_nn_leaf_module(module: torch.nn.Module) -> bool:
+    """
+    Utility function to determine if the given module is leaf and from torch.nn class or not.
+    :param module: PyTorch module.
+    :return: True if the module is leaf and from torch.nn class, False otherwise
+    """
+    torch_nn_leaf_module = False
+    if is_leaf_module(module) and is_torch_nn_module(module):
+        torch_nn_leaf_module = True
+    return torch_nn_leaf_module

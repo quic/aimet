@@ -1024,7 +1024,7 @@ class QuantizationSimModel:
                 continue
 
             # check if the module is leaf or not
-            if utils.is_leaf_module(module_ref):
+            if self._is_quantization_wrapper_needed(module_ref):
 
                 # Create a new QcQuantize wrapper module
                 quantized_module = self._create_quantizer_module(module_ref, num_inout_tensors, default_data_type)
@@ -1034,6 +1034,30 @@ class QuantizationSimModel:
             # recursively call children modules
             else:
                 self._add_quantization_wrappers(module_ref, num_inout_tensors, default_data_type)
+
+    def _is_quantization_wrapper_needed(self, module: torch.nn.Module) -> bool:
+        """
+        Utility to decide whether quantization wrapper is added for given module or not.
+        If connected graph is not built successfully and set to None, we simply check if the module is leaf or not.
+        If connected graph is not None then only we perform detailed check for given module and detailed check
+        is if the module is leaf and from torch.nn class or leaf and with only one functional operation in
+        forward pass.
+
+        :param module: PyTorch module.
+        :return: True if the quantization wrapper needed, False otherwise.
+        """
+        wrapper_needed = False
+        # 1) if the module is leaf module and from torch.nn class (nn.Conv2d, nn.ReLU, nn.rNN etc.)
+        # 2) if the module is leaf module and has only one aten node inside forward method (elementwise_ops.Add etc.)
+        if utils.is_torch_nn_leaf_module(module) or \
+                (self.connected_graph and self.connected_graph.is_custom_leaf_module(module)):
+            wrapper_needed = True
+
+        # if connected graph is not built successfully then we simply check if the module is leaf or not.
+        elif utils.is_leaf_module(module) and not self.connected_graph:
+            wrapper_needed = True
+
+        return wrapper_needed
 
     @staticmethod
     def _create_encoding_dict(encoding: libpymo.TfEncoding, quantizer, propagate_encodings: bool) -> Union[Dict, None]:

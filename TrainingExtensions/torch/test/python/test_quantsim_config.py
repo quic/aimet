@@ -48,6 +48,7 @@ from aimet_torch.quantsim_config.quantsim_config import get_all_ops_in_neighborh
 from aimet_torch.qc_quantize_op import QcQuantizeWrapper
 from aimet_torch import utils
 from aimet_torch.meta.connectedgraph import ConnectedGraph
+from aimet_torch import elementwise_ops
 
 
 class ModelWithBertCustomLayerNormGelu(torch.nn.Module):
@@ -751,12 +752,6 @@ class TestQuantsimConfig:
         This is used by connected graph to apply op level specific quantsim config.
         :return:
         """
-
-        import json
-        import aimet_common.libpymo as libpymo
-        from aimet_common.defs import QuantScheme
-        from aimet_torch.quantsim import QuantizationSimModel
-
         class ModelWithGeluLayerNorm(torch.nn.Module):
             def __init__(self):
                 super(ModelWithGeluLayerNorm, self).__init__()
@@ -1875,3 +1870,75 @@ class TestQuantsimConfig:
         qsim_config.ENFORCE_TARGET_DTYPE_BITWIDTH_CONFIG = False
         if os.path.exists('./data/quantsim_config.json'):
             os.remove('./data/quantsim_config.json')
+
+    def test_quantsim_config_with_custom_module_as_first_module(self):
+        """
+        Test quantsim configs with Custom module (multiple functional operations) as very first module in the model.
+        """
+        class CustomModule(torch.nn.Module):
+
+            @staticmethod
+            def forward(x):
+                return x * torch.nn.functional.softplus(x).sigmoid()
+
+        class Model(torch.nn.Module):
+            """ Expects input of shape (1, 3, 32, 32) """
+
+            def __init__(self):
+                super(Model, self).__init__()
+                self.custom = CustomModule()
+                self.conv = torch.nn.Conv2d(3, 8, kernel_size=2, bias=False)
+
+            def forward(self, inputs):
+                x = self.custom(inputs)
+                x = self.conv(x)
+                return x
+
+        dummy_input = torch.rand(1, 3, 32, 32)
+        model = Model().eval()
+        sim = QuantizationSimModel(model, dummy_input)
+        print(sim)
+
+        # Custom module is not wrapped since it has multiple functional operations (and thus not treated as leaf module)
+        assert not isinstance(sim.model.custom, QcQuantizeWrapper)
+        assert isinstance(sim.model.conv, QcQuantizeWrapper)
+        assert sim.model.conv.input_quantizer.enabled
+        assert sim.model.conv.output_quantizer.enabled
+
+    def test_quantsim_config_with_custom_module(self):
+        """
+        Test quantsim configs with Custom module (multiple functional operations).
+        """
+        class CustomModule(torch.nn.Module):
+
+            @staticmethod
+            def forward(x):
+                return x * torch.nn.functional.softplus(x).sigmoid()
+
+        class Model(torch.nn.Module):
+            """ Expects input of shape (1, 3, 32, 32) """
+
+            def __init__(self):
+                super(Model, self).__init__()
+                self.custom = CustomModule()
+                self.conv = torch.nn.Conv2d(3, 8, kernel_size=2, bias=False)
+                self.add = elementwise_ops.Add()
+
+            def forward(self, inputs):
+                x = self.conv(inputs)
+                x = self.custom(x)
+                x = self.add(x, 1)
+                return x
+
+        dummy_input = torch.rand(1, 3, 32, 32)
+        model = Model().eval()
+        sim = QuantizationSimModel(model, dummy_input)
+        print(sim)
+
+        # Custom module is not wrapped since it has multiple functional operations (and thus not treated as leaf module)
+        assert not isinstance(sim.model.custom, QcQuantizeWrapper)
+        assert isinstance(sim.model.conv, QcQuantizeWrapper)
+        assert isinstance(sim.model.add, QcQuantizeWrapper)
+
+        # Input quantizer for Add is enabled which collects quantization noise for output of Custom module.
+        assert sim.model.add.input_quantizer.enabled
