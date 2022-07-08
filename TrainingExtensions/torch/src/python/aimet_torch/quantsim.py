@@ -472,9 +472,13 @@ class QuantizationSimModel:
         for layer in layers_to_exclude:
             excluded_name_with_model_name = self.connected_graph._module_to_name.get(layer._module_to_wrap, None)
 
-            # Remove the model name
-            excluded_name = excluded_name_with_model_name.replace((model_name+'.'), '')
-            self._excluded_layer_names.append(excluded_name)
+            if excluded_name_with_model_name:
+                # Remove the model name
+                excluded_name = excluded_name_with_model_name.replace((model_name+'.'), '')
+                self._excluded_layer_names.append(excluded_name)
+            else:
+                # A layer to be excluded was not found in Connected Graph
+                logger.error("Unable to add layer name to the list of excluded layer names: %s", layer)
 
         self._remove_quantization_wrappers(self.model, layers_to_exclude)
 
