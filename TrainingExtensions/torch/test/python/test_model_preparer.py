@@ -789,7 +789,8 @@ class TestFX:
                 x = torch.nn.functional.conv2d(x, self.w1, stride=self.stride)
                 x = torch.nn.functional.conv2d(x, self.w1, None)
                 x = torch.nn.functional.conv2d(x, self.w1, bias=None)
-                x = torch.nn.functional.conv2d(weight=self.w2, bias=self.b2, input=x, stride=self.padding_2, padding=self.padding_2)
+                x = torch.nn.functional.conv2d(weight=self.w2, bias=self.b2, input=x, stride=self.stride_2,
+                                               padding=self.padding_2)
                 return x
 
         input_shape = (1, 10, 10, 1)
@@ -808,6 +809,38 @@ class TestFX:
 
         assert model_transformed.module_conv2d_4.padding == (model.padding_2, model.padding_2)
         assert model_transformed.module_conv2d_4.stride == (model.stride_2, model.stride_2)
+
+        sim = QuantizationSimModel(model_transformed, input_tensor)
+
+        def dummy_forward(model, args):
+            model.eval()
+            model(input_tensor)
+        sim.compute_encodings(dummy_forward, None)
+        sim.model(input_tensor)
+
+    def test_fx_with_depthwise_conv(self):
+        class ModelWithFunctionalDepthwiseConv(torch.nn.Module):
+            """ Use this model for unit testing purposes. Expect input shape (1, 3, 32, 32) """
+            def __init__(self):
+                super().__init__()
+                self.w = torch.nn.parameter.Parameter(torch.randn(10, 1, 1, 1))
+                self.groups = 10
+
+            def forward(self, x):
+                x = torch.nn.functional.conv2d(x, self.w, bias=None, groups=self.groups)
+                return x
+
+        input_shape = (1, 10, 10, 1)
+        input_tensor = torch.randn(input_shape)
+        model = ModelWithFunctionalDepthwiseConv().eval()
+        model_transformed = prepare_model(model)
+
+        assert torch.allclose(model_transformed(input_tensor),
+                              model(input_tensor))
+
+        assert isinstance(model_transformed.module_conv2d, torch.nn.Conv2d)
+        assert model_transformed.module_conv2d.groups == model.groups
+        assert model_transformed.module_conv2d.in_channels == model.groups * model.w.shape[1]
 
         sim = QuantizationSimModel(model_transformed, input_tensor)
 

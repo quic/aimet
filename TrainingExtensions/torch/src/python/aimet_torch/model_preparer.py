@@ -151,7 +151,9 @@ def conv2d_create_module(node: torch.fx.node) -> torch.nn.Module:
     out_channels, in_channels, kernel_size, _ = params['weight'].shape
     bias = 'bias' in params
 
-    kwargs['in_channels'] = in_channels
+    # For Depthwise Conv, multiply in_channels by number of groups
+    # if groups is not passed as arg, use its default value 1
+    kwargs['in_channels'] = in_channels * kwargs.get('groups', 1)
     kwargs['out_channels'] = out_channels
     kwargs['kernel_size'] = kernel_size
     kwargs['bias'] = bias
