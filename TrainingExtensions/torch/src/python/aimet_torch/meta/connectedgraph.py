@@ -54,7 +54,8 @@ from aimet_common.connected_graph.operation import determine_preceding_op_input_
 from aimet_common.model_module import PytorchModelModule
 from aimet_common.utils import AimetLogger
 from aimet_torch.meta.operation import Op
-from aimet_torch.utils import is_leaf_module, run_hook_for_layers_with_given_input, in_eval_mode, is_torch_nn_leaf_module
+from aimet_torch.utils import is_leaf_module, run_hook_for_layers_with_given_input, in_eval_mode,\
+    is_torch_nn_leaf_module, is_custom_leaf_module
 from aimet_torch import onnx_utils
 
 logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.ConnectedGraph)
@@ -208,24 +209,20 @@ class ConnectedGraph(AimetCommonConnectedGraph):
         """
         return self._products.get(name, None)
 
-    def is_custom_leaf_module(self, module: torch.nn.Module) -> bool:
+    def get_all_nodes(self, module: torch.nn.Module) -> List[torch._C.Node]:
         """
-        Given PyTorch module, determine whether the module is leaf module and has not more than one aten node(s).
+        Given PyTorch module, Find all the valid aten nodes in forward pass for given trace of model or submodule.
 
         :param module: PyTorch module.
-        :return: True if module is custom leaf module, False otherwise.
+        :return: List of trace graph nodes if node.kind() starts with "aten::".
         """
         try:
             trace = self._module_to_jit_trace[module]
         except:
             raise KeyError(f"Couldn't find corresponding JIT trace for module : {module}")
 
-        custom_leaf_module = False
         nodes = self._find_nodes_in_forward_pass(trace)
-        if is_leaf_module(module) and len(nodes) <= 1:
-            custom_leaf_module = True
-
-        return custom_leaf_module
+        return nodes
 
     def _generate_module_lookup_table(self, model: torch.nn.Module):
         """
@@ -974,7 +971,7 @@ class ConnectedGraph(AimetCommonConnectedGraph):
         :return: Boolean whether recursive parsing needed or not. If needed returns True, False otherwise.
         """
         recursive_parsing_needed = True
-        if is_torch_nn_leaf_module(module) or self.is_custom_leaf_module(module):
+        if is_torch_nn_leaf_module(module) or is_custom_leaf_module(module, self.get_all_nodes(module)):
             recursive_parsing_needed = False
 
         return recursive_parsing_needed

@@ -1050,7 +1050,7 @@ class QuantizationSimModel:
         # 1) if the module is leaf module and from torch.nn class (nn.Conv2d, nn.ReLU, nn.rNN etc.)
         # 2) if the module is leaf module and has only one aten node inside forward method (elementwise_ops.Add etc.)
         if utils.is_torch_nn_leaf_module(module) or \
-                (self.connected_graph and self.connected_graph.is_custom_leaf_module(module)):
+                (self.connected_graph and utils.is_custom_leaf_module(module, self.connected_graph.get_all_nodes(module))):
             wrapper_needed = True
 
         # if connected graph is not built successfully then we simply check if the module is leaf or not.
