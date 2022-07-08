@@ -489,16 +489,21 @@ class StaticGridQuantWrapper(QcQuantizeWrapper):
             param.data.zero_()
             param.data.add_(shadow_params[name].data)
 
+        if hasattr(self, '_is_replica') and self._is_replica:
+            # pylint: disable = protected-access
+            for name, param in self._module_to_wrap._former_parameters.items():
+                param.data.zero_()
+                param.data.add_(shadow_params[name].data)
+
     def _quantize_dequantize_params(self):
         """
         Quantizes and dequantizes a parameter
         """
 
-        shadow_params = {}
-
-        # Quantize the parameters, if present
-        for name, param in self._module_to_wrap.named_parameters():
-
+        def quantize_dequantize(name: str, param: torch.nn.Parameter, is_replica: bool):
+            """
+            Quantize dequantize param
+            """
             # Store current weight for use later on
             shadow_params[name] = param.detach().clone()
 
@@ -521,7 +526,22 @@ class StaticGridQuantWrapper(QcQuantizeWrapper):
                     round_mode = param_quantizer.round_mode
                 else:
                     round_mode = libpymo.RoundingMode.ROUND_NEAREST
-                param.data = param_quantizer.quantize_dequantize(param.data, round_mode)
+                if is_replica:
+                    param.data = param_quantizer.quantize_dequantize(param.data.clone(), round_mode)
+                else:
+                    param.data = param_quantizer.quantize_dequantize(param.data, round_mode)
+
+        shadow_params = {}
+
+        if hasattr(self, '_is_replica') and self._is_replica:
+            # pylint: disable = protected-access
+            for name, param in self._module_to_wrap._former_parameters.items():
+                quantize_dequantize(name, param, is_replica=True)
+
+        else:
+            # Quantize the parameters, if present
+            for name, param in self._module_to_wrap.named_parameters():
+                quantize_dequantize(name, param, is_replica=False)
 
         return shadow_params
 
@@ -868,8 +888,10 @@ class SteGatingFuncForParameters(torch.autograd.Function):
     def backward(ctx, *output_grad):
         quant_wrapper_ref = ctx.quantization_wrapper_ref
 
-        # pylint:disable = protected-access
-        for name, param in quant_wrapper_ref._module_to_wrap.named_parameters():
+        def calc_param_grad(name: str, param: torch.float32):
+            """
+            Calculates parameter gradient
+            """
             if quant_wrapper_ref.param_quantizers[name].enabled and param.grad is not None and \
                     quant_wrapper_ref.param_quantizers[name].data_type == QuantizationDataType.int:
                 param_quantizer = quant_wrapper_ref.param_quantizers[name]
@@ -878,9 +900,19 @@ class SteGatingFuncForParameters(torch.autograd.Function):
                     # Stack the encodings
                     max_encodings = [enc.max for enc in param_quantizer.encoding]
                     min_encodings = [enc.min for enc in param_quantizer.encoding]
+                    # pylint: disable = protected-access
                     param.grad = ste.compute_dloss_by_dx(param, param.grad, min_encodings, max_encodings,
                                                          param_quantizer._ch_axis)
                 else:
                     param.grad = ste.compute_dloss_by_dx(param, param.grad, param_quantizer.encoding.min,
                                                          param_quantizer.encoding.max)
+
+        # pylint:disable = protected-access
+        for name, param in quant_wrapper_ref._module_to_wrap.named_parameters():
+            calc_param_grad(name, param)
+
+        if hasattr(quant_wrapper_ref, '_is_replica') and quant_wrapper_ref._is_replica:
+            for name, param in quant_wrapper_ref._module_to_wrap._former_parameters.items():
+                calc_param_grad(name, param)
+
         return (None, *output_grad)
