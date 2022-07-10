@@ -691,7 +691,7 @@ class QuantizeDequantizeFunc(torch.autograd.Function):
         :param offset: offset tensor
         :return: quantized dequantized tensor
         """
-        tensor = torch.clamp(tensor, encoding_min.item(), encoding_max.item())
+        tensor = torch.clamp(tensor, encoding_min, encoding_max)
         tensor = torch.round(tensor / delta) + offset
         tensor = (tensor - offset) * delta
         return tensor

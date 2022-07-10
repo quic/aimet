@@ -55,6 +55,28 @@ import aimet_torch.quantsim_straight_through_grad as ste
 _logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Quant)
 
 
+class _ConstantTensor:
+    def __init__(self, device: Union[str, torch.device]):
+        self.eps = torch.tensor([1e-5], device=device)
+        self.zero = torch.tensor([0.0], device=device)
+
+
+_device_map: Dict[torch.device, _ConstantTensor] = {}
+def _constant_tensor(device: Union[str, torch.device]) -> _ConstantTensor:
+    """
+    Factory function to generate constant tensor or return cached object
+    :param device: device str ('cpu', 'cuda', ...) or torch.device
+    :return: Constant tensor
+    """
+    if isinstance(device, str):
+        device = torch.device(device)
+    if device in _device_map:
+        return _device_map[device]
+    ret = _ConstantTensor(device)
+    _device_map[device] = ret
+    return ret
+
+
 class QcQuantizeOpMode(Enum):
     """
     Mode for the Quantization Ops
@@ -736,12 +758,14 @@ class LearnedGridQuantWrapper(QcQuantizeWrapper):
         """
         Apply gating logic.
         """
-        def _apply_logic(encoding_min, encoding_max):
-            encoding_min.data = torch.minimum(torch.tensor([0.0], device=self.device), encoding_min.data)
-            encoding_max.data = torch.maximum(torch.tensor([0.0], device=self.device), encoding_max.data)
-            encoding_max.data = torch.maximum(encoding_max.data, encoding_min.data + eps)
+        constant_tensor = _constant_tensor(self.device)
+        zero_tensor = constant_tensor.zero
+        eps_tensor = constant_tensor.eps
 
-        eps = torch.tensor([1e-5], device=self.device)
+        def _apply_logic(encoding_min, encoding_max):
+            encoding_min.data = torch.minimum(zero_tensor, encoding_min.data)
+            encoding_max.data = torch.maximum(zero_tensor, encoding_max.data)
+            encoding_max.data = torch.maximum(encoding_max.data, encoding_min.data + eps_tensor)
 
         # Gating input encodings
         for index, input_quantizer in enumerate(self.input_quantizers):
