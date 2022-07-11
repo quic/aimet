@@ -37,8 +37,9 @@
 //==============================================================================
 
 #include <DlQuantization/TensorQuantizer.h>
+#include "quantization_utils.hpp"
 #include <cassert>
-#include <pybind11/numpy.h>
+#include <numeric>
 
 namespace DlQuantization
 {
@@ -162,10 +163,127 @@ void TensorQuantizer::quantizeDequantize(const float* input, std::size_t tensorS
             encodingMax, bitwidth, roundingMode, useCuda);
 }
 
+void TensorQuantizer::quantizeTensorPacked(const float* input, std::size_t tensorSize,
+                                           std::vector<uint8_t>& output, double encodingMin, double encodingMax,
+                                           uint8_t bw, RoundingMode roundMode, bool useCuda, bool useStrictSymmetric)
+{
+    assert(isEncodingValid);
+    _tensorQuantizationSim->quantizeTensorPacked(input, tensorSize, output, encodingMin,
+                                                 encodingMax, bw, roundMode, useCuda, useStrictSymmetric);
+}
+
+void TensorQuantizer::quantizeDequantizePerChannelTensor(const float* input, const std::vector<uint32_t>& inputShape,
+                                                         uint32_t axis, float* output,
+                                                         std::vector<TfEncoding>& encodings, uint8_t bw,
+                                                         RoundingMode roundMode, bool useCuda,
+                                                         bool useStrictSymmetric)
+{
+    std::vector <uint32_t> splitShape;
+    std::vector <std::vector<float>> splits;
+
+    this->setStrictSymmetric(useStrictSymmetric); // currently we only support signed symmetric
+    generatePerChannelEncodings(input, inputShape, axis, encodings, bw, splits, splitShape, useCuda);
+
+    _tensorQuantizationSim->quantizeDequantizePerChannelTensor(splits, splitShape, axis, output,
+                                                                encodings, bw, roundMode, useCuda);
+}
+
+void TensorQuantizer::quantizePerChannelTensorPacked(const float* input, const std::vector<uint32_t>& inputShape,
+                                                     uint32_t axis,
+                                                     std::vector<uint8_t>& output,
+                                                     std::vector<TfEncoding>& encodings, uint8_t bw,
+                                                     RoundingMode roundMode, bool useCuda, bool useStrictSymmetric)
+{
+    std::vector <uint32_t> splitShape;
+    std::vector <std::vector<float>> splits;
+
+    // currently we only support signed symmetric for packed tensors
+    this->setStrictSymmetric(useStrictSymmetric);
+    generatePerChannelEncodings(input, inputShape, axis, encodings, bw, splits, splitShape, useCuda);
+    _tensorQuantizationSim->quantizePerChannelTensorPacked(splits, splitShape, axis, output,
+                                                           encodings, bw, roundMode, useCuda, useStrictSymmetric);
+}
+
+void TensorQuantizer::dequantize(const uint8_t* input, std::size_t tensorSize, double encodingMin, double encodingMax,
+                                 uint8_t bw, float* output, bool useStrictSymmetric)
+{
+    _tensorQuantizationSim->dequantizeTensor(input, tensorSize,
+                                             output, encodingMin, encodingMax, bw, useStrictSymmetric);
+}
+
+void TensorQuantizer::dequantizePerChannelTensor(const uint8_t* input,
+                                                 const std::vector<uint32_t>& inputShape, uint32_t axis,
+                                                 const std::vector<TfEncoding>& encodings, uint8_t bw,
+                                                 float* output, bool useStrictSymmetric)
+{
+    _tensorQuantizationSim->dequantizePerChannelTensor(input, inputShape, axis, output,
+                                                       bw, encodings, useStrictSymmetric);
+}
+
 std::vector<std::tuple<double, double>> TensorQuantizer::getStatsHistogram()
 {
     auto histogram = _encodingAnalyzer->getStatsHistogram();
     return histogram;
+}
+void TensorQuantizer::generatePerChannelEncodings(const float* input, const std::vector<uint32_t>& inputShape,
+                                                   uint32_t axis, std::vector<TfEncoding>& encodings, uint32_t bw,
+                                                   std::vector<std::vector<float>>& splits,
+                                                   std::vector<uint32_t>& splitShape, bool useCuda)
+{
+    if (bw < 8) {
+        throw std::runtime_error("Only bitwidths >= 8 supported for per-channel quantization");
+    }
+
+    if (inputShape.size() != 4) {
+        throw std::runtime_error("Per-channel quantization only operates on 4 dimensional data!");
+    }
+
+    if (axis > 3) {
+        throw std::runtime_error("Per-channel axis must be < 4");
+    }
+
+    if (encodings.size() != 0 && encodings.size() != inputShape[axis]) {
+        throw std::runtime_error("Must provide 0 or all encodings for per-channel quantization");
+    }
+
+    encodings.resize(inputShape[axis]);
+
+    // Split the data by axis and perform quantization analysis
+    slice(input, inputShape, axis, splits, splitShape);
+    if (splits.size() != inputShape[axis]) {
+        throw std::runtime_error("Invalid slice count generated. Count must be equal to axis split on!");
+    }
+
+    uint32_t splitCount = std::accumulate(std::begin(splitShape), std::end(splitShape), 1, std::multiplies<uint32_t>());
+    uint32_t outputCount = std::accumulate(std::begin(inputShape), std::end(inputShape), 1,
+                                           std::multiplies<uint32_t>());
+    if (outputCount != splitCount * splits.size()) {
+        throw std::runtime_error("Accumulated split count doesn't match original input count");
+    }
+
+    for (uint32_t i = 0; i < splits.size(); ++i) {
+        auto &e = encodings[i];
+        auto &split = splits[i];
+
+        if (split.size() != splitCount) {
+            throw std::runtime_error("Tensor split size mismatch!");
+        }
+
+        if (e.bw != (double)bw) {
+            e.bw = (double)bw;
+            e.delta = 0, e.offset = 0;
+        }
+        // compute encodings
+        ComputationMode mode = useCuda ? COMP_MODE_GPU : COMP_MODE_CPU;
+        auto useSymmetricEncodings = _useStrictSymmetric || _useUnsignedSymmetric;
+
+        if (!isEncodingValid)
+        {
+            this->computeEncodingFromData(bw, split.data(), split.size(), e, mode, useSymmetricEncodings,
+                                          _useUnsignedSymmetric, _useStrictSymmetric);
+        }
+
+    }
 }
 
 }

@@ -50,6 +50,15 @@ namespace DlQuantization
 TfEncoding getComputedEncodings(uint8_t bw, double min, double max, bool useSymmetricEncodings, bool useStrictSymmetric,
                                 bool useUnsignedSymmetric);
 
+
+// Function to slice a tensor along an axis, allocate and populate output buffers. Output shape will be the same for each slice.
+template <typename DTYPE>
+void slice(const DTYPE* data, const std::vector<uint32_t>& inputShape, int32_t axis, std::vector<std::vector<DTYPE>>& output, std::vector<uint32_t>& splitShape);
+
+// Function to concatenate from slice along an axis. Should be the same shape as the original input shape to slice.
+template<typename DTYPE>
+void concat(const std::vector<std::vector<DTYPE>>& data, const std::vector<uint32_t>& inputShape, int32_t axis, DTYPE* output, std::vector<uint32_t>& outputShape);
+
 }   // End of namespace DlQuantization
 
-#endif   // QUANTIZATION_UTILS_H_ 
+#endif   // QUANTIZATION_UTILS_H_

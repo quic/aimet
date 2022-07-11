@@ -39,6 +39,16 @@
 
 #include "quantization_utils.hpp"
 #include "DlQuantization/Quantization.hpp"
+#include <stdexcept>
+#include <cmath>
+#include <cstdlib>
+#include <iostream>
+#include <numeric>
+
+#include "math_functions.hpp"
+#ifdef GPU_QUANTIZATION_ENABLED
+#include "cuda_util.hpp"
+#endif
 
 
 namespace DlQuantization
@@ -108,4 +118,168 @@ TfEncoding getComputedEncodings(uint8_t bw, double min, double max, bool useSymm
     }
     return encoding;
 }
+
+// Function to slice a tensor along an axis. Output shape will be the same for each slice.
+template <typename DTYPE>
+void slice(const DTYPE* input,
+           const std::vector<uint32_t>& inputDim,
+           int32_t axis,
+           std::vector<std::vector<DTYPE>>& outputs,
+           std::vector<uint32_t>& outputDim) {
+
+    // Account for negative axis
+    uint32_t realAxis = (axis >= 0) ? axis : inputDim.size() + axis;
+    outputDim = inputDim;
+    outputDim[realAxis] = 1;
+
+    // If input slice axis dimension size == 1, then it's already "sliced". Copy input->output as there is nothing to slice
+    uint32_t outputCnt = std::accumulate( outputDim.begin(), outputDim.end(), 1, std::multiplies<uint32_t>() );
+    if(inputDim[realAxis] == 1) {
+        outputs.emplace_back(input,input+outputCnt);
+        return;
+    }
+
+    // Add all the slices
+    std::vector<uint32_t> slices;
+    for(uint32_t i = 1; i < inputDim[realAxis]; ++i) {
+        slices.push_back(i);
+    }
+
+    uint32_t sliceCnt = slices.size()+1;
+
+    //std::cout << "Slice axis: " << realAxis << std::endl;
+    //std::cout << "# slices: " << sliceCnt << std::endl;
+
+    outputs.resize(sliceCnt);
+    for(uint32_t i = 0; i < outputs.size(); ++i) {
+        outputs[i].resize(outputCnt);
+    }
+
+    // Compute input dim strides
+    // For e.g. input dim = {6, 3, 4}
+    // strides = {12, 4, 1}
+    std::vector<uint32_t> inputDimStrides(inputDim.size());
+    for(uint32_t i = inputDim.size(); i > 0; --i )
+    {
+        inputDimStrides[i-1] = std::accumulate( inputDim.begin() + i, inputDim.end(), 1, std::multiplies<uint32_t>() );
+        //std::cout << "inputDimStrides[" << (i-1) << "]=" << inputDimStrides[i-1] << std::endl;
+    }
+
+    // Compute num of slice runs
+    uint32_t numSliceRuns =  std::accumulate( inputDim.begin(), inputDim.begin() + realAxis, 1, std::multiplies<uint32_t>() );
+    //std::cout << "No. of slice runs : " << numSliceRuns << std::endl;
+
+    // Compute the distane to move during each run for a given slice.
+    // It is the same for each slice.
+    uint32_t sliceRunStride = (realAxis == 0) ? 0 : inputDimStrides[realAxis-1];
+    //std::cout << "Slice run stride : " <<  sliceRunStride << std::endl;
+
+    typedef struct {
+        uint32_t inputStartOffset;
+        uint32_t size;
+    } SliceInfo;
+
+    std::vector<SliceInfo> sliceInfos;
+
+    // Compute slice info for each slice, using slice points, axis and input dim
+    for(uint32_t sliceIdx  = 0; sliceIdx < slices.size()+1; ++sliceIdx)
+    {
+        SliceInfo sinfo;
+
+        if( sliceIdx == 0 ) // First slice
+        {
+            sinfo.inputStartOffset =  0;
+            sinfo.size = slices[sliceIdx]*inputDimStrides[realAxis];
+        }
+        else if ( sliceIdx == slices.size() ) // Last slice
+        {
+            sinfo.inputStartOffset =  inputDimStrides[realAxis]*slices[sliceIdx-1];
+            sinfo.size = (inputDim[realAxis]-slices[sliceIdx-1])*inputDimStrides[realAxis];
+        }
+        else  // Middle slices
+        {
+            sinfo.inputStartOffset =  inputDimStrides[realAxis]*slices[sliceIdx-1];
+            sinfo.size = (slices[sliceIdx]-slices[sliceIdx-1])*inputDimStrides[realAxis];
+        }
+        sliceInfos.push_back(sinfo);
+        //std::cout << "SliceInfo Idx " << sliceIdx << ", inputStartOffset: " << sinfo.inputStartOffset << ", size: " << sinfo.size << std::endl;
+
+    }
+
+    for(uint32_t runIdx = 0; runIdx <  numSliceRuns; ++runIdx )
+    {
+        for(uint32_t sliceIdx =0; sliceIdx < sliceCnt; ++sliceIdx )
+        {
+            auto inPtr = input + sliceInfos[sliceIdx].inputStartOffset + runIdx*sliceRunStride;
+            std::copy(inPtr, inPtr+sliceInfos[sliceIdx].size, outputs[sliceIdx].data() + runIdx*sliceInfos[sliceIdx].size);
+        }
+    }
+}
+
+// Function to concatenate from slice along an axis. Output shape should be the same shape as the original input shape to slice.
+template <typename DTYPE>
+void concat(const std::vector<std::vector<DTYPE>>& inputs,
+            const std::vector<uint32_t>& inputDim,
+            int32_t axis,
+            DTYPE* output,
+            std::vector<uint32_t>& outputDim) {
+
+    uint32_t realAxis = (axis >= 0) ? axis : inputDim.size() + axis;
+    outputDim = inputDim;
+    outputDim[realAxis] = inputs.size();
+
+    uint32_t a = 0;
+    uint32_t numUnits = 1;
+    for(; a < realAxis; ++a)
+    {
+        numUnits = numUnits*inputDim[a];
+    }
+
+    uint32_t unitSize = 1;
+    for(; a < inputDim.size(); ++a)
+    {
+        unitSize = unitSize * inputDim[a];
+    }
+    for( uint32_t i = 0; i < numUnits; ++i )
+    {
+        for( uint32_t u = 0; u < (uint32_t)inputs.size(); ++u )
+        {
+            const DTYPE* src = inputs[u].data() + unitSize*i;
+            std::copy(src, src+unitSize, output);
+            output += unitSize;
+        }
+    }
+}
+
+template void slice(const float* input,
+                    const std::vector<uint32_t>& inputDim,
+                    int32_t axis,
+                    std::vector<std::vector<float>>& outputs,
+                    std::vector<uint32_t>& outputDim);
+template void slice(const double* input,
+                    const std::vector<uint32_t>& inputDim,
+                    int32_t axis,
+                    std::vector<std::vector<double>>& outputs,
+                    std::vector<uint32_t>& outputDim);
+template void slice(const uint8_t* input,
+                    const std::vector<uint32_t>& inputDim,
+                    int32_t axis,
+                    std::vector<std::vector<uint8_t>>& outputs,
+                    std::vector<uint32_t>& outputDim);
+
+template void concat(const std::vector<std::vector<float>>& inputs,
+                     const std::vector<uint32_t>& inputDim,
+                     int32_t axis,
+                     float* output,
+                     std::vector<uint32_t>& outputDim);
+template void concat(const std::vector<std::vector<double>>& inputs,
+                     const std::vector<uint32_t>& inputDim,
+                     int32_t axis,
+                     double* output,
+                     std::vector<uint32_t>& outputDim);
+template void concat(const std::vector<std::vector<unsigned char>>& inputs,
+                     const std::vector<uint32_t>& inputDim,
+                     int32_t axis,
+                     unsigned char* output,
+                     std::vector<uint32_t>& outputDim);
 }   // End of namespace DlQuantization
