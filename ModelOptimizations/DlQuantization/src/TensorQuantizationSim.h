@@ -55,17 +55,47 @@ class TensorQuantizationSim : public ITensorQuantizationSim<DTYPE>
 {
 public:
     explicit TensorQuantizationSim();
+
     void gateMinMax(double& encodingMin, double& encodingMax);
+
     void quantizeDequantizeTensor(const DTYPE* inputTensorData, size_t inputTensorCount, DTYPE* outputTensorData,
                                   double encodingMin, double encodingMax, uint8_t bw, RoundingMode roundMode,
                                   bool use_cuda) override;
+
     void quantizeTensor(const DTYPE* inputTensorData, size_t inputTensorCount, DTYPE* outputTensorData,
                         double encodingMin, double encodingMax, uint8_t bw, RoundingMode roundMode, bool use_cuda,
                         bool shiftToSigned)
                         override;
+
+    void quantizeTensorPacked(const DTYPE* inputTensorData, size_t inputTensorCount, std::vector<uint8_t>& outputTensorData,
+                              double encodingMin, double encodingMax, uint8_t bw, RoundingMode roundMode,
+                              bool useCuda, bool shiftToSigned) override;
+
+    void quantizeDequantizePerChannelTensor(std::vector <std::vector<DTYPE>>& splits,
+                                            std::vector <uint32_t> splitShape,
+                                            uint32_t axis, DTYPE* outputTensorData,
+                                            const std::vector <TfEncoding> &encodings,
+                                            uint8_t bw, RoundingMode roundMode,
+                                            bool useCuda) override;
+
+    void quantizePerChannelTensorPacked(std::vector <std::vector<DTYPE>>& splits,
+                                        std::vector <uint32_t> splitShape,
+                                        uint32_t axis, std::vector<uint8_t>& outputTensorData,
+                                        const std::vector <TfEncoding> &encodings,
+                                        uint8_t bw, RoundingMode roundMode,
+                                        bool useCuda, bool shiftToSigned) override;
+
+    void dequantizeTensor(const uint8_t* inputTensorData, size_t inputTensorCount, DTYPE* output,
+                         double encodingMin, double encodingMax, uint8_t bw, bool shiftToSigned) override;
+
+    void dequantizePerChannelTensor(const uint8_t* inputTensorData, const std::vector<uint32_t> &inputShape, uint32_t axis,
+                                    DTYPE* outputTensorData, uint8_t bw, const std::vector<TfEncoding> &encodings, bool shiftToSigned) override;
+
     void fillQuantizeInfo(TfEncoding& encoding, DlQuantization::ComputationMode& cpuGpuMode, uint8_t bw,
                           double encodingMin, double encodingMax, bool use_cuda)
                           override;
+
+    ~TensorQuantizationSim() = default;
 };
 
 }   // namespace DlQuantization

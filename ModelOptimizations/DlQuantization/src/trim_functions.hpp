@@ -2,7 +2,7 @@
 //
 //  @@-COPYRIGHT-START-@@
 //
-//  Copyright (c) 2016-2017, Qualcomm Innovation Center, Inc. All rights reserved.
+//  Copyright (c) 2016-2022, Qualcomm Innovation Center, Inc. All rights reserved.
 //
 //  Redistribution and use in source and binary forms, with or without
 //  modification, are permitted provided that the following conditions are met:
@@ -58,12 +58,35 @@ void quantizeToFxp(const DTYPE* in, int cnt, const TfEncoding& encoding, DTYPE* 
                    RoundingMode rounding_mode, bool shiftToSigned);
 
 template <typename DTYPE>
+void quantizeToFxpPacked(const DTYPE* in, int cnt, const TfEncoding& encoding,
+                         uint8_t* out, size_t out_size, ComputationMode mode_cpu_gpu,
+                         RoundingMode rounding_mode, bool shiftToSigned);
+
+template <typename DTYPE>
+void dequantizeFromPackedFxp(const uint8_t* input, int cnt,
+                             const TfEncoding& encoding, DTYPE* output,
+                             ComputationMode mode_cpu_gpu, bool shiftToSigned);
+
+template <typename DTYPE>
 void quantizeDequantizeCpu(const DTYPE* in, int cnt, const TfEncoding& encoding, DTYPE* out,
                            RoundingMode rounding_mode);
 
 template <typename DTYPE>
 void quantizeToFxpCpu(const DTYPE* in, int cnt, const TfEncoding& encoding, DTYPE* out, RoundingMode rounding_mode,
                       bool shiftToSigned);
+
+template <typename DTYPE>
+void quantizeToFxpPackedCpu(const DTYPE* in, int cnt, const TfEncoding& encoding,
+                            DTYPE* out, size_t out_size, RoundingMode rounding_mode, bool shiftToSigned);
+
+// Multi-threading implementation
+template <typename DTYPE>
+void dequantizeFromPackedFxpCpuMt(const uint8_t* input, int cnt,
+                                   const TfEncoding& encoding, DTYPE* output, bool shiftToSigned);
+
+template <typename DTYPE>
+void dequantizeFromPackedFxpCpu(const uint8_t* input, int cnt,
+                                const TfEncoding& encoding, DTYPE* output, bool shiftToSigned);
 
 double computeDelta(double encodingMin, double encodingMax, double numSteps);
 double computeOffset(double encodingMin, double delta);
