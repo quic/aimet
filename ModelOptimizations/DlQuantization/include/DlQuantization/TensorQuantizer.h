@@ -109,6 +109,52 @@ public:
                             double encodingMin, double encodingMax, unsigned int bitwidth, bool useCuda) override;
 
     /**
+     * @brief Convert a tensor from DTYPE to quantized 8-bit packed format
+     * @relates quantizeDequantize, except output is stored in 8-bit packed format
+     * @param shiftToSigned
+     */
+    void quantizeTensorPacked(const float* input, std::size_t tensorSize, std::vector<uint8_t>& output,
+                              double encodingMin, double encodingMax, uint8_t bw, RoundingMode roundMode,
+                              bool useCuda, bool shiftToSigned);
+
+    /**
+     * @brief Perform per channel (axis) quantization on a float tensor and dequantize back to float
+     * @param input The input tensor
+     * @param inputShape The shape of the tensor
+     * @param axis  The axis on which encodings will be generated
+     * @param encodings Vector of min, max, delta and offset values
+     * @param bw The bit-width
+     * @param roundMode
+     * @param useCuda
+     * @param shiftToSigned
+     * @param[in/out] output The output tensor
+     */
+    void quantizeDequantizePerChannelTensor(const float* input, const std::vector<uint32_t>& inputShape,
+                                            uint32_t axis, float* output,
+                                            std::vector <TfEncoding> &encodings,
+                                            uint8_t bw, RoundingMode roundMode,
+                                            bool useCuda, bool shiftToSigned);
+
+    void quantizePerChannelTensorPacked(const float* input, const std::vector<uint32_t>& inputShape,
+                                        uint32_t axis, std::vector<uint8_t>& output,
+                                        std::vector <TfEncoding> &encodings,
+                                        uint8_t bw, RoundingMode roundMode,
+                                        bool useCuda, bool shiftToSigned);
+
+    /**
+     * @brief Converts a quantized int tensor back to float
+     * @param input The input tensor
+     * @param count The dimension of the tensor
+     * @param encoding The min, max, delta and offset values
+     * @param output[in/out]  The output tensor
+     */
+    void dequantize(const uint8_t* input, std::size_t tensorSize, double encodingMin, double encodingMax, uint8_t bw, float* output,
+                    bool shiftToSigned);
+
+    void dequantizePerChannelTensor(const uint8_t* input, const std::vector<uint32_t> &inputShape, uint32_t axis,
+                                    const std::vector<TfEncoding> &encodings, uint8_t bw, float* output, bool useSymmetricEncodings);
+
+    /**
     * sets quantScheme and creates new encoding analyzer instance
     * @param quantScheme Quantization scheme (e.g. TF-Enhanced)
     */
@@ -151,6 +197,22 @@ public:
    * relative to all the values seen across all buckets
    */
     std::vector<std::tuple<double, double>> getStatsHistogram();
+
+    /**
+     * @brief Generate per channel encodings of a slice of an input tensor along a pre-specified axis
+     * @param input The input tensor
+     * @param inputShape The dimension of the input tensor
+     * @param axis The axis on which encodings will be generated
+     * @param bw   The bitwidth to use for quantization
+     * @param encodings The min, max, delta and offset values
+     * @param splits    Slices of the input tensor along the axis
+     * @param splitShape The shape of each input slice
+     */
+    void generatePerChannelEncodings(const float* input, const std::vector<uint32_t> &inputShape, uint32_t axis,
+                                     std::vector<TfEncoding> &encodings, uint32_t bw, std::vector<std::vector<float>> &splits,
+                                     std::vector<uint32_t> &splitShape, bool useCuda);
+
+    inline bool hasValidStats(){return _validStats;}
 
     RoundingMode roundingMode;      ///< Rounding mode to use during quantization
     bool isEncodingValid;           ///< Is encoding valid
