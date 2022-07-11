@@ -177,11 +177,12 @@ void TensorQuantizer::quantizeDequantizePerChannelTensor(const float* input, con
                                                          std::vector<TfEncoding>& encodings, uint8_t bw,
                                                          RoundingMode roundMode, bool useCuda,
                                                          bool useStrictSymmetric)
+
 {
     std::vector <uint32_t> splitShape;
     std::vector <std::vector<float>> splits;
 
-    this->setStrictSymmetric(useStrictSymmetric); // currently we only support signed symmetric
+    this->setStrictSymmetric(useStrictSymmetric); // currently we only support strict symmetric
     generatePerChannelEncodings(input, inputShape, axis, encodings, bw, splits, splitShape, useCuda);
 
     _tensorQuantizationSim->quantizeDequantizePerChannelTensor(splits, splitShape, axis, output,
@@ -197,7 +198,7 @@ void TensorQuantizer::quantizePerChannelTensorPacked(const float* input, const s
     std::vector <uint32_t> splitShape;
     std::vector <std::vector<float>> splits;
 
-    // currently we only support signed symmetric for packed tensors
+    // currently we only support strict symmetric for packed tensors
     this->setStrictSymmetric(useStrictSymmetric);
     generatePerChannelEncodings(input, inputShape, axis, encodings, bw, splits, splitShape, useCuda);
     _tensorQuantizationSim->quantizePerChannelTensorPacked(splits, splitShape, axis, output,
