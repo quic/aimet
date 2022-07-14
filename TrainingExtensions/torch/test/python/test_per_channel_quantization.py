@@ -229,7 +229,7 @@ class TestPerChannelQcQuantizeOpStaticGrid:
         assert len(encodings['param_encodings']) == 5
         assert len(encodings['param_encodings']['conv1_a.weight']) == 10
         assert encodings['param_encodings']['conv1_a.weight'][1]['bitwidth'] == 8
-        assert encodings['param_encodings']['conv1_a.weight'][1]['is_symmetric'] == 'False'
+        assert encodings['param_encodings']['conv1_a.weight'][1]['is_symmetric'] == 'True'
 
     def test_model_per_channel_single_channel(self):
         """Model with single channel conv """

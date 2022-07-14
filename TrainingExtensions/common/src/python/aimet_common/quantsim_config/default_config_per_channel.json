@@ -12,7 +12,7 @@
     },
     "strict_symmetric": "False",
 	"unsigned_symmetric": "True",
-	"per_channel_quantization": "False"
+	"per_channel_quantization": "True"
   },
 
   "params":

@@ -965,10 +965,10 @@ class TestQuantSim(unittest.TestCase):
         self.assertEqual(6, bitwidth)
 
         sym_encoding = bias_quantizer.use_symmetric_encoding
-        self.assertFalse(sym_encoding)
-        bias_quantizer.use_symmetric_encoding = True
-        sym_encoding = bias_quantizer.use_symmetric_encoding
         self.assertTrue(sym_encoding)
+        bias_quantizer.use_symmetric_encoding = False
+        sym_encoding = bias_quantizer.use_symmetric_encoding
+        self.assertFalse(sym_encoding)
 
         rounding_mode = o_quantizer.rounding_mode
         self.assertEqual(libpymo.RoundingMode.ROUND_NEAREST, rounding_mode)
@@ -1515,7 +1515,7 @@ class TestQuantSimRangeLearning:
         # inputs[3] : min, inputs[4] : max, inputs[5] bit_width, inputs[6] use_symmetric_encoding flag
         assert 8 == sim.session.run(conv2d_weight_quant_op.inputs[QuantizeOpIndices.bit_width])
         assert 6 == sim.session.run(conv2d_output_quant_op.inputs[QuantizeOpIndices.bit_width])
-        assert not sim.session.run(conv2d_weight_quant_op.inputs[QuantizeOpIndices.use_symmetric_encoding])
+        assert sim.session.run(conv2d_weight_quant_op.inputs[QuantizeOpIndices.use_symmetric_encoding])
         assert not sim.session.run(conv2d_output_quant_op.inputs[QuantizeOpIndices.use_symmetric_encoding])
 
         # check encodings are being set
@@ -1578,7 +1578,7 @@ class TestQuantSimRangeLearning:
         # check correct bit-width/ use_symmetric_encoding flag are set for param and output quantize ops
         assert 6 == sim.session.run(conv2d_weight_quant_op.inputs[QuantizeOpIndices.bit_width])
         assert 4 == sim.session.run(conv2d_output_quant_op.inputs[QuantizeOpIndices.bit_width])
-        assert not sim.session.run(conv2d_weight_quant_op.inputs[QuantizeOpIndices.use_symmetric_encoding])
+        assert sim.session.run(conv2d_weight_quant_op.inputs[QuantizeOpIndices.use_symmetric_encoding])
         assert not sim.session.run(conv2d_output_quant_op.inputs[QuantizeOpIndices.use_symmetric_encoding])
 
         # check encodings are being set
