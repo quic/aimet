@@ -141,7 +141,7 @@ class TestQuantAnalyzer:
         enabled_quantizers = quant_analyzer._get_enabled_activation_quantizers(sim)
 
         # total 12 activation quantizers (conv3 + relu3 is a supergroup) are enabled as per default config file.
-        assert len(enabled_quantizers) == 12
+        assert len(enabled_quantizers) == 8
 
     def test_get_enabled_param_quantizers(self):
         """ test get_enabled_param_quantizers() """
@@ -232,7 +232,6 @@ class TestQuantAnalyzer:
             assert os.path.exists("./tmp/activations_pdf")
             assert os.path.exists("./tmp/weights_pdf")
             assert os.path.isfile("./tmp/activations_pdf/conv1_input_0.html")
-            assert os.path.isfile("./tmp/activations_pdf/conv1_output_0.html")
             assert os.path.isfile("./tmp/weights_pdf/conv1/conv1_weight_0.html")
         finally:
             if os.path.isdir("./tmp/"):
