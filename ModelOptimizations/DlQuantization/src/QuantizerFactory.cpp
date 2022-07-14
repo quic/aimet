@@ -46,6 +46,7 @@
 #include "DlQuantization/Quantization.hpp"
 #include "DlQuantization/QuantizerFactory.hpp"
 #include "MainQuantizationClass.hpp"
+#include "MseEncodingAnalyzer.h"
 #include "PercentileEncodingAnalyzer.h"
 #include "TensorQuantizationSim.h"
 #include "TfEncodingAnalyzer.h"
@@ -73,6 +74,10 @@ std::unique_ptr<IQuantizationEncodingAnalyzer<DTYPE>> getEncodingAnalyzerInstanc
     else if (quantization_mode == QUANTIZATION_PERCENTILE)
     {
         return std::unique_ptr<IQuantizationEncodingAnalyzer<DTYPE>>(new PercentileEncodingAnalyzer<DTYPE>);
+    }
+    else if (quantization_mode == QUANTIZATION_MSE)
+    {
+        return std::unique_ptr<IQuantizationEncodingAnalyzer<DTYPE>>(new MseEncodingAnalyzer<DTYPE>);
     }
     else
     {
