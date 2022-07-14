@@ -54,7 +54,8 @@ from aimet_common.connected_graph.operation import determine_preceding_op_input_
 from aimet_common.model_module import PytorchModelModule
 from aimet_common.utils import AimetLogger
 from aimet_torch.meta.operation import Op
-from aimet_torch.utils import is_leaf_module, run_hook_for_layers_with_given_input, in_eval_mode
+from aimet_torch.utils import is_leaf_module, run_hook_for_layers_with_given_input, in_eval_mode,\
+    is_torch_nn_leaf_module, is_custom_leaf_module
 from aimet_torch import onnx_utils
 
 logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.ConnectedGraph)
@@ -124,6 +125,8 @@ class ConnectedGraph(AimetCommonConnectedGraph):
         self._name_to_module = {}
         # Maps pytorch modules to module names
         self._module_to_name = {}
+        # Maps pytorch module to jit trace
+        self._module_to_jit_trace = {}
 
         self._split_count = 0  # Use it in the name of split Ops getting added to the connected graph.
 
@@ -206,6 +209,21 @@ class ConnectedGraph(AimetCommonConnectedGraph):
         """
         return self._products.get(name, None)
 
+    def get_all_nodes(self, module: torch.nn.Module) -> List[torch._C.Node]:
+        """
+        Given PyTorch module, Find all the valid aten nodes in forward pass for given trace of model or submodule.
+
+        :param module: PyTorch module.
+        :return: List of trace graph nodes if node.kind() starts with "aten::".
+        """
+        try:
+            trace = self._module_to_jit_trace[module]
+        except:
+            raise KeyError(f"Couldn't find corresponding JIT trace for module : {module}")
+
+        nodes = self._find_nodes_in_forward_pass(trace)
+        return nodes
+
     def _generate_module_lookup_table(self, model: torch.nn.Module):
         """
         Generates a look up dictionary for getting modules from their names.
@@ -256,6 +274,7 @@ class ConnectedGraph(AimetCommonConnectedGraph):
         """
         module_tensor_shapes_map = ConnectedGraph._generate_module_tensor_shapes_lookup_table(model, model_input)
         trace = torch.jit.trace(model, model_input, check_trace=check_trace)
+        self._generate_trace_lookup_table(model, trace)
         ir_nodes_list, output_map = self._parse_top_level_trace(trace, model)
         self._construct_ops_and_products(ir_nodes_list,
                                          module_tensor_shapes_map,
@@ -287,7 +306,7 @@ class ConnectedGraph(AimetCommonConnectedGraph):
         _ = self._parse_trace_graph(trace, model, ir_nodes_list=ir_nodes_list, output_map=output_map)
         return ir_nodes_list, output_map
 
-    def _parse_trace_graph(self,
+    def _parse_trace_graph(self, # pylint: disable=too-many-locals
                            trace: Union[torch.jit.TopLevelTracedModule, torch.jit.TracedModule],
                            model: torch.nn.Module,
                            ir_nodes_list: List[IrNode],
@@ -306,7 +325,11 @@ class ConnectedGraph(AimetCommonConnectedGraph):
         :param inputs_map: Dictionary mapping low recursion level inputs to higher level equivalent inputs
         :return: the outputs of the traced module
         """
-        if is_leaf_module(model):
+        # Create a single IrNode if the module is leaf module and the trace has only one node in forward pass.
+        # These checks are needed because even though the module is leaf module but forward pass
+        # might have more than one node. In that case, we can't handle the module as a single IrNode and further
+        # parsing is needed.
+        if not self._is_recursive_parsing_needed(model):
             return self._parse_single_module_model(model, trace.graph, ir_nodes_list)
         if inputs_map is None:
             inputs_map = {}
@@ -338,7 +361,14 @@ class ConnectedGraph(AimetCommonConnectedGraph):
                     raise ValueError("duplicate model for {0} -> {1} and {2}".format(
                         getattr_node_info.node_alias, node_name_to_module[getattr_node_info.node_alias],
                         subgraph_model))
-                if not is_leaf_module(subgraph_model):
+
+                # Recursive parsing is not needed 1) if the module is leaf module and
+                # module is from torch.nn (Conv2d, Linear etc.) 2) if the module is leaf module and
+                # custom module whose forward method has only one functional operation (elementwise_ops.Add()).
+                # Recursive parsing is needed 1) if the module is not leaf module.
+                # 2) If the module is leaf module but has multiple functional operations in
+                # forward method.
+                if self._is_recursive_parsing_needed(subgraph_model):
                     node_name_to_subgraph_model[getattr_node_info.node_alias] = (subgraph_model, getattr_node_info)
 
             # invoking forward method
@@ -929,6 +959,73 @@ class ConnectedGraph(AimetCommonConnectedGraph):
                 _handle_passthrough_ir_node(ir_node, connections_to_ir_nodes_dict)
             elif ir_node.node_type in input_ops_to_ignore:
                 _handle_input_ir_node_to_ignore(ir_node, connections_to_ir_nodes_dict)
+
+    def _is_recursive_parsing_needed(self, module: torch.nn.Module) -> bool:
+        """
+        Utility to decide whether recursive parsing is needed for given module and it's jit trace.
+        Recursive parsing is not needed
+        1) if the module is leaf module and from torch.nn class (nn.Conv2d, nn.ReLU, nn.rNN etc.)
+        2) if the module is leaf module and has only one aten node inside forward method (elementwise_ops.Add etc.)
+
+        :param module: PyTorch module.
+        :return: Boolean whether recursive parsing needed or not. If needed returns True, False otherwise.
+        """
+        recursive_parsing_needed = True
+        if is_torch_nn_leaf_module(module) or is_custom_leaf_module(module, self.get_all_nodes(module)):
+            recursive_parsing_needed = False
+
+        return recursive_parsing_needed
+
+    def _generate_trace_lookup_table(self, model: torch.nn.Module,
+                                     trace: Union[torch.jit.TopLevelTracedModule, torch.jit.TracedModule]):
+        """
+        Generate pytorch module names to corresponding JIT trace dictionary. There will be always one to one
+        mapping between pytorch module and corresponding JIT trace.
+
+        :param model: PyTorch model.
+        :param trace: PyTorch JIT trace.
+        """
+        def _add_jit_trace(model: torch.nn.Module,
+                           trace: Union[torch.jit.TopLevelTracedModule, torch.jit.TracedModule]):
+            """
+            Recursively add jit trace for all the modules to dictionary.
+            :param model: PyTorch model or submodule.
+            :param trace: PyTorch JIT trace of model.
+            """
+            for name, module in model.named_children():
+                sub_trace = getattr(trace, name)
+                self._module_to_jit_trace[module] = sub_trace
+
+                # recursively call children modules.
+                if not is_leaf_module(module):
+                    _add_jit_trace(module, sub_trace)
+
+        # Add top level model and corresponding JIT trace.
+        self._module_to_jit_trace[model] = trace
+        # Recursively add children modules and corresponding JIT traces.
+        _add_jit_trace(model, trace)
+
+    @staticmethod
+    def _find_nodes_in_forward_pass(trace: Union[torch.jit.TopLevelTracedModule, torch.jit.TracedModule]) \
+            -> List[torch._C.Node]:
+        """
+        Find all the valid nodes in forward pass for given trace of model or submodule.
+        Three possible outcomes:
+        1) When the forward method has multiple functional operations and valid nodes are returned.
+        2) When the forward method is not defined which causes RuntimeError and empty list is returned.
+        3) When the module is unused, empty list is returned.
+
+        :param trace: trace of model or submodule.
+        :return: List of trace graph nodes if node.kind() starts with "aten::".
+        """
+        # pylint: disable=protected-access
+        nodes = []
+        try:
+            nodes = [node for node in trace.graph.nodes() if "aten::" in node.kind() and
+                     ConnectedGraph._parse_op_type(node) not in ConnectedGraph.passthrough_graph_nodes]
+        except RuntimeError:
+            pass
+        return nodes
 
 
 def _create_module_to_op_dict(ops: List[Op]) -> Dict[torch.nn.Module, Op]:

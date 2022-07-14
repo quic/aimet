@@ -429,7 +429,7 @@ class TestQuantizationSimStaticGrad:
         net = Net()
         model = net.to(torch.device('cpu'))
 
-        sim = QuantizationSimModel(model, dummy_input=torch.rand(1, 1, 12, 12))
+        sim = QuantizationSimModel(model, dummy_input=torch.rand(1, 1, 12, 12), in_place=True)
 
         # Add wrappers again, expect to be a nop
         sim._add_quantization_wrappers(model, num_inout_tensors={}, default_data_type=QuantizationDataType.int)
@@ -2654,7 +2654,7 @@ class TestQuantizationSimLearnedGrid:
                          propagate_encodings=True)
         with open('./data/cust_v1_simple.encodings') as json_file:
             activation_encodings = json.load(json_file)['activation_encodings']
-            assert set(['6', '7', 't.1']).issubset(activation_encodings.keys())
+            assert set(['4', '8', 't.1']).issubset(activation_encodings.keys())
 
     def test_custom_op_simple_v2(self):
         """
@@ -2686,7 +2686,7 @@ class TestQuantizationSimLearnedGrid:
 
         with open('./data/cust_v2_simple.encodings') as json_file:
             activation_encodings = json.load(json_file)['activation_encodings']
-            assert set(['13', '14', '15', '16', '17', 't.1']).issubset(activation_encodings.keys())
+            assert set(['15', '19', '23', '4', '8', 't.1']).issubset(activation_encodings.keys())
 
 
 class CustModelV1Simple(torch.nn.Module):
@@ -2705,10 +2705,12 @@ class CustomOp(torch.nn.Module):
     def __init__(self):
         super().__init__()
         self.size = 8
+        self.mul1 = elementwise_ops.Multiply()
+        self.mul2 = elementwise_ops.Multiply()
 
     def forward(self, x):
-        y = x*self.size
-        z = x*5
+        y = self.mul1(x, self.size)
+        z = self.mul2(x, 5)
         return y, z
 
 
@@ -2728,13 +2730,27 @@ class CustomOpV2(torch.nn.Module):
     def __init__(self):
         super().__init__()
         self.size = 8
+        self.mul1 = elementwise_ops.Multiply()
+        self.mul2 = elementwise_ops.Multiply()
+        self.add = elementwise_ops.Add()
+        self.sub = elementwise_ops.Subtract()
+        self.clamp = Clamp()
 
     def forward(self, x):
-        y = x*self.size
-        z = x*5
-        a = z.clamp(0)
-        b = y + z
-        c = y - z
+        y = self.mul1(x, self.size)
+        z = self.mul2(x, 5)
+        a = self.clamp(z)
+        b = self.add(y, z)
+        c = self.sub(y, z)
         return y, z, a, b, c
 
 
+class Clamp(torch.nn.Module):
+    """ Custom module for a functional clamp"""
+    # pylint:disable=arguments-differ
+    @staticmethod
+    def forward(x: torch.Tensor) -> torch.Tensor:
+        """
+        Forward-pass routine for add op
+        """
+        return x.clamp(0)

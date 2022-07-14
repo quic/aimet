@@ -35,12 +35,45 @@
 #  @@-COPYRIGHT-END-@@
 # =============================================================================
 
+import pytest
 import unittest
 import torch
+import torch.nn.functional as F
 
+from aimet_torch import utils
 from aimet_torch.model_validator.model_validator import ModelValidator
 from aimet_torch.model_validator import validation_checks
 from aimet_torch.examples import test_models
+from aimet_torch.meta import connectedgraph_utils
+from aimet_torch.model_preparer import prepare_model
+
+
+class CustomModule(torch.nn.Module):
+
+    @staticmethod
+    def forward(x):
+        return x * F.softplus(x).sigmoid()
+
+
+class Model(torch.nn.Module):
+    """ Model that uses functional modules instead of nn.Modules. Expects input of shape (1, 3, 32, 32) """
+
+    def __init__(self):
+        super(Model, self).__init__()
+        self.conv1 = torch.nn.Conv2d(3, 8, kernel_size=2, stride=2, padding=2, bias=False)
+        self.bn1 = torch.nn.BatchNorm2d(8)
+        self.relu1 = torch.nn.ReLU(inplace=True)
+        self.custom = CustomModule()
+
+    def forward(self, inputs):
+        x = self.conv1(inputs)
+        x = self.relu1(x)
+        x = self.bn1(x)
+        x = F.relu(x)
+        x = self.relu1(x)
+        x = self.custom(x)
+        x += 1
+        return x
 
 
 class TestValidateModel(unittest.TestCase):
@@ -74,3 +107,31 @@ class TestValidationChecks(unittest.TestCase):
         model = test_models.ModelWithFunctionalOps()
         rand_inp = torch.randn(1, 3, 32, 32)
         self.assertFalse(validation_checks.validate_for_missing_modules(model, rand_inp))
+
+
+class TestModelValidatorPreparer:
+
+    @pytest.mark.cuda
+    def test_model_validator_preparer(self):
+        """ Validate model validator and preparer workflow """
+        model = Model().eval().cuda()
+        input_shape = (1, 3, 32, 32)
+        dummy_input = torch.rand(input_shape).cuda()
+
+        # ModelValidator check should be False before.
+        assert not ModelValidator.validate_model(model, dummy_input)
+
+        reused_modules = utils.get_reused_modules(model, dummy_input)
+        print(reused_modules)
+        assert len(reused_modules) == 1
+
+        ops_with_missing_modules = connectedgraph_utils.get_ops_with_missing_modules(model, dummy_input)
+        print(ops_with_missing_modules)
+        assert len(ops_with_missing_modules) == 5 # ['relu_3', 'softplus_5', 'sigmoid_6', 'Mul_7', 'Add_8']
+
+        # Prepare model and verify the outputs.
+        prepared_model = prepare_model(model)
+        assert torch.equal(model(dummy_input), prepared_model(dummy_input))
+
+        # ModelValidator check should be True after.
+        assert ModelValidator.validate_model(prepared_model, dummy_input)
