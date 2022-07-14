@@ -74,6 +74,7 @@ PYBIND11_MODULE(libpymo, m)
         .value("QUANTIZATION_TF_ENHANCED", QuantizationMode::QUANTIZATION_TF_ENHANCED)
         .value("QUANTIZATION_RANGE_LEARNING", QuantizationMode::QUANTIZATION_RANGE_LEARNING)
         .value("QUANTIZATION_PERCENTILE", QuantizationMode::QUANTIZATION_PERCENTILE)
+        .value("QUANTIZATION_MSE", QuantizationMode::QUANTIZATION_MSE)
         .export_values();
 
     py::enum_<LayerInOut>(m, "LayerInOut")
