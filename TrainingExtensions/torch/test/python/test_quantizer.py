@@ -742,8 +742,8 @@ class TestQuantizationSimStaticGrad:
             print(encoding_data)
 
         activation_keys = list(encoding_data["activation_encodings"].keys())
-        assert activation_keys[0] == "124"
-        assert isinstance(encoding_data["activation_encodings"]["124"], list)
+        assert activation_keys[0] == "130"
+        assert isinstance(encoding_data["activation_encodings"]["130"], list)
 
         param_keys = list(encoding_data["param_encodings"].keys())
         assert param_keys[1] == "conv1.weight"
@@ -1473,11 +1473,12 @@ class TestQuantizationSimStaticGrad:
 
     def test_changing_param_quantizer_settings(self):
         """ Test that changing param quantizer settings takes effect after computing encodings is run """
+        torch.random.manual_seed(10)
         model = SmallMnist()
 
         # Skew weights of conv1
         old_weight = model.conv1.weight.detach().clone()
-        model.conv1.weight = torch.nn.Parameter(old_weight + .9 * torch.abs(torch.min(old_weight)), requires_grad=False)
+        model.conv1.weight = torch.nn.Parameter(old_weight + .5 * torch.abs(torch.min(old_weight)), requires_grad=False)
 
         sim = QuantizationSimModel(model, dummy_input=torch.rand(1, 1, 28, 28))
 
@@ -1489,18 +1490,20 @@ class TestQuantizationSimStaticGrad:
         asym_min = sim.model.conv1.param_quantizers['weight'].encoding.min
         asym_max = sim.model.conv1.param_quantizers['weight'].encoding.max
         assert 8 == sim.model.conv1.param_quantizers['weight'].encoding.bw
-        # Check that offset is not relatively symmetric
-        assert not sim.model.conv1.param_quantizers['weight'].encoding.offset in [-127, -128]
+
+        # Check that offset is still symmetric
+        assert sim.model.conv1.param_quantizers['weight'].encoding.offset == -128.0
 
         # Change param quantizer to symmetric and new bitwidth
-        sim.model.conv1.param_quantizers['weight'].use_symmetric_encodings = True
+        sim.model.conv1.param_quantizers['weight'].use_symmetric_encodings = False
         sim.model.conv1.param_quantizers['weight'].bitwidth = 4
         sim.compute_encodings(dummy_forward_pass, None)
         sym_min = sim.model.conv1.param_quantizers['weight'].encoding.min
         sym_max = sim.model.conv1.param_quantizers['weight'].encoding.max
         assert 4 == sim.model.conv1.param_quantizers['weight'].encoding.bw
-        # Check that offset is still symmetric
-        assert sim.model.conv1.param_quantizers['weight'].encoding.offset in [-7, -8]
+
+        # Check that offset is not relatively symmetric
+        assert not sim.model.conv1.param_quantizers['weight'].encoding.offset in [-127, -128]
 
         # Check that mins and maxes have been recomputed
         assert not asym_min == sym_min
