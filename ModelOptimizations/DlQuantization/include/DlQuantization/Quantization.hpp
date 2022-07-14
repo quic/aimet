@@ -71,6 +71,10 @@ enum QuantizationMode
     // Percentile calibration. Compute the encoding by adjusting the min/max range of the tensor
     // by clipping percentile of outliers.
     QUANTIZATION_PERCENTILE,
+
+    // Compute the encoding by adjusting the min/max range of the tensor based on the mean square
+    // error due to quantization of the tensor.
+    QUANTIZATION_MSE,
 };
 
 /**
