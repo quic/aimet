@@ -547,37 +547,37 @@ class TestConnectedGraphUtils(unittest.TestCase):
         # 1) elementwise_ops.Add()
         dummy_input = (torch.randn(1, 3, 4, 4), torch.randn(1, 3, 4, 4))
         trace = torch.jit.trace(elementwise_ops.Add(), dummy_input)
-        nodes =  ConnectedGraph._find_nodes_in_forward_pass(trace)
+        nodes =  ConnectedGraph._find_aten_nodes_in_forward_pass(trace)
         assert len(nodes) == 1
 
         # 2) elementwise_ops.Subtract()
         dummy_input = (torch.randn(1, 3, 4, 4), torch.randn(1, 3, 4, 4))
         trace = torch.jit.trace(elementwise_ops.Subtract(), dummy_input)
-        nodes = ConnectedGraph._find_nodes_in_forward_pass(trace)
+        nodes = ConnectedGraph._find_aten_nodes_in_forward_pass(trace)
         assert len(nodes) == 1
 
         # 3) elementwise_ops.Multiply()
         dummy_input = (torch.randn(1, 3, 4, 4), torch.randn(1, 3, 4, 4))
         trace = torch.jit.trace(elementwise_ops.Multiply(), dummy_input)
-        nodes = ConnectedGraph._find_nodes_in_forward_pass(trace)
+        nodes = ConnectedGraph._find_aten_nodes_in_forward_pass(trace)
         assert len(nodes) == 1
 
         # 4) elementwise_ops.Divide()
         dummy_input = (torch.randn(1, 3, 4, 4), torch.randn(1, 3, 4, 4))
         trace = torch.jit.trace(elementwise_ops.Divide(), dummy_input)
-        nodes = ConnectedGraph._find_nodes_in_forward_pass(trace)
+        nodes = ConnectedGraph._find_aten_nodes_in_forward_pass(trace)
         assert len(nodes) == 1
 
         # 5) elementwise_ops.MatMul()
         dummy_input = (torch.randn(1, 3, 4, 4), torch.randn(1, 3, 4, 4))
         trace = torch.jit.trace(elementwise_ops.MatMul(), dummy_input)
-        nodes = ConnectedGraph._find_nodes_in_forward_pass(trace)
+        nodes = ConnectedGraph._find_aten_nodes_in_forward_pass(trace)
         assert len(nodes) == 1
 
         # 6) elementwise_ops.Concat()
         dummy_input = (torch.randn(1, 3, 4, 4), torch.randn(1, 3, 4, 4))
         trace = torch.jit.trace(elementwise_ops.Concat(), dummy_input)
-        nodes = ConnectedGraph._find_nodes_in_forward_pass(trace)
+        nodes = ConnectedGraph._find_aten_nodes_in_forward_pass(trace)
         assert len(nodes) == 1
 
     @pytest.mark.cuda
@@ -592,7 +592,7 @@ class TestConnectedGraphUtils(unittest.TestCase):
 
         dummy_input = torch.randn(1, 3, 4, 4)
         trace = torch.jit.trace(CustomModule().cuda(), dummy_input.cuda())
-        nodes = ConnectedGraph._find_nodes_in_forward_pass(trace)
+        nodes = ConnectedGraph._find_aten_nodes_in_forward_pass(trace)
         # mulitply, softplus and relu ops.
         # detach is considered as passthrough op.
         assert len(nodes) == 3
@@ -610,7 +610,7 @@ class TestConnectedGraphUtils(unittest.TestCase):
         dummy_bias = torch.randn((32,))
         dummy_input = (dummy_input, dummy_weight, dummy_bias)
         trace = torch.jit.trace(CustomModule(), dummy_input)
-        nodes = ConnectedGraph._find_nodes_in_forward_pass(trace)
+        nodes = ConnectedGraph._find_aten_nodes_in_forward_pass(trace)
         assert len(nodes) == 1
 
     def test_find_nodes_in_forward_pass_for_torch_nn_module(self):
@@ -621,21 +621,21 @@ class TestConnectedGraphUtils(unittest.TestCase):
         conv = torch.nn.Conv2d(3, 3, 2)
         print(conv.__class__)
         trace = torch.jit.trace(conv, dummy_input)
-        nodes = ConnectedGraph._find_nodes_in_forward_pass(trace)
+        nodes = ConnectedGraph._find_aten_nodes_in_forward_pass(trace)
         assert len(nodes) == 1
 
         # 2) ReLU
         dummy_input = torch.randn(1, 3, 4, 4)
         relu = torch.nn.ReLU(inplace=True)
         trace = torch.jit.trace(relu, dummy_input)
-        nodes = ConnectedGraph._find_nodes_in_forward_pass(trace)
+        nodes = ConnectedGraph._find_aten_nodes_in_forward_pass(trace)
         assert len(nodes) == 1
 
         # 3) BatchNorm2d
         dummy_input = torch.randn(1, 3, 4, 4)
         bn = torch.nn.BatchNorm2d(3)
         trace = torch.jit.trace(bn, dummy_input)
-        nodes = ConnectedGraph._find_nodes_in_forward_pass(trace)
+        nodes = ConnectedGraph._find_aten_nodes_in_forward_pass(trace)
         assert len(nodes) == 1
 
     def test_find_nodes_in_forward_pass_for_unused_module(self):
@@ -665,12 +665,12 @@ class TestConnectedGraphUtils(unittest.TestCase):
 
         # Conv2 is unused in forward pass.
         conv2_trace = getattr(trace, "conv2")
-        nodes = ConnectedGraph._find_nodes_in_forward_pass(conv2_trace)
+        nodes = ConnectedGraph._find_aten_nodes_in_forward_pass(conv2_trace)
         assert len(nodes) == 0
 
         # Conv1 and Conv3 are used in forward pass.
         conv1_trace = getattr(trace, "conv1")
-        nodes = ConnectedGraph._find_nodes_in_forward_pass(conv1_trace)
+        nodes = ConnectedGraph._find_aten_nodes_in_forward_pass(conv1_trace)
         assert len(nodes) == 1
 
     def test_find_nodes_in_forward_pass_for_undefined_graph(self):
@@ -683,15 +683,8 @@ class TestConnectedGraphUtils(unittest.TestCase):
 
         inner_seq_trace = getattr(trace, "inner_seq")
         bn_trace = getattr(inner_seq_trace, "1")
-        nodes = ConnectedGraph._find_nodes_in_forward_pass(bn_trace)
+        nodes = ConnectedGraph._find_aten_nodes_in_forward_pass(bn_trace)
         assert len(nodes) == 0
 
         with pytest.raises(RuntimeError):
             _ = bn_trace.graph
-
-    def test_generate_trace_lookup_table(self):
-        """ test _generate_trace_lookup_table() method """
-        dummy_input = torch.rand(1, 3, 224, 224)
-        model = torchvision.models.resnet18().eval()
-        conn_graph = ConnectedGraph(model, dummy_input)
-        assert len(conn_graph._module_to_jit_trace.keys()) == len(conn_graph._module_to_jit_trace.values())
