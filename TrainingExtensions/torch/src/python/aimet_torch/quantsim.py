@@ -409,7 +409,7 @@ class QuantizationSimModel:
         # Export encodings
         QuantizationSimModel._export_encodings_to_files(sim_model, path, filename_prefix,
                                                         torch_script_node_io_tensor_map, valid_param_set,
-                                                        excluded_layer_names, propagate_encodings=False, )
+                                                        excluded_layer_names, propagate_encodings=False)
 
     @staticmethod
     def export_onnx_model_and_encodings(path: str, filename_prefix: str, original_model: torch.nn.Module,
@@ -470,7 +470,7 @@ class QuantizationSimModel:
 
         model_name = self.model.__class__.__name__
         for layer in layers_to_exclude:
-            excluded_name_with_model_name = self.connected_graph._module_to_name.get(layer._module_to_wrap, None)
+            excluded_name_with_model_name = self.connected_graph._module_to_name.get(layer._module_to_wrap)
 
             if excluded_name_with_model_name:
                 # Remove the model name
@@ -727,8 +727,6 @@ class QuantizationSimModel:
 
         for orig_param_name, param_quantizer in layer.param_quantizers.items():
             param_name = layer_name + '.' + orig_param_name
-            param_name = layer_name + '.' + orig_param_name
-
             if not param_quantizer.enabled:
                 continue
             elif param_name not in valid_param_set:
