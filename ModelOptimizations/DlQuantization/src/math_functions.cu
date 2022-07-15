@@ -94,7 +94,16 @@ bool GemmFloat_gpu(int M, int N, int K, const float* A, const float* B, float* C
 void* MemoryAllocation_gpu(size_t bytes)
 {
     void* devPtr;
-    cudaMalloc(&devPtr, bytes);
+    auto status = cudaMalloc(&devPtr, bytes);
+
+    if (cudaErrorMemoryAllocation == status) {
+        throw std::runtime_error("CUDA OOM");
+    }
+
+    if (cudaSuccess != status) {
+        throw std::runtime_error("cuda malloc failed");
+    }
+
     return devPtr;
 }
 
