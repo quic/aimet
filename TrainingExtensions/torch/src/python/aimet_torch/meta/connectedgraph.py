@@ -155,6 +155,8 @@ class ConnectedGraph(AimetCommonConnectedGraph):
         'select',
         'unsqueeze',
         'randn',
+        'flatten',
+        'Concat',
         'Split'
     }
 
