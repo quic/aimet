@@ -727,8 +727,4 @@ def is_custom_leaf_module(module: torch.nn.Module, nodes: List[torch._C.Node]) -
     :return: True if module is custom leaf module, False otherwise.
     """
     # pylint: disable=protected-access
-    custom_leaf_module = False
-    if is_leaf_module(module) and len(nodes) <= 1:
-        custom_leaf_module = True
-
-    return custom_leaf_module
+    return is_leaf_module(module) and len(nodes) <= 1
