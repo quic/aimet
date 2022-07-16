@@ -73,6 +73,7 @@ class Model(torch.nn.Module):
         x = self.relu1(x)
         x = self.custom(x)
         x += 1
+        x = torch.flatten(x)
         return x
 
 

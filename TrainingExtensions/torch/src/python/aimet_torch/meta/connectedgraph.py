@@ -138,8 +138,9 @@ class ConnectedGraph(AimetCommonConnectedGraph):
         # Maps pytorch modules to connected graph ops
         self._module_to_op_dict = _create_module_to_op_dict(self.ordered_ops)
 
+    # List of op types which can remain as functional in pytorch model definition without affecting the outcome of
+    # AIMET features.
     functional_ops = {
-        'cat',
         'size',
         'NumToTensor',
         'view',
@@ -155,6 +156,7 @@ class ConnectedGraph(AimetCommonConnectedGraph):
         'select',
         'unsqueeze',
         'randn',
+        'flatten',
         'Split'
     }
 

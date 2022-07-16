@@ -76,13 +76,23 @@ def validate_for_missing_modules(model: torch.nn.Module, model_input: Union[torc
     if ops_with_missing_modules:
         # TODO: replace with logger.error and assertion after rewriting unit tests to avoid using built in vgg,
         #  resnet, and inception models (since they use functionals in their models)
-        logger.warning('Ops with missing modules: %s\n'
-                       'This can be due to several reasons:\n'
-                       '1. There is no mapping for the op in ConnectedGraph.op_type_map. Add a mapping for '
-                       'ConnectedGraph to recognize and be able to map the op.\n'
-                       '2. The op is defined as a functional in the forward function, instead of as a class '
-                       'module. Redefine the op as a class module if possible. Else, check 3.\n'
-                       '3. This op is one that cannot be defined as a class module, but has not been added to '
-                       'ConnectedGraph.functional_ops. Add to continue.'
-                       , ops_with_missing_modules)
+        warning_message = ('Functional ops were found in the model. Different AIMET features will expect ops of '
+                           'certain types to be defined as torch.nn modules.\n'
+                           'AIMET features which operate on the op may not work as intended. As an example, quantsim '
+                           'will not be able to wrap functional ops and simulate quantization noise for them.\n'
+                           'Consider the following choices: \n'
+                           '1. The op can be redefined as a torch.nn.Module in the class definition.\n'
+                           '2. The op can remain as a functional op due to not being an op type of interest, but the '
+                           'op type has not been added to ConnectedGraph.functional_ops. \n'
+                           'Add an entry to ignore the op.\n')
+        warning_message += f'The following functional ops were found. The parent module is named for ease of ' \
+                           f'locating the ops within the model definition.\n'
+        max_name_len = 0
+        for op in ops_with_missing_modules:
+            if len(op.name) > max_name_len:
+                max_name_len = len(op.name)
+        for op in ops_with_missing_modules:
+            warning_message += f'{op.name}{" " * (max_name_len + 10 - len(op.name))}parent module: ' \
+                                      f'{op.residing_module}\n'
+        logger.warning(warning_message)
     return not ops_with_missing_modules
