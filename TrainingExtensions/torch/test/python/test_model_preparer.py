@@ -1277,6 +1277,7 @@ class TestFX:
         transformer_model.eval()
 
         ops_with_missing_modules = connectedgraph_utils.get_ops_with_missing_modules(transformer_model, (src, src))
+        ops_with_missing_modules = [op.name for op in ops_with_missing_modules]
 
         # first validate there are relu to be replaced
         r = re.compile("relu_*")
@@ -1286,6 +1287,7 @@ class TestFX:
         # auto replace functional activation with module for nn.Transformer layers
         prepare_pt_transformer_for_quantsim(transformer_model)
         ops_with_missing_modules = connectedgraph_utils.get_ops_with_missing_modules(transformer_model, (src, src))
+        ops_with_missing_modules = [op.name for op in ops_with_missing_modules]
 
         # validate there are no activations with missing modules
         # check there are no Add
