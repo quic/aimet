@@ -612,6 +612,7 @@ class TestQuantizationSimStaticGrad:
         # layer ignored, so no QcQuantizeWrapper wrapper
         assert isinstance(sim.model.layers_deep[3], nn.Conv2d)
 
+
     # -------------------------------------------
     def test_model_with_two_inputs(self):
         """Model with more than 1 input"""
@@ -1323,7 +1324,8 @@ class TestQuantizationSimStaticGrad:
 
         model = SmallMnist()
 
-        sim = QuantizationSimModel(model, dummy_input=torch.rand(1, 1, 28, 28))
+        dummy_input=torch.rand(1, 1, 28, 28)
+        sim = QuantizationSimModel(model, dummy_input=dummy_input)
         layers_to_ignore = [sim.model.conv1, sim.model.fc2]
         sim.exclude_layers_from_quantization(layers_to_ignore)
 
@@ -1334,6 +1336,13 @@ class TestQuantizationSimStaticGrad:
         assert isinstance(sim.model.conv1, nn.Conv2d)
         assert not isinstance(sim.model.conv2, nn.Conv2d)
         assert isinstance(sim.model.fc2, nn.Linear)
+
+        # export and check encodings file has excluded layers listed as string
+        sim.export('./data', 'excluded_layers', dummy_input, propagate_encodings=True)
+
+        with open('./data/excluded_layers.encodings') as f:
+            encodings = json.load(f)
+            assert 2 == len(encodings['excluded_layers'])
 
     def check_quant_params(self, model_layer, loaded_model_layer, check_weights):
         output_encoding1 = model_layer.output_quantizers[0].encoding
