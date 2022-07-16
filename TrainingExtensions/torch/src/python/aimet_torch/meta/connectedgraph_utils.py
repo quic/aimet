@@ -43,6 +43,7 @@ import torch
 
 # Import AIMET specific modules
 from aimet_common.utils import AimetLogger
+from aimet_torch.meta.operation import Op
 from aimet_torch.meta.connectedgraph import ConnectedGraph
 from aimet_torch.utils import create_rand_tensors_given_shapes, get_device
 
@@ -115,7 +116,7 @@ def create_connected_graph_with_input_shapes(model: torch.nn.Module, input_shape
     return ConnectedGraph(model, random_inputs)
 
 
-def get_ops_with_missing_modules(model: torch.nn.Module, model_input: Union[torch.Tensor, Tuple]) -> List[str]:
+def get_ops_with_missing_modules(model: torch.nn.Module, model_input: Union[torch.Tensor, Tuple]) -> List[Op]:
     """
     Utility function to ensure that all connected graph ops of a certain type have associated modules
     :param model: Pytorch model to create connected graph from
@@ -131,9 +132,8 @@ def get_ops_with_missing_modules(model: torch.nn.Module, model_input: Union[torc
                              'able to run on the model. Please address the errors shown.')
 
     missing_modules = []
-    for op_name, op in conn_graph.get_all_ops().items():
+    for op in conn_graph.get_all_ops().values():
         if not op.get_module() and op.type not in ConnectedGraph.functional_ops:
-            missing_modules.append(op_name)
-
+            missing_modules.append(op)
 
     return missing_modules
