@@ -36,7 +36,8 @@
 //
 //==============================================================================
 
-#include <DlQuantization/TensorQuantizer.h>
+#include "DlQuantization/TensorQuantizer.h"
+#include "DlQuantization/QuantizerFactory.hpp"
 #include "quantization_utils.hpp"
 #include <cassert>
 #include <numeric>
@@ -143,7 +144,7 @@ void TensorQuantizer::computeEncodingFromData(uint8_t bw, const float* data, siz
     if (encoding.delta == 0 && bw != 0)
     {
         resetEncodingStats();
-        // Use data to compute min, max statistics (forget any accumulated/updated stats)ze
+        // Use data to compute min, max statistics (forget any accumulated/updated stats)
         // To avoid duplication use update stats since internal functions rely on this->_stats
         _encodingAnalyzer->updateStats(data, count, cpuGpuMode);
 
@@ -177,7 +178,6 @@ void TensorQuantizer::quantizeDequantizePerChannelTensor(const float* input, con
                                                          std::vector<TfEncoding>& encodings, uint8_t bw,
                                                          RoundingMode roundMode, bool useCuda,
                                                          bool useStrictSymmetric)
-
 {
     std::vector <uint32_t> splitShape;
     std::vector <std::vector<float>> splits;

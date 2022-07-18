@@ -52,6 +52,7 @@ add_executable(MoDlQuantizationTest
       TestTfEncodingAnalyzer.cpp
       TestTensorQuantizationSim.cpp
       TestTensorQuantizer.cpp
+      TestGraphQuantizer.cpp
       TestUtilities.cpp
       TestPercentileEncodingAnalyzer.cpp
       TestMseEncodingAnalyzer.cpp)

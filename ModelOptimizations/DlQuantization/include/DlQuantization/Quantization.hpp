@@ -90,6 +90,7 @@ struct TfEncoding
     double delta;
     double offset;
     int bw;
+
 };
 
 /**
