@@ -188,20 +188,22 @@ using namespace DlQuantization;
 
 // Assume a non-skewed distribution.
 // Round offset to fixed point, and adjust min and max accordingly.
-static TfEncoding getTfEncoding(double min, double max, int bw) {
+static TfEncoding getTfEncoding(double min, double max, int bw)
+{
     TfEncoding encoding;
-    int steps = pow(2, bw) - 1;
-    encoding.delta = (max - min) / (double)steps;
+    int steps       = pow(2, bw) - 1;
+    encoding.delta  = (max - min) / (double) steps;
     encoding.offset = round(min / encoding.delta);
-    encoding.min = encoding.delta * encoding.offset;
-    encoding.max = encoding.delta * steps + encoding.min;
-    encoding.bw = bw;
+    encoding.min    = encoding.delta * encoding.offset;
+    encoding.max    = encoding.delta * steps + encoding.min;
+    encoding.bw     = bw;
     return encoding;
 }
 
-static TfEncoding getTfSymmetricEncoding(double max, int bw) {
+static TfEncoding getTfSymmetricEncoding(double max, int bw)
+{
     TfEncoding encoding;
-    int halfSteps = pow(2, bw) - 2; // To make it symmetric
+    int halfSteps                 = pow(2, bw) - 2;   // To make it symmetric
     unsigned int numPositiveSteps = std::floor(halfSteps / 2);
     encoding.delta                = max / numPositiveSteps;
     encoding.offset               = -std::ceil(halfSteps / 2);
@@ -211,18 +213,18 @@ static TfEncoding getTfSymmetricEncoding(double max, int bw) {
     return encoding;
 }
 
-static void printEncoding(TfEncoding encoding) {
-    std::cout << "Encoding: min: " << encoding.min << ", max: " << encoding.max <<
-        ", delta: " << encoding.delta << ", offset: " << encoding.offset <<
-        ", bw: " << encoding.bw << std::endl;
+static void printEncoding(TfEncoding encoding)
+{
+    std::cout << "Encoding: min: " << encoding.min << ", max: " << encoding.max << ", delta: " << encoding.delta
+              << ", offset: " << encoding.offset << ", bw: " << encoding.bw << std::endl;
 }
 
-static bool compareEncodings(TfEncoding e0, TfEncoding e1) {
+static bool compareEncodings(TfEncoding e0, TfEncoding e1)
+{
     bool result = true;
 
     // Hacky to use the gtest internal function of testing double value equaity
-#define TEST_DOUBLE_EQ(v0, v1)                                          \
-    bool(::testing::internal::CmpHelperFloatingPointEQ<double>(#v0, #v1, v0, v1))
+#define TEST_DOUBLE_EQ(v0, v1) bool(::testing::internal::CmpHelperFloatingPointEQ<double>(#v0, #v1, v0, v1))
 
     result = result && TEST_DOUBLE_EQ(e0.min, e1.min);
     result = result && TEST_DOUBLE_EQ(e0.max, e1.max);
@@ -234,8 +236,8 @@ static bool compareEncodings(TfEncoding e0, TfEncoding e1) {
     return result;
 }
 
-static void compareEncodings(TfEncoding e0, TfEncoding e1, double err) {
-
+static void compareEncodings(TfEncoding e0, TfEncoding e1, double err)
+{
     EXPECT_NEAR(e0.min, e1.min, err);
     EXPECT_NEAR(e0.max, e1.max, err);
     EXPECT_NEAR(e0.delta, e1.delta, err);
@@ -243,23 +245,30 @@ static void compareEncodings(TfEncoding e0, TfEncoding e1, double err) {
 }
 
 template <typename T>
-void printTensors(const T* v1, const T* v2, uint32_t size) {
-    std::cout << "Got tensor: ";;
-    for(uint32_t i = 0; i < size; ++i) {
-        std::cout << (float)v1[i] << ", ";
+void printTensors(const T* v1, const T* v2, uint32_t size)
+{
+    std::cout << "Got tensor: ";
+    ;
+    for (uint32_t i = 0; i < size; ++i)
+    {
+        std::cout << (float) v1[i] << ", ";
     }
     std::cout << std::endl << "Expected:   ";
-    for(uint32_t i = 0; i < size; ++i) {
-        std::cout << (float)v2[i] << ", ";
+    for (uint32_t i = 0; i < size; ++i)
+    {
+        std::cout << (float) v2[i] << ", ";
     }
     std::cout << std::endl;
 }
 
 template <typename T>
-bool compareTensors(const T* v1, const T* v2, uint32_t size) {
-    for(uint32_t i = 0; i < size; ++i) {
-        if(v1[i] != v2[i]) {
-            printTensors(v1,v2,size);
+bool compareTensors(const T* v1, const T* v2, uint32_t size)
+{
+    for (uint32_t i = 0; i < size; ++i)
+    {
+        if (v1[i] != v2[i])
+        {
+            printTensors(v1, v2, size);
             return false;
         }
     }

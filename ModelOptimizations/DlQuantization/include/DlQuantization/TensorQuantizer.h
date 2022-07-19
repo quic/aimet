@@ -95,6 +95,16 @@ public:
                                  bool useUnsignedSymmetric, bool useStrictSymmetric);
 
     /**
+     * @brief Compute the encoding for this tensor given partial TfEncoding data i.e
+     *        bw, min/max and no delta/offset
+     *        bw, delta/offset and no min/max
+     * @param[in/out] encoding Partial encoding containing min, max, delta and offset values
+     * @relates EncodingAnalyzer::computeEncoding
+     */
+    void computePartialEncoding(uint8_t bw, TfEncoding& encoding, bool useSymmetricEncodings,
+                                bool useUnsignedSymmetric, bool useStrictSymmetric);
+
+    /**
      * Convert a tensor from float to quantized int and back to float
      * @param input Input tensor
      * @param tensorSize Size of the input tensor (number of tensor elements)

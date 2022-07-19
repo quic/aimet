@@ -56,8 +56,6 @@ class TensorQuantizationSim : public ITensorQuantizationSim<DTYPE>
 public:
     explicit TensorQuantizationSim();
 
-    void gateMinMax(double& encodingMin, double& encodingMax);
-
     void quantizeDequantizeTensor(const DTYPE* inputTensorData, size_t inputTensorCount, DTYPE* outputTensorData,
                                   double encodingMin, double encodingMax, uint8_t bw, RoundingMode roundMode,
                                   bool use_cuda) override;
