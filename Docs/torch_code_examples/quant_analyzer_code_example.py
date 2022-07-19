@@ -1,0 +1,141 @@
+# /usr/bin/env python3.6
+# -*- mode: python -*-
+# =============================================================================
+#  @@-COPYRIGHT-START-@@
+#
+#  Copyright (c) 2022, Qualcomm Innovation Center, Inc. All rights reserved.
+#
+#  Redistribution and use in source and binary forms, with or without
+#  modification, are permitted provided that the following conditions are met:
+#
+#  1. Redistributions of source code must retain the above copyright notice,
+#     this list of conditions and the following disclaimer.
+#
+#  2. Redistributions in binary form must reproduce the above copyright notice,
+#     this list of conditions and the following disclaimer in the documentation
+#     and/or other materials provided with the distribution.
+#
+#  3. Neither the name of the copyright holder nor the names of its contributors
+#     may be used to endorse or promote products derived from this software
+#     without specific prior written permission.
+#
+#  THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+#  AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+#  IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+#  ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE
+#  LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+#  CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+#  SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+#  INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+#  CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+#  ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+#  POSSIBILITY OF SUCH DAMAGE.
+#
+#  SPDX-License-Identifier: BSD-3-Clause
+#
+#  @@-COPYRIGHT-END-@@
+# =============================================================================
+# pylint: skip-file
+
+""" Quant Analyzer code example """
+
+# Step 0. Import statements
+from typing import Optional
+import torch
+from torchvision import models
+from aimet_common.defs import QuantScheme
+from aimet_torch.utils import create_fake_data_loader
+from aimet_torch.model_preparer import prepare_model
+from aimet_torch.quant_analyzer import QuantAnalyzer, CallbackFunc
+# End step 0
+
+# Step 1. Prepare forward pass callback
+# NOTE: In the actual use cases, the users should implement this part to serve
+#       their own goals if necessary.
+def forward_pass_callback(model: torch.nn.Module, num_samples: Optional[int] = None):
+    """
+    A callback function for model calibration that simply runs forward passes on the model to
+    compute encoding (delta/offset). This callback function should use representative data and should be subset of
+    entire train/validation dataset (~1000 images/samples).
+    :param model: PyTorch model.
+    :param num_samples: Number of samples/batches.
+    """
+    # User action required
+    # The following line is an example of how to use the data loader.
+    # Replace the following line with your own dataset's validation data loader.
+    data_loader = create_fake_data_loader(dataset_size=64, batch_size=16, image_size=(3, 224, 224))
+
+    if num_samples is None:
+        num_samples = len(data_loader)
+
+    model.eval()
+    current_counter = 0
+    with torch.no_grad():
+        for input_data, labels in data_loader:
+            model(input_data.cuda())
+            current_counter += 1
+            if current_counter == num_samples:
+                break
+# End step 1
+
+# Step 2. Prepare eval callback
+# NOTE: In the actual use cases, the users should implement this part to serve
+#       their own goals if necessary.
+def eval_callback(model: torch.nn.Module, num_samples: Optional[int] = None) -> float:
+    """
+    A callback function for model evaluation that determines model performance. This callback function is
+    expected to return scalar value representing the model performance evaluated against entire test/evaluation dataset.
+    :param model: PyTorch model.
+    :param num_samples: Number of samples/batches.
+    :return: Scalar value representing the model performance.
+    """
+    # User action required
+    # The following line is an example of how to use the test/evaluation data loader.
+    # Replace the following line with your own dataset's test/evaluation data loader.
+    data_loader = create_fake_data_loader(dataset_size=64, batch_size=16, image_size=(3, 224, 224))
+
+    if num_samples is None:
+        num_samples = len(data_loader)
+
+    model.eval()
+    num_correct_predictions = 0
+    with torch.no_grad():
+        for input_data, labels in data_loader:
+            predictions = torch.argmax(model(input_data.cuda()), dim=1)
+            num_correct_predictions += torch.sum(predictions.cpu() == labels)
+
+    return int(num_correct_predictions) / num_samples
+# End step 2
+
+
+def quant_analyzer_example():
+
+    # Step 3. Prepare model
+    model = models.resnet18(pretrained=True).cuda().eval()
+    input_shape = (1, 3, 224, 224)
+    dummy_input = torch.randn(*input_shape).cuda()
+
+    prepared_model = prepare_model(model)
+    # End step 3
+
+    forward_pass_callback_fn = CallbackFunc(forward_pass_callback, None)
+    eval_callback_fn = CallbackFunc(eval_callback, None)
+
+    # Step 4. Create QuantAnalyzer object
+    quant_analyzer = QuantAnalyzer(model=prepared_model,
+                                   dummy_input=dummy_input,
+                                   forward_pass_callback=forward_pass_callback_fn,
+                                   eval_callback=eval_callback_fn)
+    # End step 4
+
+    # Step 5. Run QuantAnalyzer
+    quant_analyzer.analyze(quant_scheme=QuantScheme.post_training_tf_enhanced,
+                           default_param_bw=8,
+                           default_output_bw=8,
+                           config_file=None,
+                           results_dir="./tmp/")
+    # End step 5
+
+
+if __name__ == '__main__':
+    quant_analyzer_example()
