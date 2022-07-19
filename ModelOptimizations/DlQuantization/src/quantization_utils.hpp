@@ -47,9 +47,20 @@
 
 namespace DlQuantization
 {
+
+static constexpr double EPSILON = 1e-5;
+
 TfEncoding getComputedEncodings(uint8_t bw, double min, double max, bool useSymmetricEncodings, bool useStrictSymmetric,
                                 bool useUnsignedSymmetric);
 
+// ensures min - max is not too close, by checking that max - min > epsilon
+void gateMinMax(double& encodingMin, double& encodingMax);
+
+void computeMinMaxRangeFromDeltaOffset(uint8_t bw, TfEncoding& encoding, bool useSymmetricEncodings, bool useUnsignedSymmetric,
+                                       bool useStrictSymmetric);
+
+void computeDeltaAndOffsetFromMinMax(uint8_t bw, TfEncoding& encoding, bool useSymmetricEncodings, bool useUnsignedSymmetric,
+                                     bool useStrictSymmetric);
 
 // Function to slice a tensor along an axis, allocate and populate output buffers. Output shape will be the same for each slice.
 template <typename DTYPE>

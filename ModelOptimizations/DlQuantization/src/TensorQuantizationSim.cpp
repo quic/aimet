@@ -56,21 +56,6 @@ TensorQuantizationSim<DTYPE>::TensorQuantizationSim()
 {
 }
 
-template <typename DTYPE>
-void TensorQuantizationSim<DTYPE>::gateMinMax(double& encodingMin, double& encodingMax)
-{
-
-        double epsilon = 1e-5;
-        // Additional handling to retain zero in range
-        // encodingMin can be at maximum 0.0
-        encodingMin = std::min(encodingMin, 0.0);
-
-        // encodingMax can be at minimum 0.0
-        encodingMax = std::max(encodingMax, 0.0);
-
-        // handle case where encodingMin == encodingMax
-        encodingMax = std::max(encodingMax, encodingMin + epsilon);
-}
 
 template <typename DTYPE>
 void TensorQuantizationSim<DTYPE>::fillQuantizeInfo(TfEncoding& encoding, DlQuantization::ComputationMode& cpuGpuMode,

@@ -66,7 +66,8 @@ IQuantizer<DTYPE>* GetQuantizerInstance(const std::vector<std::string>& layer_na
 
 std::unique_ptr<GraphQuantizer> getGraphQuantizerInstance (const std::vector<std::string>& tensorNames,
                                                           ComputationMode modeCpuGpu,
-                                                          QuantizationMode quantMode){
+                                                          QuantizationMode quantMode)
+{
     return std::unique_ptr<GraphQuantizer>(new GraphQuantizer(tensorNames, modeCpuGpu, quantMode));
 }
 
