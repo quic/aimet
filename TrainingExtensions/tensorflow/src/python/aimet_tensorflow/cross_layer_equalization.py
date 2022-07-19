@@ -399,18 +399,31 @@ class CrossLayerScaling:
                                                            tf.Operation,
                                                            tf.Operation]) -> [np.ndarray, np.ndarray]:
         """
-        API to invoke equalize layer params for depth wise separable layers(update for weights and bias is in place)
+        API to invoke equalize layer params for the combination of conv+depthwiseConv+conv layer params
+        - update for weights and bias is in place
         :param model: active tf.compat.v1.Session
         :param cls_set: Consecutive Conv layers whose weights and biases need to be equalized.
                         Second Conv layer is a depth-wise conv and third conv layer is point-wise conv
         :return: Scaling factors S_12 and S_23 : numpy arrays
+
+        DepthwiseConv2D layer is handled the following way, Assume the depthwise layer has the following dimensions
+        [Dimensions: (kh, kw, Nic, Noc) example:(3, 3, 96, 2)], following operations are done on it,
+        1. Pre-process
+            a. Merge the last two dimensions and transpose [(Nic*Noc, kh, kw, 1), (192, 3, 3, 1)]
+                - implementation is converting to [(Nic, Noc, kh, kw), (96, 2, 3, 3)] which would give same res after next step
+            b. Convert to a 1D array [(Nic*Noc*kh*kw), (192*3*3)]
+        2. Perform scaling
+        3. Bring it back to original dimensions, current dimensions [(Nic*Noc*kh*kw), (192*3*3)]
+            a. reshape to [(Noc, Nic, kh, kw), (2, 96, 3, 3)]
+            b. reorder the dimensions [(kh, kw, Nic, Noc), (3, 3, 96, 2)]
         """
 
         # make sure you define the session and graph scope before making any graph updates.
         with model.graph.as_default():
-            for module in cls_set:
-                if module.type not in ['Conv2D', 'DepthwiseConv2dNative']:
-                    raise ValueError("Only conv layers are supported for cross layer equalization")
+            assert len(cls_set) == 3, "Three layers need to be present in the cls_set"
+            assert cls_set[0].type == "Conv2D", "unsupported type for cls_set[0]"
+            assert cls_set[1].type == "DepthwiseConv2dNative", "unsupported type for cls_set[1]"
+            assert cls_set[2].type == "Conv2D", "unsupported type for cls_set[2]"
 
             # Create structs for holding layer weights and bias parameters
             prev_layer_params = libpymo.EqualizationParams()
@@ -432,7 +445,8 @@ class CrossLayerScaling:
 
             # depthwise layer outputs is set to 1 in TF
             # send as [Nic, Noc, kh, kw],  TF format is [kh, kw, Nic, Noc]
-            curr_layer_params.weightShape = [weight_shape[2], weight_shape[3], weight_shape[0], weight_shape[1]]
+            curr_layer_params.weightShape = [weight_shape[2] * weight_shape[3], weight_shape[0], weight_shape[1], 1]
+            assert weight_shape[3] == 1, "Only depth_multiplier=1 is supported for DepthwiseConv2D"
             curr_layer_params.isBiasNone = BiasUtils.is_bias_none(cls_set[1])
 
             # send as [Noc, Nic, kh, kw] , TF format is [kh, kw, Nic, Noc]
@@ -454,26 +468,32 @@ class CrossLayerScaling:
             scaling_params = libpymo.scaleDepthWiseSeparableLayer(prev_layer_params, curr_layer_params,
                                                                   next_layer_params)
 
-            # convert received formats back to TF
-            # TF format is [kh, kw, Nic, Noc]
+            # convert received formats (in [Noc, Nic, kh, kw] format) back to the TF format ([kh, kw, Nic, Noc])
             numpy_weight_reshaped_0 = np.reshape(prev_layer_params.weight, prev_layer_params.weightShape). \
                 transpose((2, 3, 1, 0))
             WeightTensorUtils.update_tensor_for_op(model, cls_set[0], numpy_weight_reshaped_0)
 
             # depthwise layer
-            numpy_weight_reshaped_1 = np.reshape(curr_layer_params.weight, curr_layer_params.weightShape). \
-                transpose((2, 3, 0, 1))
+            weight_shape_1 = WeightTensorUtils.get_tensor_shape(cls_set[1])
+            numpy_weight_reshaped_1 = np.reshape(curr_layer_params.weight, (weight_shape_1[3], weight_shape_1[2],
+                                                                            weight_shape_1[0], weight_shape_1[1]))
+            numpy_weight_reshaped_1 = np.transpose(numpy_weight_reshaped_1, (2, 3, 1, 0))
             WeightTensorUtils.update_tensor_for_op(model, cls_set[1], numpy_weight_reshaped_1)
 
+            # conv layer
             numpy_weight_reshaped_2 = np.reshape(next_layer_params.weight, next_layer_params.weightShape). \
                 transpose((2, 3, 1, 0))
             WeightTensorUtils.update_tensor_for_op(model, cls_set[2], numpy_weight_reshaped_2)
 
             if not BiasUtils.is_bias_none(cls_set[0]):
+                assert [len(prev_layer_params.bias)] == BiasUtils.get_shape(cls_set[0]), \
+                    "Unsupported dimension encountered"
                 numpy_bias_reshaped = np.reshape(prev_layer_params.bias, BiasUtils.get_shape(cls_set[0]))
                 BiasUtils.update_bias_for_op(model, cls_set[0], numpy_bias_reshaped)
 
             if not BiasUtils.is_bias_none(cls_set[1]):
+                assert [len(curr_layer_params.bias)] == BiasUtils.get_shape(cls_set[1]), \
+                    "Unsupported dimension encountered"
                 numpy_bias_reshaped = np.reshape(curr_layer_params.bias, BiasUtils.get_shape(cls_set[1]))
                 BiasUtils.update_bias_for_op(model, cls_set[1], numpy_bias_reshaped)
 
