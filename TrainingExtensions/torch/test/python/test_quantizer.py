@@ -289,17 +289,18 @@ class FakeMultiOutputOp(torch.autograd.Function):
         return g.op('FakeMultiOutputOp', inp, outputs=5)
 
     @staticmethod
-    def forward(ctx, x):     # pylint: disable=arguments-differ
-        return x*2, x*4, x*8, x*16, x*32
+    def forward(ctx, x):  # pylint: disable=arguments-differ
+        return x * 2, x * 4, x * 8, x * 16, x * 32
 
     @staticmethod
-    def backward(ctx, _grad):                       # pylint: disable=arguments-differ
+    def backward(ctx, _grad):  # pylint: disable=arguments-differ
         raise NotImplementedError()
 
 
 class ModuleWith5Output(torch.nn.Module):
     def forward(self, x):
         return FakeMultiOutputOp.apply(x)
+
 
 class ModelWith5Output(torch.nn.Module):
     def __init__(self):
@@ -308,6 +309,7 @@ class ModelWith5Output(torch.nn.Module):
 
     def forward(self, x):
         return self.cust(x)
+
 
 class TestQuantizationSimStaticGrad:
     def test_is_leaf_module_positive(self):
@@ -340,11 +342,13 @@ class TestQuantizationSimStaticGrad:
     def test_is_quantizable_module_negative(self):
         """With a non-quantizable module"""
         conv1 = StaticGridQuantWrapper(nn.Conv2d(1, 10, 5), weight_bw=8, activation_bw=8, round_mode='nearest',
-                                       quant_scheme=QuantScheme.post_training_tf_enhanced, data_type=QuantizationDataType.int)
+                                       quant_scheme=QuantScheme.post_training_tf_enhanced,
+                                       data_type=QuantizationDataType.int)
         assert not QuantizationSimModel._is_quantizable_module(conv1)
 
     # ------------------------------------------------------------
-    def verify_quantization_wrappers(self, original_model, quantized_model, quant_scheme=QuantScheme.post_training_tf_enhanced):
+    def verify_quantization_wrappers(self, original_model, quantized_model,
+                                     quant_scheme=QuantScheme.post_training_tf_enhanced):
         """Test utility to determine if quantization wrappers were added correctly"""
 
         # All leaf modules in the original model
@@ -379,6 +383,7 @@ class TestQuantizationSimStaticGrad:
     # --------------------------------------------------------
     def test_add_quantization_wrappers_one_deep(self):
         """With a one-deep model"""
+
         class Net(nn.Module):
             def __init__(self):
                 super(Net, self).__init__()
@@ -405,6 +410,7 @@ class TestQuantizationSimStaticGrad:
     # ------------------------------------------------------
     def test_add_quantization_wrappers_with_preexisting_quantization_layers(self):
         """With a one-deep model"""
+
         class Net(nn.Module):
             def __init__(self):
                 super(Net, self).__init__()
@@ -439,6 +445,7 @@ class TestQuantizationSimStaticGrad:
     # -------------------------------------------
     def test_add_quantization_wrappers_two_deep(self):
         """With a one-deep model"""
+
         class SubNet(nn.Module):
             def __init__(self):
                 super(SubNet, self).__init__()
@@ -469,6 +476,7 @@ class TestQuantizationSimStaticGrad:
     # -------------------------------------------
     def test_add_quantization_wrappers_with_sequentials(self):
         """With a one-deep model"""
+
         class Net(nn.Module):
             def __init__(self):
                 super(Net, self).__init__()
@@ -501,6 +509,7 @@ class TestQuantizationSimStaticGrad:
     # -------------------------------------------
     def test_add_quantization_wrappers_with_sequential_two_deep(self):
         """With a one-deep model"""
+
         class Net(nn.Module):
             def __init__(self):
                 super(Net, self).__init__()
@@ -532,6 +541,7 @@ class TestQuantizationSimStaticGrad:
     # -------------------------------------------
     def test_add_quantization_wrappers_with_modulelist(self):
         """With a one-deep model using ModuleList"""
+
         class Net(nn.Module):
             def __init__(self):
                 super(Net, self).__init__()
@@ -559,8 +569,10 @@ class TestQuantizationSimStaticGrad:
                 self.layers = nn.ModuleList([nn.Linear(1, 32), nn.Linear(32, 64), nn.Conv2d(3, 32, kernel_size=3)])
                 self.layers_deep = nn.ModuleList([nn.ModuleList([nn.BatchNorm2d(10), nn.ReLU()]),
                                                   nn.Linear(3, 32), nn.Linear(32, 64), nn.Conv2d(1, 32, 5),
-                                                  StaticGridQuantWrapper(nn.Conv2d(1, 10, 5), weight_bw=8, activation_bw=8,
-                                                                         round_mode='nearest', quant_scheme=QuantScheme.post_training_tf_enhanced,
+                                                  StaticGridQuantWrapper(nn.Conv2d(1, 10, 5), weight_bw=8,
+                                                                         activation_bw=8,
+                                                                         round_mode='nearest',
+                                                                         quant_scheme=QuantScheme.post_training_tf_enhanced,
                                                                          data_type=QuantizationDataType.int)])
 
             def forward(self, *inputs):
@@ -583,7 +595,8 @@ class TestQuantizationSimStaticGrad:
                 self.layers = nn.ModuleList([nn.Linear(1, 32), nn.Linear(32, 64), nn.Conv2d(3, 32, kernel_size=3)])
                 self.layers_deep = nn.ModuleList([nn.ModuleList([nn.BatchNorm2d(10), nn.ReLU()]),
                                                   nn.Linear(3, 32), nn.Linear(32, 64), nn.Conv2d(1, 32, 5),
-                                                  StaticGridQuantWrapper(nn.Conv2d(1, 10, 5), weight_bw=8, activation_bw=8,
+                                                  StaticGridQuantWrapper(nn.Conv2d(1, 10, 5), weight_bw=8,
+                                                                         activation_bw=8,
                                                                          round_mode='nearest',
                                                                          quant_scheme=QuantScheme.post_training_tf_enhanced,
                                                                          data_type=QuantizationDataType.int)])
@@ -617,7 +630,7 @@ class TestQuantizationSimStaticGrad:
     def test_model_with_two_inputs(self):
         """Model with more than 1 input"""
 
-        dummy_input=(torch.rand(32, 1, 28, 28), torch.rand(32, 1, 28, 28))
+        dummy_input = (torch.rand(32, 1, 28, 28), torch.rand(32, 1, 28, 28))
 
         def forward_pass(model, args):
             model.eval()
@@ -642,7 +655,7 @@ class TestQuantizationSimStaticGrad:
     def test_model_with_two_inputs_fp16(self):
         """Model with more than 1 input"""
 
-        dummy_input=(torch.rand(32, 1, 28, 28), torch.rand(32, 1, 28, 28))
+        dummy_input = (torch.rand(32, 1, 28, 28), torch.rand(32, 1, 28, 28))
 
         def forward_pass(model, args):
             model.eval()
@@ -782,7 +795,7 @@ class TestQuantizationSimStaticGrad:
         assert isinstance(encoding_data["param_encodings"]["conv1.weight"], list)
 
         with open('./data/resnet50.encodings.yaml') as yaml_file:
-             encoding_data = yaml.load(yaml_file, Loader=yaml.FullLoader)
+            encoding_data = yaml.load(yaml_file, Loader=yaml.FullLoader)
 
         activation_keys = list(encoding_data["activation_encodings"].keys())
         assert activation_keys[0] == "103"
@@ -792,7 +805,6 @@ class TestQuantizationSimStaticGrad:
         assert param_keys[1] == "conv1.weight"
         assert isinstance(encoding_data["param_encodings"]["conv1.weight"], list)
 
-    
     # -------------------------------------------
 
     def test_export_to_onnx(self):
@@ -895,7 +907,6 @@ class TestQuantizationSimStaticGrad:
         loss.backward()
         grad_single_gpu = sim.model.conv1._module_to_wrap.weight.grad
 
-
         sim.model = torch.nn.DataParallel(sim.model)
 
         output_multi_gpu = sim.model(copy.deepcopy(dummy_input))
@@ -962,6 +973,7 @@ class TestQuantizationSimStaticGrad:
         Testing models with add functional ops
         :return:
         """
+
         class Net(nn.Module):
             def __init__(self):
                 super(Net, self).__init__()
@@ -1005,6 +1017,7 @@ class TestQuantizationSimStaticGrad:
         Testing models with add functional ops
         :return:
         """
+
         class Net(nn.Module):
             def __init__(self):
                 super(Net, self).__init__()
@@ -1050,6 +1063,7 @@ class TestQuantizationSimStaticGrad:
         Testing models with add functional ops followed by a split
         :return:
         """
+
         class Net(nn.Module):
             def __init__(self):
                 super(Net, self).__init__()
@@ -1093,6 +1107,7 @@ class TestQuantizationSimStaticGrad:
         This is similar to the resnet architecture where there are no ops on the residual connection
         :return:
         """
+
         class Net(nn.Module):
             def __init__(self):
                 super(Net, self).__init__()
@@ -1139,6 +1154,7 @@ class TestQuantizationSimStaticGrad:
                 x = self.conv1(x1)
                 x = x + x2
                 return self.softmax(x)
+
         model = Net().eval()
         _ = QuantizationSimModel(model, quant_scheme=QuantScheme.post_training_tf,
                                  dummy_input=(torch.rand(1, 3, 28, 28), torch.rand(1, 3, 24, 24)))
@@ -1148,6 +1164,7 @@ class TestQuantizationSimStaticGrad:
         Testing models with elementwise multiply functional ops
         :return:
         """
+
         class Net(nn.Module):
             def __init__(self):
                 super(Net, self).__init__()
@@ -1190,6 +1207,7 @@ class TestQuantizationSimStaticGrad:
         Testing models with elementwise division functional ops
         :return:
         """
+
         class Net(nn.Module):
             def __init__(self):
                 super(Net, self).__init__()
@@ -1232,6 +1250,7 @@ class TestQuantizationSimStaticGrad:
         Testing models with concat functional ops
         :return:
         """
+
         class Net(nn.Module):
             def __init__(self):
                 super(Net, self).__init__()
@@ -1303,7 +1322,7 @@ class TestQuantizationSimStaticGrad:
     def test_with_standalone_ops(self):
 
         model = ModelWithStandaloneOps()
-        dummy_input=torch.rand(1, 1, 28, 28)
+        dummy_input = torch.rand(1, 1, 28, 28)
 
         sim = QuantizationSimModel(model=model, dummy_input=dummy_input)
 
@@ -1540,6 +1559,7 @@ class TestQuantizationSimStaticGrad:
 
     def test_connected_graph_is_none(self):
         """ Test that an assertion is thrown when connected graph is not able to be built. """
+
         def raise_trace_error(_self, _model, _inputs):
             raise torch.jit.TracingCheckError(None, None)
 
@@ -1613,9 +1633,10 @@ class TestQuantizationSimStaticGrad:
 
         dummy_input = {'a': torch.randn(1, 10, 10, 10),
                        'b': torch.randn(1, 10, 10, 10),
-                       'c': torch.randn(1, 10, 10, 10) }
+                       'c': torch.randn(1, 10, 10, 10)}
 
         model = InputOutputDictModel()
+
         def forward_pass(model, args):
             model.eval()
             with torch.no_grad():
@@ -1713,7 +1734,6 @@ class TestQuantizationSimStaticGrad:
                 self.softmax = nn.LogSoftmax(dim=1)
 
             def forward(self, x1, x2):
-
                 x = self.add(x1, x2)
                 return self.softmax(x)
 
@@ -1738,7 +1758,7 @@ class TestQuantizationSimStaticGrad:
         # use some dummy custom block type
         model = DummyAttnBlockModel()
         from aimet_common.defs import QuantScheme
-        sim = QuantizationSimModel(model, quant_scheme=QuantScheme.post_training_tf,  dummy_input=dummy_input)
+        sim = QuantizationSimModel(model, quant_scheme=QuantScheme.post_training_tf, dummy_input=dummy_input)
         sim.compute_encodings(forward_pass, None)
 
         old_encoding_min = sim.model.block.add.output_quantizer.encoding.min
@@ -1751,7 +1771,7 @@ class TestQuantizationSimStaticGrad:
 
         # use override registration function
         transformer_utils.register_attention_mask_override('AttnBlock', 'add')
-        sim2 = QuantizationSimModel(model, quant_scheme=QuantScheme.post_training_tf,  dummy_input=dummy_input)
+        sim2 = QuantizationSimModel(model, quant_scheme=QuantScheme.post_training_tf, dummy_input=dummy_input)
 
         # compute encodings again to check override takes effect
         sim2.compute_encodings(forward_pass, None)
@@ -1781,7 +1801,6 @@ class TestQuantizationSimStaticGrad:
                 self.softmax = nn.LogSoftmax(dim=1)
 
             def forward(self, x1, x2):
-
                 x = self.add_2(x1, x2)
                 return self.softmax(x)
 
@@ -1805,7 +1824,7 @@ class TestQuantizationSimStaticGrad:
 
         # use some dummy custom block type
         model = DummyAttnBlockModel()
-        sim = QuantizationSimModel(model, quant_scheme=QuantScheme.post_training_tf_enhanced,  dummy_input=dummy_input)
+        sim = QuantizationSimModel(model, quant_scheme=QuantScheme.post_training_tf_enhanced, dummy_input=dummy_input)
         sim.compute_encodings(forward_pass, None)
         old_encoding_min = sim.model.block.add_2.output_quantizer.encoding.min
         old_encoding_max = sim.model.block.add_2.output_quantizer.encoding.max
@@ -1817,7 +1836,7 @@ class TestQuantizationSimStaticGrad:
 
         # use override registration function
         transformer_utils.register_attention_mask_override('AttnBlock', 'add_2')
-        sim2 = QuantizationSimModel(model, quant_scheme=QuantScheme.post_training_tf_enhanced,  dummy_input=dummy_input)
+        sim2 = QuantizationSimModel(model, quant_scheme=QuantScheme.post_training_tf_enhanced, dummy_input=dummy_input)
 
         # compute encodings again to check override takes effect
         sim2.compute_encodings(forward_pass, None)
@@ -1845,7 +1864,6 @@ class TestQuantizationSimStaticGrad:
                 self.softmax = nn.LogSoftmax(dim=1)
 
             def forward(self, x1, x2):
-
                 x = self.mask_add(x1, x2)
                 return self.softmax(x)
 
@@ -1858,7 +1876,6 @@ class TestQuantizationSimStaticGrad:
                 self.softmax = nn.LogSoftmax(dim=1)
 
             def forward(self, x1, x2):
-
                 x = self.mask_add(x1, x2)
                 return self.softmax(x)
 
@@ -1871,7 +1888,6 @@ class TestQuantizationSimStaticGrad:
                 self.softmax = nn.LogSoftmax(dim=1)
 
             def forward(self, x1, x2):
-
                 x = self.mask_add(x1, x2)
                 return self.softmax(x)
 
@@ -1886,7 +1902,7 @@ class TestQuantizationSimStaticGrad:
                 a = self.distilbert_block(x1, x2)
                 b = self.roberta_block(x3, x4)
                 c = self.gpt_block(x5, x6)
-                return a+b+c
+                return a + b + c
 
         # update data input to reflect range at add -10000 to ~16.xx
         # this results in max being mapped to zero when econding grid is computed with 8 bit for mask add
@@ -1904,7 +1920,7 @@ class TestQuantizationSimStaticGrad:
 
         # use some dummy custom block type
         model = DummyAttnBlockModel()
-        sim = QuantizationSimModel(model, quant_scheme=QuantScheme.post_training_tf_enhanced,  dummy_input=dummy_input)
+        sim = QuantizationSimModel(model, quant_scheme=QuantScheme.post_training_tf_enhanced, dummy_input=dummy_input)
         sim.compute_encodings(forward_pass, None)
         distil_encoding_min = sim.model.distilbert_block.mask_add.output_quantizer.encoding.min
         distil_encoding_max = sim.model.distilbert_block.mask_add.output_quantizer.encoding.max
@@ -1912,7 +1928,7 @@ class TestQuantizationSimStaticGrad:
         roberta_encoding_min = sim.model.roberta_block.mask_add.output_quantizer.encoding.min
         roberta_encoding_max = sim.model.roberta_block.mask_add.output_quantizer.encoding.max
 
-        gpt_encoding_min= sim.model.gpt_block.mask_add.output_quantizer.encoding.min
+        gpt_encoding_min = sim.model.gpt_block.mask_add.output_quantizer.encoding.min
         gpt_encoding_max = sim.model.gpt_block.mask_add.output_quantizer.encoding.max
 
         # check min clamped
@@ -2222,6 +2238,59 @@ class TestQuantizationSimLearnedGrid:
 
         assert isinstance(sim.model.conv1, LearnedGridQuantWrapper)
         assert isinstance(sim.model.fc1, LearnedGridQuantWrapper)
+
+    @pytest.mark.cuda
+    def test_multi_gpu_qat(self):
+        """"""
+        seed = 1
+        torch.manual_seed(seed)
+        torch.cuda.manual_seed(seed)
+        torch.cuda.manual_seed_all(seed)
+
+        class OneConvLayerModel(nn.Module):
+            def __init__(self):
+                super(OneConvLayerModel, self).__init__()
+                self.conv1 = nn.Conv2d(1, 5, kernel_size=2)
+
+            def forward(self, x):
+                x = self.conv1(x)
+                return x
+
+        model = OneConvLayerModel().to('cuda:0')
+        model = model.to('cuda:0')
+
+        dummy_input = torch.ones(2, 1, 3, 3).to('cuda:0')
+        dummy_input[1] += 1
+
+        sim = QuantizationSimModel(model, quant_scheme=QuantScheme.training_range_learning_with_tf_init,
+                                   dummy_input=dummy_input)
+
+        original_weight = sim.model.conv1._module_to_wrap.weight
+
+        def forward_pass(model, args):
+            model.eval()
+            with torch.no_grad():
+                output = model(torch.randn((2, 1, 3, 3)).to('cuda:0'))
+            return output
+
+        sim.compute_encodings(forward_pass, None)
+        output_single_gpu = sim.model(copy.deepcopy(dummy_input))
+        loss = output_single_gpu.flatten().sum()
+        loss.backward()
+        grad_single_gpu = sim.model.conv1._module_to_wrap.weight.grad
+
+        sim.model = torch.nn.DataParallel(sim.model)
+
+        output_multi_gpu = sim.model(copy.deepcopy(dummy_input))
+
+        weight = sim.model.module.conv1._module_to_wrap.weight
+
+        assert torch.allclose(output_multi_gpu, output_single_gpu)
+        assert torch.allclose(original_weight, weight)
+
+        loss = output_multi_gpu.flatten().sum()
+        loss.backward()
+        assert torch.allclose(sim.model.module.conv1._module_to_wrap.weight.grad, grad_single_gpu)
 
     def test_copy_properties_between_wrappers_when_inp_output_is_1(self):
         conv1 = nn.Conv2d(3, 10, kernel_size=5)
@@ -2626,14 +2695,14 @@ class TestQuantizationSimLearnedGrid:
         dummy_input = torch.randn(1, 3, 224, 224)
 
         sim = QuantizationSimModel(net, dummy_input, quant_scheme=QuantScheme.post_training_tf_enhanced,
-                                         default_param_bw=4, default_output_bw=4)
+                                   default_param_bw=4, default_output_bw=4)
 
         sim.model.cust.output_quantizers[0].enabled = False
         sim.compute_encodings(evaluate, dummy_input)
 
         sim.export('./data/', 'module_with_5_output', dummy_input,
-                         onnx_export_args=(onnx_utils.OnnxExportApiArgs(opset_version=11)),
-                         propagate_encodings=False)
+                   onnx_export_args=(onnx_utils.OnnxExportApiArgs(opset_version=11)),
+                   propagate_encodings=False)
         with open('./data/module_with_5_output.encodings') as json_file:
             activation_encodings = json.load(json_file)['activation_encodings']
             assert '7' not in activation_encodings
@@ -2707,13 +2776,14 @@ class CustModelV1Simple(torch.nn.Module):
         self.cust = CustomOp()
 
     def forward(self, x):
-        k1, k2  = self.cust(x)
-        return k1, k2 
+        k1, k2 = self.cust(x)
+        return k1, k2
 
 
 class CustomOp(torch.nn.Module):
     """
     """
+
     def __init__(self):
         super().__init__()
         self.size = 8
@@ -2739,6 +2809,7 @@ class CustModelV2Simple(torch.nn.Module):
 class CustomOpV2(torch.nn.Module):
     """
     """
+
     def __init__(self):
         super().__init__()
         self.size = 8
@@ -2759,6 +2830,7 @@ class CustomOpV2(torch.nn.Module):
 
 class Clamp(torch.nn.Module):
     """ Custom module for a functional clamp"""
+
     # pylint:disable=arguments-differ
     @staticmethod
     def forward(x: torch.Tensor) -> torch.Tensor:
