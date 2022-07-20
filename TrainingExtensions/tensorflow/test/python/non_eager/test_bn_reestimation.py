@@ -135,7 +135,7 @@ def sessions(device):
             bn_trainable_var = True
             inputs = tf.keras.Input(shape=(32, 32, 3,))
             conv_op = tf.keras.layers.Conv2D(32, (3, 3))(inputs)
-            bn_op = tf.compat.v1.layers.batch_normalization(conv_op, momentum=bn_momentum_var, name="any_name1",
+            bn_op = tf.compat.v1.layers.batch_normalization(conv_op, momentum=bn_momentum_var, name="any_name1/",
                                                             moving_mean_initializer=tf.compat.v1.zeros_initializer(),
                                                             moving_variance_initializer=tf.compat.v1.ones_initializer(),
                                                             fused=True, training=bn_training_var,
@@ -144,7 +144,7 @@ def sessions(device):
             relu_op = tf.nn.relu(bn_op)  # tf.keras.layers.ReLU(bn_op)
             conv_op1 = tf.keras.layers.Conv2D(32, (3, 3))(relu_op)
 
-            bn_op1 = tf.keras.layers.BatchNormalization(momentum=bn_momentum_var1, name="any_name2",
+            bn_op1 = tf.keras.layers.BatchNormalization(momentum=bn_momentum_var1, name="any_name2/",
                                                         beta_initializer=tf.compat.v1.random_uniform_initializer(),
                                                         gamma_initializer=tf.compat.v1.random_uniform_initializer(),
                                                         moving_mean_initializer=tf.compat.v1.random_uniform_initializer(),

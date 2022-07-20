@@ -98,8 +98,8 @@ op_type_templates = {
         'input_shape': (10, 10, 3,),
         'op_type': 'FusedBatchNormV3',
         'constructor': "tf.keras.layers.BatchNormalization()(inputs)",
-        'module_regex': ['(.+)/cond/FusedBatchNormV3_1$'],
-        'associated_op_regex': ['FusedBatchNormV3_1$'],
+        'module_regex': ['(.+)/cond/FusedBatchNormV3_1$', '(.+)/cond/Identity'],
+        'associated_op_regex': ['FusedBatchNormV3_1$', 'cond/Identity$'],
         'supported_tf_versions': [1, 2]
     },
     'BN_keras_with_training_True': {
