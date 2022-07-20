@@ -43,10 +43,12 @@ from aimet_tensorflow.keras.cross_layer_equalization import equalize_model
 from packaging import version
 import numpy as np
 import tensorflow as tf
+from tensorflow import keras
 
 import aimet_common.libpymo as libpymo
 from aimet_common.defs import QuantScheme
 from aimet_tensorflow.keras.quantsim import QuantizationSimModel
+from aimet_tensorflow.keras.quant_sim.qc_mha_wrapper import QcQuantizableMultiHeadAttention
 
 from test_models_keras import tiny_conv_net
 
@@ -364,3 +366,131 @@ def test_assert_on_reused_layer():
 
         with pytest.raises(NotImplementedError):
             _ = QuantizationSimModel(model, quant_scheme='tf')
+
+
+def test_quantizable_mha_basic():
+    B = 5
+    T = 8
+    S = 4
+
+    # STAGE 1 MODEL - model created with layers.MultiHeadAttention
+    stage_1_q_inputs = keras.Input(shape=(T, 16))
+    stage_1_v_inputs = keras.Input(shape=(S, 16))
+    stage_1_output = keras.layers.MultiHeadAttention(key_dim=2, num_heads=2)(stage_1_q_inputs, stage_1_v_inputs)
+    stage_1_model = keras.Model(inputs=[stage_1_q_inputs, stage_1_v_inputs], outputs=stage_1_output)
+
+    # STAGE 2 MODEL - model manually created with QcQuantizeableMultiHeadAttention
+    stage_2_q_inputs = keras.Input(shape=(T, 16))
+    stage_2_v_inputs = keras.Input(shape=(S, 16))
+    stage_2_output = QcQuantizableMultiHeadAttention(key_dim=2, num_heads=2)(stage_2_q_inputs, stage_2_v_inputs)
+    stage_2_model = keras.Model(inputs=[stage_2_q_inputs, stage_2_v_inputs], outputs=stage_2_output)
+
+    # STAGE 3 MODEL - model created using QuantSim
+    stage_3_model = QuantizationSimModel(stage_1_model)
+
+    query = np.ones([B, T, 16])
+    value = np.ones([B, S, 16])
+
+    output_1_tensor = stage_1_model([query, value])
+    output_2_tensor = stage_2_model([query, value])
+    output_3_tensor = stage_3_model.model([query, value])
+
+    for layer in stage_3_model.model.layers:
+        if isinstance(layer, QcQuantizableMultiHeadAttention): layer.deactivate_quantizers()
+    output_3_tensor_without_quantizers = stage_3_model.model([query, value])
+    for layer in stage_3_model.model.layers:
+        if isinstance(layer, QcQuantizableMultiHeadAttention): layer.reactivate_quantizers()
+
+    # check that all output tensors have the same shape
+    assert output_1_tensor.shape == output_2_tensor.shape == output_3_tensor.shape
+
+    # check that QcQuantizableMultiHeadAttention does not exist in original model.layers
+    assert not any(isinstance(layer, QcQuantizableMultiHeadAttention) for layer in stage_1_model.layers)
+
+    # check that QcQuantizableMultiHeadAttention exists in QuantSim model.layers
+    assert any(isinstance(layer, QcQuantizableMultiHeadAttention) for layer in stage_3_model.model.layers)
+
+    # check that QuantSim generated model has same output as original model when quantizers are disabled
+    assert tf.equal(output_1_tensor, output_3_tensor_without_quantizers).numpy().flatten().all()
+
+
+def test_quantizable_mha_with_value():
+    B = 5
+    T = 8
+    S = 4
+
+    q_inputs = keras.Input(shape=(T, 16))
+    v_inputs = keras.Input(shape=(S, 16))
+    k_inputs = keras.Input(shape=(S, 16))
+    model_output = keras.layers.MultiHeadAttention(key_dim=2, num_heads=2)(q_inputs, v_inputs, k_inputs)
+    unquantized_model = keras.Model(inputs=[q_inputs, v_inputs, k_inputs], outputs=model_output)
+
+    quantized_model = QuantizationSimModel(unquantized_model)
+
+    query = np.ones([B, T, 16])
+    value = np.ones([B, S, 16])
+    key = np.ones([B, S, 16])
+
+    unquantized_model_tensor = unquantized_model([query, value, key])
+    quantized_model_tensor = quantized_model.model([query, value, key])
+
+    for layer in quantized_model.model.layers:
+        if isinstance(layer, QcQuantizableMultiHeadAttention): layer.deactivate_quantizers()
+    quantized_model_tensor_without_quantizers = quantized_model.model([query, value, key])
+    for layer in quantized_model.model.layers:
+        if isinstance(layer, QcQuantizableMultiHeadAttention): layer.reactivate_quantizers()
+
+    # check that all output tensors have the same shape
+    assert unquantized_model_tensor.shape == quantized_model_tensor.shape == \
+           quantized_model_tensor_without_quantizers.shape
+
+    # check that QuantSim generated model has same output as original model when quantizers are disabled
+    assert tf.equal(unquantized_model_tensor, quantized_model_tensor_without_quantizers).numpy().flatten().all()
+
+    # check that QcQuantizableMultiHeadAttention does not exist in original model.layers
+    assert not any(isinstance(layer, QcQuantizableMultiHeadAttention) for layer in unquantized_model.layers)
+
+    # check that QcQuantizableMultiHeadAttention exists in QuantSim model.layers
+    assert any(isinstance(layer, QcQuantizableMultiHeadAttention) for layer in quantized_model.model.layers)
+
+
+def test_quantizable_mha_with_mask():
+    B = 5
+    T = 8
+    S = 4
+
+    q_inputs = keras.Input(shape=(T, 16))
+    v_inputs = keras.Input(shape=(S, 16))
+    k_inputs = keras.Input(shape=(S, 16))
+    m_inputs = keras.Input(shape=(T, S))
+    model_output = keras.layers.MultiHeadAttention(key_dim=2, num_heads=2)(q_inputs, v_inputs, k_inputs, m_inputs)
+    unquantized_model = keras.Model(inputs=[q_inputs, v_inputs, k_inputs, m_inputs], outputs=model_output)
+
+    quantized_model = QuantizationSimModel(unquantized_model)
+
+    query = np.ones([B, T, 16])
+    value = np.ones([B, S, 16])
+    key = np.ones([B, S, 16])
+    mask = np.zeros([B, T, S])
+
+    unquantized_model_tensor = unquantized_model([query, value, key, mask])
+    quantized_model_tensor = quantized_model.model([query, value, key, mask])
+
+    for layer in quantized_model.model.layers:
+        if isinstance(layer, QcQuantizableMultiHeadAttention): layer.deactivate_quantizers()
+    quantized_model_tensor_without_quantizers = quantized_model.model([query, value, key, mask])
+    for layer in quantized_model.model.layers:
+        if isinstance(layer, QcQuantizableMultiHeadAttention): layer.reactivate_quantizers()
+
+    # check that all output tensors have the same shape
+    assert unquantized_model_tensor.shape == quantized_model_tensor.shape == \
+           quantized_model_tensor_without_quantizers.shape
+
+    # check that QuantSim generated model has same output as original model when quantizers are disabled
+    assert tf.equal(unquantized_model_tensor, quantized_model_tensor_without_quantizers).numpy().flatten().all()
+
+    # check that QcQuantizableMultiHeadAttention does not exist in original model.layers
+    assert not any(isinstance(layer, QcQuantizableMultiHeadAttention) for layer in unquantized_model.layers)
+
+    # check that QcQuantizableMultiHeadAttention exists in QuantSim model.layers
+    assert any(isinstance(layer, QcQuantizableMultiHeadAttention) for layer in quantized_model.model.layers)
