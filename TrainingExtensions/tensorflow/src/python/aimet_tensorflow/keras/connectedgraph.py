@@ -107,6 +107,7 @@ class ConnectedGraph(AimetCommonConnectedGraph):
         super(ConnectedGraph, self).__init__()
 
         self._name_to_layer = {}
+        self._op_name_to_layer = {}
         self._layer_to_op = {}
         self.ordered_ops = []
         self._ops_index = 0
@@ -196,6 +197,7 @@ class ConnectedGraph(AimetCommonConnectedGraph):
             op = self._generate_op(op_type, layer)
 
             self._name_to_layer[layer.output.name] = layer
+            self._op_name_to_layer[op.name] = layer
             self._layer_to_op[layer] = op
             self._ops[op.name] = op
             self.ordered_ops.append(op)
@@ -551,6 +553,14 @@ class ConnectedGraph(AimetCommonConnectedGraph):
         if layer:
             return self._layer_to_op.get(layer, None)
         return None
+
+    def get_layer_from_op_name(self, name: str):
+        """
+        Given the name of the op return the corresponding layer
+        :param name: Name of the op
+        :return: Layer corrsponding to the name provided
+        """
+        return self._op_name_to_layer.get(name, None)
 
     def get_all_ops(self) -> typing.Dict[str, Op]:
         """
