@@ -40,11 +40,10 @@
 """ Quant Analyzer code example """
 
 # Step 0. Import statements
-from typing import Optional
+from typing import Any
 import torch
 from torchvision import models
 from aimet_common.defs import QuantScheme
-from aimet_torch.utils import create_fake_data_loader
 from aimet_torch.model_preparer import prepare_model
 from aimet_torch.quant_analyzer import QuantAnalyzer, CallbackFunc
 # End step 0
@@ -52,59 +51,49 @@ from aimet_torch.quant_analyzer import QuantAnalyzer, CallbackFunc
 # Step 1. Prepare forward pass callback
 # NOTE: In the actual use cases, the users should implement this part to serve
 #       their own goals if necessary.
-def forward_pass_callback(model: torch.nn.Module, num_samples: Optional[int] = None):
+def forward_pass_callback(model: torch.nn.Module, _: Any = None) -> None:
     """
+    NOTE: This is intended to be the user-defined model calibration function.
+    AIMET requires the above signature. So if the user's calibration function does not
+    match this signature, please create a simple wrapper around this callback function.
+
     A callback function for model calibration that simply runs forward passes on the model to
-    compute encoding (delta/offset). This callback function should use representative data and should be subset of
-    entire train/validation dataset (~1000 images/samples).
+    compute encoding (delta/offset). This callback function should use representative data and should
+    be subset of entire train/validation dataset (~1000 images/samples).
+
     :param model: PyTorch model.
-    :param num_samples: Number of samples/batches.
+    :param _: Argument(s) of this callback function. Up to the user to determine the type of this parameter.
+    E.g. could be simply an integer representing the number of data samples to use. Or could be a tuple of
+    parameters or an object representing something more complex.
     """
     # User action required
-    # The following line is an example of how to use the data loader.
-    # Replace the following line with your own dataset's validation data loader.
-    data_loader = create_fake_data_loader(dataset_size=64, batch_size=16, image_size=(3, 224, 224))
-
-    if num_samples is None:
-        num_samples = len(data_loader)
-
-    model.eval()
-    current_counter = 0
-    with torch.no_grad():
-        for input_data, labels in data_loader:
-            model(input_data.cuda())
-            current_counter += 1
-            if current_counter == num_samples:
-                break
+    # User should create data loader/iterable using representative dataset and simply run
+    # forward passes on the model.
 # End step 1
 
 # Step 2. Prepare eval callback
 # NOTE: In the actual use cases, the users should implement this part to serve
 #       their own goals if necessary.
-def eval_callback(model: torch.nn.Module, num_samples: Optional[int] = None) -> float:
+def eval_callback(model: torch.nn.Module, _: Any = None) -> float:
     """
+    NOTE: This is intended to be the user-defined model evaluation function.
+    AIMET requires the above signature. So if the user's calibration function does not
+    match this signature, please create a simple wrapper around this callback function.
+
     A callback function for model evaluation that determines model performance. This callback function is
-    expected to return scalar value representing the model performance evaluated against entire test/evaluation dataset.
+    expected to return scalar value representing the model performance evaluated against entire
+    test/evaluation dataset.
+
     :param model: PyTorch model.
-    :param num_samples: Number of samples/batches.
+    :param _: Argument(s) of this callback function. Up to the user to determine the type of this parameter.
+    E.g. could be simply an integer representing the number of data samples to use. Or could be a tuple of
+    parameters or an object representing something more complex.
     :return: Scalar value representing the model performance.
     """
     # User action required
-    # The following line is an example of how to use the test/evaluation data loader.
-    # Replace the following line with your own dataset's test/evaluation data loader.
-    data_loader = create_fake_data_loader(dataset_size=64, batch_size=16, image_size=(3, 224, 224))
-
-    if num_samples is None:
-        num_samples = len(data_loader)
-
-    model.eval()
-    num_correct_predictions = 0
-    with torch.no_grad():
-        for input_data, labels in data_loader:
-            predictions = torch.argmax(model(input_data.cuda()), dim=1)
-            num_correct_predictions += torch.sum(predictions.cpu() == labels)
-
-    return int(num_correct_predictions) / num_samples
+    # User should create data loader/iterable using entire test/evaluation dataset, perform forward passes on
+    # the model and return single scalar value representing the model performance.
+    return .8
 # End step 2
 
 
@@ -114,12 +103,13 @@ def quant_analyzer_example():
     model = models.resnet18(pretrained=True).cuda().eval()
     input_shape = (1, 3, 224, 224)
     dummy_input = torch.randn(*input_shape).cuda()
-
     prepared_model = prepare_model(model)
     # End step 3
 
-    forward_pass_callback_fn = CallbackFunc(forward_pass_callback, None)
-    eval_callback_fn = CallbackFunc(eval_callback, None)
+    # User action required
+    # User should pass actual argument(s) of the callback functions.
+    forward_pass_callback_fn = CallbackFunc(forward_pass_callback, func_callback_args=None)
+    eval_callback_fn = CallbackFunc(eval_callback, func_callback_args=None)
 
     # Step 4. Create QuantAnalyzer object
     quant_analyzer = QuantAnalyzer(model=prepared_model,

@@ -12,6 +12,7 @@ User should first invoke Model Preparer API before using any of AIMET Quantizati
    - :ref:`Model Validator API<api-torch-model-validator>`: Allows user to check whether AIMET Quantization feature can be applied on a PyTorch model
 
 AIMET Quantization for PyTorch Models provides the following functionality.
+   - :ref:`Quant Analyzer API<api-torch-quant-analyzer>`: Analyzes the model and points out sensitive layers to quantization
    - :ref:`Quantization Simulation API<api-torch-quantsim>`: Allows ability to simulate inference and training on quantized hardware
    - :ref:`Adaptive Rounding API<api-torch-adaround>`: Post-training quantization technique to optimize rounding of weight tensors
    - :ref:`Cross-Layer Equalization API<api-torch-cle>`: Post-training quantization technique to equalize layer parameters
