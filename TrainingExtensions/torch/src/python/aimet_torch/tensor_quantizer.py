@@ -545,14 +545,14 @@ class LearnedGridTensorQuantizer(TensorQuantizer):
 
         return stream.getvalue()
 
-    def compute_scaling_offset(self, encoding_min: float, encoding_max: float) -> [torch.Tensor, torch.Tensor]:
+    def compute_scaling_offset(self, encoding_min: torch.Tensor, encoding_max: torch.Tensor) -> [torch.Tensor, torch.Tensor]:
         """
         Computes scaling and offset for a given tensor using encoding min and max
         :param encoding_min: encoding min of a tensor
         :param encoding_max: encoding max of a tensor
         :return:
         """
-        scaling = (encoding_max - encoding_min) / self.p.to(device=self.device)
+        scaling = (encoding_max - encoding_min) / self.p.to(device=encoding_min.device)
         offset = self.round_ste_func(-encoding_min / scaling)
         return scaling, offset
 
@@ -582,8 +582,9 @@ class LearnedGridTensorQuantizer(TensorQuantizer):
         :return: Up-to-date (learned) encoding(s).
         """
         # pylint:disable=protected-access
-        encoding_min = self.wrapper_ref._parameters[self.name + '_encoding_min']
-        encoding_max = self.wrapper_ref._parameters[self.name + '_encoding_max']
+
+        encoding_min = getattr(self.wrapper_ref, self.name + '_encoding_min')
+        encoding_max = getattr(self.wrapper_ref, self.name + '_encoding_max')
 
         encodings = []
         for minimum, maximum in zip(encoding_min, encoding_max):
@@ -796,7 +797,7 @@ class ParameterQuantizer(torch.autograd.Function):
         :return: original layer parameters values
         """
         # pylint:disable = protected-access
-        for index, named_param in enumerate(trainable_wrapper._module_to_wrap.named_parameters()):
+        for index, named_param in enumerate(trainable_wrapper.get_named_parameters()):
             name, param = named_param
             if trainable_wrapper.param_quantizers[name].enabled:
                 encoding_min = encoding_params[index * 2]
@@ -805,7 +806,11 @@ class ParameterQuantizer(torch.autograd.Function):
                 param_quantizer = trainable_wrapper.param_quantizers[name]
                 param_quantizer.scaling, param_quantizer.offset = \
                     param_quantizer.compute_scaling_offset(encoding_min, encoding_max)
-                param.data = param_quantizer.quantize_dequantize(param.data, encoding_min, encoding_max)
+
+                if hasattr(trainable_wrapper, '_is_replica') and trainable_wrapper._is_replica:
+                    param.data = param_quantizer.quantize_dequantize(param.data.clone(), encoding_min, encoding_max)
+                else:
+                    param.data = param_quantizer.quantize_dequantize(param.data, encoding_min, encoding_max)
 
     @staticmethod
     def backward_pass_for_parameters(trainable_wrapper):
@@ -816,7 +821,7 @@ class ParameterQuantizer(torch.autograd.Function):
         """
         param_encoding_grads = []
         # pylint:disable = protected-access
-        for name, param in trainable_wrapper._module_to_wrap.named_parameters():
+        for name, param in trainable_wrapper.get_named_parameters():
             param_quantizer = trainable_wrapper.param_quantizers[name]
             if param_quantizer.enabled and param.grad is not None:
                 param_encoding_min_grad, param_encoding_max_grad = ParameterQuantizer.compute_gradients(
