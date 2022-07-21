@@ -367,7 +367,7 @@ class QuantAnalyzer:
 
                 # Record eval score.
                 eval_score_dict[name] = self._eval_model(sim.model)
-                _logger.info("For layer: %s, the eval score is: %.02f", name, eval_score_dict[name])
+                _logger.info("For layer: %s, the eval score is: %f", name, eval_score_dict[name])
 
                 self._enable_disable_quantizers(enabled_quantizers, enabled=enabled_after)
 
@@ -642,14 +642,14 @@ class QuantAnalyzer:
         """
         # pylint: disable=protected-access
         fp32_eval_score = self._eval_model(self._model)
-        _logger.info("FP32 eval score (W32A32): %.02f", fp32_eval_score)
+        _logger.info("FP32 eval score (W32A32): %f", fp32_eval_score)
 
         weight_quantized_eval_score = self._eval_weight_quantized_model(sim)
-        _logger.info("Weight-quantized eval score (W%dA32): %.02f", sim._default_param_bw,
+        _logger.info("Weight-quantized eval score (W%dA32): %f", sim._default_param_bw,
                      weight_quantized_eval_score)
 
         act_quantized_eval_score = self._eval_activation_quantized_model(sim)
-        _logger.info("Activation-quantized eval score (W32A%d): %.02f", sim._default_output_bw,
+        _logger.info("Activation-quantized eval score (W32A%d): %f", sim._default_output_bw,
                      act_quantized_eval_score)
 
         return fp32_eval_score, weight_quantized_eval_score, act_quantized_eval_score

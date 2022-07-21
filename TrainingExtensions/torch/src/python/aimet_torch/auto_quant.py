@@ -384,8 +384,8 @@ class AutoQuant:
                 fp32_acc = self._evaluate_model_performance(fp32_model)
                 target_acc = fp32_acc - self.allowed_accuracy_drop
 
-                _logger.info("Target eval score: %.02f", target_acc)
-                _logger.info("FP32 eval score (W32A32): %.02f", fp32_acc)
+                _logger.info("Target eval score: %f", target_acc)
+                _logger.info("FP32 eval score (W32A32): %f", fp32_acc)
 
                 eval_manager = _EvalManager(
                     quantsim_factory=self._create_quantsim_and_encodings,
@@ -399,7 +399,7 @@ class AutoQuant:
                                          eval_manager, results_dir)
 
                 acc = ret["accuracy"]
-                _logger.info("Best eval score: %.02f", acc)
+                _logger.info("Best eval score: %f", acc)
 
                 if acc < target_acc:
                     _logger.info(
@@ -433,13 +433,13 @@ class AutoQuant:
         with eval_manager.analysis_session("Weight Quantization Sensitivity") as sess:
             acc = sess.eval(fp32_model, default_output_bw=32)
             sess.diagnostics.add(
-                f"Weight-quantized eval score (W{self.default_param_bw}A32): {acc:.02f}"
+                f"Weight-quantized eval score (W{self.default_param_bw}A32): {acc:f}"
             )
 
         with eval_manager.analysis_session("Activation Quantization Sensitivity") as sess:
             acc = sess.eval(fp32_model, default_param_bw=32)
             sess.diagnostics.add(
-                f"Activation-quantized eval score (W32A{self.default_output_bw}): {acc:.02f}"
+                f"Activation-quantized eval score (W32A{self.default_output_bw}): {acc:f}"
             )
 
         # Batchnorm Folding
@@ -784,7 +784,7 @@ class _PtqSession(_EvalSession):
         if self._ptq_result is None:
             raise RuntimeError
 
-        _logger.info("Session finished: %s. (eval score: %.02f)",
+        _logger.info("Session finished: %s. (eval score: %f)",
                      self._title, self._ptq_result.accuracy)
 
 
