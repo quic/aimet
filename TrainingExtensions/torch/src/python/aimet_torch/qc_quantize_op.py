@@ -273,6 +273,21 @@ class QcQuantizeWrapper(nn.Module):
         self.input_quantizer = self.input_quantizers[0]
         self._quant_scheme = quant_scheme
 
+    def get_named_parameters(self):
+        """
+        Yields parameter name and parameter
+        """
+        # is_replica is an
+        if hasattr(self, '_is_replica') and self._is_replica:
+            # pylint: disable = protected-access
+            for name, param in self._module_to_wrap._former_parameters.items():
+                yield name, param
+
+        else:
+            for name, param in self._module_to_wrap.named_parameters():
+                yield name, param
+
+
     def __getattr__(self, name):
         try:
             return super().__getattr__(name)
@@ -505,17 +520,10 @@ class StaticGridQuantWrapper(QcQuantizeWrapper):
         return output
 
     def _restore_shadow_params(self, shadow_params):
-
         # Restore the parameters
-        for name, param in self._module_to_wrap.named_parameters():
+        for name, param in self.get_named_parameters():
             param.data.zero_()
             param.data.add_(shadow_params[name].data)
-
-        if hasattr(self, '_is_replica') and self._is_replica:
-            # pylint: disable = protected-access
-            for name, param in self._module_to_wrap._former_parameters.items():
-                param.data.zero_()
-                param.data.add_(shadow_params[name].data)
 
     def _quantize_dequantize_params(self):
         """
@@ -555,15 +563,11 @@ class StaticGridQuantWrapper(QcQuantizeWrapper):
 
         shadow_params = {}
 
-        if hasattr(self, '_is_replica') and self._is_replica:
-            # pylint: disable = protected-access
-            for name, param in self._module_to_wrap._former_parameters.items():
-                quantize_dequantize(name, param, is_replica=True)
-
-        else:
-            # Quantize the parameters, if present
-            for name, param in self._module_to_wrap.named_parameters():
-                quantize_dequantize(name, param, is_replica=False)
+        for name, param in self.get_named_parameters():
+            is_replica = False
+            if hasattr(self, '_is_replica') and self._is_replica:
+                is_replica = True
+            quantize_dequantize(name, param, is_replica=is_replica)
 
         return shadow_params
 
@@ -738,7 +742,7 @@ class LearnedGridQuantWrapper(QcQuantizeWrapper):
             self.output_quantizers[index].wrapper_ref = self
 
         # Param Quantizers
-        for name, param in self._module_to_wrap.named_parameters():
+        for name, param in self.get_named_parameters():
             self.register_parameter(name + '_encoding_min', None)
 
             self.register_parameter(name + '_encoding_max', None)
@@ -758,11 +762,10 @@ class LearnedGridQuantWrapper(QcQuantizeWrapper):
         """
         Apply gating logic.
         """
-        constant_tensor = _constant_tensor(self.device)
-        zero_tensor = constant_tensor.zero
-        eps_tensor = constant_tensor.eps
-
         def _apply_logic(encoding_min, encoding_max):
+            constant_tensor = _constant_tensor(encoding_min.device)
+            zero_tensor = constant_tensor.zero
+            eps_tensor = constant_tensor.eps
             encoding_min.data = torch.minimum(zero_tensor, encoding_min.data)
             encoding_max.data = torch.maximum(zero_tensor, encoding_max.data)
             encoding_max.data = torch.maximum(encoding_max.data, encoding_min.data + eps_tensor)
@@ -770,19 +773,20 @@ class LearnedGridQuantWrapper(QcQuantizeWrapper):
         # Gating input encodings
         for index, input_quantizer in enumerate(self.input_quantizers):
             if input_quantizer.enabled:
-                _apply_logic(self._parameters['input' + str(index) + '_encoding_min'],
-                             self._parameters['input' + str(index) + '_encoding_max'])
+                _apply_logic(getattr(self, 'input' + str(index) + '_encoding_min'),
+                             getattr(self, 'input' + str(index) + '_encoding_max'))
 
         # Gating output encodings
         for index, output_quantizer in enumerate(self.output_quantizers):
             if output_quantizer.enabled:
-                _apply_logic(self._parameters['output' + str(index) + '_encoding_min'],
-                             self._parameters['output' + str(index) + '_encoding_max'])
+                _apply_logic(getattr(self, 'output' + str(index) + '_encoding_min'),
+                             getattr(self, 'output' + str(index) + '_encoding_max'))
 
         # Gating for parameters
         for name, _ in self._module_to_wrap.named_parameters():
             if self.param_quantizers[name].enabled:
-                _apply_logic(self._parameters[name + '_encoding_min'], self._parameters[name + '_encoding_max'])
+                _apply_logic(getattr(self, name + '_encoding_min'),
+                             getattr(self, name + '_encoding_max'))
 
     def forward(self, *inputs):
         """
@@ -817,13 +821,12 @@ class LearnedGridQuantWrapper(QcQuantizeWrapper):
         encoding_list_for_params = []
 
         try:
-            for name, param in self._module_to_wrap.named_parameters():
-                # Store current weight for use later on
+            for name, param in self.get_named_parameters():
                 shadow_params[name] = param.detach().clone()
                 # Create a list of encoding parameters for params
                 if self.param_quantizers[name].enabled:
-                    encoding_list_for_params.append(self._parameters[name + '_encoding_min'])
-                    encoding_list_for_params.append(self._parameters[name + '_encoding_max'])
+                    encoding_list_for_params.append(getattr(self, name + '_encoding_min'))
+                    encoding_list_for_params.append(getattr(self, name + '_encoding_max'))
 
             # Quantize the parameters
             inputs[0] = ParameterQuantizer.apply(inputs[0], self, *encoding_list_for_params)
@@ -832,8 +835,9 @@ class LearnedGridQuantWrapper(QcQuantizeWrapper):
             # of view (view is created since Custom function's forward return input as-is)
             inputs[0] = inputs[0].clone()
             yield
+
         finally:
-            for name, param in self._module_to_wrap.named_parameters():
+            for name, param in self.get_named_parameters():
                 if name in shadow_params:
                     param.data.copy_(shadow_params[name].data)
 
@@ -856,8 +860,8 @@ class LearnedGridQuantWrapper(QcQuantizeWrapper):
                 _logger.error(error_msg)
                 raise AssertionError(error_msg)
 
-            encoding_min = self._parameters[type_of_quantizer + str(index) + '_encoding_min']
-            encoding_max = self._parameters[type_of_quantizer + str(index) + '_encoding_max']
+            encoding_min = getattr(self, type_of_quantizer + str(index) + '_encoding_min')
+            encoding_max = getattr(self, type_of_quantizer + str(index) + '_encoding_max')
             quantized_tensors.append(tensor_quantizers[index].quantize_dequantize(tensor_to_quantize, encoding_min,
                                                                                   encoding_max))
         # Flatten if there is only one output - which is by far the most common case
@@ -912,7 +916,7 @@ class SteGatingFuncForParameters(torch.autograd.Function):
     def backward(ctx, *output_grad):
         quant_wrapper_ref = ctx.quantization_wrapper_ref
 
-        def calc_param_grad(name: str, param: torch.float32):
+        def calc_param_grad(name: str, param: torch.nn.Parameter):
             """
             Calculates parameter gradient
             """
@@ -931,12 +935,7 @@ class SteGatingFuncForParameters(torch.autograd.Function):
                     param.grad = ste.compute_dloss_by_dx(param, param.grad, param_quantizer.encoding.min,
                                                          param_quantizer.encoding.max)
 
-        # pylint:disable = protected-access
-        for name, param in quant_wrapper_ref._module_to_wrap.named_parameters():
+        for name, param in quant_wrapper_ref.get_named_parameters():
             calc_param_grad(name, param)
-
-        if hasattr(quant_wrapper_ref, '_is_replica') and quant_wrapper_ref._is_replica:
-            for name, param in quant_wrapper_ref._module_to_wrap._former_parameters.items():
-                calc_param_grad(name, param)
 
         return (None, *output_grad)
