@@ -324,10 +324,10 @@ def _fold_given_batch_norms(model,
             else:
                 _fold_to_weight(conv, bn, fold_backward=fold_backward)
         except _BatchNormFoldingNotSupported as e:
-            conv_name = utils.get_layer_name(model, conv)
             bn_name = utils.get_layer_name(model, bn)
+            conv_name = utils.get_layer_name(model, conv)
             _logger.warning(
-                "Failed to fold %s to %s. [Reason] %s", conv_name, bn_name, str(e)
+                "Failed to fold %s to %s. [Reason] %s", bn_name, conv_name, str(e)
             )
         else:
             bn_modules.append(bn._module_to_wrap if is_wrapped else bn)
