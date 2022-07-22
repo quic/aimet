@@ -21,6 +21,7 @@ Install the basic pre-requisite packages as follows:
 apt-get update
 apt-get install python3.8 python3.8-dev python3-pip
 python3 -m pip install --upgrade pip
+apt-get install --assume-yes wget gnupg2
 ```
 
 ### Install GPU packages
@@ -68,9 +69,9 @@ export download_url="https://github.com/quic/aimet/releases/download/${release_t
 ```
 
 Set the common suffix for the package files as follows:
-> _NOTE:_ Set wheel_file_suffix to `cp36-cp36m-linux_x86_64` OR `cp37-cp37m-linux_x86_64` OR `py3-none-any` as appropriate depending on the actual wheel filename(s) on the [releases page](https://github.com/quic/aimet/releases).
+> _NOTE:_ Set wheel_file_suffix to `cp38-cp38-linux_x86_64.whl` OR `cp36-cp36m-linux_x86_64` OR `cp37-cp37m-linux_x86_64` OR `py3-none-any` as appropriate depending on the actual wheel filename(s) on the [releases page](https://github.com/quic/aimet/releases).
 ```bash
-export wheel_file_suffix="cp36-cp36m-linux_x86_64.whl"
+export wheel_file_suffix="cp38-cp38-linux_x86_64.whl"
 ```
 
 Install the AIMET packages in the order specified below:
