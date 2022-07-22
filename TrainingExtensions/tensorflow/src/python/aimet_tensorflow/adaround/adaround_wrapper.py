@@ -212,6 +212,12 @@ class AdaroundWrapper(keras.layers.Layer):
 
         elif self._op.type == 'DepthwiseConv2dNative':
             kwargs = self._get_conv_args(self._op)
+            if kwargs['data_format'] == 'NCHW':
+                dilations = kwargs["dilations"][2:4]
+            else:
+                dilations = kwargs["dilations"][1:3]
+            kwargs["dilations"] = dilations
+
             adaround_out_tensor = tf.nn.depthwise_conv2d(inp_tensor, adaround_weight_tensor, **kwargs)
 
         elif self._op.type == 'MatMul':

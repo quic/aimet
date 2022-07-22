@@ -76,8 +76,8 @@ class TestAdaroundOptimizer(unittest.TestCase):
         conv = tf.compat.v1.get_default_graph().get_operation_by_name('conv2d/Conv2D')
         orig_weight = session.run(conv.inputs[1])
 
-        inp_data = np.random.rand(1, 5, 5, 3)
-        out_data = np.random.rand(1, 5, 5, 16)
+        inp_data = np.random.rand(32, 5, 5, 3)
+        out_data = np.random.rand(32, 5, 5, 16)
         opt_params = AdaroundHyperParameters(num_iterations=1, reg_param=0.01, beta_range=(20, 2), warm_start=0.2)
 
         # Adaround optimization in separate graph
@@ -111,8 +111,8 @@ class TestAdaroundOptimizer(unittest.TestCase):
         matmul = tf.compat.v1.get_default_graph().get_operation_by_name('depthwise_conv2d_model/MatMul')
         orig_weight = session.run(matmul.inputs[1])
 
-        inp_data = np.random.rand(1, 392)
-        out_data = np.random.rand(1, 10)
+        inp_data = np.random.rand(32, 392)
+        out_data = np.random.rand(32, 10)
         opt_params = AdaroundHyperParameters(num_iterations=1, reg_param=0.01, beta_range=(20, 2), warm_start=0.2)
 
         # Adaround optimization in separate graph
@@ -146,8 +146,8 @@ class TestAdaroundOptimizer(unittest.TestCase):
         depthwise_conv2d = tf.compat.v1.get_default_graph().get_operation_by_name('depthwise_conv2d/depthwise')
         orig_weight = session.run(depthwise_conv2d.inputs[1])
 
-        inp_data = np.random.rand(1, 5, 5, 10)
-        out_data = np.random.rand(1, 3, 3, 10)
+        inp_data = np.random.rand(32, 5, 5, 10)
+        out_data = np.random.rand(32, 3, 3, 10)
         opt_params = AdaroundHyperParameters(num_iterations=1, reg_param=0.01, beta_range=(20, 2), warm_start=0.2)
 
         # Adaround optimization in separate graph
