@@ -85,8 +85,7 @@ class QuantizationSimModel:
             self._model_without_wrappers.set_weights(model.get_weights())
         self._layer_name_to_quant_wrapper = {}
         self._validate_model()
-        connected_graph = ConnectedGraph(self._model_without_wrappers)
-        self.connected_graph = connected_graph
+        self.connected_graph = ConnectedGraph(self._model_without_wrappers)
         self._quantsim_configurator = self._initialize_quantsim_configurator(quant_scheme, rounding_mode,
                                                                              default_output_bw, default_param_bw,
                                                                              config_file)

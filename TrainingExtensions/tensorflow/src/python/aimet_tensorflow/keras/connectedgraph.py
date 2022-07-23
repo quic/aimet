@@ -560,7 +560,7 @@ class ConnectedGraph(AimetCommonConnectedGraph):
         :param name: Name of the op
         :return: Layer corrsponding to the name provided
         """
-        return self._op_name_to_layer.get(name, None)
+        return self._op_name_to_layer.get(name)
 
     def get_all_ops(self) -> typing.Dict[str, Op]:
         """
