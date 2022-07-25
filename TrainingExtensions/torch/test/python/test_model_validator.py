@@ -109,6 +109,31 @@ class TestValidationChecks(unittest.TestCase):
         rand_inp = torch.randn(1, 3, 32, 32)
         self.assertFalse(validation_checks.validate_for_missing_modules(model, rand_inp))
 
+    def test_get_filtered_ops_with_missing_modules(self):
+        """ Validate the missing modules check with excluded layers """
+        model = Model().eval()
+        input_shape = (1, 3, 32, 32)
+        dummy_input = torch.rand(input_shape)
+        layers_to_exclude = [model.custom]
+        filtered_ops_with_missing_modules = \
+            validation_checks._get_filtered_ops_with_missing_modules(model, dummy_input,
+                                                                     layers_to_exclude=layers_to_exclude)
+
+        # Check that only two ops (addition and relu) are flagged
+        self.assertEqual(2, len(filtered_ops_with_missing_modules))
+
+    def test_get_blacklisted_modules(self):
+        """ Test get_blacklisted_modules utility """
+        model = test_models.HierarchicalModel()
+        layers_to_exclude = {model.nm1, model.nm2}
+        blacklisted_layers = validation_checks._get_blacklisted_layers(layers_to_exclude)
+        manually_obtained_set = set()
+        for module in model.nm1.modules():
+            manually_obtained_set.add(module)
+        for module in model.nm2.modules():
+            manually_obtained_set.add(module)
+        self.assertEqual(manually_obtained_set, blacklisted_layers)
+
 
 class TestModelValidatorPreparer:
 

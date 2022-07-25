@@ -326,6 +326,18 @@ def create_fake_data_loader(dataset_size: int, batch_size: int, image_size=(1, 2
     return data_loader
 
 
+def get_module_to_name_dict(model: torch.nn.Module) -> Dict[torch.nn.Module, str]:
+    """
+    Get a dictionary mapping model modules to names
+    :param model: Model to get mapping for
+    :return: Dictionary mapping model modules to names
+    """
+    module_to_name_dict = {}
+    for name, module in model.named_modules():
+        module_to_name_dict[module] = name
+    return module_to_name_dict
+
+
 def get_layer_name(model, layer):
     """
     Helper function to get layer name given model and layer reference

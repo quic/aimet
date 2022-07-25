@@ -72,7 +72,7 @@ class IrNode:
     """
     def __init__(self, node_type: str, inputs: List[Union[List, torch._C.TensorType]],
                  outputs: List[Union[List, torch._C.TensorType]], module: Union[torch.nn.Module, None],
-                 residing_module: Union[str, None] = None):
+                 residing_module: Union[torch.nn.Module, None] = None):
         self.node_type = node_type
         self.inputs = inputs
         self.outputs = outputs
@@ -379,13 +379,11 @@ class ConnectedGraph(AimetCommonConnectedGraph):
             # invoking forward method
             elif 'CallMethod' in node.kind():
                 self.parse_callmethod_node(node, trace, node_name_to_module, node_name_to_subgraph_model,
-                                           ir_nodes_list, inputs_map, output_map, self._module_to_name[model],
-                                           module_to_jit_trace)
+                                           ir_nodes_list, inputs_map, output_map, model, module_to_jit_trace)
 
             # functional operations e.g. cat, size etc
             else:
-                ir_nodes_list.append(_create_functional_ir_node(node, inputs_map,
-                                                                residing_module=self._module_to_name[model]))
+                ir_nodes_list.append(_create_functional_ir_node(node, inputs_map, residing_module=model))
 
         # return output connections
         return [output for output in trace.graph.return_node().inputs()]
@@ -409,7 +407,7 @@ class ConnectedGraph(AimetCommonConnectedGraph):
                               ir_nodes_list: List[IrNode],
                               inputs_map: Dict[torch._C.TensorType, torch._C.TensorType],
                               output_map: Dict[torch._C.TensorType, torch._C.TensorType],
-                              residing_module: str,
+                              residing_module: torch.nn.Module,
                               module_to_jit_trace: Dict[torch.nn.Module, torch.jit.TracedModule]):
         # pylint: disable=too-many-locals
         """
@@ -424,7 +422,7 @@ class ConnectedGraph(AimetCommonConnectedGraph):
         :param ir_nodes_list: List of IrNodes created from traversing the trace graph
         :param inputs_map: Dictionary mapping low recursion level inputs to higher level equivalent inputs
         :param output_map: Dictionary mapping high recursion level outputs to lower level equivalent outputs
-        :param residing_module: Torch module name which the current node is situated in
+        :param residing_module: Torch module in which the current node is situated
         :param module_to_jit_trace: Dictionary mapping torch modules to their traces
         """
         inputs = [inp for inp in node.inputs()]
@@ -1219,11 +1217,12 @@ def _update_op_output_with_product(op: Op, product: Product):
 
 
 def _create_functional_ir_node(node: torch._C.Node, inputs_map: Dict[torch._C.TensorType, torch._C.TensorType],
-                               residing_module: str) -> IrNode:
+                               residing_module: torch.nn.Module) -> IrNode:
     """
     Create an IrNode containing input and output connections information given a torch graph node.
     :param node: trace graph node
     :param inputs_map: Mapping
+    :param residing_module: Torch module in which the current node is situated
     :return: IrNode created from information in the trace graph node
     """
     outputs = [output for output in node.outputs()]

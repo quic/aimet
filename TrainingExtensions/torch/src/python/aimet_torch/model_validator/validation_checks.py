@@ -38,24 +38,26 @@
 
 """ Functions for validating pytorch models prior to using AIMET features """
 
-from typing import Tuple, Union
+from typing import Tuple, Union, Set, List
 import torch
 
 from aimet_common.utils import AimetLogger
 from aimet_torch import utils
 from aimet_torch.meta import connectedgraph_utils
+from aimet_torch.meta.operation import Op
 
 
 logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Utils)
 
 
-def validate_for_reused_modules(model: torch.nn.Module, model_input: Union[torch.Tensor, Tuple]) -> bool:
+def validate_for_reused_modules(model: torch.nn.Module, model_input: Union[torch.Tensor, Tuple], **kwargs) -> bool:
     """
     Check if the model has any reused modules. Returns True if there are none, False otherwise.
     :param model: Pytorch model to create connected graph from
     :param model_input: Example input to model.  Can be a single tensor or a list/tuple of input tensors
     :return: True if model has no reused modules, False otherwise
     """
+    # pylint: disable=unused-argument
     reused_modules = utils.get_reused_modules(model, model_input)
     if reused_modules:
         logger.warning('The following modules are used more than once in the model: %s\n'
@@ -64,16 +66,23 @@ def validate_for_reused_modules(model: torch.nn.Module, model_input: Union[torch
     return not reused_modules
 
 
-def validate_for_missing_modules(model: torch.nn.Module, model_input: Union[torch.Tensor, Tuple]) -> bool:
+def validate_for_missing_modules(model: torch.nn.Module, model_input: Union[torch.Tensor, Tuple],
+                                 layers_to_exclude: Union[List[torch.nn.Module], None] = None, **kwargs) -> bool:
     """
     Check if the model has any ops with missing modules (excluding a set of known ops which can be functionals).
     Returns True if there are no ops with missing modules, False otherwise.
     :param model: Pytorch model to create connected graph from
     :param model_input: Example input to model.  Can be a single tensor or a list/tuple of input tensors
+    :param layers_to_exclude: List of layers to exclude from checking for missing modules
     :return: True if model has no ops with missing modules, False otherwise.
     """
-    ops_with_missing_modules = connectedgraph_utils.get_ops_with_missing_modules(model, model_input)
-    if ops_with_missing_modules:
+    # pylint: disable=unused-argument
+    if not layers_to_exclude:
+        layers_to_exclude = []
+    filtered_ops_with_missing_modules = _get_filtered_ops_with_missing_modules(model, model_input, layers_to_exclude)
+    module_to_name_dict = utils.get_module_to_name_dict(model)
+
+    if filtered_ops_with_missing_modules:
         # TODO: replace with logger.error and assertion after rewriting unit tests to avoid using built in vgg,
         #  resnet, and inception models (since they use functionals in their models)
         warning_message = ('Functional ops were found in the model. Different AIMET features will expect ops of '
@@ -88,11 +97,42 @@ def validate_for_missing_modules(model: torch.nn.Module, model_input: Union[torc
         warning_message += f'The following functional ops were found. The parent module is named for ease of ' \
                            f'locating the ops within the model definition.\n'
         max_name_len = 0
-        for op in ops_with_missing_modules:
+        for op in filtered_ops_with_missing_modules:
             if len(op.name) > max_name_len:
                 max_name_len = len(op.name)
-        for op in ops_with_missing_modules:
+        for op in filtered_ops_with_missing_modules:
             warning_message += f'{op.name}{" " * (max_name_len + 10 - len(op.name))}parent module: ' \
-                                      f'{op.residing_module}\n'
+                               f'{module_to_name_dict.get(op.residing_module)}\n'
         logger.warning(warning_message)
-    return not ops_with_missing_modules
+    return not filtered_ops_with_missing_modules
+
+def _get_filtered_ops_with_missing_modules(model: torch.nn.Module, model_input: Union[torch.Tensor, Tuple],
+                                           layers_to_exclude: List[torch.nn.Module]) -> List[Op]:
+    """
+    Get a list of ops with missing modules excluding ones of types in excluded_layer_types, as well as ones residing
+    within layers whose types appear in excluded_layer_types.
+    :param model: Torch model to get ops with missing modules for
+    :param model_input: Dummy input to the torch model
+    :param layers_to_exclude: List of layers to exclude looking for ops with missing modules in
+    :return: List of filtered ops with missing modules
+    """
+    layers_to_exclude = set(layers_to_exclude)
+    blacklisted_layers = _get_blacklisted_layers(layers_to_exclude)
+    ops_with_missing_modules = connectedgraph_utils.get_ops_with_missing_modules(model, model_input)
+    filtered_ops_with_missing_modules = [op for op in ops_with_missing_modules if \
+                                         op.residing_module not in blacklisted_layers and \
+                                         op.type not in layers_to_exclude]
+    return filtered_ops_with_missing_modules
+
+def _get_blacklisted_layers(layers_to_exclude: Set[torch.nn.Module]) -> Set[torch.nn.Module]:
+    """
+    Get a set of modules consisting of layers to exclude and their submodules.
+    :param layers_to_exclude: Set of layers to exclude
+    :return: Set of excluded layers and their submodules.
+    """
+    blacklisted_layers = set()
+    for layer in layers_to_exclude:
+        blacklisted_layers.add(layer)
+        for module in layer.modules():
+            blacklisted_layers.add(module)
+    return blacklisted_layers
