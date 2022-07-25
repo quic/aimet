@@ -39,7 +39,7 @@
 
 import json
 import os
-from typing import Union, Dict, Tuple, Optional
+from typing import Union, Dict, Tuple, Optional, List
 import tensorflow as tf
 
 from aimet_common.defs import QuantScheme
@@ -181,7 +181,7 @@ class QuantizationSimModel:
 
 
     @staticmethod
-    def _quantizer_to_name_tuple(quantizers):
+    def _quantizer_to_name_tuple(quantizers: List[TensorQuantizer]) -> Tuple[Optional[List[str]]]:
         """
         Converts a list of quantizers to a tuple of quantizer names
         :param quantizers: quantizers
@@ -196,9 +196,9 @@ class QuantizationSimModel:
         return tuple(quant_list)
 
 
-    def get_quantizer_name_by_layer(self, layer: tf.keras.layers.Layer) -> Tuple[Optional[str],
-                                                                                 Optional[str],
-                                                                                 Optional[str]]:
+    def get_quantizer_name_by_layer(self, layer: tf.keras.layers.Layer) -> Tuple[Optional[List[str]],
+                                                                                 Optional[List[str]],
+                                                                                 Optional[List[str]]]:
         """
         Get the names of input, output and param quantizers
         :param layer: the keras layer

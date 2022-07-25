@@ -554,7 +554,7 @@ class ConnectedGraph(AimetCommonConnectedGraph):
             return self._layer_to_op.get(layer, None)
         return None
 
-    def get_layer_from_op_name(self, name: str):
+    def get_layer_from_op_name(self, name: str) -> tf.keras.layers.Layer:
         """
         Given the name of the op return the corresponding layer
         :param name: Name of the op
