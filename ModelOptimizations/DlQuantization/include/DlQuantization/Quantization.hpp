@@ -75,6 +75,10 @@ enum QuantizationMode
     // Compute the encoding by adjusting the min/max range of the tensor based on the mean square
     // error due to quantization of the tensor.
     QUANTIZATION_MSE,
+
+    // Compute the optimal quantization range (thresholds) for a tensor based on minimizing the
+    // Kullback-Leibler divergence.
+    QUANTIZATION_ENTROPY,
 };
 
 /**

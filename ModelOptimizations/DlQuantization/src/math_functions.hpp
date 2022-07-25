@@ -66,6 +66,16 @@ struct PDF
     int iterations;
 };
 
+// Profiling parameters of a tensor consisting in the global minimum and global
+// maximum values and also the histogram obtained during profiling.
+struct TensorProfilingParams
+{
+    double min;
+    double max;
+    std::vector<double> histogram;
+    int iterations;
+};
+
 // Number of buckets in histogram which we use to capture the dynamic range.
 const int PDF_SIZE = 512;
 
@@ -158,6 +168,28 @@ std::vector<std::tuple<double, double>> getCollectedHistogram(const PDF& pdf);
 
 template <typename DTYPE>
 std::tuple<DTYPE, DTYPE> findOriginalRange(const PDF& pdf);
+
+/**
+ * @brief Generate input tensor histogram based on the input tensor and existing
+ * histogram.
+ * @param data The number distribution for which we create a density function.
+ * @param tensorSize The number of data points.
+ * @param tpp histogram of float numbers seen so far.
+ */
+template <typename DTYPE>
+void updateTensorHistogram(const DTYPE* data, int tensorSize, ComputationMode mode_cpu_gpu, TensorProfilingParams& tpp);
+
+template <typename DTYPE>
+void updateTensorHistogram_cpu(const DTYPE* data, int tensorSize, TensorProfilingParams& tpp);
+
+/**
+ * @brief Function to rescale the input histogram srcHist initially computed in the
+ * range srcHistMin and srcHistMax to a new range given by destHistMin
+ * and destHistMax. The rescaled histogram has the same number of bins as
+ * the input histogram.
+ */
+std::vector<double> rescaleHistogram(const std::vector<double>& srcHist, const double srcHistMin,
+                                     const double srcHistMax, const double destHistMin, const double destHistMax);
 
 // GPU implementations...
 #ifdef GPU_QUANTIZATION_ENABLED

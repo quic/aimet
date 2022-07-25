@@ -45,6 +45,7 @@
 #include "DlQuantization/IQuantizer.hpp"
 #include "DlQuantization/Quantization.hpp"
 #include "DlQuantization/QuantizerFactory.hpp"
+#include "EntropyEncodingAnalyzer.h"
 #include "MainQuantizationClass.hpp"
 #include "MseEncodingAnalyzer.h"
 #include "PercentileEncodingAnalyzer.h"
@@ -78,6 +79,10 @@ std::unique_ptr<IQuantizationEncodingAnalyzer<DTYPE>> getEncodingAnalyzerInstanc
     else if (quantization_mode == QUANTIZATION_MSE)
     {
         return std::unique_ptr<IQuantizationEncodingAnalyzer<DTYPE>>(new MseEncodingAnalyzer<DTYPE>);
+    }
+    else if (quantization_mode == QUANTIZATION_ENTROPY)
+    {
+        return std::unique_ptr<IQuantizationEncodingAnalyzer<DTYPE>>(new EntropyEncodingAnalyzer<DTYPE>);
     }
     else
     {
