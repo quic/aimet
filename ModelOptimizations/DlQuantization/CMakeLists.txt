@@ -52,6 +52,8 @@ add_library(MoDlQuantization STATIC
       src/trim_functions.cpp
       src/trim_functions.hpp
 
+      src/EntropyEncodingAnalyzer.cpp
+      src/EntropyEncodingAnalyzer.h
       src/MseEncodingAnalyzer.cpp
       src/MseEncodingAnalyzer.h
       src/PercentileEncodingAnalyzer.cpp
