@@ -39,6 +39,7 @@
 """ Adaround optimizer """
 
 from typing import Union, Callable, Tuple
+from functools import reduce
 import numpy as np
 import tensorflow as tf
 from tensorflow import keras
@@ -64,7 +65,7 @@ class AdaroundOptimizer:
         self._beta_tensor = tf.compat.v1.placeholder(dtype=tf.float32, shape=[])
         self._inp_tensor = tf.compat.v1.placeholder(dtype=tf.float32, name='inp_tensor')
         self._out_tensor = tf.compat.v1.placeholder(dtype=tf.float32, name='out_tensor')
-        self._indices_tensor = tf.compat.v1.placeholder(shape=BATCH_SIZE, dtype=tf.int32)
+        self._indices_tensor = tf.compat.v1.placeholder(dtype=tf.int32)
         self._optimizer_session = tf.compat.v1.Session()
 
     def __del__(self):
@@ -162,9 +163,10 @@ class AdaroundOptimizer:
         """
         # pylint: disable=too-many-locals
         optimizer = keras.optimizers.Adam(learning_rate=1e-3)
+
         # Create tf.constant() operation for intermediate activation data to speed up the optimization
         # if possible otherwise fallback to original implementation which incurs CPU-GPU transfers.
-        tensors_created, inp_tensor, out_tensor = self._create_inp_and_out_tensors(all_inp_data, all_orig_out_data)
+        tensors_pinned, inp_tensor, out_tensor = self._pin_inp_and_out_tensors(all_inp_data, all_orig_out_data)
 
         for cur_iteration in tqdm(range(opt_params.num_iterations)):
 
@@ -196,10 +198,11 @@ class AdaroundOptimizer:
             feed_dict = {self._warm_start_tensor: warm_start, self._beta_tensor: beta}
             # If tensors are created and can be fit entirely in memory, then pass only indices, else
             # pass both input and output data.
-            if tensors_created:
+            if tensors_pinned:
                 feed_dict.update({self._indices_tensor: indices})
             else:
                 feed_dict.update({inp_tensor: inp_data, out_tensor: orig_out_data})
+
             _, total_loss, recon_loss, round_loss = self._optimizer_session.run([train_op, total_loss_tensor,
                                                                                  recon_loss_tensor, round_loss_tensor],
                                                                                 feed_dict=feed_dict)
@@ -255,44 +258,61 @@ class AdaroundOptimizer:
         return train_op, (total_loss, recon_loss, round_loss)
 
     @staticmethod
-    def _is_tensor_created(numpy_data: np.ndarray, name: str) -> bool:
+    def _is_tensor_pinned(numpy_data: np.ndarray, name: str) -> bool:
         """
-        Utility to see if the given numpy data can be entirely fit in the memory by creating tf.constant()
-        operation in the graph. This works well only when the numpy data is less than 2GB.
+        NOTE: there is hard limit of 2GB to create tensorflow protobuf.
+
+        Utility to see if the given numpy data can be entirely fit in the device (GPU if available) memory
+        by creating tf.constant() operation in the graph.
 
         :param numpy_data: Numpy data.
         :param name: Name of tensor to be created.
-        :return: True if tensor is created, False otherwise.
+        :return: True if tensor is created and pinned in memory, False otherwise.
         """
-        is_tensor_created = True
+        is_tensor_pinned = True
         try:
             tf.constant(numpy_data, dtype=tf.float32, name=name)
         except ValueError:
-            is_tensor_created = False
-        return is_tensor_created
+            is_tensor_pinned = False
+        return is_tensor_pinned
 
-    def _create_inp_and_out_tensors(self, all_inp_data: np.ndarray, all_orig_out_data: np.ndarray) -> \
+    def _pin_inp_and_out_tensors(self, all_inp_data: np.ndarray, all_orig_out_data: np.ndarray) -> \
             Tuple[bool, tf.Tensor, tf.Tensor]:
         """
         NOTE: there is hard limit of 2GB to create tensorflow protobuf.
 
         Create tf.constant() operations for op's intermediate activation data in the graph which will avoid
-        CPU-GPU data transfer and speed up the optimization. If we can't fit the activation data in memory,
-        then we fall back to original implementation which incurs CPU-GPU transfers.
+        CPU-GPU data transfers and speeds up the optimization. If we can't pin the activation data in device memory,
+        then we fall back to original implementation which returns placeholders for input and output tensors
+        to transfer Numpy arrays to device memory.
 
-        :param all_inp_data: Input activation data
+        :param all_inp_data: Input activation data.
         :param all_orig_out_data: Original output activation data.
-        :return: True if the tensors are created successfully (False otherwise), input tensor, output tensor.
+        :return: True if the tensors are pinned successfully in device memory (False otherwise),
+         input tensor, output tensor.
         """
-        if self._is_tensor_created(all_inp_data, name="all_inp_data") and \
-                self._is_tensor_created(all_orig_out_data, name="all_orig_out_data"):
-            inp_tensor = self._optimizer_session.graph.get_tensor_by_name("all_inp_data:0")
-            out_tensor = self._optimizer_session.graph.get_tensor_by_name("all_orig_out_data:0")
-            inp_tensor = tf.gather(inp_tensor, self._indices_tensor)
-            out_tensor = tf.gather(out_tensor, self._indices_tensor)
-            tensors_created = True
+        all_inp_data_dim = reduce(lambda x, y: x * y, all_inp_data.shape)
+        all_orig_out_data_dim = reduce(lambda x, y: x * y, all_orig_out_data.shape)
+
+        if all_inp_data_dim >= all_orig_out_data_dim:
+            larger_act_data, larger_act_data_name = all_inp_data, "all_inp_data"
+            smaller_act_data, smaller_act_data_name = all_orig_out_data, "all_orig_out_data"
         else:
-            inp_tensor = self._inp_tensor
-            out_tensor = self._out_tensor
-            tensors_created = False
-        return tensors_created, inp_tensor, out_tensor
+            larger_act_data, larger_act_data_name = all_orig_out_data, "all_orig_out_data"
+            smaller_act_data, smaller_act_data_name = all_inp_data, "all_inp_data"
+
+        inp_tensor = self._inp_tensor
+        out_tensor = self._out_tensor
+        tensors_pinned = False
+
+        # Try to fit larger activation data in memory first. If it succeeds, try to fit the other
+        # activation data in memory. If it fails in either of two the cases, fall back to original implementation.
+        if self._is_tensor_pinned(larger_act_data, name=larger_act_data_name):
+            if self._is_tensor_pinned(smaller_act_data, name=smaller_act_data_name):
+                inp_tensor = self._optimizer_session.graph.get_tensor_by_name("all_inp_data:0")
+                out_tensor = self._optimizer_session.graph.get_tensor_by_name("all_orig_out_data:0")
+                inp_tensor = tf.gather(inp_tensor, self._indices_tensor)
+                out_tensor = tf.gather(out_tensor, self._indices_tensor)
+                tensors_pinned = True
+
+        return tensors_pinned, inp_tensor, out_tensor
