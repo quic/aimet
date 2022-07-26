@@ -2,7 +2,7 @@
 //
 //  @@-COPYRIGHT-START-@@
 //
-//  Copyright (c) 2016-2017, Qualcomm Innovation Center, Inc. All rights reserved.
+//  Copyright (c) 2016-2022, Qualcomm Innovation Center, Inc. All rights reserved.
 //
 //  Redistribution and use in source and binary forms, with or without
 //  modification, are permitted provided that the following conditions are met:
@@ -35,8 +35,6 @@
 //  @@-COPYRIGHT-END-@@
 //
 //==============================================================================
-
-
 #ifndef QUANTIZER_FACTORY_HPP
 #define QUANTIZER_FACTORY_HPP
 
@@ -44,6 +42,8 @@
 #include <string>
 #include <vector>
 
+
+#include "DlQuantization/GraphQuantizer.h"
 #include "DlQuantization/IQuantizationEncodingAnalyzer.hpp"
 #include "DlQuantization/IQuantizer.hpp"
 #include "DlQuantization/ITensorQuantizationSim.h"
@@ -51,6 +51,7 @@
 
 namespace DlQuantization
 {
+
 /**
  * @brief Create an object for fixed point quantization.
  * @param layer_names The activations of these layers will get quantized to
@@ -84,6 +85,9 @@ std::unique_ptr<IQuantizationEncodingAnalyzer<DTYPE>> getEncodingAnalyzerInstanc
 
 template <typename DTYPE>
 std::unique_ptr<ITensorQuantizationSim<DTYPE>> getTensorQuantizationSim();
+
+std::unique_ptr<GraphQuantizer> getGraphQuantizerInstance(const std::vector<std::string>& tensorNames,
+                                                          ComputationMode modeCpuGpu, QuantizationMode quantMode);
 
 }   // End of namespace DlQuantization
 

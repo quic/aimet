@@ -44,7 +44,6 @@
 #include <DlQuantization/IQuantizationEncodingAnalyzer.hpp>
 #include <DlQuantization/ITensorQuantizationSim.h>
 #include <DlQuantization/Quantization.hpp>
-#include <DlQuantization/QuantizerFactory.hpp>
 #include "DlQuantization/TensorQuantizerOpFacade.h"
 
 

@@ -64,6 +64,12 @@ IQuantizer<DTYPE>* GetQuantizerInstance(const std::vector<std::string>& layer_na
     return instance;
 }
 
+std::unique_ptr<GraphQuantizer> getGraphQuantizerInstance (const std::vector<std::string>& tensorNames,
+                                                          ComputationMode modeCpuGpu,
+                                                          QuantizationMode quantMode){
+    return std::unique_ptr<GraphQuantizer>(new GraphQuantizer(tensorNames, modeCpuGpu, quantMode));
+}
+
 template <typename DTYPE>
 std::unique_ptr<IQuantizationEncodingAnalyzer<DTYPE>> getEncodingAnalyzerInstance(QuantizationMode quantization_mode)
 {
