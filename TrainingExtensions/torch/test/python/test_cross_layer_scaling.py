@@ -37,6 +37,8 @@
 # =============================================================================
 
 import unittest.mock
+
+import pytest
 import torch
 from torchvision import models
 
@@ -390,6 +392,24 @@ class TestTrainingExtensionsCrossLayerScaling(unittest.TestCase):
         output_after_scale = model(random_input)
         self.assertTrue(torch.allclose(output_before_scale, output_after_scale))
 
+    @pytest.mark.cuda
+    def test_auto_cls_custom_model_multi_gpu(self):
+
+        torch.manual_seed(10)
+        model = MyModel()
+        model.eval()
+        model = torch.nn.DataParallel(model)
+        model.to(device='cuda:0')
+        random_input = torch.rand(2, 10, 24, 24).to(device='cuda:0')
+        output_before_scale = model(random_input)
+
+        # BN fold
+        fold_all_batch_norms(model, (2, 10, 24, 24))
+
+        scale_factors = CrossLayerScaling.scale_model(model, (2, 10, 24, 24))
+
+        output_after_scale = model(random_input)
+        self.assertTrue(torch.allclose(output_before_scale, output_after_scale))
 
     def test_auto_cle_custom_model(self):
 
@@ -397,6 +417,23 @@ class TestTrainingExtensionsCrossLayerScaling(unittest.TestCase):
         model = MyModel()
         model.eval()
         random_input = torch.rand(2, 10, 24, 24)
+        output_before_equalize = model(random_input)
+
+        equalize_model(model, (2, 10, 24, 24))
+
+        output_after_equalize = model(random_input)
+        self.assertTrue(torch.allclose(output_before_equalize, output_after_equalize))
+
+    @pytest.mark.cuda
+    def test_auto_cle_custom_model_multi_gpu(self):
+
+        torch.manual_seed(10)
+        model = MyModel()
+        model.eval()
+        model = torch.nn.DataParallel(model)
+        model.to(device='cuda:0')
+
+        random_input = torch.rand(2, 10, 24, 24).to(device='cuda:0')
         output_before_equalize = model(random_input)
 
         equalize_model(model, (2, 10, 24, 24))
