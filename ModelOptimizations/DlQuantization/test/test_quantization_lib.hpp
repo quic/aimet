@@ -234,6 +234,14 @@ static bool compareEncodings(TfEncoding e0, TfEncoding e1) {
     return result;
 }
 
+static void compareEncodings(TfEncoding e0, TfEncoding e1, double err) {
+
+    EXPECT_NEAR(e0.min, e1.min, err);
+    EXPECT_NEAR(e0.max, e1.max, err);
+    EXPECT_NEAR(e0.delta, e1.delta, err);
+    EXPECT_NEAR(e0.offset, e1.offset, err);
+}
+
 template <typename T>
 void printTensors(const T* v1, const T* v2, uint32_t size) {
     std::cout << "Got tensor: ";;

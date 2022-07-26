@@ -48,5 +48,6 @@
 #include <DlQuantization/Quantization.hpp>
 #include <DlQuantization/ITensorQuantizationSim.h>
 #include <DlQuantization/TensorQuantizer.h>
+#include <DlQuantization/QuantizerFactory.hpp>
 
 #endif   // QC_QUANTIZE_PER_CHANNEL_OP_HPP
