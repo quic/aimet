@@ -710,6 +710,23 @@ class TestTrainingExtensionBnFold:
         assert model.conv1d.weight.device == model.conv1d.bias.device
         assert model.conv1d.weight.dtype == model.conv1d.bias.dtype
 
+    @pytest.mark.cuda
+    def test_multi_gpu(self):
+
+        torch.manual_seed(10)
+        model = MyModel()
+        model.eval()
+        model = torch.nn.DataParallel(model)
+        model.to(device='cuda:0')
+        random_input = torch.rand(2, 10, 24, 24).to(device='cuda:0')
+        output_before = model(random_input)
+
+        # BN fold
+        fold_all_batch_norms(model, (2, 10, 24, 24))
+
+        output_after = model(random_input)
+        assert torch.allclose(output_before, output_after)
+
     def test_fold_bn_before_Conv1d_with_bias(self):
 
         class MyModel(torch.nn.Module):

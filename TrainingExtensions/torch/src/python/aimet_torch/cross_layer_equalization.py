@@ -551,7 +551,8 @@ class CrossLayerScaling:
         :param input_shapes: Input shape for the model (can be one or multiple inputs)
         :return: CLS information for each CLS set
         """
-
+        if isinstance(model, torch.nn.DataParallel):
+            return CrossLayerScaling.scale_model(model.module, input_shapes)
         device = get_device(model)
         model.cpu()
 
@@ -678,15 +679,16 @@ def equalize_model(model: torch.nn.Module, input_shapes: Union[Tuple, List[Tuple
     :param input_shapes: Shape of the input (can be a tuple or a list of tuples if multiple inputs)
     :return: None
     """
+    if isinstance(model, torch.nn.DataParallel):
+        equalize_model(model.module, input_shapes)
+    else:
+        device = get_device(model)
+        model.cpu()
+        # fold batchnorm layers
+        folded_pairs = fold_all_batch_norms(model, input_shapes)
+        equalize_bn_folded_model(model, input_shapes, folded_pairs)
 
-    device = get_device(model)
-    model.cpu()
-
-    # fold batchnorm layers
-    folded_pairs = fold_all_batch_norms(model, input_shapes)
-    equalize_bn_folded_model(model, input_shapes, folded_pairs)
-
-    model.to(device=device)
+        model.to(device=device)
 
 
 def equalize_bn_folded_model(model: torch.nn.Module,
@@ -701,21 +703,23 @@ def equalize_bn_folded_model(model: torch.nn.Module,
     :param folded_pairs: List of pairs of folded layers
     :return: None
     """
+    if isinstance(model, torch.nn.DataParallel):
+        equalize_bn_folded_model(model.module, input_shapes, folded_pairs)
+    else:
+        device = get_device(model)
+        model.cpu()
 
-    device = get_device(model)
-    model.cpu()
+        bn_dict = {}
+        for conv_bn in folded_pairs:
+            bn_dict[conv_bn[0]] = conv_bn[1]
 
-    bn_dict = {}
-    for conv_bn in folded_pairs:
-        bn_dict[conv_bn[0]] = conv_bn[1]
+        # replace any ReLU6 layers with ReLU
+        utils.replace_modules_of_type1_with_type2(model, torch.nn.ReLU6, torch.nn.ReLU)
 
-    # replace any ReLU6 layers with ReLU
-    utils.replace_modules_of_type1_with_type2(model, torch.nn.ReLU6, torch.nn.ReLU)
+        # perform cross-layer scaling on applicable layer sets
+        cls_set_info_list = CrossLayerScaling.scale_model(model, input_shapes)
 
-    # perform cross-layer scaling on applicable layer sets
-    cls_set_info_list = CrossLayerScaling.scale_model(model, input_shapes)
+        # high-bias fold
+        HighBiasFold.bias_fold(cls_set_info_list, bn_dict)
 
-    # high-bias fold
-    HighBiasFold.bias_fold(cls_set_info_list, bn_dict)
-
-    model.to(device=device)
+        model.to(device=device)

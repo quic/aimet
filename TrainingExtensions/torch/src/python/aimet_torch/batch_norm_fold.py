@@ -391,6 +391,8 @@ def fold_all_batch_norms_to_weight(
     :param fold_to_scale: If True, fold BatchNorms to quantization scale parameter.
     :return: A list of pairs of layers [(Conv/Linear, BN layer that got folded)]
     """
+    if isinstance(model, torch.nn.DataParallel):
+        return fold_all_batch_norms_to_weight(model.module, input_shapes)
     device = utils.get_device(model)
     inp_tensor_list = [t.to(device) for t in utils.create_rand_tensors_given_shapes(input_shapes)]
     connected_graph = ConnectedGraph(model, inp_tensor_list)
