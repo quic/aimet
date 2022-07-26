@@ -206,6 +206,7 @@ class QuantizableMultiheadAttention(nn.MultiheadAttention):
         # for the type: ignore, see https://github.com/pytorch/pytorch/issues/58969
         self.out_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=bias, **factory_kwargs)  # type: ignore[assignment]
 
+        self.div = elementwise_ops.Divide()
         self.matmul_1 = elementwise_ops.MatMul()
         self.matmul_2 = elementwise_ops.MatMul()
         self.softmax = torch.nn.Softmax(dim=-1)
@@ -305,7 +306,7 @@ class QuantizableMultiheadAttention(nn.MultiheadAttention):
         k = self.linear_K(key)
         v = self.linear_V(value)
         scaling = float(head_dim) ** 0.5
-        q = self.linear_Q(query) / scaling
+        q = self.div(self.linear_Q(query), scaling)
 
         if attn_mask is not None:
             assert attn_mask.dtype == torch.float32 or attn_mask.dtype == torch.float64 or \
