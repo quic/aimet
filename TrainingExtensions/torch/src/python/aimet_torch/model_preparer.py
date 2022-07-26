@@ -534,8 +534,8 @@ def prepare_pt_transformer_for_quantsim(transformer_model: torch.nn.Module):
     for module in transformer_model.modules():
 
         # encoder layer or decoder layer type is the leaf level node to be updated within nn.transformer layer
-        if isinstance(module, torch.nn.TransformerEncoderLayer):
+        if isinstance(module, torch.nn.TransformerEncoderLayer) and not isinstance(module.activation, torch.nn.Module):
             module.activation = get_module_for_activation_fn(module.activation)
 
-        if isinstance(module, torch.nn.TransformerDecoderLayer):
+        if isinstance(module, torch.nn.TransformerDecoderLayer) and not isinstance(module.activation, torch.nn.Module):
             module.activation = get_module_for_activation_fn(module.activation)
