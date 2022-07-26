@@ -423,3 +423,17 @@ class TestQuantAnalyzer:
         finally:
             if os.path.isdir("./tmp/"):
                 shutil.rmtree("./tmp/")
+
+    def test_exclude_modules_from_quantization(self):
+        """ test ability to exclude modules from quantization """
+        input_shape = (1, 3, 32, 32)
+        dummy_input = torch.randn(*input_shape)
+        model = TinyModel().eval()
+        sim = QuantizationSimModel(model, dummy_input)
+
+        assert isinstance(sim.model.conv1, QcQuantizeWrapper)
+        assert isinstance(sim.model.fc, QcQuantizeWrapper)
+        QuantAnalyzer._exclude_modules_from_quantization(model, sim, modules_to_ignore=[model.conv1,
+                                                                                        model.fc])
+        assert not isinstance(sim.model.conv1, QcQuantizeWrapper)
+        assert not isinstance(sim.model.fc, QcQuantizeWrapper)
