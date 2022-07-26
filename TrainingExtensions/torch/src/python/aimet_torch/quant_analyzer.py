@@ -39,6 +39,7 @@
 """ Quant Analyzer """
 
 import os
+import json
 import pickle
 import shutil
 from collections import OrderedDict, defaultdict
@@ -54,6 +55,7 @@ from aimet_torch.tensor_quantizer import TensorQuantizer, StaticGridTensorQuanti
 from aimet_torch.qc_quantize_op import QcQuantizeWrapper
 from aimet_torch.qc_quantize_recurrent import QcQuantizeRecurrent
 from aimet_torch.quantsim import QuantizationSimModel
+from aimet_torch.batch_norm_fold import fold_all_batch_norms
 
 _logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Quant)
 
@@ -87,6 +89,7 @@ class QuantAnalyzer:
                  dummy_input: Union[torch.Tensor, Tuple],
                  forward_pass_callback: CallbackFunc,
                  eval_callback: CallbackFunc,
+                 modules_to_ignore: List[torch.nn.Module] = None,
                  ):
         """
         :param model: FP32 model to analyze for quantization.
@@ -98,6 +101,7 @@ class QuantAnalyzer:
         :param eval_callback: A callback function for model evaluation that determines model
                 performance. This callback function is expected to return scalar value
                 representing the model performance evaluated against entire test/evaluation dataset.
+        :param modules_to_ignore: Excludes certain modules from being analyzed.
         """
         if not isinstance(forward_pass_callback, CallbackFunc):
             raise ValueError('forward_pass_callback and its argument(s) are not encapsulated by CallbackFunc class.')
@@ -109,6 +113,7 @@ class QuantAnalyzer:
         self._forward_pass_callback = forward_pass_callback
         self._eval_callback = eval_callback
         self._enable_per_layer_mse_loss = False
+        self._modules_to_ignore = modules_to_ignore
 
     def analyze(self,
                 quant_scheme: QuantScheme = QuantScheme.post_training_tf_enhanced,
@@ -131,14 +136,10 @@ class QuantAnalyzer:
         :param config_file: Path to configuration file for model quantizers.
         :param results_dir: Directory to save the results.
         """
-        kwargs = dict(
-            quant_scheme=quant_scheme,
-            default_output_bw=default_output_bw,
-            default_param_bw=default_param_bw,
-            config_file=config_file,
-        )
-        sim = QuantizationSimModel(self._model, self._dummy_input, **kwargs)
-        sim.compute_encodings(self._forward_pass_callback.func, self._forward_pass_callback.args)
+        sim = self._create_quantsim_and_encodings(quant_scheme,
+                                                  default_param_bw,
+                                                  default_output_bw,
+                                                  config_file)
 
         results_dir = os.path.abspath(results_dir)
         os.makedirs(results_dir, exist_ok=True)
@@ -163,6 +164,37 @@ class QuantAnalyzer:
         #TODO: The following check will be removed, once MSE loss calculation is refactored.
         if self._enable_per_layer_mse_loss:
             self._export_per_layer_mse_loss(sim, results_dir)
+
+    def _create_quantsim_and_encodings(self, quant_scheme: QuantScheme, default_param_bw: int,
+                                       default_output_bw: int, config_file: str) \
+            -> QuantizationSimModel:
+        """
+        Create Quantsim and compute encodings.
+
+        :param quant_scheme: Quantization scheme.
+        :param default_param_bw: Default bitwidth (4-31) to use for quantizing layer parameters.
+        :param default_output_bw: Default bitwidth (4-31) to use for quantizing layer inputs and outputs.
+        :param config_file: Path to configuration file for model quantizers.
+        :return: Quantsim model.
+        """
+        if isinstance(self._dummy_input, torch.Tensor):
+            input_shape = tuple(self._dummy_input.shape)
+        else:
+            input_shape = [tuple(x.shape) for x in self._dummy_input]
+        _ = fold_all_batch_norms(self._model, input_shape)
+
+        kwargs = dict(
+            quant_scheme=quant_scheme,
+            default_output_bw=default_output_bw,
+            default_param_bw=default_param_bw,
+            config_file=config_file,
+        )
+        sim = QuantizationSimModel(self._model, self._dummy_input, **kwargs)
+        if self._modules_to_ignore:
+            self._exclude_modules_from_quantization(self._model, sim, self._modules_to_ignore)
+
+        sim.compute_encodings(self._forward_pass_callback.func, self._forward_pass_callback.args)
+        return sim
 
     def _eval_weight_quantized_model(self, sim: QuantizationSimModel)-> float:
         """
@@ -653,6 +685,9 @@ class QuantAnalyzer:
         self._export_per_layer_sensitivity_analysis_plot(layer_wise_eval_score_dict,
                                                          results_dir,
                                                          title="per_layer_quant_enabled")
+        self._save_json(layer_wise_eval_score_dict,
+                        results_dir,
+                        title="per_layer_quant_enabled.json")
         return layer_wise_eval_score_dict
 
     def _perform_per_layer_analysis_by_disabling_quant_wrappers(self,
@@ -686,6 +721,9 @@ class QuantAnalyzer:
         self._export_per_layer_sensitivity_analysis_plot(layer_wise_eval_score_dict,
                                                          results_dir,
                                                          title="per_layer_quant_disabled")
+        self._save_json(layer_wise_eval_score_dict,
+                        results_dir,
+                        title="per_layer_quant_disabled.json")
         return layer_wise_eval_score_dict
 
     def _export_per_layer_encoding_min_max_range(self,
@@ -747,6 +785,9 @@ class QuantAnalyzer:
         self._create_and_export_min_max_ranges_plot(min_max_range_for_activations_dict,
                                                     min_max_ranges_dir,
                                                     title="activations")
+
+        self._save_json(min_max_range_for_weights_dict, min_max_ranges_dir, title="weights.json")
+        self._save_json(min_max_range_for_activations_dict, min_max_ranges_dir, title="activations.json")
 
         return min_max_range_for_weights_dict, min_max_range_for_activations_dict
 
@@ -844,3 +885,41 @@ class QuantAnalyzer:
         Enable per layer MSE analysis.
         """
         self._enable_per_layer_mse_loss = True
+
+    @staticmethod
+    def _exclude_modules_from_quantization(model: torch.nn.Module, sim: QuantizationSimModel,
+                                           modules_to_ignore: List[torch.nn.Module]):
+        """
+        For the modules in the modules_to_ignore, remove the corresponding quant wrappers.
+
+        :param model: Original model.
+        :param sim: Quantsim model.
+        :param modules_to_ignore: The list of modules for which the quant wrappers are removed.
+        """
+        name_to_quant_wrapper_dict = {}
+        for name, module in sim.model.named_modules():
+            name_to_quant_wrapper_dict[name] = module
+
+        module_to_name_dict = {}
+        for name, module in model.named_modules():
+            module_to_name_dict[module] = name
+
+        quant_wrappers_to_ignore = []
+        for module in modules_to_ignore:
+            name = module_to_name_dict[module]
+            quant_wrapper = name_to_quant_wrapper_dict[name]
+            quant_wrappers_to_ignore.append(quant_wrapper)
+
+        sim.exclude_layers_from_quantization(quant_wrappers_to_ignore)
+
+    @staticmethod
+    def _save_json(dictionary: Dict, results_dir: str, title: str):
+        """
+        Save dictionary in JSON format.
+        :param dictionary: Dictionary to be saved.
+        :param results_dir: Directory to save the results.
+        :param title: Title of the file.
+        """
+        filename = os.path.join(results_dir, title)
+        with open(filename, 'w') as f:
+            json.dump(dictionary, f, indent=4)
