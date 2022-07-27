@@ -494,3 +494,80 @@ def test_quantizable_mha_with_mask():
 
     # check that QcQuantizableMultiHeadAttention exists in QuantSim model.layers
     assert any(isinstance(layer, QcQuantizableMultiHeadAttention) for layer in quantized_model.model.layers)
+
+def test_quantizable_mha_encodings():
+    B = 5
+    T = 8
+    S = 4
+
+    q_inputs = keras.Input(shape=(T, 16))
+    v_inputs = keras.Input(shape=(S, 16))
+    k_inputs = keras.Input(shape=(S, 16))
+    m_inputs = keras.Input(shape=(T, S))
+    model_output = keras.layers.MultiHeadAttention(key_dim=2, num_heads=2)(q_inputs, v_inputs, k_inputs, m_inputs)
+    unquantized_model = keras.Model(inputs=[q_inputs, v_inputs, k_inputs, m_inputs], outputs=model_output)
+
+    quantized_model = QuantizationSimModel(unquantized_model)
+
+    rng = np.random.default_rng(seed=42)
+    query = rng.random([B, T, 16])
+    value = rng.random([B, S, 16])
+    key = rng.random([B, S, 16])
+    mask = np.zeros([B, T, S])
+
+    quantized_model.compute_encodings(lambda m, _: m([query, value, key, mask]), None)
+
+    query = query * 10
+    value = value * 10
+    key = key * 10
+
+    unquantized_model_tensor = unquantized_model([query, value, key, mask]).numpy().flatten()
+    quantized_model_tensor = quantized_model.model([query, value, key, mask]).numpy().flatten()
+
+    output_encoding_min = quantized_model.model.layers[-1]._wrapped_layers[-1].output_quantizers[0]._encoding_min
+    output_encoding_max = quantized_model.model.layers[-1]._wrapped_layers[-1].output_quantizers[0]._encoding_max
+
+    # checking to make sure all outputs fall within the limits set by the output quantizer
+    FLOAT_DELTA = 0.0001
+    assert all((quantized_model_tensor >= output_encoding_min - FLOAT_DELTA) &
+               (quantized_model_tensor <= output_encoding_max + FLOAT_DELTA))
+    assert abs(quantized_model_tensor.min() - output_encoding_min) < FLOAT_DELTA
+    assert abs(quantized_model_tensor.max() - output_encoding_max) < FLOAT_DELTA
+
+def test_quantizable_mha_export_encodings():
+    B = 5
+    T = 8
+    S = 4
+
+    # STAGE 1 MODEL - model created with layers.MultiHeadAttention
+    stage_1_q_inputs = keras.Input(shape=(T, 16))
+    stage_1_v_inputs = keras.Input(shape=(S, 16))
+    stage_1_output = keras.layers.MultiHeadAttention(key_dim=2, num_heads=2)(stage_1_q_inputs, stage_1_v_inputs)
+    stage_1_model = keras.Model(inputs=[stage_1_q_inputs, stage_1_v_inputs], outputs=stage_1_output)
+
+    # STAGE 3 MODEL - model created using QuantSim
+    stage_3_model = QuantizationSimModel(stage_1_model)
+
+    rng = np.random.default_rng(seed=42)
+    query = rng.random([B, T, 16]) * 100
+    value = rng.random([B, S, 16]) * 100
+
+    stage_3_model.compute_encodings(lambda m, _: m([query, value]), None)
+    stage_3_model.export('./data', 'mha')
+
+    with open("./data/mha.encodings", "r") as encodings_file:
+        encodings = json.load(encodings_file)
+
+    for wrapper in stage_3_model.model.layers[2]._wrapped_layers:
+        for io_quantizer in wrapper.input_quantizers + wrapper.output_quantizers:
+            if io_quantizer.encoding is not None:
+                tensor_name = wrapper.name + "/" + io_quantizer.name
+                encoding_dict = QuantizationSimModel._get_encoding_dict_for_quantizer(io_quantizer)
+                assert tensor_name in encodings['activation_encodings']
+                assert encodings['activation_encodings'][tensor_name] == encoding_dict
+        for idx, param_quantizer in enumerate(wrapper.param_quantizers):
+            if param_quantizer.encoding is not None:
+                param_name = wrapper._layer_to_wrap.weights[idx].name
+                encoding_dict = QuantizationSimModel._get_encoding_dict_for_quantizer(param_quantizer)
+                assert param_name in encodings['param_encodings']
+                assert encodings['param_encodings'][param_name] == encoding_dict
