@@ -561,8 +561,13 @@ class QuantizerInfo:
         varhandle_list = varhandle_tensor.consumers()
         assert len(varhandle_list) >= 3
 
-        readvariable_op = varhandle_list[2]
-        assert readvariable_op.type == 'ReadVariableOp'
+        readvariable_op = None
+        for consumer_op in varhandle_list:
+            if consumer_op.name.startswith(varhandle_tensor.op.name):
+                readvariable_op = consumer_op
+                break
+
+        assert readvariable_op
         assert len(readvariable_op.outputs) == 1
 
         return readvariable_op.outputs[0]
