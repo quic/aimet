@@ -39,7 +39,7 @@
 
 import json
 import os
-from typing import Union, Dict, Tuple, Optional
+from typing import Union, Dict, Tuple, Optional, List
 import tensorflow as tf
 
 from aimet_common.defs import QuantScheme
@@ -89,7 +89,7 @@ class QuantizationSimModel:
             self._model_without_wrappers.set_weights(model.get_weights())
         self._layer_name_to_quant_wrapper = {}
         self._validate_model()
-
+        self.connected_graph = ConnectedGraph(self._model_without_wrappers)
         self._quantsim_configurator = self._initialize_quantsim_configurator(quant_scheme, rounding_mode,
                                                                              default_output_bw, default_param_bw,
                                                                              config_file)
@@ -126,8 +126,7 @@ class QuantizationSimModel:
         :param config_file: Path to a config file to use to specify rules for placing quant ops in the model
         :return: QuantSimConfigurator
         """
-        connected_graph = ConnectedGraph(self._model_without_wrappers)
-        return QuantSimConfigurator(connected_graph, quant_scheme, rounding_mode,
+        return QuantSimConfigurator(self.connected_graph, quant_scheme, rounding_mode,
                                     default_output_bw, default_param_bw, config_file)
 
     def _add_quantization_wrappers(self, quant_scheme, rounding_mode, default_output_bw, default_param_bw):
@@ -191,6 +190,39 @@ class QuantizationSimModel:
 
         return input_quantizers, output_quantizers, param_quantizers
 
+
+    @staticmethod
+    def _quantizer_to_name_tuple(quantizers: List[TensorQuantizer]) -> Tuple[Optional[List[str]]]:
+        """
+        Converts a list of quantizers to a tuple of quantizer names
+        :param quantizers: quantizers
+        :return: tuple of quantizer names
+        """
+        quant_list = []
+        if not quantizers:
+            return None
+
+        for quantizer in quantizers:
+            quant_list.append(quantizer.name)
+        return tuple(quant_list)
+
+
+    def get_quantizer_name_by_layer(self, layer: tf.keras.layers.Layer) -> Tuple[Optional[List[str]],
+                                                                                 Optional[List[str]],
+                                                                                 Optional[List[str]]]:
+        """
+        Get the names of input, output and param quantizers
+        :param layer: the keras layer
+        :return: Tuple of quantizer names
+        """
+        input_quantizers, output_quantizers, param_quantizers = self._get_quantizers_by_layer(layer)
+        output_quantizers_names = self._quantizer_to_name_tuple(output_quantizers)
+        input_quantizers_names = self._quantizer_to_name_tuple(input_quantizers)
+        parameter_quantizers_names = self._quantizer_to_name_tuple(param_quantizers)
+
+        return input_quantizers_names, output_quantizers_names, parameter_quantizers_names
+
+
     def _disable_quantizers_in_folded_batchnorm(self):
         """
         Disable input/output/param quantizers if layer is folded batch normalization
@@ -221,7 +253,7 @@ class QuantizationSimModel:
         encoding_dict['dtype'] = 'int'
         return encoding_dict
 
-    def _get_encodings_dict(self) -> Dict[str, Union[str, Dict]]:
+    def get_encodings_dict(self) -> Dict[str, Union[str, Dict]]:
         """
         Get encodings dict containing all activation and parameter encodings info in the model
         :return: Dictionary containing all activation and parameter encodings info in the model
@@ -282,7 +314,7 @@ class QuantizationSimModel:
         model_path = os.path.join(path, filename_prefix)
         self._model_without_wrappers.save(model_path)
         self._model_without_wrappers.save(model_path + '.h5', save_format='h5')
-        encodings_dict = self._get_encodings_dict()
+        encodings_dict = self.get_encodings_dict()
         encoding_file_path = os.path.join(path, filename_prefix + '.encodings')
         save_json_yaml(encoding_file_path, encodings_dict)
 
