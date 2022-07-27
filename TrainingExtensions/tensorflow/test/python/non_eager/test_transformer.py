@@ -801,6 +801,59 @@ class TransformerQuantizationUnittests(unittest.TestCase):
         del sim
         sess.close()
 
+    def test_hf_bert_embedding_multiple_readvar(self):
+        tf.compat.v1.reset_default_graph()
+
+        input_ids = tf.keras.Input([512], dtype=tf.int32, name='input_ids')
+        token_type_ids = tf.constant(0, dtype=tf.int32, shape=(1, 512))
+        embedding = transformers.models.bert.modeling_tf_bert.TFBertEmbeddings(BertConfig())
+
+        outputs = embedding(input_ids=input_ids, token_type_ids=token_type_ids)
+        additional_op1 = tf.math.add(embedding.weight, 1)
+        additional_op2 = tf.math.add(embedding.weight, 1)
+
+        sess = tf.compat.v1.Session()
+        initialize_uninitialized_vars(sess)
+
+        sim = QuantizationSimModel(sess, [input_ids.op.name, token_type_ids.op.name], [outputs.op.name], use_cuda=False)
+
+        sim.compute_encodings(random_input_forward_pass, {
+            'input_tensor': 'input_ids:0',
+            'input_shape': (1, 512),
+            'output_tensor': 'tf_bert_embeddings/dropout/Identity:0',
+            'int': True
+        })
+
+        quant_ops = {op.name: op for op in sim.session.graph.get_operations() if op.type == 'QcQuantize'}
+        quant_ops_to_check = []
+
+        layernorm_quant = 'tf_bert_embeddings/LayerNorm/batchnorm/add_1_quantized'
+        add_1_quant = 'tf_bert_embeddings/add/add_1_quantized'
+        add_quant = 'tf_bert_embeddings/add/add_quantized'
+
+        quant_ops_to_check += [(layernorm_quant, True), (add_1_quant, True), (add_quant, True)]
+
+        token_quant = 'tf_bert_embeddings/Gather_2_quantized'
+        position_quant = 'tf_bert_embeddings/Identity_1_quantized'
+        word_quant = 'tf_bert_embeddings/Gather_quantized'
+        beta_quant = 'tf_bert_embeddings/LayerNorm/batchnorm/ReadVariableOp_quantized'
+        gamma_quant = 'tf_bert_embeddings/LayerNorm/batchnorm/mul/ReadVariableOp_quantized'
+
+        quant_ops_to_check += [(token_quant, True), (position_quant, True), (word_quant, True), (gamma_quant, True),
+                               (beta_quant, False)]
+
+        # Check if quant op exists and check encoding
+        # Pop quantizer from quant_ops list if it is found
+        for quant_op_name, enabled in quant_ops_to_check:
+            quant_op = quant_ops.pop(quant_op_name)
+            self.assertTrue(quant_op)
+            self.assertTrue(check_encoding(quant_op, sim, enabled))
+
+        self.assertTrue(len(quant_ops) == 0)
+
+        del sim
+        sess.close()
+
 
 def check_quant_info(quant_info, enabled):
     # Check settings
