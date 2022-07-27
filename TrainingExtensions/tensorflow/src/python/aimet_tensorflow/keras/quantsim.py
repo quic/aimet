@@ -264,7 +264,12 @@ class QuantizationSimModel:
         for wrapper in self.quant_wrappers():
             for idx, input_quantizer in enumerate(wrapper.input_quantizers):
                 if input_quantizer.encoding is not None:
-                    tensor_name = wrapper._layer_to_wrap.inbound_nodes[0].keras_inputs[idx].name
+                    # because dense layers in quantizable MHA are not explicitly sublayers, they don't have their
+                    # inbound_nodes parameter populated, so the name of the quantizer is used instead
+                    if not wrapper._layer_to_wrap.inbound_nodes:
+                        tensor_name = wrapper.name + "/" + input_quantizer.name
+                    else:
+                        tensor_name = wrapper._layer_to_wrap.inbound_nodes[0].keras_inputs[idx].name
                     encoding_dict = self._get_encoding_dict_for_quantizer(input_quantizer)
                     activation_encodings[tensor_name] = encoding_dict
             for idx, param_quantizer in enumerate(wrapper.param_quantizers):
@@ -274,7 +279,12 @@ class QuantizationSimModel:
                     param_encodings[param_name] = encoding_dict
             for idx, output_quantizer in enumerate(wrapper.output_quantizers):
                 if output_quantizer.encoding is not None:
-                    tensor_name = wrapper._layer_to_wrap.output.name
+                    # because dense layers in quantizable MHA are not explicitly sublayers, they don't have their
+                    # inbound_nodes parameter populated, so the name of the quantizer is used instead
+                    if not wrapper._layer_to_wrap.inbound_nodes:
+                        tensor_name = wrapper.name + "/" + output_quantizer.name
+                    else:
+                        tensor_name = wrapper._layer_to_wrap.output.name
                     encoding_dict = self._get_encoding_dict_for_quantizer(output_quantizer)
                     activation_encodings[tensor_name] = encoding_dict
         encodings_dict = {'version': encoding_version,

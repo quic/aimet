@@ -131,14 +131,22 @@ class QcQuantizableMultiHeadAttention(MultiHeadAttention):
             _, _, output_rank = _build_proj_equation(query_shape.rank - 1, bound_dims=1, output_dims=2)
             output_shape = _get_output_shape(output_rank, [self._num_heads, self._key_dim])
 
-            self._query_dense.build(query_shape)
-            self._value_dense.build(value_shape)
-            self._key_dense.build(key_shape)
-            self._output_dense.build(output_shape)
+            with tf.name_scope("query"):
+                self._query_dense.build(query_shape)
+            with tf.name_scope("value"):
+                self._value_dense.build(value_shape)
+            with tf.name_scope("key"):
+                self._key_dense.build(key_shape)
+            with tf.name_scope("attention_output"):
+                self._output_dense.build(output_shape)
 
             if self.copy_source_weights is not None:
                 new_weights = self.get_weights()
+                # Weights 0-5 in QcQuantizableMultiHeadAttention correspond to the weights 0-5 in Keras MHA, and
+                # represent the weights and biases associated with the query, key, and value feedforward layers
                 new_weights[0:6] = self.copy_source_weights[0:6]
+                # Weights 32-33 in QcQuantizableMultiHeadAttention correspond to the weights 6-7 in Keras MHA, and
+                # represent the output feedforward layer weights and biases
                 new_weights[32:34] = self.copy_source_weights[6:8]
                 self.set_weights(new_weights)
 
@@ -266,7 +274,7 @@ class QcQuantizableMultiHeadAttention(MultiHeadAttention):
         """Function to reactivate quantizers during forward pass"""
         self._remove_quantizers = False
 
-    def quant_layers(self):
+    def quant_wrappers(self):
         """Function to allow QuantizationSimModel to access local quantization wrappers"""
         for layer in self._wrapped_layers:
             yield layer
