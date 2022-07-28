@@ -43,6 +43,8 @@ import numpy as np
 import torch
 
 import aimet_common.libpymo as libpymo
+from torch.autograd import Variable
+
 from aimet_common.defs import MAP_ROUND_MODE_TO_PYMO, QuantizationDataType
 from aimet_torch.qc_quantize_op import StaticGridQuantWrapper, LearnedGridQuantWrapper, SteGatingFuncForParameters, \
     QcQuantizeOpMode
@@ -488,6 +490,66 @@ class CustomFunc(torch.autograd.Function):
         return grad_input, grad_min, grad_max, None, None
 
 
+class OptimizedCustomFunc(torch.autograd.Function):
+    @staticmethod
+    def forward(ctx, tensor, enc_min, enc_max, n, p):
+        """
+        Forward pass function
+        :param ctx: context
+        :param tensor: input tensor
+        :param enc_min: encoding min
+        :param enc_max: encoding max
+        :param n: lower bound for a given bitwidth and symmetric/asymmetric encoding
+        :param p: upper bound for a given bitwidth and symmetric/asymmetric encoding
+        :return: computed quant dequant output
+        """
+        bitwidth = 8
+        steps = 2 ** bitwidth - 1
+        delta = (enc_max - enc_min) / steps
+        offset = torch.round(enc_min / delta)
+
+        quantize_out = torch.round(tensor / delta) - offset
+        clamp_out = quantize_out.clamp(n, p)
+        dequantize_out = (clamp_out + offset) * delta
+
+        mask_tensor = quantize_out.ge(n) * quantize_out.le(p)
+
+        ctx.steps = steps
+        ctx.save_for_backward(tensor, clamp_out, delta, offset,
+                              enc_min, enc_max, mask_tensor)
+
+        return dequantize_out
+
+    @staticmethod
+    def backward(ctx, grad):
+        """
+        In the backward pass we receive a Tensor containing the gradient of the loss
+        with respect to the output, and we need to compute the gradient of the loss
+        with respect to the inputs.
+        :param ctx: current context
+        :param grad: gradients as a tensor containing gradient of loss w.r.t output
+        :return: gradients w.r.t input, encoding_min and encoding_max and None for two extra params.
+        """
+        tensor, clamp_out, delta, offset, encoding_min, encoding_max, mask_tensor = ctx.saved_tensors
+        steps = ctx.steps
+
+        dequantize_grad = delta * grad
+        mask = Variable(mask_tensor.type_as(dequantize_grad))
+
+        tensor_grad = grad * mask
+        scale_grad = (clamp_out + offset - tensor * mask / delta) * grad
+        offset_grad = dequantize_grad * (1 - mask)
+
+        dim = list(range(len(tensor.shape)))
+        intermediate_term1 = scale_grad.sum(dim=dim) / steps
+        intermediate_term2 = steps / (encoding_max - encoding_min) ** 2 * offset_grad.sum(dim=dim)
+
+        tensor_encoding_min_grad = -intermediate_term1 + encoding_max * intermediate_term2
+        tensor_encoding_max_grad = intermediate_term1 - encoding_min * intermediate_term2
+
+        return tensor_grad, tensor_encoding_min_grad, tensor_encoding_max_grad, None, None
+
+
 class TestQcQuantizeOpLearnedGrid:
 
     def test_trainable_tensor_quantizer_forward_backward(self):
@@ -502,8 +564,8 @@ class TestQcQuantizeOpLearnedGrid:
         tensor = 10 * torch.rand((2, 1, 3, 5))
         tensor = tensor_quantizer.quantize_dequantize(tensor, encoding_min, encoding_max)
 
-        assert np.amax(np.abs(tensor.detach().numpy()), axis=(0, 1, 2, 3)) <= 5
-        assert np.amin(np.abs(tensor.detach().numpy()), axis=(0, 1, 2, 3)) >= -5
+        assert np.amax(np.abs(tensor.detach().numpy()), axis=(0, 1, 2, 3)) <= 5.0197
+        assert np.amin(np.abs(tensor.detach().numpy()), axis=(0, 1, 2, 3)) >= -4.9803
 
     @staticmethod
     def perform_auto_grad_computation(custom_input, min_value, max_value, n=0., p=255.):
@@ -571,6 +633,27 @@ class TestQcQuantizeOpLearnedGrid:
 
         return c_input_tensor.grad, c_enc_min.grad, c_enc_max.grad
 
+    @staticmethod
+    def perform_optimized_custom_grad_computation(custom_input, min_value, max_value, n, p):
+        oc_input_tensor = copy.deepcopy(custom_input)
+        oc_enc_min = torch.nn.Parameter(torch.Tensor([min_value]), requires_grad=True)
+        oc_enc_max = torch.nn.Parameter(torch.Tensor([max_value]), requires_grad=True)
+
+        # To apply our Function, we use Function.apply method.
+        # We alias this as 'custom_op'.
+        custom_op = OptimizedCustomFunc.apply
+
+        # Forward pass: compute predicted y using operations; we compute
+        # using our "custom" autograd operation.
+        y_pred = custom_op(oc_input_tensor, oc_enc_min, oc_enc_max, n, p)
+
+        # Compute and print loss
+        loss = y_pred.flatten().sum()
+        # Use custom grad to compute the backward pass.ctx.p = p
+        loss.backward()
+
+        return oc_input_tensor.grad, oc_enc_min.grad, oc_enc_max.grad
+
     def test_custom_gradient_math_for_range_learning(self):
         """
         Unit test to validate custom gradient computation with auto grad computation.
@@ -591,20 +674,29 @@ class TestQcQuantizeOpLearnedGrid:
         a_input_grad, a_min_grad, a_max_grad = TestQcQuantizeOpLearnedGrid.perform_auto_grad_computation(
             custom_input, _min, _max
         )
-        # custom gradient computation
-        torch.manual_seed(0)
-        custom_input = torch.rand(data_size, requires_grad=True, dtype=dtype, device=device)
 
+        # custom gradient computation
         # compute this one time and pass it to forward function
-        n, p = LearnedGridTensorQuantizer.get_n_and_p(bitwidth=8, use_symmetric_encoding=False)
+        n, p = LearnedGridTensorQuantizer.get_n_and_p(bitwidth=8, use_symmetric_encoding=False,
+                                                      use_unsigned_symmetric=False, use_strict_symmetric=False)
         c_input_grad, c_min_grad, c_max_grad = TestQcQuantizeOpLearnedGrid.perform_custom_grad_computation(
             custom_input, _min, _max, n, p
         )
 
-        # validate gradients computed
+        # Optimized custom gradient computation
+        oc_input_grad, oc_min_grad, oc_max_grad = TestQcQuantizeOpLearnedGrid.perform_optimized_custom_grad_computation(
+            custom_input, _min, _max, n, p
+        )
+
+        # validate gradients computed from custom gradients and autograd engine
         assert torch.allclose(c_input_grad.data[0], a_input_grad.data[0])
         assert torch.isclose(c_min_grad.data[0], a_min_grad.data[0])
         assert torch.isclose(c_max_grad.data[0], a_max_grad.data[0])
+
+        # validate gradients computed from custom gradients and optimized custom gradients
+        assert torch.allclose(c_input_grad.data[0], oc_input_grad.data[0])
+        assert torch.isclose(c_min_grad.data[0], oc_min_grad.data[0])
+        assert torch.isclose(c_max_grad.data[0], oc_max_grad.data[0])
 
     def test_custom_gradient_for_range_learning_time_taken(self):
         """
@@ -634,7 +726,8 @@ class TestQcQuantizeOpLearnedGrid:
         custom_input = torch.rand((2, 2), requires_grad=True, dtype=dtype, device=device)
         for i in range(1, iterations):
             # compute this one time and pass it to forward function
-            n, p = LearnedGridTensorQuantizer.get_n_and_p(bitwidth=8, use_symmetric_encoding=False)
+            n, p = LearnedGridTensorQuantizer.get_n_and_p(bitwidth=8, use_symmetric_encoding=False,
+                                                          use_unsigned_symmetric=False, use_strict_symmetric=False)
             start_time = time.perf_counter()
             _ = TestQcQuantizeOpLearnedGrid.perform_custom_grad_computation(custom_input, 0.0015, 1.0, n, p)
             exec_time = time.perf_counter() - start_time
@@ -682,16 +775,32 @@ class TestQcQuantizeOpLearnedGrid:
         """
         bitwidth = 8
 
-        sym_n, sym_p = LearnedGridTensorQuantizer.get_n_and_p(bitwidth, True)
+        signed_strict_sym_n, signed_strict_sym_p = LearnedGridTensorQuantizer.get_n_and_p(bitwidth, use_symmetric_encoding=True,
+                                                                                          use_unsigned_symmetric=False,
+                                                                                          use_strict_symmetric=True)
 
-        # for 8 bit , -127 to +127
-        expected_sym_n = (-2 ** (bitwidth - 1)) + 1
-        expected_sym_p = (2 ** (bitwidth - 1)) - 1
+        # for 8 bit (Strict case) , -127 to +127
+        expected_signed_strict_sym_n = (-2 ** (bitwidth - 1)) + 1
+        expected_signed_strict_sym_p = (2 ** (bitwidth - 1)) - 1
 
-        comp_symmetric_n = sym_n.data[0].item()
-        comp_symmetric_p = sym_p.data[0].item()
+        comp_signed_strict_symmetric_n = signed_strict_sym_n.data[0].item()
+        comp_signed_strict_symmetric_p = signed_strict_sym_p.data[0].item()
 
-        asym_n, asym_p = LearnedGridTensorQuantizer.get_n_and_p(bitwidth, False)
+
+        # for 8 bit (Not strict ase) , -128 to +127
+        signed_sym_n, signed_sym_p = LearnedGridTensorQuantizer.get_n_and_p(bitwidth, use_symmetric_encoding=True,
+                                                                            use_unsigned_symmetric=False,
+                                                                            use_strict_symmetric=False)
+        comp_signed_symmetric_n = signed_sym_n.data[0].item()
+        comp_signed_symmetric_p = signed_sym_p.data[0].item()
+
+        expected_signed_sym_n = -2 ** (bitwidth - 1)
+        expected_signed_sym_p = (2 ** (bitwidth - 1)) - 1
+
+
+        asym_n, asym_p = LearnedGridTensorQuantizer.get_n_and_p(bitwidth, use_symmetric_encoding=False,
+                                                                use_unsigned_symmetric=False,
+                                                                use_strict_symmetric=False)
 
         # for 8 bit , 0 to 255
         expected_asym_n = 0
@@ -702,8 +811,12 @@ class TestQcQuantizeOpLearnedGrid:
         assert expected_asym_n == comp_asymmetric_n
         assert expected_asym_p == comp_asymmetric_p
 
-        assert expected_sym_n == comp_symmetric_n
-        assert expected_sym_p == comp_symmetric_p
+        assert expected_signed_strict_sym_n == comp_signed_strict_symmetric_n
+        assert expected_signed_strict_sym_p == comp_signed_strict_symmetric_p
+
+        assert expected_signed_sym_n == comp_signed_symmetric_n
+        assert expected_signed_sym_p == comp_signed_symmetric_p
+
 
     def test_ste_gating_for_learnable_grid_wrapper(self):
         torch.manual_seed(0)
