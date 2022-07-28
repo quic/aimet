@@ -1,8 +1,7 @@
-#=============================================================================
-#
+#==============================================================================
 #  @@-COPYRIGHT-START-@@
 #
-#  Copyright (c) 2018, Qualcomm Innovation Center, Inc. All rights reserved.
+#  Copyright (c) 2022, Qualcomm Innovation Center, Inc. All rights reserved.
 #
 #  Redistribution and use in source and binary forms, with or without
 #  modification, are permitted provided that the following conditions are met:
@@ -33,12 +32,10 @@
 #  SPDX-License-Identifier: BSD-3-Clause
 #
 #  @@-COPYRIGHT-END-@@
-#
-#=============================================================================
+#==============================================================================
 cmake_minimum_required(VERSION 3.5)
 
-install(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
-      DESTINATION ${AIMET_INSTALL_DIR}/lib
-      PATTERN "__pycache*" EXCLUDE
-      PATTERN "CMakeLists.txt" EXCLUDE
-      )
+find_program(PYTHON "python3")
+
+add_subdirectory(src/python)
+add_subdirectory(test)
