@@ -39,13 +39,15 @@
 #  =============================================================================
 """ Pytorch Operation class and utilities """
 from typing import Union
+import torch
+
 import aimet_common.connected_graph.operation
 
 class Op(aimet_common.connected_graph.operation.Op):
     """ Subclass Op inherited from aimet_common.connected_graph.operation.Op """
 
     def __init__(self, name: str, dotted_name: str, output_shape,
-                 is_anonymous: bool, op_type: str, residing_module: Union[str, None]):
+                 is_anonymous: bool, op_type: str, residing_module: Union[torch.nn.Module, None]):
         """
         Initializer for Op
         :param name: name of the operation
@@ -53,7 +55,7 @@ class Op(aimet_common.connected_graph.operation.Op):
         :param output_shape: shape of the output product of the operation
         :param is_anonymous: whether this is an anonymous operation
         :param op_type: type of the operation
-        :param residing_module: Torch module name in which the op is situated in
+        :param residing_module: Torch module in which the op is situated
         """
         super().__init__(name, dotted_name, output_shape, is_anonymous, op_type)
         self.residing_module = residing_module
