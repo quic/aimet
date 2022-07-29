@@ -36,7 +36,7 @@
 #  @@-COPYRIGHT-END-@@
 # =============================================================================
 """ Custom Tensor Quantizers for PyTorch Op for quantizing weights and activations """
-
+# pylint: disable=too-many-lines
 import io
 from typing import List, Union, Tuple
 from dataclasses import dataclass
