@@ -40,6 +40,7 @@ if (ENABLE_TENSORFLOW)
 endif(ENABLE_TENSORFLOW)
 
 if (ENABLE_TORCH)
+    add_subdirectory(onnx)
     add_subdirectory(torch)
 endif(ENABLE_TORCH)
 

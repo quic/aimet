@@ -1,8 +1,7 @@
-#=============================================================================
-#
+#==============================================================================
 #  @@-COPYRIGHT-START-@@
 #
-#  Copyright (c) 2018, Qualcomm Innovation Center, Inc. All rights reserved.
+#  Copyright (c) 2022, Qualcomm Innovation Center, Inc. All rights reserved.
 #
 #  Redistribution and use in source and binary forms, with or without
 #  modification, are permitted provided that the following conditions are met:
@@ -33,12 +32,28 @@
 #  SPDX-License-Identifier: BSD-3-Clause
 #
 #  @@-COPYRIGHT-END-@@
-#
-#=============================================================================
+#==============================================================================
 cmake_minimum_required(VERSION 3.5)
 
-install(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
-      DESTINATION ${AIMET_INSTALL_DIR}/lib
-      PATTERN "__pycache*" EXCLUDE
-      PATTERN "CMakeLists.txt" EXCLUDE
-      )
+if (ENABLE_CUDA)
+    add_test(OnnxTrainingExtensionTest
+            pytest ${CMAKE_CURRENT_SOURCE_DIR} --junitxml=${CMAKE_CURRENT_BINARY_DIR}/py_test_output.xml
+            )
+
+else (ENABLE_CUDA)
+    add_test(OnnxTrainingExtensionTest
+            pytest ${CMAKE_CURRENT_SOURCE_DIR} -m "not cuda" --junitxml=${CMAKE_CURRENT_BINARY_DIR}/py_test_output.xml
+            )
+
+endif (ENABLE_CUDA)
+
+set_property(TEST OnnxTrainingExtensionTest
+      APPEND PROPERTY ENVIRONMENT "${AIMET_LD_LIBRARY_PATH}")
+set_property(TEST OnnxTrainingExtensionTest
+      APPEND PROPERTY ENVIRONMENT "${AIMET_PYTHONPATH}")
+
+if(DEFINED ENV{DEPENDENCY_DATA_PATH})
+set_property(TEST OnnxTrainingExtensionTest
+      APPEND PROPERTY ENVIRONMENT "${DEPENDENCY_DATA_PATH}")
+endif(DEFINED ENV{DEPENDENCY_DATA_PATH})
+
