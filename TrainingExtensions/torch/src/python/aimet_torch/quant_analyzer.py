@@ -40,9 +40,7 @@
 
 import os
 import json
-import pickle
-import shutil
-from collections import OrderedDict, defaultdict
+from collections import OrderedDict, defaultdict, Collection
 from typing import Union, Tuple, Callable, Dict, List, Any
 from bokeh import plotting
 from bokeh.models import ColumnDataSource, Band, Span, tickers
@@ -77,7 +75,7 @@ class QuantAnalyzer:
     def __init__(self,
                  model: torch.nn.Module,
                  dummy_input: Union[torch.Tensor, Tuple],
-                 data_loader: DataLoader,
+                 data_loader: Union[DataLoader, Collection],
                  eval_callback: Callable,
                  modules_to_ignore: List[torch.nn.Module] = None,
                  ):
@@ -202,7 +200,7 @@ class QuantAnalyzer:
         if self._modules_to_ignore:
             self._exclude_modules_from_quantization(self._model, sim, self._modules_to_ignore)
 
-        sim.compute_encodings(self._forward_pass_callback.func, self._forward_pass_callback.args)
+        sim.compute_encodings(self._forward_pass_callback, None)
         return sim
 
     def _eval_weight_quantized_model(self, sim: QuantizationSimModel)-> float:
@@ -625,10 +623,10 @@ class QuantAnalyzer:
         self._export_per_layer_sensitivity_analysis_plot(layer_wise_eval_score_dict,
                                                          results_dir,
                                                          title="per_layer_quant_enabled")
-        _logger.info("Exported per-layer quant analysis (enabled) plot.")
         self._save_json(layer_wise_eval_score_dict,
                         results_dir,
                         title="per_layer_quant_enabled.json")
+        _logger.info("Exported per-layer quant analysis (enabled) plot.")
         return layer_wise_eval_score_dict
 
     def _perform_per_layer_analysis_by_disabling_quant_wrappers(self,
@@ -662,10 +660,10 @@ class QuantAnalyzer:
         self._export_per_layer_sensitivity_analysis_plot(layer_wise_eval_score_dict,
                                                          results_dir,
                                                          title="per_layer_quant_disabled")
-        _logger.info("Exported per-layer quant analysis (disabled) plot.")
         self._save_json(layer_wise_eval_score_dict,
                         results_dir,
                         title="per_layer_quant_disabled.json")
+        _logger.info("Exported per-layer quant analysis (disabled) plot.")
         return layer_wise_eval_score_dict
 
     def _export_per_layer_encoding_min_max_range(self,
@@ -726,11 +724,9 @@ class QuantAnalyzer:
         self._create_and_export_min_max_ranges_plot(min_max_range_for_activations_dict,
                                                     min_max_ranges_dir,
                                                     title="activations")
-        _logger.info("Exported per layer encodings min-max ranges plot(s).")
-
         self._save_json(min_max_range_for_weights_dict, min_max_ranges_dir, title="weights.json")
         self._save_json(min_max_range_for_activations_dict, min_max_ranges_dir, title="activations.json")
-
+        _logger.info("Exported per layer encodings min-max ranges plot(s).")
         return min_max_range_for_weights_dict, min_max_range_for_activations_dict
 
     def _export_per_layer_stats_histogram(self,
@@ -783,7 +779,7 @@ class QuantAnalyzer:
     def _export_per_layer_mse_loss(self,
                                    sim: QuantizationSimModel,
                                    results_dir: str = "./tmp/",
-                                   ):
+                                   ) -> Dict:
         """
         NOTE: Need to pass same model input data through both fp32 and quantsim model to
         tap output activations of each layer.
@@ -791,41 +787,44 @@ class QuantAnalyzer:
         Export MSE loss between fp32 and quantized output activations for each layer.
         :param sim: Quantsim model.
         :param results_dir: Directory to save the results.
+        :return layer wise MSE loss. dict[layer_name] = MSE loss.
         """
         results_dir = os.path.abspath(results_dir)
         os.makedirs(results_dir, exist_ok=True)
 
-        name_to_quant_module_dict = {}
-        for name, quant_module in sim.model.named_modules():
-            name_to_quant_module_dict[name] = quant_module
+        name_to_quant_wrapper_dict = {}
+        for name, module in sim.model.named_modules():
+            name_to_quant_wrapper_dict[name] = module
 
         modules = utils.get_ordered_list_of_modules(self._model, self._dummy_input)
         mse_loss_dict = {}
         for name, module in modules:
-            quant_module = name_to_quant_module_dict[name]
-            loss = self._compute_mse_loss(module, quant_module, self._model, sim)
+            quant_wrapper = name_to_quant_wrapper_dict[name]
+            loss = self._compute_mse_loss(module, quant_wrapper, self._model, sim)
             mse_loss_dict[name] = loss
 
         self._export_per_layer_mse_plot(mse_loss_dict,
                                         results_dir,
                                         title="per_layer_mse_loss")
+        self._save_json(mse_loss_dict, results_dir, title="per_layer_mse_loss.json")
         _logger.info("Exported per layer MSE loss plot.")
+        return mse_loss_dict
 
-    def _compute_mse_loss(self, module: torch.nn.Module, quant_module: torch.nn.Module,
+    def _compute_mse_loss(self, module: torch.nn.Module, quant_wrapper: torch.nn.Module,
                           fp32_model: torch.nn.Module, sim: QuantizationSimModel) -> float:
         """
         Compute MSE loss between fp32 and quantized output activations for each batch, add for
         all the batches and return averaged mse loss.
 
         :param module: module from the fp32_model.
-        :param quant_module: Corresponding quant wrapper from the QuantSim model.
+        :param quant_wrapper: Corresponding quant wrapper from the QuantSim model.
         :param fp32_model: PyTorch model.
         :param sim: Quantsim model.
         :return: MSE loss between fp32 and quantized output activations.
         """
         # output activations collector.
         orig_module_collector = utils.ModuleData(fp32_model, module)
-        quant_module_collector = utils.ModuleData(sim.model, quant_module)
+        quant_module_collector = utils.ModuleData(sim.model, quant_wrapper)
 
         loss = 0.0
         batch_index = 0
