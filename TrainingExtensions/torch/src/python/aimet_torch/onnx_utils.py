@@ -186,6 +186,8 @@ class CustomMarkerFunc(torch.autograd.Function):
 
     @staticmethod
     def forward(ctx, inp, _identifier, _start):     # pylint: disable=arguments-differ
+        if inp.dtype == torch.bool:
+            return inp
         return inp.clamp(0)
 
     @staticmethod
