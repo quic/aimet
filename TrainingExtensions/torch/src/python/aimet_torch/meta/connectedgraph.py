@@ -373,7 +373,10 @@ class ConnectedGraph(AimetCommonConnectedGraph):
                 # Recursive parsing is needed 1) if the module is not leaf module.
                 # 2) If the module is leaf module but has multiple functional operations in
                 # forward method.
-                if self._is_recursive_parsing_needed(subgraph_model, module_to_jit_trace):
+                # TODO: Temporarily reverting this change while we rework CG to be able to handle reused custom modules
+                # with only functionals inside.
+                # if self._is_recursive_parsing_needed(subgraph_model, module_to_jit_trace):
+                if not is_leaf_module(subgraph_model):
                     node_name_to_subgraph_model[getattr_node_info.node_alias] = (subgraph_model, getattr_node_info)
 
             # invoking forward method
