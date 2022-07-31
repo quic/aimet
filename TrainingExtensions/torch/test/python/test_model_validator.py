@@ -138,7 +138,6 @@ class TestValidationChecks(unittest.TestCase):
 class TestModelValidatorPreparer:
 
     @pytest.mark.cuda
-    @pytest.mark.skip('Disable temporarily while CG does not dive into custom modules with only functionals.')
     def test_model_validator_preparer(self):
         """ Validate model validator and preparer workflow """
         model = Model().eval().cuda()

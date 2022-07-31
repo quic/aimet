@@ -740,3 +740,15 @@ def is_custom_leaf_module(module: torch.nn.Module, nodes: List[torch._C.Node]) -
     """
     # pylint: disable=protected-access
     return is_leaf_module(module) and len(nodes) <= 1
+
+
+def get_torch_tensortype_shape(torch_graph_output) -> Union[None, List[int]]:
+    """
+    Given an output tensor from a torch graph, return its shape, or return None if the output tensor is not a
+    tensortype.
+    """
+    # pylint: disable=protected-access
+    shape = None
+    if isinstance(torch_graph_output.type(), torch._C.TensorType):
+        shape = torch_graph_output.type().sizes()
+    return shape
