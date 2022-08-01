@@ -715,6 +715,12 @@ class TestQuantsimConfig(unittest.TestCase):
                 {
                     "op_list": ["Conv", "Clip"]
                 },
+		{
+                    "op_list": [
+                        "MatMul",
+                        "Add"
+                    ]
+                }
             ],
             "model_input": {},
             "model_output": {}
