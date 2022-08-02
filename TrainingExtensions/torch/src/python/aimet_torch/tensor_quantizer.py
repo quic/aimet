@@ -767,11 +767,11 @@ class QuantizeDequantizeFunc(torch.autograd.Function):
         steps, channel_axis = ctx.steps, ctx.channel_axis
 
         dequantize_grad = delta * grad
-        mask = Variable(mask_tensor.type_as(dequantize_grad))
+        mask_tensor = Variable(mask_tensor.type_as(dequantize_grad))
 
-        tensor_grad = grad * mask
-        scale_grad = (clamp_out + offset - tensor * mask / delta) * grad
-        offset_grad = dequantize_grad * (1 - mask)
+        tensor_grad = grad * mask_tensor
+        scale_grad = (clamp_out + offset - tensor * mask_tensor / delta) * grad
+        offset_grad = dequantize_grad * (1 - mask_tensor)
 
         dim = list(range(len(tensor.shape)))
         if len(delta) > 1 and len(tensor.shape) > 1:
