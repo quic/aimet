@@ -64,6 +64,15 @@ class _EncodingParams:
     use_unsigned_symmetric: bool
 
 
+_encoding_params_to_dtype = {
+    _EncodingParams(bitwidth=8, is_symmetric=True, use_unsigned_symmetric=True): torch.uint8,
+    _EncodingParams(bitwidth=8, is_symmetric=True, use_unsigned_symmetric=False): torch.int8,
+    _EncodingParams(bitwidth=8, is_symmetric=False, use_unsigned_symmetric=True): torch.uint8,
+    _EncodingParams(bitwidth=8, is_symmetric=False, use_unsigned_symmetric=False): torch.uint8,
+    _EncodingParams(bitwidth=16, is_symmetric=True, use_unsigned_symmetric=False): torch.int16
+}
+
+
 def _compute_delta_and_offset(tensor: torch.Tensor,
                               encoding_min: torch.nn.Parameter,
                               encoding_max: torch.nn.Parameter,
@@ -87,27 +96,6 @@ def _compute_delta_and_offset(tensor: torch.Tensor,
         offset = grad_fn.broadcast_to_tensor(tensor, offset, channel_axis)
 
     return delta, offset
-
-
-def _get_dtype_by_encoding_params(encoding_params: _EncodingParams) -> torch.dtype:
-    """
-    Retrieve possible dtype corresponding to encoding parameters
-    This is mainly depends on bitwidth and signed/unsigned
-    If there is no predefined case, return torch.int32
-
-    :param encoding_params: Encoding parameters containing bitwidth and flag values
-    :return: Possible smallest dtype or torch.int32 as fallback
-    """
-    encoding_params_to_dtype = {
-        _EncodingParams(bitwidth=8, is_symmetric=True, use_unsigned_symmetric=True): torch.uint8,
-        _EncodingParams(bitwidth=8, is_symmetric=True, use_unsigned_symmetric=False): torch.int8,
-        _EncodingParams(bitwidth=8, is_symmetric=False, use_unsigned_symmetric=True): torch.uint8,
-        _EncodingParams(bitwidth=8, is_symmetric=False, use_unsigned_symmetric=False): torch.uint8,
-        _EncodingParams(bitwidth=16, is_symmetric=True, use_unsigned_symmetric=False): torch.int16
-    }
-
-    return encoding_params_to_dtype.get(encoding_params, torch.int32)
-
 
 class TensorQuantizer:
     """
@@ -750,7 +738,7 @@ class QuantizeDequantizeFunc(torch.autograd.Function):
         mask_tensor = quantize_out.ge(n) * quantize_out.le(p)
         encoding_params = _EncodingParams(bitwidth, tensor_quantizer.use_symmetric_encodings,
                                           tensor_quantizer.use_unsigned_symmetric)
-        dtype_for_clamp_out = _get_dtype_by_encoding_params(encoding_params)
+        dtype_for_clamp_out = _encoding_params_to_dtype.get(encoding_params, torch.int32)
 
         ctx.steps = steps
         ctx.channel_axis = channel_axis
