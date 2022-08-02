@@ -79,13 +79,6 @@ add_library(MoDlQuantization STATIC
       include/DlQuantization/TensorQuantizer.h
       include/DlQuantization/GraphQuantizer.h )
 
-if (ENABLE_CUDA)
-target_compile_options(MoDlQuantization
-      PRIVATE
-         -DGPU_QUANTIZATION_ENABLED=1
-      )
-endif (ENABLE_CUDA)
-
 target_include_directories(MoDlQuantization
       PUBLIC
         ${CMAKE_CURRENT_SOURCE_DIR}/include
@@ -95,6 +88,10 @@ target_include_directories(MoDlQuantization
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/include)
 
 if (ENABLE_CUDA)
+    target_compile_options(MoDlQuantization
+          PRIVATE
+             -DGPU_QUANTIZATION_ENABLED=1
+          )
 
     add_library(MoDlQuantizationCuda
       src/math_functions.cu
@@ -103,6 +100,16 @@ if (ENABLE_CUDA)
       src/cuda_util.hpp
       src/trim_functions.cuh
       )
+
+    if (ENABLE_TORCH)
+        target_link_libraries(MoDlQuantizationCuda PRIVATE
+            PyTorch
+            )
+    elseif (ENABLE_TENSORFLOW)
+        target_link_libraries(MoDlQuantizationCuda PRIVATE
+            TensorFlow
+            )
+    endif ()
 
     target_compile_options(MoDlQuantizationCuda
             PRIVATE $<$<COMPILE_LANGUAGE:CUDA>:
