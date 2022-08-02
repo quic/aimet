@@ -105,10 +105,6 @@ if (ENABLE_CUDA)
         target_link_libraries(MoDlQuantizationCuda PRIVATE
             PyTorch
             )
-    elseif (ENABLE_TENSORFLOW)
-        target_link_libraries(MoDlQuantizationCuda PRIVATE
-            TensorFlow
-            )
     endif ()
 
     target_compile_options(MoDlQuantizationCuda
