@@ -311,6 +311,23 @@ class ModelWith5Output(torch.nn.Module):
         return self.cust(x)
 
 
+class ModuleListModel(nn.Module):
+    def __init__(self):
+        super(ModuleListModel, self).__init__()
+        self.layers = nn.ModuleList([nn.Linear(1, 32), nn.Linear(32, 64), nn.Conv2d(3, 32, kernel_size=3)])
+        self.layers_deep = nn.ModuleList([nn.ModuleList([nn.BatchNorm2d(10), nn.ReLU()]),
+                                          nn.Linear(3, 32), nn.Linear(32, 64), nn.Conv2d(1, 32, 5),
+                                          StaticGridQuantWrapper(nn.Conv2d(1, 10, 5), weight_bw=8,
+                                                                 activation_bw=8,
+                                                                 round_mode='nearest',
+                                                                 quant_scheme=QuantScheme.post_training_tf_enhanced,
+                                                                 data_type=QuantizationDataType.int),
+                                          nn.ModuleList([nn.MaxPool2d(2), nn.PReLU()])])
+
+    def forward(self, *inputs):
+        return self.layers[2](inputs[0])
+
+
 class TestQuantizationSimStaticGrad:
     def test_is_leaf_module_positive(self):
         """With an actual leaf module"""
@@ -589,25 +606,10 @@ class TestQuantizationSimStaticGrad:
     def test_add_quantization_wrappers_with_modulelist_with_layers_to_ignore(self):
         """With a two-deep model using ModuleList and layers_to_ignore"""
 
-        class Net(nn.Module):
-            def __init__(self):
-                super(Net, self).__init__()
-                self.layers = nn.ModuleList([nn.Linear(1, 32), nn.Linear(32, 64), nn.Conv2d(3, 32, kernel_size=3)])
-                self.layers_deep = nn.ModuleList([nn.ModuleList([nn.BatchNorm2d(10), nn.ReLU()]),
-                                                  nn.Linear(3, 32), nn.Linear(32, 64), nn.Conv2d(1, 32, 5),
-                                                  StaticGridQuantWrapper(nn.Conv2d(1, 10, 5), weight_bw=8,
-                                                                         activation_bw=8,
-                                                                         round_mode='nearest',
-                                                                         quant_scheme=QuantScheme.post_training_tf_enhanced,
-                                                                         data_type=QuantizationDataType.int)])
-
-            def forward(self, *inputs):
-                return self.layers[2](inputs[0])
-
-        model = Net()
+        model = ModuleListModel()
 
         sim = QuantizationSimModel(model, dummy_input=torch.rand(1, 3, 12, 12))
-        layers_to_exclude = [sim.model.layers_deep[1], sim.model.layers_deep[3]]
+        layers_to_exclude = [sim.model.layers_deep[1], sim.model.layers_deep[3], sim.model.layers_deep[5]]
         sim.exclude_layers_from_quantization(layers_to_exclude)
         print(sim.model)
 
@@ -625,6 +627,25 @@ class TestQuantizationSimStaticGrad:
         # layer ignored, so no QcQuantizeWrapper wrapper
         assert isinstance(sim.model.layers_deep[3], nn.Conv2d)
 
+        # non leaf layer specified, check that all submodules had wrappers removed
+        assert isinstance(sim.model.layers_deep[5][0], nn.MaxPool2d)
+        assert isinstance(sim.model.layers_deep[5][1], nn.PReLU)
+
+        assert len(sim._excluded_layer_names) == 4
+        assert 'layers_deep.1' in sim._excluded_layer_names
+        assert 'layers_deep.3' in sim._excluded_layer_names
+        assert 'layers_deep.5.0' in sim._excluded_layer_names
+        assert 'layers_deep.5.1' in sim._excluded_layer_names
+
+        sim.export('./data/', 'modulelist_with_layers_to_ignore', dummy_input=torch.rand(1, 3, 12, 12))
+        with open("./data/modulelist_with_layers_to_ignore.encodings", "r") as encodings_file:
+            encodings = json.load(encodings_file)
+
+        assert 'layers_deep.1' in encodings['excluded_layers']
+        assert 'layers_deep.3' in encodings['excluded_layers']
+        assert 'layers_deep.5.0' in encodings['excluded_layers']
+        assert 'layers_deep.5.1' in encodings['excluded_layers']
+        assert len(encodings['excluded_layers']) == 4
 
     # -------------------------------------------
     def test_model_with_two_inputs(self):
