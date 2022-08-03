@@ -36,23 +36,22 @@
 # =============================================================================
 
 import copy
-import time
 import pickle
-import pytest
-import numpy as np
-import torch
+import time
 
 import aimet_common.libpymo as libpymo
-from torch.autograd import Variable
+import numpy as np
+import pytest
+import torch
 
 from aimet_common.defs import MAP_ROUND_MODE_TO_PYMO, QuantizationDataType
+from aimet_torch.qc_quantize_op import QuantScheme
 from aimet_torch.qc_quantize_op import StaticGridQuantWrapper, LearnedGridQuantWrapper, SteGatingFuncForParameters, \
     QcQuantizeOpMode
-from aimet_torch.qc_quantize_op import QuantScheme
 from aimet_torch.quantsim_straight_through_grad import compute_dloss_by_dmax, compute_dloss_by_dmin, \
     compute_dloss_by_dx_using_scale_offset, LearnedGridParams, compute_intermediate_result_for_learned_grid
-from aimet_torch.tensor_quantizer import StaticGridPerTensorQuantizer
 from aimet_torch.tensor_quantizer import LearnedGridTensorQuantizer
+from aimet_torch.tensor_quantizer import StaticGridPerTensorQuantizer, QuantizeDequantizeFunc
 
 
 class TestQcQuantizeOpStaticGrid:
@@ -490,66 +489,6 @@ class CustomFunc(torch.autograd.Function):
         return grad_input, grad_min, grad_max, None, None
 
 
-class OptimizedCustomFunc(torch.autograd.Function):
-    @staticmethod
-    def forward(ctx, tensor, enc_min, enc_max, n, p):
-        """
-        Forward pass function
-        :param ctx: context
-        :param tensor: input tensor
-        :param enc_min: encoding min
-        :param enc_max: encoding max
-        :param n: lower bound for a given bitwidth and symmetric/asymmetric encoding
-        :param p: upper bound for a given bitwidth and symmetric/asymmetric encoding
-        :return: computed quant dequant output
-        """
-        bitwidth = 8
-        steps = 2 ** bitwidth - 1
-        delta = (enc_max - enc_min) / steps
-        offset = torch.round(enc_min / delta)
-
-        quantize_out = torch.round(tensor / delta) - offset
-        clamp_out = quantize_out.clamp(n, p)
-        dequantize_out = (clamp_out + offset) * delta
-
-        mask_tensor = quantize_out.ge(n) * quantize_out.le(p)
-
-        ctx.steps = steps
-        ctx.save_for_backward(tensor, clamp_out, delta, offset,
-                              enc_min, enc_max, mask_tensor)
-
-        return dequantize_out
-
-    @staticmethod
-    def backward(ctx, grad):
-        """
-        In the backward pass we receive a Tensor containing the gradient of the loss
-        with respect to the output, and we need to compute the gradient of the loss
-        with respect to the inputs.
-        :param ctx: current context
-        :param grad: gradients as a tensor containing gradient of loss w.r.t output
-        :return: gradients w.r.t input, encoding_min and encoding_max and None for two extra params.
-        """
-        tensor, clamp_out, delta, offset, encoding_min, encoding_max, mask_tensor = ctx.saved_tensors
-        steps = ctx.steps
-
-        dequantize_grad = delta * grad
-        mask = Variable(mask_tensor.type_as(dequantize_grad))
-
-        tensor_grad = grad * mask
-        scale_grad = (clamp_out + offset - tensor * mask / delta) * grad
-        offset_grad = dequantize_grad * (1 - mask)
-
-        dim = list(range(len(tensor.shape)))
-        intermediate_term1 = scale_grad.sum(dim=dim) / steps
-        intermediate_term2 = steps / (encoding_max - encoding_min) ** 2 * offset_grad.sum(dim=dim)
-
-        tensor_encoding_min_grad = -intermediate_term1 + encoding_max * intermediate_term2
-        tensor_encoding_max_grad = intermediate_term1 - encoding_min * intermediate_term2
-
-        return tensor_grad, tensor_encoding_min_grad, tensor_encoding_max_grad, None, None
-
-
 class TestQcQuantizeOpLearnedGrid:
 
     def test_trainable_tensor_quantizer_forward_backward(self):
@@ -634,20 +573,24 @@ class TestQcQuantizeOpLearnedGrid:
         return c_input_tensor.grad, c_enc_min.grad, c_enc_max.grad
 
     @staticmethod
-    def perform_optimized_custom_grad_computation(custom_input, min_value, max_value, n, p):
+    def perform_optimized_custom_grad_computation(custom_input, min_value, max_value):
         oc_input_tensor = copy.deepcopy(custom_input)
         oc_enc_min = torch.nn.Parameter(torch.Tensor([min_value]), requires_grad=True)
         oc_enc_max = torch.nn.Parameter(torch.Tensor([max_value]), requires_grad=True)
 
         # To apply our Function, we use Function.apply method.
-        # We alias this as 'custom_op'.
-        custom_op = OptimizedCustomFunc.apply
+        # We alias this as 'optimized_custom_op'.
+        optimized_custom_op = QuantizeDequantizeFunc.apply
 
         # Forward pass: compute predicted y using operations; we compute
-        # using our "custom" autograd operation.
-        y_pred = custom_op(oc_input_tensor, oc_enc_min, oc_enc_max, n, p)
+        # using our "optimized custom" autograd operation.
+        tensor_quantizer = LearnedGridTensorQuantizer(bitwidth=8, round_mode="nearest",
+                                                      quant_scheme=QuantScheme.training_range_learning_with_tf_init,
+                                                      use_symmetric_encodings=True,
+                                                      enabled_by_default=True,
+                                                      data_type=QuantizationDataType.int)
+        y_pred = optimized_custom_op(oc_input_tensor, oc_enc_min, oc_enc_max, tensor_quantizer)
 
-        # Compute and print loss
         loss = y_pred.flatten().sum()
         # Use custom grad to compute the backward pass.ctx.p = p
         loss.backward()
@@ -685,7 +628,7 @@ class TestQcQuantizeOpLearnedGrid:
 
         # Optimized custom gradient computation
         oc_input_grad, oc_min_grad, oc_max_grad = TestQcQuantizeOpLearnedGrid.perform_optimized_custom_grad_computation(
-            custom_input, _min, _max, n, p
+            custom_input, _min, _max
         )
 
         # validate gradients computed from custom gradients and autograd engine
@@ -693,10 +636,12 @@ class TestQcQuantizeOpLearnedGrid:
         assert torch.isclose(c_min_grad.data[0], a_min_grad.data[0])
         assert torch.isclose(c_max_grad.data[0], a_max_grad.data[0])
 
-        # validate gradients computed from custom gradients and optimized custom gradients
-        assert torch.allclose(c_input_grad.data[0], oc_input_grad.data[0])
-        assert torch.isclose(c_min_grad.data[0], oc_min_grad.data[0])
-        assert torch.isclose(c_max_grad.data[0], oc_max_grad.data[0])
+        # validate gradients computed from autograd engine and optimized custom gradients
+        # NOTE: Optimized custom grad follows same computation logic of autograd engine
+        # To sanity check, it should be compared whole tensor between two results
+        assert torch.allclose(a_input_grad, oc_input_grad)
+        assert torch.isclose(a_min_grad, oc_min_grad.data)
+        assert torch.isclose(a_max_grad, oc_max_grad.data)
 
     def test_custom_gradient_for_range_learning_time_taken(self):
         """
