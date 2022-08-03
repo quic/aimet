@@ -500,11 +500,11 @@ class TestQcQuantizeOpLearnedGrid:
 
         encoding_min = torch.nn.Parameter(torch.FloatTensor([-5]))
         encoding_max = torch.nn.Parameter(torch.FloatTensor([5]))
-        tensor = 10 * torch.rand((2, 1, 3, 5))
+        tensor = torch.FloatTensor(2, 1, 3, 5).uniform_(-10, 10)
         tensor = tensor_quantizer.quantize_dequantize(tensor, encoding_min, encoding_max)
 
-        assert np.amax(np.abs(tensor.detach().numpy()), axis=(0, 1, 2, 3)) <= 5.0197
-        assert np.amin(np.abs(tensor.detach().numpy()), axis=(0, 1, 2, 3)) >= -4.9803
+        assert np.amax(tensor.detach().numpy(), axis=(0, 1, 2, 3)) <= 5.0197
+        assert np.amin(tensor.detach().numpy(), axis=(0, 1, 2, 3)) >= -4.9804
 
     @staticmethod
     def perform_auto_grad_computation(custom_input, min_value, max_value, n=0., p=255.):
