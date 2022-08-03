@@ -678,15 +678,26 @@ class ConnectedGraph(AimetCommonConnectedGraph):
                 assert len(op.inputs) == len(op.output_products) or len(op.inputs) == 1
                 # The op sits after a module that has multiple outputs
                 if len(op.inputs) == 1:
-                    op.inputs[0]._consumers = []
-                    for output_product in op.output_products:
+                    inp_op = op.inputs[0].producer
+                    assert len(inp_op.output_products) == 1, 'TupleUnpack with one input product has parent op with ' \
+                                                             'multiple output products. This is currently unhandled.'
+                    inp_op.output_products = []
+                    # Delete the singular input product to the op, and replace it with multiple distinct products for
+                    # each output product of the op.
+                    del self._products[op.inputs[0].name]
+                    for idx, output_product in enumerate(op.output_products):
+                        # Create a product for each consumer of tuple unpack, to represent a distinct tensor feeding
+                        # into each consumer.
+                        new_product = self._add_product(f'{inp_op.name}_#{idx}', shape=output_product.shape)
+                        new_product.producer = inp_op
                         for consumer in output_product.consumers:
                             # Replace consumer's input product with the input product of this op
                             consumer_input_idx = consumer.inputs.index(output_product)
-                            consumer.inputs[consumer_input_idx] = op.inputs[0]
+                            consumer.inputs[consumer_input_idx] = new_product
                             # Add consumer into this op's input product consumers if not already present
                             if consumer not in op.inputs[0].consumers:
-                                op.inputs[0]._consumers.append(consumer)
+                                new_product.add_consumer(consumer)
+                        inp_op.output_products.append(new_product)
                         del self._products[output_product.name]
                 # The op sits after a Tuple/List construct op that was already processed
                 else:
@@ -718,7 +729,7 @@ class ConnectedGraph(AimetCommonConnectedGraph):
             if len(op.output_products) > 1:
                 error_message = f'Op {op.name} with multiple outputs detected. Currently, AIMET connected graph does ' \
                                 f'not distinguish between different outputs of the same op.'
-                logger.warning(error_message)
+                logger.debug(error_message)
                 products_to_remove = []
                 consumers_of_first_output_product = set(op.output_products[0].consumers)
                 for output in op.output_products[1:]:
@@ -728,7 +739,7 @@ class ConnectedGraph(AimetCommonConnectedGraph):
                         consumer.inputs[consumer_input_index] = op.output_products[0]
                         # Update op's first output product consumer list if it doesn't already contain the consumer
                         if consumer not in consumers_of_first_output_product:
-                            op.output_products[0]._consumers.append(consumer)
+                            op.output_products[0].add_consumer(consumer)
                             consumers_of_first_output_product.add(consumer)
                     products_to_remove.append(output)
                 for product in products_to_remove:
