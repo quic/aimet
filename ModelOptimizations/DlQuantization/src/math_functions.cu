@@ -46,12 +46,6 @@
 #include "cuda_util.hpp"
 #include "math_functions.hpp"
 
-// NOTE: If both tensorflow and pytorch are enabled, prioritize pytorch
-#if ENABLE_TORCH
-#include "c10/cuda/CUDACachingAllocator.h"
-#elif ENABLE_TENSORFLOW
-#endif
-
 
 namespace DlQuantization
 {
@@ -97,10 +91,11 @@ bool GemmFloat_gpu(int M, int N, int K, const float* A, const float* B, float* C
     return success;
 }
 
-static void* cudaMallocHelper(size_t bytes)
+void* MemoryAllocation_gpu(size_t bytes)
 {
     void* devPtr;
     auto status = cudaMalloc(&devPtr, bytes);
+
     if (cudaErrorMemoryAllocation == status) {
         throw std::runtime_error("CUDA OOM");
     }
@@ -112,35 +107,9 @@ static void* cudaMallocHelper(size_t bytes)
     return devPtr;
 }
 
-void* MemoryAllocation_gpu(size_t bytes)
-{
-// NOTE: If both tensorflow and pytorch are enabled, prioritize pytorch
-#if ENABLE_TORCH
-    return c10::cuda::CUDACachingAllocator::raw_alloc(bytes);
-#elif ENABLE_TENSORFLOW
-    return cudaMallocHelper(bytes); // Fall back to raw cuda malloc
-#else
-    return cudaMallocHelper(bytes);
-#endif
-}
-
-static bool cudaFreeHelper(void* data)
-{
-    return cudaSuccess == cudaFree(data);
-}
-
-
 bool MemoryFree_gpu(void* data)
 {
-// NOTE: If both tensorflow and pytorch are enabled, prioritize pytorch
-#if ENABLE_TORCH
-    c10::cuda::CUDACachingAllocator::raw_delete(data);
-    return true;
-#elif ENABLE_TENSORFLOW
-    return cudaFreeHelper(data); // Fall back to raw cuda malloc
-#else
-    return cudaFreeHelper(data);
-#endif
+    return cudaSuccess == cudaFree(data);
 }
 
 // Explicit instantiations
