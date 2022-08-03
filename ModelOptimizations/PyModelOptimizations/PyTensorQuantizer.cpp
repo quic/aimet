@@ -62,8 +62,8 @@ void PyTensorQuantizer::updateStats(py::array_t<float> tensor, bool useCuda)
 void PyTensorQuantizer::quantizeDequantize(py::array_t<float> inputTensor, py::array_t<float> outputTensor,
                                            double encodingMin, double encodingMax, unsigned int  bitwidth, bool useCuda)
 {
-    auto inputArr     = inputTensor.mutable_unchecked<4>();
-    auto outputArr    = outputTensor.mutable_unchecked<4>();
+    auto inputArr     = inputTensor.mutable_unchecked();
+    auto outputArr    = outputTensor.mutable_unchecked();
     size_t tensorSize = inputArr.shape(0) * inputArr.shape(1) * inputArr.shape(2) * inputArr.shape(3);
 
     auto inputTensorPtr  = static_cast<float*>(inputArr.mutable_data(0, 0, 0, 0));
