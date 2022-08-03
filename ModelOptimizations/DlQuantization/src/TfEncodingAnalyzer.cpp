@@ -71,6 +71,13 @@ void TfEncodingAnalyzer<DTYPE>::updateStats(const DTYPE* tensor, const size_t te
 }
 
 template <typename DTYPE>
+void TfEncodingAnalyzer<DTYPE>::updateStats(const DTYPE* tensor, const size_t tensorSize,
+                                            ComputationMode tensorCpuGpuMode, IAllocator* allocator)
+{
+    updateStats(tensor, tensorSize, tensorCpuGpuMode);
+}
+
+template <typename DTYPE>
 TfEncoding TfEncodingAnalyzer<DTYPE>::computeEncoding(uint8_t bw, bool useSymmetricEncodings,
                                                       bool useStrictSymmetric, bool useUnsignedSymmetric) const
 {

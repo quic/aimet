@@ -57,7 +57,10 @@ public:
      * @param tensorSize Size of the tensor (number of elements)
      * @param tensorCpuGpuMode Indicates if the tensor is in CPU or GPU memory
      */
-    void updateStats(const DTYPE* tensor, const size_t tensorSize, ComputationMode tensorCpuGpuMode) override;
+    virtual void updateStats(const DTYPE* tensor, const size_t tensorSize, ComputationMode tensorCpuGpuMode) override;
+
+    virtual void updateStats(const DTYPE* tensor, const size_t tensorSize,
+                             ComputationMode tensorCpuGpuMode, IAllocator* allocator) override;
 
     /***
      * Given a number distribution in CPU memory, compute the TensorFlow encoding with the highest possible SQNR

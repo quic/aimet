@@ -177,13 +177,15 @@ void GetHistogram_gpu(const DTYPE* data,
                       uint32_t histogram[PDF_SIZE],
                       const DTYPE bucket_size,
                       const DTYPE pdf_offset,
-                      const bool is_signed)
+                      const bool is_signed,
+                      IAllocator* allocator)
 {
     // Limit the number of thread blocks for performance based on heuristics
     const size_t CUDA_NUM_BLOCKS_ = GET_PDF_BUFF_SIZE(cnt, DTYPE);
     const size_t buff_size = PDF_SIZE * CUDA_NUM_BLOCKS_ * CUDA_NUM_THREADS;
 
-    uint32_t* histogram_per_thread = (uint32_t*) MemoryAllocation_gpu(sizeof(uint32_t) * buff_size);
+    uint32_t* histogram_per_thread = (uint32_t*) allocator->allocateRaw(sizeof(uint32_t) * buff_size);
+
     cudaMemset(histogram_per_thread, 0x00, sizeof(uint32_t) * buff_size);
 
     // Go through all data points and add them to the histogram.
@@ -194,7 +196,7 @@ void GetHistogram_gpu(const DTYPE* data,
                                                                  pdf_offset,
                                                                  is_signed);
 
-    uint32_t* histogram_gpu = (uint32_t*) MemoryAllocation_gpu(sizeof(uint32_t) * PDF_SIZE);
+    uint32_t* histogram_gpu = (uint32_t*) allocator->allocateRaw(sizeof(uint32_t) * PDF_SIZE);
     cudaMemset(histogram_gpu, 0x00, sizeof(uint32_t) * PDF_SIZE);
 
     histogramReduceSumKernel<<<1, PDF_SIZE>>>(histogram_per_thread, histogram_gpu, buff_size);
@@ -204,8 +206,8 @@ void GetHistogram_gpu(const DTYPE* data,
                sizeof(uint32_t) * PDF_SIZE,
                cudaMemcpyDefault);
 
-    MemoryFree_gpu(histogram_gpu);
-    MemoryFree_gpu(histogram_per_thread);
+    allocator->deleteRaw(histogram_gpu);
+    allocator->deleteRaw(histogram_per_thread);
 }
 
 template void GetHistogram_gpu(const float* data,
@@ -213,12 +215,14 @@ template void GetHistogram_gpu(const float* data,
                                uint32_t histogram[PDF_SIZE],
                                const float bucket_size,
                                const float pdf_offset,
-                               const bool is_signed);
+                               const bool is_signed,
+                               IAllocator* allocator);
 template void GetHistogram_gpu(const double* data,
                                int cnt,
                                uint32_t histogram[PDF_SIZE],
                                const double bucket_size,
                                const double pdf_offset,
-                               const bool is_signed);
+                               const bool is_signed,
+                               IAllocator* allocator);
 
 }   // End of namespace DlQuantization

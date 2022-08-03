@@ -44,6 +44,7 @@
 
 namespace DlQuantization
 {
+
 /**
  * Run on the CPU or GPU.
  */
@@ -52,6 +53,15 @@ enum ComputationMode
     COMP_MODE_CPU,
     COMP_MODE_GPU
 };
+
+
+class IAllocator
+{
+public:
+    virtual void* allocateRaw(size_t bytes) = 0;
+    virtual void deleteRaw(void *ptr) = 0;
+};
+
 
 /**
  * @brief The fixed point quantization mode defines what fixed point scheme

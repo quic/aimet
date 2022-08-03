@@ -109,13 +109,7 @@ double logBase2(double d);
  * distribution.
  */
 template <typename DTYPE>
-void UpdatePdf(const DTYPE* data, int cnt, ComputationMode mode_cpu_gpu, bool signed_vals, PDF& pdf);
-
-template <typename DTYPE>
-void UpdatePdfSigned(const DTYPE* data, int cnt, ComputationMode mode_cpu_gpu, PDF& pdf);
-
-template <typename DTYPE>
-void UpdatePdfUnsigned(const DTYPE* data, int cnt, ComputationMode mode_cpu_gpu, PDF& pdf);
+void UpdatePdf(const DTYPE* data, int cnt, ComputationMode mode_cpu_gpu, bool signed_vals, PDF& pdf, IAllocator* allocator);
 
 template <typename DTYPE>
 void GetHistogram(const DTYPE* data,
@@ -124,7 +118,8 @@ void GetHistogram(const DTYPE* data,
                   const DTYPE bucket_size,
                   const DTYPE pdf_offset,
                   const ComputationMode mode_cpu_gpu,
-                  const bool is_signed);
+                  const bool is_signed,
+                  IAllocator* allocator);
 
 /**
  * @brief Allocate memory.
@@ -235,7 +230,8 @@ void GetHistogram_gpu(const DTYPE* data,
                       uint32_t histogram[PDF_SIZE],
                       const DTYPE bucket_size,
                       const DTYPE pdf_offset,
-                      const bool is_signed);
+                      const bool is_signed,
+                      IAllocator* allocator);
 
 #endif   // GPU_QUANTIZATION_ENABLED
 

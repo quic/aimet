@@ -48,6 +48,7 @@ namespace DlQuantization
 template <typename DTYPE>
 class IQuantizationEncodingAnalyzer
 {
+
 public:
     virtual ~IQuantizationEncodingAnalyzer() = default;
 
@@ -57,7 +58,9 @@ public:
      * @param tensorSize Number of elements in the tensor
      * @param tensorCpuGpuMode Enum indicating whether the tensor is placed in CPU or GPU memory
      */
-    virtual void updateStats(const DTYPE* tensor, const std::size_t tensorSize, ComputationMode tensorCpuGpuMode) = 0;
+    virtual void updateStats(const DTYPE* tensor, const size_t tensorSize, ComputationMode tensorCpuGpuMode) = 0;
+
+    virtual void updateStats(const DTYPE* tensor, const size_t tensorSize, ComputationMode tensorCpuGpuMode, IAllocator* allocator) = 0;
 
     /**
      * @brief Given a number distribution in CPU memory, compute the TensorFlow
