@@ -97,9 +97,9 @@ DTYPE GetMin(const DTYPE* data, int cnt, ComputationMode cpuGpuMode);
 double logBase2(double d);
 
 /**
- * @brief Creat a probability density function and average it into the
+ * @brief Create a probability density function and average it into the
  * data we have so far.
- * @param data The number distribution for which we create a density function.
+ * @param data The data to create probability densiti function from.
  * @param cnt The number of data points.
  * @param mode_cpu_gpu The 'data' buffer is either in CPU or GPU memory.
  * @param signed_vals If true, we create a histogram of the actual values. If
@@ -107,10 +107,29 @@ double logBase2(double d);
  * @param pdf Compute a probability density function. If this PDF already
  * contains values, update the PDF by averaging it with the new number
  * distribution.
+ * @param allocator Device memory allocator. If nullptr, there is no device
+ * memory allocator available.
  */
 template <typename DTYPE>
-void UpdatePdf(const DTYPE* data, int cnt, ComputationMode mode_cpu_gpu, bool signed_vals, PDF& pdf, IAllocator* allocator);
+void UpdatePdf(const DTYPE* data,
+               int cnt,
+               ComputationMode mode_cpu_gpu,
+               bool signed_vals,
+               PDF& pdf,
+               IAllocator* allocator);
 
+/**
+ * @brief Create a histogram of a given tensor
+ * @param data The data to create histogram from.
+ * @param cnt The number of data points.
+ * @param bucket_size Size of each bucket
+ * @param pdf_offset The minimum value that the leftmost bucket can cover
+ * @param mode_cpu_gpu The 'data' buffer is either in CPU or GPU memory.
+ * @param is_signed If true, we create a histogram of the actual values. If
+ * set to false, we create a histogram of the absolute values.
+ * @param allocator Device memory allocator. If nullptr, there is no device
+ * memory allocator available.
+ */
 template <typename DTYPE>
 void GetHistogram(const DTYPE* data,
                   const int cnt,

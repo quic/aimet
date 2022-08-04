@@ -60,6 +60,13 @@ public:
      */
     virtual void updateStats(const DTYPE* tensor, const size_t tensorSize, ComputationMode tensorCpuGpuMode) = 0;
 
+    /**
+     * @brief Given a tensor update running stats for this encoding analyzer
+     * @param tensor The tensor to use for updating stats
+     * @param tensorSize Number of elements in the tensor
+     * @param tensorCpuGpuMode Enum indicating whether the tensor is placed in CPU or GPU memory
+     * @param allocator Device memory allocator. If nullptr, there is no device memory allocator available.
+     */
     virtual void updateStats(const DTYPE* tensor, const size_t tensorSize, ComputationMode tensorCpuGpuMode, IAllocator* allocator) = 0;
 
     /**
