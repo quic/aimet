@@ -463,24 +463,18 @@ class QuantizationSimModel:
         :param layers_to_exclude: List of torch layers to exclude
         :return: None
         """
-
         # Save the excluded layer names. Do not save the modules since the wrapper removal depends on
         # reference count to automatically remove the layers.
-        # pylint: disable=protected-access
-
-        model_name = self.model.__class__.__name__
+        module_to_name_dict = utils.get_module_to_name_dict(self.model)
+        quant_layers_to_exclude = []
         for layer in layers_to_exclude:
-            excluded_name_with_model_name = self.connected_graph._module_to_name.get(layer._module_to_wrap)
+            for module in layer.modules():
+                if isinstance(module, (QcQuantizeWrapper, QcQuantizeRecurrent)):
+                    quant_layers_to_exclude.append(module)
+                    excluded_module_name = module_to_name_dict.get(module)
+                    self._excluded_layer_names.append(excluded_module_name)
 
-            if excluded_name_with_model_name:
-                # Remove the model name
-                excluded_name = excluded_name_with_model_name.replace((model_name+'.'), '')
-                self._excluded_layer_names.append(excluded_name)
-            else:
-                # A layer to be excluded was not found in Connected Graph
-                logger.error("Unable to add layer name to the list of excluded layer names: %s", layer)
-
-        self._remove_quantization_wrappers(self.model, layers_to_exclude)
+        self._remove_quantization_wrappers(self.model, quant_layers_to_exclude)
 
     def exclude_param_from_quantization(self, param_name_to_exclude: str):
         """
