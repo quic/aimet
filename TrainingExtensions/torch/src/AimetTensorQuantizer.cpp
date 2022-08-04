@@ -47,6 +47,8 @@
 #include <vector>
 
 #include <torch/extension.h>
+
+#if ENABLE_CUDA_PYTORCH
 #include <c10/cuda/CUDACachingAllocator.h>
 
 
@@ -66,6 +68,7 @@ public:
 
 
 static PyTorchCudaAllocator _allocator;
+#endif
 
 
 class AimetTensorQuantizer
@@ -115,7 +118,11 @@ public:
         DlQuantization::IAllocator* allocator;
         if ("1" == use_gpu_string)
         {
+#if ENABLE_CUDA_PYTORCH
             allocator = &_allocator;
+#else
+            allocator = nullptr;
+#endif
         }
         else
         {

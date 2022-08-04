@@ -37,13 +37,22 @@
 # =============================================================================
 
 import glob
+import os
 from setuptools import setup
-from torch.utils.cpp_extension import BuildExtension, CUDAExtension
+from torch.utils.cpp_extension import BuildExtension, CppExtension, CUDAExtension
+
+enable_cuda = os.environ["ENABLE_CUDA_PYTORCH"]
+if enable_cuda == "1":
+    extension_cls = CUDAExtension
+elif enable_cuda == "0":
+    extension_cls = CppExtension
+else:
+    raise ValueError(f"Unexpected value for 'ENABLE_CUDA'. Expected 0 or 1; got {enable_cuda}")
 
 setup(
     name='aimet_tensor_quantizer',
     ext_modules=[
-        CUDAExtension(
+        extension_cls(
             name='AimetTensorQuantizer',
             sources=['${CMAKE_CURRENT_SOURCE_DIR}/src/AimetTensorQuantizer.cpp'],
             include_dirs=['${DlQuantizationIncludePaths}'],
@@ -51,4 +60,5 @@ setup(
     ],
     cmdclass={
         'build_ext': BuildExtension
-    })
+    }
+)
