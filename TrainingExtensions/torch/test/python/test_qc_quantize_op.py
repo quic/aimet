@@ -621,7 +621,7 @@ class TestQcQuantizeOpLearnedGrid:
         # custom gradient computation
         # compute this one time and pass it to forward function
         n, p = LearnedGridTensorQuantizer.get_n_and_p(bitwidth=8, use_symmetric_encoding=False,
-                                                      use_unsigned_symmetric=False, use_strict_symmetric=False)
+                                                      use_strict_symmetric=False)
         c_input_grad, c_min_grad, c_max_grad = TestQcQuantizeOpLearnedGrid.perform_custom_grad_computation(
             custom_input, _min, _max, n, p
         )
@@ -672,7 +672,7 @@ class TestQcQuantizeOpLearnedGrid:
         for i in range(1, iterations):
             # compute this one time and pass it to forward function
             n, p = LearnedGridTensorQuantizer.get_n_and_p(bitwidth=8, use_symmetric_encoding=False,
-                                                          use_unsigned_symmetric=False, use_strict_symmetric=False)
+                                                          use_strict_symmetric=False)
             start_time = time.perf_counter()
             _ = TestQcQuantizeOpLearnedGrid.perform_custom_grad_computation(custom_input, 0.0015, 1.0, n, p)
             exec_time = time.perf_counter() - start_time
@@ -720,34 +720,33 @@ class TestQcQuantizeOpLearnedGrid:
         """
         bitwidth = 8
 
-        signed_strict_sym_n, signed_strict_sym_p = LearnedGridTensorQuantizer.get_n_and_p(bitwidth, use_symmetric_encoding=True,
-                                                                                          use_unsigned_symmetric=False,
-                                                                                          use_strict_symmetric=True)
+        # for 8 bit , 0 to 255 if not strict symmetric
+        sym_n, sym_p = LearnedGridTensorQuantizer.get_n_and_p(bitwidth, use_symmetric_encoding=True, use_strict_symmetric=False)
 
-        # for 8 bit (Strict case) , -127 to +127
-        expected_signed_strict_sym_n = (-2 ** (bitwidth - 1)) + 1
-        expected_signed_strict_sym_p = (2 ** (bitwidth - 1)) - 1
+        expected_sym_n = 0
+        expected_sym_p = (2 ** bitwidth) - 1
 
-        comp_signed_strict_symmetric_n = signed_strict_sym_n.data[0].item()
-        comp_signed_strict_symmetric_p = signed_strict_sym_p.data[0].item()
+        comp_symmetric_n = sym_n.data[0].item()
+        comp_symmetric_p = sym_p.data[0].item()
 
+        assert expected_sym_n == comp_symmetric_n
+        assert expected_sym_p == comp_symmetric_p
 
-        # for 8 bit (Not strict ase) , -128 to +127
-        signed_sym_n, signed_sym_p = LearnedGridTensorQuantizer.get_n_and_p(bitwidth, use_symmetric_encoding=True,
-                                                                            use_unsigned_symmetric=False,
-                                                                            use_strict_symmetric=False)
-        comp_signed_symmetric_n = signed_sym_n.data[0].item()
-        comp_signed_symmetric_p = signed_sym_p.data[0].item()
+        # for 8 bit, 0 to 254 if strict symmetric
+        strict_sym_n, strict_sym_p = LearnedGridTensorQuantizer.get_n_and_p(bitwidth, use_symmetric_encoding=True, use_strict_symmetric=True)
 
-        expected_signed_sym_n = -2 ** (bitwidth - 1)
-        expected_signed_sym_p = (2 ** (bitwidth - 1)) - 1
+        expected_strict_sym_n = 0
+        expected_strict_sym_p = ((2 ** bitwidth) - 1) - 1
 
+        comp_strict_symmetric_n = strict_sym_n.data[0].item()
+        comp_strict_symmetric_p = strict_sym_p.data[0].item()
 
-        asym_n, asym_p = LearnedGridTensorQuantizer.get_n_and_p(bitwidth, use_symmetric_encoding=False,
-                                                                use_unsigned_symmetric=False,
-                                                                use_strict_symmetric=False)
+        assert expected_strict_sym_n == comp_strict_symmetric_n
+        assert expected_strict_sym_p == comp_strict_symmetric_p
 
         # for 8 bit , 0 to 255
+        asym_n, asym_p = LearnedGridTensorQuantizer.get_n_and_p(bitwidth, use_symmetric_encoding=False, use_strict_symmetric=False)
+
         expected_asym_n = 0
         expected_asym_p = (2 ** bitwidth) - 1
         comp_asymmetric_n = asym_n.data[0].item()
@@ -756,11 +755,9 @@ class TestQcQuantizeOpLearnedGrid:
         assert expected_asym_n == comp_asymmetric_n
         assert expected_asym_p == comp_asymmetric_p
 
-        assert expected_signed_strict_sym_n == comp_signed_strict_symmetric_n
-        assert expected_signed_strict_sym_p == comp_signed_strict_symmetric_p
-
-        assert expected_signed_sym_n == comp_signed_symmetric_n
-        assert expected_signed_sym_p == comp_signed_symmetric_p
+        # Should raise exception when SymmetricEncoding=False, UseStrictSymmetric=True
+        with pytest.raises(ValueError):
+            _, _ = LearnedGridTensorQuantizer.get_n_and_p(bitwidth, use_symmetric_encoding=False, use_strict_symmetric=True)
 
 
     def test_ste_gating_for_learnable_grid_wrapper(self):

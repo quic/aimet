@@ -504,8 +504,7 @@ class LearnedGridTensorQuantizer(TensorQuantizer):
         self.name = None
         self.round_ste_func = grad_fn.RoundStraightThrough.apply
         # p is the granularity/ steps (2^bw - 1)
-        self.n, self.p = LearnedGridTensorQuantizer.get_n_and_p(self.bitwidth, self.use_symmetric_encodings,
-                                                                self.use_unsigned_symmetric, self.use_strict_symmetric)
+        self.n, self.p = LearnedGridTensorQuantizer.get_n_and_p(self.bitwidth, self.use_symmetric_encodings, self.use_strict_symmetric)
         # Moving n and p device once so that we don't have to move it for every batch
         self.scaling, self.offset = None, None
         self._ch_axis = 0
@@ -517,33 +516,22 @@ class LearnedGridTensorQuantizer(TensorQuantizer):
 
     @staticmethod
     def get_n_and_p(bitwidth: int, use_symmetric_encoding: bool,
-                    use_unsigned_symmetric: bool, use_strict_symmetric: bool) -> Tuple[torch.Tensor, torch.Tensor]:
+                    use_strict_symmetric: bool) -> Tuple[torch.Tensor, torch.Tensor]:
         """
         compute bounds n and p params given bitwidth and use_symmetric_encoding flag
         :param bitwidth: bitwidth configured
         :param use_symmetric_encoding: boolean flag indicates symmetric/asymmetric encoding
-        :param use_unsigned_symmetric: boolean flag indicates signed/unsigned when symmetric encoding
         :param use_strict_symmetric: boolean flag indicates strict or not when symmetric encoding
         :return: n and p params computed as torch tensors
         """
+        if not use_symmetric_encoding and use_strict_symmetric:
+            raise ValueError("Strict symmetric can be enabled only when using symmetric encoding")
 
-        two_pow_bw = torch.pow(torch.Tensor([2]), bitwidth)
-        two_pow_bw_minus_1 = torch.pow(torch.Tensor([2]), (bitwidth - 1))
+        n = 0.0
+        p = torch.pow(torch.Tensor([2]), bitwidth) - 1
 
-        use_asymmetric_encoding = not use_symmetric_encoding
-
-        if use_asymmetric_encoding or (use_symmetric_encoding and use_unsigned_symmetric):
-            # asymmetric case or unsigned symmetric case : n = 0  , p = 2 ** (bw) - 1
-            n = 0.0
-            p = two_pow_bw - 1
-        elif use_symmetric_encoding and use_strict_symmetric:
-            # Symmetric Strict Signed : n = -2 ** (bw - 1), p = 2 ** (bw - 1) - 1
-            n = torch.add(-1.0 * two_pow_bw_minus_1, 1.0)
-            p = torch.sub(two_pow_bw_minus_1, 1.0)
-        else:
-            # Symmetric Signed  : -2 ** (bw - 1) + 1  , p = 2 ** (bw - 1) - 1
-            n = -1.0 * two_pow_bw_minus_1
-            p = torch.sub(two_pow_bw_minus_1, 1.0)
+        if use_symmetric_encoding and use_strict_symmetric:
+            p -= 1
 
         n = torch.Tensor([n])
         p = torch.Tensor([p])
@@ -690,8 +678,7 @@ class LearnedGridTensorQuantizer(TensorQuantizer):
         bitwidth = encodings[0].bw if isinstance(encodings, List) else encodings.bw
         assert bitwidth == self.bitwidth, "Bitwidth mismatched."
 
-        self.n, self.p = self.get_n_and_p(self.bitwidth, self.use_symmetric_encodings,
-                                          self.use_unsigned_symmetric, self.use_strict_symmetric)
+        self.n, self.p = self.get_n_and_p(self.bitwidth, self.use_symmetric_encodings, self.use_strict_symmetric)
 
     def freeze_encoding(self):
         """
