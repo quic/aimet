@@ -35,7 +35,6 @@
 #  @@-COPYRIGHT-END-@@
 #
 #=============================================================================
-cmake_minimum_required(VERSION 3.5)
 
 add_subdirectory(DlQuantization)
 add_subdirectory(DlCompression)

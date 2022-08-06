@@ -36,7 +36,6 @@
 
 # CMake file to generate AIMET packages
 
-cmake_minimum_required(VERSION 3.5)
 
 set(src_packaging_dir "${SOURCE_DIR}/packaging")
 set(src_deps_dir "${src_packaging_dir}/dependencies")
