@@ -37,7 +37,6 @@
 # =============================================================================
 
 import pytest
-import unittest.mock
 import json
 import os
 import torch
@@ -1075,8 +1074,9 @@ class TestTrainingExtensionBnFoldToScale:
         sim = quantsim(model, (2, 10, 24,  24))
         model = sim.model
 
-        with pytest.raises(RuntimeError):
-            fold_all_batch_norms_to_scale(sim, (2, 10, 24, 24))
+        fold_all_batch_norms_to_scale(sim, (2, 10, 24, 24))
+        # Folding BatchNorm to transposed depthwise convolution is not supported
+        assert isinstance(model.bn1._module_to_wrap, torch.nn.BatchNorm2d)
 
     def test_fold_bn_after_conv_with_bias(self):
 

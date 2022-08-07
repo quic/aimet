@@ -51,6 +51,7 @@ import aimet_common.libpymo as libpymo
 from aimet_common.bias_correction import ConvBnPatternHandler
 from aimet_common.graph_pattern_matcher import PatternType
 from aimet_common.graph_searcher import GraphSearcher
+from aimet_common.utils import AimetLogger
 
 # pylint: disable=unused-import
 from aimet_torch.defs import PassThroughOp
@@ -59,6 +60,8 @@ from aimet_torch.meta.connectedgraph import ConnectedGraph
 from aimet_torch.quantsim import QuantizationSimModel
 from aimet_torch.qc_quantize_op import QcQuantizeWrapper
 from aimet_torch.tensor_quantizer import LearnedGridTensorQuantizer
+
+_logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.BatchNormFoldiing)
 
 
 LayerType = Union[
@@ -144,6 +147,10 @@ def _call_mo_batch_norm_fold(weight: torch.Tensor,
         )
 
 
+class _BatchNormFoldingNotSupported(RuntimeError):
+    pass
+
+
 def _fold_to_scale(conv_wrapper: QcQuantizeWrapper, bn_wrapper: QcQuantizeWrapper):
     """
     Fold BatchNorm into the scale and bias of the given layer.
@@ -152,10 +159,13 @@ def _fold_to_scale(conv_wrapper: QcQuantizeWrapper, bn_wrapper: QcQuantizeWrappe
     :param bn_wrapper: QcQuantizeWrapper that wraps bn.
     """
     # pylint: disable=protected-access
+    conv = conv_wrapper._module_to_wrap
+    bn = bn_wrapper._module_to_wrap
+
     weight_quantizer = conv_wrapper.param_quantizers["weight"]
 
     if not isinstance(weight_quantizer, LearnedGridTensorQuantizer):
-        raise RuntimeError(
+        raise _BatchNormFoldingNotSupported(
             "BatchNorm folding to scale supports LearnedGridTensorQuantizer only; "
             f"got {type(weight_quantizer)}."
         )
@@ -163,12 +173,16 @@ def _fold_to_scale(conv_wrapper: QcQuantizeWrapper, bn_wrapper: QcQuantizeWrappe
     output_quantizer = conv_wrapper.output_quantizers[0]
 
     if output_quantizer.enabled:
-        raise RuntimeError("Can't fold unless conv and bn belongs to the same supergroup.")
+        raise _BatchNormFoldingNotSupported(
+            "BatchNorm should belong to the same supergroup with the layer to be folded to."
+        )
 
     if "bias" in conv_wrapper.param_quantizers:
         bias_quantizer = conv_wrapper.param_quantizers["bias"]
         if bias_quantizer.enabled:
-            raise RuntimeError("Can't fold to scale if bias quantizer is enabled.")
+            raise _BatchNormFoldingNotSupported(
+                "Can't fold BatchNorm to scale if bias quantizer is enabled."
+            )
 
     encodings = weight_quantizer.encoding
 
@@ -178,11 +192,10 @@ def _fold_to_scale(conv_wrapper: QcQuantizeWrapper, bn_wrapper: QcQuantizeWrappe
     if isinstance(encodings, libpymo.TfEncoding):
         encodings = [encodings]
 
-    conv = conv_wrapper._module_to_wrap
-    bn = bn_wrapper._module_to_wrap
-
     if isinstance(conv, _ConvTransposeNd) and conv.groups != 1:
-        raise RuntimeError("BN folding to scale is not supported for grouped ConvTransposeNd.")
+        raise _BatchNormFoldingNotSupported(
+            "BatchNorm folding to scale is not supported for grouped ConvTransposeNd."
+        )
 
     # Add quantization noise to the BN params (bn weight & bn bias) before folding.
     with bn_wrapper._quantize_params():
@@ -280,7 +293,7 @@ def fold_given_batch_norms(model, layer_pairs):
             bn = y
             conv_bn_pairs.append((conv, bn))
 
-    _fold_given_batch_norms(model, conv_bn_pairs, bn_conv_pairs,)
+    _fold_given_batch_norms(model, conv_bn_pairs, bn_conv_pairs)
 
 
 def _fold_given_batch_norms(model,
@@ -299,12 +312,25 @@ def _fold_given_batch_norms(model,
         if isinstance(conv, QcQuantizeWrapper):
             raise RuntimeError(f"Forward folding to scale is not possible. Got {conv}")
 
+    bn_modules = []
+
     def _fold(conv, bn, fold_backward):
-        if isinstance(conv, QcQuantizeWrapper) or isinstance(bn, QcQuantizeWrapper):
-            assert isinstance(conv, QcQuantizeWrapper) and isinstance(bn, QcQuantizeWrapper)
-            _fold_to_scale(conv, bn)
+        is_wrapped = isinstance(conv, QcQuantizeWrapper) or isinstance(bn, QcQuantizeWrapper)
+        try:
+            if is_wrapped:
+                assert isinstance(conv, QcQuantizeWrapper) and isinstance(bn, QcQuantizeWrapper)
+                _fold_to_scale(conv, bn)
+                bn_modules.append(bn._module_to_wrap)
+            else:
+                _fold_to_weight(conv, bn, fold_backward=fold_backward)
+        except _BatchNormFoldingNotSupported as e:
+            bn_name = utils.get_layer_name(model, bn)
+            conv_name = utils.get_layer_name(model, conv)
+            _logger.warning(
+                "Failed to fold %s to %s. [Reason] %s", bn_name, conv_name, str(e)
+            )
         else:
-            _fold_to_weight(conv, bn, fold_backward=fold_backward)
+            bn_modules.append(bn._module_to_wrap if is_wrapped else bn)
 
 
     with utils.in_eval_mode(model), torch.no_grad():
@@ -314,11 +340,6 @@ def _fold_given_batch_norms(model,
         for bn, conv in bn_conv_pairs:
             _fold(conv, bn, fold_backward=False)
 
-        bn_modules = [bn for _, bn in conv_bn_pairs] + [bn for bn, _ in bn_conv_pairs]
-        bn_modules = [
-            bn._module_to_wrap if isinstance(bn, QcQuantizeWrapper) else bn
-            for bn in bn_modules
-        ]
         _delete_bn_from_model(model, bn_modules)
 
 

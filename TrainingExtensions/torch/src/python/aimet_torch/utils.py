@@ -346,9 +346,9 @@ def get_layer_name(model, layer):
     :return:
     """
     for name, module in model.named_modules():
-        if module == layer:
+        if module is layer:
             return name
-    return KeyError
+    raise KeyError(f"Couldn't find layer {layer} from model {model}")
 
 
 def get_layer_by_name(model, layer_name):
@@ -358,10 +358,10 @@ def get_layer_by_name(model, layer_name):
     :param layer_name   : layer_name
     :return:
     """
-    for name, module in model.named_modules():
-        if name == layer_name:
-            return module
-    return KeyError
+    try:
+        return dict(model.named_modules())[layer_name]
+    except KeyError as e:
+        raise KeyError(f"Couldn't find layer named {layer_name}") from e
 
 
 def is_model_on_gpu(model):
