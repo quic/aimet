@@ -44,7 +44,6 @@ if (ENABLE_CUDA)
     target_link_libraries(PyModelOptimizations
           PUBLIC
              stdc++
-             PYBIND11
              MoDlQuantization
              MoDlEqualization
              MoDlQuantizationCuda
@@ -60,7 +59,6 @@ else (ENABLE_CUDA)
     target_link_libraries(PyModelOptimizations
             PUBLIC
             stdc++
-            PYBIND11
             MoDlQuantization
             MoDlEqualization
             MoDlCompression

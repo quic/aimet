@@ -62,7 +62,11 @@ add_library(MoDlEqualization STATIC
 target_include_directories(MoDlEqualization
       PUBLIC
       ${CMAKE_CURRENT_SOURCE_DIR}/include
-      ${PYBIND11_INC_DIRS})
+      )
+
+target_link_libraries(MoDlEqualization
+      PUBLIC PYBIND11
+      )
 
 target_compile_options(MoDlEqualization
         PRIVATE

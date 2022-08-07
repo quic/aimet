@@ -118,29 +118,34 @@ if (ENABLE_TORCH)
                   OUTPUT_STRIP_TRAILING_WHITESPACE
                   )
   find_package(Torch REQUIRED PATHS ${TORCH_CMAKE_DIR} NO_DEFAULT_PATH)
-
-  # If we enable PyTorch builds then use the pybind11 headers that are part of the torch pip install
-  # So we don't have a version mismatch - between PyTorch custom C++ op code and PyMO
-  list(APPEND PYBIND11_INC_DIRS "${PYTHON_DIST_PACKAGES}/torch/include")
-  list(APPEND PYBIND11_INC_DIRS ${Python_INCLUDE_DIRS})
-
 else (ENABLE_TORCH)
-  list(APPEND PYBIND11_INC_DIRS "${PYTHON_DIST_PACKAGES}/pybind11/include/")
-  list(APPEND PYBIND11_INC_DIRS ${Python_INCLUDE_DIRS})
-
   message("AIMET Torch build disabled")
-
 endif (ENABLE_TORCH)
 
 # ----------------------------------
 # PyBind11
 # ----------------------------------
+execute_process(COMMAND ${Python3_EXECUTABLE} "-c" "import pybind11;print(pybind11.get_include())"
+                RESULT_VARIABLE PYBIND11_NOT_FOUND
+                OUTPUT_VARIABLE PYBIND11_INCLUDE_DIRS
+                OUTPUT_STRIP_TRAILING_WHITESPACE
+                )
+# If we enable PyTorch builds then use the pybind11 headers that are part of the torch pip install
+# So we don't have a version mismatch - between PyTorch custom C++ op code and PyMO
+find_path(PYBIND11_INCLUDE "pybind11.h"
+          PATHS ${TORCH_INCLUDE_DIRS} ${PYBIND11_INCLUDE_DIRS}
+          PATH_SUFFIXES "pybind11"
+          REQUIRED
+          NO_DEFAULT_PATH
+        )
+get_filename_component(PYBIND11_INC_DIRS ${PYBIND11_INCLUDE} DIRECTORY)
 
 add_library(PYBIND11 SHARED IMPORTED)
 
 set_target_properties(PYBIND11 PROPERTIES
         IMPORTED_LOCATION ${Python3_LIBRARIES}
         INTERFACE_INCLUDE_DIRECTORIES "${PYBIND11_INC_DIRS}"
+        INTERFACE_LINK_LIBRARIES Python3::Module
         )
 
 # ----------------------------------

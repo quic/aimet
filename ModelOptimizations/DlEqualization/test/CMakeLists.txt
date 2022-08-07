@@ -53,7 +53,6 @@ target_compile_options(MoDlEqualizationTest
 target_link_libraries(MoDlEqualizationTest
         MoDlEqualization
         stdc++
-        PYBIND11
         ${LAPACKE_LIBRARY}
         ${OPENCV_LIBRARY}
         z
