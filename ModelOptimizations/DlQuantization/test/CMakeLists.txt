@@ -83,7 +83,7 @@ add_test(MoDlQuantizationTest
       MoDlQuantizationTest --gtest_output=xml:cpp_test_output.xml)
 
 add_test(MoDlQuantizationPythonTest
-      pytest ${CMAKE_CURRENT_SOURCE_DIR} --junitxml=${CMAKE_CURRENT_BINARY_DIR}/py_test_output.xml
+      ${Python3_EXECUTABLE} -m pytest ${CMAKE_CURRENT_SOURCE_DIR} --junitxml=${CMAKE_CURRENT_BINARY_DIR}/py_test_output.xml
       )
 
 set_property(TEST MoDlQuantizationPythonTest

@@ -98,11 +98,11 @@ set(OPENCV_LIBRARY /usr/local/lib/libopencv_core.a)
 # Conditional build for PyTorch
 # ----------------------------------
 
-find_package(Python COMPONENTS Interpreter Development)
-set(PYTHON_DIST_PACKAGES "/usr/local/lib/python${Python_VERSION_MAJOR}.${Python_VERSION_MINOR}/dist-packages/")
-message("Found python: ${Python_FOUND}, at ${Python_LIBRARIES}")
+find_package(Python3 COMPONENTS Interpreter Development)
+set(PYTHON_DIST_PACKAGES "/usr/local/lib/python${Python3_VERSION_MAJOR}.${Python3_VERSION_MINOR}/dist-packages/")
+message("Found python: ${Python3_FOUND}, at ${Python3_LIBRARIES}")
 EXECUTE_PROCESS( COMMAND "uname" "-m" OUTPUT_VARIABLE ARCHITECTURE OUTPUT_STRIP_TRAILING_WHITESPACE)
-execute_process(COMMAND "python" "-c" "import sys; print(sys.abiflags)" OUTPUT_VARIABLE ABI_FLAGS OUTPUT_STRIP_TRAILING_WHITESPACE)
+execute_process(COMMAND "${Python3_EXECUTABLE}" "-c" "import sys; print(sys.abiflags)" OUTPUT_VARIABLE ABI_FLAGS OUTPUT_STRIP_TRAILING_WHITESPACE)
 
 if (NOT (DEFINED ENABLE_TORCH))
   message("AIMET Torch build not explicitly disabled. Enabling implicitly")
@@ -133,7 +133,7 @@ endif (ENABLE_TORCH)
 add_library(PYBIND11 SHARED IMPORTED)
 
 set_target_properties(PYBIND11 PROPERTIES
-        IMPORTED_LOCATION ${Python_LIBRARIES}
+        IMPORTED_LOCATION ${Python3_LIBRARIES}
         INTERFACE_INCLUDE_DIRECTORIES "${PYBIND11_INC_DIRS}"
         )
 
@@ -150,9 +150,9 @@ endif(NOT (DEFINED ENABLE_TENSORFLOW))
 if (ENABLE_TENSORFLOW)
   if(NOT DEFINED TF_LIB_DIR)
     # Get location of TensorFlow library
-    execute_process(COMMAND "python" "-c" "import tensorflow as tf; print(tf.sysconfig.get_lib())" OUTPUT_VARIABLE TF_LIB_DIR OUTPUT_STRIP_TRAILING_WHITESPACE)
+    execute_process(COMMAND "${Python3_EXECUTABLE}" "-c" "import tensorflow as tf; print(tf.sysconfig.get_lib())" OUTPUT_VARIABLE TF_LIB_DIR OUTPUT_STRIP_TRAILING_WHITESPACE)
     # Get Tensorflow version
-    execute_process(COMMAND "python" "-c" "import tensorflow as tf; print(tf.__version__)" OUTPUT_VARIABLE TF_VERSION OUTPUT_STRIP_TRAILING_WHITESPACE)
+    execute_process(COMMAND "${Python3_EXECUTABLE}" "-c" "import tensorflow as tf; print(tf.__version__)" OUTPUT_VARIABLE TF_VERSION OUTPUT_STRIP_TRAILING_WHITESPACE)
     message(STATUS "Found TensorFlow version: ${TF_VERSION} TensorFlow library path: ${TF_LIB_DIR}")
   else(TF_LIB_DIR)
     message(STATUS "TensorFlow version and TensorFlow library already set.")
