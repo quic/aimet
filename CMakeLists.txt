@@ -112,6 +112,12 @@ endif(NOT (DEFINED ENABLE_TORCH))
 
 if (ENABLE_TORCH)
   set(AIMET_PYTHONPATH "${AIMET_PYTHONPATH}:${CMAKE_CURRENT_SOURCE_DIR}/TrainingExtensions/torch/src/python:${CMAKE_CURRENT_SOURCE_DIR}/TrainingExtensions/onnx/src/python")
+  execute_process(COMMAND ${Python3_EXECUTABLE} "-c" "import torch;print(torch.utils.cmake_prefix_path)"
+                  RESULT_VARIABLE TORCH_NOT_FOUND
+                  OUTPUT_VARIABLE TORCH_CMAKE_DIR
+                  OUTPUT_STRIP_TRAILING_WHITESPACE
+                  )
+  find_package(Torch REQUIRED PATHS ${TORCH_CMAKE_DIR} NO_DEFAULT_PATH)
 
   # If we enable PyTorch builds then use the pybind11 headers that are part of the torch pip install
   # So we don't have a version mismatch - between PyTorch custom C++ op code and PyMO
