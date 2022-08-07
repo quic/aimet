@@ -115,6 +115,7 @@ class AimetLogger(metaclass=SingletonType):
         Nas = 'Nas'
         NasPipeline = 'NasPipeline'
         DeviceFramework = 'DeviceFramework'
+        BatchNormFoldiing = "BatchNormFolding"
 
     def __init__(self):
         self._logger = logging.getLogger()
