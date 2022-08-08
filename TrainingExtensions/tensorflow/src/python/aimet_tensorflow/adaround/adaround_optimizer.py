@@ -168,6 +168,10 @@ class AdaroundOptimizer:
         # if possible otherwise fallback to original implementation which incurs CPU-GPU transfers.
         tensors_pinned, inp_tensor, out_tensor = self._pin_inp_and_out_tensors(all_inp_data, all_orig_out_data)
 
+        # Get the channels index for 'channels_last' data format to compute reconstruction loss
+        # across the channels index. 'channels_last' data format is only supported format.
+        channels_index = len(all_orig_out_data.shape) - 1
+
         for cur_iteration in tqdm(range(opt_params.num_iterations)):
 
             # During warm start period, rounding loss is zero
@@ -177,14 +181,8 @@ class AdaroundOptimizer:
             beta = AdaroundLoss.compute_beta(opt_params.num_iterations, cur_iteration, opt_params.beta_range,
                                              opt_params.warm_start)
 
-            # Get random indices of batch size and get original output and input activation data of batch size
+            # Get random indices of batch size
             indices = np.random.permutation(all_inp_data.shape[0])[:BATCH_SIZE]
-            inp_data = all_inp_data[indices]
-            orig_out_data = all_orig_out_data[indices]
-
-            # Get the channels index for 'channels_last' data format to compute reconstruction loss
-            # across the channels index
-            channels_index = len(orig_out_data.shape) - 1
 
             # Graph is created only once
             if cur_iteration == 0:
@@ -201,7 +199,7 @@ class AdaroundOptimizer:
             if tensors_pinned:
                 feed_dict.update({self._indices_tensor: indices})
             else:
-                feed_dict.update({inp_tensor: inp_data, out_tensor: orig_out_data})
+                feed_dict.update({inp_tensor: all_inp_data[indices], out_tensor: all_orig_out_data[indices]})
 
             _, total_loss, recon_loss, round_loss = self._optimizer_session.run([train_op, total_loss_tensor,
                                                                                  recon_loss_tensor, round_loss_tensor],
