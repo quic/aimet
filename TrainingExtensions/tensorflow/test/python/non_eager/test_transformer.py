@@ -801,6 +801,7 @@ class TransformerQuantizationUnittests(unittest.TestCase):
         del sim
         sess.close()
 
+    @pytest.mark.skip
     def test_hf_bert_embedding_multiple_readvar(self):
         tf.compat.v1.reset_default_graph()
 
