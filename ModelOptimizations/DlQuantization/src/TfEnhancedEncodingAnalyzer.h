@@ -59,6 +59,9 @@ public:
      */
     void updateStats(const DTYPE* tensor, const size_t tensorSize, ComputationMode tensorCpuGpuMode) override;
 
+    void updateStats(const DTYPE* tensor, const size_t tensorSize,
+                     ComputationMode tensorCpuGpuMode, IAllocator* allocator) override;
+
     /***
      * Given a number distribution in CPU memory, compute the TensorFlow encoding with the highest possible SQNR
      *

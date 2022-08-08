@@ -44,8 +44,32 @@
 
 #include <iostream>
 #include <string>
-#include <torch/extension.h>
 #include <vector>
+
+#include <torch/extension.h>
+
+#if ENABLE_CUDA_PYTORCH
+#include <c10/cuda/CUDACachingAllocator.h>
+
+
+class PyTorchCudaAllocator: public DlQuantization::IAllocator
+{
+public:
+    void* allocateRaw(size_t bytes) override
+    {
+        return c10::cuda::CUDACachingAllocator::raw_alloc(bytes);
+    }
+
+    void deleteRaw(void *ptr) override
+    {
+        c10::cuda::CUDACachingAllocator::raw_delete(ptr);
+    }
+};
+
+
+static PyTorchCudaAllocator _allocator;
+#endif
+
 
 class AimetTensorQuantizer
 {
@@ -69,6 +93,14 @@ public:
 
     void updateStats(at::Tensor input, bool use_cuda)
     {
+        const char* use_gpu = std::getenv("AIMET_TFE_USE_GPU");
+        std::string use_gpu_string = use_gpu ? use_gpu : "";
+
+        if (!use_gpu_string.empty() && "0" != use_gpu_string && "1" != use_gpu_string)
+        {
+            throw std::runtime_error("Variable `AIMET_TFE_USE_GPU` allows only 0 or 1.");
+        }
+
         // Set encoding as valid
         _isEncodingValid = true;
 
@@ -82,7 +114,21 @@ public:
 
         DlQuantization::ComputationMode cpu_gpu_mode =
             use_cuda ? DlQuantization::ComputationMode::COMP_MODE_GPU : DlQuantization::ComputationMode::COMP_MODE_CPU;
-        _encodingAnalyzer->updateStats(inputDataPtr, inputTensorSize, cpu_gpu_mode);
+
+        DlQuantization::IAllocator* allocator;
+        if ("1" == use_gpu_string)
+        {
+#if ENABLE_CUDA_PYTORCH
+            allocator = &_allocator;
+#else
+            allocator = nullptr;
+#endif
+        }
+        else
+        {
+            allocator = nullptr;
+        }
+        _encodingAnalyzer->updateStats(inputDataPtr, inputTensorSize, cpu_gpu_mode, allocator);
     }
 
 

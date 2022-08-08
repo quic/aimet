@@ -49,8 +49,14 @@ string(REPLACE ";" "','" DlQuantizationIncludePaths "${DlQuantizationIncludes}")
 
 configure_file(${CMAKE_CURRENT_SOURCE_DIR}/src/setup.py.in ${SETUP_PY})
 
+if (ENABLE_CUDA)
+    set(ENABLE_CUDA_PYTORCH 1)
+else()
+    set(ENABLE_CUDA_PYTORCH 0)
+endif()
+
 add_custom_command(OUTPUT ${OUTPUT}
-      COMMAND ${CMAKE_COMMAND} -E env PYTHONPATH="${CMAKE_BINARY_DIR}/artifacts"
+      COMMAND ${CMAKE_COMMAND} -E env PYTHONPATH="${CMAKE_BINARY_DIR}/artifacts" ENABLE_CUDA_PYTORCH=${ENABLE_CUDA_PYTORCH}
               ${PYTHON} ${SETUP_PY} install  --install-base=${CMAKE_BINARY_DIR}/artifacts
                                              --install-purelib=${CMAKE_BINARY_DIR}/artifacts
                                              --install-platlib=${CMAKE_BINARY_DIR}/artifacts
