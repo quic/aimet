@@ -62,10 +62,18 @@ template <typename DTYPE>
 void PercentileEncodingAnalyzer<DTYPE>::updateStats(const DTYPE* tensor, const size_t tensorSize,
                                                     ComputationMode tensorCpuGpuMode)
 {
+    updateStats(tensor, tensorSize, tensorCpuGpuMode, nullptr);
+}
+
+template <typename DTYPE>
+void PercentileEncodingAnalyzer<DTYPE>::updateStats(const DTYPE* tensor, const size_t tensorSize,
+                                                    ComputationMode tensorCpuGpuMode,
+                                                    IAllocator* allocator)
+{
     this->_statsUpdated = true;
 
     // update pdf
-    UpdatePdf(tensor, tensorSize, tensorCpuGpuMode, true, this->_stats);
+    UpdatePdf(tensor, tensorSize, tensorCpuGpuMode, true, this->_stats, allocator);
 }
 
 template <typename DTYPE>

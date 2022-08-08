@@ -88,6 +88,13 @@ void EntropyEncodingAnalyzer<DTYPE>::updateStats(const DTYPE* tensor, const size
 }
 
 template <typename DTYPE>
+void EntropyEncodingAnalyzer<DTYPE>::updateStats(const DTYPE* tensor, const size_t tensorSize,
+                                                 ComputationMode tensorCpuGpuMode, IAllocator* allocator)
+{
+    updateStats(tensor, tensorSize, tensorCpuGpuMode);
+}
+
+template <typename DTYPE>
 TfEncoding EntropyEncodingAnalyzer<DTYPE>::computeEncoding(uint8_t bw, bool useSymmetricEncodings,
                                                            bool useStrictSymmetric, bool useUnsignedSymmetric) const
 {
