@@ -50,15 +50,23 @@ from aimet_torch.meta.operation import Op
 logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Utils)
 
 
-def validate_for_reused_modules(model: torch.nn.Module, model_input: Union[torch.Tensor, Tuple], **kwargs) -> bool:
+def validate_for_reused_modules(model: torch.nn.Module, model_input: Union[torch.Tensor, Tuple],
+                                layers_to_exclude: Union[List[torch.nn.Module], None] = None, **kwargs) -> bool:
     """
     Check if the model has any reused modules. Returns True if there are none, False otherwise.
     :param model: Pytorch model to create connected graph from
     :param model_input: Example input to model.  Can be a single tensor or a list/tuple of input tensors
+    :param layers_to_exclude: List of layers to exclude from checking for reused modules
     :return: True if model has no reused modules, False otherwise
     """
     # pylint: disable=unused-argument
+    if not layers_to_exclude:
+        layers_to_exclude = []
+
+    layers_to_exclude = set(layers_to_exclude)
+    blacklisted_layers = _get_blacklisted_layers(layers_to_exclude)
     reused_modules = utils.get_reused_modules(model, model_input)
+    reused_modules = [(name, module) for (name, module) in reused_modules if module not in blacklisted_layers]
     if reused_modules:
         logger.warning('The following modules are used more than once in the model: %s\n'
                        'AIMET features are not designed to work with reused modules. Please redefine your model '
@@ -120,8 +128,7 @@ def _get_filtered_ops_with_missing_modules(model: torch.nn.Module, model_input: 
     blacklisted_layers = _get_blacklisted_layers(layers_to_exclude)
     ops_with_missing_modules = connectedgraph_utils.get_ops_with_missing_modules(model, model_input)
     filtered_ops_with_missing_modules = [op for op in ops_with_missing_modules if \
-                                         op.residing_module not in blacklisted_layers and \
-                                         op.type not in layers_to_exclude]
+                                         op.residing_module not in blacklisted_layers]
     return filtered_ops_with_missing_modules
 
 def _get_blacklisted_layers(layers_to_exclude: Set[torch.nn.Module]) -> Set[torch.nn.Module]:
