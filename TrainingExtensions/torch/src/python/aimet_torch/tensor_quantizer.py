@@ -36,11 +36,13 @@
 #  @@-COPYRIGHT-END-@@
 # =============================================================================
 """ Custom Tensor Quantizers for PyTorch Op for quantizing weights and activations """
-
+# pylint: disable=too-many-lines
 import io
-from typing import List, Union
+from typing import List, Union, Tuple
+from dataclasses import dataclass
 
 import torch
+from torch.autograd import Variable
 
 import aimet_common.libpymo as libpymo
 import aimet_common.AimetTensorQuantizer as AimetTensorQuantizer
@@ -51,6 +53,49 @@ from aimet_torch.quantsim_straight_through_grad import broadcast_to_tensor
 
 _logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Quant)
 
+
+@dataclass(frozen=True)
+class _EncodingParams:
+    """
+    Data carrier containing bitwidth and encoding flags (is_symmetric, use_unsigned_symmetric)
+    """
+    bitwidth: int
+    is_symmetric: bool
+    use_unsigned_symmetric: bool
+
+
+_encoding_params_to_dtype = {
+    _EncodingParams(bitwidth=8, is_symmetric=True, use_unsigned_symmetric=True): torch.uint8,
+    _EncodingParams(bitwidth=8, is_symmetric=True, use_unsigned_symmetric=False): torch.int8,
+    _EncodingParams(bitwidth=8, is_symmetric=False, use_unsigned_symmetric=True): torch.uint8,
+    _EncodingParams(bitwidth=8, is_symmetric=False, use_unsigned_symmetric=False): torch.uint8,
+    _EncodingParams(bitwidth=16, is_symmetric=True, use_unsigned_symmetric=False): torch.int16
+}
+
+
+def _compute_delta_and_offset(tensor: torch.Tensor,
+                              encoding_min: torch.nn.Parameter,
+                              encoding_max: torch.nn.Parameter,
+                              steps: int,
+                              channel_axis: int) -> Tuple[torch.Tensor, torch.Tensor]:
+    """
+    Compute delta and offset, also broadcast if needed (per-channel case)
+
+    :param tensor: Input tensor
+    :param encoding_min: Encoding min
+    :param encoding_max: Encoding max
+    :param steps: Steps computed by bitwidth
+    :param channel_axis: Channel axis to use for per-channel quant
+    :return: Tuple of delta and offset
+    """
+    delta = (encoding_max - encoding_min) / steps
+    offset = torch.round(encoding_min / delta)
+
+    if len(encoding_min) > 1:
+        delta = grad_fn.broadcast_to_tensor(tensor, delta, channel_axis)
+        offset = grad_fn.broadcast_to_tensor(tensor, offset, channel_axis)
+
+    return delta, offset
 
 class TensorQuantizer:
     """
@@ -459,7 +504,7 @@ class LearnedGridTensorQuantizer(TensorQuantizer):
         self.name = None
         self.round_ste_func = grad_fn.RoundStraightThrough.apply
         # p is the granularity/ steps (2^bw - 1)
-        self.n, self.p = LearnedGridTensorQuantizer.get_n_and_p(self.bitwidth, self.use_symmetric_encodings)
+        self.n, self.p = LearnedGridTensorQuantizer.get_n_and_p(self.bitwidth, self.use_symmetric_encodings, self.use_strict_symmetric)
         # Moving n and p device once so that we don't have to move it for every batch
         self.scaling, self.offset = None, None
         self._ch_axis = 0
@@ -470,25 +515,23 @@ class LearnedGridTensorQuantizer(TensorQuantizer):
         return self.wrapper_ref.device
 
     @staticmethod
-    def get_n_and_p(bitwidth, use_symmetric_encoding):
+    def get_n_and_p(bitwidth: int, use_symmetric_encoding: bool,
+                    use_strict_symmetric: bool) -> Tuple[torch.Tensor, torch.Tensor]:
         """
         compute bounds n and p params given bitwidth and use_symmetric_encoding flag
         :param bitwidth: bitwidth configured
-        :param use_symmetric_encoding: boolean flag indicates symmetric/ asymmetric encoding
+        :param use_symmetric_encoding: boolean flag indicates symmetric/asymmetric encoding
+        :param use_strict_symmetric: boolean flag indicates strict or not when symmetric encoding
         :return: n and p params computed as torch tensors
         """
+        if not use_symmetric_encoding and use_strict_symmetric:
+            raise ValueError("Strict symmetric can be enabled only when using symmetric encoding")
 
-        two_pow_bw = torch.pow(torch.Tensor([2]), bitwidth)
-        two_pow_bw_minus_1 = torch.pow(torch.Tensor([2]), (bitwidth - 1))
+        n = 0.0
+        p = torch.pow(torch.Tensor([2]), bitwidth) - 1
 
-        if use_symmetric_encoding:
-            # symmetric case  : -2 ** (bw - 1) + 1  , p = 2 ** (bw - 1) - 1
-            n = torch.add(-1.0 * two_pow_bw_minus_1, 1.0)
-            p = torch.sub(two_pow_bw_minus_1, 1.0)
-        else:
-            # asymmetric case  : n = 0  , p = 2 ** (bw) - 1
-            n = 0.0
-            p = two_pow_bw - 1
+        if use_symmetric_encoding and use_strict_symmetric:
+            p -= 1
 
         n = torch.Tensor([n])
         p = torch.Tensor([p])
@@ -572,7 +615,6 @@ class LearnedGridTensorQuantizer(TensorQuantizer):
             if encoding_max is None or encoding_min is None:
                 raise RuntimeError("Forward pass used for compute_encodings differs from forward pass used during "
                                    "training")
-
             tensor = QuantizeDequantizeFunc.apply(tensor, encoding_min, encoding_max, self)
         return tensor
 
@@ -636,7 +678,7 @@ class LearnedGridTensorQuantizer(TensorQuantizer):
         bitwidth = encodings[0].bw if isinstance(encodings, List) else encodings.bw
         assert bitwidth == self.bitwidth, "Bitwidth mismatched."
 
-        self.n, self.p = self.get_n_and_p(self.bitwidth, self.use_symmetric_encodings)
+        self.n, self.p = self.get_n_and_p(self.bitwidth, self.use_symmetric_encodings, self.use_strict_symmetric)
 
     def freeze_encoding(self):
         """
@@ -668,86 +710,53 @@ class QuantizeDequantizeFunc(torch.autograd.Function):
     @staticmethod
     def forward(ctx, tensor: torch.Tensor, encoding_min: torch.nn.Parameter,
                 encoding_max: torch.nn.Parameter, tensor_quantizer) -> torch.Tensor:
-        # pylint: disable=protected-access
-        ctx.save_for_backward(tensor, encoding_min, encoding_max, tensor_quantizer.n, tensor_quantizer.p,
-                              torch.tensor(tensor_quantizer.bitwidth), torch.tensor(tensor_quantizer._ch_axis))
+        # pylint: disable=protected-access, too-many-locals
+        bitwidth = tensor_quantizer.bitwidth
+        channel_axis = tensor_quantizer._ch_axis
+        n, p = tensor_quantizer.n, tensor_quantizer.p
 
-        delta = (encoding_max - encoding_min) / (2 ** tensor_quantizer.bitwidth - 1)
-        offset = torch.round(-encoding_min / delta)
-        if len(encoding_min) > 1:
-            tensor = QuantizeDequantizeFunc._per_channel_quantize_dequantize(tensor, encoding_min, encoding_max, delta, offset, tensor_quantizer._ch_axis)
-        else:
-            tensor = QuantizeDequantizeFunc._per_tensor_quantize_dequantize(tensor, encoding_min, encoding_max, delta, offset)
-        return tensor
+        steps = 2 ** bitwidth - 1
+        delta, offset = _compute_delta_and_offset(tensor, encoding_min, encoding_max, steps, channel_axis)
 
-    @staticmethod
-    def _per_tensor_quantize_dequantize(tensor: torch.Tensor, encoding_min: torch.nn.Parameter, encoding_max: torch.nn.Parameter,
-                                        delta: float, offset: float):
-        """
-        Quantize dequantize a tensor
-        :param tensor: tensor which gets quantized and dequantized
-        :param encoding_min: encoding's min
-        :param encoding_max: encoding's max
-        :param delta: encoding's delta
-        :param offset: offset tensor
-        :return: quantized dequantized tensor
-        """
-        tensor = torch.clamp(tensor, encoding_min, encoding_max)
-        tensor = torch.round(tensor / delta) + offset
-        tensor = (tensor - offset) * delta
-        return tensor
+        quantize_out = torch.round(tensor / delta) - offset
+        clamp_out = quantize_out.clamp(n, p)
+        dequantize_out = (clamp_out + offset) * delta
 
-    @staticmethod
-    def _per_channel_quantize_dequantize(tensor_to_quantize_dequantize: torch.Tensor, encoding_min: torch.nn.Parameter,
-                                         encoding_max: torch.nn.Parameter, delta: torch.Tensor, offset: torch.Tensor,
-                                         channel_axis: int):
-        """
-        Clamps tensor wrt min max per output channel
-        :param tensor_to_quantize_dequantize: tensor which gets quantized and dequantized
-        :param encoding_min: encoding's min
-        :param encoding_max: encoding's max
-        :param delta: encoding's delta
-        :param offset: offset tensor
-        :param channel_axis: Axis along which per channel quantize dequantize is performed
-        :return: quantized dequantized tensor
-        """
+        mask_tensor = quantize_out.ge(n) * quantize_out.le(p)
+        encoding_params = _EncodingParams(bitwidth, tensor_quantizer.use_symmetric_encodings,
+                                          tensor_quantizer.use_unsigned_symmetric)
+        dtype_for_clamp_out = _encoding_params_to_dtype.get(encoding_params, torch.int32)
 
-        if len(tensor_to_quantize_dequantize.shape) > 1:
-            encoding_min = grad_fn.broadcast_to_tensor(tensor_to_quantize_dequantize, encoding_min, channel_axis)
-            encoding_max = grad_fn.broadcast_to_tensor(tensor_to_quantize_dequantize, encoding_max, channel_axis)
-            delta = grad_fn.broadcast_to_tensor(tensor_to_quantize_dequantize, delta, channel_axis)
-            offset = grad_fn.broadcast_to_tensor(tensor_to_quantize_dequantize, offset, channel_axis)
+        ctx.steps = steps
+        ctx.channel_axis = channel_axis
+        ctx.save_for_backward(tensor, clamp_out.to(dtype=dtype_for_clamp_out), delta, offset,
+                              encoding_min, encoding_max, mask_tensor)
 
-        tensor = torch.clamp(tensor_to_quantize_dequantize, encoding_min, encoding_max)
-        tensor = torch.round(tensor / delta) + offset
-        tensor = (tensor - offset) * delta
-
-        return tensor
+        return dequantize_out
 
     @staticmethod
     def backward(ctx, grad):
         # pylint: disable=too-many-locals
         # Retrieve saved tensors for gradient calculations
-        tensor, encoding_min, encoding_max, n, p, bitwidth, channel_axis = ctx.saved_tensors
-        channel_axis = channel_axis.item()
+        tensor, clamp_out, delta, offset, encoding_min, encoding_max, mask_tensor = ctx.saved_tensors
+        steps, channel_axis = ctx.steps, ctx.channel_axis
 
-        scale = (encoding_max - encoding_min) / (2 ** bitwidth.data - 1)
-        offset = torch.round(-encoding_min / scale)
+        dequantize_grad = delta * grad
+        mask_tensor = Variable(mask_tensor.type_as(dequantize_grad))
 
-        if len(scale) > 1 and len(tensor.shape) > 1:
-            scale = broadcast_to_tensor(tensor, scale, channel_axis)
+        tensor_grad = grad * mask_tensor
+        scale_grad = (clamp_out + offset - tensor * mask_tensor / delta) * grad
+        offset_grad = dequantize_grad * (1 - mask_tensor)
 
-        if len(offset) > 1 and len(tensor.shape) > 1:
-            offset = broadcast_to_tensor(tensor, offset, channel_axis)
+        dim = list(range(len(tensor.shape)))
+        if len(delta) > 1 and len(tensor.shape) > 1:
+            dim.pop(channel_axis)
 
-        grid_params = grad_fn.LearnedGridParams(scale, offset, n, p)
-        intermediate_result = grad_fn.compute_intermediate_result_for_learned_grid(tensor, scale, offset)
+        intermediate_term1 = scale_grad.sum(dim=dim) / steps
+        intermediate_term2 = steps / (encoding_max - encoding_min) ** 2 * offset_grad.sum(dim=dim)
 
-        tensor_grad = grad_fn.compute_dloss_by_dx_using_scale_offset(tensor, grad, grid_params)
-        tensor_encoding_max_grad = grad_fn.compute_dloss_by_dmax(tensor, grad, intermediate_result,
-                                                                 grid_params, channel_axis)
-        tensor_encoding_min_grad = grad_fn.compute_dloss_by_dmin(tensor, grad, intermediate_result,
-                                                                 grid_params, channel_axis)
+        tensor_encoding_min_grad = -intermediate_term1 + encoding_max * intermediate_term2
+        tensor_encoding_max_grad = intermediate_term1 - encoding_min * intermediate_term2
 
         return tensor_grad, tensor_encoding_min_grad, tensor_encoding_max_grad, None
 
