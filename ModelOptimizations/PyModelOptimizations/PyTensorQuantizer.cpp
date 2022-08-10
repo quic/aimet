@@ -64,10 +64,11 @@ void PyTensorQuantizer::quantizeDequantize(py::array_t<float> inputTensor, py::a
 {
     auto inputArr     = inputTensor.mutable_unchecked();
     auto outputArr    = outputTensor.mutable_unchecked();
-    size_t tensorSize = inputArr.shape(0) * inputArr.shape(1) * inputArr.shape(2) * inputArr.shape(3);
 
-    auto inputTensorPtr  = static_cast<float*>(inputArr.mutable_data(0, 0, 0, 0));
-    auto outputTensorPtr = static_cast<float*>(outputArr.mutable_data(0, 0, 0, 0));
+    size_t tensorSize = inputArr.size();
+
+    auto inputTensorPtr  = static_cast<float*>(inputArr.mutable_data());
+    auto outputTensorPtr = static_cast<float*>(outputArr.mutable_data());
 
     // Delegate
    TensorQuantizer::quantizeDequantize(inputTensorPtr, tensorSize, outputTensorPtr,
