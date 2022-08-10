@@ -525,13 +525,13 @@ class LearnedGridTensorQuantizer(TensorQuantizer):
             raise ValueError("Strict symmetric can be enabled only when using symmetric encoding")
 
         n = 0.0
-        p = torch.pow(torch.Tensor([2]), bitwidth) - 1
+        p = torch.pow(torch.tensor([2]), bitwidth) - 1
 
         if use_symmetric_encoding and use_strict_symmetric:
             p -= 1
 
-        n = torch.Tensor([n], device=device)
-        p = torch.Tensor([p], device=device)
+        n = torch.tensor([n], device=device)
+        p = torch.tensor([p], device=device)
 
         return n, p
 
@@ -678,9 +678,9 @@ class LearnedGridTensorQuantizer(TensorQuantizer):
             encodings_min = [encodings.min]
             encodings_max = [encodings.max]
 
-        params[enc_min_param] = torch.nn.Parameter(torch.FloatTensor(encodings_min).to(self.device),
+        params[enc_min_param] = torch.nn.Parameter(torch.FloatTensor(encodings_min).to(self.wrapper_ref.device),
                                                    requires_grad=True)
-        params[enc_max_param] = torch.nn.Parameter(torch.FloatTensor(encodings_max).to(self.device),
+        params[enc_max_param] = torch.nn.Parameter(torch.FloatTensor(encodings_max).to(self.wrapper_ref.device),
                                                    requires_grad=True)
 
     def freeze_encoding(self):
