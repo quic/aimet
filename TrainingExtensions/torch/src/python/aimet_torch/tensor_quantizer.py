@@ -509,7 +509,7 @@ class LearnedGridTensorQuantizer(TensorQuantizer):
         self._ch_axis = 0
 
     @staticmethod
-    @functools.lru_cache
+    @functools.lru_cache()
     def get_n_and_p(bitwidth: int,
                     use_symmetric_encoding: bool,
                     use_strict_symmetric: bool,
