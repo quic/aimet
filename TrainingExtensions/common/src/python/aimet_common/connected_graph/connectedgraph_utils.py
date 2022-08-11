@@ -3,7 +3,7 @@
 # =============================================================================
 #  @@-COPYRIGHT-START-@@
 #
-#  Copyright (c) 2020, Qualcomm Innovation Center, Inc. All rights reserved.
+#  Copyright (c) 2020-2022, Qualcomm Innovation Center, Inc. All rights reserved.
 #
 #  Redistribution and use in source and binary forms, with or without
 #  modification, are permitted provided that the following conditions are met:
@@ -36,9 +36,10 @@
 #  @@-COPYRIGHT-END-@@
 # =============================================================================
 """ Utilities for ConnectedGraph """
-
-from typing import List
-from aimet_common.connected_graph.connectedgraph import ConnectedGraph
+import json
+import os
+from typing import List, Dict, Tuple
+from aimet_common.connected_graph.connectedgraph import ConnectedGraph, get_ordered_ops
 from aimet_common.connected_graph.operation import Op
 
 
@@ -62,3 +63,72 @@ def get_all_output_ops(conn_graph: ConnectedGraph) -> List[Op]:
     all_ops = conn_graph.get_all_ops().values()
     output_ops = [op for op in all_ops if not op.output]
     return output_ops
+
+
+def export_connected_graph(conn_graph: ConnectedGraph, path: str, filename_prefix: str):
+    """
+    Serialize and export the connected graph as a json file
+    :param conn_graph: Connected graph to serialize and export
+    :param path: Folder path to save exported connected graph. Does not include filename.
+    :param filename_prefix: Filename to save exported connected graph. Do not include '.json', which will be added
+        automatically.
+    """
+    ops_list = _serialize_ops(conn_graph)
+    activation_products_list, param_products_list = _serialize_products(conn_graph)
+    connected_graph_export_dict = {
+        'ops': ops_list,
+        'products': {
+            'activations': activation_products_list,
+            'parameters': param_products_list
+        }
+    }
+
+    connected_graph_export_path = os.path.join(path, filename_prefix + '.json')
+    with open(connected_graph_export_path, 'w') as encoding_fp_json:
+        json.dump(connected_graph_export_dict, encoding_fp_json, sort_keys=True, indent=4)
+
+def _serialize_ops(conn_graph: ConnectedGraph) -> List[Dict[str, str]]:
+    """
+    Get a list of ops serialized as dictionary objects with name, type, inputs, and outputs information
+    :param conn_graph: Connected graph containing ops to serialize
+    :return: List of ops serialized
+    """
+    ops_list = []
+    input_ops = get_all_input_ops(conn_graph)
+    for op in get_ordered_ops(input_ops):
+        ops_list.append({
+            'name': op.dotted_name,
+            'type': op.type,
+            'inputs': [op.dotted_name for op in op.input_ops],
+            'outputs': [op.dotted_name for op in op.output_ops],
+            'is_functional': op.get_module() is None
+        })
+    return ops_list
+
+def _serialize_products(conn_graph: ConnectedGraph) -> Tuple[List[Dict[str, str]], List[Dict[str, str]]]:
+    """
+    Get lists of products serialized as dictionary objects with name and op for parameter products, and name, producer,
+    and consumers for activation products.
+    :param conn_graph: Connected graph containing products to serialize
+    :return: Tuple of activation products and parameter products serialized
+    """
+    param_products_list = []
+    activation_products_list = []
+    for product in conn_graph.get_all_products().values():
+        if product.is_parm:
+            param_products_list.append({
+                'name': product.name,
+                'op': product.consumers[0].dotted_name
+            })
+        else:
+            producer_name = None
+            if product.producer:
+                producer_name = product.producer.dotted_name
+            consumer_names = []
+            for consumer in product.consumers:
+                consumer_names.append(consumer.dotted_name)
+            activation_products_list.append({
+                'producer': producer_name,
+                'consumers': consumer_names
+            })
+    return activation_products_list, param_products_list
