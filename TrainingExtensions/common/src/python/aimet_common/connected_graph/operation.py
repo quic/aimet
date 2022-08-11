@@ -186,6 +186,13 @@ class Op:    # pylint: disable=too-many-public-methods
         self._output = product
 
     @property
+    def output_ops(self):
+        """ Returns all the inputs of an Operation. """
+        if self.output:
+            return self.output.consumers
+        return []
+
+    @property
     def groups(self):
         """ Returns the groups parameter.
         The groups parameter applies only to Conv modules. """
