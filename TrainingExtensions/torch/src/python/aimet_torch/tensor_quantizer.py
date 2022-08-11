@@ -786,7 +786,9 @@ class ParameterQuantizer(torch.autograd.Function):
         if len(offset) > 1 and len(tensor.shape) > 1:
             offset = broadcast_to_tensor(tensor, offset, channel_axis)
 
-        grid_params = grad_fn.LearnedGridParams(scaling, offset, tensor_quantizer.n(), tensor_quantizer.p())
+        grid_params = grad_fn.LearnedGridParams(scaling, offset,
+                                                tensor_quantizer.n(device=tensor.device),
+                                                tensor_quantizer.p(device=tensor.device))
         intermediate_result = grad_fn.compute_intermediate_result_for_learned_grid(tensor, scaling, offset)
 
         tensor.grad = grad_fn.compute_dloss_by_dx_using_scale_offset(tensor, grad, grid_params)
