@@ -1,4 +1,4 @@
-# /usr/bin/env python3.5
+# /usr/bin/env python3.8
 # -*- mode: python -*-
 # =============================================================================
 #  @@-COPYRIGHT-START-@@
@@ -90,7 +90,8 @@ class QcQuantizableMultiHeadAttention(MultiHeadAttention):
                 self.copy_source_weights
         }
         base_config = super(QcQuantizableMultiHeadAttention, self).get_config()
-        return base_config.update(config)
+        base_config.update(config)
+        return base_config
 
     def _wrap_layer(self, layer: tf.keras.layers.Layer, num_inputs: int) -> tf.keras.layers.Layer:
         """
