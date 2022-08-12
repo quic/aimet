@@ -94,7 +94,6 @@ class QuantAnalyzer:
                 Eval callback function should have only model to be evaluated as first argument. If eval
                 callback function requires additional arguments, user should use functools.partial to
                 hand over the additional arguments.
-                hand over the arguments.
         :param modules_to_ignore: Excludes certain modules from being analyzed.
         """
         self._model = model

@@ -25,37 +25,44 @@ Code Examples
     :start-after: # Step 0. Import statements
     :end-before: # End step 0
 
-**Prepare forward pass callback**
-
-.. literalinclude:: ../torch_code_examples/quant_analyzer_code_example.py
-    :language: python
-    :start-after: # Step 1. Prepare forward pass callback
-    :end-before: # End step 1
-
 **Prepare eval callback**
 
 .. literalinclude:: ../torch_code_examples/quant_analyzer_code_example.py
     :language: python
-    :start-after: # Step 2. Prepare eval callback
-    :end-before: # End step 2
+    :start-after: # Step 1. Prepare eval callback
+    :end-before: # End step 1
 
 **Prepare model**
 
 .. literalinclude:: ../torch_code_examples/quant_analyzer_code_example.py
     :language: python
-    :start-after: # Step 3. Prepare model
+    :start-after: # Step 2. Prepare model
+    :end-before: # End step 2
+
+**Prepare calibration dataloader**
+
+.. literalinclude:: ../torch_code_examples/quant_analyzer_code_example.py
+    :language: python
+    :start-after: # Step 3. Prepare calibration dataloader
     :end-before: # End step 3
+
+**Wrap eval callback function**
+
+.. literalinclude:: ../torch_code_examples/quant_analyzer_code_example.py
+    :language: python
+    :start-after: # Step 4. Wrap eval callback function
+    :end-before: # End step 4
 
 **Create QuantAnalyzer object**
 
 .. literalinclude:: ../torch_code_examples/quant_analyzer_code_example.py
     :language: python
-    :start-after: # Step 4. Create QuantAnalyzer object
-    :end-before: # End step 4
+    :start-after: # Step 5. Create QuantAnalyzer object
+    :end-before: # End step 5
 
 **Run QuantAnalyzer**
 
 .. literalinclude:: ../torch_code_examples/quant_analyzer_code_example.py
     :language: python
-    :start-after: # Step 5. Run QuantAnalyzer
-    :end-before: # End step 5
+    :start-after: # Step 6. Run QuantAnalyzer
+    :end-before: # End step 6
