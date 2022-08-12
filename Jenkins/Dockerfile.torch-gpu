@@ -221,7 +221,7 @@ RUN sed -i 's/PermitRootLogin prohibit-password/PermitRootLogin yes/' /etc/ssh/s
 RUN sed 's@session\s*required\s*pam_loginuid.so@session optional pam_loginuid.so@g' -i /etc/pam.d/sshd
 
 RUN python3 -m pip install git-pylint-commit-hook osqp onnx==1.8.1
-RUN python3 -m pip install onnxruntime==1.11.1 onnxruntime-extensions==0.4.2
+RUN python3 -m pip install onnxruntime-gpu==1.11.1 onnxruntime-extensions==0.4.2
 
 # NOTE: We need to pin the holoviews version to this since the latest version has a circular dependency on bokeh 2.0.0 through the panel package
 RUN python3 -m pip install holoviews==1.12.7 netron jsonschema pandas
