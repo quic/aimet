@@ -267,7 +267,7 @@ class QuantizationSimModel:
                     # because dense layers in quantizable MHA are not explicitly sublayers, they don't have their
                     # inbound_nodes parameter populated, so the name of the quantizer is used instead
                     if not wrapper._layer_to_wrap.inbound_nodes:
-                        tensor_name = wrapper.name + "/" + input_quantizer.name
+                        tensor_name = "multi_head_attention/" + wrapper.name + "/" + input_quantizer.name
                     else:
                         tensor_name = wrapper._layer_to_wrap.inbound_nodes[0].keras_inputs[idx].name
                     encoding_dict = self._get_encoding_dict_for_quantizer(input_quantizer)
@@ -282,7 +282,7 @@ class QuantizationSimModel:
                     # because dense layers in quantizable MHA are not explicitly sublayers, they don't have their
                     # inbound_nodes parameter populated, so the name of the quantizer is used instead
                     if not wrapper._layer_to_wrap.inbound_nodes:
-                        tensor_name = wrapper.name + "/" + output_quantizer.name
+                        tensor_name = "multi_head_attention/" + wrapper.name + "/" + output_quantizer.name
                     else:
                         tensor_name = wrapper._layer_to_wrap.output.name
                     encoding_dict = self._get_encoding_dict_for_quantizer(output_quantizer)
