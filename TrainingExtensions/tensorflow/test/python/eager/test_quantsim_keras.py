@@ -561,7 +561,7 @@ def test_quantizable_mha_export_encodings():
     for wrapper in stage_3_model.model.layers[2]._wrapped_layers:
         for io_quantizer in wrapper.input_quantizers + wrapper.output_quantizers:
             if io_quantizer.encoding is not None:
-                tensor_name = wrapper.name + "/" + io_quantizer.name
+                tensor_name = "multi_head_attention/" + wrapper.name + "/" + io_quantizer.name
                 encoding_dict = QuantizationSimModel._get_encoding_dict_for_quantizer(io_quantizer)
                 assert tensor_name in encodings['activation_encodings']
                 assert encodings['activation_encodings'][tensor_name] == encoding_dict
@@ -571,3 +571,5 @@ def test_quantizable_mha_export_encodings():
                 encoding_dict = QuantizationSimModel._get_encoding_dict_for_quantizer(param_quantizer)
                 assert param_name in encodings['param_encodings']
                 assert encodings['param_encodings'][param_name] == encoding_dict
+
+
