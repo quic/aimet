@@ -47,7 +47,7 @@ if enable_cuda == "1":
 elif enable_cuda == "0":
     extension_cls = CppExtension
 else:
-    raise ValueError(f"Unexpected value for 'ENABLE_CUDA'. Expected 0 or 1; got {enable_cuda}")
+    raise ValueError(f"Unexpected value for 'ENABLE_CUDA_PYTORCH'. Expected 0 or 1; got {enable_cuda}")
 
 setup(
     name='aimet_tensor_quantizer',
@@ -56,7 +56,8 @@ setup(
             name='AimetTensorQuantizer',
             sources=['${CMAKE_CURRENT_SOURCE_DIR}/src/AimetTensorQuantizer.cpp'],
             include_dirs=['${DlQuantizationIncludePaths}'],
-            extra_objects=glob.glob('${CMAKE_BINARY_DIR}/artifacts/aimet_common/libpymo*.so')),
+            extra_objects=glob.glob('${CMAKE_BINARY_DIR}/artifacts/aimet_common/libpymo*.so'),
+            extra_compile_args=['-D_GLIBCXX_USE_CXX11_ABI=0', f'-DENABLE_CUDA_PYTORCH={enable_cuda}']),
     ],
     cmdclass={
         'build_ext': BuildExtension
