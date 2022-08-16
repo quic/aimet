@@ -42,15 +42,15 @@ import torch
 import torch.nn
 
 # Import AIMET specific modules
-from aimet_common.defs import AdaroundConstants, QuantizationDataType
+from aimet_common.defs import AdaroundConstants, QuantizationDataType, QuantScheme
 from aimet_torch.tensor_quantizer import TensorQuantizer
 
 class AdaroundTensorQuantizer(TensorQuantizer):
     """
     Simulates quantization for the given tensor post training using Adaround
     """
-    def __init__(self, bitwidth: int, round_mode: str, quant_scheme: str, use_symmetric_encodings: bool,
-                 enabled_by_default: bool):
+    def __init__(self, bitwidth: int, round_mode: str, quant_scheme: QuantScheme, use_symmetric_encodings: bool,
+                 enabled_by_default: bool, channel_axis: int):
         """
         Constructor
         :param bitwidth: Quantization bitwidth
@@ -58,6 +58,7 @@ class AdaroundTensorQuantizer(TensorQuantizer):
         :param quant_scheme: Quantization scheme (e.g. Range Learning)
         :param use_symmetric_encodings: True if symmetric encoding is used.  False otherwise.
         :param enabled_by_default: True if quantization of tensor is enabled.  False otherwise.
+        :param channel_axis: Channel axis of parameter tensor. Only used during per channel Adaround.
         """
         #TODO Remove the hardcoding of data_type
         super(AdaroundTensorQuantizer, self).__init__(bitwidth, round_mode, quant_scheme, use_symmetric_encodings,
@@ -66,6 +67,7 @@ class AdaroundTensorQuantizer(TensorQuantizer):
         # V in System HLD
         self.alpha = None
         self.use_soft_rounding = True
+        self._ch_axis = channel_axis
 
     def quantize_dequantize(self, tensor: torch.Tensor, _) -> torch.Tensor:
         """
@@ -138,9 +140,9 @@ class AdaroundTensorQuantizer(TensorQuantizer):
 
         if isinstance(self.encoding, list):
             delta = [enc.delta for enc in self.encoding]                # pylint: disable=not-an-iterable
-            broadcasted_delta = _broadcast_to_tensor(delta, 0)
+            broadcasted_delta = _broadcast_to_tensor(delta, self._ch_axis)
             offset = [enc.offset for enc in self.encoding]              # pylint: disable=not-an-iterable
-            broadcasted_offset = _broadcast_to_tensor(offset, 0)
+            broadcasted_offset = _broadcast_to_tensor(offset, self._ch_axis)
         else:
             broadcasted_delta = self.encoding.delta
             broadcasted_offset = self.encoding.offset
