@@ -144,6 +144,31 @@ class MultiDataLoaders:
         yield from self._dl2
 
 
+def save_config_file_for_per_channel_quantization():
+    quantsim_config = {
+        "defaults": {
+            "ops": {
+                "is_output_quantized": "True",
+                "is_symmetric": "False"
+            },
+            "params": {
+                "is_quantized": "True",
+                "is_symmetric": "False"
+            },
+            "per_channel_quantization": "True",
+        },
+        "params": {"bias": {
+            "is_quantized": "False"
+        }},
+        "op_type": {},
+        "supergroups": [],
+        "model_input": {},
+        "model_output": {}
+    }
+
+    with open('./quantsim_config.json', 'w') as f:
+        json.dump(quantsim_config, f)
+
 class TestAdaround:
     """
     AdaRound Weights Unit Test Cases
@@ -431,6 +456,49 @@ class TestAdaround:
         # Delete encodings file
         if os.path.exists("./dummy.encodings"):
             os.remove("./dummy.encodings")
+
+    def test_conv_transpose_2d_model_per_channel(self):
+        """ test a model that has a ConvTranspose2d module in per channel mode """
+
+        AimetLogger.set_level_for_all_areas(logging.DEBUG)
+
+        # create fake data loader with image size (3, 32, 32)
+        data_loader = create_fake_data_loader(dataset_size=64, batch_size=16, image_size=(3, 24, 24))
+
+        net = ConvTransposeNet().eval()
+        model = net.to(torch.device('cpu'))
+
+        param_bit_width = 4
+        input_shape = (1, 3, 24, 24)
+        inp_tensor_list = create_rand_tensors_given_shapes(input_shape)
+
+        # Test Forward Pass
+        _ = model(*inp_tensor_list)
+
+        params = AdaroundParameters(data_loader=data_loader, num_batches=4, default_num_iterations=100,
+                                    default_reg_param=0.01, default_beta_range=(20, 2))
+
+        save_config_file_for_per_channel_quantization()
+        ada_model = Adaround.apply_adaround(model, inp_tensor_list, params, path='./', filename_prefix='dummy',
+                                            default_param_bw=param_bit_width,
+                                            default_quant_scheme=QuantScheme.post_training_tf,
+                                            default_config_file='./quantsim_config.json')
+
+        # Test that forward pass works for the AdaRounded model
+        _ = ada_model(*inp_tensor_list)
+
+        with open('./dummy.encodings') as json_file:
+            encoding_data = json.load(json_file)
+
+        assert len(encoding_data['trans_conv1.weight']) == 2
+
+        # Delete encodings file
+        if os.path.exists("./dummy.encodings"):
+            os.remove("./dummy.encodings")
+
+        # Delete encodings file
+        if os.path.exists("./quantsim_config.json"):
+            os.remove("./quantsim_config.json")
 
     def test_overriding_default_parameter_bitwidths(self):
         """ Override the default parameter bitwidths for a model """

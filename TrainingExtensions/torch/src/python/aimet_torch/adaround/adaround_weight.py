@@ -55,6 +55,7 @@ from aimet_torch.save_utils import SaveUtils
 from aimet_torch.meta import connectedgraph_utils
 from aimet_torch.quantsim import QuantizationSimModel, QcQuantizeWrapper
 from aimet_torch.qc_quantize_op import StaticGridQuantWrapper, QcQuantizeOpMode
+from aimet_torch.tensor_quantizer import StaticGridPerChannelQuantizer
 from aimet_torch.adaround.adaround_tensor_quantizer import AdaroundTensorQuantizer
 from aimet_torch.adaround.adaround_optimizer import AdaroundOptimizer
 from aimet_torch.adaround.adaround_loss import AdaroundHyperParameters
@@ -230,8 +231,12 @@ class Adaround:
         assert quant_module.param_quantizers['weight'].encoding, '%s encoding needs to be set.' % quant_module
 
         quantizer = quant_module.param_quantizers['weight']
+        ch_axis = 0
+        if isinstance(quantizer, StaticGridPerChannelQuantizer):
+            # pylint: disable=protected-access
+            ch_axis = quantizer._ch_axis
         adaround_quantizer = AdaroundTensorQuantizer(quantizer.bitwidth, 'Adaptive', quantizer.quant_scheme,
-                                                     quantizer.use_symmetric_encodings, quantizer.enabled)
+                                                     quantizer.use_symmetric_encodings, quantizer.enabled, ch_axis)
 
         # Set the encodings and replace by Adaround tensor quantizer
         adaround_quantizer.encoding = quantizer.encoding
