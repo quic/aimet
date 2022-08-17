@@ -1309,6 +1309,33 @@ class TestFX:
         find_gelus = list(filter(r.match, ops_with_missing_modules))
         assert (not find_gelus)
 
+    def test_fx_with_interpolate_dynamic_inferred(self):
+        """ test torch fx with interpolate functional with size dynamically inferred """
+        class ModelWithInterpolate(torch.nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.conv = torch.nn.Conv2d(3, 4, kernel_size=2, stride=2, padding=2)
+
+            def forward(self, x):
+                x = self.conv(x)
+                height, width = x.size(2), x.size(3)
+                x = torch.nn.functional.interpolate(x, size=(height, width), mode='bilinear', align_corners=True)
+                return x
+
+        input_shape = (1, 3, 32, 32)
+        dummy_input = torch.randn(input_shape)
+        model = ModelWithInterpolate().eval()
+        model_transformed = prepare_model(model)
+        print(model_transformed)
+
+        assert torch.equal(model_transformed(dummy_input), model(dummy_input))
+        assert isinstance(model_transformed.module_interpolate, elementwise_ops.Interpolate)
+
+        # Verify with Quantization workflow.
+        sim = QuantizationSimModel(model_transformed, dummy_input=dummy_input)
+        sim.compute_encodings(evaluate, forward_pass_callback_args=dummy_input)
+        sim.model(dummy_input)
+
     def test_fx_with_quantsim_export_and_encodings(self):
         """ test quantsim export and verify encodings are exported correctly for newly added modules """
 

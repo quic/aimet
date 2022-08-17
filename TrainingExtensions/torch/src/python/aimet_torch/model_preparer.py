@@ -92,14 +92,14 @@ functional_to_module_map = {
     'mul'           : elementwise_ops.Multiply,
     'div'           : elementwise_ops.Divide,
     'matmul'        : elementwise_ops.MatMul,
-    'interpolate'   : elementwise_ops.Interpolate
 }
 
 functional_to_module_special_handling_map = {
 
     # Operations that require special transformation
     'cat'           : elementwise_ops.Concat,
-    'conv2d'        : torch.nn.Conv2d
+    'interpolate'   : elementwise_ops.Interpolate,
+    'conv2d'        : torch.nn.Conv2d,
 }
 
 
@@ -144,7 +144,7 @@ def conv2d_create_module(node: torch.fx.node) -> torch.nn.Module:
     Create the replacement module.
 
     :param node: Current node in the graph after which new node will be inserted
-    :return:
+    :return: New module.
     """
 
     # Get weight and bias from argument
@@ -250,7 +250,7 @@ def concat_create_module(node: torch.fx.node) -> torch.nn.Module:
     Create the replacement module.
 
     :param node: Current node in the graph after which new node will be inserted
-    :return:
+    :return: New module.
     """
 
     num_args = len(node.args)
@@ -268,10 +268,45 @@ def concat_create_module(node: torch.fx.node) -> torch.nn.Module:
 
     return module
 
+def interpolate_create_node(symbolic_traced_model: torch.fx.GraphModule, module_name: str, node: torch.fx.node)\
+        -> torch.fx.node:
+    """
+    Create the node to be inserted in the graph model for interpolate.
+    :param symbolic_traced_model: Symbolically traced model
+    :param module_name: Qualified module name in symbolic_traced_model hierarchy corresponding to new node
+    :param node: Current node in the graph after which new node will be inserted
+    :return: torch.fx.node to be inserted in the graph
+    """
+    # Merge args and kwargs.
+    args = [node.args[0]]
+    for arg in node.kwargs.values():
+        args.append(arg)
+
+    with symbolic_traced_model.graph.inserting_after(node):
+        new_node = symbolic_traced_model.graph.call_module(module_name, args=tuple(args))
+        return new_node
+
+
+def interpolate_create_module(node: torch.fx.node) -> torch.nn.Module:
+    """
+    Create the replacement module.
+
+    :param node: Current node in the graph after which new node will be inserted
+    :return: New module.
+    """
+    kwargs = node.kwargs
+    module = elementwise_ops.Interpolate()
+    # Set the parameters for module from node.kwargs
+    for key, value in kwargs.items():
+        setattr(module, key, value)
+
+    return module
+
 
 special_handler_functions = {
     # Special handling functions for creating node and module
     'cat': {'node_fn': concat_create_node, 'module_fn': concat_create_module},
+    'interpolate': {'node_fn': interpolate_create_node, 'module_fn': interpolate_create_module},
     'conv2d': {'node_fn': conv2d_create_node, 'module_fn': conv2d_create_module}
 }
 
