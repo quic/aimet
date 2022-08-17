@@ -44,6 +44,7 @@ import json
 import logging
 import torch
 import torch.nn.functional as functional
+from torch.utils.data import Dataset, DataLoader
 
 from aimet_common.utils import AimetLogger
 from aimet_common.defs import QuantScheme
@@ -128,20 +129,25 @@ class MultiDataLoaders:
      to support more than two data loaders as well.
     """
     def __init__(self, data_loader1, data_loader2):
-        self._dl1 = iter(data_loader1)
-        self._dl2 = iter(data_loader2)
+        self._dl1 = data_loader1
+        self._dl2 = data_loader2
+
+    def __len__(self):
+        return len(self._dl1) + len(self._dl2)
 
     def __iter__(self):
         """
         yields batches alternatively one after the other from provided data loaders
         """
-        for dl1_batch, dl2_batch in zip(self._dl1, self._dl2):
+        dl1_iter = iter(self._dl1)
+        dl2_iter = iter(self._dl2)
+        for dl1_batch, dl2_batch in zip(dl1_iter, dl2_iter):
             yield dl1_batch
             yield dl2_batch
 
         # yield from remaining non-exhausted data loader
-        yield from self._dl1
-        yield from self._dl2
+        yield from dl1_iter
+        yield from dl2_iter
 
 
 def save_config_file_for_per_channel_quantization():
@@ -708,3 +714,28 @@ class TestAdaround:
         # Delete encodings JSON file
         if os.path.exists("./dummy.encodings"):
             os.remove("./dummy.encodings")
+
+    def test_data_loader_format_check(self):
+        class _TernaryDataset(Dataset):
+            def __len__(self):
+                return 100
+
+            def __getitem__(self, *args, **kwargs):
+                return (0, 1, 2)
+
+        dataloader = DataLoader(_TernaryDataset())
+
+        with pytest.raises(ValueError):
+            AdaroundParameters(dataloader, num_batches=100)
+
+        class _LengthOneDataset(Dataset):
+            def __len__(self):
+                return 1
+
+            def __getitem__(self, *args, **kwargs):
+                return (0, 1)
+
+        dataloader = DataLoader(_LengthOneDataset())
+
+        with pytest.raises(ValueError):
+            AdaroundParameters(dataloader, num_batches=100)
