@@ -76,7 +76,7 @@ _encoding_params_to_dtype = {
 def _compute_delta_and_offset(tensor: torch.Tensor,
                               encoding_min: torch.nn.Parameter,
                               encoding_max: torch.nn.Parameter,
-                              steps: int,
+                              steps: torch.Tensor,
                               channel_axis: int) -> Tuple[torch.Tensor, torch.Tensor]:
     """
     Compute delta and offset, also broadcast if needed (per-channel case)
@@ -715,7 +715,7 @@ class QuantizeDequantizeFunc(torch.autograd.Function):
         channel_axis = tensor_quantizer._ch_axis
         n, p = tensor_quantizer.n, tensor_quantizer.p
 
-        steps = 2 ** bitwidth - 1
+        steps = p
         delta, offset = _compute_delta_and_offset(tensor, encoding_min, encoding_max, steps, channel_axis)
 
         quantize_out = torch.round(tensor / delta) - offset
@@ -727,10 +727,9 @@ class QuantizeDequantizeFunc(torch.autograd.Function):
                                           tensor_quantizer.use_unsigned_symmetric)
         dtype_for_clamp_out = _encoding_params_to_dtype.get(encoding_params, torch.int32)
 
-        ctx.steps = steps
         ctx.channel_axis = channel_axis
         ctx.save_for_backward(tensor, clamp_out.to(dtype=dtype_for_clamp_out), delta, offset,
-                              encoding_min, encoding_max, mask_tensor)
+                              encoding_min, encoding_max, mask_tensor, steps)
 
         return dequantize_out
 
@@ -738,11 +737,11 @@ class QuantizeDequantizeFunc(torch.autograd.Function):
     def backward(ctx, grad):
         # pylint: disable=too-many-locals
         # Retrieve saved tensors for gradient calculations
-        tensor, clamp_out, delta, offset, encoding_min, encoding_max, mask_tensor = ctx.saved_tensors
-        steps, channel_axis = ctx.steps, ctx.channel_axis
+        tensor, clamp_out, delta, offset, encoding_min, encoding_max, mask_tensor, steps = ctx.saved_tensors
+        channel_axis = ctx.channel_axis
 
         dequantize_grad = delta * grad
-        mask_tensor = Variable(mask_tensor.type_as(dequantize_grad))
+        mask_tensor = Variable(mask_tensor.type_as(dequantize_grad.data))
 
         tensor_grad = grad * mask_tensor
         scale_grad = (clamp_out + offset - tensor * mask_tensor / delta) * grad
