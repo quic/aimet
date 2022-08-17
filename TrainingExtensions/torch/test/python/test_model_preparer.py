@@ -96,9 +96,12 @@ def evaluate(model: torch.nn.Module, dummy_input: torch.Tensor):
     :param model: torch model
     :param dummy_input: dummy input to model
     """
+    if isinstance(dummy_input, torch.Tensor):
+        dummy_input = [dummy_input]
+
     model.eval()
     with torch.no_grad():
-        model(dummy_input)
+        model(*dummy_input)
 
 
 @torch.fx.wrap
@@ -1299,3 +1302,54 @@ class TestFX:
         r = re.compile("gelu_*")
         find_gelus = list(filter(r.match, ops_with_missing_modules))
         assert (not find_gelus)
+
+    def test_fx_with_quantsim_export_and_encodings(self):
+        """ test quantsim export and verify encodings are exported correctly for newly added modules """
+
+        class Model(torch.nn.Module):
+            def __init__(self):
+                super(Model, self).__init__()
+                self.conv1 = torch.nn.Conv2d(3, 4, kernel_size=2, stride=2, padding=2, bias=False)
+                self.conv2 = torch.nn.Conv2d(3, 4, kernel_size=2, stride=2, padding=2)
+
+            def forward(self, *inputs):
+                x1 = self.conv1(inputs[0])
+                x2 = self.conv2(inputs[1])
+                x = x1 + x2
+                x = x + 1
+                return x
+
+        input_shape = (1, 3, 8, 8)
+        input_tensor = (torch.randn(*input_shape), torch.randn(*input_shape))
+        model = Model().eval()
+        model_transformed = prepare_model(model)
+        print(model_transformed)
+
+        assert torch.equal(model_transformed(*input_tensor),
+                           model(*input_tensor))
+
+        # Verify Quantization workflow.
+        sim = QuantizationSimModel(model_transformed, dummy_input=input_tensor)
+        sim.compute_encodings(evaluate, forward_pass_callback_args=input_tensor)
+        sim.export('./data/', filename_prefix='modified_model', dummy_input=input_tensor)
+
+        with open('./data/modified_model.encodings') as json_file:
+            encoding_data = json.load(json_file)
+
+        # Total 6 encodings for activations. two inputs, two outputs of Convs and two outputs of Add modules.
+        assert len(encoding_data["activation_encodings"]) == 6
+
+        if os.path.exists('./data/modified_model.pth'):
+            os.remove('./data/modified_model.pth')
+
+        if os.path.exists('./data/modified_model.onnx'):
+            os.remove('./data/modified_model.onnx')
+
+        if os.path.exists('./data/modified_model.encodings.yaml'):
+            os.remove('./data/modified_model.encodings.yaml')
+
+        if os.path.exists('./data/modified_model.encodings'):
+            os.remove('./data/modified_model.encodings')
+
+        if os.path.exists('./data/temp_onnx_model_with_markers.onnx'):
+            os.remove('./data/temp_onnx_model_with_markers.onnx')
