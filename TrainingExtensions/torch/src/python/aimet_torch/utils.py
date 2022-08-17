@@ -158,6 +158,10 @@ class CachedDataset(Dataset):
         :param num_batches: Number of batches to fetch from data loader
         :param path: Path to save model inputs
         """
+        if len(data_loader) < num_batches:
+            raise ValueError(f'Can not fetch {num_batches} batches from '
+                             f'a data loader of length {len(data_loader)}.')
+
         self._data_loader = data_loader
         self._num_batches = num_batches
         self._path = path
