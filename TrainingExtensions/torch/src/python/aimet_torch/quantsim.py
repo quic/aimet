@@ -817,7 +817,8 @@ class QuantizationSimModel:
         :param op_to_io_tensor_map: ONNX or Torch Script map of layer name to it's input/output tensors
         :return: tuple(last op name, all op names)
         """
-        op_names = [key for key in op_to_io_tensor_map if key.startswith(layer_name)]
+        op_names = [layer_name]
+        op_names.extend([key for key in op_to_io_tensor_map if key.startswith(layer_name) and '#' in key])
         end_op_names = [op_name for op_name in op_names if op_name.endswith('.end')]
 
         if len(op_names) == 1:  # Scenario #1
