@@ -9,6 +9,6 @@ pandas
 progressbar2
 pybind11
 PyYAML
-scipy>=1.2.1
+scipy<=1.8.1
 setuptools
 tqdm

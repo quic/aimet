@@ -521,7 +521,7 @@ def runStage(aimet_variant, options) {
            print "Jenkins/Dockerfile.${aimet_variant} not found in changed file list, so using Linaro Docker image for ${aimet_variant}"
         }
         sh """
-            AIMET_VARIANT=${aimet_variant} bash -l -c "cd ${REPO_NAME} && ./buildntest.sh -e AIMET_VARIANT ${options} ${params.USE_LINARO}"
+            AIMET_VARIANT=${aimet_variant} bash -l -c "cd ${REPO_NAME} && ./buildntest.sh -e AIMET_VARIANT ${options} ${env.USE_LINARO}"
         """
     }
 }
