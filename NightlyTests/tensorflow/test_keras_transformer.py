@@ -43,6 +43,7 @@ import numpy as np
 
 from aimet_tensorflow.keras.quantsim import QuantizationSimModel
 
+@pytest.mark.skip("Disable tests that requires eager execution")
 def test_quantizable_mha_export_backwards_pass():
     vocab_size = 20000  # Only consider the top 20k words
     maxlen = 200  # Only consider the first 200 words of each movie review
