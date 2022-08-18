@@ -36,7 +36,9 @@
 
 # Docker image file to build and test AIMET for PyTorch in a CPU environment
 
-FROM ubuntu:bionic 
+FROM ubuntu:bionic
+
+ARG DEBIAN_FRONTEND=noninteractive
 
 RUN apt-get update > /dev/null && \
     apt-get install --no-install-recommends -y \
@@ -90,11 +92,8 @@ RUN apt-get update && apt-get install -y python-pip && rm -rf /var/lib/apt/lists
 # Upgrade Python3 pip and install some more packages
 RUN python3 -m pip --no-cache-dir install --upgrade \
         pip \
-        'numpy<1.17,>=1.16.6' \
         setuptools==41.0.1 \
         wheel==0.33.4
-
-ENV DEBIAN_FRONTEND=noninteractive
 
 # Ubuntu packages for pytorch aimet
 RUN dpkg --add-architecture i386
@@ -144,6 +143,10 @@ RUN python3 -m pip --no-cache-dir install \
         keras==2.2.4 \
         lmdb==1.2.1 \
         mock \
+        'numpy>=1.19.5' \
+        onnx \
+        onnxruntime \
+        onnxruntime-extensions \
         opencv-python \
         Pillow==8.4.0 \
         pluggy==0.12.0 \
@@ -158,7 +161,7 @@ RUN python3 -m pip --no-cache-dir install \
         pytest-cov==2.6.1 \
         pytorch-ignite \
         scikit-learn \
-        'scipy>=1.2.1' \
+        scipy==1.8.1 \
         sphinx==2.1.1 \
         sphinx-jinja==1.1.1 \
         sphinx-autodoc-typehints==1.6.0 \
@@ -170,7 +173,7 @@ RUN python3 -m pip --no-cache-dir install \
         torchtext==0.10.1 \
         torchvision==0.10.1+cpu -f https://download.pytorch.org/whl/torch_stable.html \
         tqdm \
-        transformers==4.10.3 \
+        transformers==4.11.3 \
         wget && \
     python3 -m ipykernel.kernelspec
 
@@ -216,8 +219,7 @@ RUN sed -i 's/PermitRootLogin prohibit-password/PermitRootLogin yes/' /etc/ssh/s
 # SSH login fix. Otherwise user is kicked off after login
 RUN sed 's@session\s*required\s*pam_loginuid.so@session optional pam_loginuid.so@g' -i /etc/pam.d/sshd
 
-RUN python3 -m pip install git-pylint-commit-hook osqp onnx==1.8.1
-RUN python3 -m pip install onnxruntime==1.11.1 onnxruntime-extensions==0.4.2
+RUN python3 -m pip install git-pylint-commit-hook osqp
 
 # NOTE: We need to pin the holoviews version to this since the latest version has a circular dependency on bokeh 2.0.0 through the panel package
 RUN python3 -m pip install holoviews==1.12.7 netron jsonschema pandas
