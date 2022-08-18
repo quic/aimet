@@ -170,6 +170,39 @@ class TestTensorQuantizer(unittest.TestCase):
         # compare qc quantize output and qat asymmetric quantizer output
         self.assertTrue(np.allclose(x_quant, output_tensor))
 
+    def test_compare_qat_qc_quantize_two_dims(self):
+        """
+        compare qat asymmetric quantization with  qc quantize implementation for a 2D tensor
+        :return:
+        """
+
+        quantizer = libpymo.TensorQuantizer(libpymo.QuantizationMode.QUANTIZATION_TF,
+                                            libpymo.RoundingMode.ROUND_NEAREST)
+
+        np.random.seed(11)
+        random_input = 5 * (np.random.normal(size=[1, 3 * 224 * 224])) + 20
+
+        # Full range min, max  (no scaling input)
+        x_min = min(0., float(random_input.min()))
+        x_max = max(0., float(random_input.max()))
+
+        x_min = min(x_min, 0)
+        x_max = max(x_max, 0)
+
+        #  qc quantize
+        self.set_quantizer_values(quantizer, x_min, x_max)
+        # print(quantizer.encoding.min, quantizer.encoding.max, quantizer.encoding.delta, quantizer.encoding.offset)
+
+        # aimet quantizer
+        output_tensor = np.zeros((1, 3 * 224 * 224)).astype(np.float32)
+        quantizer.quantizeDequantize(random_input, output_tensor, x_min, x_max, 8, False)
+
+        # qat asymmetric quantizer output as float32
+        x_quant = self.qat_python_asymmetric_quantizer(random_input, 8, x_max, x_min).astype(np.float32)
+
+        # compare qc quantize output and qat asymmetric quantizer output
+        self.assertTrue(np.allclose(x_quant, output_tensor))
+
     def test_compare_qat_qc_quantize_half_range_scaled_input(self):
         """
         compare qat asymmetric quantization with  qc quantize implementation
