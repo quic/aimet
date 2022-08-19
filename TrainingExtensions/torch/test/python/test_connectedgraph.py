@@ -128,7 +128,7 @@ class TestConnectedGraph(unittest.TestCase):
         inp_shape_3 = (1, 3, 8, 8)
         inp_tensor_list = create_rand_tensors_given_shapes([inp_shape_1, inp_shape_2, inp_shape_3])
         conn_graph = ConnectedGraph(model, inp_tensor_list)
-        concat_op = conn_graph.get_all_ops()['Concat_3']
+        concat_op = [op for op in conn_graph.get_all_ops().values() if op.type == 'Concat'][0]
         self.assertEqual(3, len(concat_op.inputs))
         self.assertEqual(14, concat_op.output_shape[1])
 
@@ -242,31 +242,33 @@ class TestConnectedGraph(unittest.TestCase):
         self.assertEqual(0, len([op for op in conn_graph.get_all_ops().keys() if 'Tuple' in op]))
         self.assertEqual('Concat', conn_graph.ordered_ops[-1].type)
 
-        product_names = conn_graph.get_all_products().keys()
-        self.assertEqual(0, len([product for product in product_names if 'Tuple' in product]))
+        conv0 = conn_graph.get_op_from_module_name('MultiOutputWithUnuseModel.layer.conv1')
+        conv2 = conn_graph.get_op_from_module_name('MultiOutputWithUnuseModel.layer.conv3')
+        conv3 = conn_graph.get_op_from_module_name('MultiOutputWithUnuseModel.conv1')
+        conv4 = conn_graph.get_op_from_module_name('MultiOutputWithUnuseModel.conv2')
+        concat = conn_graph.ordered_ops[-1]
 
         expected_products = [
             # layer #1 to conv1,conv2
-            'Conv_0_to_Conv_3',
-            'Conv_2_to_Conv_4',
+            (conv0, conv3),
+            (conv2, conv4),
 
             # conv1,conv2 to cat
-            'Conv_3_to_Concat_5',
-            'Conv_4_to_Concat_5']
+            (conv3, concat),
+            (conv4, concat)]
 
-        products = conn_graph.get_all_products()
-        for product_name in product_names:
-            if product_name in expected_products:
-                product = products[product_name]
+        products = conn_graph.get_all_products().values()
+        for product in products:
+            if (product.producer, product.consumers[0]) in expected_products:
                 self.assertEqual(product.shape, product.producer.output_shape)
-                expected_products.remove(product_name)
+                expected_products.remove((product.producer, product.consumers[0]))
         self.assertEqual(0, len(expected_products))
 
     def test_multi_output_with_matched_layers(self):
-        """ Test a multiple layer multi-output model with intermediate Tuple Tensors shuffled """
+        """ Test a multiple layer multi-output model with intermediate Tuple Tensors in order """
         class MultiOutputLayersModel(torch.nn.Module):
             """
-            Model with Tuple of Tensors as output shuffled between layers
+            Model with Tuple of Tensors as output in order between layers
             """
             def __init__(self):
                 super(MultiOutputLayersModel, self).__init__()
@@ -290,29 +292,38 @@ class TestConnectedGraph(unittest.TestCase):
 
         product_names = conn_graph.get_all_products().keys()
         self.assertEqual(0, len([product for product in product_names if 'Tuple' in product]))
+        conv0 = conn_graph.get_op_from_module_name('MultiOutputLayersModel.layer1.conv1')
+        conv1 = conn_graph.get_op_from_module_name('MultiOutputLayersModel.layer1.conv2')
+        conv2 = conn_graph.get_op_from_module_name('MultiOutputLayersModel.layer1.conv3')
+        conv3 = conn_graph.get_op_from_module_name('MultiOutputLayersModel.layer2.conv1')
+        conv4 = conn_graph.get_op_from_module_name('MultiOutputLayersModel.layer2.conv2')
+        conv5 = conn_graph.get_op_from_module_name('MultiOutputLayersModel.layer2.conv3')
+        conv6 = conn_graph.get_op_from_module_name('MultiOutputLayersModel.layer3.conv1')
+        conv7 = conn_graph.get_op_from_module_name('MultiOutputLayersModel.layer3.conv2')
+        conv8 = conn_graph.get_op_from_module_name('MultiOutputLayersModel.layer3.conv3')
+        concat = conn_graph.ordered_ops[-1]
 
         expected_products = [
             # layer #1 to layer #2
-            'Conv_0_to_Conv_3',
-            'Conv_1_to_Conv_4',
-            'Conv_2_to_Conv_5',
+            (conv0, conv3),
+            (conv1, conv4),
+            (conv2, conv5),
 
             # layer #2 to layer #3
-            'Conv_3_to_Conv_6',
-            'Conv_4_to_Conv_7',
-            'Conv_5_to_Conv_8',
+            (conv3, conv6),
+            (conv4, conv7),
+            (conv5, conv8),
 
             # layer #3 to cat
-            'Conv_6_to_Concat_9',
-            'Conv_7_to_Concat_9',
-            'Conv_8_to_Concat_9']
+            (conv6, concat),
+            (conv7, concat),
+            (conv8, concat)]
 
-        products = conn_graph.get_all_products()
-        for product_name in product_names:
-            if product_name in expected_products:
-                product = products[product_name]
+        products = conn_graph.get_all_products().values()
+        for product in products:
+            if (product.producer, product.consumers[0]) in expected_products:
                 self.assertEqual(product.shape, product.producer.output_shape)
-                expected_products.remove(product_name)
+                expected_products.remove((product.producer, product.consumers[0]))
         self.assertEqual(0, len(expected_products))
 
     def test_multi_output_with_shuffled_layers(self):
@@ -341,37 +352,43 @@ class TestConnectedGraph(unittest.TestCase):
         self.assertEqual(0, len([op for op in conn_graph.get_all_ops().keys() if 'Tuple' in op]))
         self.assertEqual('Concat', conn_graph.ordered_ops[-1].type)
 
-        product_names = conn_graph.get_all_products().keys()
-        self.assertEqual(0, len([product for product in product_names if 'Tuple' in product]))
+        conv0 = conn_graph.get_op_from_module_name('MultiOutputShuffledModel.layer1.conv1')
+        conv1 = conn_graph.get_op_from_module_name('MultiOutputShuffledModel.layer1.conv2')
+        conv2 = conn_graph.get_op_from_module_name('MultiOutputShuffledModel.layer1.conv3')
+        conv3 = conn_graph.get_op_from_module_name('MultiOutputShuffledModel.layer2.conv1')
+        conv4 = conn_graph.get_op_from_module_name('MultiOutputShuffledModel.layer2.conv2')
+        conv5 = conn_graph.get_op_from_module_name('MultiOutputShuffledModel.layer2.conv3')
+        conv6 = conn_graph.get_op_from_module_name('MultiOutputShuffledModel.layer3.conv1')
+        conv7 = conn_graph.get_op_from_module_name('MultiOutputShuffledModel.layer3.conv2')
+        conv8 = conn_graph.get_op_from_module_name('MultiOutputShuffledModel.layer3.conv3')
+        concat = conn_graph.ordered_ops[-1]
+        split = [op for op in conn_graph.get_all_ops().values() if op.type == 'Split'][0]
 
         expected_products = [
-            # TODO fix order of products
-
             # layer #1 to layer #2
-            'Conv_0__to__Split_0',
-            'Conv_1_to_Conv_3',
-            'Conv_2_to_Conv_4',
+            (conv0, split),
+            (conv1, conv3),
+            (conv2, conv4),
 
             # layer #2 to layer #3
-            'Conv_3_to_Conv_8',
-            'Conv_4_to_Conv_6',
-            'Conv_5_to_Conv_7',
+            (conv3, conv8),
+            (conv4, conv6),
+            (conv5, conv7),
 
-            # layer #3, layer#1.conv1 to cat
-            'Conv_6_to_Concat_9',
-            'Conv_7_to_Concat_9',
-            'Conv_8_to_Concat_9']
+            # layer #3 to cat
+            (conv6, concat),
+            (conv7, concat),
+            (conv8, concat)]
 
-        products = conn_graph.get_all_products()
-        for product_name in product_names:
-            if product_name in expected_products:
-                product = products[product_name]
+        products = conn_graph.get_all_products().values()
+        for product in products:
+            if (product.producer, product.consumers[0]) in expected_products:
                 self.assertEqual(product.shape, product.producer.output_shape)
-                expected_products.remove(product_name)
+                expected_products.remove((product.producer, product.consumers[0]))
         self.assertEqual(0, len(expected_products))
         split_product = conn_graph.get_all_products()['Split_0__to__multiple_ops']
-        self.assertTrue(conn_graph.get_all_ops()['Conv_5'] in split_product.consumers)
-        self.assertTrue(conn_graph.get_all_ops()['Concat_9'] in split_product.consumers)
+        self.assertTrue(conv5 in split_product.consumers)
+        self.assertTrue(concat in split_product.consumers)
 
     def test_submodules_with_sequence_and_module_list(self):
         """ Test building ConnectedGraph on a model with sequence and module list """

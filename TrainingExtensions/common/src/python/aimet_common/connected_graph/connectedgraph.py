@@ -40,6 +40,7 @@
 from abc import ABC, abstractmethod
 from typing import List
 from aimet_common.connected_graph.operation import Op
+from aimet_common.connected_graph.product import Product
 
 
 class ConnectedGraph(ABC):
@@ -60,6 +61,13 @@ class ConnectedGraph(ABC):
     def get_all_products(self):
         """ Returns the products dictionary """
         return self._products
+
+    def get_product(self, name: str) -> Product:
+        """
+        Returns the product with the name passed in the argument
+        :param name: Product name
+        """
+        return self._products.get(name)
 
 
 def get_ordered_ops(list_of_starting_ops: List[Op]) -> List[Op]:
