@@ -689,12 +689,12 @@ class TestQuantsimConfig:
 
         random_inputs = utils.create_rand_tensors_given_shapes(input_shapes)
         conn_graph = ConnectedGraph(model, random_inputs)
-        starting_op = conn_graph.get_all_ops()['Conv_7']
-        add_10_op = conn_graph.get_all_ops()['Add_10']
+        starting_op = conn_graph.get_op_from_module_name('SingleResidual.conv3')
+        add_op = [op for op in conn_graph.get_all_ops().values() if op.type == 'Add'][0]
         neighborhood = get_all_ops_in_neighborhood(starting_op, 'output')
         assert len(neighborhood) == 2
         assert starting_op in neighborhood
-        assert add_10_op in neighborhood
+        assert add_op in neighborhood
 
     @pytest.mark.cuda
     def test_parse_config_file_defaults_gpu(self):
