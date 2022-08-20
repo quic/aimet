@@ -47,6 +47,7 @@ from torch import nn
 import aimet_common.libpymo as libpymo
 from aimet_common.utils import AimetLogger
 from aimet_common.defs import QuantScheme, QuantizationDataType, MAP_ROUND_MODE_TO_PYMO
+from aimet_torch import custom_tensor_utils
 from aimet_torch import utils
 from aimet_torch.tensor_quantizer import StaticGridPerTensorQuantizer, StaticGridPerChannelQuantizer, TensorQuantizer, \
     LearnedGridTensorQuantizer, ParameterQuantizer
@@ -493,9 +494,8 @@ class StaticGridQuantWrapper(QcQuantizeWrapper):
         """
 
         # Quantize the inputs
-        quantized_inputs = self._quantize_activation(self.input_quantizers, inputs)
-        if isinstance(quantized_inputs, torch.Tensor):
-            quantized_inputs = [quantized_inputs]
+        torch_inputs = custom_tensor_utils.to_torch_tensor(inputs)
+        quantized_inputs = self._quantize_activation(self.input_quantizers, torch_inputs)
 
         # Quantize the parameters
         shadow_params = self._quantize_dequantize_params()
@@ -504,6 +504,7 @@ class StaticGridQuantWrapper(QcQuantizeWrapper):
         # during backward pass
         quantized_inputs = SteGatingFuncForParameters.apply(self, *quantized_inputs)
 
+        quantized_inputs = custom_tensor_utils.to_custom_tensor(inputs, quantized_inputs)
         # clone() the outputs of Custom function to avoid incorrect gradient calculation for in-place modification
         # of view (view is created since Custom function's forward return input as-is)
         quantized_inputs = [inp.clone() if isinstance(inp, torch.Tensor) else inp for inp in quantized_inputs]
@@ -514,9 +515,15 @@ class StaticGridQuantWrapper(QcQuantizeWrapper):
         self._restore_shadow_params(shadow_params)
 
         # Quantize the outputs
-        if isinstance(wrapped_output, torch.Tensor):
+        if not isinstance(wrapped_output, (List, Tuple)):
             wrapped_output = [wrapped_output]
-        output = self._quantize_activation(self.output_quantizers, wrapped_output)
+
+        torch_outputs = custom_tensor_utils.to_torch_tensor(wrapped_output)
+        output = self._quantize_activation(self.output_quantizers, torch_outputs)
+        output = custom_tensor_utils.to_custom_tensor(wrapped_output, output)
+
+        if len(output) == 1:
+            output = output[0]
 
         return output
 
@@ -654,10 +661,6 @@ class StaticGridQuantWrapper(QcQuantizeWrapper):
                 output = input_tensor
 
             outputs.append(output)
-
-        # Flatten if there is only one output - which is by far the most common case
-        if len(outputs) == 1:
-            outputs = outputs[0]
 
         return outputs
 
