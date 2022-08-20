@@ -575,8 +575,8 @@ def find_num_inout_tensors_per_module(model: torch.nn.Module, input_tensor) -> D
     num_inout_map = {}
 
     def record_num_outputs(module, inputs, outputs):
-        num_inputs = len(inputs) if not isinstance(inputs, torch.Tensor) else 1
-        num_outputs = len(outputs) if not isinstance(outputs, torch.Tensor) else 1
+        num_inputs = len(inputs) if isinstance(inputs, (List, Tuple)) else 1
+        num_outputs = len(outputs) if isinstance(outputs, (List, Tuple)) else 1
         num_inout_map[module] = (num_inputs, num_outputs)
 
     run_hook_for_layers_with_given_input(model, input_tensor, record_num_outputs)
