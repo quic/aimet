@@ -228,7 +228,7 @@ class TestQcQuantizeOpStaticGrid:
         quantizer.encoding = encodings
 
         inputs = torch.tensor([[True, True, False, False]])
-        quant_out = quantizer._quantize_activation(quantizer.output_quantizers, inputs)
+        quant_out = quantizer._quantize_activation(quantizer.output_quantizers, inputs)[0]
         expected_output = torch.tensor([True, True, False, False])
         assert torch.equal(quant_out, expected_output)
 
