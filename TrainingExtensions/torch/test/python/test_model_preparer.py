@@ -1318,8 +1318,10 @@ class TestFX:
 
             def forward(self, x):
                 x = self.conv(x)
-                height, width = x.size(2), x.size(3)
-                x = torch.nn.functional.interpolate(x, size=(height, width), mode='bilinear', align_corners=True)
+                x = torch.nn.functional.interpolate(x, size=(x.size(2),  x.size(3)), mode='bilinear', align_corners=True)
+                x = torch.nn.functional.interpolate(x, align_corners=False, size=(x.size(2), x.size(3)), mode='bicubic')
+                x = torch.nn.functional.interpolate(x, (x.size(2), x.size(3)), None, 'nearest', None, None)
+                x = torch.nn.functional.interpolate(x, (x.size(2), x.size(3)), mode='bilinear')
                 return x
 
         input_shape = (1, 3, 32, 32)
@@ -1330,6 +1332,9 @@ class TestFX:
 
         assert torch.equal(model_transformed(dummy_input), model(dummy_input))
         assert isinstance(model_transformed.module_interpolate, elementwise_ops.Interpolate)
+        assert isinstance(model_transformed.module_interpolate_1, elementwise_ops.Interpolate)
+        assert isinstance(model_transformed.module_interpolate_2, elementwise_ops.Interpolate)
+        assert isinstance(model_transformed.module_interpolate_3, elementwise_ops.Interpolate)
 
         # Verify with Quantization workflow.
         sim = QuantizationSimModel(model_transformed, dummy_input=dummy_input)
