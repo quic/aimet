@@ -41,21 +41,44 @@
 
 # Step 0. Import statements
 from typing import Any
-from functools import partial
 import torch
 from torchvision import models
 from aimet_common.defs import QuantScheme
 from aimet_torch.model_preparer import prepare_model
-from aimet_torch.quant_analyzer import QuantAnalyzer
+from aimet_torch.quant_analyzer import QuantAnalyzer, CallbackFunc
 # End step 0
 
-# Step 1. Prepare eval callback
+# Step 1. Prepare forward pass callback
+# NOTE: In the actual use cases, the users should implement this part to serve
+#       their own goals if necessary.
+def forward_pass_callback(model: torch.nn.Module, _: Any = None) -> None:
+    """
+    NOTE: This is intended to be the user-defined model calibration function.
+    AIMET requires the above signature. So if the user's calibration function does not
+    match this signature, please create a simple wrapper around this callback function.
+
+    A callback function for model calibration that simply runs forward passes on the model to
+    compute encoding (delta/offset). This callback function should use representative data and should
+    be subset of entire train/validation dataset (~1000 images/samples).
+
+    :param model: PyTorch model.
+    :param _: Argument(s) of this callback function. Up to the user to determine the type of this parameter.
+    E.g. could be simply an integer representing the number of data samples to use. Or could be a tuple of
+    parameters or an object representing something more complex.
+    """
+    # User action required
+    # User should create data loader/iterable using representative dataset and simply run
+    # forward passes on the model.
+# End step 1
+
+# Step 2. Prepare eval callback
 # NOTE: In the actual use cases, the users should implement this part to serve
 #       their own goals if necessary.
 def eval_callback(model: torch.nn.Module, _: Any = None) -> float:
     """
     NOTE: This is intended to be the user-defined model evaluation function.
-    AIMET requires the model to be evaluated as the first argument of this callback function.
+    AIMET requires the above signature. So if the user's calibration function does not
+    match this signature, please create a simple wrapper around this callback function.
 
     A callback function for model evaluation that determines model performance. This callback function is
     expected to return scalar value representing the model performance evaluated against entire
@@ -71,48 +94,42 @@ def eval_callback(model: torch.nn.Module, _: Any = None) -> float:
     # User should create data loader/iterable using entire test/evaluation dataset, perform forward passes on
     # the model and return single scalar value representing the model performance.
     return .8
-# End step 1
+# End step 2
 
 
 def quant_analyzer_example():
 
-    # Step 2. Prepare model
+    # Step 3. Prepare model
     model = models.resnet18(pretrained=True).cuda().eval()
     input_shape = (1, 3, 224, 224)
     dummy_input = torch.randn(*input_shape).cuda()
     prepared_model = prepare_model(model)
-    # End step 2
-
-    # Step 3. Prepare calibration dataloader
-    # User action required
-    # The following line of code is an example of how to use the dataloader for calibration.
-    # Replace the following line with your own dataset's dataloader.
-    calibration_data_loader = _get_calibration_data_loader()
     # End step 3
 
-    # Step 4. Wrap eval callback function
     # User action required
-    # The following line of code is an example of how to wrap eval callback function.
-    # First argument of eval callback has to be model to be evaluated.
-    # If eval callback function has more than one argument, user should use functools.partial
-    # to create partial function to hand over additional arguments.
-    eval_callback_fn = partial(eval_callback, eval_callback_args=None)
-    # End step 4
+    # User should pass actual argument(s) of the callback functions.
+    forward_pass_callback_fn = CallbackFunc(forward_pass_callback, func_callback_args=None)
+    eval_callback_fn = CallbackFunc(eval_callback, func_callback_args=None)
 
-    # Step 5. Create QuantAnalyzer object
+    # User action required
+    # User should use unlabeled dataloader, so if the dataloader yields labels as well user should use discard them.
+    unlabeled_data_loader = _get_unlabled_data_loader()
+
+    # Step 4. Create QuantAnalyzer object
     quant_analyzer = QuantAnalyzer(model=prepared_model,
                                    dummy_input=dummy_input,
-                                   data_loader=calibration_data_loader,
-                                   eval_callback=eval_callback_fn)
-    # End step 5
+                                   forward_pass_callback=forward_pass_callback_fn,
+                                   eval_callback=eval_callback_fn,
+                                   unlabeled_dataset_iterable=unlabeled_data_loader)
+    # End step 4
 
-    # Step 6. Run QuantAnalyzer
+    # Step 5. Run QuantAnalyzer
     quant_analyzer.analyze(quant_scheme=QuantScheme.post_training_tf_enhanced,
                            default_param_bw=8,
                            default_output_bw=8,
                            config_file=None,
-                           results_dir="./quantization_results/")
-    # End step 6
+                           results_dir="./quant_analyzer_results/")
+    # End step 5
 
 
 if __name__ == '__main__':

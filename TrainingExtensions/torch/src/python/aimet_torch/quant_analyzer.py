@@ -62,6 +62,19 @@ DEFAULT_BOKEH_FIGURE_HEIGHT = 300
 DEFAULT_NUM_BATCHES = 5
 
 
+class CallbackFunc:
+    """
+    Class encapsulating callback function, and it's argument(s)
+    """
+    def __init__(self, func: Callable, func_callback_args=None):
+        """
+        :param func: Callable Function
+        :param func_callback_args: Arguments passed to the callable function as-is.
+        """
+        self.func = func
+        self.args = func_callback_args
+
+
 class QuantAnalyzer:
     """
     QuantAnalyzer tool provides
@@ -75,51 +88,38 @@ class QuantAnalyzer:
     def __init__(self,
                  model: torch.nn.Module,
                  dummy_input: Union[torch.Tensor, Tuple],
-                 data_loader: Union[DataLoader, Collection],
-                 eval_callback: Callable,
+                 forward_pass_callback: CallbackFunc,
+                 eval_callback: CallbackFunc,
+                 unlabeled_dataset_iterable: Union[DataLoader, Collection] = None,
                  modules_to_ignore: List[torch.nn.Module] = None,
                  ):
         """
         :param model: FP32 model to analyze for quantization.
         :param dummy_input: Dummy input to model.
-        :param data_loader: A dataloader (i.e. iterable with `__len__`)
-                that iterates over a dataset used for finding quantization parameters.
-                The values yielded by this dataloader are expected to be representative of
-                entire dataset and able to be passed directly to the model. Roughly 1000 data samples
-                are enough for calibration. This data loader will also be used for per
-                layer MSE analysis.
+        :param forward_pass_callback: A callback function for model calibration that simply runs
+                forward passes on the model to compute encoding (delta/offset). This
+                callback function should use representative data and should be subset of
+                entire train/validation dataset (~1000 images/samples).
         :param eval_callback: A callback function for model evaluation that determines model
                 performance. This callback function is expected to return scalar value
                 representing the model performance evaluated against entire test/evaluation dataset.
-                Eval callback function should have only model to be evaluated as first argument. If eval
-                callback function requires additional arguments, user should use functools.partial to
-                hand over the additional arguments.
+        :param unlabeled_dataset_iterable: A collection (i.e. iterable with `__len__`)
+                that iterates over an unlabeled dataset. The values yielded by this iterable are expected
+                to be able to be passed directly to the model. This iterable will be used for per
+                layer MSE analysis. If not provided, per layer MSE analysis will be skipped.
         :param modules_to_ignore: Excludes certain modules from being analyzed.
         """
+        if not isinstance(forward_pass_callback, CallbackFunc):
+            raise ValueError('forward_pass_callback and its argument(s) are not encapsulated by CallbackFunc class.')
+        if not isinstance(eval_callback, CallbackFunc):
+            raise ValueError('eval_callback and its argument(s) are not encapsulated by CallbackFunc class.')
+
         self._model = model
         self._dummy_input = dummy_input
-        self._data_loader = data_loader
-
-        def forward_pass_callback(model: torch.nn.Module, _: Any = None):
-            """
-            Forward pass callback for calibration.
-            :param model: PyTorch model.
-            :param _: Don't care argument.
-            """
-            device = utils.get_device(model)
-            with utils.in_eval_mode(model), torch.no_grad():
-                for model_inputs in data_loader:
-                    # if Dataset stores data samples and corresponding labels (model_inputs, labels).
-                    if isinstance(model_inputs, (tuple, list)):
-                        model_inputs, _ = model_inputs
-                    assert isinstance(model_inputs, (torch.Tensor, tuple, list))
-                    model_inputs = utils.change_tensor_device_placement(model_inputs, device)
-                    if isinstance(model_inputs, torch.Tensor):
-                        model_inputs = [model_inputs]
-                    model(*model_inputs)
-
         self._forward_pass_callback = forward_pass_callback
         self._eval_callback = eval_callback
+        if unlabeled_dataset_iterable:
+            self._unlabeled_dataset_iterable = unlabeled_dataset_iterable
         self._modules_to_ignore = modules_to_ignore
 
     def analyze(self,
@@ -169,7 +169,8 @@ class QuantAnalyzer:
             self._export_per_layer_stats_histogram(sim, results_dir)
 
         # Export per layer MSE loss between fp32 and quantized output activations.
-        self._export_per_layer_mse_loss(sim, results_dir)
+        if self._unlabeled_dataset_iterable:
+            self._export_per_layer_mse_loss(sim, results_dir)
 
     def _create_quantsim_and_encodings(self, quant_scheme: QuantScheme, default_param_bw: int,
                                        default_output_bw: int, config_file: str) \
@@ -199,7 +200,7 @@ class QuantAnalyzer:
         if self._modules_to_ignore:
             self._exclude_modules_from_quantization(self._model, sim, self._modules_to_ignore)
 
-        sim.compute_encodings(self._forward_pass_callback, None)
+        sim.compute_encodings(self._forward_pass_callback.func, self._forward_pass_callback.args)
         return sim
 
     def _eval_weight_quantized_model(self, sim: QuantizationSimModel)-> float:
@@ -240,7 +241,7 @@ class QuantAnalyzer:
         :return: Scaler value representing model performance.
         """
         with utils.in_eval_mode(model), torch.no_grad():
-            return self._eval_callback(model)
+            return self._eval_callback.func(model, self._eval_callback.args)
 
     def _sort_quant_wrappers_based_on_occurrence(self, sim: QuantizationSimModel) -> Dict:
         """
@@ -593,7 +594,7 @@ class QuantAnalyzer:
 
     def _perform_per_layer_analysis_by_enabling_quant_wrappers(self,
                                                                sim: QuantizationSimModel,
-                                                               results_dir: str = "./tmp/",
+                                                               results_dir: str,
                                                                ) -> Dict:
         """
         NOTE: Option 1
@@ -630,7 +631,7 @@ class QuantAnalyzer:
 
     def _perform_per_layer_analysis_by_disabling_quant_wrappers(self,
                                                                 sim: QuantizationSimModel,
-                                                                results_dir: str = "./tmp/",
+                                                                results_dir: str,
                                                                 ) -> Dict:
         """
         NOTE: Option 2
@@ -667,7 +668,7 @@ class QuantAnalyzer:
 
     def _export_per_layer_encoding_min_max_range(self,
                                                  sim: QuantizationSimModel,
-                                                 results_dir: str = "./tmp/",
+                                                 results_dir: str,
                                                  ) -> Tuple[Dict, Dict]:
         """
         Export encoding min and max range for all weights and activations. results_dir should have
@@ -730,7 +731,7 @@ class QuantAnalyzer:
 
     def _export_per_layer_stats_histogram(self,
                                           sim: QuantizationSimModel,
-                                          results_dir: str = "./tmp/",
+                                          results_dir: str,
                                           ):
         """
         NOTE: Not to invoke when quantization scheme is not TF-Enhanced.
@@ -777,7 +778,7 @@ class QuantAnalyzer:
 
     def _export_per_layer_mse_loss(self,
                                    sim: QuantizationSimModel,
-                                   results_dir: str = "./tmp/",
+                                   results_dir: str,
                                    ) -> Dict:
         """
         NOTE: Need to pass same model input data through both fp32 and quantsim model to
@@ -827,10 +828,8 @@ class QuantAnalyzer:
 
         loss = 0.0
         batch_index = 0
-        for model_inputs in self._data_loader:
-            # if Dataset stores data samples and corresponding labels (model_inputs, labels).
-            if isinstance(model_inputs, (tuple, list)):
-                model_inputs, _ = model_inputs
+        for model_inputs in self._unlabeled_dataset_iterable:
+            assert isinstance(model_inputs, (torch.Tensor, tuple, list))
             _, quantized_out_acts = quant_module_collector.collect_inp_out_data(model_inputs,
                                                                                 collect_input=False,
                                                                                 collect_output=True)
