@@ -5,7 +5,7 @@ on:
       - main
 jobs:
   changed-build:
-    runs-on: ubuntu-latest  # windows-latest | macos-latest
+    runs-on: ubuntu-latest
     name: Get changed builds
     outputs:
       changed-build: ${{ steps.changed-build.outputs.all_changed_files }}
