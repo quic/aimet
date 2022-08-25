@@ -41,6 +41,7 @@ import itertools
 
 import pickle
 import os
+import re
 import numpy as np
 import tensorflow as tf
 from aimet_common.utils import AimetLogger
@@ -348,8 +349,11 @@ def update_variables_with_values(sess: tf.compat.v1.Session, vars_with_values: D
 
     with sess.graph.as_default():
         for var_name in vars_with_values.keys():
-            vars_with_given_name = [var for var in tf.compat.v1.global_variables()
-                                    if var.op.name == var_name]
+            for var in tf.compat.v1.global_variables():
+                var_op_name = re.sub('_op_mode', '', var.op.name)
+                var_name_op = re.sub('_op_mode', '', var_name)
+                if (var.op.name == var_name or var_name_op.find(var_op_name) != -1):
+                    vars_with_given_name = [var]
 
             # could not find variable
             if not vars_with_given_name:
