@@ -153,6 +153,7 @@ RUN python3.7 -m pip --no-cache-dir install \
         pytorch-ignite \
         scikit-learn \
         'scipy>=1.2.1' \
+        spconv==2.1.20 \
         sphinx==2.1.1 \
         sphinx-jinja==1.1.1 \
         sphinx-autodoc-typehints==1.6.0 \
