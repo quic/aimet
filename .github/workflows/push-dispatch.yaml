@@ -18,7 +18,7 @@ jobs:
         uses: tj-actions/changed-files@v28.0.0
         with:
           files: |
-            Docker/Dockerfile*
+            Jenkins/Dockerfile*
       - name: List changed builds
         run: |
           for file in ${{ steps.changed-build.outputs.all_changed_files }}; do
