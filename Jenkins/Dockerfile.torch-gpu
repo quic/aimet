@@ -177,6 +177,7 @@ RUN python3 -m pip --no-cache-dir install \
         pytorch-ignite \
         scikit-learn \
         scipy==1.3.2 \
+        spconv-cu111==2.1.20 \
         sphinx==2.1.1 \
         sphinx-jinja==1.1.1 \
         sphinx-autodoc-typehints==1.6.0 \
