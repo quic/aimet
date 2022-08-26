@@ -84,11 +84,12 @@ class AdaroundParameters:
          Default (20, 2)
         :param default_warm_start: warm up period, during which rounding loss has zero effect. Default 20% (0.2)
         """
-        inp = next(iter(data_loader))
-        if isinstance(inp, (tuple, list)):
-            if len(inp) != 2:
-                raise ValueError("Expected dataloader to yield input tensor "
-                                 "or tuple of (input, label).")
+        if len(data_loader) > 0:
+            inp = next(iter(data_loader))
+            if isinstance(inp, (tuple, list)):
+                if len(inp) != 2:
+                    raise ValueError("Expected dataloader to yield input tensor "
+                                     "or tuple of (input, label).")
 
         if len(data_loader) < num_batches:
             raise ValueError(f'Can not fetch {num_batches} batches from '
