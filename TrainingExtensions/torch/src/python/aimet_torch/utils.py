@@ -158,6 +158,10 @@ class CachedDataset(Dataset):
         :param num_batches: Number of batches to fetch from data loader
         :param path: Path to save model inputs
         """
+        if len(data_loader) < num_batches:
+            raise ValueError(f'Can not fetch {num_batches} batches from '
+                             f'a data loader of length {len(data_loader)}.')
+
         self._data_loader = data_loader
         self._num_batches = num_batches
         self._path = path
@@ -182,24 +186,14 @@ class CachedDataset(Dataset):
         if not os.path.exists(self._path):
             os.makedirs(self._path)
 
-        iterator = iter(self._data_loader)
+        for i, batch in enumerate(self._data_loader):
+            # batch is of shape (model_inputs, labels)
+            if isinstance(batch, (tuple, list)):
+                batch, _ = batch
 
-        for batch_index in range(self._num_batches):
-            try:
-                batch = next(iterator)
-
-                # batch is of shape (model_inputs, labels)
-                if isinstance(batch, (tuple, list)):
-                    batch, _ = batch
-
-                path = os.path.join(self._path, 'model_inputs_' + str(batch_index))
-                with open(path, 'wb') as file:
-                    pickle.dump(batch, file)
-
-            except StopIteration:
-                error_msg = f'Can not fetch {self._num_batches} batches from data loader.'
-                logger.error(error_msg)
-                raise ValueError(error_msg)
+            path = os.path.join(self._path, f'model_inputs_{i}')
+            with open(path, 'wb') as file:
+                pickle.dump(batch, file)
 
         logger.info('Caching %d batches from data loader at path location: %s', self._num_batches, self._path)
 

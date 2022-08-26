@@ -382,7 +382,7 @@ class TestTrainingExtensionsUtils(unittest.TestCase):
         self.assertEqual(len(cached_dataset), 6)
 
         # Try creating cached data loader by more than possible batches from data loader and expect ValueError
-        possible_batches = int(dataset_size / batch_size)
+        possible_batches = math.ceil(dataset_size / batch_size)
         with pytest.raises(ValueError):
             utils.CachedDataset(data_loader, possible_batches + 1, path)
 
