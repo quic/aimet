@@ -40,6 +40,7 @@
 import io
 from typing import List, Union, Tuple
 from dataclasses import dataclass
+import functools
 
 import torch
 from torch.autograd import Variable
@@ -503,20 +504,16 @@ class LearnedGridTensorQuantizer(TensorQuantizer):
         self.wrapper_ref = None
         self.name = None
         self.round_ste_func = grad_fn.RoundStraightThrough.apply
-        # p is the granularity/ steps (2^bw - 1)
-        self.n, self.p = LearnedGridTensorQuantizer.get_n_and_p(self.bitwidth, self.use_symmetric_encodings, self.use_strict_symmetric)
-        # Moving n and p device once so that we don't have to move it for every batch
         self.scaling, self.offset = None, None
+        self.device = None
         self._ch_axis = 0
 
-    @property
-    def device(self):
-        """Alias of self.wrapper_def.device"""
-        return self.wrapper_ref.device
-
     @staticmethod
-    def get_n_and_p(bitwidth: int, use_symmetric_encoding: bool,
-                    use_strict_symmetric: bool) -> Tuple[torch.Tensor, torch.Tensor]:
+    @functools.lru_cache()
+    def get_n_and_p(bitwidth: int,
+                    use_symmetric_encoding: bool,
+                    use_strict_symmetric: bool,
+                    device: Union[torch.device, str]) -> Tuple[torch.Tensor, torch.Tensor]:
         """
         compute bounds n and p params given bitwidth and use_symmetric_encoding flag
         :param bitwidth: bitwidth configured
@@ -528,15 +525,25 @@ class LearnedGridTensorQuantizer(TensorQuantizer):
             raise ValueError("Strict symmetric can be enabled only when using symmetric encoding")
 
         n = 0.0
-        p = torch.pow(torch.Tensor([2]), bitwidth) - 1
+        p = torch.pow(torch.tensor([2]), bitwidth) - 1
 
         if use_symmetric_encoding and use_strict_symmetric:
             p -= 1
 
-        n = torch.Tensor([n])
-        p = torch.Tensor([p])
+        n = torch.tensor([n], device=device)
+        p = torch.tensor([p], device=device)
 
         return n, p
+
+    def n(self, device=None) -> torch.Tensor:
+        """ Get n """
+        n, _ = self.get_n_and_p(self.bitwidth, self.use_strict_symmetric, self.use_strict_symmetric, device or self.device)
+        return n
+
+    def p(self, device=None) -> torch.Tensor:
+        """ Get p """
+        _, p = self.get_n_and_p(self.bitwidth, self.use_strict_symmetric, self.use_strict_symmetric, device or self.device)
+        return p
 
     @property
     def encoding(self) -> Union[None, libpymo.TfEncoding, List[libpymo.TfEncoding]]:
@@ -562,11 +569,21 @@ class LearnedGridTensorQuantizer(TensorQuantizer):
         :param encoding: encodings.
         """
         if self.enabled:
-            assert encoding is not None, "Encodings cannot be None if Quantizer is enabled."
+            if encoding is None:
+                raise RuntimeError("Encodings cannot be None if Quantizer is enabled.")
+
+            bitwidth = encoding[0].bw if isinstance(encoding, List) else encoding.bw
+
+            if bitwidth != self.bitwidth:
+                raise RuntimeError(
+                    f"Bitwidth mismatched. The bitwidth for quantizer is {self.bitwidth}, but the bitwidth in encodings is {bitwidth}. "
+                    f"If the intent is to change the bitwidth, please set quantizer bitwidth to {bitwidth} first."
+                )
+
             if self._is_encoding_frozen:
                 raise RuntimeError("Encoding can be set only when it is not frozen.")
+
             self._set_encoding_min_max_parameters(encoding)
-            self._set_p_and_n(encoding)
 
     def __str__(self):
         stream = io.StringIO(newline='\n')
@@ -588,14 +605,14 @@ class LearnedGridTensorQuantizer(TensorQuantizer):
 
         return stream.getvalue()
 
-    def compute_scaling_offset(self, encoding_min: torch.Tensor, encoding_max: torch.Tensor) -> [torch.Tensor, torch.Tensor]:
+    def compute_scaling_offset(self, encoding_min: torch.Tensor, encoding_max: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
         """
         Computes scaling and offset for a given tensor using encoding min and max
         :param encoding_min: encoding min of a tensor
         :param encoding_max: encoding max of a tensor
         :return:
         """
-        scaling = (encoding_max - encoding_min) / self.p.to(device=encoding_min.device)
+        scaling = (encoding_max - encoding_min) / self.p(device=encoding_min.device)
         offset = self.round_ste_func(-encoding_min / scaling)
         return scaling, offset
 
@@ -608,9 +625,6 @@ class LearnedGridTensorQuantizer(TensorQuantizer):
         :param encoding_max: maximum value of encoding for tensor
         :return: Quantized-dequantized tensor
         """
-        self.p = self.p.to(tensor.device)
-        self.n = self.n.to(tensor.device)
-
         if self.enabled:
             if encoding_max is None or encoding_min is None:
                 raise RuntimeError("Forward pass used for compute_encodings differs from forward pass used during "
@@ -659,26 +673,15 @@ class LearnedGridTensorQuantizer(TensorQuantizer):
             # TODO: Check for sequence
             encodings_min = [enc.min for enc in encodings]
             encodings_max = [enc.max for enc in encodings]
-            self.bitwidth = encodings[0].bw
         else:
             assert isinstance(encodings, libpymo.TfEncoding), "Encodings should be a libpymo.TfEncoding() object"
             encodings_min = [encodings.min]
             encodings_max = [encodings.max]
-            self.bitwidth = encodings.bw
 
-        params[enc_min_param] = torch.nn.Parameter(torch.FloatTensor(encodings_min).to(self.device),
+        params[enc_min_param] = torch.nn.Parameter(torch.FloatTensor(encodings_min).to(self.wrapper_ref.device),
                                                    requires_grad=True)
-        params[enc_max_param] = torch.nn.Parameter(torch.FloatTensor(encodings_max).to(self.device),
+        params[enc_max_param] = torch.nn.Parameter(torch.FloatTensor(encodings_max).to(self.wrapper_ref.device),
                                                    requires_grad=True)
-
-    def _set_p_and_n(self, encodings: Union[libpymo.TfEncoding, List[libpymo.TfEncoding]]) -> None:
-        """
-        Recompute and set p and n bound tensors.
-        """
-        bitwidth = encodings[0].bw if isinstance(encodings, List) else encodings.bw
-        assert bitwidth == self.bitwidth, "Bitwidth mismatched."
-
-        self.n, self.p = self.get_n_and_p(self.bitwidth, self.use_symmetric_encodings, self.use_strict_symmetric)
 
     def freeze_encoding(self):
         """
@@ -713,7 +716,7 @@ class QuantizeDequantizeFunc(torch.autograd.Function):
         # pylint: disable=protected-access, too-many-locals
         bitwidth = tensor_quantizer.bitwidth
         channel_axis = tensor_quantizer._ch_axis
-        n, p = tensor_quantizer.n, tensor_quantizer.p
+        n, p = tensor_quantizer.n(device=tensor.device), tensor_quantizer.p(device=tensor.device)
 
         steps = p
         delta, offset = _compute_delta_and_offset(tensor, encoding_min, encoding_max, steps, channel_axis)
@@ -773,19 +776,19 @@ class ParameterQuantizer(torch.autograd.Function):
         :param grad: gradient using which other gradients will be calculated
         :return: grad with respect to tensor, grad of encoding min and max
         """
-        device = tensor.device
         scaling, offset = tensor_quantizer.scaling, tensor_quantizer.offset
         # pylint:disable = protected-access
         channel_axis = tensor_quantizer._ch_axis
+
         if len(scaling) > 1 and len(tensor.shape) > 1:
             scaling = broadcast_to_tensor(tensor, scaling, channel_axis)
 
         if len(offset) > 1 and len(tensor.shape) > 1:
             offset = broadcast_to_tensor(tensor, offset, channel_axis)
 
-        tensor_quantizer.n, tensor_quantizer.p = tensor_quantizer.n.to(device), tensor_quantizer.p.to(device)
-
-        grid_params = grad_fn.LearnedGridParams(scaling, offset, tensor_quantizer.n, tensor_quantizer.p)
+        grid_params = grad_fn.LearnedGridParams(scaling, offset,
+                                                tensor_quantizer.n(device=tensor.device),
+                                                tensor_quantizer.p(device=tensor.device))
         intermediate_result = grad_fn.compute_intermediate_result_for_learned_grid(tensor, scaling, offset)
 
         tensor.grad = grad_fn.compute_dloss_by_dx_using_scale_offset(tensor, grad, grid_params)

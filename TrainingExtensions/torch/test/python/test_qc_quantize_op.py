@@ -621,7 +621,7 @@ class TestQcQuantizeOpLearnedGrid:
         # custom gradient computation
         # compute this one time and pass it to forward function
         n, p = LearnedGridTensorQuantizer.get_n_and_p(bitwidth=8, use_symmetric_encoding=False,
-                                                      use_strict_symmetric=False)
+                                                      use_strict_symmetric=False, device="cpu")
         c_input_grad, c_min_grad, c_max_grad = TestQcQuantizeOpLearnedGrid.perform_custom_grad_computation(
             custom_input, _min, _max, n, p
         )
@@ -669,10 +669,11 @@ class TestQcQuantizeOpLearnedGrid:
         time_taken_by_custom = 0
         torch.manual_seed(0)
         custom_input = torch.rand((2, 2), requires_grad=True, dtype=dtype, device=device)
+        n, p = LearnedGridTensorQuantizer.get_n_and_p(bitwidth=8, use_symmetric_encoding=True,
+                                                      use_strict_symmetric=False, device="cpu")
+
         for i in range(1, iterations):
             # compute this one time and pass it to forward function
-            n, p = LearnedGridTensorQuantizer.get_n_and_p(bitwidth=8, use_symmetric_encoding=False,
-                                                          use_strict_symmetric=False)
             start_time = time.perf_counter()
             _ = TestQcQuantizeOpLearnedGrid.perform_custom_grad_computation(custom_input, 0.0015, 1.0, n, p)
             exec_time = time.perf_counter() - start_time
@@ -721,19 +722,21 @@ class TestQcQuantizeOpLearnedGrid:
         bitwidth = 8
 
         # for 8 bit , 0 to 255 if not strict symmetric
-        sym_n, sym_p = LearnedGridTensorQuantizer.get_n_and_p(bitwidth, use_symmetric_encoding=True, use_strict_symmetric=False)
+        sym_n, sym_p = LearnedGridTensorQuantizer.get_n_and_p(bitwidth, use_symmetric_encoding=True,
+                                                              use_strict_symmetric=False, device="cpu")
 
         expected_sym_n = 0
         expected_sym_p = (2 ** bitwidth) - 1
 
-        comp_symmetric_n = sym_n.data[0].item()
-        comp_symmetric_p = sym_p.data[0].item()
+        comp_symmetric_n = sym_n.data.item()
+        comp_symmetric_p = sym_p.data.item()
 
         assert expected_sym_n == comp_symmetric_n
         assert expected_sym_p == comp_symmetric_p
 
         # for 8 bit, 0 to 254 if strict symmetric
-        strict_sym_n, strict_sym_p = LearnedGridTensorQuantizer.get_n_and_p(bitwidth, use_symmetric_encoding=True, use_strict_symmetric=True)
+        strict_sym_n, strict_sym_p = LearnedGridTensorQuantizer.get_n_and_p(bitwidth, use_symmetric_encoding=True,
+                                                                            use_strict_symmetric=True, device="cpu")
 
         expected_strict_sym_n = 0
         expected_strict_sym_p = ((2 ** bitwidth) - 1) - 1
@@ -745,19 +748,20 @@ class TestQcQuantizeOpLearnedGrid:
         assert expected_strict_sym_p == comp_strict_symmetric_p
 
         # for 8 bit , 0 to 255
-        asym_n, asym_p = LearnedGridTensorQuantizer.get_n_and_p(bitwidth, use_symmetric_encoding=False, use_strict_symmetric=False)
+        asym_n, asym_p = LearnedGridTensorQuantizer.get_n_and_p(bitwidth, use_symmetric_encoding=False,
+                                                                use_strict_symmetric=False, device="cpu")
 
         expected_asym_n = 0
         expected_asym_p = (2 ** bitwidth) - 1
-        comp_asymmetric_n = asym_n.data[0].item()
-        comp_asymmetric_p = asym_p.data[0].item()
+        comp_asymmetric_n = asym_n.data.item()
+        comp_asymmetric_p = asym_p.data.item()
 
         assert expected_asym_n == comp_asymmetric_n
         assert expected_asym_p == comp_asymmetric_p
 
         # Should raise exception when SymmetricEncoding=False, UseStrictSymmetric=True
         with pytest.raises(ValueError):
-            _, _ = LearnedGridTensorQuantizer.get_n_and_p(bitwidth, use_symmetric_encoding=False, use_strict_symmetric=True)
+            _, _ = LearnedGridTensorQuantizer.get_n_and_p(bitwidth, use_symmetric_encoding=False, use_strict_symmetric=True, device="cpu")
 
 
     def test_ste_gating_for_learnable_grid_wrapper(self):
@@ -893,7 +897,7 @@ class TestQcQuantizeOpLearnedGrid:
                                                 weight_bw=8, device='cpu')
 
         enc_old = libpymo.TfEncoding()
-        enc_old.bw, enc_old.max, enc_old.min, enc_old.delta, enc_old.offset = 4, 0.5, -1, 1, 0.2
+        enc_old.bw, enc_old.max, enc_old.min, enc_old.delta, enc_old.offset = 8, 0.5, -1, 1, 0.2
         quant_wrapper.param_quantizers['weight'].encoding = enc_old
 
         param_encodings = {'conv1.weight': [{'bitwidth': 4, 'is_symmetric': 'False', 'max': 0.3, 'min': -0.2,
@@ -910,7 +914,7 @@ class TestQcQuantizeOpLearnedGrid:
         # try to set new encoding.
         with pytest.raises(RuntimeError):
             enc_new = libpymo.TfEncoding()
-            enc_new.bw, enc_new.max, enc_new.min, enc_new.delta, enc_new.offset = 4, 0.4, -0.98, 1, 0.2
+            enc_new.bw, enc_new.max, enc_new.min, enc_new.delta, enc_new.offset = 8, 0.4, -0.98, 1, 0.2
             quant_wrapper.param_quantizers['weight'].encoding = enc_new
 
         # Once again verify.
@@ -982,7 +986,7 @@ class TestQcQuantizeOpLearnedGrid:
                                                 weight_bw=8, device='cpu')
 
         enc_old = libpymo.TfEncoding()
-        enc_old.bw, enc_old.max, enc_old.min, enc_old.delta, enc_old.offset = 4, 0.5, -1, 1, 0.2
+        enc_old.bw, enc_old.max, enc_old.min, enc_old.delta, enc_old.offset = 8, 0.5, -1, 1, 0.2
 
         # Set encoding for all - input, output and parameters quantizer.
         quant_wrapper.input_quantizer.enabled = True
@@ -1011,7 +1015,7 @@ class TestQcQuantizeOpLearnedGrid:
         assert loaded_quant_wrapper.param_quantizers['bias']._is_encoding_frozen == False
 
         enc_new = libpymo.TfEncoding()
-        enc_new.bw, enc_new.max, enc_new.min, enc_new.delta, enc_new.offset = 4, 0.4, -0.98, 1, 0.2
+        enc_new.bw, enc_new.max, enc_new.min, enc_new.delta, enc_new.offset = 8, 0.4, -0.98, 1, 0.2
 
         # try to set new encoding except output quantizer.
         loaded_quant_wrapper.param_quantizers['weight'].encoding = enc_new
