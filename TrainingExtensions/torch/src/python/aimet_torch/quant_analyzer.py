@@ -40,8 +40,8 @@
 
 import os
 import json
-from collections import OrderedDict, defaultdict, Collection
-from typing import Union, Tuple, Callable, Dict, List, Any
+from collections import OrderedDict, defaultdict
+from typing import Union, Tuple, Callable, Dict, List, Collection
 from bokeh import plotting
 from bokeh.models import ColumnDataSource, Band, Span, tickers
 import torch
