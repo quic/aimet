@@ -35,60 +35,53 @@
 #
 #  @@-COPYRIGHT-END-@@
 # =============================================================================
-import onnx
 
+from aimet_onnx import utils, test_models
 
-def remove_nodes_with_type(node_type: str, onnx_graph: onnx.onnx_pb.GraphProto):
+class TestUtils:
     """
-    Remove specific type of nodes from graph
-
-    :param node_type: string, type of node to be removed
-    :param onnx_graph: onnx graph to modify
-
+    Test functions in utils
     """
-    for node in onnx_graph.node:
-        if node.op_type == node_type:
-            onnx_graph.node.remove(node)
+    def test_remove_nodes(self):
+        """
+        Test remove nodes by given type
+        """
+        model = test_models.build_dummy_model()
+        node_ls = [node.op_type for node in model.graph.node]
+        assert node_ls == ['Conv', 'Relu', 'MaxPool', 'Flatten', 'Gemm']
 
+        utils.remove_nodes_with_type('Conv', model.graph)
+        new_node_ls = [node.op_type for node in model.graph.node]
+        assert new_node_ls == ['Relu', 'MaxPool', 'Flatten', 'Gemm']
 
-def replace_node_with_op(node_type: str, new_type: str, onnx_graph: onnx.onnx_pb.GraphProto):
-    """
-    Replace the given op type of nodes to new op type
+    def test_replace_nodes(self):
+        """
+        Test replace op type of nodes with given op type
+        """
+        model = test_models.build_dummy_model()
+        node_ls = [node.op_type for node in model.graph.node]
+        assert node_ls == ['Conv', 'Relu', 'MaxPool', 'Flatten', 'Gemm']
 
-    :param node_type: string, type of node to be replaced
-    :param new_type: string, type of node to substitute for
-    :param onnx_graph: onnx graph to modify
+        utils.replace_node_with_op('Conv', 'CustomOp', model.graph)
+        new_node_ls = [node.op_type for node in model.graph.node]
+        assert new_node_ls == ['CustomOp', 'Relu', 'MaxPool', 'Flatten', 'Gemm']
 
-    """
-    for node in onnx_graph.node:
-        if node.op_type == node_type:
-            node.op_type = new_type
+    def test_get_weights(self):
+        """
+        Test get weights
+        """
+        model = test_models.build_dummy_model()
+        for node in model.graph.initializer:
+            assert node.raw_data == utils.get_weights(node.name, model.graph)
 
+    def test_list_nodes(self):
+        """
+        Test get nodes with ordered
+        """
+        model = test_models.build_dummy_model()
+        node_dict = utils.get_ordered_dict_of_nodes(model.graph)
+        node_keys = list(node_dict.keys())
 
-def get_weights(name: str, onnx_graph: onnx.onnx_pb.GraphProto):
-    """
-    Return the weights by given name
-
-    :param name, name of the weights to find
-    :param onnx_graph, onnx graph to find the corresponding weight data
-    :return onnx tensor
-
-    """
-    for param in onnx_graph.initializer:
-        if param.name == name:
-            return param.raw_data
-    assert Exception("Couldn't find weights by the given name")
-
-
-def get_ordered_dict_of_nodes(onnx_graph: onnx.onnx_pb.GraphProto):
-    """
-    Return the ordered list of nodes
-
-    :param onnx_graph: onnx graph to provide node info
-    :return dict of ordered nodes with name as key
-
-    """
-    ordered_dict = {}
-    for node in onnx_graph.node:
-        ordered_dict[node.name] = node
-    return ordered_dict
+        for i, node in enumerate(model.graph.node):
+            assert node_keys[i] == node.name
+            assert node_dict[node.name] == node
