@@ -84,7 +84,7 @@ class AdaroundParameters:
          Default (20, 2)
         :param default_warm_start: warm up period, during which rounding loss has zero effect. Default 20% (0.2)
         """
-        if len(data_loader) > 0:
+        if len(data_loader) > 0: # pylint: disable=len-as-condition
             inp = next(iter(data_loader))
             if isinstance(inp, (tuple, list)):
                 if len(inp) != 2:
