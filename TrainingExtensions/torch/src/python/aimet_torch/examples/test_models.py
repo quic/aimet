@@ -888,3 +888,18 @@ class SimpleConditional(torch.nn.Module):
         x = self.prelu2(x)
         x = self.softmax(x)
         return x
+
+
+class LinearAndLSTMModel(torch.nn.Module):
+    def __init__(self):
+        super(LinearAndLSTMModel, self).__init__()
+
+        self.linear = torch.nn.Linear(10, 4)
+        self.prelu = torch.nn.PReLU(init=.3)
+        self.recurrent = torch.nn.LSTM(input_size=4, hidden_size=5, num_layers=2)
+
+    def forward(self, x, h_and_c=None):
+        x = self.linear(x)
+        x = self.prelu(x)
+        x = torch.unsqueeze(x, 1)
+        return self.recurrent(x, h_and_c)

@@ -668,6 +668,7 @@ class ConnectedGraph(AimetCommonConnectedGraph):
         Remove tuple and list unpack ops, updating parent and children ops and products along the way.
         """
         # pylint: disable=too-many-nested-blocks
+        # pylint: disable=too-many-branches
         # For tuple unpack, either input came from tuple pack, or an op that had multiple outputs
         ops_to_remove = []
         for op in self.get_all_ops().values():
@@ -679,17 +680,24 @@ class ConnectedGraph(AimetCommonConnectedGraph):
                 # The op sits after a module that has multiple outputs
                 if len(op.inputs) == 1:
                     inp_op = op.inputs[0].producer
-                    assert len(inp_op.output_products) == 1, 'TupleUnpack with one input product has parent op with ' \
-                                                             'multiple output products. This is currently unhandled.'
-                    inp_op.output_products = []
-                    # Delete the singular input product to the op, and replace it with multiple distinct products for
-                    # each output product of the op.
+                    if not inp_op:
+                        # TupleUnpack is taking in a tuple model input and unpacking it, no parent op exists.
+                        assert op.inputs[0].is_model_input
+                        inp_name = op.inputs[0].name
+                    else:
+                        assert len(inp_op.output_products) == 1, 'TupleUnpack with one input product has parent op ' \
+                                                                 'with multiple output products. This is currently ' \
+                                                                 'unhandled.'
+                        inp_op.output_products = []
+                        inp_name = inp_op.name
+
+                        # Delete the singular input product to the op, and replace it with multiple distinct products
+                        # for each output product of the op.
                     del self._products[op.inputs[0].name]
                     for idx, output_product in enumerate(op.output_products):
                         # Create a product for each consumer of tuple unpack, to represent a distinct tensor feeding
                         # into each consumer.
-                        new_product = self._add_product(f'{inp_op.name}_#{idx}', shape=output_product.shape)
-                        new_product.producer = inp_op
+                        new_product = self._add_product(f'{inp_name}_#{idx}', shape=output_product.shape)
                         for consumer in output_product.consumers:
                             # Replace consumer's input product with the input product of this op
                             consumer_input_idx = consumer.inputs.index(output_product)
@@ -697,7 +705,11 @@ class ConnectedGraph(AimetCommonConnectedGraph):
                             # Add consumer into this op's input product consumers if not already present
                             if consumer not in op.inputs[0].consumers:
                                 new_product.add_consumer(consumer)
-                        inp_op.output_products.append(new_product)
+                        if inp_op is not None:
+                            new_product.producer = inp_op
+                            inp_op.output_products.append(new_product)
+                        else:
+                            new_product.is_model_input = True
                         del self._products[output_product.name]
                 # The op sits after a Tuple/List construct op that was already processed
                 else:
