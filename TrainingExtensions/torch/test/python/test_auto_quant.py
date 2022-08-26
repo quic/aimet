@@ -295,29 +295,29 @@ class TestAutoQuant:
                 target_acc, bn_folded_acc, cle_acc, adaround_acc,
             )
 
-    def test_auto_quant_invalid_input(self):
+    def test_auto_quant_invalid_input(self, unlabeled_data_loader):
         # Allowed accuracy drop < 0
         with pytest.raises(ValueError):
-            _ = AutoQuant(-1.0, MagicMock(), MagicMock(), MagicMock())
+            _ = AutoQuant(-1.0, unlabeled_data_loader, MagicMock(), MagicMock())
 
         # Bitwidth < 4 or bitwidth > 32
         with pytest.raises(ValueError):
-            _ = AutoQuant(0, MagicMock(), MagicMock(), default_param_bw=2)
+            _ = AutoQuant(0, unlabeled_data_loader, MagicMock(), default_param_bw=2)
 
         with pytest.raises(ValueError):
-            _ = AutoQuant(0, MagicMock(), MagicMock(), default_param_bw=64)
+            _ = AutoQuant(0, unlabeled_data_loader, MagicMock(), default_param_bw=64)
 
         with pytest.raises(ValueError):
-            _ = AutoQuant(0, MagicMock(), MagicMock(), default_output_bw=2)
+            _ = AutoQuant(0, unlabeled_data_loader, MagicMock(), default_output_bw=2)
 
         with pytest.raises(ValueError):
-            _ = AutoQuant(0, MagicMock(), MagicMock(), default_output_bw=64)
+            _ = AutoQuant(0, unlabeled_data_loader, MagicMock(), default_output_bw=64)
 
     @pytest.mark.cuda
-    def test_auto_quant_invalid_input_gpu(self):
-        auto_quant = AutoQuant(0, MagicMock(), MagicMock())
+    def test_auto_quant_invalid_input_gpu(self, unlabeled_data_loader):
+        auto_quant = AutoQuant(0, unlabeled_data_loader, MagicMock())
         with pytest.raises(ValueError):
-            auto_quant.apply(Model().cuda(), MagicMock())
+            auto_quant.apply(Model().cuda(), unlabeled_data_loader)
 
     def test_auto_quant_caching(
         self, cpu_model, dummy_input, unlabeled_data_loader,
