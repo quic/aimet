@@ -255,7 +255,7 @@ def correct_bias(model: torch.nn.Module, quant_params: qsim.QuantParams,
     def pass_data_through_model(model, early_stopping_iterations=None, use_cuda=False):
         # pylint: disable=unused-argument
         # forward pass for given number of batches for model
-        for (images_in_one_batch, _) in data_loader_n_samples_quant:
+        for (images_in_one_batch, *_) in data_loader_n_samples_quant:
             forward_pass(model, images_in_one_batch)
 
     ordered_conv_linear_nodes = get_ordered_lists_of_conv_fc(model, input_shape)
@@ -329,7 +329,7 @@ def correct_bias(model: torch.nn.Module, quant_params: qsim.QuantParams,
 
                     # Get output from quantized model and reference model
 
-                    for images_in_one_batch, _ in data_loader_n_samples_bias_corr:
+                    for images_in_one_batch, *_ in data_loader_n_samples_bias_corr:
                         reference_output_batch = get_output_data(reference_layer, model_copy, images_in_one_batch)
                         quantized_model_output_batch = get_output_data(quantize_layer, model, images_in_one_batch)
 
