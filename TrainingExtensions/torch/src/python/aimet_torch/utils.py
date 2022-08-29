@@ -395,7 +395,7 @@ def get_input_shape_batch_size(data_loader):
     :param data_loader: Iterates over data set
     :return: returns batch size and shape of one image
     """
-    for _, (images_in_one_batch, _) in enumerate(data_loader):
+    for _, (images_in_one_batch, *_) in enumerate(data_loader):
         # finding shape of a batch
         input_shape = torch.Tensor.size(images_in_one_batch)
 
