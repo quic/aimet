@@ -36,6 +36,7 @@
 #  @@-COPYRIGHT-END-@@
 # =============================================================================
 import onnx
+from typing import Dict
 
 
 def remove_nodes_with_type(node_type: str, onnx_graph: onnx.onnx_pb.GraphProto):
@@ -65,7 +66,7 @@ def replace_node_with_op(node_type: str, new_type: str, onnx_graph: onnx.onnx_pb
             node.op_type = new_type
 
 
-def get_weights(name: str, onnx_graph: onnx.onnx_pb.GraphProto):
+def get_weights(name: str, onnx_graph: onnx.onnx_pb.GraphProto) -> bytes:
     """
     Return the weights by given name
 
@@ -80,7 +81,7 @@ def get_weights(name: str, onnx_graph: onnx.onnx_pb.GraphProto):
     assert Exception("Couldn't find weights by the given name")
 
 
-def get_ordered_dict_of_nodes(onnx_graph: onnx.onnx_pb.GraphProto):
+def get_ordered_dict_of_nodes(onnx_graph: onnx.onnx_pb.GraphProto) -> Dict:
     """
     Return the ordered list of nodes
 
