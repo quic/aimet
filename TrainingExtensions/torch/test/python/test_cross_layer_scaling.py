@@ -42,6 +42,7 @@ import pytest
 import torch
 from torchvision import models
 
+from aimet_torch import batch_norm_fold
 from aimet_torch.batch_norm_fold import fold_all_batch_norms
 from aimet_torch.cross_layer_equalization import CrossLayerScaling, GraphSearchUtils, HighBiasFold, equalize_model
 from aimet_torch.utils import get_layer_name
@@ -173,6 +174,23 @@ class TestTrainingExtensionsCrossLayerScaling(unittest.TestCase):
         assert (np.allclose(range_conv1_after_scaling, range_conv2_after_scaling))
         assert(np.allclose(baseline_output, output_after_scaling, rtol=1.e-2))
 
+    def test_top_level_api(self):
+        torch.manual_seed(10)
+        # model = MockMobileNetV1()
+        # input_shape = (1, 3, 224, 224)
+        model = MyModel()
+        input_shape = (2, 10, 24, 24)
+        model = model.eval()
+        random_input = torch.rand(*input_shape)
+        baseline_output = model(random_input).detach().numpy()
+
+        folded_pairs = batch_norm_fold.fold_all_batch_norms(model, [input_shape])
+
+        cls_sets = CrossLayerScaling.scale_model(model, input_shapes=[input_shape])
+        # cls_sets is empty!
+        pass
+
+
     def test_verify_cross_layer_for_multiple_pairs(self):
         # Get trained MNIST model
 
@@ -263,14 +281,16 @@ class TestTrainingExtensionsCrossLayerScaling(unittest.TestCase):
             for module in layer_group:
                 print("   " + get_layer_name(model, module))
 
-    def test_find_layer_groups_to_scale_depthwise_no_pointwise(self):
-
+    def test_find_layer_groups_to_scale(self):
+        """
+        test conv+depthwise+conv combination
+        """
         model = torch.nn.Sequential(
-            torch.nn.Conv2d(10, 20, 3),
+            torch.nn.Conv2d(10, 20, (3, 3)),
             torch.nn.ReLU(),
-            torch.nn.Conv2d(20, 20, 3, groups=10),
+            torch.nn.Conv2d(20, 20, (3, 3), groups=20),
             torch.nn.ReLU(),
-            torch.nn.Conv2d(20, 40, 3)
+            torch.nn.Conv2d(20, 40, (3, 3))
         )
         model.eval()
 
@@ -285,6 +305,138 @@ class TestTrainingExtensionsCrossLayerScaling(unittest.TestCase):
 
         self.assertEqual(1, len(cls_sets))
         self.assertIn((model[0], model[2], model[4]), cls_sets)
+
+    def test_find_layer_groups_to_scale_2(self):
+        """
+        verify conv+conv cls sets
+        """
+        model = torch.nn.Sequential(
+            torch.nn.Conv2d(10, 20, (3, 3)),
+            torch.nn.ReLU(),
+            torch.nn.Conv2d(20, 20, (3, 3)),
+            torch.nn.ReLU(),
+            torch.nn.Conv2d(20, 20, (3, 3))
+        )
+        model.eval()
+
+        graph_search = GraphSearchUtils(model, (1, 10, 24, 24))
+        layer_groups = graph_search.find_layer_groups_to_scale()
+
+        # Find cls sets from the layer groups
+        cls_sets = []
+        for layer_group in layer_groups:
+            cls_set = GraphSearchUtils.convert_layer_group_to_cls_sets(layer_group)
+            cls_sets += cls_set
+
+        self.assertEqual(2, len(cls_sets))
+        self.assertIn(model[0], cls_sets[0])
+        self.assertIn(model[2], cls_sets[0])
+        self.assertIn(model[2], cls_sets[1])
+        self.assertIn(model[4], cls_sets[1])
+
+    def test_find_layer_groups_to_scale_3(self):
+        """
+        verify depthwiseConv2D+conv cls sets
+        """
+        model = torch.nn.Sequential(
+            torch.nn.Conv2d(20, 20, (3, 3), groups=20),
+            torch.nn.ReLU(),
+            torch.nn.Conv2d(20, 20, (3, 3)),
+            torch.nn.ReLU(),
+            torch.nn.Conv2d(20, 20, (3, 3))
+        )
+        model.eval()
+
+        graph_search = GraphSearchUtils(model, (1, 20, 24, 24))
+        layer_groups = graph_search.find_layer_groups_to_scale()
+
+        # Find cls sets from the layer groups
+        cls_sets = []
+        for layer_group in layer_groups:
+            cls_set = GraphSearchUtils.convert_layer_group_to_cls_sets(layer_group)
+            cls_sets += cls_set
+
+        self.assertEqual(2, len(cls_sets))
+        self.assertIn(model[0], cls_sets[0])
+        self.assertIn(model[2], cls_sets[0])
+        self.assertIn(model[2], cls_sets[1])
+        self.assertIn(model[4], cls_sets[1])
+
+
+    def test_find_layer_groups_to_scale_4(self):
+        """
+        verify depthwiseConv2D+conv cls sets
+        - test ignore depthwise+depthwise combo which is unsupported
+        """
+        model = torch.nn.Sequential(
+            torch.nn.Conv2d(20, 20, (3, 3), groups=20),
+            torch.nn.ReLU(),
+            torch.nn.Conv2d(20, 20, (3, 3), groups=20),
+            torch.nn.ReLU(),
+            torch.nn.Conv2d(20, 20, (3, 3))
+        )
+        model.eval()
+
+        graph_search = GraphSearchUtils(model, (1, 20, 24, 24))
+        layer_groups = graph_search.find_layer_groups_to_scale()
+
+        # Find cls sets from the layer groups
+        cls_sets = []
+        for layer_group in layer_groups:
+            cls_set = GraphSearchUtils.convert_layer_group_to_cls_sets(layer_group)
+            cls_sets += cls_set
+
+        self.assertEqual(1, len(cls_sets))
+        self.assertIn(model[2], cls_sets[0])
+        self.assertIn(model[4], cls_sets[0])
+
+    def test_find_layer_groups_to_scale_5(self):
+        """
+        Test invalid case
+        """
+        model = torch.nn.Sequential(
+            torch.nn.Conv2d(2, 4, (3, 3), groups=2),
+            torch.nn.ReLU(),
+            torch.nn.Conv2d(4, 8, (3, 3), groups=4),
+            torch.nn.ReLU(),
+        )
+        model.eval()
+
+        graph_search = GraphSearchUtils(model, (1, 2, 24, 24))
+        layer_groups = graph_search.find_layer_groups_to_scale()
+
+        # Find cls sets from the layer groups
+        cls_sets = []
+        for layer_group in layer_groups:
+            cls_set = GraphSearchUtils.convert_layer_group_to_cls_sets(layer_group)
+            cls_sets += cls_set
+
+        self.assertEqual(0, len(cls_sets))
+
+    def test_find_layer_groups_to_scale_6(self):
+        """
+        Test invalid case
+        """
+        model = torch.nn.Sequential(
+            torch.nn.Conv2d(2, 2, (3, 3)),
+            torch.nn.ReLU(),
+            torch.nn.Conv2d(2, 4, (3, 3), groups=2),
+            torch.nn.ReLU(),
+            torch.nn.Conv2d(4, 8, (3, 3), groups=4),
+            torch.nn.ReLU()
+        )
+        model.eval()
+
+        graph_search = GraphSearchUtils(model, (1, 2, 24, 24))
+        layer_groups = graph_search.find_layer_groups_to_scale()
+
+        # Find cls sets from the layer groups
+        cls_sets = []
+        for layer_group in layer_groups:
+            cls_set = GraphSearchUtils.convert_layer_group_to_cls_sets(layer_group)
+            cls_sets += cls_set
+
+        self.assertEqual(0, len(cls_sets))
 
     def test_find_cls_sets_vgg16(self):
 
