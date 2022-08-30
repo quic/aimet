@@ -3,7 +3,7 @@
 # =============================================================================
 #  @@-COPYRIGHT-START-@@
 #
-#  Copyright (c) 2019, Qualcomm Innovation Center, Inc. All rights reserved.
+#  Copyright (c) 2019-2022, Qualcomm Innovation Center, Inc. All rights reserved.
 #
 #  Redistribution and use in source and binary forms, with or without
 #  modification, are permitted provided that the following conditions are met:
@@ -524,6 +524,17 @@ class TestConnectedGraph(unittest.TestCase):
         self.assertEqual(10, len(conn_graph.ordered_ops))
         # Expect 1 split for the reshape operation
         self.assertEqual(1, conn_graph._split_count)
+
+    def test_lstm_with_tuple_input(self):
+        model = test_models.LinearAndLSTMModel()
+        model.eval()
+        h = torch.randn((2, 1, 5))
+        c = torch.randn((2, 1, 5))
+        rand_inp = torch.randn((5, 10))
+        conn_graph = ConnectedGraph(model, model_input=(rand_inp, (h, c)))
+        self.assertEqual(4, len(conn_graph.ordered_ops))
+        self.assertEqual(8, len(conn_graph.get_all_products()))
+
 
 class TestConnectedGraphUtils(unittest.TestCase):
     """ Unit tests for testing connectedgraph_utils module"""
