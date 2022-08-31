@@ -40,8 +40,42 @@
 from typing import Union
 from enum import Enum
 import numpy as np
+from onnxruntime_extensions import onnx_op, PyCustomOpDef
 import aimet_common.libpymo as libpymo
 from aimet_common.defs import QuantScheme, MAP_QUANT_SCHEME_TO_PYMO, MAP_ROUND_MODE_TO_PYMO
+
+
+qc_quantize_op_dict = {}
+TF_ENHANCED_STRIDE_FACTOR = 2
+
+
+@onnx_op(op_type='QcQuantizeOp',
+         inputs=[PyCustomOpDef.dt_float],
+         outputs=[PyCustomOpDef.dt_float],
+         attrs=['op_name'],
+         )
+def custom_onnxruntime_op(x, **kwargs):
+    """
+    Custom ONNXRuntime operations
+    """
+    op_name = kwargs['op_name']
+    qc_op = qc_quantize_op_dict[op_name]
+
+    # TODO
+    # For non-four-dimensional tensors, set op_mode to update_stats, libpymo.tensorQunatizer doesn't support.
+    if len(x.shape) != 4:
+        qc_op.set_mode(OpMode.update_stats)
+
+    return qc_op.compute(x)
+
+
+def reset_qc_quantize_op_dict():
+    """
+    Reset qc_quantize_op dict to prevent overwrite
+    """
+    global qc_quantize_op_dict
+    for key in list(qc_quantize_op_dict.keys()):
+        del qc_quantize_op_dict[key]
 
 
 class OpMode(Enum):
@@ -64,7 +98,6 @@ class QcQuantizeOp:
                  bitwidth: int = 8, use_symmetric_encodings: bool = False,
                  use_cuda: bool = False):
         """
-
         Args:
             quant_scheme: Quantization scheme (e.g. QuantScheme.post_training_tf)
             rounding_mode: Rounding mode (e.g. nearest)
@@ -73,7 +106,6 @@ class QcQuantizeOp:
             bitwidth: Quantization bitwidth
             use_symmetric_encodings: True if symmetric encoding is used.  False otherwise.
             use_cuda: True if using CUDA to run quantization op. False otherwise.
-
         """
         self.quant_scheme = quant_scheme
         self.rounding_mode = rounding_mode
@@ -81,7 +113,7 @@ class QcQuantizeOp:
         self.encodings = encodings
         self.op_mode = op_mode
         self.bitwidth = bitwidth
-        self.use_symmetric_encoding = use_symmetric_encodings
+        self.use_symmetric_encodings = use_symmetric_encodings
         self.use_cuda = use_cuda
         self.enabled = True
 
@@ -135,7 +167,7 @@ class QcQuantizeOp:
         Compute and return encodings of each tensor quantizer
         """
         self.encodings = self.tensor_quantizer.computeEncoding(self.bitwidth,
-                                                               self.use_symmetric_encoding)
+                                                               self.use_symmetric_encodings)
         return self.encodings
 
     def compute(self, in_tensor: Union[None, np.array] = None):
@@ -144,15 +176,18 @@ class QcQuantizeOp:
         """
         if self.enabled:
             if self.op_mode == OpMode.update_stats:
-                self.tensor_quantizer.updateStats(in_tensor, self.use_cuda)
                 output = in_tensor
+                if self.quant_scheme == QuantScheme.post_training_tf_enhanced:
+                    in_tensor_flatten = in_tensor.reshape(-1)
+                    in_tensor = in_tensor_flatten[0::TF_ENHANCED_STRIDE_FACTOR].astype(np.float32)
+                self.tensor_quantizer.updateStats(in_tensor, self.use_cuda)
 
             elif self.op_mode == OpMode.one_shot_quantize_dequantize:
                 out_tensor = np.zeros(in_tensor.shape).astype(np.float32)
                 self.reset_encoding_stats()
                 self.tensor_quantizer.updateStats(in_tensor, self.use_cuda)
                 self.encodings = self.tensor_quantizer.computeEncoding(self.bitwidth,
-                                                                       self.use_symmetric_encoding)
+                                                                       self.use_symmetric_encodings)
                 self.tensor_quantizer.quantizeDequantize(in_tensor, out_tensor, self.encodings.min,
                                                          self.encodings.max, self.bitwidth, self.use_cuda)
                 output = out_tensor
