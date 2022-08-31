@@ -125,15 +125,11 @@ class ClsSetInfo:
 class GraphSearchUtils:
     """Implements graph search utils required by CLE feature"""
 
-    def __init__(self,
-                 model: tf.keras.Model,
-                 input_shapes: typing.Union[None, typing.Tuple,
-                                            typing.List[typing.Tuple]]):
+    def __init__(self, model: tf.keras.Model):
         """
-        :param model: Keras Model (Sequential, Functional, Subclassing)
-        :param input_shapes: Input shape tuple or list of input tuple shape
+        :param model: Keras Model that is built (Sequential, Functional)
         """
-        self._connected_graph = ConnectedGraph(model, input_shapes)
+        self._connected_graph = ConnectedGraph(model)
         self._ordered_module_list = self._get_ordered_list_of_conv_modules()
 
     def _get_ordered_list_of_conv_modules(self):
@@ -558,20 +554,16 @@ class CrossLayerScaling:
         return cls_set_info_list
 
     @staticmethod
-    def scale_model(model: tf.keras.Model,
-                    input_shapes: typing.Union[None,
-                                               typing.Tuple,
-                                               typing.List[typing.Tuple]]) -> typing.List[ClsSetInfo]:
+    def scale_model(model: tf.keras.Model) -> typing.List[ClsSetInfo]:
         """
         Uses cross-layer scaling to scale all applicable layers in the given model
 
         :param model: tf.keras.Model
-        :param input_shapes: input_shapes: Input shape tuple or list of input tuple shape
         :return: CLS information for each CLS set
         """
 
         # Find layer groups
-        graph_search_util = GraphSearchUtils(model, input_shapes)
+        graph_search_util = GraphSearchUtils(model)
         layer_groups = graph_search_util.find_layer_groups_to_scale()
 
         # Find cls sets from the layer groups
@@ -710,9 +702,7 @@ class HighBiasFold:
         return prev_layer_params, curr_layer_params
 
 
-def equalize_model(model: tf.keras.Model,
-                   input_shapes: typing.Union[None, typing.Tuple,
-                                              typing.List[typing.Tuple]]) -> tf.keras.Model:
+def equalize_model(model: tf.keras.Model) -> tf.keras.Model:
     """
     High-level API to perform Cross-Layer Equalization (CLE) on the given model
 
@@ -724,14 +714,12 @@ def equalize_model(model: tf.keras.Model,
     model_for_cle, _ = model_transform_utils.replace_relu6_with_relu(model)
 
     folded_pairs = fold_all_batch_norms(model_for_cle)
-    equalize_bn_folded_model(model_for_cle, input_shapes, folded_pairs)
+    equalize_bn_folded_model(model_for_cle, folded_pairs)
 
     return model_for_cle
 
 
 def equalize_bn_folded_model(model: tf.keras.Model,
-                             input_shapes: typing.Union[None, typing.Tuple,
-                                                        typing.List[typing.Tuple]],
                              folded_pairs: typing.List[BatchNormFoldedPair]):
     """
     Perform Cross-Layer Scaling (CLS) and High Bias Folding (HBF) on a batchnorm-folded model in-place
@@ -745,7 +733,7 @@ def equalize_bn_folded_model(model: tf.keras.Model,
         bn_dict[conv_or_linear] = bn
 
     # perform cross-layer scaling on applicable layer sets
-    cls_set_info_list = CrossLayerScaling.scale_model(model, input_shapes)
+    cls_set_info_list = CrossLayerScaling.scale_model(model)
 
     # high-bias fold
     HighBiasFold.bias_fold(cls_set_info_list, bn_dict)

@@ -93,16 +93,12 @@ class ConnectedGraph(AimetCommonConnectedGraph):
     def __init__(
             self,
             model: tf.keras.Model,
-            input_shapes: typing.Union[
-                None, typing.Tuple, typing.List[typing.Tuple]
-            ] = None,
     ):
         """
         If the model object is implemented in a subclassing manner, resulting object is different from
         the original object because this method is converting to Functional manner
 
-        :param model: Keras Model (Sequential, Functional, Subclassing)
-        :param input_shapes: Input shape tuple or list of input tuple shape
+        :param model: Keras Model that is built (Sequential, Functional)
         """
         super(ConnectedGraph, self).__init__()
 
@@ -113,14 +109,9 @@ class ConnectedGraph(AimetCommonConnectedGraph):
         self._ops_index = 0
         self._split_count = 0
 
-        if model.built:
-            self._model = model
-        else:
-            if input_shapes is None:
-                raise RuntimeError(
-                    "input_shapes should be provided if model was not built"
-                )
-            self._model = self._build_model(model, input_shapes)
+        if not model.built:
+            raise RuntimeError("Keras Model should be built before passing it")
+        self._model = model
 
         # Generate Ops by parsing layer information
         self._parse_layers(self._model.layers)
@@ -131,37 +122,6 @@ class ConnectedGraph(AimetCommonConnectedGraph):
 
         # For each split in the model, insert a corresponding split Op in the connected graph.
         self._find_and_parse_split_ops()
-
-    @staticmethod
-    def _build_model(
-            model: tf.keras.Model,
-            input_shapes: typing.Union[typing.Tuple, typing.List[typing.Tuple]],
-    ) -> tf.keras.Model:
-        """
-        Build tf.keras.model if it was not built. After building layer connection information is set
-
-        :param model: Keras Model (Sequential, Subclassing)
-        :param input_shapes: Input shape tuple or list of input tuple shape
-        :return: Keras Model with layer connection information
-        """
-        if isinstance(model, tf.keras.Sequential):
-            if not isinstance(input_shapes, typing.Tuple):
-                raise RuntimeError(
-                    "Sequential model can only receive one input, multiple input is not supported"
-                )
-
-            model.build((None,) + input_shapes)
-            return model
-
-        # Subclassing model
-        if isinstance(input_shapes, typing.Tuple):
-            # Received input shape tuple, it's a single input case
-            inputs = tf.keras.Input(shape=input_shapes)
-        else:
-            # Received list of input shape tuple, it's a multiple input case
-            inputs = [tf.keras.Input(shape=input_shape) for input_shape in input_shapes]
-
-        return tf.keras.Model(inputs=inputs, outputs=model.call(inputs))
 
     def _parse_layers(self, layers: typing.List[tf.keras.layers.Layer]):
         """

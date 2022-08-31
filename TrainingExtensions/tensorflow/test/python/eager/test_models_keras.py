@@ -77,88 +77,6 @@ def simple_functional():
     return model
 
 
-def simple_subclassing():
-    """
-    Simple subclassing model (Two layer MLP)
-    """
-
-    # pylint: disable-msg=too-many-ancestors
-    class SimpleSubclassing(tf.keras.Model):
-        """
-        Two layer MLP implemented by subclassing
-        """
-
-        def __init__(self):
-            super().__init__()
-            self.dense1 = tf.keras.layers.Dense(4, activation=tf.nn.relu)
-            self.dense2 = tf.keras.layers.Dense(5, activation=tf.nn.softmax)
-
-        def call(self, inputs):
-            """
-            Call forward pass
-            """
-            x = self.dense1(inputs)
-            return self.dense2(x)
-
-    return SimpleSubclassing()
-
-
-def multi_input_subclassing():
-    """
-    Multi input subclassing model
-    """
-    # pylint: disable-msg=too-many-ancestors
-    class MultiInputSubclassing(tf.keras.Model):
-        """
-        Multi input network implemented by subclassing
-        """
-
-        def __init__(self):
-            super(MultiInputSubclassing, self).__init__()
-            self.dense1 = tf.keras.layers.Dense(4)
-            self.dense2 = tf.keras.layers.Dense(5)
-            self.dense3 = tf.keras.layers.Dense(6)
-
-        def call(self, inputs):
-            """
-            Call forward pass
-            """
-            input1, input2 = inputs
-            x = self.dense1(input1)
-            y = self.dense2(input2)
-            z = tf.keras.layers.concatenate([x, y])
-            return self.dense3(z)
-
-    return MultiInputSubclassing()
-
-
-def residual_subclassing():
-    """
-    Residual connection subclassing model
-    """
-    # pylint: disable-msg=too-many-ancestors
-    class Residual(tf.keras.Model):
-        """The Residual block"""
-
-        def __init__(self):
-            super().__init__()
-            self.conv1 = tf.keras.layers.Conv2D(5, padding="same", kernel_size=5)
-            self.conv2 = tf.keras.layers.Conv2D(3, kernel_size=3, padding="same")
-            self.bn1 = tf.keras.layers.BatchNormalization()
-            self.bn2 = tf.keras.layers.BatchNormalization()
-
-        def call(self, inputs):
-            """
-            Call forward pass
-            """
-            output = tf.keras.activations.relu(self.bn1(self.conv1(inputs)))
-            output = self.bn2(self.conv2(output))
-            output += inputs
-            return tf.keras.layers.ReLU()(output)
-
-    return Residual()
-
-
 def concat_functional():
     """
     Functional model containing concat operation
@@ -249,6 +167,7 @@ def nested_functional_model():
     """
     Nested Functional model implemented by Functional style
     """
+
     def inner_block1(inp):
         blk = tf.keras.layers.Conv2D(
             16, kernel_size=2, strides=2, padding="same", use_bias=False
@@ -319,4 +238,3 @@ def tiny_conv_net():
     outputs = tf.keras.layers.Dense(10)(x)
 
     return tf.keras.Model(inputs=inputs, outputs=outputs)
-
