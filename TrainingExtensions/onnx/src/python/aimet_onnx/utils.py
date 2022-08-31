@@ -47,9 +47,14 @@ def remove_nodes_with_type(node_type: str, onnx_graph: onnx.onnx_pb.GraphProto):
     :param onnx_graph: onnx graph to modify
 
     """
+    input_output_pairs = {}
     for node in onnx_graph.node:
         if node.op_type == node_type:
+            input_output_pairs[node.output[0]] = node.input[0]
             onnx_graph.node.remove(node)
+    for node in onnx_graph.node:
+        if node.input[0] in input_output_pairs.keys():
+            node.input[0] = input_output_pairs[node.input[0]]
 
 
 def replace_node_with_op(node_type: str, new_type: str, onnx_graph: onnx.onnx_pb.GraphProto):
