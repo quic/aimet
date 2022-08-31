@@ -39,7 +39,7 @@
 """Automatic Post-Training Quantization"""
 import os
 from dataclasses import dataclass
-from typing import List, Callable, Dict, Any, Tuple, Union
+from typing import List, Callable, Dict, Any, Tuple
 
 import tensorflow as tf
 
@@ -99,14 +99,12 @@ class AutoQuant:
 
     def apply(self,
               fp32_model: tf.keras.Model,
-              input_shapes: Union[None, Tuple, List[Tuple]],
               results_dir: str = "/tmp",
               cache_id: str = None) -> Tuple[tf.keras.Model, float, str]:
         """
         Apply post-training quantization techniques.
 
         :param fp32_model: Model to apply PTQ techniques.
-        :param input_shapes: Input shape tuple or list of input shape tuple
         :param results_dir: Directory to save the results.
         :param cache_id: A string that composes a cache id in combination with results_dir.
             If specified, AutoQuant will load/save the PTQ results from/to the file system
@@ -115,7 +113,6 @@ class AutoQuant:
         """
         result = self._apply_helper(self._auto_quant_main,
                                     fp32_model,
-                                    input_shapes,
                                     results_dir,
                                     cache_id)
 
@@ -124,14 +121,12 @@ class AutoQuant:
     def _apply_helper(self,
                       auto_quant_main_fn: Callable,
                       fp32_model: tf.keras.Model,
-                      input_shapes: Union[None, Tuple, List[Tuple]],
                       results_dir: str = "/tmp",
                       cache_id: str = None) -> Dict[str, Any]:
         """
 
         :param auto_quant_main_fn: Function that implements the main logic of AutoQuant.
         :param fp32_model: Model to apply PTQ techniques.
-        :param input_shapes: Input shape tuple or list of input shape tuple
         :param results_dir: Directory to save the results.
         :param cache_id: A string that composes a cache id in combination with results_dir.
             If specified, AutoQuant will load/save the PTQ results from/to the file system
@@ -159,7 +154,6 @@ class AutoQuant:
             eval_manager = _EvalManager()
 
             ret = auto_quant_main_fn(fp32_model, target_acc,
-                                     input_shapes,
                                      eval_manager, results_dir)
 
             return ret
@@ -169,7 +163,6 @@ class AutoQuant:
     def _auto_quant_main(self,
                          fp32_model: tf.keras.Model,
                          target_acc: float,
-                         input_shapes: Union[None, Tuple, List[Tuple]],
                          eval_manager: "_EvalManager",
                          results_dir: str = "/tmp") -> Dict[str, Any]:
         """
@@ -177,7 +170,6 @@ class AutoQuant:
 
         :param fp32_model: Model to apply PTQ techniques.
         :param target_acc: Target eval score.
-        :param input_shapes: Input shape tuple or list of input shape tuple
         :param eval_manager: _Evalmanager object.
         :param results_dir: Directory to save the results.
         :return: The best ptq result as a dictionary.

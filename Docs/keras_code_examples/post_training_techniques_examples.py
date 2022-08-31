@@ -48,7 +48,7 @@ def cross_layer_equalization_auto():
     input_shape = (224, 224, 3)
     model = tf.keras.applications.ResNet50()
 
-    cle_applied_model = equalize_model(model, input_shape)
+    cle_applied_model = equalize_model(model)
 
 
 def cross_layer_equalization_auto_stepwise():
@@ -75,7 +75,7 @@ def cross_layer_equalization_auto_stepwise():
         bn_dict[conv_or_linear] = bn
 
     # 3. Perform cross-layer scaling on applicable layer groups
-    cls_set_info_list = CrossLayerScaling.scale_model(model_for_cle, (224, 224, 3))
+    cls_set_info_list = CrossLayerScaling.scale_model(model_for_cle)
 
     # 4. Perform high bias fold
     HighBiasFold.bias_fold(cls_set_info_list, bn_dict)

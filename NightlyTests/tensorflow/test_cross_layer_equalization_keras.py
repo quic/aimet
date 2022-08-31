@@ -80,7 +80,7 @@ def test_layer_group_search():
     model = tf.keras.applications.ResNet50(input_shape=(224, 224, 3))
 
     _ = fold_all_batch_norms(model)
-    graph_search_utils = GraphSearchUtils(model, input_shapes=(224, 224, 3))
+    graph_search_utils = GraphSearchUtils(model)
     layer_groups = graph_search_utils.find_layer_groups_to_scale()
 
     cls_set_list = []
@@ -156,7 +156,7 @@ def test_cross_layer_equalization_stepwise():
     w2, _ = conv2.get_weights()
     w3, _ = conv3.get_weights()
 
-    cls_set_info_list = CrossLayerScaling.scale_model(model, (224, 224, 3))
+    cls_set_info_list = CrossLayerScaling.scale_model(model)
     # check if weights are updating
     assert not np.allclose(conv1.kernel, w1)
     assert not np.allclose(conv2.kernel, w2)
@@ -178,12 +178,12 @@ def test_cross_layer_equalization_stepwise():
 def test_cross_layer_equalization_resnet50():
     model = tf.keras.applications.ResNet50(input_shape=(224, 224, 3))
 
-    cle_applied_model = equalize_model(model, (224, 224, 3))
+    cle_applied_model = equalize_model(model)
     cle_applied_model.summary()
 
 
 def test_cross_layer_equalization_mobile_net_v2():
     model = tf.keras.applications.MobileNetV2(input_shape=(224, 224, 3))
 
-    cle_applied_model = equalize_model(model, (224, 224, 3))
+    cle_applied_model = equalize_model(model)
     cle_applied_model.summary()

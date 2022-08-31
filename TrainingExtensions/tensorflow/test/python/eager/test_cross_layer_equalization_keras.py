@@ -3,7 +3,7 @@
 # =============================================================================
 #  @@-COPYRIGHT-START-@@
 #
-#  Copyright (c) 2021, Qualcomm Innovation Center, Inc. All rights reserved.
+#  Copyright (c) 2021-2022, Qualcomm Innovation Center, Inc. All rights reserved.
 #
 #  Redistribution and use in source and binary forms, with or without
 #  modification, are permitted provided that the following conditions are met:
@@ -119,8 +119,9 @@ class TestTrainingExtensionsCrossLayerScaling:
             tf.keras.layers.Dropout(0.5),
             tf.keras.layers.Dense(10)
         ])
+        model.build((None, 224, 224, 3))
 
-        graph_search_utils = GraphSearchUtils(model, (224, 224, 3))
+        graph_search_utils = GraphSearchUtils(model)
         layer_groups = graph_search_utils.find_layer_groups_to_scale()
 
         assert len(layer_groups) == 5
@@ -151,7 +152,7 @@ class TestTrainingExtensionsCrossLayerScaling:
         output = tf.keras.layers.Dense(units=10)(model)
 
         keras_model = tf.keras.Model(inputs=input_layer, outputs=output)
-        graph_search_utils = GraphSearchUtils(keras_model, (28, 28, 3))
+        graph_search_utils = GraphSearchUtils(keras_model)
         layer_groups = graph_search_utils.find_layer_groups_to_scale()
         assert len(layer_groups) == 2
 
@@ -182,7 +183,7 @@ class TestTrainingExtensionsCrossLayerScaling:
             return tf.keras.models.Model([x1, x2], y)
 
         model = generate_model()
-        graph_search_utils = GraphSearchUtils(model, (28, 28, 1))
+        graph_search_utils = GraphSearchUtils(model)
         layer_groups = graph_search_utils.find_layer_groups_to_scale()
 
         assert len(layer_groups) == 3
@@ -414,7 +415,6 @@ class TestTrainingExtensionsCrossLayerScaling:
 
         assert actual == expected
 
-    @pytest.mark.skip("Skipping while enabling eager mode tests, need to debug.")
     def test_scale_cls_sets(self):
         """
         Test scale cls sets
@@ -447,7 +447,7 @@ class TestTrainingExtensionsCrossLayerScaling:
         assert not np.array_equal(before_scaling_conv0_weight, after_scaling_conv0_weight)
         after_scaling_output = model.predict(inp_array)
 
-        assert np.allclose(before_scaling_ouptut, after_scaling_output, rtol=1.e-2)
+        assert np.allclose(before_scaling_ouptut, after_scaling_output, rtol=1.e-2, atol=1.e-5)
 
     def test_create_cls_set_info_list(self):
         """

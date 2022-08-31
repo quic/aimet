@@ -242,7 +242,7 @@ def test_quantsim_handling_folded_bn_layer():
         json.dump(quantsim_config, f)
 
     model = tiny_conv_net()
-    cle_applied_model = equalize_model(model, input_shapes=(32, 32, 3))
+    cle_applied_model = equalize_model(model)
     qsim = QuantizationSimModel(cle_applied_model, quant_scheme='tf', config_file="./data/quantsim_config.json")
 
     layers = qsim.model.layers
