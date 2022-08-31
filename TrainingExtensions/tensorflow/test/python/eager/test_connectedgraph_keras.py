@@ -44,6 +44,7 @@ import test_models_keras
 from aimet_common.connected_graph.connectedgraph_utils import get_all_input_ops, get_all_output_ops
 from aimet_tensorflow.keras.connectedgraph import ConnectedGraph
 
+
 class TestConnectedGraph:
     """
     Test methods for ConnectedGraph
@@ -68,15 +69,9 @@ class TestConnectedGraph:
         for layer in model.layers:
             assert not layer.inbound_nodes
 
-        # Sequential model can only receive one input, multiple input is not supported
+        # Raise RuntimeError if passed model is not built
         with pytest.raises(RuntimeError):
-            _ = ConnectedGraph(model, [(3,), (4,)])
-
-        connected_graph = ConnectedGraph(model, (3,))
-        for layer in connected_graph._model.layers:
-            assert layer.inbound_nodes
-
-        assert len(connected_graph.get_all_ops().keys()) == 2
+            _ = ConnectedGraph(model)
 
     def test_simple_functional(self):
         model = test_models_keras.simple_functional()
@@ -90,64 +85,6 @@ class TestConnectedGraph:
             assert layer.inbound_nodes
 
         assert len(connected_graph.get_all_ops().keys()) == 2
-
-    def test_simple_subclassing(self):
-        model = test_models_keras.simple_subclassing()
-
-        # In Subclassing model, there is no connection information between layers before building
-        for layer in model.layers:
-            assert not layer.inbound_nodes
-        connected_graph = ConnectedGraph(model, (3,))
-        for layer in connected_graph._model.layers:
-            assert layer.inbound_nodes
-
-        assert len(connected_graph.get_all_ops().keys()) == 2
-        assert (
-            model.layers[0] == connected_graph.ordered_ops[0].model_module.get_module()
-        )
-        assert (
-            model.layers[1] == connected_graph.ordered_ops[1].model_module.get_module()
-        )
-
-    def test_multi_input_subclassing(self):
-        model = test_models_keras.multi_input_subclassing()
-
-        # In Subclassing model, there is no connection information between layers before building
-        for layer in model.layers:
-            assert not layer.inbound_nodes
-
-        # input_shapes should be passed if model is subclassing case
-        with pytest.raises(RuntimeError):
-            _ = ConnectedGraph(model)
-
-        connected_graph = ConnectedGraph(model, [(3,), (4,)])
-        for layer in connected_graph._model.layers:
-            assert layer.inbound_nodes
-
-        assert len(connected_graph.get_all_ops().keys()) == 4
-
-    def test_residual_subclassing(self):
-        model = test_models_keras.residual_subclassing()
-        # In Subclassing model, there is no connection information between layers before building
-        for layer in model.layers:
-            assert not layer.inbound_nodes
-        connected_graph = ConnectedGraph(model, (28, 28, 3))
-        for layer in connected_graph._model.layers:
-            assert layer.inbound_nodes
-
-        assert len(connected_graph.get_all_ops().keys()) == 7
-        assert (
-            model.layers[0] == connected_graph.ordered_ops[0].model_module.get_module()
-        )
-        assert (
-            model.layers[1] == connected_graph.ordered_ops[3].model_module.get_module()
-        )
-        assert (
-            model.layers[2] == connected_graph.ordered_ops[1].model_module.get_module()
-        )
-        assert (
-            model.layers[3] == connected_graph.ordered_ops[4].model_module.get_module()
-        )
 
     def test_concat_functional(self):
         model = test_models_keras.concat_functional()
@@ -166,7 +103,7 @@ class TestConnectedGraph:
         """Test building ConnectedGraph on single residual model"""
         model = test_models_keras.single_residual()
 
-        connected_graph = ConnectedGraph(model, (32, 32, 3))
+        connected_graph = ConnectedGraph(model)
         # 15 usual ops, 1 split ops
         assert len(connected_graph.get_all_ops().keys()) == 15 + 1
         assert connected_graph._split_count == 1
@@ -185,8 +122,9 @@ class TestConnectedGraph:
     def test_nested_sequential(self):
         """Test building ConnectedGraph on a model constructed with nested Sequential"""
         model = test_models_keras.nested_sequential_model()
+        model.build((None, 8, 8, 3))
 
-        connected_graph = ConnectedGraph(model, (8, 8, 3))
+        connected_graph = ConnectedGraph(model)
         assert len(connected_graph.get_all_ops().keys()) == 8
 
         products = connected_graph.get_all_products()
