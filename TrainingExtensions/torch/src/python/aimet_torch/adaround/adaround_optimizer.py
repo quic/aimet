@@ -131,7 +131,7 @@ class AdaroundOptimizer:
         use_cache_acts_data = cls._can_cache_acts_data(len(cached_dataset), inp_data.shape, out_data.shape)
 
         if use_cache_acts_data and AdaroundOptimizer.enable_caching_acts_data():
-            logger.debug(f"Caching intermediate activations data for optimization.")
+            logger.debug("Caching intermediate activations data for optimization.")
             all_inp_data, all_orig_out_data = act_sampler.sample_all_acts(cached_dataset)
             # Try to put all cached activations data on GPU for faster optimization if possible.
             device = utils.get_device(module)
@@ -280,11 +280,11 @@ class AdaroundOptimizer:
         try:
             inp_data = inp_data.to(device)
             out_data = out_data.to(device)
-            logger.debug(f"Placing cached activations data on GPU.")
+            logger.debug("Placing cached activations data on GPU.")
         except RuntimeError:
             inp_data = inp_data.cpu()
             out_data = out_data.cpu()
-            logger.debug(f"Could not place cached activations data on GPU, keeping on CPU.")
+            logger.debug("Could not place cached activations data on GPU, keeping on CPU.")
         return inp_data, out_data
 
     @staticmethod
