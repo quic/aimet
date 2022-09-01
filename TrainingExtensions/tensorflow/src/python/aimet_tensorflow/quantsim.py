@@ -182,18 +182,20 @@ class QuantizationSimModel:
         self._use_cuda = use_cuda
         self._param_quantizers = {}
         self._activation_quantizers = {}
+        self._config_file = config_file
         self._default_output_bw = default_output_bw
         self._default_param_bw = default_param_bw
+        self._default_data_type = default_data_type
         self.connected_graph = ConnectedGraph(self.session.graph, starting_op_names, output_op_names)
 
         # We save a copy of the original model (to be used during export later)
         with self.session.graph.as_default():
             saver = tf.compat.v1.train.Saver()
         saver.save(self.session, save_path=WORKING_DIR+'orig_model_before_quantsim')
-        self._quantsim_configurator = QuantSimConfigurator(session, self.connected_graph, config_file, default_output_bw,
-                                                           default_param_bw, default_data_type)
-        self._supported_kernels = self._quantsim_configurator.get_supported_kernels()
-        self.per_channel_quantization_enabled = self._quantsim_configurator.per_channel_quantization_flag
+        quantsim_configurator = QuantSimConfigurator(session, self.connected_graph, config_file, default_output_bw,
+                                                     default_param_bw, default_data_type)
+        self._supported_kernels = quantsim_configurator.get_supported_kernels()
+        self.per_channel_quantization_enabled = quantsim_configurator.per_channel_quantization_flag
         self._op_name_to_output_channels_axis_handling_dict = {}
 
         with self.session.graph.as_default():
@@ -271,8 +273,11 @@ class QuantizationSimModel:
             raise AssertionError(error_msg)
         op_to_quant_ops_dict = create_op_to_quant_ops_dict(self.session.graph, conn_graph, ops_with_param_names, indices,
                                                            params_to_quantize, activation_op_names)
-        self._quantsim_configurator.configure_quantizers(op_to_quant_ops_dict, self._param_quantizers,
-                                                         self._activation_quantizers)
+        # self._quantsim_configurator.configure_quantizers(op_to_quant_ops_dict, self._param_quantizers,
+        #                                                  self._activation_quantizers)
+        quantsim_configurator = QuantSimConfigurator(self.session, self.connected_graph, self._config_file, self._default_output_bw,
+                                                     self._default_param_bw, self._default_data_type)
+        quantsim_configurator.configure_quantizers(op_to_quant_ops_dict, self._param_quantizers, self._activation_quantizers)
 
     def compute_encodings(self, forward_pass_callback: Callable[[tf.compat.v1.Session, Any], None],
                           forward_pass_callback_args):
