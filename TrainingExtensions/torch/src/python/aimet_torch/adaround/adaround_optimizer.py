@@ -38,19 +38,24 @@
 
 """ Adaround optimizer """
 
-from typing import Union, Tuple, List
+from typing import Union, Tuple
+from functools import reduce
+import psutil
+import numpy as np
 import torch
 import torch.nn.functional as functional
 from torch.utils.data import Dataset
 
 # Import AIMET specific modules
 from aimet_common.utils import AimetLogger
+from aimet_torch import utils
 from aimet_torch.qc_quantize_op import StaticGridQuantWrapper
 from aimet_torch.adaround.activation_sampler import ActivationSampler
 from aimet_torch.adaround.adaround_loss import AdaroundLoss, AdaroundHyperParameters
 
 logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Quant)
 BATCH_SIZE = 32
+DATA_SIZE_IN_BITS = 32
 
 
 class AdaroundOptimizer:
@@ -77,9 +82,9 @@ class AdaroundOptimizer:
 
         # Get input and output data of batch size to compute reconstruction error of output activations
         # before and after optimization
-        iterator = iter(cached_dataset)
-        inp_data, out_data = ActivationSampler.sample_activation(module, quant_module, orig_model,
-                                                                 quant_model, iterator, num_batches=1)
+        model_inputs = cached_dataset[0]
+        act_sampler = ActivationSampler(module, quant_module, orig_model, quant_model)
+        inp_data, out_data = act_sampler.sample_acts(model_inputs)
 
         recons_err_hard, recons_err_soft = cls._compute_recons_metrics(quant_module, act_func, inp_data, out_data)
         logger.debug("Before opt, Recons. error metrics using soft rounding=%f and hard rounding=%f", recons_err_soft,
@@ -116,62 +121,55 @@ class AdaroundOptimizer:
         assert adaround_quantizer.use_soft_rounding, 'optimization should use soft rounding only.'
         assert adaround_quantizer.alpha is not None, 'alpha parameter should be initialized.'
 
-        # Split total batches and iterations into chunks
-        num_chunks = cls._compute_chunks_for_act_data(module, quant_module, orig_model, quant_model, cached_dataset)
-        batches = cls._split_into_chunks(len(cached_dataset), num_chunks)
-        iterations = cls._split_into_chunks(opt_params.num_iterations, num_chunks)
-        logger.debug("Collecting activation data and optimizing layer using chunk(s)=%d", num_chunks)
-
         # Create and set up Adam optimizer with parameter 'alpha' to be optimized
         optimizer = torch.optim.Adam([adaround_quantizer.alpha])
 
-        # Optimization using chunked input and output activation data
-        cur_iteration = 0
-        iterator = iter(cached_dataset)
+        # Check if we can cache intermediate activation data.
+        model_inputs = cached_dataset[0]
+        act_sampler = ActivationSampler(module, quant_module, orig_model, quant_model)
+        inp_data, out_data = act_sampler.sample_acts(model_inputs)
+        use_cache_acts_data = cls._can_cache_acts_data(len(cached_dataset), inp_data.shape, out_data.shape)
 
-        for chunk in range(num_chunks):
+        if use_cache_acts_data and AdaroundOptimizer.enable_caching_acts_data():
+            logger.debug(f"Caching intermediate activations data for optimization.")
+            all_inp_data, all_orig_out_data = act_sampler.sample_all_acts(cached_dataset)
+            # Try to put all cached activations data on GPU for faster optimization if possible.
+            device = utils.get_device(module)
+            if 'cuda' in str(device):
+                all_inp_data, all_orig_out_data = cls._place_cached_acts_data(all_inp_data, all_orig_out_data, device)
 
-            # Collect input and output activations data in chunks
-            all_inp_data, all_orig_out_data = ActivationSampler.sample_activation(module, quant_module, orig_model,
-                                                                                  quant_model, iterator,
-                                                                                  num_batches=batches[chunk])
-
-            for _ in range(iterations[chunk]):
-
-                # Get random indices of batch size and get original output and input activation data of batch size
+        for iteration in range(opt_params.num_iterations):
+            if use_cache_acts_data and AdaroundOptimizer.enable_caching_acts_data():
                 indices = torch.randperm(all_inp_data.size(0))[:BATCH_SIZE]
-                inp_data = all_inp_data[indices]
-                orig_out_data = all_orig_out_data[indices]
+                inp_data = all_inp_data[indices].to(device)
+                orig_out_data = all_orig_out_data[indices].to(device)
+            else:
+                model_inputs = cached_dataset[np.random.randint(len(cached_dataset))]
+                inp_data, orig_out_data = act_sampler.sample_acts(model_inputs)
 
-                # Clear alpha's gradients before optimization step
-                optimizer.zero_grad()
+            # Clear alpha's gradients before optimization step
+            optimizer.zero_grad()
 
-                # Get the module's output activations using AdaRounded weights
-                quant_out_data = cls._compute_output_with_adarounded_weights(quant_module, inp_data)
+            # Get the module's output activations using AdaRounded weights
+            quant_out_data = cls._compute_output_with_adarounded_weights(quant_module, inp_data)
 
-                # If followed by an activation function
-                if act_func is not None:
-                    orig_out_data = act_func(orig_out_data)
-                    quant_out_data = act_func(quant_out_data)
+            # If followed by an activation function
+            if act_func is not None:
+                orig_out_data = act_func(orig_out_data)
+                quant_out_data = act_func(quant_out_data)
 
-                # Calculate total loss
-                recon_loss = AdaroundLoss.compute_recon_loss(quant_out_data, orig_out_data)
-                round_loss = AdaroundLoss.compute_round_loss(adaround_quantizer.alpha, opt_params, cur_iteration)
-                total_loss = recon_loss + round_loss
+            # Calculate total loss
+            recon_loss = AdaroundLoss.compute_recon_loss(quant_out_data, orig_out_data)
+            round_loss = AdaroundLoss.compute_round_loss(adaround_quantizer.alpha, opt_params, iteration)
+            total_loss = recon_loss + round_loss
 
-                # Back propagate and Update the parameter 'alpha'
-                total_loss.backward()
-                optimizer.step()
+            # Back propagate and Update the parameter 'alpha'
+            total_loss.backward()
+            optimizer.step()
 
-                if cur_iteration == 0 or cur_iteration % 100 == 0:
-                    logger.debug("After iterations=%d, Total loss=%5f, Recons. loss=%5f, Rounding loss=%5f",
-                                 cur_iteration, float(total_loss), float(recon_loss), float(round_loss))
-
-                cur_iteration += 1
-
-            # Delete intermediate tensor references
-            del all_inp_data
-            del all_orig_out_data
+            if iteration == 0 or iteration % 100 == 0:
+                logger.debug("After iterations=%d, Total loss=%5f, Recons. loss=%5f, Rounding loss=%5f",
+                             iteration, float(total_loss), float(recon_loss), float(round_loss))
 
     @classmethod
     def _compute_recons_metrics(cls, quant_module: StaticGridQuantWrapper, act_func, inp_data: torch.Tensor,
@@ -238,48 +236,60 @@ class AdaroundOptimizer:
         return out_data
 
     @staticmethod
-    def _split_into_chunks(value: int, chunks: int) -> List:
+    def _can_cache_acts_data(num_batches: int, input_shape: torch.Size, output_shape: torch.Size) -> bool:
         """
-        Split a number into almost equal chunks
-        :param value: Value to be split
-        :param chunks: Chunks
-        :return: List of splits
+        Function to check whether activations data can be cached and fit in CPU memory for given
+        input and output shape.
+
+        :param num_batches: Number of batches.
+        :param input_shape: Shape of input activations data.
+        :param output_shape: Shape of output activations data.
+        :return: True if we can cache, false otherwise.
         """
-        assert not value < chunks, 'Can not split {} into {} chunks'.format(value, chunks)
+        can_cache_data = False
 
-        if value % chunks == 0:
-            splits = [value // chunks for _ in range(chunks)]
+        # Available CPU memory in GB.
+        threshold_mem = psutil.virtual_memory().available
+        threshold_mem = threshold_mem / (1024 * 1024 * 1024)
 
-        else:
-            splits = [value // chunks + 1 if c >= chunks - value % chunks else value // chunks for c in range(chunks)]
+        # required CPU memory in GB.
+        req_mem = 0
+        req_mem += reduce(lambda x, y: x * y, input_shape) * num_batches * DATA_SIZE_IN_BITS / (1024 * 1024 * 1024 * 8)
+        req_mem += reduce(lambda x, y: x * y, output_shape) * num_batches * DATA_SIZE_IN_BITS / (1024 * 1024 * 1024 * 8)
 
-        return splits
+        if req_mem < threshold_mem:
+            can_cache_data = True
+
+        return can_cache_data
 
     @staticmethod
-    def _compute_chunks_for_act_data(module: torch.nn.Module, quant_module: StaticGridQuantWrapper,
-                                     orig_model: torch.nn.Module, quant_model: torch.nn.Module,
-                                     cached_dataset: Dataset) -> int:
+    def _place_cached_acts_data(inp_data: torch.Tensor, out_data: torch.Tensor, device: torch.device) \
+            -> Tuple[torch.Tensor, torch.Tensor]:
         """
-        Function computes number of possible chunks needed to split activation data that can be fit on
-        device without running out of memory
-        :param module: Original module
-        :param quant_module: Quantized wrapper module
-        :param orig_model: The original, un quantized, model
-        :param quant_model: QuantSim model
-        :param cached_dataset: Cached dataset
-        :return: Number of chunks
+        Function to put cached activation data to given device. If it raises RunTimeError, it places the
+        cached activation data back to CPU memory.
+
+        :param inp_data: Input activations data.
+        :param out_data: Output activations data.
+        :param device: Device.
+        :return: Input and output activations data.
+        :raises:
+            - If RuntimeError is raised, it will put input and output activations data back to CPU memory.
         """
-        num_chunks = 1
+        torch.cuda.empty_cache()
+        try:
+            inp_data = inp_data.to(device)
+            out_data = out_data.to(device)
+            logger.debug(f"Placing cached activations data on GPU.")
+        except RuntimeError:
+            inp_data = inp_data.cpu()
+            out_data = out_data.cpu()
+            logger.debug(f"Could not place cached activations data on GPU, keeping on CPU.")
+        return inp_data, out_data
 
-        while True:
-            iterator = iter(cached_dataset)
-            num_batches = int(len(cached_dataset) / num_chunks)
-            try:
-                ActivationSampler.sample_activation(module, quant_module, orig_model, quant_model, iterator,
-                                                    num_batches=num_batches)
-                break
-
-            except RuntimeError:
-                num_chunks += 1
-
-        return num_chunks
+    @staticmethod
+    def enable_caching_acts_data() -> bool:
+        """
+        Function to enable/disable caching intermediate activation data.
+        """
+        return True

@@ -49,7 +49,7 @@ from torch.utils.data import Dataset, DataLoader
 from aimet_common.utils import AimetLogger
 from aimet_common.defs import QuantScheme
 from aimet_common.quantsim import calculate_delta_offset
-from aimet_torch.utils import create_fake_data_loader, create_rand_tensors_given_shapes
+from aimet_torch.utils import create_fake_data_loader, create_rand_tensors_given_shapes, change_tensor_device_placement
 from aimet_torch.examples.test_models import TinyModel
 from aimet_torch.quantsim import QuantizationSimModel
 from aimet_torch.qc_quantize_op import StaticGridQuantWrapper, QcQuantizeOpMode
@@ -182,6 +182,7 @@ class TestAdaround:
 
     def test_apply_adaround(self):
         """ test apply_adaround end to end using tiny model """
+        torch.manual_seed(10)
         AimetLogger.set_level_for_all_areas(logging.DEBUG)
 
         # create fake data loader with image size (3, 32, 32)
@@ -198,7 +199,7 @@ class TestAdaround:
         params = AdaroundParameters(data_loader=data_loader, num_batches=4, default_num_iterations=5)
         ada_rounded_model = Adaround.apply_adaround(model, inp_tensor_list, params, './', 'dummy')
         out_after_ada = dummy_forward_pass(ada_rounded_model, input_shape)
-
+        print(out_after_ada.detach().cpu().numpy()[0, :])
         assert not torch.all(torch.eq(out_before_ada, out_after_ada))
 
         # Test export functionality
@@ -739,3 +740,87 @@ class TestAdaround:
 
         with pytest.raises(ValueError):
             AdaroundParameters(dataloader, num_batches=100)
+
+    @pytest.mark.cuda
+    def test_apply_adaround_using_gpu(self):
+        """ test apply_adaround end to end using tiny model """
+        torch.manual_seed(10)
+        AimetLogger.set_level_for_all_areas(logging.DEBUG)
+
+        # create fake data loader with image size (3, 32, 32)
+        data_loader = create_fake_data_loader(dataset_size=64, batch_size=16, image_size=(3, 32, 32))
+
+        net = TinyModel().eval()
+        model = net.to(torch.device('cuda'))
+
+        input_shape = (1, 3, 32, 32)
+        dummy_input = create_rand_tensors_given_shapes(input_shape)
+        dummy_input = change_tensor_device_placement(dummy_input, device=torch.device('cuda'))
+        out_before_ada = model(*dummy_input)
+
+        params = AdaroundParameters(data_loader=data_loader, num_batches=4, default_num_iterations=1000)
+        ada_rounded_model = Adaround.apply_adaround(model, dummy_input, params, './', 'dummy')
+        out_after_ada = ada_rounded_model(*dummy_input)
+
+        assert not torch.all(torch.eq(out_before_ada, out_after_ada))
+
+        # Test export functionality
+        with open('./dummy.encodings') as json_file:
+            encoding_data = json.load(json_file)
+            print(encoding_data)
+
+        param_keys = list(encoding_data.keys())
+        print(param_keys)
+        assert param_keys[0] == "conv1.weight"
+        assert isinstance(encoding_data["conv1.weight"], list)
+
+        # Delete encodings file
+        if os.path.exists("./dummy.encodings"):
+            os.remove("./dummy.encodings")
+
+    @pytest.mark.cuda
+    def test_apply_adaround_using_gpu_caching_disabled(self):
+        """ test apply_adaround end to end using tiny model """
+        torch.manual_seed(10)
+        AimetLogger.set_level_for_all_areas(logging.DEBUG)
+
+        # Disable caching activation data
+        from aimet_torch.adaround.adaround_optimizer import AdaroundOptimizer
+        def enable_caching_acts_data() -> bool:
+            """
+            Function to enable/disable caching intermediate activation data.
+            """
+            return False
+
+        AdaroundOptimizer.enable_caching_acts_data = enable_caching_acts_data
+
+        # create fake data loader with image size (3, 32, 32)
+        data_loader = create_fake_data_loader(dataset_size=64, batch_size=16, image_size=(3, 32, 32))
+
+        net = TinyModel().eval()
+        model = net.to(torch.device('cuda'))
+
+        input_shape = (1, 3, 32, 32)
+        dummy_input = create_rand_tensors_given_shapes(input_shape)
+        dummy_input = change_tensor_device_placement(dummy_input, device=torch.device('cuda'))
+        out_before_ada = model(*dummy_input)
+
+        params = AdaroundParameters(data_loader=data_loader, num_batches=4, default_num_iterations=5)
+        ada_rounded_model = Adaround.apply_adaround(model, dummy_input, params, './', 'dummy')
+        out_after_ada = ada_rounded_model(*dummy_input)
+
+        assert not torch.all(torch.eq(out_before_ada, out_after_ada))
+
+        # Test export functionality
+        with open('./dummy.encodings') as json_file:
+            encoding_data = json.load(json_file)
+            print(encoding_data)
+
+        param_keys = list(encoding_data.keys())
+        print(param_keys)
+        assert param_keys[0] == "conv1.weight"
+        assert isinstance(encoding_data["conv1.weight"], list)
+
+        # Delete encodings file
+        if os.path.exists("./dummy.encodings"):
+            os.remove("./dummy.encodings")
