@@ -58,10 +58,7 @@ class TestUtils:
         new_node_ls = [node.op_type for node in model.graph.node]
         assert new_node_ls == ['Relu', 'MaxPool', 'Flatten']
         # Check connection of each layer
-        name = model.graph.input[0].name
-        for node in model.graph.node:
-            assert node.input[0] == name
-            name = node.output[0]
+        onnx.checker.check_model(model)
 
     def test_replace_nodes(self):
         """
