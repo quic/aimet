@@ -35,7 +35,7 @@
 #
 #  @@-COPYRIGHT-END-@@
 # =============================================================================
-
+import onnx
 from aimet_onnx import utils, test_models
 
 class TestUtils:
@@ -49,11 +49,15 @@ class TestUtils:
         model = test_models.build_dummy_model()
         node_ls = [node.op_type for node in model.graph.node]
         assert node_ls == ['Conv', 'Relu', 'MaxPool', 'Flatten', 'Gemm']
-
+        # Remove first layer of dummy model
         utils.remove_nodes_with_type('Conv', model.graph)
         new_node_ls = [node.op_type for node in model.graph.node]
         assert new_node_ls == ['Relu', 'MaxPool', 'Flatten', 'Gemm']
-
+        # Remove last layer of dummy model
+        utils.remove_nodes_with_type('Gemm', model.graph)
+        new_node_ls = [node.op_type for node in model.graph.node]
+        assert new_node_ls == ['Relu', 'MaxPool', 'Flatten']
+        # Check connection of each layer
         name = model.graph.input[0].name
         for node in model.graph.node:
             assert node.input[0] == name

@@ -55,6 +55,10 @@ def remove_nodes_with_type(node_type: str, onnx_graph: onnx.onnx_pb.GraphProto):
     for node in onnx_graph.node:
         if node.input[0] in input_output_pairs.keys():
             node.input[0] = input_output_pairs[node.input[0]]
+        for outputs in onnx_graph.output:
+            if outputs.name in input_output_pairs.keys() and \
+                    node.output[0] == input_output_pairs[outputs.name]:
+                node.output[0] = outputs.name
 
 
 def replace_node_with_op(node_type: str, new_type: str, onnx_graph: onnx.onnx_pb.GraphProto):
