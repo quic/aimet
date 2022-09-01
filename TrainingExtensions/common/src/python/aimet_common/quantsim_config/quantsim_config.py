@@ -104,9 +104,6 @@ DEFAULT_OVERRIDE_SUPPORTED_KERNEL_INDEX = 0
 
 class SupergroupConfigCallback(ABC):
     """ Class acting as a callback for when supergroups are found """
-    def __init__(self):
-        pass
-
     @abstractmethod
     def __call__(self, _, op_list: List[Op]):
         """ Callback logic """
