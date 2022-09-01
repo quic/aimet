@@ -111,9 +111,6 @@ class QuantSimConfigurator(AimetCommonQuantSimConfigurator):
                  quantsim_param_bw: int, quantsim_data_type: QuantizationDataType):
         super().__init__(config_file, quantsim_data_type, quantsim_output_bw, quantsim_param_bw)
         _report_unsupported_ops(self._quantsim_configs)
-        self._default_param_bw = quantsim_param_bw
-        self._default_output_bw = quantsim_output_bw
-        self._default_data_type = quantsim_data_type
         self._conn_graph = connected_graph
         self._module_to_quantsim_wrapper_dict = _create_module_to_quantsim_wrapper_dict(model)
         self._named_modules_to_tensor_quantizers_dict = self._create_named_modules_to_tensor_quantizers_dict()
