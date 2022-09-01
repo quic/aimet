@@ -1138,7 +1138,7 @@ class QuantizationSimModel:
             hooks[module_ref].remove()
             del hooks[module_ref]
             module_name = module_to_name_map[module_ref]
-            marker_layer = torch.jit.trace(CustomMarker(module_ref, module_name),
+            marker_layer = torch.jit.trace(CustomMarker(module_ref, module_name, 'True'),
                                            inputs)
             self._module_marker_map[module_name] = marker_layer
 
@@ -1290,7 +1290,7 @@ class QuantizationSimModel:
             # Only perform init and trace if the given module is a leaf module, and we have not recorded it before
             if module in module_to_name_map and module_to_name_map[module] not in self._module_marker_map:
                 with utils.in_eval_mode(module), torch.no_grad():
-                    marker_layer = torch.jit.trace(CustomMarker(module, module_to_name_map[module]),
+                    marker_layer = torch.jit.trace(CustomMarker(module, module_to_name_map[module], 'True'),
                                                    dummy_input)
                 self._module_marker_map[module_to_name_map[module]] = marker_layer
 

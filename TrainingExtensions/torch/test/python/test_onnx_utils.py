@@ -42,6 +42,7 @@ import logging
 import torch
 from torchvision import models
 
+import aimet_torch.elementwise_ops
 from aimet_common.utils import AimetLogger
 from aimet_torch import onnx_utils
 import onnx
@@ -78,6 +79,25 @@ class OutOfOrderModel(torch.nn.Module):
 
         return x1 + y1
 
+class MultiplyModuleAndFunctional(torch.nn.Module):
+
+    def __init__(self, factor):
+        super().__init__()
+        self.mul = aimet_torch.elementwise_ops.Multiply()
+        self.factor = factor
+
+    def forward(self, x):
+        return self.mul(x, self.factor) * 3
+
+class HierarchicalMultiplyModule(torch.nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.mul1 = MultiplyModuleAndFunctional(4)
+        self.mul2 = MultiplyModuleAndFunctional(5)
+
+    def forward(self, x):
+        x = self.mul1(x)
+        return self.mul2(x) * 6
 
 class TestOnnxUtils:
 
@@ -301,7 +321,12 @@ class TestOnnxUtils:
                                      'block2.relu4']
         not_expected_names = ['conv0']
 
+        module_names = { module_name for module_name, _ in model.named_modules()}
         for node in onnx_model.graph.node:
+            if not node.name.startswith('.'):
+                name = node.name.split('#')[0]
+                assert '.'.join(name.split('.')[:-1]) in module_names
+
             if node.op_type == 'Conv':
                 assert node.name in expected_conv_names
 
@@ -613,6 +638,47 @@ class TestOnnxUtils:
 
         onnx_model = onnx.load(onnx_path)
         self.check_onnx_node_name_uniqueness(onnx_model)
+
+        if os.path.exists(onnx_path):
+            os.remove(onnx_path)
+
+    def test_non_leaf_module_names(self):
+        """
+        Test that node names are uniquely set.
+        """
+        class Net(torch.nn.Module):
+            """
+            Model using torch.nn.LSTM module
+            """
+            def __init__(self):
+                super().__init__()
+                self.layer = HierarchicalMultiplyModule()
+
+            def forward(self, x):
+                return self.layer(x)
+
+        model = Net()
+        dummy_input = torch.randn(10, 1, 3)
+        onnx_path = './data/MyModel.onnx'
+
+        torch.onnx.export(model, dummy_input, onnx_path)
+        onnx_utils.OnnxSaver.set_node_names(onnx_path, model, dummy_input)
+
+        onnx_model = onnx.load(onnx_path)
+        onnx.checker.check_model(onnx_model)
+        self.check_onnx_node_name_uniqueness(onnx_model)
+
+        expected_names = [
+            'layer.mul1.mul',
+            'layer.mul1.Mul_7',
+
+            'layer.mul2.mul',
+            'layer.mul2.Mul_15',
+
+            'layer.Mul_18'
+        ]
+        for node in onnx_model.graph.node:
+            assert 'Constant' in node.name or node.name in expected_names
 
         if os.path.exists(onnx_path):
             os.remove(onnx_path)
