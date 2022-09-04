@@ -84,3 +84,52 @@ class TestSparseConv(unittest.TestCase):
         self.assertTrue(isinstance(sim.model.conv.param_quantizers['weight'].encoding, TfEncoding))
         self.assertTrue(isinstance(sim.model.conv.output_quantizer.encoding, TfEncoding))
 
+    def test_sparse_conv_quantsim_enhanced(self):
+        dummy_input = torch.rand(2, 1, 5, 5)
+
+        spconv_model = SpconvModel()
+        sim = QuantizationSimModel(spconv_model, dummy_input, 'tf_enhanced')
+
+        def dummy_forward(model, args):
+            model.eval()
+            with torch.no_grad():
+                model(dummy_input)
+
+        sim.compute_encodings(dummy_forward, None)
+
+        # Check if Quantizers were created
+        self.assertTrue(isinstance(sim.model.conv, StaticGridQuantWrapper))
+        self.assertTrue(isinstance(sim.model.conv.param_quantizers['weight'], StaticGridPerTensorQuantizer))
+        self.assertTrue(isinstance(sim.model.conv.param_quantizers['bias'], StaticGridPerTensorQuantizer))
+        self.assertTrue(isinstance(sim.model.conv.output_quantizer, StaticGridPerTensorQuantizer))
+        self.assertTrue(isinstance(sim.model.conv.input_quantizer, StaticGridPerTensorQuantizer))
+
+        # Check if encodings were created
+        self.assertTrue(sim.model.conv.param_quantizers['weight'].encoding)
+        self.assertTrue(sim.model.conv.output_quantizer.encoding)
+
+    def test_sparse_conv_per_channel(self):
+        dummy_input = torch.rand(2, 1, 5, 5)
+
+        spconv_model = SpconvModel()
+        sim = QuantizationSimModel(spconv_model, dummy_input)
+
+        def dummy_forward(model, args):
+            model.eval()
+            with torch.no_grad():
+                model(dummy_input)
+
+        sim.model.conv.enable_per_channel_quantization()
+        sim.compute_encodings(dummy_forward, None)
+
+        # Check if Quantizers were created
+        self.assertTrue(isinstance(sim.model.conv, StaticGridQuantWrapper))
+        self.assertTrue(isinstance(sim.model.conv.param_quantizers['weight'], StaticGridPerChannelQuantizer))
+        self.assertTrue(isinstance(sim.model.conv.param_quantizers['bias'], StaticGridPerChannelQuantizer))
+        self.assertTrue(isinstance(sim.model.conv.output_quantizer, StaticGridPerTensorQuantizer))
+        self.assertTrue(isinstance(sim.model.conv.input_quantizer, StaticGridPerTensorQuantizer))
+
+        # Check if encodings were created
+        for encoding in sim.model.conv.param_quantizers['weight'].encoding:
+            self.assertTrue(isinstance(encoding, TfEncoding))
+        self.assertTrue(isinstance(sim.model.conv.output_quantizer.encoding, TfEncoding))
