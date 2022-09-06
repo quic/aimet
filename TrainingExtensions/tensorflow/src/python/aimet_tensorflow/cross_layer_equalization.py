@@ -39,6 +39,7 @@
 """ Auto Mode TF Cross Layer Equalization """
 
 from typing import Tuple, List, Union, Dict
+from enum import Enum
 import numpy as np
 import tensorflow as tf
 
@@ -59,6 +60,12 @@ ScaleFactor = Union[np.ndarray, Tuple[np.ndarray]]
 ClsSet = Union[Tuple[tf.Operation, tf.Operation],
                Tuple[tf.Operation, tf.Operation, tf.Operation]]
 
+# TODO below Enum is common with PyTorch impl. Move to a common file
+class ClsLayerType(Enum):
+    """Enum class to represent CLS layer types"""
+    Unsupported = 0
+    Conv = 1  # Overloaded for conv and ConvTranspose
+    DepthwiseConv = 2
 
 class GraphSearchUtils:
 
@@ -183,26 +190,92 @@ class GraphSearchUtils:
         return layer_groups_as_tf_ops, tf_op_to_conn_graph_op_map
 
     @staticmethod
-    def convert_layer_group_to_cls_sets(layer_group):
+    def convert_layer_group_to_cls_sets(layer_group: List[tf.Operation]):
         """
         Helper function to convert a layer group to a list of cls sets
-        :param layer_group: Given layer group to convert
+        :param layer_group: Given layer group to generate cls sets
         :return: List of cls sets
+
+        Supported layer combinations for CLS are:
+        1. Conv + Conv
+        2. DepthwiseConv + Conv
+        3. Conv + DepthwiseConv + Conv
+        Can be rewritten as,
+        Conv
+            -> Conv
+            -> DepthwiseConv
+                -> Conv
+        DepthwiseConv
+            -> Conv
+        If a combination is partially supported, the cls_set is completely omitted and restarted from the next
+        supported layer
+        For example: Consider Conv + DepthwiseConv + Depthwise(unsupported)
+        - Since Depthwise(unsupported) is the last layer encountered, we need to omit all the three layers and restart
+        the cls sets from the next supported layer.
+
         """
-        cls_sets = []
 
-        prev_layer_to_scale = layer_group.pop(0)
-        while layer_group:
-            next_layer_to_scale = layer_group.pop(0)
-
-            if next_layer_to_scale.type in ['DepthwiseConv2dNative']:
-                next_non_depthwise_conv_layer = layer_group.pop(0)
-                cls_sets.append((prev_layer_to_scale, next_layer_to_scale, next_non_depthwise_conv_layer))
-                prev_layer_to_scale = next_non_depthwise_conv_layer
-
+        # pylint: disable=too-many-branches
+        def convert_to_cls_layer_type(layer: tf.Operation) -> Tuple[ClsLayerType, tf.Operation]:
+            """
+            Given the layer, check if its supported in CLS
+            :param layer: layer to check
+            :return: Tuple of ClsLayerType and the layer
+            """
+            if layer.type in ['Conv', 'Conv2D', 'ConvTranspose', 'Conv2DTranspose']:
+                layer_type = ClsLayerType.Conv
+            elif layer.type == 'DepthwiseConv2dNative':
+                layer_type = ClsLayerType.DepthwiseConv
             else:
-                cls_sets.append((prev_layer_to_scale, next_layer_to_scale))
-                prev_layer_to_scale = next_layer_to_scale
+                layer_type = ClsLayerType.Unsupported
+
+            return layer_type, layer
+
+        def get_next_layer() -> Union[Tuple[ClsLayerType, Union[tf.Operation, None]]]:
+            """
+            :return: Tuple of ClsLayerType and the next layer in layer_group
+            """
+            if not layer_group:
+                return ClsLayerType.Unsupported, None
+            layer = layer_group.pop(0)
+            return convert_to_cls_layer_type(layer)
+
+        # TODO below code is common with PyTorch impl. Move to a common file
+        cls_sets = []
+        first_layer_to_scale = (ClsLayerType.Unsupported, None)
+        while layer_group:
+            while layer_group and first_layer_to_scale[0] is ClsLayerType.Unsupported:
+                first_layer_to_scale = get_next_layer()
+                if first_layer_to_scale[0] is ClsLayerType.Unsupported:
+                    logger.info('Layer %s is not supported. Ignoring for cls', first_layer_to_scale[1])
+
+            second_layer_to_scale = get_next_layer()
+            if first_layer_to_scale[0] == ClsLayerType.Conv:
+                if second_layer_to_scale[0] == ClsLayerType.Conv:
+                    cls_sets.append((first_layer_to_scale[1], second_layer_to_scale[1]))
+                    first_layer_to_scale = second_layer_to_scale
+                elif second_layer_to_scale[0] == ClsLayerType.DepthwiseConv:
+                    if layer_group:
+                        # do not pop third layer yet, determine its type and then pop it
+                        third_layer_to_scale = convert_to_cls_layer_type(layer_group[0])
+                        if third_layer_to_scale[0] == ClsLayerType.Conv:
+                            cls_sets.append(
+                                (first_layer_to_scale[1], second_layer_to_scale[1], third_layer_to_scale[1]))
+                            # adding third_layer_to_scale for the next round of CLS set determination
+                            first_layer_to_scale = get_next_layer()
+                        else:
+                            # unsupported combination encountered
+                            first_layer_to_scale = second_layer_to_scale
+                else:
+                    logger.info('Layer %s is not supported. Ignoring for cls', second_layer_to_scale[1])
+                    first_layer_to_scale = (ClsLayerType.Unsupported, None)
+            elif first_layer_to_scale[0] == ClsLayerType.DepthwiseConv:
+                if second_layer_to_scale[0] == ClsLayerType.Conv:
+                    cls_sets.append((first_layer_to_scale[1], second_layer_to_scale[1]))
+                first_layer_to_scale = second_layer_to_scale
+            else:
+                logger.info('Layer %s is not supported. Ignoring for cls', first_layer_to_scale[1])
+                first_layer_to_scale = second_layer_to_scale
 
         return cls_sets
 

@@ -402,6 +402,74 @@ class TestCrossLayerEqualization(unittest.TestCase):
             assert cls_set_info_list[0].cls_pair_info_list[0].layer1.type == 'Conv2D'
             assert cls_set_info_list[0].cls_pair_info_list[0].layer2.type == 'Conv2D'
 
+    def test_find_layer_groups_to_scale(self):
+        """
+        test conv+conv combination
+        """
+        tf.compat.v1.reset_default_graph()
+        with tf.device('/cpu:0'):
+            model = tf.keras.Sequential((
+                tf.keras.Input(shape=(32, 32, 3,)),
+                tf.keras.layers.Conv2D(32, (3, 3), activation=tf.nn.relu),
+                tf.keras.layers.Conv2D(32, (3, 3), activation=tf.nn.relu),
+                tf.keras.layers.Dense(32, activation=tf.nn.softmax)
+            ))
+            model.summary()
+
+            init = tf.compat.v1.global_variables_initializer()
+            sess = tf.compat.v1.Session()
+            sess.run(init)
+
+            in_t = sess.graph.get_tensor_by_name('input_1:0')
+            in_values = np.random.rand(1, 32, 32, 3)
+            out_1 = sess.run(sess.graph.get_operation_by_name('dense/Softmax').outputs[0], feed_dict={in_t: in_values})
+            # print(out_1)
+
+            sess_updated, cls_set_info_list = CrossLayerScaling.scale_model(sess, 'input_1', 'dense/Softmax')
+            int_t_updated = sess_updated.graph.get_tensor_by_name('input_1:0')
+            out_2 = sess_updated.run(sess_updated.graph.get_operation_by_name('dense/Softmax').outputs[0],
+                                     feed_dict={int_t_updated: in_values})
+
+            assert np.allclose(out_1, out_2)
+            assert len(cls_set_info_list[0].cls_pair_info_list) == 1, 'expect only one supported layer pair'
+            assert cls_set_info_list[0].cls_pair_info_list[0].layer1.type == 'Conv2D'
+            assert cls_set_info_list[0].cls_pair_info_list[0].layer2.type == 'Conv2D'
+
+    def test_find_layer_groups_to_scale_2(self):
+        """
+        test conv+depthwise+conv combination
+        """
+        tf.compat.v1.reset_default_graph()
+        with tf.device('/cpu:0'):
+            model = tf.keras.Sequential((
+                tf.keras.Input(shape=(32, 32, 3,)),
+                tf.keras.layers.Conv2D(32, (3, 3), activation=tf.nn.relu),
+                tf.keras.layers.DepthwiseConv2D(kernel_size=3, depth_multiplier=1),
+                tf.keras.layers.Conv2D(32, (3, 3), activation=tf.nn.relu),
+                tf.keras.layers.Dense(32, activation=tf.nn.softmax)
+            ))
+            model.summary()
+
+            init = tf.compat.v1.global_variables_initializer()
+            sess = tf.compat.v1.Session()
+            sess.run(init)
+
+            in_t = sess.graph.get_tensor_by_name('input_1:0')
+            in_values = np.random.rand(1, 32, 32, 3)
+            out_1 = sess.run(sess.graph.get_operation_by_name('dense/Softmax').outputs[0], feed_dict={in_t: in_values})
+            # print(out_1)
+
+            sess_updated, cls_set_info_list = CrossLayerScaling.scale_model(sess, 'input_1', 'dense/Softmax')
+            int_t_updated = sess_updated.graph.get_tensor_by_name('input_1:0')
+            out_2 = sess_updated.run(sess_updated.graph.get_operation_by_name('dense/Softmax').outputs[0],
+                                     feed_dict={int_t_updated: in_values})
+
+            assert np.allclose(out_1, out_2)
+            assert len(cls_set_info_list[0].cls_pair_info_list) == 2, 'expect two supported layer pair'
+            assert cls_set_info_list[0].cls_pair_info_list[0].layer1.type == 'Conv2D'
+            assert cls_set_info_list[0].cls_pair_info_list[0].layer2.type == 'DepthwiseConv2dNative'
+            assert cls_set_info_list[0].cls_pair_info_list[1].layer1.type == 'DepthwiseConv2dNative'
+            assert cls_set_info_list[0].cls_pair_info_list[1].layer2.type == 'Conv2D'
 
     def test_high_bias_fold_two_bn_folded_convs(self):
         """
