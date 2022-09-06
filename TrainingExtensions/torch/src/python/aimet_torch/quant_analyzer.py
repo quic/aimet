@@ -90,7 +90,6 @@ class QuantAnalyzer:
                  dummy_input: Union[torch.Tensor, Tuple],
                  forward_pass_callback: CallbackFunc,
                  eval_callback: CallbackFunc,
-                 unlabeled_dataset_iterable: Union[DataLoader, Collection] = None,
                  modules_to_ignore: List[torch.nn.Module] = None,
                  ):
         """
@@ -103,10 +102,6 @@ class QuantAnalyzer:
         :param eval_callback: A callback function for model evaluation that determines model
                 performance. This callback function is expected to return scalar value
                 representing the model performance evaluated against entire test/evaluation dataset.
-        :param unlabeled_dataset_iterable: A collection (i.e. iterable with `__len__`)
-                that iterates over an unlabeled dataset. The values yielded by this iterable are expected
-                to be able to be passed directly to the model. This iterable will be used for per
-                layer MSE analysis. If not provided, per layer MSE analysis will be skipped.
         :param modules_to_ignore: Excludes certain modules from being analyzed.
         """
         if not isinstance(forward_pass_callback, CallbackFunc):
@@ -118,8 +113,7 @@ class QuantAnalyzer:
         self._dummy_input = dummy_input
         self._forward_pass_callback = forward_pass_callback
         self._eval_callback = eval_callback
-        if unlabeled_dataset_iterable:
-            self._unlabeled_dataset_iterable = unlabeled_dataset_iterable
+        self._unlabeled_dataset_iterable = None
         self._modules_to_ignore = modules_to_ignore
 
     def analyze(self,
@@ -171,6 +165,17 @@ class QuantAnalyzer:
         # Export per layer MSE loss between fp32 and quantized output activations.
         if self._unlabeled_dataset_iterable:
             self._export_per_layer_mse_loss(sim, results_dir)
+
+    def enable_per_layer_mse_loss(self, unlabeled_dataset_iterable: Union[DataLoader, Collection]):
+        """
+        Enable per layer MSE loss analysis.
+
+        :param unlabeled_dataset_iterable: A collection (i.e. iterable with `__len__`)
+                that iterates over an unlabeled dataset. The values yielded by this iterable are expected
+                to be able to be passed directly to the model.
+        """
+        # TODO: Make per layer MSE loss analysis as part of top level API.
+        self._unlabeled_dataset_iterable = unlabeled_dataset_iterable
 
     def _create_quantsim_and_encodings(self, quant_scheme: QuantScheme, default_param_bw: int,
                                        default_output_bw: int, config_file: str) \
