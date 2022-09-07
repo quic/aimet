@@ -111,14 +111,19 @@ class TestQuantsimConfig:
                     assert module.input_quantizers[0].enabled
                 else:
                     assert not module.input_quantizers[0].enabled
-                assert module.output_quantizers[0].enabled
+                if name in ["conv1", "conv2"]:
+                    # Output quantizers of conv1 and conv2 are
+                    # disabled due to the subsequent batchnorm
+                    assert not module.output_quantizers[0].enabled
+                else:
+                    assert module.output_quantizers[0].enabled
                 assert not module.input_quantizers[0].use_symmetric_encodings
                 assert not module.output_quantizers[0].use_symmetric_encodings
-                if module.param_quantizers:
-                    for _, param_quantizer in module.param_quantizers.items():
-                        assert not param_quantizer.enabled
-                        assert param_quantizer.use_symmetric_encodings
-                        assert len(param_quantizer._cppOp) > 1
+
+                for _, param_quantizer in module.param_quantizers.items():
+                    assert not param_quantizer.enabled
+                    assert param_quantizer.use_symmetric_encodings
+                    assert len(param_quantizer._cppOp) > 1
 
         if os.path.exists('./data/quantsim_config.json'):
             os.remove('./data/quantsim_config.json')
@@ -157,14 +162,16 @@ class TestQuantsimConfig:
                                    dummy_input=torch.rand(1, 3, 32, 32))
         for _, module in sim.model.named_modules():
             if isinstance(module, QcQuantizeWrapper):
-                if module.param_quantizers:
-                    for param_name, param_quantizer in module.param_quantizers.items():
-                        if param_name == 'weight':
-                            assert param_quantizer.enabled
-                            assert not param_quantizer.use_symmetric_encodings
-                        else:
+                for param_name, param_quantizer in module.param_quantizers.items():
+                    if param_name == 'weight':
+                        if module in (sim.model.bn1, sim.model.bn2):
                             assert not param_quantizer.enabled
-                            assert param_quantizer.use_symmetric_encodings
+                        else:
+                            assert param_quantizer.enabled
+                        assert not param_quantizer.use_symmetric_encodings
+                    else:
+                        assert not param_quantizer.enabled
+                        assert param_quantizer.use_symmetric_encodings
         if os.path.exists('./data/quantsim_config.json'):
             os.remove('./data/quantsim_config.json')
 
@@ -296,8 +303,10 @@ class TestQuantsimConfig:
             if isinstance(module, QcQuantizeWrapper):
                 if isinstance(module._module_to_wrap, torch.nn.Conv2d):
                     assert module.input_quantizers[0].enabled
-                    assert not module.input_quantizers[0].use_symmetric_encodings
-                    assert not module.output_quantizers[0].use_symmetric_encodings
+                    if name in ["conv1", "conv2"]:
+                        assert not module.output_quantizers[0].enabled
+                    else:
+                        assert module.output_quantizers[0].enabled
                 else:
                     # Output of add op is input quantized
                     if name == 'relu3':
@@ -305,16 +314,17 @@ class TestQuantsimConfig:
                     else:
                         assert not module.input_quantizers[0].enabled
                     assert module.output_quantizers[0].enabled
-                    assert not module.input_quantizers[0].use_symmetric_encodings
-                    assert not module.output_quantizers[0].use_symmetric_encodings
-                if module.param_quantizers:
-                    for param_name, param_quantizer in module.param_quantizers.items():
-                        if isinstance(module._module_to_wrap, torch.nn.Conv2d) and param_name == 'bias':
-                            assert param_quantizer.enabled
-                            assert not param_quantizer.use_symmetric_encodings
-                        else:
-                            assert not param_quantizer.enabled
-                            assert param_quantizer.use_symmetric_encodings
+
+                assert not module.input_quantizers[0].use_symmetric_encodings
+                assert not module.output_quantizers[0].use_symmetric_encodings
+
+                for param_name, param_quantizer in module.param_quantizers.items():
+                    if isinstance(module._module_to_wrap, torch.nn.Conv2d) and param_name == 'bias':
+                        assert param_quantizer.enabled
+                        assert not param_quantizer.use_symmetric_encodings
+                    else:
+                        assert not param_quantizer.enabled
+                        assert param_quantizer.use_symmetric_encodings
         if os.path.exists('./data/quantsim_config.json'):
             os.remove('./data/quantsim_config.json')
 
@@ -799,7 +809,7 @@ class TestQuantsimConfig:
             "op_type": {},
             "supergroups": [
                 {
-                    "op_list": ["Conv", "BatchNormalization"]
+                    "op_list": ["Conv", "Relu"]
                 },
                 {
                     "op_list": ["Relu", "MaxPool"]
@@ -820,22 +830,34 @@ class TestQuantsimConfig:
         sim = QuantizationSimModel(model, quant_scheme=QuantScheme.post_training_tf_enhanced,
                                    config_file='./data/quantsim_config.json',
                                    in_place=True, dummy_input=torch.rand(1, 3, 32, 32))
+
+        # Expected supergroups: (square bracket indicates a supergroup)
+        # in -> [conv1->bn1->relu1->maxpool] -> [conv2->bn2->relu2] -> [conv3->relu3->avgpool] -> [conv4] -> [fc] -> out
+
         for _, module in sim.model.named_modules():
             if isinstance(module, QcQuantizeWrapper):
-                # Check configs for starts of supergroups
-                if module in [model.conv1, model.relu1, model.conv2, model.conv3]:
-                    assert not module.output_quantizers[0].enabled
-                # Check configs for middle ops in supergroups
-                elif module == model.relu3:
-                    assert not module.input_quantizers[0].enabled
-                    assert not module.output_quantizers[0].enabled
-                # Check configs for ends of supergroups
-                elif module in [model.bn1, model.maxpool, model.bn2, model.avgpool, model.relu2]:
-                    assert not module.input_quantizers[0].enabled
-                    assert module.output_quantizers[0].enabled
-                else:
-                    assert not module.input_quantizers[0].enabled
-                    assert module.output_quantizers[0].enabled
+                # All input quantizers are disabled by config
+                assert not module.input_quantizers[0].enabled
+
+        # First supergroup
+        assert not sim.model.conv1.output_quantizers[0].enabled
+        assert not sim.model.bn1.output_quantizers[0].enabled
+        assert not sim.model.relu1.output_quantizers[0].enabled
+        assert sim.model.maxpool.output_quantizers[0].enabled
+
+        # Second supergroup
+        assert not sim.model.conv2.output_quantizers[0].enabled
+        assert not sim.model.bn2.output_quantizers[0].enabled
+        assert sim.model.relu2.output_quantizers[0].enabled
+
+        # Third supergroup
+        assert not model.conv3.output_quantizers[0].enabled
+        assert not sim.model.relu3.output_quantizers[0].enabled
+        assert sim.model.avgpool.output_quantizers[0].enabled
+
+        # Supergroups with only one operation
+        assert model.conv4.output_quantizers[0].enabled
+        assert model.fc.output_quantizers[0].enabled
 
         if os.path.exists('./data/quantsim_config.json'):
             os.remove('./data/quantsim_config.json')
@@ -974,12 +996,14 @@ class TestQuantsimConfig:
         sim = QuantizationSimModel(model, quant_scheme=QuantScheme.post_training_tf_enhanced,
                                    config_file='./data/quantsim_config.json',
                                    in_place=True, dummy_input=torch.rand(1, 3, 32, 32))
-        for _, module in sim.model.named_modules():
-            if isinstance(module, QcQuantizeWrapper):
-                # Check configs for starts of supergroups
-                if module == model.relu3:
-                    # If add were not part of the supergroup, relu's input quantizer would be enabled
-                    assert not module.input_quantizers[0].enabled
+
+        # Expected supergroups: (square bracket indicates a supergroup)
+        # in -> [conv1] -> [bn1]-> ... -> [conv3] -----> [(+)->relu3->avgpool] -> [fc] -> out
+        #                           |                      ^
+        #                           +--> [conv4] -> [ada] -+
+
+        # If add were not part of the supergroup, relu's input quantizer would be enabled
+        assert not sim.model.relu3.input_quantizers[0].enabled
 
         if os.path.exists('./data/quantsim_config.json'):
             os.remove('./data/quantsim_config.json')
@@ -1015,7 +1039,7 @@ class TestQuantsimConfig:
         for _, module in sim.model.named_modules():
             if isinstance(module, QcQuantizeWrapper):
                 # Check configs for starts of supergroups
-                if module == model.add:
+                if module in [model.add, model.conv1, model.conv2]:
                     # If add were not part of the supergroup, relu's input quantizer would be enabled
                     assert not module.output_quantizers[0].enabled
                 else:
@@ -1119,13 +1143,19 @@ class TestQuantsimConfig:
                     assert module.input_quantizers[0].enabled
                 else:
                     assert not module.input_quantizers[0].enabled
-                assert module.output_quantizers[0].enabled
+                if name in ["conv1", "conv2"]:
+                    # Output quantizers of conv1 and conv2 are
+                    # disabled due to the subsequent batchnorm
+                    assert not module.output_quantizers[0].enabled
+                else:
+                    assert module.output_quantizers[0].enabled
                 assert not module.input_quantizers[0].use_symmetric_encodings
                 assert not module.output_quantizers[0].use_symmetric_encodings
-                if module.param_quantizers:
-                    for _, param_quantizer in module.param_quantizers.items():
-                        assert not param_quantizer.enabled
-                        assert param_quantizer.use_symmetric_encodings
+
+                for _, param_quantizer in module.param_quantizers.items():
+                    assert not param_quantizer.enabled
+                    assert param_quantizer.use_symmetric_encodings
+                    assert len(param_quantizer._cppOp) == 1
 
         if os.path.exists('./data/quantsim_config.json'):
             os.remove('./data/quantsim_config.json')

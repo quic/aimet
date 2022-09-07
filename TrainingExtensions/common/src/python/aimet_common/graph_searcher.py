@@ -120,33 +120,37 @@ class GraphSearcher:
 
     def _find_patterns_apply_actions(self, op,
                                      pattern_matcher: PatternMatcher,
-                                     visited_nodes) -> None:
+                                     visited_nodes,
+                                     ignore=None) -> None:
         """
         Finds all patterns in the graph using DFS with sliding window based pattern matcher
         :param op: starting op as connected graph op
         :param pattern_matcher: pattern matcher instance
         :param visited_nodes: list of ops visited to avoid loops during search
+        :param ignore: List of operations to ignore during searching
         :return: None
         """
-
         if op and op in visited_nodes:
             return
 
-        # sliding window stores the op and the type
-        self.sliding_window.append_to_sliding_window(op)
-        op_types_sliding_window = self.sliding_window.get_sub_graph_type_pattern()
+        if ignore and op in ignore:
+            pass
+        else:
+            # sliding window stores the op and the type
+            self.sliding_window.append_to_sliding_window(op)
+            op_types_sliding_window = self.sliding_window.get_sub_graph_type_pattern()
 
-        # we get the index in the sliding window and the matched pattern back from pattern matcher
-        matched_patterns_start_indices_dict = pattern_matcher.get_matching_patterns(op_types_sliding_window)
+            # we get the index in the sliding window and the matched pattern back from pattern matcher
+            matched_patterns_start_indices_dict = pattern_matcher.get_matching_patterns(op_types_sliding_window)
 
-        if matched_patterns_start_indices_dict:
-            for matched_pattern in matched_patterns_start_indices_dict.keys():
-                for i in matched_patterns_start_indices_dict[matched_pattern]:
-                    # we need to call appropriate handler here based on the matched length and the starting op type
-                    op_subset = list(itertools.islice(self.sliding_window.get_op_sliding_window(), i,
-                                                      i+len(matched_pattern.pattern)))
-                    logger.info('...... subset to store %s', op_subset)
-                    matched_pattern.action(matched_pattern, op_subset)
+            if matched_patterns_start_indices_dict:
+                for matched_pattern in matched_patterns_start_indices_dict.keys():
+                    for i in matched_patterns_start_indices_dict[matched_pattern]:
+                        # we need to call appropriate handler here based on the matched length and the starting op type
+                        op_subset = list(itertools.islice(self.sliding_window.get_op_sliding_window(), i,
+                                                          i+len(matched_pattern.pattern)))
+                        logger.info('...... subset to store %s', op_subset)
+                        matched_pattern.action(matched_pattern, op_subset)
 
         # mark visited node
         visited_nodes.add(op)
@@ -156,15 +160,16 @@ class GraphSearcher:
         if op.output:
             for consumer in op.output.consumers:
                 GraphSearcher._find_patterns_apply_actions(self, consumer, pattern_matcher,
-                                                           visited_nodes)
+                                                           visited_nodes, ignore=ignore)
         # Done with the op, if this op in sliding window, remove it
         if op in self.sliding_window.current_op_window:
             self.sliding_window.remove_op_from_sliding_window(op)
 
-    def find_all_patterns_in_graph_apply_actions(self):
+    def find_all_patterns_in_graph_apply_actions(self, ignore=None):
         """
-         Finds all conv and linear layers with bn and activations if present
-         :return: None
+        Finds all conv and linear layers with bn and activations if present
+        :param ignore: List of operations to ignore during searching
+        :return: None
         """
 
         # Find the input node(s) in the graph
@@ -184,4 +189,4 @@ class GraphSearcher:
 
             # perform DFS with sliding window
             GraphSearcher._find_patterns_apply_actions(self, op, pattern_matcher,
-                                                       visited_nodes)
+                                                       visited_nodes, ignore=ignore)

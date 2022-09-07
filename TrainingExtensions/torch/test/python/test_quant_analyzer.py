@@ -169,7 +169,7 @@ class TestQuantAnalyzer:
         enabled_quantizers = quant_analyzer._get_enabled_param_quantizers(sim)
 
         # total 7 param quantizers are enabled as per default config file.
-        assert len(enabled_quantizers) == 7
+        assert len(enabled_quantizers) == 5
 
     def test_perform_per_layer_analysis_by_enabling_quant_wrappers(self):
         """ test perform per layer analysis by enabling quant wrappers """
@@ -190,7 +190,7 @@ class TestQuantAnalyzer:
                 quant_analyzer._perform_per_layer_analysis_by_enabling_quant_wrappers(sim, results_dir="./tmp/")
             print(layer_wise_eval_score_dict)
             assert type(layer_wise_eval_score_dict) == dict
-            assert len(layer_wise_eval_score_dict) == 12
+            assert len(layer_wise_eval_score_dict) == 10
 
             # test whether layer_wise_eval_score_dict consists of correct keys (module names).
             for quant_wrapper_name in layer_wise_eval_score_dict.keys():
@@ -221,7 +221,7 @@ class TestQuantAnalyzer:
                 quant_analyzer._perform_per_layer_analysis_by_disabling_quant_wrappers(sim, results_dir="./tmp/")
             print(layer_wise_eval_score_dict)
             assert type(layer_wise_eval_score_dict) == dict
-            assert len(layer_wise_eval_score_dict) == 12
+            assert len(layer_wise_eval_score_dict) == 10
 
             # test whether layer_wise_eval_score_dict consists of correct keys (module names).
             for quant_wrapper_name in layer_wise_eval_score_dict.keys():
@@ -291,7 +291,7 @@ class TestQuantAnalyzer:
             quant_analyzer._export_per_layer_stats_histogram(sim, results_dir="./tmp/")
             assert os.path.exists("./tmp/activations_pdf")
             assert os.path.exists("./tmp/weights_pdf")
-            assert os.path.isfile("./tmp/activations_pdf/conv1_output_0.html")
+            assert os.path.isfile("./tmp/activations_pdf/bn1_output_0.html")
             assert os.path.isfile("./tmp/weights_pdf/conv1/conv1_weight_0.html")
             assert os.path.isfile("./tmp/weights_pdf/conv1/conv1_weight_31.html")
             assert os.path.isfile("./tmp/weights_pdf/conv2/conv2_weight_0.html")

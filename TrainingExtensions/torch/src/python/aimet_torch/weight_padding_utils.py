@@ -80,6 +80,11 @@ def weight_pad(sim: QuantizationSimModel, layer_bw_dict: Dict[str, WeightPadding
         if 'weight' in param_quant_dict and bw_values.target_kernel_bw > bw_values.simulated_bw:
             # access weights associated with param quantizer per layer
             param_weight_quant = param_quant_dict['weight']
+
+            # Skip padding if weight quantizer is not enabled
+            if not param_weight_quant.enabled:
+                continue
+
             layer_weight = layer._module_to_wrap.weight
 
             # compute encodings with lower simulated bitwidth
