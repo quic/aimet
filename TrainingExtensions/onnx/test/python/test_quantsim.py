@@ -41,62 +41,10 @@ import torch
 import numpy as np
 from onnx import onnx_pb, helper, numpy_helper, OperatorSetIdProto, load_model
 from aimet_onnx.quantsim import QuantizationSimModel
+from aimet_onnx.test_models import build_dummy_model
 from aimet_onnx.qc_quantize_op import OpMode, reset_qc_quantize_op_dict
 from aimet_torch.quantsim import QuantizationSimModel as PtQuantizationSimModel
 from aimet_torch.examples.test_models import SingleResidual
-
-
-def build_dummy_model():
-    """
-    Dummy onnx model built to be tested
-    """
-    op = OperatorSetIdProto()
-    op.version = 13
-    input_info = helper.make_tensor_value_info(name='input', elem_type=onnx_pb.TensorProto.FLOAT,
-                                                    shape=[1, 3, 32, 32])
-
-    output_info = helper.make_tensor_value_info(name='output', elem_type=onnx_pb.TensorProto.FLOAT,
-                                                     shape=[1, 10])
-    conv_node = helper.make_node('Conv',
-                                      ['input', 'conv_w', 'conv_b'],
-                                      ['3'],
-                                      'conv',
-                                      kernel_shape=[3, 3],
-                                      pads=[1, 1, 1, 1],)
-    relu_node = helper.make_node('Relu',
-                                      ['3'],
-                                      ['4'],
-                                      'relu')
-    maxpool_node = helper.make_node('MaxPool',
-                                         ['4'],
-                                         ['5'],
-                                         'maxpool',
-                                         kernel_shape=[3, 3],
-                                         pads=[1, 1, 1, 1],
-                                         strides=[2, 2],
-                                         )
-
-    flatten_node = helper.make_node('Flatten',
-                                         ['5'],
-                                         ['6'],
-                                         'flatten')
-    fc_node = helper.make_node('Gemm',
-                                    ['6', 'fc_w', 'fc_b'],
-                                    ['output'],
-                                    'fc')
-
-    conv_w_init = numpy_helper.from_array(np.random.rand(1, 3, 3, 3).astype(np.float32), 'conv_w')
-    conv_b_init = numpy_helper.from_array(np.random.rand(1).astype(np.float32), 'conv_b')
-    fc_w_init = numpy_helper.from_array(np.random.rand(256, 10).astype(np.float32), 'fc_w')
-    fc_b_init = numpy_helper.from_array(np.random.rand(10).astype(np.float32), 'fc_b')
-
-    onnx_graph = helper.make_graph([conv_node, relu_node, maxpool_node, flatten_node, fc_node],
-                                        'dummy_graph', [input_info], [output_info],
-                                        [conv_w_init, conv_b_init, fc_w_init, fc_b_init])
-
-    model = helper.make_model(onnx_graph, opset_imports=[op])
-
-    return model
 
 
 class DummyModel(SingleResidual):
@@ -179,9 +127,9 @@ class TestQuantSim:
             session.run(None, in_tensor)
 
         sim.compute_encodings(callback, None)
-        encodings = sim.encodings
-        for name, encoding in encodings.items():
-            assert encoding.bw == 8
+
+        for name, qc_op in sim.get_qc_quantize_op().items():
+            assert qc_op.encodings.bw == 8
 
         for name, qc_op in sim.get_qc_quantize_op().items():
             assert qc_op.tensor_quantizer.isEncodingValid is True
