@@ -36,6 +36,8 @@
 #  @@-COPYRIGHT-END-@@
 # =============================================================================
 
+import os
+import shutil
 import logging
 import unittest
 import unittest.mock
@@ -48,7 +50,7 @@ import torch.nn.functional as functional
 from aimet_common.utils import AimetLogger
 from aimet_common.defs import QuantizationDataType
 from aimet_torch.utils import to_numpy, create_fake_data_loader, compute_encoding_for_given_bitwidth,\
-    create_encoding_from_dict
+    create_encoding_from_dict, CachedDataset
 from aimet_torch.quantsim import QuantizationSimModel
 from aimet_torch.qc_quantize_op import StaticGridQuantWrapper, QuantScheme
 from aimet_torch.examples.test_models import TinyModel
@@ -89,18 +91,25 @@ class TestAdaroundOptimizer(unittest.TestCase):
         batch_size = 10
         image_size = (3, 32, 32)
         data_loader = create_fake_data_loader(dataset_size, batch_size, image_size)
-        opt_params = AdaroundHyperParameters(num_iterations=10, reg_param=0.01, beta_range=(20, 2),
-                                             warm_start=warm_start)
+        path = './tmp/cached_dataset/'
+        try:
+            cached_dataset = CachedDataset(data_loader, dataset_size // batch_size, path)
 
-        AdaroundOptimizer.adaround_module(module, quant_module, model, sim.model, None, data_loader, opt_params)
+            opt_params = AdaroundHyperParameters(num_iterations=10, reg_param=0.01, beta_range=(20, 2),
+                                                 warm_start=warm_start)
 
-        after_opt = quant_module.param_quantizers['weight'].alpha
+            AdaroundOptimizer.adaround_module(module, quant_module, model, sim.model, None, cached_dataset, opt_params)
 
-        # parameter should be different before and after optimization
-        self.assertFalse(np.array_equal(to_numpy(before_opt), to_numpy(after_opt)))
+            after_opt = quant_module.param_quantizers['weight'].alpha
 
-        # alpha's gradient should not be None
-        self.assertTrue(quant_module.param_quantizers['weight'].alpha.grad is not None)
+            # parameter should be different before and after optimization
+            self.assertFalse(np.array_equal(to_numpy(before_opt), to_numpy(after_opt)))
+
+            # alpha's gradient should not be None
+            self.assertTrue(quant_module.param_quantizers['weight'].alpha.grad is not None)
+        finally:
+            if os.path.isdir(path):
+                shutil.rmtree(path)
 
     def test_optimize_rounding_with_only_recons_loss(self):
         """ test optimize layer rounding with reconstruction loss """
@@ -112,15 +121,6 @@ class TestAdaroundOptimizer(unittest.TestCase):
         """ test optimize layer rounding with combined loss """
         warm_start = 0.2
         self._optimize_layer_rounding(warm_start)
-
-    def test_split_val_into_chunks(self):
-        """ Test split value logic """
-        splits = AdaroundOptimizer._split_into_chunks(10, 2)
-        self.assertEqual(splits, [5, 5])
-        splits = AdaroundOptimizer._split_into_chunks(32, 3)
-        self.assertEqual(splits, [10, 11, 11])
-        splits = AdaroundOptimizer._split_into_chunks(10000, 3)
-        self.assertEqual(splits, [3333, 3333, 3334])
 
     def test_compute_recons_metrics(self):
         """ Test compute reconstruction metrics function """
