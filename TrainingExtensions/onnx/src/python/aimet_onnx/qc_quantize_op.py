@@ -46,6 +46,7 @@ from aimet_common.defs import QuantScheme, MAP_QUANT_SCHEME_TO_PYMO, MAP_ROUND_M
 
 
 qc_quantize_op_dict = {}
+TF_ENHANCED_OFFSET_FACTOR = 0
 TF_ENHANCED_STRIDE_FACTOR = 2
 
 
@@ -74,8 +75,7 @@ def reset_qc_quantize_op_dict():
     Reset qc_quantize_op dict to prevent overwrite
     """
     global qc_quantize_op_dict
-    for key in list(qc_quantize_op_dict.keys()):
-        del qc_quantize_op_dict[key]
+    qc_quantize_op_dict.clear()
 
 
 class OpMode(Enum):
@@ -179,7 +179,8 @@ class QcQuantizeOp:
                 output = in_tensor
                 if self.quant_scheme == QuantScheme.post_training_tf_enhanced:
                     in_tensor_flatten = in_tensor.reshape(-1)
-                    in_tensor = in_tensor_flatten[0::TF_ENHANCED_STRIDE_FACTOR].astype(np.float32)
+                    in_tensor = \
+                        in_tensor_flatten[TF_ENHANCED_OFFSET_FACTOR::TF_ENHANCED_STRIDE_FACTOR].astype(np.float32)
                 self.tensor_quantizer.updateStats(in_tensor, self.use_cuda)
 
             elif self.op_mode == OpMode.one_shot_quantize_dequantize:

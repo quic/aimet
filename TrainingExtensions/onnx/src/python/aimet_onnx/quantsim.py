@@ -85,7 +85,6 @@ class QuantizationSimModel:
             self.providers = ["CUDAExecutionProvider"]
         else:
             self.providers = ['CPUExecutionProvider']
-        self.encodings = {}
         self.param_names = []
         self.activation_names = []
         self._get_param_names()
@@ -216,7 +215,7 @@ class QuantizationSimModel:
         """
         forward_pass_callback(self.session, forward_pass_callback_args)
         for op_name, qc_op in self.qc_quantize_op_dict.items():
-            self.encodings[op_name] = qc_op.compute_encodings()
+            qc_op.compute_encodings()
             if op_name in self.activation_names:
                 qc_op.set_mode(OpMode.quantize_dequantize)
 
