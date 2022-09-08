@@ -175,6 +175,10 @@ class QuantAnalyzer:
                 to be able to be passed directly to the model.
         """
         # TODO: Make per layer MSE loss analysis as part of top level API.
+        if len(unlabeled_dataset_iterable) < DEFAULT_NUM_BATCHES:
+            raise ValueError(f'Can not fetch {DEFAULT_NUM_BATCHES} batches from '
+                             f'a data loader of length {len(unlabeled_dataset_iterable)}.')
+
         self._unlabeled_dataset_iterable = unlabeled_dataset_iterable
 
     def _create_quantsim_and_encodings(self, quant_scheme: QuantScheme, default_param_bw: int,
@@ -831,6 +835,7 @@ class QuantAnalyzer:
         orig_module_collector = utils.ModuleData(fp32_model, module)
         quant_module_collector = utils.ModuleData(sim.model, quant_wrapper)
 
+        total = 0
         loss = 0.0
         batch_index = 0
         for model_inputs in self._unlabeled_dataset_iterable:
@@ -842,11 +847,12 @@ class QuantAnalyzer:
                                                                           collect_input=False,
                                                                           collect_output=True)
             loss += torch.nn.functional.mse_loss(fp32_out_acts, quantized_out_acts).item()
+            total += fp32_out_acts.size(0)
             batch_index += 1
             if batch_index == DEFAULT_NUM_BATCHES:
                 break
 
-        average_loss = loss/batch_index
+        average_loss = loss/total
         return average_loss
 
     @staticmethod
