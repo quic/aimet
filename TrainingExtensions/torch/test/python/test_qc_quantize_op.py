@@ -540,7 +540,7 @@ class TestQcQuantizeOpLearnedGrid:
                                             quant_scheme=QuantScheme.training_range_learning_with_tf_init, device='cpu')
 
         inputs = torch.tensor([[True, True, False, False]])
-        quant_out = quantizer._quantize_activation(inputs, quantizer.output_quantizers, 'output')
+        quant_out = quantizer._quantize_activation(inputs, quantizer.output_quantizers, 'output')[0]
         expected_output = torch.tensor([True, True, False, False])
         assert torch.equal(quant_out, expected_output)
 
