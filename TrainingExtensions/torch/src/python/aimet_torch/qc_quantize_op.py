@@ -807,18 +807,24 @@ class LearnedGridQuantWrapper(QcQuantizeWrapper):
         self.apply_gating_logic()
 
         # Quantize inputs
-        quantized_inputs = self._quantize_activation(inputs, self.input_quantizers, 'input')
-        if isinstance(quantized_inputs, torch.Tensor):
-            quantized_inputs = [quantized_inputs]
+        torch_inputs = custom_tensor_utils.to_torch_tensor(inputs)
+        quantized_inputs = self._quantize_activation(torch_inputs, self.input_quantizers, 'input')
 
         with self._quantize_params(quantized_inputs):
+            quantized_inputs = custom_tensor_utils.to_custom_tensor(inputs, quantized_inputs)
             # Call the forward of the wrapped module
             wrapped_output = self._module_to_wrap(*quantized_inputs)
 
         # Quantize the outputs
-        if isinstance(wrapped_output, torch.Tensor):
+        if not isinstance(wrapped_output, (List, Tuple)):
             wrapped_output = [wrapped_output]
-        output = self._quantize_activation(wrapped_output, self.output_quantizers, 'output')
+
+        torch_outputs = custom_tensor_utils.to_torch_tensor(wrapped_output)
+        output = self._quantize_activation(torch_outputs, self.output_quantizers, 'output')
+        output = custom_tensor_utils.to_custom_tensor(wrapped_output, output)
+
+        if len(output) == 1:
+            output = output[0]
 
         return output
 
@@ -872,9 +878,6 @@ class LearnedGridQuantWrapper(QcQuantizeWrapper):
             encoding_max = getattr(self, type_of_quantizer + str(index) + '_encoding_max')
             quantized_tensors.append(tensor_quantizers[index].quantize_dequantize(tensor_to_quantize, encoding_min,
                                                                                   encoding_max))
-        # Flatten if there is only one output - which is by far the most common case
-        if len(quantized_tensors) == 1:
-            quantized_tensors = quantized_tensors[0]
         return quantized_tensors
 
 
