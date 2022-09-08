@@ -648,7 +648,7 @@ class TestOnnxUtils:
         """
         class Net(torch.nn.Module):
             """
-            Model using torch.nn.LSTM module
+            Model using multiply as functional and module at different depths
             """
             def __init__(self):
                 super().__init__()
