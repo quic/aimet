@@ -43,6 +43,7 @@ from typing import Union, List, Tuple, Dict, Set
 import os
 import copy
 from collections import defaultdict
+import logging
 import torch
 import torch.nn as nn
 import torch.onnx.symbolic_caffe2
@@ -104,6 +105,24 @@ pytorch_functional_name_to_onnx_dict = {
     'mul': 'Mul',
     'div': 'Div'
 }
+
+
+def export_to_onnx(*args, **kwargs):
+    """ 
+    A wrapper function to export torch module to onnx
+
+    `enable_checker` is ignored for pytorch >= 1.10
+    """
+    enable_checker = kwargs.get('enable_onnx_checker', None)
+    if version.parse(torch.__version__) >= version.parse("1.10") and not enable_checker:
+        logging.warning('Export torch module to onnx with `enable_onnx_checker` deprecated')
+        kwargs.pop('enable_onnx_checker')
+        try:
+            torch.onnx.export(*args, **kwargs)
+        except torch.onnx.utils.ONNXCheckerError as e:
+            logging.error('Error when exporting to onnx: {}, could be ignored'.format(e))
+    else:
+        torch.onnx.export(*args, **kwargs)
 
 
 if version.parse(torch.__version__) >= version.parse("1.9"):
@@ -661,10 +680,18 @@ class OnnxSaver:
             with aimet_torch.utils.in_eval_mode(model), torch.no_grad():
                 dummy_output = model(*dummy_input)
             scripted_model = torch.jit.script(model)
-            torch.onnx.export(scripted_model, dummy_input, temp_file, example_outputs=dummy_output,
-                              enable_onnx_checker=False, **onnx_export_args.kwargs)
+            export_to_onnx(scripted_model,
+                           dummy_input,
+                           temp_file, 
+                           example_outputs=dummy_output,
+                           enable_onnx_checker=False,
+                           **onnx_export_args.kwargs)
         else:
-            torch.onnx.export(model, dummy_input, temp_file, enable_onnx_checker=False, **onnx_export_args.kwargs)
+            export_to_onnx(model,
+                           dummy_input,
+                           temp_file,
+                           enable_onnx_checker=False,
+                           **onnx_export_args.kwargs)
         onnx_model = onnx.load(temp_file)
         return onnx_model
 
