@@ -40,8 +40,9 @@ import torch
 from torch import nn
 import spconv.pytorch as spconv
 
+from aimet_common.defs import QuantScheme
 from aimet_torch.qc_quantize_op import StaticGridQuantWrapper, StaticGridPerTensorQuantizer,\
-    StaticGridPerChannelQuantizer
+    StaticGridPerChannelQuantizer, LearnedGridQuantWrapper, LearnedGridTensorQuantizer
 from aimet_torch.quantsim import QuantizationSimModel
 from aimet_common.libpymo import TfEncoding
 
@@ -133,3 +134,45 @@ class TestSparseConv(unittest.TestCase):
         for encoding in sim.model.conv.param_quantizers['weight'].encoding:
             self.assertTrue(isinstance(encoding, TfEncoding))
         self.assertTrue(isinstance(sim.model.conv.output_quantizer.encoding, TfEncoding))
+
+    def test_sparse_conv_qat(self):
+        dummy_input = torch.rand(1, 1, 5, 5)
+        spconv_model = SpconvModel()
+
+        def dummy_forward(model, args):
+            model.eval()
+            with torch.no_grad():
+                model(dummy_input)
+
+        sim = QuantizationSimModel(spconv_model, dummy_input,
+                                   quant_scheme=QuantScheme.training_range_learning_with_tf_init)
+        sim.compute_encodings(dummy_forward, None)
+
+        # Check if correct Quantizers are created
+        self.assertTrue(isinstance(sim.model.conv, LearnedGridQuantWrapper))
+        self.assertTrue(isinstance(sim.model.conv.param_quantizers['weight'], LearnedGridTensorQuantizer))
+        self.assertTrue(isinstance(sim.model.conv.param_quantizers['bias'], LearnedGridTensorQuantizer))
+        self.assertTrue(isinstance(sim.model.conv.output_quantizer, LearnedGridTensorQuantizer))
+        self.assertTrue(isinstance(sim.model.conv.input_quantizer, LearnedGridTensorQuantizer))
+
+        # Check if gradients for weights are initialized as None
+        self.assertEqual(sim.model.conv._module_to_wrap.weight.grad, None)
+
+        # Check if gradients for encodings are initialized as None
+        self.assertEqual(sim.model.conv.output0_encoding_max.grad, None)
+        self.assertEqual(sim.model.conv.output0_encoding_min.grad, None)
+        self.assertEqual(sim.model.conv.weight_encoding_max.grad, None)
+        self.assertEqual(sim.model.conv.weight_encoding_min.grad, None)
+
+        output = sim.model(dummy_input)
+        loss = output.flatten().sum()
+        loss.backward()
+
+        # Check if gradients for weights are calculated
+        self.assertTrue(isinstance(sim.model.conv._module_to_wrap.weight.grad, torch.Tensor))
+
+        # Check if gradients for encodings are calculated
+        self.assertTrue(isinstance(sim.model.conv.output0_encoding_max.grad, torch.Tensor))
+        self.assertTrue(isinstance(sim.model.conv.output0_encoding_min.grad, torch.Tensor))
+        self.assertTrue(isinstance(sim.model.conv.weight_encoding_max.grad, torch.Tensor))
+        self.assertTrue(isinstance(sim.model.conv.weight_encoding_min.grad, torch.Tensor))
