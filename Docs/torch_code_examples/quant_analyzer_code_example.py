@@ -120,7 +120,7 @@ def quant_analyzer_example():
                                    dummy_input=dummy_input,
                                    forward_pass_callback=forward_pass_callback_fn,
                                    eval_callback=eval_callback_fn)
-    quant_analyzer.enable_per_layer_mse_loss(data_loader=unlabeled_data_loader)
+    quant_analyzer.enable_per_layer_mse_loss(unlabeled_dataset_iterable=unlabeled_data_loader)
     # End step 4
 
     # Step 5. Run QuantAnalyzer
