@@ -37,7 +37,7 @@
 # =============================================================================
 
 """ Modules for functional elementwise ops """
-from typing import Optional, List
+
 import torch
 import torch.nn
 
@@ -114,13 +114,11 @@ class MatMul(torch.nn.Module):
 class Interpolate(torch.nn.Module):
     """ Interpolate module for a functional interpolate"""
     @staticmethod
-    def forward(x: torch.Tensor, size: Optional[int] = None, scale_factor: Optional[List[float]] = None,
-                mode: str = 'nearest', align_corners: Optional[bool] = None,
-                recompute_scale_factor: Optional[bool] = None) -> torch.Tensor:
+    def forward(*args, **kwargs) -> torch.Tensor:
         """
         Forward-pass routine for interpolate op
         """
-        return torch.nn.functional.interpolate(x, size, scale_factor, mode, align_corners, recompute_scale_factor)
+        return torch.nn.functional.interpolate(*args, **kwargs)
 
 
 class DynamicConv2d(torch.nn.Module):

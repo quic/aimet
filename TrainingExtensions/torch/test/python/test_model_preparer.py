@@ -41,6 +41,7 @@ import json
 import random
 import os
 import re
+import shutil
 import copy
 import numpy as np
 import onnx
@@ -67,6 +68,8 @@ from aimet_torch.adaround.adaround_weight import Adaround, AdaroundParameters
 from aimet_torch import bias_correction
 from aimet_torch.meta import connectedgraph_utils
 from aimet_torch.model_preparer import prepare_pt_transformer_for_quantsim
+from aimet_torch import onnx_utils
+
 
 def train(model: torch.nn.Module, data_loader: DataLoader) -> torch.Tensor:
     """
@@ -1322,6 +1325,7 @@ class TestFX:
                 x = torch.nn.functional.interpolate(x, align_corners=False, size=(x.size(2), x.size(3)), mode='bicubic')
                 x = torch.nn.functional.interpolate(x, (x.size(2), x.size(3)), None, 'nearest', None, None)
                 x = torch.nn.functional.interpolate(x, (x.size(2), x.size(3)), mode='bilinear')
+                x = torch.nn.functional.interpolate(x, scale_factor=2)
                 return x
 
         input_shape = (1, 3, 32, 32)
@@ -1330,16 +1334,33 @@ class TestFX:
         model_transformed = prepare_model(model)
         print(model_transformed)
 
+        # Verify bit exact outputs.
         assert torch.equal(model_transformed(dummy_input), model(dummy_input))
         assert isinstance(model_transformed.module_interpolate, elementwise_ops.Interpolate)
         assert isinstance(model_transformed.module_interpolate_1, elementwise_ops.Interpolate)
         assert isinstance(model_transformed.module_interpolate_2, elementwise_ops.Interpolate)
         assert isinstance(model_transformed.module_interpolate_3, elementwise_ops.Interpolate)
+        assert isinstance(model_transformed.module_interpolate_4, elementwise_ops.Interpolate)
 
         # Verify with Quantization workflow.
         sim = QuantizationSimModel(model_transformed, dummy_input=dummy_input)
         sim.compute_encodings(evaluate, forward_pass_callback_args=dummy_input)
         sim.model(dummy_input)
+
+        # Verify that activations encodings are correctly exported.
+        results_dir = os.path.abspath('./data/interpolate/')
+        os.makedirs(results_dir, exist_ok=True)
+        try:
+            sim.export(results_dir, filename_prefix='modified_model', dummy_input=dummy_input,
+                       onnx_export_args=(onnx_utils.OnnxExportApiArgs(opset_version=11)))
+            with open(results_dir + '/modified_model.encodings') as json_file:
+                encoding_data = json.load(json_file)
+
+            # Total 7 encodings for activations.
+            assert len(encoding_data["activation_encodings"]) == 7
+        finally:
+            if os.path.isdir(results_dir):
+                shutil.rmtree(results_dir)
 
     def test_fx_with_quantsim_export_and_encodings(self):
         """ test quantsim export and verify encodings are exported correctly for newly added modules """
@@ -1369,25 +1390,17 @@ class TestFX:
         # Verify Quantization workflow.
         sim = QuantizationSimModel(model_transformed, dummy_input=input_tensor)
         sim.compute_encodings(evaluate, forward_pass_callback_args=input_tensor)
-        sim.export('./data/', filename_prefix='modified_model', dummy_input=input_tensor)
 
-        with open('./data/modified_model.encodings') as json_file:
-            encoding_data = json.load(json_file)
+        # Verify that activations encodings are correctly exported.
+        results_dir = os.path.abspath('./data/verify_sim_export/')
+        os.makedirs(results_dir, exist_ok=True)
 
-        # Total 6 encodings for activations. two inputs, two outputs of Convs and two outputs of Add modules.
-        assert len(encoding_data["activation_encodings"]) == 6
-
-        if os.path.exists('./data/modified_model.pth'):
-            os.remove('./data/modified_model.pth')
-
-        if os.path.exists('./data/modified_model.onnx'):
-            os.remove('./data/modified_model.onnx')
-
-        if os.path.exists('./data/modified_model.encodings.yaml'):
-            os.remove('./data/modified_model.encodings.yaml')
-
-        if os.path.exists('./data/modified_model.encodings'):
-            os.remove('./data/modified_model.encodings')
-
-        if os.path.exists('./data/temp_onnx_model_with_markers.onnx'):
-            os.remove('./data/temp_onnx_model_with_markers.onnx')
+        try:
+            sim.export(results_dir, filename_prefix='modified_model', dummy_input=input_tensor)
+            with open(results_dir + '/modified_model.encodings') as json_file:
+                encoding_data = json.load(json_file)
+            # Total 6 encodings for activations. two inputs, two outputs of Convs and two outputs of Add modules.
+            assert len(encoding_data["activation_encodings"]) == 6
+        finally:
+            if os.path.isdir(results_dir):
+                shutil.rmtree(results_dir)
