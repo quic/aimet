@@ -141,7 +141,7 @@ def visualize_relative_weight_ranges_to_identify_problematic_layers(
     :return: A list of bokeh plots
     """
 
-    file_path = os.path.join(results_dir, 'visualize_changes_after_optimization.html')
+    file_path = os.path.join(results_dir, 'visualize_relative_weight_ranges_to_identify_problematic_layers.html')
     plotting.output_file(file_path)
     subplots = []
     # layer name -> module weights data frame mapping
