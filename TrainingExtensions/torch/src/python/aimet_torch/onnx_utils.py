@@ -189,7 +189,7 @@ class CustomMarkerFunc(torch.autograd.Function):
         Magic method that helps with exporting a custom ONNX node
         """
         # Note: the attribute are listed alphabetically in onnx.NodeProto
-        return g.op('CustomMarker', inp, id_s=identifier, leaf_s=is_leaf, start_s=start)
+        return g.op('aimet_torch::CustomMarker', inp, id_s=identifier, leaf_s=is_leaf, start_s=start)
 
     @staticmethod
     def forward(ctx, inp, _identifier, _start, _is_leaf):     # pylint: disable=arguments-differ
