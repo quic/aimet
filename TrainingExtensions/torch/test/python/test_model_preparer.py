@@ -625,11 +625,17 @@ class TestFX:
         onnx_model = onnx.load('./data/modified_resnet18.onnx')
         node_for_relu = 0
         node_for_add = 0
+        onnx.checker.check_model(onnx_model)
+        module_names = { module_name for module_name, _ in model_transformed.named_modules()}
         for node in onnx_model.graph.node:
             if node.op_type == 'Relu':
                 node_for_relu += 1
             elif node.op_type == 'Add':
                 node_for_add += 1
+
+            if not node.name.startswith('Flatten'):
+                name = node.name.split('#')[0]
+                assert '.'.join(name.split('.')[:-1]) in module_names
 
         # 8 new ReLUs are added.
         assert node_for_relu == 8 + 9

@@ -2754,7 +2754,7 @@ class TestQuantizationSimLearnedGrid:
                          propagate_encodings=True)
         with open('./data/cust_v1_simple.encodings') as json_file:
             activation_encodings = json.load(json_file)['activation_encodings']
-            assert set(['4', '8', 't.1']).issubset(activation_encodings.keys())
+            assert set(['10', '11', 't.1']).issubset(activation_encodings.keys())
 
     def test_custom_op_simple_v2(self):
         """
@@ -2763,7 +2763,7 @@ class TestQuantizationSimLearnedGrid:
         """
         AimetLogger.set_level_for_all_areas(logging.DEBUG)
 
-        cust_model = CustModelV2Simple()
+        cust_model = CustomOpV2()
 
         input_shape = (1, 10, 24, 24)
         dummy_input = torch.randn(*input_shape)
@@ -2786,7 +2786,16 @@ class TestQuantizationSimLearnedGrid:
 
         with open('./data/cust_v2_simple.encodings') as json_file:
             activation_encodings = json.load(json_file)['activation_encodings']
-            assert set(['15', '19', '23', '4', '8', 't.1']).issubset(activation_encodings.keys())
+            assert set(['13', '17', '21', '4', '6', 't.1']).issubset(activation_encodings.keys())
+
+        module_names = { module_name for module_name, _ in cust_model.named_modules()}
+        onnx_model = onnx.load('./data/cust_v2_simple.onnx')
+
+        for node in onnx_model.graph.node:
+            if not node.name.startswith('.'):
+                name = node.name.split('#')[0]
+                assert '.'.join(name.split('.')[:-1]) in module_names
+        onnx.checker.check_model(onnx_model)
 
 
 class CustModelV1Simple(torch.nn.Module):
@@ -2832,15 +2841,14 @@ class CustomOpV2(torch.nn.Module):
     def __init__(self):
         super().__init__()
         self.size = 8
-        self.mul1 = elementwise_ops.Multiply()
-        self.mul2 = elementwise_ops.Multiply()
+        self.mul = elementwise_ops.Multiply()
         self.add = elementwise_ops.Add()
         self.sub = elementwise_ops.Subtract()
         self.clamp = Clamp()
 
     def forward(self, x):
-        y = self.mul1(x, self.size)
-        z = self.mul2(x, 5)
+        y = self.mul(x, self.size)
+        z = x * 5 # functional op
         a = self.clamp(z)
         b = self.add(y, z)
         c = self.sub(y, z)
