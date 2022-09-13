@@ -52,7 +52,7 @@ WORKING_DIR = '/tmp/quantsim/'
 
 
 class QuantizationSimModel:
-    """ Create a QuantizationSimModel model by adding quantization simulations ops to a given model """
+    """ Creates a QuantizationSimModel model by adding quantization simulations ops to a given model """
 
     # pylint: disable=too-many-arguments
     # pylint: disable=too-many-instance-attributes
@@ -64,14 +64,15 @@ class QuantizationSimModel:
                  default_activation_bw: int = 8,
                  use_symmetric_encodings: bool = False, use_cuda: bool = False):
         """
-        Args:
-            model: ONNX model or path to model
-            quant_scheme: Quantization scheme (e.g. QuantScheme.post_training_tf)
-            rounding_mode: Rounding mode (e.g. nearest)
-            default_param_bw: Quantization bitwidth for parameter
-            default_activation_bw: Quantization bitwidth for activation
-            use_symmetric_encodings: True if symmetric encoding is used.  False otherwise.
-            use_cuda: True if using CUDA to run quantization op. False otherwise.
+        Constructor
+        
+        :param model: ONNX model or path to model
+        :param quant_scheme: Quantization scheme (e.g. QuantScheme.post_training_tf)
+        :param rounding_mode: Rounding mode (e.g. nearest)
+        :param default_param_bw: Quantization bitwidth for parameter
+        :param default_activation_bw: Quantization bitwidth for activation
+        :param use_symmetric_encodings: True if symmetric encoding is used.  False otherwise.
+        :param use_cuda: True if using CUDA to run quantization op. False otherwise.
         """
         self.model = ONNXModel(model)
         self.qc_quantize_op_dict = qc_quantize_op_dict
@@ -203,6 +204,7 @@ class QuantizationSimModel:
     def compute_encodings(self, forward_pass_callback, forward_pass_callback_args):
         """
         Compute and return the encodings of each tensor quantizer
+
         :param forward_pass_callback: A callback function that simply runs forward passes on the model. This callback
             function should use representative data for the forward pass, so the calculated encodings work for all
             data samples. This callback internally chooses the number of data samples it wants to use for calculating
@@ -211,7 +213,6 @@ class QuantizationSimModel:
             the user to determine the type of this parameter. E.g. could be simply an integer representing the number
             of data samples to use. Or could be a tuple of parameters or an object representing something more complex.
             If set to None, forward_pass_callback will be invoked with no parameters.
-        :return: encodings
         """
         forward_pass_callback(self.session, forward_pass_callback_args)
         for op_name, qc_op in self.qc_quantize_op_dict.items():
