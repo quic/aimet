@@ -44,12 +44,10 @@ Layer groups: Groups of layers that are immediately connected and can be decompo
 """
 
 from typing import Tuple, List, Union, Dict
-from enum import Enum
 import numpy as np
 import torch
 
-import aimet_common.libpymo as libpymo      # pylint: disable=import-error
-
+import aimet_common.libpymo as libpymo  # pylint: disable=import-error
 from aimet_common.utils import AimetLogger
 from aimet_torch import utils
 from aimet_torch.meta.connectedgraph import ConnectedGraph
@@ -58,23 +56,13 @@ from aimet_torch.utils import get_device, get_ordered_list_of_modules
 
 logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Quant)
 
-
 ClsSet = Union[Tuple[torch.nn.Conv2d, torch.nn.Conv2d],
                Tuple[torch.nn.Conv2d, torch.nn.Conv2d, torch.nn.Conv2d]]
-
-ClsSupportedLayer = Union[torch.nn.Conv1d, torch.nn.Conv2d, torch.nn.ConvTranspose1d, torch.nn.ConvTranspose2d]
 
 ScaleFactor = Union[np.ndarray, Tuple[np.ndarray]]
 
 cls_supported_layers = (torch.nn.Conv2d, torch.nn.ConvTranspose2d, torch.nn.Conv1d, torch.nn.ConvTranspose1d)
 cls_supported_activations = (torch.nn.ReLU, torch.nn.PReLU)
-
-
-class ClsLayerType(Enum):
-    """Enum class to represent CLS layer types"""
-    Unsupported = 0
-    Conv = 1  # Overloaded for conv and ConvTranspose
-    DepthwiseConv = 2
 
 
 class ClsSetInfo:
@@ -131,8 +119,8 @@ class GraphSearchUtils:
     Code to search a model graph to find nodes to use for cross-layer-scaling and high-bias-fold
     """
 
-    def __init__(self, model: torch.nn.Module, input_shapes: Union[Tuple, List[Tuple]]):
-        inp_tensor_list = tuple(utils.create_rand_tensors_given_shapes(input_shapes))
+    def __init__(self, model: torch.nn.Module, dummy_input: Union[torch.Tensor, Tuple]):
+        inp_tensor_list = dummy_input
         self._connected_graph = ConnectedGraph(model, inp_tensor_list)
         self._ordered_module_list = get_ordered_list_of_conv_modules(model, inp_tensor_list)
 
@@ -182,91 +170,25 @@ class GraphSearchUtils:
     def convert_layer_group_to_cls_sets(layer_group):
         """
         Helper function to convert a layer group to a list of cls sets
-        :param layer_group: Given layer group to generate cls sets
+        :param layer_group: Given layer group to conver
         :return: List of cls sets
-
-        Supported layer combinations for CLS are:
-        1. Conv + Conv
-        2. DepthwiseConv + Conv
-        3. Conv + DepthwiseConv + Conv
-
-        Can be rewritten as,
-        Conv
-            -> Conv
-            -> DepthwiseConv
-                -> Conv
-        DepthwiseConv
-            -> Conv
-
-        If a combination is partially supported, the cls_set is completely omitted and restarted from the next
-        supported layer
-        For example: Consider Conv + DepthwiseConv + Depthwise(unsupported)
-        - Since Depthwise(unsupported) is the last layer encountered, we need to omit all the three layers and restart
-        the cls sets from the next supported layer.
-
         """
-
-        # pylint: disable=too-many-branches
-        def convert_to_cls_layer_type(layer: ClsSupportedLayer) -> Tuple[ClsLayerType, ClsSupportedLayer]:
-            """
-            Given the layer, check if its supported in CLS
-            :param layer: layer to check
-            :return: Tuple of ClsLayerType and the layer
-            """
-            if layer.groups == 1:
-                layer_type = ClsLayerType.Conv
-            elif layer.groups == layer.in_channels and layer.in_channels == layer.out_channels:
-                # depthwiseConv layer with depth multiplier = 1
-                layer_type = ClsLayerType.DepthwiseConv
-            else:
-                layer_type = ClsLayerType.Unsupported
-            return layer_type, layer
-
-        def get_next_layer() -> Union[Tuple[ClsLayerType, Union[ClsSupportedLayer, None]]]:
-            """
-            :return: Tuple of ClsLayerType and the next layer in layer_group
-            """
-            if not layer_group:
-                return ClsLayerType.Unsupported, None
-            layer = layer_group.pop(0)
-            return convert_to_cls_layer_type(layer)
-
         cls_sets = []
 
-        first_layer_to_scale = (ClsLayerType.Unsupported, None)
+        prev_layer_to_scale = layer_group.pop(0)
         while layer_group:
-            while layer_group and first_layer_to_scale[0] is ClsLayerType.Unsupported:
-                first_layer_to_scale = get_next_layer()
-                if first_layer_to_scale[0] is ClsLayerType.Unsupported:
-                    logger.info('Layer %s is not supported. Ignoring for cls', first_layer_to_scale[1])
+            next_layer_to_scale = layer_group.pop(0)
 
-            second_layer_to_scale = get_next_layer()
-            if first_layer_to_scale[0] == ClsLayerType.Conv:
-                if second_layer_to_scale[0] == ClsLayerType.Conv:
-                    cls_sets.append((first_layer_to_scale[1], second_layer_to_scale[1]))
-                    first_layer_to_scale = second_layer_to_scale
-                elif second_layer_to_scale[0] == ClsLayerType.DepthwiseConv:
-                    if layer_group:
-                        # do not pop third layer yet, determine its type and then pop it
-                        third_layer_to_scale = convert_to_cls_layer_type(layer_group[0])
-                        if third_layer_to_scale[0] == ClsLayerType.Conv:
-                            cls_sets.append(
-                                (first_layer_to_scale[1], second_layer_to_scale[1], third_layer_to_scale[1]))
-                            # adding third_layer_to_scale for the next round of CLS set determination
-                            first_layer_to_scale = get_next_layer()
-                        else:
-                            # unsupported combination encountered
-                            first_layer_to_scale = second_layer_to_scale
-                else:
-                    logger.info('Layer %s is not supported. Ignoring for cls', second_layer_to_scale[1])
-                    first_layer_to_scale = (ClsLayerType.Unsupported, None)
-            elif first_layer_to_scale[0] == ClsLayerType.DepthwiseConv:
-                if second_layer_to_scale[0] == ClsLayerType.Conv:
-                    cls_sets.append((first_layer_to_scale[1], second_layer_to_scale[1]))
-                first_layer_to_scale = second_layer_to_scale
+            if next_layer_to_scale.groups > 1:
+
+                if layer_group:
+                    next_non_depthwise_conv_layer = layer_group.pop(0)
+                    cls_sets.append((prev_layer_to_scale, next_layer_to_scale, next_non_depthwise_conv_layer))
+                    prev_layer_to_scale = next_non_depthwise_conv_layer
+
             else:
-                logger.info('Layer %s is not supported. Ignoring for cls', first_layer_to_scale[1])
-                first_layer_to_scale = second_layer_to_scale
+                cls_sets.append((prev_layer_to_scale, next_layer_to_scale))
+                prev_layer_to_scale = next_layer_to_scale
 
         return cls_sets
 
@@ -329,7 +251,7 @@ class GraphSearchUtils:
             is_relu_activation_in_cls_set = ()
             for module in cls_set:
                 is_relu_activation_in_cls_set += (self.does_module_have_relu_activation(self._connected_graph,
-                                                                                        module), )
+                                                                                        module),)
 
             if len(is_relu_activation_in_cls_set) == 1:
                 is_relu_activation_in_cls_set = is_relu_activation_in_cls_set[0]
@@ -445,7 +367,6 @@ class CrossLayerScaling:
                                                              prev_layer_params.weightShape))
         cls_set[0].weight.data = cls_set[0].weight.data.type(torch.FloatTensor)
 
-
         # Transpose weight back to N, C, H, W for transposed Conv2D
         if isinstance(cls_set[0], torch.nn.ConvTranspose2d):
             cls_set[0].weight.data = cls_set[0].weight.data.permute(1, 0, 2, 3)
@@ -525,7 +446,6 @@ class CrossLayerScaling:
         next_layer_params.weightShape = np.array(cls_set[2].weight.shape)
         if len(next_layer_params.weightShape) == 3:
             next_layer_params.weightShape = next_layer_params.weightShape + [1]
-
 
         if cls_set[0].bias is not None:
             prev_layer_params.bias = cls_set[0].bias.detach().numpy()
@@ -621,21 +541,22 @@ class CrossLayerScaling:
         return cls_set_info_list
 
     @staticmethod
-    def scale_model(model: torch.nn.Module, input_shapes: Union[Tuple, List[Tuple]]) -> List[ClsSetInfo]:
+    def scale_model(model: torch.nn.Module, dummy_input: Union[torch.Tensor, Tuple]) -> List[ClsSetInfo]:
         """
         Uses cross-layer scaling to scale all applicable layers in the given model
 
         :param model: Model to scale
-        :param input_shapes: Input shape for the model (can be one or multiple inputs)
+        :param dummy_input: Dummy input to the model. Used to parse model graph. If the model has more than one input,
+                            pass a tuple. User is expected to place the tensors on the appropriate device.
         :return: CLS information for each CLS set
         """
         if isinstance(model, torch.nn.DataParallel):
-            return CrossLayerScaling.scale_model(model.module, input_shapes)
+            return CrossLayerScaling.scale_model(model.module, dummy_input)
         device = get_device(model)
         model.cpu()
 
         # Find layer groups
-        graph_search = GraphSearchUtils(model, input_shapes)
+        graph_search = GraphSearchUtils(model, dummy_input)
         layer_groups = graph_search.find_layer_groups_to_scale()
 
         # Find cls sets from the layer groups
@@ -668,7 +589,8 @@ class HighBiasFold:
 
     @staticmethod
     def call_mo_high_bias_fold(cls_pair_info: ClsSetInfo.ClsSetLayerPairInfo,
-                               bn_layers: Dict[Union[torch.nn.Conv2d, torch.nn.ConvTranspose2d], torch.nn.BatchNorm2d])\
+                               bn_layers: Dict[Union[torch.nn.Conv2d, torch.nn.ConvTranspose2d],
+                                               torch.nn.BatchNorm2d]) \
             -> Tuple[libpymo.LayerParams, libpymo.LayerParams]:
         """
         Invokes high bias fold MO API
@@ -749,40 +671,46 @@ class HighBiasFold:
                 cls_pair_info.layer2.bias.data = cls_pair_info.layer2.bias.data.type(torch.FloatTensor)
 
 
-def equalize_model(model: torch.nn.Module, input_shapes: Union[Tuple, List[Tuple]]):
+def equalize_model(model: torch.nn.Module, dummy_input: Union[torch.Tensor, Tuple]):
     """
     High-level API to perform Cross-Layer Equalization (CLE) on the given model. The model is equalized in place.
 
     :param model: Model to equalize
-    :param input_shapes: Shape of the input (can be a tuple or a list of tuples if multiple inputs)
+    :param dummy_input: Dummy input to the model. Used to parse model graph. If the model has more than one input,
+                            pass a tuple. User is expected to place the tensors on the appropriate device.
     :return: None
     """
     if isinstance(model, torch.nn.DataParallel):
-        equalize_model(model.module, input_shapes)
+        equalize_model(model.module, dummy_input)
     else:
         device = get_device(model)
         model.cpu()
+        dummy_input.cpu()
         # fold batchnorm layers
+        shape = dummy_input.shape
+        input_shapes = shape
         folded_pairs = fold_all_batch_norms(model, input_shapes)
-        equalize_bn_folded_model(model, input_shapes, folded_pairs)
+        equalize_bn_folded_model(model, dummy_input, folded_pairs)
 
         model.to(device=device)
+        dummy_input.to(device=device)
 
 
 def equalize_bn_folded_model(model: torch.nn.Module,
-                             input_shapes: Union[Tuple, List[Tuple]],
+                             dummy_input: Union[torch.Tensor, Tuple],
                              folded_pairs: List[Tuple[torch.nn.Module, torch.nn.BatchNorm2d]]):
     """
     Perform Cross-Layer Scaling (CLS) and High Bias Folding (HBF) on a batchnorm-folded model.
     The model is equalized in place.
 
     :param model: Batchnorm-folded model to equalize
-    :param input_shapes: Shape of the input (can be a tuple or a list of tuples if multiple inputs)
+    :param dummy_input: Dummy input to the model. Used to parse model graph. If the model has more than one input,
+                            pass a tuple. User is expected to place the tensors on the appropriate device.
     :param folded_pairs: List of pairs of folded layers
     :return: None
     """
     if isinstance(model, torch.nn.DataParallel):
-        equalize_bn_folded_model(model.module, input_shapes, folded_pairs)
+        equalize_bn_folded_model(model.module, dummy_input, folded_pairs)
     else:
         device = get_device(model)
         model.cpu()
@@ -795,7 +723,7 @@ def equalize_bn_folded_model(model: torch.nn.Module,
         utils.replace_modules_of_type1_with_type2(model, torch.nn.ReLU6, torch.nn.ReLU)
 
         # perform cross-layer scaling on applicable layer sets
-        cls_set_info_list = CrossLayerScaling.scale_model(model, input_shapes)
+        cls_set_info_list = CrossLayerScaling.scale_model(model, dummy_input)
 
         # high-bias fold
         HighBiasFold.bias_fold(cls_set_info_list, bn_dict)
