@@ -42,18 +42,46 @@ import pytest
 import torch
 from torchvision import models
 
+from aimet_torch import batch_norm_fold
 from aimet_torch.batch_norm_fold import fold_all_batch_norms
 from aimet_torch.cross_layer_equalization import CrossLayerScaling, GraphSearchUtils, HighBiasFold, equalize_model
+from aimet_torch.utils import create_rand_tensors_given_shapes
 from aimet_torch.utils import get_layer_name
 from aimet_torch.examples.mobilenet import MockMobileNetV2, MockMobileNetV1
-
 import torch.nn as nn
 import numpy as np
 
 
+class TwoInputsModel(torch.nn.Module):
+    def __init__(self, num_classes=3):
+        super(TwoInputsModel, self).__init__()
+        self.conv1 = torch.nn.Conv2d(3, 16, kernel_size=2, stride=2, padding=2, bias=False)
+        self.bn1 = torch.nn.BatchNorm2d(16)
+        self.conv2 = torch.nn.Conv2d(3, 8, kernel_size=3, stride=2, padding=2)
+        self.bn2 = torch.nn.BatchNorm2d(8)
+        self.conv3 = torch.nn.Conv2d(8, 16, kernel_size=3, stride=2, padding=2)
+        self.ada = torch.nn.AdaptiveAvgPool2d(18)
+        self.relu1 = torch.nn.ReLU(inplace=True)
+        self.maxpool = torch.nn.MaxPool2d(kernel_size=2, stride=2, padding=1)
+        self.fc = torch.nn.Linear(1600, num_classes)
+
+    def forward(self, *inputs):
+        x1 = self.conv1(inputs[0])
+        x1 = self.bn1(x1)
+        x2 = self.conv2(inputs[1])
+        x2 = self.bn2(x2)
+        x2 = self.conv3(x2)
+        x2 = self.ada(x2)
+        x = x1 + x2
+        x = self.relu1(x)
+        x = self.maxpool(x)
+        x = x.view(x.size(0), -1)
+        x = self.fc(x)
+        return x
+
+
 class MyModel(torch.nn.Module):
     def __init__(self):
-
         super(MyModel, self).__init__()
 
         self.conv1 = torch.nn.Conv2d(10, 20, 3)
@@ -91,7 +119,6 @@ class MyModel(torch.nn.Module):
         self.fc1 = torch.nn.Linear(5040, 10)
 
     def forward(self, x):
-
         # Regular case - conv followed by bn
         x = self.conv1(x)
         x = self.relu1(x)
@@ -140,7 +167,6 @@ class TransposedConvModel(torch.nn.Module):
 
         self.conv2 = torch.nn.ConvTranspose2d(10, 10, 3)
 
-
     def forward(self, x):
         # Regular case - conv followed by bn
         x = self.conv1(x)
@@ -159,7 +185,7 @@ class TestTrainingExtensionsCrossLayerScaling(unittest.TestCase):
         model = MyModel()
         # Call API
         model = model.eval()
-        random_input = torch.rand(2, 10, 24, 24)
+        random_input = torch.rand((2, 10, 24, 24))
         # model.features[0].bias.data = torch.rand(64)
         baseline_output = model(random_input).detach().numpy()
 
@@ -171,7 +197,23 @@ class TestTrainingExtensionsCrossLayerScaling(unittest.TestCase):
         range_conv2_after_scaling = np.amax(np.abs(model.conv2.weight.detach().cpu().numpy()), axis=(0, 2, 3))
 
         assert (np.allclose(range_conv1_after_scaling, range_conv2_after_scaling))
-        assert(np.allclose(baseline_output, output_after_scaling, rtol=1.e-2))
+        assert (np.allclose(baseline_output, output_after_scaling, rtol=1.e-2))
+
+    def test_top_level_api(self):
+        torch.manual_seed(10)
+        # model = MockMobileNetV1()
+        # input_shape = (1, 3, 224, 224)
+        model = MyModel()
+        input_shape = (2, 10, 24, 24)
+        model = model.eval()
+        random_input = torch.rand((2, 10, 24, 24))
+        baseline_output = model(random_input).detach().numpy()
+
+        folded_pairs = batch_norm_fold.fold_all_batch_norms(model, [input_shape])
+
+        cls_sets = CrossLayerScaling.scale_model(model, input_shape, random_input)
+        # cls_sets is empty!
+        pass
 
     def test_verify_cross_layer_for_multiple_pairs(self):
         # Get trained MNIST model
@@ -220,7 +262,7 @@ class TestTrainingExtensionsCrossLayerScaling(unittest.TestCase):
 
         output_after_scaling = model(random_input).detach().numpy()
 
-        assert(np.allclose(baseline_output, output_after_scaling, rtol=1.e-2))
+        assert (np.allclose(baseline_output, output_after_scaling, rtol=1.e-2))
 
     def test_verify_cross_layer_scaling_depthwise_separable_layer_multiple_triplets(self):
 
@@ -249,8 +291,9 @@ class TestTrainingExtensionsCrossLayerScaling(unittest.TestCase):
         model.eval()
 
         fold_all_batch_norms(model, (1, 3, 224, 224))
-        random_input = torch.rand(1, 3, 224, 224)
-        graph_search = GraphSearchUtils(model, random_input)
+        input_shape = (1, 3, 224, 224)
+        random_input = torch.rand(*input_shape)
+        graph_search = GraphSearchUtils(model, (1, 3, 224, 224),random_input)
         layer_groups = graph_search.find_layer_groups_to_scale()
         self.assertEqual(4, len(layer_groups))
         self.assertIn([model.features[3].conv[0], model.features[3].conv[3], model.features[3].conv[6]], layer_groups)
@@ -258,24 +301,25 @@ class TestTrainingExtensionsCrossLayerScaling(unittest.TestCase):
         self.assertIn([model.features[5].conv[0], model.features[5].conv[3], model.features[5].conv[6],
                        model.features[6][0]], layer_groups)
 
-
         for layer_group in layer_groups:
             print("Group ------- ")
             for module in layer_group:
                 print("   " + get_layer_name(model, module))
 
-    def test_find_layer_groups_to_scale_depthwise_no_pointwise(self):
-
+    def test_find_layer_groups_to_scale(self):
+        """
+        test conv+depthwise+conv combination
+        """
         model = torch.nn.Sequential(
-            torch.nn.Conv2d(10, 20, 3),
+            torch.nn.Conv2d(10, 20, (3, 3)),
             torch.nn.ReLU(),
-            torch.nn.Conv2d(20, 20, 3, groups=10),
+            torch.nn.Conv2d(20, 20, (3, 3), groups=20),
             torch.nn.ReLU(),
-            torch.nn.Conv2d(20, 40, 3)
+            torch.nn.Conv2d(20, 40, (3, 3))
         )
         model.eval()
         random_input = torch.rand(1, 10, 24, 24)
-        graph_search = GraphSearchUtils(model, random_input)
+        graph_search = GraphSearchUtils(model, (1, 10, 24, 24), random_input)
         layer_groups = graph_search.find_layer_groups_to_scale()
 
         # Find cls sets from the layer groups
@@ -287,14 +331,146 @@ class TestTrainingExtensionsCrossLayerScaling(unittest.TestCase):
         self.assertEqual(1, len(cls_sets))
         self.assertIn((model[0], model[2], model[4]), cls_sets)
 
+    def test_find_layer_groups_to_scale_2(self):
+        """
+        verify conv+conv cls sets
+        """
+        model = torch.nn.Sequential(
+            torch.nn.Conv2d(10, 20, (3, 3)),
+            torch.nn.ReLU(),
+            torch.nn.Conv2d(20, 20, (3, 3)),
+            torch.nn.ReLU(),
+            torch.nn.Conv2d(20, 20, (3, 3))
+        )
+        model.eval()
+        input_shape = (1, 10, 24, 24)
+        random_input = torch.rand(*input_shape)
+        graph_search = GraphSearchUtils(model, (1, 10, 24, 24), random_input)
+        layer_groups = graph_search.find_layer_groups_to_scale()
+
+        # Find cls sets from the layer groups
+        cls_sets = []
+        for layer_group in layer_groups:
+            cls_set = GraphSearchUtils.convert_layer_group_to_cls_sets(layer_group)
+            cls_sets += cls_set
+
+        self.assertEqual(2, len(cls_sets))
+        self.assertIn(model[0], cls_sets[0])
+        self.assertIn(model[2], cls_sets[0])
+        self.assertIn(model[2], cls_sets[1])
+        self.assertIn(model[4], cls_sets[1])
+
+    def test_find_layer_groups_to_scale_3(self):
+        """
+        verify depthwiseConv2D+conv cls sets
+        """
+        model = torch.nn.Sequential(
+            torch.nn.Conv2d(20, 20, (3, 3), groups=20),
+            torch.nn.ReLU(),
+            torch.nn.Conv2d(20, 20, (3, 3)),
+            torch.nn.ReLU(),
+            torch.nn.Conv2d(20, 20, (3, 3))
+        )
+        model.eval()
+        random_input = torch.rand((1, 20, 24, 24))
+        graph_search = GraphSearchUtils(model, (1, 20, 24, 24), random_input)
+        layer_groups = graph_search.find_layer_groups_to_scale()
+
+        # Find cls sets from the layer groups
+        cls_sets = []
+        for layer_group in layer_groups:
+            cls_set = GraphSearchUtils.convert_layer_group_to_cls_sets(layer_group)
+            cls_sets += cls_set
+
+        self.assertEqual(2, len(cls_sets))
+        self.assertIn(model[0], cls_sets[0])
+        self.assertIn(model[2], cls_sets[0])
+        self.assertIn(model[2], cls_sets[1])
+        self.assertIn(model[4], cls_sets[1])
+
+    def test_find_layer_groups_to_scale_4(self):
+        """
+        verify depthwiseConv2D+conv cls sets
+        - test ignore depthwise+depthwise combo which is unsupported
+        """
+        model = torch.nn.Sequential(
+            torch.nn.Conv2d(20, 20, (3, 3), groups=20),
+            torch.nn.ReLU(),
+            torch.nn.Conv2d(20, 20, (3, 3), groups=20),
+            torch.nn.ReLU(),
+            torch.nn.Conv2d(20, 20, (3, 3))
+        )
+        model.eval()
+        random_input = torch.rand((1, 20, 24, 24))
+        graph_search = GraphSearchUtils(model, (1, 20, 24, 24), random_input)
+        layer_groups = graph_search.find_layer_groups_to_scale()
+
+        # Find cls sets from the layer groups
+        cls_sets = []
+        for layer_group in layer_groups:
+            cls_set = GraphSearchUtils.convert_layer_group_to_cls_sets(layer_group)
+            cls_sets += cls_set
+
+        self.assertEqual(1, len(cls_sets))
+        self.assertIn(model[2], cls_sets[0])
+        self.assertIn(model[4], cls_sets[0])
+
+    def test_find_layer_groups_to_scale_5(self):
+        """
+        Test invalid case
+        """
+        model = torch.nn.Sequential(
+            torch.nn.Conv2d(2, 4, (3, 3), groups=2),
+            torch.nn.ReLU(),
+            torch.nn.Conv2d(4, 8, (3, 3), groups=4),
+            torch.nn.ReLU(),
+        )
+        model.eval()
+        random_input = torch.rand((1, 2, 24, 24))
+        graph_search = GraphSearchUtils(model, (1, 2, 24, 24), random_input)
+        layer_groups = graph_search.find_layer_groups_to_scale()
+
+        # Find cls sets from the layer groups
+        cls_sets = []
+        for layer_group in layer_groups:
+            cls_set = GraphSearchUtils.convert_layer_group_to_cls_sets(layer_group)
+            cls_sets += cls_set
+
+        self.assertEqual(0, len(cls_sets))
+
+    def test_find_layer_groups_to_scale_6(self):
+        """
+        Test invalid case
+        """
+        model = torch.nn.Sequential(
+            torch.nn.Conv2d(2, 2, (3, 3)),
+            torch.nn.ReLU(),
+            torch.nn.Conv2d(2, 4, (3, 3), groups=2),
+            torch.nn.ReLU(),
+            torch.nn.Conv2d(4, 8, (3, 3), groups=4),
+            torch.nn.ReLU()
+        )
+        model.eval()
+        random_input = torch.rand((1, 2, 24, 24))
+        graph_search = GraphSearchUtils(model, (1, 2, 24, 24), random_input)
+        layer_groups = graph_search.find_layer_groups_to_scale()
+
+        # Find cls sets from the layer groups
+        cls_sets = []
+        for layer_group in layer_groups:
+            cls_set = GraphSearchUtils.convert_layer_group_to_cls_sets(layer_group)
+            cls_sets += cls_set
+
+        self.assertEqual(0, len(cls_sets))
+
     def test_find_cls_sets_vgg16(self):
 
         torch.manual_seed(10)
         model = models.vgg16()
         print(model)
         model.eval()
-        random_input = torch.rand(1, 3, 224, 224)
-        graph_search = GraphSearchUtils(model, random_input)
+        random_input = torch.rand((1, 3, 224, 224))
+        graph_search = GraphSearchUtils(model, (1, 3, 224, 224), random_input)
         layer_groups = graph_search.find_layer_groups_to_scale()
         self.assertEqual(5, len(layer_groups))
         self.assertIn([model.features[0], model.features[2]], layer_groups)
@@ -305,7 +481,6 @@ class TestTrainingExtensionsCrossLayerScaling(unittest.TestCase):
 
         cls_sets = []
         for layer_group in layer_groups:
-
             cls_set = GraphSearchUtils.convert_layer_group_to_cls_sets(layer_group)
             cls_sets += cls_set
 
@@ -334,8 +509,7 @@ class TestTrainingExtensionsCrossLayerScaling(unittest.TestCase):
 
         fold_all_batch_norms(model, (1, 3, 224, 224))
         random_input = torch.rand(1, 3, 224, 224)
-        #graph_search = GraphSearchUtils(model, (1, 3, 224, 224))
-        graph_search = GraphSearchUtils(model, random_input)
+        graph_search = GraphSearchUtils(model, (1, 3, 224, 224), random_input)
         layer_groups = graph_search.find_layer_groups_to_scale()
 
         self.assertEqual(1, len(layer_groups))
@@ -370,9 +544,8 @@ class TestTrainingExtensionsCrossLayerScaling(unittest.TestCase):
 
         # BN fold
         fold_all_batch_norms(model, (1, 3, 224, 224))
-        random_input = torch.rand(1, 3, 224, 224)
-        scale_factors = CrossLayerScaling.scale_model(model,  random_input)
-
+        random_input = torch.rand((1, 3, 224, 224))
+        scale_factors = CrossLayerScaling.scale_model(model, (1, 3, 224, 224), random_input)
         self.assertEqual(8, len(scale_factors))
 
     def test_auto_cls_custom_model(self):
@@ -386,7 +559,7 @@ class TestTrainingExtensionsCrossLayerScaling(unittest.TestCase):
         # BN fold
         fold_all_batch_norms(model, (2, 10, 24, 24))
 
-        scale_factors = CrossLayerScaling.scale_model(model, random_input)
+        scale_factors = CrossLayerScaling.scale_model(model, (2, 10, 24, 24), random_input)
         self.assertEqual(8, len(scale_factors))
         self.assertTrue(scale_factors[0].cls_pair_info_list[0].relu_activation_between_layers)
         self.assertTrue(scale_factors[1].cls_pair_info_list[0].relu_activation_between_layers)
@@ -401,14 +574,16 @@ class TestTrainingExtensionsCrossLayerScaling(unittest.TestCase):
         torch.manual_seed(10)
         model = MyModel()
         model.eval()
-        model = torch.nn.DataParallel(model,device_ids=[0])
+
+        model = torch.nn.DataParallel(model, device_ids=[0])
         random_input = torch.rand(2, 10, 24, 24)
         output_before_scale = model(random_input)
 
         # BN fold
         fold_all_batch_norms(model, (2, 10, 24, 24))
 
-        scale_factors = CrossLayerScaling.scale_model(model, random_input)
+        scale_factors = CrossLayerScaling.scale_model(model, (2, 10, 24, 24), random_input)
+
         output_after_scale = model(random_input)
         self.assertTrue(torch.allclose(output_before_scale, output_after_scale, rtol=1.e-2))
 
@@ -419,7 +594,8 @@ class TestTrainingExtensionsCrossLayerScaling(unittest.TestCase):
         model.eval()
         random_input = torch.rand(2, 10, 24, 24)
         output_before_equalize = model(random_input)
-        equalize_model(model, random_input)
+
+        equalize_model(model, (2, 10, 24, 24), dummy_input=random_input)
 
         output_after_equalize = model(random_input)
         self.assertTrue(torch.allclose(output_before_equalize, output_after_equalize))
@@ -430,23 +606,43 @@ class TestTrainingExtensionsCrossLayerScaling(unittest.TestCase):
         torch.manual_seed(10)
         model = MyModel()
         model.eval()
-        model = torch.nn.DataParallel(model,device_ids=[0])
+        model = torch.nn.DataParallel(model, device_ids=[0])
+        input_shapes = (2, 10, 24, 24)
+        random_input = torch.rand(*input_shapes)
         random_input = torch.rand(2, 10, 24, 24)
         output_before_equalize = model(random_input)
 
-        equalize_model(model, random_input)
+        equalize_model(model, input_shapes, dummy_input=random_input)
 
         output_after_equalize = model(random_input)
         self.assertTrue(torch.allclose(output_before_equalize, output_after_equalize, rtol=1.e-2))
 
+    def test_auto_cle_two_inputs_model(self):
+
+        model = TwoInputsModel()
+        model.eval()
+        inp_shapes = [(1, 3, 32, 32), (1, 3, 20, 20)]
+        model_input_list = create_rand_tensors_given_shapes(inp_shapes)
+
+        output_before_equalize = model(*model_input_list)
+        equalize_model(model, inp_shapes)
+        output_after_equalize = model(*model_input_list)
+        self.assertTrue(torch.allclose(output_before_equalize, output_after_equalize))
+
+        output_before_equalize = model(*model_input_list)
+        equalize_model(model, inp_shapes, dummy_input=model_input_list)
+        output_after_equalize = model(*model_input_list)
+        self.assertTrue(torch.allclose(output_before_equalize, output_after_equalize))
 
     def test_auto_transposed_conv2d_model(self):
         torch.manual_seed(10)
         model = TransposedConvModel()
         model.eval()
         random_input = torch.rand((10, 10, 4, 4))
+
         baseline_output = model(random_input).detach().numpy()
-        scale_factors = CrossLayerScaling.scale_model(model, random_input)
+        scale_factors = CrossLayerScaling.scale_model(model, (10, 10, 4, 4), random_input)
+
         output_after_scaling = model(random_input).detach().numpy()
         self.assertTrue(np.allclose(baseline_output, output_after_scaling, rtol=1.e-2))
         self.assertEqual(10, len(scale_factors[0].cls_pair_info_list[0].scale_factor))
@@ -466,7 +662,7 @@ class TestTrainingExtensionsCrossLayerScaling(unittest.TestCase):
         random_input = torch.rand((1, 5, 32, 32))
 
         baseline_output = model(random_input).detach().numpy()
-        scale_factors = CrossLayerScaling.scale_model(model,  random_input)
+        scale_factors = CrossLayerScaling.scale_model(model, (1, 5, 32, 32), random_input)
 
         output_after_scaling = model(random_input).detach().numpy()
         output_diff = abs(baseline_output - output_after_scaling)
@@ -474,3 +670,4 @@ class TestTrainingExtensionsCrossLayerScaling(unittest.TestCase):
         self.assertTrue(np.all(max(output_diff) < 1e-6))
         self.assertEqual(2, len(scale_factors))
         self.assertEqual(2, len(scale_factors[0].cls_pair_info_list))
+        
