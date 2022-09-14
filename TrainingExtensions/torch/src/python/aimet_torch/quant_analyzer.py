@@ -59,7 +59,6 @@ from aimet_torch.batch_norm_fold import fold_all_batch_norms
 _logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Quant)
 
 DEFAULT_BOKEH_FIGURE_HEIGHT = 300
-DEFAULT_NUM_BATCHES = 5
 
 
 class CallbackFunc:
@@ -114,6 +113,7 @@ class QuantAnalyzer:
         self._forward_pass_callback = forward_pass_callback
         self._eval_callback = eval_callback
         self._unlabeled_dataset_iterable = None
+        self._num_batches = None
         self._modules_to_ignore = modules_to_ignore
 
     def analyze(self,
@@ -166,20 +166,23 @@ class QuantAnalyzer:
         if self._unlabeled_dataset_iterable:
             self._export_per_layer_mse_loss(sim, results_dir)
 
-    def enable_per_layer_mse_loss(self, unlabeled_dataset_iterable: Union[DataLoader, Collection]):
+    def enable_per_layer_mse_loss(self, unlabeled_dataset_iterable: Union[DataLoader, Collection], num_batches: int):
         """
         Enable per layer MSE loss analysis.
 
         :param unlabeled_dataset_iterable: A collection (i.e. iterable with `__len__`)
                 that iterates over an unlabeled dataset. The values yielded by this iterable are expected
                 to be able to be passed directly to the model.
+        :param num_batches: Number of batches. Approximately 256 samples/images are recommended,
+                so if batch size of data loader is 64, then 4 number of batches leads to 256 samples/images.
         """
         # TODO: Make per layer MSE loss analysis as part of top level API.
-        if len(unlabeled_dataset_iterable) < DEFAULT_NUM_BATCHES:
-            raise ValueError(f'Can not fetch {DEFAULT_NUM_BATCHES} batches from '
+        if len(unlabeled_dataset_iterable) < num_batches:
+            raise ValueError(f'Can not fetch {num_batches} batches from '
                              f'a data loader of length {len(unlabeled_dataset_iterable)}.')
 
         self._unlabeled_dataset_iterable = unlabeled_dataset_iterable
+        self._num_batches = num_batches
 
     def _create_quantsim_and_encodings(self, quant_scheme: QuantScheme, default_param_bw: int,
                                        default_output_bw: int, config_file: str) \
@@ -849,7 +852,7 @@ class QuantAnalyzer:
             loss += torch.nn.functional.mse_loss(fp32_out_acts, quantized_out_acts).item()
             total += fp32_out_acts.size(0)
             batch_index += 1
-            if batch_index == DEFAULT_NUM_BATCHES:
+            if batch_index == self._num_batches:
                 break
 
         average_loss = loss/total

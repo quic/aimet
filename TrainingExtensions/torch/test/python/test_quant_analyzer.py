@@ -374,7 +374,7 @@ class TestQuantAnalyzer:
         forward_pass_callback = CallbackFunc(calibrate, dummy_input)
         eval_callback = CallbackFunc(evaluate, dummy_input)
         quant_analyzer = QuantAnalyzer(model, dummy_input, forward_pass_callback, eval_callback)
-        quant_analyzer.enable_per_layer_mse_loss(unlabeled_dataset_iterable)
+        quant_analyzer.enable_per_layer_mse_loss(unlabeled_dataset_iterable, num_batches=4)
         try:
             quant_analyzer._export_per_layer_mse_loss(sim, results_dir="./tmp/")
             assert os.path.isfile("./tmp/per_layer_mse_loss.html")
@@ -392,7 +392,7 @@ class TestQuantAnalyzer:
         forward_pass_callback = CallbackFunc(calibrate, dummy_input)
         eval_callback = CallbackFunc(evaluate, dummy_input)
         quant_analyzer = QuantAnalyzer(model, dummy_input, forward_pass_callback, eval_callback)
-        quant_analyzer.enable_per_layer_mse_loss(unlabeled_dataset_iterable)
+        quant_analyzer.enable_per_layer_mse_loss(unlabeled_dataset_iterable, num_batches=4)
         try:
             quant_analyzer.analyze(quant_scheme=QuantScheme.post_training_tf_enhanced,
                                    default_param_bw=8,
