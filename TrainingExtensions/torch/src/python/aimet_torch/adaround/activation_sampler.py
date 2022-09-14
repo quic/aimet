@@ -70,7 +70,7 @@ class ActivationSampler:
         self._orig_module_collector = ModuleData(orig_model, orig_module)
         self._quant_module_collector = ModuleData(quant_model, quant_module)
 
-    def sample_all_acts(self, cached_dataset: Dataset) -> Tuple[torch.Tensor, torch.Tensor]:
+    def sample_and_place_all_acts_on_cpu(self, cached_dataset: Dataset) -> Tuple[torch.Tensor, torch.Tensor]:
         """
         From the original module, collect output activations and input activations
         to corresponding quantized module.
