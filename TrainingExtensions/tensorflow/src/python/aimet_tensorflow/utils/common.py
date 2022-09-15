@@ -53,6 +53,7 @@ logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Utils)
 # Multiple onnx types may be associated with a tf connected graph type, and vice versa.
 onnx_tf_conn_graph_type_pairs = [
     [["Conv"], ["Conv2D", "DepthwiseConv2dNative"]],
+    [["ConvTranspose"], ["Conv2DTranspose"]],
     [["BatchNormalization"], ["FusedBatchNormV3", "BatchNorm"]],
     [["MaxPool"], ["MaxPool"]],
     [["AveragePool"], ["AvgPool"]],
@@ -69,6 +70,9 @@ onnx_tf_conn_graph_type_pairs = [
     [["Pad"], ["Pad"]],
     [["Squeeze"], ["Squeeze"]],
     [["Identity"], ["Identity"]],
+    [["Sigmoid"], ["Sigmoid"]],
+    [["Softplus"], ["Softplus"]],
+    [["Tanh"], ["Tanh"]],
     # Note - Currently, both LayerNorm and GELU are not in the supported ops list in ONNX
     # Adding this entry here for usage by Connected graph
     [["LayerNorm"], ["LayerNorm"]],
