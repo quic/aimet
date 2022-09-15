@@ -430,3 +430,12 @@ class QuantizableMultiheadAttention(nn.MultiheadAttention):
             return attn_output, attn_output_weights
         else:
             return attn_output, None
+
+
+def create_quantizable_multihead_attention(module) -> QuantizableMultiheadAttention:
+    """
+    Create QuantizableMultiheadAttention using existing torch.nn.MultiheadAttention module
+    :param module: Existing torch.nn.MultiheadAttention module
+    :return: Newly created QuantizableMultiheadAttention module
+    """
+    return QuantizableMultiheadAttention(module.embed_dim, module.num_heads)
