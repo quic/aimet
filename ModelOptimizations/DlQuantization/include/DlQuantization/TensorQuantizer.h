@@ -76,6 +76,7 @@ public:
      * @param useCuda If true, the tensor is assumed to be in CUDA memory
      */
     void updateStats(const float* tensor, std::size_t tensorSize, bool useCuda) override;
+    void updateStats(const float* tensor, std::size_t tensorSize, bool useCuda, IAllocator* alloc) override;
 
     /**
      * Compute the encoding for this tensor using stats collected so far

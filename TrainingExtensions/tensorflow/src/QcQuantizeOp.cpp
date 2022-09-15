@@ -37,6 +37,7 @@
 //==============================================================================
 
 #include "QcQuantizeOp.hpp"
+#include "AimetOpUtils.h"
 #include "AimetFp16OpUtils.h"
 
 #include <type_traits>
@@ -62,66 +63,6 @@ REGISTER_OP("QcQuantize")
         return Status::OK();
     });
 
-
-
-template <typename D, typename T>
-void modeSpecificActionInt(const D& d, const T* inTensor, size_t count, T* outTensor,
-                        const uint64* tensorQuantizerRef, const int32* opMode,
-                        const double* min, const double* max, const int8* bw,
-                        const bool* useSymEncoding)
-{
-    bool useCuda = false;
-    if (std::is_same<D, GPUDevice>::value)
-    {
-        useCuda = true;
-    }
-
-    // Note that all of the pointers to data here could either be pointing to CPU memory or GPU memory
-    // We first copy everything to CPU memory and then use them
-    auto tensorQuantizerRefHost = copyLiteralToHost<uint64>(d, tensorQuantizerRef);
-    auto opModeHost = copyLiteralToHost<int32>(d, opMode);
-    auto opModeEnum = static_cast<const DlQuantization::TensorQuantizerOpMode>(opModeHost);
-    auto encodingMin = copyLiteralToHost<double>(d, min);
-    auto encodingMax = copyLiteralToHost<double>(d, max);
-    auto tensorQuantizer = reinterpret_cast<DlQuantization::TensorQuantizerOpFacade*>(tensorQuantizerRefHost);
-    auto bitwidth = copyLiteralToHost<int8>(d, bw);
-    auto useSymmetricEncoding = copyLiteralToHost<bool>(d, useSymEncoding);
-
-    switch (opModeEnum)
-    {
-    case DlQuantization::TensorQuantizerOpMode::oneShotQuantizeDequantize:
-    {
-        tensorQuantizer->resetEncodingStats();
-        tensorQuantizer->updateStats(inTensor, count, useCuda);
-        DlQuantization::TfEncoding initial_encoding = tensorQuantizer->computeEncoding(bitwidth, useSymmetricEncoding);
-        tensorQuantizer->quantizeDequantize(inTensor, count, outTensor, initial_encoding.min, initial_encoding.max,
-                                            bitwidth, useCuda);
-
-        break;
-    }
-    case DlQuantization::TensorQuantizerOpMode::updateStats:
-    {
-        tensorQuantizer->updateStats(inTensor, count, useCuda);
-        copyInputTensorsToOutputTensors(d, inTensor, count, outTensor);
-        break;
-    }
-    case DlQuantization::TensorQuantizerOpMode::quantizeDequantize:
-    {
-        tensorQuantizer->quantizeDequantize(inTensor, count, outTensor, encodingMin, encodingMax, bitwidth, useCuda);
-        break;
-    }
-    case DlQuantization::TensorQuantizerOpMode::passThrough:
-    {
-        copyInputTensorsToOutputTensors(d, inTensor, count, outTensor);
-        break;
-    }
-    default:
-    {
-        assert(0);
-    }
-    }
-
-}
 
 // OpKernel definition.
 // 'Device is templated on the type of device.
@@ -183,8 +124,14 @@ public:
 
         if(isIntDataType)
         {
+            DlQuantization::IAllocator* allocator = nullptr;
+#if GOOGLE_CUDA
+            auto tf_allocator = context->get_allocator(context->output_alloc_attr(0));
+            auto _allocator = TensorFlowCudaAllocator(tf_allocator);
+            allocator = &_allocator;
+#endif
             modeSpecificActionInt(context->eigen_device<Device>(), inTensorFlat, inTensor.NumElements(), outTensorFlat,
-                           quantizerAddr, opMode, encodingMin, encodingMax, bitwidth, useSymmetricEncoding);
+                           quantizerAddr, opMode, encodingMin, encodingMax, bitwidth, useSymmetricEncoding, allocator);
         }
         else
         {

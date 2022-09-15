@@ -112,11 +112,16 @@ void TensorQuantizer::resetEncodingStats()
 
 void TensorQuantizer::updateStats(const float* tensor, std::size_t tensorSize, bool useCuda)
 {
+    updateStats(tensor, tensorSize, useCuda, nullptr);
+}
+
+void TensorQuantizer::updateStats(const float* tensor, std::size_t tensorSize, bool useCuda, IAllocator* alloc)
+{
     // Set encoding as valid
     _validStats = true;
 
     ComputationMode cpuGpuMode = useCuda ? ComputationMode::COMP_MODE_GPU : ComputationMode::COMP_MODE_CPU;
-    _encodingAnalyzer->updateStats(tensor, tensorSize, cpuGpuMode);
+    _encodingAnalyzer->updateStats(tensor, tensorSize, cpuGpuMode, alloc);
 }
 
 

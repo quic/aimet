@@ -64,7 +64,8 @@ template <typename D, typename T>
 void modeSpecificAction(const D& d, const T* inTensor, size_t count, T* outTensor,
                         const uint64* tensorQuantizerRef, const int32* opMode, const double* min, const double* max,
                         const int8* bw, const bool* useSymEncoding, const int32* timeStepInOp,
-                       int &computeEncodingCounter, DlQuantization::TfEncoding &cachedEncoding, bool &isEncodingValid)
+                        int &computeEncodingCounter, DlQuantization::TfEncoding &cachedEncoding, bool &isEncodingValid,
+                        DlQuantization::IAllocator* allocator)
 {
     bool useCuda = false;
     if (std::is_same<D, GPUDevice>::value)
@@ -95,7 +96,7 @@ void modeSpecificAction(const D& d, const T* inTensor, size_t count, T* outTenso
             // a recurrent param quantizer has special handling below to reduce the number of
             // updateStats and encoding computations performed.
             // Instead of every time step we compute encoidngs only at h0.
-            tensorQuantizer->updateStats(inTensor, count, useCuda);
+            tensorQuantizer->updateStats(inTensor, count, useCuda, allocator);
             cachedEncoding = tensorQuantizer->computeEncoding(bitwidth, useSymmetricEncoding);
             tensorQuantizer->quantizeDequantize(inTensor, count, outTensor, cachedEncoding.min, cachedEncoding.max,
                                                 bitwidth, useCuda);
@@ -197,9 +198,16 @@ public:
         OP_REQUIRES_OK(context, context->allocate_output(0, inTensor.shape(), &outTensor));
         auto outTensorFlat = outTensor->flat<T>().data();
 
+        DlQuantization::IAllocator* allocator = nullptr;
+#if GOOGLE_CUDA
+        auto tf_allocator = context->get_allocator(context->output_alloc_attr(0));
+        auto _allocator = TensorFlowCudaAllocator(tf_allocator);
+        allocator = &_allocator;
+#endif
+
         modeSpecificAction(context->eigen_device<Device>(), inTensorFlat, inTensor.NumElements(), outTensorFlat,
                            quantizerAddr, opMode,  encodingMin, encodingMax, bitwidth, useSymmetricEncoding,
-                           time_steps, _computeEncodingCounter, _cachedEncoding, _isEncodingValid);
+                           time_steps, _computeEncodingCounter, _cachedEncoding, _isEncodingValid, allocator);
     }
 };
 
