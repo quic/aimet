@@ -55,6 +55,8 @@ from aimet_torch.adaround.adaround_loss import AdaroundLoss, AdaroundHyperParame
 
 logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Quant)
 BATCH_SIZE = 32
+EMPIRICAL_THRESHOLD = 3 / 4
+DATA_SIZE_IN_BITS = 32
 
 
 class AdaroundOptimizer:
@@ -149,32 +151,22 @@ class AdaroundOptimizer:
             # Clear alpha's gradients before optimization step
             optimizer.zero_grad()
 
-            # Below try - except block make sure that even if we successfully place cached
-            # activations data on device, we are safe from OOM when running adaround optimization.
-            try:
-                # Get the module's output activations using AdaRounded weights
-                quant_out_data = cls._compute_output_with_adarounded_weights(quant_module, inp_data)
+            # Get the module's output activations using AdaRounded weights
+            quant_out_data = cls._compute_output_with_adarounded_weights(quant_module, inp_data)
 
-                # If followed by an activation function
-                if act_func is not None:
-                    orig_out_data = act_func(orig_out_data)
-                    quant_out_data = act_func(quant_out_data)
+            # If followed by an activation function
+            if act_func is not None:
+                orig_out_data = act_func(orig_out_data)
+                quant_out_data = act_func(quant_out_data)
 
-                # Calculate total loss
-                recon_loss = AdaroundLoss.compute_recon_loss(quant_out_data, orig_out_data)
-                round_loss = AdaroundLoss.compute_round_loss(adaround_quantizer.alpha, opt_params, iteration)
-                total_loss = recon_loss + round_loss
+            # Calculate total loss
+            recon_loss = AdaroundLoss.compute_recon_loss(quant_out_data, orig_out_data)
+            round_loss = AdaroundLoss.compute_round_loss(adaround_quantizer.alpha, opt_params, iteration)
+            total_loss = recon_loss + round_loss
 
-                # Back propagate and Update the parameter 'alpha'
-                total_loss.backward()
-                optimizer.step()
-            except RuntimeError as error:
-                if use_cache_acts_data and 'cuda' in str(device):
-                    all_inp_data = all_inp_data.cpu()
-                    all_orig_out_data = all_orig_out_data.cpu()
-                    logger.debug("Don't have enough GPU memory to perform optimization, keeping on CPU.")
-                else:
-                    raise error
+            # Back propagate and Update the parameter 'alpha'
+            total_loss.backward()
+            optimizer.step()
 
             if iteration == 0 or iteration % 100 == 0:
                 logger.debug("After iterations=%d, Total loss=%5f, Recons. loss=%5f, Rounding loss=%5f",
@@ -248,10 +240,10 @@ class AdaroundOptimizer:
     def _can_cache_acts_data(num_batches: int, input_shape: torch.Size, output_shape: torch.Size) -> bool:
         """
         Function to check whether activations data can be cached and fit in CPU memory for given
-        input and output shape. The threshold CPU memory is determined by multiplying threshold and
+        input and output shape in advance. The threshold CPU memory is determined by multiplying threshold and
         available CPU memory so that remaining CPU memory is available for other processes.
 
-        NOTE: The threshold value is empirically chosen.
+        NOTE: The threshold value is empirically chosen. Threshold ensures the safety from OOM for remaining run.
 
         :param num_batches: Number of batches.
         :param input_shape: Shape of input activations data.
@@ -261,16 +253,13 @@ class AdaroundOptimizer:
         can_cache_data = False
 
         # Available CPU memory in GB.
-        threshold = 3 / 4
-        threshold_mem = psutil.virtual_memory().available
-        threshold_mem = threshold_mem / (1024 * 1024 * 1024)
-        threshold_mem = threshold_mem * threshold
+        threshold_mem = psutil.virtual_memory().available / (1024 * 1024 * 1024)
+        threshold_mem = threshold_mem * EMPIRICAL_THRESHOLD
 
         # required CPU memory in GB.
-        size_in_bits = 32
         req_mem = 0
-        req_mem += reduce(lambda x, y: x * y, input_shape) * num_batches * size_in_bits / (1024 * 1024 * 1024 * 8)
-        req_mem += reduce(lambda x, y: x * y, output_shape) * num_batches * size_in_bits / (1024 * 1024 * 1024 * 8)
+        req_mem += reduce(lambda x, y: x * y, input_shape) * num_batches * DATA_SIZE_IN_BITS / (1024 * 1024 * 1024 * 8)
+        req_mem += reduce(lambda x, y: x * y, output_shape) * num_batches * DATA_SIZE_IN_BITS / (1024 * 1024 * 1024 * 8)
 
         if req_mem < threshold_mem:
             can_cache_data = True
@@ -281,9 +270,11 @@ class AdaroundOptimizer:
     def _place_cached_acts_data(inp_data: torch.Tensor, out_data: torch.Tensor, device: torch.device) \
             -> Tuple[torch.Tensor, torch.Tensor]:
         """
-        Function to put cached activation data to given device. If it raises RunTimeError, it places the
-        cached activation data back to CPU memory. If RuntimeError is raised, it will put input and output
-        activations data back to CPU memory.
+        Function decides whether cached activation data can be placed on device or not. If yes, it puts
+        cached activation data to given device. If there is not enough device memory, it keeps the
+        cached activation data to CPU memory.
+
+        NOTE: The threshold value is empirically chosen. Threshold ensures the safety from OOM for remaining run.
 
         :param inp_data: Input activations data.
         :param out_data: Output activations data.
@@ -291,14 +282,22 @@ class AdaroundOptimizer:
         :return: Input and output activations data.
         """
         torch.cuda.empty_cache()
-        try:
+
+        # Available GPU memory in GB
+        threshold_mem = torch.cuda.get_device_properties(device).total_memory - torch.cuda.memory_allocated(device)
+        threshold_mem = threshold_mem / (1024 * 1024 * 1024)
+        threshold_mem = threshold_mem * EMPIRICAL_THRESHOLD
+
+        # required GPU memory in GB
+        req_mem = 0
+        req_mem += reduce(lambda x, y: x * y, inp_data.size())  * DATA_SIZE_IN_BITS / (1024 * 1024 * 1024 * 8)
+        req_mem += reduce(lambda x, y: x * y, out_data.size()) * DATA_SIZE_IN_BITS / (1024 * 1024 * 1024 * 8)
+
+        if req_mem < threshold_mem:
             inp_data = inp_data.to(device)
             out_data = out_data.to(device)
             logger.debug("Placing cached activations data on GPU.")
-        except RuntimeError:
-            inp_data = inp_data.cpu()
-            out_data = out_data.cpu()
-            logger.debug("Could not place cached activations data on GPU, keeping on CPU.")
+
         return inp_data, out_data
 
     @staticmethod
