@@ -93,14 +93,6 @@ public:
 
     void updateStats(at::Tensor input, bool use_cuda)
     {
-        const char* use_gpu = std::getenv("AIMET_TFE_USE_GPU");
-        std::string use_gpu_string = use_gpu ? use_gpu : "";
-
-        if (!use_gpu_string.empty() && "0" != use_gpu_string && "1" != use_gpu_string)
-        {
-            throw std::runtime_error("Variable `AIMET_TFE_USE_GPU` allows only 0 or 1.");
-        }
-
         // Set encoding as valid
         _isEncodingValid = true;
 
@@ -116,18 +108,11 @@ public:
             use_cuda ? DlQuantization::ComputationMode::COMP_MODE_GPU : DlQuantization::ComputationMode::COMP_MODE_CPU;
 
         DlQuantization::IAllocator* allocator;
-        if ("1" == use_gpu_string)
-        {
 #if ENABLE_CUDA_PYTORCH
-            allocator = &_allocator;
+        allocator = &_allocator;
 #else
-            allocator = nullptr;
+        allocator = nullptr;
 #endif
-        }
-        else
-        {
-            allocator = nullptr;
-        }
         _encodingAnalyzer->updateStats(inputDataPtr, inputTensorSize, cpu_gpu_mode, allocator);
     }
 

@@ -41,6 +41,7 @@ import abc
 import contextlib
 from enum import Enum
 from typing import Dict, Tuple, Union, List
+import os
 import torch
 from torch import nn
 
@@ -89,6 +90,7 @@ class QcQuantizeOpMode(Enum):
 
 QUANTIZER_TYPE_INPUT = 'input'
 QUANTIZER_TYPE_OUTPUT = 'output'
+TF_ENHANCED_USE_DOWNSAMPLING = bool(int(os.environ.get("AIMET_TFE_USE_DOWNSAMPLING", "0")))
 TF_ENHANCED_OFFSET_FACTOR = 0
 TF_ENHANCED_STRIDE_FACTOR = 2
 
@@ -637,7 +639,7 @@ class StaticGridQuantWrapper(QcQuantizeWrapper):
                 raise AssertionError(error_msg)
 
             if self._mode is QcQuantizeOpMode.ANALYSIS:
-                if self._quant_scheme == QuantScheme.post_training_tf_enhanced:
+                if TF_ENHANCED_USE_DOWNSAMPLING and self._quant_scheme == QuantScheme.post_training_tf_enhanced:
                     # Update stats using downsampled output to speed up tf enhanced
                     input_tensor_flatten = input_tensor.reshape(-1)
                     downsampled_input = \
