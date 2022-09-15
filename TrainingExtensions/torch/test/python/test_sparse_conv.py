@@ -176,3 +176,37 @@ class TestSparseConv(unittest.TestCase):
         self.assertTrue(isinstance(sim.model.conv.output0_encoding_min.grad, torch.Tensor))
         self.assertTrue(isinstance(sim.model.conv.weight_encoding_max.grad, torch.Tensor))
         self.assertTrue(isinstance(sim.model.conv.weight_encoding_min.grad, torch.Tensor))
+
+    def test_sparse_conv_sequential(self):
+        class SequentialModel(nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.seq = spconv.SparseSequential(
+                    spconv.SparseConv2d(1, 10, 1),
+                    nn.ReLU()
+                )
+
+            def forward(self, x):
+                x = x.permute(0, *[i for i in range(2, len(x.shape))], 1)
+                x = spconv.SparseConvTensor.from_dense(x)
+                return self.seq(x).dense()
+
+        dummy_input = torch.rand(1, 1, 5, 5)
+        def dummy_forward(model, args):
+            model.eval()
+            with torch.no_grad():
+                model(dummy_input)
+
+        sequential_model = SequentialModel()
+
+        from aimet_torch.utils import replace_modules_of_type1_using_constructor
+        from aimet_torch.custom.custom_modules import create_quantizable_sparse_sequential, QuantizableSparseSequential
+        replace_modules_of_type1_using_constructor(sequential_model, spconv.SparseSequential,
+                                                   create_quantizable_sparse_sequential)
+        self.assertTrue(isinstance(sequential_model.seq, QuantizableSparseSequential))
+
+        sim = QuantizationSimModel(sequential_model, dummy_input)
+        sim.compute_encodings(dummy_forward, None)
+
+        for module in sim.model.seq._modules.values():
+            self.assertTrue(isinstance(module, StaticGridQuantWrapper))

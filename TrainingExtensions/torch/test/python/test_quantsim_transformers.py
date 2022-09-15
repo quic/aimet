@@ -487,9 +487,9 @@ class TestQuantizationSimTransformers(unittest.TestCase):
             self.assertTrue(isinstance(transformer_model.decoder.layers[i].self_attn, torch.nn.MultiheadAttention))
 
         # auto replace PyTorch MHA in given transformer layer with quantizable MHA
-        from aimet_torch.transformers.activation import QuantizableMultiheadAttention
-        utils.replace_modules_of_type1_with_type2(transformer_model, torch.nn.MultiheadAttention,
-                                                  QuantizableMultiheadAttention)
+        from aimet_torch.transformers.activation import create_quantizable_multihead_attention, QuantizableMultiheadAttention
+        utils.replace_modules_of_type1_using_constructor(transformer_model, torch.nn.MultiheadAttention,
+                                                         create_quantizable_multihead_attention)
 
         # validate replacement is done for both encoder and decoder
         for i in range(num_encoder_layers):
@@ -545,9 +545,9 @@ class TestQuantizationSimTransformers(unittest.TestCase):
         prepare_pt_transformer_for_quantsim(transformer_model)
 
         # auto replace PyTorch MHA in given transformer layer with quantizable MHA
-        from aimet_torch.transformers.activation import QuantizableMultiheadAttention
-        utils.replace_modules_of_type1_with_type2(transformer_model, torch.nn.MultiheadAttention,
-                                                  QuantizableMultiheadAttention)
+        from aimet_torch.transformers.activation import create_quantizable_multihead_attention
+        utils.replace_modules_of_type1_using_constructor(transformer_model, torch.nn.MultiheadAttention,
+                                                         create_quantizable_multihead_attention)
 
         ops_with_missing_modules = connectedgraph_utils.get_ops_with_missing_modules(transformer_model, (src, src))
 

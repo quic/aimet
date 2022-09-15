@@ -48,7 +48,7 @@ from torch import nn
 import aimet_common.libpymo as libpymo
 from aimet_common.utils import AimetLogger
 from aimet_common.defs import QuantScheme, QuantizationDataType, MAP_ROUND_MODE_TO_PYMO
-from aimet_torch import custom_tensor_utils
+from aimet_torch.custom import custom_tensor_utils
 from aimet_torch import utils
 from aimet_torch.tensor_quantizer import StaticGridPerTensorQuantizer, StaticGridPerChannelQuantizer, TensorQuantizer, \
     LearnedGridTensorQuantizer, ParameterQuantizer
