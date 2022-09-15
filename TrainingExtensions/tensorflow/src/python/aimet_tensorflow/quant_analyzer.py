@@ -39,17 +39,181 @@
 """ Quant Analyzer """
 
 import os
-from typing import List, Tuple, Dict
+from typing import List, Tuple, Dict, Callable
 from bokeh import plotting
 from bokeh.models import ColumnDataSource, Band, Span, tickers
-
+import tensorflow.compat.v1 as tf
 from aimet_common.utils import AimetLogger
+from aimet_common.defs import QuantScheme
 from aimet_tensorflow.quantizer_info import QuantizerInfo
 from aimet_tensorflow.quantsim import QuantizationSimModel
 
 _logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Quant)
 
 DEFAULT_BOKEH_FIGURE_HEIGHT = 300
+
+
+class CallbackFunc:
+    """
+    Class encapsulating callback function, and it's argument(s)
+    """
+
+    def __init__(self, func: Callable, func_callback_args=None):
+        """
+        :param func: Callable Function
+        :param func_callback_args: Arguments passed to the callable function as-is.
+        """
+        self.func = func
+        self.args = func_callback_args
+
+
+class QuantAnalyzer:
+    """
+    QuantAnalyzer tool provides
+        Model sensitivity to weight and activation quantization
+    """
+
+    def __init__(self, session: tf.compat.v1.Session, start_op_names: List[str], output_op_names: List[str],
+                 forward_pass_callback: CallbackFunc, eval_callback: CallbackFunc, use_cuda: bool = True):
+        """
+        :param session: The input model as session to add quantize ops to
+        :param start_op_names: List of starting op names of the model
+        :param output_op_names: List of output op names of the model
+        :param forward_pass_callback: A callback function that is expected to run forward passes on a session.
+               This callback function should use representative data for the forward pass, so the calculated
+               encodings work for all data samples. This callback internally chooses the number of data samples
+               it wants to use for calculating encodings.
+        :param eval_callback: A callback function for model evaluation that determines model
+                performance. This callback function is expected to return scalar value
+                representing the model performance evaluated against entire test/evaluation dataset.
+        :param use_cuda: If True, places quantization ops on GPU. Defaults to True
+        """
+        if not isinstance(forward_pass_callback, CallbackFunc):
+            raise ValueError('forward_pass_callback and its argument(s) are not encapsulated by CallbackFunc class.')
+        if not isinstance(eval_callback, CallbackFunc):
+            raise ValueError('eval_callback and its argument(s) are not encapsulated by CallbackFunc class.')
+
+        self._session = session
+        self._start_op_names = start_op_names
+        self._output_op_names = output_op_names
+        self._forward_pass_callback = forward_pass_callback
+        self._eval_callback = eval_callback
+        self._use_cuda = use_cuda
+        self._default_output_bw = None
+        self._default_param_bw = None
+
+    def analyze(self,
+                quant_scheme: QuantScheme = QuantScheme.post_training_tf_enhanced,
+                rounding_mode: str = 'nearest',
+                default_param_bw: int = 8,
+                default_output_bw: int = 8,
+                config_file: str = None,
+                results_dir: str = "./tmp/"):
+        """
+        Analyze model for quantization and point out sensitive parts/hotspots of the model by performing
+        model sensitivity to quantization
+
+        :param quant_scheme: Quantization Scheme, currently supported schemes are post_training_tf and
+               post_training_tf_enhanced, defaults to post_training_tf_enhanced
+        :param rounding_mode: The round scheme to used. One of: 'nearest' or 'stochastic', defaults to 'nearest'
+        :param default_param_bw: bitwidth to use for parameter tensors, defaults to 8
+        :param default_output_bw: bitwidth to use for activation tensors, defaults to 8
+        :param config_file: Path to a config file to use to specify rules for placing quant ops in the model
+        :param results_dir: Directory to save the results.
+        """
+        self._default_param_bw = default_param_bw
+        self._default_output_bw = default_output_bw
+
+        sim = self._create_quantsim_and_encodings(quant_scheme, rounding_mode, config_file)
+        results_dir = os.path.abspath(results_dir)
+        os.makedirs(results_dir, exist_ok=True)
+
+        # Check model sensitivity to weight and activation quantization individually.
+        self._check_model_sensitivity_to_quantization(sim)
+
+    def _create_quantsim_and_encodings(self, quant_scheme: QuantScheme, rounding_mode: str,
+                                       config_file: str) -> QuantizationSimModel:
+        """"
+        Create Quantsim and compute encodings.
+
+        :param quant_scheme: Quantization Scheme
+        :param rounding_mode: The round scheme to used
+        :param config_file: Path to a config file
+        :return: Quantsim model
+        """
+        quant_sim_model = QuantizationSimModel(session=self._session,
+                                               starting_op_names=self._start_op_names,
+                                               output_op_names=self._output_op_names,
+                                               quant_scheme=quant_scheme, rounding_mode=rounding_mode,
+                                               default_output_bw=self._default_output_bw,
+                                               default_param_bw=self._default_param_bw,
+                                               use_cuda=self._use_cuda,
+                                               config_file=config_file)
+
+        quant_sim_model.compute_encodings(forward_pass_callback=self._forward_pass_callback.func,
+                                          forward_pass_callback_args=self._forward_pass_callback.args)
+
+        return quant_sim_model
+
+    def _check_model_sensitivity_to_quantization(self, sim: QuantizationSimModel) -> Tuple[float, float, float]:
+        """
+        Perform the sensitivity analysis to weight and activation quantization
+        individually.
+
+        :param sim: Quantsim model.
+        :return: FP32 eval score, weight-quantized eval score, act-quantized eval score.
+        """
+        fp32_eval_score = self._eval_model(self._session)
+        _logger.info("FP32 eval score (W32A32): %f", fp32_eval_score)
+
+        act_quantized_eval_score = self._eval_activation_quantized_model(sim)
+        _logger.info("Activation-quantized eval score (W32A%d): %f", self._default_output_bw,
+                     act_quantized_eval_score)
+
+        weight_quantized_eval_score = self._eval_weight_quantized_model(sim)
+        _logger.info("Weight-quantized eval score (W%dA32): %f", self._default_param_bw,
+                     weight_quantized_eval_score)
+
+        return fp32_eval_score, weight_quantized_eval_score, act_quantized_eval_score
+
+    def _eval_model(self, session: tf.compat.v1.Session) -> float:
+        """
+        Evaluate the model performance.
+
+        :param session: TensorFlow session to be evaluated.
+        :return: Scaler value representing model performance.
+        """
+        return self._eval_callback.func(session, self._eval_callback.args)
+
+    def _eval_weight_quantized_model(self, sim):
+        """
+        Evaluate weight quantized model performance.
+        For weight quantized model performance, disable enabled activation quantizers, measure
+        eval score and enable again.
+
+        :param sim: Quantsim model.
+        :return: Quantized model performance.
+        """
+        enabled_activation_quantizers = sim.get_enabled_activation_quantizers()
+        sim.enable_disable_quantizers(enabled_activation_quantizers, enabled=False)
+        eval_score = self._eval_model(sim.session)
+        sim.enable_disable_quantizers(enabled_activation_quantizers, enabled=True)
+        return eval_score
+
+    def _eval_activation_quantized_model(self, sim):
+        """
+        Evaluate activation quantized model performance.
+        For activation quantized model performance, disable enabled param quantizers, measure
+        eval score and enable again.
+
+        :param sim: Quantsim model.
+        :return: Quantized model performance.
+        """
+        enabled_param_quantizers = sim.get_enabled_parameter_quantizers()
+        sim.enable_disable_quantizers(enabled_param_quantizers, enabled=False)
+        eval_score = self._eval_model(sim.session)
+        sim.enable_disable_quantizers(enabled_param_quantizers, enabled=True)
+        return eval_score
 
 
 def export_per_layer_stats_histogram(sim: QuantizationSimModel,
