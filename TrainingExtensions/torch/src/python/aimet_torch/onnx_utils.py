@@ -150,16 +150,22 @@ class OnnxExportApiArgs:
     configuration for torch onnx export api invocation
     """
 
-    def __init__(self, opset_version: int = None, input_names: List[str] = None, output_names: List[str] = None):
+    def __init__(self,
+                 opset_version: int = None,
+                 input_names: List[str] = None,
+                 output_names: List[str] = None,
+                 rename_all_onnx_ops: bool = False):
         """
         Refer torch documentation https://pytorch.org/docs/1.7.1/onnx.html?highlight=onnx%20export#torch.onnx.export
         :param opset_version: onnx opset version to use to export the model
         :param input_names:  names to assign to the input nodes of the onnx graph, in order
         :param output_names: names to assign to the output nodes of the graph, in order
+        :param rename_all_onnx_ops: optionally renames all onnx ops based on the torch module context
         """
         self.opset_version = opset_version
         self.input_names = input_names
         self.output_names = output_names
+        self.rename_all_onnx_ops = rename_all_onnx_ops
 
     @property
     def kwargs(self):
@@ -214,7 +220,7 @@ class CustomMarker(torch.nn.Module):
         self.identifier = identifier
         self.is_leaf = is_leaf
 
-    def forward(self, *inputs):
+    def forward(self, *inputs, **kwargs):
         """
         Forward method for this CustomMarker layer
         """
@@ -224,7 +230,8 @@ class CustomMarker(torch.nn.Module):
                 t = CustomMarkerFunc.apply(t, self.identifier, 'True', self.is_leaf)
             output.append(t)
 
-        x = self.marked_module(*output)
+        x = self.marked_module(*output, **kwargs) # pass down kwargs, TODO check for tensor inputs
+        was_output_tuple = isinstance(x, tuple)
         if isinstance(x, torch.Tensor):
             x = [x]
 
@@ -234,7 +241,8 @@ class CustomMarker(torch.nn.Module):
                 t = CustomMarkerFunc.apply(t, self.identifier, 'False', self.is_leaf)
             output.append(t)
 
-        if len(output) == 1:
+        # retain the tuple as output if marked module generates tuple.
+        if len(output) == 1 and not was_output_tuple:
             output = output[0]
         else:
             output = tuple(output)
@@ -333,8 +341,9 @@ class OnnxSaver:
                                                                  subnode)
 
     @classmethod
-    def _add_markers(cls, starting_module, module_name_map, module_marker_map, use_trace):
+    def _add_markers(cls, starting_module, module_name_map, module_marker_map, use_trace, add_all_marker: bool):
         """Recursively add marker layers
+        :param add_all_marker: if True add marker for non-leaf modules along with leaf module.
         """
         for local_module_name, module_ref in starting_module.named_children():
             # local module name only contains the module's attribute name directly under the parent module
@@ -351,10 +360,10 @@ class OnnxSaver:
             # recursively call children modules
             else:
                 # nn.ModuleList: does not have forward() method so should be ignored
-                if not isinstance(module_ref, torch.nn.ModuleList):
+                if add_all_marker and not isinstance(module_ref, torch.nn.ModuleList):
                     marker_layer = CustomMarker(module_ref, full_module_name, 'False')
                     setattr(starting_module, local_module_name, marker_layer)
-                cls._add_markers(module_ref, module_name_map, module_marker_map, use_trace)
+                cls._add_markers(module_ref, module_name_map, module_marker_map, use_trace, add_all_marker)
 
     @classmethod
     def _map_onnx_nodes_to_pytorch_modules(cls, pt_model, dummy_input, onnx_model_path, onnx_export_args,
@@ -379,7 +388,9 @@ class OnnxSaver:
         map_output_tensor_to_node, map_input_tensor_to_node = cls._create_map_of_tensor_to_node(onnx_model)
 
         # set default names for onnx nodes based on pytorch parent module and find all marker nodes
-        end_marker_map, start_marker_map = cls._set_onnx_node_default_names(onnx_model, map_input_tensor_to_node)
+        end_marker_map, start_marker_map = cls._set_onnx_node_default_names(onnx_model,
+                                                                            map_input_tensor_to_node,
+                                                                            map_output_tensor_to_node)
 
         # Set names for onnx ops belonging to leaf-level torch modules
         cls._set_leaf_module_onnx_node_names(map_input_tensor_to_node, start_marker_map)
@@ -629,12 +640,17 @@ class OnnxSaver:
                 set_name_for_downstream_nodes(downstream_nodes, node_name, 0)
 
     @classmethod
-    def _set_onnx_node_default_names(cls, onnx_model, map_input_tensor_to_node: Dict[str, onnx.NodeProto]):
+    def _set_onnx_node_default_names(cls, onnx_model,
+                                     map_input_tensor_to_node: Dict[str, onnx.NodeProto],
+                                     map_output_tensor_to_node: Dict[str, List[onnx.NodeProto]]
+                                     ):
+        # pylint: disable=too-many-branches
         """
         set names of the ONNX nodes using the identifier fields in the innermost marker layers.
         gathers and returns all the start and end markers as look-up by module name
         :param onnx_model: Onnx model
         :param map_input_tensor_to_node: Map of tensor to node consuming the tensor
+        :param map_output_tensor_to_node: Map of tensor to node producing the tensor
         :return: Map of end marker node, Map of start marker nodes
         """
         start_marker_map = defaultdict(list)
@@ -660,7 +676,12 @@ class OnnxSaver:
                     parent_module_name = identifier
                 else:
                     end_marker_map[identifier].append(node)
-                    parent_module_name = marker_context[identifier]
+                    if identifier in marker_context:
+                        parent_module_name = marker_context[identifier]
+                    else:
+                        parent_context = parent_module_name if parent_module_name is not None else '<model>'
+                        _logger.warning("end-marker seen without passing start-marker for '%s', continue to "
+                                        "use parent context '%s'", identifier, parent_context)
             else:
                 if parent_module_name is not None:
                     node.name = f'{parent_module_name}.{node.name}'
@@ -674,7 +695,17 @@ class OnnxSaver:
             for tensor in node.output:
                 downstream_nodes = map_input_tensor_to_node.get(tensor, [])
                 for dnode in downstream_nodes:
-                    set_name_for_downstream_nodes(dnode, parent_module_name)
+
+                    # continue only if all nodes associated with the input tensor(s) have been visited.
+                    skip = any(
+                        input_tensor in map_output_tensor_to_node \
+                        and map_output_tensor_to_node[input_tensor].op_type not in ['Constant'] \
+                        and id(map_output_tensor_to_node[input_tensor]) not in visited
+                        for input_tensor in dnode.input
+                    )
+
+                    if not skip:
+                        set_name_for_downstream_nodes(dnode, parent_module_name)
 
         for n in onnx_model.graph.node:
             # Ideally traversing the graph here might not be required with DFS but might be
@@ -700,7 +731,7 @@ class OnnxSaver:
         module_name_map = {}
         for module_name, module_ref in model.named_modules():
             module_name_map[module_ref] = module_name
-        cls._add_markers(model, module_name_map, module_marker_map, is_conditional)
+        cls._add_markers(model, module_name_map, module_marker_map, is_conditional, onnx_export_args.rename_all_onnx_ops)
         temp_file = os.path.join(working_dir, 'temp_onnx_model_with_markers.onnx')
         if is_conditional:
             with aimet_torch.utils.in_eval_mode(model), torch.no_grad():
