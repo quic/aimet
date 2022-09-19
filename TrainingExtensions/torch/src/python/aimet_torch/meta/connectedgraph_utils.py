@@ -133,7 +133,7 @@ def get_ops_with_missing_modules(model: torch.nn.Module, model_input: Union[torc
 
     missing_modules = []
     for op in conn_graph.get_all_ops().values():
-        if not op.get_module() and op.type not in ConnectedGraph.functional_ops:
+        if not op.get_module() and op.type not in ConnectedGraph.math_invariant_types and op.type != 'Split':
             missing_modules.append(op)
 
     return missing_modules
