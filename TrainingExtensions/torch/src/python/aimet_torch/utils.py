@@ -320,14 +320,15 @@ def create_fake_data_loader(dataset_size: int, batch_size: int, image_size=(1, 2
     return data_loader
 
 
-def get_module_to_name_dict(model: torch.nn.Module) -> Dict[torch.nn.Module, str]:
+def get_module_to_name_dict(model: torch.nn.Module, prefix: str = '') -> Dict[torch.nn.Module, str]:
     """
     Get a dictionary mapping model modules to names
     :param model: Model to get mapping for
+    :param prefix: Prefix string to prepend to names
     :return: Dictionary mapping model modules to names
     """
     module_to_name_dict = {}
-    for name, module in model.named_modules():
+    for name, module in model.named_modules(prefix=prefix):
         module_to_name_dict[module] = name
     return module_to_name_dict
 
