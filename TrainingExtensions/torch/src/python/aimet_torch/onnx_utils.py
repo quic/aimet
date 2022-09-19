@@ -150,22 +150,16 @@ class OnnxExportApiArgs:
     configuration for torch onnx export api invocation
     """
 
-    def __init__(self,
-                 opset_version: int = None,
-                 input_names: List[str] = None,
-                 output_names: List[str] = None,
-                 rename_all_onnx_ops: bool = False):
+    def __init__(self, opset_version: int = None, input_names: List[str] = None, output_names: List[str] = None):
         """
         Refer torch documentation https://pytorch.org/docs/1.7.1/onnx.html?highlight=onnx%20export#torch.onnx.export
         :param opset_version: onnx opset version to use to export the model
         :param input_names:  names to assign to the input nodes of the onnx graph, in order
         :param output_names: names to assign to the output nodes of the graph, in order
-        :param rename_all_onnx_ops: optionally renames all onnx ops based on the torch module context
         """
         self.opset_version = opset_version
         self.input_names = input_names
         self.output_names = output_names
-        self.rename_all_onnx_ops = rename_all_onnx_ops
 
     @property
     def kwargs(self):
@@ -341,15 +335,14 @@ class OnnxSaver:
                                                                  subnode)
 
     @classmethod
-    def _add_markers(cls, starting_module, module_name_map, module_marker_map, use_trace, add_all_marker: bool):
+    def _add_markers(cls, starting_module, module_name_map, module_marker_map, use_trace):
         """Recursively add marker layers
-        :param add_all_marker: if True add marker for non-leaf modules along with leaf module.
         """
         for local_module_name, module_ref in starting_module.named_children():
-            # local module name only contains the module's attribute name directly under the parent module
-            # need to pick up the full name starting with top level module name from module_inputs_map
-            full_module_name = module_name_map[module_ref]
             if aimet_torch.utils.is_leaf_module(module_ref):
+                # local module name only contains the module's attribute name directly under the parent module
+                # need to pick up the full name starting with top level module name from module_inputs_map
+                full_module_name = module_name_map[module_ref]
                 if use_trace:
                     assert full_module_name in module_marker_map
                     marker_layer = module_marker_map[full_module_name]
@@ -359,11 +352,7 @@ class OnnxSaver:
 
             # recursively call children modules
             else:
-                # nn.ModuleList: does not have forward() method so should be ignored
-                if add_all_marker and not isinstance(module_ref, torch.nn.ModuleList):
-                    marker_layer = CustomMarker(module_ref, full_module_name, 'False')
-                    setattr(starting_module, local_module_name, marker_layer)
-                cls._add_markers(module_ref, module_name_map, module_marker_map, use_trace, add_all_marker)
+                cls._add_markers(module_ref, module_name_map, module_marker_map, use_trace)
 
     @classmethod
     def _map_onnx_nodes_to_pytorch_modules(cls, pt_model, dummy_input, onnx_model_path, onnx_export_args,
@@ -387,13 +376,11 @@ class OnnxSaver:
         # Parse the ONNX model and create mapping from input and output tensors to corresponding nodes
         map_output_tensor_to_node, map_input_tensor_to_node = cls._create_map_of_tensor_to_node(onnx_model)
 
-        # set default names for onnx nodes based on pytorch parent module and find all marker nodes
-        end_marker_map, start_marker_map = cls._set_onnx_node_default_names(onnx_model,
-                                                                            map_input_tensor_to_node,
-                                                                            map_output_tensor_to_node)
+        # Find all marker nodes
+        end_marker_map, start_marker_map = cls._create_map_of_marker_nodes(onnx_model)
 
-        # Set names for onnx ops belonging to leaf-level torch modules
-        cls._set_leaf_module_onnx_node_names(map_input_tensor_to_node, start_marker_map)
+        # Set names
+        cls._set_onnx_node_names(map_input_tensor_to_node, start_marker_map)
 
         # Remove markers
         cls._detach_start_and_end_markers(map_input_tensor_to_node, map_output_tensor_to_node, start_marker_map,
@@ -587,7 +574,7 @@ class OnnxSaver:
                     OnnxSaver._remove_detached_nodes_from_onnx_graph(attribute.g)
 
     @classmethod
-    def _set_leaf_module_onnx_node_names(cls, map_input_tensor_to_node, start_marker_map):
+    def _set_onnx_node_names(cls, map_input_tensor_to_node, start_marker_map):
         """
         Set names of the ONNX nodes using the identifier fields in the marker layers
         :param map_input_tensor_to_node: Map of tensor to node consuming that tensor
@@ -596,10 +583,6 @@ class OnnxSaver:
         """
         node_name_count_map = dict()
         visited = set()
-
-        leaf_only_start_marker_map = {name: marker_nodes
-                                      for name, marker_nodes in start_marker_map.items()
-                                      if marker_nodes[0].attribute[MarkerAttr.IS_LEAF].s.decode() == 'True'}
 
         def set_name_for_downstream_nodes(starting_nodes, name, depth):
             for node in starting_nodes:
@@ -633,85 +616,48 @@ class OnnxSaver:
                                 break
                 visited.add(id(node))
 
-        for node_name, markers in leaf_only_start_marker_map.items():
+        for node_name, markers in start_marker_map.items():
             for marker in markers:
                 out_tensor = marker.output[0]
                 downstream_nodes = map_input_tensor_to_node.get(out_tensor, [])
                 set_name_for_downstream_nodes(downstream_nodes, node_name, 0)
 
     @classmethod
-    def _set_onnx_node_default_names(cls, onnx_model,
-                                     map_input_tensor_to_node: Dict[str, onnx.NodeProto],
-                                     map_output_tensor_to_node: Dict[str, List[onnx.NodeProto]]
-                                     ):
-        # pylint: disable=too-many-branches
+    def _create_map_of_marker_nodes(cls, onnx_model):
         """
-        set names of the ONNX nodes using the identifier fields in the innermost marker layers.
-        gathers and returns all the start and end markers as look-up by module name
+        Creates and returns maps of start and end marker nodes
         :param onnx_model: Onnx model
-        :param map_input_tensor_to_node: Map of tensor to node consuming the tensor
-        :param map_output_tensor_to_node: Map of tensor to node producing the tensor
         :return: Map of end marker node, Map of start marker nodes
         """
         start_marker_map = defaultdict(list)
         end_marker_map = defaultdict(list)
-        visited = set()
-        marker_context = {}
-
-        def set_name_for_downstream_nodes(node: onnx.NodeProto, parent_module_name):
-            """
-            Implement a depth-first traversal of onnx nodes based on the input tensor map.
-            :param node: Onnx node to rename or update the current parent context.
-            :param parent_module_name: parent module name
-            """
-            if id(node) in visited:
-                return
-
-            if node.op_type == 'CustomMarker':
-                identifier = node.attribute[MarkerAttr.NAME].s.decode()
-                is_start_marker = node.attribute[MarkerAttr.IS_START].s.decode()
-                if is_start_marker == 'True':
-                    start_marker_map[identifier].append(node)
-                    marker_context[identifier] = parent_module_name
-                    parent_module_name = identifier
-                else:
-                    end_marker_map[identifier].append(node)
-                    if identifier in marker_context:
-                        parent_module_name = marker_context[identifier]
-                    else:
-                        parent_context = parent_module_name if parent_module_name is not None else '<model>'
-                        _logger.warning("end-marker seen without passing start-marker for '%s', continue to "
-                                        "use parent context '%s'", identifier, parent_context)
-            else:
-                if parent_module_name is not None:
-                    node.name = f'{parent_module_name}.{node.name}'
-
-            visited.add(id(node))
-            for attribute in node.attribute:
-                if getattr(attribute, 'g', None) is not None:
-                    for subnode in getattr(attribute, 'g').node:
-                        set_name_for_downstream_nodes(subnode, parent_module_name)
-
-            for tensor in node.output:
-                downstream_nodes = map_input_tensor_to_node.get(tensor, [])
-                for dnode in downstream_nodes:
-
-                    # continue only if all nodes associated with the input tensor(s) have been visited.
-                    skip = any(
-                        input_tensor in map_output_tensor_to_node \
-                        and map_output_tensor_to_node[input_tensor].op_type not in ['Constant'] \
-                        and id(map_output_tensor_to_node[input_tensor]) not in visited
-                        for input_tensor in dnode.input
-                    )
-
-                    if not skip:
-                        set_name_for_downstream_nodes(dnode, parent_module_name)
-
-        for n in onnx_model.graph.node:
-            # Ideally traversing the graph here might not be required with DFS but might be
-            # required to name ops in dangling sub-graph.
-            set_name_for_downstream_nodes(n, None)
+        for node in onnx_model.graph.node:
+            OnnxSaver._populate_start_and_end_marker_maps(start_marker_map, end_marker_map, node)
         return end_marker_map, start_marker_map
+
+    @staticmethod
+    def _populate_start_and_end_marker_maps(start_marker_map: Dict[str, onnx.NodeProto],
+                                            end_marker_map: Dict[str, onnx.NodeProto], node: onnx.NodeProto):
+        """
+        Populate dictionaries mapping identifier names to start and end markers. Recursively populates dictionaries for
+        subgraphs of the given node.
+        :param start_marker_map: Dictionary mapping identifier names to start markers
+        :param end_marker_map: Dictionary mapping identifier names to end markers
+        :param node: Onnx node to potentially include in a map
+        """
+        if node.op_type == 'CustomMarker':
+            identifier = node.attribute[MarkerAttr.NAME].s.decode()
+            is_start_marker = node.attribute[MarkerAttr.IS_START].s.decode()
+
+            if is_start_marker == 'True':
+                start_marker_map[identifier].append(node)
+            else:
+                end_marker_map[identifier].append(node)
+
+        for attribute in node.attribute:
+            if getattr(attribute, 'g', None) is not None:
+                for subnode in getattr(attribute, 'g').node:
+                    OnnxSaver._populate_start_and_end_marker_maps(start_marker_map, end_marker_map, subnode)
 
     @classmethod
     def _create_onnx_model_with_markers(cls, dummy_input, pt_model, working_dir, onnx_export_args, is_conditional,
@@ -730,8 +676,9 @@ class OnnxSaver:
         model = copy.deepcopy(pt_model).cpu()
         module_name_map = {}
         for module_name, module_ref in model.named_modules():
-            module_name_map[module_ref] = module_name
-        cls._add_markers(model, module_name_map, module_marker_map, is_conditional, onnx_export_args.rename_all_onnx_ops)
+            if aimet_torch.utils.is_leaf_module(module_ref):
+                module_name_map[module_ref] = module_name
+        cls._add_markers(model, module_name_map, module_marker_map, is_conditional)
         temp_file = os.path.join(working_dir, 'temp_onnx_model_with_markers.onnx')
         if is_conditional:
             with aimet_torch.utils.in_eval_mode(model), torch.no_grad():
@@ -827,7 +774,7 @@ class OnnxSaver:
                         output_names_for_all_graphs[idx][index] = input_tensor
                 break
 
-        if output_tensor in map_input_tensor_to_node:#not found_tensor:
+        if output_tensor in map_input_tensor_to_node:
             for next_node in map_input_tensor_to_node[output_tensor]:
                 index = list(next_node.input).index(output_tensor)
                 next_node.input.remove(output_tensor)

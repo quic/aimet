@@ -39,6 +39,7 @@
 import os
 import logging
 
+import pytest
 import torch
 from torchvision import models
 
@@ -645,6 +646,8 @@ class TestOnnxUtils:
             os.remove(onnx_path)
 
     def test_non_leaf_module_names(self):
+        pytest.skip('enable after adding non-leaf modules naming of onnx ops')
+
         """
         Test that node names are uniquely set.
         """
