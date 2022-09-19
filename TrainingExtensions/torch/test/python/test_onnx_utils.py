@@ -47,6 +47,8 @@ from aimet_common.utils import AimetLogger
 from aimet_torch import onnx_utils
 import onnx
 
+from aimet_torch.onnx_utils import OnnxExportApiArgs
+
 
 class OutOfOrderModel(torch.nn.Module):
 
@@ -662,7 +664,8 @@ class TestOnnxUtils:
         onnx_path = './data/MyModel.onnx'
 
         torch.onnx.export(model, dummy_input, onnx_path)
-        onnx_utils.OnnxSaver.set_node_names(onnx_path, model, dummy_input)
+        onnx_utils.OnnxSaver.set_node_names(onnx_path, model, dummy_input,
+                                            onnx_export_args=OnnxExportApiArgs(rename_all_onnx_ops=True))
 
         onnx_model = onnx.load(onnx_path)
         onnx.checker.check_model(onnx_model)
