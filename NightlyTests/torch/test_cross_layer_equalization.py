@@ -125,7 +125,7 @@ class TestCrossLayerEqualization(unittest.TestCase):
         results_dir = 'artifacts'
         if not os.path.exists('artifacts'):
             os.makedirs('artifacts')
-        file = os.path.join(results_dir, 'visualize_changes_after_optimization.html')
+        file = os.path.join(results_dir, 'visualize_relative_weight_ranges_to_identify_problematic_layers.html')
 
         batch_norm_fold.fold_all_batch_norms(model, (1, 3, 224, 224))
 
