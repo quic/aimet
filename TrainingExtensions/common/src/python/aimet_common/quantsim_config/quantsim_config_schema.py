@@ -231,6 +231,10 @@ QUANTSIM_CONFIG_SCHEMA = {
                             },
                             "minItems": 1,
                             "additionalItems": False
+                        },
+                        "per_channel_quantization": {
+                            "type": "string",
+                            "pattern": "^True$|^False$"
                         }
                     },
                     "additionalProperties": False

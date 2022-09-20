@@ -1011,7 +1011,7 @@ class TestFX:
                 return x
 
         input_shape = (1, 3, 8, 8)
-        input_tensor = [torch.randn(*input_shape), torch.randn(*input_shape)]
+        input_tensor = (torch.randn(*input_shape), torch.randn(*input_shape))
         model = ModelWithMatMulOp().eval()
         model_transformed = prepare_model(model)
         print(model_transformed)

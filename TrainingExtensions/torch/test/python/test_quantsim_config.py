@@ -48,7 +48,7 @@ from aimet_torch.quantsim_config.quantsim_config import get_all_ops_in_neighborh
 from aimet_torch.qc_quantize_op import QcQuantizeWrapper
 from aimet_torch import utils
 from aimet_torch.meta.connectedgraph import ConnectedGraph
-
+from aimet_torch.tensor_quantizer import StaticGridPerTensorQuantizer, StaticGridPerChannelQuantizer
 
 class ModelWithBertCustomLayerNormGelu(torch.nn.Module):
     """ Model with PyTorch LayerNorm and gelu """
@@ -278,7 +278,7 @@ class TestQuantsimConfig:
                             "is_quantized": "True",
                             "is_symmetric": "False"
                         }
-                    }
+                    },
                 }
             },
             "supergroups": [],
@@ -315,6 +315,124 @@ class TestQuantsimConfig:
                             assert param_quantizer.use_symmetric_encodings
         if os.path.exists('./data/quantsim_config.json'):
             os.remove('./data/quantsim_config.json')
+
+    def _test_parse_config_file_op_type_per_channel_helper(self, per_channel_fields):
+        """ helper function to test out per_channel_quantization"""
+        for k in ['defaults', 'Conv', 'Gemm']:
+            assert k in per_channel_fields.keys()
+
+        model = MultiInput()
+        model.eval()
+        quantsim_config = {
+            "defaults": {
+                "ops": {
+                    "is_output_quantized": "True",
+                    "is_symmetric": "False"
+                },
+                "params": {
+                    "is_quantized": "True",
+                    "is_symmetric": "True"
+                },
+                "per_channel_quantization": per_channel_fields["defaults"],
+            },
+            "params": {
+                "bias": {
+                    "is_quantized": "False"
+                },
+            },
+            "op_type": {
+                "Conv": {
+                    "per_channel_quantization": per_channel_fields["Conv"]
+                },
+                "Gemm": {
+                    "per_channel_quantization": per_channel_fields["Gemm"]
+                }
+            },
+            "supergroups": [],
+            "model_input": {},
+            "model_output": {}
+        }
+        with open('./data/quantsim_config.json', 'w') as f:
+            json.dump(quantsim_config, f)
+        sim = QuantizationSimModel(model, quant_scheme=QuantScheme.post_training_tf_enhanced,
+                                   config_file='./data/quantsim_config.json',
+                                   dummy_input=(torch.rand(1, 3, 32, 32), torch.rand(1, 3, 20, 20)))
+
+        return sim
+
+    def test_parse_config_file_op_type_per_channel(self):
+        """ Test that op specific quantization parameters are set correctly when using json config file """
+
+        # test 1: expect all to be StaticGridPerChannelQuantizer
+        per_channel_fields = {"defaults": "True", "Conv": "True", "Gemm": "True"}
+        sim = self._test_parse_config_file_op_type_per_channel_helper(per_channel_fields)
+
+        for name, module in sim.model.named_modules():
+            if isinstance(module, QcQuantizeWrapper):
+                if 'weight' in module.param_quantizers:
+                    assert isinstance(module.param_quantizers['weight'], StaticGridPerChannelQuantizer)
+
+
+        # test 2: expect all but Conv to be StaticGridPerChannelQuantizer
+        per_channel_fields = {"defaults": "True", "Conv": "False", "Gemm": "True"}
+        sim = self._test_parse_config_file_op_type_per_channel_helper(per_channel_fields)
+
+        for name, module in sim.model.named_modules():
+            if isinstance(module, QcQuantizeWrapper):
+                if 'weight' in module.param_quantizers:
+                    if isinstance(module._module_to_wrap, torch.nn.Conv2d):
+                        assert isinstance(module.param_quantizers['weight'], StaticGridPerTensorQuantizer)
+                    else:
+                        assert isinstance(module.param_quantizers['weight'], StaticGridPerChannelQuantizer)
+
+
+        # test 3: expect all but Conv and Gemm to be StaticGridPerChannelQuantizer
+        per_channel_fields = {"defaults": "True", "Conv": "False", "Gemm": "False"}
+        sim = self._test_parse_config_file_op_type_per_channel_helper(per_channel_fields)
+
+        for name, module in sim.model.named_modules():
+            if isinstance(module, QcQuantizeWrapper):
+                if 'weight' in module.param_quantizers:
+                    if isinstance(module._module_to_wrap, torch.nn.Conv2d) or isinstance(module._module_to_wrap,
+                                                                                         torch.nn.Linear):
+                        assert isinstance(module.param_quantizers['weight'], StaticGridPerTensorQuantizer)
+                    else:
+                        assert isinstance(module.param_quantizers['weight'], StaticGridPerChannelQuantizer)
+
+
+        # test 4: expect all in StaticGridPerTensorQuantizer except Conv which will be in StaticGridPerChannelQuantizer
+        per_channel_fields = {"defaults": "False", "Conv": "True", "Gemm": "False"}
+        sim = self._test_parse_config_file_op_type_per_channel_helper(per_channel_fields)
+
+        for name, module in sim.model.named_modules():
+            if isinstance(module, QcQuantizeWrapper):
+                if 'weight' in module.param_quantizers:
+                    if isinstance(module._module_to_wrap, torch.nn.Conv2d):
+                        assert isinstance(module.param_quantizers['weight'], StaticGridPerChannelQuantizer)
+                    else:
+                        assert isinstance(module.param_quantizers['weight'], StaticGridPerTensorQuantizer)
+
+        random_input = (torch.rand(1, 3, 32, 32), torch.rand(1, 3, 20, 20))
+
+        def forward_pass(model, args):
+            model.eval()
+            with torch.no_grad():
+                model(*random_input)
+
+
+        # test 5: test to make sure only Conv has param encodings of length greater than 1(per-channel),
+        # others have only one entry
+        sim.compute_encodings(forward_pass, None)
+        sim.export('./data/', 'test_parse_config_file_op_type_per_channel',
+                   dummy_input=(torch.rand(1, 3, 32, 32), torch.rand(1, 3, 20, 20)))
+
+        with open("./data/test_parse_config_file_op_type_per_channel.encodings", "r") as encodings_file:
+            encodings = json.load(encodings_file)
+            assert len(encodings["param_encodings"]["bn1.weight"]) == 1
+            assert len(encodings["param_encodings"]["fc.weight"]) == 1
+            assert len(encodings["param_encodings"]["conv1.weight"]) == 16
+            assert len(encodings["param_encodings"]["conv2.weight"]) == 8
+            assert len(encodings["param_encodings"]["conv3.weight"]) == 8
 
     def test_parse_config_file_op_type_supported_kernels(self):
         """
@@ -792,11 +910,11 @@ class TestQuantsimConfig:
                         "params": {
                             "bias": {
                                 "is_quantized": "True"
-                            }
-                        }
+                            },
+                        },
                     },
                     "GELU": {
-                        "is_input_quantized": "True"
+                        "is_input_quantized": "True",
                     }
                 },
                 "supergroups": [],
