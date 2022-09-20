@@ -5,7 +5,7 @@ Jinja2==3.0.3
 jsonschema
 numpy>=1.19.5
 osqp
-pandas
+pandas==1.1.5
 progressbar2
 pybind11
 PyYAML
