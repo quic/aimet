@@ -294,11 +294,8 @@ def interpolate_create_module(node: torch.fx.node) -> torch.nn.Module:
     :param node: Current node in the graph after which new node will be inserted
     :return: New module.
     """
-    kwargs = node.kwargs
+    _ = node.kwargs
     module = elementwise_ops.Interpolate()
-    # Set the parameters for module from node.kwargs
-    for key, value in kwargs.items():
-        setattr(module, key, value)
 
     return module
 
