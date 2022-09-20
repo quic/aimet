@@ -36,7 +36,6 @@
 #  @@-COPYRIGHT-END-@@
 # =============================================================================
 """ Utilities for parsing and applying quantsim configurations from json config file """
-
 from typing import Dict, List, Tuple, Set
 import torch
 
@@ -117,12 +116,14 @@ class QuantSimConfigurator(AimetCommonQuantSimConfigurator):
         self._elementwise_op_to_tensor_quantizers_dict = self._create_elementwise_op_to_tensor_quantizers_dict()
         self._disable_all_quantizers()
         self._supported_kernels = self._parse_supported_kernels()
+        self._per_channel_quantization = {}
         if ENFORCE_TARGET_DTYPE_BITWIDTH_CONFIG:
             if self.check_correctness_of_dtype_bw_rules(QuantDtypeBwInfo(self._default_data_type,
                                                                          self._default_output_bw,
                                                                          self._default_param_bw)):
                 logger.info("Supported Kernel check for valid dtype and bitwidth overrides completed")
         self._set_quantsim_configs()
+        self._set_per_channel_quantization()
 
     def _create_named_modules_to_tensor_quantizers_dict(self) -> Dict[torch.nn.Module, TensorQuantizersTupleType]:
         """
@@ -304,8 +305,9 @@ class QuantSimConfigurator(AimetCommonQuantSimConfigurator):
         if ConfigDictKeys.UNSIGNED_SYMMETRIC in default_configs:
             self._set_unsigned_symmetric(default_configs[ConfigDictKeys.UNSIGNED_SYMMETRIC])
 
-        if ConfigDictKeys.PER_CHANNEL_QUANTIZATION in default_configs:
-            self._set_per_channel_quantization(default_configs[ConfigDictKeys.PER_CHANNEL_QUANTIZATION])
+        self._per_channel_quantization[ConfigDictKeys.DEFAULTS] = default_configs.get(
+            ConfigDictKeys.PER_CHANNEL_QUANTIZATION, False)
+
 
     def _set_default_configs_for_ops(self, default_op_configs: ConfigType):
         """
@@ -358,14 +360,26 @@ class QuantSimConfigurator(AimetCommonQuantSimConfigurator):
             for param_quantizer in quantsim_wrapper.param_quantizers.values():
                 param_quantizer.use_unsigned_symmetric = unsigned_symmetric
 
-    def _set_per_channel_quantization(self, per_channel_quantization: bool):
+    def _set_per_channel_quantization(self):
         """
         Enables per-channel quantization for all parameter quantizers in the model
-        :param per_channel_quantization: Bool to enable/disable per-channel quantization
         """
-        if per_channel_quantization:
-            for quantsim_wrapper in self._module_to_quantsim_wrapper_dict.values():
+        # pylint: disable=protected-access
+        assert ConfigDictKeys.DEFAULTS in self._per_channel_quantization.keys()
+        for quantsim_wrapper in self._module_to_quantsim_wrapper_dict.values():
+            onnx_types = map_torch_types_to_onnx.get(type(quantsim_wrapper._module_to_wrap), [])
+
+            # check if any entry in onnx_types exists in self._per_channel_quantization. If a result exists, use it to
+            # enable per_channel_quantization, if not fall back to using the default value
+            if bool(set(onnx_types).intersection(self._per_channel_quantization)):
+                for onnx_type in onnx_types:
+                    if onnx_type in self._per_channel_quantization:
+                        if self._per_channel_quantization[onnx_type]:
+                            quantsim_wrapper.enable_per_channel_quantization()
+                        break
+            elif self._per_channel_quantization[ConfigDictKeys.DEFAULTS]:
                 quantsim_wrapper.enable_per_channel_quantization()
+
 
     def _set_param_configs(self, param_configs: ParamType):
         """
@@ -402,6 +416,11 @@ class QuantSimConfigurator(AimetCommonQuantSimConfigurator):
                 op_config = op_configs[op.type]
                 logger.info(' Set op level config for elementwise op = {%s}', op.type)
                 self._set_config_for_module(input_output_tensor_quantizers, op_config, modified_tensor_quantizers)
+
+        for op_type in op_configs.keys():
+            if ConfigDictKeys.PER_CHANNEL_QUANTIZATION in op_configs[op_type]:
+                self._per_channel_quantization[op_type] = op_configs[op_type][ConfigDictKeys.PER_CHANNEL_QUANTIZATION]
+
 
     def _set_config_for_module(self, input_output_tensor_quantizers: TensorQuantizersTupleType, op_config: OpType,
                                modified_tensor_quantizers: Dict[TensorQuantizer, Set], module: torch.nn.Module = None):
