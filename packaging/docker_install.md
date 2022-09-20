@@ -55,7 +55,7 @@ popd
 
 ## Setup the environment
 In order to build and run AIMET code, several dependencies are required (such as python, cmake, tensorflow, pytorch, etc). [Docker files](../Jenkins) and [Docker images](https://artifacts.codelinaro.org/ui/native/codelinaro-aimet/aimet-dev) with all prerequisites and dependencies are available for each AIMET variant. Following are the available development options:
-- Use the appropriate [pre-built Docker image](https://artifacts.codelinaro.org/ui/native/codelinaro-aimet/aimet-dev) using the instructions [here](#docker-information).
+- Use the appropriate [pre-built Docker image](https://artifacts.codelinaro.org/ui/native/codelinaro-aimet/aimet-dev) using the instructions [here](#docker-information). This is the *recommended* option.
 - Build the docker image locally and launch a launch container docker using the instructions [here](#docker-information).
 - Install the dependencies on your machine and setup your environment using [the appropriate Dockerfile](../Jenkins) as a guide.
 
