@@ -1250,7 +1250,7 @@ class TestQuantsimConfig(unittest.TestCase):
                                            quantsim_output_bw=8, quantsim_param_bw=8,
                                            quantsim_data_type=QuantizationDataType.int)
 
-        qsim_dtype_bw = QuantDtypeBwInfo(data_type=QuantizationDataType.int, act_bw=8, param_bw=8)
+        qsim_dtype_bw = QuantDtypeBwInfo(act_dtype=QuantizationDataType.int, act_bw=8, param_dtype=QuantizationDataType.int, param_bw=8)
 
         self.assertTrue(qsim_config.check_correctness_of_dtype_bw_rules(qsim_dtype_bw))
 
@@ -1352,7 +1352,7 @@ class TestQuantsimConfig(unittest.TestCase):
                                            quantsim_output_bw=8, quantsim_param_bw=8,
                                            quantsim_data_type=QuantizationDataType.int)
 
-        qsim_dtype_bw = QuantDtypeBwInfo(data_type=QuantizationDataType.int, act_bw=8, param_bw=8)
+        qsim_dtype_bw = QuantDtypeBwInfo(act_dtype=QuantizationDataType.int, act_bw=8, param_dtype=QuantizationDataType.int, param_bw=8)
         exception_raised = False
         try:
             qsim_config.check_correctness_of_dtype_bw_rules(qsim_dtype_bw)
@@ -1455,7 +1455,7 @@ class TestQuantsimConfig(unittest.TestCase):
                                            quantsim_output_bw=8, quantsim_param_bw=8,
                                            quantsim_data_type=QuantizationDataType.int)
 
-        qsim_dtype_bw = QuantDtypeBwInfo(data_type=QuantizationDataType.int, act_bw=8, param_bw=8)
+        qsim_dtype_bw = QuantDtypeBwInfo(act_dtype=QuantizationDataType.int, act_bw=8, param_dtype=QuantizationDataType.int, param_bw=8)
 
         exception_raised = False
         try:
