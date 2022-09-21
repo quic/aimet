@@ -6,6 +6,10 @@
 AIMET Keras AdaRound API
 ==================================
 
+User Guide Link
+===============
+To learn more about this technique, please see :ref:`AdaRound<ug-adaround>`:
+
 Top-level API
 =============
 .. autofunction:: aimet_tensorflow.keras.adaround.adaround_weight.Adaround.apply_adaround
