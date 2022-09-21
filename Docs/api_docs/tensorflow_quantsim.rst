@@ -6,6 +6,11 @@
 AIMET TensorFlow Quantization SIM API
 =====================================
 
+User Guide Link
+===============
+To learn more about Quantization Simulation, please see :ref:`Quantization Sim<ug-quantsim>`
+
+
 Top-level API
 =============
 

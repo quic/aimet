@@ -5,6 +5,11 @@
 ===============================================
 AIMET TensorFlow Cross Layer Equalization APIs
 ===============================================
+
+User Guide Link
+===============
+To learn more about this technique, please see :ref:`Cross-Layer Equalization<ug-post-training-quantization>`:
+
 Introduction
 ============
 AIMET functionality for TensorFlow Cross Layer Equalization supports three techniques-

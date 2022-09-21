@@ -6,6 +6,10 @@
 AIMET PyTorch AutoQuant API
 ===========================
 
+User Guide Link
+===============
+To learn more about this technique, please see :ref:`AutoQuant<ug-auto-quant>`:
+
 Top-level API
 =============
 .. autoclass:: aimet_torch.auto_quant.AutoQuant

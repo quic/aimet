@@ -6,6 +6,10 @@
 AIMET PyTorch Cross Layer Equalization APIs
 ===========================================
 
+User Guide Link
+===============
+To learn more about this technique, please see :ref:`Cross-Layer Equalization<ug-post-training-quantization>`:
+
 Introduction
 ============
 AIMET functionality for PyTorch Cross Layer Equalization has 3 features-
