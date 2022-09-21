@@ -118,9 +118,9 @@ class QuantSimConfigurator(AimetCommonQuantSimConfigurator):
         self._supported_kernels = self._parse_supported_kernels()
         self._per_channel_quantization = {}
         if ENFORCE_TARGET_DTYPE_BITWIDTH_CONFIG:
-            if self.check_correctness_of_dtype_bw_rules(QuantDtypeBwInfo(self._default_data_type,
-                                                                         self._default_output_bw,
-                                                                         self._default_param_bw)):
+            if self.check_correctness_of_dtype_bw_rules(
+                    QuantDtypeBwInfo(self._default_data_type, self._default_output_bw,
+                                     self._default_data_type, self._default_param_bw)):
                 logger.info("Supported Kernel check for valid dtype and bitwidth overrides completed")
         self._set_quantsim_configs()
         self._set_per_channel_quantization()

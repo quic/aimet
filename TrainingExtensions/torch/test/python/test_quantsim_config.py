@@ -1418,7 +1418,8 @@ class TestQuantsimConfig:
                                            quantsim_output_bw=8, quantsim_param_bw=8,
                                            quantsim_data_type=QuantizationDataType.int)
 
-        qsim_dtype_bw = QuantDtypeBwInfo(data_type=QuantizationDataType.int, act_bw=8 , param_bw=8)
+        qsim_dtype_bw = QuantDtypeBwInfo(act_dtype=QuantizationDataType.int, act_bw=8,
+                                         param_dtype=QuantizationDataType.int, param_bw=8)
 
         assert qsim_config.check_correctness_of_dtype_bw_rules(qsim_dtype_bw)
 
@@ -1517,7 +1518,8 @@ class TestQuantsimConfig:
                                            quantsim_output_bw=8, quantsim_param_bw=8,
                                            quantsim_data_type=QuantizationDataType.int)
 
-        qsim_dtype_bw = QuantDtypeBwInfo(data_type=QuantizationDataType.int, act_bw=8 , param_bw=8)
+        qsim_dtype_bw = QuantDtypeBwInfo(act_dtype=QuantizationDataType.int, act_bw=8,
+                                         param_dtype=QuantizationDataType.int, param_bw=8)
         exception_raised = False
         try:
             qsim_config.check_correctness_of_dtype_bw_rules(qsim_dtype_bw)
@@ -1618,7 +1620,8 @@ class TestQuantsimConfig:
                                            quantsim_output_bw=8, quantsim_param_bw=8,
                                            quantsim_data_type=QuantizationDataType.int)
 
-        qsim_dtype_bw = QuantDtypeBwInfo(data_type=QuantizationDataType.int, act_bw=8 , param_bw=8)
+        qsim_dtype_bw = QuantDtypeBwInfo(act_dtype=QuantizationDataType.int, act_bw=8,
+                                         param_dtype=QuantizationDataType.int, param_bw=8)
         exception_raised = False
         try:
             qsim_config.check_correctness_of_dtype_bw_rules(qsim_dtype_bw)
@@ -1993,3 +1996,15 @@ class TestQuantsimConfig:
         qsim_config.ENFORCE_TARGET_DTYPE_BITWIDTH_CONFIG = False
         if os.path.exists('./data/quantsim_config.json'):
             os.remove('./data/quantsim_config.json')
+
+    def test_QuantDtypeBwInfo_data_class_1(self):
+        """
+        Test QuantDtypeBwInfo __eq__
+        """
+        q1 = QuantDtypeBwInfo(QuantizationDataType.int, 8, QuantizationDataType.float, 16)
+        q2 = QuantDtypeBwInfo(QuantizationDataType.int, 16, QuantizationDataType.float, 16)
+        q3 = QuantDtypeBwInfo(QuantizationDataType.int, 8, QuantizationDataType.float, 16)
+
+        assert q1 != q2
+        assert q1 == q3
+
