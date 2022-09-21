@@ -46,7 +46,7 @@ the tensors that are either input to the model (input, constant or parameter) or
 result of an operation. Furthermore the graph representation is bi-directional."""
 
 
-from typing import Dict, List
+from typing import Dict
 from onnx import onnx_pb
 from onnxruntime.quantization.onnx_quantizer import ONNXModel
 
@@ -105,15 +105,15 @@ class ConnectedGraph(AimetCommonConnectedGraph):
                 else:
                     self._input_to_node[input_name] = [node]
 
-    def _get_starting_nodes_names(self) -> List:
+    def _get_starting_nodes(self) -> Dict:
         """ Gets list of names of starting nodes"""
-        input_node_names = []
-        for node in self.model.graph.input:
-            input_node_names.append(node.name)
+        input_nodes = {}
+        for tensor in self.model.graph.input:
+            input_nodes[tensor.name] = tensor
 
-        assert input_node_names, "The model does not have any input tensors"
+        assert input_nodes, "The model does not have any input tensors"
 
-        return input_node_names
+        return input_nodes
 
     def get_all_ops(self) -> Dict[str, Op]:
         """ Returns the ops dictionary """
@@ -155,14 +155,39 @@ class ConnectedGraph(AimetCommonConnectedGraph):
 
     def _process_starting_ops(self):
         """Processes input ops"""
-        input_node_names = self._get_starting_nodes_names()
-        for name in input_node_names:
-            if name in self._input_to_node:
-                for node in self._input_to_node[name]:
+        input_nodes = self._get_starting_nodes()
+        for input_name in input_nodes:
+            if input_name in self._input_to_node:
+                for node in self._input_to_node[input_name]:
                     op = self._create_ir_op(node)
                     self._ops[node.name] = op
+                    self._create_and_link_product_for_inputs(node.name, input_name)
                     self._add_children_ops_to_op_queue(node)
                     self.starting_ops.append(op)
+
+    def _create_and_link_product_for_inputs(self, node_name: str, input_name: str):
+        """
+        Create products between input and op consuming the input
+        """
+
+        assert input_name, "No inputs present in the model"
+
+        if input_name + '_to_' + node_name in self._products:
+            logger.debug("%s already exists", input_name + '_to_' + node_name)
+        else:
+            # TODO: figure out a way to add tensor shape. Adding the shape as None for now
+            product = Product(input_name + '_to_' + node_name, None)
+            # add product to self._products dictionary
+            self._products[input_name + '_to_' + node_name] = product
+            logger.debug("Created new product " + input_name + '_to_' + node_name)
+
+            current_op = self._ops[node_name]
+            product.tensor_dict[current_op] = input_name
+
+            # Link parent op, product, and current op
+            # Fill in input, output, producer, consumer params as appropriate.
+            current_op.add_input(product)
+            product.add_consumer(current_op)
 
     def _create_op_if_not_exists(self, node: onnx_pb.NodeProto):
         """ Creates a CG op for a node"""
@@ -211,6 +236,7 @@ class ConnectedGraph(AimetCommonConnectedGraph):
         - Creates op/product graph
         """
         visited_ops = set()
+
         self._process_starting_ops()
         # op_queue is treated as a stack, containing operations to traverse. Elements are tuple
         # - Index 0 contains the node to visit.

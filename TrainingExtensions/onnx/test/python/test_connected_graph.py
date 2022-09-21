@@ -45,13 +45,13 @@ class TestConnectedGraph:
         model = build_dummy_model()
         cg = ConnectedGraph(model)
         assert len(cg.get_all_ops()) == 5
-        assert len(cg.get_all_products()) == 4
+        assert len(cg.get_all_products()) == 5
 
     def test_single_residual_model(self):
         model = single_residual_model()
         conn_graph = ConnectedGraph(model)
         assert len(conn_graph.get_all_ops()) == 19
-        assert len(conn_graph.get_all_products()) == 20
+        assert len(conn_graph.get_all_products()) == 21
         input_ops = get_all_input_ops(conn_graph)
         assert len(input_ops) == 1
 
@@ -59,6 +59,6 @@ class TestConnectedGraph:
         model = multi_input_model()
         conn_graph = ConnectedGraph(model)
         assert len(conn_graph.get_all_ops()) == 15
-        assert len(conn_graph.get_all_products()) == 14
+        assert len(conn_graph.get_all_products()) == 16
         input_ops = get_all_input_ops(conn_graph)
         assert len(input_ops) == 2
