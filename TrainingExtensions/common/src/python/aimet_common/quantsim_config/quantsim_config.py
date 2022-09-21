@@ -230,19 +230,15 @@ class QuantSimConfigurator(ABC):
 
                 else:
                     error_msg = (f'Default supported_kernels override check failed, one way to rectify is to include \n'
-                                 f'default quantsim data type and bit-width (act_bw = {quantsim_dtype_bw_info.act_bw}, '
-                                 f'param_bw = {quantsim_dtype_bw_info.param_bw}, data_type = '
-                                 f'{quantsim_dtype_bw_info.data_type}) \n'
+                                 f'default quantsim candidate: {quantsim_dtype_bw_info}\n'
                                  f'in supported_kernels list under default section of target specific config file \n')
                     logger.error(error_msg)
                     raise NotImplementedError(error_msg)
         else:
             # user has not provided default supported_kernels, log quantsim defaults treated as default target kernel support
             default_valid = True
-            logger.info(' Default supported_kernels not specified in given target specific config file. \n'
-                        ' Using default quantsim data type and bit-width {act_bw = %s, param_bw = %s, data_type = %s} \n '
-                        ' as default target support\n',
-                        quantsim_dtype_bw_info.act_bw, quantsim_dtype_bw_info.param_bw, quantsim_dtype_bw_info.data_type)
+            logger.info(' Default supported_kernels not specified in given target specific config file.\n'
+                        ' Using default quantsim candidate: %s as default target support', quantsim_dtype_bw_info)
 
         # in either case, validate op level override options
         if self._quantsim_configs[ConfigDictKeys.OP_TYPE]:
@@ -259,9 +255,8 @@ class QuantSimConfigurator(ABC):
         :return:
         """
 
-        if is_current_config_same_as_override_option(QuantDtypeBwInfo(self._default_data_type,
-                                                                      self._default_output_bw,
-                                                                      self._default_param_bw),
+        if is_current_config_same_as_override_option(QuantDtypeBwInfo(self._default_data_type, self._default_output_bw,
+                                                                      self._default_data_type, self._default_param_bw),
                                                      default_configs[ConfigDictKeys.SUPPORTED_KERNELS]):
             logger.info('Default quantsim config is same as override option at override index {%s}. Skipping override',
                         DEFAULT_OVERRIDE_SUPPORTED_KERNEL_INDEX)
@@ -317,7 +312,7 @@ class QuantSimConfigurator(ABC):
 
         if not is_current_config_same_as_override_option(
                 QuantDtypeBwInfo(self._default_data_type, self._default_output_bw,
-                                 self._default_param_bw), op_config[ConfigDictKeys.SUPPORTED_KERNELS]):
+                                 self._default_data_type, self._default_param_bw), op_config[ConfigDictKeys.SUPPORTED_KERNELS]):
             param_bw = op_config[ConfigDictKeys.SUPPORTED_KERNELS][DEFAULT_OVERRIDE_SUPPORTED_KERNEL_INDEX]['param']['bitwidth']
             param_dtype = op_config[ConfigDictKeys.SUPPORTED_KERNELS][DEFAULT_OVERRIDE_SUPPORTED_KERNEL_INDEX]['param']['dtype']
             logger.info(' Enforcing target kernel config for param bw = {%s} and dtype = {%s}',
@@ -507,9 +502,9 @@ def current_config_in_supported_kernels(current_dtype_bw: QuantDtypeBwInfo, supp
 
         # we need to compare combination of act/param with default user provided config.
         # Because a given kernel support is valid only as a combination.
-        if act_config[ConfigDictKeys.DTYPE] == current_dtype_bw.data_type and \
+        if act_config[ConfigDictKeys.DTYPE] == current_dtype_bw.act_dtype and \
                 act_config[ConfigDictKeys.BITWIDTH] == current_dtype_bw.act_bw and \
-                param_config[ConfigDictKeys.DTYPE] == current_dtype_bw.data_type and \
+                param_config[ConfigDictKeys.DTYPE] == current_dtype_bw.param_dtype and \
                 param_config[ConfigDictKeys.BITWIDTH] == current_dtype_bw.param_bw:
 
             return True
@@ -517,27 +512,20 @@ def current_config_in_supported_kernels(current_dtype_bw: QuantDtypeBwInfo, supp
     return False
 
 
-def is_current_config_same_as_override_option(current_dtype_bw: QuantDtypeBwInfo, supported_kernels: List) -> bool:
+def is_current_config_same_as_override_option(current_candidate: QuantDtypeBwInfo, supported_kernels: List) -> bool:
     """
    Checks if given bw/dtype config is in (act, param) is same as supported kernel provided as an
    option at DEFAULT_OVERRIDE_SUPPORTED_KERNEL_INDEX.
-   :param current_dtype_bw : current data type and bitwidths for act and param as QuantDtypeBwInfo.
+   :param current_candidate : current candidate as QuantDtypeBwInfo.
    :param supported_kernels: supported kernels (Default level in config file).
    :return: True, if current config is supported Kernel at index specified by , False otherwise.
    """
 
-    override_dtype_bw = get_override_from_supported_kernels(supported_kernels)
+    override_candidate = get_override_from_supported_kernels(supported_kernels)
 
     # we need to compare combination of act/param with default user provided config.
     # Because a given kernel support is valid only as a combination.
-    if override_dtype_bw.data_type == current_dtype_bw.data_type and \
-            override_dtype_bw.act_bw == current_dtype_bw.act_bw and \
-            override_dtype_bw.data_type == current_dtype_bw.data_type and \
-            override_dtype_bw.param_bw == current_dtype_bw.param_bw:
-
-        return True
-
-    return False
+    return override_candidate == current_candidate
 
 
 def get_override_from_supported_kernels(supported_kernels: Dict) -> QuantDtypeBwInfo:
@@ -552,11 +540,12 @@ def get_override_from_supported_kernels(supported_kernels: Dict) -> QuantDtypeBw
     config_file_default_act_bw_dtype_config = supported_kernels[DEFAULT_OVERRIDE_SUPPORTED_KERNEL_INDEX][ConfigDictKeys.ACTIVATION]
     config_file_default_param_bw_dtype_config = supported_kernels[DEFAULT_OVERRIDE_SUPPORTED_KERNEL_INDEX][ConfigDictKeys.PARAM]
 
-    override_data_type = config_file_default_act_bw_dtype_config[ConfigDictKeys.DTYPE]
+    override_act_dtype = config_file_default_act_bw_dtype_config[ConfigDictKeys.DTYPE]
     override_act_bw = config_file_default_act_bw_dtype_config[ConfigDictKeys.BITWIDTH]
+    override_param_dtype = config_file_default_param_bw_dtype_config[ConfigDictKeys.DTYPE]
     override_param_bw = config_file_default_param_bw_dtype_config[ConfigDictKeys.BITWIDTH]
 
-    return QuantDtypeBwInfo(override_data_type, override_act_bw, override_param_bw)
+    return QuantDtypeBwInfo(override_act_dtype, override_act_bw, override_param_dtype, override_param_bw)
 
 
 def is_override_dtype_bw_valid(override_dtype_bw_info: QuantDtypeBwInfo, quantsim_dtype_bw_info: QuantDtypeBwInfo) -> bool:
@@ -574,27 +563,27 @@ def is_override_dtype_bw_valid(override_dtype_bw_info: QuantDtypeBwInfo, quantsi
     # case (ii) if quantsim default is float => override is not float, then it fails to satisfy criteria because:
     # quantsim defaults are higher precision compared to overrides . (ex : quantsim default = Fp16 > override = int)
 
-    if (quantsim_dtype_bw_info.data_type == override_dtype_bw_info.data_type and
+    # pylint: disable=too-many-boolean-expressions
+    if (quantsim_dtype_bw_info.param_dtype == override_dtype_bw_info.param_dtype and
+            quantsim_dtype_bw_info.act_dtype == override_dtype_bw_info.act_dtype and
             (quantsim_dtype_bw_info.act_bw > override_dtype_bw_info.act_bw or
-             quantsim_dtype_bw_info.param_bw > override_dtype_bw_info.param_bw)) or \
-            quantsim_dtype_bw_info.data_type == QuantizationDataType.float:
+             quantsim_dtype_bw_info.param_bw > override_dtype_bw_info.param_bw)) or (
+                 quantsim_dtype_bw_info.act_dtype == QuantizationDataType.float
+                 and quantsim_dtype_bw_info.param_dtype == QuantizationDataType.float):
         logger.error(' Target specfic op level override only with a higher precision kernel is supported  \n,'
                      ' (please check both quantsim defaults and default supported_kernels in config file specified at override index {%s}) \n'
-                     ' quantsim is configured with {act_bw = %s, param_bw = %s, data_type = %s} and \n'
-                     ' supported_kernels override configured as {act_bw = %s, param_bw = %s, data_type = %s} \n',
-                     DEFAULT_OVERRIDE_SUPPORTED_KERNEL_INDEX,
-                     quantsim_dtype_bw_info.act_bw, quantsim_dtype_bw_info.param_bw, quantsim_dtype_bw_info.data_type,
-                     override_dtype_bw_info.act_bw, override_dtype_bw_info.param_bw, override_dtype_bw_info.data_type)
+                     ' quantsim is configured with %s and supported_kernels override configured as %s \n',
+                     DEFAULT_OVERRIDE_SUPPORTED_KERNEL_INDEX, quantsim_dtype_bw_info, override_dtype_bw_info)
         return False
 
     return True
 
 
-def validate_all_op_level_dtype_bw_overrides(op_configs: OpTypeType, default_dtype_bw: QuantDtypeBwInfo):
+def validate_all_op_level_dtype_bw_overrides(op_configs: OpTypeType, default_candidate: QuantDtypeBwInfo):
     """
     Checks if given op level supported_kernel is supported (across all op types).
     :param op_configs: Op level config information (Level 3 spec in target config file).
-    :param default_dtype_bw: default values configured for quantsim data_type/ bitwidths.
+    :param default_candidate: default candidate
     :return: bool, indicating valid or not.
     """
 
@@ -604,7 +593,7 @@ def validate_all_op_level_dtype_bw_overrides(op_configs: OpTypeType, default_dty
 
             # if current quantsim config or default level supported kernel is in op level supported kernels
             # no override required at op level.
-            if current_config_in_supported_kernels(default_dtype_bw,
+            if current_config_in_supported_kernels(default_candidate,
                                                    op_level_supported_kernels):
                 logger.info(" Default option found in op level supported kernels list,  skip "
                             "op level override needed for op {%s} \n", op_name)
@@ -614,18 +603,20 @@ def validate_all_op_level_dtype_bw_overrides(op_configs: OpTypeType, default_dty
                 # option specified at DEFAULT_OVERRIDE_SUPPORTED_KERNEL_INDEX of default supported_kernels
                 # will be applied during override.
                 override_dtype_bw_info = get_override_from_supported_kernels(op_level_supported_kernels)
-                if not is_override_dtype_bw_valid(override_dtype_bw_info, default_dtype_bw):
+                if not is_override_dtype_bw_valid(override_dtype_bw_info, default_candidate):
                     error_msg = (f'Op level supported_kernels override check failed for op {op_name} \n'
                                  f'Op level override only with higher precision kernel is supported \n'
                                  f'(please check both quantsim defaults and default supported_kernels in config file '
                                  f'specified at override index {DEFAULT_OVERRIDE_SUPPORTED_KERNEL_INDEX})\n'
                                  f'One way to rectify this is to specify lower precision data type and bit-width as defaults'
                                  f'\nex : (act_bw = {override_dtype_bw_info.act_bw}, param_bw = '
-                                 f'{override_dtype_bw_info.param_bw}, data_type = {override_dtype_bw_info.data_type}) and '
+                                 f'{override_dtype_bw_info.param_bw}, act_data_type = {override_dtype_bw_info.act_dtype},'
+                                 f'param_data_type = {override_dtype_bw_info.param_dtype}) and '
                                  f'use op level supported_kernels override \n'
                                  f'for this op to indicate higher precision kernel that is supported on given target \n'
-                                 f'ex: (act_bw = {default_dtype_bw.act_bw}, param_bw ='
-                                 f'{override_dtype_bw_info.param_bw} , data_type = {override_dtype_bw_info.data_type}) \n')
+                                 f'ex: (act_bw = {default_candidate.act_bw}, param_bw ='
+                                 f'{override_dtype_bw_info.param_bw} , act_data_type = {override_dtype_bw_info.act_dtype},'
+                                 f'param_data_type = {override_dtype_bw_info.param_dtype}) \n')
 
                     logger.info(error_msg)
                     raise NotImplementedError(error_msg)
