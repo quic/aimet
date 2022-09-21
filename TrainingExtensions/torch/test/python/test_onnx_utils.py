@@ -646,7 +646,6 @@ class TestOnnxUtils:
             os.remove(onnx_path)
 
     def test_non_leaf_module_names(self):
-        pytest.skip('enable after adding non-leaf modules naming of onnx ops')
 
         """
         Test that node names are uniquely set.
@@ -667,8 +666,7 @@ class TestOnnxUtils:
         onnx_path = './data/MyModel.onnx'
 
         torch.onnx.export(model, dummy_input, onnx_path)
-        onnx_utils.OnnxSaver.set_node_names(onnx_path, model, dummy_input,
-                                            onnx_export_args=OnnxExportApiArgs(rename_all_onnx_ops=True))
+        onnx_utils.OnnxSaver.set_node_names(onnx_path, model, dummy_input)
 
         onnx_model = onnx.load(onnx_path)
         onnx.checker.check_model(onnx_model)
@@ -676,12 +674,12 @@ class TestOnnxUtils:
 
         expected_names = [
             'layer.mul1.mul',
-            'layer.mul1.Mul_7',
+            'layer.mul1.Mul_5',
 
             'layer.mul2.mul',
-            'layer.mul2.Mul_15',
+            'layer.mul2.Mul_11',
 
-            'layer.Mul_18'
+            'layer.Mul_13'
         ]
         for node in onnx_model.graph.node:
             assert 'Constant' in node.name or node.name in expected_names
