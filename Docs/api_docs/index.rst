@@ -1,6 +1,3 @@
-=========
-Main Page
-=========
 
 Welcome to AI Model Efficiency Toolkit API Docs!
 ================================================

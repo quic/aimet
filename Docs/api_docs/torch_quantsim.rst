@@ -6,6 +6,12 @@
 AIMET PyTorch Quantization SIM API
 ==================================
 
+User Guide Link
+===============
+To learn more about Quantization Simulation, please see :ref:`Quantization Sim<ug-quantsim>`
+
+Guidelines
+===============
 AIMET Quantization Sim requires PyTorch model definition to follow certain guidelines. These guidelines are described
 in detail here. :ref:`Model Guidelines<api-torch-model-guidelines>`
 
