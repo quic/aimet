@@ -46,6 +46,7 @@ from aimet_torch.qc_quantize_op import StaticGridQuantWrapper, LearnedGridQuantW
 from aimet_torch.examples.test_models import ModelWithTwoInputs, ModelWithTransposeConv
 from aimet_torch.qc_quantize_op import QuantScheme
 from aimet_torch.quantsim import QuantizationSimModel
+from aimet_torch.quantsim_straight_through_grad import calculate_forward_pass
 from aimet_torch.tensor_quantizer import StaticGridPerTensorQuantizer, StaticGridPerChannelQuantizer, \
     LearnedGridTensorQuantizer, ParameterQuantizer
 
@@ -561,8 +562,9 @@ class TestPerChannelQcQuantizeOpLearnedGrid:
 
         tensor = torch.ones((3, 1, 1, 2)).to('cuda')
         grad = torch.randn(3, 1, 1, 2).to('cuda')
-        enc_min_grad, enc_max_grad = ParameterQuantizer.compute_gradients(tensor, wrapper.param_quantizers['weight'],
-                                                                          grad)
+        _, intermediate_result = calculate_forward_pass(tensor, param_quantizer, encoding_min, encoding_max)
+        enc_min_grad, enc_max_grad = ParameterQuantizer.compute_gradients(tensor, grad, intermediate_result,
+                                                                          param_quantizer.channel_axis)
 
         assert len(enc_min_grad) == len(enc_max_grad) == 3
         assert torch.all(torch.eq(enc_max_grad, -enc_min_grad))
@@ -581,8 +583,8 @@ class TestPerChannelQcQuantizeOpLearnedGrid:
 
         tensor = torch.ones(3).to('cuda')
         grad = torch.randn(3).to('cuda')
-        enc_min_grad, enc_max_grad = ParameterQuantizer.compute_gradients(tensor, param_quantizer,
-                                                                          grad)
+        _, intermediate_result = calculate_forward_pass(tensor, param_quantizer, encoding_min, encoding_max)
+        enc_min_grad, enc_max_grad = ParameterQuantizer.compute_gradients(tensor, grad, intermediate_result, param_quantizer.channel_axis)
 
         assert len(enc_min_grad) == len(enc_max_grad) == 3
         assert torch.all(torch.eq(enc_max_grad, -enc_min_grad))
