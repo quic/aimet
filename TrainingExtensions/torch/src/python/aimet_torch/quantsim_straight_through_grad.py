@@ -37,8 +37,28 @@
 # =============================================================================
 """ Implements straight through gradient computation for Quant op"""
 from dataclasses import dataclass
+from typing import TYPE_CHECKING
+from typing import Tuple
 
 import torch
+from torch.autograd import Variable
+
+if TYPE_CHECKING:
+    from aimet_torch.tensor_quantizer import LearnedGridTensorQuantizer
+
+
+@dataclass
+class IntermediateResult:
+    """
+    Data carrier containing intermediate result for learned grid backward computation
+    """
+    clamp_out: torch.Tensor
+    encoding_min: torch.nn.Parameter
+    encoding_max: torch.nn.Parameter
+    delta: torch.Tensor
+    offset: torch.Tensor
+    mask_tensor: torch.Tensor
+    steps: torch.Tensor
 
 
 @dataclass
@@ -269,6 +289,107 @@ def compute_dloss_by_dx_using_scale_offset(x: torch.Tensor,
                               torch.zeros_like(r_x_by_s_plus_round_o.data)) * grad
 
     return dloss_by_dx
+
+
+def _compute_delta_and_offset(tensor: torch.Tensor,
+                              encoding_min: torch.nn.Parameter,
+                              encoding_max: torch.nn.Parameter,
+                              steps: torch.Tensor,
+                              channel_axis: int) -> Tuple[torch.Tensor, torch.Tensor]:
+    """
+    Compute delta and offset, also broadcast if needed (per-channel case)
+
+    :param tensor: Input tensor
+    :param encoding_min: Encoding min
+    :param encoding_max: Encoding max
+    :param steps: Steps computed by bitwidth
+    :param channel_axis: Channel axis to use for per-channel quant
+    :return: Tuple of delta and offset
+    """
+    delta = (encoding_max - encoding_min) / steps
+    offset = torch.round(encoding_min / delta)
+
+    if len(encoding_min) > 1:
+        delta = broadcast_to_tensor(tensor, delta, channel_axis)
+        offset = broadcast_to_tensor(tensor, offset, channel_axis)
+
+    return delta, offset
+
+
+# pylint:disable=too-many-locals
+def calculate_forward_pass(tensor: torch.Tensor,
+                           tensor_quantizer: "LearnedGridTensorQuantizer",
+                           encoding_min: torch.nn.Parameter,
+                           encoding_max: torch.nn.Parameter) -> Tuple[torch.Tensor, IntermediateResult]:
+    """
+    Calculate forward pass logic of range learning
+    :param tensor: Target tensor to compute
+    :param tensor_quantizer: LearnedGridTensorQuantizer corresponding to target tensor
+    :param encoding_min: Encoding min
+    :param encoding_max: Encoding max
+    :return: QuantizeDequantize out and intermediate result tuple
+    """
+    channel_axis = tensor_quantizer.channel_axis
+    n, p = tensor_quantizer.n(device=tensor.device), tensor_quantizer.p(device=tensor.device)
+
+    steps = p
+    delta, offset = _compute_delta_and_offset(tensor, encoding_min, encoding_max, steps, channel_axis)
+
+    quantize_out = torch.round(tensor / delta) - offset
+    clamp_out = quantize_out.clamp(n, p)
+    dequantize_out = (clamp_out + offset) * delta
+
+    mask_tensor = quantize_out.ge(n) * quantize_out.le(p)
+
+    # NOTE: There is no uint4, uint16 in PyTorch
+    # Use uint8 if bitwidth less than or equal to 8, otherwise use int32 as fallback
+    dtype_for_clamp_out = torch.uint8 if tensor_quantizer.bitwidth <= 8 else torch.int32
+    intermediate_result = IntermediateResult(clamp_out.to(dtype=dtype_for_clamp_out),
+                                             encoding_min, encoding_max,
+                                             delta, offset, mask_tensor, steps)
+    return dequantize_out, intermediate_result
+
+
+# pylint:disable=too-many-locals
+def calculate_gradients(tensor: torch.Tensor,
+                        grad: torch.Tensor,
+                        intermediate_result: IntermediateResult,
+                        channel_axis: int) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    """
+    Calculate gradients with respect to tensor, gradients of encoding min and max
+    :param tensor: Given tensor
+    :param grad: Gradient using which other gradients will be calculated
+    :param intermediate_result: Intermediate result from forward pass
+    :param channel_axis: Channel axis
+    :return: Gradients with respect to tensor, gradients of encoding min and max
+    """
+    delta = intermediate_result.delta
+    offset = intermediate_result.offset
+    clamp_out = intermediate_result.clamp_out
+    mask_tensor = intermediate_result.mask_tensor
+
+    dequantize_grad = delta * grad
+    mask_tensor = Variable(mask_tensor.type_as(dequantize_grad.data))
+
+    tensor_grad = grad * mask_tensor
+    scale_grad = (clamp_out + offset - tensor * mask_tensor / delta) * grad
+    offset_grad = dequantize_grad * (1 - mask_tensor)
+
+    dim = list(range(len(tensor.shape)))
+    if len(delta) > 1 and len(tensor.shape) > 1:
+        dim.pop(channel_axis)
+
+    steps = intermediate_result.steps
+    encoding_min = intermediate_result.encoding_min
+    encoding_max = intermediate_result.encoding_max
+
+    intermediate_term1 = scale_grad.sum(dim=dim) / steps
+    intermediate_term2 = steps / (encoding_max - encoding_min) ** 2 * offset_grad.sum(dim=dim)
+
+    tensor_encoding_min_grad = -intermediate_term1 + encoding_max * intermediate_term2
+    tensor_encoding_max_grad = intermediate_term1 - encoding_min * intermediate_term2
+
+    return tensor_grad, tensor_encoding_min_grad, tensor_encoding_max_grad
 
 
 class RoundStraightThrough(torch.autograd.Function):
