@@ -37,6 +37,7 @@
 # =============================================================================
 """ Custom QcQuantizeOp to quantize weights and activations using ONNXRuntime """
 
+import os
 from typing import Union
 from enum import Enum
 import numpy as np
@@ -46,6 +47,7 @@ from aimet_common.defs import QuantScheme, MAP_QUANT_SCHEME_TO_PYMO, MAP_ROUND_M
 
 
 qc_quantize_op_dict = {}
+TF_ENHANCED_USE_DOWNSAMPLING = bool(int(os.environ.get("AIMET_TFE_USE_DOWNSAMPLING", "0")))
 TF_ENHANCED_OFFSET_FACTOR = 0
 TF_ENHANCED_STRIDE_FACTOR = 2
 
@@ -177,7 +179,7 @@ class QcQuantizeOp:
         if self.enabled:
             if self.op_mode == OpMode.update_stats:
                 output = in_tensor
-                if self.quant_scheme == QuantScheme.post_training_tf_enhanced:
+                if TF_ENHANCED_USE_DOWNSAMPLING and self.quant_scheme == QuantScheme.post_training_tf_enhanced:
                     in_tensor_flatten = in_tensor.reshape(-1)
                     in_tensor = \
                         in_tensor_flatten[TF_ENHANCED_OFFSET_FACTOR::TF_ENHANCED_STRIDE_FACTOR].astype(np.float32)
