@@ -46,14 +46,14 @@ the tensors that are either input to the model (input, constant or parameter) or
 result of an operation. Furthermore the graph representation is bi-directional."""
 
 
-from typing import Dict
+from typing import Dict, List
 from onnx import onnx_pb
 from onnxruntime.quantization.onnx_quantizer import ONNXModel
 
 from aimet_common.connected_graph.connectedgraph import ConnectedGraph as AimetCommonConnectedGraph
 from aimet_common.utils import AimetLogger
+from aimet_common.connected_graph.operation import Op
 
-from aimet_onnx.meta.operations import Op
 from aimet_onnx.meta.product import Product
 
 logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.ConnectedGraph)
@@ -84,7 +84,6 @@ class ConnectedGraph(AimetCommonConnectedGraph):
         self.ordered_ops = []
 
         self.starting_ops = []
-        self._op_queue = []
         self.fill_op_product_graph()
 
     def get_op_from_module_name(self, name: str) -> Op:
@@ -115,21 +114,6 @@ class ConnectedGraph(AimetCommonConnectedGraph):
 
         return input_nodes
 
-    def get_all_ops(self) -> Dict[str, Op]:
-        """ Returns the ops dictionary """
-        return self._ops
-
-    def get_all_products(self) -> Dict[str, Product]:
-        """ Returns the products dictionary """
-        return self._products
-
-    def get_product(self, name: str) -> Product:
-        """
-        Returns the product with the name passed in the argument
-        :param name: Product name
-        """
-        return self._products.get(name, None)
-
     @staticmethod
     def _create_ir_op(node: onnx_pb.NodeProto) -> Op:
         """
@@ -139,22 +123,26 @@ class ConnectedGraph(AimetCommonConnectedGraph):
         op = Op(name=node.name, dotted_name=node.name, output_shape=None, is_anonymous=False, op_type=node.op_type)
         return op
 
-    def _add_children_ops_to_op_queue(self, node: onnx_pb.NodeProto) -> int:
+    def _add_children_ops_to_op_queue(self, node: onnx_pb.NodeProto, op_queue: List) -> int:
         """
         Utility function for adding all children of op to self._op_queue
         :param node: node whose children will be added to op_queue
+        :param op_queue: Queue for performing dfs
         :return: Number of child ops added to the queue
         """
         num_ops_added = 0
         for output_tensor in node.output:
             if output_tensor in self._input_to_node:
                 for child_node in self._input_to_node[output_tensor]:
-                    self._op_queue.append((child_node, node, output_tensor))
+                    op_queue.append((child_node, node, output_tensor))
                     num_ops_added += 1
         return num_ops_added
 
-    def _process_starting_ops(self):
-        """Processes input ops"""
+    def _process_starting_ops(self, op_queue: List):
+        """
+        Processes input ops
+        :param op_queue: Queue for performing dfs
+        """
         input_nodes = self._get_starting_nodes()
         for input_name in input_nodes:
             if input_name in self._input_to_node:
@@ -162,7 +150,7 @@ class ConnectedGraph(AimetCommonConnectedGraph):
                     op = self._create_ir_op(node)
                     self._ops[node.name] = op
                     self._create_and_link_product_for_inputs(node.name, input_name)
-                    self._add_children_ops_to_op_queue(node)
+                    self._add_children_ops_to_op_queue(node, op_queue)
                     self.starting_ops.append(op)
 
     def _create_and_link_product_for_inputs(self, node_name: str, input_name: str):
@@ -236,26 +224,20 @@ class ConnectedGraph(AimetCommonConnectedGraph):
         - Creates op/product graph
         """
         visited_ops = set()
-
-        self._process_starting_ops()
+        op_queue = []
+        self._process_starting_ops(op_queue)
         # op_queue is treated as a stack, containing operations to traverse. Elements are tuple
         # - Index 0 contains the node to visit.
         # - Index 1 contains the parent node.
-        while self._op_queue:
-            child_node, parent_node, connecting_tensor_name = self._op_queue.pop()
+        while op_queue:
+            child_node, parent_node, connecting_tensor_name = op_queue.pop()
             # new module, create op/product and link to parent
             if child_node.name != parent_node.name:
                 self._create_op_if_not_exists(child_node)
                 self._create_and_link_product_if_not_exists(child_node, parent_node, connecting_tensor_name)
-                # switching modules means marking previous op as output of previous module,
-                # and current op as input of new current module
-                self._ops[parent_node.name].output_op_node = parent_node
 
                 # add children to op_queue if not visited
                 if child_node.name not in visited_ops:
-                    num_children = self._add_children_ops_to_op_queue(child_node)
-                    if not num_children:
-                        # No children added to the queue, mark this op as the output op of the current connected graph Op
-                        self._ops[child_node.name].output_op_node = child_node
+                    self._add_children_ops_to_op_queue(child_node, op_queue)
                     visited_ops.add(child_node.name)
                     logger.debug("visited op: %s", child_node.name)

@@ -44,14 +44,20 @@ class TestConnectedGraph:
     def test_simple_model(self):
         model = build_dummy_model()
         cg = ConnectedGraph(model)
-        assert len(cg.get_all_ops()) == 5
-        assert len(cg.get_all_products()) == 5
+        ops = cg.get_all_ops()
+        assert len(ops) == 5
+        assert ['conv', 'relu', 'maxpool', 'flatten', 'fc'] == [op_name for op_name in ops]
+        products = cg.get_all_products()
+        assert len(products) == 5
+        assert ['input_to_conv', 'conv_to_relu', 'relu_to_maxpool', 'maxpool_to_flatten', 'flatten_to_fc'] == [product for product in products]
 
     def test_single_residual_model(self):
         model = single_residual_model()
         conn_graph = ConnectedGraph(model)
         assert len(conn_graph.get_all_ops()) == 19
-        assert len(conn_graph.get_all_products()) == 21
+        products = conn_graph.get_all_products()
+        assert len(products) == 21
+        assert {'Conv_0_to_Relu_1', 'Relu_1_to_MaxPool_2', 'MaxPool_2_to_Conv_6'}.issubset({product for product in products})
         input_ops = get_all_input_ops(conn_graph)
         assert len(input_ops) == 1
 
@@ -59,6 +65,10 @@ class TestConnectedGraph:
         model = multi_input_model()
         conn_graph = ConnectedGraph(model)
         assert len(conn_graph.get_all_ops()) == 15
-        assert len(conn_graph.get_all_products()) == 16
+
+        products = conn_graph.get_all_products()
+        assert len(products) == 16
+        assert {'Conv_0_to_MaxPool_1', 'Conv_3_to_MaxPool_4', 'Conv_7_to_MaxPool_8'}.issubset(
+            {product for product in products})
         input_ops = get_all_input_ops(conn_graph)
         assert len(input_ops) == 2
