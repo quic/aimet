@@ -59,6 +59,10 @@ from aimet_torch.defs import OpToIOTensors
 _logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Utils)
 
 
+# runs the second pass of markers for non-leaf torch module and updates names of onnx ops belonging to
+# non-leaf pytorch module
+update_all_onnx_nodes_name = True
+
 recurrent_onnx_optypes = ['LSTM', 'GRU', 'RNN']
 
 # This is a dict that maps a PyTorch module type to the corresponding ONNX op type (as a string)
@@ -404,8 +408,9 @@ class OnnxSaver:
         cls._fix_initializer_names(onnx_model, pt_model)
 
         # set names for onnx ops belonging to non-leaf torch module
-        cls._update_non_leaf_pytorch_modules_onnx_nodes_names(pt_model, dummy_input, working_dir, onnx_export_args,
-                                                              is_conditional, module_marker_map, onnx_model)
+        if update_all_onnx_nodes_name:
+            cls._update_non_leaf_pytorch_modules_onnx_nodes_names(pt_model, dummy_input, working_dir, onnx_export_args,
+                                                                  is_conditional, module_marker_map, onnx_model)
 
 
         return onnx_model
