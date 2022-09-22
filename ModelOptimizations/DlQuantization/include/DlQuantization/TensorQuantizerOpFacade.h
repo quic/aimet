@@ -75,6 +75,7 @@ public:
      * @param useCuda If true, the tensor is assumed to be in CUDA memory
      */
     virtual void updateStats(const float* tensor, std::size_t tensorSize, bool useCuda) = 0;
+    virtual void updateStats(const float* tensor, std::size_t tensorSize, bool useCuda, IAllocator* alloc) = 0;
 
     /**
     * Convert a tensor from float to quantized int and back to float
