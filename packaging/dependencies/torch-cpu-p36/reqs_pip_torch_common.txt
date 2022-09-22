@@ -1,8 +1,1 @@
-holoviews==1.12.7
-matplotlib>=3
-onnx
-onnxsim
-onnxruntime
-onnxruntime-extensions
-scikit-learn
-tensorboardX==2.4
+../reqs_pip_torch_common_p36.txt
