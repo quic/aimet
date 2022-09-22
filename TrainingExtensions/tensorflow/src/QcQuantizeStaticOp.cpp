@@ -125,6 +125,11 @@ public:
 
     void modeSpecificAction(const Device& d, const T* inTensor, size_t count, T* outTensor)
     {
+        modeSpecificAction(d, inTensor, count, outTensor, nullptr);
+    }
+
+    void modeSpecificAction(const Device& d, const T* inTensor, size_t count, T* outTensor, DlQuantization::IAllocator* allocator)
+    {
         bool useCuda = false;
         if (std::is_same<Device, GPUDevice>::value)
         {
@@ -136,7 +141,7 @@ public:
         case DlQuantization::TensorQuantizerOpMode::oneShotQuantizeDequantize:
         {
             auto tensorQuantizer = DlQuantization::TensorQuantizer(_quantScheme, _roundingMode);
-            tensorQuantizer.updateStats(inTensor, count, useCuda);
+            tensorQuantizer.updateStats(inTensor, count, useCuda, allocator);
             DlQuantization::TfEncoding initial_encoding = tensorQuantizer.computeEncoding(_bitwidth, _isSymmetric);
             tensorQuantizer.quantizeDequantize(inTensor, count, outTensor, initial_encoding.min,
                                                initial_encoding.max, _bitwidth, useCuda);
