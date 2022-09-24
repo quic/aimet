@@ -16,7 +16,7 @@ jobs:
       - uses: actions/checkout@v2
       - name: Check build exists
         run: |
-          stat ${{ inputs.build_file }}
+          stat "Jenkins/${{ inputs.build_file }}"
       - name: Dispatch payload
         uses: peter-evans/repository-dispatch@v2
         with:
