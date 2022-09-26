@@ -3,13 +3,13 @@ pipeline {
         string(name: 'PROJECT_NAME', defaultValue: 'aimet', description: 'project name')
         string(name: 'BUILD_LABEL_GPU', defaultValue: 'docker-build-aimet-pr-gpu', description: 'Jenkins node host name or label for GPU variants')
         string(name: 'BUILD_LABEL_CPU', defaultValue: 'docker-build-aimet-pr-cpu', description: 'Jenkins node host name or label for CPU variants')
-        string(name: 'BUILD_TIMEOUT', defaultValue: '1', description: 'Build timeout in hours')
+        string(name: 'BUILD_TIMEOUT', defaultValue: '3', description: 'Build timeout in hours')
         string(name: 'USE_LINARO', defaultValue: '-l', description: 'Use pre-built Linaro images, if available.')
     }
     agent { label "${params.BUILD_LABEL_CPU}" }
     options {
         timestamps()
-        timeout( time: 1, unit: 'HOURS' )
+        timeout( time: 3, unit: 'HOURS' )
     }
     environment{
         def workspace   = pwd()
