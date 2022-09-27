@@ -218,8 +218,10 @@ class Adaround:
         for quant_module in quant_sim.model.modules():
             if isinstance(quant_module, StaticGridQuantWrapper):
                 # Adaround requires input and output quantizers to be disabled
-                quant_module.input_quantizer.enabled = False
-                quant_module.output_quantizer.enabled = False
+                for quatizer in quant_module.input_quantizers:
+                    quatizer.enabled = False
+                for quatizer in quant_module.output_quantizers:
+                    quatizer.enabled = False
 
                 # pylint: disable=protected-access
                 for name, param in quant_module._module_to_wrap.named_parameters():
