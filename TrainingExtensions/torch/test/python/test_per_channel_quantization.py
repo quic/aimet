@@ -485,9 +485,9 @@ class TestPerChannelQcQuantizeOpLearnedGrid:
         loss = quant_dequantized_output.sum()
         loss.backward()
         optimizer.step()
-        assert encoding_min.grad is not None
+        assert encoding_min.grad is None
         assert encoding_max.grad is not None
-        assert len(encoding_min.grad) == len(encoding_max) == len(encoding_min) == len(encoding_max.grad)
+        assert len(encoding_max) == len(encoding_max.grad)
 
 
     def test_replacement_of_wrapper(self):
