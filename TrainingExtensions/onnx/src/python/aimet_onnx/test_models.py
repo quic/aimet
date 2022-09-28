@@ -37,7 +37,10 @@
 # =============================================================================
 """Dummy models for testing"""
 import numpy as np
-from onnx import helper, numpy_helper, OperatorSetIdProto, TensorProto
+import torch
+from onnx import helper, numpy_helper, OperatorSetIdProto, TensorProto, load_model
+from onnxruntime.quantization.onnx_quantizer import ONNXModel
+from aimet_torch.examples.test_models import SingleResidualWithAvgPool, ModelWithTwoInputs
 
 # pylint: disable=no-member
 def build_dummy_model():
@@ -87,4 +90,36 @@ def build_dummy_model():
 
     model = helper.make_model(onnx_graph, opset_imports=[op])
 
+    return model
+
+def single_residual_model():
+    x = torch.randn(1, 3, 32, 32, requires_grad=True)
+    model = SingleResidualWithAvgPool()
+
+    # Export the model
+    torch.onnx.export(model,  # model being run
+                      x,  # model input (or a tuple for multiple inputs)
+                      "./model_single_residual.onnx",  # where to save the model (can be a file or file-like object)
+                      export_params=True,  # store the trained parameter weights inside the model file
+                      opset_version=12,  # the ONNX version to export the model to
+                      do_constant_folding=True,  # whether to execute constant folding for optimization
+                      input_names=['input'],  # the model's input names
+                      output_names=['output'])
+    model = ONNXModel(load_model('./model_single_residual.onnx'))
+    return model
+
+def multi_input_model():
+    x = (torch.rand(32, 1, 28, 28, requires_grad=True), torch.rand(32, 1, 28, 28, requires_grad=True))
+    model = ModelWithTwoInputs()
+
+    # Export the model
+    torch.onnx.export(model,  # model being run
+                      x,  # model input (or a tuple for multiple inputs)
+                      "./model_multi_input.onnx",  # where to save the model (can be a file or file-like object)
+                      export_params=True,  # store the trained parameter weights inside the model file
+                      opset_version=12,  # the ONNX version to export the model to
+                      do_constant_folding=True,  # whether to execute constant folding for optimization
+                      input_names=['input'],  # the model's input names
+                      output_names=['output'])
+    model = ONNXModel(load_model('./model_multi_input.onnx'))
     return model
