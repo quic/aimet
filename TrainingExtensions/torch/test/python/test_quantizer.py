@@ -286,7 +286,7 @@ class FakeMultiOutputOp(torch.autograd.Function):
         """
         Magic method that helps with exporting a custom ONNX node
         """
-        return g.op('FakeMultiOutputOp', inp, outputs=5)
+        return g.op('aimet_torch::FakeMultiOutputOp', inp, outputs=5)
 
     @staticmethod
     def forward(ctx, x):  # pylint: disable=arguments-differ
