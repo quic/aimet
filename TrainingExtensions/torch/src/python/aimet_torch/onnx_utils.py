@@ -65,7 +65,7 @@ _logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Utils)
 update_all_onnx_nodes_name = True
 
 # executes onnx simplify on the onnx model with marker attached.
-simplify_onnx_model = True
+simplify_onnx_model = False
 
 recurrent_onnx_optypes = ['LSTM', 'GRU', 'RNN']
 
