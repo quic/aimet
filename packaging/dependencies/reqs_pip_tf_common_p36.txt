@@ -1,5 +1,4 @@
 bert-tensorflow
-h5py==2.10.0
 holoviews==1.12.7
 numpy==1.19.5
 scikit-learn
