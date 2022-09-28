@@ -43,11 +43,13 @@ from typing import List, Callable, Dict, Any, Tuple, Optional
 
 import jinja2
 import tensorflow as tf
+from tqdm import tqdm
 
+from aimet_common.auto_quant import Diagnostics
 from aimet_common.cache import Cache
 from aimet_common.defs import QuantScheme
 from aimet_common.quantsim import validate_quantsim_inputs
-from aimet_common.utils import AimetLogger
+from aimet_common.utils import AimetLogger, Spinner
 from aimet_tensorflow.keras.quantsim import QuantizationSimModel
 
 _logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.AutoQuant)
@@ -69,9 +71,11 @@ class AutoQuant:
     meets the evaluation goal given as allowed_accuracy_drop.
     """
 
+    # pylint: disable=too-many-arguments
     def __init__(self,
                  allowed_accuracy_drop: float,
                  eval_callback: Callable[[tf.keras.Model, Optional[int]], float],
+                 unlabeled_dataset: tf.data.Dataset,
                  default_param_bw: int = 8,
                  default_output_bw: int = 8,
                  default_quant_scheme: QuantScheme = QuantScheme.post_training_tf_enhanced,
@@ -79,6 +83,9 @@ class AutoQuant:
                  default_config_file: str = None):
         """
         :param allowed_accuracy_drop: Maximum allowed accuracy drop.
+        :param unlabeled_dataset: An unlabeled dataset for encoding computation.
+                By default, this dataset will be also used for Adaround unless
+                otherwise specified by `self.set_adaround_params`
         :param eval_callback: A function that maps model and the number samples
                 to the evaluation score. This callback is expected to return a
                 scalar value representing the model performance evaluated
@@ -111,9 +118,12 @@ class AutoQuant:
         self.default_quant_scheme = default_quant_scheme
         self.default_rounding_mode = default_rounding_mode
         self.default_config_file = default_config_file
-        # TODO: Implement forward_pass_callback
-        self.forward_pass_callback = None
 
+        def forward_pass_callback(model, _: Any = None):
+            for input_data in tqdm(unlabeled_dataset):
+                model(input_data)
+
+        self.forward_pass_callback = forward_pass_callback
 
     def apply(self,
               fp32_model: tf.keras.Model,
@@ -253,6 +263,17 @@ class AutoQuant:
         :param results_dir: Directory to save the results.
         :return: The best ptq result as a dictionary.
         """
+        with eval_manager.analysis_session("Weight Quantization Sensitivity") as sess:
+            acc = sess.eval(fp32_model, default_output_bw=32)
+            sess.diagnostics.add(
+                f"Weight-quantized eval score (W{self.default_param_bw}A32): {acc:f}"
+            )
+
+        with eval_manager.analysis_session("Activation Quantization Sensitivity") as s:
+            acc = s.eval(fp32_model, default_param_bw=32)
+            s.diagnostics.add(
+                f"Activation-quantized eval score (W32A{self.default_output_bw}): {acc:f}"
+            )
 
         return eval_manager.get_best_ptq_result().as_dict()
 
@@ -301,10 +322,9 @@ class _EvalManager:
 
         os.makedirs(self._results_dir, exist_ok=True)
 
-        # TODO: Implement _EvalSession and _PtqSession
-        # self._all_sessions: List[_EvalSession] = []
+        # TODO: Implement _PtqSession
         # self._ptq_sessions: List[_PtqSession] = []
-        self._all_sessions = []
+        self._all_sessions: List[_EvalSession] = []
         self._ptq_sessions = []
 
     def get_best_ptq_result(self) -> PtqResult:
@@ -317,6 +337,28 @@ class _EvalManager:
 
         ptq_results = [sess.ptq_result for sess in self._ptq_sessions]
         return max(ptq_results, key=lambda ptq_result: ptq_result.accuracy)
+
+    def analysis_session(self, title: str) -> "_EvalSession":
+        """
+        Return a session for analysis only.
+        :param title: Title of the session.
+        :return: Analysis session.
+        """
+        return self._get_session(title, _EvalSession)
+
+    def _get_session(self, title: str, session_cls: type):
+        """
+        Session factory.
+        :param title: Title of the session.
+        :session_cls: Class of the session.
+        :return: Session object.
+        """
+        session = session_cls(title,
+                              self._quantsim_factory,
+                              self._eval_func,
+                              results_dir=os.path.join(self._results_dir, ".trace"))
+        self._all_sessions.append(session)
+        return session
 
     def export_diagnostics(self) -> str:
         """
@@ -344,3 +386,67 @@ class _EvalManager:
         with open(filename, "w") as f:
             f.write(html)
         return html
+
+
+class _EvalSession:
+    """
+    Evaluation session for AutoQuant.
+
+    Each session object contains a title and diagnostics produced during the session.
+    The collected diagnostics will be exported into a html file by _EvalManager.
+    """
+    def __init__(self,
+                 title: str,
+                 quantsim_factory: Callable,
+                 eval_func: Callable[[tf.keras.Model], float],
+                 results_dir: str):
+        """
+        :param title:
+        :param quantsim_factory:
+        :param eval_func:
+        :param results_dir:
+        """
+        self._title = title
+        self._quantsim_factory = quantsim_factory
+        self._eval_func = eval_func
+        self._results_dir = results_dir
+        self._spinner = None
+
+        os.makedirs(self._results_dir, exist_ok=True)
+
+        self._diagnostics = Diagnostics()
+
+        # Map session title to file name.
+        # e.g. title: "Cross-Layer Equalization" -> filename: "cross_layer_equalization"
+        self._filename = self._title.lower().replace("-", " ")
+        self._filename = "_".join(self._filename.split())
+
+    def eval(self, model: tf.keras.Model, **kwargs):
+        """
+        Evaluate the model
+        :param model: Model to evaluate.
+        :param kwargs: Additional arguments to the quantsim factory.
+        :return: Eval score
+        """
+        sim = self._quantsim_factory(model, **kwargs)
+        acc = self._eval_func(sim.model)
+        return acc
+
+    @property
+    def title(self):
+        """Getter of self._title."""
+        return self._title
+
+    @property
+    def diagnostics(self):
+        """Getter of self._diagnostics."""
+        return self._diagnostics
+
+    def __enter__(self):
+        self._spinner = Spinner(self._title)
+        self._spinner.__enter__()
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        if self._spinner is not None:
+            self._spinner.__exit__(exc_type, exc_val, exc_tb)
