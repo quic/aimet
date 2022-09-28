@@ -33,7 +33,7 @@
 #
 #  @@-COPYRIGHT-END-@@
 # =============================================================================
-
+import os
 import unittest
 import json
 import torch
@@ -136,6 +136,27 @@ class TestSparseConv(unittest.TestCase):
         self.assertTrue(isinstance(sim.model.conv.output_quantizers[0].encoding, TfEncoding))
 
     def test_sparse_conv_qat(self):
+        # NOTE: Use asymmetric quantization for parameter, which have gradients both encoding min/max
+        quantsim_config = {
+            "defaults": {
+                "ops": {
+                    "is_output_quantized": "True",
+                },
+                "params": {
+                    "is_quantized": "True",
+                    "is_symmetric": "False"
+                }
+            },
+            "params": {},
+            "op_type": {},
+            "supergroups": [],
+            "model_input": {},
+            "model_output": {}
+        }
+        config_file_path = "/tmp/quantsim_config.json"
+        with open(config_file_path, "w") as f:
+            json.dump(quantsim_config, f)
+
         dummy_input = torch.rand(1, 1, 5, 5)
         spconv_model = SpconvModel()
 
@@ -145,7 +166,8 @@ class TestSparseConv(unittest.TestCase):
                 model(dummy_input)
 
         sim = QuantizationSimModel(spconv_model, dummy_input,
-                                   quant_scheme=QuantScheme.training_range_learning_with_tf_init)
+                                   quant_scheme=QuantScheme.training_range_learning_with_tf_init,
+                                   config_file=config_file_path)
         sim.compute_encodings(dummy_forward, None)
 
         # Check if correct Quantizers are created
@@ -176,6 +198,9 @@ class TestSparseConv(unittest.TestCase):
         self.assertTrue(isinstance(sim.model.conv.output0_encoding_min.grad, torch.Tensor))
         self.assertTrue(isinstance(sim.model.conv.weight_encoding_max.grad, torch.Tensor))
         self.assertTrue(isinstance(sim.model.conv.weight_encoding_min.grad, torch.Tensor))
+
+        if os.path.exists(config_file_path):
+            os.remove(config_file_path)
 
     def test_sparse_conv_sequential(self):
         class SequentialModel(nn.Module):

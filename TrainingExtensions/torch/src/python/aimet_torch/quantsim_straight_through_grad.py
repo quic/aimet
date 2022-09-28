@@ -3,7 +3,7 @@
 # =============================================================================
 #  @@-COPYRIGHT-START-@@
 #
-#  Copyright (c) 2020, Qualcomm Innovation Center, Inc. All rights reserved.
+#  Copyright (c) 2020-2022, Qualcomm Innovation Center, Inc. All rights reserved.
 #
 #  Redistribution and use in source and binary forms, with or without
 #  modification, are permitted provided that the following conditions are met:
@@ -37,8 +37,7 @@
 # =============================================================================
 """ Implements straight through gradient computation for Quant op"""
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
-from typing import Tuple
+from typing import TYPE_CHECKING, Tuple
 
 import torch
 from torch.autograd import Variable
@@ -52,13 +51,15 @@ class IntermediateResult:
     """
     Data carrier containing intermediate result for learned grid backward computation
     """
-    clamp_out: torch.Tensor
+    x_quant: torch.Tensor
     encoding_min: torch.nn.Parameter
     encoding_max: torch.nn.Parameter
     delta: torch.Tensor
     offset: torch.Tensor
     mask_tensor: torch.Tensor
-    steps: torch.Tensor
+    num_steps: torch.Tensor
+    is_symmetric: bool
+    is_unsigned: bool
 
 
 @dataclass
@@ -96,7 +97,7 @@ def broadcast_to_tensor(tensor, encoding, ch_axis):
     :return: Broad-casted tensor
     """
     if not isinstance(encoding, torch.Tensor):
-        encoding = torch.Tensor(encoding).to(tensor.device)                  # convert encoding to a tensor
+        encoding = torch.Tensor(encoding).to(tensor.device)  # convert encoding to a tensor
 
     # Original tensor shape is OIHW/IOHW, we change the shape to IHWO. Encoding (which is of shape O) can naturally
     # broadcast to this shape
@@ -291,6 +292,113 @@ def compute_dloss_by_dx_using_scale_offset(x: torch.Tensor,
     return dloss_by_dx
 
 
+def get_true_sign_condition(encoding_min: torch.nn.Parameter,
+                            encoding_max: torch.nn.Parameter,
+                            use_unsigned_symmetric: bool) -> bool:
+    """
+    Get true quantizer sign option from encoding parameters and sign flag.
+    This has to be deprecated in the future, but currently there is no way to identify true option
+    only from the flags.
+    :param encoding_min: Encoding min parameter
+    :param encoding_max: Encoding max parameter
+    :param use_unsigned_symmetric: Flag for symmetric (signed/unsigned)
+    :return Tuple of (is_symmetric, is_unsigned_symmetric) flags
+    """
+
+    is_unsigned_symmetric = use_unsigned_symmetric
+    if (encoding_min < 0 < encoding_max) or not use_unsigned_symmetric:
+        # signed symmetric
+        is_unsigned_symmetric = False
+    else:
+        # unsigned symmetric
+        is_unsigned_symmetric = True
+
+    return is_unsigned_symmetric
+
+
+def get_computed_encodings(bitwidth: int,
+                           encoding_min: torch.nn.Parameter,
+                           encoding_max: torch.nn.Parameter,
+                           use_symmetric_encodings: bool,
+                           use_strict_symmetric: bool,
+                           use_unsigned_symmetric: bool) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    """
+    Compute delta and offset, and number of steps given quantization parameters
+    Followed the flow of C++ compute encoding function (quantization_utils::getComputedEncodings)
+    :param bitwidth: Bitwidth
+    :param encoding_min: Encoding min
+    :param encoding_max: Encoding max
+    :param use_symmetric_encodings: True if symmetric encoding is used. False otherwise
+    :param use_strict_symmetric: True if strict symmetric encoding is used. False otherwise
+    :param use_unsigned_symmetric: Whether to use signed/unsigned in symmetric case
+    :return: Tuple of delta and offset and num_steps
+    """
+    num_steps = torch.pow(torch.tensor([2], device=encoding_min.device), bitwidth) - 1
+    if use_symmetric_encodings and use_strict_symmetric:
+        num_steps -= 1
+
+    # NOTE: This assumes that the use_* flags reflect true condition (regardless of the encoding_* values)
+    if use_symmetric_encodings and (not use_unsigned_symmetric):
+        # signed symmetric
+        absmax = torch.max(torch.abs(encoding_min), torch.abs(encoding_max))[0]
+        half_num_steps = torch.div(num_steps, 2)
+
+        delta = absmax / torch.floor(half_num_steps)
+        offset = -torch.ceil(half_num_steps)
+    else:
+        delta = (encoding_max - encoding_min) / num_steps
+        if use_symmetric_encodings:
+            # unsigned symmetric
+            offset = encoding_min / delta
+        else:
+            # asym
+            b_zero = torch.round(-encoding_min / delta)
+            b_zero = torch.min(num_steps, torch.max(torch.tensor([0], device=encoding_min.device), b_zero)[0])[0]
+            offset = torch.tensor([-b_zero], device=encoding_min.device)
+
+    return delta, offset, num_steps
+
+
+def _compute_variables_for_range_learning(tensor: torch.Tensor,
+                                          bitwidth: int,
+                                          encoding_min: torch.nn.Parameter,
+                                          encoding_max: torch.nn.Parameter,
+                                          channel_axis: int,
+                                          use_symmetric_encodings: bool,
+                                          use_strict_symmetric: bool,
+                                          use_unsigned_symmetric: bool):
+    """
+    Calculate required variables for range learning
+    :param tensor: torch Tensor
+    :param bitwidth: Bitwidth for quantization
+    :param encoding_min: Encoding min
+    :param encoding_max: Encoding max
+    :param channel_axis: Channel axis to use for per-channel quant
+    :param use_symmetric_encodings: True if symmetric encoding is used. False otherwise
+    :param use_strict_symmetric: True if strict symmetric encoding is used. False otherwise
+    :param use_unsigned_symmetric: Whether to use signed/unsigned in symmetric case
+    """
+
+    if len(encoding_min) > 1:
+
+        for emin, emax in zip(encoding_min, encoding_max):
+            is_unsigned = get_true_sign_condition(emin, emax, use_unsigned_symmetric)
+            if not is_unsigned:
+                # if one is singed, then all of them are considered as signed
+                break
+    else:
+        is_unsigned = get_true_sign_condition(encoding_min, encoding_max, use_unsigned_symmetric)
+
+    delta, offset, num_steps = get_computed_encodings(bitwidth, encoding_min, encoding_max,
+                                                      use_symmetric_encodings, use_strict_symmetric, is_unsigned)
+    # broadcasting
+    if len(encoding_min) > 1:
+        delta = broadcast_to_tensor(tensor, delta, channel_axis)
+        offset = broadcast_to_tensor(tensor, offset, channel_axis)
+
+    return delta, offset, num_steps, use_symmetric_encodings, is_unsigned
+
+
 def _compute_delta_and_offset(tensor: torch.Tensor,
                               encoding_min: torch.nn.Parameter,
                               encoding_max: torch.nn.Parameter,
@@ -329,25 +437,140 @@ def calculate_forward_pass(tensor: torch.Tensor,
     :param encoding_max: Encoding max
     :return: QuantizeDequantize out and intermediate result tuple
     """
-    channel_axis = tensor_quantizer.channel_axis
-    n, p = tensor_quantizer.n(device=tensor.device), tensor_quantizer.p(device=tensor.device)
+    delta, offset, num_steps, is_symmetric, is_unsigned = \
+        _compute_variables_for_range_learning(tensor,
+                                              tensor_quantizer.bitwidth,
+                                              encoding_min,
+                                              encoding_max,
+                                              tensor_quantizer.channel_axis,
+                                              tensor_quantizer.use_symmetric_encodings,
+                                              tensor_quantizer.use_strict_symmetric,
+                                              tensor_quantizer.use_unsigned_symmetric)
 
-    steps = p
-    delta, offset = _compute_delta_and_offset(tensor, encoding_min, encoding_max, steps, channel_axis)
+    zero = torch.zeros_like(num_steps)
 
-    quantize_out = torch.round(tensor / delta) - offset
-    clamp_out = quantize_out.clamp(n, p)
-    dequantize_out = (clamp_out + offset) * delta
+    x_round = torch.round(tensor / delta) - offset
+    x_quant = x_round.clamp(zero, num_steps)
+    x_dequant = (x_quant + offset) * delta
 
-    mask_tensor = quantize_out.ge(n) * quantize_out.le(p)
+    mask_tensor = x_round.ge(zero) * x_round.le(num_steps)
 
-    # NOTE: There is no uint4, uint16 in PyTorch
-    # Use uint8 if bitwidth less than or equal to 8, otherwise use int32 as fallback
-    dtype_for_clamp_out = torch.uint8 if tensor_quantizer.bitwidth <= 8 else torch.int32
-    intermediate_result = IntermediateResult(clamp_out.to(dtype=dtype_for_clamp_out),
+    # Downcast x_quant if bitwidth is less than or equal to 8 to reduce memory consumption
+    if tensor_quantizer.bitwidth <= 8:
+        x_quant = x_quant.to(dtype=torch.uint8)
+
+    intermediate_result = IntermediateResult(x_quant,
                                              encoding_min, encoding_max,
-                                             delta, offset, mask_tensor, steps)
-    return dequantize_out, intermediate_result
+                                             delta, offset, mask_tensor, num_steps,
+                                             is_symmetric, is_unsigned)
+    return x_dequant, intermediate_result
+
+
+# pylint:disable=too-many-locals
+def asymmetric_gradients(tensor: torch.Tensor,
+                         grad: torch.Tensor,
+                         intermediate_result: IntermediateResult,
+                         channel_axis: int) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    """
+    Calculate asymmetric gradients with respect to tensor, gradients of encoding min and max
+    :param tensor: Given tensor
+    :param grad: Gradient using which other gradients will be calculated
+    :param intermediate_result: Intermediate result from forward pass
+    :param channel_axis: Channel axis
+    :return: Gradients with respect to tensor, gradients of encoding min and max
+    """
+    delta = intermediate_result.delta
+    offset = intermediate_result.offset
+    x_quant = intermediate_result.x_quant
+    mask_tensor = intermediate_result.mask_tensor
+
+    grad_xq = delta * grad
+    mask_tensor = Variable(mask_tensor.type_as(grad_xq.data))
+
+    grad_tensor = grad * mask_tensor
+    grad_scale = (x_quant + offset - tensor * mask_tensor / delta) * grad
+    grad_offset = grad_xq * (1 - mask_tensor)
+
+    dim = list(range(len(tensor.shape)))
+    if len(delta) > 1 and len(tensor.shape) > 1:
+        dim.pop(channel_axis)
+
+    num_steps = intermediate_result.num_steps
+    encoding_min = intermediate_result.encoding_min
+    encoding_max = intermediate_result.encoding_max
+
+    intermediate_term1 = grad_scale.sum(dim=dim) / num_steps
+    intermediate_term2 = num_steps / (encoding_max - encoding_min) ** 2 * grad_offset.sum(dim=dim)
+
+    grad_encoding_min = -intermediate_term1 + encoding_max * intermediate_term2
+    grad_encoding_max = intermediate_term1 - encoding_min * intermediate_term2
+
+    return grad_tensor, grad_encoding_min, grad_encoding_max
+
+
+# pylint:disable=too-many-locals
+def unsigned_symmetric_gradients(tensor: torch.Tensor,
+                                 grad: torch.Tensor,
+                                 intermediate_result: IntermediateResult,
+                                 channel_axis: int) -> Tuple[torch.Tensor, None, torch.Tensor]:
+    """
+    Calculate unsigned symmetric gradients with respect to tensor, gradients of encoding min and max
+    :param tensor: Given tensor
+    :param grad: Gradient using which other gradients will be calculated
+    :param intermediate_result: Intermediate result from forward pass
+    :param channel_axis: Channel axis
+    :return: Gradients with respect to tensor, gradients of encoding min and max
+    """
+    delta = intermediate_result.delta
+    x_quant = intermediate_result.x_quant
+    mask_tensor = intermediate_result.mask_tensor
+
+    mask_tensor = Variable(mask_tensor.type_as(grad.data))
+
+    dim = list(range(len(tensor.shape)))
+    if len(delta) > 1 and len(tensor.shape) > 1:
+        dim.pop(channel_axis)
+
+    num_steps = intermediate_result.num_steps
+
+    grad_tensor = mask_tensor * grad
+    grad_encoding_max = (x_quant * grad).sum(dim=dim) - (mask_tensor * (tensor / delta) * grad).sum(dim=dim)
+    grad_encoding_max = grad_encoding_max / num_steps
+
+    return grad_tensor, None, grad_encoding_max
+
+
+# pylint:disable=too-many-locals
+def symmetric_gradients(tensor: torch.Tensor,
+                        grad: torch.Tensor,
+                        intermediate_result: IntermediateResult,
+                        channel_axis: int) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    """
+    Calculate signed symmetric gradients with respect to tensor, gradients of encoding min and max
+    :param tensor: Given tensor
+    :param grad: Gradient using which other gradients will be calculated
+    :param intermediate_result: Intermediate result from forward pass
+    :param channel_axis: Channel axis
+    :return: Gradients with respect to tensor, gradients of encoding min and max
+    """
+    delta = intermediate_result.delta
+    offset = intermediate_result.offset
+    x_quant = intermediate_result.x_quant
+    mask_tensor = intermediate_result.mask_tensor
+
+    mask_tensor = Variable(mask_tensor.type_as(grad.data))
+
+    dim = list(range(len(tensor.shape)))
+    if len(delta) > 1 and len(tensor.shape) > 1:
+        dim.pop(channel_axis)
+
+    num_steps = intermediate_result.num_steps
+
+    grad_tensor = mask_tensor * grad
+    grad_encoding_max = ((x_quant + offset) * grad).sum(dim=dim) - (mask_tensor * (tensor / delta) * grad).sum(dim=dim)
+    grad_encoding_max = grad_encoding_max / torch.div(num_steps, 2, rounding_mode="floor")
+
+    return grad_tensor, -grad_encoding_max, grad_encoding_max
 
 
 # pylint:disable=too-many-locals
@@ -363,38 +586,19 @@ def calculate_gradients(tensor: torch.Tensor,
     :param channel_axis: Channel axis
     :return: Gradients with respect to tensor, gradients of encoding min and max
     """
-    delta = intermediate_result.delta
-    offset = intermediate_result.offset
-    clamp_out = intermediate_result.clamp_out
-    mask_tensor = intermediate_result.mask_tensor
+    is_symmetric = intermediate_result.is_symmetric
+    is_unsigned = intermediate_result.is_unsigned
 
-    dequantize_grad = delta * grad
-    mask_tensor = Variable(mask_tensor.type_as(dequantize_grad.data))
+    if not is_symmetric:
+        return asymmetric_gradients(tensor, grad, intermediate_result, channel_axis)
 
-    tensor_grad = grad * mask_tensor
-    scale_grad = (clamp_out + offset - tensor * mask_tensor / delta) * grad
-    offset_grad = dequantize_grad * (1 - mask_tensor)
-
-    dim = list(range(len(tensor.shape)))
-    if len(delta) > 1 and len(tensor.shape) > 1:
-        dim.pop(channel_axis)
-
-    steps = intermediate_result.steps
-    encoding_min = intermediate_result.encoding_min
-    encoding_max = intermediate_result.encoding_max
-
-    intermediate_term1 = scale_grad.sum(dim=dim) / steps
-    intermediate_term2 = steps / (encoding_max - encoding_min) ** 2 * offset_grad.sum(dim=dim)
-
-    tensor_encoding_min_grad = -intermediate_term1 + encoding_max * intermediate_term2
-    tensor_encoding_max_grad = intermediate_term1 - encoding_min * intermediate_term2
-
-    return tensor_grad, tensor_encoding_min_grad, tensor_encoding_max_grad
+    return unsigned_symmetric_gradients(tensor, grad, intermediate_result, channel_axis) if is_unsigned else \
+        symmetric_gradients(tensor, grad, intermediate_result, channel_axis)
 
 
 class RoundStraightThrough(torch.autograd.Function):
     """
-    Defining gradient of rounding function as passthrogh since round is a non-linearity
+    Defining gradient of rounding function as pass-through since round is a non-linearity
     """
 
     @staticmethod

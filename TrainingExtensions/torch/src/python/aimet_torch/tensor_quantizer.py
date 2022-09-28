@@ -662,6 +662,7 @@ class LearnedGridTensorQuantizer(TensorQuantizer):
         params[enc_max_param].requires_grad = False
 
 
+
 class QuantizeDequantizeFunc(torch.autograd.Function):
     """
     This functional is created explicitly for reducing the amount of intermediate tensors that would need to be
@@ -674,24 +675,31 @@ class QuantizeDequantizeFunc(torch.autograd.Function):
     @staticmethod
     def forward(ctx, tensor: torch.Tensor, encoding_min: torch.nn.Parameter,
                 encoding_max: torch.nn.Parameter, tensor_quantizer: LearnedGridTensorQuantizer) -> torch.Tensor:
-        dequantize_out, intermediate_result = grad_fn.calculate_forward_pass(tensor, tensor_quantizer,
-                                                                             encoding_min, encoding_max)
+        x_dequant, intermediate_result = grad_fn.calculate_forward_pass(tensor, tensor_quantizer,
+                                                                        encoding_min, encoding_max)
 
         ctx.channel_axis = tensor_quantizer.channel_axis
-        ctx.save_for_backward(tensor, intermediate_result.clamp_out,
+        ctx.is_symmetric = intermediate_result.is_symmetric
+        ctx.is_unsigned = intermediate_result.is_unsigned
+        ctx.save_for_backward(tensor, intermediate_result.x_quant,
                               intermediate_result.delta, intermediate_result.offset,
                               intermediate_result.encoding_min, intermediate_result.encoding_max,
-                              intermediate_result.mask_tensor, intermediate_result.steps)
+                              intermediate_result.mask_tensor, intermediate_result.num_steps)
 
-        return dequantize_out
+        return x_dequant
 
     @staticmethod
     def backward(ctx, grad):
+        # pylint: disable=too-many-locals
         # Retrieve saved tensors for gradient calculation
-        tensor, clamp_out, delta, offset, encoding_min, encoding_max, mask_tensor, steps = ctx.saved_tensors
+        tensor, x_quant, delta, offset, encoding_min, encoding_max, mask_tensor, num_steps = ctx.saved_tensors
         channel_axis = ctx.channel_axis
+        is_symmetric = ctx.is_symmetric
+        is_unsigned = ctx.is_unsigned
 
-        intermediate_result = IntermediateResult(clamp_out, encoding_min, encoding_max, delta, offset, mask_tensor, steps)
+        intermediate_result = IntermediateResult(x_quant, encoding_min, encoding_max,
+                                                 delta, offset, mask_tensor, num_steps,
+                                                 is_symmetric, is_unsigned)
 
         tensor_grad, tensor_encoding_min_grad, tensor_encoding_max_grad = \
             grad_fn.calculate_gradients(tensor, grad, intermediate_result, channel_axis)
