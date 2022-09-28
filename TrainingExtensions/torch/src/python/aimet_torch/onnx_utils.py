@@ -49,6 +49,7 @@ import torch
 import torch.nn as nn
 import torch.onnx.symbolic_caffe2
 import onnx
+import onnxsim
 from packaging import version
 
 from aimet_common.utils import AimetLogger
@@ -62,6 +63,9 @@ _logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Utils)
 # runs the second pass of markers for non-leaf torch module and updates names of onnx ops belonging to
 # non-leaf pytorch module
 update_all_onnx_nodes_name = True
+
+# executes onnx simplify on the onnx model with marker attached.
+simplify_onnx_model = True
 
 recurrent_onnx_optypes = ['LSTM', 'GRU', 'RNN']
 
@@ -822,7 +826,14 @@ class OnnxSaver:
                               enable_onnx_checker=False, **onnx_export_args.kwargs)
         else:
             torch.onnx.export(model, dummy_input, temp_file, enable_onnx_checker=False, **onnx_export_args.kwargs)
-        return onnx.load(temp_file)
+
+        onnx_model = onnx.load(temp_file)
+        if simplify_onnx_model:
+            onnx_model_simplified, check = onnxsim.simplify(onnx_model)
+            if check:
+                return onnx_model_simplified
+
+        return onnx_model
 
     @classmethod
     def _detach_start_and_end_markers(cls, map_input_tensor_to_node: Dict[str, onnx.NodeProto],
