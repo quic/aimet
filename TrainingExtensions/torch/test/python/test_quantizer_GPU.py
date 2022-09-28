@@ -2,7 +2,7 @@
 # =============================================================================
 #  @@-COPYRIGHT-START-@@
 #
-#  Copyright (c) 2017-2018, Qualcomm Innovation Center, Inc. All rights reserved.
+#  Copyright (c) 2017-2022, Qualcomm Innovation Center, Inc. All rights reserved.
 #
 #  Redistribution and use in source and binary forms, with or without
 #  modification, are permitted provided that the following conditions are met:
@@ -34,6 +34,8 @@
 #
 #  @@-COPYRIGHT-END-@@
 # =============================================================================
+import json
+import os
 
 import pytest
 import unittest
@@ -162,6 +164,27 @@ class QuantizerCpuGpu(unittest.TestCase):
 
     @pytest.mark.cuda
     def test_qc_trainable_wrapper_for_model_with_multiple_inputs_with_one_add(self):
+        # NOTE: Use asymmetric quantization for parameter, which have gradients both encoding min/max
+        quantsim_config = {
+            "defaults": {
+                "ops": {
+                    "is_output_quantized": "True",
+                },
+                "params": {
+                    "is_quantized": "True",
+                    "is_symmetric": "False"
+                }
+            },
+            "params": {},
+            "op_type": {},
+            "supergroups": [],
+            "model_input": {},
+            "model_output": {}
+        }
+        config_file_path = "/tmp/quantsim_config.json"
+        with open(config_file_path, "w") as f:
+            json.dump(quantsim_config, f)
+
         dummy_input = (torch.rand(32, 1, 100, 100).cuda(), torch.rand(32, 10, 22, 22).cuda())
 
         def forward_pass(sim_model, _):
@@ -172,7 +195,8 @@ class QuantizerCpuGpu(unittest.TestCase):
         model = ModelWithTwoInputsOneToAdd().cuda()
 
         sim = QuantizationSimModel(model, dummy_input=dummy_input,
-                                   quant_scheme=QuantScheme.training_range_learning_with_tf_init)
+                                   quant_scheme=QuantScheme.training_range_learning_with_tf_init,
+                                   config_file=config_file_path)
         # Enable input parameters to add (multiple input parameter exist)
         sim.model.add.input_quantizers[0].enabled = True
         sim.model.add.input_quantizers[1].enabled = True
@@ -193,3 +217,5 @@ class QuantizerCpuGpu(unittest.TestCase):
         for params in sim.model.parameters():
             assert params.grad is not None
 
+        if os.path.exists(config_file_path):
+            os.remove(config_file_path)
