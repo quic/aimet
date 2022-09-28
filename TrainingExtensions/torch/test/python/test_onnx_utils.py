@@ -35,7 +35,7 @@
 #
 #  @@-COPYRIGHT-END-@@
 # =============================================================================
-
+import contextlib
 import os
 import logging
 
@@ -102,6 +102,14 @@ class HierarchicalMultiplyModule(torch.nn.Module):
         x = self.mul1(x)
         return self.mul2(x) * 6
 
+# helper method to restore prior state of the flag.
+@contextlib.contextmanager
+def onnx_simply(enable):
+    entry_state = onnx_utils.simplify_onnx_model
+    onnx_utils.simplify_onnx_model = enable
+    yield
+    onnx_utils.simplify_onnx_model = entry_state
+
 class TestOnnxUtils:
 
     @staticmethod
@@ -120,9 +128,9 @@ class TestOnnxUtils:
         model = models.resnet18(pretrained=False)
         dummy_input = torch.randn(1, 3, 224, 224)
 
-        torch.onnx.export(model, dummy_input, './data/' + model_name + '.onnx')
-        onnx_utils.OnnxSaver.set_node_names('./data/' + model_name + '.onnx', model, dummy_input, is_conditional=False,
-                                            module_marker_map={})
+        with onnx_simply(True):
+            onnx_utils.OnnxSaver.set_node_names('./data/' + model_name + '.onnx', model, dummy_input,
+                                                is_conditional=False, module_marker_map={})
 
         onnx_model = onnx.load('./data/' + model_name + '.onnx')
         self.check_onnx_node_names(onnx_model)
@@ -148,8 +156,9 @@ class TestOnnxUtils:
         model = OutOfOrderModel()
         dummy_input = torch.randn(1, 16, 20, 20)
 
-        onnx_utils.OnnxSaver.set_node_names('./data/' + model_name + '.onnx', model, dummy_input, is_conditional=False,
-                                            module_marker_map={})
+        with onnx_simply(True):
+            onnx_utils.OnnxSaver.set_node_names('./data/' + model_name + '.onnx', model, dummy_input,
+                                                is_conditional=False, module_marker_map={})
 
         onnx_model = onnx.load('./data/' + model_name + '.onnx')
         self.check_onnx_node_names(onnx_model)
@@ -559,12 +568,32 @@ class TestOnnxUtils:
         for name in expected_node_names:
             assert name in actual_node_names
 
-        expected_param_names = ['conv1.weight', 'gn.bias', 'conv1.bias', 'gn.weight', 'bn.weight', 'bn.bias' ]
+        expected_param_names = {'conv1.weight', 'gn.bias', 'conv1.bias', 'gn.weight', 'bn.weight',
+                                'bn.running_mean', 'bn.bias', 'bn.running_var'}
         _, valid_param_set = onnx_utils.OnnxSaver.get_onnx_node_to_io_tensor_names_map(onnx_model)
         for name in expected_param_names:
             assert name in valid_param_set
 
         self.check_onnx_node_name_uniqueness(onnx_model)
+
+        # enable onnx simply
+        onnx_utils.simplify_onnx_model = True
+        with onnx_simply(True):
+            onnx_utils.OnnxSaver.set_node_names(onnx_path, model, dummy_input=torch.rand(1, 10, 24, 24),
+                                                is_conditional=False, module_marker_map={})
+        onnx_model = onnx.load(onnx_path)
+
+        actual_node_names = [node.name for node in onnx_model.graph.node]
+        for name in expected_node_names:
+            assert name in actual_node_names
+
+        params_names_removed = {'bn.running_mean', 'bn.running_var'}
+        _, valid_param_set = onnx_utils.OnnxSaver.get_onnx_node_to_io_tensor_names_map(onnx_model)
+        assert not params_names_removed.intersection(valid_param_set)
+        expected_param_names.difference_update(params_names_removed)
+        for name in expected_param_names:
+            assert name in valid_param_set
+
         if os.path.exists(onnx_path):
             os.remove(onnx_path)
 
