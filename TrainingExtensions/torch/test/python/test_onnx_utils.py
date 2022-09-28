@@ -125,14 +125,20 @@ class TestOnnxUtils:
                                             module_marker_map={})
 
         onnx_model = onnx.load('./data/' + model_name + '.onnx')
+        self.check_onnx_node_names(onnx_model)
+
+    def check_onnx_node_names(self, onnx_model):
+        name_to_bn_node_map = {}
         for node in onnx_model.graph.node:
             if node.op_type in ('Conv', 'Gemm', 'MaxPool'):
                 assert node.name
+            if node.op_type == 'BatchNormalization':
+                name_to_bn_node_map[node.name] = node
 
             for in_tensor in node.input:
                 if in_tensor.endswith('weight'):
-                    print("Checking " + in_tensor)
-                    assert node.name == in_tensor[:-7]
+                    tensor_context = in_tensor[:-7]
+                    assert node.name == tensor_context or tensor_context in name_to_bn_node_map
 
     def test_add_pytorch_node_names_to_onnx_ooo(self):
 
@@ -146,14 +152,7 @@ class TestOnnxUtils:
                                             module_marker_map={})
 
         onnx_model = onnx.load('./data/' + model_name + '.onnx')
-        for node in onnx_model.graph.node:
-            if node.op_type in ('Conv', 'Gemm', 'MaxPool'):
-                assert node.name
-
-            for in_tensor in node.input:
-                if in_tensor.endswith('weight'):
-                    print("Checking " + in_tensor)
-                    assert node.name == in_tensor[:-7]
+        self.check_onnx_node_names(onnx_model)
 
     def test_onnx_node_name_to_input_output_names_util(self):
         """ test onxx based utility to find mapping between onnx node names and io tensors"""
@@ -560,8 +559,7 @@ class TestOnnxUtils:
         for name in expected_node_names:
             assert name in actual_node_names
 
-        expected_param_names = ['conv1.weight', 'gn.bias', 'conv1.bias', 'gn.weight', 'bn.weight',
-                                'bn.running_mean', 'bn.bias', 'bn.running_var']
+        expected_param_names = ['conv1.weight', 'gn.bias', 'conv1.bias', 'gn.weight', 'bn.weight', 'bn.bias' ]
         _, valid_param_set = onnx_utils.OnnxSaver.get_onnx_node_to_io_tensor_names_map(onnx_model)
         for name in expected_param_names:
             assert name in valid_param_set
