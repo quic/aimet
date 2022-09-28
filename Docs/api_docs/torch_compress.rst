@@ -10,7 +10,7 @@ AIMET supports the following model compression techniques for PyTorch models
    - Spatial SVD
    - Channel Pruning
 
-To learn more about these model compression techniques, please see :ref:`Model Compression User Guide<ug-model-compression>`:
+To learn more about these model compression techniques, please see :ref:`Model Compression User Guide<ug-model-compression>`
 
 For all of these compression techniques there are two modes in which you can invoke the AIMET API
    - Auto Mode: In **Auto** mode, AIMET will determine the optimal way to compress each layer of
