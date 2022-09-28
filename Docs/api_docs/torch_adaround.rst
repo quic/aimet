@@ -8,7 +8,7 @@ AIMET PyTorch AdaRound API
 
 User Guide Link
 ===============
-To learn more about this technique, please see :ref:`AdaRound<ug-adaround>`:
+To learn more about this technique, please see :ref:`AdaRound<ug-adaround>`
 
 
 Top-level API
