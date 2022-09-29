@@ -146,6 +146,7 @@ RUN python3 -m pip --no-cache-dir install \
         mock \
         'numpy>=1.19.5' \
         onnx \
+        onnxsim \
         onnxruntime \
         onnxruntime-extensions \
         opencv-python \

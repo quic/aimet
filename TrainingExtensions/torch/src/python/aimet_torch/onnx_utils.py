@@ -827,12 +827,20 @@ class OnnxSaver:
         else:
             torch.onnx.export(model, dummy_input, temp_file, enable_onnx_checker=False, **onnx_export_args.kwargs)
 
-        onnx_model = onnx.load(temp_file)
+        return cls.load_simply_onnx_model(temp_file)
+
+    @classmethod
+    def load_simply_onnx_model(cls, filepath) -> onnx.ModelProto:
+        """
+         load the save onnx model and applies simply pass if enabled.
+        :param filepath: file path of saved onnx model
+        :return: Onnx model with optional simply pass
+        """
+        onnx_model = onnx.load(filepath)
         if simplify_onnx_model:
             onnx_model_simplified, check = onnxsim.simplify(onnx_model)
             if check:
                 return onnx_model_simplified
-
         return onnx_model
 
     @classmethod
