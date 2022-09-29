@@ -35,6 +35,7 @@
 # =============================================================================
 """ Utilities that are used for different AIMET PyTorch features """
 
+import itertools
 from typing import List, Tuple, Union, Dict
 import contextlib
 import os
@@ -162,11 +163,10 @@ class CachedDataset(Dataset):
             raise ValueError(f'Can not fetch {num_batches} batches from '
                              f'a data loader of length {len(data_loader)}.')
 
-        self._data_loader = data_loader
         self._num_batches = num_batches
         self._path = path
 
-        self._cache_model_inputs()
+        self._cache_model_inputs(itertools.islice(data_loader, num_batches))
 
     def __len__(self):
         return self._num_batches
@@ -179,14 +179,14 @@ class CachedDataset(Dataset):
 
         return batch
 
-    def _cache_model_inputs(self):
+    def _cache_model_inputs(self, data_loader):
         """
         Function to cache number of batches individually in separate file at provided path location
         """
         if not os.path.exists(self._path):
             os.makedirs(self._path)
 
-        for i, batch in enumerate(self._data_loader):
+        for i, batch in enumerate(data_loader):
             # batch is of shape (model_inputs, labels)
             if isinstance(batch, (tuple, list)):
                 batch, _ = batch
