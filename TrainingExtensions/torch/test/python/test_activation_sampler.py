@@ -81,9 +81,9 @@ class TestAdaroundActivationSampler(unittest.TestCase):
         image_size = (3, 32, 32)
         data_loader = create_fake_data_loader(dataset_size, batch_size, image_size)
         possible_batches = dataset_size // batch_size
-        iterator = iter(data_loader)
-        quant_inp, orig_out = ActivationSampler.sample_activation(model.conv1, sim.model.conv1, model, sim.model,
-                                                                  iterator, num_batches=possible_batches)
+
+        act_sampler = ActivationSampler(model.conv1, sim.model.conv1, model, sim.model)
+        quant_inp, orig_out = act_sampler.sample_and_place_all_acts_on_cpu(data_loader)
 
         self.assertEqual(list(quant_inp.shape), [batch_size * possible_batches, 3, 32, 32])
         self.assertEqual(list(orig_out.shape), [batch_size * possible_batches, 32, 18, 18])
@@ -112,10 +112,8 @@ class TestAdaroundActivationSampler(unittest.TestCase):
         possible_batches = dataset_size // batch_size
         data_loader = create_fake_data_loader(dataset_size, batch_size, image_size)
 
-        iterator = iter(data_loader)
-
-        quant_inp, orig_out = ActivationSampler.sample_activation(model.fc, sim.model.fc, model, sim.model,
-                                                                  iterator, num_batches=possible_batches)
+        act_sampler = ActivationSampler(model.fc, sim.model.fc, model, sim.model)
+        quant_inp, orig_out = act_sampler.sample_and_place_all_acts_on_cpu(data_loader)
 
         self.assertEqual(list(quant_inp.shape), [batch_size * possible_batches, 36])
         self.assertEqual(list(orig_out.shape), [batch_size * possible_batches, 12])
