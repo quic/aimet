@@ -36,7 +36,7 @@
 #  @@-COPYRIGHT-END-@@
 # =============================================================================
 from aimet_common.connected_graph.connectedgraph_utils import get_all_input_ops
-from aimet_onnx.test_models import build_dummy_model, single_residual_model, multi_input_model
+from TrainingExtensions.onnx.test.python.test_models import build_dummy_model, single_residual_model, multi_input_model
 from aimet_onnx.meta.connectedgraph import ConnectedGraph
 
 

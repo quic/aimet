@@ -36,7 +36,10 @@
 #  @@-COPYRIGHT-END-@@
 # =============================================================================
 import onnx
-from typing import Dict
+from onnx import onnx_pb
+from typing import Dict, List
+
+OP_TYPES_WITH_PARAMS = ['Conv', 'Gemm', 'ConvTranspose']
 
 
 def remove_nodes_with_type(node_type: str, onnx_graph: onnx.onnx_pb.GraphProto):
@@ -102,3 +105,41 @@ def get_ordered_dict_of_nodes(onnx_graph: onnx.onnx_pb.GraphProto) -> Dict:
     for node in onnx_graph.node:
         ordered_dict[node.name] = node
     return ordered_dict
+
+
+class ParamUtils:
+    @staticmethod
+    def get_shape(model: onnx_pb.ModelProto, node: onnx_pb.NodeProto, param_index: int) -> List:
+        """
+        Returns a list of shape for the param specifies
+        :param model: ONNX model
+        :param node: ONNX node to which the param feeds to
+        :param param_index: Index at which param feeds to the ONNX node
+        """
+        if node.op_type in OP_TYPES_WITH_PARAMS:
+            if len(node.input) >= param_index + 1:
+                param_name = node.input[param_index]
+                for param in model.graph.initializer:
+                    if param.name == param_name:
+                        return param.dims
+            assert "Param not present in the node"
+        else:
+            assert "Node type not in allowed op types with param list"
+
+    @staticmethod
+    def get_param(model: onnx_pb.ModelProto, node: onnx_pb.NodeProto, param_index: int) -> onnx_pb.TensorProto:
+        """
+        Returns the param tensor
+        :param model: ONNX model
+        :param node: ONNX node to which the param feeds to
+        :param param_index: Index at which param feeds to the ONNX node
+        """
+        if node.op_type in OP_TYPES_WITH_PARAMS:
+            if len(node.input) >= param_index + 1:
+                param_name = node.input[param_index]
+                for param in model.graph.initializer:
+                    if param.name == param_name:
+                        return param
+            assert "Param not present in the node"
+        else:
+            assert "Node type not in allowed op types with param list"

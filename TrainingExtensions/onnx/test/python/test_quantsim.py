@@ -39,9 +39,9 @@ import json
 import os
 import torch
 import numpy as np
-from onnx import onnx_pb, helper, numpy_helper, OperatorSetIdProto, load_model
+from onnx import load_model
 from aimet_onnx.quantsim import QuantizationSimModel
-from aimet_onnx.test_models import build_dummy_model
+from TrainingExtensions.onnx.test.python.test_models import build_dummy_model
 from aimet_onnx.qc_quantize_op import OpMode, reset_qc_quantize_op_dict
 from aimet_torch.quantsim import QuantizationSimModel as PtQuantizationSimModel
 from aimet_torch.examples.test_models import SingleResidual

@@ -40,7 +40,8 @@ import numpy as np
 import torch
 from onnx import helper, numpy_helper, OperatorSetIdProto, TensorProto, load_model
 from onnxruntime.quantization.onnx_quantizer import ONNXModel
-from aimet_torch.examples.test_models import SingleResidualWithAvgPool, ModelWithTwoInputs
+from aimet_torch.examples.test_models import SingleResidualWithAvgPool, ModelWithTwoInputs, TransposedConvModel
+from aimet_torch.examples.mobilenet import MockMobileNetV1
 
 # pylint: disable=no-member
 def build_dummy_model():
@@ -123,3 +124,36 @@ def multi_input_model():
                       output_names=['output'])
     model = ONNXModel(load_model('./model_multi_input.onnx'))
     return model
+
+def transposed_conv_model():
+    x = torch.randn(10, 10, 4, 4, requires_grad=True)
+    model = TransposedConvModel()
+
+    # Export the model
+    torch.onnx.export(model,  # model being run
+                      x,  # model input (or a tuple for multiple inputs)
+                      "./model_transposed_conv.onnx",  # where to save the model (can be a file or file-like object)
+                      export_params=True,  # store the trained parameter weights inside the model file
+                      opset_version=12,  # the ONNX version to export the model to
+                      do_constant_folding=True,  # whether to execute constant folding for optimization
+                      input_names=['input'],  # the model's input names
+                      output_names=['output'])
+    model = ONNXModel(load_model('./model_transposed_conv.onnx'))
+    return model
+
+def depthwise_conv_model():
+    x = torch.randn(1, 3, 224, 224, requires_grad=True)
+    model = MockMobileNetV1()
+
+    # Export the model
+    torch.onnx.export(model,  # model being run
+                      x,  # model input (or a tuple for multiple inputs)
+                      "./model_mock_mobilenet.onnx",  # where to save the model (can be a file or file-like object)
+                      export_params=True,  # store the trained parameter weights inside the model file
+                      opset_version=12,  # the ONNX version to export the model to
+                      do_constant_folding=True,  # whether to execute constant folding for optimization
+                      input_names=['input'],  # the model's input names
+                      output_names=['output'])
+    model = ONNXModel(load_model('./model_mock_mobilenet.onnx'))
+    return model
+
