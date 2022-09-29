@@ -36,7 +36,7 @@
 #  @@-COPYRIGHT-END-@@
 # =============================================================================
 import onnx
-import TrainingExtensions.onnx.test.python.test_models as test_models
+import test_models
 import aimet_onnx.utils as utils
 from aimet_onnx.utils import ParamUtils
 
