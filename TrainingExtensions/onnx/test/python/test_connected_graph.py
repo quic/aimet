@@ -36,13 +36,13 @@
 #  @@-COPYRIGHT-END-@@
 # =============================================================================
 from aimet_common.connected_graph.connectedgraph_utils import get_all_input_ops
-from aimet_onnx.test_models import build_dummy_model, single_residual_model, multi_input_model
 from aimet_onnx.meta.connectedgraph import ConnectedGraph
+import test_models
 
 
 class TestConnectedGraph:
     def test_simple_model(self):
-        model = build_dummy_model()
+        model = test_models.build_dummy_model()
         cg = ConnectedGraph(model)
         ops = cg.get_all_ops()
         assert len(ops) == 5
@@ -52,7 +52,7 @@ class TestConnectedGraph:
         assert ['input_to_conv', 'conv_to_relu', 'relu_to_maxpool', 'maxpool_to_flatten', 'flatten_to_fc'] == [product for product in products]
 
     def test_single_residual_model(self):
-        model = single_residual_model()
+        model = test_models.single_residual_model()
         conn_graph = ConnectedGraph(model)
         assert len(conn_graph.get_all_ops()) == 19
         products = conn_graph.get_all_products()
@@ -62,7 +62,7 @@ class TestConnectedGraph:
         assert len(input_ops) == 1
 
     def test_multi_inputs_model(self):
-        model = multi_input_model()
+        model = test_models.multi_input_model()
         conn_graph = ConnectedGraph(model)
         assert len(conn_graph.get_all_ops()) == 15
 

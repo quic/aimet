@@ -36,7 +36,10 @@
 #  @@-COPYRIGHT-END-@@
 # =============================================================================
 import onnx
-from aimet_onnx import utils, test_models
+import test_models
+import aimet_onnx.utils as utils
+from aimet_onnx.utils import ParamUtils
+
 
 class TestUtils:
     """
@@ -91,3 +94,41 @@ class TestUtils:
         for i, node in enumerate(model.graph.node):
             assert node_keys[i] == node.name
             assert node_dict[node.name] == node
+
+    def test_weight_utils(self):
+        model = test_models.build_dummy_model()
+        for node in model.graph.node:
+            if node.op_type == 'Conv':
+                weights = ParamUtils.get_param(model, node, 1)
+                weights_shape = ParamUtils.get_shape(model, node, 1)
+                bias = ParamUtils.get_param(model, node, 2)
+                bias_shape = ParamUtils.get_shape(model, node, 2)
+                assert bias_shape == [1]
+                assert weights_shape == [1, 3, 3, 3]
+                assert weights.name == 'conv_w'
+                assert bias.name == 'conv_b'
+
+            if node.op_type == 'Gemm':
+                weights = ParamUtils.get_param(model, node, 1)
+                weights_shape = ParamUtils.get_shape(model, node, 1)
+                bias = ParamUtils.get_param(model, node, 2)
+                bias_shape = ParamUtils.get_shape(model, node, 2)
+                assert bias_shape == [10]
+                assert weights_shape == [256, 10]
+                assert weights.name == 'fc_w'
+                assert bias.name == 'fc_b'
+
+    def test_utils_transposed_conv_model(self):
+        model = test_models.transposed_conv_model()
+        model = model.model
+        for node in model.graph.node:
+            if node.op_type == 'ConvTranspose':
+                weights = ParamUtils.get_param(model, node, 1)
+                weights_shape = ParamUtils.get_shape(model, node, 1)
+                bias = ParamUtils.get_param(model, node, 2)
+                bias_shape = ParamUtils.get_shape(model, node, 2)
+                assert bias_shape == [10]
+                assert weights_shape == [10, 10, 3, 3]
+                assert weights.name == 'conv1.weight'
+                assert bias.name == 'conv1.bias'
+                break
