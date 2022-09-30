@@ -63,6 +63,7 @@ def depthwise_conv2d_model():
     model = tf.keras.Model(inputs=inputs, outputs=outputs)
     return model
 
+
 def varied_activations_model():
     model = tf.keras.Sequential([
         tf.keras.layers.Conv2D(8, (2, 2), input_shape=(16, 16, 3,)),
@@ -103,6 +104,7 @@ def test_apply_adaround():
     if os.path.exists("./data/dummy.encodings"):
         os.remove("./data/dummy.encodings")
 
+
 def test_get_module_act_func_pair():
     model = varied_activations_model()
     module_act_func_pairs = Adaround._get_module_act_func_pair(model)
@@ -114,6 +116,7 @@ def test_get_module_act_func_pair():
     assert module_act_func_pairs[conv_layer_2] is None
     assert module_act_func_pairs[conv_layer_3] is None
     assert module_act_func_pairs[dense_layer] is None
+
 
 def test_get_ordered_adaround_layer_indices():
     model = varied_activations_model()
@@ -157,7 +160,7 @@ def test_optimize_rounding_conv2d():
     orig_weight = conv.get_weights()[0]
 
     opt_params = AdaroundHyperParameters(num_iterations=1, reg_param=0.01, beta_range=(20, 2), warm_start=0.2)
-    conv_wrapper = AdaroundWrapper(conv, 4, QuantScheme.post_training_tf, False)
+    conv_wrapper = AdaroundWrapper(conv, 4, QuantScheme.post_training_tf, False, False, True, False, None, None, None)
 
     inp_data = np.random.rand(1, 10, 10, 3).astype('float32')
     out_data = np.random.rand(1, 10, 10, 16).astype('float32')
@@ -171,6 +174,7 @@ def test_optimize_rounding_conv2d():
     assert orig_weight.shape == soft_rounded_weight.shape
     assert np.allclose(orig_weight, soft_rounded_weight, atol=2 * conv_wrapper.encoding.delta)
 
+
 def test_optimize_rounding_matmul():
     """ Test optimize rounding for MatMul """
     model = depthwise_conv2d_model()
@@ -178,7 +182,8 @@ def test_optimize_rounding_matmul():
     orig_weight = matmul.get_weights()[0]
 
     opt_params = AdaroundHyperParameters(num_iterations=1, reg_param=0.01, beta_range=(20, 2), warm_start=0.2)
-    matmul_wrapper = AdaroundWrapper(matmul, 4, QuantScheme.post_training_tf, False)
+    matmul_wrapper = AdaroundWrapper(matmul, 4, QuantScheme.post_training_tf,
+                                     False, False, True, False, None, None, None)
 
     inp_data = np.random.rand(1, 392).astype('float32')
     out_data = np.random.rand(1, 10).astype('float32')
@@ -192,6 +197,7 @@ def test_optimize_rounding_matmul():
     assert orig_weight.shape == soft_rounded_weight.shape
     assert np.allclose(orig_weight, soft_rounded_weight, atol=2 * matmul_wrapper.encoding.delta)
 
+
 def test_optimize_rounding_depthwise_conv2d():
     """ Test optimize rounding for Depthwise Conv2d """
     model = depthwise_conv2d_model()
@@ -199,7 +205,8 @@ def test_optimize_rounding_depthwise_conv2d():
     orig_weight = depthwise_conv2d.get_weights()[0]
 
     opt_params = AdaroundHyperParameters(num_iterations=1, reg_param=0.01, beta_range=(20, 2), warm_start=0.2)
-    depthwise_conv_wrapper = AdaroundWrapper(depthwise_conv2d, 4, QuantScheme.post_training_tf, False)
+    depthwise_conv_wrapper = AdaroundWrapper(depthwise_conv2d, 4, QuantScheme.post_training_tf,
+                                             False, False, True, False, None, None, None)
 
     inp_data = np.random.rand(1, 5, 5, 10).astype('float32')
     out_data = np.random.rand(1, 3, 3, 10).astype('float32')
@@ -212,6 +219,7 @@ def test_optimize_rounding_depthwise_conv2d():
 
     assert orig_weight.shape == soft_rounded_weight.shape
     assert np.allclose(orig_weight, soft_rounded_weight, atol=2 * depthwise_conv_wrapper.encoding.delta)
+
 
 def test_compute_output_with_adarounded_weights():
     """ Test compute output with adarounded weights for Conv layer """
@@ -237,7 +245,7 @@ def test_compute_output_with_adarounded_weights():
     conv_layer = tf.keras.layers.Conv2D(4, 1, padding='same')
     conv_layer.build(input_shape=(1, 10, 10, 4))
     conv_layer.set_weights([weight_tensor] + conv_layer.get_weights()[1:])
-    conv_wrapper = AdaroundWrapper(conv_layer, weight_bw, quant_scheme, False)
+    conv_wrapper = AdaroundWrapper(conv_layer, weight_bw, quant_scheme, False, False, True, False, None, None, None)
 
     hard_recons_error, soft_recons_error = AdaroundOptimizer._eval_recons_err_metrics(conv_wrapper, None, inp_tensor,
                                                                                       out_tensor)
@@ -270,6 +278,7 @@ def test_get_conv_args():
     assert conv_args['strides'] == [1, 1, 1, 1]
     assert conv_args['dilations'] == (1, 1)
 
+
 def test_calculate_alpha():
     np.random.seed(0)
     weight = np.random.rand(32, 3, 12, 12)
@@ -278,8 +287,9 @@ def test_calculate_alpha():
     encoding.offset = -127.0
     encoding.delta = 0.001551126479
 
-    alpha = AdaroundWrapper._calculate_alpha(weight, encoding)
+    alpha = AdaroundWrapper._calculate_alpha(weight, encoding, per_channel_enabled=False, ch_axis=None)
     assert np.isclose(alpha[0, 0, :1, :1], 1.1715, atol=1e-4)
+
 
 def test_adaround_weights():
     """ test adaround weights """
@@ -287,15 +297,17 @@ def test_adaround_weights():
 
     # 1) Conv2D
     conv = model.layers[1]
-    conv_wrapper = AdaroundWrapper(conv, 4, QuantScheme.post_training_tf, False)
+    conv_wrapper = AdaroundWrapper(conv, 4, QuantScheme.post_training_tf, False, False, True, False, None, None, None)
 
     # 2) MatMul
     matmul = model.layers[6]
-    matmul_wrapper = AdaroundWrapper(matmul, 4, QuantScheme.post_training_tf, False)
+    matmul_wrapper = AdaroundWrapper(matmul, 4, QuantScheme.post_training_tf,
+                                     False, False, True, False, None, None, None)
 
     # 3) Depthwise Conv2D
     depthwise_conv = model.layers[3]
-    depthwise_conv_wrapper = AdaroundWrapper(depthwise_conv, 4, QuantScheme.post_training_tf, False)
+    depthwise_conv_wrapper = AdaroundWrapper(depthwise_conv, 4, QuantScheme.post_training_tf,
+                                             False, False, True, False, None, None, None)
 
     matmul_wrapper.use_soft_rounding.assign(False)
     quantized_weight = matmul_wrapper.adaround_weights()
@@ -332,3 +344,56 @@ def test_adaround_weights():
     orig_weight = depthwise_conv_wrapper._weight_tensor
     assert orig_weight.shape == quantized_weight.shape
     assert np.allclose(orig_weight, quantized_weight, atol=2 * depthwise_conv_wrapper.encoding.delta)
+
+
+def test_apply_adaround_per_channel_conv2d_transpose():
+    """ test adaround apply specific to Conv2DTranspose"""
+    inputs = tf.keras.Input(shape=(16, 16, 3))
+    outputs = tf.keras.layers.Conv2DTranspose(8, (2, 2))(inputs)
+    dataset_size = 32
+    batch_size = 16
+    possible_batches = dataset_size // batch_size
+    input_data = np.random.rand(dataset_size, 16, 16, 3).astype(dtype=np.float64)
+
+    dataset = tf.data.Dataset.from_tensor_slices(input_data)
+    dataset = dataset.batch(batch_size=batch_size)
+
+    params = AdaroundParameters(data_set=dataset, num_batches=possible_batches, default_num_iterations=10)
+    model = tf.keras.Model(inputs=inputs, outputs=outputs)
+
+    quantsim_config = {
+        "defaults": {
+            "ops": {},
+            "params": {
+                "is_symmetric": "True"
+            },
+            "per_channel_quantization": "True",
+        },
+        "params": {},
+        "op_type": {},
+        "supergroups": [],
+        "model_input": {},
+        "model_output": {
+            "is_output_quantized": "True"
+        }
+    }
+
+    with open('./config.json', 'w') as f:
+        json.dump(quantsim_config, f)
+
+    Adaround.apply_adaround(
+        model, params, path='./', filename_prefix='conv2d_transpose',
+        default_param_bw=8, default_quant_scheme=QuantScheme.post_training_tf,
+        default_is_symmetric=False,
+        config_file='config.json',
+    )
+
+    with open('./conv2d_transpose.encodings') as json_file:
+        encoding_data = json.load(json_file)
+
+    param_keys = list(encoding_data.keys())
+
+    assert(param_keys[0] == "conv2d_transpose/kernel:0")
+    conv_transpose_encoding_data = encoding_data['conv2d_transpose/kernel:0']
+    assert (isinstance(conv_transpose_encoding_data, list))
+    assert len(conv_transpose_encoding_data) == 8

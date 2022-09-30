@@ -51,15 +51,15 @@ from aimet_common.quantsim_config.json_config_importer import ConfigType, Superg
 from aimet_common.quantsim_config.quantsim_config import QuantSimConfigurator as AimetCommonQuantSimConfigurator, \
     get_all_ops_in_neighborhood
 from aimet_common.utils import AimetLogger
+import aimet_tensorflow.keras.utils.common as keras_common_utils
 from aimet_tensorflow.keras.connectedgraph import ConnectedGraph
 from aimet_tensorflow.keras.quant_sim.qc_quantize_wrapper import QuantizerSettings, ALLOWED_FLOAT_DTYPES
 from aimet_tensorflow.keras.quant_sim.tensor_quantizer import ActivationTensorQuantizer, ParamTensorQuantizer
 
-logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Quant)
+_logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Quant)
 
 LayerAffectedQuantizerTupleType = Tuple[List[Tuple[layers.Layer, str]], List[Tuple[layers.Layer, str]],
                                         List[Tuple[layers.Layer, str]], List[Tuple[layers.Layer, str]]]
-
 
 SETTING = "setting"
 AFFECTED_QUANTIZERS = "affected_quantizers"
@@ -72,6 +72,7 @@ class TreeLikeDictionary(dict):
     """
     A n-ary tree-like autovivification dictionary for storing/updating/fetching
     """
+
     def __missing__(self, key):
         value = self[key] = type(self)()
         return value
@@ -94,20 +95,24 @@ class SupergroupConfigCallback(AimetCommonSupergroupConfigCallback):
                 # turn off only output quantization of first op in the list
                 self._layer_to_config_dict[layer][ConfigDictKeys.IS_OUTPUT_QUANTIZED][SETTING] = False
                 self._layer_to_config_dict[layer][ConfigDictKeys.IS_OUTPUT_QUANTIZED][AFFECTED_QUANTIZERS] = \
-                    _get_affected_tensor_quantizers_by_false_setting(op, "output")
+                    _get_affected_tensor_quantizers_by_false_setting(
+                        op, "output")
             elif index == len(op_list) - 1:
                 # turn off only input quantization of last op in the list
                 self._layer_to_config_dict[layer][ConfigDictKeys.IS_INPUT_QUANTIZED][SETTING] = False
                 self._layer_to_config_dict[layer][ConfigDictKeys.IS_INPUT_QUANTIZED][AFFECTED_QUANTIZERS] = \
-                    _get_affected_tensor_quantizers_by_false_setting(op, "input")
+                    _get_affected_tensor_quantizers_by_false_setting(
+                        op, "input")
             else:
                 self._layer_to_config_dict[layer][ConfigDictKeys.IS_INPUT_QUANTIZED][SETTING] = False
                 self._layer_to_config_dict[layer][ConfigDictKeys.IS_INPUT_QUANTIZED][AFFECTED_QUANTIZERS] = \
-                    _get_affected_tensor_quantizers_by_false_setting(op, "input")
+                    _get_affected_tensor_quantizers_by_false_setting(
+                        op, "input")
 
                 self._layer_to_config_dict[layer][ConfigDictKeys.IS_OUTPUT_QUANTIZED][SETTING] = False
                 self._layer_to_config_dict[layer][ConfigDictKeys.IS_OUTPUT_QUANTIZED][AFFECTED_QUANTIZERS] = \
-                    _get_affected_tensor_quantizers_by_false_setting(op, "output")
+                    _get_affected_tensor_quantizers_by_false_setting(
+                        op, "output")
 
 
 def _get_affected_tensor_quantizers_by_true_setting(op: Op, direction: str) -> List[Tuple[layers.Layer, str]]:
@@ -136,9 +141,11 @@ def _get_affected_tensor_quantizers_by_false_setting(op: Op, direction: str) -> 
             continue
 
         if neighboring_ops[neighbor_op] == "input":
-            affected_tensor_quantizers_by_false_setting.append((neighbor_op.get_module(), "input"))
+            affected_tensor_quantizers_by_false_setting.append(
+                (neighbor_op.get_module(), "input"))
         else:
-            affected_tensor_quantizers_by_false_setting.append((neighbor_op.get_module(), "output"))
+            affected_tensor_quantizers_by_false_setting.append(
+                (neighbor_op.get_module(), "output"))
 
     return affected_tensor_quantizers_by_false_setting
 
@@ -158,7 +165,8 @@ def _initialize_input_quantizers(layer: layers.Layer, quant_settings: QuantizerS
     input_quantizers = []
     for i in range(num_inputs):
         if layer_input_list[i].dtype in ALLOWED_FLOAT_DTYPES:
-            activation_tensor_quantizer = ActivationTensorQuantizer(f"{layer.name}_input_quantizer_{i}",
+            activation_tensor_quantizer = ActivationTensorQuantizer(layer,
+                                                                    f"{layer.name}_input_quantizer_{i}",
                                                                     quant_settings.quant_scheme,
                                                                     quant_settings.round_mode,
                                                                     quant_settings.bitwidth,
@@ -182,7 +190,8 @@ def _initialize_output_quantizers(layer: layers.Layer, quant_settings: Quantizer
     """
     output_quantizers = []
     if layer.output.dtype in ALLOWED_FLOAT_DTYPES:
-        activation_tensor_quantizer = ActivationTensorQuantizer(f"{layer.name}_output_quantizer_0",
+        activation_tensor_quantizer = ActivationTensorQuantizer(layer,
+                                                                f"{layer.name}_output_quantizer_0",
                                                                 quant_settings.quant_scheme,
                                                                 quant_settings.round_mode,
                                                                 quant_settings.bitwidth,
@@ -195,7 +204,9 @@ def _initialize_output_quantizers(layer: layers.Layer, quant_settings: Quantizer
 
 
 def _initialize_param_quantizers(layer: layers.Layer, param_config_dict: TreeLikeDictionary,
-                                 quant_settings: QuantizerSettings) -> List[ParamTensorQuantizer]:
+                                 quant_settings: QuantizerSettings,
+                                 per_channel_quantization_enabled: bool) -> Union[List[ParamPerTensorQuantizer],
+                                                                                  List[ParamPerChannelQuantizer]]:
     """
     Initialize param quantizers corresponding to layer using quantizer settings
     :param layer: Target tf.keras.layers.Layer
@@ -210,22 +221,46 @@ def _initialize_param_quantizers(layer: layers.Layer, param_config_dict: TreeLik
             param_type = "bias" if "bias" in weight_name else "weight"
 
             if param_type in param_config_dict:
-                is_symmetric = param_config_dict[param_type][ConfigDictKeys.IS_SYMMETRIC].get(SETTING, False)
-                enabled = param_config_dict[param_type][ConfigDictKeys.IS_QUANTIZED].get(SETTING, False)
+                is_symmetric = param_config_dict[param_type][ConfigDictKeys.IS_SYMMETRIC].get(
+                    SETTING, False)
+                enabled = param_config_dict[param_type][ConfigDictKeys.IS_QUANTIZED].get(
+                    SETTING, False)
             else:
-                is_symmetric = param_config_dict[ConfigDictKeys.IS_SYMMETRIC].get(SETTING, False)
-                enabled = param_config_dict[ConfigDictKeys.IS_QUANTIZED].get(SETTING, False)
+                is_symmetric = param_config_dict[ConfigDictKeys.IS_SYMMETRIC].get(
+                    SETTING, False)
+                enabled = param_config_dict[ConfigDictKeys.IS_QUANTIZED].get(
+                    SETTING, False)
 
-            param_tensor_quantizer = ParamTensorQuantizer(weight_name,
-                                                          quant_settings.quant_scheme,
-                                                          quant_settings.round_mode,
-                                                          quant_settings.bitwidth,
-                                                          is_symmetric,
-                                                          quant_settings.use_strict_symmetric,
-                                                          quant_settings.use_unsigned_symmetric,
-                                                          enabled)
+            if per_channel_quantization_enabled and isinstance(layer, keras_common_utils.per_channel_quantizeable_layers):
+                num_output_channels, axis_handling = keras_common_utils.get_number_of_outputs_and_axis_handling(
+                    layer, weight.shape, param_type
+                )
 
-            param_quantizers.append(param_tensor_quantizer)
+                param_quantizers.append(
+                    ParamPerChannelQuantizer(layer,
+                                             weight_name,
+                                             quant_settings.quant_scheme,
+                                             quant_settings.round_mode,
+                                             quant_settings.bitwidth,
+                                             is_symmetric,
+                                             quant_settings.use_strict_symmetric,
+                                             quant_settings.use_unsigned_symmetric,
+                                             axis_handling,
+                                             num_output_channels,
+                                             enabled))
+            else:
+
+                param_quantizers.append(
+                    ParamPerTensorQuantizer(layer,
+                                            weight_name,
+                                            quant_settings.quant_scheme,
+                                            quant_settings.round_mode,
+                                            quant_settings.bitwidth,
+                                            is_symmetric,
+                                            quant_settings.use_strict_symmetric,
+                                            quant_settings.use_unsigned_symmetric,
+                                            enabled))
+
     return param_quantizers
 
 
@@ -235,14 +270,17 @@ class QuantSimConfigurator(AimetCommonQuantSimConfigurator):
     def __init__(self, connected_graph: ConnectedGraph, quant_scheme: Union[QuantScheme, str], rounding_mode: str,
                  default_output_bw: int, default_param_bw: int, config_file: str):
         # TODO when keras supports fp16, pass default_data_type to below line
-        super(QuantSimConfigurator, self).__init__(config_file, QuantizationDataType.int, default_output_bw, default_param_bw)
+        super(QuantSimConfigurator, self).__init__(config_file, QuantizationDataType.int, default_output_bw,
+                                                   default_param_bw)
         self._connected_graph = connected_graph
         self._layer_to_affected_quantizer_info_dict = self._create_layer_to_affected_quantizer_info_dict()
         self._layer_to_config_dict = TreeLikeDictionary()
         self._layer_to_quantizers_dict = TreeLikeDictionary()
 
         self._set_quantsim_configs()
-        self._initialize_quantizers_by_layer(quant_scheme, rounding_mode, default_output_bw, default_param_bw)
+        self.per_channel_quantization_flag = self._get_per_channel_quantization_flag()
+        self._initialize_quantizers_by_layer(
+            quant_scheme, rounding_mode, default_output_bw, default_param_bw)
 
     def _create_layer_to_affected_quantizer_info_dict(self) -> Dict[layers.Layer, LayerAffectedQuantizerTupleType]:
         """
@@ -255,10 +293,14 @@ class QuantSimConfigurator(AimetCommonQuantSimConfigurator):
         """
         layer_to_tensor_quantizers_dict = {}
         for op in self._connected_graph.ordered_ops:
-            affected_quantizers_when_input_enabled = _get_affected_tensor_quantizers_by_true_setting(op, "input")
-            affected_quantizers_when_output_enabled = _get_affected_tensor_quantizers_by_true_setting(op, "output")
-            affected_quantizers_when_input_disabled = _get_affected_tensor_quantizers_by_false_setting(op, "input")
-            affected_quantizers_when_output_disabled = _get_affected_tensor_quantizers_by_false_setting(op, "output")
+            affected_quantizers_when_input_enabled = _get_affected_tensor_quantizers_by_true_setting(
+                op, "input")
+            affected_quantizers_when_output_enabled = _get_affected_tensor_quantizers_by_true_setting(
+                op, "output")
+            affected_quantizers_when_input_disabled = _get_affected_tensor_quantizers_by_false_setting(
+                op, "input")
+            affected_quantizers_when_output_disabled = _get_affected_tensor_quantizers_by_false_setting(
+                op, "output")
 
             layer_to_tensor_quantizers_dict[op.get_module()] = (affected_quantizers_when_input_enabled,
                                                                 affected_quantizers_when_output_enabled,
@@ -287,7 +329,8 @@ class QuantSimConfigurator(AimetCommonQuantSimConfigurator):
             for config_key, config_val in default_configs[ConfigDictKeys.OPS].items():
                 self._layer_to_config_dict[layer][config_key][SETTING] = config_val
                 self._layer_to_config_dict[layer][config_key][AFFECTED_QUANTIZERS] = \
-                    self._get_affected_quantizers_by_config(layer, config_key, config_val)
+                    self._get_affected_quantizers_by_config(
+                        layer, config_key, config_val)
 
             # Set default configs for params
             for config_key, config_val in default_configs[ConfigDictKeys.PARAMS].items():
@@ -323,8 +366,8 @@ class QuantSimConfigurator(AimetCommonQuantSimConfigurator):
         if setting_name == ConfigDictKeys.IS_SYMMETRIC:
             # Will modify all input and output quantizers in the False case
             return input_false_list + output_false_list
-        logger.error("Encountered unrecognized case for setting name %s, setting value %s", setting_name,
-                     quantizer_setting)
+        _logger.error("Encountered unrecognized case for setting name %s, setting value %s", setting_name,
+                      quantizer_setting)
         raise ValueError
 
     def _set_param_configs(self, param_configs: ParamType):
@@ -353,7 +396,8 @@ class QuantSimConfigurator(AimetCommonQuantSimConfigurator):
                     else:
                         self._layer_to_config_dict[layer][config_key][SETTING] = config_val
                         self._layer_to_config_dict[layer][config_key][AFFECTED_QUANTIZERS] = \
-                            self._get_affected_quantizers_by_config(layer, config_key, config_val)
+                            self._get_affected_quantizers_by_config(
+                                layer, config_key, config_val)
 
     def _update_layer_param_config(self, layer: layers.Layer, param_configs: ParamType):
         """
@@ -375,10 +419,12 @@ class QuantSimConfigurator(AimetCommonQuantSimConfigurator):
         for supergroup_config in supergroups_configs:
             callback = SupergroupConfigCallback(self._layer_to_config_dict)
             op_list = supergroup_config[ConfigDictKeys.OP_LIST]
-            patterns_with_callbacks.append(PatternType(pattern=op_list, action=callback))
+            patterns_with_callbacks.append(
+                PatternType(pattern=op_list, action=callback))
 
         if patterns_with_callbacks:
-            graph_searcher = GraphSearcher(self._connected_graph, patterns_with_callbacks)
+            graph_searcher = GraphSearcher(
+                self._connected_graph, patterns_with_callbacks)
             graph_searcher.find_all_patterns_in_graph_apply_actions()
 
     def _set_model_input_configs(self, model_input_configs: ConfigType):
@@ -393,7 +439,8 @@ class QuantSimConfigurator(AimetCommonQuantSimConfigurator):
             for config_key, config_val in model_input_configs.items():
                 self._layer_to_config_dict[layer][config_key][SETTING] = config_val
                 self._layer_to_config_dict[layer][config_key][AFFECTED_QUANTIZERS] = \
-                    self._get_affected_quantizers_by_config(layer, config_key, config_val)
+                    self._get_affected_quantizers_by_config(
+                        layer, config_key, config_val)
 
     def _set_model_output_configs(self, model_output_configs: ConfigType):
         """
@@ -407,7 +454,8 @@ class QuantSimConfigurator(AimetCommonQuantSimConfigurator):
             for config_key, config_val in model_output_configs.items():
                 self._layer_to_config_dict[layer][config_key][SETTING] = config_val
                 self._layer_to_config_dict[layer][config_key][AFFECTED_QUANTIZERS] = \
-                    self._get_affected_quantizers_by_config(layer, config_key, config_val)
+                    self._get_affected_quantizers_by_config(
+                        layer, config_key, config_val)
 
     def _initialize_quantizers_by_layer(self, quant_scheme: Union[QuantScheme, str], rounding_mode: str,
                                         default_output_bw: int, default_param_bw: int):
@@ -422,40 +470,52 @@ class QuantSimConfigurator(AimetCommonQuantSimConfigurator):
         # pylint: disable-msg=too-many-locals
         for layer, config_dict in self._layer_to_config_dict.items():
             # Configs for both Ops and Params
-            use_unsigned_symmetric = config_dict[ConfigDictKeys.UNSIGNED_SYMMETRIC].get(SETTING, False)
-            use_strict_symmetric = config_dict[ConfigDictKeys.STRICT_SYMMETRIC].get(SETTING, False)
+            use_unsigned_symmetric = config_dict[ConfigDictKeys.UNSIGNED_SYMMETRIC].get(
+                SETTING, False)
+            use_strict_symmetric = config_dict[ConfigDictKeys.STRICT_SYMMETRIC].get(
+                SETTING, False)
 
             # Configs for Ops
-            ops_is_symmetric = config_dict[ConfigDictKeys.IS_SYMMETRIC].get(SETTING, False)
-            input_quantizer_enabled = config_dict[ConfigDictKeys.IS_INPUT_QUANTIZED].get(SETTING, False)
-            output_quantizer_enabled = config_dict[ConfigDictKeys.IS_OUTPUT_QUANTIZED].get(SETTING, False)
+            ops_is_symmetric = config_dict[ConfigDictKeys.IS_SYMMETRIC].get(
+                SETTING, False)
+            input_quantizer_enabled = config_dict[ConfigDictKeys.IS_INPUT_QUANTIZED].get(
+                SETTING, False)
+            output_quantizer_enabled = config_dict[ConfigDictKeys.IS_OUTPUT_QUANTIZED].get(
+                SETTING, False)
             activation_quant_settings = QuantizerSettings(default_output_bw, rounding_mode,
                                                           quant_scheme, ops_is_symmetric,
                                                           use_unsigned_symmetric, use_strict_symmetric)
 
             # Check if there are conflict cases before initializing input/output quantizers
-            self._check_existence_of_conflict_case(layer, ConfigDictKeys.IS_INPUT_QUANTIZED, input_quantizer_enabled)
-            self._check_existence_of_conflict_case(layer, ConfigDictKeys.IS_OUTPUT_QUANTIZED, output_quantizer_enabled)
-            self._check_existence_of_conflict_case(layer, ConfigDictKeys.IS_SYMMETRIC, ops_is_symmetric)
+            self._check_existence_of_conflict_case(
+                layer, ConfigDictKeys.IS_INPUT_QUANTIZED, input_quantizer_enabled)
+            self._check_existence_of_conflict_case(
+                layer, ConfigDictKeys.IS_OUTPUT_QUANTIZED, output_quantizer_enabled)
+            self._check_existence_of_conflict_case(
+                layer, ConfigDictKeys.IS_SYMMETRIC, ops_is_symmetric)
 
             # Initialize Input Quantizers
             self._layer_to_quantizers_dict[layer][INPUT_QUANTIZERS] = \
-                _initialize_input_quantizers(layer, activation_quant_settings, input_quantizer_enabled)
+                _initialize_input_quantizers(
+                    layer, activation_quant_settings, input_quantizer_enabled)
 
             # Initialize Output Quantizers
             self._layer_to_quantizers_dict[layer][OUTPUT_QUANTIZERS] = \
-                _initialize_output_quantizers(layer, activation_quant_settings, output_quantizer_enabled)
+                _initialize_output_quantizers(
+                    layer, activation_quant_settings, output_quantizer_enabled)
 
             # Configs for Params
             param_config_dict = config_dict[ConfigDictKeys.PARAMS]
-            param_is_symmetric = param_config_dict[ConfigDictKeys.IS_SYMMETRIC].get(SETTING, False)
+            param_is_symmetric = param_config_dict[ConfigDictKeys.IS_SYMMETRIC].get(
+                SETTING, False)
             param_quant_settings = QuantizerSettings(default_param_bw, rounding_mode,
                                                      quant_scheme, param_is_symmetric,
                                                      use_unsigned_symmetric, use_strict_symmetric)
 
             # Initialize Param Quantizers
             self._layer_to_quantizers_dict[layer][PARAM_QUANTIZERS] = \
-                _initialize_param_quantizers(layer, param_config_dict, param_quant_settings)
+                _initialize_param_quantizers(layer, param_config_dict, param_quant_settings,
+                                             self.per_channel_quantization_flag)
 
     def _check_existence_of_conflict_case(self, layer: layers.Layer, config_key: str, current_setting: bool):
         """
@@ -474,10 +534,11 @@ class QuantSimConfigurator(AimetCommonQuantSimConfigurator):
             else:
                 raise ValueError("Unsupported case of config key")
 
-            quantizer_setting = self._layer_to_config_dict[affected_layer][config_key_to_check].get(SETTING, False)
+            quantizer_setting = self._layer_to_config_dict[affected_layer][config_key_to_check].get(
+                SETTING, False)
             if current_setting != quantizer_setting:
-                logger.error("Conflicting tensor quantizer settings for %s, expected: %s, actual: %s", config_key,
-                             current_setting, quantizer_setting)
+                _logger.error("Conflicting tensor quantizer settings for %s, expected: %s, actual: %s", config_key,
+                              current_setting, quantizer_setting)
                 raise RuntimeError
 
     def get_quantizers_dict(self, layer: layers.Layer) -> TreeLikeDictionary:

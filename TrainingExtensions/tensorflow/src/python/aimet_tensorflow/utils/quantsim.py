@@ -255,21 +255,17 @@ def create_encoding_from_dict(encoding_dict: dict) -> (Union[libpymo.TfEncoding,
         enc.delta = delta_enc
         return enc
 
+    def _create_tf_encoding_factory(encoding_dict_to_convert) -> List[libpymo.TfEncoding]:
+        return [_create_tf_encoding_object(enc_dict.get('bitwidth'),
+                                           enc_dict.get('max'),
+                                           enc_dict.get('min'),
+                                           enc_dict.get('offset'),
+                                           enc_dict.get('scale')) for enc_dict in encoding_dict_to_convert]
+
     # make a distinction between the per-channel and per-tensor flow
-    if isinstance(encoding_dict.get('max'), List):
-        encoding = []
-        for i in range(len(encoding_dict.get('max'))):
-            encoding.append(_create_tf_encoding_object(encoding_dict.get('bitwidth'),
-                                                       encoding_dict.get('max')[i],
-                                                       encoding_dict.get('min')[i],
-                                                       encoding_dict.get('offset')[i],
-                                                       encoding_dict.get('scale')[i]))
-        is_symmetric = encoding_dict.get('is_symmetric')
-    else:
-        encoding = _create_tf_encoding_object(encoding_dict.get('bitwidth'),
-                                              encoding_dict.get('max'),
-                                              encoding_dict.get('min'),
-                                              encoding_dict.get('offset'),
-                                              encoding_dict.get('scale'))
-        is_symmetric = encoding_dict.get('is_symmetric')
-    return encoding, is_symmetric
+    if isinstance(encoding_dict, List):
+        is_symmetric = encoding_dict[0].get('is_symmetric')
+        return _create_tf_encoding_factory(encoding_dict), is_symmetric
+    is_symmetric = encoding_dict.get('is_symmetric')
+    encoding_dict = [encoding_dict]
+    return _create_tf_encoding_factory(encoding_dict)[0], is_symmetric
