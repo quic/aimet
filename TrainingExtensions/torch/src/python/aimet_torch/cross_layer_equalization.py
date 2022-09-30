@@ -54,7 +54,7 @@ from aimet_common.utils import AimetLogger
 from aimet_torch import utils
 from aimet_torch.meta.connectedgraph import ConnectedGraph
 from aimet_torch.batch_norm_fold import fold_all_batch_norms
-from aimet_torch.utils import get_device, get_ordered_list_of_modules
+from aimet_torch.utils import get_device, get_ordered_list_of_modules, create_rand_tensors_given_shapes
 
 logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Quant)
 
@@ -131,10 +131,15 @@ class GraphSearchUtils:
     Code to search a model graph to find nodes to use for cross-layer-scaling and high-bias-fold
     """
 
-    def __init__(self, model: torch.nn.Module, input_shapes: Union[Tuple, List[Tuple]]):
-        inp_tensor_list = tuple(utils.create_rand_tensors_given_shapes(input_shapes))
+    def __init__(self, model: torch.nn.Module, input_shapes: Union[Tuple, List[Tuple]], dummy_input: Union[torch.Tensor, List[torch.Tensor]] = None):
+
+        if dummy_input is None:
+            inp_tensor_list = tuple(utils.create_rand_tensors_given_shapes(input_shapes))
+        else:
+            inp_tensor_list = dummy_input
         self._connected_graph = ConnectedGraph(model, inp_tensor_list)
         self._ordered_module_list = get_ordered_list_of_conv_modules(model, inp_tensor_list)
+
 
     @staticmethod
     def find_downstream_layer_groups_to_scale(op, layer_groups, current_group=None, visited_nodes=None):
@@ -621,21 +626,22 @@ class CrossLayerScaling:
         return cls_set_info_list
 
     @staticmethod
-    def scale_model(model: torch.nn.Module, input_shapes: Union[Tuple, List[Tuple]]) -> List[ClsSetInfo]:
+    def scale_model(model: torch.nn.Module, input_shapes: Union[Tuple, List[Tuple]], dummy_input: Union[torch.Tensor, List[torch.Tensor]] = None) -> List[ClsSetInfo]:
         """
         Uses cross-layer scaling to scale all applicable layers in the given model
 
         :param model: Model to scale
         :param input_shapes: Input shape for the model (can be one or multiple inputs)
+        :param dummy_input: Dummy input to the model. Used to parse model graph. User is expected to place the tensors on the appropriate device.
         :return: CLS information for each CLS set
         """
         if isinstance(model, torch.nn.DataParallel):
-            return CrossLayerScaling.scale_model(model.module, input_shapes)
+            return CrossLayerScaling.scale_model(model.module, input_shapes, dummy_input=dummy_input)
         device = get_device(model)
         model.cpu()
 
         # Find layer groups
-        graph_search = GraphSearchUtils(model, input_shapes)
+        graph_search = GraphSearchUtils(model, input_shapes, dummy_input=dummy_input)
         layer_groups = graph_search.find_layer_groups_to_scale()
 
         # Find cls sets from the layer groups
@@ -656,7 +662,6 @@ class CrossLayerScaling:
 
         model.to(device=device)
         return cls_set_info_list
-
 
 class HighBiasFold:
     """
@@ -748,8 +753,7 @@ class HighBiasFold:
                                                                              curr_layer_params.weightShape[0]))
                 cls_pair_info.layer2.bias.data = cls_pair_info.layer2.bias.data.type(torch.FloatTensor)
 
-
-def equalize_model(model: torch.nn.Module, input_shapes: Union[Tuple, List[Tuple]]):
+def equalize_model(model: torch.nn.Module, input_shapes: Union[Tuple, List[Tuple]], dummy_input: Union[torch.Tensor, List[torch.Tensor]] = None):
     """
     High-level API to perform Cross-Layer Equalization (CLE) on the given model. The model is equalized in place.
 
@@ -757,36 +761,44 @@ def equalize_model(model: torch.nn.Module, input_shapes: Union[Tuple, List[Tuple
     :param input_shapes: Shape of the input (can be a tuple or a list of tuples if multiple inputs)
     :return: None
     """
+    if dummy_input is None:
+        dummy_input = create_rand_tensors_given_shapes(input_shapes)
+    if isinstance(dummy_input, List):
+        input_shapes = [i.shape for i in dummy_input]
+    else:
+        input_shapes = dummy_input.shape
+
     if isinstance(model, torch.nn.DataParallel):
-        equalize_model(model.module, input_shapes)
+        equalize_model(model.module, input_shapes, dummy_input)
     else:
         device = get_device(model)
         model.cpu()
         # fold batchnorm layers
         folded_pairs = fold_all_batch_norms(model, input_shapes)
-        equalize_bn_folded_model(model, input_shapes, folded_pairs)
+        equalize_bn_folded_model(model, input_shapes, folded_pairs, dummy_input=dummy_input)
 
         model.to(device=device)
 
-
 def equalize_bn_folded_model(model: torch.nn.Module,
                              input_shapes: Union[Tuple, List[Tuple]],
-                             folded_pairs: List[Tuple[torch.nn.Module, torch.nn.BatchNorm2d]]):
+                             folded_pairs: List[Tuple[torch.nn.Module, torch.nn.BatchNorm2d]],
+                             dummy_input: Union[torch.Tensor, List[torch.Tensor]] = None
+                             ):
     """
     Perform Cross-Layer Scaling (CLS) and High Bias Folding (HBF) on a batchnorm-folded model.
     The model is equalized in place.
 
     :param model: Batchnorm-folded model to equalize
     :param input_shapes: Shape of the input (can be a tuple or a list of tuples if multiple inputs)
+    :param dummy_input: Dummy input to the model. Used to parse model graph. User is expected to place the tensors on the appropriate device.
     :param folded_pairs: List of pairs of folded layers
     :return: None
     """
     if isinstance(model, torch.nn.DataParallel):
-        equalize_bn_folded_model(model.module, input_shapes, folded_pairs)
+        equalize_bn_folded_model(model.module, input_shapes, folded_pairs, dummy_input=dummy_input)
     else:
         device = get_device(model)
         model.cpu()
-
         bn_dict = {}
         for conv_bn in folded_pairs:
             bn_dict[conv_bn[0]] = conv_bn[1]
@@ -795,7 +807,7 @@ def equalize_bn_folded_model(model: torch.nn.Module,
         utils.replace_modules_of_type1_with_type2(model, torch.nn.ReLU6, torch.nn.ReLU)
 
         # perform cross-layer scaling on applicable layer sets
-        cls_set_info_list = CrossLayerScaling.scale_model(model, input_shapes)
+        cls_set_info_list = CrossLayerScaling.scale_model(model, input_shapes, dummy_input=dummy_input)
 
         # high-bias fold
         HighBiasFold.bias_fold(cls_set_info_list, bn_dict)
