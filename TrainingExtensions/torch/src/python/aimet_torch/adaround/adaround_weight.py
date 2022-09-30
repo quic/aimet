@@ -41,7 +41,7 @@
 import os
 import json
 import shutil
-from typing import Tuple, Union, Dict, List
+from typing import Tuple, Union, Dict, List, Callable, Any
 import torch
 from torch.utils.data import DataLoader
 from tqdm import tqdm
@@ -73,7 +73,8 @@ class AdaroundParameters:
     """
     def __init__(self, data_loader: DataLoader, num_batches: int,
                  default_num_iterations: int = 10000, default_reg_param: float = 0.01,
-                 default_beta_range: Tuple = (20, 2), default_warm_start: float = 0.2):
+                 default_beta_range: Tuple = (20, 2), default_warm_start: float = 0.2,
+                 forward_fn: Callable[[torch.nn.Module, Any], Any] = None):
         """
         :param data_loader: Data loader
         :param num_batches: Number of batches
@@ -83,14 +84,10 @@ class AdaroundParameters:
         :param default_beta_range: Start and stop beta parameter for annealing of rounding loss (start_beta, end_beta).
          Default (20, 2)
         :param default_warm_start: warm up period, during which rounding loss has zero effect. Default 20% (0.2)
+        :param forward_fn: Optional adapter function that performs forward pass given a model and inputs
+         yielded from the data loader. The function expects model as first argument and inputs to model
+         as second argument.
         """
-        if len(data_loader) > 0: # pylint: disable=len-as-condition
-            inp = next(iter(data_loader))
-            if isinstance(inp, (tuple, list)):
-                if len(inp) != 2:
-                    raise ValueError("Expected dataloader to yield input tensor "
-                                     "or tuple of (input, label).")
-
         if len(data_loader) < num_batches:
             raise ValueError(f'Can not fetch {num_batches} batches from '
                              f'a data loader of length {len(data_loader)}.')
@@ -101,6 +98,28 @@ class AdaroundParameters:
         self.reg_param = default_reg_param
         self.beta_range = default_beta_range
         self.warm_start = default_warm_start
+
+        def default_forward_fn(model: torch.nn.Module,
+                               inputs: Union[torch.tensor, List[torch.Tensor], Tuple[torch.Tensor]]):
+            """
+            Default forward function that performs forward pass given a model and inputs yielded from
+            the data loader. Data loader which yields a non-tuple python object that can be directly
+            passed into the model, or a data loader which yields a tuple of length two where its
+            first element can be directly passed into the model.
+
+            NOTE: This default forward function ensures the backward compatibility.
+
+            :param model: PyTorch model.
+            :param inputs: Inputs passed to model.
+            """
+            # When provided dataloader is labeled, then ignore the second element (labels).
+            if isinstance(inputs, (list, tuple)):
+                inputs, _ = inputs
+            if isinstance(inputs, torch.Tensor):
+                inputs = [inputs]
+            model(*inputs)
+
+        self.forward_fn = forward_fn or default_forward_fn
 
 
 class Adaround:
@@ -203,7 +222,7 @@ class Adaround:
 
                 logger.info("Started Optimizing weight rounding of module: %s", name)
                 AdaroundOptimizer.adaround_module(module, quant_module, model, quant_sim.model, act_func,
-                                                  cached_dataset, opt_params)
+                                                  cached_dataset, params.forward_fn, opt_params)
 
         if os.path.exists(WORKING_DIR):
             logger.info('Deleting model inputs from location: %s', WORKING_DIR)

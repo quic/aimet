@@ -38,7 +38,7 @@
 
 """ Sample input to quantized wrapper module and output from original module for Adaround feature """
 
-from typing import Tuple, Union, List
+from typing import Tuple, Union, List, Callable, Any
 import torch
 from torch.utils.data import Dataset
 
@@ -56,19 +56,22 @@ class ActivationSampler:
     collect the module's output and input activation data respectively
     """
     def __init__(self, orig_module: torch.nn.Module, quant_module: QcQuantizeWrapper,
-                 orig_model: torch.nn.Module, quant_model: torch.nn.Module):
+                 orig_model: torch.nn.Module, quant_model: torch.nn.Module,
+                 forward_fn: Callable[[torch.nn.Module, Any], Any]):
         """
         :param orig_module: Module from original model.
         :param quant_module: Quant wrapper from sim model.
         :param orig_model: Original model.
         :param quant_model: Sim model.
+        :param forward_fn: Adapter function that performs forward pass given a model and inputs
+         yielded from the data loader.
         """
         self._orig_module = orig_module
         self._quant_module = quant_module
         self._orig_model = orig_model
         self._quant_model = quant_model
-        self._orig_module_collector = ModuleData(orig_model, orig_module)
-        self._quant_module_collector = ModuleData(quant_model, quant_module)
+        self._orig_module_collector = ModuleData(orig_model, orig_module, forward_fn)
+        self._quant_module_collector = ModuleData(quant_model, quant_module, forward_fn)
 
     def sample_and_place_all_acts_on_cpu(self, cached_dataset: Dataset) -> Tuple[torch.Tensor, torch.Tensor]:
         """
