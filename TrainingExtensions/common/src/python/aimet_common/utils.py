@@ -69,6 +69,7 @@ class ModelApi(Enum):
     pytorch = 0
     tensorflow = 1
     keras = 2
+    onnx = 3
 
 
 class SingletonType(type):
