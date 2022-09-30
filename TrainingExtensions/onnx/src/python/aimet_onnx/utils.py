@@ -35,11 +35,14 @@
 #
 #  @@-COPYRIGHT-END-@@
 # =============================================================================
-import onnx
-from onnx import onnx_pb
+""" Utility functions for ONNX """
 from typing import Dict, List
 
-OP_TYPES_WITH_PARAMS = ['Conv', 'Gemm', 'ConvTranspose']
+import onnx
+from onnx import onnx_pb
+
+
+OP_TYPES_WITH_PARAMS = ['Conv', 'Gemm', 'ConvTranspose', 'BatchNormalization']
 
 
 def remove_nodes_with_type(node_type: str, onnx_graph: onnx.onnx_pb.GraphProto):
@@ -81,16 +84,15 @@ def replace_node_with_op(node_type: str, new_type: str, onnx_graph: onnx.onnx_pb
 def get_weights(name: str, onnx_graph: onnx.onnx_pb.GraphProto) -> bytes:
     """
     Return the weights by given name
-
     :param name, name of the weights to find
     :param onnx_graph, onnx graph to find the corresponding weight data
     :return onnx tensor
-
     """
     for param in onnx_graph.initializer:
         if param.name == name:
             return param.raw_data
     assert Exception("Couldn't find weights by the given name")
+    return None
 
 
 def get_ordered_dict_of_nodes(onnx_graph: onnx.onnx_pb.GraphProto) -> Dict:
@@ -108,6 +110,7 @@ def get_ordered_dict_of_nodes(onnx_graph: onnx.onnx_pb.GraphProto) -> Dict:
 
 
 class ParamUtils:
+    """ Param utilities """
     @staticmethod
     def get_shape(model: onnx_pb.ModelProto, node: onnx_pb.NodeProto, param_index: int) -> List:
         """
@@ -125,6 +128,7 @@ class ParamUtils:
             assert "Param not present in the node"
         else:
             assert "Node type not in allowed op types with param list"
+        return None
 
     @staticmethod
     def get_param(model: onnx_pb.ModelProto, node: onnx_pb.NodeProto, param_index: int) -> onnx_pb.TensorProto:
@@ -143,3 +147,4 @@ class ParamUtils:
             assert "Param not present in the node"
         else:
             assert "Node type not in allowed op types with param list"
+        return None
