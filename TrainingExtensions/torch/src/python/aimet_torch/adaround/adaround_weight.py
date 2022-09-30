@@ -98,28 +98,7 @@ class AdaroundParameters:
         self.reg_param = default_reg_param
         self.beta_range = default_beta_range
         self.warm_start = default_warm_start
-
-        def default_forward_fn(model: torch.nn.Module,
-                               inputs: Union[torch.tensor, List[torch.Tensor], Tuple[torch.Tensor]]):
-            """
-            Default forward function that performs forward pass given a model and inputs yielded from
-            the data loader. Data loader which yields a non-tuple python object that can be directly
-            passed into the model, or a data loader which yields a tuple of length two where its
-            first element can be directly passed into the model.
-
-            NOTE: This default forward function ensures the backward compatibility.
-
-            :param model: PyTorch model.
-            :param inputs: Inputs passed to model.
-            """
-            # When provided dataloader is labeled, then ignore the second element (labels).
-            if isinstance(inputs, (list, tuple)):
-                inputs, _ = inputs
-            if isinstance(inputs, torch.Tensor):
-                inputs = [inputs]
-            model(*inputs)
-
-        self.forward_fn = forward_fn or default_forward_fn
+        self.forward_fn = forward_fn
 
 
 class Adaround:

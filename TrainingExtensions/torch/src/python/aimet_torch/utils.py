@@ -82,7 +82,7 @@ class ModuleData:
     Collect input and output data to and from module
     """
     def __init__(self, model: torch.nn.Module, module: torch.nn.Module,
-                 forward_fn: Callable[[torch.nn.Module, Any], Any]):
+                 forward_fn: Callable[[torch.nn.Module, Any], Any] = None):
         """
         :param model: Pytorch model
         :param module: Module reference
@@ -91,7 +91,7 @@ class ModuleData:
         """
         self._model = model
         self._module = module
-        self._forward_fn = forward_fn
+        self._forward_fn = forward_fn or self.default_forward_fn
 
     def collect_inp_out_data(self, model_input: Union[torch.tensor, List[torch.Tensor], Tuple[torch.Tensor]],
                              collect_input: bool, collect_output: bool) -> Tuple[torch.Tensor, torch.Tensor]:
@@ -145,6 +145,25 @@ class ModuleData:
             out_data = out_data_list[0].detach()
 
         return inp_data, out_data
+
+    @staticmethod
+    def default_forward_fn(model: torch.nn.Module,
+                           inputs: Union[torch.tensor, List[torch.Tensor], Tuple[torch.Tensor]]):
+        """
+        Default forward function that performs forward pass given a model and inputs yielded from
+        the data loader. Data loader which yields torch.Tensor object that can be directly
+        passed into the model, or a data loader which yields a tuple of length two where its
+        first element can be directly passed into the model.
+
+        :param model: PyTorch model.
+        :param inputs: Inputs passed to model.
+        """
+        # When provided dataloader is labeled (model_inputs, labels), then ignore the second element (labels).
+        if isinstance(inputs, (list, tuple)):
+            inputs, _ = inputs
+        if isinstance(inputs, torch.Tensor):
+            inputs = [inputs]
+        model(*inputs)
 
 
 class CachedDataset(Dataset):

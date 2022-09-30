@@ -248,32 +248,30 @@ class TestTrainingExtensionsUtils(unittest.TestCase):
         model = TinyModel().to(device=device)
         model.eval()
         model_input = torch.randn(1, 3, 32, 32).to(device=device)
-        def forward_fn(model, inputs):
-            model(inputs)
 
-        module_data = utils.ModuleData(model, model.conv1, forward_fn)
+        module_data = utils.ModuleData(model, model.conv1)
         inp, out = module_data.collect_inp_out_data(model_input, collect_input=False, collect_output=False)
         self.assertEqual(inp, None)
         self.assertEqual(out, None)
 
-        module_data = utils.ModuleData(model, model.conv1, forward_fn)
+        module_data = utils.ModuleData(model, model.conv1)
         inp, out = module_data.collect_inp_out_data(model_input, collect_input=True, collect_output=False)
         self.assertTrue(np.array_equal(utils.to_numpy(inp), utils.to_numpy(model_input)))
         self.assertEqual(out, None)
 
-        module_data = utils.ModuleData(model, model.conv1, forward_fn)
+        module_data = utils.ModuleData(model, model.conv1)
         inp, out = module_data.collect_inp_out_data(model_input, collect_input=False, collect_output=True)
         conv1_out = model.conv1(model_input)
         self.assertTrue(np.array_equal(utils.to_numpy(out), utils.to_numpy(conv1_out)))
         self.assertEqual(inp, None)
 
-        module_data = utils.ModuleData(model, model.conv1, forward_fn)
+        module_data = utils.ModuleData(model, model.conv1)
         inp, out = module_data.collect_inp_out_data(model_input, collect_input=True, collect_output=True)
         conv1_out = model.conv1(model_input)
         self.assertTrue(np.array_equal(utils.to_numpy(out), utils.to_numpy(conv1_out)))
         self.assertTrue(np.array_equal(utils.to_numpy(inp), utils.to_numpy(model_input)))
 
-        module_data = utils.ModuleData(model, model.fc, forward_fn)
+        module_data = utils.ModuleData(model, model.fc)
         inp, out = module_data.collect_inp_out_data(model_input, collect_input=False, collect_output=True)
         fc_out = model(model_input)
         self.assertTrue(np.array_equal(utils.to_numpy(out), utils.to_numpy(fc_out)))
@@ -336,21 +334,19 @@ class TestTrainingExtensionsUtils(unittest.TestCase):
     def test_collect_inp_out_data_quantsim_model_cpu(self):
         """ test collect input output data from module """
 
-        def forward_fn(model, inputs):
-            model(inputs)
-
         device_list = [torch.device('cpu')]
+
         for device in device_list:
             model = TinyModel().to(device=device)
             model_input = torch.randn(1, 3, 32, 32).to(device=device)
             sim = QuantizationSimModel(model, dummy_input=torch.rand(1, 3, 32, 32))
 
-            module_data = utils.ModuleData(model, model.fc, forward_fn)
+            module_data = utils.ModuleData(model, model.fc)
             inp, out = module_data.collect_inp_out_data(model_input, collect_input=False, collect_output=True)
             fc_out = sim.model(model_input)
             self.assertFalse(np.array_equal(utils.to_numpy(out), utils.to_numpy(fc_out)))
 
-            module_data = utils.ModuleData(model, model.conv1, forward_fn)
+            module_data = utils.ModuleData(model, model.conv1)
             inp, out = module_data.collect_inp_out_data(model_input, collect_input=True, collect_output=False)
             self.assertTrue(np.array_equal(utils.to_numpy(inp), utils.to_numpy(model_input)))
 
@@ -358,21 +354,19 @@ class TestTrainingExtensionsUtils(unittest.TestCase):
     def test_collect_inp_out_data_quantsim_model_gpu(self):
         """ test collect input output data from module """
 
-        def forward_fn(model, inputs):
-            model(inputs)
-
         device_list = [torch.device('cuda:0')]
+
         for device in device_list:
             model = TinyModel().to(device=device)
             model_input = torch.randn(1, 3, 32, 32).to(device=device)
             sim = QuantizationSimModel(model, dummy_input=torch.rand(1, 3, 32, 32).to(device=device))
 
-            module_data = utils.ModuleData(model, model.fc, forward_fn)
+            module_data = utils.ModuleData(model, model.fc)
             inp, out = module_data.collect_inp_out_data(model_input, collect_input=False, collect_output=True)
             fc_out = sim.model(model_input)
             self.assertFalse(np.array_equal(utils.to_numpy(out), utils.to_numpy(fc_out)))
 
-            module_data = utils.ModuleData(model, model.conv1, forward_fn)
+            module_data = utils.ModuleData(model, model.conv1)
             inp, out = module_data.collect_inp_out_data(model_input, collect_input=True, collect_output=False)
             self.assertTrue(np.array_equal(utils.to_numpy(inp), utils.to_numpy(model_input)))
 
