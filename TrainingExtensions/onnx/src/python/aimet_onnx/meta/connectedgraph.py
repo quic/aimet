@@ -46,17 +46,23 @@ the tensors that are either input to the model (input, constant or parameter) or
 result of an operation. Furthermore the graph representation is bi-directional."""
 
 
-from typing import Dict, List
+from typing import List
 from onnx import onnx_pb
 from onnxruntime.quantization.onnx_quantizer import ONNXModel
 
 from aimet_common.connected_graph.connectedgraph import ConnectedGraph as AimetCommonConnectedGraph
 from aimet_common.utils import AimetLogger
-from aimet_common.connected_graph.operation import Op
-
+from aimet_common.model_module import ONNXModelModule
+from aimet_onnx.meta.operations import Op
 from aimet_onnx.meta.product import Product
+from aimet_onnx.utils import ParamUtils
 
 logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.ConnectedGraph)
+
+WEIGHT_INDEX = 1
+BIAS_INDEX = 2
+RUNNING_MEAN_INDEX = 3
+RUNNING_VAR_INDEX = 4
 
 
 class ConnectedGraph(AimetCommonConnectedGraph):
@@ -78,12 +84,12 @@ class ConnectedGraph(AimetCommonConnectedGraph):
         self._input_to_node = {}
         self._get_input_to_node()
 
-        self._split_count = 0  # Use it in the name of split Ops getting added to the connected graph.
-
         # List of ops in the order they are traversed using the forward function
         self.ordered_ops = []
 
         self.starting_ops = []
+        self._branch_count = 0
+
         self.fill_op_product_graph()
 
     def get_op_from_module_name(self, name: str) -> Op:
@@ -104,15 +110,15 @@ class ConnectedGraph(AimetCommonConnectedGraph):
                 else:
                     self._input_to_node[input_name] = [node]
 
-    def _get_starting_nodes(self) -> Dict:
+    def _get_input_tensors_names(self) -> List:
         """ Gets list of names of starting nodes"""
-        input_nodes = {}
+        input_tensors_names = []
         for tensor in self.model.graph.input:
-            input_nodes[tensor.name] = tensor
+            input_tensors_names.append(tensor.name)
 
-        assert input_nodes, "The model does not have any input tensors"
+        assert input_tensors_names, "The model does not have any input tensors"
 
-        return input_nodes
+        return input_tensors_names
 
     @staticmethod
     def _create_ir_op(node: onnx_pb.NodeProto) -> Op:
@@ -121,61 +127,60 @@ class ConnectedGraph(AimetCommonConnectedGraph):
         :param node: ONNX proto node for which Op needs to be created
         """
         op = Op(name=node.name, dotted_name=node.name, output_shape=None, is_anonymous=False, op_type=node.op_type)
+        # Add corresponding node to op
+        op.model_module = ONNXModelModule(node)
         return op
 
-    def _add_children_ops_to_op_queue(self, node: onnx_pb.NodeProto, op_queue: List) -> int:
+    def _add_children_ops_to_op_queue(self, node: onnx_pb.NodeProto, op_queue: List):
         """
         Utility function for adding all children of op to self._op_queue
         :param node: node whose children will be added to op_queue
         :param op_queue: Queue for performing dfs
-        :return: Number of child ops added to the queue
         """
-        num_ops_added = 0
         for output_tensor in node.output:
             if output_tensor in self._input_to_node:
                 for child_node in self._input_to_node[output_tensor]:
                     op_queue.append((child_node, node, output_tensor))
-                    num_ops_added += 1
-        return num_ops_added
 
     def _process_starting_ops(self, op_queue: List):
         """
         Processes input ops
         :param op_queue: Queue for performing dfs
         """
-        input_nodes = self._get_starting_nodes()
-        for input_name in input_nodes:
-            if input_name in self._input_to_node:
-                for node in self._input_to_node[input_name]:
+        input_tensors_names = self._get_input_tensors_names()
+        for input_tensor_name in input_tensors_names:
+            if input_tensor_name in self._input_to_node:
+                for node in self._input_to_node[input_tensor_name]:
                     op = self._create_ir_op(node)
                     self._ops[node.name] = op
-                    self._create_and_link_product_for_inputs(node.name, input_name)
+                    self._create_and_link_product_for_inputs(node.name, input_tensor_name)
                     self._add_children_ops_to_op_queue(node, op_queue)
                     self.starting_ops.append(op)
 
-    def _create_and_link_product_for_inputs(self, node_name: str, input_name: str):
+    def _create_and_link_product_for_inputs(self, consumer_node_name: str, input_tensor_name: str):
         """
         Create products between input and op consuming the input
         """
 
-        assert input_name, "No inputs present in the model"
+        assert input_tensor_name, "No inputs present in the model"
 
-        if input_name + '_to_' + node_name in self._products:
-            logger.debug("%s already exists", input_name + '_to_' + node_name)
+        if input_tensor_name + '_to_' + consumer_node_name in self._products:
+            logger.debug("%s already exists", input_tensor_name + '_to_' + consumer_node_name)
         else:
             # TODO: figure out a way to add tensor shape. Adding the shape as None for now
-            product = Product(input_name + '_to_' + node_name, None)
+            product = Product(input_tensor_name + '_to_' + consumer_node_name, None)
             # add product to self._products dictionary
-            self._products[input_name + '_to_' + node_name] = product
-            logger.debug("Created new product " + input_name + '_to_' + node_name)
+            self._products[input_tensor_name + '_to_' + consumer_node_name] = product
+            logger.debug("Created new product " + input_tensor_name + '_to_' + consumer_node_name)
+            product.is_model_input = True
 
-            current_op = self._ops[node_name]
-            product.tensor_dict[current_op] = input_name
+            consumer_op = self._ops[consumer_node_name]
+            product.tensor_dict[consumer_op] = input_tensor_name
 
             # Link parent op, product, and current op
             # Fill in input, output, producer, consumer params as appropriate.
-            current_op.add_input(product)
-            product.add_consumer(current_op)
+            consumer_op.add_input(product)
+            product.add_consumer(consumer_op)
 
     def _create_op_if_not_exists(self, node: onnx_pb.NodeProto):
         """ Creates a CG op for a node"""
@@ -241,3 +246,148 @@ class ConnectedGraph(AimetCommonConnectedGraph):
                     self._add_children_ops_to_op_queue(child_node, op_queue)
                     visited_ops.add(child_node.name)
                     logger.debug("visited op: %s", child_node.name)
+
+        # Add parameter products during postprocess
+        logger.debug("finished initial pass, num_products is %s", len(self._products))
+        self._create_param_products()
+
+        # Identify places where branch Ops need to be inserted
+        self._branch_ops_processing()
+
+    def _branch_ops_processing(self):
+        """ Identify places in the op/product graph where branch ops need to be inserted, and create them """
+
+        # Dictionary that will map producers (ops) to products
+        # Ops that map to multiple products will be ones to create branch ops for
+        product_producer_dict = dict()
+        for product in self._products.values():
+            if product.producer is not None:
+                if product.producer not in product_producer_dict:
+                    product_producer_dict[product.producer] = [product]
+                else:
+                    product_producer_dict[product.producer].append(product)
+
+        for op in product_producer_dict:
+            if len(product_producer_dict[op]) > 1:
+                # check if this has an input node
+                is_model_input = False
+                for product in product_producer_dict[op]:
+                    if product.is_model_input:
+                        is_model_input = True
+                # Create branch op directly under op
+                branch_op = self._create_branch_op()
+                # Create product to link op and branch_op
+                self._link_previous_op_to_branch_op(op, branch_op)
+                # Create product to link branch op with multiple children modules
+                self._link_branch_op_to_multiple_ops(branch_op, product_producer_dict[op], is_model_input)
+
+    def _create_branch_op(self):
+        """ Create a new branch op in self._ops """
+
+        op = Op(name='branch_' + str(self._branch_count), output_shape=None,
+                dotted_name='branch_' + str(self._branch_count),
+                is_anonymous=True,
+                op_type='branch')
+        self._ops[op.name] = op
+        self._branch_count += 1
+        return op
+
+    def _link_previous_op_to_branch_op(self, original_op: Op, branch_op: Op):
+        """ Link the original op to the new branch op by creating a product """
+
+        product = Product(original_op.name + '_to_' + branch_op.name, None)
+        product.producer = original_op
+        product.add_consumer(branch_op)
+        original_op.output = product
+        branch_op.add_input(product)
+        self._products[product.name] = product
+
+    def _link_branch_op_to_multiple_ops(self, branch_op: Op, product_list: list,
+                                        is_model_input: bool = False):
+        """ Create new product with multiple consumers, linking branch op with children ops"""
+
+        branch_op_product = Product(branch_op.name + '_to_' + 'multiple_ops', branch_op.output_shape)
+        branch_op_product.is_model_input = is_model_input
+        branch_op_product.producer = branch_op
+        branch_op.output = branch_op_product
+
+        # For each product from original op to multiple children, we must:
+        # 1: Add each child op as a consumer of the new branch_op_product
+        # 2: Append the old product's corresponding Tensor to the new branch op product's tensor_list
+        # 3: Add new branch_op_product as input for each child op
+        # 4: Remove product from original op to child in child's inputs
+        # 5: Remove product from self._products
+        for product in product_list:
+            assert len(product.consumers) == 1
+            # item 1
+            branch_op_product.add_consumer(product.consumers[0])
+            # item 2
+            assert len(product.tensor_dict.keys()) == 1
+            branch_op_product.tensor_dict[product.consumers[0]] = product.tensor_dict[product.consumers[0]]
+            # items 3 and 4
+            # replace the old product with the new branch product, in the same index as the old product
+            index = product.consumers[0].inputs.index(product)
+            product.consumers[0].inputs[index] = branch_op_product
+            # item 5
+            del self._products[product.name]
+
+        self._products[branch_op_product.name] = branch_op_product
+
+    def _create_param_products(self):
+        """ Create products for parameters of select modules """
+
+        def create_and_connect_product(param_name: str, product_shape: List, my_op: Op,
+                                       param_tensor: onnx_pb.TensorProto):
+            """ Create product with given name, shape, and corresponding tensor.  Connect product to my_op. """
+
+            product = Product(my_op.name + '/' + param_name, product_shape)
+            product.is_parm = True
+            product.add_consumer(my_op)
+            product.tensor_dict[my_op] = param_tensor
+            my_op.add_input(product)
+            self._products[product.name] = product
+            my_op.add_param(param_name, product)
+
+        def create_conv2d_dense_type_params(my_op: Op):
+            """ Create products for conv2d, dense, depthwise conv2d, and similar """
+            op = my_op.get_module()
+
+            weight_tensor = ParamUtils.get_param(self.model, op, WEIGHT_INDEX)
+            create_and_connect_product('kernel', weight_tensor.dims, my_op, weight_tensor)
+
+            bias_tensor = ParamUtils.get_param(self.model, op, BIAS_INDEX)
+            if bias_tensor:
+                create_and_connect_product('bias', bias_tensor.dims, my_op, bias_tensor)
+
+        def create_batchnorm_params(my_op: Op):
+            """ Create products for fusedbatchnorm """
+            op = my_op.get_module()
+
+            gamma_tensor = ParamUtils.get_param(self.model, op, WEIGHT_INDEX)
+            create_and_connect_product('gamma', gamma_tensor.dims, my_op, gamma_tensor)
+
+            beta_tensor = ParamUtils.get_param(self.model, op, BIAS_INDEX)
+            create_and_connect_product('beta', beta_tensor.dims, my_op, beta_tensor)
+
+            moving_mean_tensor = ParamUtils.get_param(self.model, op, RUNNING_MEAN_INDEX)
+            create_and_connect_product('moving_mean', moving_mean_tensor.dims, my_op,
+                                       moving_mean_tensor)
+
+            moving_variance_tensor = ParamUtils.get_param(self.model, op, RUNNING_VAR_INDEX)
+            create_and_connect_product('moving_variance', moving_variance_tensor.dims, my_op,
+                                       moving_variance_tensor)
+
+        def handle_default(my_op: Op):
+            """ Handler for other modules """
+            logger.debug("Nothing to handle for op %s", my_op.name)
+
+        switcher = {
+            "Conv": create_conv2d_dense_type_params,
+            "Gemm": create_conv2d_dense_type_params,
+            "ConvTranspose": create_conv2d_dense_type_params,
+            "BatchNormalization": create_batchnorm_params
+        }
+
+        for op in self._ops.values():
+            handler = switcher.get(op.type, handle_default)
+            handler(op)
