@@ -1,4 +1,1 @@
-h5py==2.10.0
-holoviews==1.12.7
-scikit-learn
-tensorflow-model-optimization
+../reqs_pip_tf_common_p36.txt
