@@ -105,6 +105,7 @@ def tensor_quantizer_factory(bitwidth: int, round_mode: str, quant_scheme: Quant
     :param quant_scheme: Quantization scheme (e.g. Range Learning)
     :param use_symmetric_encodings: True if symmetric encoding is used.  False otherwise.
     :param enabled_by_default: True if quantization of tensor is enabled.  False otherwise.
+    :param data_type: Quantization data_type to be used
     :return: An instance of StaticGridPerTensorQuantizer
     """
 
@@ -269,6 +270,7 @@ class QcQuantizeWrapper(nn.Module):
                                  for _ in range(num_inputs)]
 
         self._quant_scheme = quant_scheme
+        self._supported_kernels = {}
 
     def get_named_parameters(self):
         """

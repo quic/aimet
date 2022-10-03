@@ -511,6 +511,14 @@ class QuantSimConfigurator(AimetCommonQuantSimConfigurator):
 
     # -----------------------------------[ override support end] --------------------------------------------- #
 
+    def _generate_and_apply_op_instance_specific_config(self):
+        """
+        Generate op instance specific configurations - currently supported_kernels and per_channel_quantization fields
+        This function uses op specific supported_kernels (if absent use defaults), op specific per_channel_quantization
+        fields (if absent use default per_channel_quantization) and generate op instance specific config
+        """
+
+
 def _get_quantize_ops_to_modify(input_output_quantize_ops: QuantizerListType, setting_name: str) -> List[tf.Operation]:
     """
     Given the tuple containing lists of quantize ops to modify under different situations, identify a list of quantize
