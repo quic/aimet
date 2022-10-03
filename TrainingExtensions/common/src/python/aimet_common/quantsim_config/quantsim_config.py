@@ -169,6 +169,21 @@ class QuantSimConfigurator(ABC):
         """
         return self._supported_kernels
 
+    def _get_hw_version(self) -> str:
+        """
+        Return the hardware version from the config file if present, else return the default value
+        """
+        return self._quantsim_configs[ConfigDictKeys.DEFAULTS].get(ConfigDictKeys.HW_VERSION, 'default')
+
+    @abstractmethod
+    def _generate_and_apply_op_instance_specific_config(self):
+        """
+        Generate op instance specific configurations - currently supported_kernels and per_channel_quantization fields
+        This function uses op specific supported_kernels (if absent use defaults), op specific per_channel_quantization
+        fields (if absent use default per_channel_quantization) and generate op instance specific config
+        :return: {op_instance_name, op_specific_config}
+        """
+
     def _parse_supported_kernels(self) -> Dict:
         """
         Parse the layer overrides present in default and op_type section of the config file
@@ -183,6 +198,8 @@ class QuantSimConfigurator(ABC):
             else:
                 # TODO make this an assert
                 logger.debug("supported_kernels is a required argument in the defaults section")
+        else:
+            supported_kernels[ConfigDictKeys.DEFAULTS] = {}
 
         op_type_configs = self._quantsim_configs[ConfigDictKeys.OP_TYPE]
         for op_type in op_type_configs:
@@ -192,6 +209,22 @@ class QuantSimConfigurator(ABC):
                     supported_kernels[op_type] = op_type_supported_kernels
 
         return supported_kernels
+
+    def _parse_per_channel_quantization(self) -> Dict:
+        """
+        Parse the per_channel_quantization fields in "defaults" and "op_type" sections of the config file
+        If "defaults" entry does not exist, assume it to be False
+        :return: Dict of per_channel_quantization entries in the config file
+        """
+        per_channel_quantization = {ConfigDictKeys.DEFAULTS: self._quantsim_configs[ConfigDictKeys.DEFAULTS].get(
+            ConfigDictKeys.PER_CHANNEL_QUANTIZATION, False)}
+
+        for op_type in self._quantsim_configs[ConfigDictKeys.OP_TYPE].keys():
+            if ConfigDictKeys.PER_CHANNEL_QUANTIZATION in self._quantsim_configs[ConfigDictKeys.OP_TYPE][op_type]:
+                per_channel_quantization[op_type] = \
+                    self._quantsim_configs[ConfigDictKeys.OP_TYPE][op_type][ConfigDictKeys.PER_CHANNEL_QUANTIZATION]
+
+        return per_channel_quantization
 
     def check_correctness_of_dtype_bw_rules(self, quantsim_dtype_bw_info: QuantDtypeBwInfo):
         """
@@ -621,3 +654,24 @@ def validate_all_op_level_dtype_bw_overrides(op_configs: OpTypeType, default_can
                     logger.info(error_msg)
                     raise NotImplementedError(error_msg)
     return True
+
+#TODO change to QuantDtypeBwInfo
+def reformat_supported_kernels(supported_kernels: Dict):
+    """
+    reformat the supported kernels dict to match the internal representation of it ->
+    ((activation bitwidth, activation data type), (param bitwidth, param data type))
+    :param supported_kernels: Dict with module name and its candidates
+    """
+
+    ret_dict = {}
+
+    for op_name, op_supported_kernels in supported_kernels.items():
+        candidates = []
+        for supported_kernel in op_supported_kernels:
+            candidate = ((supported_kernel['activation']['bitwidth'], supported_kernel['activation']['dtype']),
+                         (supported_kernel['param']['bitwidth'], supported_kernel['param']['dtype']))
+            candidates.append(candidate)
+
+        ret_dict[op_name] = candidates
+
+    return ret_dict

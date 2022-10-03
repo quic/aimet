@@ -78,6 +78,7 @@ class ConfigDictKeys:
     ACTIVATION = "activation"
     PARAM = "param"
     BITWIDTH = "bitwidth"
+    HW_VERSION = "hw_version"
 
 
 class JsonConfigImporter:
