@@ -238,10 +238,14 @@ class QcQuantizeWrapper(tf.keras.layers.Layer):
 
     def _quantize_params(self):
         """ Quantize parameters """
+
+        idx_param_quantizer = 0
         for idx, param in enumerate(self._layer_to_wrap.weights):
             if self._layer_to_wrap.weights[idx].dtype in ALLOWED_FLOAT_DTYPES:
-                quantized_param = self.param_quantizers[idx](param)
+                quantized_param = self.param_quantizers[idx_param_quantizer](param)
                 self._layer_to_wrap.weights[idx].assign(quantized_param)
+                idx_param_quantizer = idx_param_quantizer + 1
+
 
     def _quantize_activation(self, activation: Union[tf.Tensor, List], quantizers: List[ActivationTensorQuantizer],
                              is_input_quantization: bool) -> Union[tf.Tensor, List]:
