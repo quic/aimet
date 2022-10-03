@@ -48,6 +48,7 @@ from aimet_tensorflow.keras.quant_sim.tensor_quantizer import ActivationTensorQu
 from aimet_tensorflow.keras.utils.common import is_lambda_operator
 
 _logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Quant)
+ALLOWED_FLOAT_DTYPES = [tf.float16, tf.float32, tf.float64, tf.bfloat16]
 
 class QuantizerSettings:
     """ Class holding quantizer settings """
@@ -238,8 +239,9 @@ class QcQuantizeWrapper(tf.keras.layers.Layer):
     def _quantize_params(self):
         """ Quantize parameters """
         for idx, param in enumerate(self._layer_to_wrap.weights):
-            quantized_param = self.param_quantizers[idx](param)
-            self._layer_to_wrap.weights[idx].assign(quantized_param)
+            if self._layer_to_wrap.weights[idx].dtype in ALLOWED_FLOAT_DTYPES:
+                quantized_param = self.param_quantizers[idx](param)
+                self._layer_to_wrap.weights[idx].assign(quantized_param)
 
     def _quantize_activation(self, activation: Union[tf.Tensor, List], quantizers: List[ActivationTensorQuantizer],
                              is_input_quantization: bool) -> Union[tf.Tensor, List]:
