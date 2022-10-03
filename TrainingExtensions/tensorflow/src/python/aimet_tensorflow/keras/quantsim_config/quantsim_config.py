@@ -513,3 +513,10 @@ class QuantSimConfigurator(AimetCommonQuantSimConfigurator):
         :param data_type: data type as QuantizationDataType
         :return:
         """
+
+    def _generate_and_apply_op_instance_specific_config(self):
+        """
+        Generate op instance specific configurations - currently supported_kernels and per_channel_quantization fields
+        This function uses op specific supported_kernels (if absent use defaults), op specific per_channel_quantization
+        fields (if absent use default per_channel_quantization) and generate op instance specific config
+        """

@@ -36,6 +36,7 @@
 #  @@-COPYRIGHT-END-@@
 # =============================================================================
 """ Utilities for parsing and applying quantsim configurations from json config file """
+from abc import abstractmethod
 from typing import Dict, List, Tuple, Set
 import torch
 
@@ -48,7 +49,7 @@ from aimet_common.connected_graph.connectedgraph_utils import get_all_input_ops,
 from aimet_common.quantsim_config.json_config_importer import ConfigDictKeys, ConfigType, SupergroupType, OpType, \
     ParamType, DefaultsType, OpTypeType, ConfigDictType
 from aimet_common.quantsim_config.quantsim_config import QuantSimConfigurator as AimetCommonQuantSimConfigurator, \
-    get_all_ops_in_neighborhood, get_setting_type, ENFORCE_TARGET_DTYPE_BITWIDTH_CONFIG
+    get_all_ops_in_neighborhood, get_setting_type, ENFORCE_TARGET_DTYPE_BITWIDTH_CONFIG, reformat_supported_kernels
 from aimet_common.quantsim_config.quantsim_config import SupergroupConfigCallback as AimetCommonSupergroupConfigCallback
 from aimet_torch.qc_quantize_op import QcQuantizeWrapper
 from aimet_torch.tensor_quantizer import TensorQuantizer
@@ -119,15 +120,18 @@ class QuantSimConfigurator(AimetCommonQuantSimConfigurator):
         self._named_modules_to_tensor_quantizers_dict = self._create_named_modules_to_tensor_quantizers_dict()
         self._elementwise_op_to_tensor_quantizers_dict = self._create_elementwise_op_to_tensor_quantizers_dict()
         self._disable_all_quantizers()
+        # TODO remove the below field and use the wrapper.supported_kernels instead. reformat_supported_kernels missing as well
         self._supported_kernels = self._parse_supported_kernels()
-        self._per_channel_quantization = {}
+
         if ENFORCE_TARGET_DTYPE_BITWIDTH_CONFIG:
             if self.check_correctness_of_dtype_bw_rules(
                     QuantDtypeBwInfo(self._default_data_type, self._default_output_bw,
                                      self._default_data_type, self._default_param_bw)):
                 logger.info("Supported Kernel check for valid dtype and bitwidth overrides completed")
+
         self._set_quantsim_configs()
-        self._set_per_channel_quantization()
+        self._generate_and_apply_op_instance_specific_config()
+
 
     def _create_named_modules_to_tensor_quantizers_dict(self) -> Dict[torch.nn.Module, TensorQuantizersTupleType]:
         """
@@ -308,9 +312,6 @@ class QuantSimConfigurator(AimetCommonQuantSimConfigurator):
         if ConfigDictKeys.UNSIGNED_SYMMETRIC in default_configs:
             self._set_unsigned_symmetric(default_configs[ConfigDictKeys.UNSIGNED_SYMMETRIC])
 
-        self._per_channel_quantization[ConfigDictKeys.DEFAULTS] = default_configs.get(
-            ConfigDictKeys.PER_CHANNEL_QUANTIZATION, False)
-
 
     def _set_default_configs_for_ops(self, default_op_configs: ConfigType):
         """
@@ -363,26 +364,6 @@ class QuantSimConfigurator(AimetCommonQuantSimConfigurator):
             for param_quantizer in quantsim_wrapper.param_quantizers.values():
                 param_quantizer.use_unsigned_symmetric = unsigned_symmetric
 
-    def _set_per_channel_quantization(self):
-        """
-        Enables per-channel quantization for all parameter quantizers in the model
-        """
-        # pylint: disable=protected-access
-        assert ConfigDictKeys.DEFAULTS in self._per_channel_quantization.keys()
-        for quantsim_wrapper in self._module_to_quantsim_wrapper_dict.values():
-            onnx_types = map_torch_types_to_onnx.get(type(quantsim_wrapper._module_to_wrap), [])
-
-            # check if any entry in onnx_types exists in self._per_channel_quantization. If a result exists, use it to
-            # enable per_channel_quantization, if not fall back to using the default value
-            if bool(set(onnx_types).intersection(self._per_channel_quantization)):
-                for onnx_type in onnx_types:
-                    if onnx_type in self._per_channel_quantization:
-                        if self._per_channel_quantization[onnx_type]:
-                            quantsim_wrapper.enable_per_channel_quantization()
-                        break
-            elif self._per_channel_quantization[ConfigDictKeys.DEFAULTS]:
-                quantsim_wrapper.enable_per_channel_quantization()
-
 
     def _set_param_configs(self, param_configs: ParamType):
         """
@@ -419,10 +400,6 @@ class QuantSimConfigurator(AimetCommonQuantSimConfigurator):
                 op_config = op_configs[op.type]
                 logger.info(' Set op level config for elementwise op = {%s}', op.type)
                 self._set_config_for_module(input_output_tensor_quantizers, op_config, modified_tensor_quantizers)
-
-        for op_type in op_configs.keys():
-            if ConfigDictKeys.PER_CHANNEL_QUANTIZATION in op_configs[op_type]:
-                self._per_channel_quantization[op_type] = op_configs[op_type][ConfigDictKeys.PER_CHANNEL_QUANTIZATION]
 
 
     def _set_config_for_module(self, input_output_tensor_quantizers: TensorQuantizersTupleType, op_config: OpType,
@@ -552,6 +529,40 @@ class QuantSimConfigurator(AimetCommonQuantSimConfigurator):
                 param_quantizer.bitwidth = bitwidth
 
     # -----------------------------------[ override support end] --------------------------------------------- #
+
+    def _generate_and_apply_op_instance_specific_config(self):
+        """
+        Generate op instance specific configurations - currently supported_kernels and per_channel_quantization fields
+        This function uses op specific supported_kernels (if absent use defaults), op specific per_channel_quantization
+        fields (if absent use default per_channel_quantization) and generate op instance specific config
+        """
+        per_channel_quantization = self._parse_per_channel_quantization()
+        hw_version = self._get_hw_version()
+        supported_kernels = reformat_supported_kernels(self._supported_kernels)
+        config_generator = config_generator_factory(hw_version, supported_kernels, per_channel_quantization)
+
+        for op in self._conn_graph.ordered_ops:
+            if op.get_module() in self._module_to_quantsim_wrapper_dict:
+                wrapper = self._module_to_quantsim_wrapper_dict[op.get_module()]
+                wrapper._supported_kernels, per_channel_quantization = config_generator.generate(op.get_module(), op)
+                if per_channel_quantization:
+                    wrapper.enable_per_channel_quantization()
+
+
+def config_generator_factory(hw_version, supported_kernels, per_channel_quantization):
+    """
+    factory to select the config generator based on the hw_version
+    :param hw_version: hw_version field from the config file
+    :param supported_kernels: aggregated supported_kernels fields from the config file
+    :param per_channel_quantization: aggregated per_channel_quantization fields from the config file
+    :return: Config Generator object
+    """
+
+    config_generator = DefaultOpInstanceConfigGenerator(supported_kernels, per_channel_quantization)
+    logger.info('Selecting DefaultOpInstanceConfigGenerator to compute the specialized config. hw_version:%s',
+                hw_version)
+    return config_generator
+
 
 def _create_module_to_quantsim_wrapper_dict(model: torch.nn.Module) -> Dict[torch.nn.Module, QcQuantizeWrapper]:
     """
@@ -689,3 +700,65 @@ def _is_elementwise_functional(op: Op) -> bool:
     :return: True if op is functional elementwise, False otherwise
     """
     return op.type in ['Add', 'Mul', 'Concat', 'Div'] and op.get_module() is None
+
+
+class OpInstanceConfigGenerator:
+    """
+    Class to specify op instance specific rules and generate the updated config
+    """
+
+    def __init__(self, supported_kernels: dict, pcq: dict):
+        """
+        :param supported_kernels: supported_kernels fields from the config file
+        :param pcq: per_channel_quantization(pcq) fields from the config file
+        """
+        self.supported_kernels = supported_kernels
+        self.pcq = pcq
+        assert ConfigDictKeys.DEFAULTS in self.supported_kernels
+        assert ConfigDictKeys.DEFAULTS in self.pcq
+
+    @abstractmethod
+    def generate(self, module, op) -> dict:
+        """ generate the config for the given op """
+
+    def _generate_pcq(self, module: torch.nn.Module) -> bool:
+        """
+        Helper function to generate the pcq field
+        :param module: torch op instance to generate the pcq value to
+        :return: pcq value for the op type
+
+        Steps:
+        1. Generate onnx_types for the given module
+        2. Check if the above onnx_types exist in the config file for pcq
+        3. If any entry is present, use it else use the default value
+        """
+        pcq = False
+        onnx_types = map_torch_types_to_onnx.get(type(module), [])
+        onnx_types_in_config = set(onnx_types).intersection(self.pcq)
+
+        if onnx_types_in_config:
+            for onnx_type in onnx_types_in_config:
+                if self.pcq[onnx_type]:
+                    pcq = True
+                break
+        elif self.pcq[ConfigDictKeys.DEFAULTS]:
+            pcq = True
+
+        return pcq
+
+
+class DefaultOpInstanceConfigGenerator(OpInstanceConfigGenerator):
+    """
+    Default implementation of OpInstanceConfigGenerator
+    """
+
+    def generate(self, module, op) -> Tuple[dict, bool]:
+        """
+        :param module: module to generate the specialized config
+        :param op: higher level op retrieved from CG
+        :return: supported_kernels and per_channel_quantization fields
+        """
+        supported_kernels = self.supported_kernels.get(op.type, self.supported_kernels[ConfigDictKeys.DEFAULTS])
+        pcq = self._generate_pcq(module)
+
+        return supported_kernels, pcq

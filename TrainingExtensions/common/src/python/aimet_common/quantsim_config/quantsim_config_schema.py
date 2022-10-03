@@ -35,7 +35,7 @@
 #
 #  @@-COPYRIGHT-END-@@
 # =============================================================================
-""" Schema used to validate json configuration file """
+""" Schema used to validate json configuration file. Docs: https://json-schema.org/learn/ """
 
 
 QUANTSIM_CONFIG_SCHEMA = {
@@ -129,6 +129,9 @@ QUANTSIM_CONFIG_SCHEMA = {
                     },
                     "minItems": 1,
                     "additionalItems": False
+                },
+                "hw_version": {
+                    "type": "string"
                 }
             },
             "required": ["ops", "params"],
