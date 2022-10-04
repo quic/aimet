@@ -40,7 +40,8 @@ import numpy as np
 import torch
 from onnx import helper, numpy_helper, OperatorSetIdProto, TensorProto, load_model
 from onnxruntime.quantization.onnx_quantizer import ONNXModel
-from aimet_torch.examples.test_models import SingleResidualWithAvgPool, ModelWithTwoInputs, TransposedConvModel
+from aimet_torch.examples.test_models import SingleResidualWithAvgPool, ModelWithTwoInputs, TransposedConvModel, \
+    ConcatModel, HierarchicalModel
 from aimet_torch.examples.mobilenet import MockMobileNetV1
 
 # pylint: disable=no-member
@@ -157,3 +158,41 @@ def depthwise_conv_model():
     model = ONNXModel(load_model('./model_mock_mobilenet.onnx'))
     return model
 
+def concat_model():
+    x = (torch.rand(1, 3, 8, 8, requires_grad=True), torch.rand(1, 3, 8, 8, requires_grad=True),
+         torch.rand(1, 3, 8, 8, requires_grad=True))
+    model = ConcatModel()
+
+    # Export the model
+    torch.onnx.export(model,  # model being run
+                      x,  # model input (or a tuple for multiple inputs)
+                      "./concat_model.onnx",  # where to save the model (can be a file or file-like object)
+                      export_params=True,  # store the trained parameter weights inside the model file
+                      opset_version=12,  # the ONNX version to export the model to
+                      do_constant_folding=True,  # whether to execute constant folding for optimization
+                      input_names=['input'],  # the model's input names
+                      output_names=['output'])
+    model = ONNXModel(load_model('./concat_model.onnx'))
+    return model
+
+def hierarchical_model():
+    conv_shape = (1, 64, 32, 32)
+    inp_shape = (1, 3, 32, 32)
+    seq_shape = (1, 3, 8, 8)
+    [conv_shape, inp_shape, conv_shape, inp_shape, seq_shape]
+    x = (torch.rand(1, 64, 32, 32, requires_grad=True), torch.rand(1, 3, 32, 32, requires_grad=True),
+         torch.rand(1, 64, 32, 32, requires_grad=True), torch.rand(1, 3, 32, 32, requires_grad=True),
+         torch.rand(1, 3, 8, 8, requires_grad=True))
+    model = HierarchicalModel()
+
+    # Export the model
+    torch.onnx.export(model,  # model being run
+                      x,  # model input (or a tuple for multiple inputs)
+                      "./hierarchical_model.onnx",  # where to save the model (can be a file or file-like object)
+                      export_params=True,  # store the trained parameter weights inside the model file
+                      opset_version=12,  # the ONNX version to export the model to
+                      do_constant_folding=True,  # whether to execute constant folding for optimization
+                      input_names=['input'],  # the model's input names
+                      output_names=['output'])
+    model = ONNXModel(load_model('./hierarchical_model.onnx'))
+    return model

@@ -50,7 +50,7 @@ from typing import List
 from onnx import onnx_pb
 from onnxruntime.quantization.onnx_quantizer import ONNXModel
 
-from aimet_common.connected_graph.connectedgraph import ConnectedGraph as AimetCommonConnectedGraph
+from aimet_common.connected_graph.connectedgraph import ConnectedGraph as AimetCommonConnectedGraph, get_ordered_ops
 from aimet_common.utils import AimetLogger
 from aimet_common.model_module import ONNXModelModule
 from aimet_onnx.meta.operations import Op
@@ -84,13 +84,12 @@ class ConnectedGraph(AimetCommonConnectedGraph):
         self._input_to_node = {}
         self._get_input_to_node()
 
-        # List of ops in the order they are traversed using the forward function
-        self.ordered_ops = []
-
         self.starting_ops = []
         self._branch_count = 0
 
         self.fill_op_product_graph()
+        # List of ops in the order they are traversed using the forward function
+        self.ordered_ops = get_ordered_ops(self.starting_ops)
 
     def get_op_from_module_name(self, name: str) -> Op:
         """
@@ -223,6 +222,31 @@ class ConnectedGraph(AimetCommonConnectedGraph):
             product.add_consumer(current_op)
             parent_op.output = product
 
+    def _create_link_for_output_product(self, output_tensor_name, producer_node_name):
+        """ Creates link between nodes and outputs of the model """
+        if producer_node_name + '_to_' + output_tensor_name in self._products:
+            logger.debug("%s already exists", producer_node_name + '_to_' + output_tensor_name)
+        else:
+            # TODO: figure out a way to add tensor shape. Adding the shape as None for now
+            product = Product(producer_node_name + '_to_' + output_tensor_name, None)
+            # add product to self._products dictionary
+            self._products[producer_node_name + '_to_' + output_tensor_name] = product
+            logger.debug("Created new product " + producer_node_name + '_to_' + output_tensor_name)
+
+            producer_op = self._ops[producer_node_name]
+            product.tensor_dict[producer_node_name] = producer_op
+
+            # Link producer op, product, and current tensor
+            producer_op.output = product
+            product.producer = producer_op
+
+
+    def _create_output_products(self):
+        for output in self.model.graph.output:
+            for node in self.model.graph.node:
+                if output.name in node.output:
+                    self._create_link_for_output_product(output.name, node.name)
+
     def fill_op_product_graph(self):
         """
         - DFS over the graph beginning with input op given as start_op_name
@@ -246,6 +270,9 @@ class ConnectedGraph(AimetCommonConnectedGraph):
                     self._add_children_ops_to_op_queue(child_node, op_queue)
                     visited_ops.add(child_node.name)
                     logger.debug("visited op: %s", child_node.name)
+
+        # Add output products
+        self._create_output_products()
 
         # Add parameter products during postprocess
         logger.debug("finished initial pass, num_products is %s", len(self._products))
