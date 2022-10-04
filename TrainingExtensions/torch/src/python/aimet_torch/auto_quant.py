@@ -673,12 +673,8 @@ class _EvalSession:
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
-        try:
-            if self._spinner is not None:
-                self._spinner.__exit__(exc_type, exc_val, exc_tb)
-        finally:
-            if exc_val is not None:
-                raise exc_val
+        if self._spinner is not None:
+            self._spinner.__exit__(exc_type, exc_val, exc_tb)
 
 
 class _PtqSession(_EvalSession):
