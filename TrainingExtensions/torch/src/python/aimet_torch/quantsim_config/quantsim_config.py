@@ -89,15 +89,19 @@ class SupergroupConfigCallback(AimetCommonSupergroupConfigCallback):
                 # turn off only output quantization of first op in the list
                 first_quantsim_wrapper = self._module_to_quantsim_wrapper_dict[op_list[0].get_module()]
                 # pylint: disable=protected-access
-                first_quantsim_wrapper.output_quantizers[0].enabled = False
+                for quantizer in first_quantsim_wrapper.output_quantizers:
+                    quantizer.enabled = False
             elif index == len(op_list) - 1:
                 # turn off only input quantization of last op in the list
                 last_quantsim_wrapper = self._module_to_quantsim_wrapper_dict[op_list[-1].get_module()]
-                last_quantsim_wrapper.input_quantizer.enabled = False
+
+                for quantizer in last_quantsim_wrapper.input_quantizers:
+                    quantizer.enabled = False
             else:
                 quantsim_wrapper = self._module_to_quantsim_wrapper_dict[op.get_module()]
-                quantsim_wrapper.input_quantizer.enabled = False
-                quantsim_wrapper.output_quantizers[0].enabled = False
+
+                for quantizer in quantsim_wrapper.input_quantizers + quantsim_wrapper.output_quantizers:
+                    quantizer.enabled = False
 
 
 # pylint: disable=too-many-arguments
@@ -144,10 +148,10 @@ class QuantSimConfigurator(AimetCommonQuantSimConfigurator):
                 input_false_list = self._get_tensor_quantizers_for_input_false_setting(op[0])
                 output_false_list = self._get_tensor_quantizers_for_output_false_setting(op[0])
             else:
-                input_true_list = [quantsim_wrapper.input_quantizer]
-                output_true_list = [quantsim_wrapper.output_quantizers[0]]
-                input_false_list = [quantsim_wrapper.input_quantizer]
-                output_false_list = [quantsim_wrapper.output_quantizers[0]]
+                input_true_list = quantsim_wrapper.input_quantizers
+                output_true_list = quantsim_wrapper.output_quantizers
+                input_false_list = quantsim_wrapper.input_quantizers
+                output_false_list = quantsim_wrapper.output_quantizers
             module_to_tensor_quantizers_dict[module] = (input_true_list, output_true_list, input_false_list,
                                                         output_false_list)
         return module_to_tensor_quantizers_dict
@@ -185,7 +189,7 @@ class QuantSimConfigurator(AimetCommonQuantSimConfigurator):
         tensor_quantizers_for_input_true = []
         if op.get_module() is not None:
             qc_quantize_wrapper = self._module_to_quantsim_wrapper_dict[op.get_module()]
-            tensor_quantizers_for_input_true.append(qc_quantize_wrapper.input_quantizer)
+            tensor_quantizers_for_input_true += qc_quantize_wrapper.input_quantizers
         else:
             queue = [op]
             while queue:
@@ -212,7 +216,7 @@ class QuantSimConfigurator(AimetCommonQuantSimConfigurator):
         tensor_quantizers_for_output_true = []
         if op.get_module() is not None:
             qc_quantize_wrapper = self._module_to_quantsim_wrapper_dict[op.get_module()]
-            tensor_quantizers_for_output_true.append(qc_quantize_wrapper.output_quantizers[0])
+            tensor_quantizers_for_output_true += qc_quantize_wrapper.output_quantizers
         else:
             queue = [op]
             while queue:
@@ -223,7 +227,7 @@ class QuantSimConfigurator(AimetCommonQuantSimConfigurator):
                         if output_op.get_module() is not None and output_op.get_module() in \
                                 self._module_to_quantsim_wrapper_dict:
                             qc_quantize_wrapper = self._module_to_quantsim_wrapper_dict[output_op.get_module()]
-                            tensor_quantizers_for_output_true.append(qc_quantize_wrapper.input_quantizer)
+                            tensor_quantizers_for_output_true += qc_quantize_wrapper.input_quantizers
                         elif output_op.type == 'Split':
                             queue.append(output_op)
         return tensor_quantizers_for_output_true
@@ -243,9 +247,9 @@ class QuantSimConfigurator(AimetCommonQuantSimConfigurator):
                     self._module_to_quantsim_wrapper_dict:
                 qc_quantize_wrapper = self._module_to_quantsim_wrapper_dict[input_op.get_module()]
                 if neighboring_input_ops[input_op] == 'input':
-                    tensor_quantizers_for_input_false.append(qc_quantize_wrapper.input_quantizer)
+                    tensor_quantizers_for_input_false += qc_quantize_wrapper.input_quantizers
                 else:
-                    tensor_quantizers_for_input_false.append(qc_quantize_wrapper.output_quantizers[0])
+                    tensor_quantizers_for_input_false += qc_quantize_wrapper.output_quantizers
         return tensor_quantizers_for_input_false
 
     def _get_tensor_quantizers_for_output_false_setting(self, op: Op) -> List[TensorQuantizer]:
@@ -263,9 +267,9 @@ class QuantSimConfigurator(AimetCommonQuantSimConfigurator):
                     self._module_to_quantsim_wrapper_dict:
                 qc_quantize_wrapper = self._module_to_quantsim_wrapper_dict[output_op.get_module()]
                 if neighboring_output_ops[output_op] == 'input':
-                    tensor_quantizers_for_output_false.append(qc_quantize_wrapper.input_quantizer)
+                    tensor_quantizers_for_output_false += qc_quantize_wrapper.input_quantizers
                 else:
-                    tensor_quantizers_for_output_false.append(qc_quantize_wrapper.output_quantizers[0])
+                    tensor_quantizers_for_output_false += qc_quantize_wrapper.output_quantizers
         return tensor_quantizers_for_output_false
 
     def _disable_all_quantizers(self):
@@ -273,10 +277,9 @@ class QuantSimConfigurator(AimetCommonQuantSimConfigurator):
         Set all tensor quantizers to enabled False and use_symmetric_encodings False
         """
         for quantsim_wrapper in self._module_to_quantsim_wrapper_dict.values():
-            quantsim_wrapper.input_quantizer.enabled = False
-            quantsim_wrapper.input_quantizer.use_symmetric_encodings = False
-            quantsim_wrapper.output_quantizers[0].enabled = False
-            quantsim_wrapper.output_quantizers[0].use_symmetric_encodings = False
+            for quantizer in quantsim_wrapper.input_quantizers + quantsim_wrapper.output_quantizers:
+                quantizer.enabled = False
+                quantizer.use_symmetric_encodings = False
             for param_quantizer in quantsim_wrapper.param_quantizers.values():
                 param_quantizer.enabled = False
                 param_quantizer.use_symmetric_encodings = False

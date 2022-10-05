@@ -98,7 +98,8 @@ def get_attention_with_mask_add_quantizer_dict(model: torch.nn.Module) -> Dict:
                 if name is supported_attention_mask_override_dict[module_name]:
 
                     # Override the quantizer that was added by default, to tf mode
-                    if isinstance(sub_module, QcQuantizeWrapper) and sub_module.output_quantizer.enabled:
+                    if isinstance(sub_module, QcQuantizeWrapper) and sub_module.output_quantizers \
+                            and sub_module.output_quantizers[0].enabled:
 
                         attention_with_mask_adds_dict[module] = (sub_module, name)
 

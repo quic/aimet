@@ -145,9 +145,6 @@ class QcQuantizeStandAloneBase(nn.Module):
                                                            is_symmetric,
                                                            enabled_by_default=True,
                                                            data_type=data_type)]
-        # Temporary to satisfy dependent code
-        # Todo: remove this once all dependent code has been cleaned up
-        self.output_quantizer = self.output_quantizers[0]
 
         self._mode = QcQuantizeOpMode.ANALYSIS
 
@@ -250,10 +247,6 @@ class QcQuantizeWrapper(nn.Module):
                                                            data_type=data_type)
                                   for _ in range(num_outputs)]
 
-        # Temporary to satisfy dependent code
-        # Todo: remove this once all dependent code has been cleaned up
-        self.output_quantizer = self.output_quantizers[0]
-
         self._mode = QcQuantizeOpMode.ANALYSIS
         self._module_to_wrap = module_to_wrap
 
@@ -274,7 +267,7 @@ class QcQuantizeWrapper(nn.Module):
                                                           enabled_by_default=False,
                                                           data_type=data_type)
                                  for _ in range(num_inputs)]
-        self.input_quantizer = self.input_quantizers[0]
+
         self._quant_scheme = quant_scheme
 
     def get_named_parameters(self):
