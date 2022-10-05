@@ -69,11 +69,12 @@ class TestAdaroundActivationSampler(unittest.TestCase):
 
         for module in sim.model.modules():
             if isinstance(module, QcQuantizeWrapper):
-                module.output_quantizer.enabled = False
-                module.input_quantizer.enabled = False
+                for quantizer in module.input_quantizers + module.output_quantizers:
+                    quantizer.enabled = False
+                    quantizer.enabled = False
 
-        self.assertFalse(sim.model.conv1.output_quantizer.encoding)
-        self.assertFalse(sim.model.conv1.input_quantizer.encoding)
+        for quantizer in sim.model.conv1.input_quantizers + sim.model.conv1.output_quantizers:
+            self.assertFalse(quantizer.encoding)
         self.assertTrue(sim.model.conv1.param_quantizers['weight'])
 
         dataset_size = 100
@@ -99,11 +100,12 @@ class TestAdaroundActivationSampler(unittest.TestCase):
 
         for module in sim.model.modules():
             if isinstance(module, QcQuantizeWrapper):
-                module.output_quantizer.enabled = False
-                module.input_quantizer.enabled = False
+                for quantizer in module.input_quantizers + module.output_quantizers:
+                    quantizer.enabled = False
+                    quantizer.enabled = False
 
-        self.assertFalse(sim.model.conv1.output_quantizer.encoding)
-        self.assertFalse(sim.model.conv1.input_quantizer.encoding)
+        for quantizer in sim.model.conv1.input_quantizers + sim.model.conv1.output_quantizers:
+            self.assertFalse(quantizer.encoding)
         self.assertTrue(sim.model.fc.param_quantizers['weight'])
 
         dataset_size = 100

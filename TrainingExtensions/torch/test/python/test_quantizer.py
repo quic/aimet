@@ -951,7 +951,7 @@ class TestQuantizationSimStaticGrad:
         for module in sim.model.modules():
             if isinstance(module, QcQuantizeWrapper):
                 module.output_quantizers[0].enabled = False
-                module.input_quantizer.enabled = True
+                module.input_quantizers[0].enabled = True
 
         # Find encodings
         sim.compute_encodings(dummy_forward_pass, None)
@@ -960,9 +960,9 @@ class TestQuantizationSimStaticGrad:
         output = dummy_forward_pass(sim.model, None)
 
         assert not sim.model.conv1.output_quantizers[0].encoding
-        assert sim.model.conv1.input_quantizer.encoding
+        assert sim.model.conv1.input_quantizers[0].encoding
 
-        print(sim.model.conv1.input_quantizer)
+        print(sim.model.conv1.input_quantizers[0])
         print(sim.model.conv1.output_quantizers[0])
 
     # -------------------------------------------
@@ -975,7 +975,7 @@ class TestQuantizationSimStaticGrad:
         for module in sim.model.modules():
             if isinstance(module, QcQuantizeWrapper):
                 module.output_quantizers[0].enabled = True
-                module.input_quantizer.enabled = True
+                module.input_quantizers[0].enabled = True
 
         # Find encodings
         sim.compute_encodings(dummy_forward_pass, None)
@@ -984,9 +984,9 @@ class TestQuantizationSimStaticGrad:
         output = dummy_forward_pass(sim.model, None)
 
         assert sim.model.conv1.output_quantizers[0].encoding
-        assert sim.model.conv1.input_quantizer.encoding
+        assert sim.model.conv1.input_quantizers[0].encoding
 
-        print(sim.model.conv1.input_quantizer)
+        print(sim.model.conv1.input_quantizers[0])
         print(sim.model.conv1.output_quantizers[0])
 
     def test_quantizing_models_with_funtional_add_ops(self):
@@ -1028,8 +1028,8 @@ class TestQuantizationSimStaticGrad:
         sim = QuantizationSimModel(model, quant_scheme=QuantScheme.post_training_tf,
                                    dummy_input=torch.rand(1, 3, 28, 28))
 
-        assert sim.model.conv3.input_quantizer.enabled
-        assert sim.model.conv5.input_quantizer.enabled
+        assert sim.model.conv3.input_quantizers[0].enabled
+        assert sim.model.conv5.input_quantizers[0].enabled
 
         print(sim)
 
@@ -1074,8 +1074,8 @@ class TestQuantizationSimStaticGrad:
         sim = QuantizationSimModel(model, quant_scheme=QuantScheme.post_training_tf,
                                    dummy_input=torch.rand(1, 3, 28, 28))
 
-        assert not sim.model.conv3.input_quantizer.enabled
-        assert sim.model.add1.output_quantizer.enabled
+        assert not sim.model.conv3.input_quantizers[0].enabled
+        assert sim.model.add1.output_quantizers[0].enabled
 
         print(sim)
 
@@ -1116,9 +1116,9 @@ class TestQuantizationSimStaticGrad:
         sim = QuantizationSimModel(model, quant_scheme=QuantScheme.post_training_tf,
                                    dummy_input=torch.rand(1, 3, 28, 28))
 
-        assert sim.model.conv4a.input_quantizer.enabled
-        assert sim.model.conv4b.input_quantizer.enabled
-        assert sim.model.conv5.input_quantizer.enabled
+        assert sim.model.conv4a.input_quantizers[0].enabled
+        assert sim.model.conv4b.input_quantizers[0].enabled
+        assert sim.model.conv5.input_quantizers[0].enabled
 
         print(sim)
 
@@ -1159,8 +1159,8 @@ class TestQuantizationSimStaticGrad:
         sim = QuantizationSimModel(model, quant_scheme=QuantScheme.post_training_tf,
                                    dummy_input=torch.rand(1, 3, 28, 28))
 
-        assert sim.model.conv4a.input_quantizer.enabled
-        assert sim.model.conv5.input_quantizer.enabled
+        assert sim.model.conv4a.input_quantizers[0].enabled
+        assert sim.model.conv5.input_quantizers[0].enabled
 
         print(sim)
 
@@ -1218,8 +1218,8 @@ class TestQuantizationSimStaticGrad:
         sim = QuantizationSimModel(model, quant_scheme=QuantScheme.post_training_tf,
                                    dummy_input=torch.rand(1, 3, 28, 28))
 
-        assert sim.model.conv3.input_quantizer.enabled
-        assert sim.model.conv5.input_quantizer.enabled
+        assert sim.model.conv3.input_quantizers[0].enabled
+        assert sim.model.conv5.input_quantizers[0].enabled
 
         print(sim)
 
@@ -1261,8 +1261,8 @@ class TestQuantizationSimStaticGrad:
         sim = QuantizationSimModel(model, quant_scheme=QuantScheme.post_training_tf,
                                    dummy_input=torch.rand(1, 3, 28, 28))
 
-        assert sim.model.conv3.input_quantizer.enabled
-        assert sim.model.conv5.input_quantizer.enabled
+        assert sim.model.conv3.input_quantizers[0].enabled
+        assert sim.model.conv5.input_quantizers[0].enabled
 
         print(sim)
 
@@ -1305,8 +1305,8 @@ class TestQuantizationSimStaticGrad:
         sim = QuantizationSimModel(model, quant_scheme=QuantScheme.post_training_tf,
                                    dummy_input=torch.rand(1, 3, 28, 28))
 
-        assert sim.model.conv3.input_quantizer.enabled
-        assert sim.model.conv5.input_quantizer.enabled
+        assert sim.model.conv3.input_quantizers[0].enabled
+        assert sim.model.conv5.input_quantizers[0].enabled
 
         print(sim)
 
@@ -1702,7 +1702,7 @@ class TestQuantizationSimStaticGrad:
         sim = QuantizationSimModel(model, default_output_bw=16, default_param_bw=16, dummy_input=dummy_input,
                                    default_data_type=QuantizationDataType.float)
 
-        quantizer = sim.model.mul1.input_quantizer
+        quantizer = sim.model.mul1.input_quantizers[0]
         enc_dict = sim._create_encoding_dict(encoding=None, quantizer=quantizer, propagate_encodings=False)
         assert enc_dict['dtype'] == 'float'
         assert enc_dict['bitwidth'] == 16
@@ -1782,8 +1782,8 @@ class TestQuantizationSimStaticGrad:
         sim = QuantizationSimModel(model, quant_scheme=QuantScheme.post_training_tf, dummy_input=dummy_input)
         sim.compute_encodings(forward_pass, None)
 
-        old_encoding_min = sim.model.block.add.output_quantizer.encoding.min
-        old_encoding_max = sim.model.block.add.output_quantizer.encoding.max
+        old_encoding_min = sim.model.block.add.output_quantizers[0].encoding.min
+        old_encoding_max = sim.model.block.add.output_quantizers[0].encoding.max
 
         print("old encoding min = ", old_encoding_min)
         print("old encoding max = ", old_encoding_max)
@@ -1796,15 +1796,15 @@ class TestQuantizationSimStaticGrad:
 
         # compute encodings again to check override takes effect
         sim2.compute_encodings(forward_pass, None)
-        new_encoding_min = sim2.model.block.add.output_quantizer.encoding.min
-        new_encoding_max = sim2.model.block.add.output_quantizer.encoding.max
+        new_encoding_min = sim2.model.block.add.output_quantizers[0].encoding.min
+        new_encoding_max = sim2.model.block.add.output_quantizers[0].encoding.max
         print("encoding min = ", new_encoding_min)
         print("encoding max = ", new_encoding_max)
 
         # validate override
         assert int(new_encoding_min) == -6
         assert int(new_encoding_max) == 17
-        assert sim2.model.block.add.output_quantizer.encoding.bw == 8
+        assert sim2.model.block.add.output_quantizers[0].encoding.bw == 8
 
     def test_transformer_mask_override_tf_enhanced(self):
         """
@@ -1847,8 +1847,8 @@ class TestQuantizationSimStaticGrad:
         model = DummyAttnBlockModel()
         sim = QuantizationSimModel(model, quant_scheme=QuantScheme.post_training_tf_enhanced, dummy_input=dummy_input)
         sim.compute_encodings(forward_pass, None)
-        old_encoding_min = sim.model.block.add_2.output_quantizer.encoding.min
-        old_encoding_max = sim.model.block.add_2.output_quantizer.encoding.max
+        old_encoding_min = sim.model.block.add_2.output_quantizers[0].encoding.min
+        old_encoding_max = sim.model.block.add_2.output_quantizers[0].encoding.max
 
         print("old encoding min = ", old_encoding_min)
         print("old encoding max = ", old_encoding_max)
@@ -1861,13 +1861,13 @@ class TestQuantizationSimStaticGrad:
 
         # compute encodings again to check override takes effect
         sim2.compute_encodings(forward_pass, None)
-        new_encoding_min = sim2.model.block.add_2.output_quantizer.encoding.min
-        new_encoding_max = sim2.model.block.add_2.output_quantizer.encoding.max
+        new_encoding_min = sim2.model.block.add_2.output_quantizers[0].encoding.min
+        new_encoding_max = sim2.model.block.add_2.output_quantizers[0].encoding.max
         print("encoding min = ", new_encoding_min)
         print("encoding max = ", new_encoding_max)
         assert int(new_encoding_min) == -6
         assert int(new_encoding_max) == 17
-        assert sim2.model.block.add_2.output_quantizer.encoding.bw == 8
+        assert sim2.model.block.add_2.output_quantizers[0].encoding.bw == 8
 
     def test_transformer_mask_override_transformers_tf_enhanced(self):
         """
@@ -1943,14 +1943,14 @@ class TestQuantizationSimStaticGrad:
         model = DummyAttnBlockModel()
         sim = QuantizationSimModel(model, quant_scheme=QuantScheme.post_training_tf_enhanced, dummy_input=dummy_input)
         sim.compute_encodings(forward_pass, None)
-        distil_encoding_min = sim.model.distilbert_block.mask_add.output_quantizer.encoding.min
-        distil_encoding_max = sim.model.distilbert_block.mask_add.output_quantizer.encoding.max
+        distil_encoding_min = sim.model.distilbert_block.mask_add.output_quantizers[0].encoding.min
+        distil_encoding_max = sim.model.distilbert_block.mask_add.output_quantizers[0].encoding.max
 
-        roberta_encoding_min = sim.model.roberta_block.mask_add.output_quantizer.encoding.min
-        roberta_encoding_max = sim.model.roberta_block.mask_add.output_quantizer.encoding.max
+        roberta_encoding_min = sim.model.roberta_block.mask_add.output_quantizers[0].encoding.min
+        roberta_encoding_max = sim.model.roberta_block.mask_add.output_quantizers[0].encoding.max
 
-        gpt_encoding_min = sim.model.gpt_block.mask_add.output_quantizer.encoding.min
-        gpt_encoding_max = sim.model.gpt_block.mask_add.output_quantizer.encoding.max
+        gpt_encoding_min = sim.model.gpt_block.mask_add.output_quantizers[0].encoding.min
+        gpt_encoding_max = sim.model.gpt_block.mask_add.output_quantizers[0].encoding.max
 
         # check min clamped
         assert int(distil_encoding_min) == -6
@@ -1962,9 +1962,9 @@ class TestQuantizationSimStaticGrad:
         assert int(gpt_encoding_min) == -6
         assert int(gpt_encoding_max) == 16
 
-        assert sim.model.distilbert_block.mask_add.output_quantizer.encoding.bw == 8
-        assert sim.model.roberta_block.mask_add.output_quantizer.encoding.bw == 8
-        assert sim.model.gpt_block.mask_add.output_quantizer.encoding.bw == 8
+        assert sim.model.distilbert_block.mask_add.output_quantizers[0].encoding.bw == 8
+        assert sim.model.roberta_block.mask_add.output_quantizers[0].encoding.bw == 8
+        assert sim.model.gpt_block.mask_add.output_quantizers[0].encoding.bw == 8
 
     def test_encodings_propagation_simple_model(self):
         """
@@ -2252,8 +2252,8 @@ class TestQuantizationSimLearnedGrid:
         assert isinstance(sim.model.conv1, StaticGridQuantWrapper)
         assert isinstance(sim.model.fc1, StaticGridQuantWrapper)
         for _, module in sim.model._modules.items():
-            module.input_quantizer.enabled = False
-            module.output_quantizer.enabled = False
+            module.input_quantizers[0].enabled = False
+            module.output_quantizers[0].enabled = False
             module.param_quantizers['weight'].enabled = False
         sim._replace_quantization_wrapper(sim.model, device='cpu')
 
@@ -2326,8 +2326,8 @@ class TestQuantizationSimLearnedGrid:
         encodings.delta = 1
         encodings.offset = 0.2
 
-        post_training_module.input_quantizer.enabled = True
-        post_training_module.input_quantizer.encoding = encodings
+        post_training_module.input_quantizers[0].enabled = True
+        post_training_module.input_quantizers[0].encoding = encodings
         post_training_module.param_quantizers['weight'].enabled = False
         post_training_module.param_quantizers['bias'].enabled = False
         dummy_input = torch.randn(1, 3, 12, 12)
@@ -2336,8 +2336,8 @@ class TestQuantizationSimLearnedGrid:
         # sim.model.conv1.input_quantizer.enabled = True
         trainable_module = sim._construct_and_initialize_trainable_wrapper(post_training_module, device='cpu')
 
-        assert trainable_module.output_quantizer.use_symmetric_encodings == False
-        assert trainable_module.output_quantizer.enabled == False
+        assert trainable_module.output_quantizers[0].use_symmetric_encodings == False
+        assert trainable_module.output_quantizers[0].enabled == False
         assert trainable_module.input0_encoding_min.item() == -5.0
 
     def test_copy_properties_for_elementwise_aimet_add_op(self):
@@ -2372,7 +2372,6 @@ class TestQuantizationSimLearnedGrid:
         assert trainable_module.output_quantizers[0].enabled == False
         assert trainable_module.input0_encoding_min.item() == -1.0
         assert trainable_module.input1_encoding_max.item() == 5.0
-        assert trainable_module.input_quantizers[0] == trainable_module.input_quantizer
 
     def test_qc_trainable_wrapper(self):
         torch.manual_seed(0)
@@ -2389,16 +2388,16 @@ class TestQuantizationSimLearnedGrid:
         encodings.min = -2
         encodings.delta = 1
         encodings.offset = 0.2
-        trainable_module.input_quantizer.enabled = True
-        trainable_module.input_quantizer.encoding = encodings
+        trainable_module.input_quantizers[0].enabled = True
+        trainable_module.input_quantizers[0].encoding = encodings
 
         trainable_module.param_quantizers['weight'].enabled = True
         trainable_module.param_quantizers['weight'].encoding = encodings
         trainable_module.param_quantizers['bias'].enabled = True
         trainable_module.param_quantizers['bias'].encoding = encodings
 
-        trainable_module.output_quantizer.enabled = True
-        trainable_module.output_quantizer.encoding = encodings
+        trainable_module.output_quantizers[0].enabled = True
+        trainable_module.output_quantizers[0].encoding = encodings
 
         inp = torch.rand((1, 1, 5, 5), requires_grad=True)
         out = trainable_module(inp)
@@ -2461,7 +2460,7 @@ class TestQuantizationSimLearnedGrid:
                                                    is_symmetric=False, is_output_quantized=True, activation_bw=8,
                                                    weight_bw=8, device='cpu', data_type=QuantizationDataType.int)
 
-        trainable_module.input_quantizer.enabled = True
+        trainable_module.input_quantizers[0].enabled = True
 
         encodings = libpymo.TfEncoding()
         encodings.bw = 8
@@ -2472,11 +2471,11 @@ class TestQuantizationSimLearnedGrid:
 
         # If enabled encoding cannot be None
         with pytest.raises(RuntimeError):
-            trainable_module.input_quantizer.encoding = None
-        trainable_module.input_quantizer.encoding = encodings
+            trainable_module.input_quantizers[0].encoding = None
+        trainable_module.input_quantizers[0].encoding = encodings
 
         # Check if quantizer.encoding is accessible
-        print(trainable_module.input_quantizer.encoding)
+        print(trainable_module.input_quantizers[0].encoding)
         assert trainable_module.input0_encoding_min.data == encodings.min
 
     def test_model_with_two_inputs(self):
@@ -2497,7 +2496,7 @@ class TestQuantizationSimLearnedGrid:
         # Quantize
         sim.compute_encodings(forward_pass, None)
 
-        assert sim.model.conv1_a.output_quantizer.encoding
+        assert sim.model.conv1_a.output_quantizers[0].encoding
 
         # self.assertAlmostEqual(sim.model.conv1_a.output_quantizer.encoding.min,
         #                        sim.model.conv1_a.output0_encoding_min.data)

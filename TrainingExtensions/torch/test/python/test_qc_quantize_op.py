@@ -123,16 +123,16 @@ class TestQcQuantizeOpStaticGrid:
         quantize.train()
         quantize._module_to_wrap.register_backward_hook(hook_fn)
 
-        quantize.input_quantizer.enabled = True
+        quantize.input_quantizers[0].enabled = True
         quantize.output_quantizers[0].enabled = True
-        quantize.input_quantizer.encoding = encodings
+        quantize.input_quantizers[0].encoding = encodings
         quantize.output_quantizers[0].encoding = encodings
 
         new_input = torch.autograd.Variable(torch.tensor([[[[0.6469]]], [[[-0.9]]]]), requires_grad=True)
         quantize.set_mode(QcQuantizeOpMode.ACTIVE)
         out = quantize(new_input)
 
-        quantize.input_quantizer.encoding = encodings_new
+        quantize.input_quantizers[0].encoding = encodings_new
         quantize.output_quantizers[0].encoding = encodings_new
         quantize.param_quantizers['weight'].encoding = encodings_new
 
@@ -790,9 +790,9 @@ class TestQcQuantizeOpLearnedGrid:
         quantize.train()
         quantize._module_to_wrap.register_backward_hook(hook_fn)
 
-        quantize.input_quantizer.enabled = True
+        quantize.input_quantizers[0].enabled = True
         quantize.output_quantizers[0].enabled = True
-        quantize.input_quantizer.encoding = encodings
+        quantize.input_quantizers[0].encoding = encodings
         quantize.output_quantizers[0].encoding = encodings
         quantize.param_quantizers['weight'].encoding = encodings
         quantize.param_quantizers['bias'].enabled = False
@@ -800,7 +800,7 @@ class TestQcQuantizeOpLearnedGrid:
         new_input = torch.autograd.Variable(torch.tensor([[[[-0.8469]]], [[[0.9]]]]), requires_grad=True)
         out = quantize(new_input)
 
-        quantize.input_quantizer.encoding = encodings_new
+        quantize.input_quantizers[0].encoding = encodings_new
         quantize.output_quantizers[0].encoding = encodings_new
         quantize.param_quantizers['weight'].encoding = encodings_new
 
@@ -935,35 +935,35 @@ class TestQcQuantizeOpLearnedGrid:
         enc.bw, enc.max, enc.min, enc.delta, enc.offset = 8, 0.5, -1, 0.01, 50
 
         # Set encoding for all - input, output and parameters quantizer.
-        quant_wrapper.input_quantizer.enabled = True
-        quant_wrapper.input_quantizer.encoding = enc
+        quant_wrapper.input_quantizers[0].enabled = True
+        quant_wrapper.input_quantizers[0].encoding = enc
         quant_wrapper.param_quantizers['weight'].enabled = True
         quant_wrapper.param_quantizers['weight'].encoding = enc
         quant_wrapper.param_quantizers['bias'].enabled = True
         quant_wrapper.param_quantizers['bias'].encoding = enc
-        quant_wrapper.output_quantizer.enabled = True
-        quant_wrapper.output_quantizer.encoding = enc
+        quant_wrapper.output_quantizers[0].enabled = True
+        quant_wrapper.output_quantizers[0].encoding = enc
 
-        enc_cur = quant_wrapper.output_quantizer.encoding
+        enc_cur = quant_wrapper.output_quantizers[0].encoding
         assert enc_cur.min == enc.min
 
         # Freeze encoding only for output quantizer.
-        quant_wrapper.output_quantizer.freeze_encoding()
+        quant_wrapper.output_quantizers[0].freeze_encoding()
 
         # Serialize and De-serialize.
         pickled = pickle.dumps(quant_wrapper)
         loaded_quant_wrapper = pickle.loads(pickled)
 
         # verify that the state _is_encoding_frozen state is maintained.
-        assert loaded_quant_wrapper.output_quantizer._is_encoding_frozen == True
-        assert loaded_quant_wrapper.input_quantizer._is_encoding_frozen == False
+        assert loaded_quant_wrapper.output_quantizers[0]._is_encoding_frozen == True
+        assert loaded_quant_wrapper.input_quantizers[0]._is_encoding_frozen == False
         assert loaded_quant_wrapper.param_quantizers['weight']._is_encoding_frozen == False
         assert loaded_quant_wrapper.param_quantizers['bias']._is_encoding_frozen == False
 
         assert loaded_quant_wrapper.param_quantizers['weight'].encoding.max == 0.5
         assert loaded_quant_wrapper.param_quantizers['bias'].encoding.max == 0.5
-        assert loaded_quant_wrapper.output_quantizer.encoding.max == 0.5
-        assert loaded_quant_wrapper.input_quantizer.encoding.max == 0.5
+        assert loaded_quant_wrapper.output_quantizers[0].encoding.max == 0.5
+        assert loaded_quant_wrapper.input_quantizers[0].encoding.max == 0.5
 
         enc_new = libpymo.TfEncoding()
         enc_new.bw, enc_new.max, enc_new.min, enc_new.delta, enc_new.offset = 8, 0.4, -0.98, 1, 0.2
@@ -971,9 +971,9 @@ class TestQcQuantizeOpLearnedGrid:
         # try to set new encoding except output quantizer.
         loaded_quant_wrapper.param_quantizers['weight'].encoding = enc_new
         loaded_quant_wrapper.param_quantizers['bias'].encoding = enc_new
-        loaded_quant_wrapper.input_quantizer.encoding = enc_new
+        loaded_quant_wrapper.input_quantizers[0].encoding = enc_new
         with pytest.raises(RuntimeError):
-            loaded_quant_wrapper.output_quantizer.encoding = enc_new
+            loaded_quant_wrapper.output_quantizers[0].encoding = enc_new
 
     def test_learned_grid_wrapper_pickle_upickle(self):
         """
@@ -989,28 +989,28 @@ class TestQcQuantizeOpLearnedGrid:
         enc_old.bw, enc_old.max, enc_old.min, enc_old.delta, enc_old.offset = 8, 0.5, -1, 1, 0.2
 
         # Set encoding for all - input, output and parameters quantizer.
-        quant_wrapper.input_quantizer.enabled = True
-        quant_wrapper.input_quantizer.encoding = enc_old
+        quant_wrapper.input_quantizers[0].enabled = True
+        quant_wrapper.input_quantizers[0].encoding = enc_old
         quant_wrapper.param_quantizers['weight'].enabled = True
         quant_wrapper.param_quantizers['weight'].encoding = enc_old
         quant_wrapper.param_quantizers['bias'].enabled = True
         quant_wrapper.param_quantizers['bias'].encoding = enc_old
-        quant_wrapper.output_quantizer.enabled = True
-        quant_wrapper.output_quantizer.encoding = enc_old
+        quant_wrapper.output_quantizers[0].enabled = True
+        quant_wrapper.output_quantizers[0].encoding = enc_old
 
-        enc_cur = quant_wrapper.output_quantizer.encoding
+        enc_cur = quant_wrapper.output_quantizers[0].encoding
         assert enc_cur.min == enc_old.min
 
         # Freeze encoding only for output quantizer.
-        quant_wrapper.output_quantizer.freeze_encoding()
+        quant_wrapper.output_quantizers[0].freeze_encoding()
 
         # Serialize and De-serialize.
         pickled = pickle.dumps(quant_wrapper)
         loaded_quant_wrapper = pickle.loads(pickled)
 
         # verify that the state _is_encoding_frozen state is maintained.
-        assert loaded_quant_wrapper.output_quantizer._is_encoding_frozen == True
-        assert loaded_quant_wrapper.input_quantizer._is_encoding_frozen == False
+        assert loaded_quant_wrapper.output_quantizers[0]._is_encoding_frozen == True
+        assert loaded_quant_wrapper.input_quantizers[0]._is_encoding_frozen == False
         assert loaded_quant_wrapper.param_quantizers['weight']._is_encoding_frozen == False
         assert loaded_quant_wrapper.param_quantizers['bias']._is_encoding_frozen == False
 
@@ -1020,6 +1020,6 @@ class TestQcQuantizeOpLearnedGrid:
         # try to set new encoding except output quantizer.
         loaded_quant_wrapper.param_quantizers['weight'].encoding = enc_new
         loaded_quant_wrapper.param_quantizers['bias'].encoding = enc_new
-        loaded_quant_wrapper.input_quantizer.encoding = enc_new
+        loaded_quant_wrapper.input_quantizers[0].encoding = enc_new
         with pytest.raises(RuntimeError):
-            loaded_quant_wrapper.output_quantizer.encoding = enc_new
+            loaded_quant_wrapper.output_quantizers[0].encoding = enc_new

@@ -247,17 +247,17 @@ class TestFX:
         print(quant_sim_for_modified_model)
 
         # Conv --> ReLU supergroup is detected correctly
-        assert quant_sim_for_modified_model.model.conv1.output_quantizer.enabled == False
-        assert quant_sim_for_modified_model.model.module_relu.output_quantizer.enabled == True
+        assert quant_sim_for_modified_model.model.conv1.output_quantizers[0].enabled == False
+        assert quant_sim_for_modified_model.model.module_relu.output_quantizers[0].enabled == True
 
-        assert quant_sim_for_modified_model.model.conv2.output_quantizer.enabled == False
-        assert quant_sim_for_modified_model.model.module_relu_1.output_quantizer.enabled == True
+        assert quant_sim_for_modified_model.model.conv2.output_quantizers[0].enabled == False
+        assert quant_sim_for_modified_model.model.module_relu_1.output_quantizers[0].enabled == True
 
-        assert quant_sim_for_modified_model.model.fc1.output_quantizer.enabled == False
-        assert quant_sim_for_modified_model.model.module_relu_2.output_quantizer.enabled == True
+        assert quant_sim_for_modified_model.model.fc1.output_quantizers[0].enabled == False
+        assert quant_sim_for_modified_model.model.module_relu_2.output_quantizers[0].enabled == True
 
-        assert quant_sim_for_modified_model.model.fc2.output_quantizer.enabled == False
-        assert quant_sim_for_modified_model.model.module_relu_3.output_quantizer.enabled == True
+        assert quant_sim_for_modified_model.model.fc2.output_quantizers[0].enabled == False
+        assert quant_sim_for_modified_model.model.module_relu_3.output_quantizers[0].enabled == True
 
     def test_fx_with_functional_relu_quantsim_eval(self):
         """
@@ -295,10 +295,10 @@ class TestFX:
                                                             config_file='./data/quantsim_config.json')
 
         # Disable output activation quantizer for ReLUs to compare with original quantsim.model eval
-        quant_sim_for_modified_model.model.module_relu.output_quantizer.enabled = False
-        quant_sim_for_modified_model.model.module_relu_1.output_quantizer.enabled = False
-        quant_sim_for_modified_model.model.module_relu_2.output_quantizer.enabled = False
-        quant_sim_for_modified_model.model.module_relu_3.output_quantizer.enabled = False
+        quant_sim_for_modified_model.model.module_relu.output_quantizers[0].enabled = False
+        quant_sim_for_modified_model.model.module_relu_1.output_quantizers[0].enabled = False
+        quant_sim_for_modified_model.model.module_relu_2.output_quantizers[0].enabled = False
+        quant_sim_for_modified_model.model.module_relu_3.output_quantizers[0].enabled = False
 
         quant_sim_for_original_model.compute_encodings(evaluate, input_tensor)
         quant_sim_for_modified_model.compute_encodings(evaluate, input_tensor)
@@ -308,8 +308,8 @@ class TestFX:
                               quant_sim_for_modified_model.model(input_tensor))
 
         # Compare encodings for last layer for both models
-        assert quant_sim_for_original_model.model.fc2.output_quantizer.encoding.min ==\
-               quant_sim_for_modified_model.model.fc2.output_quantizer.encoding.min
+        assert quant_sim_for_original_model.model.fc2.output_quantizers[0].encoding.min ==\
+               quant_sim_for_modified_model.model.fc2.output_quantizers[0].encoding.min
 
         if os.path.exists('./data/quantsim_config.json'):
             os.remove('./data/quantsim_config.json')
@@ -332,8 +332,8 @@ class TestFX:
 
         # Add + ReLU Supergroup
         # Add's output quantizer should be disabled, and ReLU's output quantizer should be enabled
-        assert quant_sim_for_modified_model.model.module_add.output_quantizer.enabled == False
-        assert quant_sim_for_modified_model.model.relu3.output_quantizer.enabled == True
+        assert quant_sim_for_modified_model.model.module_add.output_quantizers[0].enabled == False
+        assert quant_sim_for_modified_model.model.relu3.output_quantizers[0].enabled == True
 
     def test_fx_with_functional_relu_training(self):
         """
@@ -905,7 +905,7 @@ class TestFX:
         assert isinstance(model_transformed.module_cat, elementwise_ops.Concat)
 
         quant_sim = QuantizationSimModel(model_transformed, dummy_input=input_tensor)
-        assert quant_sim.model.module_cat.output_quantizer.enabled == True
+        assert quant_sim.model.module_cat.output_quantizers[0].enabled == True
 
     def test_fx_with_elementwise_subtract(self):
         """
@@ -962,7 +962,7 @@ class TestFX:
         assert isinstance(model_transformed.module_mul, elementwise_ops.Multiply)
 
         quant_sim = QuantizationSimModel(model_transformed, dummy_input=input_tensor)
-        assert quant_sim.model.module_mul.output_quantizer.enabled == True
+        assert quant_sim.model.module_mul.output_quantizers[0].enabled == True
 
     def test_fx_with_elementwise_div(self):
         """
@@ -992,7 +992,7 @@ class TestFX:
         assert isinstance(model_transformed.module_div, elementwise_ops.Divide)
 
         quant_sim = QuantizationSimModel(model_transformed, dummy_input=input_tensor)
-        assert quant_sim.model.module_div.output_quantizer.enabled == True
+        assert quant_sim.model.module_div.output_quantizers[0].enabled == True
 
     def test_fx_with_elementwise_matmul(self):
         """
@@ -1022,7 +1022,7 @@ class TestFX:
         assert isinstance(model_transformed.module_matmul, elementwise_ops.MatMul)
 
         quant_sim = QuantizationSimModel(model_transformed, dummy_input=input_tensor)
-        assert quant_sim.model.module_matmul.output_quantizer.enabled == True
+        assert quant_sim.model.module_matmul.output_quantizers[0].enabled == True
 
     def test_fx_with_elementwise_cat_default_dim(self):
         """
@@ -1052,7 +1052,7 @@ class TestFX:
         assert isinstance(model_transformed.module_cat, elementwise_ops.Concat)
 
         quant_sim = QuantizationSimModel(model_transformed, dummy_input=input_tensor)
-        assert quant_sim.model.module_cat.output_quantizer.enabled == True
+        assert quant_sim.model.module_cat.output_quantizers[0].enabled == True
 
     def test_fx_with_elementwise_cat_input_as_list_and_dim_as_kwargs(self):
         """
@@ -1082,7 +1082,7 @@ class TestFX:
         assert isinstance(model_transformed.module_cat, elementwise_ops.Concat)
 
         quant_sim = QuantizationSimModel(model_transformed, dummy_input=input_tensor)
-        assert quant_sim.model.module_cat.output_quantizer.enabled == True
+        assert quant_sim.model.module_cat.output_quantizers[0].enabled == True
 
     def test_fx_with_elementwise_scalar_add(self):
         """
