@@ -65,15 +65,15 @@ class TestQuantizationSimTransformers(unittest.TestCase):
 
         for i in range(n_layers):
             # validate MHA layers have quantizers
-            self.assertTrue(sim.model.transformer_encoder.layers[i].self_attn.linear_Q.output_quantizer.encoding)
-            self.assertTrue(sim.model.transformer_encoder.layers[i].self_attn.linear_K.output_quantizer.encoding)
-            self.assertTrue(sim.model.transformer_encoder.layers[i].self_attn.linear_V.output_quantizer.encoding)
-            self.assertTrue(sim.model.transformer_encoder.layers[i].self_attn.matmul_1.output_quantizer.encoding)
-            self.assertTrue(sim.model.transformer_encoder.layers[i].self_attn.matmul_2.output_quantizer.encoding)
-            self.assertTrue(sim.model.transformer_encoder.layers[i].self_attn.softmax.output_quantizer.encoding)
+            self.assertTrue(sim.model.transformer_encoder.layers[i].self_attn.linear_Q.output_quantizers[0].encoding)
+            self.assertTrue(sim.model.transformer_encoder.layers[i].self_attn.linear_K.output_quantizers[0].encoding)
+            self.assertTrue(sim.model.transformer_encoder.layers[i].self_attn.linear_V.output_quantizers[0].encoding)
+            self.assertTrue(sim.model.transformer_encoder.layers[i].self_attn.matmul_1.output_quantizers[0].encoding)
+            self.assertTrue(sim.model.transformer_encoder.layers[i].self_attn.matmul_2.output_quantizers[0].encoding)
+            self.assertTrue(sim.model.transformer_encoder.layers[i].self_attn.softmax.output_quantizers[0].encoding)
 
             # validate mask encoding
-            mask_add_quantizer = sim.model.transformer_encoder.layers[i].self_attn.mask_add.output_quantizer
+            mask_add_quantizer = sim.model.transformer_encoder.layers[i].self_attn.mask_add.output_quantizers[0]
             self.assertAlmostEqual(mask_add_quantizer.encoding.min, -6, 1)
 
         del sim

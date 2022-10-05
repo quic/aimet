@@ -119,22 +119,22 @@ class TestTensorQuantizer:
         enc_new.bw, enc_new.max, enc_new.min, enc_new.delta, enc_new.offset = 8, 0.4, -0.98, 1, 0.2
 
         # Set encoding for output quantizer and freeze it.
-        quant_wrapper.output_quantizer.encoding = enc_old
-        quant_wrapper.output_quantizer.freeze_encoding()
+        quant_wrapper.output_quantizers[0].encoding = enc_old
+        quant_wrapper.output_quantizers[0].freeze_encoding()
 
-        enc_cur = quant_wrapper.output_quantizer.encoding
+        enc_cur = quant_wrapper.output_quantizers[0].encoding
         assert enc_cur.min == enc_old.min
 
         # set encoding one more time but can not set it since it is frozen.
         with pytest.raises(RuntimeError):
-            quant_wrapper.output_quantizer.encoding = enc_new
+            quant_wrapper.output_quantizers[0].encoding = enc_new
 
-        enc_cur = quant_wrapper.output_quantizer.encoding
+        enc_cur = quant_wrapper.output_quantizers[0].encoding
         assert enc_cur.min == enc_old.min
 
         # Freeze encoding for input quantizer without initializing.
         with pytest.raises(RuntimeError):
-            quant_wrapper.input_quantizer.freeze_encoding()
+            quant_wrapper.input_quantizers[0].freeze_encoding()
 
     def test_learned_grid_set_freeze_encoding(self):
         """
@@ -150,20 +150,20 @@ class TestTensorQuantizer:
         enc.bw, enc.max, enc.min, enc.delta, enc.offset = 8, 0.5, -1, 0.01, 50
 
         # Set encoding for all - input, output and parameters quantizer.
-        quant_wrapper.input_quantizer.enabled = True
-        quant_wrapper.input_quantizer.encoding = enc
+        quant_wrapper.input_quantizers[0].enabled = True
+        quant_wrapper.input_quantizers[0].encoding = enc
         quant_wrapper.param_quantizers['weight'].enabled = True
         quant_wrapper.param_quantizers['weight'].encoding = enc
         quant_wrapper.param_quantizers['bias'].enabled = True
         quant_wrapper.param_quantizers['bias'].encoding = enc
-        quant_wrapper.output_quantizer.enabled = True
-        quant_wrapper.output_quantizer.encoding = enc
+        quant_wrapper.output_quantizers[0].enabled = True
+        quant_wrapper.output_quantizers[0].encoding = enc
 
-        enc_cur = quant_wrapper.output_quantizer.encoding
+        enc_cur = quant_wrapper.output_quantizers[0].encoding
         assert enc_cur.min == enc.min
 
         # Freeze encoding only for output quantizer.
-        quant_wrapper.output_quantizer.freeze_encoding()
+        quant_wrapper.output_quantizers[0].freeze_encoding()
 
         inp = torch.rand((1, 1, 5, 5), requires_grad=True)
         optimizer = torch.optim.SGD(quant_wrapper.parameters(), lr=0.05, momentum=0.5)
@@ -186,15 +186,15 @@ class TestTensorQuantizer:
         assert quant_wrapper.output0_encoding_max.item() == 0.5
 
         # Check encoding.getter property.
-        assert not quant_wrapper.input_quantizer.encoding.min == -1
-        assert not quant_wrapper.input_quantizer.encoding.max == 0.5
+        assert not quant_wrapper.input_quantizers[0].encoding.min == -1
+        assert not quant_wrapper.input_quantizers[0].encoding.max == 0.5
         assert not quant_wrapper.param_quantizers["weight"].encoding.min == -1
         assert not quant_wrapper.param_quantizers["weight"].encoding.max == 0.5
         assert not quant_wrapper.param_quantizers["bias"].encoding.min == -1
         assert not quant_wrapper.param_quantizers["bias"].encoding.max == 0.5
         # For output quantizer, it should be same as before.
-        assert quant_wrapper.output_quantizer.encoding.min == -1
-        assert quant_wrapper.output_quantizer.encoding.max == 0.5
+        assert quant_wrapper.output_quantizers[0].encoding.min == -1
+        assert quant_wrapper.output_quantizers[0].encoding.max == 0.5
 
     def test_learned_grid_n_and_p_up_to_date(self):
         tensor_quantizer = LearnedGridTensorQuantizer(bitwidth=8,
