@@ -120,8 +120,8 @@ class TestTrainingExtensionElementwiseOps(unittest.TestCase):
         encodings.min = -5
         encodings.delta = 1
         encodings.offset = 0.2
-        sim.model.op1.output_quantizer.encoding = encodings
-        sim.model.conv1.output_quantizer.encoding = encodings
+        sim.model.op1.output_quantizers[0].encoding = encodings
+        sim.model.conv1.output_quantizers[0].encoding = encodings
         sim.model.conv1.param_quantizers['weight'].encoding = encodings
         sim.export(path='./data', filename_prefix='quant_model', dummy_input=dummy_input)
 
@@ -269,11 +269,11 @@ class TestTrainingExtensionElementwiseOps(unittest.TestCase):
 
         assert not sim.model.add.input_quantizers[0].encoding
         assert not sim.model.add.input_quantizers[1].encoding
-        assert sim.model.add.output_quantizer.encoding
+        assert sim.model.add.output_quantizers[0].encoding
 
         assert not sim.model.mul.input_quantizers[0].encoding
         assert not sim.model.mul.input_quantizers[1].encoding
-        assert sim.model.mul.output_quantizer.encoding
+        assert sim.model.mul.output_quantizers[0].encoding
 
     def test_dtypes_to_ignore_for_quantization_quant_scheme_range_learning(self):
         """
@@ -306,8 +306,8 @@ class TestTrainingExtensionElementwiseOps(unittest.TestCase):
 
         assert not sim.model.add.input_quantizers[0].encoding
         assert not sim.model.add.input_quantizers[1].encoding
-        assert sim.model.add.output_quantizer.encoding
+        assert sim.model.add.output_quantizers[0].encoding
 
         assert not sim.model.mul.input_quantizers[0].encoding
         assert not sim.model.mul.input_quantizers[1].encoding
-        assert sim.model.mul.output_quantizer.encoding
+        assert sim.model.mul.output_quantizers[0].encoding

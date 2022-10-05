@@ -289,8 +289,8 @@ class TestAdaround:
         for quant_wrapper in sim.model.modules():
             if isinstance(quant_wrapper, StaticGridQuantWrapper):
                 # Adaround requires input and output quantizers to be disabled
-                quant_wrapper.input_quantizer.enabled = False
-                quant_wrapper.output_quantizer.enabled = False
+                for quantizer in quant_wrapper.input_quantizers + quant_wrapper.output_quantizers:
+                    quantizer.enabled = False
 
                 for name, param in quant_wrapper._module_to_wrap.named_parameters():
                     # Compute encodings for parameters, needed for initializing Adaround quantizers

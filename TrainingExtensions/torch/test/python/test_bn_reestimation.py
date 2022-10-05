@@ -104,7 +104,7 @@ def test_reestimation_with_fp32_model(fp32_model, data_loader):
 
 def test_reestimation_with_quantsim_model(quantsim_model, data_loader):
     def quantize_input(data):
-        input_quantizer = quantsim_model._bn.input_quantizer
+        input_quantizer = quantsim_model._bn.input_quantizers[0]
         encoding = input_quantizer.encoding
         encoding_min = torch.tensor([encoding.min])
         encoding_max = torch.tensor([encoding.max])

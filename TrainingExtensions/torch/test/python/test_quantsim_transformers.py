@@ -209,8 +209,8 @@ class TestQuantizationSimTransformers(unittest.TestCase):
         sim.compute_encodings(forward_pass, None)
 
         # GELU output quantization is enabled by default.
-        self.assertTrue(sim.model.gelu.output_quantizer.encoding)
-        out_quantizer = sim.model.gelu.output_quantizer
+        self.assertTrue(sim.model.gelu.output_quantizers[0].encoding)
+        out_quantizer = sim.model.gelu.output_quantizers[0]
         self.assertTrue(out_quantizer.enabled)
         self.assertEqual(out_quantizer.round_mode, libpymo.RoundingMode.ROUND_NEAREST)
         self.assertEqual(out_quantizer.quant_scheme, QuantScheme.post_training_tf)
@@ -268,10 +268,10 @@ class TestQuantizationSimTransformers(unittest.TestCase):
         #  check quantizer added to parameters of LayerNorm
         self.assertTrue(isinstance(sim.model.ln1.param_quantizers['weight'], StaticGridPerTensorQuantizer))
         self.assertTrue(isinstance(sim.model.ln1.param_quantizers['bias'], StaticGridPerTensorQuantizer))
-        self.assertTrue(isinstance(sim.model.ln1.input_quantizer, StaticGridPerTensorQuantizer))
+        self.assertTrue(isinstance(sim.model.ln1.input_quantizers[0], StaticGridPerTensorQuantizer))
 
         # input / output quantizers for layernorm
-        self.assertTrue(isinstance(sim.model.ln1.output_quantizer, StaticGridPerTensorQuantizer))
+        self.assertTrue(isinstance(sim.model.ln1.output_quantizers[0], StaticGridPerTensorQuantizer))
         self.assertTrue(isinstance(sim.model.ln1, StaticGridQuantWrapper))
 
         # validate config after compute encodings
@@ -280,8 +280,8 @@ class TestQuantizationSimTransformers(unittest.TestCase):
         sim.export('./data/', 'two_input_model2', random_input)
 
         # LayerNorm output quantization is enabled by default
-        self.assertTrue(sim.model.ln1.output_quantizer.encoding)
-        out_quantizer = sim.model.ln1.output_quantizer
+        self.assertTrue(sim.model.ln1.output_quantizers[0].encoding)
+        out_quantizer = sim.model.ln1.output_quantizers[0]
         self.assertTrue(out_quantizer.enabled)
         self.assertEqual(out_quantizer.round_mode, libpymo.RoundingMode.ROUND_NEAREST)
         self.assertEqual(out_quantizer.quant_scheme, QuantScheme.post_training_tf)
@@ -289,7 +289,7 @@ class TestQuantizationSimTransformers(unittest.TestCase):
 
         # LayerNorm input quantization is disabled by default
         # could override with custom config file
-        self.assertFalse(sim.model.ln1.input_quantizer.encoding)
+        self.assertFalse(sim.model.ln1.input_quantizers[0].encoding)
 
         #  gamma (weight) quantizer of LayerNorm is enabled by default
         self.assertTrue(sim.model.ln1.param_quantizers['weight'].encoding)
@@ -341,10 +341,10 @@ class TestQuantizationSimTransformers(unittest.TestCase):
         #  check quantizer added to parameters of LayerNorm
         self.assertTrue(isinstance(sim.model.customln1.param_quantizers['weight'], StaticGridPerTensorQuantizer))
         self.assertTrue(isinstance(sim.model.customln1.param_quantizers['bias'], StaticGridPerTensorQuantizer))
-        self.assertTrue(isinstance(sim.model.customln1.input_quantizer, StaticGridPerTensorQuantizer))
+        self.assertTrue(isinstance(sim.model.customln1.input_quantizers[0], StaticGridPerTensorQuantizer))
 
         # input / output quantizers for layernorm
-        self.assertTrue(isinstance(sim.model.customln1.output_quantizer, StaticGridPerTensorQuantizer))
+        self.assertTrue(isinstance(sim.model.customln1.output_quantizers[0], StaticGridPerTensorQuantizer))
         self.assertTrue(isinstance(sim.model.customln1, StaticGridQuantWrapper))
 
         # validate config after compute encodings
@@ -352,9 +352,9 @@ class TestQuantizationSimTransformers(unittest.TestCase):
 
         # LayerNorm output quantization is enabled by default
         # override this with custom config (matches aic100_config.json)
-        self.assertTrue(sim.model.customln1.output_quantizer.encoding)
-        self.assertTrue(sim.model.customln1.output_quantizer.bitwidth == 8)
-        self.assertTrue(sim.model.gelu.output_quantizer.data_type == QuantizationDataType.int)
+        self.assertTrue(sim.model.customln1.output_quantizers[0].encoding)
+        self.assertTrue(sim.model.customln1.output_quantizers[0].bitwidth == 8)
+        self.assertTrue(sim.model.gelu.output_quantizers[0].data_type == QuantizationDataType.int)
 
         #  gamma (weight) quantizer of LayerNorm is enabled by default
         # override this with custom config (matches aic100_config.json)
@@ -366,9 +366,9 @@ class TestQuantizationSimTransformers(unittest.TestCase):
         self.assertIsNone(sim.model.customln1.param_quantizers['weight'].encoding)
         self.assertIsNone(sim.model.customln1.param_quantizers['bias'].encoding)
 
-        self.assertTrue(sim.model.gelu.output_quantizer.bitwidth == 8)
-        self.assertTrue(sim.model.gelu.output_quantizer.data_type == QuantizationDataType.int)
-        self.assertIsNotNone(sim.model.gelu.output_quantizer.encoding)
+        self.assertTrue(sim.model.gelu.output_quantizers[0].bitwidth == 8)
+        self.assertTrue(sim.model.gelu.output_quantizers[0].data_type == QuantizationDataType.int)
+        self.assertIsNotNone(sim.model.gelu.output_quantizers[0].encoding)
 
         # clear data dir that was used in this test
         qsim_config.ENFORCE_TARGET_DTYPE_BITWIDTH_CONFIG = False
@@ -559,11 +559,11 @@ class TestQuantizationSimTransformers(unittest.TestCase):
 
         # validate MHA layers have quantizers
         for i in range(num_encoder_layers):
-            self.assertTrue(sim.model.encoder.layers[i].self_attn.linear_Q.output_quantizer.encoding)
-            self.assertTrue(sim.model.encoder.layers[i].self_attn.linear_K.output_quantizer.encoding)
-            self.assertTrue(sim.model.encoder.layers[i].self_attn.linear_V.output_quantizer.encoding)
-            self.assertTrue(sim.model.encoder.layers[i].self_attn.matmul_1.output_quantizer.encoding)
-            self.assertTrue(sim.model.encoder.layers[i].self_attn.matmul_2.output_quantizer.encoding)
-            self.assertTrue(sim.model.encoder.layers[i].self_attn.softmax.output_quantizer.encoding)
+            self.assertTrue(sim.model.encoder.layers[i].self_attn.linear_Q.output_quantizers[0].encoding)
+            self.assertTrue(sim.model.encoder.layers[i].self_attn.linear_K.output_quantizers[0].encoding)
+            self.assertTrue(sim.model.encoder.layers[i].self_attn.linear_V.output_quantizers[0].encoding)
+            self.assertTrue(sim.model.encoder.layers[i].self_attn.matmul_1.output_quantizers[0].encoding)
+            self.assertTrue(sim.model.encoder.layers[i].self_attn.matmul_2.output_quantizers[0].encoding)
+            self.assertTrue(sim.model.encoder.layers[i].self_attn.softmax.output_quantizers[0].encoding)
 
 

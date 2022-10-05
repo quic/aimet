@@ -106,11 +106,11 @@ class TestQuantsimConfig:
             if isinstance(module, QcQuantizeWrapper):
                 # Output of add op is input quantized
                 if name == 'relu3':
-                    assert module.input_quantizer.enabled
+                    assert module.input_quantizers[0].enabled
                 else:
-                    assert not module.input_quantizer.enabled
+                    assert not module.input_quantizers[0].enabled
                 assert module.output_quantizers[0].enabled
-                assert not module.input_quantizer.use_symmetric_encodings
+                assert not module.input_quantizers[0].use_symmetric_encodings
                 assert not module.output_quantizers[0].use_symmetric_encodings
                 if module.param_quantizers:
                     for _, param_quantizer in module.param_quantizers.items():
@@ -293,17 +293,17 @@ class TestQuantsimConfig:
         for name, module in sim.model.named_modules():
             if isinstance(module, QcQuantizeWrapper):
                 if isinstance(module._module_to_wrap, torch.nn.Conv2d):
-                    assert module.input_quantizer.enabled
-                    assert not module.input_quantizer.use_symmetric_encodings
+                    assert module.input_quantizers[0].enabled
+                    assert not module.input_quantizers[0].use_symmetric_encodings
                     assert not module.output_quantizers[0].use_symmetric_encodings
                 else:
                     # Output of add op is input quantized
                     if name == 'relu3':
-                        assert module.input_quantizer.enabled
+                        assert module.input_quantizers[0].enabled
                     else:
-                        assert not module.input_quantizer.enabled
+                        assert not module.input_quantizers[0].enabled
                     assert module.output_quantizers[0].enabled
-                    assert not module.input_quantizer.use_symmetric_encodings
+                    assert not module.input_quantizers[0].use_symmetric_encodings
                     assert not module.output_quantizers[0].use_symmetric_encodings
                 if module.param_quantizers:
                     for param_name, param_quantizer in module.param_quantizers.items():
@@ -563,14 +563,14 @@ class TestQuantsimConfig:
                     assert not module.output_quantizers[0].enabled
                 # Check configs for middle ops in supergroups
                 elif module == model.relu3:
-                    assert not module.input_quantizer.enabled
+                    assert not module.input_quantizers[0].enabled
                     assert not module.output_quantizers[0].enabled
                 # Check configs for ends of supergroups
                 elif module in [model.bn1, model.maxpool, model.bn2, model.avgpool, model.relu2]:
-                    assert not module.input_quantizer.enabled
+                    assert not module.input_quantizers[0].enabled
                     assert module.output_quantizers[0].enabled
                 else:
-                    assert not module.input_quantizer.enabled
+                    assert not module.input_quantizers[0].enabled
                     assert module.output_quantizers[0].enabled
 
         if os.path.exists('./data/quantsim_config.json'):
@@ -608,7 +608,7 @@ class TestQuantsimConfig:
                     assert module.output_quantizers[0].enabled
                 else:
                     assert not module.output_quantizers[0].enabled
-                assert not module.input_quantizer.enabled
+                assert not module.input_quantizers[0].enabled
         if os.path.exists('./data/quantsim_config.json'):
             os.remove('./data/quantsim_config.json')
 
@@ -639,11 +639,11 @@ class TestQuantsimConfig:
             if isinstance(module, QcQuantizeWrapper):
                 # Output of add op is input quantized
                 if name in ('conv1', 'conv3'):
-                    assert module.input_quantizer.enabled
+                    assert module.input_quantizers[0].enabled
                 else:
-                    assert not module.input_quantizer.enabled
+                    assert not module.input_quantizers[0].enabled
                 assert not module.output_quantizers[0].enabled
-                assert not module.input_quantizer.use_symmetric_encodings
+                assert not module.input_quantizers[0].use_symmetric_encodings
                 assert not module.output_quantizers[0].use_symmetric_encodings
 
         if os.path.exists('./data/quantsim_config.json'):
@@ -678,7 +678,7 @@ class TestQuantsimConfig:
                     assert module.output_quantizers[0].enabled
                 else:
                     assert not module.output_quantizers[0].enabled
-                assert not module.input_quantizer.enabled
+                assert not module.input_quantizers[0].enabled
         if os.path.exists('./data/quantsim_config.json'):
             os.remove('./data/quantsim_config.json')
 
@@ -715,7 +715,7 @@ class TestQuantsimConfig:
                 # Check configs for starts of supergroups
                 if module == model.relu3:
                     # If add were not part of the supergroup, relu's input quantizer would be enabled
-                    assert not module.input_quantizer.enabled
+                    assert not module.input_quantizers[0].enabled
 
         if os.path.exists('./data/quantsim_config.json'):
             os.remove('./data/quantsim_config.json')
@@ -753,10 +753,10 @@ class TestQuantsimConfig:
                 # Check configs for starts of supergroups
                 if module == model.add:
                     # If add were not part of the supergroup, relu's input quantizer would be enabled
-                    assert not module.output_quantizer.enabled
+                    assert not module.output_quantizers[0].enabled
                 else:
-                    assert module.output_quantizer.enabled
-                assert not module.input_quantizer.enabled
+                    assert module.output_quantizers[0].enabled
+                assert not module.input_quantizers[0].enabled
 
         if os.path.exists('./data/quantsim_config.json'):
             os.remove('./data/quantsim_config.json')
@@ -847,11 +847,11 @@ class TestQuantsimConfig:
             if isinstance(module, QcQuantizeWrapper):
                 # Output of add op is input quantized
                 if name == 'relu3':
-                    assert module.input_quantizer.enabled
+                    assert module.input_quantizers[0].enabled
                 else:
-                    assert not module.input_quantizer.enabled
+                    assert not module.input_quantizers[0].enabled
                 assert module.output_quantizers[0].enabled
-                assert not module.input_quantizer.use_symmetric_encodings
+                assert not module.input_quantizers[0].use_symmetric_encodings
                 assert not module.output_quantizers[0].use_symmetric_encodings
                 if module.param_quantizers:
                     for _, param_quantizer in module.param_quantizers.items():
@@ -949,9 +949,9 @@ class TestQuantsimConfig:
 
         # LayerNorm input quantization is disabled by default
         # override with custom config file, this needs appropriate entry in onnx node name mapping
-        assert(isinstance(sim.model.ln1.input_quantizer, StaticGridPerTensorQuantizer))
-        assert(sim.model.ln1.input_quantizer.encoding)
-        in_quantizer = sim.model.ln1.input_quantizer
+        assert(isinstance(sim.model.ln1.input_quantizers[0], StaticGridPerTensorQuantizer))
+        assert(sim.model.ln1.input_quantizers[0].encoding)
+        in_quantizer = sim.model.ln1.input_quantizers[0]
         assert(in_quantizer.enabled)  # disabled by default, override with config file
         assert(in_quantizer.round_mode == libpymo.RoundingMode.ROUND_NEAREST)
         assert(in_quantizer.quant_scheme == QuantScheme.post_training_tf)
@@ -960,9 +960,9 @@ class TestQuantsimConfig:
 
         # GELU input quantization is disabled by default
         # override with custom config file, this needs appropriate entry in onnx node name mapping
-        assert(isinstance(sim.model.gelu1.input_quantizer, StaticGridPerTensorQuantizer))
-        assert(sim.model.gelu1.input_quantizer.encoding)
-        in_quantizer = sim.model.gelu1.input_quantizer
+        assert(isinstance(sim.model.gelu1.input_quantizers[0], StaticGridPerTensorQuantizer))
+        assert(sim.model.gelu1.input_quantizers[0].encoding)
+        in_quantizer = sim.model.gelu1.input_quantizers[0]
         assert(in_quantizer.enabled)  # disabled by default, override with config file
         assert(in_quantizer.round_mode == libpymo.RoundingMode.ROUND_NEAREST)
         assert(in_quantizer.quant_scheme == QuantScheme.post_training_tf)
@@ -1980,8 +1980,8 @@ class TestQuantsimConfig:
 
         # enforce is set to true
         # LayerNorm params should be set to FP 16, while output is maintained at quantsim defaults (int8)
-        assert(sim.model.customln1.output_quantizer.data_type == QuantizationDataType.int)
-        assert(sim.model.customln1.output_quantizer.bitwidth == 8)
+        assert(sim.model.customln1.output_quantizers[0].data_type == QuantizationDataType.int)
+        assert(sim.model.customln1.output_quantizers[0].bitwidth == 8)
 
         # override this with custom config (matches aic100_config.json)
         assert(sim.model.customln1.param_quantizers['weight'].data_type == QuantizationDataType.float)
@@ -1989,8 +1989,8 @@ class TestQuantsimConfig:
 
         # gelu output should be retained at quantsim defaults (int8) although it has supported_kernels = FP16
         # as this op doesn't have params
-        assert(sim.model.gelu1.output_quantizer.data_type == QuantizationDataType.int)
-        assert(sim.model.gelu1.output_quantizer.bitwidth == 8)
+        assert(sim.model.gelu1.output_quantizers[0].data_type == QuantizationDataType.int)
+        assert(sim.model.gelu1.output_quantizers[0].bitwidth == 8)
 
         # remove test config created
         qsim_config.ENFORCE_TARGET_DTYPE_BITWIDTH_CONFIG = False
