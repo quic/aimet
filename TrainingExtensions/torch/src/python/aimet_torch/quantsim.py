@@ -573,7 +573,8 @@ class QuantizationSimModel:
             assert isinstance(mask_add_quantizer_wrapper, StaticGridQuantWrapper)
 
             # clamping needs to be done only if data type is int
-            if mask_add_quantizer_wrapper.output_quantizer.data_type == QuantizationDataType.int:
+            if mask_add_quantizer_wrapper.output_quantizers and \
+                    mask_add_quantizer_wrapper.output_quantizers[0].data_type == QuantizationDataType.int:
 
                 module_to_quantize = mask_add_quantizer_wrapper._module_to_wrap
 
@@ -582,11 +583,11 @@ class QuantizationSimModel:
                 # Add a quantizer set to tf mode and bw to 16 and copy over remaining attributes
                 # we need 16 bit to retain the max representation for this quantizer.
                 quantized_module = quantizer_wrapper_type(module_to_quantize, 16, 16,
-                                                          MAP_PYMO_TO_ROUND_MODE[mask_add_quantizer_wrapper.output_quantizer.round_mode],
+                                                          MAP_PYMO_TO_ROUND_MODE[mask_add_quantizer_wrapper.output_quantizers[0].round_mode],
                                                           QuantScheme.post_training_tf,
                                                           num_inputs=len(mask_add_quantizer_wrapper.input_quantizers),
                                                           num_outputs=len(mask_add_quantizer_wrapper.output_quantizers),
-                                                          data_type=mask_add_quantizer_wrapper.output_quantizer.data_type)
+                                                          data_type=mask_add_quantizer_wrapper.output_quantizers[0].data_type)
 
                 setattr(attention_head, mask_add_name, quantized_module)
 
@@ -603,8 +604,8 @@ class QuantizationSimModel:
             # we check if quantizer is enabled and data type is set to int before clamping
             # clamping is not necessary for FP16 mode.
             assert isinstance(mask_add_quantizer_wrapper, StaticGridQuantWrapper)
-            if mask_add_quantizer_wrapper.output_quantizer.enabled and \
-                    mask_add_quantizer_wrapper.output_quantizer.data_type == QuantizationDataType.int:
+            if mask_add_quantizer_wrapper.output_quantizers and mask_add_quantizer_wrapper.output_quantizers[0].enabled \
+                    and mask_add_quantizer_wrapper.output_quantizers[0].data_type == QuantizationDataType.int:
                 for output_quantizer in mask_add_quantizer_wrapper.output_quantizers:
                     # get the min/max from accumulated stats associated with this quantizer
                     if output_quantizer.is_encoding_frozen:
@@ -623,7 +624,7 @@ class QuantizationSimModel:
 
                     # update encoding of this quantizer
                     output_quantizer.encoding = clamped_encoding
-                    mask_add_quantizer_wrapper.output_quantizer.freeze_encoding()
+                    output_quantizer.freeze_encoding()
             else:
                 logger.debug("Skipping clamp on %s. Quantizer is disabled or not int type",
                              mask_add_quantizer_wrapper)
