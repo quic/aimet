@@ -37,6 +37,7 @@
 # =============================================================================
 
 """ Common Utilities for tf 2 keras """
+import errno
 import os
 import typing
 import tensorflow as tf
@@ -521,8 +522,19 @@ def convert_h5_model_to_pb_model(h5_model_path: str, custom_objects: dict = None
     :param custom_objects: If there are custom objects to load, Keras needs to return a list of them
     :return: A set of all weight names. This is mainly for testing purposes.
     """
-    model_name = h5_model_path.split('/')[-1].split('.')[0] + '_converted.pb'
-    save_path = '/'.join(h5_model_path.split('/')[:-1]) if '/' in h5_model_path else os.getcwd()
+
+    # Function for validating if the file exist and is a h5
+    def validate_model_path() -> typing.Tuple[str, str]:
+        if not os.path.exists(h5_model_path):
+            raise FileNotFoundError(errno.ENOENT, os.strerror(errno.ENOENT), h5_model_path)
+
+        model_name_split = os.path.basename(h5_model_path).split('.')
+        if model_name_split[1] != 'h5':
+            raise ValueError("File must be a h5 model.")
+
+        model_name = model_name_split[0] + '_converted.pb'
+        save_path = os.path.dirname(h5_model_path)
+        return model_name, save_path
 
     def freeze_session(session, output_names=None):
         graph = session.graph
@@ -540,6 +552,7 @@ def convert_h5_model_to_pb_model(h5_model_path: str, custom_objects: dict = None
                 session, input_graph_def, output_names)
             return frozen_graph
 
+    model_name, save_path = validate_model_path()
     with tf.compat.v1.Graph().as_default():
         with tf.compat.v1.Session() as sess:
             # Grab the session and set the learning phase to test to remove training nodes
