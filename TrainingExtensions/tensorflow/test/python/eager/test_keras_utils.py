@@ -39,6 +39,7 @@
 """ Unit tests for keras utils """
 import json
 import os
+import tempfile
 
 import pytest
 import numpy as np
@@ -306,6 +307,17 @@ def check_conversion_tensor_names(model, custom_objects=None):
     # Check to see if all the original weight names can be found in the converted pb model
     missing_weight_names = original_weight_names.difference(converted_weight_names)
     assert not missing_weight_names, f"Weight name(s): {missing_weight_names} are missing"
+
+
+def test_convert_h5_to_pb_file_does_not_exist():
+    with pytest.raises(FileNotFoundError) as _:
+        convert_h5_model_to_pb_model('NA_FILE.h5')
+
+
+def test_convert_h5_to_pb_not_h5_file():
+    incorrect_filename = tempfile.NamedTemporaryFile(suffix='.pb', delete=True)
+    with pytest.raises(ValueError) as _:
+        convert_h5_model_to_pb_model(incorrect_filename.name)
 
 
 def test_convert_h5_to_pb_functional_model():
