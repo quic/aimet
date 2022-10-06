@@ -48,7 +48,7 @@ from aimet_tensorflow.keras.quant_sim.tensor_quantizer import ActivationTensorQu
 from aimet_tensorflow.keras.utils.common import is_lambda_operator
 
 _logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Quant)
-ALLOWED_FLOAT_DTYPES = [tf.float16, tf.float32, tf.float64, tf.bfloat16]
+ALLOWED_FLOAT_DTYPES = [tf.float32, tf.float64]
 
 class QuantizerSettings:
     """ Class holding quantizer settings """
