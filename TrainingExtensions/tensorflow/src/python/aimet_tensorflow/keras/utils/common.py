@@ -515,12 +515,11 @@ def log_param_quantizer_wrapper_details(layer, axis_handling=None, num_output_ch
                       axis_handling, num_output_channels)
 
 
-def convert_h5_model_to_pb_model(h5_model_path: str, custom_objects: dict = None) -> set:
+def convert_h5_model_to_pb_model(h5_model_path: str, custom_objects: dict = None):
     """
-    This utility function converts a h5_model from Keras into a frozen pb for consumption by SNPE and QNN
+    This utility function converts a h5_model from Keras into a frozen pb for consumption by SNPE/QNN
     :param h5_model_path: Path to the saved h5 Keras Model
-    :param custom_objects: If there are custom objects to load, Keras needs to return a list of them
-    :return: A set of all weight names. This is mainly for testing purposes.
+    :param custom_objects: If there are custom objects to load, Keras needs a dict of them to map them
     """
 
     # Function for validating if the file exist and is a h5
@@ -534,9 +533,10 @@ def convert_h5_model_to_pb_model(h5_model_path: str, custom_objects: dict = None
 
         model_name = model_name_split[0] + '_converted.pb'
         save_path = os.path.dirname(h5_model_path)
-        return model_name, save_path
 
-    def freeze_session(session, output_names=None):
+        return model_name, save_path if save_path else os.getcwd()
+
+    def freeze_session(session, output_names):
         graph = session.graph
         with graph.as_default():
             output_names += [v.op.name for v in tf.compat.v1.global_variables()]
@@ -559,20 +559,19 @@ def convert_h5_model_to_pb_model(h5_model_path: str, custom_objects: dict = None
             tf.compat.v1.keras.backend.get_session(sess)
             tf.compat.v1.keras.backend.set_learning_phase(0)
 
-            # Try and load model. If there are custom objects, the use is notified with an exception.
+            # Try and load model. If there are custom objects, then user is logged how to pass custom objects and
+            # raises again with the stacktrace.
             try:
                 model = tf.keras.models.load_model(h5_model_path,
                                                    custom_objects=custom_objects,
                                                    compile=False)
-            except ValueError as msg:
-                error_msg = msg.args[0] + ". If using custom layers, pass a dict mapping them. " \
-                                          "For example, {'CustomerLayer': CustomLayer}"
-                raise ValueError(error_msg)
+            except ValueError:
+                _logger.error("If using custom layers, pass a dict mapping them. "
+                              "For example, {'CustomLayer': CustomLayer}")
+                raise
 
             frozen_graph = freeze_session(tf.compat.v1.keras.backend.get_session(),
-                                          output_names=[out.op.name for out in model.outputs])
+                                          [out.op.name for out in model.outputs])
             tf.io.write_graph(frozen_graph, save_path, model_name, as_text=False)
 
             _logger.info("Success. The converted model is located at %s saved as %s", save_path, model_name)
-
-            return {node.name for node in frozen_graph.node}
