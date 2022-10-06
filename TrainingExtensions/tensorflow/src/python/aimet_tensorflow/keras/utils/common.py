@@ -37,10 +37,11 @@
 # =============================================================================
 
 """ Common Utilities for tf 2 keras """
-
+import os
 import typing
-
 import tensorflow as tf
+from tensorflow.python.framework.convert_to_constants import convert_variables_to_constants_from_session_graph
+
 from aimet_common.utils import AimetLogger
 from aimet_tensorflow.defs import AxisHandling
 
@@ -49,6 +50,7 @@ _logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Quant)
 lambda_operators = ['__operators__.add', 'math.multiply', 'math.truediv', 'math.subtract']
 per_channel_quantizeable_layers = (tf.keras.layers.Conv2D, tf.keras.layers.Conv2DTranspose,
                                    tf.keras.layers.DepthwiseConv2D, tf.keras.layers.SeparableConv2D)
+
 
 
 def is_lambda_operator(layer: tf.keras.layers.Layer) -> bool:
@@ -510,3 +512,54 @@ def log_param_quantizer_wrapper_details(layer, axis_handling=None, num_output_ch
                       "Axis: %d\n"
                       "Number of Output Channels: %d", layer,
                       axis_handling, num_output_channels)
+
+
+def convert_h5_model_to_pb_model(h5_model_path: str, custom_objects: dict = None) -> set:
+    """
+    This utility function converts a h5_model from Keras into a frozen pb for consumption by SNPE and QNN
+    :param h5_model_path: Path to the saved h5 Keras Model
+    :param custom_objects: If there are custom objects to load, Keras needs to return a list of them
+    :return: A set of all weight names. This is mainly for testing purposes.
+    """
+    model_name = h5_model_path.split('/')[-1].split('.')[0] + '_converted.pb'
+    save_path = '/'.join(h5_model_path.split('/')[:-1]) if '/' in h5_model_path else os.getcwd()
+
+    def freeze_session(session, output_names=None):
+        graph = session.graph
+        with graph.as_default():
+            output_names += [v.op.name for v in tf.compat.v1.global_variables()]
+            input_graph_def = graph.as_graph_def()
+
+            # Unset all nodes device
+            for node in input_graph_def.node:
+                node.device = ""
+
+            # Take session and output names to a frozen graph. Also converting training specific ops
+            # to testing ops i.e. Identities
+            frozen_graph = convert_variables_to_constants_from_session_graph(
+                session, input_graph_def, output_names)
+            return frozen_graph
+
+    with tf.compat.v1.Graph().as_default():
+        with tf.compat.v1.Session() as sess:
+            # Grab the session and set the learning phase to test to remove training nodes
+            tf.compat.v1.keras.backend.get_session(sess)
+            tf.compat.v1.keras.backend.set_learning_phase(0)
+
+            # Try and load model. If there are custom objects, the use is notified with an exception.
+            try:
+                model = tf.keras.models.load_model(h5_model_path,
+                                                   custom_objects=custom_objects,
+                                                   compile=False)
+            except ValueError as msg:
+                error_msg = msg.args[0] + ". If using custom layers, pass a dict mapping them. " \
+                                          "For example, {'CustomerLayer': CustomLayer}"
+                raise ValueError(error_msg)
+
+            frozen_graph = freeze_session(tf.compat.v1.keras.backend.get_session(),
+                                          output_names=[out.op.name for out in model.outputs])
+            tf.io.write_graph(frozen_graph, save_path, model_name, as_text=False)
+
+            _logger.info("Success. The converted model is located at %s saved as %s", save_path, model_name)
+
+            return {node.name for node in frozen_graph.node}

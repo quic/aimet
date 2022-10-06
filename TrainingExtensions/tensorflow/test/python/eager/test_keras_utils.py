@@ -3,7 +3,7 @@
 # =============================================================================
 #  @@-COPYRIGHT-START-@@
 #
-#  Copyright (c) 2021, Qualcomm Innovation Center, Inc. All rights reserved.
+#  Copyright (c) 2021-2022, Qualcomm Innovation Center, Inc. All rights reserved.
 #
 #  Redistribution and use in source and binary forms, with or without
 #  modification, are permitted provided that the following conditions are met:
@@ -37,12 +37,71 @@
 # =============================================================================
 
 """ Unit tests for keras utils """
-
+import json
 import os
+
+import pytest
 import numpy as np
-os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 import tensorflow as tf
+
+from aimet_tensorflow.keras.quantsim import QuantizationSimModel
+from aimet_tensorflow.keras.utils.common import convert_h5_model_to_pb_model
 from aimet_tensorflow.keras.utils.common import replace_layer_in_functional_model
+
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
+
+
+def conv_functional():
+    input_shape = (128, 28, 28, 1)
+    inp = tf.keras.Input(shape=input_shape[1:])
+    x = tf.keras.layers.Conv2D(32, kernel_size=(3, 3), activation="relu")(inp)
+    x = tf.keras.layers.Conv2DTranspose(32, kernel_size=(3, 3), activation="relu")(x)
+    x = tf.keras.layers.DepthwiseConv2D(depth_multiplier=1, kernel_size=(3, 3), activation='relu')(x)
+    x = tf.keras.layers.Flatten()(x)
+    x = tf.keras.layers.Dropout(0.5, trainable=False)(x)
+    x = tf.keras.layers.Dense(10, activation="softmax")(x)
+
+    model = tf.keras.Model(inputs=inp, outputs=x, name='conv_functional')
+    return model
+
+
+# Not used for testing at the moment. This is a condensed version of a model structure seen during the September 2022
+# Samsung OnSite that will be used for future testing.
+class ConvTimesThree(tf.keras.layers.Layer):
+    def __init__(self, **kwargs):
+        super(ConvTimesThree, self).__init__(**kwargs)
+        self.conv = tf.keras.layers.Conv2D(32,
+                                           kernel_size=(3, 3),
+                                           activation='relu',
+                                           name='class_conv')
+        self.conv_transpose = tf.keras.layers.Conv2DTranspose(64,
+                                                              kernel_size=(3, 3),
+                                                              activation='relu',
+                                                              name='class_conv_transpose')
+        self.depth_conv = tf.keras.layers.DepthwiseConv2D(depth_multiplier=1,
+                                                          kernel_size=(3, 3),
+                                                          activation='relu',
+                                                          name='class_conv_depth')
+
+    def call(self, x):
+        x = self.conv(x)
+        x = self.conv_transpose(x)
+        x = self.depth_conv(x)
+        return x
+
+
+# See comment above ConvTimesThree Class
+def conv_sub_class():
+    input_shape = (128, 28, 28, 1)
+    inp = tf.keras.Input(shape=input_shape[1:])
+    x = ConvTimesThree()(inp)
+    x = tf.keras.layers.Flatten()(x)
+    x = tf.keras.layers.Dropout(0.5)(x, training=False)
+    x = tf.keras.layers.Dense(10, activation="softmax")(x)
+
+    model = tf.keras.Model(inputs=inp, outputs=x, name='conv_classes')
+    return model
+
 
 def test_replace_middle_layers():
     # Create model
@@ -56,7 +115,8 @@ def test_replace_middle_layers():
     _ = model.predict(test_inp)
 
     # Define new layers to substitute for old layer
-    new_layers = [tf.keras.layers.Dense(units=4), tf.keras.layers.Dense(units=2, kernel_initializer=tf.keras.initializers.Constant(5.))]
+    new_layers = [tf.keras.layers.Dense(units=4),
+                  tf.keras.layers.Dense(units=2, kernel_initializer=tf.keras.initializers.Constant(5.))]
     old_dense = model.layers[2]
 
     replace_layer_in_functional_model(model, old_dense, new_layers)
@@ -81,6 +141,7 @@ def test_replace_middle_layers():
     assert new_model.layers[3].weights[0].shape == [4, 2]
     assert new_model.layers[3].weights[0][0][0] == 5.
 
+
 def test_replace_output_layer():
     inp = tf.keras.layers.Input(shape=(2,))
     x = tf.keras.layers.Dense(units=1)(inp)
@@ -98,6 +159,7 @@ def test_replace_output_layer():
 
     out = new_model(test_inp)
     assert out.shape == [1, 3]
+
 
 def test_replace_multi_input_layer():
     inp = tf.keras.layers.Input(shape=(2,))
@@ -117,6 +179,7 @@ def test_replace_multi_input_layer():
 
     out = new_model([test_inp, test_inp2])
     assert np.array_equal(out, np.array([[-1, -1]]))
+
 
 def test_replace_layer_with_multiple_children():
     inp = tf.keras.layers.Input(shape=(2,))
@@ -142,6 +205,7 @@ def test_replace_layer_with_multiple_children():
     assert not new_model.layers[4].inbound_nodes
     assert not new_model.layers[4].outbound_nodes
 
+
 def test_replace_layer_in_internal_model():
     inp = tf.keras.layers.Input(shape=(2,))
     out = tf.keras.layers.PReLU(alpha_initializer='ones')(inp)
@@ -163,3 +227,101 @@ def test_replace_layer_in_internal_model():
 
     out = new_model.predict(test_inp)
     assert np.array_equal(np.array([[0., 0.]]), out)
+
+
+def check_conversion_tensor_names(model, custom_objects=None):
+    """
+    Driving function for testing conversion script. Takes a model as input to run QuantSim on and then convert the
+    exported h5 model to a frozen pb model for SNPE/QNN consumtion. This function checks if the h5 and the pb weight
+    names are valid.
+    :param model:
+    :param custom_objects:
+    :return:
+    """
+
+    quantsim_config = {
+        "defaults": {
+            "ops": {
+                "is_output_quantized": "True"
+            },
+            "params": {
+                "is_symmetric": "True",
+                "is_quantized": "True"
+            },
+            "per_channel_quantization": "False",
+        },
+        "params": {},
+        "op_type": {
+            "Conv": {
+                "is_input_quantized": "True",
+                "is_output_quantized": "True"
+            },
+            "ConvTranspose": {
+                "is_input_quantized": "True",
+                "is_output_quantized": "True"
+            },
+            "Gemm": {
+                "is_input_quantized": "True",
+                "is_output_quantized": "True"
+            },
+            "MatMul": {
+                "is_input_quantized": "True",
+                "is_output_quantized": "True"
+            },
+            "MaxPooling2D": {
+                "is_input_quantized": "True",
+                "is_output_quantized": "True"
+            }
+        },
+        "supergroups": [],
+        "model_input": {},
+        "model_output": {
+            "is_output_quantized": "True"
+        }
+    }
+
+    with open('./config.json', 'w') as f:
+        json.dump(quantsim_config, f)
+
+    random_input_data = tf.random.normal(shape=(128, *model.input_shape[1:]))
+    # run forward pass on dense to generate weights
+    _ = model(random_input_data)
+
+    sim = QuantizationSimModel(model, quant_scheme='tf', config_file='./config.json')
+    sim.compute_encodings(lambda m, _: m.predict(random_input_data), None)
+    sim.export('./tmp', model.name)
+
+    # Get all encodings names (param_encodings and activation encodings) and put their respective keys
+    # (which represent the weights names) into a set for fast checking.
+    encodings = sim.get_encodings_dict()
+    encoding_weight_names = {*encodings['param_encodings'].keys(), *encodings['activation_encodings'].keys()}
+    original_weight_names = {
+        weight_name.split(':')[0]
+        for weight_name in encoding_weight_names
+    }
+
+    # Convert h5 model that was exported from QuantSim to a pb model to be used with encodings that were exported
+    converted_weight_names = convert_h5_model_to_pb_model(f'./tmp/{model.name}.h5', custom_objects=custom_objects)
+
+    # Check to see if all the original weight names can be found in the converted pb model
+    missing_weight_names = original_weight_names.difference(converted_weight_names)
+    assert not missing_weight_names, f"Weight name(s): {missing_weight_names} are missing"
+
+
+def test_convert_h5_to_pb_functional_model():
+    tf.keras.backend.clear_session()
+    check_conversion_tensor_names(conv_functional())
+
+
+@pytest.mark.skip(
+    reason="Subclassed Keras models are not currently supported. "
+           "Created to mimic a model seen during September 2022 SS OnSite")
+def test_convert_h5_to_pb_subclass_model():
+    check_conversion_tensor_names(conv_sub_class())
+
+
+@pytest.mark.skip(reason="This test takes a long time. Only used during development.")
+def test_convert_h5_to_pb_pretrained_keras():
+    model = tf.keras.applications.ResNet50(weights="imagenet",
+                                           input_shape=(224, 224, 3))
+    check_conversion_tensor_names(model)
