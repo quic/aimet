@@ -44,6 +44,7 @@ import tempfile
 import pytest
 import numpy as np
 import tensorflow as tf
+from tensorflow.python.platform import gfile
 
 from aimet_tensorflow.keras.quantsim import QuantizationSimModel
 from aimet_tensorflow.keras.utils.common import convert_h5_model_to_pb_model
@@ -239,6 +240,24 @@ def check_conversion_tensor_names(model, custom_objects=None):
     :param custom_objects:
     :return:
     """
+    tf.keras.backend.clear_session()
+
+    def get_converted_models_weight_names(converted_model_path) -> set:
+        """
+        Helper function to read a converted pb model and return all the weight names
+        :param converted_model_path: path to the converted model
+        :return: a set of the weight names
+        """
+        converted_weight_names = set()
+        with tf.compat.v1.Session() as persisted_sess:
+            with gfile.FastGFile(converted_model_path, 'rb') as f:
+                graph_def = tf.compat.v1.GraphDef()
+                graph_def.ParseFromString(f.read())
+                persisted_sess.graph.as_default()
+                tf.import_graph_def(graph_def, name='')
+                for op in persisted_sess.graph.get_operations():
+                    converted_weight_names.add(op.name)
+        return converted_weight_names
 
     quantsim_config = {
         "defaults": {
@@ -290,6 +309,7 @@ def check_conversion_tensor_names(model, custom_objects=None):
 
     sim = QuantizationSimModel(model, quant_scheme='tf', config_file='./config.json')
     sim.compute_encodings(lambda m, _: m.predict(random_input_data), None)
+    # convert_h5_model_to_pb_model is called during export.
     sim.export('./tmp', model.name)
 
     # Get all encodings names (param_encodings and activation encodings) and put their respective keys
@@ -302,7 +322,7 @@ def check_conversion_tensor_names(model, custom_objects=None):
     }
 
     # Convert h5 model that was exported from QuantSim to a pb model to be used with encodings that were exported
-    converted_weight_names = convert_h5_model_to_pb_model(f'./tmp/{model.name}.h5', custom_objects=custom_objects)
+    converted_weight_names = get_converted_models_weight_names(f'./tmp/{model.name}_converted.pb')
 
     # Check to see if all the original weight names can be found in the converted pb model
     missing_weight_names = original_weight_names.difference(converted_weight_names)
@@ -310,18 +330,17 @@ def check_conversion_tensor_names(model, custom_objects=None):
 
 
 def test_convert_h5_to_pb_file_does_not_exist():
-    with pytest.raises(FileNotFoundError) as _:
+    with pytest.raises(FileNotFoundError):
         convert_h5_model_to_pb_model('NA_FILE.h5')
 
 
 def test_convert_h5_to_pb_not_h5_file():
     incorrect_filename = tempfile.NamedTemporaryFile(suffix='.pb', delete=True)
-    with pytest.raises(ValueError) as _:
+    with pytest.raises(ValueError):
         convert_h5_model_to_pb_model(incorrect_filename.name)
 
 
 def test_convert_h5_to_pb_functional_model():
-    tf.keras.backend.clear_session()
     check_conversion_tensor_names(conv_functional())
 
 
