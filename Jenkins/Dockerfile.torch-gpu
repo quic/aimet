@@ -145,7 +145,7 @@ RUN python3 -m pip --no-cache-dir install \
         blosc==1.10.1 \
         cffi==1.12.3 \
         click \
-        cumm==0.2.8 \
+        cumm-cu111==0.2.8 \
         cython==0.29.12 \
         dataclasses \
         Deprecated \
