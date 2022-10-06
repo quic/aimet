@@ -232,7 +232,7 @@ RUN sed 's@session\s*required\s*pam_loginuid.so@session optional pam_loginuid.so
 # Clone the tensorflow repo to enable development
 RUN cd / && git clone --depth 1 --single-branch --branch v2.4.3 https://github.com/tensorflow/tensorflow.git
 
-RUN python3 -m pip install git-pylint-commit-hook osqp
+RUN python3 -m pip install git-pylint-commit-hook osqp onnx
 
 # NOTE: We need to pin the holoviews version to this since the latest version has a circular dependency on bokeh 2.0.0 through the panel package
 RUN python3 -m pip install holoviews==1.12.7 netron jsonschema pandas==1.4.3
