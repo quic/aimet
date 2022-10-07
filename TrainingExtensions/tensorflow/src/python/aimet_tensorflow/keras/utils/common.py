@@ -42,6 +42,7 @@ import os
 import typing
 import tensorflow as tf
 from tensorflow.python.framework.convert_to_constants import convert_variables_to_constants_from_session_graph
+from tensorflow.python.framework.graph_util_impl import remove_training_nodes
 
 from aimet_common.utils import AimetLogger
 from aimet_tensorflow.defs import AxisHandling
@@ -550,7 +551,8 @@ def convert_h5_model_to_pb_model(h5_model_path: str, custom_objects: dict = None
             # to testing ops i.e. Identities
             frozen_graph = convert_variables_to_constants_from_session_graph(
                 session, input_graph_def, output_names)
-            return frozen_graph
+            frozen_graph = remove_training_nodes(frozen_graph)
+        return frozen_graph
 
     model_name, save_path = validate_model_path()
     with tf.compat.v1.Graph().as_default():
