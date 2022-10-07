@@ -616,17 +616,18 @@ class StaticGridQuantWrapper(QcQuantizeWrapper):
         :return: Quantized output from the wrapped module
         """
 
-        outputs = []
-        for index, input_tensor in enumerate(tensors_to_quantize):
-            assert len(tensor_quantizers) > index, \
-                f"Not enough tensor quantizers ({len(tensor_quantizers)}) allocated"
+        def inner_quantization(input_tensor, index):
+            if isinstance(input_tensor, (List, Tuple)):
+                inner_outputs = []
+                for inner_input in input_tensor:
+                    inner_outputs.append(inner_quantization(inner_input, index))
+                return inner_outputs
 
-            if isinstance(input_tensor, utils.dtypes_to_ignore_for_quantization) or\
-                    input_tensor.dtype in utils.torch_dtypes_to_ignore_for_quantization or\
+            if isinstance(input_tensor, utils.dtypes_to_ignore_for_quantization) or \
+                    input_tensor.dtype in utils.torch_dtypes_to_ignore_for_quantization or \
                     not tensor_quantizers[index].enabled:
                 # Do not quantize tensors of integer or bool data type or if the quantizer is disabled.
-                outputs.append(input_tensor)
-                continue
+                return input_tensor
 
             if not isinstance(input_tensor, torch.Tensor):
                 error_msg = f'Expecting quantize activation input of type torch.Tensor but got {type(input_tensor)}'
@@ -657,7 +658,14 @@ class StaticGridQuantWrapper(QcQuantizeWrapper):
             else:
                 output = input_tensor
 
-            outputs.append(output)
+            return output
+
+        outputs = []
+        for index, input_tensor in enumerate(tensors_to_quantize):
+            assert len(tensor_quantizers) > index, \
+                f"Not enough tensor quantizers ({len(tensor_quantizers)}) allocated"
+
+            outputs.append(inner_quantization(input_tensor, index))
 
         return outputs
 
