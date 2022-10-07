@@ -2227,6 +2227,32 @@ class TestQuantizationSimStaticGrad:
 
         del sim
 
+    def test_nested_input(self):
+        class Model(nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.add = elementwise_ops.Add()
+
+            def forward(self, x, y):
+                return self.add(x, y)
+
+        model = Model()
+
+        length = 8
+        shape = (256, 256)
+        inputs_a = [torch.rand(shape) for _ in range(length)]
+        inputs_b = [torch.rand(shape) for _ in range(length)]
+
+        sim = QuantizationSimModel(model, (inputs_a, inputs_b))
+
+        def forward_pass(model, args):
+            model.eval()
+            model(inputs_a, inputs_b)
+        sim.compute_encodings(forward_pass, None)
+
+        assert sim.model.add.input_quantizers[0].encoding is not None
+        assert sim.model.add.input_quantizers[1].encoding is not None
+
 
 class TestQuantizationSimLearnedGrid:
 
