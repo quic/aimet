@@ -69,7 +69,7 @@ Follow these instructions to build the AIMET code:
 
 > NOTE: **If you are inside the docker, set `WORKSPACE="<absolute_path_to_workspace>"` again.**
 ```bash
-cd $WORKSPACE 
+cd $WORKSPACE/aimet 
 mkdir build && cd build
 
 # Run cmake (be sure to set the flags in the below command depending on your variant)
@@ -83,28 +83,28 @@ make -j8
 
 After a successful build, install the package using the following instructions:
 ```bash
-cd $WORKSPACE/build
+cd $WORKSPACE/aimet/build
 make install
 ```
-Once the installation step is complete, the AIMET package is created at `$WORKSPACE/build/staging/universal/lib/`.
+Once the installation step is complete, the AIMET package is created at `$WORKSPACE/aimet/build/staging/universal/lib/`.
 
 ## Setup paths
 Setup the package and library paths as follows:
 ```bash
-export PYTHONPATH=$WORKSPACE/build/staging/universal/lib/python:$PYTHONPATH
-export LD_LIBRARY_PATH=$WORKSPACE/build/staging/universal/lib/python:$LD_LIBRARY_PATH
+export PYTHONPATH=$WORKSPACE/aimet/build/staging/universal/lib/python:$PYTHONPATH
+export LD_LIBRARY_PATH=$WORKSPACE/aimet/build/staging/universal/lib/python:$LD_LIBRARY_PATH
 ```
 At this point, we are all set to use AIMET!
 
 ## Usage examples and documentation
-The following steps would generate AIMET documentation including the user guide, examples and API documentation at `$WORKSPACE/build/staging/universal/Docs`:
+The following steps would generate AIMET documentation including the user guide, examples and API documentation at `$WORKSPACE/aimet/build/staging/universal/Docs`:
 
 ```bash
-cd $WORKSPACE/build
+cd $WORKSPACE/aimet/build
 make doc
 ```
 
-To begin navigating the documentation, open the page `$WORKSPACE/build/staging/universal/Docs/user_guide/index.html` on any browser.
+To begin navigating the documentation, open the page `$WORKSPACE/aimet/build/staging/universal/Docs/user_guide/index.html` on any browser.
 
 ## Docker information
 Code may *optionally* be developed inside a development docker container. This section describes how to build a docker image and launch a container using the provided [Dockerfiles](../Jenkins).
