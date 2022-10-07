@@ -499,8 +499,14 @@ def asymmetric_gradients(tensor: torch.Tensor,
     encoding_min = intermediate_result.encoding_min
     encoding_max = intermediate_result.encoding_max
 
-    intermediate_term1 = grad_scale.sum(dim=dim) / num_steps
-    intermediate_term2 = num_steps / (encoding_max - encoding_min) ** 2 * grad_offset.sum(dim=dim)
+    if len(delta) > 1 and len(tensor.shape) == 1:
+        # NOTE: Handle when applying per-channel quant to 1-D Tensor case such as bias tensor in Conv or beta/gamma in BatchNorm
+        intermediate_term1 = grad_scale / num_steps
+        intermediate_term2 = num_steps / (encoding_max - encoding_min) ** 2 * grad_offset
+    else:
+        # Per-channel quant to k-D Tensor (k >= 2) or per-tensor case
+        intermediate_term1 = grad_scale.sum(dim=dim) / num_steps
+        intermediate_term2 = num_steps / (encoding_max - encoding_min) ** 2 * grad_offset.sum(dim=dim)
 
     grad_encoding_min = -intermediate_term1 + encoding_max * intermediate_term2
     grad_encoding_max = intermediate_term1 - encoding_min * intermediate_term2
@@ -532,9 +538,15 @@ def unsigned_symmetric_gradients(tensor: torch.Tensor,
         dim.pop(channel_axis)
 
     num_steps = intermediate_result.num_steps
-
     grad_tensor = mask_tensor * grad
-    grad_encoding_max = (x_quant * grad).sum(dim=dim) - (mask_tensor * (tensor / delta) * grad).sum(dim=dim)
+
+    if len(delta) > 1 and len(tensor.shape) == 1:
+        # NOTE: Handle when applying per-channel quant to 1-D Tensor case such as bias tensor in Conv or beta/gamma in BatchNorm
+        grad_encoding_max = (x_quant * grad) - (mask_tensor * (tensor / delta) * grad)
+    else:
+        # Per-channel quant to k-D Tensor (k >= 2) or per-tensor case
+        grad_encoding_max = (x_quant * grad).sum(dim=dim) - (mask_tensor * (tensor / delta) * grad).sum(dim=dim)
+
     grad_encoding_max = grad_encoding_max / num_steps
 
     return grad_tensor, None, grad_encoding_max
@@ -557,7 +569,6 @@ def symmetric_gradients(tensor: torch.Tensor,
     offset = intermediate_result.offset
     x_quant = intermediate_result.x_quant
     mask_tensor = intermediate_result.mask_tensor
-
     mask_tensor = Variable(mask_tensor.type_as(grad.data))
 
     dim = list(range(len(tensor.shape)))
@@ -565,9 +576,15 @@ def symmetric_gradients(tensor: torch.Tensor,
         dim.pop(channel_axis)
 
     num_steps = intermediate_result.num_steps
-
     grad_tensor = mask_tensor * grad
-    grad_encoding_max = ((x_quant + offset) * grad).sum(dim=dim) - (mask_tensor * (tensor / delta) * grad).sum(dim=dim)
+
+    if len(delta) > 1 and len(tensor.shape) == 1:
+        # NOTE: Handle when applying per-channel quant to 1-D Tensor case such as bias tensor in Conv or beta/gamma in BatchNorm
+        grad_encoding_max = ((x_quant + offset) * grad) - (mask_tensor * (tensor / delta) * grad)
+    else:
+        # Per-channel quant to k-D Tensor (k >= 2) or per-tensor case
+        grad_encoding_max = ((x_quant + offset) * grad).sum(dim=dim) - (mask_tensor * (tensor / delta) * grad).sum(dim=dim)
+
     grad_encoding_max = grad_encoding_max / torch.div(num_steps, 2, rounding_mode="floor")
 
     return grad_tensor, -grad_encoding_max, grad_encoding_max
