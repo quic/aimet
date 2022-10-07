@@ -57,7 +57,7 @@ from aimet_torch import transformer_utils, onnx_utils
 from aimet_torch import utils, elementwise_ops
 from aimet_torch.elementwise_ops import Multiply
 from aimet_torch.examples.test_models import TwoLayerBidirectionalLSTMModel, SingleLayerRNNModel, \
-    ModelWithTwoInputs, SimpleConditional
+    ModelWithTwoInputs, SimpleConditional, RoiModel
 from aimet_torch.meta.connectedgraph import ConnectedGraph
 from aimet_torch.onnx_utils import OnnxExportApiArgs
 from aimet_torch.qc_quantize_op import QcQuantizeWrapper, QcQuantizeStandalone, \
@@ -2821,6 +2821,29 @@ class TestQuantizationSimLearnedGrid:
                 assert '.'.join(name.split('.')[:-1]) in module_names
         onnx.checker.check_model(onnx_model)
 
+    def test_quant_roi_model(self):
+        roi_model = RoiModel(height=7, width=7, scale=0.25)
+        x = torch.rand(1, 1, 6, 6)
+        rois = torch.tensor([ [0, -2.0, -2.0, 22.0, 22.0], ])
+        dummy_input = (x, rois)
+        torch.onnx.export(roi_model, dummy_input, './roi.onnx', enable_onnx_checker=False, opset_version=11)
+        sim = QuantizationSimModel(roi_model, dummy_input=dummy_input)
+        for q in sim.model.roi.input_quantizers:
+            q.enabled = False
+
+        def forward_pass(model, _):
+            model.eval()
+            with torch.no_grad():
+                model(*dummy_input)
+
+        sim.compute_encodings(forward_pass, None)
+        sim.export("./data/", "roi_model", dummy_input,
+                   onnx_export_args=(onnx_utils.OnnxExportApiArgs(opset_version=11)),  propagate_encodings=True)
+
+        with open('./data/roi_model.encodings') as json_file:
+            encodings = json.load(json_file)['activation_encodings']
+            assert set(['5', '6', '7', '9', '11',]).issubset(encodings.keys())
+            assert 'scale' in encodings['11'][0]
 
 class CustModelV1Simple(torch.nn.Module):
     def __init__(self):
