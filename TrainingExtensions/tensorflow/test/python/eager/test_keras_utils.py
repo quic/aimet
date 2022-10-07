@@ -319,6 +319,7 @@ def check_conversion_tensor_names(model, custom_objects=None):
     original_weight_names = {
         weight_name.split(':')[0]
         for weight_name in encoding_weight_names
+        if 'dropout' not in weight_name
     }
 
     # Convert h5 model that was exported from QuantSim to a pb model to be used with encodings that were exported
