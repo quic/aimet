@@ -342,6 +342,42 @@ class QuantizationSimModel:
 
         self._clamp_transformer_attention_mask_encoding()
 
+    def get_enabled_parameter_quantizers(self):
+        """
+        For given quantsim model, get all enabled param quantizers.
+        :return: List of enabled param quantizers.
+        """
+        enabled_param_quantizers = []
+        for quantizer_info in self._param_quantizers.values():
+            if quantizer_info.enabled:
+                enabled_param_quantizers.append(quantizer_info)
+        return enabled_param_quantizers
+
+    def get_enabled_activation_quantizers(self):
+        """
+        For given quantsim model, get all enabled activation quantizers.
+        :return: List of enabled activation quantizers.
+        """
+        enabled_activation_quantizers = []
+        for quantizer_info in self._activation_quantizers.values():
+            if quantizer_info.enabled:
+                enabled_activation_quantizers.append(quantizer_info)
+        return enabled_activation_quantizers
+
+    @staticmethod
+    def enable_disable_quantizers(quantizer_list: List[QuantizerInfo], enabled: bool):
+        """
+        For given list of quantizers, set (enable/disable) quantizer's enabled.
+
+        :param quantizer_list: List of quantizers.
+        :param enabled: Enabled flag.
+        """
+        for quantizer_info in quantizer_list:
+            if enabled:
+                quantizer_info.enable_keeping_encoding()
+            else:
+                quantizer_info.enabled = enabled
+
     def _set_op_mode_parameters(self, op_mode: libpymo.TensorQuantizerOpMode,
                                 ops_with_invalid_encodings: List):
         """
