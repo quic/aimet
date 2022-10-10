@@ -364,6 +364,29 @@ class QuantizerInfo:
         var_name = self.quant_op_name + '_op_mode'
         self.set_variable(var_name, op_mode)
 
+    def enable_keeping_encoding(self):
+        """
+         Enables given Quantize op and updates the isEncodingValid state to True
+        """
+        op_mode = int(libpymo.TensorQuantizerOpMode.quantizeDequantize)
+        if self.get_op_mode() == int(libpymo.TensorQuantizerOpMode.passThrough):
+            if self.quantizer_type == QuantizerType.param:
+                op_mode = int(libpymo.TensorQuantizerOpMode.oneShotQuantizeDequantize)
+            self._validate_tensor_quantizer_encodings()
+
+        var_name = self.quant_op_name + '_op_mode'
+        self.set_variable(var_name, op_mode)
+
+    def _validate_tensor_quantizer_encodings(self):
+        """
+        Sets isEncodingValid flag to True for every tensor quantizer
+        """
+        if isinstance(self.tensor_quantizer, list):
+            for tensor_quantizer in self.tensor_quantizer:
+                tensor_quantizer.isEncodingValid = True
+        else:
+            self.tensor_quantizer.isEncodingValid = True
+
     def compute_encoding(self, bitwidth: int, use_symmetric_encodings: bool) -> libpymo.TfEncoding:
         """
         Compute the quantization encoding for this tensor
