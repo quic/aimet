@@ -46,7 +46,6 @@ endif (ENABLE_CUDA)
 
 add_custom_target(AcceptanceTests.TorchDependencies
       COMMAND ${CMAKE_COMMAND} -E env
-      "${AIMET_LD_LIBRARY_PATH}"
       "${AIMET_PYTHONPATH}"
       "${Python3_EXECUTABLE}" ${CMAKE_CURRENT_SOURCE_DIR}/dependencies.py ${CMAKE_CURRENT_SOURCE_DIR}/resnet18_eval_scores.csv
        ${USE_CUDA})
@@ -58,7 +57,6 @@ file(GLOB files "${CMAKE_CURRENT_SOURCE_DIR}/test_*.py")
         get_filename_component( testname "${filename}" NAME_WE )
         add_custom_target(AcceptanceTests.Torch.${testname}
             VERBATIM COMMAND ${CMAKE_COMMAND} -E env
-             "${AIMET_LD_LIBRARY_PATH}"
              "${AIMET_PYTHONPATH}"
              ${Python3_EXECUTABLE} -m pytest -s ${filename} ${CUDA_FLAG} --junitxml=${CMAKE_CURRENT_BINARY_DIR}/py_test_output_${testname}.xml)
 

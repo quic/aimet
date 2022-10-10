@@ -47,8 +47,6 @@ else (ENABLE_CUDA)
 endif (ENABLE_CUDA)
 
 set_property(TEST TorchTrainingExtensionTest
-      APPEND PROPERTY ENVIRONMENT "${AIMET_LD_LIBRARY_PATH}")
-set_property(TEST TorchTrainingExtensionTest
       APPEND PROPERTY ENVIRONMENT "${AIMET_PYTHONPATH}")
 
 if(DEFINED ENV{DEPENDENCY_DATA_PATH})

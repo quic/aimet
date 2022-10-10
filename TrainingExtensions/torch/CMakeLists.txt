@@ -54,8 +54,16 @@ else()
     set(ENABLE_CUDA_PYTORCH 0)
 endif()
 
+# Set EXTRA_LINK_ARGS to specify RPATH to not use LD_LIBRARY_PATH at runtime.
+# Use an absolute path RPATH because the SO file is located in the build directory. It is not
+# possible to use $ORIGIN to point to folder with torch libs.
+# Later, when a SO is copied into a wheel, RPATH will be changed to use relative paths ($ORIGIN)
 add_custom_command(OUTPUT ${OUTPUT}
-      COMMAND ${CMAKE_COMMAND} -E env PYTHONPATH="${CMAKE_BINARY_DIR}/artifacts" ENABLE_CUDA_PYTORCH=${ENABLE_CUDA_PYTORCH}
+      COMMAND ${CMAKE_COMMAND}
+              -E env
+                  PYTHONPATH="${CMAKE_BINARY_DIR}/artifacts"
+                  ENABLE_CUDA_PYTORCH=${ENABLE_CUDA_PYTORCH}
+                  EXTRA_LINK_ARGS="-Wl,-rpath;-Wl,$<TARGET_FILE_DIR:PyModelOptimizations>;-Wl,-rpath;-Wl,${TORCH_DIR}/lib;-Wl,--enable-new-dtags"
               ${Python3_EXECUTABLE} ${SETUP_PY} install  --install-base=${CMAKE_BINARY_DIR}/artifacts
                                              --install-purelib=${CMAKE_BINARY_DIR}/artifacts
                                              --install-platlib=${CMAKE_BINARY_DIR}/artifacts
@@ -87,3 +95,4 @@ install(DIRECTORY ${CMAKE_BINARY_DIR}/artifacts/aimet_common/
       DESTINATION ${AIMET_INSTALL_DIR}/lib/python/aimet_common
       FILES_MATCHING PATTERN "AimetTensorQuantizer*.so"
       )
+
