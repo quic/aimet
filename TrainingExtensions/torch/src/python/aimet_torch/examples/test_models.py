@@ -43,6 +43,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch import nn as nn
+from torchvision.ops import roi_align
 
 import aimet_torch.elementwise_ops as aimet_elementwise
 
@@ -958,3 +959,29 @@ class LinearAndLSTMModel(torch.nn.Module):
         x = self.prelu(x)
         x = torch.unsqueeze(x, 1)
         return self.recurrent(x, h_and_c)
+
+
+
+class RoiAlignPyTorch(torch.nn.Module):
+
+    def __init__(self, aligned_height, aligned_width, spatial_scale):
+        super(RoiAlignPyTorch, self).__init__()
+        self.aligned_width = int(aligned_width)
+        self.aligned_height = int(aligned_height)
+        self.spatial_scale = float(spatial_scale)
+
+    def forward(self, features, rois):
+        return roi_align(input=features,
+                         boxes = rois,
+                         output_size = [self.aligned_height, self.aligned_width],
+                         spatial_scale = self.spatial_scale,
+                         sampling_ratio = 0)
+
+class RoiModel(torch.nn.Module):
+
+    def __init__(self, height, width, scale):
+        super(RoiModel, self).__init__()
+        self.roi = RoiAlignPyTorch(height, width, scale)
+
+    def forward(self, *inputs):
+        return self.roi(*inputs)
