@@ -52,7 +52,7 @@ from aimet_common.quantsim_config.quantsim_config import QuantSimConfigurator as
     get_all_ops_in_neighborhood
 from aimet_common.utils import AimetLogger
 from aimet_tensorflow.keras.connectedgraph import ConnectedGraph
-from aimet_tensorflow.keras.quant_sim.qc_quantize_wrapper import QuantizerSettings
+from aimet_tensorflow.keras.quant_sim.qc_quantize_wrapper import QuantizerSettings, ALLOWED_FLOAT_DTYPES
 from aimet_tensorflow.keras.quant_sim.tensor_quantizer import ActivationTensorQuantizer, ParamTensorQuantizer
 
 logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Quant)
@@ -153,18 +153,20 @@ def _initialize_input_quantizers(layer: layers.Layer, quant_settings: QuantizerS
     :param enabled: Flag for quantized or not
     :return: Input quantizers corresponding to layer
     """
-    num_inputs = len(layer.inbound_nodes[0].keras_inputs)
+    layer_input_list = layer.inbound_nodes[0].keras_inputs
+    num_inputs = len(layer_input_list)
     input_quantizers = []
     for i in range(num_inputs):
-        activation_tensor_quantizer = ActivationTensorQuantizer(f"{layer.name}_input_quantizer_{i}",
-                                                                quant_settings.quant_scheme,
-                                                                quant_settings.round_mode,
-                                                                quant_settings.bitwidth,
-                                                                quant_settings.is_symmetric,
-                                                                quant_settings.use_strict_symmetric,
-                                                                quant_settings.use_unsigned_symmetric,
-                                                                enabled)
-        input_quantizers.append(activation_tensor_quantizer)
+        if layer_input_list[i].dtype in ALLOWED_FLOAT_DTYPES:
+            activation_tensor_quantizer = ActivationTensorQuantizer(f"{layer.name}_input_quantizer_{i}",
+                                                                    quant_settings.quant_scheme,
+                                                                    quant_settings.round_mode,
+                                                                    quant_settings.bitwidth,
+                                                                    quant_settings.is_symmetric,
+                                                                    quant_settings.use_strict_symmetric,
+                                                                    quant_settings.use_unsigned_symmetric,
+                                                                    enabled)
+            input_quantizers.append(activation_tensor_quantizer)
     return input_quantizers
 
 
@@ -179,15 +181,16 @@ def _initialize_output_quantizers(layer: layers.Layer, quant_settings: Quantizer
     :return: Output quantizers corresponding to layer
     """
     output_quantizers = []
-    activation_tensor_quantizer = ActivationTensorQuantizer(f"{layer.name}_output_quantizer_0",
-                                                            quant_settings.quant_scheme,
-                                                            quant_settings.round_mode,
-                                                            quant_settings.bitwidth,
-                                                            quant_settings.is_symmetric,
-                                                            quant_settings.use_strict_symmetric,
-                                                            quant_settings.use_unsigned_symmetric,
-                                                            enabled)
-    output_quantizers.append(activation_tensor_quantizer)
+    if layer.output.dtype in ALLOWED_FLOAT_DTYPES:
+        activation_tensor_quantizer = ActivationTensorQuantizer(f"{layer.name}_output_quantizer_0",
+                                                                quant_settings.quant_scheme,
+                                                                quant_settings.round_mode,
+                                                                quant_settings.bitwidth,
+                                                                quant_settings.is_symmetric,
+                                                                quant_settings.use_strict_symmetric,
+                                                                quant_settings.use_unsigned_symmetric,
+                                                                enabled)
+        output_quantizers.append(activation_tensor_quantizer)
     return output_quantizers
 
 
@@ -202,26 +205,27 @@ def _initialize_param_quantizers(layer: layers.Layer, param_config_dict: TreeLik
     """
     param_quantizers = []
     for weight in layer.weights:
-        weight_name = weight.name.split(":")[0]
-        param_type = "bias" if "bias" in weight_name else "weight"
+        if weight.dtype in ALLOWED_FLOAT_DTYPES:
+            weight_name = weight.name.split(":")[0]
+            param_type = "bias" if "bias" in weight_name else "weight"
 
-        if param_type in param_config_dict:
-            is_symmetric = param_config_dict[param_type][ConfigDictKeys.IS_SYMMETRIC].get(SETTING, False)
-            enabled = param_config_dict[param_type][ConfigDictKeys.IS_QUANTIZED].get(SETTING, False)
-        else:
-            is_symmetric = param_config_dict[ConfigDictKeys.IS_SYMMETRIC].get(SETTING, False)
-            enabled = param_config_dict[ConfigDictKeys.IS_QUANTIZED].get(SETTING, False)
+            if param_type in param_config_dict:
+                is_symmetric = param_config_dict[param_type][ConfigDictKeys.IS_SYMMETRIC].get(SETTING, False)
+                enabled = param_config_dict[param_type][ConfigDictKeys.IS_QUANTIZED].get(SETTING, False)
+            else:
+                is_symmetric = param_config_dict[ConfigDictKeys.IS_SYMMETRIC].get(SETTING, False)
+                enabled = param_config_dict[ConfigDictKeys.IS_QUANTIZED].get(SETTING, False)
 
-        param_tensor_quantizer = ParamTensorQuantizer(weight_name,
-                                                      quant_settings.quant_scheme,
-                                                      quant_settings.round_mode,
-                                                      quant_settings.bitwidth,
-                                                      is_symmetric,
-                                                      quant_settings.use_strict_symmetric,
-                                                      quant_settings.use_unsigned_symmetric,
-                                                      enabled)
+            param_tensor_quantizer = ParamTensorQuantizer(weight_name,
+                                                          quant_settings.quant_scheme,
+                                                          quant_settings.round_mode,
+                                                          quant_settings.bitwidth,
+                                                          is_symmetric,
+                                                          quant_settings.use_strict_symmetric,
+                                                          quant_settings.use_unsigned_symmetric,
+                                                          enabled)
 
-        param_quantizers.append(param_tensor_quantizer)
+            param_quantizers.append(param_tensor_quantizer)
     return param_quantizers
 
 
