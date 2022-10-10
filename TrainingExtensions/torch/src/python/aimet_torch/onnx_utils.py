@@ -396,6 +396,8 @@ class OnnxSaver:
         # Set names
         cls._set_onnx_node_names(map_input_tensor_to_node, start_marker_map)
 
+        cls._remove_redundant_end_suffix(onnx_model)
+
         # Remove markers
         cls._detach_start_and_end_markers(map_input_tensor_to_node, map_output_tensor_to_node, start_marker_map,
                                           end_marker_map, graphs_list, output_names_list)
@@ -550,6 +552,24 @@ class OnnxSaver:
         output_names_list = []
         OnnxSaver._populate_graph_and_output_names_lists(onnx_model.graph, graphs_list, output_names_list)
         return graphs_list, output_names_list
+
+    @classmethod
+    def _remove_redundant_end_suffix(cls, onnx_model: onnx.GraphProto):
+        """
+        Helper function to remove redundant  `.end` name suffix for module which generates a single onnx op e.g.
+         torch.nn.Conv2d
+        :param onnx_model: Onnx Model with onnx ops in leaf module named.
+        """
+
+        root_name_to_nodes_map = defaultdict(list)
+        for node in onnx_model.graph.node:
+            if node.op_type != 'CustomMarker':
+                root_name = node.name.split('#')[0]
+                root_name_to_nodes_map[root_name].append(node)
+
+        for root_name, nodes_list in root_name_to_nodes_map.items():
+            if len(nodes_list) == 1:
+                nodes_list[0].name = root_name
 
     @staticmethod
     def _populate_graph_and_output_names_lists(onnx_graph: onnx.GraphProto, graphs_list: List[onnx.GraphProto],
@@ -745,11 +765,10 @@ class OnnxSaver:
                     downstream_nodes = map_input_tensor_to_node.get(tensor, [])
                     set_name_for_downstream_nodes(downstream_nodes, name, depth + 1)
 
-                    if depth != 0:
-                        for dnode in downstream_nodes:
-                            if dnode.op_type == 'CustomMarker':  #end marker
-                                node.name += '.end'
-                                break
+                    for dnode in downstream_nodes:
+                        if dnode.op_type == 'CustomMarker':  #end marker
+                            node.name += '.end' if '#' in node.name else '#0.0.end'
+                            break
                 visited.add(id(node))
 
         for node_name, markers in start_marker_map.items():

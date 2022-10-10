@@ -39,7 +39,6 @@ import contextlib
 import os
 import logging
 
-import pytest
 import torch
 from torchvision import models
 
@@ -48,7 +47,7 @@ from aimet_common.utils import AimetLogger
 from aimet_torch import onnx_utils
 import onnx
 
-from aimet_torch.onnx_utils import OnnxExportApiArgs
+from aimet_torch.examples.test_models import RoiModel
 
 
 class OutOfOrderModel(torch.nn.Module):
@@ -713,3 +712,20 @@ class TestOnnxUtils:
 
         if os.path.exists(onnx_path):
             os.remove(onnx_path)
+
+    def test_model_with_input_last_onnx_node(self):
+        """
+        Test that adversial case when the first input is feed to last node in onnx sub-graph
+        """
+
+        roi_model = RoiModel(height=7, width=7, scale=0.25)
+        x = torch.rand(1, 1, 6, 6)
+        rois = torch.tensor([ [0, -2.0, -2.0, 22.0, 22.0], ])
+        dummy_input = (x, rois)
+        onnx_utils.OnnxSaver.set_node_names('./data/roi.onnx', roi_model, dummy_input, is_conditional=False,
+                                            module_marker_map={},
+                                            onnx_export_args=(onnx_utils.OnnxExportApiArgs(opset_version=11))
+                                            )
+        onnx_model = onnx.load('./data/roi.onnx')
+        end_nodes = [ n.name for n in onnx_model.graph.node if 'end' in n.name]
+        assert len(end_nodes) == 1
