@@ -54,7 +54,8 @@ from aimet_common.utils import AimetLogger
 import aimet_tensorflow.keras.utils.common as keras_common_utils
 from aimet_tensorflow.keras.connectedgraph import ConnectedGraph
 from aimet_tensorflow.keras.quant_sim.qc_quantize_wrapper import QuantizerSettings, ALLOWED_FLOAT_DTYPES
-from aimet_tensorflow.keras.quant_sim.tensor_quantizer import ActivationTensorQuantizer, ParamTensorQuantizer
+from aimet_tensorflow.keras.quant_sim.tensor_quantizer import ActivationTensorQuantizer, ParamPerTensorQuantizer, \
+    ParamPerChannelQuantizer
 
 _logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Quant)
 
