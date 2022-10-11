@@ -279,7 +279,7 @@ class QuantSimConfigurator(AimetCommonQuantSimConfigurator):
         self._layer_to_quantizers_dict = TreeLikeDictionary()
 
         self._set_quantsim_configs()
-        self.per_channel_quantization_flag = self._get_per_channel_quantization_flag()
+        self.per_channel_quantization_flag = self._parse_per_channel_quantization().get('defaults')
         self._initialize_quantizers_by_layer(
             quant_scheme, rounding_mode, default_output_bw, default_param_bw)
 

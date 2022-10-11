@@ -109,7 +109,7 @@ class QuantSimConfigurator(AimetCommonQuantSimConfigurator):
         self._activation_quantizer_dict = {}
         self._op_to_quantizer_lists_dict = None
         self._onnx_conn_graph_name_mapper = OnnxConnectedGraphTypeMapper(onnx_tf_conn_graph_type_pairs)
-        self.per_channel_quantization_flag = self._get_per_channel_quantization_flag()
+        self.per_channel_quantization_flag = self._parse_per_channel_quantization().get('defaults')
 
         self._supported_kernels = self._parse_supported_kernels()
         if ENFORCE_TARGET_DTYPE_BITWIDTH_CONFIG:
