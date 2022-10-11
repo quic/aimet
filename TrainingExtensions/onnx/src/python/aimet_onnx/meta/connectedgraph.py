@@ -222,16 +222,17 @@ class ConnectedGraph(AimetCommonConnectedGraph):
             product.add_consumer(current_op)
             parent_op.output = product
 
-    def _create_link_for_output_product(self, output_tensor_name, producer_node_name):
+    def _create_link_for_output_product(self, output_tensor_name: str, producer_node_name: str):
         """ Creates link between nodes and outputs of the model """
-        if producer_node_name + '_to_' + output_tensor_name in self._products:
-            logger.debug("%s already exists", producer_node_name + '_to_' + output_tensor_name)
+        product_name = producer_node_name + '_to_' + output_tensor_name
+        if product_name in self._products:
+            logger.debug("%s already exists", product_name)
         else:
             # TODO: figure out a way to add tensor shape. Adding the shape as None for now
-            product = Product(producer_node_name + '_to_' + output_tensor_name, None)
+            product = Product(product_name, None)
             # add product to self._products dictionary
-            self._products[producer_node_name + '_to_' + output_tensor_name] = product
-            logger.debug("Created new product " + producer_node_name + '_to_' + output_tensor_name)
+            self._products[product_name] = product
+            logger.debug("Created new product " + product_name)
 
             producer_op = self._ops[producer_node_name]
             product.tensor_dict[producer_node_name] = producer_op
@@ -240,8 +241,8 @@ class ConnectedGraph(AimetCommonConnectedGraph):
             producer_op.output = product
             product.producer = producer_op
 
-
     def _create_output_products(self):
+        """ Create products between last node and output """
         for output in self.model.graph.output:
             for node in self.model.graph.node:
                 if output.name in node.output:
