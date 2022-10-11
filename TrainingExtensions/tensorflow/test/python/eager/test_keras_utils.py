@@ -67,8 +67,7 @@ def conv_functional():
     return model
 
 
-# Not used for testing at the moment. This is a condensed version of a model structure seen during the September 2022
-# Samsung OnSite that will be used for future testing.
+# Not used for testing at the moment. This is placed here for future testing.
 class ConvTimesThree(tf.keras.layers.Layer):
     def __init__(self, **kwargs):
         super(ConvTimesThree, self).__init__(**kwargs)
@@ -347,7 +346,7 @@ def test_convert_h5_to_pb_functional_model():
 
 @pytest.mark.skip(
     reason="Subclassed Keras models are not currently supported. "
-           "Created to mimic a model seen during September 2022 SS OnSite")
+           "Created for future testing.")
 def test_convert_h5_to_pb_subclass_model():
     check_conversion_tensor_names(conv_sub_class())
 
