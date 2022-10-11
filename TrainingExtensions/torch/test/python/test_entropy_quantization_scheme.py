@@ -73,7 +73,7 @@ class TestEntropySchemeStaticGrid:
         from aimet_common.defs import MAP_QUANT_SCHEME_TO_PYMO
         MAP_QUANT_SCHEME_TO_PYMO['entropy'] = libpymo.QuantizationMode.QUANTIZATION_ENTROPY
 
-        for quant_wrapper in sim2.quant_wrappers():
+        for _, quant_wrapper in sim2.quant_wrappers():
             for quantizer in quant_wrapper.input_quantizers:
                 quantizer.quant_scheme = 'entropy'
             for quantizer in quant_wrapper.output_quantizers:

@@ -38,11 +38,12 @@
 """ Weight padding API"""
 # pylint: disable=protected-access
 from typing import Dict
-import torch
+
 import aimet_common.libpymo as libpymo
-from aimet_common.defs import MAP_ROUND_MODE_TO_PYMO
+from aimet_common.defs import MAP_ROUND_MODE_TO_PYMO, MAP_QUANT_SCHEME_TO_PYMO
 from aimet_common.quantsim import recompute_grid_params
-from aimet_torch.qc_quantize_op import StaticGridQuantWrapper
+
+from aimet_torch.tensor_quantizer import TensorQuantizer
 from aimet_torch.quantsim import QuantizationSimModel
 
 
@@ -54,7 +55,7 @@ class WeightPaddingParams:
     def __init__(self, simulated_bw, target_kernel_bw):
         """
         :param simulated_bw: Simulated bitwidth
-        :param target_kernel_bw: Target kernel bitwith
+        :param target_kernel_bw: Target kernel bitwidth
         """
         self.simulated_bw = simulated_bw
         self.target_kernel_bw = target_kernel_bw
@@ -70,48 +71,47 @@ def weight_pad(sim: QuantizationSimModel, layer_bw_dict: Dict[str, WeightPadding
     :return None
     """
     # iterate through quant wrappers in model
-    for layer_name, layer in sim.model.named_modules():
-        if isinstance(layer, StaticGridQuantWrapper):
-            # access bitwidth params per layer
-            bw_values = layer_bw_dict[layer_name]
+    for layer_name, layer in sim.quant_wrappers():
+        # access bitwidth params per layer
+        bw_values = layer_bw_dict[layer_name]
 
-            param_quant_dict = layer.param_quantizers
-            # checks if weights and proper bitwidth params present
-            if 'weight' in param_quant_dict and bw_values.target_kernel_bw > bw_values.simulated_bw:
-                # access weights associated with param quantizer per layer
-                param_weight_quant = param_quant_dict['weight']
-                layer_weights = layer._module_to_wrap.weight
+        param_quant_dict = layer.param_quantizers
+        # checks if weights and proper bitwidth params are present
+        if 'weight' in param_quant_dict and bw_values.target_kernel_bw > bw_values.simulated_bw:
+            # access weights associated with param quantizer per layer
+            param_weight_quant = param_quant_dict['weight']
+            layer_weight = layer._module_to_wrap.weight
 
-                # compute encodings with lower simulated bitwidth
-                param_weight_quant.encoding = recompute_grid_params(param_weight_quant.encoding,
-                                                                    bw_values.simulated_bw,
-                                                                    use_symmetric_encoding=False)
-                # perform quant dequant on weights
-                quant_dequant = param_weight_quant.quantize_dequantize(layer_weights.clone(),
-                                                                       MAP_ROUND_MODE_TO_PYMO['nearest'])
-                # update weights
-                layer._module_to_wrap.weight = torch.nn.Parameter(quant_dequant.clone())
+            # compute encodings with lower simulated bitwidth
+            param_weight_quant.encoding = recompute_grid_params(param_weight_quant.encoding,
+                                                                bw_values.simulated_bw,
+                                                                use_symmetric_encoding=param_weight_quant.use_symmetric_encodings)
+            # perform quant dequant on weights
+            quant_dequant_weight = param_weight_quant.quantize_dequantize(layer_weight,
+                                                                          MAP_ROUND_MODE_TO_PYMO['nearest'])
+            # update weights
+            layer._module_to_wrap.weight.data = quant_dequant_weight
 
-                # recompute encodings with updated weights and target kernel bitwidth
-                param_weight_quant.update_encoding_stats(quant_dequant.clone())
-                param_weight_quant.encoding = recompute_encodings(param_weight_quant.encoding, bw_values)
+            # recompute encodings to adjust for quantization scale
+            param_weight_quant.encoding = recompute_encodings(param_weight_quant, bw_values)
 
 
-def recompute_encodings(encoding: libpymo.TfEncoding(), bw_params: WeightPaddingParams):
+def recompute_encodings(quantizer: TensorQuantizer, bw_params: WeightPaddingParams):
     """
     Recomputes encodings to account for adjusted quantization scale
 
-    :param encoding: Initial encoding
+    :param quantizer: Quantizer with encodings that need to be recomputed
     :param bw_params: Bitwidth parameters (simulated bitwidth, kernel bitwidth)
     :return: Updated encoding
     :raises AssertionError if simulated bitwidth is not less than kernel bitwidth
     """
     updated_encoding = libpymo.TfEncoding()
     updated_encoding.bw = bw_params.target_kernel_bw
-    updated_encoding.delta = recompute_scale(encoding.delta, bw_params)
-    updated_encoding.offset = round(encoding.min / updated_encoding.delta)
-    updated_encoding.min = updated_encoding.delta * updated_encoding.offset
-    updated_encoding.max = updated_encoding.min + updated_encoding.delta * ((2 ** updated_encoding.bw) - 1)
+    updated_encoding.delta = recompute_scale(quantizer.encoding.delta, bw_params)
+    updated_encoding.offset = round(quantizer.encoding.min / updated_encoding.delta)
+
+    adjusted_quantizer = libpymo.TensorQuantizer(MAP_QUANT_SCHEME_TO_PYMO[quantizer.quant_scheme], MAP_ROUND_MODE_TO_PYMO['nearest'])
+    adjusted_quantizer.computePartialEncoding(updated_encoding.bw, updated_encoding, quantizer.use_symmetric_encodings, quantizer.use_unsigned_symmetric, quantizer.use_strict_symmetric)
     return updated_encoding
 
 
