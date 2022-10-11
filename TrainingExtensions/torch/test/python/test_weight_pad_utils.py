@@ -34,14 +34,16 @@
 #  SPDX-License-Identifier: BSD-3-Clause
 #
 #  @@-COPYRIGHT-END-@@
-import unittest
 
+import onnx
+import pytest
 import torch
-import aimet_common.libpymo as libpymo
+from aimet_common import libpymo
+from onnx import numpy_helper
 from torchvision import models
 
 from aimet_common.defs import QuantScheme, QuantizationDataType, MAP_ROUND_MODE_TO_PYMO
-from aimet_torch.qc_quantize_op import StaticGridQuantWrapper
+
 from aimet_torch.quantsim import QuantizationSimModel
 from aimet_torch.tensor_quantizer import StaticGridPerTensorQuantizer
 from aimet_torch.weight_padding_utils import recompute_scale, recompute_encodings, weight_pad, WeightPaddingParams
@@ -60,50 +62,28 @@ def evaluate(model: torch.nn.Module, dummy_input: torch.Tensor):
         model(*dummy_input)
 
 
-class TestWeightPadUtils(unittest.TestCase):
-    def test_recompute_encodings(self):
-        bw_params = WeightPaddingParams(target_kernel_bw=16, simulated_bw=8)
-        input = torch.FloatTensor([100.0, 23.0, -57.0, 127.0])
+class TestWeightPadUtils:
 
-        encoding = libpymo.TfEncoding()
-        encoding.bw = bw_params.simulated_bw  # 8
-        encoding.min = torch.min(input)  # -57
-        encoding.max = torch.max(input)  # 127
-        encoding.delta = (encoding.max - encoding.min) / ((2 ** encoding.bw) - 1)  # 0.7215
-        encoding.offset = round(encoding.min / encoding.delta)  # -79
-
-        updated_encoding = recompute_encodings(encoding, bw_params)
-        self.assertEqual(updated_encoding.bw, bw_params.target_kernel_bw)  # 16
-        self.assertEqual(updated_encoding.delta, 184 / 65280)
-        self.assertEqual(updated_encoding.offset, -20223)
-        self.assertEqual(updated_encoding.min, -3721032 / 65280)
-        self.assertEqual(updated_encoding.max, 184 / 65280 * 65535 + (-3721032 / 65280))
-
-    def test_recompute_encodings_error(self):
+    def test_recompute_encodings_assertion_error(self):
         bw_params = WeightPaddingParams(target_kernel_bw=4, simulated_bw=12)
-        input = torch.FloatTensor([100.0, 23.0, -57.0, 127.0])
-
-        encoding = libpymo.TfEncoding()
-        encoding.bw = 8
-        encoding.min = torch.min(input)
-        encoding.max = torch.max(input)
-        encoding.delta = (encoding.max - encoding.min) / ((2 ** encoding.bw) - 1)
-        encoding.offset = round(encoding.min / encoding.delta)
-
-        self.assertRaises(AssertionError, recompute_encodings, encoding, bw_params)
+        quantizer = StaticGridPerTensorQuantizer(bitwidth=8, round_mode='nearest',
+                                                 quant_scheme=QuantScheme.post_training_tf,
+                                                 use_symmetric_encodings=False, enabled_by_default=True,
+                                                 data_type=QuantizationDataType.int)
+        quantizer.encoding = libpymo.TfEncoding()
+        pytest.raises(AssertionError, recompute_encodings, quantizer, bw_params)
 
     def test_recompute_scale(self):
         scale = 2.5
         bw_params = WeightPaddingParams(target_kernel_bw=8, simulated_bw=4)
         updated_scale = recompute_scale(scale, bw_params)
         # 2.5 / 2 ** (4)
-        self.assertEqual(0.15625, updated_scale)
+        assert updated_scale == 0.15625
 
-    def test_recompute_scale_error(self):
+    def test_recompute_scale_assertion_error(self):
         scale = 2.5
         bw_params = WeightPaddingParams(target_kernel_bw=2, simulated_bw=4)
-
-        self.assertRaises(AssertionError, recompute_scale, scale, bw_params)
+        pytest.raises(AssertionError, recompute_scale, scale, bw_params)
 
     def test_weight_pad_tensor(self):
         # using B = 8 and b = 4
@@ -123,27 +103,24 @@ class TestWeightPadUtils(unittest.TestCase):
         encoding.offset = round(encoding.min / encoding.delta)
         quantizer.encoding = encoding
 
-        # quantize weights with b and confirm results
-        test_quant = quantizer.quantize(input.clone(), MAP_ROUND_MODE_TO_PYMO['nearest'])
-
-        # quant dequant with b and confirm results
-        quant_dequant = quantizer.quantize_dequantize(input.clone(), MAP_ROUND_MODE_TO_PYMO['nearest'])
+        # quant dequant with b
+        quant_dequant = quantizer.quantize_dequantize(input, MAP_ROUND_MODE_TO_PYMO['nearest'])
 
         # recompute encoding with B
         updated_encoding = libpymo.TfEncoding()
         updated_encoding.bw = 8
         updated_encoding.min = torch.min(quant_dequant)
         updated_encoding.delta = quantizer.encoding.delta / 16
-        updated_encoding.offset = round(-1 * updated_encoding.min / updated_encoding.delta)
+        updated_encoding.offset = round(updated_encoding.min / updated_encoding.delta)
         updated_encoding.max = (updated_encoding.delta * 255) + updated_encoding.min
         quantizer.encoding = updated_encoding
 
         # confirm weights are padded
-        quant_output = quantizer.quantize(quant_dequant.clone(), MAP_ROUND_MODE_TO_PYMO['nearest'])
+        quant_output = quantizer.quantize(quant_dequant, MAP_ROUND_MODE_TO_PYMO['nearest'])
         for val in quant_output:
             assert val % 16 == 0
 
-    def test_weight_pad_no_shift(self):
+    def test_weight_pad_in_place(self):
         model = models.resnet50(pretrained=True)
         dummy_input = torch.randn(1, 3, 224, 224)
         sim = QuantizationSimModel(model, dummy_input, quant_scheme=QuantScheme.post_training_tf_enhanced,
@@ -153,20 +130,54 @@ class TestWeightPadUtils(unittest.TestCase):
 
         # populate bitwidths per layer in dict
         bw_dict = dict()
-        for layer_name, layer in sim.model.named_modules():
-            if isinstance(layer, StaticGridQuantWrapper):
-                bw_dict[layer_name] = WeightPaddingParams(simulated_bw=12, target_kernel_bw=16)
+        for layer_name, layer in sim.quant_wrappers():
+           bw_dict[layer_name] = WeightPaddingParams(simulated_bw=12, target_kernel_bw=16)
 
         weight_pad(sim, bw_dict)
 
-        # confirm that all weights are properly padded
-        for layer_name, layer in sim.model.named_modules():
-            if isinstance(layer, StaticGridQuantWrapper):
-                param_quant_dict = layer.param_quantizers
-                if 'weight' in param_quant_dict:
-                    layer_weights = layer._module_to_wrap.weight.clone()
-                    quant_tensor = param_quant_dict['weight'].quantize(layer_weights.clone(),
-                                                                       MAP_ROUND_MODE_TO_PYMO['nearest'])
-                    numpy_arr = quant_tensor.detach().numpy()
-                    for val in numpy_arr.flatten():
-                        assert val % 16 == 0
+        # confirm that all weights are properly padded in place
+        for layer_name, layer in sim.quant_wrappers():
+            param_quant_dict = layer.param_quantizers
+            if 'weight' in param_quant_dict:
+                layer_weights = layer._module_to_wrap.weight
+                quant_tensor = param_quant_dict['weight'].quantize(layer_weights,
+                                                                   MAP_ROUND_MODE_TO_PYMO['nearest'])
+                numpy_arr = quant_tensor.detach().numpy()
+                for val in numpy_arr.flatten():
+                    assert val % 16 == 0
+
+    def test_weight_pad_export(self):
+        model = models.resnet50(pretrained=True)
+        dummy_input = torch.randn(1, 3, 224, 224)
+        sim = QuantizationSimModel(model, dummy_input, quant_scheme=QuantScheme.post_training_tf_enhanced,
+                                   default_param_bw=16, default_output_bw=16)
+        sim.compute_encodings(evaluate, dummy_input)
+        sim.model(dummy_input)
+
+        # populate bitwidths per layer in dict
+        bw_dict = dict()
+        for layer_name, layer in sim.quant_wrappers():
+           bw_dict[layer_name] = WeightPaddingParams(simulated_bw=12, target_kernel_bw=16)
+
+        # perform weight pad and export
+        weight_pad(sim, bw_dict)
+        sim.export('./data/', 'weight_pad_model', dummy_input)
+
+        quant_dict = dict()
+        for layer_name, layer in sim.quant_wrappers():
+            param_quant_dict = layer.param_quantizers
+            if 'weight' in param_quant_dict:
+                quant_dict[layer_name + ".weight"] = param_quant_dict['weight']
+
+        # confirm exported ONNX model has padded weights
+        onnx_model = onnx.load('./data/weight_pad_model.onnx')
+
+        for node in onnx_model.graph.initializer:
+            if "weight" in node.name:
+                weights = torch.Tensor(numpy_helper.to_array(node))
+                quantizer = quant_dict[node.name]
+                quant_weights = quantizer.quantize(weights, round_mode=MAP_ROUND_MODE_TO_PYMO['nearest'])
+
+                numpy_arr = quant_weights.detach().numpy()
+                for val in numpy_arr.flatten():
+                    assert val % 16 == 0

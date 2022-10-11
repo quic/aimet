@@ -73,7 +73,7 @@ class TestMSESchemeStaticGrid:
         from aimet_common.defs import MAP_QUANT_SCHEME_TO_PYMO
         MAP_QUANT_SCHEME_TO_PYMO['mse'] = libpymo.QuantizationMode.QUANTIZATION_MSE
 
-        for quant_wrapper in sim2.quant_wrappers():
+        for _, quant_wrapper in sim2.quant_wrappers():
             for quantizer in quant_wrapper.input_quantizers:
                 quantizer.quant_scheme = 'mse'
             for quantizer in quant_wrapper.output_quantizers:
