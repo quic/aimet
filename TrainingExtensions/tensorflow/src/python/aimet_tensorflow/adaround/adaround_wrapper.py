@@ -79,7 +79,7 @@ class AdaroundWrapper(keras.layers.Layer):
         self._op = op
         self.enable_per_channel = enable_per_channel
 
-        self._orig_weight_tensor_shape, weight, bias = self._get_weight_bias(session)
+        self._orig_weight_tensor_shape, weight, bias = self._get_weight_and_bias_tensors(session)
         self._weight_tensor = tf.convert_to_tensor(weight, dtype='float32')
         self._bias_tensor = None
         if bias is not None:
@@ -133,7 +133,7 @@ class AdaroundWrapper(keras.layers.Layer):
         return ch_axis
 
     @staticmethod
-    def _transform_input_ndarray_for_depthwise_conv_2d(input_arr: Union[np.ndarray]) -> Union[np.ndarray]:
+    def transform_input_ndarray_for_depthwise_conv_2d(input_arr: Union[np.ndarray]) -> Union[np.ndarray]:
         """
         For DepthwiseConv2d op, if per-channel is enabled, we need to use the last two axes as channel axis.
         This helper function basically merges the last two dimensions into one, so that the rest of the flow would work
@@ -225,21 +225,45 @@ class AdaroundWrapper(keras.layers.Layer):
 
         elif self._op.type == 'Conv2DBackpropInput':
             kwargs = self._get_conv_args(self._op)
-            assert self._output_height is not None, 'Output height required for conv2d transpose'
-            assert self._output_width is not None, 'Output width required for conv2d transpose'
-            assert self._output_channels is not None, 'Output channels required for conv2d transpose'
-
-            if kwargs['data_format'] == 'NCHW':
-                output_shape = (BATCH_SIZE, self._output_channels, self._output_height, self._output_width)
-            else:
-                output_shape = (BATCH_SIZE, self._output_height, self._output_width, self._output_channels)
-
-            kwargs['output_shape'] = output_shape
-            adaround_out_tensor = tf.nn.conv2d_transpose(inp_tensor, adaround_weight_tensor, **kwargs)
-
+            adaround_out_tensor = AdaroundWrapper.compute_output_with_adaround_weights_conv2d_transpose_helper(
+                self._output_height,
+                self._output_width,
+                self._output_channels,
+                inp_tensor,
+                adaround_weight_tensor,
+                **kwargs)
         else:
             raise ValueError('Op type not supported')
 
+        return adaround_out_tensor
+
+    @staticmethod
+    def compute_output_with_adaround_weights_conv2d_transpose_helper(
+            output_height, output_width, output_channels,
+            inp_tensor, adaround_weight_tensor, **kwargs) -> tf.Tensor:
+        """
+        Compute output specificly for Conv2DTranpose layers for both tensorflow and keras
+        (i.e. Conv2DTranspose, Conv2DBackpropInput)
+        :param output_height: output height of the layer/op
+        :param output_width: output width of the layer/op
+        :param output_channels: output channels of layer/op
+        :param inp_tensor: The input tensor to be used for computing output
+        :param adaround_weight_tensor: the adarounded weight
+        :param **kwargs: Other kwargs needed
+        :return: output of the op computed with AdaROunded weights
+        """
+        assert output_height is not None, 'Output height required for conv2d transpose'
+        assert output_width is not None, 'Output width required for conv2d transpose'
+        assert output_channels is not None, 'Output channels required for conv2d transpose'
+
+        if kwargs['data_format'] == 'NCHW':
+            output_shape = (BATCH_SIZE, output_channels, output_height, output_width)
+        else:
+            output_shape = (BATCH_SIZE, output_height, output_width, output_channels)
+
+        kwargs['output_shape'] = output_shape
+
+        adaround_out_tensor = tf.nn.conv2d_transpose(inp_tensor, adaround_weight_tensor, **kwargs)
         return adaround_out_tensor
 
     def call(self, inputs, **kwargs): # pylint: disable=unused-argument
@@ -257,15 +281,11 @@ class AdaroundWrapper(keras.layers.Layer):
         return adaround_out_tensor
 
     @staticmethod
-    def _create_alpha_var(tensor: tf.Tensor) -> tf.Variable:
+    def _create_alpha_var(alpha: tf.Tensor) -> tf.Variable:
         """
         Helper method to create the alpha variable
         :param tensor: tensor to be used to generate alpha
         """
-        # pylint: disable=invalid-unary-operand-type
-        alpha = -tf.math.log(
-            (AdaroundConstants.ZETA - AdaroundConstants.GAMMA) / (tensor - AdaroundConstants.GAMMA) - 1)
-
         # pylint: disable=unexpected-keyword-arg
         # Resource variable is default in TF2.x
         if version.parse(tf.version.VERSION) >= version.parse("2.0"):
@@ -310,6 +330,28 @@ class AdaroundWrapper(keras.layers.Layer):
         return tensor_encoding
 
     @staticmethod
+    def calculate_alpha(tensor: tf.Tensor, encoding: Union[libpymo.TfEncoding, List[libpymo.TfEncoding]],
+                        enable_per_channel: bool, ch_axis: int) -> tf.Tensor:
+        """
+        Calculate alpha parameter for either per tensor or per channel
+        :param tensor: The tensor to be ada rounded
+        :param encoding: Encoding(s) for the tensor
+        :param enable_per_channel: Flag for per channel to broadcoast the tensor
+        :param ch_axis: Axis to broadcast if per channel is enabled
+        :return: Adarounded output tensor
+        """
+        if enable_per_channel:
+            assert isinstance(encoding, list), "Per-channel expects encoding to be a list"
+            delta = AdaroundWrapper._broadcast_to_tensor(tensor, [enc.delta for enc in encoding], ch_axis)
+        else:
+            delta = encoding.delta
+
+        tensor_floor = tf.floor(tensor / delta)
+        tensor = (tensor / delta) - tensor_floor
+        # pylint: disable=invalid-unary-operand-type
+        return -tf.math.log((AdaroundConstants.ZETA - AdaroundConstants.GAMMA) / (tensor - AdaroundConstants.GAMMA) - 1)
+
+    @staticmethod
     def _initialize_alpha(tensor: tf.Tensor, encoding: libpymo.TfEncoding, enable_per_channel: bool,
                           ch_axis: int) -> tf.Variable:
         """
@@ -325,18 +367,11 @@ class AdaroundWrapper(keras.layers.Layer):
         after transpose of encoding: (A, B, C, D)
         """
 
-        if enable_per_channel:
-            assert isinstance(encoding, list), "Per-channel expects encoding to be a list"
-            delta = AdaroundWrapper._broadcast_to_tensor(tensor, [enc.delta for enc in encoding], ch_axis)
-        else:
-            delta = encoding.delta
-
-        tensor_floor = tf.floor(tensor / delta)
-        tensor = (tensor / delta) - tensor_floor
-        alpha_var = AdaroundWrapper._create_alpha_var(tensor)
+        alpha = AdaroundWrapper.calculate_alpha(tensor, encoding, enable_per_channel, ch_axis)
+        alpha_var = AdaroundWrapper._create_alpha_var(alpha)
         return alpha_var
 
-    def _get_weight_bias(self, session: tf.compat.v1.Session) -> (Tuple, np.ndarray, Union[None, np.ndarray]):
+    def _get_weight_and_bias_tensors(self, session: tf.compat.v1.Session) -> (Tuple, np.ndarray, Union[None, np.ndarray]):
         """
         :param session: Tf session
         :return: shape of orig weight, weight and bias
@@ -354,7 +389,7 @@ class AdaroundWrapper(keras.layers.Layer):
             bias = BiasUtils.get_bias_as_numpy_data(session, self._op)
 
         if self.enable_per_channel and self._op.type == 'DepthwiseConv2dNative':
-            weight = AdaroundWrapper._transform_input_ndarray_for_depthwise_conv_2d(weight)
+            weight = AdaroundWrapper.transform_input_ndarray_for_depthwise_conv_2d(weight)
 
         return orig_weight_shape, weight, bias
 

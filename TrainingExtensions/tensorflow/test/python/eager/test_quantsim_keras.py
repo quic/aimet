@@ -355,7 +355,7 @@ def test_range_learning():
         qsim.export('./data', 'dense_functional')
         with open("./data/dense_functional.encodings", "r") as encodings_file:
             encodings = json.load(encodings_file)
-        assert encodings['activation_encodings']['dense/BiasAdd:0']['max'] == \
+        assert encodings['activation_encodings']['dense/BiasAdd:0'][0]['max'] == \
                running_dense_output_quantizer_encoding_max
 
 def test_assert_on_reused_layer():

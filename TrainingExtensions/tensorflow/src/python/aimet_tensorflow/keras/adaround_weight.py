@@ -37,10 +37,12 @@
 # =============================================================================
 
 """ Top level API for Adaptive Rounding - Post-Training Quantization (PTQ) """
-from typing import Dict, List, Union
+from typing import Dict, List, Union, Iterable
 import tensorflow as tf
+from tqdm import tqdm
 
 import aimet_common.libpymo as libpymo
+
 from aimet_common.utils import AimetLogger
 from aimet_common.defs import QuantScheme
 from aimet_tensorflow.adaround.adaround_weight import AdaroundParameters
@@ -60,12 +62,15 @@ class Adaround:
     """
     Weight-rounding mechanism for Post Training Quantization (PTQ)
     """
+
     # pylint: disable=too-many-locals
+    # pylint: disable=too-many-arguments
     @classmethod
     def apply_adaround(cls, model: tf.keras.Model, params: AdaroundParameters, path: str, filename_prefix: str,
                        default_param_bw: int = 4,
                        default_quant_scheme: QuantScheme = QuantScheme.post_training_tf_enhanced,
-                       default_is_symmetric: bool = False) -> tf.keras.Model:
+                       default_is_symmetric: bool = False,
+                       config_file: str = None) -> tf.keras.Model:
         """
         Returns model with optimized weight rounding of every op (Conv and Linear) and also saves the
         corresponding quantization encodings to a separate JSON-formatted file that can then be imported by
@@ -80,8 +85,13 @@ class Adaround:
          QuantScheme.post_training_tf_enhanced. Default QuantScheme.post_training_tf_enhanced
         :param default_is_symmetric: True if symmetric encodings is used, else asymmetric encodings.
          Default False.
+        :param config_file: Configuration file for model quantizers
         :return: Model with Adarounded weights
         """
+
+        # Get parameters from config file. To allow one central place for Adaround and Quantsim
+        _, strict_symmetric, unsigned_symmetric, per_channel_enabled = TfAdaround.get_config_dict_keys(config_file)
+
         # Optimization Hyper parameters
         opt_params = AdaroundHyperParameters(params.num_iterations, params.reg_param, params.beta_range,
                                              params.warm_start)
@@ -98,10 +108,10 @@ class Adaround:
         module_act_func_pair = cls._get_module_act_func_pair(model)
         param_encodings = {}
 
-        for idx in ordered_layer_indices:
-            cls.adaround_layer(act_sampler, default_is_symmetric, default_param_bw, default_quant_scheme, model,
-                               hard_rounded_model, soft_rounded_model, idx, module_act_func_pair, opt_params,
-                               param_encodings)
+        for idx in tqdm(ordered_layer_indices):
+            cls.adaround_layer(act_sampler, default_is_symmetric, strict_symmetric, unsigned_symmetric,
+                               default_param_bw, default_quant_scheme, model, hard_rounded_model, soft_rounded_model,
+                               idx, module_act_func_pair, opt_params, param_encodings, per_channel_enabled)
 
         # Export quantization encodings to JSON-formatted file at provided path
         TfAdaround.export_encoding_to_json(path, filename_prefix, param_encodings)
@@ -110,12 +120,15 @@ class Adaround:
     # pylint: disable=too-many-locals
     # pylint: disable=too-many-arguments
     @classmethod
-    def adaround_layer(cls, act_sampler, default_is_symmetric, default_param_bw, default_quant_scheme, orig_model,
-                       hard_rounded_model, soft_rounded_model, idx, module_act_func_pair, opt_params, param_encodings):
+    def adaround_layer(cls, act_sampler, is_symmetric, strict_symmetric, unsigned_symmetric, default_param_bw,
+                       default_quant_scheme, orig_model, hard_rounded_model, soft_rounded_model, idx,
+                       module_act_func_pair, opt_params, param_encodings, per_channel_enabled):
         """
         Perform adaround on a specific layer.
         :param act_sampler: Activation sampler
-        :param default_is_symmetric: True if symmetric encodings is used, else asymmetric encodings
+        :param is_symmetric: True if symmetric encodings is used, else asymmetric encodings
+        :param strict_symmetric: Taken from config file, False by default
+        :param unsigned_symmetric: Taken from config file, True by default
         :param default_param_bw: Default bitwidth (4-31) to use for quantizing layer parameters
         :param default_quant_scheme: Quantization scheme. Supported options are QuantScheme.post_training_tf or
             QuantScheme.post_training_tf_enhanced
@@ -126,6 +139,7 @@ class Adaround:
         :param module_act_func_pair: Dictionary mapping modules to subsequent activation functions
         :param opt_params: Adaround hyperparameters
         :param param_encodings: Dictionary holding parameter encodings information
+        :param per_channel_enabled: Flag for per channel quantization
         """
         # Collect input and output activations data
         all_inp_data, all_out_data = act_sampler.sample_activation(orig_model.layers[idx], orig_model,
@@ -133,13 +147,22 @@ class Adaround:
                                                                    hard_rounded_model)
         # Get module's next following activation function
         act_func = module_act_func_pair[orig_model.layers[idx]]
-        wrapper = AdaroundWrapper(orig_model.layers[idx], default_param_bw, default_quant_scheme, default_is_symmetric)
+
+        output_height, output_width, output_channels = None, None, None
+        if isinstance(orig_model.layers[idx], tf.keras.layers.Conv2DTranspose):
+            data_format = 'NHWC' if orig_model.layers[idx].data_format == 'channels_last' else 'NCHW'
+            output_height, output_width, output_channels = \
+                TfAdaround.get_conv2d_transpose_output_tensor_shape(data_format, all_out_data)
+
+        wrapper = AdaroundWrapper(orig_model.layers[idx], default_param_bw, default_quant_scheme,
+                                  is_symmetric, strict_symmetric, unsigned_symmetric, per_channel_enabled,
+                                  output_height, output_width, output_channels)
         hard_rounded_weight, soft_rounded_weight = AdaroundOptimizer.adaround_wrapper(wrapper, act_func,
                                                                                       all_inp_data, all_out_data,
                                                                                       opt_params)
         # Update param encodings dictionary
         Adaround._update_param_encodings_dict(param_encodings, orig_model.layers[idx], wrapper.encoding,
-                                              default_is_symmetric)
+                                              is_symmetric)
         hard_rounded_model.layers[idx].set_weights([hard_rounded_weight] +
                                                    hard_rounded_model.layers[idx].get_weights()[1:])
         soft_rounded_model.layers[idx].set_weights([soft_rounded_weight] +
@@ -183,7 +206,8 @@ class Adaround:
         return module_act_func_pair
 
     @staticmethod
-    def _update_param_encodings_dict(encoding_dict: Dict, layer: tf.keras.layers.Layer, encoding: libpymo.TfEncoding,
+    def _update_param_encodings_dict(encoding_dict: Dict, layer: tf.keras.layers.Layer,
+                                     encoding: Union[libpymo.TfEncoding, List[libpymo.TfEncoding]],
                                      is_symmetric: bool):
         """
         Add layer's parameter encoding to dictionary to be used for exporting.
@@ -193,12 +217,15 @@ class Adaround:
         :param is_symmetric: Symmetric vs Asymmetric boolean
         """
         tensor_name = layer.weights[0].name
-        encoding_dict[tensor_name] = [{'min': encoding.min,
-                                       'max': encoding.max,
-                                       'scale': encoding.delta,
-                                       'offset': encoding.offset,
-                                       'bitwidth': encoding.bw,
-                                       'is_symmetric': is_symmetric}]
+        if not isinstance(encoding, Iterable):
+            encoding = [encoding]
+        encoding_dict[tensor_name] = [{'min': enc.min,
+                                       'max': enc.max,
+                                       'scale': enc.delta,
+                                       'offset': enc.offset,
+                                       'bitwidth': enc.bw,
+                                       'is_symmetric': is_symmetric} for enc in encoding]
+
     @staticmethod
     def _get_ordered_adaround_layer_indices(model: tf.keras.Model) -> List[int]:
         """

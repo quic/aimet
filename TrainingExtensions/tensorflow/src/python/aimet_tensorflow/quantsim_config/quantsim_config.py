@@ -3,7 +3,7 @@
 # =============================================================================
 #  @@-COPYRIGHT-START-@@
 #
-#  Copyright (c) 2020, Qualcomm Innovation Center, Inc. All rights reserved.
+#  Copyright (c) 2020 - 2022, Qualcomm Innovation Center, Inc. All rights reserved.
 #
 #  Redistribution and use in source and binary forms, with or without
 #  modification, are permitted provided that the following conditions are met:
@@ -109,7 +109,7 @@ class QuantSimConfigurator(AimetCommonQuantSimConfigurator):
         self._activation_quantizer_dict = {}
         self._op_to_quantizer_lists_dict = None
         self._onnx_conn_graph_name_mapper = OnnxConnectedGraphTypeMapper(onnx_tf_conn_graph_type_pairs)
-        self.per_channel_quantization_flag = self._get_per_channel_quantization_flag()
+        self.per_channel_quantization_flag = self._parse_per_channel_quantization().get('defaults')
 
         self._supported_kernels = self._parse_supported_kernels()
         if ENFORCE_TARGET_DTYPE_BITWIDTH_CONFIG:
@@ -118,7 +118,6 @@ class QuantSimConfigurator(AimetCommonQuantSimConfigurator):
                                                                          param_dtype=quantsim_data_type,
                                                                          param_bw=quantsim_param_bw)):
                 logger.info("Supported Kernel check for valid dtype and bitwidth overrides completed")
-
 
     def configure_quantizers(self, op_to_quant_ops_dict: OpToQuantOpsDictType,
                              param_quantizer_dict: Dict[str, QuantizerInfo],
@@ -134,16 +133,6 @@ class QuantSimConfigurator(AimetCommonQuantSimConfigurator):
         # Set all quantizers to pass through mode first
         self._disable_all_quantizers()
         self._set_quantsim_configs()
-
-    def _get_per_channel_quantization_flag(self) -> bool:
-        """
-        Returns Per channel quantization flag if it is set in config file else returns False
-        """
-        # Check if per channel quantization is enabled
-        default_configs = self._quantsim_configs[ConfigDictKeys.DEFAULTS]
-        if ConfigDictKeys.PER_CHANNEL_QUANTIZATION in default_configs:
-            return default_configs[ConfigDictKeys.PER_CHANNEL_QUANTIZATION]
-        return False
 
     def _get_op_to_quantizer_lists_dict(self) -> Dict[Op, QuantizerListType]:
         """

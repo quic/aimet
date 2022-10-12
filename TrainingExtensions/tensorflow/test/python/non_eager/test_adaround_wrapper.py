@@ -287,7 +287,7 @@ class TestAdaroundWrapper(unittest.TestCase):
         """
         shape = (2, 2, 3, 4)
         a = np.random.rand(*shape)
-        b = AdaroundWrapper._transform_input_ndarray_for_depthwise_conv_2d(a)
+        b = AdaroundWrapper.transform_input_ndarray_for_depthwise_conv_2d(a)
         assert b.shape == (2, 2, 12)
         assert (a - b.reshape(*shape)).all() == 0
 
