@@ -192,13 +192,9 @@ class Adaround:
         # Create copies which will have model's weights quantized with hard and soft rounding.
         session_hard_rounded_weight = graph_saver.save_and_load_graph(WORKING_DIR, session)
         session_soft_rounded_weight = graph_saver.save_and_load_graph(WORKING_DIR, session)
-        configs = JsonConfigImporter.import_json_config_file(config_file)
-        # Strict_symmetric and unsigned_symmetric flags have default value False and True respectively.
-        strict_symmetric = configs[ConfigDictKeys.DEFAULTS].get(ConfigDictKeys.STRICT_SYMMETRIC, False)
-        unsigned_symmetric = configs[ConfigDictKeys.DEFAULTS].get(ConfigDictKeys.UNSIGNED_SYMMETRIC, True)
 
-        # read per-channel quantization field. Default = False
-        enable_per_channel = configs[ConfigDictKeys.DEFAULTS].get(ConfigDictKeys.PER_CHANNEL_QUANTIZATION, False)
+        # Get parameters from config file.
+        configs, strict_symmetric, unsigned_symmetric, enable_per_channel = Adaround.get_config_dict_keys(config_file)
 
         # Optimization Hyper parameters
         opt_params = AdaroundHyperParameters(params.num_iterations, params.reg_param, params.beta_range,
@@ -208,7 +204,6 @@ class Adaround:
 
         # Get Adaround supported ops based on occurrence in the model
         ordered_ops = cls._get_ordered_list_of_ops(session.graph, starting_op_names, output_op_names)
-
 
         param_encodings = {}
         for op in tqdm(ordered_ops):
@@ -234,8 +229,8 @@ class Adaround:
                 output_height, output_width, output_channels = None, None, None
                 if op.type == 'Conv2DBackpropInput':
                     output_height, output_width, output_channels = \
-                        cls._get_conv2d_transpose_output_tensor_shape(op.get_attr("data_format").decode('utf-8'),
-                                                                      all_out_data)
+                        cls.get_conv2d_transpose_output_tensor_shape(op.get_attr("data_format").decode('utf-8'),
+                                                                     all_out_data)
                 wrapper = AdaroundWrapper(session, op, param_bw, quant_scheme, is_symmetric,
                                           strict_symmetric, unsigned_symmetric, enable_per_channel, output_height,
                                           output_width, output_channels)
@@ -255,6 +250,23 @@ class Adaround:
         session_hard_rounded_weight.close()
 
         return param_encodings, session_soft_rounded_weight
+
+    @staticmethod
+    def get_config_dict_keys(config_file: str) -> Tuple[ConfigDictType, bool, bool, bool]:
+        """
+        Get config dictionary keys from config file. Config file will default if no provided one.
+        :param config_file: configuration file.
+        :return: Config dictionary, strict symmetric flag, unsigned symmetric flag, enable per channel flag.
+        """
+        configs = JsonConfigImporter.import_json_config_file(config_file)
+        # Strict_symmetric and unsigned_symmetric flags have default value False and True respectively
+        strict_symmetric = configs[ConfigDictKeys.DEFAULTS].get(ConfigDictKeys.STRICT_SYMMETRIC, False)
+        unisgned_symmetric = configs[ConfigDictKeys.DEFAULTS].get(ConfigDictKeys.UNSIGNED_SYMMETRIC, True)
+
+        # Read per-channel quantization field. Default = False
+        per_channel_enabled = configs[ConfigDictKeys.DEFAULTS].get(ConfigDictKeys.PER_CHANNEL_QUANTIZATION, False)
+
+        return configs, strict_symmetric, unisgned_symmetric, per_channel_enabled
 
     @staticmethod
     def _get_ordered_list_of_ops(graph: tf.Graph, input_op_names: List[str], output_op_names: List[str]) \
@@ -390,7 +402,7 @@ class Adaround:
         return False
 
     @staticmethod
-    def _get_conv2d_transpose_output_tensor_shape(data_format: str, output_data: np.ndarray):
+    def get_conv2d_transpose_output_tensor_shape(data_format: str, output_data: np.ndarray):
         """
         Get output height, width, and channels from output_data for use in adarounding conv2d transpose op.
         :param data_format: Data format for the op (NHWC or NCHW)
