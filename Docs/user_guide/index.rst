@@ -50,6 +50,11 @@ Please visit the generated AIMET API documentation here
 
 - :ref:`Examples Documentation <ug-examples>`:Browse and use the Jupyter Notebooks that provide examples of using AIMET features.
 
+Installation Guide
+==================
+
+Please visit :ref:`AIMET Installation<ug-intall>` for more details
+
 |
 
 |
