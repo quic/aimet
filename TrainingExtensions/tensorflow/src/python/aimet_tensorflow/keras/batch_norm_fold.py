@@ -3,7 +3,7 @@
 # =============================================================================
 #  @@-COPYRIGHT-START-@@
 #
-#  Copyright (c) 2021, Qualcomm Innovation Center, Inc. All rights reserved.
+#  Copyright (c) 2021-2022, Qualcomm Innovation Center, Inc. All rights reserved.
 #
 #  Redistribution and use in source and binary forms, with or without
 #  modification, are permitted provided that the following conditions are met:
@@ -444,7 +444,7 @@ def _delete_all_bns_from_model(model: (tf.keras.Model, tf.keras.layers.Layer),
             _delete_bn_for_non_subclassed_model(model, bn_layer)
 
 
-def _find_all_batch_norms_to_fold(model: Tuple[tf.keras.Model, tf.keras.layers.Layer]) -> List[PAIR_TYPE]:
+def _find_all_batch_norms_to_fold(model: tf.keras.Model) -> List[PAIR_TYPE]:
     """
     uses searcher to choose layers for bias correction
 
@@ -480,7 +480,7 @@ def _find_all_batch_norms_to_fold(model: Tuple[tf.keras.Model, tf.keras.layers.L
     return valid_bn_conv_linear_pairs
 
 
-def fold_given_batch_norms(model: Tuple[tf.keras.Model, tf.keras.layers.Layer], layer_pairs: List[PAIR_TYPE]):
+def fold_given_batch_norms(model: tf.keras.Model, layer_pairs: List[PAIR_TYPE]):
     """
     Fold a given set of batch_norm layers into conv layers
 
@@ -545,7 +545,7 @@ def fold_given_batch_norms(model: Tuple[tf.keras.Model, tf.keras.layers.Layer], 
     _delete_all_bns_from_model(model, list_of_bn_layers)
 
 
-def fold_all_batch_norms(model: Tuple[tf.keras.Model, tf.keras.layers.Layer]):
+def fold_all_batch_norms(model: tf.keras.Model):
     """
     Fold all batch_norm layers in a model into corresponding conv layers
 
