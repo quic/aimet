@@ -37,6 +37,7 @@
 # =============================================================================
 
 """Automatic Post-Training Quantization"""
+import copy
 import os
 from dataclasses import dataclass
 from typing import List, Callable, Dict, Any, Tuple, Optional
@@ -50,6 +51,7 @@ from aimet_common.cache import Cache
 from aimet_common.defs import QuantScheme
 from aimet_common.quantsim import validate_quantsim_inputs
 from aimet_common.utils import AimetLogger, Spinner
+from aimet_tensorflow.keras.batch_norm_fold import fold_all_batch_norms
 from aimet_tensorflow.keras.quantsim import QuantizationSimModel
 
 _logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.AutoQuant)
@@ -247,6 +249,19 @@ class AutoQuant:
 
         return sim
 
+    # pylint: disable=no-self-use
+    def _apply_batchnorm_folding(self, model: tf.keras.Model) -> Tuple[tf.keras.Model, List[Tuple]]:
+        """
+        Apply batchnorm folding
+        Note: Input model is not mutated
+        :param model: Model to apply batchnorm folding
+        :return: Output model and folded pairs
+        """
+        model = copy.deepcopy(model)
+        folded_pairs = fold_all_batch_norms(model)
+        return model, folded_pairs
+
+
     # TODO: Remove temporary pylint disable after full implementation
     # pylint: disable=no-self-use, unused-argument
     def _auto_quant_main(self,
@@ -274,6 +289,17 @@ class AutoQuant:
             s.diagnostics.add(
                 f"Activation-quantized eval score (W32A{self.default_output_bw}): {acc:f}"
             )
+
+        # Batchnorm Folding
+        with eval_manager.ptq_session("Batchnorm Folding") as sess:
+            model, folded_pairs = self._apply_batchnorm_folding(fp32_model)
+            for conv, bn in folded_pairs:
+                sess.diagnostics.add(f"{conv} was merged with {bn}.")
+            sess.set_ptq_result(model=model, applied_techniques=["batchnorm_folding"])
+
+        best_result = eval_manager.get_best_ptq_result()
+        if best_result.accuracy >= target_acc:
+            return best_result.as_dict()
 
         return eval_manager.get_best_ptq_result().as_dict()
 
@@ -322,10 +348,8 @@ class _EvalManager:
 
         os.makedirs(self._results_dir, exist_ok=True)
 
-        # TODO: Implement _PtqSession
-        # self._ptq_sessions: List[_PtqSession] = []
         self._all_sessions: List[_EvalSession] = []
-        self._ptq_sessions = []
+        self._ptq_sessions: List[_PtqSession] = []
 
     def get_best_ptq_result(self) -> PtqResult:
         """
@@ -345,6 +369,16 @@ class _EvalManager:
         :return: Analysis session.
         """
         return self._get_session(title, _EvalSession)
+
+    def ptq_session(self, title: str) -> "_PtqSession":
+        """
+        Return a session for analysis only.
+        :param title: Title of the session.
+        :return: PTQ session.
+        """
+        sess = self._get_session(title, _PtqSession)
+        self._ptq_sessions.append(sess)
+        return sess
 
     def _get_session(self, title: str, session_cls: type):
         """
@@ -450,3 +484,88 @@ class _EvalSession:
     def __exit__(self, exc_type, exc_val, exc_tb):
         if self._spinner is not None:
             self._spinner.__exit__(exc_type, exc_val, exc_tb)
+
+
+class _PtqSession(_EvalSession):
+    """
+    PTQ session.
+
+    Each PTQ session object should call `set_ptq_result` exactly once
+    inside a with-as block.
+    """
+    def __init__(self, *args, **kwargs):
+        super(_PtqSession, self).__init__(*args, **kwargs)
+        self._ptq_result = None
+
+    @property
+    def ptq_result(self) -> PtqResult:
+        """Getter of self._ptq_result."""
+        if self._ptq_result is None:
+            raise RuntimeError
+        return self._ptq_result
+
+    def set_ptq_result(self,
+                       applied_techniques: List[str],
+                       model: tf.keras.Model = None,
+                       sim: QuantizationSimModel = None,
+                       acc: float = None,
+                       **kwargs):
+        """
+        Set the result of PTQ. Should be called exactly once inside a with-as block
+
+        Exactly one among model and (sim, acc) pair should be specified
+        1) If sim and acc is specified, save them as the result of this session
+        2) If model is specified, evaluate the quantized accuracy of the model and save the result
+        :param applied_techniques: List of applied technique names
+        :param model: Result of PTQ
+        :param sim: Result of PTQ. The quantization encoding (compute_encodings()) is
+                    assumed to have been computed in advance
+        :param acc: Eval score
+        :param kwargs: Additional arguments to the quantsim factory
+        """
+        if sim is None:
+            assert acc is None
+            assert model is not None
+            sim = self._quantsim_factory(model, **kwargs)
+            acc = self._eval_func(sim.model)
+        else:
+            assert acc is not None
+            assert model is None
+
+        self._set_ptq_result(sim, acc, applied_techniques)
+
+    def _set_ptq_result(self,
+                        sim: QuantizationSimModel,
+                        acc: float,
+                        applied_techniques: List[str]) -> PtqResult:
+        """
+        Set the result of PTQ. Should be called exactly once inside a with-as block
+        :param sim: Result of PTQ. The quantization encoding (compute_encodings()) is
+                    assumed to have been computed in advance
+        :param acc: Eval score
+        :param applied_techniques: List of applied technique names
+        :return: PtqResult object
+        """
+        if self._ptq_result is not None:
+            raise RuntimeError(
+                "sess.eval() can be called only once per each _EvalSession instance."
+            )
+        model_path, encoding_path = self._export(sim)
+        self._ptq_result = PtqResult(model_path=model_path,
+                                     encoding_path=encoding_path,
+                                     accuracy=acc,
+                                     applied_techniques=applied_techniques)
+        return self._ptq_result
+
+    def _export(self, sim: QuantizationSimModel) -> Tuple[str, str]:
+        """
+        Export quantsim
+        :param sim: QuantizationSimModel object to export
+        :return: The paths where model and encoding are saved
+        """
+        sim.export(path=self._results_dir, filename_prefix=self._filename)
+        model_path = os.path.join(self._results_dir, f"{self._filename}.h5")
+        encoding_path = os.path.join(self._results_dir, f"{self._filename}.encodings")
+        _logger.info("The results of %s is saved in %s and %s.",
+                     self._title, model_path, encoding_path)
+        return model_path, encoding_path
