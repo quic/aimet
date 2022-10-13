@@ -139,6 +139,7 @@ class QcQuantizeOp:
         :param use_strict_symmetric: True if strict symmetric mode is to be used, False otherwise
         """
         self.tensor_quantizer.setStrictSymmetric(use_strict_symmetric)
+        self.encodings = None
 
     @property
     def use_unsigned_symmetric(self) -> bool:
@@ -155,6 +156,7 @@ class QcQuantizeOp:
         :param use_unsigned_symmetric: True if unsigned symmetric mode is to be used, False otherwise
         """
         self.tensor_quantizer.setUnsignedSymmetric(use_unsigned_symmetric)
+        self.encodings = None
 
     def set_encodings(self, encodings: libpymo.TfEncoding):
         """
