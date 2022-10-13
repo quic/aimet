@@ -53,7 +53,7 @@ import aimet_common.libpymo as libpymo
 
 logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Utils)
 
-dtypes_to_ignore_for_quantization = (int, float, bool)
+dtypes_to_ignore_for_quantization = (int, float, bool, str, tuple, type(None))
 torch_dtypes_to_ignore_for_quantization = [torch.int, torch.int8, torch.int16, torch.int32, torch.int64, torch.bool]
 
 
