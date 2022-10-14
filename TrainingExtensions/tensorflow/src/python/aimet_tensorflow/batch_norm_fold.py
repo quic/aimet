@@ -44,7 +44,7 @@ import numpy as np
 import tensorflow as tf
 
 from aimet_tensorflow.common.connectedgraph import ConnectedGraph
-from aimet_tensorflow.common.operation import OpWithMetaInfoType
+from aimet_tensorflow.common.operation import OpWithMetaInfoType, Op
 from aimet_tensorflow.quantsim import QuantizationSimModel
 from aimet_tensorflow.utils import graph_saver
 from aimet_tensorflow.utils.op.conv import WeightTensorUtils, BiasUtils
@@ -65,7 +65,7 @@ logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.CrosslayerEqualization
 # tf.Operation type  : op which bn needs to be folded into.
 # OpWithMetaInfoType : bn op will store the input and output tensors along with tf.Operation
 # bool : Flag indicating if bn op can be folded upstream or downstream.
-PairType = Tuple[tf.Operation, OpWithMetaInfoType, bool]
+PairType = Tuple[tf.Operation, Union[OpWithMetaInfoType, Op], bool]
 
 def _conv_bn_select_custom_pattern_init():
     """
@@ -146,12 +146,13 @@ def _find_conv_bn_pairs(model, start_op_names: Union[List[str], str],
 
 
 def find_all_batch_norms_to_fold(sess: tf.compat.v1.Session, start_op_names: Union[List[str], str],
-                                 output_op_names: Union[List[str], str]) -> List[PairType]:
+                                 output_op_names: Union[List[str], str], return_bn_conn_op=False) -> List[PairType]:
     """
     uses searcher to choose layers for bias correction
     :param sess: tf.compat.v1.Session type
     :param start_op_names: list of strings with names of starting ops in the model
     :param output_op_names: List of output op names of the model, used to help ConnectedGraph determine valid ops
+    :param return_bn_conn_op: Return bn op as connected graph op instead of tf tensor
     (to ignore training ops for example).  If None, all ops in the model are considered valid.
 
     :return: List of conv/linear layers with associated bn op / activation info
@@ -173,11 +174,17 @@ def find_all_batch_norms_to_fold(sess: tf.compat.v1.Session, start_op_names: Uni
             bn_info = convs_linears_bn_activation_info_dict[conv_linear_op]
             if bn_info.output_bn:
                 if bn_info.output_bn not in marked_bn_set:
-                    bn_conv_linear_pairs.append((conv_linear_op, bn_info.output_bn.get_tf_op_with_io_tensor(), True))
+                    if return_bn_conn_op:
+                        bn_conv_linear_pairs.append((conv_linear_op, bn_info.output_bn, True))
+                    else:
+                        bn_conv_linear_pairs.append((conv_linear_op, bn_info.output_bn.get_tf_op_with_io_tensor(), True))
                     marked_bn_set.add(bn_info.output_bn)
             elif bn_info.input_bn:
                 if bn_info.input_bn not in marked_bn_set:
-                    bn_conv_linear_pairs.append((conv_linear_op, bn_info.input_bn.get_tf_op_with_io_tensor(), False))
+                    if return_bn_conn_op:
+                        bn_conv_linear_pairs.append((conv_linear_op, bn_info.output_bn, True))
+                    else:
+                        bn_conv_linear_pairs.append((conv_linear_op, bn_info.input_bn.get_tf_op_with_io_tensor(), False))
                     marked_bn_set.add(bn_info.input_bn)
 
     return bn_conv_linear_pairs

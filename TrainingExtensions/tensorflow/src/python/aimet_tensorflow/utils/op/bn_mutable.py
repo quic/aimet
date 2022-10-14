@@ -47,52 +47,62 @@ _DEFAULT_TF_BN_MOMENTUM = 0.99
 
 def modify_model_bn_mutable(model: tf.keras.Model):
     """
-    Utilities to modify batchnorm layer's momentum of pre-traind tf2 model as mutable TF variable
+    Utilities to modify batchnorm layer's momentum of keras model as mutable tf.Variable
 
-    :param model: Pre-trained tf2 model
+    :param model: keras model to modify batchnorms
     """
     for layer in model.layers:
         if isinstance(layer, tf.keras.layers.BatchNormalization):
             momentum = layer.momentum
-            bn_momentum_var = tf.Variable(momentum, trainable=False, name="bn_momentum_" + layer.name + "_mutable")
+            bn_momentum_var = tf.Variable(momentum, trainable=False, name=layer.name + "/momentum_mutable")
             layer.momentum = bn_momentum_var
 
 
 # pylint: disable=too-many-locals
 def modify_sess_bn_mutable(sess: tf.compat.v1.Session, start_op_names: Union[List[str], str],
-                           output_op_names: Union[List[str], str], trainin_is_tf_placeholder: bool = True):
+                           output_op_names: Union[List[str], str], training_tf_placeholder: bool = True):
     """
-    Utilities to modify batchnorm layer's momentum of any pre-trained tf model as tf1 subgraph with mutable TF variable, training as placeholder
+    Utilities to modify batchnorm layer's momentum and training argument of tf session model as tf.Variable and/or tf.placeholder
     :param sess: active tf.compat.v1.Session
     :param start_op_names: Name of the starting op in the given graph or a list of names in case of multi-input model
     :param output_op_names: List of output op names of the model, used to help ConnectedGraph determine valid ops
            (to ignore training ops for example).  If None, all ops in the model are considered valid.
-    :return: A new session
+    :param training_tf_placeholder: Use tf.placeholder as training arg when set to True, else use tf.Variable
 
     """
-    bn_conv_linear_pairs = find_all_batch_norms_to_fold(sess, start_op_names, output_op_names)
+    bn_conv_linear_pairs = find_all_batch_norms_to_fold(sess, start_op_names, output_op_names, return_bn_conn_op=True)
     with sess.graph.as_default():
-        bn_training = tf.compat.v1.Variable(tf.compat.v1.constant(False), name='bn_training_var')
-        if trainin_is_tf_placeholder:
-            bn_training = tf.compat.v1.placeholder_with_default(False, shape=[], name='bn_is_training_placehoder')
+        if training_tf_placeholder:
+            bn_training = tf.compat.v1.placeholder_with_default(False, shape=[], name='bn_training_placeholder')
+        else:
+            bn_training = tf.compat.v1.Variable(tf.compat.v1.constant(False), name='bn_training_var')
+
         for pair in bn_conv_linear_pairs:
-            _, batchnorm, _ = pair
-            beta = BNUtils.get_beta_as_numpy_data(sess, batchnorm.op).reshape(-1)
-            gamma = BNUtils.get_gamma_as_numpy_data(sess, batchnorm.op).reshape(-1)
-            mean = BNUtils.get_moving_mean_as_numpy_data(sess, batchnorm.op).reshape(-1)
-            var = BNUtils.get_moving_variance_as_numpy_data(sess, batchnorm.op).reshape(-1)
+            batchnorm = pair[1]
+            modified_name = batchnorm.name + '_modified'
+            batchnorm_tensor = batchnorm.get_tf_op_with_io_tensor()
+
+            beta_read_var = BNUtils.get_beta_read_var_op_tensor(sess.graph, batchnorm_tensor.op)
+            gamma_read_var = BNUtils.get_gamma_read_var_op_tensor(sess.graph, batchnorm_tensor.op)
+            mean_read_var = BNUtils.get_moving_mean_read_var_op_tensor(sess.graph, batchnorm_tensor.op)
+            var_read_var = BNUtils.get_moving_variance_read_var_op_tensor(sess.graph, batchnorm_tensor.op)
+
+            beta, gamma, mean, var = sess.run([beta_read_var, gamma_read_var, mean_read_var, var_read_var])
+
             beta_init = tf.compat.v1.constant_initializer(beta, dtype=tf.float32, verify_shape=True)
             gamma_init = tf.compat.v1.constant_initializer(gamma, dtype=tf.float32, verify_shape=True)
             mean_init = tf.compat.v1.constant_initializer(mean, dtype=tf.float32, verify_shape=True)
             var_init = tf.compat.v1.constant_initializer(var, dtype=tf.float32, verify_shape=True)
-            modified_name = "modified_bn_" + batchnorm.op.name
-            new_bn = tf.compat.v1.layers.batch_normalization(batchnorm.in_tensor, beta_initializer=beta_init,
+            momentum = tf.Variable(_DEFAULT_TF_BN_MOMENTUM, trainable=False, name=modified_name + "/momentum_mutable")
+
+            new_bn = tf.compat.v1.layers.batch_normalization(batchnorm_tensor.in_tensor, beta_initializer=beta_init,
                                                              gamma_initializer=gamma_init,
                                                              moving_mean_initializer=mean_init,
                                                              moving_variance_initializer=var_init,
-                                                             name=modified_name, momentum=tf.Variable(_DEFAULT_TF_BN_MOMENTUM, trainable=False, name="momentum_mutable_" + modified_name),
-                                                             training=bn_training,
+                                                             name=modified_name, momentum=momentum, training=bn_training,
                                                              fused=True)
-            graph_editor.reroute_ts(ts0=[new_bn], ts1=batchnorm.out_tensor)
-            graph_editor.detach_inputs(batchnorm.op)
+
+            graph_editor.reroute_ts(ts0=[new_bn], ts1=batchnorm_tensor.out_tensor)
+            graph_editor.detach_inputs(batchnorm_tensor.op)
+
     initialize_uninitialized_vars(sess)
