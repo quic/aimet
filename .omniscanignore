@@ -19,6 +19,8 @@ TrainingExtensions/tensorflow/src/python/aimet_tensorflow/examples/
 TrainingExtensions/torch/test/
 TrainingExtensions/torch/src/python/aimet_torch/examples/
 
+TrainingExtensions/torch/src/python/aimet_torch/meta/old_connectedgraph.py
+
 buildntest.sh
 CODE-OF-CONDUCT.md
 CONTRIBUTING.md
