@@ -36,6 +36,7 @@
 #  @@-COPYRIGHT-END-@@
 # =============================================================================
 from aimet_common.connected_graph.connectedgraph_utils import get_all_input_ops
+from aimet_common.connected_graph.connectedgraph import get_ordered_ops
 from aimet_onnx.meta.connectedgraph import ConnectedGraph
 import test_models
 
@@ -48,8 +49,8 @@ class TestConnectedGraph:
         assert len(ops) == 5
         assert ['conv', 'relu', 'maxpool', 'flatten', 'fc'] == [op_name for op_name in ops]
         products = cg.get_all_products()
-        assert len(products) == 9
-        assert ['input_to_conv', 'conv_to_relu', 'relu_to_maxpool', 'maxpool_to_flatten', 'flatten_to_fc',
+        assert len(products) == 10
+        assert ['input_to_conv', 'conv_to_relu', 'relu_to_maxpool', 'maxpool_to_flatten', 'flatten_to_fc', 'fc_to_output',
                 'conv/kernel', 'conv/bias', 'fc/kernel', 'fc/bias'] == [product for product in products]
 
     def test_single_residual_model(self):
@@ -57,9 +58,9 @@ class TestConnectedGraph:
         conn_graph = ConnectedGraph(model)
         assert len(conn_graph.get_all_ops()) == 21
         products = conn_graph.get_all_products()
-        assert len(products) == 30
+        assert len(products) == 31
         assert {'Conv_0_to_Relu_1', 'Relu_1_to_MaxPool_2'}.issubset({product for product in products})
-        assert {'Conv_0/kernel', 'Conv_0/bias', 'Conv_6/kernel'}.issubset({product for product in products})
+        assert {'Gemm_21_to_output','Conv_0/kernel', 'Conv_0/bias', 'Conv_6/kernel'}.issubset({product for product in products})
         input_ops = get_all_input_ops(conn_graph)
         assert len(input_ops) == 1
         assert conn_graph._branch_count == 2
@@ -70,7 +71,7 @@ class TestConnectedGraph:
         assert len(conn_graph.get_all_ops()) == 15
 
         products = conn_graph.get_all_products()
-        assert len(products) == 26
+        assert len(products) == 27
         assert {'Conv_0_to_MaxPool_1', 'Conv_3_to_MaxPool_4', 'Conv_7_to_MaxPool_8'}.issubset(
             {product for product in products})
         assert {'Conv_0/kernel', 'Conv_0/bias', 'Conv_3/kernel'}.issubset({product for product in products})
@@ -83,6 +84,33 @@ class TestConnectedGraph:
         assert len(conn_graph.get_all_ops()) == 5
 
         products = conn_graph.get_all_products()
-        assert len(products) == 17
+        assert len(products) == 18
         assert {'BatchNormalization_1/beta', 'BatchNormalization_1/gamma', 'BatchNormalization_1/moving_mean',
          'BatchNormalization_1/moving_variance', 'BatchNormalization_1_to_Relu_2'}.issubset({product for product in products})
+
+    def test_concat_model(self):
+        model = test_models.concat_model()
+        conn_graph = ConnectedGraph(model)
+        ops = conn_graph.get_all_ops()
+        assert len(ops) == 11
+        assert len(ops['Concat_3'].inputs) == 3
+        products = conn_graph.get_all_products()
+        assert len(products) == 21
+        assert conn_graph._branch_count == 1
+
+    def test_hierarchical_model(self):
+        model = test_models.hierarchical_model()
+        conn_graph = ConnectedGraph(model)
+        ops = conn_graph.get_all_ops()
+        assert len(ops) == 95
+        assert conn_graph._branch_count == 5
+        ordered_ops = conn_graph.ordered_ops
+        name_to_index = {}
+        for index, op in enumerate(ordered_ops):
+            name_to_index[op.name] = index
+
+        # Check in the graph that if A & B are connected and A comes before B in the graph then that should be the case
+        # in ordered graphs as well
+        assert name_to_index['Conv_0'] < name_to_index['Concat_18']
+        assert name_to_index['Conv_86'] < name_to_index['branch_0']
+        assert name_to_index['Conv_40'] < name_to_index['Conv_54']
