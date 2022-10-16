@@ -1404,3 +1404,40 @@ class TestFX:
         finally:
             if os.path.isdir(results_dir):
                 shutil.rmtree(results_dir)
+
+    def test_model_with_exclusion(self):
+        """ test model with exclusion list """
+        class CustomModule(torch.nn.Module):
+            @staticmethod
+            def forward(x):
+                return x * torch.nn.functional.softplus(x).sigmoid()
+
+        class CustomModel(torch.nn.Module):
+            def __init__(self):
+                super(CustomModel, self).__init__()
+                self.conv1 = torch.nn.Conv2d(3, 8, kernel_size=2, stride=2, padding=2, bias=False)
+                self.bn1 = torch.nn.BatchNorm2d(8)
+                self.relu1 = torch.nn.ReLU(inplace=True)
+                self.custom = CustomModule()
+
+            def forward(self, inputs):
+                x = self.conv1(inputs)
+                x = self.relu1(x)
+                x = self.bn1(x)
+                x = self.custom(x)
+                return x
+
+        # Create prepared_model without exclusion list.
+        model = CustomModel().eval()
+        prepared = prepare_model(model)
+        assert hasattr(prepared, "module_softplus") and isinstance(getattr(prepared, "module_softplus"), torch.nn.Softplus)
+        assert hasattr(prepared, "module_sigmoid") and isinstance(getattr(prepared, "module_sigmoid"), torch.nn.Sigmoid)
+        assert hasattr(prepared, "module_mul") and isinstance(getattr(prepared, "module_mul"), elementwise_ops.Multiply)
+
+        # Creat prepared model with exclusion list.
+        model = CustomModel().eval()
+        prepared = prepare_model(model, modules_to_exclude=[model.custom])
+        assert not hasattr(prepared, "module_softplus")
+        assert not hasattr(prepared, "module_sigmoid")
+        assert not hasattr(prepared, "module_mul")
+        assert hasattr(prepared, "custom")
