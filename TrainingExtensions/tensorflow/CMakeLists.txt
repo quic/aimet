@@ -166,5 +166,14 @@ install(DIRECTORY $<TARGET_FILE_DIR:TrainingExtensionsTf>/$<TARGET_FILE_PREFIX:T
     DESTINATION ${AIMET_INSTALL_DIR}/lib/python/aimet_common
 )
 
+add_custom_target(whlprep_aimet_tensorflow
+    COMMAND ${CMAKE_COMMAND} -E make_directory ${WHL_PREP_AIMET_TENSORFLOW_DIR}
+    COMMAND ${CMAKE_COMMAND} -E $<IF:$<BOOL:${WHL_EDITABLE_MODE}>,create_symlink,copy>
+        $<TARGET_FILE:TrainingExtensionsTf>
+        ${WHL_PREP_AIMET_TENSORFLOW_DIR}/$<TARGET_FILE_NAME:TrainingExtensionsTf>
+    DEPENDS TrainingExtensionsTf
+)
+add_dependencies(wheels_preparation whlprep_aimet_tensorflow)
+
 add_subdirectory(src/python)
 add_subdirectory(test)

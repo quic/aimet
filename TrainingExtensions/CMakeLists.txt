@@ -34,6 +34,8 @@
 #  @@-COPYRIGHT-END-@@
 #==============================================================================
 
+add_custom_target(wheels_preparation)
+
 if (ENABLE_TENSORFLOW)
     add_subdirectory(tensorflow)
 endif(ENABLE_TENSORFLOW)

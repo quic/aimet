@@ -59,4 +59,10 @@ include_directories(${CMAKE_CURRENT_SOURCE_DIR}/include)
 install(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/include/DlCompression
         DESTINATION ${AIMET_INSTALL_DIR}/lib/x86_64-linux-gnu/include)
 
+add_custom_target(whlprep_aimet_common_DlCompression
+      COMMAND ${CMAKE_COMMAND} -E make_directory ${WHL_PREP_AIMET_COMMON_DIR}/x86_64-linux-gnu/include
+      COMMAND ${CMAKE_COMMAND} -E $<IF:$<BOOL:${WHL_EDITABLE_MODE}>,create_symlink,copy_directory>
+            ${CMAKE_CURRENT_SOURCE_DIR}/include/DlCompression
+            ${WHL_PREP_AIMET_COMMON_DIR}/x86_64-linux-gnu/include/DlCompression
+    )
 add_subdirectory(test)
