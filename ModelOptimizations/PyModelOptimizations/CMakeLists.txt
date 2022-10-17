@@ -80,3 +80,11 @@ set_target_properties(PyModelOptimizations
 install(TARGETS PyModelOptimizations
         LIBRARY DESTINATION ${AIMET_INSTALL_DIR}/lib/python/aimet_common
 )
+
+add_custom_target(whlprep_aimet_common_PyModelOptimizations
+        COMMAND ${CMAKE_COMMAND} -E make_directory ${WHL_PREP_AIMET_COMMON_DIR}
+        COMMAND ${CMAKE_COMMAND} -E $<IF:$<BOOL:${WHL_EDITABLE_MODE}>,create_symlink,copy>
+                $<TARGET_FILE:PyModelOptimizations>
+                ${WHL_PREP_AIMET_COMMON_DIR}/$<TARGET_FILE_NAME:PyModelOptimizations>
+        DEPENDS PyModelOptimizations
+)

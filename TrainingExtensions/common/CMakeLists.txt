@@ -36,3 +36,10 @@
 
 add_subdirectory(src/python)
 add_subdirectory(test)
+
+add_dependencies(wheels_preparation
+    whlprep_aimet_common_DlCompression
+    whlprep_aimet_common_DlEqualization
+    whlprep_aimet_common_DlQuantization
+    whlprep_aimet_common_PyModelOptimizations
+)
