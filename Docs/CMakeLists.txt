@@ -35,7 +35,6 @@
 #  @@-COPYRIGHT-END-@@
 #
 #=============================================================================
-cmake_minimum_required(VERSION 3.5)
 
 install(DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
       DESTINATION ${AIMET_INSTALL_DIR}

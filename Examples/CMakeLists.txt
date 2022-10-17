@@ -33,7 +33,6 @@
 #
 #  @@-COPYRIGHT-END-@@
 #==============================================================================
-cmake_minimum_required(VERSION 3.5)
 
 set(AIMET_EXAMPLES_DEST ${AIMET_INSTALL_DIR}/Examples)
 

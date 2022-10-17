@@ -33,7 +33,6 @@
 #
 #  @@-COPYRIGHT-END-@@
 #==============================================================================
-cmake_minimum_required(VERSION 3.5)
 
 add_subdirectory(src/python)
 add_subdirectory(test)

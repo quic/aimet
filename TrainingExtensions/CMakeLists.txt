@@ -33,7 +33,6 @@
 #
 #  @@-COPYRIGHT-END-@@
 #==============================================================================
-cmake_minimum_required(VERSION 3.5)
 
 if (ENABLE_TENSORFLOW)
     add_subdirectory(tensorflow)

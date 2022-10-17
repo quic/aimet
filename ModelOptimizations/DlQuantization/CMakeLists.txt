@@ -33,7 +33,6 @@
 #
 #  @@-COPYRIGHT-END-@@
 #==============================================================================
-cmake_minimum_required(VERSION 3.5)
 
 add_library(MoDlQuantization STATIC
 
@@ -89,9 +88,11 @@ endif (ENABLE_CUDA)
 target_include_directories(MoDlQuantization
       PUBLIC
         ${CMAKE_CURRENT_SOURCE_DIR}/include
-        ${PYBIND11_INC_DIRS}
       )
 
+target_link_libraries(MoDlQuantization
+      PUBLIC PYBIND11
+      )
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/include)
 
 if (ENABLE_CUDA)
