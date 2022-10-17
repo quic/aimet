@@ -40,7 +40,7 @@
 
 import copy
 from re import search
-from typing import Any, Optional, Dict, Union
+from typing import Any, Optional, Dict, Union, List
 import torch
 import torch.fx
 from aimet_common.utils import AimetLogger
@@ -308,7 +308,8 @@ special_handler_functions = {
 }
 
 
-def prepare_model(model: torch.nn.Module, concrete_args: Optional[Dict[str, Any]] = None) -> torch.fx.GraphModule:
+def prepare_model(model: torch.nn.Module, modules_to_exclude: List[torch.nn.Module] = None,
+                  concrete_args: Optional[Dict[str, Any]] = None) -> torch.fx.GraphModule:
     """
     Prepare and modify the pytorch model for AIMET features using torch.FX symbolic tracing API.
 
@@ -387,7 +388,8 @@ def prepare_model(model: torch.nn.Module, concrete_args: Optional[Dict[str, Any]
         model = ModelWithNonTorchFunction().eval()
         model_transformed = prepare_model(model)
 
-    :param model: pytorch Model to be modified
+    :param model: pytorch Model to be modified.
+    :param modules_to_exclude: List of modules to exclude when tracing.
     :param concrete_args: Allows you to partially specialize your function, whether it's to remove control flow or
      data structures. If the model has control flow, torch.fx won't be able to trace the model. Check
      torch.fx.symbolic_trace API in detail.
@@ -395,12 +397,51 @@ def prepare_model(model: torch.nn.Module, concrete_args: Optional[Dict[str, Any]
     """
     model.eval()
     device = get_device(model)
-    # Create a copy of model and keep it on cpu
-    model_copy = copy.deepcopy(model).cpu()
+    symbolic_traced_model = _trace_model(model, modules_to_exclude, concrete_args)
 
-    unique_nodes = set()
+    # Prepare model and perform checks to make sure the graph is well-formed.
+    _prepare_helper(symbolic_traced_model)
+    _verify_symbolic_traced_model(symbolic_traced_model)
+
+    symbolic_traced_model.eval()
+    symbolic_traced_model.to(device)
+    return symbolic_traced_model
+
+
+def _trace_model(model: torch.nn.Module, modules_to_exclude: Optional[List[torch.nn.Module]],
+                 concrete_args: Optional[Dict[str, Any]]):
+    """
+    Overrides the is_leaf_module() method of parent class when modules_to_exclude list is not None.
+
+    :param model: pytorch Model to be modified.
+    :param modules_to_exclude: List of modules to exclude when tracing.
+    :param concrete_args: Concrete arguments that should not be treated as Proxies.
+    :return: Traced model.
+    """
+    class Tracer(torch.fx.Tracer):
+        """
+        Override is_leaf_module() method of parent class.
+        """
+        def is_leaf_module(self, m: torch.nn.Module, module_qualified_name: str) -> bool:
+            if modules_to_exclude and m in modules_to_exclude:
+                return True
+            return super(Tracer, self).is_leaf_module(m, module_qualified_name)
+
     # Symbolic tracing frontend - captures the semantics of the module
-    symbolic_traced_model = torch.fx.symbolic_trace(model_copy, concrete_args)
+    tracer = Tracer()
+    graph = tracer.trace(model, concrete_args=concrete_args)
+    symbolic_traced_model = torch.fx.GraphModule(tracer.root, graph)
+
+    return symbolic_traced_model
+
+
+def _prepare_helper(symbolic_traced_model: torch.fx.GraphModule):
+    """
+    Helper for prepare_model().
+
+    :param symbolic_traced_model: Symbolically traced model.
+    """
+    unique_nodes = set()
 
     # Modify the symbolically traced model by iterating over all the nodes
     for node in symbolic_traced_model.graph.nodes:
@@ -429,13 +470,6 @@ def prepare_model(model: torch.nn.Module, concrete_args: Optional[Dict[str, Any]
                 logger.info("Reused/Duplicate   : Adding new module for node: {%s} ", node.name)
         else:
             unique_nodes.add(node.target)
-
-    # Perform some checks to make sure the graph is well formed
-    _verify_symbolic_traced_model(symbolic_traced_model)
-
-    symbolic_traced_model.eval()
-    symbolic_traced_model.to(device)
-    return symbolic_traced_model
 
 
 def _verify_symbolic_traced_model(symbolic_traced_model: torch.fx.GraphModule):
