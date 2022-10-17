@@ -109,6 +109,7 @@ def tensor_quantizer_factory(bitwidth: int, round_mode: str, quant_scheme: Quant
     :return: An instance of StaticGridPerTensorQuantizer
     """
 
+    # TODO add way to pass extra parameters (e.g. FP8)
     if quant_scheme in (QuantScheme.post_training_tf_enhanced, QuantScheme.post_training_tf,
                         QuantScheme.post_training_percentile):
 
@@ -235,11 +236,11 @@ class QcQuantizeWrapper(nn.Module):
         """
         super(QcQuantizeWrapper, self).__init__()
 
-        if data_type == QuantizationDataType.float and weight_bw != 16:
-            raise ValueError('weight_bw=16 is the only supported configuration with floating point data type')
+        if data_type == QuantizationDataType.float and weight_bw not in [8, 16]:
+            raise ValueError('weight_bw in [8, 16] is the only supported configuration with floating point data type')
 
-        if data_type == QuantizationDataType.float and activation_bw != 16:
-            raise ValueError('activation_bw=16 is the only supported configuration with floating point data type')
+        if data_type == QuantizationDataType.float and activation_bw not in [8, 16]:
+            raise ValueError('activation_bw in [8, 16] is the only supported configuration with floating point data type')
 
         self.output_quantizers = [tensor_quantizer_factory(activation_bw, round_mode,
                                                            quant_scheme,
