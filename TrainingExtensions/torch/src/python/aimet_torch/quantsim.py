@@ -187,9 +187,9 @@ class QuantizationSimModel:
         # override specific quantizers to tf mode in transformer model
         self._override_quant_config_for_transformer_layers()
 
-        self._quantsim_configurator = self.configure_quantization_ops(config_file, default_output_bw, default_param_bw,
-                                                                      default_data_type)
-        self._supported_kernels = self._quantsim_configurator.get_supported_kernels()
+        quantsim_configurator = self.configure_quantization_ops(config_file, default_output_bw, default_param_bw,
+                                                                default_data_type)
+        self._supported_kernels = quantsim_configurator.get_supported_kernels()
 
     def get_supported_kernels(self) -> Dict:
         """
