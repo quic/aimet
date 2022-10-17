@@ -1,3 +1,4 @@
+.. _ug-apidocs:
 
 Welcome to AI Model Efficiency Toolkit API Docs!
 ================================================

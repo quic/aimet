@@ -42,13 +42,13 @@ API Documentation and Usage Examples
 
 Please visit the generated AIMET API documentation here
 
-.. toctree::
-    :titlesonly:
-    :maxdepth: 1
+- :ref:`API Documentation <ug-apidocs>`
+- :ref:`Examples Documentation <ug-examples>`: Browse and use the Jupyter Notebooks that provide examples of using AIMET features.
 
-    API Documentation<../api_docs/index>
+Installation Guide
+==================
 
-- :ref:`Examples Documentation <ug-examples>`:Browse and use the Jupyter Notebooks that provide examples of using AIMET features.
+Please visit the :ref:`AIMET Installation <ug-installation>` for more details.
 
 |
 
