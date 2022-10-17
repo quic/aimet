@@ -294,25 +294,27 @@ class TestTrainingExtensionsUtils(unittest.TestCase):
         inp_shape_1 = (1, 3, 32, 32)
         inp_shape_2 = (1, 3, 20, 20)
         model_input = utils.create_rand_tensors_given_shapes([inp_shape_1, inp_shape_2])
+        def forward_fn(model, inputs):
+            model(*inputs)
 
-        module_data = utils.ModuleData(model, model.conv1)
+        module_data = utils.ModuleData(model, model.conv1, forward_fn)
         inp, out = module_data.collect_inp_out_data(model_input, collect_input=True, collect_output=False)
         self.assertTrue(np.array_equal(utils.to_numpy(inp), utils.to_numpy(model_input[0])))
         self.assertEqual(out, None)
 
-        module_data = utils.ModuleData(model, model.conv1)
+        module_data = utils.ModuleData(model, model.conv1, forward_fn)
         inp, out = module_data.collect_inp_out_data(model_input, collect_input=False, collect_output=True)
         conv1_out = model.conv1(model_input[0])
         self.assertTrue(np.array_equal(utils.to_numpy(out), utils.to_numpy(conv1_out)))
         self.assertEqual(inp, None)
 
-        module_data = utils.ModuleData(model, model.conv3)
+        module_data = utils.ModuleData(model, model.conv3, forward_fn)
         inp, out = module_data.collect_inp_out_data(model_input, collect_input=True, collect_output=True)
         conv3_out = model.conv3(model_input[1])
         self.assertTrue(np.array_equal(utils.to_numpy(out), utils.to_numpy(conv3_out)))
         self.assertTrue(np.array_equal(utils.to_numpy(inp), utils.to_numpy(model_input[1])))
 
-        module_data = utils.ModuleData(model, model.fc)
+        module_data = utils.ModuleData(model, model.fc, forward_fn)
         inp, out = module_data.collect_inp_out_data(model_input, collect_input=False, collect_output=True)
         fc_out = model(*model_input)
         self.assertTrue(np.array_equal(utils.to_numpy(out), utils.to_numpy(fc_out)))

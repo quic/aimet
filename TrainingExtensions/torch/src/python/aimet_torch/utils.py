@@ -36,7 +36,7 @@
 """ Utilities that are used for different AIMET PyTorch features """
 
 import itertools
-from typing import List, Tuple, Union, Dict
+from typing import List, Tuple, Union, Dict, Callable, Any
 import contextlib
 import os
 import pickle
@@ -81,13 +81,17 @@ class ModuleData:
     """
     Collect input and output data to and from module
     """
-    def __init__(self, model: torch.nn.Module, module: torch.nn.Module):
+    def __init__(self, model: torch.nn.Module, module: torch.nn.Module,
+                 forward_fn: Callable[[torch.nn.Module, Any], Any] = None):
         """
         :param model: Pytorch model
         :param module: Module reference
+        :param forward_fn: Adapter function that performs forward pass given a model and inputs
+         yielded from the data loader.
         """
         self._model = model
         self._module = module
+        self._forward_fn = forward_fn or self.default_forward_fn
 
     def collect_inp_out_data(self, model_input: Union[torch.tensor, List[torch.Tensor], Tuple[torch.Tensor]],
                              collect_input: bool, collect_output: bool) -> Tuple[torch.Tensor, torch.Tensor]:
@@ -122,13 +126,10 @@ class ModuleData:
         # place the input to appropriate device
         model_input = change_tensor_device_placement(model_input, device)
 
-        if isinstance(model_input, torch.Tensor):
-            model_input = [model_input]
-
+        # Custom injected exception is raised when the activations data from desired module is collected.
         try:
             with in_eval_mode(self._model), torch.no_grad():
-                _ = self._model(*model_input)
-
+                _ = self._forward_fn(self._model, model_input)
         except StopForwardException:
             pass
 
@@ -144,6 +145,25 @@ class ModuleData:
             out_data = out_data_list[0].detach()
 
         return inp_data, out_data
+
+    @staticmethod
+    def default_forward_fn(model: torch.nn.Module,
+                           inputs: Union[torch.tensor, List[torch.Tensor], Tuple[torch.Tensor]]):
+        """
+        Default forward function that performs forward pass given a model and inputs yielded from
+        the data loader. Data loader which yields torch.Tensor object that can be directly
+        passed into the model, or a data loader which yields a tuple of length two where its
+        first element can be directly passed into the model.
+
+        :param model: PyTorch model.
+        :param inputs: Inputs passed to model.
+        """
+        # When provided dataloader is labeled (model_inputs, labels), then ignore the second element (labels).
+        if isinstance(inputs, (list, tuple)):
+            inputs, _ = inputs
+        if isinstance(inputs, torch.Tensor):
+            inputs = [inputs]
+        model(*inputs)
 
 
 class CachedDataset(Dataset):
@@ -187,10 +207,6 @@ class CachedDataset(Dataset):
             os.makedirs(self._path)
 
         for i, batch in enumerate(data_loader):
-            # batch is of shape (model_inputs, labels)
-            if isinstance(batch, (tuple, list)):
-                batch, _ = batch
-
             path = os.path.join(self._path, f'model_inputs_{i}')
             with open(path, 'wb') as file:
                 pickle.dump(batch, file)
@@ -556,6 +572,7 @@ def change_tensor_device_placement(tensor_data: Union[torch.tensor, List, Tuple]
     :param device: device information
     :return: tensor_data with modified device placement
     """
+    assert isinstance(tensor_data, (torch.Tensor, list, tuple))
 
     if isinstance(tensor_data, torch.Tensor):
         tensor_data = tensor_data.to(device=device)
