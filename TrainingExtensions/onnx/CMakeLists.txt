@@ -33,9 +33,8 @@
 #
 #  @@-COPYRIGHT-END-@@
 #==============================================================================
-cmake_minimum_required(VERSION 3.5)
 
-find_program(PYTHON "python3")
+find_package(Python3 COMPONENTS Interpreter)
 
 add_subdirectory(src/python)
 add_subdirectory(test)

@@ -33,7 +33,6 @@
 #  
 #  @@-COPYRIGHT-END-@@
 #==============================================================================
-cmake_minimum_required(VERSION 3.5)
 
 add_library(MoDlCompression STATIC
       src/SvdAlgorithm.cpp
@@ -45,6 +44,10 @@ add_library(MoDlCompression STATIC
 target_include_directories(MoDlCompression
       PUBLIC
          ${CMAKE_CURRENT_SOURCE_DIR}/include)
+
+target_link_libraries(MoDlCompression
+      PUBLIC PYBIND11
+      )
 
 target_compile_options(MoDlCompression
         PRIVATE

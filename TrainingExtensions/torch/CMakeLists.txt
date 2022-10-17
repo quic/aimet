@@ -33,9 +33,8 @@
 #
 #  @@-COPYRIGHT-END-@@
 #==============================================================================
-cmake_minimum_required(VERSION 3.5)
 
-find_program(PYTHON "python3")
+find_package(Python3 COMPONENTS Interpreter)
 
 
 set(SETUP_PY "${CMAKE_CURRENT_BINARY_DIR}/src/setup.py")
@@ -57,7 +56,7 @@ endif()
 
 add_custom_command(OUTPUT ${OUTPUT}
       COMMAND ${CMAKE_COMMAND} -E env PYTHONPATH="${CMAKE_BINARY_DIR}/artifacts" ENABLE_CUDA_PYTORCH=${ENABLE_CUDA_PYTORCH}
-              ${PYTHON} ${SETUP_PY} install  --install-base=${CMAKE_BINARY_DIR}/artifacts
+              ${Python3_EXECUTABLE} ${SETUP_PY} install  --install-base=${CMAKE_BINARY_DIR}/artifacts
                                              --install-purelib=${CMAKE_BINARY_DIR}/artifacts
                                              --install-platlib=${CMAKE_BINARY_DIR}/artifacts
                                              --install-scripts=${CMAKE_BINARY_DIR}/artifacts

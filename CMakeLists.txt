@@ -35,7 +35,7 @@
 #  @@-COPYRIGHT-END-@@
 #
 #=============================================================================
-cmake_minimum_required(VERSION 3.5)
+cmake_minimum_required(VERSION 3.17)
 
 project(aimet)
 
@@ -98,11 +98,11 @@ set(OPENCV_LIBRARY /usr/local/lib/libopencv_core.a)
 # Conditional build for PyTorch
 # ----------------------------------
 
-find_package(Python COMPONENTS Interpreter Development)
-set(PYTHON_DIST_PACKAGES "/usr/local/lib/python${Python_VERSION_MAJOR}.${Python_VERSION_MINOR}/dist-packages/")
-message("Found python: ${Python_FOUND}, at ${Python_LIBRARIES}")
+find_package(Python3 COMPONENTS Interpreter Development)
+set(PYTHON_DIST_PACKAGES "/usr/local/lib/python${Python3_VERSION_MAJOR}.${Python3_VERSION_MINOR}/dist-packages/")
+message("Found python: ${Python3_FOUND}, at ${Python3_LIBRARIES}")
 EXECUTE_PROCESS( COMMAND "uname" "-m" OUTPUT_VARIABLE ARCHITECTURE OUTPUT_STRIP_TRAILING_WHITESPACE)
-execute_process(COMMAND "python" "-c" "import sys; print(sys.abiflags)" OUTPUT_VARIABLE ABI_FLAGS OUTPUT_STRIP_TRAILING_WHITESPACE)
+execute_process(COMMAND "${Python3_EXECUTABLE}" "-c" "import sys; print(sys.abiflags)" OUTPUT_VARIABLE ABI_FLAGS OUTPUT_STRIP_TRAILING_WHITESPACE)
 
 if (NOT (DEFINED ENABLE_TORCH))
   message("AIMET Torch build not explicitly disabled. Enabling implicitly")
@@ -112,29 +112,40 @@ endif(NOT (DEFINED ENABLE_TORCH))
 
 if (ENABLE_TORCH)
   set(AIMET_PYTHONPATH "${AIMET_PYTHONPATH}:${CMAKE_CURRENT_SOURCE_DIR}/TrainingExtensions/torch/src/python:${CMAKE_CURRENT_SOURCE_DIR}/TrainingExtensions/onnx/src/python")
-
-  # If we enable PyTorch builds then use the pybind11 headers that are part of the torch pip install
-  # So we don't have a version mismatch - between PyTorch custom C++ op code and PyMO
-  list(APPEND PYBIND11_INC_DIRS "${PYTHON_DIST_PACKAGES}/torch/include")
-  list(APPEND PYBIND11_INC_DIRS ${Python_INCLUDE_DIRS})
-
+  execute_process(COMMAND ${Python3_EXECUTABLE} "-c" "import torch;print(torch.utils.cmake_prefix_path)"
+                  RESULT_VARIABLE TORCH_NOT_FOUND
+                  OUTPUT_VARIABLE TORCH_CMAKE_DIR
+                  OUTPUT_STRIP_TRAILING_WHITESPACE
+                  )
+  find_package(Torch REQUIRED PATHS ${TORCH_CMAKE_DIR} NO_DEFAULT_PATH)
 else (ENABLE_TORCH)
-  list(APPEND PYBIND11_INC_DIRS "${PYTHON_DIST_PACKAGES}/pybind11/include/")
-  list(APPEND PYBIND11_INC_DIRS ${Python_INCLUDE_DIRS})
-
   message("AIMET Torch build disabled")
-
 endif (ENABLE_TORCH)
 
 # ----------------------------------
 # PyBind11
 # ----------------------------------
+execute_process(COMMAND ${Python3_EXECUTABLE} "-c" "import pybind11;print(pybind11.get_include())"
+                RESULT_VARIABLE PYBIND11_NOT_FOUND
+                OUTPUT_VARIABLE PYBIND11_INCLUDE_DIRS
+                OUTPUT_STRIP_TRAILING_WHITESPACE
+                )
+# If we enable PyTorch builds then use the pybind11 headers that are part of the torch pip install
+# So we don't have a version mismatch - between PyTorch custom C++ op code and PyMO
+find_path(PYBIND11_INCLUDE "pybind11.h"
+          PATHS ${TORCH_INCLUDE_DIRS} ${PYBIND11_INCLUDE_DIRS}
+          PATH_SUFFIXES "pybind11"
+          REQUIRED
+          NO_DEFAULT_PATH
+        )
+get_filename_component(PYBIND11_INC_DIRS ${PYBIND11_INCLUDE} DIRECTORY)
 
 add_library(PYBIND11 SHARED IMPORTED)
 
 set_target_properties(PYBIND11 PROPERTIES
-        IMPORTED_LOCATION ${Python_LIBRARIES}
+        IMPORTED_LOCATION ${Python3_LIBRARIES}
         INTERFACE_INCLUDE_DIRECTORIES "${PYBIND11_INC_DIRS}"
+        INTERFACE_LINK_LIBRARIES Python3::Module
         )
 
 # ----------------------------------
@@ -150,9 +161,9 @@ endif(NOT (DEFINED ENABLE_TENSORFLOW))
 if (ENABLE_TENSORFLOW)
   if(NOT DEFINED TF_LIB_DIR)
     # Get location of TensorFlow library
-    execute_process(COMMAND "python" "-c" "import tensorflow as tf; print(tf.sysconfig.get_lib())" OUTPUT_VARIABLE TF_LIB_DIR OUTPUT_STRIP_TRAILING_WHITESPACE)
+    execute_process(COMMAND "${Python3_EXECUTABLE}" "-c" "import tensorflow as tf; print(tf.sysconfig.get_lib())" OUTPUT_VARIABLE TF_LIB_DIR OUTPUT_STRIP_TRAILING_WHITESPACE)
     # Get Tensorflow version
-    execute_process(COMMAND "python" "-c" "import tensorflow as tf; print(tf.__version__)" OUTPUT_VARIABLE TF_VERSION OUTPUT_STRIP_TRAILING_WHITESPACE)
+    execute_process(COMMAND "${Python3_EXECUTABLE}" "-c" "import tensorflow as tf; print(tf.__version__)" OUTPUT_VARIABLE TF_VERSION OUTPUT_STRIP_TRAILING_WHITESPACE)
     message(STATUS "Found TensorFlow version: ${TF_VERSION} TensorFlow library path: ${TF_LIB_DIR}")
   else(TF_LIB_DIR)
     message(STATUS "TensorFlow version and TensorFlow library already set.")

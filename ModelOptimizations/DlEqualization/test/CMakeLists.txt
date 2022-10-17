@@ -33,7 +33,6 @@
 #  
 #  @@-COPYRIGHT-END-@@
 #==============================================================================
-cmake_minimum_required(VERSION 3.5)
 
 
 include_directories(BEFORE
@@ -54,7 +53,6 @@ target_compile_options(MoDlEqualizationTest
 target_link_libraries(MoDlEqualizationTest
         MoDlEqualization
         stdc++
-        PYBIND11
         ${LAPACKE_LIBRARY}
         ${OPENCV_LIBRARY}
         z
@@ -66,7 +64,7 @@ add_test(MoDlEqualizationTest
         MoDlEqualizationTest --gtest_output=xml:cpp_test_output.xml)
 
 add_test(MoDlEqualizationPythonTest
-      pytest ${CMAKE_CURRENT_SOURCE_DIR} --junitxml=${CMAKE_CURRENT_BINARY_DIR}/py_test_output.xml
+      ${Python3_EXECUTABLE} -m pytest ${CMAKE_CURRENT_SOURCE_DIR} --junitxml=${CMAKE_CURRENT_BINARY_DIR}/py_test_output.xml
       )
 
 set_property(TEST MoDlEqualizationPythonTest
