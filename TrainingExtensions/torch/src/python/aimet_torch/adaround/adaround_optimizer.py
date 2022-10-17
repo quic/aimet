@@ -38,7 +38,7 @@
 
 """ Adaround optimizer """
 
-from typing import Union, Tuple
+from typing import Union, Tuple, Callable, Any
 from functools import reduce
 import psutil
 import numpy as np
@@ -67,6 +67,7 @@ class AdaroundOptimizer:
     def adaround_module(cls, module: torch.nn.Module, quant_module: StaticGridQuantWrapper,
                         orig_model: torch.nn.Module, quant_model: torch.nn.Module,
                         act_func: Union[torch.nn.Module, None], cached_dataset: Dataset,
+                        forward_fn: Callable[[torch.nn.Module, Any], Any],
                         opt_params: AdaroundHyperParameters):
         """
         Adaround module
@@ -76,15 +77,18 @@ class AdaroundOptimizer:
         :param quant_model: QuantSim model
         :param act_func: Activation function
         :param cached_dataset: Cached dataset
+        :param forward_fn: Adapter function that performs forward pass given a model and inputs
+         yielded from the data loader
         :param opt_params: Optimization parameters
         """
+        # pylint: disable=too-many-arguments
         assert isinstance(quant_module, StaticGridQuantWrapper), '%s is not wrapper module.' % quant_module
         assert quant_module.param_quantizers['weight'], '%s does not have weight quantizer.' % quant_module
 
         # Get input and output data of batch size to compute reconstruction error of output activations
         # before and after optimization
         model_inputs = cached_dataset[0]
-        act_sampler = ActivationSampler(module, quant_module, orig_model, quant_model)
+        act_sampler = ActivationSampler(module, quant_module, orig_model, quant_model, forward_fn)
         inp_data, out_data = act_sampler.sample_acts(model_inputs)
 
         recons_err_hard, recons_err_soft = cls._compute_recons_metrics(quant_module, act_func, inp_data, out_data)
@@ -92,7 +96,8 @@ class AdaroundOptimizer:
                      recons_err_hard)
 
         # Optimize weight rounding
-        cls._optimize_rounding(module, quant_module, orig_model, quant_model, act_func, cached_dataset, opt_params)
+        cls._optimize_rounding(module, quant_module, orig_model, quant_model, act_func, cached_dataset, forward_fn,
+                               opt_params)
 
         recons_err_hard, recons_err_soft = cls._compute_recons_metrics(quant_module, act_func, inp_data, out_data)
         logger.debug("After opt, Recons. error metrics using soft rounding=%f and hard rounding=%f", recons_err_soft,
@@ -105,6 +110,7 @@ class AdaroundOptimizer:
     def _optimize_rounding(cls, module: torch.nn.Module, quant_module: StaticGridQuantWrapper,
                            orig_model: torch.nn.Module, quant_model: torch.nn.Module,
                            act_func: Union[torch.nn.Module, None], cached_dataset: Dataset,
+                           forward_fn: Callable[[torch.nn.Module, Any], Any],
                            opt_params: AdaroundHyperParameters):
         """
         Optimizes the weight rounding of quantized wrapper module
@@ -114,9 +120,11 @@ class AdaroundOptimizer:
         :param quant_model: QuantSim model
         :param act_func: Activation function
         :param cached_dataset: Cached dataset
+        :param forward_fn: Adapter function that performs forward pass given a model and inputs
+         yielded from the data loader
         :param opt_params: Optimization parameters
         """
-        # pylint: disable=too-many-locals
+        # pylint: disable=too-many-locals, too-many-arguments
         adaround_quantizer = quant_module.param_quantizers['weight']
 
         assert adaround_quantizer.use_soft_rounding, 'optimization should use soft rounding only.'
@@ -127,7 +135,7 @@ class AdaroundOptimizer:
 
         # Check if we can cache intermediate activation data.
         model_inputs = cached_dataset[0]
-        act_sampler = ActivationSampler(module, quant_module, orig_model, quant_model)
+        act_sampler = ActivationSampler(module, quant_module, orig_model, quant_model, forward_fn)
         inp_data, out_data = act_sampler.sample_acts(model_inputs)
         use_cache_acts_data = cls._can_cache_acts_data(len(cached_dataset), inp_data.shape, out_data.shape)
 

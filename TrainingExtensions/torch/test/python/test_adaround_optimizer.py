@@ -91,15 +91,17 @@ class TestAdaroundOptimizer(unittest.TestCase):
         batch_size = 10
         image_size = (3, 32, 32)
         data_loader = create_fake_data_loader(dataset_size, batch_size, image_size)
+        def forward_fn(model, inputs):
+            inputs, _ = inputs
+            model(inputs)
+
         path = './tmp/cached_dataset/'
         try:
             cached_dataset = CachedDataset(data_loader, dataset_size // batch_size, path)
-
             opt_params = AdaroundHyperParameters(num_iterations=10, reg_param=0.01, beta_range=(20, 2),
                                                  warm_start=warm_start)
-
-            AdaroundOptimizer.adaround_module(module, quant_module, model, sim.model, None, cached_dataset, opt_params)
-
+            AdaroundOptimizer.adaround_module(module, quant_module, model, sim.model, None, cached_dataset, forward_fn,
+                                              opt_params)
             after_opt = quant_module.param_quantizers['weight'].alpha
 
             # parameter should be different before and after optimization

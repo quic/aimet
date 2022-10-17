@@ -716,31 +716,6 @@ class TestAdaround:
         if os.path.exists("./dummy.encodings"):
             os.remove("./dummy.encodings")
 
-    def test_data_loader_format_check(self):
-        class _TernaryDataset(Dataset):
-            def __len__(self):
-                return 100
-
-            def __getitem__(self, *args, **kwargs):
-                return (0, 1, 2)
-
-        dataloader = DataLoader(_TernaryDataset())
-
-        with pytest.raises(ValueError):
-            AdaroundParameters(dataloader, num_batches=100)
-
-        class _LengthOneDataset(Dataset):
-            def __len__(self):
-                return 1
-
-            def __getitem__(self, *args, **kwargs):
-                return (0, 1)
-
-        dataloader = DataLoader(_LengthOneDataset())
-
-        with pytest.raises(ValueError):
-            AdaroundParameters(dataloader, num_batches=100)
-
     @pytest.mark.cuda
     def test_apply_adaround_using_gpu(self):
         """ test apply_adaround end to end using tiny model """
