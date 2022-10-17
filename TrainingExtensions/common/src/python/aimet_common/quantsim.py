@@ -53,7 +53,7 @@ import aimet_common.libpymo as libpymo
 # additional information element being added to encoding format and might require update to fully consume the encodings.
 # The patching version shall be updated to indicate minor updates to quantization simulation e.g. bug fix etc.
 encoding_version = '0.5.1'
-
+ALLOW_EXPERIMENTAL = False
 
 def gate_min_max(min_val: float, max_val: float) -> Tuple[float, float]:
     """
@@ -177,10 +177,20 @@ def validate_quantsim_inputs(
     if default_output_bw < 4 or default_output_bw > 32:
         raise ValueError('Activation bitwidth must be between 4 and 32, not ' + str(default_output_bw))
 
-    if data_type == QuantizationDataType.float and default_output_bw != 16:
-        raise ValueError(
-            'float data_type can only be used when default_output_bw set to 16, not ' + str(default_output_bw))
+    if ALLOW_EXPERIMENTAL:
+        if data_type == QuantizationDataType.float and default_output_bw not in [8, 16]:
+            raise ValueError(
+                'float data_type can only be used when default_output_bw set to 8 or 16, not ' + str(default_output_bw))
 
-    if data_type == QuantizationDataType.float and default_param_bw != 16:
-        raise ValueError(
-            'float data_type can only be used when default_param_bw set to 16, not ' + str(default_output_bw))
+        if data_type == QuantizationDataType.float and default_param_bw not in [8, 16]:
+            raise ValueError(
+                'float data_type can only be used when default_param_bw set to 8 or 16, not ' + str(default_param_bw))
+
+    else:
+        if data_type == QuantizationDataType.float and default_output_bw != 16:
+            raise ValueError(
+                'float data_type can only be used when default_output_bw set to 16, not ' + str(default_output_bw))
+
+        if data_type == QuantizationDataType.float and default_param_bw != 16:
+            raise ValueError(
+                'float data_type can only be used when default_param_bw set to 16, not ' + str(default_param_bw))
