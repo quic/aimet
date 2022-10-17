@@ -1057,6 +1057,7 @@ class QuantizationSimModel:
         elif self._quant_scheme == QuantScheme.training_range_learning_with_tf_enhanced_init:
             quant_scheme_for_initialization = QuantScheme.post_training_tf_enhanced
 
+        # TODO add quant_scheme_for_initialization for FP8 case
         quantized_module = quantizer_wrapper_type(module_to_quantize, self._default_param_bw, self._default_output_bw,
                                                   self._rounding_mode, quant_scheme_for_initialization, num_inputs=num_in_tensors,
                                                   num_outputs=num_out_tensors, data_type=data_type)

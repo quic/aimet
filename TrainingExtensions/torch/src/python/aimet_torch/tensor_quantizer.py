@@ -48,6 +48,8 @@ from aimet_common.defs import QuantScheme, QuantizationDataType, MAP_QUANT_SCHEM
 from aimet_common.utils import AimetLogger
 import aimet_torch.quantsim_straight_through_grad as grad_fn
 from aimet_torch.quantsim_straight_through_grad import IntermediateResult
+from aimet_torch.fp_quantization import fp8_quantizer, INIT_MAP
+
 
 _logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Quant)
 
@@ -91,6 +93,11 @@ class TensorQuantizer:
         """Accessor to self._is_encoding_frozen"""
         return self._is_encoding_frozen
 
+    @property
+    def channel_axis(self):
+        """ Returns channel axis, default None unless for per-channel quantizers """
+        return None
+
 
 class PickableState:
     """
@@ -126,6 +133,7 @@ class StaticGridTensorQuantizer(TensorQuantizer):
                                                         enabled_by_default, data_type)
         self._cppOp = None
         self._encoding = None
+        self.fp8_maxval = None
 
     def __str__(self):
         stream = io.StringIO(newline='\n')
@@ -230,7 +238,12 @@ class StaticGridTensorQuantizer(TensorQuantizer):
         if self.enabled and not self._is_encoding_frozen:
             self._encoding = []
             if self.data_type == QuantizationDataType.float:
-                self._encoding = None
+                if self.bitwidth == 16:
+                    self._encoding = None
+                elif self.bitwidth == 8:
+                    self._encoding = [libpymo.TfEncoding()]
+                else:
+                    raise ValueError("Only bitwidths [8, 16] allowed for float data type, not ", str(self.bitwidth))
             else:
                 for op in self._cppOp:
                     encoding, is_encoding_valid = op.getEncoding(self.bitwidth, self.use_symmetric_encodings,
@@ -321,6 +334,15 @@ class StaticGridTensorQuantizer(TensorQuantizer):
         for op in self._cppOp:
             op.setPercentileValue(percentile_value)
 
+    def update_maxval(self, maxval):
+        """
+        Update the self.fp8_maxval member with a new value
+        """
+        if self.fp8_maxval is None:
+            self.fp8_maxval = maxval
+        else:
+            self.fp8_maxval = 0.9 * self.fp8_maxval + 0.1 * maxval
+
 
 class StaticGridPerTensorQuantizer(StaticGridTensorQuantizer):
     """
@@ -373,8 +395,17 @@ class StaticGridPerTensorQuantizer(StaticGridTensorQuantizer):
         :param tensor: Tensor to use for updating the encodings stats
         """
         if self.enabled and not self._is_encoding_frozen:
-            for op in self._cppOp:
-                op.updateStats(tensor, tensor.is_cuda)
+            if self.data_type == QuantizationDataType.float:
+                if self.bitwidth == 8:
+                    maxval = INIT_MAP[self.quant_scheme](tensor, self, False).to(tensor.device)
+                    self.update_maxval(maxval)
+                    ec = libpymo.TfEncoding()
+                    ec.max = float(self.fp8_maxval)
+                    ec.min = -ec.max
+                    self.encoding = ec
+            else:
+                for op in self._cppOp:
+                    op.updateStats(tensor, tensor.is_cuda)
 
 
 class StaticGridPerChannelQuantizer(StaticGridTensorQuantizer):
@@ -421,15 +452,31 @@ class StaticGridPerChannelQuantizer(StaticGridTensorQuantizer):
 
         self._encoding = encoding
 
+    @property
+    def channel_axis(self) -> int:
+        """ Return private member _ch_axis """
+        return self._ch_axis
+
     def update_encoding_stats(self, tensor):
         """
         Update the stats for computing encoding
         :param tensor: Tensor to use for updating the encodings stats
         """
         if self.enabled and not self._is_encoding_frozen:
-            for channel_idx, op in enumerate(self._cppOp):
-                tensor_slice = tensor.select(self._ch_axis, channel_idx).contiguous(memory_format=torch.contiguous_format)
-                op.updateStats(tensor_slice, tensor.is_cuda)
+            if self.data_type == QuantizationDataType.float:
+                if self.bitwidth == 8:
+                    maxval = INIT_MAP[self.quant_scheme](tensor, self, True).to(tensor.device)
+                    self.update_maxval(maxval)
+                    ecs = [libpymo.TfEncoding() for _ in range(self.fp8_maxval.shape[0])]
+                    for idx, ec in enumerate(ecs):
+                        ec.max = float(self.fp8_maxval[idx])
+                        ec.min = -ec.max
+                    self.encoding = ecs
+            else:
+                for channel_idx, op in enumerate(self._cppOp):
+                    tensor_slice = tensor.select(self._ch_axis, channel_idx).contiguous(
+                        memory_format=torch.contiguous_format)
+                    op.updateStats(tensor_slice, tensor.is_cuda)
 
 
 class LearnedGridTensorQuantizer(TensorQuantizer):
@@ -814,6 +861,18 @@ class QuantizeDequantize(torch.autograd.Function):
     """
 
     @staticmethod
+    def _quantize_float(tensor, tensor_quantizer, per_channel):
+        if tensor_quantizer.bitwidth == 16:
+            quantized_tensor = tensor.half()
+            quantized_tensor = quantized_tensor.float()
+        elif tensor_quantizer.bitwidth == 8:
+            quantized_tensor = fp8_quantizer(tensor, tensor_quantizer, per_channel)
+        else:
+            raise ValueError('float data_type only supports bitwidth in {16, 8}')
+
+        return quantized_tensor
+
+    @staticmethod
     def _per_tensor_quantize_dequantize(tensor, tensor_quantizer, round_mode):
         """
         If the quantization data type is floating point, then call the pytorch functions to
@@ -822,10 +881,7 @@ class QuantizeDequantize(torch.autograd.Function):
         """
         # pylint:disable = protected-access
         if tensor_quantizer.data_type == QuantizationDataType.float:
-            if tensor_quantizer.bitwidth != 16:
-                raise ValueError('float data_type only supports bitwidth=16')
-            quantized_tensor = tensor.half()
-            quantized_tensor = quantized_tensor.float()
+            quantized_tensor = QuantizeDequantize._quantize_float(tensor, tensor_quantizer, False)
         else:
             quantized_tensor = tensor_quantizer._cppOp[0].quantizeDequantize(tensor, tensor_quantizer.encoding,
                                                                              round_mode, tensor.is_cuda)
@@ -834,10 +890,7 @@ class QuantizeDequantize(torch.autograd.Function):
     @staticmethod
     def _per_channel_quantize_dequantize(tensor, tensor_quantizer, round_mode):
         if tensor_quantizer.data_type == QuantizationDataType.float:
-            if tensor_quantizer.bitwidth != 16:
-                raise ValueError('float data_type only supports bitwidth=16')
-            quantized_tensor = tensor.half()
-            quantized_tensor = quantized_tensor.float()
+            quantized_tensor = QuantizeDequantize._quantize_float(tensor, tensor_quantizer, True)
         else:
             quantized_tensors = []
             # pylint: disable=protected-access
