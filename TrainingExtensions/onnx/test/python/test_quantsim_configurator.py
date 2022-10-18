@@ -40,14 +40,13 @@ import os
 import numpy as np
 from onnx import load_model
 from aimet_onnx.quantsim import QuantizationSimModel
-from test_models import build_dummy_model
+import test_models
 
 
 class TestQuantSimConfig:
     """Tests for applying config to QuantizationSimModel"""
-    def test_insert_quantize_op_nodes(self):
-        """ Test to insert qc quantize op to the graph"""
-        model = build_dummy_model()
+    def test_qs_config_dummy_model(self):
+        model = test_models.build_dummy_model()
         sim = QuantizationSimModel(model)
         for quantizer in sim.qc_quantize_op_dict:
             assert sim.qc_quantize_op_dict[quantizer].enabled == False

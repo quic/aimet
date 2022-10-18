@@ -152,3 +152,11 @@ class QuantSimConfigurator(AimetCommonQuantSimConfigurator):
         Set model output specific configurations (sixth level of specificity in configuration file)
         :param model_output_configs: Configuration for model outputs
         """
+
+    def _generate_and_apply_op_instance_specific_config(self):
+        """
+        Generate op instance specific configurations - currently supported_kernels and per_channel_quantization fields
+        This function uses op specific supported_kernels (if absent use defaults), op specific per_channel_quantization
+        fields (if absent use default per_channel_quantization) and generate op instance specific config
+        :return: {op_instance_name, op_specific_config}
+        """
