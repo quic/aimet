@@ -76,6 +76,7 @@ def reset_qc_quantize_op_dict():
     """
     Reset qc_quantize_op dict to prevent overwrite
     """
+    # pylint: disable=global-statement
     global qc_quantize_op_dict
     qc_quantize_op_dict.clear()
 
@@ -122,6 +123,40 @@ class QcQuantizeOp:
     def _build_tensor_quantizer(self):
         return libpymo.TensorQuantizer(MAP_QUANT_SCHEME_TO_PYMO[self.quant_scheme],
                                        MAP_ROUND_MODE_TO_PYMO[self.rounding_mode])
+
+    @property
+    def use_strict_symmetric(self) -> bool:
+        """
+        Reads useStrictSymmetric config from Tensor Quantizer
+        :return: True if strict symmetric mode is to be used, False otherwise
+        """
+        return self.tensor_quantizer.getStrictSymmetric()
+
+    @use_strict_symmetric.setter
+    def use_strict_symmetric(self, use_strict_symmetric: bool):
+        """
+        Sets the useStrictSymmetric associated with the Tensor Quantizer
+        :param use_strict_symmetric: True if strict symmetric mode is to be used, False otherwise
+        """
+        self.tensor_quantizer.setStrictSymmetric(use_strict_symmetric)
+        self.encodings = None
+
+    @property
+    def use_unsigned_symmetric(self) -> bool:
+        """
+        Reads useStrictSymmetric config from Tensor Quantizer
+        :return: True if unsigned symmetric mode is to be used, False otherwise
+        """
+        return self.tensor_quantizer.getUnsignedSymmetric()
+
+    @use_unsigned_symmetric.setter
+    def use_unsigned_symmetric(self, use_unsigned_symmetric: bool):
+        """
+        Sets the useUnsignedSymmetric associated with the Tensor Quantizer
+        :param use_unsigned_symmetric: True if unsigned symmetric mode is to be used, False otherwise
+        """
+        self.tensor_quantizer.setUnsignedSymmetric(use_unsigned_symmetric)
+        self.encodings = None
 
     def set_encodings(self, encodings: libpymo.TfEncoding):
         """

@@ -48,6 +48,9 @@ from aimet_common.defs import QuantScheme
 from aimet_common.quantsim import encoding_version
 from aimet_common.utils import save_json_yaml
 
+from aimet_onnx.quantsim_config.quantsim_config import QuantSimConfigurator
+from aimet_onnx.meta.connectedgraph import ConnectedGraph
+
 WORKING_DIR = '/tmp/quantsim/'
 
 
@@ -62,7 +65,8 @@ class QuantizationSimModel:
                  rounding_mode: str = 'nearest',
                  default_param_bw: int = 8,
                  default_activation_bw: int = 8,
-                 use_symmetric_encodings: bool = False, use_cuda: bool = False):
+                 use_symmetric_encodings: bool = False, use_cuda: bool = False,
+                 config_file: str = None):
         """
         Constructor
         
@@ -73,9 +77,11 @@ class QuantizationSimModel:
         :param default_activation_bw: Quantization bitwidth for activation
         :param use_symmetric_encodings: True if symmetric encoding is used.  False otherwise.
         :param use_cuda: True if using CUDA to run quantization op. False otherwise.
+        :param config_file: Path to Configuration file for model quantizers
         """
         self.model = ONNXModel(model)
         self.qc_quantize_op_dict = qc_quantize_op_dict
+        self.connected_graph = ConnectedGraph(self.model)
         self._quant_scheme = quant_scheme
         self._rounding_mode = rounding_mode
         self._default_param_bw = default_param_bw
@@ -92,6 +98,17 @@ class QuantizationSimModel:
         self._get_activation_names()
         self._add_quantization_nodes()
         self.session = self._build_session(self.providers)
+
+        self._add_configuration(config_file)
+
+    def _add_configuration(self, config_file: str):
+        """
+        Add configuration based on config file
+        :param config_file: Path to Configuration file for model quantizers
+        """
+        quantsim_configurator = QuantSimConfigurator(self.model, self.connected_graph, config_file, self._default_activation_bw,
+                                                     self._default_param_bw)
+        quantsim_configurator.configure_quantizers(self.qc_quantize_op_dict, self.activation_names, self.param_names)
 
     def _get_param_names(self):
         """
