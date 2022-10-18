@@ -144,7 +144,7 @@ class Adaround:
             cls._override_param_bitwidth(model, quant_sim, param_bw_override_list)
 
         if ignore_quant_ops_list:
-            cls._skip_quantization_for_ops(model, quant_sim, ignore_quant_ops_list)
+            cls._exclude_modules(model, quant_sim, ignore_quant_ops_list)
 
         # Compute only param encodings
         cls._compute_param_encodings(quant_sim)
@@ -177,35 +177,35 @@ class Adaround:
         :param params: Adaround parameters
         :param dummy_input: Dummy input to the model
         """
-        # Cache model input data to WORKING_DIR
-        cached_dataset = utils.CachedDataset(params.data_loader, params.num_batches, WORKING_DIR)
+        try:
+            # Cache model input data to WORKING_DIR
+            cached_dataset = utils.CachedDataset(params.data_loader, params.num_batches, WORKING_DIR)
 
-        # Optimization Hyper parameters
-        opt_params = AdaroundHyperParameters(params.num_iterations, params.reg_param, params.beta_range,
-                                             params.warm_start)
+            # Optimization Hyper parameters
+            opt_params = AdaroundHyperParameters(params.num_iterations, params.reg_param, params.beta_range,
+                                                 params.warm_start)
 
-        # AdaRound must be applied to modules in the order of occurrence
-        modules = utils.get_ordered_list_of_modules(model, dummy_input)
+            # AdaRound must be applied to modules in the order of occurrence
+            modules = utils.get_ordered_list_of_modules(model, dummy_input)
 
-        for name, module in tqdm(modules):
-            if isinstance(module, AdaroundSupportedModules):
+            for name, module in tqdm(modules):
+                if isinstance(module, AdaroundSupportedModules):
+                    # Using name, get corresponding quantized wrapper module from Quant sim model
+                    quant_wrapper = cls._get_quant_wrapper(quant_sim.model, name)
+                    if quant_wrapper:
+                        # Replace quant module's tensor quantizer with Adaround tensor quantizer
+                        cls._replace_tensor_quantizer(quant_wrapper)
 
-                # Using name, get corresponding quantized wrapper module from Quant sim model
-                quant_module = cls._get_quant_module(quant_sim.model, name)
+                        # Get module's next following activation function
+                        act_func = module_act_func_pair[module]
 
-                # Replace quant module's tensor quantizer with Adaround tensor quantizer
-                cls._replace_tensor_quantizer(quant_module)
-
-                # Get module's next following activation function
-                act_func = module_act_func_pair[module]
-
-                logger.info("Started Optimizing weight rounding of module: %s", name)
-                AdaroundOptimizer.adaround_module(module, quant_module, model, quant_sim.model, act_func,
-                                                  cached_dataset, params.forward_fn, opt_params)
-
-        if os.path.exists(WORKING_DIR):
-            logger.info('Deleting model inputs from location: %s', WORKING_DIR)
-            shutil.rmtree(WORKING_DIR)
+                        logger.info("Started Optimizing weight rounding of module: %s", name)
+                        AdaroundOptimizer.adaround_module(module, quant_wrapper, model, quant_sim.model, act_func,
+                                                          cached_dataset, params.forward_fn, opt_params)
+        finally:
+            if os.path.exists(WORKING_DIR):
+                logger.info('Deleting model inputs from location: %s', WORKING_DIR)
+                shutil.rmtree(WORKING_DIR)
 
     @staticmethod
     def _compute_param_encodings(quant_sim: QuantizationSimModel):
@@ -254,7 +254,7 @@ class Adaround:
         quant_module.param_quantizers['weight'] = adaround_quantizer
 
     @staticmethod
-    def _get_quant_module(quant_sim_model: torch.nn.Module, module_name: str) -> Union[StaticGridQuantWrapper, None]:
+    def _get_quant_wrapper(quant_sim_model: torch.nn.Module, module_name: str) -> Union[StaticGridQuantWrapper, None]:
         """
         For given module name, get the quantized wrapper module from the QuantSim model
         :param quant_sim_model: Model with simulation ops
@@ -365,14 +365,12 @@ class Adaround:
                                    'bitwidth': enc.bw,
                                    'is_symmetric': str(quantizer.use_symmetric_encodings),
                                    'dtype': 'int' if quantizer.data_type == QuantizationDataType.int else 'float'})
-
         return encodings_dict
 
     @staticmethod
     def _override_param_bitwidth(model: torch.nn.Module, quant_sim: QuantizationSimModel,
                                  param_bw_override_list: List[Tuple[torch.nn.Module, int]]):
         """
-
         For the QuantSim, for the list of modules in the param_bw_override_list,
         overrides the default parameter bitwidths with the provided bitwidth.
 
@@ -380,47 +378,44 @@ class Adaround:
         :param quant_sim: The QuantSim that was created using a deepcopy of the original model.
         :param param_bw_override_list: List of Tuples. Each Tuple is a module and the corresponding parameter bitwidth
                                        to be used for that module.
-        :return:
         """
+        # Create a mapping of original model's AdaRoundable module and their name
+        module_to_name = {}
+        for name, module in model.named_modules():
+            if isinstance(module, AdaroundSupportedModules):
+                module_to_name[module] = name
 
-        if param_bw_override_list:
+        # Create a mapping of QuantSim model's AdaRoundable module name and their module
+        name_to_module = {}
+        for q_name, q_module in quant_sim.model.named_modules():
+            if isinstance(q_module, QcQuantizeWrapper):
+                if isinstance(q_module._module_to_wrap, AdaroundSupportedModules):  # pylint: disable=protected-access
+                    name_to_module[q_name] = q_module
 
-            # Create a mapping of original model's AdaRoundable module and their name
-            module_to_name = {}
-            for name, module in model.named_modules():
-                if isinstance(module, AdaroundSupportedModules):
-                    module_to_name[module] = name
-
-            # Create a mapping of QuantSim model's AdaRoundable module name and their module
-            name_to_module = {}
-            for q_name, q_module in quant_sim.model.named_modules():
-                if isinstance(q_module, QcQuantizeWrapper):
-                    if isinstance(q_module._module_to_wrap, AdaroundSupportedModules):  # pylint: disable=protected-access
-                        name_to_module[q_name] = q_module
-
-            # For the modules specified in the param_bw_override_list, set the weight quantizer bitwidth
-            for module_bw in param_bw_override_list:
-                module, bw = module_bw
-                module_name = module_to_name[module]
-                quant_wrapper = name_to_module[module_name]
-                if isinstance(quant_wrapper, QcQuantizeWrapper):
-                    quant_wrapper.param_quantizers['weight'].bitwidth = bw
+        # For the modules specified in the param_bw_override_list, set the weight quantizer bitwidth
+        for (module, bw) in param_bw_override_list:
+            module_name = module_to_name[module]
+            quant_wrapper = name_to_module[module_name]
+            quant_wrapper.param_quantizers['weight'].bitwidth = bw
 
     @classmethod
-    def _skip_quantization_for_ops(cls, model: torch.nn.Module, quant_sim: QuantizationSimModel,
-                                   ignore_quant_ops_list: List[torch.nn.Module]):
+    def _exclude_modules(cls, model: torch.nn.Module, quant_sim: QuantizationSimModel,
+                         ignore_quant_ops_list: List[torch.nn.Module]):
         """
-        For the Ops mentioned in the ignore_quant_ops_list, remove the corresponding Quantization wrappers from the
-        QuantSim object.
+        For the modules mentioned in the ignore_quant_ops_list, remove the corresponding quant wrappers from the
+        quantSim and excludes modules from adaround optimization.
 
         :param model: The original model
         :param quant_sim: The QuantSim that was created using a deepcopy of the original model.
-        :param ignore_quant_ops_list: The list of Ops for which the Quantization wrappers are removed from the
+        :param ignore_quant_ops_list: The list of modules for which the Quantization wrappers are removed from the
                                       QuantSim object.
-        :return:
         """
-        list_of_modules_to_remove = []
+        quant_wrappers_to_exclude = []
         for module in ignore_quant_ops_list:
-            layer_name = utils.get_layer_name(model, module)
-            list_of_modules_to_remove.append(cls._get_quant_module(quant_sim.model, layer_name))
-        quant_sim.exclude_layers_from_quantization(list_of_modules_to_remove)
+            for m in module.modules():
+                name = utils.get_layer_name(model, m)
+                quant_wrapper = cls._get_quant_wrapper(quant_sim.model, name)
+                if quant_wrapper:
+                    quant_wrappers_to_exclude.append(quant_wrapper)
+
+        quant_sim.exclude_layers_from_quantization(quant_wrappers_to_exclude)
