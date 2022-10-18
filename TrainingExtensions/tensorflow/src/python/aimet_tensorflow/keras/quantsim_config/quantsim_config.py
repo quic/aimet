@@ -165,17 +165,17 @@ def _initialize_input_quantizers(layer: layers.Layer, quant_settings: QuantizerS
     num_inputs = len(layer_input_list)
     input_quantizers = []
     for i in range(num_inputs):
-        if layer_input_list[i].dtype in ALLOWED_FLOAT_DTYPES:
-            activation_tensor_quantizer = ActivationTensorQuantizer(layer,
-                                                                    f"{layer.name}_input_quantizer_{i}",
-                                                                    quant_settings.quant_scheme,
-                                                                    quant_settings.round_mode,
-                                                                    quant_settings.bitwidth,
-                                                                    quant_settings.is_symmetric,
-                                                                    quant_settings.use_strict_symmetric,
-                                                                    quant_settings.use_unsigned_symmetric,
-                                                                    enabled)
-            input_quantizers.append(activation_tensor_quantizer)
+        activation_tensor_quantizer = ActivationTensorQuantizer(layer,
+                                                                f"{layer.name}_input_quantizer_{i}",
+                                                                quant_settings.quant_scheme,
+                                                                quant_settings.round_mode,
+                                                                quant_settings.bitwidth,
+                                                                quant_settings.is_symmetric,
+                                                                quant_settings.use_strict_symmetric,
+                                                                quant_settings.use_unsigned_symmetric,
+                                                                enabled,
+                                                                layer_input_list[i].dtype in ALLOWED_FLOAT_DTYPES)
+        input_quantizers.append(activation_tensor_quantizer)
     return input_quantizers
 
 
@@ -190,17 +190,17 @@ def _initialize_output_quantizers(layer: layers.Layer, quant_settings: Quantizer
     :return: Output quantizers corresponding to layer
     """
     output_quantizers = []
-    if layer.output.dtype in ALLOWED_FLOAT_DTYPES:
-        activation_tensor_quantizer = ActivationTensorQuantizer(layer,
-                                                                f"{layer.name}_output_quantizer_0",
-                                                                quant_settings.quant_scheme,
-                                                                quant_settings.round_mode,
-                                                                quant_settings.bitwidth,
-                                                                quant_settings.is_symmetric,
-                                                                quant_settings.use_strict_symmetric,
-                                                                quant_settings.use_unsigned_symmetric,
-                                                                enabled)
-        output_quantizers.append(activation_tensor_quantizer)
+    activation_tensor_quantizer = ActivationTensorQuantizer(layer,
+                                                            f"{layer.name}_output_quantizer_0",
+                                                            quant_settings.quant_scheme,
+                                                            quant_settings.round_mode,
+                                                            quant_settings.bitwidth,
+                                                            quant_settings.is_symmetric,
+                                                            quant_settings.use_strict_symmetric,
+                                                            quant_settings.use_unsigned_symmetric,
+                                                            enabled,
+                                                            layer.output.dtype in ALLOWED_FLOAT_DTYPES)
+    output_quantizers.append(activation_tensor_quantizer)
     return output_quantizers
 
 
@@ -232,7 +232,8 @@ def _initialize_param_quantizers(layer: layers.Layer, param_config_dict: TreeLik
                 enabled = param_config_dict[ConfigDictKeys.IS_QUANTIZED].get(
                     SETTING, False)
 
-            if per_channel_quantization_enabled and isinstance(layer, keras_common_utils.per_channel_quantizeable_layers):
+            if per_channel_quantization_enabled and isinstance(layer,
+                                                               keras_common_utils.per_channel_quantizeable_layers):
                 num_output_channels, axis_handling = keras_common_utils.get_number_of_outputs_and_axis_handling(
                     layer, weight.shape, param_type
                 )

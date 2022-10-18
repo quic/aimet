@@ -51,7 +51,10 @@ from aimet_tensorflow.quantsim import AxisHandling
 from aimet_tensorflow.keras.quant_sim.quantsim_straight_through_grad import qc_straight_through_estimator_grad, \
     quantsim_custom_grad_learned_grid
 import aimet_tensorflow.keras.utils.common as keras_common_utils
+
 _logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Quant)
+
+ALLOWED_FLOAT_DTYPES = [tf.float32, tf.float64]
 
 
 class TensorQuantizer(tf.keras.layers.Layer, abc.ABC):
@@ -417,7 +420,7 @@ class ActivationTensorQuantizer(StaticGridPerTensorQuantizer):
     # pylint: disable=too-many-arguments
     def __init__(self, layer: tf.keras.layers.Layer, name: str, quant_scheme: QuantScheme, round_mode: str,
                  bitwidth: int, is_symmetric: bool, use_strict_symmetric: bool, use_unsigned_symmetric: bool,
-                 enabled: bool):
+                 enabled: bool, is_allowed_dtype: bool = True):
 
         if enabled:
             op_mode = libpymo.TensorQuantizerOpMode.updateStats
@@ -426,6 +429,8 @@ class ActivationTensorQuantizer(StaticGridPerTensorQuantizer):
 
         super(ActivationTensorQuantizer, self).__init__(layer, name, op_mode, quant_scheme, round_mode, bitwidth,
                                                         is_symmetric, use_strict_symmetric, use_unsigned_symmetric)
+
+        self._is_allowed_dtype = is_allowed_dtype
 
     def enable(self):
         """ Enable the activation tensor quantizer """
@@ -445,6 +450,17 @@ class ActivationTensorQuantizer(StaticGridPerTensorQuantizer):
             return
         self._set_encoding_values(encoding)
         self._quantizer_mode.assign(int(libpymo.TensorQuantizerOpMode.quantizeDequantize))
+
+    def call(self, tensor: tf.Tensor):
+        """
+        :param tensor: Activation tensor to be quantized
+        Only call the `call` method of the super class for valid dtypes
+        Else, return the original tensor
+        """
+        if self._is_allowed_dtype:
+            return super().call(tensor)
+
+        return tensor
 
 
 class StaticGridPerChannelQuantizer(TensorQuantizer):
