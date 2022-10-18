@@ -459,13 +459,15 @@ class TestQuantsimConfig:
             "model_output": {}
         }
 
-        with open('./data/quantsim_config.json', 'w') as f:
+        config_file = './data/quantsim_config.json'
+        with open(config_file, 'w') as f:
             json.dump(quantsim_config, f)
         sim = QuantizationSimModel(model, quant_scheme=QuantScheme.post_training_tf_enhanced,
-                                   config_file='./data/quantsim_config.json',
+                                   config_file=config_file,
                                    dummy_input=torch.rand(1, 3, 32, 32))
 
-        version = sim._quantsim_configurator._get_hw_version()
+        version = sim.configure_quantization_ops(config_file, 8, 8, QuantizationDataType.int).\
+                      _get_hw_version()
         assert version == "V01"
 
         quantsim_config = {
@@ -486,12 +488,14 @@ class TestQuantsimConfig:
             "model_output": {}
         }
 
-        with open('./data/quantsim_config.json', 'w') as f:
+        with open(config_file, 'w') as f:
             json.dump(quantsim_config, f)
         sim = QuantizationSimModel(model, quant_scheme=QuantScheme.post_training_tf_enhanced,
-                                   config_file='./data/quantsim_config.json',
+                                   config_file=config_file,
                                    dummy_input=torch.rand(1, 3, 32, 32))
-        version = sim._quantsim_configurator._get_hw_version()
+
+        version = sim.configure_quantization_ops(config_file, 8, 8, QuantizationDataType.int).\
+                      _get_hw_version()
         assert version == "default"
 
     def test_op_instance_config_1(self):
