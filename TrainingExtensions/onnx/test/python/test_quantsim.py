@@ -119,6 +119,9 @@ class TestQuantSim:
         model = build_dummy_model()
         sim = QuantizationSimModel(model)
 
+        for quantizer in sim.qc_quantize_op_dict:
+            sim.qc_quantize_op_dict[quantizer].enabled = True
+
         for name, qc_op in sim.get_qc_quantize_op().items():
             assert qc_op.tensor_quantizer.isEncodingValid is False
 
@@ -142,6 +145,9 @@ class TestQuantSim:
             os.mkdir('/tmp')
         model = build_dummy_model()
         sim = QuantizationSimModel(model)
+
+        for quantizer in sim.qc_quantize_op_dict:
+            sim.qc_quantize_op_dict[quantizer].enabled = True
 
         def dummy_callback(session, args):
             pass
@@ -191,6 +197,8 @@ class TestQuantSim:
         onnx_model = load_model('/tmp/dummy_model.onnx')
 
         onnx_sim = QuantizationSimModel(onnx_model)
+        for quantizer in onnx_sim.qc_quantize_op_dict:
+            onnx_sim.qc_quantize_op_dict[quantizer].enabled = True
 
         disables = ['conv4.bias', 'fc.bias', 'fc.weight']
         weights = ['conv1.weight', 'conv2.weight', 'conv3.weight', 'conv4.weight']

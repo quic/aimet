@@ -132,3 +132,13 @@ class TestQcQuantizeOp:
         output_qdq = qc_op.compute(input_arr)
 
         assert np.allclose(output_oneshot, output_qdq)
+
+    def test_set_get_properties(self):
+        qc_op = QcQuantizeOp(quant_scheme=QuantScheme.post_training_tf, rounding_mode='nearest',
+                             op_mode=OpMode.one_shot_quantize_dequantize, bitwidth=8,
+                             use_symmetric_encodings=True, use_cuda=False)
+        qc_op.use_strict_symmetric = True
+        assert qc_op.use_strict_symmetric == True
+
+        qc_op.use_unsigned_symmetric = False
+        assert qc_op.use_unsigned_symmetric == False
