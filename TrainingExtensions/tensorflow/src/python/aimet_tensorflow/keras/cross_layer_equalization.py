@@ -707,7 +707,6 @@ def equalize_model(model: tf.keras.Model) -> tf.keras.Model:
     High-level API to perform Cross-Layer Equalization (CLE) on the given model
 
     :param model: tf.keras.Model
-    :param input_shapes: Input shape tuple or list of input tuple shape
     :return: CLE applied tf.keras.Model
     """
     # replace any ReLU6 layers with ReLU
@@ -725,7 +724,6 @@ def equalize_bn_folded_model(model: tf.keras.Model,
     Perform Cross-Layer Scaling (CLS) and High Bias Folding (HBF) on a batchnorm-folded model in-place
 
     :param model: BatchNorm-folded model to equalize
-    :param input_shapes: Input shape tuple or list of input tuple shape
     :param folded_pairs: List of pairs of folded layers
     """
     bn_dict = {}

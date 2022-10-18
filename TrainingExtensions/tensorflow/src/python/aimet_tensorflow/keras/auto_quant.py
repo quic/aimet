@@ -52,6 +52,7 @@ from aimet_common.defs import QuantScheme
 from aimet_common.quantsim import validate_quantsim_inputs
 from aimet_common.utils import AimetLogger, Spinner
 from aimet_tensorflow.keras.batch_norm_fold import fold_all_batch_norms
+from aimet_tensorflow.keras.cross_layer_equalization import equalize_model
 from aimet_tensorflow.keras.quantsim import QuantizationSimModel
 
 _logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.AutoQuant)
@@ -261,9 +262,18 @@ class AutoQuant:
         folded_pairs = fold_all_batch_norms(model)
         return model, folded_pairs
 
+    # pylint: disable=no-self-use
+    def _apply_cross_layer_equalization(self, model: tf.keras.Model) -> tf.keras.Model:
+        """
+        Apply cross-layer equalization
+        Note: Input model is not mutated
+        :param model: Model to apply cross-layer-equalization
+        :return: CLE applied model
+        """
+        return equalize_model(model)
 
     # TODO: Remove temporary pylint disable after full implementation
-    # pylint: disable=no-self-use, unused-argument
+    # pylint: disable=unused-argument
     def _auto_quant_main(self,
                          fp32_model: tf.keras.Model,
                          target_acc: float,
@@ -284,9 +294,9 @@ class AutoQuant:
                 f"Weight-quantized eval score (W{self.default_param_bw}A32): {acc:f}"
             )
 
-        with eval_manager.analysis_session("Activation Quantization Sensitivity") as s:
-            acc = s.eval(fp32_model, default_param_bw=32)
-            s.diagnostics.add(
+        with eval_manager.analysis_session("Activation Quantization Sensitivity") as sess:
+            acc = sess.eval(fp32_model, default_param_bw=32)
+            sess.diagnostics.add(
                 f"Activation-quantized eval score (W32A{self.default_output_bw}): {acc:f}"
             )
 
@@ -296,6 +306,15 @@ class AutoQuant:
             for conv, bn in folded_pairs:
                 sess.diagnostics.add(f"{conv} was merged with {bn}.")
             sess.set_ptq_result(model=model, applied_techniques=["batchnorm_folding"])
+
+        best_result = eval_manager.get_best_ptq_result()
+        if best_result.accuracy >= target_acc:
+            return best_result.as_dict()
+
+        # Cross-Layer Equalization
+        with eval_manager.ptq_session("Cross-Layer Equalization") as sess:
+            model = self._apply_cross_layer_equalization(fp32_model)
+            sess.set_ptq_result(model=model, applied_techniques=["cross_layer_equalization"])
 
         best_result = eval_manager.get_best_ptq_result()
         if best_result.accuracy >= target_acc:
@@ -564,7 +583,7 @@ class _PtqSession(_EvalSession):
         :return: The paths where model and encoding are saved
         """
         sim.export(path=self._results_dir, filename_prefix=self._filename)
-        model_path = os.path.join(self._results_dir, f"{self._filename}.h5")
+        model_path = os.path.join(self._results_dir, f"{self._filename}")
         encoding_path = os.path.join(self._results_dir, f"{self._filename}.encodings")
         _logger.info("The results of %s is saved in %s and %s.",
                      self._title, model_path, encoding_path)
