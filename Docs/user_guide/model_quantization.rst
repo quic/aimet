@@ -2,78 +2,156 @@
 
 AIMET Model Quantization
 ========================
+Models are generally trained on floating-point hardware like CPUs and GPUs. However, when these trained models are run
+on quantized hardware that support fixed-precision operations, model parameters are converted from floating-point
+precision to fixed precision. As an example, when running on hardware that supports 8-bit integer operations, the
+floating point parameters in the trained model need to be converted to 8-bit integers. It is observed that for some
+models, running on an 8-bit fixed-precision runtime introduces a loss in accuracy due to noise added from the use
+of fixed precision parameters and fixed precision operations.
 
-Quantization refers to the process of deploying trained FP32 models on low-precision fixed-point integer hardware.
-Quantization can provide dramatic gains in inferences/second and dramatically reduced power requirements for model
-inference. However, it can be challenging to maintain model accuracy when running on quantized runtimes, say in INT8
-precision.
+AIMET provides multiple techniques and tools which help to create quantized models with a minimal loss in accuracy
+relative to floating-point models.
 
-How does AIMET help?
---------------------
-
-AIMET provides various optimization techniques that help improve the quantized accuracy of ML models. "Quantized
-accuracy" refers to the accuracy of FP32 models when they are quantized and run on quantized target runtimes.
-
-AIMET quantization techniques can be categorized into two buckets
-
-1. **Post-training techniques**: These techniques require a few unlabeled data samples and don't require any model
-training. So they are easier to run. For some models these techniques provide very good gains to get quantized accuracy
-close to the original FP32 accuracy. For other models and tasks, they may not be sufficient by themselves to get to an
-acceptable accuracy target.
-
-2. **Quantization-aware training (QAT)**: These techniques can generalize to help most models improve quantized accuracy. They do
-require additional training for a few more epochs. This additional training is also sometimes referred to as fine-tuning.
-To get the best benefits, just like with regular training, QAT would need the user to choose the right hyper-parameters.
-So QAT is a little more involved technique from the user perspective and also can take longer to run.
-
-AIMET is designed to combine the above techniques and we often find that this produces the best possible results.
-
-
-List of AIMET quantization techniques
--------------------------------------
-
-**Post-training techniques**
-
-* :ref:`Calibration<ug-quantsim>`: Use data samples to find optimal per-tensor or per-channel quantization parameters (like scale/offsets)
-
-* :ref:`Cross-Layer Equalization<ug-post-training-quantization>`: Equalizes weight ranges in consecutive layers
-
-* :ref:`Bias Correction<ug-post-training-quantization>`: Corrects for a shift in layer outputs due to quantization noise
-
-* :ref:`Adaptive Rounding<ug-adaround>`: Learn optimal rounding for weight tensors
-
-**Quantization Aware Training**
-
-* :ref:`Quantization-aware Training (QAT)<ug-quantsim>`: Fine-tune a simulated quantized model to adapt model weights to minimize quantization noise
-
-* :ref:`QAT with range-learning<ug-quantsim>`: Fine-tune a simulated quantized model to adapt model weights **and scale/offsets** to minimize quantization noise
-
-**Visualizations**
-
-* :ref:`Visualizations<ug-quantization-visualization>`: AIMET provides visualization tools that help guide the user to determine if AIMET post-training quantization techniques are useful for a given model
-
-
-
-Please see the :ref:`Quantization Guidebook<ug-quant-guidebook>` - which includes some practical advice on using the Quantization features, and how to combine the features.
+This section provides information on typical use cases and AIMET's quantization features.
 
 Use Cases
 ---------
-1. **Predict on-target accuracy**: AIMET enables a user to simulate the effects of quantization to get a first order estimate of the model's accuracy when run on quantized targets. This is useful to get an estimate of on-target accuracy without needing an actual target platform. Note that to create a simulation model, AIMET uses representative data samples to compute per-layer quantization encodings.
+1. **Predict on-target accuracy**: AIMET enables a user to simulate the effects of quantization to get a first order
+estimate of the model's accuracy when run on quantized targets. This is useful to get an estimate of on-target accuracy
+without needing an actual target platform. Note that to create a simulation model, AIMET uses representative data
+samples to compute per-layer quantization encodings.
 
     .. image:: ../images/quant_use_case_1.PNG
 
-2. **Fine-tune model for computed per-layer encodings**: AIMET enables a user to compute per-layer quantization encodings using representative data samples. And it further enables the user to use a training pipeline to fine-tune the model to improve quantized accuracy given these computed encodings.
+2. **Post-Training Quantization (PTQ)**: PTQ techniques attempt to make a model more quantization friendly without
+requiring model re-training/fine-tuning. PTQ (as opposed to fine-tuning) is recommended as a first step in a
+quantization workflow due to the following advantages:
 
-    .. image:: ../images/quant_use_case_2.PNG
-
-
-3. **Post-training quantization (no fine-tuning)**: In some cases, a user may want to not further train the model to improve quantized accuracy. Some reasons for this may be
-	- May not have access to a training pipeline for this model
-	- May not have access to labeled training data to use for fine-tuning
-	- May want to avoid the time and effort it would take to pick the right hyper-parameters and train the model
-
-    In the above scenarios, AIMET provides a set of post-training quantization techniques that alter the model parameters to enable better quantized accuracy. These techniques are designed to fix for specific equalization issues in the model and may not work for all models.
+- No need for the original training pipeline; an evaluation pipeline is sufficient
+- Only requires a small unlabeled dataset for calibration (can even be data-free in some scenarios)
+- Fast, simple, and easy to use
 
     .. image:: ../images/quant_use_case_3.PNG
 
-#. :ref:`AutoQuant<ug-auto-quant>`: AIMET provides an API that integrates all the post-training quantization techniques.
+Note that with PTQ techniques, the quantized model accuracy may still have a gap relative to the floating-point model.
+In such a scenario, or to even further improve the model accuracy, fine-tuning is recommended.
+
+3. **Quantization-Aware Training (QAT)/Fine-Tuning**: QAT enables a user to fine-tune a model with quantization
+operations inserted in network graph, which in effect adapts the model parameters to be robust to quantization noise.
+While QAT requires access to a training pipeline and dataset, and takes longer to run due to needing a few epochs of
+fine-tuning, it can provide better accuracy especially at low bitwidths. A typical QAT workflow is illustrated below.
+
+    .. image:: ../images/quant_use_case_2.PNG
+
+AIMET Quantization Features
+---------------------------
+- :doc:`Quantization Simulation<quantization_sim>`:
+    QuantSim enables a user to modify a model by adding quantization simulation ops. When an evaluation is run on a
+    model with these quantization simulation ops, the user can observe a first-order simulation of expected accuracy on
+    quantized hardware.
+
+- Post-Training Quantization (PTQ) Techniques
+    Post-training quantization techniques help a model improve quantized accuracy without needing to re-train.
+
+    - :ref:`AutoQuant<ug-auto-quant>`:
+        AIMET provies an API that integrates the post-training quantization techniques described below. AutoQuant is
+        recommended for PTQ. If desired, individual techniques can be invoked using standalone feature specific APIs.
+
+        - :ref:`Adaptive Rounding (Adaround)<ug-adaround>`:
+            Determines optimal rounding for weight tensors to improve quantized performance.
+
+        - :ref:`Cross-Layer Equalization<ug-post-training-quantization>`:
+            Equalizes weight ranges in consecutive layers.
+
+    - :ref:`Bias Correction<ug-post-training-quantization>`:
+        Corrects for a shift in layer outputs due to quantization noise. Bias Correction and Adaptive Rounding
+        should not be applied in the same workflow; users should apply either Adaptive Rounding only or Bias
+        Correction only. It is recommended to try using Adaptive Rounding first, and only try Bias Correction if
+        results are not satisfactory.
+
+- Quantization-Aware Fine-Tuning (QAT)
+    QAT allows users to take a QuantSim model and further fine-tune the model parameters by taking quantization into
+    account.
+
+    Two modes of QAT are supported:
+
+    - Regular QAT:
+        Fine-tuning of model parameters. Trainable parameters such as module weights, biases, etc. can be
+        updated. The scale and offset quantization parameters for activation quantizers remain constant. Scale and
+        offset parameters for weight quantizers will update to reflect new weight values after each training step.
+
+    - QAT with Range Learning:
+        In addition to trainable module weights and scale/offset parameters for weight quantizers, scale/offset
+        parameters for activation quantizers are also updated during each training step.
+
+- Debugging/Analysis Tools
+    - QuantAnalyzer:
+        Automated debugging of the model to understand sensitivity to weight and/or activation quantization, individual
+        layer sensitivity, etc.
+
+    - :ref:`Visualizations<ug-quantization-visualization>`:
+        Visualizations and histograms of weight and activation ranges.
+
+AIMET Quantization Workflow
+---------------------------
+This section describes the recommended workflow for quantizing a neural network.
+
+    .. image:: ../images/quantization_workflow.PNG
+
+**1. Model prep and validation**
+
+Before attempting quantization, ensure that models have been defined in accordance to model guidelines. These guidelines
+depend on the ML framework the model is written in.
+
+Pytorch:
+    :doc:`PyTorch Model Guidelines<../api_docs/torch_model_guidelines>`
+
+    In the case of PyTorch, there exist the Model Validator utility, to automate the checking of certain PyTorch model
+    requirements, as well as the Model Preparer utility, to automate the updating of the model definition to align with
+    certain requirements. For more information, refer to the corresponding sections in
+    :doc:`AIMET PyTorch Quantization APIs<../api_docs/torch_quantization>`.
+
+Tensorflow:
+    :doc:`TensorFlow Model Guidelines<../api_docs/tensorflow_model_guidelines>`
+
+**2. PTQ/AutoQuant**
+
+The user can apply various PTQ techniques to the model to adjust model parameters and make the model more robust to
+quantization. We recommend trying AutoQuant first, a PTQ feature which internally tries various other PTQ methods and
+finds the best combination of methods to apply. Refer to the
+AIMET Quantization Features section for more details on PTQ/AutoQuant.
+
+**3. QAT**
+
+If model accuracy is still not satisfactory after PTQ/AutoQuant, the user can use QAT to fine-tune the model. Refer to
+the AIMET Quantization Features section for more details on QAT.
+
+**4. Exporting models**
+
+In order to bring the model onto the target, users will need two things:
+
+- a model with updated weights
+- an encodings file containing quantization parameters associated with each quantization op
+
+AIMET QuantSim provides export functionality to generate both items. The exported model type will differ based on the ML
+framework used:
+
+- .onnx for PyTorch
+- meta/checkpoint for TensorFlow
+- .h5 and .pb for Keras
+
+Depending on which AIMET Quantization features were used, the user may need to take different steps to export the model
+and encodings file. For example, calling AutoQuant will automatically export the model and encodings file as part of its
+processing. If QAT is used, users will need to call .export() on the QuantSim object. If lower level PTQ techniques like
+CLE are used, users will need to first create a QuantSim object from the modified model, and then call .export() on the
+QuantSim object.
+
+**5. Running on SNPE/QNN**
+
+TODO: Include command for running model on target
+
+Debugging Guidelines
+----------------------
+Applying AIMET Quantization features may involve some trial and error in order to find the best optimizations to apply
+on a particular model. We have included some debugging steps in the :ref:`Quantization Guidebook<ug-quant-guidebook>`
+that can be tried when quantization accuracy does not seem to improve right off the bat.
