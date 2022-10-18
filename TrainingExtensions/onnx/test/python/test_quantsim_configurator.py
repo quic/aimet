@@ -48,5 +48,13 @@ class TestQuantSimConfig:
     def test_qs_config_dummy_model(self):
         model = test_models.build_dummy_model()
         sim = QuantizationSimModel(model)
-        for quantizer in sim.qc_quantize_op_dict:
-            assert sim.qc_quantize_op_dict[quantizer].enabled == False
+        assert sim.qc_quantize_op_dict['conv_w'].enabled == False
+        assert sim.qc_quantize_op_dict['conv_b'].enabled == False
+        assert sim.qc_quantize_op_dict['fc_w'].enabled == False
+        assert sim.qc_quantize_op_dict['fc_b'].enabled == False
+        assert sim.qc_quantize_op_dict['input'].enabled == False
+        assert sim.qc_quantize_op_dict['3'].enabled == False
+        assert sim.qc_quantize_op_dict['4'].enabled == False
+        assert sim.qc_quantize_op_dict['5'].enabled == False
+        assert sim.qc_quantize_op_dict['6'].enabled == False
+        assert sim.qc_quantize_op_dict['output'].enabled == False
