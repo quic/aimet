@@ -53,6 +53,8 @@ from aimet_common.utils import AimetLogger
 from aimet_common.defs import QuantScheme
 from aimet_tensorflow.quantsim import QuantizationSimModel
 from aimet_tensorflow.bn_reestimation import reestimate_bn_stats, _get_all_tf_bn_vars_list
+from aimet_tensorflow.common.graph_eval import initialize_uninitialized_vars
+from aimet_tensorflow.utils.op.bn_mutable import modify_sess_bn_mutable
 
 tf.compat.v1.logging.set_verbosity(tf.compat.v1.logging.WARN)
 logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Test)
@@ -132,7 +134,6 @@ def sessions(device):
             bn_training_var = tf.compat.v1.Variable(tf.compat.v1.constant(True), name='bn_training_var')
             bn_training_var1 = tf.compat.v1.Variable(tf.compat.v1.constant(True), name='bn_training_var1')
             bn_trainable_var = True
-            bn_trainable_var = True
             inputs = tf.keras.Input(shape=(32, 32, 3,))
             conv_op = tf.keras.layers.Conv2D(32, (3, 3))(inputs)
             bn_op = tf.compat.v1.layers.batch_normalization(conv_op, momentum=bn_momentum_var, name="any_name1/",
@@ -155,19 +156,10 @@ def sessions(device):
             reshape = tf.keras.layers.Flatten()(relu_op1)
             logit = tf.keras.layers.Dense(10)(reshape)
             sess = tf.compat.v1.Session()
-            model_input = sess.graph.get_tensor_by_name('input_1:0')
-            model_output = sess.graph.get_tensor_by_name('dense/BiasAdd:0')
-            update_ops = tf.compat.v1.get_collection(tf.compat.v1.GraphKeys.UPDATE_OPS)
-            with tf.compat.v1.control_dependencies(update_ops):
-                model_output = tf.compat.v1.identity(model_output)
-            init = tf.compat.v1.global_variables_initializer()
 
-            config = tf.compat.v1.ConfigProto()
-            config.gpu_options.allow_growth = True
-            sess = tf.compat.v1.Session(graph=graph, config=config)
-            sess.run(init)
-            input_op_names = ["input_1"]
-            output_op_names = ['dense/BiasAdd']
+            initialize_uninitialized_vars(sess)
+            input_op_names = [inputs.op.name]
+            output_op_names = [logit.op.name]
 
             quantsim_config = {
                 "defaults": {
@@ -226,7 +218,7 @@ def batch_size():
 
 
 @pytest.fixture
-def bn_re_restimation_dataset(bn_num_batches, batch_size):
+def bn_re_estimation_dataset(bn_num_batches, batch_size):
     graph = tf.Graph()
     with graph.as_default():
         dummy_inputs = tf.random.normal((bn_num_batches * batch_size, 32, 32, 3))
@@ -235,44 +227,82 @@ def bn_re_restimation_dataset(bn_num_batches, batch_size):
         return dataset
 
 
-def test_reestimation_with_quantsim_model(gpu_sessions, bn_re_restimation_dataset,
-                                          bn_num_batches,
-                                          bn_momentum_names, bn_training_names):
-    sess_sim, sess_fp32 = gpu_sessions
-    _test_reestimation(sess_sim, sess_fp32, bn_re_restimation_dataset, bn_num_batches,
-                       bn_momentum_names, bn_training_names)
+class TestBNReEstimation:
+    def test_reestimation_with_quantsim_model(self, gpu_sessions, bn_re_estimation_dataset,
+                                              bn_num_batches,
+                                              bn_momentum_names, bn_training_names):
+        sess_sim, sess_fp32 = gpu_sessions
+        self._reestimate_and_compare_results(sess_sim, sess_fp32, bn_re_estimation_dataset, bn_num_batches,
+                                'input_1', 'dense/BiasAdd')
 
-def _test_reestimation(sess_sim, sess_fp32, bn_re_restimation_dataset, bn_num_batches,
-                       bn_momentum_names, bn_training_names):
-    model_input = sess_sim.session.graph.get_tensor_by_name('input_1:0')
-    model_output = sess_sim.session.graph.get_tensor_by_name('dense/BiasAdd:0')
-    shape = model_input.shape
-    dummy_val = np.random.randn(1, shape[1], shape[2], shape[3])
-    sess_sim.session.run(model_output, feed_dict={model_input: dummy_val})
+    def test_reestimation_with_rewriter(self, bn_re_estimation_dataset, bn_num_batches):
+        tf.compat.v1.reset_default_graph()
+        sess = tf.compat.v1.Session()
 
-    bn_mean_var_tf_var_list, bn_momentum_tf_var_list, bn_training_tf_var_list = _get_all_tf_bn_vars_list(
-        sess_sim, ['input_1'], ['dense/BiasAdd'])
-    bn_mean_var_ori, bn_momentum_ori, bn_training_ori = get_all_status(sess_sim.session, bn_mean_var_tf_var_list,
-                                                                       bn_momentum_tf_var_list, bn_training_tf_var_list)
+        inputs = tf.keras.Input(shape=(32, 32, 3,))
+        conv_op = tf.keras.layers.Conv2D(32, (3, 3))(inputs)
 
-    with reestimate_bn_stats(sim=sess_sim, start_op_names=["input_1"], output_op_names=['dense/BiasAdd'],
-                             bn_re_estimation_dataset=bn_re_restimation_dataset,
-                             bn_num_batches=bn_num_batches):
-        bn_mean_var_est, bn_momentum_est, bn_training_est = get_all_status(sess_sim.session, bn_mean_var_tf_var_list,
-                                                                           bn_momentum_tf_var_list,
-                                                                           bn_training_tf_var_list)
-        # Sanity check(apply_bn_re_estimation):  re-estimation , update runing mean &var, set training with False for
-        # eval(), momentum  no change
-        assert not is_two_dict_close_numpy_array(bn_mean_var_ori, bn_mean_var_est)
-        assert not is_dict_close_numpy_array_zeros(bn_mean_var_est)
-        assert is_two_dict_close_float(bn_momentum_ori, bn_momentum_est)
-        assert is_two_dict_close_bool(bn_training_ori, bn_training_est)
+        bn_op = tf.compat.v1.layers.batch_normalization(conv_op,
+                                                        beta_initializer=tf.compat.v1.random_uniform_initializer(),
+                                                        gamma_initializer=tf.compat.v1.random_uniform_initializer(),
+                                                        moving_mean_initializer=tf.compat.v1.random_uniform_initializer(),
+                                                        moving_variance_initializer=tf.compat.v1.random_uniform_initializer(),
+                                                        fused=True)
 
-    bn_mean_var_restored, bn_momentum_restored, bn_training_restored = get_all_status(sess_sim.session,
-                                                                                      bn_mean_var_tf_var_list,
-                                                                                      bn_momentum_tf_var_list,
-                                                                                      bn_training_tf_var_list)
-    # Sanity check(train_mode): restore  mean &var, set training with True for train(), momentum no change
-    assert is_two_dict_close_numpy_array(bn_mean_var_ori, bn_mean_var_restored)
-    assert is_two_dict_close_float(bn_momentum_ori, bn_momentum_restored)
-    assert is_two_dict_close_bool(bn_training_ori, bn_training_restored)
+        outputs = tf.nn.relu(bn_op)
+        initialize_uninitialized_vars(sess)
+
+        start_op_names = [inputs.op.name]
+        end_op_names = [outputs.op.name]
+
+        modify_sess_bn_mutable(sess, start_op_names, end_op_names, training_tf_placeholder=False)
+
+        sim = QuantizationSimModel(sess, start_op_names, end_op_names)
+        def dummy_forward_pass(sess, args):
+            model_input = sess.graph.get_tensor_by_name(inputs.name)
+            model_output = sess.graph.get_tensor_by_name(outputs.name)
+            dummy_val = np.random.randn(1, *model_input.shape[1:])
+            sess.run(model_output, feed_dict={model_input: dummy_val})
+        sim.compute_encodings(dummy_forward_pass, None)
+
+        self._reestimate_and_compare_results(sim, sess, bn_re_estimation_dataset, bn_num_batches, inputs.op.name, outputs.op.name)
+
+
+
+    def _reestimate_and_compare_results(self, sess_sim, sess_fp32, bn_re_restimation_dataset, bn_num_batches, input_op, output_op):
+        bn_mean_var_tf_var_list, bn_momentum_tf_var_list, bn_training_tf_var_list = _get_all_tf_bn_vars_list(
+            sess_sim, [input_op], [output_op])
+
+        model_input = sess_sim.session.graph.get_tensor_by_name(input_op + ':0')
+        model_output = sess_sim.session.graph.get_tensor_by_name(output_op + ':0')
+        dummy_val = np.random.randn(1, *model_input.shape[1:])
+
+        feed_dict_data = {model_input: dummy_val}
+        for bn_training in bn_training_tf_var_list:
+            feed_dict_data[bn_training]: True
+        sess_sim.session.run(model_output, feed_dict=feed_dict_data)
+
+        bn_mean_var_ori, bn_momentum_ori, bn_training_ori = get_all_status(sess_sim.session, bn_mean_var_tf_var_list,
+                                                                           bn_momentum_tf_var_list, bn_training_tf_var_list)
+
+        with reestimate_bn_stats(sim=sess_sim, start_op_names=[input_op], output_op_names=[output_op],
+                                 bn_re_estimation_dataset=bn_re_restimation_dataset,
+                                 bn_num_batches=bn_num_batches):
+            bn_mean_var_est, bn_momentum_est, bn_training_est = get_all_status(sess_sim.session, bn_mean_var_tf_var_list,
+                                                                               bn_momentum_tf_var_list,
+                                                                               bn_training_tf_var_list)
+            # Sanity check(apply_bn_re_estimation):  re-estimation , update runing mean &var, set training with False for
+            # eval(), momentum  no change
+            assert not is_two_dict_close_numpy_array(bn_mean_var_ori, bn_mean_var_est)
+            assert not is_dict_close_numpy_array_zeros(bn_mean_var_est)
+            assert is_two_dict_close_float(bn_momentum_ori, bn_momentum_est)
+            assert is_two_dict_close_bool(bn_training_ori, bn_training_est)
+
+        bn_mean_var_restored, bn_momentum_restored, bn_training_restored = get_all_status(sess_sim.session,
+                                                                                          bn_mean_var_tf_var_list,
+                                                                                          bn_momentum_tf_var_list,
+                                                                                          bn_training_tf_var_list)
+        # Sanity check(train_mode): restore  mean &var, set training with True for train(), momentum no change
+        assert is_two_dict_close_numpy_array(bn_mean_var_ori, bn_mean_var_restored)
+        assert is_two_dict_close_float(bn_momentum_ori, bn_momentum_restored)
+        assert is_two_dict_close_bool(bn_training_ori, bn_training_restored)
