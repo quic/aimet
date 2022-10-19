@@ -198,6 +198,11 @@ def _fold_to_scale(conv_wrapper: QcQuantizeWrapper, bn_wrapper: QcQuantizeWrappe
         )
 
     # Add quantization noise to the BN params (bn weight & bn bias) before folding.
+    # NOTE: Quantization of foldable batchnorms is automatically disabled when
+    #       initializing quantsim. However, it is still safer to call _quantize_params here
+    #       as we can't guarantee this is always the case.
+    #       For example, the user can manually enable quantization of batchnorms, etc...
+    #       (FYI: _quantize_params takes effect only when the parameter quantizers are enabled)
     with bn_wrapper._quantize_params():
         _fold_to_weight(conv, bn, fold_backward=True)
 
