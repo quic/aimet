@@ -700,12 +700,12 @@ class TestOnnxUtils:
 
         expected_names = [
             'layer.mul1.mul',
-            'layer.mul1.Mul_5',
+            'layer.mul1.Mul_7',
 
             'layer.mul2.mul',
-            'layer.mul2.Mul_11',
+            'layer.mul2.Mul_15',
 
-            'layer.Mul_13'
+            'layer.Mul_18'
         ]
         for node in onnx_model.graph.node:
             assert 'Constant' in node.name or node.name in expected_names
@@ -746,6 +746,49 @@ class TestOnnxUtils:
                 return self.layer(x)
 
         model = Net()
+        dummy_input = {'a': torch.randn(1, 10, 10, 10),
+                       'b': torch.randn(1, 10, 10, 10),
+                       'c': torch.randn(1, 10, 10, 10)}
+        onnx_path = './data/MyModel.onnx'
+
+        torch.onnx.export(model, dummy_input, onnx_path)
+        onnx_utils.OnnxSaver.set_node_names(onnx_path, model, dummy_input)
+
+        onnx_model = onnx.load(onnx_path)
+        onnx.checker.check_model(onnx_model)
+        self.check_onnx_node_name_uniqueness(onnx_model)
+
+        for node in onnx_model.graph.node:
+            assert node.name.startswith('layer')
+
+    def test_kwargs_input_dict_output(self):
+        """ test dictionary input as kwargs in an intermediate layer """
+
+        class KwargModel(torch.nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.mul = aimet_torch.elementwise_ops.Multiply()
+
+            def forward(self, a, b, c):
+                ab = a * b
+                bc = b * c
+                ca = self.mul(c, a)
+
+                return {'ab': ab, 'bc': bc, 'ca': ca}
+
+        class Net(torch.nn.Module):
+            """
+            Model using multiply as functional and module at different depths
+            """
+            def __init__(self):
+                super().__init__()
+                self.layer = KwargModel()
+
+            def forward(self, x):
+                return self.layer(**x)
+
+        model = Net()
+
         dummy_input = {'a': torch.randn(1, 10, 10, 10),
                        'b': torch.randn(1, 10, 10, 10),
                        'c': torch.randn(1, 10, 10, 10)}

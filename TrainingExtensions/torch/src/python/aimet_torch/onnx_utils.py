@@ -232,15 +232,15 @@ class CustomMarker(torch.nn.Module):
             if isinstance(t, torch.Tensor):
                 t = CustomMarkerFunc.apply(t, self.identifier, 'True', self.is_leaf)
             elif isinstance(t, dict):
-                t = self.apply_marker_to_dict(t, 'True')
+                t = self.apply_marker_to_dict(t, is_start_marker='True')
             marked_inputs.append(t)
 
         if kwargs:
-            kwargs = self.apply_marker_to_dict_input(kwargs)
+            kwargs = self.apply_marker_to_dict(kwargs, 'True')
 
         x = self.marked_module(*marked_inputs, **kwargs)
         if isinstance(x, dict):
-            output = self.apply_marker_to_dict(x, 'False')
+            output = self.apply_marker_to_dict(x, is_start_marker='False')
         else:
             was_output_tuple = isinstance(x, tuple)
             if isinstance(x, torch.Tensor):
@@ -251,7 +251,7 @@ class CustomMarker(torch.nn.Module):
                 if isinstance(t, torch.Tensor):
                     t = CustomMarkerFunc.apply(t, self.identifier, 'False', self.is_leaf)
                 elif isinstance(t, dict):
-                    t = self.apply_marker_to_dict(t, 'False')
+                    t = self.apply_marker_to_dict(t, is_start_marker='False')
                 output.append(t)
 
             # retain the tuple as output if marked module generates tuple.

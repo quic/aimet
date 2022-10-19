@@ -2785,7 +2785,7 @@ class TestQuantizationSimLearnedGrid:
                          propagate_encodings=True)
         with open('./data/cust_v1_simple.encodings') as json_file:
             activation_encodings = json.load(json_file)['activation_encodings']
-            assert set(['4', '8', 't.1']).issubset(activation_encodings.keys())
+            assert set(['10', '11', 't.1']).issubset(activation_encodings.keys())
 
     def test_custom_op_simple_v2(self):
         """
