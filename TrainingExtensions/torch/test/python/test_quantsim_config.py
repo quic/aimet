@@ -902,9 +902,14 @@ class TestQuantsimConfig:
         model.eval()
 
         quantsim_config = {
-            "defaults": {
+            "defaults":
+            {
                 "ops": {},
-                "params": {},
+                "params":
+                {
+                    "is_symmetric": "True"
+                },
+                "per_channel_quantization": "True",
                 "strict_symmetric": "True",
                 "unsigned_symmetric": "False"
             },
