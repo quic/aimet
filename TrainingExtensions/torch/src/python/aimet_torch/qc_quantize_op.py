@@ -691,6 +691,8 @@ class StaticGridQuantWrapper(QcQuantizeWrapper):
                                                                   enabled_by_default=param_quantizer.enabled,
                                                                   ch_axis=channel_axis,
                                                                   data_type=param_quantizer.data_type)
+            per_channel_quantizer.use_strict_symmetric = param_quantizer.use_strict_symmetric
+            per_channel_quantizer.use_unsigned_symmetric = param_quantizer.use_unsigned_symmetric
 
             new_param_quant_dict[param_name] = per_channel_quantizer
         self.param_quantizers = new_param_quant_dict

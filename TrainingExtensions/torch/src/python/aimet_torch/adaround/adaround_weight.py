@@ -246,8 +246,11 @@ class Adaround:
         if isinstance(quantizer, StaticGridPerChannelQuantizer):
             # pylint: disable=protected-access
             ch_axis = quantizer._ch_axis
+
         adaround_quantizer = AdaroundTensorQuantizer(quantizer.bitwidth, 'Adaptive', quantizer.quant_scheme,
                                                      quantizer.use_symmetric_encodings, quantizer.enabled, ch_axis)
+        adaround_quantizer.use_strict_symmetric = quantizer.use_strict_symmetric
+        adaround_quantizer.use_unsigned_symmetric = quantizer.use_unsigned_symmetric
 
         # Set the encodings and replace by Adaround tensor quantizer
         adaround_quantizer.encoding = quantizer.encoding
