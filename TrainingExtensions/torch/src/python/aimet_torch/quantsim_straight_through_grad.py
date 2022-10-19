@@ -354,7 +354,7 @@ def get_computed_encodings(bitwidth: int,
             # asym
             b_zero = torch.round(-encoding_min / delta)
             b_zero = torch.min(num_steps, torch.max(torch.tensor([0], device=encoding_min.device), b_zero))
-            offset = torch.tensor([-b_zero], device=encoding_min.device)
+            offset = torch.tensor(-b_zero, device=encoding_min.device)
 
     return delta, offset, num_steps
 
