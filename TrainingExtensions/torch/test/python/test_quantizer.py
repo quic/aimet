@@ -39,8 +39,6 @@ import logging
 import json as json
 import os
 import unittest.mock
-from collections import namedtuple
-from typing import Dict
 from packaging import version
 import numpy as np
 import onnx
@@ -55,9 +53,8 @@ from aimet_common.defs import QuantScheme, QuantizationDataType, MAP_ROUND_MODE_
 from aimet_common.utils import AimetLogger
 from aimet_torch import transformer_utils, onnx_utils
 from aimet_torch import utils, elementwise_ops
-from aimet_torch.elementwise_ops import Multiply
 from aimet_torch.examples.test_models import TwoLayerBidirectionalLSTMModel, SingleLayerRNNModel, \
-    ModelWithTwoInputs, SimpleConditional, RoiModel
+    ModelWithTwoInputs, SimpleConditional, RoiModel, InputOutputDictModel
 from aimet_torch.meta.connectedgraph import ConnectedGraph
 from aimet_torch.onnx_utils import OnnxExportApiArgs
 from aimet_torch.qc_quantize_op import QcQuantizeWrapper, QcQuantizeStandalone, \
@@ -87,22 +84,6 @@ def dummy_forward_pass(model, args):
     with torch.no_grad():
         output = model(torch.randn((32, 1, 28, 28)))
     return output
-
-
-class InputOutputDictModel(nn.Module):
-    def __init__(self):
-        super(InputOutputDictModel, self).__init__()
-        self.mul1 = Multiply()
-        self.mul2 = Multiply()
-        self.mul3 = Multiply()
-
-    def forward(self, inputs: Dict[str, torch.Tensor]):
-        ab = self.mul1(inputs['a'], inputs['b'])
-        bc = self.mul2(inputs['b'], inputs['c'])
-        ca = self.mul3(inputs['c'], inputs['a'])
-
-        output_def = namedtuple('output_def', ['ab', 'bc', 'ca'])
-        return output_def(ab, bc, ca)
 
 
 class SmallMnistNoDropoutWithPassThrough(nn.Module):

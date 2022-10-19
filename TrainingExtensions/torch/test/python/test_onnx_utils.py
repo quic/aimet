@@ -47,7 +47,7 @@ from aimet_common.utils import AimetLogger
 from aimet_torch import onnx_utils
 import onnx
 
-from aimet_torch.examples.test_models import RoiModel
+from aimet_torch.examples.test_models import RoiModel, InputOutputDictModel
 
 
 class OutOfOrderModel(torch.nn.Module):
@@ -729,3 +729,37 @@ class TestOnnxUtils:
         onnx_model = onnx.load('./data/roi.onnx')
         end_nodes = [ n.name for n in onnx_model.graph.node if 'end' in n.name]
         assert len(end_nodes) == 1
+
+    def test_export_dict_input_output(self):
+        """ test dictionary input and output  layers"""
+
+
+        class Net(torch.nn.Module):
+            """
+            Model using multiply as functional and module at different depths
+            """
+            def __init__(self):
+                super().__init__()
+                self.layer = InputOutputDictModel()
+
+            def forward(self, x):
+                return self.layer(x)
+
+        model = Net()
+        dummy_input = {'a': torch.randn(1, 10, 10, 10),
+                       'b': torch.randn(1, 10, 10, 10),
+                       'c': torch.randn(1, 10, 10, 10)}
+        onnx_path = './data/MyModel.onnx'
+
+        torch.onnx.export(model, dummy_input, onnx_path)
+        onnx_utils.OnnxSaver.set_node_names(onnx_path, model, dummy_input)
+
+        onnx_model = onnx.load(onnx_path)
+        onnx.checker.check_model(onnx_model)
+        self.check_onnx_node_name_uniqueness(onnx_model)
+
+        for node in onnx_model.graph.node:
+            assert node.name.startswith('layer')
+
+        if os.path.exists(onnx_path):
+            os.remove(onnx_path)

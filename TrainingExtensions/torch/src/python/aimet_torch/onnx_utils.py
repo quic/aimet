@@ -50,6 +50,7 @@ import torch.nn as nn
 import torch.onnx.symbolic_caffe2
 import onnx
 import onnxsim
+import yaml
 from packaging import version
 
 from aimet_common.utils import AimetLogger
@@ -226,30 +227,55 @@ class CustomMarker(torch.nn.Module):
         """
         Forward method for this CustomMarker layer
         """
-        output = []
+        marked_inputs = []
         for t in inputs:
             if isinstance(t, torch.Tensor):
                 t = CustomMarkerFunc.apply(t, self.identifier, 'True', self.is_leaf)
-            output.append(t)
+            elif isinstance(t, dict):
+                t = self.apply_marker_to_dict(t, 'True')
+            marked_inputs.append(t)
 
-        x = self.marked_module(*output, **kwargs) # pass down kwargs, TODO check for tensor inputs
-        was_output_tuple = isinstance(x, tuple)
-        if isinstance(x, torch.Tensor):
-            x = [x]
+        if kwargs:
+            kwargs = self.apply_marker_to_dict_input(kwargs)
 
-        output = []
-        for t in x:
-            if isinstance(t, torch.Tensor):
-                t = CustomMarkerFunc.apply(t, self.identifier, 'False', self.is_leaf)
-            output.append(t)
-
-        # retain the tuple as output if marked module generates tuple.
-        if len(output) == 1 and not was_output_tuple:
-            output = output[0]
+        x = self.marked_module(*marked_inputs, **kwargs)
+        if isinstance(x, dict):
+            output = self.apply_marker_to_dict(x, 'False')
         else:
-            output = tuple(output)
+            was_output_tuple = isinstance(x, tuple)
+            if isinstance(x, torch.Tensor):
+                x = [x]
+
+            output = []
+            for t in x:
+                if isinstance(t, torch.Tensor):
+                    t = CustomMarkerFunc.apply(t, self.identifier, 'False', self.is_leaf)
+                elif isinstance(t, dict):
+                    t = self.apply_marker_to_dict(t, 'False')
+                output.append(t)
+
+            # retain the tuple as output if marked module generates tuple.
+            if len(output) == 1 and not was_output_tuple:
+                output = output[0]
+            else:
+                output = tuple(output)
 
         return output
+
+    def apply_marker_to_dict(self, tensors_dict: Dict, is_start_marker: str) -> Dict:
+        """
+        method to apply marker to every tensor value in the dictionary
+        :param tensors_dict: dictionary that may contain tensor values, currently not enabled for recursion
+            i.e. dict of dict
+        :param is_start_marker: set to 'True' or 'False' based on if called for input or output dict of tensors
+        """
+        marked_dict_inputs = dict()
+        for k, t in tensors_dict.items():
+            if isinstance(t, torch.Tensor):
+                t = CustomMarkerFunc.apply(t, self.identifier, is_start_marker, self.is_leaf)
+            marked_dict_inputs[k] = t
+        return marked_dict_inputs
+
 
     def __getattr__(self, name):
         """
@@ -294,7 +320,26 @@ class OnnxSaver:
                                                             onnx_model_path, onnx_export_args, is_conditional,
                                                             module_marker_map)
 
+        cls.check_onnx_node_names(onnx_model, pytorch_model)
+
         onnx.save(onnx_model, onnx_model_path)
+
+    @classmethod
+    def check_onnx_node_names(cls, onnx_model: onnx.ModelProto, pytorch_model: torch.nn.Module):
+        """
+        This utility check the onnx node names for module names from  pytorch model
+        :param onnx_model: ONNX model object
+        :param pytorch_model: Equivalent PyTorch model instance
+        """
+        root_module_names = tuple([local_module_name for local_module_name, _ in pytorch_model.named_children()])
+        node_names = [node.name  for node in onnx_model.graph.node if not node.name.startswith('Constant')]
+        num_nodes = len(node_names)
+        node_names = set(node_names)
+        if num_nodes != len(node_names):
+            _logger.warning('%d nodes do not have unique names', num_nodes - len(node_names))
+
+        num_named_nodes = sum(name.startswith(root_module_names) for name in node_names)
+        _logger.info("successfully created onnx model with %d/%d node names updated", num_named_nodes, num_nodes)
 
     @staticmethod
     def _create_map_of_tensor_to_node(onnx_model: onnx.ModelProto) -> Tuple[Dict[str, List[onnx.NodeProto]],
@@ -363,9 +408,17 @@ class OnnxSaver:
             else:
                 # nn.ModuleList: does not have forward() method so should be ignored
                 if add_all_marker and not isinstance(module_ref, torch.nn.ModuleList):
-                    full_module_name = module_name_map[module_ref]
-                    marker_layer = CustomMarker(module_ref, full_module_name, 'False')
-                    setattr(starting_module, local_module_name, marker_layer)
+                    if not isinstance(module_ref, CustomMarker):
+                        full_module_name = module_name_map[module_ref]
+                        marker_layer = CustomMarker(module_ref, full_module_name, 'False')
+                        setattr(starting_module, local_module_name, marker_layer)
+                    else:
+                        module_name = f'{module_name_map.get(starting_module, "<..>")}.{local_module_name}'
+
+                        # check if it is the case of containing module having multiple reference.
+                        if module_name != module_ref.identifier:
+                            _logger.warning("layer=%s already marked as '%s', skipping",
+                                            module_name, module_ref.identifier)
                 cls._add_markers(module_ref, module_name_map, module_marker_map, use_trace, add_all_marker)
 
     @classmethod
@@ -381,10 +434,13 @@ class OnnxSaver:
         :param is_conditional: True if model is a conditional model, False otherwise
         :param module_marker_map: Maps module names to traced custom markers (only used for conditional models)
         """
+        # pylint: disable=too-many-locals
         working_dir = os.path.dirname(onnx_model_path)
 
-        onnx_model = cls._create_onnx_model_with_markers(dummy_input, pt_model, working_dir, onnx_export_args,
-                                                         is_conditional, module_marker_map, False)
+        onnx_model, onnx_model_all_marker = cls._create_onnx_model(dummy_input, is_conditional, module_marker_map,
+                                                                   onnx_export_args, pt_model, working_dir,
+                                                                   update_all_onnx_nodes_name)
+
         graphs_list, output_names_list = OnnxSaver._get_graph_and_output_names_lists(onnx_model)
 
         # Parse the ONNX model and create mapping from input and output tensors to corresponding nodes
@@ -395,6 +451,12 @@ class OnnxSaver:
 
         # Set names
         cls._set_onnx_node_names(map_input_tensor_to_node, start_marker_map)
+
+        # set names for onnx ops belonging to non-leaf torch module
+        if update_all_onnx_nodes_name:
+            cls._update_non_leaf_pytorch_modules_onnx_nodes_names(
+                pt_model, dummy_input, working_dir, onnx_export_args, is_conditional, module_marker_map,
+                onnx_model_all_marker, onnx_model)
 
         cls._remove_redundant_end_suffix(onnx_model)
 
@@ -413,17 +475,44 @@ class OnnxSaver:
         cls._fix_param_names(onnx_model)
         cls._fix_initializer_names(onnx_model, pt_model)
 
-        # set names for onnx ops belonging to non-leaf torch module
-        if update_all_onnx_nodes_name:
-            cls._update_non_leaf_pytorch_modules_onnx_nodes_names(pt_model, dummy_input, working_dir, onnx_export_args,
-                                                                  is_conditional, module_marker_map, onnx_model)
-
 
         return onnx_model
 
     @classmethod
-    def _update_non_leaf_pytorch_modules_onnx_nodes_names(cls, pt_model, dummy_input, working_dir, onnx_export_args,
-                                                          is_conditional, module_marker_map, onnx_model):
+    def _create_onnx_model(cls, dummy_input, is_conditional: bool, module_marker_map,
+                           onnx_export_args: OnnxExportApiArgs, pt_model: torch.nn.Module,
+                           working_dir: str, add_all_markers: bool) -> Tuple[onnx.NodeProto, Optional[onnx.NodeProto]]:
+        """
+        creates an onnx model with markers at all module-levels if not successful falls back to marker at leaf only.
+        :param dummy_input: Dummy input to run a fwd pass on @pt_model
+        :param is_conditional: True if model is a conditional model, False otherwise
+        :param module_marker_map: Maps module names to traced custom markers (only used for conditional models)
+        :param onnx_export_args:  override options for torch.onnx.export call
+        :param pt_model: PyTorch model
+        :param working_dir: working directory to save intermediate files
+        :return onnx model w/ leaf level markers and when feasible at non-leaf level as well.
+        """
+        try:
+            onnx_model = cls._create_onnx_model_with_markers(dummy_input, pt_model, working_dir, onnx_export_args,
+                                                             is_conditional, module_marker_map, add_all_markers)
+            if add_all_markers:
+                return onnx_model, copy.deepcopy(onnx_model)
+
+        except (IndexError, AttributeError, TypeError):
+            onnx_model = cls._create_onnx_model_with_markers(dummy_input, pt_model, working_dir, onnx_export_args,
+                                                             is_conditional, module_marker_map, False)
+        return onnx_model, None
+
+    @classmethod
+    def _update_non_leaf_pytorch_modules_onnx_nodes_names(cls, pt_model: torch.nn.Module,
+                                                          dummy_input,
+                                                          working_dir: str,
+                                                          onnx_export_args: OnnxExportApiArgs,
+                                                          is_conditional: bool,
+                                                          module_marker_map,
+                                                          onnx_model_all_marker: Optional[onnx.ModelProto],
+                                                          onnx_model: Optional[onnx.ModelProto]):
+        # pylint: disable=too-many-arguments
         """
         updates the names of onnx ops belonging to non-leaf pytorch module with parent pytorch module context.
         :param pt_model: PyTorch model
@@ -432,42 +521,76 @@ class OnnxSaver:
         :param onnx_export_args:  override options for torch.onnx.export call
         :param is_conditional: True if model is a conditional model, False otherwise
         :param module_marker_map: Maps module names to traced custom markers (only used for conditional models)
+        :param onnx_model_all_marker: onnx_model with marker attached at every module level before import, optionally provided.
         :param onnx_model: onnx_model with updated names for onnx ops belonging to leaf pytorch module
         """
         try:
 
-            temp_onnx_model = cls._create_onnx_model_with_markers(dummy_input, pt_model, working_dir, onnx_export_args,
-                                                                  is_conditional, module_marker_map, True)
+            if onnx_model_all_marker is None:
+                onnx_model_all_marker = cls._create_onnx_model_with_markers(
+                    dummy_input, pt_model, working_dir, onnx_export_args, is_conditional, module_marker_map, True)
 
             cls._update_non_leaf_onnx_nodes_names(
                 node_list_from_leaf_markers=cls._get_topological_sorted_nodes_list(onnx_model),
-                node_list_from_all_markers=cls._get_topological_sorted_nodes_list(temp_onnx_model)
+                node_list_from_all_markers=cls._get_topological_sorted_nodes_list(onnx_model_all_marker),
+                working_dir=working_dir
             )
 
-        except (KeyError, AttributeError):
-            _logger.debug('failed with exception when naming of onnx op at non-leaf modules', exc_info=True)
+        except (KeyError, AttributeError, TypeError):
+            _logger.error('failed with exception when naming of onnx op at non-leaf modules', exc_info=True)
             _logger.warning('naming of onnx op at non-leaf modules failed, skipping naming of non-leaf')
 
     @classmethod
-    def _update_non_leaf_onnx_nodes_names(cls, node_list_from_leaf_markers, node_list_from_all_markers):
+    def _update_non_leaf_onnx_nodes_names(cls,
+                                          node_list_from_leaf_markers: List[Tuple[onnx.NodeProto, str]],
+                                          node_list_from_all_markers: List[Tuple[onnx.NodeProto, str]],
+                                          working_dir: str):
         """
         update the names of onnx ops list belonging to onnx model with markers at leaf-level with names from
          node list generated with markers at all level.
         :param node_list_from_leaf_markers: onnx nodes list obtained with makers for leaf modules only
         :param node_list_from_all_markers: onnx nodes lisr obtained with marker for all pytorch modules
+        :param working_dir: Path to the saved ONNX model
         """
         i = 0
-        for (n1, pt_module_name), (n2, _) in zip(node_list_from_all_markers, node_list_from_leaf_markers):
-            if n1.op_type != n2.op_type:
+        for (node, pt_module_name), (leaf_only_node, _) in zip(node_list_from_all_markers, node_list_from_leaf_markers):
+            if node.op_type != leaf_only_node.op_type:
+                _logger.warning('leaf (%s:%s) and non-leaf (%s:%s) sequence did not match at %d',
+                                node.name, node.op_type, leaf_only_node.name, leaf_only_node.op_type, i)
                 break
 
-            if pt_module_name is not None and '#' not in n2.name and n2.name != pt_module_name:
-                n2.name = f'{pt_module_name}.{n2.name}'
+            if pt_module_name is not None and '#' not in leaf_only_node.name and leaf_only_node.name != pt_module_name:
+                leaf_only_node.name = f'{pt_module_name}.{leaf_only_node.name}'
 
             i += 1
 
         if i < len(node_list_from_leaf_markers) - 1:
             _logger.warning('partially (%d/%d) named onnx op at non-leaf modules', i, len(node_list_from_leaf_markers))
+            cls.save_mismatch_sequence(i, node_list_from_all_markers, node_list_from_leaf_markers, working_dir)
+
+    @classmethod
+    def save_mismatch_sequence(cls, mismatch_index: int,
+                               node_list_from_leaf_markers: List[Tuple[onnx.NodeProto, str]],
+                               node_list_from_all_markers: List[Tuple[onnx.NodeProto, str]],
+                               working_dir: str):
+        """
+        saves the mismatch sequence as a YAML file.
+        :param mismatch_index: index at which the first mismatch occurs.
+        :param node_list_from_leaf_markers: onnx nodes list obtained with makers for leaf modules only
+        :param node_list_from_all_markers: onnx nodes lisr obtained with marker for all pytorch modules
+        :param working_dir: Path to the saved ONNX model
+        """
+        sequence = []
+        for index, ((node, pt_module_name), (leaf_only_node, _)) in enumerate(zip(node_list_from_all_markers,
+                                                                                  node_list_from_leaf_markers)):
+            sequence.append({'index': index,
+                             'leaf': {'name': leaf_only_node.name, 'op_type': leaf_only_node.op_type},
+                             'non-leaf': {'name': node.name, 'op_type': node.op_type, 'module_name': pt_module_name}})
+
+        filename = os.path.join(working_dir, 'mismatch_onnx_mapping.yaml')
+        with open(filename, 'w') as f:
+            yaml.dump({'mismatch': mismatch_index, 'sequence': sequence}, f, default_flow_style=False, allow_unicode=True)
+        _logger.info('saved node sequence to %s', filename)
 
     @classmethod
     def _get_topological_sorted_nodes_list(cls, onnx_model) -> List[Tuple[onnx.NodeProto, Optional[str]]]:
@@ -739,6 +862,8 @@ class OnnxSaver:
         """
         node_name_count_map = dict()
         visited = set()
+        leaf_only_start_marker = {n:m for n, m in start_marker_map.items()
+                                  if m[0].attribute[MarkerAttr.IS_LEAF].s.decode() == 'True'}
 
         def set_name_for_downstream_nodes(starting_nodes, name, depth):
             for node in starting_nodes:
@@ -771,7 +896,7 @@ class OnnxSaver:
                             break
                 visited.add(id(node))
 
-        for node_name, markers in start_marker_map.items():
+        for node_name, markers in leaf_only_start_marker.items():
             for marker in markers:
                 out_tensor = marker.output[0]
                 downstream_nodes = map_input_tensor_to_node.get(out_tensor, [])
