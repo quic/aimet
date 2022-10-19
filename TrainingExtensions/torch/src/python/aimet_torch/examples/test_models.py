@@ -38,6 +38,8 @@
 """ Models for use in unit testing """
 
 # pylint: skip-file
+from collections import namedtuple
+from typing import Dict
 
 import torch
 import torch.nn as nn
@@ -49,6 +51,9 @@ import aimet_torch.elementwise_ops as aimet_elementwise
 
 
 # pylint: disable=too-many-instance-attributes
+from aimet_torch.elementwise_ops import Multiply
+
+
 class SingleResidual(nn.Module):
     """ A model with a single residual connection.
         Use this model for unit testing purposes. """
@@ -985,3 +990,19 @@ class RoiModel(torch.nn.Module):
 
     def forward(self, *inputs):
         return self.roi(*inputs)
+
+
+class InputOutputDictModel(nn.Module):
+    def __init__(self):
+        super(InputOutputDictModel, self).__init__()
+        self.mul1 = Multiply()
+        self.mul2 = Multiply()
+        self.mul3 = Multiply()
+
+    def forward(self, inputs: Dict[str, torch.Tensor]):
+        ab = self.mul1(inputs['a'], inputs['b'])
+        bc = self.mul2(inputs['b'], inputs['c'])
+        ca = self.mul3(inputs['c'], inputs['a'])
+
+        output_def = namedtuple('output_def', ['ab', 'bc', 'ca'])
+        return output_def(ab, bc, ca)
