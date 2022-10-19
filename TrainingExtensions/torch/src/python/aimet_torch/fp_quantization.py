@@ -49,7 +49,6 @@ def init_minmax(tensor, tensor_quantizer, per_channel):
     """
     Minmax initialization.
     """
-    assert False
     tensor = torch.abs(tensor)
     if per_channel:
         channel = tensor_quantizer.channel_axis
@@ -80,7 +79,6 @@ def init_mse(tensor, tensor_quantizer, per_channel):
     """
     MSE initialization. Nearly equivalent to tf_enhanced
     """
-    assert False
     channel = tensor_quantizer.channel_axis
     if per_channel:
         mxs = [torch.max(torch.abs(xc.min()), torch.abs(xc.max())) for xc in tensor.split(1, dim=channel)]
@@ -130,7 +128,6 @@ def fp8_quantizer(tensor, tensor_quantizer, _):
     """
     FP8 quantization entry function.
     """
-    assert False
     mantissa_bits_to_device(tensor)
 
     if not hasattr(tensor_quantizer, 'fp8_maxval') or tensor_quantizer.fp8_maxval is None:
@@ -150,7 +147,6 @@ def quantize_to_fp8(x_float: torch.Tensor,
     scales that depend on the input.
 
     """
-    assert False
     # For learning: ensure that the number of mantissa bits is rounded and clamped to
     # allowed values. NB: torch.round should be replaced by ste_round_func (not included
     # here yet)
