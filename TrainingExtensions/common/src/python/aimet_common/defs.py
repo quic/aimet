@@ -347,6 +347,12 @@ class QuantizationDataType(Enum):
     int = 1
     float = 2
 
+class SupportedKernelsAction(Enum):
+    """ Enumeration to specify the action to apply during supported_kernels validation"""
+    allow_error = 1
+    warn_on_error = 2
+    assert_on_error = 3
+
 
 class QuantDtypeBwInfo:
     """
@@ -368,8 +374,8 @@ class QuantDtypeBwInfo:
         self._validate_inputs()
 
     def __str__(self):
-        return (f'activation_data_type = {self.act_dtype}), act_bw = {self.act_bw}\n'
-                f'param_data_type = {self.param_dtype} param_bw = {self.param_bw}\n')
+        return (f'(activation_data_type = {self.act_dtype}, act_bw = {self.act_bw} '
+                f'param_data_type = {self.param_dtype} param_bw = {self.param_bw})')
 
     def __eq__(self, other):
         return self.act_dtype == other.act_dtype and self.act_bw == other.act_bw and \
@@ -386,3 +392,19 @@ class QuantDtypeBwInfo:
         if self.act_dtype == QuantizationDataType.float and self.act_bw != 16:
             raise ValueError(
                 'float act_dtype can only be used when act_bw is set to 16, not ' + str(self.act_bw))
+
+    def is_same_activation(self, bw: int, dtype: QuantizationDataType):
+        """
+        helper function to check if activation of the object is same as input
+        :param bw: bitwidth to verify against
+        :param dtype: dtype to verify against
+        """
+        return bw == self.act_bw and dtype == self.act_dtype
+
+    def is_same_param(self, bw: int, dtype: QuantizationDataType):
+        """
+        helper function to check if param of the object is same as input
+        :param bw: bitwidth to verify against
+        :param dtype: dtype to verify against
+        """
+        return bw == self.param_bw and dtype == self.param_dtype
