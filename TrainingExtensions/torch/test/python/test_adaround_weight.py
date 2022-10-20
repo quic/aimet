@@ -44,7 +44,7 @@ import json
 import logging
 import torch
 import torch.nn.functional as functional
-from torch.utils.data import Dataset, DataLoader
+from torchvision import models
 
 from aimet_common.utils import AimetLogger
 from aimet_common.defs import QuantScheme
@@ -604,7 +604,7 @@ class TestAdaround:
 
         # Skip the maxpool and avgpool layers.
         ignore_quant_ops_list = [model.maxpool, model.avgpool]
-        Adaround._skip_quantization_for_ops(model, sim, ignore_quant_ops_list)
+        Adaround._exclude_modules(model, sim, ignore_quant_ops_list)
         sim.compute_encodings(dummy_forward_pass, forward_pass_callback_args=input_shape)
 
         # Since maxpool and avgpool are skipped, they shouldn't be wrapped StaticGridQuantWrapper.
@@ -799,3 +799,22 @@ class TestAdaround:
         # Delete encodings file
         if os.path.exists("./dummy.encodings"):
             os.remove("./dummy.encodings")
+
+    def test_adaround_with_modules_to_exclude(self):
+        """ test adaround API with modules_to_exclude list with both leaf and non-leaf modules """
+        model = models.resnet18().eval()
+        input_shape = (1, 3, 224, 224)
+        dummy_input = torch.randn(input_shape)
+        data_loader = create_fake_data_loader(dataset_size=64, batch_size=16, image_size=input_shape[1:])
+        params = AdaroundParameters(data_loader=data_loader, num_batches=4, default_num_iterations=5)
+        try:
+            _ = Adaround.apply_adaround(model, dummy_input, params, path='./', filename_prefix='resnet18',
+                                        ignore_quant_ops_list=[model.layer1, model.layer2, model.layer3,
+                                                               model.layer4, model.fc])
+            with open('./resnet18.encodings') as json_file:
+                encoding_data = json.load(json_file)
+
+            assert len(encoding_data) == 1 # Only model.conv1 layer is adarounded.
+        finally:
+            if os.path.exists("./resnet18.encodings"):
+                os.remove("./resnet18.encodings")
