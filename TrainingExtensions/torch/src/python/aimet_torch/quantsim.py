@@ -42,7 +42,7 @@ import os
 import io
 import copy
 import pickle
-from typing import Tuple, List, Union, Dict, Callable, Set
+from typing import Tuple, List, Union, Dict, Callable, Set, Optional
 from collections.abc import Iterable
 import json
 import torch
@@ -334,7 +334,7 @@ class QuantizationSimModel:
         self._percentile_value = percentile_value
 
     def export(self, path: str, filename_prefix: str, dummy_input: Union[torch.Tensor, Tuple],
-               onnx_export_args: Union[OnnxExportApiArgs, None] = OnnxExportApiArgs(),
+               onnx_export_args: Optional[OnnxExportApiArgs] = None,
                propagate_encodings: bool = False):
         """
         This method exports out the quant-sim model so it is ready to be run on-target.
@@ -360,6 +360,9 @@ class QuantizationSimModel:
         :return: None
 
         """
+        if onnx_export_args is None:
+            onnx_export_args = OnnxExportApiArgs()
+
         # save the quantized model and encodings
         model_filename = filename_prefix + '.pth'
         model_path = os.path.join(path, model_filename)
@@ -1213,7 +1216,7 @@ class QuantizationSimModel:
 
     def _export_conditional(self, path: str, filename_prefix: str, dummy_input: Union[torch.Tensor, Tuple],
                             forward_pass_callback: Callable, forward_pass_callback_args,
-                            onnx_export_args: Union[OnnxExportApiArgs, None] = OnnxExportApiArgs(),
+                            onnx_export_args: Optional[OnnxExportApiArgs] = None,
                             propagate_encodings: bool = False):
         """
         Export function for conditional models. Performs another round of forward passes to create and store traced
