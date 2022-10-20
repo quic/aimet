@@ -36,7 +36,7 @@
 #
 #=============================================================================
 
-Python3_add_library(PyModelOptimizations MODULE WITH_SOABI
+Python3_add_library(PyModelOptimizations SHARED
         PyModelOptimizations.cpp
         PyTensorQuantizer.cpp)
 
@@ -72,7 +72,8 @@ endif (ENABLE_CUDA)
 
 set_target_properties(PyModelOptimizations
       PROPERTIES
-         OUTPUT_NAME "libpymo"
+         OUTPUT_NAME "pymo"
+         SUFFIX ".${Python3_SOABI}.so"
          LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/artifacts/aimet_common/"
       )
 
