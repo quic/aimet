@@ -218,10 +218,7 @@ def reestimate_bn_stats(sim: QuantizationSimModel, start_op_names: List[str],
     # (3) average mean&var
     for k in sum_dict.keys():
         sum_dict[k] = sum_dict[k] / bn_num_batches
-    # (4) apply result: a.update BN stats with new  b.restore momentum  c. restore training
+    # (4) apply result: update BN stats
     with sess.graph.as_default():
         sess.run([tf.compat.v1.assign(k, sum_dict[k]) for k in bn_mean_var_checkpoints.keys()])
-        sess.run([tf.compat.v1.assign(k, bn_momentum_checkpoints[k]) for k in bn_momentum_checkpoints.keys()])
-        sess.run([tf.compat.v1.assign(k, bn_training_checkpoints[k]) for k in bn_training_checkpoints.keys()])
-
     return handle
