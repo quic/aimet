@@ -47,7 +47,6 @@ import tensorflow as tf
 from aimet_tensorflow.examples.test_models import keras_model
 from aimet_tensorflow.quantsim import QuantizationSimModel
 from aimet_tensorflow.quant_analyzer import QuantAnalyzer, CallbackFunc
-from aimet_tensorflow.quant_analyzer import export_per_layer_stats_histogram, export_per_layer_encoding_min_max_range
 
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
 
@@ -84,22 +83,20 @@ def forward_pass_callback(session: tf.compat.v1.Session, _: Any = None):
     return 0.8
 
 
-
-def test_export_per_layer_stats_histogram():
+#pylint: disable=redefined-outer-name
+def test_export_per_layer_stats_histogram(cpu_session):
     """ test export_per_layer_stats_histogram() """
-    tf.compat.v1.reset_default_graph()
-    with tf.device('/cpu:0'):
-        _ = keras_model()
-        init = tf.compat.v1.global_variables_initializer()
 
-    session = tf.compat.v1.Session()
-    session.run(init)
-
-    sim = QuantizationSimModel(session, ['conv2d_input'], ['keras_model/Softmax'], use_cuda=False)
+    sim = QuantizationSimModel(cpu_session, ['conv2d_input'], ['keras_model/Softmax'], use_cuda=False)
     sim.compute_encodings(forward_pass_callback, None)
+    quant_analyzer = QuantAnalyzer(cpu_session, start_op_names=['conv2d_input'],
+                                   output_op_names=['keras_model/Softmax'],
+                                   forward_pass_callback=CallbackFunc(forward_pass_callback),
+                                   eval_callback=CallbackFunc(forward_pass_callback), use_cuda=False)
 
     try:
-        export_per_layer_stats_histogram(sim, results_dir="./tmp/")
+        #pylint: disable=protected-access
+        quant_analyzer._export_per_layer_stats_histogram(sim, results_dir="./tmp/")
 
         # Check if it is exported to correct html file.
         assert os.path.exists("./tmp/activations_pdf")
@@ -110,13 +107,14 @@ def test_export_per_layer_stats_histogram():
                               "conv2d_Conv2D_ReadVariableOp_quantized_0.html")
     finally:
         sim.session.close()
-        session.close()
+        cpu_session.close()
         if os.path.isdir("./tmp/"):
             shutil.rmtree("./tmp/")
 
-def test_export_per_layer_stats_histogram_per_channel():
+#pylint: disable=redefined-outer-name
+def test_export_per_layer_stats_histogram_per_channel(cpu_session):
     """ test export_per_layer_stats_histogram() for per channel quantization"""
-    tf.compat.v1.reset_default_graph()
+
     results_dir = os.path.abspath("./tmp/")
     os.makedirs(results_dir, exist_ok=True)
 
@@ -139,19 +137,17 @@ def test_export_per_layer_stats_histogram_per_channel():
     with open("./tmp/quantsim_config.json", 'w') as f:
         json.dump(quantsim_config, f)
 
-    with tf.device('/cpu:0'):
-        _ = keras_model()
-        init = tf.compat.v1.global_variables_initializer()
-
-    session = tf.compat.v1.Session()
-    session.run(init)
-
-    sim = QuantizationSimModel(session, ['conv2d_input'], ['keras_model/Softmax'], use_cuda=False,
+    sim = QuantizationSimModel(cpu_session, ['conv2d_input'], ['keras_model/Softmax'], use_cuda=False,
                                config_file="./tmp/quantsim_config.json")
     sim.compute_encodings(forward_pass_callback, None)
+    quant_analyzer = QuantAnalyzer(cpu_session, start_op_names=['conv2d_input'],
+                                   output_op_names=['keras_model/Softmax'],
+                                   forward_pass_callback=CallbackFunc(forward_pass_callback),
+                                   eval_callback=CallbackFunc(forward_pass_callback), use_cuda=False)
 
     try:
-        export_per_layer_stats_histogram(sim, results_dir="./tmp/")
+        #pylint: disable=protected-access
+        quant_analyzer._export_per_layer_stats_histogram(sim, results_dir="./tmp/")
 
         # Check if it is exported to correct html file.
         assert os.path.exists("./tmp/activations_pdf")
@@ -163,36 +159,35 @@ def test_export_per_layer_stats_histogram_per_channel():
                               "conv2d_Conv2D_ReadVariableOp_quantized_7.html")
     finally:
         sim.session.close()
-        session.close()
+        cpu_session.close()
         if os.path.isdir("./tmp/"):
             shutil.rmtree("./tmp/")
 
-def test_export_per_layer_encoding_min_max_range():
+#pylint: disable=redefined-outer-name
+def test_export_per_layer_encoding_min_max_range(cpu_session):
     """ test export_per_layer_encoding_min_max_range() """
-    tf.compat.v1.reset_default_graph()
-    with tf.device('/cpu:0'):
-        _ = keras_model()
-        init = tf.compat.v1.global_variables_initializer()
 
-    session = tf.compat.v1.Session()
-    session.run(init)
-
-    sim = QuantizationSimModel(session, ['conv2d_input'], ['keras_model/Softmax'], use_cuda=False)
+    sim = QuantizationSimModel(cpu_session, ['conv2d_input'], ['keras_model/Softmax'], use_cuda=False)
     sim.compute_encodings(forward_pass_callback, None)
-
+    quant_analyzer = QuantAnalyzer(cpu_session, start_op_names=['conv2d_input'],
+                                   output_op_names=['keras_model/Softmax'],
+                                   forward_pass_callback=CallbackFunc(forward_pass_callback),
+                                   eval_callback=CallbackFunc(forward_pass_callback), use_cuda=False)
     try:
-        export_per_layer_encoding_min_max_range(sim, results_dir="./tmp/")
+        #pylint: disable=protected-access
+        quant_analyzer._export_per_layer_encoding_min_max_range(sim, results_dir="./tmp/")
         assert os.path.isfile("./tmp/min_max_ranges/weights.html")
         assert os.path.isfile("./tmp/min_max_ranges/activations.html")
     finally:
         sim.session.close()
-        session.close()
+        cpu_session.close()
         if os.path.isdir("./tmp/"):
             shutil.rmtree("./tmp/")
 
-def test_export_per_layer_encoding_min_max_range_per_channel():
+#pylint: disable=redefined-outer-name
+def test_export_per_layer_encoding_min_max_range_per_channel(cpu_session):
     """ test export_per_layer_encoding_min_max_range() for per channel quantization """
-    tf.compat.v1.reset_default_graph()
+
     results_dir = os.path.abspath("./tmp/")
     os.makedirs(results_dir, exist_ok=True)
 
@@ -219,25 +214,22 @@ def test_export_per_layer_encoding_min_max_range_per_channel():
     with open("./tmp/quantsim_config.json", 'w') as f:
         json.dump(quantsim_config, f)
 
-    with tf.device('/cpu:0'):
-        _ = keras_model()
-        init = tf.compat.v1.global_variables_initializer()
-
-    session = tf.compat.v1.Session()
-    session.run(init)
-
-    sim = QuantizationSimModel(session, ['conv2d_input'], ['keras_model/Softmax'], use_cuda=False,
+    sim = QuantizationSimModel(cpu_session, ['conv2d_input'], ['keras_model/Softmax'], use_cuda=False,
                                config_file="./tmp/quantsim_config.json")
     sim.compute_encodings(forward_pass_callback, None)
-
+    quant_analyzer = QuantAnalyzer(cpu_session, start_op_names=['conv2d_input'],
+                                   output_op_names=['keras_model/Softmax'],
+                                   forward_pass_callback=CallbackFunc(forward_pass_callback),
+                                   eval_callback=CallbackFunc(forward_pass_callback), use_cuda=False)
     try:
-        export_per_layer_encoding_min_max_range(sim, results_dir="./tmp/")
+        #pylint: disable=protected-access
+        quant_analyzer._export_per_layer_encoding_min_max_range(sim, results_dir="./tmp/")
         assert os.path.isfile("./tmp/min_max_ranges/activations.html")
         assert os.path.isfile("./tmp/min_max_ranges/conv2d_Conv2D_ReadVariableOp_quantized.html")
         assert os.path.isfile("./tmp/min_max_ranges/keras_model_MatMul_ReadVariableOp_quantized.html")
     finally:
         sim.session.close()
-        session.close()
+        cpu_session.close()
         if os.path.isdir("./tmp/"):
             shutil.rmtree("./tmp/")
 
