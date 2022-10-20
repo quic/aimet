@@ -96,15 +96,23 @@ install(DIRECTORY ${CMAKE_BINARY_DIR}/artifacts/aimet_common/
       FILES_MATCHING PATTERN "AimetTensorQuantizer*.so"
       )
 
-set(cp_cmd "cp")
-set(ln_cmd "ln -s")
-add_custom_target(whlprep_aimet_torch
+add_custom_target(whl_prep_cp_torch
       COMMAND ${CMAKE_COMMAND} -E make_directory ${WHL_PREP_AIMET_TORCH_DIR}
-      # An ugly way to either copy or make a symbolink with small massage
-      # to have proper escapeing in cmake/make/ninja/etc.
       COMMAND find ${CMAKE_BINARY_DIR}/artifacts -path \"*/aimet_tensor_quantizer*\" -name \"AimetTensorQuantizer*.so\"
-              -exec sh -c '$$0 -f $$1 ${WHL_PREP_AIMET_TORCH_DIR}/$$\(basename $$1\)' $<IF:$<BOOL:${WHL_EDITABLE_MODE}>,${ln_cmd},${cp_cmd}> {} \\\;
+              -exec sh -c '$$0 -f $$1 ${WHL_PREP_AIMET_TORCH_DIR}/$$\(basename $$1\)' cp {} \\\;
+      COMMAND find ${WHL_PREP_AIMET_TORCH_DIR} -name 'AimetTensorQuantizer*.so'
+              -exec ${PATCHELF_EXE} --set-rpath '$$ORIGIN:$$ORIGIN/../torch/lib' {} \\\;
       DEPENDS
           TorchCppOps
 )
-add_dependencies(wheels_preparation whlprep_aimet_torch)
+add_custom_target(whl_prep_ln_torch
+      COMMAND ${CMAKE_COMMAND} -E make_directory ${WHL_PREP_AIMET_TORCH_DIR}
+      COMMAND find ${CMAKE_BINARY_DIR}/artifacts -path \"*/aimet_tensor_quantizer*\" -name \"AimetTensorQuantizer*.so\"
+              -exec sh -c '$$0 -f $$1 ${WHL_PREP_AIMET_TORCH_DIR}/$$\(basename $$1\)' "ln -s" {} \\\;
+      DEPENDS
+          TorchCppOps
+)
+
+add_dependencies(whl_prep_cp whl_prep_cp_torch)
+add_dependencies(whl_prep_ln whl_prep_ln_torch)
+whl_add_whl_action_target(torch)
