@@ -271,7 +271,7 @@ class QcQuantizeWrapper(nn.Module):
                                  for _ in range(num_inputs)]
 
         self._quant_scheme = quant_scheme
-        self._supported_kernels = {}
+        self.supported_kernels = {}
 
     def get_named_parameters(self):
         """
