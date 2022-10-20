@@ -37,9 +37,20 @@
 add_subdirectory(src/python)
 add_subdirectory(test)
 
-add_dependencies(wheels_preparation
-    whlprep_aimet_common_DlCompression
-    whlprep_aimet_common_DlEqualization
-    whlprep_aimet_common_DlQuantization
-    whlprep_aimet_common_PyModelOptimizations
+add_custom_target(whl_prep_cp_common DEPENDS
+    whl_prep_cp_common_DlCompression
+    whl_prep_cp_common_DlEqualization
+    whl_prep_cp_common_DlQuantization
+    whl_prep_cp_common_PyModelOptimizations
 )
+add_dependencies(whl_prep_cp whl_prep_cp_common)
+
+add_custom_target(whl_prep_ln_common DEPENDS
+    whl_prep_ln_common_DlCompression
+    whl_prep_ln_common_DlEqualization
+    whl_prep_ln_common_DlQuantization
+    whl_prep_ln_common_PyModelOptimizations
+)
+
+add_dependencies(whl_prep_ln whl_prep_ln_common)
+whl_add_whl_action_target(common)
