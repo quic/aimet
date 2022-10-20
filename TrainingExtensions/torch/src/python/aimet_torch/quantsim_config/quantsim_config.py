@@ -117,7 +117,8 @@ class QuantSimConfigurator(AimetCommonQuantSimConfigurator):
         self._named_modules_to_tensor_quantizers_dict = self._create_named_modules_to_tensor_quantizers_dict()
         self._elementwise_op_to_tensor_quantizers_dict = self._create_elementwise_op_to_tensor_quantizers_dict()
         self._disable_all_quantizers()
-        # TODO remove the below field and use the wrapper.supported_kernels instead. reformat_supported_kernels missing as well
+        # TODO remove the below field and use the wrapper.supported_kernels instead. reformat_supported_kernels missing
+        #  as well
         self._supported_kernels = self._parse_supported_kernels()
 
         if ENFORCE_TARGET_DTYPE_BITWIDTH_CONFIG:
@@ -541,7 +542,8 @@ class QuantSimConfigurator(AimetCommonQuantSimConfigurator):
         for op in self._conn_graph.ordered_ops:
             if op.get_module() in self._module_to_quantsim_wrapper_dict:
                 wrapper = self._module_to_quantsim_wrapper_dict[op.get_module()]
-                wrapper._supported_kernels, per_channel_quantization = config_generator.generate(op.get_module(), op)
+                wrapper.supported_kernels, per_channel_quantization = config_generator.generate(op.get_module(),
+                                                                                                op.type)
                 if per_channel_quantization:
                     wrapper.enable_per_channel_quantization()
 
@@ -704,18 +706,18 @@ class OpInstanceConfigGenerator:
     Class to specify op instance specific rules and generate the updated config
     """
 
-    def __init__(self, supported_kernels: dict, pcq: dict):
+    def __init__(self, op_type_supported_kernels: dict, op_type_pcq: dict):
         """
-        :param supported_kernels: supported_kernels fields from the config file
-        :param pcq: per_channel_quantization(pcq) fields from the config file
+        :param op_type_supported_kernels: supported_kernels fields from the config file(specific op types + default)
+        :param op_type_pcq: per_channel_quantization(pcq) fields from the config file(specific op types + default)
         """
-        self.supported_kernels = supported_kernels
-        self.pcq = pcq
-        assert ConfigDictKeys.DEFAULTS in self.supported_kernels
-        assert ConfigDictKeys.DEFAULTS in self.pcq
+        self.op_type_supported_kernels = op_type_supported_kernels
+        self.op_type_pcq = op_type_pcq
+        assert ConfigDictKeys.DEFAULTS in self.op_type_supported_kernels
+        assert ConfigDictKeys.DEFAULTS in self.op_type_pcq
 
     @abstractmethod
-    def generate(self, module, op) -> dict:
+    def generate(self, module: torch.nn.Module, op_type: str) -> dict:
         """ generate the config for the given op """
 
     def _generate_pcq(self, module: torch.nn.Module) -> bool:
@@ -731,14 +733,14 @@ class OpInstanceConfigGenerator:
         """
         pcq = False
         onnx_types = map_torch_types_to_onnx.get(type(module), [])
-        onnx_types_in_config = set(onnx_types).intersection(self.pcq)
+        onnx_types_in_config = set(onnx_types).intersection(self.op_type_pcq)
 
         if onnx_types_in_config:
             for onnx_type in onnx_types_in_config:
-                if self.pcq[onnx_type]:
+                if self.op_type_pcq[onnx_type]:
                     pcq = True
-                break
-        elif self.pcq[ConfigDictKeys.DEFAULTS]:
+                    break
+        elif self.op_type_pcq[ConfigDictKeys.DEFAULTS]:
             pcq = True
 
         return pcq
@@ -749,13 +751,14 @@ class DefaultOpInstanceConfigGenerator(OpInstanceConfigGenerator):
     Default implementation of OpInstanceConfigGenerator
     """
 
-    def generate(self, module, op) -> Tuple[dict, bool]:
+    def generate(self, module: torch.nn.Module, op_type: str) -> Tuple[dict, bool]:
         """
         :param module: module to generate the specialized config
-        :param op: higher level op retrieved from CG
+        :param op_type: Type str retrieved from CG op
         :return: supported_kernels and per_channel_quantization fields
         """
-        supported_kernels = self.supported_kernels.get(op.type, self.supported_kernels[ConfigDictKeys.DEFAULTS])
+        supported_kernels = self.op_type_supported_kernels.get(op_type,
+                                                               self.op_type_supported_kernels[ConfigDictKeys.DEFAULTS])
         pcq = self._generate_pcq(module)
 
         return supported_kernels, pcq

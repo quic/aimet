@@ -51,7 +51,7 @@ import onnx
 import aimet_common
 import aimet_common.libpymo as libpymo
 from aimet_common.utils import AimetLogger, save_json_yaml
-from aimet_common.defs import QuantScheme, QuantizationDataType
+from aimet_common.defs import QuantScheme, QuantizationDataType, SupportedKernelsAction, QuantDtypeBwInfo
 from aimet_common.quantsim import encoding_version, validate_quantsim_inputs, calculate_delta_offset
 from aimet_common.quant_utils import get_conv_accum_bounds
 
@@ -84,6 +84,7 @@ MODULE_TO_WRAP_STRING_REVERSE_INDEX = -16
 MAP_PYMO_TO_ROUND_MODE = {libpymo.RoundingMode.ROUND_NEAREST: 'nearest',
                           libpymo.RoundingMode.ROUND_STOCHASTIC: 'stochastic'}
 
+SUPPORTED_KERNELS_ACTION = SupportedKernelsAction.warn_on_error
 
 class QuantParams:
     """
@@ -190,6 +191,8 @@ class QuantizationSimModel:
         quantsim_configurator = self.configure_quantization_ops(config_file, default_output_bw, default_param_bw,
                                                                 default_data_type)
         self._supported_kernels = quantsim_configurator.get_supported_kernels()
+
+        self._validate_supported_kernels_for_quantizers(SUPPORTED_KERNELS_ACTION)
 
     def get_supported_kernels(self) -> Dict:
         """
@@ -1322,6 +1325,80 @@ class QuantizationSimModel:
                     marker_layer = torch.jit.trace(CustomMarker(module, module_to_name_map[module], 'True'),
                                                    dummy_input)
                 self._module_marker_map[module_to_name_map[module]] = marker_layer
+
+    def _validate_supported_kernels_for_quantizers(self, action: SupportedKernelsAction):
+        """
+        Validate supported kernels for all the Quantizers in the QuantSimModel
+        :param action: The action to be performed when incorrect candidate is set in a quantizer
+        """
+
+        def apply_act_param_rules(curr_candidate: QuantDtypeBwInfo, allowed_supported_kernels: List[QuantDtypeBwInfo], module_name):
+            """
+            helper function to validate both activation and param against the supported_kernels passed
+            :param curr_candidate: candidate of interest
+            :param allowed_supported_kernels: List of supported kernels for the given module
+            :param module_name: name of the module
+            """
+            if action != SupportedKernelsAction.allow_error:
+                for k in allowed_supported_kernels:
+                    if curr_candidate == k:
+                        return
+
+                if action == SupportedKernelsAction.warn_on_error:
+                    logger.warning("candidate:%s is not under the supported_kernels for the module %s", curr_candidate,
+                                   module_name)
+
+                if action == SupportedKernelsAction.assert_on_error:
+                    error_msg = f'candidate: {curr_candidate} is not under the supported_kernels for the module {module_name}'
+                    raise RuntimeError(error_msg)
+
+        def apply_act_rules(act: Tuple[int, QuantizationDataType], allowed_supported_kernels: List[QuantDtypeBwInfo], module_name):
+            """
+            helper function to validate both activation only against the supported_kernels passed
+            :param act: act of the candidate to be validated
+            :param allowed_supported_kernels: List of supported kernels for the given module
+            :param module_name: name of the module
+            """
+            if action != SupportedKernelsAction.allow_error:
+                for k in allowed_supported_kernels:
+                    if k.is_same_activation(act[0], act[1]):
+                        return
+
+                if action == SupportedKernelsAction.warn_on_error:
+                    logger.warning("activation:%s is not under the supported_kernels for the module %s", act, module_name)
+
+                if action == SupportedKernelsAction.assert_on_error:
+                    error_msg = f'activation: {act} is not under the supported_kernels for the module {module_name}'
+                    raise RuntimeError(error_msg)
+
+        # retrieve all the act and param quantizer candidates, and validate them against supported_kernels
+        for name, module in self.model.named_modules():
+            if isinstance(module, QcQuantizeWrapper) and module.supported_kernels:
+                supported_kernels = []
+                for supported_kernel in module.supported_kernels:
+                    # ((activation bitwidth, activation data type), (param bitwidth, param data type))
+                    # TODO modify this once reformat_supported_kernels generates of type QuantDtypeBwInfo
+                    supported_kernels.append(
+                        QuantDtypeBwInfo(supported_kernel[0][1], supported_kernel[0][0],
+                                         supported_kernel[1][1], supported_kernel[1][0]))
+
+                act_candidates = []
+                param_candidate = ()
+                for quantizer in module.input_quantizers + module.output_quantizers:
+                    act_candidates.append((quantizer.bitwidth, quantizer.data_type))
+
+                if 'weight' in module.param_quantizers:
+                    param_candidate = (module.param_quantizers['weight'].bitwidth,
+                                       module.param_quantizers['weight'].data_type)
+
+                if param_candidate:
+                    # we need to check weights against all the activations
+                    for act_candidate in set(act_candidates):
+                        apply_act_param_rules(QuantDtypeBwInfo(act_candidate[1], act_candidate[0], param_candidate[1],
+                                                               param_candidate[0]), supported_kernels, name)
+                else:
+                    for candidate in set(act_candidates):
+                        apply_act_rules(candidate, supported_kernels, name)
 
 
 def save_checkpoint(quant_sim_model: QuantizationSimModel, file_path: str):
