@@ -46,26 +46,26 @@ The steps are as follows:
     3) Save checkpoint to use with DDP training
 """
 
+import os
+import socket
+import argparse
+
+import progressbar
 import torch
-import torchvision
-import torchvision.transforms as transforms
-import torchvision.datasets as datasets
 import torch.distributed as dist
 import torch.multiprocessing as mp
 from torch.nn.parallel import DistributedDataParallel as DDP
 from torch.utils.data.distributed import DistributedSampler
+import torchvision
+import torchvision.transforms as transforms
+import torchvision.datasets as datasets
 import torchmetrics
 
-from aimet_torch.model_preparer import prepare_model
 from aimet_common.defs import QuantScheme
 from aimet_torch.quantsim import QuantizationSimModel
 from aimet_torch import quantsim
 from aimet_torch import batch_norm_fold
-
-import os
-import socket
-import progressbar
-import argparse
+from aimet_torch.model_preparer import prepare_model
 
 
 def find_free_network_port() -> int:
@@ -98,7 +98,13 @@ def dist_eval_func(model, imagenet_dir, batch_size, world_size):
 
 
 def get_quant_eval(imagenet_dir, batch_size, device):
-    def evaluate_quant(model, iter):
+    """
+    Forward pass callback
+    :param imagenet_dir: Directory path for images
+    :param batch_size: Batch size used for eval
+    :param device: Which device (Cuda/CPU) model is on
+    """
+    def evaluate_quant(model, _):
         val_dir = os.path.join(imagenet_dir, 'val')
         normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406],
                                          std=[0.229, 0.224, 0.225])
@@ -121,13 +127,13 @@ def get_quant_eval(imagenet_dir, batch_size, device):
         model.to(device)
         model.eval()
 
-        with progressbar.ProgressBar(max_value=100) as bar:
+        with progressbar.ProgressBar(max_value=100) as progress_bar:
             with torch.no_grad():
-                for i, (images, target) in enumerate(val_loader):
+                for i, (images, _) in enumerate(val_loader):
                     images = images.to(device)
                     # compute output
                     _ = model(images)
-                    bar.update(i)
+                    progress_bar.update(i)
                     if i == 100:
                         break
 
@@ -145,6 +151,7 @@ def evaluate_ddp(rank, world_size, port_id, model, imagenet_dir, batch_size, res
     :param batch_size: Batch size used for eval
     :param results: Dict that collects results from all processes
     """
+    # pylint: disable=too-many-locals
 
     os.environ["MASTER_ADDR"] = "localhost"
     os.environ["MASTER_PORT"] = port_id
@@ -209,19 +216,22 @@ def evaluate_ddp(rank, world_size, port_id, model, imagenet_dir, batch_size, res
         # Reseting internal state such that metric ready for new data
         metric.reset()
 
-    if rank == 0:   
+    if rank == 0:
         results['top-1 acc'] = float(acc)
     # cleanup
     dist.destroy_process_group()
 
 
 def main():
+    """
+    Main function
+    """
     parser = argparse.ArgumentParser(description='PyTorch DDP Eval')
     parser.add_argument('--world_size', default=2, type=int, help="number of total nodes")
     parser.add_argument('-b', '--batch_size', default=64, type=int, metavar='N')
     parser.add_argument(
         '--model_path',
-        help="path to the quantized model's saved checkpoint for QAT", 
+        help="path to the quantized model's saved checkpoint for QAT",
         default='na'
     )
     parser.add_argument('--imagenet_dir', help="path to imagenet_dir", required=True)
@@ -242,10 +252,10 @@ def main():
 
     # Note: As of now only range learning quantization schemes as supported
     quant_sim = QuantizationSimModel(
-        prepared_model, 
+        prepared_model,
         dummy_input=dummy_input,
         quant_scheme=QuantScheme.training_range_learning_with_tf_init,
-        default_param_bw=8, 
+        default_param_bw=8,
         default_output_bw=8
     )
 
