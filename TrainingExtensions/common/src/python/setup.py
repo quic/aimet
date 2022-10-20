@@ -92,28 +92,28 @@ class BuildExtensionCommand(build_ext):
             src_dir = CURRENT_DIR
             bld_dir = Path(self.build_temp).resolve()
             whl_prep_dir = bld_dir / "whlprep"
+            tgt = f"whl_prep_{'ln' if self.inplace else 'cp'}_"
             cmake_args = [
                 f"-DPython3_ROOT_DIR={os.path.dirname(sys.executable)}",
                 f"-DWHL_PREP_DIR={whl_prep_dir}",
                 f"-DENABLE_CUDA={ENABLE_CUDA}",
                 f"-DENABLE_TORCH={ENABLE_TORCH}",
                 f"-DENABLE_TENSORFLOW={ENABLE_TENSORFLOW}",
-                f"-DWHL_EDITABLE_MODE={self.inplace}",
             ]
             subprocess.run(["cmake", "-B", bld_dir, "-S",  src_dir] + cmake_args,
                 check=True, stdout=sys.stdout, stderr=sys.stderr, encoding="utf8",
                 )
-            subprocess.run(["cmake", "--build",  bld_dir, "-j", "-t", "whl_prep_aimet_common"],
+            subprocess.run(["cmake", "--build",  bld_dir, "-j", "-t", tgt + "common"],
                 check=True, stdout=sys.stdout, stderr=sys.stderr, encoding="utf8",
                 )
             if ENABLE_TORCH:
                 subprocess.run(
-                    ["cmake", "--build",  bld_dir, "-j", "-t", "whl_prep_aimet_torch"],
+                    ["cmake", "--build",  bld_dir, "-j", "-t", tgt + "torch"],
                     check=True, stdout=sys.stdout, stderr=sys.stderr, encoding="utf8",
                     )
             if ENABLE_TENSORFLOW:
                 subprocess.run(
-                    ["cmake", "--build",  bld_dir, "-j", "-t", "whl_prep_aimet_tensorflow"],
+                    ["cmake", "--build",  bld_dir, "-j", "-t", tgt + "tensorflow"],
                     check=True, stdout=sys.stdout, stderr=sys.stderr, encoding="utf8",
                     )
         # Copy C++ part into wheel package
