@@ -267,8 +267,6 @@ class TestBNReEstimation:
 
         self._reestimate_and_compare_results(sim, sess, bn_re_estimation_dataset, bn_num_batches, inputs.op.name, outputs.op.name)
 
-
-
     def _reestimate_and_compare_results(self, sess_sim, sess_fp32, bn_re_restimation_dataset, bn_num_batches, input_op, output_op):
         bn_mean_var_tf_var_list, bn_momentum_tf_var_list, bn_training_tf_var_list = _get_all_tf_bn_vars_list(
             sess_sim, [input_op], [output_op])

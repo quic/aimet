@@ -36,6 +36,7 @@
 #  @@-COPYRIGHT-END-@@
 # =============================================================================
 """ utilities for fused batchnorm op """
+# pylint: disable=too-many-lines
 
 from typing import Union, List
 import numpy as np
@@ -136,13 +137,16 @@ class BNUtils:
         :param input_tensor: Input tensor to find corresponding read op tensor that can be evaluated
         :return: read var op type tensor as tf.Tensor type.
         """
+
         logger.debug('Fetching params from trainable BN op type')
         assert input_tensor.op.inputs[0].op.inputs is not None
         # inputs of 0 is beta tensor , get readVarOp associated with it
         var_tensor = input_tensor.op.inputs[0].op.inputs[0]
         assert var_tensor.op.outputs is not None
         assert len(var_tensor.consumers()) >= 3
+
         tensor_consumers = var_tensor.consumers()
+
         var_read_tensor = None
         # get read variable op tensor from these consumers
         # do not pick the one with _1 , it is not fetch-able
@@ -151,7 +155,9 @@ class BNUtils:
                 assert consumer.outputs is not None
                 var_read_tensor = consumer.outputs[0]
                 break
+
         assert var_read_tensor is not None
+
         return var_read_tensor
 
     @staticmethod
@@ -183,6 +189,7 @@ class BNUtils:
         else:
             logger.error("Error, unknown BN op")
             assert False
+
         assert beta_read.type in ['ReadVariableOp', 'Identity', 'VarHandleOp']      # Will be VarHandleOp for tf slim BNs in tf2 runtime
         return beta_read
 
@@ -196,10 +203,12 @@ class BNUtils:
         """
         assert bn_op.type in ['FusedBatchNormV3', 'FusedBatchNorm', 'Mul', 'Identity']
         beta_read_tensor = BNUtils.get_beta_read_op(bn_op).outputs[0]
+
         assert beta_read_tensor is not None
         if beta_read_tensor.op.inputs and beta_read_tensor.op.inputs[0].op.type == 'Switch':
             logger.debug('Fetching params from trainable BN op type')
             beta_read_tensor = BNUtils._get_tensor_read_var_op_trainable_bn_op(beta_read_tensor)
+
         return beta_read_tensor
 
     @staticmethod
@@ -219,6 +228,7 @@ class BNUtils:
             # if we can't find the tensor name, use structure match
             # to figure out the read tensor for param
             beta_read_tensor = BNUtils.get_beta_read_var_op_tensor_using_structure(bn_op)
+
         return beta_read_tensor
 
     @staticmethod
@@ -230,15 +240,12 @@ class BNUtils:
         :param bn_op: bn_op as tf.Operation
         :return: beta tensor as numpy data
         """
+
         beta_tensor = BNUtils.get_beta_read_var_op_tensor(sess.graph, bn_op)
+
         with sess.graph.as_default():
             numpy_data = sess.run(beta_tensor)
-        # mutable tf1 API Bn on TF2 runtime, numpy_data will get dtype=[('resource', 'u1')])
-        if not isinstance(numpy_data[0], np.float32):
-            tf_global_vars = tf.compat.v1.get_collection(tf.compat.v1.GraphKeys.GLOBAL_VARIABLES)
-            for v in tf_global_vars:
-                if v.name == beta_tensor.name:
-                    numpy_data = sess.run(v)
+
         return numpy_data
 
     @staticmethod
@@ -307,6 +314,7 @@ class BNUtils:
             # if we can't find the tensor name, use structure match
             # to figure out the read tensor for param
             gamma_read_tensor = BNUtils.get_gamma_read_var_op_tensor_using_structure(bn_op)
+
         return gamma_read_tensor
 
     @staticmethod
@@ -318,15 +326,12 @@ class BNUtils:
         :param bn_op: bn_op obtained from connected graph using get_modules (is mul_1 op inside BN scope)
         :return: gamma as numpy data
         """
+
         gamma_tensor = BNUtils.get_gamma_read_var_op_tensor(sess.graph, bn_op)
+
         with sess.graph.as_default():
             numpy_data = sess.run(gamma_tensor)
-        # mutable tf1 API Bn on TF2 runtime, numpy_data will get dtype=[('resource', 'u1')])
-        if not isinstance(numpy_data[0], np.float32):
-            tf_global_vars = tf.compat.v1.get_collection(tf.compat.v1.GraphKeys.GLOBAL_VARIABLES)
-            for v in tf_global_vars:
-                if v.name == gamma_tensor.name:
-                    numpy_data = sess.run(v)
+
         return numpy_data
 
     @staticmethod
@@ -410,6 +415,7 @@ class BNUtils:
         bn_op_struct_for_variance_handlers = [BNUtils._bn_op_var_struct_1,
                                               BNUtils._bn_op_var_struct_2,
                                               BNUtils._bn_op_var_struct_3]
+
         if bn_op.type in ['FusedBatchNormV3', 'FusedBatchNorm']:
             assert len(bn_op.inputs) == 5
             moving_var_read = bn_op.inputs[constants.BN_OP_PARAM_INDICES['movingvariance']].op
@@ -437,7 +443,9 @@ class BNUtils:
 
         if moving_var_read.type == 'Identity':
             assert len(moving_var_read.inputs) == 1, _BN_STRUCTURE_ERROR_MSG
+
         assert moving_var_read.type in ['ReadVariableOp', 'Const', 'Identity', 'VarHandleOp']
+
         return moving_var_read
 
     @staticmethod
@@ -503,15 +511,12 @@ class BNUtils:
         :param bn_op: bn_op obtained from connected graph using get_modules a mul_1 op inside BN scope.
         :return: moving variance as numpy data
         """
+
         moving_var_tensor = BNUtils.get_moving_variance_read_var_op_tensor(sess.graph, bn_op)
+
         with sess.graph.as_default():
             numpy_data = sess.run(moving_var_tensor)
-        # mutable tf1 API Bn on TF2 runtime, numpy_data will get dtype=[('resource', 'u1')])
-        if not isinstance(numpy_data[0], np.float32):
-            tf_global_vars = tf.compat.v1.get_collection(tf.compat.v1.GraphKeys.GLOBAL_VARIABLES)
-            for v in tf_global_vars:
-                if v.name == moving_var_tensor.name:
-                    numpy_data = sess.run(v)
+
         return numpy_data
 
     @staticmethod
@@ -689,15 +694,12 @@ class BNUtils:
         :param bn_op: bn_op obtained from connected graph using get_modules a mul_1 op inside BN scope.
         :return: moving mean as numpy data
         """
+
         moving_mean_tensor = BNUtils.get_moving_mean_read_var_op_tensor(sess.graph, bn_op)
+
         with sess.graph.as_default():
             numpy_data = sess.run(moving_mean_tensor)
-        # mutable tf1 API Bn on TF2 runtime, numpy_data will get dtype=[('resource', 'u1')])
-        if not isinstance(numpy_data[0], np.float32):
-            tf_global_vars = tf.compat.v1.get_collection(tf.compat.v1.GraphKeys.GLOBAL_VARIABLES)
-            for v in tf_global_vars:
-                if v.name == moving_mean_tensor.name:
-                    numpy_data = sess.run(v)
+
         return numpy_data
 
     @staticmethod
@@ -708,6 +710,7 @@ class BNUtils:
         :param bn_op: bn_op obtained from connected graph using get_modules a mul_1 op inside BN scope.
         :return: epsilon value
         """
+
         if bn_op.type in ['Mul']:
             assert len(bn_op.inputs) >= 2, _BN_STRUCTURE_ERROR_MSG
             mul = bn_op.inputs[1].op
@@ -723,6 +726,7 @@ class BNUtils:
             numpy_epsilon = bn_op.get_attr("epsilon")
         else:
             raise RuntimeError(f"Unknown BN op type: {bn_op.type}")
+
         return numpy_epsilon
 
     @staticmethod
@@ -733,23 +737,32 @@ class BNUtils:
         :param bn_op: Batchnorm op to search for corresponding assign_moving_avg op
         :return: assign_moving_op corresponding with the bn op, or None if it does not exist.
         """
-        assert bn_op.type in ['FusedBatchNormV3', 'FusedBatchNorm', 'Identity']
-        assert len(bn_op.outputs) == 6 or len(bn_op.outputs) == 5 or len(bn_op.outputs) == 1
+        assert (bn_op.type in ['FusedBatchNormV3', 'FusedBatchNorm'] and len(bn_op.outputs) in [5, 6]) \
+               or (bn_op.type == 'Identity' and len(bn_op.outputs) == 1)
+
         assign_moving_avg_op = None
         if bn_op.type in 'Identity':
-            assign_moving_avg_op = bn_op.inputs[0].op.outputs[1].consumers()[0].outputs[0].consumers()[0].outputs[0].consumers()[0].outputs[0].consumers()[0]
-        else:
-            if bn_op.outputs[1].consumers():
-                child_op = bn_op.outputs[1].consumers()[0]
-                if child_op.type == 'Merge':
-                    sub_op = child_op.outputs[0].consumers()[0]
-                else:
-                    sub_op = child_op
-                assert sub_op.type == 'Sub'
-                mul_op = sub_op.outputs[0].consumers()[0]
-                assert mul_op.type == 'Mul'
-                assign_moving_avg_op = mul_op.outputs[0].consumers()[0]
-                assert assign_moving_avg_op.type in ['AssignSub', 'AssignSubVariableOp']
+            if_op = bn_op.inputs[0].op
+            assert if_op.type == 'If'
+            identity_1_op = if_op.outputs[1].consumers()[0]
+            assert identity_1_op.type == 'Identity'
+            sub_op = identity_1_op.outputs[0].consumers()[0]
+            assert sub_op.type == 'Sub'
+            mul_op = sub_op.outputs[0].consumers()[0]
+            assert mul_op.type == 'Mul'
+            assign_moving_avg_op = mul_op.outputs[0].consumers()[0]
+            assert assign_moving_avg_op.type in ['AssignSub', 'AssignSubVariableOp']
+        elif bn_op.outputs[1].consumers():
+            child_op = bn_op.outputs[1].consumers()[0]
+            if child_op.type == 'Merge':
+                sub_op = child_op.outputs[0].consumers()[0]
+            else:
+                sub_op = child_op
+            assert sub_op.type == 'Sub'
+            mul_op = sub_op.outputs[0].consumers()[0]
+            assert mul_op.type == 'Mul'
+            assign_moving_avg_op = mul_op.outputs[0].consumers()[0]
+            assert assign_moving_avg_op.type in ['AssignSub', 'AssignSubVariableOp']
         return assign_moving_avg_op
 
     @staticmethod
@@ -760,23 +773,32 @@ class BNUtils:
         :param bn_op: Batchnorm op to search for corresponding assign_moving_avg_1 op
         :return: assign_moving_avg_1 corresponding with the bn op, or None if it does not exist.
         """
-        assert bn_op.type in ['FusedBatchNormV3', 'FusedBatchNorm', 'Identity']
-        assert len(bn_op.outputs) == 6 or len(bn_op.outputs) == 5 or len(bn_op.outputs) == 1
+        assert (bn_op.type in ['FusedBatchNormV3', 'FusedBatchNorm'] and len(bn_op.outputs) in [5, 6]) \
+               or (bn_op.type == 'Identity' and len(bn_op.outputs) == 1)
+
         assign_moving_avg_op = None
         if bn_op.type in 'Identity':
-            assign_moving_avg_op = bn_op.inputs[0].op.outputs[2].consumers()[0].outputs[0].consumers()[0].outputs[0].consumers()[0].outputs[0].consumers()[0]
-        else:
-            if bn_op.outputs[2].consumers():
-                child_op = bn_op.outputs[2].consumers()[0]
-                if child_op.type == 'Merge':
-                    sub_op = child_op.outputs[0].consumers()[0]
-                else:
-                    sub_op = child_op
-                assert sub_op.type == 'Sub'
-                mul_op = sub_op.outputs[0].consumers()[0]
-                assert mul_op.type == 'Mul'
-                assign_moving_avg_op = mul_op.outputs[0].consumers()[0]
-                assert assign_moving_avg_op.type in ['AssignSub', 'AssignSubVariableOp']
+            if_op = bn_op.inputs[0].op
+            assert if_op.type == 'If'
+            identity_2_op = if_op.outputs[2].consumers()[0]
+            assert identity_2_op.type == 'Identity'
+            sub_op = identity_2_op.outputs[0].consumers()[0]
+            assert sub_op.type == 'Sub'
+            mul_op = sub_op.outputs[0].consumers()[0]
+            assert mul_op.type == 'Mul'
+            assign_moving_avg_op = mul_op.outputs[0].consumers()[0]
+            assert assign_moving_avg_op.type in ['AssignSub', 'AssignSubVariableOp']
+        elif bn_op.outputs[2].consumers():
+            child_op = bn_op.outputs[2].consumers()[0]
+            if child_op.type == 'Merge':
+                sub_op = child_op.outputs[0].consumers()[0]
+            else:
+                sub_op = child_op
+            assert sub_op.type == 'Sub'
+            mul_op = sub_op.outputs[0].consumers()[0]
+            assert mul_op.type == 'Mul'
+            assign_moving_avg_op = mul_op.outputs[0].consumers()[0]
+            assert assign_moving_avg_op.type in ['AssignSub', 'AssignSubVariableOp']
         return assign_moving_avg_op
 
     @staticmethod
@@ -809,6 +831,7 @@ class BNUtils:
             types are beta, gamma, moving_mean or moving_variance)
         :return: param read tensor
         """
+
         if param_type not in vars(constants.BNOpParamType).values():
             assert 0, 'Error, get_bn_param_using_name() invalid param type requested'
 
@@ -818,6 +841,7 @@ class BNUtils:
         op_name = bn_op.name.split('/')[0]
         param_tensor_name = op_name + constants.BN_OP_PARAM_NAME_SUFFIX[param_type]
         param_tensor = graph.get_tensor_by_name(param_tensor_name)
+
         return param_tensor
 
     @staticmethod
@@ -923,7 +947,28 @@ class BNUtils:
             return None
 
     @staticmethod
-    def get_momentum(bn_op: tf.Operation) -> float:
+    def _fused_bn_op_cond_momentum_struct_1(bn_op: tf.Operation) -> Union[float, None, tf.Variable]:
+        """
+        Return momentum value corresponding to fused batchnorm with training=Variable
+
+        :param bn_op: bn_op obtained from connected graph using get_modules a Identity op inside BN scope.
+        :return: momentum value
+        """
+        try:
+            cond_1_identity_op = BNUtils.get_cond_1_identity_op(bn_op)
+            cond_1_op = cond_1_identity_op.inputs[0].op
+            assert cond_1_op.type == 'If'
+            decay_op = cond_1_op.inputs[1].op
+            if decay_op.type == 'Const':
+                decay = decay_op.get_attr('value').float_val[0]
+            else:
+                decay = decay_op
+            return decay
+        except:     # pylint: disable=bare-except
+            return None
+
+    @staticmethod
+    def get_momentum(bn_op: tf.Operation) -> Union[float, tf.Variable]:
         """
         Returns momentum extracted from given bn op.  If bn op is training=False mode, momentum will be none.
 
@@ -935,22 +980,25 @@ class BNUtils:
                                               BNUtils._bn_op_momentum_struct_2]
         fused_bn_op_struct_for_momentum_handlers = [BNUtils._fused_bn_op_momentum_struct_1,
                                                     BNUtils._fused_bn_op_momentum_struct_2]
+        fused_bn_op_cond_struct_for_momentum_handlers = [BNUtils._fused_bn_op_cond_momentum_struct_1]
 
         decay = None
         if bn_op.type in ['Mul']:
             # try all handlers available
             for handler in bn_op_struct_for_momentum_handlers:
-                if decay is None:
-                    decay = handler(bn_op)
-                else:
+                decay = handler(bn_op)
+                if decay is not None:
                     break
-
         elif bn_op.type in ['FusedBatchNormV3', 'FusedBatchNorm']:
             # try all handlers available
             for handler in fused_bn_op_struct_for_momentum_handlers:
-                if decay is None:
-                    decay = handler(bn_op)
-                else:
+                decay = handler(bn_op)
+                if decay is not None:
+                    break
+        elif bn_op.type in ['Identity']:
+            for handler in fused_bn_op_cond_struct_for_momentum_handlers:
+                decay = handler(bn_op)
+                if decay is not None:
                     break
         else:
             logger.error("Error, unknown BN op")
@@ -958,22 +1006,27 @@ class BNUtils:
         return decay
 
     @staticmethod
-    def get_training(bn_op: tf.Operation) -> Union[None, bool, tf.Tensor]:
+    def get_training(bn_op: tf.Operation) -> Union[None, bool, tf.Tensor, tf.Variable]:
         """
         Returns either a boolean of whether the BN op training mode is True or False, or the is_training tensor
         feeding into the BN op if it is using a tensor to determine the mode dynamically.
         :param bn_op: bn_op obtained in the connected graph
         :return: True or False for training mode, or tf.Tensor that determines the mode dynamically.
         """
-        assert bn_op.type in ['FusedBatchNormV3', 'FusedBatchNorm', 'Mul']
-        if bn_op.type == 'FusedBatchNormV3' or bn_op.type == 'FusedBatchNorm':
+        assert bn_op.type in ['FusedBatchNormV3', 'FusedBatchNorm', 'Mul', 'Identity']
+
+        if bn_op.type in ['FusedBatchNormV3', 'FusedBatchNorm', 'Identity']:
             if 'FusedBatchNormV3_1' in bn_op.name:
                 switch_op = bn_op.inputs[0].op
                 pred_id_op = switch_op.inputs[1].op
                 training = pred_id_op.inputs[0]
+            elif bn_op.type == 'Identity':
+                cond_op = bn_op.inputs[0].op
+                training = cond_op.inputs[0]
             else:
                 training = bn_op.get_attr('is_training')
             return training
+
         # Non fused batchnorm case
         mul_op = bn_op.inputs[1].op
         assert mul_op.type == 'Mul'
@@ -994,3 +1047,26 @@ class BNUtils:
             return pred_id_op.inputs[0]
         logger.error('Error, unknown BN structure')
         return None
+
+    @staticmethod
+    def get_cond_1_identity_op(bn_op: tf.Operation) -> tf.Operation:
+        """
+        Returns cond_1 Identity op of bn when training is variable
+
+        :param bn_op: bn_op obtained from connected graph using get_modules a Identity op inside BN scope.
+        :return: cond_1 Identity op
+        """
+        assert bn_op.type == 'Identity'
+
+        assign_moving_avg = BNUtils.get_assign_moving_avg_op(bn_op)
+        mul_op = assign_moving_avg.inputs[1].op
+        assert mul_op.type == 'Mul'
+        sub_op = mul_op.inputs[1].op
+        assert sub_op.type == 'Sub'
+        cond_1_identity_op = sub_op.inputs[1].op
+        assert cond_1_identity_op.type == 'Identity'
+
+        # Make sure fetched op isn't cond op
+        assert bn_op != cond_1_identity_op
+
+        return cond_1_identity_op
