@@ -449,7 +449,7 @@ class QuantSimConfigurator(AimetCommonQuantSimConfigurator):
         Set supergroup specific configurations (fourth level of specificity in configuration file)
         :param supergroups_configs: Configurations for supergroups
         """
-        def find_foldable_bns(cg):
+        def find_scale_foldable_bns(cg):
             """
             Find batchnorms that can be folded to scale
             """
@@ -472,7 +472,7 @@ class QuantSimConfigurator(AimetCommonQuantSimConfigurator):
             graph_searcher.find_all_patterns_in_graph_apply_actions()
             return conv_bn_pairs
 
-        conv_bn_pairs = find_foldable_bns(self._conn_graph)
+        conv_bn_pairs = find_scale_foldable_bns(self._conn_graph)
         foldable_bns = [bn for _, bn in conv_bn_pairs]
 
         patterns_with_callbacks = []

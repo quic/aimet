@@ -167,7 +167,7 @@ class GraphSearcher:
 
     def find_all_patterns_in_graph_apply_actions(self, ignore=None):
         """
-        Finds all conv and linear layers with bn and activations if present
+        Finds corresponding op sequences and apply action.
         :param ignore: List of operations to ignore during searching
         :return: None
         """
