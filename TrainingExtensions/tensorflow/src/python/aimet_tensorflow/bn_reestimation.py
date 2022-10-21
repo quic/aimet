@@ -41,6 +41,7 @@ from typing import List, Tuple, Dict
 import numpy as np
 import tensorflow as tf
 from aimet_common.utils import AimetLogger
+from aimet_tensorflow.utils.op.fusedbatchnorm import BNUtils
 from aimet_tensorflow.batch_norm_fold import find_all_batch_norms_to_fold
 from aimet_tensorflow.common.graph_eval import initialize_uninitialized_vars
 from aimet_tensorflow.quantsim import QuantizationSimModel
@@ -94,13 +95,14 @@ def _get_all_tf_bn_vars_list(sim: QuantizationSimModel, start_op_names: List[str
         mean_var_tf_var_name_list = []
         training_tf_var_name_list = []
         momentum_tf_var_name_list = []
-        for pair in bn_conv_linear_pairs:
-            _, batchnorm, _ = pair
+
+        for _, batchnorm, _ in bn_conv_linear_pairs:
             assert batchnorm.op.type in ['Identity']
             bn_mean_tf_var_name = batchnorm.op.inputs[0].op.inputs[3].name
             bn_var_tf_var_name = batchnorm.op.inputs[0].op.inputs[4].name
-            bn_cond1_tf_op = sim.session.graph.get_operation_by_name(batchnorm.op.name.split("/")[0] + "/cond_1")
-            bn_momentum_tf_var_name = bn_cond1_tf_op.outputs[0].op.inputs[1].name
+
+            bn_cond_1_tf_op = BNUtils.get_cond_1_identity_op(batchnorm.op)
+            bn_momentum_tf_var_name = bn_cond_1_tf_op.inputs[0].op.inputs[1].name
             bn_training_tf_var_name = batchnorm.op.inputs[0].op.inputs[0].op.inputs[0].name
 
             mean_var_tf_var_name_list.append(bn_mean_tf_var_name)

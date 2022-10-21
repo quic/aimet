@@ -61,7 +61,6 @@ from aimet_tensorflow.examples.test_models import single_residual, multiple_inpu
     keras_model_functional_for_tf2, keras_model_functional_with_non_fused_batchnorms_for_tf2
 from aimet_tensorflow.utils.op.conv import WeightTensorUtils, BiasUtils, get_output_activation_shape
 from aimet_tensorflow.utils.op.fusedbatchnorm import BNUtils
-from aimet_tensorflow.batch_norm_fold import find_all_batch_norms_to_fold, fold_all_batch_norms
 from aimet_tensorflow.utils.graph_saver import save_and_load_graph
 
 tf.compat.v1.logging.set_verbosity(tf.compat.v1.logging.WARN)
@@ -664,52 +663,6 @@ class TestBNUtils(unittest.TestCase):
         self.assertTrue(np.allclose(expected_variance, moving_var))
         sess.close()
 
-    def test_tf1_mutable_bn_type_identity_read_paramters_fp32_fold_on_tf2_runtime(self):
-        tf.compat.v1.reset_default_graph()
-        bn_training = tf.compat.v1.placeholder_with_default(False, shape=[], name='bn_is_training_placehoder')
-        inputs = tf.keras.Input(shape=(32, 32, 3,))
-        conv_op = tf.keras.layers.Conv2D(32, (3, 3))(inputs)
-        bn_op = tf.compat.v1.layers.batch_normalization(conv_op, name="old1/", training=bn_training,epsilon = 1.0009999641624745e-05,
-                                                        beta_initializer=tf.compat.v1.random_uniform_initializer(),
-                                                        gamma_initializer=tf.compat.v1.random_uniform_initializer(),
-                                                        moving_mean_initializer=tf.compat.v1.random_uniform_initializer(),
-                                                        moving_variance_initializer=tf.compat.v1.random_uniform_initializer(),
-                                                        momentum=tf.Variable(0.9, trainable=False),
-                                                        fused=True)
-        relu0 = tf.nn.relu(bn_op)
-
-        conv_op1 = tf.keras.layers.Conv2D(32, (3, 3))(relu0)
-
-        bn_op1 = tf.compat.v1.layers.batch_normalization(conv_op1, name="old2/", training=bn_training,epsilon = 1.0009999641624745e-05,
-                                                         beta_initializer=tf.compat.v1.random_uniform_initializer(),
-                                                         gamma_initializer=tf.compat.v1.random_uniform_initializer(),
-                                                         moving_mean_initializer=tf.compat.v1.random_uniform_initializer(),
-                                                         moving_variance_initializer=tf.compat.v1.random_uniform_initializer(),
-                                                         momentum=tf.Variable(0.9, trainable=False),
-                                                         fused=True)
-
-        relu1 = tf.nn.relu(bn_op1)
-        init = tf.compat.v1.global_variables_initializer()
-        sess = tf.compat.v1.Session()
-        sess.run(init)
-
-        input_op_names = ["input_1"]
-        output_op_names = ['Relu_1']
-
-        bn_conv_linear_pairs_new = find_all_batch_norms_to_fold(sess, input_op_names, output_op_names)
-        _, bn1_new, _ = bn_conv_linear_pairs_new[0]
-        bn_op = bn1_new.op
-        moving_mean = BNUtils.get_moving_mean_as_numpy_data(sess, bn_op)
-        assert isinstance(moving_mean[0], np.float32)
-        moving_var = BNUtils.get_moving_variance_as_numpy_data(sess, bn_op)
-        assert isinstance(moving_var[0], np.float32)
-        beta = BNUtils.get_beta_as_numpy_data(sess, bn_op)
-        assert isinstance(beta[0], np.float32)
-        gamma = BNUtils.get_gamma_as_numpy_data(sess, bn_op)
-        assert isinstance(gamma[0], np.float32)
-        fold_sess, pairs = fold_all_batch_norms(sess, "input_1", 'Relu_1')
-
-
     @pytest.mark.tf1
     def test_with_slim_bn_op(self):
         """
@@ -775,7 +728,6 @@ class TestBNUtils(unittest.TestCase):
             bn_1_params = get_bn_params_aimet_api(sess, bn_op_1)
             bn_2_params = get_bn_params_aimet_api(sess, bn_op_2)
             bn_3_params = get_bn_params_aimet_api(sess, bn_op_3)
-
 
             self.assertTrue(np.allclose(keras_bn_1_params, bn_1_params))
             self.assertTrue(np.allclose(keras_bn_2_params, bn_2_params))
