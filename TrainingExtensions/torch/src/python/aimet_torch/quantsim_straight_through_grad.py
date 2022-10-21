@@ -340,7 +340,7 @@ def get_computed_encodings(bitwidth: int,
     # NOTE: This assumes that the use_* flags reflect true condition (regardless of the encoding_* values)
     if use_symmetric_encodings and (not use_unsigned_symmetric):
         # signed symmetric
-        absmax = torch.max(torch.abs(encoding_min), torch.abs(encoding_max))[0]
+        absmax = torch.max(torch.abs(encoding_min), torch.abs(encoding_max))
         half_num_steps = torch.div(num_steps, 2)
 
         delta = absmax / torch.floor(half_num_steps)
@@ -351,7 +351,7 @@ def get_computed_encodings(bitwidth: int,
             # unsigned symmetric
             offset = encoding_min / delta
         else:
-            # asym
+            # asymmetric
             b_zero = torch.round(-encoding_min / delta)
             b_zero = torch.min(num_steps, torch.max(torch.tensor([0], device=encoding_min.device), b_zero))
             offset = torch.tensor(-b_zero, device=encoding_min.device)
