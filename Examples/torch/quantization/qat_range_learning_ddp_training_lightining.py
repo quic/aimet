@@ -44,6 +44,9 @@ The steps are as follows:
     2) Use PyTorch lightning DDP for evaluating the model
     3) Use PyTorch lightning DDP for Training the model
 """
+
+# pylint: skip-file
+
 import os
 import argparse
 import torch

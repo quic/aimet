@@ -46,6 +46,8 @@ The steps are as follows:
     3) Save checkpoint to use with DDP training
 """
 
+# pylint: skip-file
+
 import os
 import socket
 import argparse
