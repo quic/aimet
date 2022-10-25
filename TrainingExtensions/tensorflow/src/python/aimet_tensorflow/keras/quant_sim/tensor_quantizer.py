@@ -186,7 +186,7 @@ class TensorQuantizer(tf.keras.layers.Layer, abc.ABC):
         """
         Forward pass for the quantizer
         """
-        if self.quant_mode == libpymo.TensorQuantizerOpMode.passThrough:
+        if self.quant_mode == libpymo.TensorQuantizerOpMode.passThrough.value:
             return tensor
         return self._call_handler(tensor)
 
