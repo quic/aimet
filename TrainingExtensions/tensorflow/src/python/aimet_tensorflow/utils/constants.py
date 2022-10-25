@@ -37,6 +37,8 @@
 # =============================================================================
 """  Module for holding all the constants """
 
+import tensorflow as tf
+
 # Op types with weights
 OP_WEIGHT_TYPES = ['Conv2D', 'MatMul', 'DepthwiseConv2dNative', 'Conv2DTranspose']
 OP_WEIGHT_INDICES = {'Conv2D': 1,
@@ -75,6 +77,8 @@ TF_VAR_WT_CONSUMERS_READ_OP_INDEX = 1
 TF_VAR_BIAS_CONSUMERS_READ_OP_INDEX = 1
 BIAS_ADD_CONSUMERS_INPUT_BIAS_READ_INDEX = 1
 BIAS_ADD_READ_VAR_OP_BIAS_TENSOR_INDEX = 1
+
+QUANT_ALLOWED_DTYPES = [tf.float32, tf.float64]
 
 # add quantize op input indices with corresponding param name
 

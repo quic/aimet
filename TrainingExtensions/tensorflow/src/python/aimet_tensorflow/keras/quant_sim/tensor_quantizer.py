@@ -54,8 +54,6 @@ import aimet_tensorflow.keras.utils.common as keras_common_utils
 
 _logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Quant)
 
-ALLOWED_FLOAT_DTYPES = [tf.float32, tf.float64]
-
 
 class TensorQuantizer(tf.keras.layers.Layer, abc.ABC):
     """Tensor quantizer class containing the bare bones of a given Quantizer"""
@@ -177,11 +175,20 @@ class TensorQuantizer(tf.keras.layers.Layer, abc.ABC):
         self._is_encoding_valid = False
 
     @abc.abstractmethod
+    def _call_handler(self, tensor):
+        """
+        Equivalent to `tf.keras.Layers.call` function as it is called from `call` function
+        `call` function handles passThrough at the top level
+        """
+
     # pylint: disable=arguments-differ
     def call(self, tensor):
         """
         Forward pass for the quantizer
         """
+        if self.quant_mode == libpymo.TensorQuantizerOpMode.passThrough:
+            return tensor
+        return self._call_handler(tensor)
 
 
 # pylint: disable=too-many-ancestors
@@ -314,7 +321,7 @@ class StaticGridPerTensorQuantizer(TensorQuantizer):
                 self._quantizer_mode.assign(int(libpymo.TensorQuantizerOpMode.passThrough))
 
     # pylint: disable=arguments-differ
-    def call(self, tensor):
+    def _call_handler(self, tensor):
         if self.quant_scheme in [QuantScheme.training_range_learning_with_tf_init,
                                  QuantScheme.training_range_learning_with_tf_enhanced_init]:
             return self.call_quantsim_custom_grad_learned_grid(tensor)
@@ -420,7 +427,7 @@ class ActivationTensorQuantizer(StaticGridPerTensorQuantizer):
     # pylint: disable=too-many-arguments
     def __init__(self, layer: tf.keras.layers.Layer, name: str, quant_scheme: QuantScheme, round_mode: str,
                  bitwidth: int, is_symmetric: bool, use_strict_symmetric: bool, use_unsigned_symmetric: bool,
-                 enabled: bool, is_allowed_dtype: bool = True):
+                 enabled: bool):
 
         if enabled:
             op_mode = libpymo.TensorQuantizerOpMode.updateStats
@@ -429,8 +436,6 @@ class ActivationTensorQuantizer(StaticGridPerTensorQuantizer):
 
         super(ActivationTensorQuantizer, self).__init__(layer, name, op_mode, quant_scheme, round_mode, bitwidth,
                                                         is_symmetric, use_strict_symmetric, use_unsigned_symmetric)
-
-        self._is_allowed_dtype = is_allowed_dtype
 
     def enable(self):
         """ Enable the activation tensor quantizer """
@@ -450,17 +455,6 @@ class ActivationTensorQuantizer(StaticGridPerTensorQuantizer):
             return
         self._set_encoding_values(encoding)
         self._quantizer_mode.assign(int(libpymo.TensorQuantizerOpMode.quantizeDequantize))
-
-    def call(self, tensor: tf.Tensor):
-        """
-        :param tensor: Activation tensor to be quantized
-        Only call the `call` method of the super class for valid dtypes
-        Else, return the original tensor
-        """
-        if self._is_allowed_dtype:
-            return super().call(tensor)
-
-        return tensor
 
 
 class StaticGridPerChannelQuantizer(TensorQuantizer):
@@ -616,10 +610,8 @@ class StaticGridPerChannelQuantizer(TensorQuantizer):
                     ops_with_invalid_encodings.append(self.name)
                     self._quantizer_mode.assign(int(libpymo.TensorQuantizerOpMode.passThrough))
 
-    def call(self, tensor):
-        return self._per_channel_call_handler(tensor)
 
-    def _per_channel_call_handler(self, tensor):
+    def _call_handler(self, tensor):
         # TODO: Currently does not support if quant scheme is range learning based
         if isinstance(self._original_layer, tf.keras.layers.Conv2DTranspose):
             if len(tensor.shape) == 4:
