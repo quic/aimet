@@ -8,10 +8,16 @@ Overview
 AIMET allows the configuration of quantizer placement and settings in accordance with a set of rules specified in a json configuration file, applied when the Quantization Simulation API is called.
 
 Settings such as quantizer enablement, per channel quantization, symmetric quantization, and specifying fused ops when quantizing can be configurated.
-
 The general use case for this file would be for users to match the quantization rules for a particular runtime they would like to simulate.
 
-For examples on how to provide a specific configuration file to AIMET Quantization Simulation, refer to the API docs for :doc:`PyTorch Quantsim<../api_docs/torch_quantsim>` and :doc:`TensorFlow Quantsim<../api_docs/tensorflow_quantsim>`.
+For examples on how to provide a specific configuration file to AIMET Quantization Simulation,
+refer to the API docs for :doc:`PyTorch Quantsim<../api_docs/torch_quantsim>`, :doc:`TensorFlow Quantsim<../api_docs/tensorflow_quantsim>`, and :doc:`Keras Quantsim<../api_docs/keras_quantsim>`.
+
+It is advised for the user to begin with the default configuration file under
+
+|default-quantsim-config-file|
+
+For most users of AIMET, no additional changes to the default configuration file should be needed.
 
 Configuration File Structure
 ============================
@@ -22,12 +28,10 @@ The configuration file contains six main sections, in increasing amounts of spec
 Rules defined in a more general section can be overruled by subsequent rules defined in a more specific case.
 For example, one may specify in "defaults" for no layers to be quantized, but then turn on quantization for specific layers in the "op_type" section.
 
-It is advised for the user to begin with the default configuration file under
-
-|default-quantsim-config-file|
-
 How to configure individual Configuration File Sections
 =======================================================
+When working with a new runtime with different rules, or for experimental purposes, users can refer to this section to understand how to configure individual sections in a configuration file.
+
 1. **defaults**:
 
     .. literalinclude:: ../torch_code_examples/quantsim_config_example.py
