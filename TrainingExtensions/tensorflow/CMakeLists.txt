@@ -82,7 +82,7 @@ endif(ENABLE_CUDA)
 
 set_target_properties(TrainingExtensionsTf PROPERTIES
       OUTPUT_NAME "aimet_tf_ops"
-      LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/artifacts"
+      LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/artifacts/aimet_common"
       )
 
 get_target_property(dirs MoDlQuantization INCLUDE_DIRECTORIES)
