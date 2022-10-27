@@ -51,6 +51,8 @@ from aimet_common.cache import Cache
 from aimet_common.defs import QuantScheme
 from aimet_common.quantsim import validate_quantsim_inputs
 from aimet_common.utils import AimetLogger, Spinner
+from aimet_tensorflow.adaround.adaround_weight import AdaroundParameters
+from aimet_tensorflow.keras.adaround_weight import Adaround
 from aimet_tensorflow.keras.batch_norm_fold import fold_all_batch_norms
 from aimet_tensorflow.keras.cross_layer_equalization import equalize_model
 from aimet_tensorflow.keras.quantsim import QuantizationSimModel
@@ -127,6 +129,9 @@ class AutoQuant:
                 model(input_data)
 
         self.forward_pass_callback = forward_pass_callback
+        self._unlabeled_dataset = unlabeled_dataset
+        self.adaround_params = AdaroundParameters(unlabeled_dataset,
+                                                  len(unlabeled_dataset))
 
     def apply(self,
               fp32_model: tf.keras.Model,
@@ -212,6 +217,16 @@ class AutoQuant:
         """
         return self.eval_callback(model, NUM_SAMPLES_FOR_PERFORMANCE_EVALUATION)
 
+    def set_adaround_params(self, adaround_params: AdaroundParameters):
+        """
+        Set Adaround parameters.
+        If this method is not called explicitly by the user, AutoQuant will use
+        `unlabeled_dataset_iterable` (passed to `__init__`) for Adaround.
+
+        :param adaround_params: Adaround parameters.
+        """
+        self.adaround_params = adaround_params
+
     def _create_quantsim_and_encodings(self,
                                        model: tf.keras.Model,
                                        quant_scheme: QuantScheme = None,
@@ -272,8 +287,31 @@ class AutoQuant:
         """
         return equalize_model(model)
 
-    # TODO: Remove temporary pylint disable after full implementation
-    # pylint: disable=unused-argument
+    def _apply_adaround(self,
+                        model: tf.keras.Model,
+                        results_dir: str) -> Tuple[tf.keras.Model, str]:
+        """
+        Apply adaround
+
+        NOTE: Input model is not mutated
+        :param model: Model to apply adaround
+        :param results_dir: Directory to save the results of AdaRound
+        :return: Output model and the path to the parameter encoding file
+        """
+        filename_prefix = "adaround"
+        adaround_encoding_path = os.path.join(results_dir,
+                                              f"{filename_prefix}.encodings")
+
+        model = Adaround.apply_adaround(model,
+                                        self.adaround_params,
+                                        path=results_dir,
+                                        filename_prefix=filename_prefix,
+                                        default_param_bw=self.default_param_bw,
+                                        default_quant_scheme=self.default_quant_scheme,
+                                        config_file=self.default_config_file)
+
+        return model, adaround_encoding_path
+
     def _auto_quant_main(self,
                          fp32_model: tf.keras.Model,
                          target_acc: float,
@@ -319,6 +357,14 @@ class AutoQuant:
         best_result = eval_manager.get_best_ptq_result()
         if best_result.accuracy >= target_acc:
             return best_result.as_dict()
+
+        # Adaround
+        with eval_manager.ptq_session("AdaRound") as sess:
+            model, encoding_path = self._apply_adaround(best_result.load_model(),
+                                                        results_dir)
+            sess.set_ptq_result(model=model,
+                                encoding_path=encoding_path,
+                                applied_techniques=[*best_result.applied_techniques, "adaround"])
 
         return eval_manager.get_best_ptq_result().as_dict()
 
