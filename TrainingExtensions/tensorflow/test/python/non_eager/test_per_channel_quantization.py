@@ -47,6 +47,7 @@ import tensorflow as tf
 from aimet_common.defs import QuantScheme
 from aimet_common.quantsim import calculate_delta_offset
 import aimet_common.libpymo as libpymo
+import aimet_common.libaimet_tf_ops as zero_out_module
 from aimet_tensorflow.common.graph_eval import initialize_uninitialized_vars
 from aimet_tensorflow.quantsim import QuantizationSimModel, AxisHandling
 from aimet_tensorflow.examples.test_models import depthwise_conv2d_model, transposed_conv2d_model
@@ -82,7 +83,6 @@ class TestTrainingExtensionsQcQuantizeOpPerChannel(unittest.TestCase):
         test custom op with CPU
         """
         np.random.seed(0)
-        zero_out_module = tf.load_op_library('libaimet_tf_ops.so')
         graph = tf.Graph()
         config = tf.compat.v1.ConfigProto(log_device_placement=False)
         sess = tf.compat.v1.Session(graph=graph, config=config)
@@ -161,7 +161,6 @@ class TestTrainingExtensionsQcQuantizeOpPerChannel(unittest.TestCase):
         test custom op which is operating in fp16 mode
         """
         np.random.seed(0)
-        zero_out_module = tf.load_op_library('libaimet_tf_ops.so')
         graph = tf.Graph()
         config = tf.compat.v1.ConfigProto(log_device_placement=False)
         sess = tf.compat.v1.Session(graph=graph, config=config)
@@ -282,7 +281,6 @@ class TestTrainingExtensionsQcQuantizeOpPerChannel(unittest.TestCase):
 
         """
         np.random.seed(0)
-        zero_out_module = tf.load_op_library('libaimet_tf_ops.so')
         graph = tf.Graph()
         config = tf.compat.v1.ConfigProto(log_device_placement=False)
         sess = tf.compat.v1.Session(graph=graph, config=config)
@@ -364,7 +362,6 @@ class TestTrainingExtensionsQcQuantizeOpPerChannel(unittest.TestCase):
         test per channel op with axis handling = last two axes on GPU
         """
         np.random.seed(0)
-        zero_out_module = tf.load_op_library('libaimet_tf_ops.so')
         graph = tf.Graph()
         config = tf.compat.v1.ConfigProto(log_device_placement=False)
         sess = tf.compat.v1.Session(graph=graph, config=config)
@@ -459,7 +456,6 @@ class TestTrainingExtensionsQcQuantizeOpPerChannel(unittest.TestCase):
         test custom op with CPU
         """
         np.random.seed(0)
-        zero_out_module = tf.load_op_library('libaimet_tf_ops.so')
         graph = tf.Graph()
         config = tf.compat.v1.ConfigProto(log_device_placement=False)
         sess = tf.compat.v1.Session(graph=graph, config=config)
@@ -534,7 +530,6 @@ class TestTrainingExtensionsQcQuantizeOpPerChannel(unittest.TestCase):
         test custom op with CPU
         """
         np.random.seed(0)
-        zero_out_module = tf.load_op_library('libaimet_tf_ops.so')
         graph = tf.Graph()
         config = tf.compat.v1.ConfigProto(log_device_placement=False)
         sess = tf.compat.v1.Session(graph=graph, config=config)

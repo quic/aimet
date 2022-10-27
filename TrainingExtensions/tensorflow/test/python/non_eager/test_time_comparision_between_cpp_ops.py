@@ -42,6 +42,7 @@ import time
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
 import tensorflow as tf
 import aimet_common.libpymo as libpymo
+import aimet_common.libaimet_tf_ops as zero_out_module
 from aimet_tensorflow.defs import AxisHandling
 
 tf.compat.v1.disable_eager_execution()
@@ -184,7 +185,6 @@ class TestTrainingExtensionsQcQuantizeOpPerChannel(unittest.TestCase):
         test custom op with CPU
         """
         np.random.seed(0)
-        zero_out_module = tf.load_op_library('libaimet_tf_ops.so')
         graph = tf.Graph()
         config = tf.compat.v1.ConfigProto(log_device_placement=False)
         sess = tf.compat.v1.Session(graph=graph, config=config)
@@ -266,7 +266,6 @@ class TestTrainingExtensionsQcQuantizeOpPerChannel(unittest.TestCase):
         test custom op with CPU
         """
         np.random.seed(0)
-        zero_out_module = tf.load_op_library('libaimet_tf_ops.so')
         graph = tf.Graph()
         config = tf.compat.v1.ConfigProto(log_device_placement=False)
         sess = tf.compat.v1.Session(graph=graph, config=config)
@@ -344,7 +343,6 @@ class TestTrainingExtensionsQcQuantizeOpPerChannel(unittest.TestCase):
 
         """
         np.random.seed(0)
-        zero_out_module = tf.load_op_library('libaimet_tf_ops.so')
         graph = tf.Graph()
         config = tf.compat.v1.ConfigProto(log_device_placement=False)
         sess = tf.compat.v1.Session(graph=graph, config=config)
@@ -425,7 +423,6 @@ class TestTrainingExtensionsQcQuantizeOpPerChannel(unittest.TestCase):
 
         """
         np.random.seed(0)
-        zero_out_module = tf.load_op_library('libaimet_tf_ops.so')
         graph = tf.Graph()
         config = tf.compat.v1.ConfigProto(log_device_placement=False)
         sess = tf.compat.v1.Session(graph=graph, config=config)
