@@ -85,6 +85,61 @@ set_target_properties(TrainingExtensionsTf PROPERTIES
       LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/artifacts/aimet_common"
       )
 
+set(INIT_PY "\
+#==============================================================================\\n\
+#  @@-COPYRIGHT-START-@@\\n\
+#\\n\
+#  Copyright (c) 2018, Qualcomm Innovation Center, Inc. All rights reserved.\\n\
+#\\n\
+#  Redistribution and use in source and binary forms, with or without\\n\
+#  modification, are permitted provided that the following conditions are met:\\n\
+#\\n\
+#  1. Redistributions of source code must retain the above copyright notice,\\n\
+#     this list of conditions and the following disclaimer.\\n\
+#\\n\
+#  2. Redistributions in binary form must reproduce the above copyright notice,\\n\
+#     this list of conditions and the following disclaimer in the documentation\\n\
+#     and/or other materials provided with the distribution.\\n\
+#\\n\
+#  3. Neither the name of the copyright holder nor the names of its contributors\\n\
+#     may be used to endorse or promote products derived from this software\\n\
+#     without specific prior written permission.\\n\
+#\\n\
+#  THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS \"AS IS\"\\n\
+#  AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE\\n\
+#  IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE\\n\
+#  ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE\\n\
+#  LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR\\n\
+#  CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF\\n\
+#  SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS\\n\
+#  INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN\\n\
+#  CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)\\n\
+#  ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE\\n\
+#  POSSIBILITY OF SUCH DAMAGE.\\n\
+#\\n\
+#  SPDX-License-Identifier: BSD-3-Clause\\n\
+#\\n\
+#  @@-COPYRIGHT-END-@@\\n\
+#==============================================================================\\n\
+import pathlib\\n\
+import tensorflow as tf\\n\
+__module = tf.load_op_library(str(pathlib.Path(__file__).parent.parent / '$<TARGET_FILE_NAME:TrainingExtensionsTf>'))\\n\
+for __name in dir(__module):\\n\
+\\tif not __name.startswith('_'):\\n\
+\\t\\tglobals()[__name] = getattr(__module, __name)\\n\
+del __name\\n\
+del __module\\n\
+del tf\\n\
+del pathlib\\n\
+")
+add_custom_command(TARGET TrainingExtensionsTf POST_BUILD
+      # Create a directory with the same name as *.so with __init__.py file to force python loads
+      # a trampoline module which would call tf.load_op_library.
+      COMMAND ${CMAKE_COMMAND} -E make_directory $<TARGET_FILE_DIR:TrainingExtensionsTf>/$<TARGET_FILE_PREFIX:TrainingExtensionsTf>$<TARGET_FILE_BASE_NAME:TrainingExtensionsTf>
+      COMMAND echo ${INIT_PY} > "$<TARGET_FILE_DIR:TrainingExtensionsTf>/$<TARGET_FILE_PREFIX:TrainingExtensionsTf>$<TARGET_FILE_BASE_NAME:TrainingExtensionsTf>/__init__.py"
+      VERBATIM
+)
+
 get_target_property(dirs MoDlQuantization INCLUDE_DIRECTORIES)
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/../common/include ${TF_LIB_DIR}/include/external/nsync/public ${dirs})
 
@@ -106,6 +161,10 @@ endif(ENABLE_CUDA)
 install(FILES $<TARGET_FILE:TrainingExtensionsTf>
       DESTINATION ${AIMET_INSTALL_DIR}/lib/python/aimet_common
       )
+
+install(DIRECTORY $<TARGET_FILE_DIR:TrainingExtensionsTf>/$<TARGET_FILE_PREFIX:TrainingExtensionsTf>$<TARGET_FILE_BASE_NAME:TrainingExtensionsTf>
+    DESTINATION ${AIMET_INSTALL_DIR}/lib/python/aimet_common
+)
 
 add_subdirectory(src/python)
 add_subdirectory(test)
