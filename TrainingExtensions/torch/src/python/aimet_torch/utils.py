@@ -444,18 +444,22 @@ def get_one_positions_in_binary_mask(mask):
 
 def get_ordered_list_of_modules(model: torch.nn.Module, dummy_input: Union[torch.Tensor, Tuple]) -> List:
     """
-    Finds order of nodes in graph
-    :param model: model
+    Finds ordered modules in given model.
+    :param model: PyTorch model.
     :param dummy_input: Dummy input to the model. Used to parse model graph.
-    :return: List of names in graph in order
+    :return: List of module name, module in order.
     """
     def _hook_to_collect_name_of_module(module, _, __):
         """
         hook to find name of module
         """
-        for name, module_ref in model.named_modules():
-            if module is module_ref:
-                list_modules.append([name, module])
+        module_name = module_to_name_dict[module]
+        list_modules.append([module_name, module])
+
+    module_to_name_dict = {}
+    for name, module in model.named_modules():
+        module_to_name_dict[module] = name
+
     list_modules = []
     run_hook_for_layers_with_given_input(model, dummy_input, hook=_hook_to_collect_name_of_module)
 
