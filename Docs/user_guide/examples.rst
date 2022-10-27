@@ -6,8 +6,8 @@
 AIMET Examples
 ==============
 
-AIMET Examples provide reference code (in the form of *scripts* and *Jupyter Notebooks*) to learn how to load models,
-apply AIMET quantization and compression features, fine tune and save your models. It is also a quick way to become
+AIMET Examples provide reference code (in the form of *Jupyter Notebooks*) to learn how to
+apply AIMET quantization and compression features. It is also a quick way to become
 familiar with AIMET usage and APIs.
 
 For more details on each of the features and APIs please refer:
@@ -17,44 +17,60 @@ Installation Instructions
 =========================
 
 - The dataloader, evaluator, and trainer utilized in the examples is for the ImageNet dataset.
-  To run the example, please download it from here: https://www.image-net.org/download.php
+  To run the example, please download the ImageNet dataset from here: https://www.image-net.org/download.php
 - Install AIMET and its dependencies using the instructions in the Installation section'
-- Clone the AIMET repo as follows to any location:
+    - Installing AIMET will also install these AIMET Examples
 
-  * WORKSPACE="<absolute_path_to_workspace>"
+Examples for PyTorch Models
+===========================
 
-  * mkdir $WORKSPACE && cd $WORKSPACE
+The following table has links to browsable versions of the notebooks for different features.
 
-  *  Go to https://github.com/quic/aimet/releases and identify the release tag (`<release_tag>`) of the AIMET package that you're working with.
 
-  * git clone https://github.com/quic/aimet.git --branch <release_tag>
+.. list-table:: Quantization Examples
+   :widths: 40 12 12
+   :header-rows: 1
 
-  * Update the environment variable as follows: `export PYTHONPATH=$PYTHONPATH:${WORKSPACE}/aimet`
+   * - Features
+     - PyTorch
+     - TensorFlow
+   * - Quantization-Aware Training (QAT)
+     - `Link <../Examples/torch/quantization/qat.ipynb>`_
+     - `Link <../Examples/tensorflow/quantization/qat.ipynb>`_
+   * - QAT with Range Learning
+     - `Link <../Examples/torch/quantization/qat_range_learning.ipynb>`_
+     - `Link <../Examples/tensorflow/quantization/qat_range_learning.ipynb>`_
+   * - Cross-Layer Equalization (CLE)
+     - `Link <../Examples/torch/quantization/cle_bc.ipynb>`_
+     - `Link <../Examples/tensorflow/quantization/cle_bc.ipynb>`_
+   * - Adaptive Rounding (AdaRound)
+     - `Link <../Examples/torch/quantization/adaround.ipynb>`_
+     - `Link <../Examples/tensorflow/quantization/adaround.ipynb>`_
+   * - AutoQuant
+     - `Link <../Examples/torch/quantization/autoquant.ipynb>`_
+     - `Link <../Examples/tensorflow/quantization/autoquant.ipynb>`_
+   * - BN Re-estimation
+     - `Link <../Examples/torch/quantization/bn_reestimation.ipynb>`_
+     - `Link <../Examples/tensorflow/quantization/bn_reestimation.ipynb>`_
 
-Code Layout
-===========
 
-The code for AIMET Examples shares a common structure:
+.. list-table:: Compression Examples
+   :widths: 40 12 12
+   :header-rows: 1
 
-Examples/
+   * - Features
+     - PyTorch
+     - TensorFlow
+   * - Channel Pruning
+     - `Link <../Examples/torch/compression/channel_pruning.ipynb>`_
+     - `Link <../Examples/tensorflow/compression/channel_pruning.ipynb>`_
+   * - Spatial SVD
+     - `Link <../Examples/torch/compression/spatial_svd.ipynb>`_
+     - `Link <../Examples/tensorflow/compression/spatial_svd.ipynb>`_
+   * - Spatial SVD + Channel Pruning
+     - `Link <../Examples/torch/compression/spatial_svd_channel_pruning.ipynb>`_
+     - `Link <../Examples/tensorflow/compression/spatial_svd_channel_pruning.ipynb>`_
 
-  common/
-
-  torch/
-
-    utils/
-
-    quantization/
-
-    compression/
-
-  tensorflow/
-
-    utils/
-
-    quantization/
-
-    compression/
 
 |
 Running Examples via Jupyter Notebook
@@ -75,15 +91,3 @@ Running Examples via Jupyter Notebook
   - `Examples/tensorflow/compression/`
 - Follow the instructions therein to execute the code.
 
-Running Examples via Command Line
-=================================
-
-To run an AIMET example:
-
-python example_name.py --dataset_dir path/to/dataset/ --use_cuda
-
-For example, to run the channel pruning example run the following:
-
-python channel_pruning.py --dataset_dir path/to/dataset/ --use_cuda --epochs 15 --learning_rate 1e-2 --learning_rate_schedule [5, 10]
-
-Setting the hyperparameters epochs, learning rate, and learning rate scheduler is optional. If the values are not given, the default values will be used.
