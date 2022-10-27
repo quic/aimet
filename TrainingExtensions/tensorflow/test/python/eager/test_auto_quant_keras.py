@@ -36,7 +36,6 @@
 #  @@-COPYRIGHT-END-@@
 # =============================================================================
 import contextlib
-import copy
 import os
 import shutil
 from dataclasses import dataclass
@@ -52,7 +51,7 @@ from aimet_tensorflow.keras.connectedgraph import ConnectedGraph
 from aimet_tensorflow.keras.quantsim import QuantizationSimModel
 
 
-@pytest.fixture(scope="session")
+@pytest.fixture(scope="function")
 def model():
     inputs = tf.keras.Input(shape=(32, 32, 3,))
     x = tf.keras.layers.Conv2D(32, (3, 3))(inputs)
@@ -116,10 +115,13 @@ def patch_ptq_techniques(bn_folded_acc, cle_acc, adaround_acc):
         return tuple()
 
     def cle(model: tf.keras.Model, *_, **__):
-        model = copy.deepcopy(model)
-        model.applied_bn_folding.assign(True)
-        model.applied_cle.assign(True)
-        return model
+        copied_model = tf.keras.models.clone_model(model)
+        for key in ["applied_bn_folding", "applied_cle", "applied_adaround"]:
+            if hasattr(model, key):
+                setattr(copied_model, key, getattr(model, key))
+        copied_model.applied_bn_folding.assign(True)
+        copied_model.applied_cle.assign(True)
+        return copied_model
 
     class _QuantizationSimModel(QuantizationSimModel):
         def __init__(self, model, quant_scheme: Union[QuantScheme, str] = 'tf_enhanced', rounding_mode: str = 'nearest',
