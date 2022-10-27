@@ -111,11 +111,18 @@ def quant_analyzer_example():
     forward_pass_callback_fn = CallbackFunc(forward_pass_callback, func_callback_args=None)
     eval_callback_fn = CallbackFunc(eval_callback, func_callback_args=None)
 
+    # User action required
+    # User should use unlabeled dataloader, so if the dataloader yields labels as well user should use discard them.
+    unlabeled_data_loader = _get_unlabled_data_loader()
+
     # Step 4. Create QuantAnalyzer object
     quant_analyzer = QuantAnalyzer(model=prepared_model,
                                    dummy_input=dummy_input,
                                    forward_pass_callback=forward_pass_callback_fn,
                                    eval_callback=eval_callback_fn)
+    # Approximately 256 images/samples are recommended for MSE loss analysis. So, if the dataloader
+    # has batch_size of 64, then 4 number of batches leads to 256 images/samples.
+    quant_analyzer.enable_per_layer_mse_loss(unlabeled_dataset_iterable=unlabeled_data_loader, num_batches=4)
     # End step 4
 
     # Step 5. Run QuantAnalyzer
@@ -123,7 +130,7 @@ def quant_analyzer_example():
                            default_param_bw=8,
                            default_output_bw=8,
                            config_file=None,
-                           results_dir="./tmp/")
+                           results_dir="./quant_analyzer_results/")
     # End step 5
 
 

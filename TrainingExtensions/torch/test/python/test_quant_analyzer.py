@@ -41,7 +41,9 @@ import json
 import os.path
 import shutil
 import torch
+from torch.utils.data import Dataset, DataLoader
 
+from aimet_common.defs import QuantScheme
 from aimet_torch.examples.test_models import TinyModel
 from aimet_torch.tensor_quantizer import TensorQuantizer
 from aimet_torch.qc_quantize_op import QcQuantizeWrapper
@@ -70,6 +72,20 @@ def evaluate(model: torch.nn.Module, dummy_input: torch.Tensor):
         with torch.no_grad():
             model(dummy_input)
     return 0.8
+
+def unlabeled_data_loader(dummy_input):
+    class MyDataset(Dataset):
+        def __init__(self, data):
+            self.data = data
+
+        def __getitem__(self, index):
+            return self.data[index]
+
+        def __len__(self):
+            return len(self.data)
+
+    dataset = MyDataset([dummy_input[0, :] for _ in range(10)])
+    return DataLoader(dataset)
 
 
 class TestQuantAnalyzer:
@@ -170,7 +186,8 @@ class TestQuantAnalyzer:
         eval_callback = CallbackFunc(evaluate, dummy_input)
         quant_analyzer = QuantAnalyzer(model, dummy_input, forward_pass_callback, eval_callback)
         try:
-            layer_wise_eval_score_dict = quant_analyzer._perform_per_layer_analysis_by_enabling_quant_wrappers(sim)
+            layer_wise_eval_score_dict = \
+                quant_analyzer._perform_per_layer_analysis_by_enabling_quant_wrappers(sim, results_dir="./tmp/")
             print(layer_wise_eval_score_dict)
             assert type(layer_wise_eval_score_dict) == dict
             assert len(layer_wise_eval_score_dict) == 12
@@ -200,7 +217,8 @@ class TestQuantAnalyzer:
         eval_callback = CallbackFunc(evaluate, dummy_input)
         quant_analyzer = QuantAnalyzer(model, dummy_input, forward_pass_callback, eval_callback)
         try:
-            layer_wise_eval_score_dict = quant_analyzer._perform_per_layer_analysis_by_disabling_quant_wrappers(sim)
+            layer_wise_eval_score_dict = \
+                quant_analyzer._perform_per_layer_analysis_by_disabling_quant_wrappers(sim, results_dir="./tmp/")
             print(layer_wise_eval_score_dict)
             assert type(layer_wise_eval_score_dict) == dict
             assert len(layer_wise_eval_score_dict) == 12
@@ -226,7 +244,7 @@ class TestQuantAnalyzer:
         eval_callback = CallbackFunc(evaluate, dummy_input)
         quant_analyzer = QuantAnalyzer(model, dummy_input, forward_pass_callback, eval_callback)
         try:
-            quant_analyzer._export_per_layer_stats_histogram(sim)
+            quant_analyzer._export_per_layer_stats_histogram(sim, results_dir="./tmp/")
 
             # Check if it is exported to correct html file.
             assert os.path.exists("./tmp/activations_pdf")
@@ -270,7 +288,7 @@ class TestQuantAnalyzer:
         eval_callback = CallbackFunc(evaluate, dummy_input)
         quant_analyzer = QuantAnalyzer(model, dummy_input, forward_pass_callback, eval_callback)
         try:
-            quant_analyzer._export_per_layer_stats_histogram(sim)
+            quant_analyzer._export_per_layer_stats_histogram(sim, results_dir="./tmp/")
             assert os.path.exists("./tmp/activations_pdf")
             assert os.path.exists("./tmp/weights_pdf")
             assert os.path.isfile("./tmp/activations_pdf/conv1_output_0.html")
@@ -293,7 +311,7 @@ class TestQuantAnalyzer:
         eval_callback = CallbackFunc(evaluate, dummy_input)
         quant_analyzer = QuantAnalyzer(model, dummy_input, forward_pass_callback, eval_callback)
         try:
-            quant_analyzer._export_per_layer_encoding_min_max_range(sim)
+            quant_analyzer._export_per_layer_encoding_min_max_range(sim, results_dir="./tmp/")
             assert os.path.isfile("./tmp/min_max_ranges/weights.html")
             assert os.path.isfile("./tmp/min_max_ranges/activations.html")
         finally:
@@ -337,7 +355,7 @@ class TestQuantAnalyzer:
         eval_callback = CallbackFunc(evaluate, dummy_input)
         quant_analyzer = QuantAnalyzer(model, dummy_input, forward_pass_callback, eval_callback)
         try:
-            quant_analyzer._export_per_layer_encoding_min_max_range(sim)
+            quant_analyzer._export_per_layer_encoding_min_max_range(sim, results_dir="./tmp/")
             assert os.path.isfile("./tmp/min_max_ranges/activations.html")
             assert os.path.isfile("./tmp/min_max_ranges/conv1_weight.html")
             assert os.path.isfile("./tmp/min_max_ranges/fc_weight.html")
@@ -345,57 +363,20 @@ class TestQuantAnalyzer:
             if os.path.isdir("./tmp/"):
                 shutil.rmtree("./tmp/")
 
-    def test_run_hooks_to_tap_output_activations(self):
-        """ test _run_hooks_to_tap_output_activations() method """
-        input_shape = (4, 3, 32, 32)
-        dummy_input = torch.randn(*input_shape)
-        model = TinyModel().eval()
-        sim = QuantizationSimModel(model, dummy_input)
-        sim.compute_encodings(evaluate, dummy_input)
-        forward_pass_callback = CallbackFunc(calibrate, dummy_input)
-        eval_callback = CallbackFunc(evaluate, dummy_input)
-        quant_analyzer = QuantAnalyzer(model, dummy_input, forward_pass_callback, eval_callback)
-        fp32_out_acts_dir = os.path.join("./fp32_out_acts")
-        quantized_out_acts_dir = os.path.join("./quantized_out_acts")
-        try:
-            quant_analyzer._collect_and_save_output_acts(model, module_type_for_attaching_hook=None,
-                                                         leaf_module_only=True, results_dir=fp32_out_acts_dir)
-            fp32_out_acts = [name for name in os.listdir(fp32_out_acts_dir)]
-            assert len(fp32_out_acts) == 12
-            quant_analyzer._collect_and_save_output_acts(sim.model,
-                                                         module_type_for_attaching_hook=(QcQuantizeWrapper,),
-                                                         leaf_module_only=False, results_dir=quantized_out_acts_dir)
-            quantized_out_acts = [name for name in os.listdir(quantized_out_acts_dir)]
-            assert len(quantized_out_acts) == 12
-
-            # verify that both the lists hava same layer names.
-            assert fp32_out_acts == quantized_out_acts
-
-            # verify that the output_activations have same tensor shape.
-            for name in os.listdir(quantized_out_acts_dir):
-                fp32_out_act = quant_analyzer._load_out_acts(fp32_out_acts_dir, name)
-                quant_out_act = quant_analyzer._load_out_acts(quantized_out_acts_dir, name)
-                assert fp32_out_act.shape == quant_out_act.shape
-                # batch_size=4, number_of_batches=2
-                assert fp32_out_act.size(dim=0) == 8
-        finally:
-            if os.path.isdir(fp32_out_acts_dir):
-                shutil.rmtree(fp32_out_acts_dir)
-            if os.path.isdir(quantized_out_acts_dir):
-                shutil.rmtree(quantized_out_acts_dir)
-
     def test_export_per_layer_mse_loss(self):
         """ test _export_per_layer_mse_loss() """
         input_shape = (1, 3, 32, 32)
         dummy_input = torch.randn(*input_shape)
+        unlabeled_dataset_iterable = unlabeled_data_loader(dummy_input)
         model = TinyModel().eval()
         sim = QuantizationSimModel(model, dummy_input)
         sim.compute_encodings(evaluate, dummy_input)
         forward_pass_callback = CallbackFunc(calibrate, dummy_input)
         eval_callback = CallbackFunc(evaluate, dummy_input)
         quant_analyzer = QuantAnalyzer(model, dummy_input, forward_pass_callback, eval_callback)
+        quant_analyzer.enable_per_layer_mse_loss(unlabeled_dataset_iterable, num_batches=4)
         try:
-            quant_analyzer._export_per_layer_mse_loss(sim)
+            quant_analyzer._export_per_layer_mse_loss(sim, results_dir="./tmp/")
             assert os.path.isfile("./tmp/per_layer_mse_loss.html")
         finally:
             if os.path.isdir("./tmp/"):
@@ -406,13 +387,19 @@ class TestQuantAnalyzer:
         """ test end to end for analyze() method """
         input_shape = (1, 3, 32, 32)
         dummy_input = torch.randn(*input_shape).cuda()
+        unlabeled_dataset_iterable = unlabeled_data_loader(dummy_input)
         model = TinyModel().eval().cuda()
         forward_pass_callback = CallbackFunc(calibrate, dummy_input)
         eval_callback = CallbackFunc(evaluate, dummy_input)
         quant_analyzer = QuantAnalyzer(model, dummy_input, forward_pass_callback, eval_callback)
-        quant_analyzer.enable_per_layer_mse_loss()
+        quant_analyzer.enable_per_layer_mse_loss(unlabeled_dataset_iterable, num_batches=4)
         try:
-            quant_analyzer.analyze()
+            quant_analyzer.analyze(quant_scheme=QuantScheme.post_training_tf_enhanced,
+                                   default_param_bw=8,
+                                   default_output_bw=8,
+                                   config_file=None,
+                                   results_dir="./tmp/")
+
             assert os.path.isfile("./tmp/per_layer_quant_disabled.html")
             assert os.path.isfile("./tmp/per_layer_quant_enabled.html")
             assert os.path.exists("./tmp/activations_pdf")
