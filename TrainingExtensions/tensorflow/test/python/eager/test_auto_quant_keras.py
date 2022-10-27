@@ -80,7 +80,7 @@ def unlabeled_dataset(dataset_length):
 
 def assert_applied_techniques(
         output_model, acc, encoding_path,
-        target_acc, bn_folded_acc, cle_acc
+        target_acc, bn_folded_acc, cle_acc, adaround_acc
 ):
     # Batchnorm folding is always applied.
     assert output_model.applied_bn_folding
@@ -104,8 +104,30 @@ def assert_applied_techniques(
     # CLE should be applied if and only if it brings accuracy gain
     assert output_model.applied_cle == (bn_folded_acc < cle_acc)
 
+    # If accuracy is good enough after adaround
+    if adaround_acc >= target_acc:
+        assert acc == adaround_acc
+        assert encoding_path.endswith("adaround.encodings")
+        assert output_model.applied_adaround
+        return
+
+    assert acc == max(bn_folded_acc, cle_acc, adaround_acc)
+
+    if max(bn_folded_acc, cle_acc, adaround_acc) == bn_folded_acc:
+        assert encoding_path.endswith("batchnorm_folding.encodings")
+    elif max(bn_folded_acc, cle_acc, adaround_acc) == cle_acc:
+        assert encoding_path.endswith("cross_layer_equalization.encodings")
+    else:
+        assert encoding_path.endswith("adaround.encodings")
+
 
 FP32_ACC = 80.0
+
+def _set_attr_to_copied_model(copied_model: tf.keras.Model,
+                              model: tf.keras.Model):
+    for key in ["applied_bn_folding", "applied_cle", "applied_adaround"]:
+        if hasattr(model, key):
+            setattr(copied_model, key, getattr(model, key))
 
 
 @contextlib.contextmanager
@@ -116,11 +138,17 @@ def patch_ptq_techniques(bn_folded_acc, cle_acc, adaround_acc):
 
     def cle(model: tf.keras.Model, *_, **__):
         copied_model = tf.keras.models.clone_model(model)
-        for key in ["applied_bn_folding", "applied_cle", "applied_adaround"]:
-            if hasattr(model, key):
-                setattr(copied_model, key, getattr(model, key))
+        _set_attr_to_copied_model(copied_model, model)
+
         copied_model.applied_bn_folding.assign(True)
         copied_model.applied_cle.assign(True)
+        return copied_model
+
+    def adaround(model: tf.keras.Model, *_, **__):
+        copied_model = tf.keras.models.clone_model(model)
+        _set_attr_to_copied_model(copied_model, model)
+
+        copied_model.applied_adaround.assign(True)
         return copied_model
 
     class _QuantizationSimModel(QuantizationSimModel):
@@ -156,11 +184,7 @@ def patch_ptq_techniques(bn_folded_acc, cle_acc, adaround_acc):
 
         def _add_quantization_wrappers(self, quant_scheme, rounding_mode, default_output_bw, default_param_bw):
             model = super()._add_quantization_wrappers(quant_scheme, rounding_mode, default_output_bw, default_param_bw)
-
-            for key in ["applied_bn_folding", "applied_cle", "applied_adaround"]:
-                if hasattr(self._model_without_wrappers, key):
-                    setattr(model, key, getattr(self._model_without_wrappers, key))
-
+            _set_attr_to_copied_model(model, self._model_without_wrappers)
             return model
 
     def mock_eval_callback(model, _):
@@ -179,15 +203,18 @@ def patch_ptq_techniques(bn_folded_acc, cle_acc, adaround_acc):
         QuantizationSimModel: MagicMock
         fold_all_batch_norms: MagicMock
         equalize_model: MagicMock
+        apply_adaround: MagicMock
 
     with patch("aimet_tensorflow.keras.auto_quant.QuantizationSimModel", side_effect=_QuantizationSimModel) as mock_qsim, \
             patch("aimet_tensorflow.keras.auto_quant.fold_all_batch_norms", side_effect=bn_folding) as mock_bn_folding, \
-            patch("aimet_tensorflow.keras.auto_quant.equalize_model", side_effect=cle) as mock_cle:
+            patch("aimet_tensorflow.keras.auto_quant.equalize_model", side_effect=cle) as mock_cle, \
+            patch("aimet_tensorflow.keras.auto_quant.Adaround.apply_adaround", side_effect=adaround) as mock_adaround:
         try:
             yield Mocks(eval_callback=mock_eval_callback,
                         QuantizationSimModel=mock_qsim,
                         fold_all_batch_norms=mock_bn_folding,
-                        equalize_model=mock_cle)
+                        equalize_model=mock_cle,
+                        apply_adaround=mock_adaround)
         finally:
             pass
 
@@ -223,7 +250,7 @@ class TestAutoQuant:
             target_acc = FP32_ACC - allowed_accuracy_drop
 
             output_model, acc, encoding_path = auto_quant.apply(model, results_dir=results_dir)
-            assert_applied_techniques(output_model, acc, encoding_path, target_acc, bn_folded_acc, cle_acc)
+            assert_applied_techniques(output_model, acc, encoding_path, target_acc, bn_folded_acc, cle_acc, adaround_acc)
 
     def test_auto_quant_invalid_input(self):
         # Allowed accuracy drop < 0
