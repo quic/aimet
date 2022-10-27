@@ -86,7 +86,8 @@ extensions = [
     'sphinx.ext.autodoc',
     'sphinx_autodoc_typehints',
     'sphinx.ext.autosectionlabel',
-    'sphinx.ext.ifconfig'
+    'sphinx.ext.ifconfig',
+    'nbsphinx'
     # 'rinoh.frontend.sphinx'
 ]
 
@@ -216,3 +217,6 @@ texinfo_documents = [
 
 # -- Extension configuration -------------------------------------------------
 autoclass_content = 'both'
+
+nbsphinx_allow_errors = True
+nbsphinx_execute = 'never'
