@@ -39,10 +39,10 @@ The following table has links to browsable versions of the notebooks for differe
      - `Link <../Examples/tensorflow/quantization/cle_bc.ipynb>`_
    * - Adaptive Rounding (AdaRound)
      - `Link <../Examples/torch/quantization/adaround.ipynb>`_
-     -
+     - `Link <../Examples/tensorflow/quantization/adaround.ipynb>`_
    * - AutoQuant
      - `Link <../Examples/torch/quantization/autoquant.ipynb>`_
-     -
+     - `Link <../Examples/tensorflow/quantization/autoquant.ipynb>`_
    * - BN Re-estimation
      - `Link <../Examples/torch/quantization/bn_reestimation.ipynb>`_
      -
