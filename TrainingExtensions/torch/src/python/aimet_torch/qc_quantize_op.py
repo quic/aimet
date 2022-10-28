@@ -627,7 +627,7 @@ class StaticGridQuantWrapper(QcQuantizeWrapper):
             if not isinstance(input_tensor, utils.allowed_output_types):
                 raise RuntimeError(
                     "Expected all the quantized layers' inputs/outputs "
-                    f"to be one of {utils.allowed_output_types}, "
+                    f"to be one of {utils.allowed_output_types} or nested tuple/list of them, "
                     f"but got {type(input_tensor)}"
                 )
 
