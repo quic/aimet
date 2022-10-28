@@ -39,6 +39,7 @@
 Connected graph class and utilities
 """
 import typing
+import json
 
 import tensorflow as tf
 
@@ -108,6 +109,7 @@ class ConnectedGraph(AimetCommonConnectedGraph):
         self.ordered_ops = []
         self._ops_index = 0
         self._split_count = 0
+        self.custom_objects = {}
 
         if not model.built:
             raise RuntimeError("Keras Model should be built before passing it")
@@ -151,6 +153,11 @@ class ConnectedGraph(AimetCommonConnectedGraph):
 
             if op_type is None:
                 op_type = "Unknown"
+                # Using Keras layer metadata to extract the custom objects layer name and the
+                # class it belongs to. self.custom_objects is used during conversion at export time.
+                layer_metadata = json.loads(layer._tracking_metadata)
+                if layer_metadata['class_name'] not in self.custom_objects:
+                    self.custom_objects[layer_metadata['class_name']] = layer.__class__
             else:
                 op_type = op_type[0]
 

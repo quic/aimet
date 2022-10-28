@@ -369,7 +369,7 @@ class QuantizationSimModel:
         self._model_without_wrappers.save(model_path)
         self._model_without_wrappers.save(model_path + '.h5', save_format='h5')
         # Conversion of saved h5 model to pb model for consumption by SNPE/QNN
-        convert_h5_model_to_pb_model(f'{model_path}.h5')
+        convert_h5_model_to_pb_model(f'{model_path}.h5', custom_objects=self.connected_graph.custom_objects)
         encodings_dict = self.get_encodings_dict()
         encoding_file_path = os.path.join(path, filename_prefix + '.encodings')
         save_json_yaml(encoding_file_path, encodings_dict)
