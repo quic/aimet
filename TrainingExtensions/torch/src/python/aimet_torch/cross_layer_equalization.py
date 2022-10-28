@@ -453,9 +453,9 @@ class CrossLayerScaling:
 
         # Transpose weight back to N, C, H, W for transposed Conv2D
         if isinstance(cls_set[0], torch.nn.ConvTranspose2d):
-            cls_set[0].weight.data = cls_set[0].weight.data.permute(1, 0, 2, 3)
+            cls_set[0].weight.data = cls_set[0].weight.data.permute(1, 0, 2, 3).contiguous()
         if isinstance(cls_set[0], torch.nn.ConvTranspose1d):
-            cls_set[0].weight.data = cls_set[0].weight.data.permute(1, 0, 2)
+            cls_set[0].weight.data = cls_set[0].weight.data.permute(1, 0, 2).contiguous()
 
         if isinstance(cls_set[1], (torch.nn.Conv1d, torch.nn.ConvTranspose1d)):
             curr_layer_params.weightShape = curr_layer_params.weightShape[:-1]
@@ -465,9 +465,9 @@ class CrossLayerScaling:
 
         # Transpose weight back to N, C, H, W for transposed Conv2D
         if isinstance(cls_set[1], torch.nn.ConvTranspose2d):
-            cls_set[1].weight.data = cls_set[1].weight.data.permute(1, 0, 2, 3)
+            cls_set[1].weight.data = cls_set[1].weight.data.permute(1, 0, 2, 3).contiguous()
         if isinstance(cls_set[1], torch.nn.ConvTranspose1d):
-            cls_set[1].weight.data = cls_set[1].weight.data.permute(1, 0, 2)
+            cls_set[1].weight.data = cls_set[1].weight.data.permute(1, 0, 2).contiguous()
 
         if cls_set[0].bias is not None:
             cls_set[0].bias.data = torch.from_numpy(np.reshape(prev_layer_params.bias,
@@ -505,14 +505,14 @@ class CrossLayerScaling:
         next_layer_params = libpymo.EqualizationParams()
 
         if isinstance(cls_set[0], torch.nn.ConvTranspose2d):
-            cls_set[0].weight.data = cls_set[0].weight.data.permute(1, 0, 2, 3)
+            cls_set[0].weight.data = cls_set[0].weight.data.permute(1, 0, 2, 3).contiguous()
         if isinstance(cls_set[0], torch.nn.ConvTranspose1d):
-            cls_set[0].weight.data = cls_set[0].weight.data.permute(1, 0, 2)
+            cls_set[0].weight.data = cls_set[0].weight.data.permute(1, 0, 2).contiguous()
 
         if isinstance(cls_set[2], torch.nn.ConvTranspose2d):
-            cls_set[2].weight.data = cls_set[2].weight.data.permute(1, 0, 2, 3)
+            cls_set[2].weight.data = cls_set[2].weight.data.permute(1, 0, 2, 3).contiguous()
         if isinstance(cls_set[2], torch.nn.ConvTranspose1d):
-            cls_set[2].weight.data = cls_set[2].weight.data.permute(1, 0, 2)
+            cls_set[2].weight.data = cls_set[2].weight.data.permute(1, 0, 2).contiguous()
 
         assert cls_set[1].groups > 1
 
@@ -550,9 +550,9 @@ class CrossLayerScaling:
                                                              prev_layer_params.weightShape))
         cls_set[0].weight.data = cls_set[0].weight.data.type(torch.FloatTensor)
         if isinstance(cls_set[0], torch.nn.ConvTranspose2d):
-            cls_set[0].weight.data = cls_set[0].weight.data.permute(1, 0, 2, 3)
+            cls_set[0].weight.data = cls_set[0].weight.data.permute(1, 0, 2, 3).contiguous()
         if isinstance(cls_set[0], torch.nn.ConvTranspose1d):
-            cls_set[0].weight.data = cls_set[0].weight.data.permute(1, 0, 2)
+            cls_set[0].weight.data = cls_set[0].weight.data.permute(1, 0, 2).contiguous()
 
         if isinstance(cls_set[1], (torch.nn.Conv1d, torch.nn.ConvTranspose1d)):
             curr_layer_params.weightShape = curr_layer_params.weightShape[:-1]
@@ -567,9 +567,9 @@ class CrossLayerScaling:
                                                              next_layer_params.weightShape))
         cls_set[2].weight.data = cls_set[2].weight.data.type(torch.FloatTensor)
         if isinstance(cls_set[2], torch.nn.ConvTranspose2d):
-            cls_set[2].weight.data = cls_set[2].weight.data.permute(1, 0, 2, 3)
+            cls_set[2].weight.data = cls_set[2].weight.data.permute(1, 0, 2, 3).contiguous()
         if isinstance(cls_set[2], torch.nn.ConvTranspose1d):
-            cls_set[2].weight.data = cls_set[2].weight.data.permute(1, 0, 2)
+            cls_set[2].weight.data = cls_set[2].weight.data.permute(1, 0, 2).contiguous()
 
         if cls_set[0].bias is not None:
             cls_set[0].bias.data = torch.from_numpy(np.reshape(prev_layer_params.bias,

@@ -227,4 +227,23 @@ class TestCrossLayerEqualization(unittest.TestCase):
         output_after_cle = model(random_input).detach().numpy()
         self.assertTrue(np.allclose(output_before_cle, output_after_cle, rtol=1.e-2))
 
+    def test_cle_for_maskrcnn(self):
+        class JITTraceableWrapper(torch.nn.Module):
+            def __init__(self, model):
+                super().__init__()
+                self.model = model
 
+            def forward(self, inputs):
+                outputs = self.model(inputs)
+                return outputs[0]["masks"]
+
+        model = models.detection.maskrcnn_resnet50_fpn(pretrained=False)
+        model = JITTraceableWrapper(model).eval()
+        input_shapes = (1, 3, 224, 224)
+        dummy_input = torch.rand(input_shapes)
+
+        output_before_cle = model(dummy_input)
+        equalize_model(model, input_shapes)
+        output_after_cle = model(dummy_input)
+
+        assert output_before_cle.shape == output_after_cle.shape
