@@ -82,7 +82,7 @@ AIMET Quantization Features
         parameters for activation quantizers are also updated during each training step.
 
 - Debugging/Analysis Tools
-    - QuantAnalyzer:
+    - :ref:`QuantAnalyzer<ug-quant-analyzer>`:
         Automated debugging of the model to understand sensitivity to weight and/or activation quantization, individual
         layer sensitivity, etc.
 
