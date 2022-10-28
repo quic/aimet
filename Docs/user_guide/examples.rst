@@ -13,21 +13,15 @@ familiar with AIMET usage and APIs.
 For more details on each of the features and APIs please refer:
 :ref:`Links to User Guide and API Documentation<ug-index>`
 
-Installation Instructions
-=========================
-
-- The dataloader, evaluator, and trainer utilized in the examples is for the ImageNet dataset.
-  To run the example, please download the ImageNet dataset from here: https://www.image-net.org/download.php
-- Install AIMET and its dependencies using the instructions in the Installation section'
-    - Installing AIMET will also install these AIMET Examples
-
-Examples for PyTorch Models
-===========================
+Browse the notebooks
+====================
 
 The following table has links to browsable versions of the notebooks for different features.
 
+|
+**Model Quantization Examples**
 
-.. list-table:: Quantization Examples
+.. list-table::
    :widths: 40 12 12
    :header-rows: 1
 
@@ -45,16 +39,18 @@ The following table has links to browsable versions of the notebooks for differe
      - `Link <../Examples/tensorflow/quantization/cle_bc.ipynb>`_
    * - Adaptive Rounding (AdaRound)
      - `Link <../Examples/torch/quantization/adaround.ipynb>`_
-     - `Link <../Examples/tensorflow/quantization/adaround.ipynb>`_
+     -
    * - AutoQuant
      - `Link <../Examples/torch/quantization/autoquant.ipynb>`_
-     - `Link <../Examples/tensorflow/quantization/autoquant.ipynb>`_
+     -
    * - BN Re-estimation
      - `Link <../Examples/torch/quantization/bn_reestimation.ipynb>`_
-     - `Link <../Examples/tensorflow/quantization/bn_reestimation.ipynb>`_
+     -
 
+|
+**Model Compression Examples**
 
-.. list-table:: Compression Examples
+.. list-table::
    :widths: 40 12 12
    :header-rows: 1
 
@@ -73,9 +69,11 @@ The following table has links to browsable versions of the notebooks for differe
 
 
 |
-Running Examples via Jupyter Notebook
-=====================================
+Running the notebooks
+=====================
 
+Install Jupyter
+---------------
 - Install the Jupyter metapackage as follows (pre-pend with "sudo -H" if appropriate):
 `python3 -m pip install jupyter`
 
@@ -83,6 +81,24 @@ Running Examples via Jupyter Notebook
 `jupyter notebook --ip=* --no-browser &`
 
 - The above command will generate and display a URL in the terminal. Copy and paste it into your browser.
+
+
+Download the Example notebooks and related code
+------------------------------------------------
+- Clone the AIMET repo as follows to any location:
+  * WORKSPACE="<absolute_path_to_workspace>"
+  * mkdir $WORKSPACE && cd $WORKSPACE
+  *  Go to https://github.com/quic/aimet/releases and identify the release tag (`<release_tag>`) of the AIMET package that you're working with.
+  * git clone https://github.com/quic/aimet.git --branch <release_tag>
+  * Update the environment variable as follows: `export PYTHONPATH=$PYTHONPATH:${WORKSPACE}/aimet`
+
+- The dataloader, evaluator, and trainer utilized in the examples is for the ImageNet dataset.
+  To run the example, please download the ImageNet dataset from here: https://www.image-net.org/download.php
+
+- Install AIMET and its dependencies using the instructions in the Installation section'
+
+Run the notebooks
+-----------------
 
 - Navigate to one of the following paths under the Examples directory and launch your chosen Jupyter Notebook (`.ipynb` extension):
   - `Examples/torch/quantization/`
