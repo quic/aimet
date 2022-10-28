@@ -42,7 +42,7 @@ import contextlib
 from dataclasses import dataclass
 import functools
 import os
-from typing import Any, Collection, Callable, Dict, List, Optional, Tuple, Union
+from typing import Any, Collection, Callable, Dict, List, Optional, Tuple, Union, Mapping
 import torch
 from torch.utils.data import DataLoader
 import jinja2
@@ -54,6 +54,7 @@ from aimet_torch.cross_layer_equalization import equalize_model
 from aimet_torch.batch_norm_fold import fold_all_batch_norms
 from aimet_torch.quantsim import QuantizationSimModel
 from aimet_torch.utils import in_eval_mode
+from aimet_torch.onnx_utils import OnnxExportApiArgs
 
 from aimet_common.auto_quant import Diagnostics
 from aimet_common.cache import Cache
@@ -158,6 +159,10 @@ class AutoQuant:
 
         self.adaround_params = AdaroundParameters(unlabeled_dataset_iterable,
                                                   len(unlabeled_dataset_iterable))
+        self._export_kwargs = dict(
+            onnx_export_args=OnnxExportApiArgs(),
+            propagate_encodings=False
+        )
 
     def _evaluate_model_performance(self, model) -> float:
         """
@@ -174,6 +179,25 @@ class AutoQuant:
         :param adaround_params: Adaround parameters.
         """
         self.adaround_params = adaround_params
+
+    def set_export_params(self,
+                          onnx_export_args: OnnxExportApiArgs = -1,
+                          propagate_encodings: bool = None) -> None:
+        """
+        Set parameters for QuantizationSimModel.export.
+
+        :param onnx_export_args: optional export argument with onnx specific overrides
+                if not provide export via torchscript graph
+        :param propagate_encodings: If True, encoding entries for intermediate ops
+                (when one PyTorch ops results in multiple ONNX nodes) are filled with
+                the same BW and data_type as the output tensor for that series of ops.
+        """
+        # Here, we use -1 to indicate `onnx_export_args` wasn't specified
+        # since onnx_export_args being None has its own meaning.
+        if onnx_export_args != -1:
+            self._export_kwargs.update(onnx_export_args=onnx_export_args)
+        if propagate_encodings is not None:
+            self._export_kwargs.update(propagate_encodings=propagate_encodings)
 
     def _create_quantsim_and_encodings( # pylint: disable=too-many-arguments
             self,
@@ -447,7 +471,9 @@ class AutoQuant:
             model, folded_pairs = self._apply_batchnorm_folding(fp32_model, dummy_input)
             for conv, bn in folded_pairs:
                 sess.diagnostics.add(f"{conv} was merged with {bn}.")
-            sess.set_ptq_result(model=model, applied_techniques=["batchnorm_folding"])
+            sess.set_ptq_result(model=model,
+                                applied_techniques=["batchnorm_folding"],
+                                export_kwargs=self._export_kwargs)
 
         best_result = eval_manager.get_best_ptq_result()
         if best_result.accuracy >= target_acc:
@@ -456,7 +482,9 @@ class AutoQuant:
         # Cross-Layer Equalization
         with eval_manager.ptq_session("Cross-Layer Equalization") as sess:
             model = self._apply_cross_layer_equalization(fp32_model, dummy_input)
-            sess.set_ptq_result(model=model, applied_techniques=["cross_layer_equalization"])
+            sess.set_ptq_result(model=model,
+                                applied_techniques=["cross_layer_equalization"],
+                                export_kwargs=self._export_kwargs)
 
         best_result = eval_manager.get_best_ptq_result()
         if best_result.accuracy >= target_acc:
@@ -469,7 +497,8 @@ class AutoQuant:
                                                         results_dir)
             sess.set_ptq_result(model=model,
                                 encoding_path=encoding_path,
-                                applied_techniques=[*best_result.applied_techniques, "adaround"])
+                                applied_techniques=[*best_result.applied_techniques, "adaround"],
+                                export_kwargs=self._export_kwargs)
 
         return eval_manager.get_best_ptq_result().as_dict()
 
@@ -701,6 +730,7 @@ class _PtqSession(_EvalSession):
             model: torch.nn.Module = None,
             sim: QuantizationSimModel = None,
             acc: float = None,
+            export_kwargs: Mapping = None,
             **kwargs
     ) -> None:
         """
@@ -717,6 +747,9 @@ class _PtqSession(_EvalSession):
         :param **kwargs: Additional arguments to the quantsim factory.
         :return: None
         """
+        if export_kwargs is None:
+            export_kwargs = {}
+
         if sim is None:
             assert acc is None
             assert model is not None
@@ -726,13 +759,14 @@ class _PtqSession(_EvalSession):
             assert acc is not None
             assert model is None
 
-        self._set_ptq_result(sim, acc, applied_techniques)
+        self._set_ptq_result(sim, acc, applied_techniques, export_kwargs)
 
     def _set_ptq_result(
             self,
             sim: QuantizationSimModel,
             acc: float,
             applied_techniques: List[str],
+            export_kwargs: Mapping,
     ) -> PtqResult:
         """
         Set the result of PTQ. Should be called exactly once inside a with-as block.
@@ -740,6 +774,7 @@ class _PtqSession(_EvalSession):
         :param sim: Result of PTQ. The quamtization encoding (compute_encodings()) is
                     assumed to have been computed in advance.
         :param acc: Eval score.
+        :param export_kwargs: Additional kwargs for sim.export
         :return: PtqResult object.
         """
         if self._ptq_result is not None:
@@ -748,7 +783,7 @@ class _PtqSession(_EvalSession):
             )
 
         device = utils.get_device(sim.model)
-        model_path, encoding_path = self._export(sim)
+        model_path, encoding_path = self._export(sim, export_kwargs)
         self._ptq_result = PtqResult(
             model_path=model_path,
             device=device,
@@ -758,15 +793,17 @@ class _PtqSession(_EvalSession):
         )
         return self._ptq_result
 
-    def _export(self, sim: QuantizationSimModel) -> Tuple[str, str]:
+    def _export(self, sim: QuantizationSimModel, export_kwargs: Mapping) -> Tuple[str, str]:
         """
         Export quantsim.
         :param sim: QuantizationSimModel object to export.
+        :param export_kwargs: Additional kwargs for sim.export
         :return: The paths where model and encoding are saved
         """
         sim.export(path=self._results_dir,
                    filename_prefix=self._filename,
-                   dummy_input=self._dummy_input_on_cpu)
+                   dummy_input=self._dummy_input_on_cpu,
+                   **export_kwargs)
         model_path = os.path.join(self._results_dir, f"{self._filename}.pth")
         encoding_path = os.path.join(self._results_dir, f"{self._filename}.encodings")
         _logger.info("The results of %s is saved in %s and %s.",
@@ -776,6 +813,9 @@ class _PtqSession(_EvalSession):
     def __exit__(self, exc_type, exc_val, exc_tb):
         """Raises error if set_ptq_result is not called."""
         super(_PtqSession, self).__exit__(exc_type, exc_val, exc_tb)
+
+        if exc_val is not None:
+            return
 
         if self._ptq_result is None:
             raise RuntimeError
