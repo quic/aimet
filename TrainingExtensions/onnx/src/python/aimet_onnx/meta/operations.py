@@ -38,7 +38,7 @@
 #
 #  =============================================================================
 """ ONNX Operation class and utilities """
-
+from typing import Union
 import aimet_common.connected_graph.operation
 from aimet_onnx.meta.product import Product
 
@@ -58,6 +58,11 @@ class Op(aimet_common.connected_graph.operation.Op):
         super().__init__(name, dotted_name, output_shape, is_anonymous, op_type)
         self._parameters = {}
 
-    def add_param(self, param: str, product: Product):
+    def add_param(self, param: str, product: Product, product_type: Union[str, None]):
         """ Add a parameter product to parameters dictionary """
-        self._parameters[param] = product
+        self._parameters[param] = (product, product_type)
+
+    @property
+    def parameters(self):
+        """ returns parameters of the op """
+        return self._parameters

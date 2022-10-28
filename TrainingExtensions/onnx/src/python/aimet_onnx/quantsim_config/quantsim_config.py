@@ -40,15 +40,27 @@
 from typing import List, Dict
 
 from onnx import onnx_pb
-
 from aimet_common.defs import QuantizationDataType
-
-from aimet_common.quantsim_config.quantsim_config import QuantSimConfigurator as AimetCommonQuantSimConfigurator
+from aimet_common.quantsim_config.json_config_importer import ConfigDictKeys, ConfigType, OpType
+from aimet_common.quantsim_config.quantsim_config import QuantSimConfigurator as AimetCommonQuantSimConfigurator, \
+    get_setting_type
 from aimet_common.utils import AimetLogger
 from aimet_onnx.meta.connectedgraph import ConnectedGraph
+from aimet_onnx.utils import get_product_name_from_quantized_name
+from aimet_onnx.qc_quantize_op import OpMode, QcQuantizeOp
 
 
 logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Quant)
+
+
+class OpToQuantizers:
+    """
+    Maps an op to input, output and parameter QcQuantizeOps
+    """
+    def __init__(self):
+        self.input_quantizer = []
+        self.output_quantizer = []
+        self.parameter_quantizer = []
 
 
 class QuantSimConfigurator(AimetCommonQuantSimConfigurator):
@@ -64,6 +76,7 @@ class QuantSimConfigurator(AimetCommonQuantSimConfigurator):
         self._param_names = {}
         self._activation_names = {}
         self._op_to_quantizer_lists_dict = None
+        self._op_to_quantizers = {}
 
     def configure_quantizers(self, quant_ops_dict: Dict,
                              param_names: List[str],
@@ -75,8 +88,38 @@ class QuantSimConfigurator(AimetCommonQuantSimConfigurator):
         self._param_names = param_names
         self._activation_names = activation_names
 
+        self._op_to_quantizers = self._map_quantizers_to_ops()
+
         # Disable all quantizers
         self._disable_all_quantizers()
+        self._set_quantsim_configs()
+
+    def _map_quantizers_to_ops(self) -> Dict:
+        """
+        Creates a dict where key is the name of the op and value is OpToQuantizers which comprises of input quantizers
+        and output quantizers of an op
+        """
+        op_to_quantizers = {}
+        for node in self._model.model.graph.node:
+            if 'QcQuantizeOp' in node.name:
+                continue
+            op_to_quantizers[node.name] = OpToQuantizers()
+            for input_product in node.input:
+                self._get_input_and_param_quantizer(op_to_quantizers[node.name], input_product)
+            for output_product in node.output:
+                self._get_output_quantizer(op_to_quantizers[node.name], output_product)
+
+        return op_to_quantizers
+
+    def _get_input_and_param_quantizer(self, op_to_quantizers: OpToQuantizers, input_product: str):
+        product_name = get_product_name_from_quantized_name(input_product)
+        if product_name in self._activation_names:
+            op_to_quantizers.input_quantizer.append(self._quant_ops_dict[product_name])
+        else:
+            op_to_quantizers.parameter_quantizer.append((product_name, self._quant_ops_dict[product_name]))
+
+    def _get_output_quantizer(self, op_to_quantizers: OpToQuantizers, output_product: str):
+        op_to_quantizers.output_quantizer.append(self._quant_ops_dict[output_product])
 
     def _disable_all_quantizers(self):
         """
@@ -116,13 +159,6 @@ class QuantSimConfigurator(AimetCommonQuantSimConfigurator):
         """
         raise NotImplementedError
 
-    def _set_default_configs(self, default_configs):
-        """
-        Set default configurations for op and param quantizers in model (first level of specificity in configuration
-        file)
-        :param default_configs: Default configurations for quantizers
-        """
-
     def _set_param_configs(self, param_configs):
         """
         Set configurations for all params of specific types (second level of specificity in configuration file)
@@ -153,6 +189,132 @@ class QuantSimConfigurator(AimetCommonQuantSimConfigurator):
         :param model_output_configs: Configuration for model outputs
         """
 
+    def _set_default_configs(self, default_configs):
+        """
+        Set default configurations for op and param quantizers in model (first level of specificity in configuration
+        file)
+        :param default_configs: Default configurations for quantizers
+        """
+        self._set_default_configs_for_ops(default_configs[ConfigDictKeys.OPS])
+
+    def _set_default_configs_for_ops(self, default_op_configs: ConfigType):
+        """
+        Set default configurations for all ops in the model.
+        :param default_op_configs: Default configurations for ops
+        """
+        # Modified quantize ops is a dictionary that keeps track of the quantize ops that are modified by this function.
+        # It is initialized as empty, and each time self._set_config_for_op is called, an op will be added.
+        # If ever a quantize op's attribute has already been modified this round and a contradicting setting is
+        # specified, an assertion will be thrown.
+        modified_quantize_ops = {}
+        for op_name, op_to_quantizer in self._op_to_quantizers.items():
+            self._set_config_for_op(op_name, op_to_quantizer, default_op_configs, modified_quantize_ops)
+
+        for model_input in self._model.model.graph.input:
+            self._quant_ops_dict[model_input.name].enabled = False
+
+    def _set_config_for_op(self, op_name, op_to_quantizer: OpToQuantizers, op_config: OpType,
+                           modified_quantize_ops: Dict):
+        """
+        Set configurations for a specific op
+        :param op_name: name of the op
+        :param op_to_quantizer: OpToQuantizers class containing input, output and param quantizer to a node
+        :param op_config: Configuration for the op
+        :param modified_quantize_ops: Dictionary of quantize ops mapping to set of settings that have been changed for
+            that quantize op already.
+        """
+        if ConfigDictKeys.IS_INPUT_QUANTIZED in op_config:
+            self._modify_activation_quantize_op(op_to_quantizer.input_quantizer, ConfigDictKeys.IS_INPUT_QUANTIZED,
+                                                op_config[ConfigDictKeys.IS_INPUT_QUANTIZED], modified_quantize_ops)
+        if ConfigDictKeys.IS_OUTPUT_QUANTIZED in op_config:
+            self._modify_activation_quantize_op(op_to_quantizer.output_quantizer, ConfigDictKeys.IS_OUTPUT_QUANTIZED,
+                                                op_config[ConfigDictKeys.IS_OUTPUT_QUANTIZED], modified_quantize_ops)
+        if ConfigDictKeys.IS_SYMMETRIC in op_config:
+            self._modify_activation_quantize_op(op_to_quantizer.input_quantizer + op_to_quantizer.output_quantizer,
+                                                ConfigDictKeys.IS_SYMMETRIC, op_config[ConfigDictKeys.IS_SYMMETRIC],
+                                                modified_quantize_ops)
+
+        # Will only see this in the op_type section, not default
+        if ConfigDictKeys.PARAMS in op_config:
+            param_quantizers = op_to_quantizer.parameter_quantizer
+            for param_name, param_quantizer in param_quantizers:
+                quantsim_param_type = self._get_param_type(op_name, param_name)
+                if quantsim_param_type is not None and quantsim_param_type in op_config[ConfigDictKeys.PARAMS]:
+                    param_config = op_config[ConfigDictKeys.PARAMS][quantsim_param_type]
+                    self._set_config_for_param(param_quantizer, param_config)
+
+    def _get_param_type(self, op_name, param_name) -> str:
+        """ Returns the type of param, weight/ bias """
+        conn_graph_op = self._conn_graph.get_all_ops()[op_name]
+        _, param_type = conn_graph_op.parameters[param_name]
+        return param_type
+
+    @staticmethod
+    def _modify_activation_quantize_op(quantize_ops_to_modify: List[QcQuantizeOp], setting_name: str,
+                                       quantizer_setting: bool, modified_quantize_ops: Dict):
+        """
+        Modify the appropriate quantize ops for the given quantizer setting.  If a quantize op has already been
+        modified, compare the old setting with the new setting and assert if the settings conflict.
+        :param quantize_ops_to_modify: List of quantizers to modify
+        :param setting_name: String representing the setting to be modified
+        :param quantizer_setting: Boolean representing the new setting value
+        :param modified_quantize_ops: Dictionary of quantize ops mapping to set of settings that have been changed for
+            that quantize op already.
+        """
+        # pylint: disable=too-many-branches
+        setting_type = get_setting_type(setting_name)
+
+        for quantizer in quantize_ops_to_modify:
+            if not quantizer:
+                continue
+            if quantizer in modified_quantize_ops and \
+                    setting_type in modified_quantize_ops[quantizer]:
+                # Tensor quantizer's setting has already been modified
+                if setting_name in [ConfigDictKeys.IS_INPUT_QUANTIZED, ConfigDictKeys.IS_OUTPUT_QUANTIZED]:
+                    current_setting = quantizer.enabled
+                else:
+                    current_setting = quantizer.use_symmetric_encodings
+                if current_setting != quantizer_setting:
+                    logger.error('Conflicting tensor quantizer settings for symmetric encodings')
+                    raise AssertionError('Conflicting tensor quantizer settings for symmetric encodings')
+            else:
+                if setting_name in [ConfigDictKeys.IS_INPUT_QUANTIZED, ConfigDictKeys.IS_OUTPUT_QUANTIZED]:
+                    if not quantizer_setting:
+                        quantizer.enabled = False
+                    else:
+                        quantizer.enabled = True
+                        quantizer.set_mode(OpMode.update_stats)
+                else:
+                    quantizer.use_symmetric_encodings = quantizer_setting
+                if quantizer not in modified_quantize_ops:
+                    modified_quantize_ops[quantizer] = {setting_type}
+                else:
+                    modified_quantize_ops[quantizer].add(setting_type)
+
+    @staticmethod
+    def _set_config_for_param(param_quantizer: QcQuantizeOp, param_config: ConfigType):
+        """
+        Set configurations for a specific param quantize op
+        :param param_quantizer: Quantize op to set configurations for
+        :param param_config: Configuration for the quantize op
+        """
+        if ConfigDictKeys.IS_QUANTIZED in param_config:
+            param_quantizer.enabled = param_config[ConfigDictKeys.IS_QUANTIZED]
+        if ConfigDictKeys.IS_SYMMETRIC in param_config:
+            param_quantizer.use_symmetric_encodings = param_config[ConfigDictKeys.IS_SYMMETRIC]
+
+    def _set_strict_symmetric(self, use_strict_symmetric: bool):
+        """
+        Set strict symmetric configuration for all quantizers in the model.
+        :param use_strict_symmetric: True or False setting for using strict symmetric mode
+        """
+
+    def _set_unsigned_symmetric(self, use_unsigned_symmetric: bool):
+        """
+        Set unsigned symmetric configuration for all quantizers in the model.
+        :param use_unsigned_symmetric: True or False setting for using unsigned symmetric mode
+        """
+
     def _generate_and_apply_op_instance_specific_config(self):
         """
         Generate op instance specific configurations - currently supported_kernels and per_channel_quantization fields
@@ -160,3 +322,4 @@ class QuantSimConfigurator(AimetCommonQuantSimConfigurator):
         fields (if absent use default per_channel_quantization) and generate op instance specific config
         :return: {op_instance_name, op_specific_config}
         """
+        raise NotImplementedError
