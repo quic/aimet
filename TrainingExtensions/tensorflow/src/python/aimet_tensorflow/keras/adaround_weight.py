@@ -39,7 +39,7 @@
 """ Top level API for Adaptive Rounding - Post-Training Quantization (PTQ) """
 from typing import Dict, List, Union, Iterable
 import tensorflow as tf
-from tqdm import tqdm
+from tensorflow.keras.utils import Progbar
 
 import aimet_common.libpymo as libpymo
 
@@ -108,10 +108,12 @@ class Adaround:
         module_act_func_pair = cls._get_module_act_func_pair(model)
         param_encodings = {}
 
-        for idx in tqdm(ordered_layer_indices):
+        progbar = Progbar(len(ordered_layer_indices))
+        for idx in ordered_layer_indices:
             cls.adaround_layer(act_sampler, default_is_symmetric, strict_symmetric, unsigned_symmetric,
                                default_param_bw, default_quant_scheme, model, hard_rounded_model, soft_rounded_model,
                                idx, module_act_func_pair, opt_params, param_encodings, per_channel_enabled)
+            progbar.add(1)
 
         # Export quantization encodings to JSON-formatted file at provided path
         TfAdaround.export_encoding_to_json(path, filename_prefix, param_encodings)

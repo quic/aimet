@@ -130,6 +130,7 @@ RUN apt-get update > /dev/null && \
         lsb-release \
         meld \
         nano \
+        pandoc \
         pkg-config \
         python3-tk \
         sox \
@@ -159,6 +160,7 @@ RUN python3 -m pip --no-cache-dir install \
         keras==2.2.4 \
         lmdb==1.2.1 \
         mock \
+        nbsphinx \
         'numpy>=1.19.5' \
         onnx \
         onnxsim \

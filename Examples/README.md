@@ -45,7 +45,7 @@ This section describes how to apply the various quantization and compression tec
 - _Cross Layer Equalization and Bias Correction - [Torch](torch/quantization/cle_bc.py), [TensorFlow](tensorflow/quantization/cle_bc.py)_:
   - Cross Layer Equalization performs BatchNorm Folding, Cross Layer Scaling, and High Bias Fold
   - Bias Correction corrects shift in layer outputs introduced due to quantization
-- _Adaround (Adaptive Rounding) - [Torch](torch/quantization/adaround.py), [TensorFlow](tensorflow/quantization/ada_round.py)_:
+- _Adaround (Adaptive Rounding) - [Torch](torch/quantization/adaround.py), [TensorFlow](tensorflow/quantization/adaround.py)_:
   - AdaRound is a weight-rounding mechanism for post-training quantization (PTQ) that adapts to the data and the task loss. AdaRound is computationally fast, needs only a small number of unlabeled examples (which may even be for a different dataset in the same domain), optimizes a local loss, does not require end-to-end finetuning, requires very little or no hyperparameter tuning for different networks and tasks, and can be applied to convolutional or fully connected layers without any modification. It complementary to most other post-training quantization techniques such as CLE, batch-normalization folding and high bias absorption.
 
 ### Quantization Examples

@@ -57,17 +57,14 @@ AIMET Quantization Features
         AIMET provies an API that integrates the post-training quantization techniques described below. AutoQuant is
         recommended for PTQ. If desired, individual techniques can be invoked using standalone feature specific APIs.
 
-        - :ref:`Adaptive Rounding (Adaround)<ug-adaround>`:
+        - :ref:`Adaptive Rounding (AdaRound)<ug-adaround>`:
             Determines optimal rounding for weight tensors to improve quantized performance.
 
         - :ref:`Cross-Layer Equalization<ug-post-training-quantization>`:
             Equalizes weight ranges in consecutive layers.
 
-    - :ref:`Bias Correction<ug-post-training-quantization>`:
-        Corrects for a shift in layer outputs due to quantization noise. Bias Correction and Adaptive Rounding
-        should not be applied in the same workflow; users should apply either Adaptive Rounding only or Bias
-        Correction only. It is recommended to try using Adaptive Rounding first, and only try Bias Correction if
-        results are not satisfactory.
+    - :ref:`Bias Correction<ug-post-training-quantization>` [Deprecated]:
+        Bias Correction is considered deprecated. It is advised to use AdaRound instead.
 
 - Quantization-Aware Fine-Tuning (QAT)
     QAT allows users to take a QuantSim model and further fine-tune the model parameters by taking quantization into
@@ -85,7 +82,7 @@ AIMET Quantization Features
         parameters for activation quantizers are also updated during each training step.
 
 - Debugging/Analysis Tools
-    - QuantAnalyzer:
+    - :ref:`QuantAnalyzer<ug-quant-analyzer>`:
         Automated debugging of the model to understand sensitivity to weight and/or activation quantization, individual
         layer sensitivity, etc.
 
@@ -108,7 +105,18 @@ Pytorch:
 
     In the case of PyTorch, there exist the Model Validator utility, to automate the checking of certain PyTorch model
     requirements, as well as the Model Preparer utility, to automate the updating of the model definition to align with
-    certain requirements. For more information, refer to the corresponding sections in
+    certain requirements.
+
+    In this model prep and validation phase, we advise the following flow:
+
+    .. image:: ../images/pytorch_model_prep_and_validate.PNG
+
+    Users can use the model validator utility first to check if the model can be run with AIMET. If validator checks
+    fail, users can first try using model preparer in their pipeline, an automated feature for updating models, and
+    retry the model validator to see if checks now pass. If the validator continues to print warnings, users will need
+    to update the model definition by hand prior to using AIMET features.
+
+    For more information on model validator and preparer, refer to the corresponding sections in
     :doc:`AIMET PyTorch Quantization APIs<../api_docs/torch_quantization>`.
 
 Tensorflow:

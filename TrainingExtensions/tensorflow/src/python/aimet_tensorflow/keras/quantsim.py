@@ -56,6 +56,7 @@ from aimet_tensorflow.keras.quant_sim.tensor_quantizer import TensorQuantizer, A
     ParamPerTensorQuantizer, StaticGridPerChannelQuantizer, ParamPerChannelQuantizer
 from aimet_tensorflow.keras.quantsim_config.quantsim_config import QuantSimConfigurator, INPUT_QUANTIZERS, \
     OUTPUT_QUANTIZERS, PARAM_QUANTIZERS
+from aimet_tensorflow.keras.utils.common import convert_h5_model_to_pb_model
 
 _logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Quant)
 
@@ -367,6 +368,8 @@ class QuantizationSimModel:
         model_path = os.path.join(path, filename_prefix)
         self._model_without_wrappers.save(model_path)
         self._model_without_wrappers.save(model_path + '.h5', save_format='h5')
+        # Conversion of saved h5 model to pb model for consumption by SNPE/QNN
+        convert_h5_model_to_pb_model(f'{model_path}.h5')
         encodings_dict = self.get_encodings_dict()
         encoding_file_path = os.path.join(path, filename_prefix + '.encodings')
         save_json_yaml(encoding_file_path, encodings_dict)
