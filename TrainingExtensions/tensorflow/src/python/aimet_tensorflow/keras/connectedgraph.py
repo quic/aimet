@@ -39,8 +39,6 @@
 Connected graph class and utilities
 """
 import typing
-import json
-
 import tensorflow as tf
 
 from aimet_common.connected_graph.connectedgraph import (
@@ -109,7 +107,6 @@ class ConnectedGraph(AimetCommonConnectedGraph):
         self.ordered_ops = []
         self._ops_index = 0
         self._split_count = 0
-        self.custom_objects = {}
 
         if not model.built:
             raise RuntimeError("Keras Model should be built before passing it")
