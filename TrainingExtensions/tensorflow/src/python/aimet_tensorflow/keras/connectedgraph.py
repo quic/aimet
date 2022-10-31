@@ -153,12 +153,6 @@ class ConnectedGraph(AimetCommonConnectedGraph):
 
             if op_type is None:
                 op_type = "Unknown"
-                # Using Keras layer metadata to extract the custom objects layer name and the
-                # class it belongs to. self.custom_objects is used during conversion at export time.
-                # pylint: disable=protected-access
-                layer_metadata = json.loads(layer._tracking_metadata)
-                if layer_metadata['class_name'] not in self.custom_objects:
-                    self.custom_objects[layer_metadata['class_name']] = layer.__class__
             else:
                 op_type = op_type[0]
 

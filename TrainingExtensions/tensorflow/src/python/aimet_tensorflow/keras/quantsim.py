@@ -352,7 +352,7 @@ class QuantizationSimModel:
                 if param_quantizer.is_enabled():
                     param_quantizer.quant_mode = op_mode
 
-    def export(self, path, filename_prefix):
+    def export(self, path, filename_prefix, custom_objects=None):
         """
         This method exports out the quant-sim model so it is ready to be run on-target.
 
@@ -364,12 +364,18 @@ class QuantizationSimModel:
 
         :param path: path where to store model pth and encodings
         :param filename_prefix: Prefix to use for filenames of the model pth and encodings files
+        :param custom_objects: If there are custom objects to load, Keras needs a dict of them to map them
         """
         model_path = os.path.join(path, filename_prefix)
         self._model_without_wrappers.save(model_path)
         self._model_without_wrappers.save(model_path + '.h5', save_format='h5')
-        # Conversion of saved h5 model to pb model for consumption by SNPE/QNN
-        convert_h5_model_to_pb_model(f'{model_path}.h5', custom_objects=self.connected_graph.custom_objects)
+        # Conversion of saved h5 model to pb model for consumption by SNPE/QNN]
+        try:
+            convert_h5_model_to_pb_model(f'{model_path}.h5', custom_objects=custom_objects)
+        except ValueError:
+            _logger.error("Could not convert h5 to frozen pb."
+                          "Please call export() again with custom_objects defined.")
+            raise
         encodings_dict = self.get_encodings_dict()
         encoding_file_path = os.path.join(path, filename_prefix + '.encodings')
         save_json_yaml(encoding_file_path, encodings_dict)
