@@ -56,7 +56,6 @@ add_library(MoDlEqualization STATIC
       include/DlEqualization/CrossLayerScalingForPython.h
       include/DlEqualization/BiasCorrection.h
       include/DlEqualization/BiasCorrectionForPython.h
-      test/TestDLEqualization.cpp
       test/python/test_cross_layer_scaling.py )
 
 target_include_directories(MoDlEqualization

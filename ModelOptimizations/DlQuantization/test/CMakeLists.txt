@@ -34,12 +34,8 @@
 #  @@-COPYRIGHT-END-@@
 #==============================================================================
 
-find_package(GTest)
-
 include_directories(BEFORE
       ${CMAKE_CURRENT_SOURCE_DIR}/../src
-      ${gtest_SOURCE_DIR}/include
-      ${gtest_SOURCE_DIR}
 )
 
 add_executable(MoDlQuantizationTest
@@ -67,13 +63,13 @@ if (ENABLE_CUDA)
             MoDlQuantization
             MoDlQuantizationCuda
             CUDA::cublas
-            gtest gtest_main
+            gtest_main
             )
 
 else (ENABLE_CUDA)
     target_link_libraries(MoDlQuantizationTest
             MoDlQuantization
-            gtest gtest_main
+            gtest_main
             )
 
 endif (ENABLE_CUDA)

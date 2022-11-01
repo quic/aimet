@@ -79,18 +79,11 @@ if (NOT TF_VERSION MATCHES "^1.15")
 
 endif ()
 
-find_package(GTest)
-
-include_directories(BEFORE
-        ${gtest_SOURCE_DIR}/include
-        ${gtest_SOURCE_DIR}
-        )
-
 add_executable(TfTrainingExtensionCppTest
     TestTfTensorOps.cpp)
 
 target_link_libraries(TfTrainingExtensionCppTest
-        gtest gtest_main
+        gtest_main
         TensorFlow
         TrainingExtensionsTf
         )
