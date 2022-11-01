@@ -25,6 +25,9 @@ To call the QuantAnalyzer API, users need to provide the following:
 Other quantization related settings are also provided in the call to analyze a model.
 Please refer to :doc:`PyTorch QuantAnalyzer API Docs<../api_docs/torch_quant_analyzer>` for more information on how to call the QuantAnalyzer feature.
 
+**Note**: Typically on quantized runtimes, batch normalization layers will be folded where possible.
+So that users do not have to call a separate API to do so, QuantAnalyzer automatically performs Batch Norm Folding prior to running its analyses.
+
 Detailed Analysis Descriptions
 ==============================
 QuantAnalyzer performs the following analyses:
