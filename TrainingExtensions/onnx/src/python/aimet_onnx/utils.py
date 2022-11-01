@@ -159,5 +159,5 @@ def get_product_name_from_quantized_name(quantized_name: str):
         return quantized_name[:quantized_name.index('_updated')]
     if '_qdq' in quantized_name:
         return quantized_name[:quantized_name.index('_qdq')]
-    assert "Incorrect quantized name"
+    # If there is no quantizer added then return None
     return None

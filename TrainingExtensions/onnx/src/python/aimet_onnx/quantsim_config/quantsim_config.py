@@ -58,9 +58,9 @@ class OpToQuantizers:
     Maps an op to input, output and parameter QcQuantizeOps
     """
     def __init__(self):
-        self.input_quantizer = []
-        self.output_quantizer = []
-        self.parameter_quantizer = []
+        self.input_quantizers = []
+        self.output_quantizers = []
+        self.parameter_quantizers = []
 
 
 class QuantSimConfigurator(AimetCommonQuantSimConfigurator):
@@ -105,21 +105,31 @@ class QuantSimConfigurator(AimetCommonQuantSimConfigurator):
                 continue
             op_to_quantizers[node.name] = OpToQuantizers()
             for input_product in node.input:
-                self._get_input_and_param_quantizer(op_to_quantizers[node.name], input_product)
+                self._populate_input_and_param_quantizer(op_to_quantizers[node.name], input_product)
             for output_product in node.output:
-                self._get_output_quantizer(op_to_quantizers[node.name], output_product)
+                self._populate_output_quantizer(op_to_quantizers[node.name], output_product)
 
         return op_to_quantizers
 
-    def _get_input_and_param_quantizer(self, op_to_quantizers: OpToQuantizers, input_product: str):
+    def _populate_input_and_param_quantizer(self, op_to_quantizers: OpToQuantizers, input_product: str):
+        """
+        Populate input and param quantizer for an op
+        """
         product_name = get_product_name_from_quantized_name(input_product)
+        # In case where there is no quantizer product_name will turn out to be None
+        if not product_name:
+            return
         if product_name in self._activation_names:
-            op_to_quantizers.input_quantizer.append(self._quant_ops_dict[product_name])
+            op_to_quantizers.input_quantizers.append(self._quant_ops_dict[product_name])
         else:
-            op_to_quantizers.parameter_quantizer.append((product_name, self._quant_ops_dict[product_name]))
+            op_to_quantizers.parameter_quantizers.append((product_name, self._quant_ops_dict[product_name]))
 
-    def _get_output_quantizer(self, op_to_quantizers: OpToQuantizers, output_product: str):
-        op_to_quantizers.output_quantizer.append(self._quant_ops_dict[output_product])
+    def _populate_output_quantizer(self, op_to_quantizers: OpToQuantizers, output_product: str):
+        """
+        Populates output quantizer for an op
+        """
+        if output_product in self._activation_names:
+            op_to_quantizers.output_quantizers.append(self._quant_ops_dict[output_product])
 
     def _disable_all_quantizers(self):
         """
@@ -224,26 +234,26 @@ class QuantSimConfigurator(AimetCommonQuantSimConfigurator):
             that quantize op already.
         """
         if ConfigDictKeys.IS_INPUT_QUANTIZED in op_config:
-            self._modify_activation_quantize_op(op_to_quantizer.input_quantizer, ConfigDictKeys.IS_INPUT_QUANTIZED,
+            self._modify_activation_quantize_op(op_to_quantizer.input_quantizers, ConfigDictKeys.IS_INPUT_QUANTIZED,
                                                 op_config[ConfigDictKeys.IS_INPUT_QUANTIZED], modified_quantize_ops)
         if ConfigDictKeys.IS_OUTPUT_QUANTIZED in op_config:
-            self._modify_activation_quantize_op(op_to_quantizer.output_quantizer, ConfigDictKeys.IS_OUTPUT_QUANTIZED,
+            self._modify_activation_quantize_op(op_to_quantizer.output_quantizers, ConfigDictKeys.IS_OUTPUT_QUANTIZED,
                                                 op_config[ConfigDictKeys.IS_OUTPUT_QUANTIZED], modified_quantize_ops)
         if ConfigDictKeys.IS_SYMMETRIC in op_config:
-            self._modify_activation_quantize_op(op_to_quantizer.input_quantizer + op_to_quantizer.output_quantizer,
+            self._modify_activation_quantize_op(op_to_quantizer.input_quantizers + op_to_quantizer.output_quantizers,
                                                 ConfigDictKeys.IS_SYMMETRIC, op_config[ConfigDictKeys.IS_SYMMETRIC],
                                                 modified_quantize_ops)
 
         # Will only see this in the op_type section, not default
         if ConfigDictKeys.PARAMS in op_config:
-            param_quantizers = op_to_quantizer.parameter_quantizer
+            param_quantizers = op_to_quantizer.parameter_quantizers
             for param_name, param_quantizer in param_quantizers:
                 quantsim_param_type = self._get_param_type(op_name, param_name)
                 if quantsim_param_type is not None and quantsim_param_type in op_config[ConfigDictKeys.PARAMS]:
                     param_config = op_config[ConfigDictKeys.PARAMS][quantsim_param_type]
                     self._set_config_for_param(param_quantizer, param_config)
 
-    def _get_param_type(self, op_name, param_name) -> str:
+    def _get_param_type(self, op_name: str, param_name: str) -> str:
         """ Returns the type of param, weight/ bias """
         conn_graph_op = self._conn_graph.get_all_ops()[op_name]
         _, param_type = conn_graph_op.parameters[param_name]
@@ -265,8 +275,6 @@ class QuantSimConfigurator(AimetCommonQuantSimConfigurator):
         setting_type = get_setting_type(setting_name)
 
         for quantizer in quantize_ops_to_modify:
-            if not quantizer:
-                continue
             if quantizer in modified_quantize_ops and \
                     setting_type in modified_quantize_ops[quantizer]:
                 # Tensor quantizer's setting has already been modified
