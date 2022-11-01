@@ -37,8 +37,6 @@
 
 include_directories(BEFORE
         ${CMAKE_CURRENT_SOURCE_DIR}/../src
-        ${gtest_SOURCE_DIR}/include
-        ${gtest_SOURCE_DIR}
         )
 
 add_executable(MoDlEqualizationTest
@@ -57,7 +55,7 @@ target_link_libraries(MoDlEqualizationTest
         ${OPENCV_LIBRARY}
         z
         dl
-        gtest gtest_main
+        gtest_main
         )
 
 add_test(MoDlEqualizationTest
