@@ -91,6 +91,9 @@ else(ENABLE_CUDA)
 
 endif(ENABLE_CUDA)
 
+find_package(Python3 COMPONENTS Interpreter Development)
+message("Found python: ${Python3_FOUND}, at ${Python3_LIBRARIES}")
+
 set(LAPACKE_LIBRARY "/usr/lib/x86_64-linux-gnu/liblapacke.so.3.7.1")
 
 find_package(OpenCV REQUIRED)
@@ -99,13 +102,6 @@ set(OPENCV_LIBRARY /usr/local/lib/libopencv_core.a)
 # ----------------------------------
 # Conditional build for PyTorch
 # ----------------------------------
-
-find_package(Python3 COMPONENTS Interpreter Development)
-set(PYTHON_DIST_PACKAGES "/usr/local/lib/python${Python3_VERSION_MAJOR}.${Python3_VERSION_MINOR}/dist-packages/")
-message("Found python: ${Python3_FOUND}, at ${Python3_LIBRARIES}")
-EXECUTE_PROCESS( COMMAND "uname" "-m" OUTPUT_VARIABLE ARCHITECTURE OUTPUT_STRIP_TRAILING_WHITESPACE)
-execute_process(COMMAND "${Python3_EXECUTABLE}" "-c" "import sys; print(sys.abiflags)" OUTPUT_VARIABLE ABI_FLAGS OUTPUT_STRIP_TRAILING_WHITESPACE)
-
 if (NOT (DEFINED ENABLE_TORCH))
   message("AIMET Torch build not explicitly disabled. Enabling implicitly")
   set(ENABLE_TORCH ON CACHE BOOL "")
