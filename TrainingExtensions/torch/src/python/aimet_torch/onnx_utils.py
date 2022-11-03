@@ -44,7 +44,7 @@ from dataclasses import dataclass
 from typing import Union, List, Tuple, Dict, Set, Optional
 import os
 import copy
-from collections import defaultdict
+from collections import defaultdict, deque
 from enum import IntEnum
 import torch
 import torch.nn as nn
@@ -604,59 +604,64 @@ class OnnxSaver:
         visited = set()
         marker_context = {}
         nodes_list = []
+        pending_nodes_list = deque()
 
-        def get_downstream_nodes(node: onnx.NodeProto, parent_module_name):
+        def gather_nodes_in_topological_order():
             """
             Implement a depth-first traversal of onnx nodes based on the input tensor map.
-            :param node: Onnx node to rename or update the current parent context.
-            :param parent_module_name: parent module name
             """
-            if id(node) in visited:
-                return
+            # pylint: disable=too-many-branches
+            while pending_nodes_list:
 
-            if node.op_type == 'CustomMarker':
-                identifier = node.attribute[MarkerAttr.NAME].s.decode()
-                is_start_marker = node.attribute[MarkerAttr.IS_START].s.decode()
-                if is_start_marker == 'True':
-                    marker_context[identifier] = parent_module_name
-                    parent_module_name = identifier
-                else:
-                    if identifier in marker_context:
-                        parent_module_name = marker_context[identifier]
+                node, parent_module_name = pending_nodes_list.popleft()
+                if id(node) in visited:
+                    continue
+
+                if node.op_type == 'CustomMarker':
+                    identifier = node.attribute[MarkerAttr.NAME].s.decode()
+                    is_start_marker = node.attribute[MarkerAttr.IS_START].s.decode()
+                    if is_start_marker == 'True':
+                        marker_context[identifier] = parent_module_name
+                        parent_module_name = identifier
                     else:
-                        parent_context = parent_module_name if parent_module_name is not None else '<model>'
-                        _logger.warning("end-marker seen without passing start-marker for '%s', continue to "
-                                        "use parent context '%s'", identifier, parent_context)
-            else:
-                # ignoring Constants since they might vary depending on where the markers were placed.
-                if node.op_type != 'Constant':
-                    nodes_list.append((node, parent_module_name))
+                        if identifier in marker_context:
+                            parent_module_name = marker_context[identifier]
+                        else:
+                            parent_context = parent_module_name if parent_module_name is not None else '<model>'
+                            _logger.warning("end-marker seen without passing start-marker for '%s', continue to "
+                                            "use parent context '%s'", identifier, parent_context)
+                else:
+                    # ignoring Constants since they might vary depending on where the markers were placed.
+                    if node.op_type != 'Constant':
+                        nodes_list.append((node, parent_module_name))
 
-            visited.add(id(node))
-            for attribute in node.attribute:
-                if getattr(attribute, 'g', None) is not None:
-                    for subnode in getattr(attribute, 'g').node:
-                        get_downstream_nodes(subnode, parent_module_name)
+                visited.add(id(node))
+                for attribute in node.attribute:
+                    if getattr(attribute, 'g', None) is not None:
+                        for subnode in getattr(attribute, 'g').node:
+                            pending_nodes_list.appendleft((subnode, parent_module_name))
 
-            for tensor in node.output:
-                downstream_nodes = map_input_tensor_to_node.get(tensor, [])
-                for dnode in downstream_nodes:
+                for tensor in node.output:
+                    downstream_nodes = map_input_tensor_to_node.get(tensor, [])
+                    for dnode in downstream_nodes:
 
-                    # continue only if all nodes associated with the input tensor(s) have been visited.
-                    skip = any(
-                        input_tensor in map_output_tensor_to_node \
-                        and map_output_tensor_to_node[input_tensor].op_type not in ['Constant'] \
-                        and id(map_output_tensor_to_node[input_tensor]) not in visited
-                        for input_tensor in dnode.input
-                    )
+                        # continue only if all nodes associated with the input tensor(s) have been visited.
+                        skip = any(
+                            input_tensor in map_output_tensor_to_node \
+                            and map_output_tensor_to_node[input_tensor].op_type not in ['Constant'] \
+                            and id(map_output_tensor_to_node[input_tensor]) not in visited
+                            for input_tensor in dnode.input
+                        )
 
-                    if not skip:
-                        get_downstream_nodes(dnode, parent_module_name)
+                        if not skip:
+                            pending_nodes_list.appendleft((dnode, parent_module_name))
 
         for n in onnx_model.graph.node:
             # Ideally traversing the graph here might not be required with DFS but might be
             # required to name ops in dangling sub-graph.
-            get_downstream_nodes(n, None)
+            if id(n) not in visited:
+                pending_nodes_list.append((n, None))
+                gather_nodes_in_topological_order()
 
         return nodes_list
 
