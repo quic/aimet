@@ -42,8 +42,6 @@ import os
 import torch
 from torchvision import models
 
-import numpy as np
-
 from aimet_torch.meta.connectedgraph import ConnectedGraph
 from aimet_torch.batch_norm_fold import (
     fold_given_batch_norms,
@@ -54,6 +52,7 @@ from aimet_torch.batch_norm_fold import (
 from aimet_torch.examples.test_models import TransposedConvModel
 from aimet_torch.utils import create_rand_tensors_given_shapes
 from aimet_torch.quantsim import QuantizationSimModel
+from aimet_torch.model_preparer import prepare_model
 from aimet_common.defs import QuantScheme
 
 from torch.nn.modules.batchnorm import _BatchNorm
@@ -68,6 +67,8 @@ def _initialize_bn_params(model: torch.nn.Module):
             with torch.no_grad():
                 module.weight.copy_(torch.randn_like(module.weight))
                 module.bias.copy_(torch.randn_like(module.bias))
+                module.running_mean.copy_(torch.randn_like(module.bias))
+                module.running_var.add_(torch.randn_like(module.bias).abs())
 
 
 class MyModel(torch.nn.Module):
@@ -157,16 +158,16 @@ class TestTrainingExtensionBnFold:
         model = model.eval()
         random_input = torch.rand(1, 3, 224, 224)
 
-        baseline_output = model(random_input).detach().numpy()
+        baseline_output = model(random_input)
 
         layer_list = [(model.layer2[0].conv1, model.layer2[0].bn1)]
 
         fold_given_batch_norms(model, layer_list)
 
-        output_after_fold = model(random_input).detach().numpy()
+        output_after_fold = model(random_input)
 
         assert not isinstance(model.layer2[0].bn1, torch.nn.BatchNorm2d)
-        assert np.allclose(baseline_output, output_after_fold, rtol=1.e-2)
+        assert torch.allclose(baseline_output, output_after_fold, rtol=1.e-2)
 
     def test_fold_bn_before_conv_no_bias(self):
 
@@ -188,27 +189,21 @@ class TestTrainingExtensionBnFold:
                 return x
 
         torch.manual_seed(10)
-        model = MyModel()
+        model = MyModel().eval()
         _initialize_bn_params(model)
 
-        model = model.eval()
         random_input = torch.rand(20, 10, 4, 4)
 
-        # Set the batch norm params to something non-zero with a random batch
-        model.train()
-        model(torch.randn((20, 10, 4, 4)))
-        model.eval()
-
-        baseline_output = model(random_input).detach().numpy()
+        baseline_output = model(random_input)
 
         layer_list = [(model.bn1, model.conv2)]
 
         fold_given_batch_norms(model, layer_list)
 
-        output_after_fold = model(random_input).detach().numpy()
+        output_after_fold = model(random_input)
 
         assert not isinstance(model.bn1, torch.nn.BatchNorm2d)
-        assert np.allclose(baseline_output, output_after_fold, rtol=1.e-2)
+        assert torch.allclose(baseline_output, output_after_fold, rtol=1.e-2)
         assert model.conv2.weight.requires_grad == model.conv2.bias.requires_grad
         assert model.conv2.weight.device == model.conv2.bias.device
         assert model.conv2.weight.dtype == model.conv2.bias.dtype
@@ -233,27 +228,21 @@ class TestTrainingExtensionBnFold:
                 return x
 
         torch.manual_seed(10)
-        model = MyModel()
+        model = MyModel().eval()
         _initialize_bn_params(model)
 
-        model = model.eval()
         random_input = torch.rand(2, 10, 24, 24)
 
-        # Set the batch norm params to something non-zero with a random batch
-        model.train()
-        model(torch.randn((2, 10, 24, 24)))
-        model.eval()
-
-        baseline_output = model(random_input).detach().numpy()
+        baseline_output = model(random_input)
 
         layer_list = [(model.bn1, model.conv2)]
 
         fold_given_batch_norms(model, layer_list)
 
-        output_after_fold = model(random_input).detach().numpy()
+        output_after_fold = model(random_input)
 
         assert not isinstance(model.bn1, torch.nn.BatchNorm2d)
-        assert np.allclose(baseline_output, output_after_fold, rtol=1.e-1)
+        assert torch.allclose(baseline_output, output_after_fold, rtol=1.e-1)
 
     def test_fold_bn_after_conv_no_bias(self):
 
@@ -273,27 +262,21 @@ class TestTrainingExtensionBnFold:
                 return x
 
         torch.manual_seed(10)
-        model = MyModel()
+        model = MyModel().eval()
         _initialize_bn_params(model)
 
-        model = model.eval()
         random_input = torch.rand(2, 10, 24, 24)
 
-        # Set the batch norm params to something non-zero with a random batch
-        model.train()
-        model(torch.randn((2, 10, 24, 24)))
-        model.eval()
-
-        baseline_output = model(random_input).detach().numpy()
+        baseline_output = model(random_input)
 
         layer_list = [(model.conv1, model.bn1)]
 
         fold_given_batch_norms(model, layer_list)
 
-        output_after_fold = model(random_input).detach().numpy()
+        output_after_fold = model(random_input)
 
         assert not isinstance(model.bn1, torch.nn.BatchNorm2d)
-        assert np.allclose(baseline_output, output_after_fold, rtol=1.e-2)
+        assert torch.allclose(baseline_output, output_after_fold, rtol=1.e-2)
         assert model.conv1.weight.requires_grad == model.conv1.bias.requires_grad
         assert model.conv1.weight.device == model.conv1.bias.device
         assert model.conv1.weight.dtype == model.conv1.bias.dtype
@@ -316,25 +299,19 @@ class TestTrainingExtensionBnFold:
                 return x
 
         torch.manual_seed(10)
-        model = MyModel()
+        model = MyModel().eval()
         _initialize_bn_params(model)
 
-        model = model.eval()
         random_input = torch.rand(2, 10, 24, 24)
 
-        # Set the batch norm params to something non-zero with a random batch
-        model.train()
-        model(torch.randn((2, 10, 24, 24)))
-        model.eval()
-
-        baseline_output = model(random_input).detach().numpy()
+        baseline_output = model(random_input)
 
         fold_all_batch_norms(model, (2, 10, 24, 24))
 
-        output_after_fold = model(random_input).detach().numpy()
+        output_after_fold = model(random_input)
 
         assert not isinstance(model.bn1, torch.nn.BatchNorm2d)
-        assert np.allclose(baseline_output, output_after_fold, rtol=1.e-2)
+        assert torch.allclose(baseline_output, output_after_fold, rtol=1.e-2)
 
     def test_fold_bn_after_transposed_conv_depthwise(self):
 
@@ -354,25 +331,19 @@ class TestTrainingExtensionBnFold:
                 return x
 
         torch.manual_seed(10)
-        model = MyModel()
+        model = MyModel().eval()
         _initialize_bn_params(model)
 
-        model = model.eval()
         random_input = torch.rand(2, 10, 24, 24)
 
-        # Set the batch norm params to something non-zero with a random batch
-        model.train()
-        model(torch.randn((2, 10, 24, 24)))
-        model.eval()
-
-        baseline_output = model(random_input).detach().numpy()
+        baseline_output = model(random_input)
 
         fold_all_batch_norms(model, (2, 10, 24, 24))
 
-        output_after_fold = model(random_input).detach().numpy()
+        output_after_fold = model(random_input)
 
         assert not isinstance(model.bn1, torch.nn.BatchNorm2d)
-        assert np.allclose(baseline_output, output_after_fold, rtol=1.e-2)
+        assert torch.allclose(baseline_output, output_after_fold, rtol=1.e-2)
 
     def test_fold_bn_after_conv_with_bias(self):
 
@@ -392,27 +363,21 @@ class TestTrainingExtensionBnFold:
                 return x
 
         torch.manual_seed(10)
-        model = MyModel()
+        model = MyModel().eval()
         _initialize_bn_params(model)
 
-        model = model.eval()
         random_input = torch.rand(2, 10, 24, 24)
 
-        # Set the batch norm params to something non-zero with a random batch
-        model.train()
-        model(torch.randn((2, 10, 24, 24)))
-        model.eval()
-
-        baseline_output = model(random_input).detach().numpy()
+        baseline_output = model(random_input)
 
         layer_list = [(model.conv1, model.bn1)]
 
         fold_given_batch_norms(model, layer_list)
 
-        output_after_fold = model(random_input).detach().numpy()
+        output_after_fold = model(random_input)
 
         assert not isinstance(model.bn1, torch.nn.BatchNorm2d)
-        assert np.allclose(baseline_output, output_after_fold, rtol=1.e-2)
+        assert torch.allclose(baseline_output, output_after_fold, rtol=1.e-2)
 
     def test_fold_bn_before_linear_layer_no_bias(self):
 
@@ -430,26 +395,21 @@ class TestTrainingExtensionBnFold:
                 return x
 
         torch.manual_seed(10)
-        model = MyModel()
+        model = MyModel().eval()
         _initialize_bn_params(model)
 
         random_input = torch.randn((32, 10))
 
-        # Set the batch norm params to something non-zero with a random batch
-        model.train()
-        model(torch.randn((32, 10)))
-        model.eval()
-
-        baseline_output = model(random_input).detach().numpy()
+        baseline_output = model(random_input)
 
         layer_list = [(model.bn1, model.fc1)]
 
         fold_given_batch_norms(model, layer_list)
 
-        output_after_fold = model(random_input).detach().numpy()
+        output_after_fold = model(random_input)
 
         assert not isinstance(model.bn1, torch.nn.BatchNorm1d)
-        assert np.allclose(baseline_output, output_after_fold, rtol=1.e-2)
+        assert torch.allclose(baseline_output, output_after_fold, rtol=1.e-2)
         assert model.fc1.weight.requires_grad == model.fc1.bias.requires_grad
         assert model.fc1.weight.device == model.fc1.bias.device
         assert model.fc1.weight.dtype == model.fc1.bias.dtype
@@ -470,26 +430,21 @@ class TestTrainingExtensionBnFold:
                 return x
 
         torch.manual_seed(10)
-        model = MyModel()
+        model = MyModel().eval()
         _initialize_bn_params(model)
 
         random_input = torch.randn((32, 10))
 
-        # Set the batch norm params to something non-zero with a random batch
-        model.train()
-        model(torch.randn((32, 10)))
-        model.eval()
-
-        baseline_output = model(random_input).detach().numpy()
+        baseline_output = model(random_input)
 
         layer_list = [(model.bn1, model.fc1)]
 
         fold_given_batch_norms(model, layer_list)
 
-        output_after_fold = model(random_input).detach().numpy()
+        output_after_fold = model(random_input)
 
         assert not isinstance(model.bn1, torch.nn.BatchNorm1d)
-        assert np.allclose(baseline_output, output_after_fold, rtol=1.e-2)
+        assert torch.allclose(baseline_output, output_after_fold, rtol=1.e-2)
 
     def test_fold_bn_after_linear_layer_no_bias(self):
 
@@ -507,26 +462,21 @@ class TestTrainingExtensionBnFold:
                 return x
 
         torch.manual_seed(10)
-        model = MyModel()
+        model = MyModel().eval()
         _initialize_bn_params(model)
 
         random_input = torch.randn((32, 10))
 
-        # Set the batch norm params to something non-zero with a random batch
-        model.train()
-        model(torch.randn((32, 10)))
-        model.eval()
-
-        baseline_output = model(random_input).detach().numpy()
+        baseline_output = model(random_input)
 
         layer_list = [(model.fc1, model.bn1)]
 
         fold_given_batch_norms(model, layer_list)
 
-        output_after_fold = model(random_input).detach().numpy()
+        output_after_fold = model(random_input)
 
         assert not isinstance(model.bn1, torch.nn.BatchNorm1d)
-        assert np.allclose(baseline_output, output_after_fold, rtol=1.e-2)
+        assert torch.allclose(baseline_output, output_after_fold, rtol=1.e-2)
         assert model.fc1.weight.requires_grad == model.fc1.bias.requires_grad
         assert model.fc1.weight.device == model.fc1.bias.device
         assert model.fc1.weight.dtype == model.fc1.bias.dtype
@@ -547,32 +497,25 @@ class TestTrainingExtensionBnFold:
                 return x
 
         torch.manual_seed(10)
-        model = MyModel()
+        model = MyModel().eval()
         _initialize_bn_params(model)
 
         random_input = torch.randn((32, 10))
 
-        # Set the batch norm params to something non-zero with a random batch
-        model.train()
-        model(torch.randn((32, 10)))
-        model.eval()
-
-        baseline_output = model(random_input).detach().numpy()
+        baseline_output = model(random_input)
 
         layer_list = [(model.fc1, model.bn1)]
 
         fold_given_batch_norms(model, layer_list)
 
-        output_after_fold = model(random_input).detach().numpy()
+        output_after_fold = model(random_input)
 
         assert not isinstance(model.bn1, torch.nn.BatchNorm1d)
-        assert np.allclose(baseline_output, output_after_fold, rtol=1.e-2)
+        assert torch.allclose(baseline_output, output_after_fold, rtol=1.e-2)
 
     def test_find_batch_norms_to_fold(self):
-
-        model = MyModel()
+        model = MyModel().eval()
         _initialize_bn_params(model)
-        model.eval()
 
         input_shape = (2, 10, 24, 24)
         connected_graph = ConnectedGraph(model,
@@ -584,28 +527,26 @@ class TestTrainingExtensionBnFold:
 
     def test_bn_fold_auto_mode_transposed_conv2d(self):
         torch.manual_seed(10)
-        model = TransposedConvModel()
+        model = TransposedConvModel().eval()
         _initialize_bn_params(model)
-        model = model.eval()
 
         random_input = torch.rand((10, 10, 4, 4))
 
-        baseline_output = model(random_input).detach().numpy()
+        baseline_output = model(random_input)
 
         folded_pairs = fold_all_batch_norms(model, (10, 10, 4, 4))
 
-        output_after_fold = model(random_input).detach().numpy()
+        output_after_fold = model(random_input)
 
         assert not isinstance(model.bn1, torch.nn.BatchNorm2d)
 
-        assert np.allclose(baseline_output, output_after_fold, rtol=1.e-2)
+        assert torch.allclose(baseline_output, output_after_fold, rtol=1.e-2)
         assert len(folded_pairs) == 2
 
     def test_find_batch_norms_to_fold_multi_input(self):
 
-        model = TwoInputs()
+        model = TwoInputs().eval()
         _initialize_bn_params(model)
-        model.eval()
         inp_shapes = [(1, 3, 32, 32), (1, 3, 20, 20)]
 
         connected_graph = ConnectedGraph(model,
@@ -619,20 +560,19 @@ class TestTrainingExtensionBnFold:
     def test_bn_fold_auto_mode(self):
         torch.manual_seed(10)
 
-        model = MyModel()
+        model = MyModel().eval()
         _initialize_bn_params(model)
 
-        model = model.eval()
         random_input = torch.rand(2, 10, 24, 24)
 
-        baseline_output = model(random_input).detach().numpy()
+        baseline_output = model(random_input)
 
         folded_pairs = fold_all_batch_norms(model, (2, 10, 24, 24))
 
-        output_after_fold = model(random_input).detach().numpy()
+        output_after_fold = model(random_input)
 
         assert not isinstance(model.bn1, torch.nn.BatchNorm2d)
-        assert np.allclose(baseline_output, output_after_fold, rtol=1.e-2)
+        assert torch.allclose(baseline_output, output_after_fold, rtol=1.e-2)
         assert len(folded_pairs) == 2
 
     def test_fold_auto_mode_with_bn_after_Conv1d_layer(self):
@@ -649,16 +589,10 @@ class TestTrainingExtensionBnFold:
 
                 return x
 
-        model = MyModel()
+        model = MyModel().eval()
         _initialize_bn_params(model)
-        model.eval()
 
         random_input = torch.randn((2, 10, 32))
-
-        # Set the batch norm params to something non-zero with a random batch
-        model.train()
-        model(torch.randn((2, 10, 32)))
-        model.eval()
 
         baseline_output = model(random_input)
         orig_bn = model.bn1
@@ -686,16 +620,10 @@ class TestTrainingExtensionBnFold:
 
                 return x
 
-        model = MyModel()
+        model = MyModel().eval()
         _initialize_bn_params(model)
-        model.eval()
 
         random_input = torch.randn((2, 10, 32))
-
-        # Set the batch norm params to something non-zero with a random batch
-        model.train()
-        model(torch.randn((2, 10, 32)))
-        model.eval()
 
         baseline_output = model(random_input)
 
@@ -742,15 +670,10 @@ class TestTrainingExtensionBnFold:
                 return x
 
         torch.manual_seed(10)
-        model = MyModel()
+        model = MyModel().eval()
         _initialize_bn_params(model)
 
         random_input = torch.randn((2, 10, 32))
-
-        # Set the batch norm params to something non-zero with a random batch
-        model.train()
-        model(torch.randn((2, 10, 32)))
-        model.eval()
 
         baseline_output = model(random_input)
         orig_bn = model.bn1
@@ -830,18 +753,18 @@ quantsim_config = {
 
 config_file_path = "/tmp/quantsim_config.json"
 
-def quantsim(model, input_shape):
+def quantsim(model, dummy_input):
     try:
         with open(config_file_path, 'w') as f:
             json.dump(quantsim_config, f)
 
         sim = QuantizationSimModel(model,
-                                   torch.randn(input_shape),
+                                   dummy_input.clone(),
                                    quant_scheme=QuantScheme.training_range_learning_with_tf_init,
                                    config_file=config_file_path)
 
         def forward_pass_callback(model, _):
-            model(torch.randn(input_shape))
+            model(dummy_input.clone())
 
         sim.compute_encodings(forward_pass_callback, None)
         return sim
@@ -854,35 +777,68 @@ def quantsim(model, input_shape):
 
 
 class TestTrainingExtensionBnFoldToScale:
-
-    def test_fold_two_conv_layers(self):
-        torch.manual_seed(10)
-        model = models.resnet18()
+    @pytest.mark.parametrize("seed", range(30))
+    def test_fold_two_conv_layers(self, seed):
+        torch.manual_seed(seed)
+        model = models.resnet18().eval()
         _initialize_bn_params(model)
-        input_shape = (1, 3, 224, 224)
+        model = prepare_model(model)
 
-        model = model.eval()
-        random_input = torch.rand(1, 3, 224, 224)
+        random_input = torch.rand((1, 3, 224, 224))
+        sim = quantsim(model, random_input.clone())
+        layer2_0 = getattr(sim.model.layer2, "0")
 
-        sim = quantsim(model, input_shape)
-        model = sim.model
+        buffer = None
+        def collect_output(bn, _, output):
+            nonlocal buffer
+            buffer = output.clone().detach()
 
-        baseline_output = model(random_input).detach().numpy()
+        def int8_repr(x, quantizer):
+            encoding = quantizer.encoding
+            delta = float((encoding.max - encoding.min)/255)
+            offset = float(round(-encoding.min/255))
+            return x / delta + offset # Fake-quantized output in INT8 representation
 
-        layer_list = [(model.layer2[0].conv1, model.layer2[0].bn1)]
+        ### Outputs before batchnorm folding
+        with layer2_0.bn1.register_forward_hook(collect_output):
+            fakequant_output = sim.model(random_input.clone()).clone().detach()
+            int8_output = int8_repr(fakequant_output, sim.model.fc.output_quantizers[0])
+            fakequant_bn_output = buffer
+            int8_bn_output = int8_repr(fakequant_bn_output, layer2_0.bn1.output_quantizers[0])
 
-        fold_given_batch_norms(model, layer_list)
+        ### Apply batchnorm folding
+        layer_list = [(layer2_0.conv1, layer2_0.bn1)]
+        fold_given_batch_norms(sim.model, layer_list)
 
-        output_after_fold = model(random_input).detach().numpy()
+        ### Outputs after batchnorm folding
+        with layer2_0.bn1.register_forward_hook(collect_output):
+            fakequant_output_after_folding = sim.model(random_input.clone()).clone().detach()
+            int8_output_after_folding = int8_repr(fakequant_output_after_folding, sim.model.fc.output_quantizers[0])
+            fakequant_bn_output_after_folding = buffer
+            int8_bn_output_after_folding = int8_repr(fakequant_bn_output_after_folding, layer2_0.bn1.output_quantizers[0])
 
-        assert not isinstance(model.layer2[0].bn1._module_to_wrap, torch.nn.BatchNorm2d)
-        assert np.allclose(baseline_output, output_after_fold, rtol=1.e-2)
+        assert isinstance(layer2_0.bn1._module_to_wrap, torch.nn.Identity)
+
+        last_output_encoding = sim.model.fc.output_quantizers[0].encoding
+        delta = float((last_output_encoding.max - last_output_encoding.min)/255)
+        # test 1: Fake-quantized outputs should be the same before & after folding
+        assert torch.allclose(fakequant_output, fakequant_output_after_folding, atol=3*delta) # Allow 3-tick difference
+
+        # test 2: Fake-quantized outputs represented with INT8 should be the same before & after folding
+        assert torch.allclose(int8_output, int8_output_after_folding, atol=3) # Allow 3-tick difference
+
+        bn_output_encoding = layer2_0.bn1.output_quantizers[0].encoding
+        delta = float((bn_output_encoding.max - bn_output_encoding.min)/255)
+        # test 3: Fake-quantized outputs of BN should be the same before & after folding
+        assert torch.allclose(fakequant_bn_output, fakequant_bn_output_after_folding, atol=1*delta) # Allow 1-tick difference
+
+        # test 4: Fake-quantized outputs of BN represented with INT8 should be the same before & after folding
+        assert torch.allclose(int8_bn_output, int8_bn_output_after_folding, atol=1) # Allow 1-tick difference
 
     def test_fold_bn_before_conv_no_bias(self):
 
         class MyModel(torch.nn.Module):
             def __init__(self):
-
                 super(MyModel, self).__init__()
                 self.conv1 = torch.nn.Conv2d(10, 20, 2, bias=False)
                 self.reul1 = torch.nn.ReLU()
@@ -894,21 +850,13 @@ class TestTrainingExtensionBnFoldToScale:
                 x = self.reul1(x)
                 x = self.bn1(x)
                 x = self.conv2(x)
-
                 return x
 
         torch.manual_seed(10)
-        model = MyModel()
+        model = MyModel().eval()
         _initialize_bn_params(model)
 
-        model = model.eval()
-
-        # Set the batch norm params to something non-zero with a random batch
-        model.train()
-        model(torch.randn((20, 10, 4, 4)))
-        model.eval()
-
-        sim = quantsim(model, (20, 10, 4, 4))
+        sim = quantsim(model, torch.randn((20, 10, 4, 4)))
         model = sim.model
 
         layer_list = [(model.bn1, model.conv2)]
@@ -936,17 +884,10 @@ class TestTrainingExtensionBnFoldToScale:
                 return x
 
         torch.manual_seed(10)
-        model = MyModel()
+        model = MyModel().eval()
         _initialize_bn_params(model)
 
-        model = model.eval()
-
-        # Set the batch norm params to something non-zero with a random batch
-        model.train()
-        model(torch.randn((2, 10, 24, 24)))
-        model.eval()
-
-        sim = quantsim(model, (2, 10, 24, 24))
+        sim = quantsim(model, torch.randn((2, 10, 24, 24)))
         model = sim.model
 
         layer_list = [(model.bn1, model.conv2)]
@@ -972,30 +913,28 @@ class TestTrainingExtensionBnFoldToScale:
                 return x
 
         torch.manual_seed(10)
-        model = MyModel()
+        model = MyModel().eval()
         _initialize_bn_params(model)
 
-        model = model.eval()
         random_input = torch.rand(2, 10, 24, 24)
 
-        # Set the batch norm params to something non-zero with a random batch
-        model.train()
-        model(torch.randn((2, 10, 24, 24)))
-        model.eval()
-
-        sim = quantsim(model, (2, 10, 24,  24))
+        sim = quantsim(model, random_input)
         model = sim.model
 
-        baseline_output = model(random_input).detach().numpy()
+        baseline_output = model(random_input)
 
         layer_list = [(model.conv1, model.bn1)]
 
         fold_given_batch_norms(model, layer_list)
 
-        output_after_fold = model(random_input).detach().numpy()
+        output_after_fold = model(random_input)
 
-        assert not isinstance(model.bn1._module_to_wrap, torch.nn.BatchNorm2d)
-        assert np.allclose(baseline_output, output_after_fold, rtol=1.e-2)
+        assert isinstance(model.bn1._module_to_wrap, torch.nn.Identity)
+
+        bn_output_encoding = sim.model.bn1.output_quantizers[0].encoding
+        delta = float((bn_output_encoding.max - bn_output_encoding.min)/255)
+        # Fake-quantized outputs should be the same before & after folding
+        assert torch.allclose(baseline_output, output_after_fold, atol=delta) # Allow 1-tick difference
 
         conv1 = model.conv1._module_to_wrap
         assert conv1.weight.requires_grad == conv1.bias.requires_grad
@@ -1020,28 +959,26 @@ class TestTrainingExtensionBnFoldToScale:
                 return x
 
         torch.manual_seed(10)
-        model = MyModel()
+        model = MyModel().eval()
         _initialize_bn_params(model)
 
-        model = model.eval()
         random_input = torch.rand(2, 10, 24, 24)
 
-        # Set the batch norm params to something non-zero with a random batch
-        model.train()
-        model(torch.randn((2, 10, 24, 24)))
-        model.eval()
-
-        sim = quantsim(model, (2, 10, 24,  24))
+        sim = quantsim(model, random_input)
         model = sim.model
 
-        baseline_output = model(random_input).detach().numpy()
+        baseline_output = model(random_input)
 
         fold_all_batch_norms_to_scale(sim, (2, 10, 24, 24))
 
-        output_after_fold = model(random_input).detach().numpy()
+        output_after_fold = model(random_input)
 
-        assert not isinstance(model.bn1._module_to_wrap, torch.nn.BatchNorm2d)
-        assert np.allclose(baseline_output, output_after_fold, rtol=1.e-2)
+        assert isinstance(model.bn1._module_to_wrap, torch.nn.Identity)
+
+        bn_output_encoding = sim.model.bn1.output_quantizers[0].encoding
+        delta = float((bn_output_encoding.max - bn_output_encoding.min)/255)
+        # Fake-quantized outputs should be the same before & after folding
+        assert torch.allclose(baseline_output, output_after_fold, atol=delta) # Allow 1-tick difference
 
     def test_fold_bn_after_transposed_conv_depthwise(self):
 
@@ -1061,17 +998,10 @@ class TestTrainingExtensionBnFoldToScale:
                 return x
 
         torch.manual_seed(10)
-        model = MyModel()
+        model = MyModel().eval()
         _initialize_bn_params(model)
 
-        model = model.eval()
-
-        # Set the batch norm params to something non-zero with a random batch
-        model.train()
-        model(torch.randn((2, 10, 24, 24)))
-        model.eval()
-
-        sim = quantsim(model, (2, 10, 24,  24))
+        sim = quantsim(model, torch.randn((2, 10, 24, 24)))
         model = sim.model
 
         fold_all_batch_norms_to_scale(sim, (2, 10, 24, 24))
@@ -1096,30 +1026,28 @@ class TestTrainingExtensionBnFoldToScale:
                 return x
 
         torch.manual_seed(10)
-        model = MyModel()
+        model = MyModel().eval()
         _initialize_bn_params(model)
 
-        model = model.eval()
         random_input = torch.rand(2, 10, 24, 24)
 
-        sim = quantsim(model, (2, 10, 24, 24))
+        sim = quantsim(model, random_input)
         model = sim.model
 
-        # Set the batch norm params to something non-zero with a random batch
-        model.train()
-        model(torch.randn((2, 10, 24, 24)))
-        model.eval()
-
-        baseline_output = model(random_input).detach().numpy()
+        baseline_output = model(random_input)
 
         layer_list = [(model.conv1, model.bn1)]
 
         fold_given_batch_norms(model, layer_list)
 
-        output_after_fold = model(random_input).detach().numpy()
+        output_after_fold = model(random_input)
 
-        assert not isinstance(model.bn1._module_to_wrap, torch.nn.BatchNorm2d)
-        assert np.allclose(baseline_output, output_after_fold, rtol=1.e-2)
+        assert isinstance(model.bn1._module_to_wrap, torch.nn.Identity)
+
+        bn_output_encoding = sim.model.bn1.output_quantizers[0].encoding
+        delta = float((bn_output_encoding.max - bn_output_encoding.min)/255)
+        # Fake-quantized outputs should be the same before & after folding
+        assert torch.allclose(baseline_output, output_after_fold, atol=delta) # Allow 1-tick difference
 
     def test_fold_bn_before_linear_layer_no_bias(self):
 
@@ -1137,15 +1065,10 @@ class TestTrainingExtensionBnFoldToScale:
                 return x
 
         torch.manual_seed(10)
-        model = MyModel()
+        model = MyModel().eval()
         _initialize_bn_params(model)
 
-        # Set the batch norm params to something non-zero with a random batch
-        model.train()
-        model(torch.randn((32, 10)))
-        model.eval()
-
-        sim = quantsim(model, (32, 10))
+        sim = quantsim(model, torch.randn((32, 10)))
         model = sim.model
 
         layer_list = [(model.bn1, model.fc1)]
@@ -1169,15 +1092,10 @@ class TestTrainingExtensionBnFoldToScale:
                 return x
 
         torch.manual_seed(10)
-        model = MyModel()
+        model = MyModel().eval()
         _initialize_bn_params(model)
 
-        # Set the batch norm params to something non-zero with a random batch
-        model.train()
-        model(torch.randn((32, 10)))
-        model.eval()
-
-        sim = quantsim(model, (32, 10))
+        sim = quantsim(model, torch.randn((32, 10)))
         model = sim.model
 
         layer_list = [(model.bn1, model.fc1)]
@@ -1201,29 +1119,27 @@ class TestTrainingExtensionBnFoldToScale:
                 return x
 
         torch.manual_seed(10)
-        model = MyModel()
+        model = MyModel().eval()
         _initialize_bn_params(model)
 
         random_input = torch.randn((32, 10))
-
-        # Set the batch norm params to something non-zero with a random batch
-        model.train()
-        model(torch.randn((32, 10)))
-        model.eval()
-
-        sim = quantsim(model, (32, 10))
+        sim = quantsim(model, random_input)
         model = sim.model
 
-        baseline_output = model(random_input).detach().numpy()
+        baseline_output = model(random_input)
 
         layer_list = [(model.fc1, model.bn1)]
 
         fold_given_batch_norms(model, layer_list)
 
-        output_after_fold = model(random_input).detach().numpy()
+        output_after_fold = model(random_input)
 
-        assert not isinstance(model.bn1._module_to_wrap, torch.nn.BatchNorm1d)
-        assert np.allclose(baseline_output, output_after_fold, rtol=1.e-2)
+        assert isinstance(model.bn1._module_to_wrap, torch.nn.Identity)
+
+        bn_output_encoding = sim.model.bn1.output_quantizers[0].encoding
+        delta = float((bn_output_encoding.max - bn_output_encoding.min)/255)
+        # Fake-quantized outputs should be the same before & after folding
+        assert torch.allclose(baseline_output, output_after_fold, atol=delta) # Allow 1-tick difference
 
         fc1 = model.fc1._module_to_wrap
         assert fc1.weight.requires_grad == fc1.bias.requires_grad
@@ -1246,57 +1162,56 @@ class TestTrainingExtensionBnFoldToScale:
                 return x
 
         torch.manual_seed(10)
-        model = MyModel()
+        model = MyModel().eval()
         _initialize_bn_params(model)
 
         random_input = torch.randn((32, 10))
-
-        # Set the batch norm params to something non-zero with a random batch
-        model.train()
-        model(torch.randn((32, 10)))
-        model.eval()
-
-        sim = quantsim(model, (32, 10))
+        sim = quantsim(model, random_input)
         model = sim.model
 
-        baseline_output = model(random_input).detach().numpy()
+        baseline_output = model(random_input)
 
         layer_list = [(model.fc1, model.bn1)]
 
         fold_given_batch_norms(model, layer_list)
 
-        output_after_fold = model(random_input).detach().numpy()
+        output_after_fold = model(random_input)
 
-        assert not isinstance(model.bn1._module_to_wrap, torch.nn.BatchNorm1d)
-        assert np.allclose(baseline_output, output_after_fold, rtol=1.e-2)
+        assert isinstance(model.bn1._module_to_wrap, torch.nn.Identity)
+
+        bn_output_encoding = sim.model.bn1.output_quantizers[0].encoding
+        delta = float((bn_output_encoding.max - bn_output_encoding.min)/255)
+        # Fake-quantized outputs should be the same before & after folding
+        assert torch.allclose(baseline_output, output_after_fold, atol=delta) # Allow 1-tick difference
 
     def test_bn_fold_auto_mode_transposed_conv2d(self):
         torch.manual_seed(10)
-        model = TransposedConvModel()
+        model = TransposedConvModel().eval()
         _initialize_bn_params(model)
-        model = model.eval()
-
-        sim = quantsim(model, (10, 10 ,4, 4))
-        model = sim.model
 
         random_input = torch.rand((10, 10, 4, 4))
-        baseline_output = model(random_input).detach().numpy()
+        sim = quantsim(model, random_input)
+        model = sim.model
+
+        baseline_output = model(random_input)
         folded_pairs = fold_all_batch_norms_to_scale(sim, (10, 10, 4, 4))
-        output_after_fold = model(random_input).detach().numpy()
+        output_after_fold = model(random_input)
 
-        assert not isinstance(model.bn1._module_to_wrap, torch.nn.BatchNorm2d)
+        assert isinstance(model.bn1._module_to_wrap, torch.nn.Identity)
 
-        assert np.allclose(baseline_output, output_after_fold, rtol=1.e-2)
+        bn_output_encoding = sim.model.bn1.output_quantizers[0].encoding
+        delta = float((bn_output_encoding.max - bn_output_encoding.min)/255)
+        # Fake-quantized outputs should be the same before & after folding
+        assert torch.allclose(baseline_output, output_after_fold, atol=delta) # Allow 1-tick difference
         assert len(folded_pairs) == 2
 
     def test_bn_fold_auto_mode(self):
         torch.manual_seed(10)
 
-        model = MyModel()
+        model = MyModel().eval()
         _initialize_bn_params(model)
 
-        model = model.eval()
-        sim = quantsim(model, (2, 10, 24, 24))
+        sim = quantsim(model, torch.randn((2, 10, 24, 24)))
 
         with pytest.raises(RuntimeError):
             fold_all_batch_norms_to_scale(sim, (2, 10, 24, 24))
@@ -1315,18 +1230,11 @@ class TestTrainingExtensionBnFoldToScale:
 
                 return x
 
-        model = MyModel()
+        model = MyModel().eval()
         _initialize_bn_params(model)
-        model.eval()
 
         random_input = torch.randn((2, 10, 32))
-
-        # Set the batch norm params to something non-zero with a random batch
-        model.train()
-        model(torch.randn((2, 10, 32)))
-        model.eval()
-
-        sim = quantsim(model, (2, 10, 32))
+        sim = quantsim(model, random_input)
         model = sim.model
 
         baseline_output = model(random_input)
@@ -1335,8 +1243,12 @@ class TestTrainingExtensionBnFoldToScale:
         bn_pairs = fold_all_batch_norms_to_scale(sim, (2, 10, 32))
         output_after_fold = model(random_input)
 
-        assert not isinstance(model.bn1._module_to_wrap, torch.nn.BatchNorm1d)
-        assert torch.allclose(baseline_output, output_after_fold, rtol=1.e-2)
+        assert isinstance(model.bn1._module_to_wrap, torch.nn.Identity)
+
+        bn_output_encoding = sim.model.bn1.output_quantizers[0].encoding
+        delta = float((bn_output_encoding.max - bn_output_encoding.min)/255)
+        # Fake-quantized outputs should be the same before & after folding
+        assert torch.allclose(baseline_output, output_after_fold, atol=delta) # Allow 1-tick difference
 
         assert 1 == len(bn_pairs)
         assert (model.conv1d, orig_bn) in bn_pairs
@@ -1355,18 +1267,11 @@ class TestTrainingExtensionBnFoldToScale:
 
                 return x
 
-        model = MyModel()
+        model = MyModel().eval()
         _initialize_bn_params(model)
-        model.eval()
 
         random_input = torch.randn((2, 10, 32))
-
-        # Set the batch norm params to something non-zero with a random batch
-        model.train()
-        model(torch.randn((2, 10, 32)))
-        model.eval()
-
-        sim = quantsim(model, (2, 10, 32))
+        sim = quantsim(model, random_input)
         model = sim.model
 
         baseline_output = model(random_input)
@@ -1375,8 +1280,12 @@ class TestTrainingExtensionBnFoldToScale:
         fold_given_batch_norms(model, layer_list)
         output_after_fold = model(random_input)
 
-        assert not isinstance(model.bn1._module_to_wrap, torch.nn.BatchNorm1d)
-        assert torch.allclose(baseline_output, output_after_fold, rtol=1.e-2)
+        assert isinstance(model.bn1._module_to_wrap, torch.nn.Identity)
+
+        bn_output_encoding = sim.model.bn1.output_quantizers[0].encoding
+        delta = float((bn_output_encoding.max - bn_output_encoding.min)/255)
+        # Fake-quantized outputs should be the same before & after folding
+        assert torch.allclose(baseline_output, output_after_fold, atol=delta) # Allow 1-tick difference
 
         conv1d = model.conv1d._module_to_wrap
         assert conv1d.weight.requires_grad == conv1d.bias.requires_grad
@@ -1399,15 +1308,10 @@ class TestTrainingExtensionBnFoldToScale:
                 return x
 
         torch.manual_seed(10)
-        model = MyModel()
+        model = MyModel().eval()
         _initialize_bn_params(model)
 
-        # Set the batch norm params to something non-zero with a random batch
-        model.train()
-        model(torch.randn((2, 10, 32)))
-        model.eval()
-
-        sim = quantsim(model, (2, 10, 32))
+        sim = quantsim(model, torch.randn((2, 10, 32)))
 
         with pytest.raises(RuntimeError):
             fold_all_batch_norms_to_scale(sim, (2, 10, 32))
@@ -1428,15 +1332,10 @@ class TestTrainingExtensionBnFoldToScale:
                 return x
 
         torch.manual_seed(10)
-        model = MyModel()
+        model = MyModel().eval()
         _initialize_bn_params(model)
 
-        # Set the batch norm params to something non-zero with a random batch
-        model.train()
-        model(torch.randn((2, 4, 4)))
-        model.eval()
-
-        sim = quantsim(model, (2, 4, 4))
+        sim = quantsim(model, torch.randn((2, 4, 4)))
         model = sim.model
 
         layer_list = [(model.bn1, model.conv1d)]
