@@ -41,6 +41,7 @@ import os
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
 import tensorflow as tf
 import aimet_common.libpymo as libpymo
+import aimet_common.libaimet_tf_ops as zero_out_module
 from aimet_tensorflow.utils.constants import QuantizeOpIndices
 from aimet_tensorflow import quantsim_straight_through_grad
 
@@ -54,7 +55,6 @@ class TestTrainingExtensionsQcQuantizeOp(unittest.TestCase):
         """
         test custom op with CPU
         """
-        zero_out_module = tf.load_op_library('libaimet_tf_ops.so')
         graph = tf.Graph()
         config = tf.compat.v1.ConfigProto(log_device_placement=False)
         sess = tf.compat.v1.Session(graph=graph, config=config)
@@ -124,7 +124,6 @@ class TestTrainingExtensionsQcQuantizeOp(unittest.TestCase):
         """
         test qc_quantize custom op with CPU with fp16 data type
         """
-        zero_out_module = tf.load_op_library('libaimet_tf_ops.so')
         graph = tf.Graph()
         config = tf.compat.v1.ConfigProto(log_device_placement=False)
         sess = tf.compat.v1.Session(graph=graph, config=config)
@@ -183,7 +182,6 @@ class TestTrainingExtensionsQcQuantizeOp(unittest.TestCase):
         """
         test qc_quantize custom op with CPU with fp16 data type in pass through mode
         """
-        zero_out_module = tf.load_op_library('libaimet_tf_ops.so')
         graph = tf.Graph()
         config = tf.compat.v1.ConfigProto(log_device_placement=False)
         sess = tf.compat.v1.Session(graph=graph, config=config)
@@ -237,7 +235,6 @@ class TestTrainingExtensionsQcQuantizeOp(unittest.TestCase):
         """
         test custom op with CPU
         """
-        zero_out_module = tf.load_op_library('libaimet_tf_ops.so')
         graph = tf.Graph()
         config = tf.compat.v1.ConfigProto(log_device_placement=False)
         sess = tf.compat.v1.Session(graph=graph, config=config)
@@ -297,7 +294,6 @@ class TestTrainingExtensionsQcQuantizeOp(unittest.TestCase):
         """
         test custom op with GPU
         """
-        zero_out_module = tf.load_op_library('libaimet_tf_ops.so')
         graph = tf.Graph()
         config = tf.compat.v1.ConfigProto(log_device_placement=False)
         sess = tf.compat.v1.Session(graph=graph, config=config)
@@ -373,7 +369,6 @@ class TestTrainingExtensionsQcQuantizeOp(unittest.TestCase):
         """
         test custom op with GPU
         """
-        zero_out_module = tf.load_op_library('libaimet_tf_ops.so')
         graph = tf.Graph()
         config = tf.compat.v1.ConfigProto(log_device_placement=False)
         sess = tf.compat.v1.Session(graph=graph, config=config)
@@ -428,7 +423,6 @@ class TestTrainingExtensionsQcQuantizeOp(unittest.TestCase):
         """
         test custom static op with CPU
         """
-        zero_out_module = tf.load_op_library('libaimet_tf_ops.so')
         graph = tf.Graph()
         config = tf.compat.v1.ConfigProto(log_device_placement=False)
         sess = tf.compat.v1.Session(graph=graph, config=config)
@@ -522,7 +516,6 @@ class TestTrainingExtensionsQcQuantizeOp(unittest.TestCase):
         """
         test custom static op with GPU
         """
-        zero_out_module = tf.load_op_library('libaimet_tf_ops.so')
         graph = tf.Graph()
         config = tf.compat.v1.ConfigProto(log_device_placement=False)
         sess = tf.compat.v1.Session(graph=graph, config=config)
@@ -619,7 +612,6 @@ class TestTrainingExtensionsQcQuantizeOp(unittest.TestCase):
 
         from aimet_tensorflow import quantsim_straight_through_grad
 
-        zero_out_module = tf.load_op_library('libaimet_tf_ops.so')
         graph = tf.Graph()
         config = tf.compat.v1.ConfigProto(log_device_placement=False)
         sess = tf.compat.v1.Session(graph=graph, config=config)
@@ -708,7 +700,6 @@ class TestTrainingExtensionsQcQuantizeOp(unittest.TestCase):
         """
         test custom recurrent param quantize op with CPU
         """
-        zero_out_module = tf.load_op_library('libaimet_tf_ops.so')
         graph = tf.Graph()
         config = tf.compat.v1.ConfigProto(log_device_placement=False)
         sess = tf.compat.v1.Session(graph=graph, config=config)
@@ -768,7 +759,6 @@ class TestTrainingExtensionsQcQuantizeOp(unittest.TestCase):
         against golden test data (in this case : an equivalent Pytorch test with auto grad)
         """
 
-        zero_out_module = tf.load_op_library('libaimet_tf_ops.so')
         graph = tf.Graph()
         config = tf.compat.v1.ConfigProto(log_device_placement=False)
         sess = tf.compat.v1.Session(graph=graph, config=config)

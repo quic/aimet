@@ -42,6 +42,7 @@ import tensorflow as tf
 import tensorflow.keras.backend as K
 
 import aimet_common.libpymo as libpymo
+import aimet_common.libaimet_tf_ops as qcops
 
 from aimet_common.defs import MAP_QUANT_SCHEME_TO_PYMO, MAP_ROUND_MODE_TO_PYMO, QuantScheme
 from aimet_common.quantsim import calculate_delta_offset
@@ -51,21 +52,6 @@ from aimet_tensorflow.keras.quant_sim.quantsim_straight_through_grad import qc_s
     quantsim_custom_grad_learned_grid
 import aimet_tensorflow.keras.utils.common as keras_common_utils
 _logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Quant)
-
-
-def _load_ops():
-    """
-    Function which loads the quantization op library. In order to load a graph with
-    custom quantization ops this must be called first as this provides tensorflow with
-    the required op definitions.
-
-    :return: Loaded library
-    """
-    return tf.load_op_library('libaimet_tf_ops.so')
-
-
-# Load the aimet ops
-qcops = _load_ops()
 
 
 class TensorQuantizer(tf.keras.layers.Layer, abc.ABC):

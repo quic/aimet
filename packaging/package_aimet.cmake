@@ -161,7 +161,14 @@ foreach(package ${package_name_list})
     file(WRITE "${build_packaging_dir}/MANIFEST.ini" "graft ${package}/acceptance_tests")
     file(COPY ${AIMET_PACKAGE_PATH}/lib/python/${package} DESTINATION ${build_packaging_dir}/)
   endif()
-
+  # Update RPATH to relative paths ($ORIGIN) to not bother by a path where python is installed
+  # Linux loader would be able to resolve dependencies without LD_LIBRARY_PATH
+  execute_process(
+      COMMAND find ${build_packaging_dir} -name "AimetTensorQuantizer*.so" -exec ${PATCHELF_EXE} --set-rpath $ORIGIN:$ORIGIN/../torch/lib {} \;
+  )
+  execute_process(
+      COMMAND find ${build_packaging_dir} -name "libaimet_tf_ops*.so" -exec ${PATCHELF_EXE} --set-rpath $ORIGIN:$ORIGIN/../../tensorflow:$ORIGIN/../../tensorflow/python {} \;
+  )
   # Invoke the setup tools script to create the wheel packages.
   execute_process(COMMAND python3 setup.py sdist bdist_wheel ${CUDA_OPTION} WORKING_DIRECTORY ${build_packaging_dir} OUTPUT_VARIABLE output_var)
 

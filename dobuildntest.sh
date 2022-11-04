@@ -441,7 +441,6 @@ if [ $run_code_violation -eq 1 ]; then
         # Append the suffix and extension
         pylint_results_file_name+="_pylint_results.out"
 
-        LD_LIBRARY_PATH=$artifactsFolder:$LD_LIBRARY_PATH \
         PYTHONPATH=$PYTHONPATH_VALUE \
         PYLINTHOME=${buildFolder} \
         pylint --rcfile=${workspaceFolder}/.pylintrc -r n --msg-template='{path}:{line}: [{msg_id}({symbol}), {obj}] {msg}' ${python_src_path} 2>&1 \
@@ -509,12 +508,12 @@ if [ $run_code_coverage -eq 1 ]; then
         # Remove the top-level path from the full path for brevity
         pycov_results_file_name=$(echo ${pycov_src_path#${workspaceFolder}/})
         # Replace forward slashes with underscores
-        pycov_results_file_name=$(echo $pycov_results_file_name | sed -e 's/\//_/g')        
+        pycov_results_file_name=$(echo $pycov_results_file_name | sed -e 's/\//_/g')
         # Append the suffix and extension
         pycov_results_file_name+="_code_coverage.xml"
 
         # Run the code coverage
-        TORCH_HOME=${AIMET_TORCH_HOME} LD_LIBRARY_PATH=$artifactsFolder:$LD_LIBRARY_PATH PYTHONPATH=$PYTHONPATH_VALUE py.test --cov=${pycov_src_path} ${pycov_test_path} --cov-report xml:${pycov_results_dir}/${pycov_results_file_name}
+        TORCH_HOME=${AIMET_TORCH_HOME} PYTHONPATH=$PYTHONPATH_VALUE py.test --cov=${pycov_src_path} ${pycov_test_path} --cov-report xml:${pycov_results_dir}/${pycov_results_file_name}
         coverage_test_rc=$?
         cp -a ${pycov_results_dir}/${pycov_results_file_name} $outputFolder
     done

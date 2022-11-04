@@ -54,13 +54,11 @@ string(APPEND MARKER_FLAG ${CUDA_FLAG} " and " ${TF_VERSION_FLAG})
 
 add_custom_target(AcceptanceTests.TensorflowDependencies
         COMMAND ${CMAKE_COMMAND} -E env
-        "${AIMET_LD_LIBRARY_PATH}"
         "${AIMET_PYTHONPATH}"
         "${Python3_EXECUTABLE}" ${CMAKE_CURRENT_SOURCE_DIR}/dependencies.py ${CMAKE_CURRENT_SOURCE_DIR}/resnet50_eval_scores.csv ${USE_CUDA})
 
 add_custom_target(AcceptanceTests.Tensorflow
       VERBATIM COMMAND ${CMAKE_COMMAND} -E env
-      "${AIMET_LD_LIBRARY_PATH}"
       "${AIMET_PYTHONPATH}"
       ${Python3_EXECUTABLE} -m pytest -s ${CMAKE_CURRENT_SOURCE_DIR} -m ${MARKER_FLAG} --junitxml=${CMAKE_CURRENT_BINARY_DIR}/py_test_output.xml)
 
