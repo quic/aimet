@@ -39,7 +39,6 @@
 Connected graph class and utilities
 """
 import typing
-
 import tensorflow as tf
 
 from aimet_common.connected_graph.connectedgraph import (
