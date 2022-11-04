@@ -373,7 +373,7 @@ class QuantizationSimModel:
         try:
             convert_h5_model_to_pb_model(f'{model_path}.h5', custom_objects=custom_objects)
         except ValueError:
-            _logger.error("Could not convert h5 to frozen pb."
+            _logger.error("Could not convert h5 to frozen pb. "
                           "Please call export() again with custom_objects defined.")
             raise
         encodings_dict = self.get_encodings_dict()

@@ -261,7 +261,7 @@ class Adaround:
         configs = JsonConfigImporter.import_json_config_file(config_file)
         # Strict_symmetric and unsigned_symmetric flags have default value False and True respectively
         strict_symmetric = configs[ConfigDictKeys.DEFAULTS].get(ConfigDictKeys.STRICT_SYMMETRIC, False)
-        unisgned_symmetric = configs[ConfigDictKeys.DEFAULTS].get(ConfigDictKeys.UNSIGNED_SYMMETRIC, True)
+        unisgned_symmetric = configs[ConfigDictKeys.DEFAULTS].get(ConfigDictKeys.UNSIGNED_SYMMETRIC, False)
 
         # Read per-channel quantization field. Default = False
         per_channel_enabled = configs[ConfigDictKeys.DEFAULTS].get(ConfigDictKeys.PER_CHANNEL_QUANTIZATION, False)

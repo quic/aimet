@@ -243,7 +243,7 @@ def _initialize_param_quantizers(layer: layers.Layer, param_config_dict: TreeLik
                                              quant_settings.quant_scheme,
                                              quant_settings.round_mode,
                                              quant_settings.bitwidth,
-                                             is_symmetric,
+                                             True,
                                              quant_settings.use_strict_symmetric,
                                              quant_settings.use_unsigned_symmetric,
                                              axis_handling,

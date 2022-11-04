@@ -91,7 +91,9 @@ class Adaround:
 
         # Get parameters from config file. To allow one central place for Adaround and Quantsim
         _, strict_symmetric, unsigned_symmetric, per_channel_enabled = TfAdaround.get_config_dict_keys(config_file)
-
+        # If per channel is enabled, is_symmetric should always be true.
+        if per_channel_enabled:
+            default_is_symmetric = True
         # Optimization Hyper parameters
         opt_params = AdaroundHyperParameters(params.num_iterations, params.reg_param, params.beta_range,
                                              params.warm_start)
