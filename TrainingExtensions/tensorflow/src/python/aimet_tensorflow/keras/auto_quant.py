@@ -54,6 +54,7 @@ from aimet_common.utils import AimetLogger, Spinner
 from aimet_tensorflow.adaround.adaround_weight import AdaroundParameters
 from aimet_tensorflow.keras.adaround_weight import Adaround
 from aimet_tensorflow.keras.batch_norm_fold import fold_all_batch_norms
+from aimet_tensorflow.keras.cache import KerasModelSerializationProtocol
 from aimet_tensorflow.keras.cross_layer_equalization import equalize_model
 from aimet_tensorflow.keras.quantsim import QuantizationSimModel
 
@@ -278,6 +279,7 @@ class AutoQuant:
         return model, folded_pairs
 
     # pylint: disable=no-self-use
+    @cache.mark("cle", KerasModelSerializationProtocol())
     def _apply_cross_layer_equalization(self, model: tf.keras.Model) -> tf.keras.Model:
         """
         Apply cross-layer equalization
@@ -302,13 +304,16 @@ class AutoQuant:
         adaround_encoding_path = os.path.join(results_dir,
                                               f"{filename_prefix}.encodings")
 
-        model = Adaround.apply_adaround(model,
-                                        self.adaround_params,
-                                        path=results_dir,
-                                        filename_prefix=filename_prefix,
-                                        default_param_bw=self.default_param_bw,
-                                        default_quant_scheme=self.default_quant_scheme,
-                                        config_file=self.default_config_file)
+        _apply_adaround_cached = cache.mark("adaround", KerasModelSerializationProtocol())\
+            (Adaround.apply_adaround)
+
+        model = _apply_adaround_cached(model,
+                                       self.adaround_params,
+                                       path=results_dir,
+                                       filename_prefix=filename_prefix,
+                                       default_param_bw=self.default_param_bw,
+                                       default_quant_scheme=self.default_quant_scheme,
+                                       config_file=self.default_config_file)
 
         return model, adaround_encoding_path
 
