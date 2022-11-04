@@ -270,7 +270,6 @@ class TestAutoQuant:
         with pytest.raises(ValueError):
             _ = AutoQuant(0, MagicMock(), MagicMock(), default_output_bw=64)
 
-    @pytest.mark.skip("Disable tests before implementing caching")
     def test_auto_quant_caching(self, model, unlabeled_dataset):
         allowed_accuracy_drop = 0.0
         bn_folded_acc, cle_acc, adaround_acc = 40., 50., 60.
@@ -289,17 +288,17 @@ class TestAutoQuant:
                 # No previously cached results
                 auto_quant.apply(model, results_dir=results_dir, cache_id=cache_id)
 
-                # for cache_file in cache_files:
-                #     assert os.path.exists(cache_file)
+                for cache_file in cache_files:
+                    assert os.path.exists(cache_file)
 
-                assert mocks.fold_all_batch_norms.call_count == 1
+                assert mocks.equalize_model.call_count == 1
+                assert mocks.apply_adaround.call_count == 1
 
                 # Load cached result
                 auto_quant.apply(model, results_dir=results_dir, cache_id=cache_id)
 
-                # PTQ functions should not be called twice.
-                # NOTE: Caching feature is not implemented yet, need to modify call_count to 1 after implementation
-                assert mocks.fold_all_batch_norms.call_count == 2
+                assert mocks.equalize_model.call_count == 1
+                assert mocks.apply_adaround.call_count == 1
 
 
 @contextlib.contextmanager
