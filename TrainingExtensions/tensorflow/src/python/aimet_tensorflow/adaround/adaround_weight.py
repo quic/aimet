@@ -194,7 +194,8 @@ class Adaround:
         session_soft_rounded_weight = graph_saver.save_and_load_graph(WORKING_DIR, session)
 
         # Get parameters from config file.
-        configs, strict_symmetric, unsigned_symmetric, enable_per_channel = Adaround.get_config_dict_keys(config_file)
+        configs, _, strict_symmetric, unsigned_symmetric, enable_per_channel = \
+            Adaround.get_config_dict_keys(config_file)
 
         # Optimization Hyper parameters
         opt_params = AdaroundHyperParameters(params.num_iterations, params.reg_param, params.beta_range,
@@ -260,13 +261,14 @@ class Adaround:
         """
         configs = JsonConfigImporter.import_json_config_file(config_file)
         # Strict_symmetric and unsigned_symmetric flags have default value False and True respectively
+        is_symmetric = configs[ConfigDictKeys.DEFAULTS].get(ConfigDictKeys.IS_SYMMETRIC, False)
         strict_symmetric = configs[ConfigDictKeys.DEFAULTS].get(ConfigDictKeys.STRICT_SYMMETRIC, False)
-        unisgned_symmetric = configs[ConfigDictKeys.DEFAULTS].get(ConfigDictKeys.UNSIGNED_SYMMETRIC, False)
+        unsigned_symmetric = configs[ConfigDictKeys.DEFAULTS].get(ConfigDictKeys.UNSIGNED_SYMMETRIC, False)
 
         # Read per-channel quantization field. Default = False
         per_channel_enabled = configs[ConfigDictKeys.DEFAULTS].get(ConfigDictKeys.PER_CHANNEL_QUANTIZATION, False)
 
-        return configs, strict_symmetric, unisgned_symmetric, per_channel_enabled
+        return configs, is_symmetric, strict_symmetric, unsigned_symmetric, per_channel_enabled
 
     @staticmethod
     def _get_ordered_list_of_ops(graph: tf.Graph, input_op_names: List[str], output_op_names: List[str]) \

@@ -56,7 +56,7 @@ class QuantizerSettings:
     """ Class holding quantizer settings """
 
     def __init__(self, bitwidth: int, round_mode: str, quant_scheme: Union[str, QuantScheme], is_symmetric: bool,
-                 use_unsigned_symmetric: bool, use_strict_symmetric: bool):
+                 use_unsigned_symmetric: bool, use_strict_symmetric: bool, enabled: bool = False):
         self._bitwidth = bitwidth
         self._round_mode = round_mode
         if isinstance(quant_scheme, str):
@@ -72,6 +72,7 @@ class QuantizerSettings:
         self._is_symmetric = is_symmetric
         self._use_unsigned_symmetric = use_unsigned_symmetric
         self._use_strict_symmetric = use_strict_symmetric
+        self._enabled = enabled
 
     @property
     def quant_scheme(self):

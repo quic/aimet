@@ -220,16 +220,16 @@ def _initialize_param_quantizers(layer: layers.Layer, param_config_dict: TreeLik
             weight_name = weight.name.split(":")[0]
             param_type = "bias" if "bias" in weight_name else "weight"
 
+            # quant_settings is the global setting of the config file here. For params, if one of the settings is not
+            # specified, we will use the global setting (which may be specificed or defaulted).
             if param_type in param_config_dict:
                 is_symmetric = param_config_dict[param_type][ConfigDictKeys.IS_SYMMETRIC].get(
-                    SETTING, False)
+                    SETTING, quant_settings.is_symmetric)
                 enabled = param_config_dict[param_type][ConfigDictKeys.IS_QUANTIZED].get(
-                    SETTING, False)
+                    SETTING, quant_settings.enabled)
             else:
-                is_symmetric = param_config_dict[ConfigDictKeys.IS_SYMMETRIC].get(
-                    SETTING, False)
-                enabled = param_config_dict[ConfigDictKeys.IS_QUANTIZED].get(
-                    SETTING, False)
+                is_symmetric = quant_settings.is_symmetric
+                enabled = quant_settings.enabled
 
             if per_channel_quantization_enabled and isinstance(layer,
                                                                keras_common_utils.per_channel_quantizeable_layers):
@@ -243,7 +243,7 @@ def _initialize_param_quantizers(layer: layers.Layer, param_config_dict: TreeLik
                                              quant_settings.quant_scheme,
                                              quant_settings.round_mode,
                                              quant_settings.bitwidth,
-                                             True,
+                                             is_symmetric,
                                              quant_settings.use_strict_symmetric,
                                              quant_settings.use_unsigned_symmetric,
                                              axis_handling,
@@ -511,7 +511,9 @@ class QuantSimConfigurator(AimetCommonQuantSimConfigurator):
                 SETTING, False)
             param_quant_settings = QuantizerSettings(default_param_bw, rounding_mode,
                                                      quant_scheme, param_is_symmetric,
-                                                     use_unsigned_symmetric, use_strict_symmetric)
+                                                     use_unsigned_symmetric, use_strict_symmetric,
+                                                     enabled=param_config_dict[ConfigDictKeys.IS_QUANTIZED].get(
+                                                        SETTING, False))
 
             # Initialize Param Quantizers
             self._layer_to_quantizers_dict[layer][PARAM_QUANTIZERS] = \

@@ -384,7 +384,6 @@ def test_apply_adaround_per_channel_conv2d_transpose():
     Adaround.apply_adaround(
         model, params, path='./', filename_prefix='conv2d_transpose',
         default_param_bw=8, default_quant_scheme=QuantScheme.post_training_tf,
-        default_is_symmetric=False,
         config_file='config.json',
     )
 
