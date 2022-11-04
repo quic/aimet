@@ -66,6 +66,4 @@ add_test(MoDlEqualizationPythonTest
       )
 
 set_property(TEST MoDlEqualizationPythonTest
-      APPEND PROPERTY ENVIRONMENT "${AIMET_LD_LIBRARY_PATH}")
-set_property(TEST MoDlEqualizationPythonTest
       APPEND PROPERTY ENVIRONMENT "${AIMET_PYTHONPATH}")

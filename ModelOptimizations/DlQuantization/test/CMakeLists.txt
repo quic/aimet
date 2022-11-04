@@ -83,8 +83,6 @@ add_test(MoDlQuantizationPythonTest
       )
 
 set_property(TEST MoDlQuantizationPythonTest
-      APPEND PROPERTY ENVIRONMENT "${AIMET_LD_LIBRARY_PATH}")
-set_property(TEST MoDlQuantizationPythonTest
       APPEND PROPERTY ENVIRONMENT "${AIMET_PYTHONPATH}")
 
 

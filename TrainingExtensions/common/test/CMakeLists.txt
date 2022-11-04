@@ -37,8 +37,5 @@
 add_test(CommonTrainingExtensionTest
       ${Python3_EXECUTABLE} -m pytest ${CMAKE_CURRENT_SOURCE_DIR} --junitxml=${CMAKE_CURRENT_BINARY_DIR}/py_test_output.xml
       )
-
-set_property(TEST CommonTrainingExtensionTest
-      APPEND PROPERTY ENVIRONMENT "${AIMET_LD_LIBRARY_PATH}")
 set_property(TEST CommonTrainingExtensionTest
       APPEND PROPERTY ENVIRONMENT "${AIMET_PYTHONPATH}")

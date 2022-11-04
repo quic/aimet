@@ -47,11 +47,6 @@ if(NOT DEFINED AIMET_PYTHONPATH)
 endif()
 set(AIMET_PYTHONPATH "${AIMET_PYTHONPATH}:${CMAKE_CURRENT_SOURCE_DIR}/TrainingExtensions/common/src/python")
 
-if(NOT DEFINED AIMET_LD_LIBRARY_PATH)
-  set(AIMET_LD_LIBRARY_PATH "LD_LIBRARY_PATH=${CMAKE_BINARY_DIR}/artifacts:$ENV{LD_LIBRARY_PATH}")
-  message(STATUS "Set ${AIMET_LD_LIBRARY_PATH} in ${CMAKE_CURRENT_SOURCE_DIR}")
-endif()
-
 # Set the software version from version.txt file (if not already set)
 if(NOT DEFINED SW_VERSION)
   file(STRINGS "packaging/version.txt" SW_VERSION)
@@ -118,6 +113,7 @@ if (ENABLE_TORCH)
                   OUTPUT_STRIP_TRAILING_WHITESPACE
                   )
   find_package(Torch REQUIRED PATHS ${TORCH_CMAKE_DIR} NO_DEFAULT_PATH)
+  get_filename_component(TORCH_DIR ${TORCH_CMAKE_DIR}/../../ ABSOLUTE)
 else (ENABLE_TORCH)
   message("AIMET Torch build disabled")
 endif (ENABLE_TORCH)
@@ -206,6 +202,18 @@ else()
   message(STATUS "Set ${AIMET_PYTHONPATH} in ${CMAKE_CURRENT_SOURCE_DIR}")
 endif()
 
+# FIXME
+# Better to include patchefl into docker image, although seems it is not trivial
+include(FetchContent)
+FetchContent_Declare(patchelf
+    URL "https://github.com/NixOS/patchelf/releases/download/0.15.0/patchelf-0.15.0-x86_64.tar.gz"
+)
+if(NOT patchelf_POPULATED)
+    FetchContent_Populate(patchelf)
+    set(PATCHELF_EXE ${patchelf_SOURCE_DIR}/bin/patchelf)
+    message(STATUS "patchelf: ${PATCHELF_EXE}")
+endif()
+
 # -------------------------------
 # Generate pip packages
 # -------------------------------
@@ -232,7 +240,7 @@ if(NOT remote_url STREQUAL "")
     # Run the install target first
     COMMAND "${CMAKE_COMMAND}" --build . --target install
     # Now run the packaging target to generate wheel files
-    COMMAND ${CMAKE_COMMAND} -DAIMET_PACKAGE_PATH=${AIMET_PACKAGE_PATH} -DSOURCE_DIR=${CMAKE_CURRENT_SOURCE_DIR} -DENABLE_CUDA=${ENABLE_CUDA} -DENABLE_TENSORFLOW=${ENABLE_TENSORFLOW} -DENABLE_TORCH=${ENABLE_TORCH} -P ${CMAKE_CURRENT_SOURCE_DIR}/packaging/package_aimet.cmake
+    COMMAND ${CMAKE_COMMAND} -DAIMET_PACKAGE_PATH=${AIMET_PACKAGE_PATH} -DSOURCE_DIR=${CMAKE_CURRENT_SOURCE_DIR} -DENABLE_CUDA=${ENABLE_CUDA} -DENABLE_TENSORFLOW=${ENABLE_TENSORFLOW} -DENABLE_TORCH=${ENABLE_TORCH} -DPATCHELF_EXE=${PATCHELF_EXE} -P ${CMAKE_CURRENT_SOURCE_DIR}/packaging/package_aimet.cmake
   )
 else()
   message(STATUS "Repo Remote URL is blank. Skipping packageaimet target")

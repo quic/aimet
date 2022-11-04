@@ -47,6 +47,7 @@ from tensorflow.python.framework import ops as tf_ops
 from packaging import version
 
 import aimet_common.libpymo as libpymo
+import aimet_common.libaimet_tf_ops as qcops
 from aimet_common.defs import QuantScheme, QuantizationDataType
 from aimet_common.quantsim import calculate_delta_offset, encoding_version, validate_quantsim_inputs, \
     recompute_grid_params
@@ -89,21 +90,6 @@ param_quant_conn_op_ignore_list = {'FusedBatchNorm', 'FusedBatchNormV3', 'BatchN
 DTYPES_QUANTIZE_NOT_REQUIRED = [tf.dtypes.int8, tf.dtypes.uint8, tf.dtypes.int16, tf.dtypes.uint16,
                                 tf.dtypes.int32, tf.dtypes.uint32, tf.dtypes.int64, tf.dtypes.uint64,
                                 tf.bool, tf.dtypes.string]
-
-def _load_ops():
-    """
-    Function which loads the quantization op library. In order to load a graph with
-    custom quantization ops this must be called first as this provides tensorflow with
-    the required op definitions.
-
-    :return: Loaded library
-    """
-    return tf.load_op_library('libaimet_tf_ops.so')
-
-
-# Load the aimet ops
-qcops = _load_ops()
-
 
 class PickleableQuantSimState:
     """
