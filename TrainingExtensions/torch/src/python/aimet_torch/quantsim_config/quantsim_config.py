@@ -456,7 +456,12 @@ class QuantSimConfigurator(AimetCommonQuantSimConfigurator):
             conv_bn_pairs = []
 
             def handler(_, op_list):
+                from torch.nn.modules import ConvTranspose2d
                 conv, bn = op_list
+                conv_module = conv.get_module()
+                # Transposed depthwise convolutions are not supported for batchnorm folding
+                if isinstance(conv_module, ConvTranspose2d) and conv_module.groups != 1:
+                    return
                 conv_bn_pairs.append((conv, bn))
 
             patterns_with_callbacks = []
