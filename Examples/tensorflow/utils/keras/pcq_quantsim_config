@@ -1,7 +1,8 @@
 {"defaults": {
 	"ops": {},
 	"params": {
-		"is_quantized": "True"
+		"is_quantized": "True",
+		"is_symmetric": "True"
 	},
 	"strict_symmetric": "True",
 	"unsigned_symmetric": "False",

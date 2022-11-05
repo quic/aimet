@@ -124,6 +124,16 @@ class QuantizerSettings:
         """ Use strict symmetric setter """
         self._use_strict_symmetric = use_strict_symmetric
 
+    @property
+    def enabled(self):
+        """ Enabled getter """
+        return self._enabled
+
+    @enabled.setter
+    def enabled(self, enabled: bool):
+        """ Enabled setter """
+        self._enabled = enabled
+
 
 class QcQuantizeWrapper(tf.keras.layers.Layer):
     """ Wrapper for simulating quantization noise """
