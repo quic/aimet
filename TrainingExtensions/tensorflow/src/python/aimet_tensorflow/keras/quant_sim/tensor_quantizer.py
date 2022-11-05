@@ -51,6 +51,7 @@ from aimet_tensorflow.quantsim import AxisHandling
 from aimet_tensorflow.keras.quant_sim.quantsim_straight_through_grad import qc_straight_through_estimator_grad, \
     quantsim_custom_grad_learned_grid
 import aimet_tensorflow.keras.utils.common as keras_common_utils
+
 _logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Quant)
 
 
@@ -174,11 +175,20 @@ class TensorQuantizer(tf.keras.layers.Layer, abc.ABC):
         self._is_encoding_valid = False
 
     @abc.abstractmethod
+    def _call_handler(self, tensor):
+        """
+        Equivalent to `tf.keras.Layers.call` function as it is called from `call` function
+        `call` function handles passThrough at the top level
+        """
+
     # pylint: disable=arguments-differ
     def call(self, tensor):
         """
         Forward pass for the quantizer
         """
+        if self.quant_mode == libpymo.TensorQuantizerOpMode.passThrough.value:
+            return tensor
+        return self._call_handler(tensor)
 
 
 # pylint: disable=too-many-ancestors
@@ -311,7 +321,7 @@ class StaticGridPerTensorQuantizer(TensorQuantizer):
                 self._quantizer_mode.assign(int(libpymo.TensorQuantizerOpMode.passThrough))
 
     # pylint: disable=arguments-differ
-    def call(self, tensor):
+    def _call_handler(self, tensor):
         if self.quant_scheme in [QuantScheme.training_range_learning_with_tf_init,
                                  QuantScheme.training_range_learning_with_tf_enhanced_init]:
             return self.call_quantsim_custom_grad_learned_grid(tensor)
@@ -600,10 +610,8 @@ class StaticGridPerChannelQuantizer(TensorQuantizer):
                     ops_with_invalid_encodings.append(self.name)
                     self._quantizer_mode.assign(int(libpymo.TensorQuantizerOpMode.passThrough))
 
-    def call(self, tensor):
-        return self._per_channel_call_handler(tensor)
 
-    def _per_channel_call_handler(self, tensor):
+    def _call_handler(self, tensor):
         # TODO: Currently does not support if quant scheme is range learning based
         if isinstance(self._original_layer, tf.keras.layers.Conv2DTranspose):
             if len(tensor.shape) == 4:

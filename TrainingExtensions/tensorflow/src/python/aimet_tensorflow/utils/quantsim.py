@@ -47,12 +47,9 @@ from aimet_tensorflow.common.operation import Op
 from aimet_tensorflow.common import core
 from aimet_tensorflow.defs import ParameterInfo
 from aimet_tensorflow.quantsim_config.quantsim_config import OpToQuantOpsDictType
+from aimet_tensorflow.utils.constants import QUANT_ALLOWED_DTYPES
 
 _logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Quant)
-
-DTYPES_QUANTIZE_NOT_REQUIRED = [tf.dtypes.int8, tf.dtypes.uint8, tf.dtypes.int16, tf.dtypes.uint16,
-                                tf.dtypes.int32, tf.dtypes.uint32, tf.dtypes.int64, tf.dtypes.uint64,
-                                tf.bool, tf.dtypes.string, tf.dtypes.resource]
 
 
 def get_param_quantizer(op: tf.Operation, index: int) -> tf.Operation:
@@ -206,7 +203,7 @@ def is_op_quantizable(op: tf.Operation) -> bool:
     """
 
     if op.outputs:
-        if op.outputs[0].dtype not in DTYPES_QUANTIZE_NOT_REQUIRED:
+        if op.outputs[0].dtype in QUANT_ALLOWED_DTYPES:
             return True
 
     return False
