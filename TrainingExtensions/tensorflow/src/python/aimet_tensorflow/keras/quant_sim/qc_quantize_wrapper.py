@@ -47,9 +47,9 @@ import aimet_tensorflow.keras.utils.common as keras_common_utils
 from aimet_tensorflow.keras.quant_sim.tensor_quantizer import ActivationTensorQuantizer, \
     ParamPerTensorQuantizer, ParamPerChannelQuantizer, StaticGridPerChannelQuantizer
 from aimet_tensorflow.keras.utils.common import is_lambda_operator
+from aimet_tensorflow.utils.constants import QUANT_ALLOWED_DTYPES
 
 _logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Quant)
-ALLOWED_FLOAT_DTYPES = [tf.float32, tf.float64]
 
 
 class QuantizerSettings:
@@ -280,7 +280,7 @@ class QcQuantizeWrapper(tf.keras.layers.Layer):
 
         idx_param_quantizer = 0
         for idx, param in enumerate(self._layer_to_wrap.weights):
-            if self._layer_to_wrap.weights[idx].dtype in ALLOWED_FLOAT_DTYPES:
+            if self._layer_to_wrap.weights[idx].dtype in QUANT_ALLOWED_DTYPES:
                 quantized_param = self.param_quantizers[idx_param_quantizer](param)
                 self._layer_to_wrap.weights[idx].assign(quantized_param)
                 idx_param_quantizer = idx_param_quantizer + 1
