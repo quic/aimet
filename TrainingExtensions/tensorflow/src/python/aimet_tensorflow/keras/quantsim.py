@@ -44,7 +44,7 @@ from typing import Union, Dict, Tuple, Optional, List
 import tensorflow as tf
 from aimet_common import libpymo
 
-from aimet_common.defs import QuantScheme
+from aimet_common.defs import QuantScheme, QuantizationDataType
 from aimet_common.utils import AimetLogger, save_json_yaml
 from aimet_common.quantsim import encoding_version
 from aimet_tensorflow.defs import AxisHandling
@@ -76,7 +76,7 @@ class QuantizationSimModel:
     # pylint: disable=unused-argument
     def __init__(self, model, quant_scheme: Union[QuantScheme, str] = 'tf_enhanced', rounding_mode: str = 'nearest',
                  default_output_bw: int = 8, default_param_bw: int = 8, in_place: bool = False,
-                 config_file: str = None):
+                 config_file: str = None, default_data_type: QuantizationDataType = QuantizationDataType.int):
         """
         :param model: Model to quantize
         :param quant_scheme: Quantization Scheme, currently supported schemes are post_training_tf and
@@ -87,6 +87,10 @@ class QuantizationSimModel:
         :param in_place: If True, then the given 'model' is modified in-place to add quant-sim nodes.
                 Only suggested use of this option is when the user wants to avoid creating a copy of the model
         :param config_file: Path to a config file to use to specify rules for placing quant ops in the model
+        :param default_data_type: Default data type to use for quantizing all layer parameters.
+                                 Possible options are QuantizationDataType.int and QuantizationDataType.float.
+                                 Note that the mode default_data_type=QuantizationDataType.float is only supported with
+                                 default_output_bw=16 and default_param_bw=16
         """
         self._model_without_wrappers = model
         if not in_place:
@@ -97,10 +101,11 @@ class QuantizationSimModel:
         self.connected_graph = ConnectedGraph(self._model_without_wrappers)
         self._quantsim_configurator = self._initialize_quantsim_configurator(quant_scheme, rounding_mode,
                                                                              default_output_bw, default_param_bw,
-                                                                             config_file)
+                                                                             default_data_type, config_file)
         self.quant_scheme = quant_scheme
         self.per_channel_quantization_enabled = self._quantsim_configurator.per_channel_quantization_flag
-        self.model = self._add_quantization_wrappers(quant_scheme, rounding_mode, default_output_bw, default_param_bw)
+        self.model = self._add_quantization_wrappers(quant_scheme, rounding_mode,
+                                                     default_output_bw, default_param_bw, default_data_type)
         self._disable_quantizers_in_folded_batchnorm()
 
     def _validate_model(self):
@@ -122,7 +127,8 @@ class QuantizationSimModel:
 
     def _initialize_quantsim_configurator(self, quant_scheme: Union[QuantScheme, str], rounding_mode: str,
                                           default_output_bw: int, default_param_bw: int,
-                                          config_file: str) -> QuantSimConfigurator:
+                                          default_data_type: QuantizationDataType = QuantizationDataType.int,
+                                          config_file: str = None) -> QuantSimConfigurator:
         """
         Initialize quantsim configurator
 
@@ -130,19 +136,22 @@ class QuantizationSimModel:
         :param rounding_mode: The round scheme to used
         :param default_output_bw: bitwidth to use for activation tensors
         :param default_param_bw: bitwidth to use for parameter tensors
+        :param default_data_type: data type to use for the parameter tensors
         :param config_file: Path to a config file to use to specify rules for placing quant ops in the model
         :return: QuantSimConfigurator
         """
         return QuantSimConfigurator(self.connected_graph, quant_scheme, rounding_mode,
-                                    default_output_bw, default_param_bw, config_file)
+                                    default_output_bw, default_param_bw, default_data_type, config_file)
 
-    def _add_quantization_wrappers(self, quant_scheme, rounding_mode, default_output_bw, default_param_bw):
+    def _add_quantization_wrappers(self, quant_scheme, rounding_mode,
+                                   default_output_bw, default_param_bw, default_data_type):
         """
         Add quantization wrappers to the model and return a new model with the wrappers inserted.
         :param quant_scheme: Quantization scheme to use
         :param rounding_mode: Rounding mode to use
         :param default_output_bw: Default bitwidth for activation quantizers
         :param default_param_bw: Default bitwidth for param quantizers
+        :param default_data_type: data type to use for param quantizers
         """
 
         def wrap_layer(layer) -> tf.keras.layers.Layer:
@@ -151,9 +160,9 @@ class QuantizationSimModel:
             :param layer: Layer to wrap
             :return: Wrapped layer, or original layer if layer is not to be wrapped
             """
-            activation_quant_settings = QuantizerSettings(default_output_bw, rounding_mode,
+            activation_quant_settings = QuantizerSettings(default_output_bw, default_data_type, rounding_mode,
                                                           quant_scheme, False, False, False)
-            param_quant_settings = QuantizerSettings(default_param_bw, rounding_mode,
+            param_quant_settings = QuantizerSettings(default_param_bw, default_data_type, rounding_mode,
                                                      quant_scheme, False, False, False)
 
             if isinstance(layer, tuple(substitutable_modules.keys())):
@@ -261,7 +270,8 @@ class QuantizationSimModel:
                 'bitwidth': encoding.bw,
                 'is_symmetric': str(quantizer.is_symmetric),
                 'dtype': 'int'
-            }
+            } if quantizer.data_type == QuantizationDataType.int
+            else {'dtype': 'float', 'bitwidth': int(quantizer.bitwidth)}
             for encoding in quantizer_encodings
         ]
 
@@ -275,7 +285,7 @@ class QuantizationSimModel:
         param_encodings = {}
         for wrapper in self.quant_wrappers():
             for idx, input_quantizer in enumerate(wrapper.input_quantizers):
-                if input_quantizer.encoding is not None:
+                if input_quantizer.encoding is not None or input_quantizer.data_type == QuantizationDataType.float:
                     # because dense layers in quantizable MHA are not explicitly sublayers, they don't have their
                     # inbound_nodes parameter populated, so the name of the quantizer is used instead
                     if not wrapper._layer_to_wrap.inbound_nodes:
@@ -285,12 +295,12 @@ class QuantizationSimModel:
                     encoding_dict = self._get_encoding_dict_for_quantizer(input_quantizer)
                     activation_encodings[tensor_name] = encoding_dict
             for idx, param_quantizer in enumerate(wrapper.param_quantizers):
-                if param_quantizer.encoding is not None:
+                if param_quantizer.encoding is not None or param_quantizer.data_type == QuantizationDataType.float:
                     param_name = wrapper._layer_to_wrap.weights[idx].name
                     encoding_dict = self._get_encoding_dict_for_quantizer(param_quantizer)
                     param_encodings[param_name] = encoding_dict
             for idx, output_quantizer in enumerate(wrapper.output_quantizers):
-                if output_quantizer.encoding is not None:
+                if output_quantizer.encoding is not None or output_quantizer.data_type == QuantizationDataType.float:
                     # because dense layers in quantizable MHA are not explicitly sublayers, they don't have their
                     # inbound_nodes parameter populated, so the name of the quantizer is used instead
                     if not wrapper._layer_to_wrap.inbound_nodes:
@@ -378,7 +388,7 @@ class QuantizationSimModel:
         # pylint: disable=too-many-nested-blocks
         for quantizer_wrapper in self.quant_wrappers():
             for idx, param_quantizer in enumerate(quantizer_wrapper.param_quantizers):
-                if param_quantizer.is_enabled():
+                if param_quantizer.is_enabled() and param_quantizer.data_type == QuantizationDataType.int:
                     # 0th input to our quant wrapper is the tensor being quantized
                     weight_tensor = quantizer_wrapper.original_layer.get_weights()[idx]
 

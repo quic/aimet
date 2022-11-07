@@ -43,13 +43,14 @@ import tensorflow.keras.backend as K
 
 import aimet_common.libpymo as libpymo
 
-from aimet_common.defs import MAP_QUANT_SCHEME_TO_PYMO, MAP_ROUND_MODE_TO_PYMO, QuantScheme
+from aimet_common.defs import MAP_QUANT_SCHEME_TO_PYMO, MAP_ROUND_MODE_TO_PYMO, QuantScheme, QuantizationDataType
 from aimet_common.quantsim import calculate_delta_offset
 from aimet_common.utils import AimetLogger
 from aimet_tensorflow.quantsim import AxisHandling
 from aimet_tensorflow.keras.quant_sim.quantsim_straight_through_grad import qc_straight_through_estimator_grad, \
     quantsim_custom_grad_learned_grid
 import aimet_tensorflow.keras.utils.common as keras_common_utils
+
 _logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Quant)
 
 
@@ -75,7 +76,7 @@ class TensorQuantizer(tf.keras.layers.Layer, abc.ABC):
     # pylint: disable=unused-argument
     def __init__(self, layer: tf.keras.layers.Layer, name: str, op_mode: libpymo.TensorQuantizerOpMode,
                  quant_scheme: QuantScheme,
-                 bitwidth: int, is_symmetric: bool, **kwargs):
+                 bitwidth: int, data_type: QuantizationDataType, is_symmetric: bool, **kwargs):
         super(TensorQuantizer, self).__init__(name=name)
         # Original layer is here to handle the case if the wrapped layer is a Conv2DTranspose and therefore
         # needs its tensor to be transposed before given to the QcPerChannelOp
@@ -83,6 +84,10 @@ class TensorQuantizer(tf.keras.layers.Layer, abc.ABC):
         self._quant_scheme = quant_scheme
         self._bitwidth = self.add_weight(name + '.bitwidth', dtype=tf.int8,
                                          initializer=tf.constant_initializer(bitwidth), trainable=False)
+        self._is_int_data_type = self.add_weight(name + '.data_type', dtype=tf.bool,
+                                                 initializer=tf.constant_initializer(
+                                                     (data_type == QuantizationDataType.int)),
+                                                 trainable=False)
         self._is_symmetric = self.add_weight(name + '.is_symmetric', dtype=tf.bool,
                                              initializer=tf.constant_initializer(is_symmetric), trainable=False)
 
@@ -128,6 +133,22 @@ class TensorQuantizer(tf.keras.layers.Layer, abc.ABC):
             _logger.info('Tensor quantizer %s encoding is frozen, not setting bitwidth.', self.name)
             return
         self._bitwidth.assign(bitwidth)
+        self.reset_quant_mode()
+
+    @property
+    def data_type(self):
+        """ Bitwidth getter """
+        return QuantizationDataType.int if tf.keras.backend.get_value(self._is_int_data_type) \
+            else QuantizationDataType.float
+
+    @data_type.setter
+    def data_type(self, data_type: QuantizationDataType):
+        """ Bitwidth setter """
+        if self._is_encoding_frozen:
+            _logger.info('Tensor quantizer %s encoding is frozen, not setting data type.', self.name)
+            return
+
+        self._is_int_data_type.assign(data_type == QuantizationDataType.int)
         self.reset_quant_mode()
 
     @property
@@ -201,10 +222,11 @@ class StaticGridPerTensorQuantizer(TensorQuantizer):
 
     # pylint: disable=too-many-arguments
     def __init__(self, layer: tf.keras.layers.Layer, name: str, op_mode: libpymo.TensorQuantizerOpMode,
-                 quant_scheme: QuantScheme, round_mode: str, bitwidth: int, is_symmetric: bool,
-                 use_strict_symmetric: bool, use_unsigned_symmetric: bool):
+                 quant_scheme: QuantScheme, round_mode: str, bitwidth: int, data_type: QuantizationDataType,
+                 is_symmetric: bool, use_strict_symmetric: bool, use_unsigned_symmetric: bool):
 
-        super(StaticGridPerTensorQuantizer, self).__init__(layer, name, op_mode, quant_scheme, bitwidth, is_symmetric)
+        super(StaticGridPerTensorQuantizer, self).__init__(layer, name, op_mode, quant_scheme,
+                                                           bitwidth, data_type, is_symmetric)
 
         self._encoding_min = self.add_weight(name + '.encoding_min', dtype=tf.float64, trainable=True,
                                              initializer=tf.constant_initializer(0.))
@@ -312,17 +334,20 @@ class StaticGridPerTensorQuantizer(TensorQuantizer):
         if self.is_enabled() and not self._is_encoding_frozen:
             # TODO: remove last two parameters after fixing PyModelOptimizations
             encoding = self._tensor_quantizer.computeEncoding(self.bitwidth, self.is_symmetric)
-            if self._tensor_quantizer.isEncodingValid:
-                self._encoding_min.assign(encoding.min)
-                self._encoding_max.assign(encoding.max)
-                if self.quant_mode == int(libpymo.TensorQuantizerOpMode.updateStats):
-                    self._quantizer_mode.assign(int(libpymo.TensorQuantizerOpMode.quantizeDequantize))
-                self._is_encoding_valid = True
+            if self.data_type == QuantizationDataType.float:
+                self._quantizer_mode.assign(int(libpymo.TensorQuantizerOpMode.quantizeDequantize))
             else:
-                _logger.info('Tensor quantizer %s did not have a valid encoding calculated, and has been set to '
-                             'passThrough mode.', self.name)
-                ops_with_invalid_encodings.append(self.name)
-                self._quantizer_mode.assign(int(libpymo.TensorQuantizerOpMode.passThrough))
+                if self._tensor_quantizer.isEncodingValid:
+                    self._encoding_min.assign(encoding.min)
+                    self._encoding_max.assign(encoding.max)
+                    if self.quant_mode == int(libpymo.TensorQuantizerOpMode.updateStats):
+                        self._quantizer_mode.assign(int(libpymo.TensorQuantizerOpMode.quantizeDequantize))
+                    self._is_encoding_valid = True
+                else:
+                    _logger.info('Tensor quantizer %s did not have a valid encoding calculated, and has been set to '
+                                 'passThrough mode.', self.name)
+                    ops_with_invalid_encodings.append(self.name)
+                    self._quantizer_mode.assign(int(libpymo.TensorQuantizerOpMode.passThrough))
 
     # pylint: disable=arguments-differ
     def call(self, tensor):
@@ -356,7 +381,7 @@ class StaticGridPerTensorQuantizer(TensorQuantizer):
                                  encoding_max=self._encoding_max,
                                  bit_width=self._bitwidth,
                                  use_symmetric_encoding=self._is_symmetric,
-                                 is_int_data_type=True), grad
+                                 is_int_data_type=self._is_int_data_type), grad
 
     @tf.custom_gradient
     def call_quantsim_custom_grad_learned_grid(self, tensor):
@@ -384,7 +409,7 @@ class StaticGridPerTensorQuantizer(TensorQuantizer):
                                  encoding_max=self._encoding_max,
                                  bit_width=self._bitwidth,
                                  use_symmetric_encoding=self._is_symmetric,
-                                 is_int_data_type=True), grad
+                                 is_int_data_type=self._is_int_data_type), grad
 
 
 # pylint: disable=too-many-ancestors
@@ -393,16 +418,17 @@ class ParamPerTensorQuantizer(StaticGridPerTensorQuantizer):
 
     # pylint: disable=too-many-arguments
     def __init__(self, layer: tf.keras.layers.Layer, name: str, quant_scheme: QuantScheme, round_mode: str,
-                 bitwidth: int, is_symmetric: bool, use_strict_symmetric: bool, use_unsigned_symmetric: bool,
-                 enabled: bool):
+                 bitwidth: int, data_type: QuantizationDataType, is_symmetric: bool, use_strict_symmetric: bool,
+                 use_unsigned_symmetric: bool, enabled: bool):
         keras_common_utils.log_param_quantizer_wrapper_details(layer)
         if enabled:
             op_mode = libpymo.TensorQuantizerOpMode.oneShotQuantizeDequantize
         else:
             op_mode = libpymo.TensorQuantizerOpMode.passThrough
 
-        super(ParamPerTensorQuantizer, self).__init__(layer, name, op_mode, quant_scheme, round_mode, bitwidth,
-                                                      is_symmetric, use_strict_symmetric, use_unsigned_symmetric)
+        super(ParamPerTensorQuantizer, self).__init__(layer, name, op_mode, quant_scheme, round_mode,
+                                                      bitwidth, data_type, is_symmetric,
+                                                      use_strict_symmetric, use_unsigned_symmetric)
 
     def enable(self):
         """ Enable the parameter tensor quantizer """
@@ -430,16 +456,17 @@ class ActivationTensorQuantizer(StaticGridPerTensorQuantizer):
 
     # pylint: disable=too-many-arguments
     def __init__(self, layer: tf.keras.layers.Layer, name: str, quant_scheme: QuantScheme, round_mode: str,
-                 bitwidth: int, is_symmetric: bool, use_strict_symmetric: bool, use_unsigned_symmetric: bool,
-                 enabled: bool):
+                 bitwidth: int, data_type: QuantizationDataType, is_symmetric: bool, use_strict_symmetric: bool,
+                 use_unsigned_symmetric: bool, enabled: bool):
 
         if enabled:
             op_mode = libpymo.TensorQuantizerOpMode.updateStats
         else:
             op_mode = libpymo.TensorQuantizerOpMode.passThrough
 
-        super(ActivationTensorQuantizer, self).__init__(layer, name, op_mode, quant_scheme, round_mode, bitwidth,
-                                                        is_symmetric, use_strict_symmetric, use_unsigned_symmetric)
+        super(ActivationTensorQuantizer, self).__init__(layer, name, op_mode, quant_scheme, round_mode,
+                                                        bitwidth, data_type, is_symmetric,
+                                                        use_strict_symmetric, use_unsigned_symmetric)
 
     def enable(self):
         """ Enable the activation tensor quantizer """
@@ -467,11 +494,12 @@ class StaticGridPerChannelQuantizer(TensorQuantizer):
     # pylint: disable=too-many-arguments
     # pylint: disable=too-many-locals
     def __init__(self, layer: tf.keras.layers.Layer, name: str, op_mode: libpymo.TensorQuantizerOpMode,
-                 quant_scheme: QuantScheme, round_mode: str, bitwidth: int, is_symmetric: bool,
-                 use_strict_symmetric: bool, use_unsigned_symmetric: bool,
+                 quant_scheme: QuantScheme, round_mode: str, bitwidth: int, data_type: QuantizationDataType,
+                 is_symmetric: bool, use_strict_symmetric: bool, use_unsigned_symmetric: bool,
                  axis_handling: AxisHandling, num_output_channels: int):
 
-        super(StaticGridPerChannelQuantizer, self).__init__(layer, name, op_mode, quant_scheme, bitwidth, is_symmetric)
+        super(StaticGridPerChannelQuantizer, self).__init__(layer, name, op_mode, quant_scheme,
+                                                            bitwidth, data_type, is_symmetric)
 
         self.axis_handling = axis_handling.value
         self._encoding_max = self.add_weight(name + '.encoding_max', dtype=tf.float64, trainable=True,
@@ -646,7 +674,7 @@ class StaticGridPerChannelQuantizer(TensorQuantizer):
                                              encoding_max=self._encoding_max,
                                              bit_width=self._bitwidth,
                                              use_symmetric_encoding=self._is_symmetric,
-                                             is_int_data_type=True,
+                                             is_int_data_type=self._is_int_data_type,
                                              axis_handling=self.axis_handling,
                                              is_training=bool(tf.keras.backend.learning_phase()))
 
@@ -657,8 +685,8 @@ class ParamPerChannelQuantizer(StaticGridPerChannelQuantizer):
 
     # pylint: disable=too-many-arguments
     def __init__(self, layer: tf.keras.layers.Layer, name: str, quant_scheme: QuantScheme, round_mode: str,
-                 bitwidth: int, is_symmetric: bool, use_strict_symmetric: bool, use_unsigned_symmetric: bool,
-                 axis_handling: AxisHandling, num_output_channels: int, enabled: bool):
+                 bitwidth: int, data_type: QuantizationDataType, is_symmetric: bool, use_strict_symmetric: bool,
+                 use_unsigned_symmetric: bool, axis_handling: AxisHandling, num_output_channels: int, enabled: bool):
         keras_common_utils.log_param_quantizer_wrapper_details(layer, axis_handling.value, num_output_channels)
         if enabled:
             op_mode = libpymo.TensorQuantizerOpMode.oneShotQuantizeDequantize
@@ -666,8 +694,8 @@ class ParamPerChannelQuantizer(StaticGridPerChannelQuantizer):
             op_mode = libpymo.TensorQuantizerOpMode.passThrough
 
         super(ParamPerChannelQuantizer, self).__init__(layer, name, op_mode, quant_scheme, round_mode, bitwidth,
-                                                       is_symmetric, use_strict_symmetric, use_unsigned_symmetric,
-                                                       axis_handling, num_output_channels)
+                                                       data_type, is_symmetric, use_strict_symmetric,
+                                                       use_unsigned_symmetric, axis_handling, num_output_channels)
 
     def enable(self):
         """

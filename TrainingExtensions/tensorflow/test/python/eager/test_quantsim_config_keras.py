@@ -38,7 +38,7 @@ import os
 import pytest
 from tensorflow.keras.layers import InputLayer
 
-from aimet_common.defs import QuantScheme
+from aimet_common.defs import QuantScheme, QuantizationDataType
 from aimet_tensorflow.keras.connectedgraph import ConnectedGraph
 from aimet_tensorflow.keras.quantsim_config.quantsim_config import QuantSimConfigurator, INPUT_QUANTIZERS, \
     OUTPUT_QUANTIZERS, PARAM_QUANTIZERS
@@ -57,7 +57,7 @@ class TestQuantSimConfig:
         model = concat_functional()
         connected_graph = ConnectedGraph(model)
         quant_sim_configurator = QuantSimConfigurator(connected_graph, QuantScheme.post_training_tf_enhanced,
-                                                      "nearest", 8, 8, "")
+                                                      "nearest", 8, 8)
 
         # layers excluding InputLayer
         layers = [x for x in model.layers if not isinstance(x, InputLayer)]
@@ -183,7 +183,7 @@ class TestQuantSimConfig:
         model = single_residual()
         connected_graph = ConnectedGraph(model)
         quant_sim_configurator = QuantSimConfigurator(connected_graph, QuantScheme.post_training_tf_enhanced,
-                                                      "nearest", 8, 8, "./data/quantsim_config.json")
+                                                      "nearest", 8, 8, QuantizationDataType.int, "./data/quantsim_config.json")
 
         layer_to_quantizers_dict = quant_sim_configurator._layer_to_quantizers_dict
         for op in connected_graph.ordered_ops:
@@ -228,7 +228,7 @@ class TestQuantSimConfig:
         model = single_residual()
         connected_graph = ConnectedGraph(model)
         quant_sim_configurator = QuantSimConfigurator(connected_graph, QuantScheme.post_training_tf_enhanced,
-                                                      "nearest", 8, 8, "./data/quantsim_config.json")
+                                                      "nearest", 8, 8, QuantizationDataType.int, "./data/quantsim_config.json")
 
         layer_to_quantizers_dict = quant_sim_configurator._layer_to_quantizers_dict
         for op in connected_graph.ordered_ops:
@@ -282,7 +282,7 @@ class TestQuantSimConfig:
         model = single_residual()
         connected_graph = ConnectedGraph(model)
         quant_sim_configurator = QuantSimConfigurator(connected_graph, QuantScheme.post_training_tf_enhanced,
-                                                      "nearest", 8, 8, "./data/quantsim_config.json")
+                                                      "nearest", 8, 8, QuantizationDataType.int, "./data/quantsim_config.json")
 
         layer_to_quantizers_dict = quant_sim_configurator._layer_to_quantizers_dict
         for op in connected_graph.ordered_ops:
@@ -339,7 +339,7 @@ class TestQuantSimConfig:
         model = single_residual()
         connected_graph = ConnectedGraph(model)
         quant_sim_configurator = QuantSimConfigurator(connected_graph, QuantScheme.post_training_tf_enhanced,
-                                                      "nearest", 8, 8, "./data/quantsim_config.json")
+                                                      "nearest", 8, 8, QuantizationDataType.int, "./data/quantsim_config.json")
 
         layer_to_quantizers_dict = quant_sim_configurator._layer_to_quantizers_dict
         for op in connected_graph.ordered_ops:
@@ -400,7 +400,7 @@ class TestQuantSimConfig:
 
         with pytest.raises(RuntimeError):
             _ = QuantSimConfigurator(connected_graph, QuantScheme.post_training_tf_enhanced, "nearest",
-                                     8, 8, "./data/quantsim_config.json")
+                                     8, 8, QuantizationDataType.int, "./data/quantsim_config.json")
 
         if os.path.exists("./data/quantsim_config.json"):
             os.remove("./data/quantsim_config.json")
@@ -429,7 +429,7 @@ class TestQuantSimConfig:
         connected_graph = ConnectedGraph(model)
 
         quant_sim_configurator = QuantSimConfigurator(connected_graph, QuantScheme.post_training_tf_enhanced,
-                                                      "nearest", 8, 8, "./data/quantsim_config.json")
+                                                      "nearest", 8, 8, QuantizationDataType.int, "./data/quantsim_config.json")
 
         layer_to_quantizers_dict = quant_sim_configurator._layer_to_quantizers_dict
         conv1 = model.layers[1]
@@ -492,7 +492,7 @@ class TestQuantSimConfig:
         connected_graph = ConnectedGraph(model)
 
         quant_sim_configurator = QuantSimConfigurator(connected_graph, QuantScheme.post_training_tf_enhanced,
-                                                      "nearest", 8, 8, "./data/quantsim_config.json")
+                                                      "nearest", 8, 8, QuantizationDataType.int, "./data/quantsim_config.json")
 
         layer_to_quantizers_dict = quant_sim_configurator._layer_to_quantizers_dict
         conv1, relu1, conv2, conv3 = model.layers[1], model.layers[3], model.layers[5], model.layers[8]
@@ -550,7 +550,7 @@ class TestQuantSimConfig:
         connected_graph = ConnectedGraph(model)
 
         quant_sim_configurator = QuantSimConfigurator(connected_graph, QuantScheme.post_training_tf_enhanced,
-                                                      "nearest", 8, 8, "./data/quantsim_config.json")
+                                                      "nearest", 8, 8, QuantizationDataType.int, "./data/quantsim_config.json")
 
         layer_to_quantizers_dict = quant_sim_configurator._layer_to_quantizers_dict
         fc = model.layers[-1]

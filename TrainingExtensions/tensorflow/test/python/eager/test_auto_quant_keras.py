@@ -45,7 +45,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 import tensorflow as tf
 
-from aimet_common.defs import QuantScheme
+from aimet_common.defs import QuantScheme, QuantizationDataType
 from aimet_tensorflow.keras.auto_quant import AutoQuant
 from aimet_tensorflow.keras.connectedgraph import ConnectedGraph
 from aimet_tensorflow.keras.quantsim import QuantizationSimModel
@@ -145,7 +145,7 @@ def patch_ptq_techniques(bn_folded_acc, cle_acc, adaround_acc):
             self.quant_scheme = quant_scheme
             self.per_channel_quantization_enabled = self._quantsim_configurator.per_channel_quantization_flag
             self.model = self._add_quantization_wrappers(quant_scheme, rounding_mode, default_output_bw,
-                                                         default_param_bw)
+                                                         default_param_bw, QuantizationDataType.int)
             self._disable_quantizers_in_folded_batchnorm()
 
         def compute_encodings(self, *_):
@@ -154,8 +154,10 @@ def patch_ptq_techniques(bn_folded_acc, cle_acc, adaround_acc):
         def set_and_freeze_param_encodings(self, _):
             pass
 
-        def _add_quantization_wrappers(self, quant_scheme, rounding_mode, default_output_bw, default_param_bw):
-            model = super()._add_quantization_wrappers(quant_scheme, rounding_mode, default_output_bw, default_param_bw)
+        def _add_quantization_wrappers(self, quant_scheme, rounding_mode, default_output_bw,
+                                       default_param_bw, default_data_type):
+            model = super()._add_quantization_wrappers(quant_scheme, rounding_mode, default_output_bw,
+                                                       default_param_bw, default_data_type)
 
             for key in ["applied_bn_folding", "applied_cle", "applied_adaround"]:
                 if hasattr(self._model_without_wrappers, key):

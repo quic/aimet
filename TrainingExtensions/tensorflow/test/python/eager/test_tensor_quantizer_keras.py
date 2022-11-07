@@ -37,15 +37,16 @@
 import tensorflow as tf
 import aimet_common.libpymo as libpymo
 from aimet_tensorflow.keras.quant_sim.tensor_quantizer import ActivationTensorQuantizer, ParamPerTensorQuantizer
-from aimet_common.defs import QuantScheme
+from aimet_common.defs import QuantScheme, QuantizationDataType
 
 
 def test_set_encodings():
     tf.keras.backend.clear_session()
     quantizer = ActivationTensorQuantizer(tf.keras.layers.Layer(), name='quantizer',
                                           quant_scheme=QuantScheme.post_training_tf,
-                                          round_mode='nearest', bitwidth=4, is_symmetric=True,
-                                          use_unsigned_symmetric=False, use_strict_symmetric=True, enabled=True)
+                                          round_mode='nearest', bitwidth=4, data_type=QuantizationDataType.int,
+                                          is_symmetric=True, use_unsigned_symmetric=False,
+                                          use_strict_symmetric=True, enabled=True)
     assert not quantizer._is_encoding_valid
 
     # Create encoding and set
@@ -67,8 +68,8 @@ def test_tensor_quantizer_freeze_encodings():
     tf.keras.backend.clear_session()
     quantizer = ParamPerTensorQuantizer(tf.keras.layers.Layer(), name='quantizer',
                                         quant_scheme=QuantScheme.post_training_tf, round_mode='nearest',
-                                        bitwidth=4, is_symmetric=True, use_unsigned_symmetric=False,
-                                        use_strict_symmetric=True, enabled=True)
+                                        bitwidth=4, data_type=QuantizationDataType.int, is_symmetric=True,
+                                        use_unsigned_symmetric=False, use_strict_symmetric=True, enabled=True)
     # Create encoding and set
     encoding = libpymo.TfEncoding()
     encoding.min = 0.0
