@@ -108,7 +108,7 @@ class QuantizationSimModel:
         """
         quantsim_configurator = QuantSimConfigurator(self.model, self.connected_graph, config_file, self._default_activation_bw,
                                                      self._default_param_bw)
-        quantsim_configurator.configure_quantizers(self.qc_quantize_op_dict, self.activation_names, self.param_names)
+        quantsim_configurator.configure_quantizers(self.qc_quantize_op_dict, self.param_names, self.activation_names)
 
     def _get_param_names(self):
         """

@@ -51,7 +51,7 @@ class TestConnectedGraph:
         products = cg.get_all_products()
         assert len(products) == 10
         assert ['input_to_conv', 'conv_to_relu', 'relu_to_maxpool', 'maxpool_to_flatten', 'flatten_to_fc', 'fc_to_output',
-                'conv/kernel', 'conv/bias', 'fc/kernel', 'fc/bias'] == [product for product in products]
+                'conv_w', 'conv_b', 'fc_w', 'fc_b'] == [product for product in products]
 
     def test_single_residual_model(self):
         model = test_models.single_residual_model()
@@ -60,7 +60,7 @@ class TestConnectedGraph:
         products = conn_graph.get_all_products()
         assert len(products) == 31
         assert {'Conv_0_to_Relu_1', 'Relu_1_to_MaxPool_2'}.issubset({product for product in products})
-        assert {'Gemm_21_to_output','Conv_0/kernel', 'Conv_0/bias', 'Conv_6/kernel'}.issubset({product for product in products})
+        assert {'Gemm_21_to_output','45', '46', 'conv4.weight'}.issubset({product for product in products})
         input_ops = get_all_input_ops(conn_graph)
         assert len(input_ops) == 1
         assert conn_graph._branch_count == 2
@@ -74,7 +74,7 @@ class TestConnectedGraph:
         assert len(products) == 27
         assert {'Conv_0_to_MaxPool_1', 'Conv_3_to_MaxPool_4', 'Conv_7_to_MaxPool_8'}.issubset(
             {product for product in products})
-        assert {'Conv_0/kernel', 'Conv_0/bias', 'Conv_3/kernel'}.issubset({product for product in products})
+        assert {'conv1_a.weight', 'conv1_a.bias', 'conv1_b.weight'}.issubset({product for product in products})
         input_ops = get_all_input_ops(conn_graph)
         assert len(input_ops) == 2
 
@@ -85,8 +85,12 @@ class TestConnectedGraph:
 
         products = conn_graph.get_all_products()
         assert len(products) == 18
-        assert {'BatchNormalization_1/beta', 'BatchNormalization_1/gamma', 'BatchNormalization_1/moving_mean',
-         'BatchNormalization_1/moving_variance', 'BatchNormalization_1_to_Relu_2'}.issubset({product for product in products})
+        assert {'bn1.running_mean',
+                'bn1.running_var',
+                'bn1.weight',
+                'bn2.bias',
+                'bn2.running_mean',
+                'bn2.running_var'}.issubset({product for product in products})
 
     def test_concat_model(self):
         model = test_models.concat_model()
