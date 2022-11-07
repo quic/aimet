@@ -46,7 +46,7 @@ the tensors that are either input to the model (input, constant or parameter) or
 result of an operation. Furthermore the graph representation is bi-directional."""
 
 
-from typing import List
+from typing import List, Union
 from onnx import onnx_pb
 from onnxruntime.quantization.onnx_quantizer import ONNXModel
 
@@ -365,45 +365,45 @@ class ConnectedGraph(AimetCommonConnectedGraph):
         """ Create products for parameters of select modules """
 
         def create_and_connect_product(param_name: str, product_shape: List, my_op: Op,
-                                       param_tensor: onnx_pb.TensorProto):
+                                       param_tensor: onnx_pb.TensorProto, product_type: Union[str, None]):
             """ Create product with given name, shape, and corresponding tensor.  Connect product to my_op. """
 
-            product = Product(my_op.name + '/' + param_name, product_shape)
+            product = Product(param_name, product_shape)
             product.is_parm = True
             product.add_consumer(my_op)
             product.tensor_dict[my_op] = param_tensor
             my_op.add_input(product)
             self._products[product.name] = product
-            my_op.add_param(param_name, product)
+            my_op.add_param(param_name, product, product_type)
 
         def create_conv2d_dense_type_params(my_op: Op):
             """ Create products for conv2d, dense, depthwise conv2d, and similar """
             op = my_op.get_module()
 
             weight_tensor = ParamUtils.get_param(self.model, op, WEIGHT_INDEX)
-            create_and_connect_product('kernel', weight_tensor.dims, my_op, weight_tensor)
+            create_and_connect_product(weight_tensor.name, weight_tensor.dims, my_op, weight_tensor, 'weight')
 
             bias_tensor = ParamUtils.get_param(self.model, op, BIAS_INDEX)
             if bias_tensor:
-                create_and_connect_product('bias', bias_tensor.dims, my_op, bias_tensor)
+                create_and_connect_product(bias_tensor.name, bias_tensor.dims, my_op, bias_tensor, 'bias')
 
         def create_batchnorm_params(my_op: Op):
             """ Create products for fusedbatchnorm """
             op = my_op.get_module()
 
             gamma_tensor = ParamUtils.get_param(self.model, op, WEIGHT_INDEX)
-            create_and_connect_product('gamma', gamma_tensor.dims, my_op, gamma_tensor)
+            create_and_connect_product(gamma_tensor.name, gamma_tensor.dims, my_op, gamma_tensor, 'weight')
 
             beta_tensor = ParamUtils.get_param(self.model, op, BIAS_INDEX)
-            create_and_connect_product('beta', beta_tensor.dims, my_op, beta_tensor)
+            create_and_connect_product(beta_tensor.name, beta_tensor.dims, my_op, beta_tensor, 'bias')
 
             moving_mean_tensor = ParamUtils.get_param(self.model, op, RUNNING_MEAN_INDEX)
-            create_and_connect_product('moving_mean', moving_mean_tensor.dims, my_op,
-                                       moving_mean_tensor)
+            create_and_connect_product(moving_mean_tensor.name, moving_mean_tensor.dims, my_op,
+                                       moving_mean_tensor, None)
 
             moving_variance_tensor = ParamUtils.get_param(self.model, op, RUNNING_VAR_INDEX)
-            create_and_connect_product('moving_variance', moving_variance_tensor.dims, my_op,
-                                       moving_variance_tensor)
+            create_and_connect_product(moving_variance_tensor.name, moving_variance_tensor.dims, my_op,
+                                       moving_variance_tensor, None)
 
         def handle_default(my_op: Op):
             """ Handler for other modules """

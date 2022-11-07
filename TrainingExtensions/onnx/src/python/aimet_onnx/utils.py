@@ -148,3 +148,16 @@ class ParamUtils:
         else:
             assert "Node type not in allowed op types with param list"
         return None
+
+
+def get_product_name_from_quantized_name(quantized_name: str):
+    """
+    Gets product's name from quantized name
+    :param quantized_name: Quantized name
+    """
+    if '_updated' in quantized_name:
+        return quantized_name[:quantized_name.index('_updated')]
+    if '_qdq' in quantized_name:
+        return quantized_name[:quantized_name.index('_qdq')]
+    # If there is no quantizer added then return None
+    return None
