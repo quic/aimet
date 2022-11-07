@@ -50,8 +50,7 @@ if (ENABLE_CUDA)
              MoDlCompression
 
             CUDA::cublas
-             ${LAPACKE_LIBRARY}
-             ${OPENCV_LIBRARY}
+             ${OPENCV_LINK_LIBRARIES}
              z
           )
 
@@ -63,8 +62,7 @@ else (ENABLE_CUDA)
             MoDlEqualization
             MoDlCompression
 
-            ${LAPACKE_LIBRARY}
-            ${OPENCV_LIBRARY}
+            ${OPENCV_LINK_LIBRARIES}
             z
             )
 

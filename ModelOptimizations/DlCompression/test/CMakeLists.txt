@@ -43,18 +43,21 @@ target_compile_options(MoDlCompressionTest
          -DUSE_OPENCV
       )
 
+target_include_directories(MoDlCompressionTest
+      PRIVATE ${OPENCV_INCLUDE_DIRS}
+      )
+
 target_link_libraries(MoDlCompressionTest
-      ${OPENCV_LIBRARY}
       Threads::Threads
       MoDlCompression
+      ${OPENCV_LINK_LIBRARIES}
       stdc++
-      ${LAPACKE_LIBRARY}
       z
       dl
       gtest_main
       )
 
 
-add_test(MoDlCompressionTest
-      MoDlCompressionTest --gtest_output=xml:cpp_test_output.xml
+add_test(NAME MoDlCompressionTest
+      COMMAND $<TARGET_FILE:MoDlCompressionTest> --gtest_output=xml:cpp_test_output.xml
       )

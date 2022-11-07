@@ -59,12 +59,13 @@ add_library(MoDlEqualization STATIC
       test/python/test_cross_layer_scaling.py )
 
 target_include_directories(MoDlEqualization
+      PRIVATE ${OPENCV_INCLUDE_DIRS}
       PUBLIC
       ${CMAKE_CURRENT_SOURCE_DIR}/include
       )
 
 target_link_libraries(MoDlEqualization
-      PUBLIC PYBIND11
+      PUBLIC PYBIND11 ${OPENCV_LINK_LIBRARIES}
       )
 
 target_compile_options(MoDlEqualization
