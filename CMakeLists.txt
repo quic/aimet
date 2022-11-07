@@ -98,10 +98,13 @@ endif(ENABLE_CUDA)
 find_package(Python3 COMPONENTS Interpreter Development)
 message("Found python: ${Python3_FOUND}, at ${Python3_LIBRARIES}")
 
-set(LAPACKE_LIBRARY "/usr/lib/x86_64-linux-gnu/liblapacke.so.3.7.1")
+find_package(PkgConfig)
+pkg_search_module(LAPACKE REQUIRED lapacke)
+set(OLD_FIND_LIBRARY_SUFFIXES "${CMAKE_FIND_LIBRARY_SUFFIXES}")
+set(CMAKE_FIND_LIBRARY_SUFFIXES "${CMAKE_STATIC_LIBRARY_SUFFIX}")
+pkg_search_module(OPENCV opencv) # in case opencv will not be found, it would be built form source
+set(CMAKE_FIND_LIBRARY_SUFFIXES "${OLD_FIND_LIBRARY_SUFFIXES}")
 
-find_package(OpenCV REQUIRED)
-set(OPENCV_LIBRARY /usr/local/lib/libopencv_core.a)
 
 # ----------------------------------
 # Conditional build for PyTorch
@@ -253,13 +256,13 @@ else()
   message(STATUS "Repo Remote URL is blank. Skipping packageaimet target")
 endif()
 
-enable_testing()
+add_subdirectory(ThirdParty)
 
+enable_testing()
 add_subdirectory(ModelOptimizations)
 add_subdirectory(TrainingExtensions)
 add_subdirectory(Examples)
 add_subdirectory(NightlyTests)
-add_subdirectory(ThirdParty)
 add_subdirectory(Docs)
 if(IS_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/Benchmarks")
   add_subdirectory(Benchmarks)

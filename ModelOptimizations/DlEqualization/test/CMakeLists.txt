@@ -48,21 +48,24 @@ target_compile_options(MoDlEqualizationTest
             -DUSE_OPENCV
         )
 
+target_include_directories(MoDlEqualizationTest
+        PRIVATE ${OPENCV_INCLUDE_DIRS}
+        )
+
 target_link_libraries(MoDlEqualizationTest
         MoDlEqualization
         stdc++
-        ${LAPACKE_LIBRARY}
-        ${OPENCV_LIBRARY}
+        ${OPENCV_LINK_LIBRARIES}
         z
         dl
         gtest_main
         )
 
-add_test(MoDlEqualizationTest
-        MoDlEqualizationTest --gtest_output=xml:cpp_test_output.xml)
+add_test(NAME MoDlEqualizationTest
+         COMMAND $<TARGET_FILE:MoDlEqualizationTest> --gtest_output=xml:cpp_test_output.xml)
 
-add_test(MoDlEqualizationPythonTest
-      ${Python3_EXECUTABLE} -m pytest ${CMAKE_CURRENT_SOURCE_DIR} --junitxml=${CMAKE_CURRENT_BINARY_DIR}/py_test_output.xml
+add_test(NAME MoDlEqualizationPythonTest
+      COMMAND ${Python3_EXECUTABLE} -m pytest ${CMAKE_CURRENT_SOURCE_DIR} --junitxml=${CMAKE_CURRENT_BINARY_DIR}/py_test_output.xml
       )
 
 set_property(TEST MoDlEqualizationPythonTest

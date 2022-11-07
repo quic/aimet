@@ -36,10 +36,12 @@
 #
 #=============================================================================
 
+set(FETCHCONTENT_UPDATES_DISCONNECTED ON)
+include(FetchContent)
+
 if (EXISTS googletest/googletest-release-1.8.0)
     add_subdirectory(googletest/googletest-release-1.8.0 EXCLUDE_FROM_ALL)
 else ()
-    include(FetchContent)
     FetchContent_Declare(
         googletest
         GIT_REPOSITORY https://github.com/google/googletest.git
@@ -51,3 +53,39 @@ else ()
         add_subdirectory(${googletest_SOURCE_DIR} ${googletest_BINARY_DIR} EXCLUDE_FROM_ALL)
     endif ()
 endif ()
+
+if (NOT OPENCV_FOUND)
+  set(BUILD_LIST        "core" CACHE INTERNAL "[OpenCV] ")
+  set(WITH_LAPACK       ON  CACHE INTERNAL "[OpenCV] ")
+  set(BUILD_SHARED_LIBS OFF CACHE INTERNAL "[OpenCV] ")
+  set(BUILD_EXAMPLES    OFF CACHE INTERNAL "[OpenCV] ")
+  set(BUILD_ITT         OFF CACHE INTERNAL "[OpenCV] ")
+  set(BUILD_JAVA        OFF CACHE INTERNAL "[OpenCV] ")
+  set(BUILD_opencv_apps OFF CACHE INTERNAL "[OpenCV] ")
+  set(BUILD_opencv_python2  OFF CACHE INTERNAL "[OpenCV] ")
+  set(BUILD_opencv_python3  OFF CACHE INTERNAL "[OpenCV] ")
+  set(BUILD_PERF_TESTS  OFF CACHE INTERNAL "[OpenCV] ")
+  set(BUILD_TESTS       OFF CACHE INTERNAL "[OpenCV] ")
+  set(WITH_CUDA         OFF CACHE INTERNAL "[OpenCV] ")
+  set(WITH_FFMPEG       OFF CACHE INTERNAL "[OpenCV] ")
+  set(WITH_GTK          OFF CACHE INTERNAL "[OpenCV] ")
+  set(WITH_IPP          OFF CACHE INTERNAL "[OpenCV] ")
+  set(WITH_JPEG         OFF CACHE INTERNAL "[OpenCV] ")
+  set(WITH_OPENEXR      OFF CACHE INTERNAL "[OpenCV] ")
+  set(WITH_OPENJPEG     OFF CACHE INTERNAL "[OpenCV] ")
+  set(WITH_PNG          OFF CACHE INTERNAL "[OpenCV] ")
+  set(WITH_TIFF         OFF CACHE INTERNAL "[OpenCV] ")
+  set(WITH_V4L          OFF CACHE INTERNAL "[OpenCV] ")
+  set(WITH_WEBP         OFF CACHE INTERNAL "[OpenCV] ")
+
+  FetchContent_Declare(
+    opencv
+    # GIT_REPOSITORY https://github.com/opencv/opencv.git
+    GIT_REPOSITORY GIT_REPOSITORY file://${CMAKE_CURRENT_SOURCE_DIR}/opencv
+    GIT_TAG        4.6.0
+  )
+  FetchContent_MakeAvailable(opencv)
+  set(OPENCV_LINK_LIBRARIES opencv_core PARENT_SCOPE)
+  get_target_property(OPENCV_INCLUDE_DIRS opencv_core INCLUDE_DIRECTORIES)
+  set(OPENCV_INCLUDE_DIRS ${OPENCV_INCLUDE_DIRS} PARENT_SCOPE)
+endif()
