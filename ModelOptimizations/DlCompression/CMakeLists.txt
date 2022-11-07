@@ -42,11 +42,12 @@ add_library(MoDlCompression STATIC
       )
 
 target_include_directories(MoDlCompression
+      PRIVATE ${LAPACKE_INCLUDE_DIRS} ${OPENCV_INCLUDE_DIRS}
       PUBLIC
          ${CMAKE_CURRENT_SOURCE_DIR}/include)
 
 target_link_libraries(MoDlCompression
-      PUBLIC PYBIND11
+      PUBLIC PYBIND11 ${LAPACKE_LINK_LIBRARIES} ${OPENCV_LINK_LIBRARIES}
       )
 
 target_compile_options(MoDlCompression
