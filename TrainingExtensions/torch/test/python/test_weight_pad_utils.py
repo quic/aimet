@@ -139,9 +139,12 @@ class TestWeightPadUtils:
         for layer_name, layer in sim.quant_wrappers():
             param_quant_dict = layer.param_quantizers
             if 'weight' in param_quant_dict:
+                quantizer = param_quant_dict['weight']
+                if not quantizer.enabled:
+                    continue
                 layer_weights = layer._module_to_wrap.weight
-                quant_tensor = param_quant_dict['weight'].quantize(layer_weights,
-                                                                   MAP_ROUND_MODE_TO_PYMO['nearest'])
+                quant_tensor = quantizer.quantize(layer_weights,
+                                                  MAP_ROUND_MODE_TO_PYMO['nearest'])
                 numpy_arr = quant_tensor.detach().numpy()
                 for val in numpy_arr.flatten():
                     assert val % 16 == 0
@@ -176,6 +179,10 @@ class TestWeightPadUtils:
             if "weight" in node.name:
                 weights = torch.Tensor(numpy_helper.to_array(node))
                 quantizer = quant_dict[node.name]
+
+                if not quantizer.enabled:
+                    continue
+
                 quant_weights = quantizer.quantize(weights, round_mode=MAP_ROUND_MODE_TO_PYMO['nearest'])
 
                 numpy_arr = quant_weights.detach().numpy()
