@@ -328,6 +328,10 @@ def _get_weight_tensor_transpose_reshape(conv_linear: LAYER_TYPE) -> libpymo.Ten
         weight = np.transpose(weight, (1, 0))
         # [Noc, Nic, kh, kw]
         shape = np.array([shape[3], shape[2], shape[0], shape[1]])
+    elif isinstance(conv_linear, tf.keras.layers.Conv2DTranspose):
+        weight = np.transpose(weight, (2, 3, 0, 1))
+        # [Noc, Nic, kh, kw]
+        shape = np.array([shape[2], shape[3], shape[0], shape[1]])
     elif isinstance(conv_linear, tf.keras.layers.Conv2D):
         weight = np.transpose(weight, (3, 2, 0, 1))
         # [Noc, Nic, kh, kw]
@@ -522,6 +526,10 @@ def fold_given_batch_norms(model: tf.keras.Model, layer_pairs: List[PAIR_TYPE]):
             numpy_weight_reshaped = np.reshape(
                 weight_tensor.data,
                 [weight_tensor.shape[0], weight_tensor.shape[1]]).transpose(1, 0)
+        elif isinstance(conv_linear, tf.keras.layers.Conv2DTranspose):
+            # we sent in format [Noc, Nic, kh, kw]
+            numpy_weight_reshaped = np.reshape(weight_tensor.data, weight_tensor.shape) \
+                .transpose((2, 3, 0, 1))
         else:
             # conv2D case
             # we sent in format [Noc, Nic, kh, kw]
