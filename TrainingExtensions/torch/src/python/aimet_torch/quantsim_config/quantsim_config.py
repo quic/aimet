@@ -449,6 +449,37 @@ class QuantSimConfigurator(AimetCommonQuantSimConfigurator):
         Set supergroup specific configurations (fourth level of specificity in configuration file)
         :param supergroups_configs: Configurations for supergroups
         """
+        def find_scale_foldable_bns(cg):
+            """
+            Find batchnorms that can be folded to scale
+            """
+            conv_bn_pairs = []
+
+            def handler(_, op_list):
+                from torch.nn.modules import ConvTranspose2d
+                conv, bn = op_list
+                conv_module = conv.get_module()
+                # Transposed depthwise convolutions are not supported for batchnorm folding
+                if isinstance(conv_module, ConvTranspose2d) and conv_module.groups != 1:
+                    return
+                conv_bn_pairs.append((conv, bn))
+
+            patterns_with_callbacks = []
+            conv_types = ['Conv1d', 'Conv', 'ConvTranspose']
+            linear_types = ['Gemm']
+
+            for op_type in conv_types + linear_types:
+                patterns_with_callbacks.append(PatternType(pattern=[op_type, 'BatchNormalization'],
+                                                           action=handler))
+
+            # create graph searcher instance with connected graph and patterns to search
+            graph_searcher = GraphSearcher(cg, patterns_with_callbacks)
+            graph_searcher.find_all_patterns_in_graph_apply_actions()
+            return conv_bn_pairs
+
+        conv_bn_pairs = find_scale_foldable_bns(self._conn_graph)
+        foldable_bns = [bn for _, bn in conv_bn_pairs]
+
         patterns_with_callbacks = []
         for supergroup_config in supergroups_configs:
             callback = SupergroupConfigCallback(self._module_to_quantsim_wrapper_dict)
@@ -457,7 +488,37 @@ class QuantSimConfigurator(AimetCommonQuantSimConfigurator):
 
         if patterns_with_callbacks:
             graph_searcher = GraphSearcher(self._conn_graph, patterns_with_callbacks)
-            graph_searcher.find_all_patterns_in_graph_apply_actions()
+            graph_searcher.find_all_patterns_in_graph_apply_actions(ignore=foldable_bns)
+
+        def fuse_config(conv: Op, bn: Op):
+            """
+            Fuse configs of conv and bn
+
+            If conv output quantizer is enabled, disable it and enable output quantizer of BN instead
+            so that we can fold batch norm to conv.
+            """
+            if conv.get_module() not in self._module_to_quantsim_wrapper_dict:
+                return
+
+            if bn.get_module() not in self._module_to_quantsim_wrapper_dict:
+                return
+
+            conv_wrapper = self._module_to_quantsim_wrapper_dict[conv.get_module()]
+            bn_wrapper = self._module_to_quantsim_wrapper_dict[bn.get_module()]
+
+            for quantizer in bn_wrapper.input_quantizers:
+                quantizer.enabled = False
+
+            for quantizer in bn_wrapper.param_quantizers.values():
+                quantizer.enabled = False
+
+            for conv_quantizer, bn_quantizer in zip(conv_wrapper.output_quantizers,
+                                                    bn_wrapper.output_quantizers):
+                bn_quantizer.enabled = conv_quantizer.enabled
+                conv_quantizer.enabled = False
+
+        for conv, bn in conv_bn_pairs:
+            fuse_config(conv, bn)
 
     def _set_model_input_configs(self, model_input_configs: ConfigType):
         """

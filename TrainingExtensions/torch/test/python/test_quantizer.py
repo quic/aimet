@@ -762,7 +762,7 @@ class TestQuantizationSimStaticGrad:
         assert isinstance(encoding_data["activation_encodings"]["130"], list)
 
         param_keys = list(encoding_data["param_encodings"].keys())
-        assert param_keys[1] == "conv1.weight"
+        assert param_keys[0] == "conv1.weight"
         assert isinstance(encoding_data["param_encodings"]["conv1.weight"], list)
 
     def test_export_to_torch_script(self):
@@ -793,7 +793,7 @@ class TestQuantizationSimStaticGrad:
         assert isinstance(encoding_data["activation_encodings"]["103"], list)
 
         param_keys = list(encoding_data["param_encodings"].keys())
-        assert param_keys[1] == "conv1.weight"
+        assert param_keys[0] == "conv1.weight"
         assert isinstance(encoding_data["param_encodings"]["conv1.weight"], list)
 
         with open('./data/resnet50.encodings.yaml') as yaml_file:
@@ -804,7 +804,7 @@ class TestQuantizationSimStaticGrad:
         assert isinstance(encoding_data["activation_encodings"]["103"], list)
 
         param_keys = list(encoding_data["param_encodings"].keys())
-        assert param_keys[1] == "conv1.weight"
+        assert param_keys[0] == "conv1.weight"
         assert isinstance(encoding_data["param_encodings"]["conv1.weight"], list)
 
     # -------------------------------------------

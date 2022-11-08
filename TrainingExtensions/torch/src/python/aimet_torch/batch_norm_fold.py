@@ -158,7 +158,7 @@ def _fold_to_scale(conv_wrapper: QcQuantizeWrapper, bn_wrapper: QcQuantizeWrappe
     :param conv_wrapper: QcQuantizeWrapper that wraps conv or linear layer.
     :param bn_wrapper: QcQuantizeWrapper that wraps bn.
     """
-    # pylint: disable=protected-access
+    # pylint: disable=protected-access, too-many-locals, too-many-branches, bad-whitespace, too-many-statements
     conv = conv_wrapper._module_to_wrap
     bn = bn_wrapper._module_to_wrap
 
@@ -198,6 +198,11 @@ def _fold_to_scale(conv_wrapper: QcQuantizeWrapper, bn_wrapper: QcQuantizeWrappe
         )
 
     # Add quantization noise to the BN params (bn weight & bn bias) before folding.
+    # NOTE: Quantization of foldable batchnorms is automatically disabled when
+    #       initializing quantsim. However, it is still safer to call _quantize_params here
+    #       as we can't guarantee this is always the case.
+    #       For example, the user can manually enable quantization of batchnorms, etc...
+    #       (FYI: _quantize_params takes effect only when the parameter quantizers are enabled)
     with bn_wrapper._quantize_params():
         _fold_to_weight(conv, bn, fold_backward=True)
 
@@ -219,6 +224,22 @@ def _fold_to_scale(conv_wrapper: QcQuantizeWrapper, bn_wrapper: QcQuantizeWrappe
             new_encodings.append(new_encoding)
 
         weight_quantizer.encoding = new_encodings
+
+    # Copy batchnorm's output quantizers to conv output quantizers
+    for conv_output_quantizer, bn_output_quantizer in\
+            zip(conv_wrapper.output_quantizers, bn_wrapper.output_quantizers):
+        conv_output_quantizer.enabled = bn_output_quantizer.enabled
+
+        if bn_output_quantizer.encoding is not None:
+            encoding = libpymo.TfEncoding()
+            encoding.delta  = bn_output_quantizer.encoding.delta
+            encoding.max    = bn_output_quantizer.encoding.max
+            encoding.min    = bn_output_quantizer.encoding.min
+            encoding.offset = bn_output_quantizer.encoding.offset
+            encoding.bw     = bn_output_quantizer.encoding.bw
+            conv_output_quantizer.encoding = encoding
+
+        bn_output_quantizer.enabled = False
 
     if "bias" not in conv_wrapper.param_quantizers:
         bias_quantizer = LearnedGridTensorQuantizer(weight_quantizer.bitwidth,
