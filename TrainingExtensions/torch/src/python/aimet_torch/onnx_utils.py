@@ -638,12 +638,15 @@ class OnnxSaver:
                 visited.add(id(node))
                 for attribute in node.attribute:
                     if getattr(attribute, 'g', None) is not None:
-                        for subnode in getattr(attribute, 'g').node:
+                        # traversing the list in reverse, see 'NOTE1'
+                        for subnode in reversed(getattr(attribute, 'g').node):
                             pending_nodes_list.appendleft((subnode, parent_module_name))
 
                 for tensor in node.output:
                     downstream_nodes = map_input_tensor_to_node.get(tensor, [])
-                    for dnode in downstream_nodes:
+                    # NOTE1: To preserve the order in which the trace was generated, traversing the list in reverse to
+                    # ensure DFS is executed left to right when popping from the pending nodes queue.
+                    for dnode in reversed(downstream_nodes):
 
                         # continue only if all nodes associated with the input tensor(s) have been visited.
                         skip = any(
