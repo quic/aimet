@@ -35,6 +35,7 @@
 # =============================================================================
 """ Unit tests for Keras tensor quantizer """
 import tensorflow as tf
+import numpy as np
 import aimet_common.libpymo as libpymo
 from aimet_tensorflow.keras.quant_sim.tensor_quantizer import ActivationTensorQuantizer, ParamPerTensorQuantizer
 from aimet_common.defs import QuantScheme
@@ -59,7 +60,7 @@ def test_set_encodings():
     assert quantizer._is_encoding_valid
     assert quant_encoding.min == 0.0
     assert quant_encoding.max == 30.0
-    assert quant_encoding.delta == 2.0
+    assert np.allclose(quant_encoding.delta, 2.142857142857143, rtol=0.01)
     assert quant_encoding.offset == 0
 
 

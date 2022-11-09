@@ -277,7 +277,9 @@ class StaticGridPerTensorQuantizer(TensorQuantizer):
             # pylint: disable = protected-access
             encodings.min = tf.keras.backend.get_value(self._encoding_min)
             encodings.max = tf.keras.backend.get_value(self._encoding_max)
-            encodings.delta, encodings.offset = calculate_delta_offset(encodings.min, encodings.max, self.bitwidth)
+            encodings.delta, encodings.offset = calculate_delta_offset(encodings.min, encodings.max,
+                                                                       self.bitwidth, self.is_symmetric,
+                                                                       self.use_strict_symmetric)
             encodings.bw = self.bitwidth
             return encodings
         return None
@@ -562,7 +564,8 @@ class StaticGridPerChannelQuantizer(TensorQuantizer):
                 encodings.min = tf.keras.backend.get_value(self._encoding_min[i])
                 encodings.max = tf.keras.backend.get_value(self._encoding_max[i])
                 encodings.delta, encodings.offset = calculate_delta_offset(encodings.min, encodings.max,
-                                                                           self.bitwidth)
+                                                                           self.bitwidth, self.is_symmetric,
+                                                                           self.use_strict_symmetric[i])
                 encodings.bw = self.bitwidth
                 all_encodings[i] = encodings
             else:

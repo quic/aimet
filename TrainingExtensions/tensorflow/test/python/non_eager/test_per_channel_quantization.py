@@ -682,7 +682,7 @@ class TestTrainingExtensionsQcQuantizeOpPerChannel(unittest.TestCase):
                     encodings.append(lst)
 
             encoding_numpy = compute_tf_encodings_given_numpy_data(weight_val, axis=3)
-            assert np.allclose(encoding_numpy, encodings, rtol=0.01)
+            assert np.allclose(encoding_numpy, encodings, rtol=0.1)
 
     def test_export_encodings(self):
         save_config_file_for_per_channel_quantization()
@@ -703,8 +703,9 @@ class TestTrainingExtensionsQcQuantizeOpPerChannel(unittest.TestCase):
             _encoding.min = random.uniform(0, 1)
             _encoding.max = random.uniform(1, 3)
             _encoding.bw = 8
-            _encoding.delta, _encoding.offset = calculate_delta_offset(_encoding.min, _encoding.max,
-                                                                       8)
+            _encoding.delta, _encoding.offset = calculate_delta_offset(_encoding.min, _encoding.max, bitwidth=8,
+                                                                       use_symmetric_encodings=False,
+                                                                       use_strict_symmetric=False)
             return _encoding
 
         # Set the encodings for activation quantizers
@@ -1430,7 +1431,9 @@ class TestTrainingExtensionsQcQuantizeOpPerChannel(unittest.TestCase):
             _encoding.min = random.uniform(0, 1)
             _encoding.max = random.uniform(1, 3)
             _encoding.bw = 8
-            _encoding.delta, _encoding.offset = calculate_delta_offset(_encoding.min, _encoding.max, 8)
+            _encoding.delta, _encoding.offset = calculate_delta_offset(_encoding.min, _encoding.max, bitwidth=8,
+                                                                       use_symmetric_encodings=False,
+                                                                       use_strict_symmetric=False)
             return _encoding
 
         # Set the encodings for activation quantizers
