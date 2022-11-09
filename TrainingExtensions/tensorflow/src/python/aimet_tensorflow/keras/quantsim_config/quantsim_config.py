@@ -513,7 +513,7 @@ class QuantSimConfigurator(AimetCommonQuantSimConfigurator):
                                                      quant_scheme, param_is_symmetric,
                                                      use_unsigned_symmetric, use_strict_symmetric,
                                                      enabled=param_config_dict[ConfigDictKeys.IS_QUANTIZED].get(
-                                                        SETTING, False))
+                                                         SETTING, False))
 
             # Initialize Param Quantizers
             self._layer_to_quantizers_dict[layer][PARAM_QUANTIZERS] = \
