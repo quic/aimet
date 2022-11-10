@@ -50,7 +50,8 @@ from torch.utils.data import Dataset, DataLoader
 
 from aimet_torch import utils
 from aimet_torch.auto_quant import AutoQuant
-from aimet_torch.quantsim import QuantizationSimModel
+from aimet_torch.adaround.adaround_weight import AdaroundParameters, Adaround
+from aimet_torch.quantsim import QuantizationSimModel, OnnxExportApiArgs
 
 
 class Model(torch.nn.Module):
@@ -357,6 +358,41 @@ class TestAutoQuant:
                 assert mocks.fold_all_batch_norms.call_count == 1
                 assert mocks.equalize_model.call_count == 1
                 assert mocks.apply_adaround.call_count == 1
+
+    def test_set_additional_params(self, cpu_model, dummy_input, unlabeled_data_loader):
+        allowed_accuracy_drop = 0
+        bn_folded_acc = 0
+        cle_acc = 0
+        adaround_acc = 0
+        with patch_ptq_techniques(bn_folded_acc, cle_acc, adaround_acc) as mocks:
+            export = QuantizationSimModel.export
+
+            def export_wrapper(*args, **kwargs):
+                assert kwargs["onnx_export_args"].opset_version == 10
+                assert kwargs["propagate_encodings"]
+                return export(*args, **kwargs)
+
+            try:
+                setattr(QuantizationSimModel, "export", export_wrapper)
+                auto_quant = AutoQuant(
+                    allowed_accuracy_drop=0,
+                    unlabeled_dataset_iterable=unlabeled_data_loader,
+                    eval_callback=mocks.eval_callback,
+                )
+                adaround_params = AdaroundParameters(unlabeled_data_loader, 1)
+                auto_quant.set_adaround_params(adaround_params)
+
+                auto_quant.set_export_params(OnnxExportApiArgs(10), True)
+
+                self._do_test_apply_auto_quant(
+                    auto_quant, cpu_model, dummy_input,
+                    allowed_accuracy_drop, bn_folded_acc, cle_acc, adaround_acc
+                )
+                adaround_args, _ = Adaround.apply_adaround.call_args
+                _, _, actual_adaround_params = adaround_args
+                assert adaround_params == actual_adaround_params
+            finally:
+                setattr(QuantizationSimModel, "export", export)
 
 
 @contextlib.contextmanager
