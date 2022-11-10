@@ -352,8 +352,6 @@ class QuantizeAcceptanceTests(unittest.TestCase):
         aimet_model_train_delta = aimet_model_train_mark - aimet_model_quantize_mark
         assert aimet_model_train_delta < (200 * (10 ** 6))
 
-        num_param_encodings = 41
-
         if apply_bn_reestimation:
             def forward_fn(model, data):
                 img, _ = data
@@ -364,15 +362,13 @@ class QuantizeAcceptanceTests(unittest.TestCase):
                                 num_batches=100,
                                 forward_fn=forward_fn)
 
-            num_param_encodings -= len([x for x in sim.model.modules() if isinstance(x, _BatchNorm)])
-            fold_all_batch_norms_to_scale(sim, dummy_input.shape)
+        fold_all_batch_norms_to_scale(sim, dummy_input.shape)
 
         sim.export('./data/', 'resnet18_per_channel_quant', dummy_input.cpu())
-
         with open("./data/resnet18_per_channel_quant.encodings", "r") as encodings_file:
             encodings = json.load(encodings_file)
 
-        assert len(encodings['param_encodings']) == num_param_encodings
+        assert len(encodings['param_encodings']) == 21
         assert encodings['param_encodings']['conv1.weight'][1]['bitwidth'] == 8
         assert encodings['param_encodings']['conv1.weight'][1]['is_symmetric'] == 'True'
 
