@@ -40,6 +40,7 @@
 
 """ Utilities to load and save onnx models """
 
+from dataclasses import dataclass
 from typing import Union, List, Tuple, Dict, Set, Optional
 import os
 import copy
@@ -154,21 +155,20 @@ else:
     }
 
 
+@dataclass(frozen=True)
 class OnnxExportApiArgs:
     """
-    configuration for torch onnx export api invocation
+    Configuration for torch onnx export api invocation
+    Refer torch documentation https://pytorch.org/docs/1.7.1/onnx.html?highlight=onnx%20export#torch.onnx.export
+
+    :param opset_version: onnx opset version to use to export the model
+    :param input_names:  names to assign to the input nodes of the onnx graph, in order
+    :param output_names: names to assign to the output nodes of the graph, in order
     """
 
-    def __init__(self, opset_version: int = None, input_names: List[str] = None, output_names: List[str] = None):
-        """
-        Refer torch documentation https://pytorch.org/docs/1.7.1/onnx.html?highlight=onnx%20export#torch.onnx.export
-        :param opset_version: onnx opset version to use to export the model
-        :param input_names:  names to assign to the input nodes of the onnx graph, in order
-        :param output_names: names to assign to the output nodes of the graph, in order
-        """
-        self.opset_version = opset_version
-        self.input_names = input_names
-        self.output_names = output_names
+    opset_version: Optional[int] = None
+    input_names: Optional[List[str]] = None
+    output_names: Optional[List[str]] = None
 
     @property
     def kwargs(self):
