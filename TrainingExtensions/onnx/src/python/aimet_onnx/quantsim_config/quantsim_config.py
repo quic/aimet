@@ -41,7 +41,7 @@ from typing import List, Dict
 
 from onnx import onnx_pb
 from aimet_common.defs import QuantizationDataType
-from aimet_common.quantsim_config.json_config_importer import ConfigDictKeys, ConfigType, OpType
+from aimet_common.quantsim_config.json_config_importer import ConfigDictKeys, ConfigType, OpType, ParamType, OpTypeType
 from aimet_common.quantsim_config.quantsim_config import QuantSimConfigurator as AimetCommonQuantSimConfigurator, \
     get_setting_type
 from aimet_common.utils import AimetLogger
@@ -169,17 +169,30 @@ class QuantSimConfigurator(AimetCommonQuantSimConfigurator):
         """
         raise NotImplementedError
 
-    def _set_param_configs(self, param_configs):
+    def _set_param_configs(self, param_configs: ParamType):
         """
         Set configurations for all params of specific types (second level of specificity in configuration file)
         :param param_configs: Dictionary containing configurations for parameters of certain types
         """
+        for op_name, op_to_quantizer in self._op_to_quantizers.items():
+            param_quantizers = op_to_quantizer.parameter_quantizers
+            for param_name, param_quantizer in param_quantizers:
+                quantsim_param_type = self._get_param_type(op_name, param_name)
+                if quantsim_param_type is not None and quantsim_param_type in param_configs:
+                    param_config = param_configs[quantsim_param_type]
+                    self._set_config_for_param(param_quantizer, param_config)
 
-    def _set_op_type_configs(self, op_configs):
+    def _set_op_type_configs(self, op_configs: OpTypeType):
         """
         Set configurations for all ops of specific types (third level of specificity in configuration file)
         :param op_configs: Dictionary containing configurations for ops of certain types
         """
+        modified_quantize_ops = {}
+        for op_name, op_to_quantizer in self._op_to_quantizers.items():
+            op = self._conn_graph.get_all_ops()[op_name]
+            if op.type in op_configs:
+                op_config = op_configs[op.type]
+                self._set_config_for_op(op_name, op_to_quantizer, op_config, modified_quantize_ops)
 
     def _set_supergroup_configs(self, supergroups_configs):
         """
