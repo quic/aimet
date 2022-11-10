@@ -45,30 +45,9 @@ from tqdm import tqdm
 import torch
 from torch.utils.data import DataLoader
 from torch.nn.modules.batchnorm import _BatchNorm
-
 from aimet_torch.utils import in_eval_mode, in_train_mode
-
-
-
-class _Handle:
-    """ Removable handle. """
-
-    def __init__(self, cleanup_fn):
-        self._cleanup_fn = cleanup_fn
-        self._removed = False
-
-    def remove(self):
-        """ Run clean up function """
-        if not self._removed:
-            self._cleanup_fn()
-            self._removed = True
-
-    def __enter__(self):
-        return self
-
-    def __exit__(self, *_):
-        self.remove()
-
+from aimet_common.utils import Handle
+from aimet_torch.utils import in_train_mode
 
 def _get_active_bn_modules(model: torch.nn.Module) -> Iterable[_BatchNorm]:
     for module in model.modules():
@@ -123,7 +102,7 @@ def _reset_bn_stats(module: _BatchNorm) -> _Handle:
 
     try:
         module.reset_running_stats()
-        return _Handle(cleanup)
+        return Handle(cleanup)
     except:
         cleanup()
         raise
@@ -143,7 +122,7 @@ def _reset_momentum(module: _BatchNorm) -> _Handle:
 
     try:
         module.momentum = 1.0
-        return _Handle(cleanup)
+        return Handle(cleanup)
     except:
         cleanup()
         raise
