@@ -81,7 +81,6 @@ class SupergroupConfigCallback(AimetCommonSupergroupConfigCallback):
     """ Class acting as a callback for when supergroups are found """
 
     def __init__(self, sess: tf.compat.v1.Session, op_to_quant_ops_dict: OpToQuantOpsDictType):
-        super().__init__()
         self._sess = sess
         self._op_to_quant_ops_dict = op_to_quant_ops_dict
 

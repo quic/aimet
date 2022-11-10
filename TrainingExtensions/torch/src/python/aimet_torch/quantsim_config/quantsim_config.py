@@ -71,7 +71,6 @@ class SupergroupConfigCallback(AimetCommonSupergroupConfigCallback):
     """ Class acting as a callback for when supergroups are found """
 
     def __init__(self, module_to_quantsim_wrapper_dict: Dict[torch.nn.Module, QcQuantizeWrapper]):
-        super().__init__()
         self._module_to_quantsim_wrapper_dict = module_to_quantsim_wrapper_dict
 
     def __call__(self, _, op_list: List[Op]):
