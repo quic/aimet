@@ -48,9 +48,9 @@ class TestQuantSimConfig:
     def test_qs_config_dummy_model(self):
         model = test_models.build_dummy_model()
         sim = QuantizationSimModel(model)
-        assert sim.qc_quantize_op_dict['conv_w'].enabled == False
+        assert sim.qc_quantize_op_dict['conv_w'].enabled == True
         assert sim.qc_quantize_op_dict['conv_b'].enabled == False
-        assert sim.qc_quantize_op_dict['fc_w'].enabled == False
+        assert sim.qc_quantize_op_dict['fc_w'].enabled == True
         assert sim.qc_quantize_op_dict['fc_b'].enabled == False
         assert sim.qc_quantize_op_dict['input'].enabled == False
         assert sim.qc_quantize_op_dict['3'].enabled == True
@@ -127,7 +127,7 @@ class TestQuantSimConfig:
 
         for name in ['conv_b', 'fc_b']:
             assert sim.qc_quantize_op_dict[name].enabled == False
-            assert sim.qc_quantize_op_dict[name].use_symmetric_encodings == False
+            assert sim.qc_quantize_op_dict[name].use_symmetric_encodings == True
 
     def test_op_level_config(self):
         model = test_models.build_dummy_model()
@@ -171,3 +171,35 @@ class TestQuantSimConfig:
         assert sim.qc_quantize_op_dict['conv_w'].use_symmetric_encodings == False
         assert sim.qc_quantize_op_dict['input'].enabled == True
         assert sim.qc_quantize_op_dict['input'].use_symmetric_encodings == False
+
+    def test_parse_config_file_symmetric_modes(self):
+        """ Test that model output quantization parameters are set correctly when using json config file """
+        model = test_models.build_dummy_model()
+
+        quantsim_config = {
+            "defaults":
+            {
+                "ops": {},
+                "params":
+                {
+                    "is_symmetric": "True"
+                },
+                "strict_symmetric": "True",
+                "unsigned_symmetric": "False"
+            },
+            "params": {},
+            "op_type": {},
+            "supergroups": [],
+            "model_input": {},
+            "model_output": {
+            }
+        }
+        if not os.path.exists('./data'):
+            os.makedirs('./data')
+        with open('./data/quantsim_config.json', 'w') as f:
+            json.dump(quantsim_config, f)
+        sim = QuantizationSimModel(model, config_file='./data/quantsim_config.json')
+
+        for _, quantizer in sim.qc_quantize_op_dict.items():
+            assert quantizer.use_strict_symmetric == True
+            assert quantizer.use_unsigned_symmetric == False

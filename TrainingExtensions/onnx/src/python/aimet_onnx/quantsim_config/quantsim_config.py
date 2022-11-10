@@ -219,6 +219,20 @@ class QuantSimConfigurator(AimetCommonQuantSimConfigurator):
         :param default_configs: Default configurations for quantizers
         """
         self._set_default_configs_for_ops(default_configs[ConfigDictKeys.OPS])
+        self._set_default_configs_for_params(default_configs[ConfigDictKeys.PARAMS])
+        if ConfigDictKeys.STRICT_SYMMETRIC in default_configs:
+            self._set_strict_symmetric(default_configs[ConfigDictKeys.STRICT_SYMMETRIC])
+        if ConfigDictKeys.UNSIGNED_SYMMETRIC in default_configs:
+            self._set_unsigned_symmetric(default_configs[ConfigDictKeys.UNSIGNED_SYMMETRIC])
+
+    def _set_default_configs_for_params(self, default_param_configs: ConfigType):
+        """
+        Set default configurations for all params in the model.
+        :param default_param_configs: Default configurations for params
+        """
+        for param_name in self._param_names:
+            param_quantizer = self._quant_ops_dict[param_name]
+            self._set_config_for_param(param_quantizer, default_param_configs)
 
     def _set_default_configs_for_ops(self, default_op_configs: ConfigType):
         """
@@ -329,12 +343,16 @@ class QuantSimConfigurator(AimetCommonQuantSimConfigurator):
         Set strict symmetric configuration for all quantizers in the model.
         :param use_strict_symmetric: True or False setting for using strict symmetric mode
         """
+        for _, quantizer in self._quant_ops_dict.items():
+            quantizer.use_strict_symmetric = use_strict_symmetric
 
     def _set_unsigned_symmetric(self, use_unsigned_symmetric: bool):
         """
         Set unsigned symmetric configuration for all quantizers in the model.
         :param use_unsigned_symmetric: True or False setting for using unsigned symmetric mode
         """
+        for _, quantizer in self._quant_ops_dict.items():
+            quantizer.use_unsigned_symmetric = use_unsigned_symmetric
 
     def _generate_and_apply_op_instance_specific_config(self):
         """
