@@ -54,6 +54,7 @@ class TestCommonQuantSim(unittest.TestCase):
 
         expected_delta = (max - min) / (2 ** bitwidth - 1)
         expected_offset = np.round(min / expected_delta)
-        delta, offset = calculate_delta_offset(min, max, bitwidth)
+        delta, offset = calculate_delta_offset(min, max, bitwidth,
+                                               use_strict_symmetric=False, use_symmetric_encodings=False)
         self.assertTrue(expected_delta == delta)
         self.assertTrue(expected_offset == offset)

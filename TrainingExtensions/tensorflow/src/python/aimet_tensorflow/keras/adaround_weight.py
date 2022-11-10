@@ -110,7 +110,6 @@ class Adaround:
             use_symmetric_encodings = TfAdaround.get_is_symmetric_flag_for_op_param(configs, model.layers[idx],
                                                                                     param_name='weight',
                                                                                     framework_to_onnx_type_dict=map_keras_types_to_onnx)
-            print(f"Adaround: Layer {model.layers[idx].name} is symmetric: {use_symmetric_encodings}")
             cls.adaround_layer(act_sampler, use_symmetric_encodings, strict_symmetric, unsigned_symmetric,
                                default_param_bw, default_quant_scheme, model, hard_rounded_model, soft_rounded_model,
                                idx, module_act_func_pair, opt_params, param_encodings, per_channel_enabled)
