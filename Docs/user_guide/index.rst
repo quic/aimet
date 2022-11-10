@@ -35,6 +35,11 @@ AIMET supports two sets of model optimization techniques:
 - Model Compression: AIMET supports multiple model compression techniques that allow the
   user to take a trained model and remove redundancies, resulting in a smaller model that runs faster on target.
 
+Release Information
+===================
+
+For information specific to this release, please see :ref:`Release Notes <ug-release-notes>` and :ref:`Known Issues <ug-known-issues>`.
+
 Installation Guide
 ==================
 
