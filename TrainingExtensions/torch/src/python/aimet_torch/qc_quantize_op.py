@@ -624,16 +624,18 @@ class StaticGridQuantWrapper(QcQuantizeWrapper):
                     inner_outputs.append(inner_quantization(inner_input, index))
                 return inner_outputs
 
+            if not isinstance(input_tensor, utils.allowed_output_types):
+                raise RuntimeError(
+                    "Expected all the quantized layers' inputs/outputs "
+                    f"to be one of {utils.allowed_output_types} or nested tuple/list of them, "
+                    f"but got {type(input_tensor)}"
+                )
+
             if isinstance(input_tensor, utils.dtypes_to_ignore_for_quantization) or \
                     input_tensor.dtype in utils.torch_dtypes_to_ignore_for_quantization or \
                     not tensor_quantizers[index].enabled:
                 # Do not quantize tensors of integer or bool data type or if the quantizer is disabled.
                 return input_tensor
-
-            if not isinstance(input_tensor, torch.Tensor):
-                error_msg = f'Expecting quantize activation input of type torch.Tensor but got {type(input_tensor)}'
-                _logger.error(error_msg)
-                raise AssertionError(error_msg)
 
             if self._mode is QcQuantizeOpMode.ANALYSIS:
                 if TF_ENHANCED_USE_DOWNSAMPLING and self._quant_scheme == QuantScheme.post_training_tf_enhanced:
