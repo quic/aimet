@@ -41,9 +41,11 @@ from typing import List, Dict
 
 from onnx import onnx_pb
 from aimet_common.defs import QuantizationDataType
-from aimet_common.quantsim_config.json_config_importer import ConfigDictKeys, ConfigType, OpType, ParamType, OpTypeType
+from aimet_common.graph_searcher import GraphSearcher
+from aimet_common.quantsim_config.json_config_importer import ConfigDictKeys, ConfigType, OpType, ParamType, OpTypeType, \
+    SupergroupType
 from aimet_common.quantsim_config.quantsim_config import QuantSimConfigurator as AimetCommonQuantSimConfigurator, \
-    get_setting_type
+    get_setting_type, SupergroupConfigCallback as AimetCommonSupergroupConfigCallback
 from aimet_common.utils import AimetLogger
 from aimet_onnx.meta.connectedgraph import ConnectedGraph
 from aimet_onnx.utils import get_product_name_from_quantized_name
@@ -63,9 +65,27 @@ class OpToQuantizers:
         self.parameter_quantizers = []
 
 
+class SupergroupConfigCallback(AimetCommonSupergroupConfigCallback):
+    """ Class acting as a callback for when supergroups are found """
+
+    def __init__(self, model: onnx_pb.ModelProto, op_to_quantizers: Dict):
+        super().__init__()
+        self._model = model
+        self._op_to_quantizers = op_to_quantizers
+
+    def __call__(self, _, op_list: List[str]):
+        # Turn off output quantizaters for all ops except for the last op
+        # Assumes op list is at least of length two
+        for op in op_list[:-1]:
+            output_quantizers = self._op_to_quantizers[op.dotted_name].output_quantizers
+            for output_quantizer in output_quantizers:
+                output_quantizer.enabled = False
+
+
 class QuantSimConfigurator(AimetCommonQuantSimConfigurator):
     """ Class for parsing and applying
     quantsim configurations from json config file """
+
     def __init__(self, model: onnx_pb.ModelProto, conn_graph: ConnectedGraph, config_file: str, quantsim_output_bw: int,
                  quantsim_param_bw: int, quantsim_data_type: QuantizationDataType = QuantizationDataType.int):
         super().__init__(config_file, quantsim_data_type, quantsim_output_bw, quantsim_param_bw)
@@ -194,19 +214,32 @@ class QuantSimConfigurator(AimetCommonQuantSimConfigurator):
                 op_config = op_configs[op.type]
                 self._set_config_for_op(op_name, op_to_quantizer, op_config, modified_quantize_ops)
 
-    def _set_supergroup_configs(self, supergroups_configs):
+    def _set_supergroup_configs(self, supergroups_configs: List[SupergroupType]):
         """
         Set supergroup specific configurations (fourth level of specificity in configuration file)
         :param supergroups_configs: Configurations for supergroups
         """
+        patterns_with_callbacks = []
+        for supergroup_config in supergroups_configs:
+            callback = SupergroupConfigCallback(self._model, self._op_to_quantizers)
+            op_list = supergroup_config[ConfigDictKeys.OP_LIST]
 
-    def _set_model_input_configs(self, model_input_configs):
+            # Op list consists of patterns to be searched for, we pass a list of op_list to be compatible with build_list
+            patterns = self._build_list_of_pattern([op_list], callback)
+            for pattern in patterns:
+                patterns_with_callbacks.append(pattern)
+
+        if patterns_with_callbacks:
+            graph_searcher = GraphSearcher(self._conn_graph, patterns_with_callbacks)
+            graph_searcher.find_all_patterns_in_graph_apply_actions()
+
+    def _set_model_input_configs(self, model_input_configs: ConfigType):
         """
         Set model input specific configurations (fifth level of specificity in configuration file)
         :param model_input_configs: Configuration for model inputs
         """
 
-    def _set_model_output_configs(self, model_output_configs):
+    def _set_model_output_configs(self, model_output_configs: ConfigType):
         """
         Set model output specific configurations (sixth level of specificity in configuration file)
         :param model_output_configs: Configuration for model outputs
