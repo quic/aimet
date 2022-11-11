@@ -60,7 +60,7 @@ def str2bool(str_):
 
 ENABLE_CUDA = str2bool(os.environ.get("ENABLE_CUDA", "False"))
 
-REQUIRES_DIR = Path("dependencies") / f"tf-{'gpu' if ENABLE_CUDA else 'cpu'}"
+REQUIRES_DIR = Path("dependencies") / f"tf-{'gpu' if ENABLE_CUDA else 'cpu'}{'-p36' if sys.version_info.minor == 6 else ''}"
 INSTALL_REQUIRES = [
     req.split(" -f ")[0]
     for file in (PACKAGING_DIR / REQUIRES_DIR).glob("reqs_pip_*.txt")
