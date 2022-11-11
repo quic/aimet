@@ -62,11 +62,6 @@ def str2bool(str_):
 ENABLE_CUDA = str2bool(os.environ.get("ENABLE_CUDA", "False"))
 
 REQUIRES_DIR = Path("dependencies") / f"torch-{'gpu' if ENABLE_CUDA else 'cpu'}{'-p36' if sys.version_info.minor == 6 else ''}"
-INSTALL_REQUIRES = [
-    req.split(" -f ")[0]
-    for file in (PACKAGING_DIR / REQUIRES_DIR).glob("reqs_pip_*.txt")
-    for req in file.read_text().splitlines()
-]
 
 AIMET_TORCH_VERSION = os.environ.get("SW_VERSION")
 if AIMET_TORCH_VERSION is None:
@@ -101,7 +96,10 @@ setup(
     cmdclass={"build_ext": BuildExtensionCommand, },
     description="AIMET PyTorch Package",
     distclass = BinaryDistribution,
-    install_requires=INSTALL_REQUIRES,
+    install_requires=list(filter(lambda r: not r.startswith('-'),
+        subprocess.run([sys.executable, str(PACKAGING_DIR / "dependencies.py"), "pip"],
+        check=True, stdout=subprocess.PIPE, encoding="utf8").stdout.splitlines()
+    )),
     license="NOTICE.txt",
     long_description=(PACKAGING_DIR / "README.txt").read_text(),
     name="AimetTorch",
