@@ -1,0 +1,64 @@
+ARG BASE_IMAGE
+FROM $BASE_IMAGE as build
+ARG PY=3.6
+ARG BUILD_DIR=/tmp/build
+ARG AIMET_CU_VER="cpu"
+ARG AIMET_TF_VER=""
+ARG AIMET_PT_VER=""
+
+RUN --mount=type=cache,target=/var/cache/apt \
+    set -x; apt update \
+    &&  DEBIAN_FRONTEND=noninteractive TZ=Etc/UTC apt install --no-install-recommends -y software-properties-common \
+    && add-apt-repository ppa:deadsnakes/ppa \
+    && DEBIAN_FRONTEND=noninteractive TZ=Etc/UTC apt install --no-install-recommends -y curl python${PY}-dev python${PY}-distutils \
+    && update-alternatives --install /usr/bin/python3 python /usr/bin/python${PY} 10 \
+    && curl -kL "https://bootstrap.pypa.io/pip/3.6/get-pip.py" | python3
+
+ENV AIMET_CU_VER=${AIMET_CU_VER} \
+    AIMET_TF_VER=${AIMET_TF_VER} \
+    AIMET_PT_VER=${AIMET_PT_VER}
+
+COPY ./packaging/dependencies.py /aimet-src/
+
+RUN --mount=type=cache,target=/var/cache/apt \
+    apt update \
+    && DEBIAN_FRONTEND=noninteractive TZ=Etc/UTC apt install --no-install-recommends -y \
+        `/aimet-src/dependencies.py apt --dev`
+
+RUN --mount=type=cache,target=/root/.cache/pip \
+    python3 -m pip install `python3 /aimet-src/dependencies.py pip --dev`
+
+ENV GIT_SSL_NO_VERIFY=true
+ENV PYTHONDONTWRITEBYTECODE=TRUE
+
+COPY . /aimet-src
+
+RUN cmake --version \
+    && cmake -S /aimet-src -B $BUILD_DIR -GNinja \
+        -DENABLE_CUDA=`if [ "$AIMET_CU_VER" = "cpu" ]; then echo "OFF"; else echo "ON"; fi` \
+        -DENABLE_TORCH=`if [ "$AIMET_PT_VER" = "" ]; then echo "OFF"; else echo "ON"; fi` \
+        -DENABLE_TENSORFLOW=`if [ "$AIMET_TF_VER" = "" ]; then echo "OFF"; else echo "ON"; fi` \
+    && cmake --build $BUILD_DIR --parallel --target all \
+    && ( PYTEST_ADDOPTS='-m "not cuda"' cmake --build $BUILD_DIR --parallel --target test || cat /tmp/build/Testing/Temporary/LastTest.log ) \
+    && cmake --build $BUILD_DIR --parallel --target whl_build \
+    && ls -la $BUILD_DIR/*
+
+FROM $BASE_IMAGE
+ARG PY=3.6
+ARG BUILD_DIR=/tmp/build
+
+COPY ./packaging/dependencies.py /tmp/
+COPY --from=0 $BUILD_DIR/whlprep/*.whl /tmp/
+
+RUN --mount=type=cache,target=/var/cache/apt \
+    apt update \
+    && DEBIAN_FRONTEND=noninteractive TZ=Etc/UTC apt install --no-install-recommends -y software-properties-common \
+    && add-apt-repository ppa:deadsnakes/ppa \
+    && apt update \
+    && DEBIAN_FRONTEND=noninteractive TZ=Etc/UTC apt install --no-install-recommends -y curl python${PY} python${PY}-distutils \
+    && update-alternatives --install /usr/bin/python3 python /usr/bin/python${PY} 10 \
+    && curl -kL "https://bootstrap.pypa.io/pip/3.6/get-pip.py" | python3
+
+RUN  --mount=type=cache,target=/root/.cache/pip \
+    python3 -m pip install --upgrade pip wheel \
+    && python3 -m pip install --extra-index-url https://download.pytorch.org/whl /tmp/*.whl
