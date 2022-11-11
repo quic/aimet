@@ -53,7 +53,7 @@ class TestQuantSimConfig:
         assert sim.qc_quantize_op_dict['fc_w'].enabled == True
         assert sim.qc_quantize_op_dict['fc_b'].enabled == False
         assert sim.qc_quantize_op_dict['input'].enabled == False
-        assert sim.qc_quantize_op_dict['3'].enabled == True
+        assert sim.qc_quantize_op_dict['3'].enabled == False
         assert sim.qc_quantize_op_dict['4'].enabled == True
         assert sim.qc_quantize_op_dict['5'].enabled == True
         assert sim.qc_quantize_op_dict['6'].enabled == True
@@ -127,7 +127,7 @@ class TestQuantSimConfig:
 
         for name in ['conv_b', 'fc_b']:
             assert sim.qc_quantize_op_dict[name].enabled == False
-            assert sim.qc_quantize_op_dict[name].use_symmetric_encodings == False
+            assert sim.qc_quantize_op_dict[name].use_symmetric_encodings == True
 
     def test_op_level_config(self):
         model = test_models.build_dummy_model()
@@ -145,6 +145,16 @@ class TestQuantSimConfig:
             },
             "params": {},
             "op_type": {
+                "Conv": {
+                    "is_input_quantized": "True",
+                    "is_symmetric": "False",
+                    "params": {
+                        "weight": {
+                            "is_quantized": "True",
+                            "is_symmetric": "False"
+                        }
+                    },
+                }
             },
             "supergroups": [],
             "model_input": {},
@@ -234,6 +244,6 @@ class TestQuantSimConfig:
             json.dump(quantsim_config, f)
         sim = QuantizationSimModel(model, config_file='./data/quantsim_config.json')
 
-        for _, quantizer in sim.qc_quantize_op_dict.items():
+        for quantizer in sim.qc_quantize_op_dict.values():
             assert quantizer.use_strict_symmetric == True
             assert quantizer.use_unsigned_symmetric == False

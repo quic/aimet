@@ -376,7 +376,7 @@ class QuantSimConfigurator(AimetCommonQuantSimConfigurator):
         Set strict symmetric configuration for all quantizers in the model.
         :param use_strict_symmetric: True or False setting for using strict symmetric mode
         """
-        for _, quantizer in self._quant_ops_dict.items():
+        for quantizer in self._quant_ops_dict.values():
             quantizer.use_strict_symmetric = use_strict_symmetric
 
     def _set_unsigned_symmetric(self, use_unsigned_symmetric: bool):
@@ -384,7 +384,7 @@ class QuantSimConfigurator(AimetCommonQuantSimConfigurator):
         Set unsigned symmetric configuration for all quantizers in the model.
         :param use_unsigned_symmetric: True or False setting for using unsigned symmetric mode
         """
-        for _, quantizer in self._quant_ops_dict.items():
+        for quantizer in self._quant_ops_dict.values():
             quantizer.use_unsigned_symmetric = use_unsigned_symmetric
 
     def _generate_and_apply_op_instance_specific_config(self):
