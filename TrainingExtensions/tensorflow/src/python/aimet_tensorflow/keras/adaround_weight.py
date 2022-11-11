@@ -51,7 +51,7 @@ from aimet_tensorflow.adaround.adaround_loss import AdaroundHyperParameters
 from aimet_tensorflow.keras.adaround.activation_sampler import ActivationSampler
 from aimet_tensorflow.keras.adaround.adaround_wrapper import AdaroundWrapper
 from aimet_tensorflow.keras.adaround.adaround_optimizer import AdaroundOptimizer
-from aimet_tensorflow.keras.connectedgraph import ConnectedGraph
+from aimet_tensorflow.keras.connectedgraph import ConnectedGraph, map_keras_types_to_onnx
 
 _logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Quant)
 
@@ -69,7 +69,6 @@ class Adaround:
     def apply_adaround(cls, model: tf.keras.Model, params: AdaroundParameters, path: str, filename_prefix: str,
                        default_param_bw: int = 4,
                        default_quant_scheme: QuantScheme = QuantScheme.post_training_tf_enhanced,
-                       default_is_symmetric: bool = False,
                        config_file: str = None) -> tf.keras.Model:
         """
         Returns model with optimized weight rounding of every op (Conv and Linear) and also saves the
@@ -83,14 +82,12 @@ class Adaround:
         :param default_param_bw: Default bitwidth (4-31) to use for quantizing layer parameters. Default 4
         :param default_quant_scheme:  Quantization scheme. Supported options are QuantScheme.post_training_tf or
          QuantScheme.post_training_tf_enhanced. Default QuantScheme.post_training_tf_enhanced
-        :param default_is_symmetric: True if symmetric encodings is used, else asymmetric encodings.
-         Default False.
         :param config_file: Configuration file for model quantizers
         :return: Model with Adarounded weights
         """
 
         # Get parameters from config file. To allow one central place for Adaround and Quantsim
-        _, strict_symmetric, unsigned_symmetric, per_channel_enabled = TfAdaround.get_config_dict_keys(config_file)
+        configs, strict_symmetric, unsigned_symmetric, per_channel_enabled = TfAdaround.get_config_dict_keys(config_file)
 
         # Optimization Hyper parameters
         opt_params = AdaroundHyperParameters(params.num_iterations, params.reg_param, params.beta_range,
@@ -110,7 +107,10 @@ class Adaround:
 
         progbar = Progbar(len(ordered_layer_indices))
         for idx in ordered_layer_indices:
-            cls.adaround_layer(act_sampler, default_is_symmetric, strict_symmetric, unsigned_symmetric,
+            use_symmetric_encodings = TfAdaround.get_is_symmetric_flag_for_op_param(configs, model.layers[idx],
+                                                                                    param_name='weight',
+                                                                                    framework_to_onnx_type_dict=map_keras_types_to_onnx)
+            cls.adaround_layer(act_sampler, use_symmetric_encodings, strict_symmetric, unsigned_symmetric,
                                default_param_bw, default_quant_scheme, model, hard_rounded_model, soft_rounded_model,
                                idx, module_act_func_pair, opt_params, param_encodings, per_channel_enabled)
             progbar.add(1)

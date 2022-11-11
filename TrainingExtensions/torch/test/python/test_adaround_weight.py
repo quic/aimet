@@ -336,7 +336,9 @@ class TestAdaround:
         param_bit_width = 4
         delta, offset = calculate_delta_offset(float(torch.min(model.conv1.weight)),
                                                float(torch.max(model.conv1.weight)),
-                                               param_bit_width)
+                                               param_bit_width,
+                                               use_symmetric_encodings=False,
+                                               use_strict_symmetric=False)
         print(delta, offset)
 
         input_shape = (1, 3, 32, 32)
@@ -367,7 +369,9 @@ class TestAdaround:
         param_bit_width = 4
         delta, offset = calculate_delta_offset(float(torch.min(model.conv1.weight)),
                                                float(torch.max(model.conv1.weight)),
-                                               param_bit_width)
+                                               param_bit_width,
+                                               use_symmetric_encodings=False,
+                                               use_strict_symmetric=False)
         print(delta, offset)
 
         input_shape = (1, 3, 32, 32)
@@ -402,7 +406,9 @@ class TestAdaround:
         param_bit_width = 4
         delta, offset = calculate_delta_offset(float(torch.min(model.conv1.weight)),
                                                float(torch.max(model.conv1.weight)),
-                                               param_bit_width)
+                                               param_bit_width,
+                                               use_symmetric_encodings=False,
+                                               use_strict_symmetric=False)
         print(delta, offset)
 
         input_shape = (1, 3, 32, 32)
@@ -437,7 +443,9 @@ class TestAdaround:
         param_bit_width = 4
         delta, offset = calculate_delta_offset(float(torch.min(model.trans_conv1.weight)),
                                                float(torch.max(model.trans_conv1.weight)),
-                                               param_bit_width)
+                                               param_bit_width,
+                                               use_symmetric_encodings=False,
+                                               use_strict_symmetric=False)
         logger.info("For the ConvTranspose2d layer's weights, delta = %f, offset = %f", delta, offset)
 
         input_shape = (1, 3, 24, 24)

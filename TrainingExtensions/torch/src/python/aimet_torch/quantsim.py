@@ -1100,7 +1100,8 @@ class QuantizationSimModel:
                 ops.
         :return: Encoding Dictionary
         """
-        data_type, bitwidth = quantizer.data_type, quantizer.bitwidth
+        data_type, bitwidth, use_symmetric_encodings, use_strict_symmetric = \
+            quantizer.data_type, quantizer.bitwidth, quantizer.use_symmetric_encodings, quantizer.use_strict_symmetric
 
         if data_type == QuantizationDataType.float:
             enc_dict = {'bitwidth': bitwidth, 'dtype': "float"}
@@ -1115,7 +1116,8 @@ class QuantizationSimModel:
                                                                     encoding.delta, encoding.offset
                     is_symmetric = quantizer.use_symmetric_encodings
                     if not isinstance(quantizer, StaticGridTensorQuantizer):
-                        scale, offset = calculate_delta_offset(encoding_min, encoding_max, bitwidth)
+                        scale, offset = calculate_delta_offset(encoding_min, encoding_max, bitwidth,
+                                                               use_symmetric_encodings, use_strict_symmetric)
 
                     enc_dict = {'min': encoding_min, 'max': encoding_max, 'scale': scale, 'offset': int(offset),
                                 'bitwidth': bw, 'is_symmetric': str(is_symmetric), 'dtype': "int"}

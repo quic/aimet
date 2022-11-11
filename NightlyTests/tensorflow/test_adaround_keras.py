@@ -36,13 +36,12 @@
 #  @@-COPYRIGHT-END-@@
 # =============================================================================
 """ Keras AdaRound Nightly Tests """
-
-import pytest
-pytestmark = pytest.mark.skip("Disable tests that requires eager execution")
 import json
 import logging
 import os
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
+import pytest
+pytestmark = pytest.mark.skip("Disable tests that requires eager execution")
 import numpy as np
 import tensorflow as tf
 from tensorflow.keras.applications.mobilenet import MobileNet
@@ -120,8 +119,7 @@ def test_adaround_followed_by_quantsim():
     quant_scheme = QuantScheme.post_training_tf_enhanced
 
     adarounded_model = Adaround.apply_adaround(model, params, path='./', filename_prefix='dummy',
-                                               default_param_bw=param_bw, default_quant_scheme=quant_scheme,
-                                               default_is_symmetric=False)
+                                               default_param_bw=param_bw, default_quant_scheme=quant_scheme)
 
     # Read exported param encodings JSON file
     with open('./dummy.encodings') as json_file:

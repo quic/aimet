@@ -667,7 +667,8 @@ class QuantizationSimModel:
             min_val, max_val = self.read_min_max(quant_op_name, variable_dict)
             # if per channel quantization is enabled, then min and max are numpy arrays, and this function gates the array
             op_bitwidth = int(self._get_op_variable_value(quant_op, QuantizeOpIndices.bit_width))
-            delta, offset = calculate_delta_offset(min_val, max_val, op_bitwidth)
+            delta, offset = calculate_delta_offset(min_val, max_val, op_bitwidth,
+                                                   use_symmetric_encodings=False, use_strict_symmetric=False)
             # Min and max will be numpy arrays, so to make them JSON serializable
             if self.per_channel_quantization_enabled and isinstance(min_val, np.ndarray):
                 min_val = min_val.tolist()
