@@ -57,6 +57,10 @@ def str2bool(str_):
     else:
         raise RuntimeError(f"Unknown boolean value '{str_}' (known values are: {TRUE_VALS | FALSE_VALS}")
 
+if {"AIMET_CU_VER", "AIMET_TF_VER", "AIMET_PT_VER"} > os.environ.keys():
+    raise RuntimeError("Please specify what veriosn of cuda, tensorflow and pytorch you would like"
+    "to use using environment variables: AIMET_CU_VER, AIMET_TF_VER, AIMET_PT_VER")
+
 ENABLE_CUDA = str2bool(os.environ.get("ENABLE_CUDA", "False"))
 ENABLE_TORCH = str2bool(os.environ.get("ENABLE_TORCH", "True"))
 ENABLE_TENSORFLOW = str2bool(os.environ.get("ENABLE_TENSORFLOW", "True"))
@@ -96,9 +100,9 @@ class BuildExtensionCommand(build_ext):
             cmake_args = [
                 f"-DPython3_ROOT_DIR={os.path.dirname(sys.executable)}",
                 f"-DWHL_PREP_DIR={whl_prep_dir}",
-                f"-DENABLE_CUDA={ENABLE_CUDA}",
-                f"-DENABLE_TORCH={ENABLE_TORCH}",
-                f"-DENABLE_TENSORFLOW={ENABLE_TENSORFLOW}",
+                f"-DENABLE_CUDA={'OFF' if os.environ['AIMET_CU_VER'] == 'cpu' else 'ON'}",
+                f"-DENABLE_TORCH={'OFF' if os.environ['AIMET_PT_VER'] == '' else 'ON'}",
+                f"-DENABLE_TENSORFLOW={'OFF' if os.environ['AIMET_TF_VER'] == '' else 'ON'}",
             ]
             subprocess.run(["cmake", "-B", bld_dir, "-S",  src_dir] + cmake_args,
                 check=True, stdout=sys.stdout, stderr=sys.stderr, encoding="utf8",
@@ -106,12 +110,12 @@ class BuildExtensionCommand(build_ext):
             subprocess.run(["cmake", "--build",  bld_dir, "-j", "-t", tgt + "common"],
                 check=True, stdout=sys.stdout, stderr=sys.stderr, encoding="utf8",
                 )
-            if ENABLE_TORCH:
+            if os.environ['AIMET_PT_VER']:
                 subprocess.run(
                     ["cmake", "--build",  bld_dir, "-j", "-t", tgt + "torch"],
                     check=True, stdout=sys.stdout, stderr=sys.stderr, encoding="utf8",
                     )
-            if ENABLE_TENSORFLOW:
+            if os.environ['AIMET_TF_VER']:
                 subprocess.run(
                     ["cmake", "--build",  bld_dir, "-j", "-t", tgt + "tensorflow"],
                     check=True, stdout=sys.stdout, stderr=sys.stderr, encoding="utf8",
@@ -121,12 +125,12 @@ class BuildExtensionCommand(build_ext):
             shlex.split(f"cp -Prv {whl_prep_dir}/aimet_common/. {dst_dir}"),
             check=True, stdout=sys.stdout, stderr=sys.stderr, encoding="utf8",
             )
-        if ENABLE_TORCH:
+        if os.environ['AIMET_PT_VER']:
             subprocess.run(
                 shlex.split(f"cp -Prv {whl_prep_dir}/aimet_torch/. {dst_dir}"),
                 check=True, stdout=sys.stdout, stderr=sys.stderr, encoding="utf8",
                 )
-        if ENABLE_TENSORFLOW:
+        if os.environ['AIMET_TF_VER']:
             subprocess.run(
                 shlex.split(f"cp -Prv {whl_prep_dir}/aimet_tensorflow/. {dst_dir}"),
                 check=True, stdout=sys.stdout, stderr=sys.stderr, encoding="utf8",
@@ -148,7 +152,10 @@ setup(
     cmdclass={"build_ext": BuildExtensionCommand, },
     description="AIMET Common Package",
     distclass = BinaryDistribution,
-    install_requires=(PACKAGING_DIR / "dependencies"/ "reqs_pip_common.txt").read_text().splitlines(),
+    install_requires=list(filter(lambda r: not r.startswith('-'),
+        subprocess.run([sys.executable, str(PACKAGING_DIR / "dependencies.py"), "pip"],
+        check=True, stdout=subprocess.PIPE, encoding="utf8").stdout.splitlines()
+    )),
     license="NOTICE.txt",
     long_description=(PACKAGING_DIR / "README.txt").read_text(),
     name="AimetCommon",
