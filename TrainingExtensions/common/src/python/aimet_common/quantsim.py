@@ -79,8 +79,9 @@ def gate_min_max(min_val: float, max_val: float) -> Tuple[float, float]:
     return gated_min, gated_max
 
 
-def calculate_delta_offset(min_val: Union[float, np.ndarray], max_val: Union[float, np.ndarray], bitwidth: int) -> \
-        Union[Tuple[float, float], Tuple[List, List]]:
+def calculate_delta_offset(min_val: Union[float, np.ndarray], max_val: Union[float, np.ndarray], bitwidth: int,
+                           use_symmetric_encodings: bool, use_strict_symmetric: bool) \
+        -> Union[Tuple[float, float], Tuple[List, List]]:
     """
     calculates delta and offset given min and max.
     :param min_val: min encoding value
@@ -88,8 +89,12 @@ def calculate_delta_offset(min_val: Union[float, np.ndarray], max_val: Union[flo
     :param bitwidth: bitwidth used for quantization
     :return: delta and offset values computed
     """
+    num_steps = 2 ** bitwidth - 1
+    if use_symmetric_encodings and use_strict_symmetric:
+        num_steps -= 1
+
     min_val, max_val = gate_min_max(min_val, max_val)
-    delta = (max_val - min_val) / (2 ** bitwidth - 1)
+    delta = (max_val - min_val) / num_steps
 
     if isinstance(delta, np.ndarray):
         offset = np.around(min_val/delta)

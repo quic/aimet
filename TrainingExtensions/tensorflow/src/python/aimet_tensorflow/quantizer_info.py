@@ -444,13 +444,14 @@ class QuantizerInfo:
         Get encoding if valid else raise error
         :return: encoding
         """
-        def _create_encoding_object(min_val, max_val, bitwidth):
+        def _create_encoding_object(min_val, max_val, bitwidth, is_symmetric, use_strict_symmetric):
             """ Creates a libpymo encoding object """
             encoding = libpymo.TfEncoding()
             encoding.min = min_val
             encoding.max = max_val
             encoding.bw = bitwidth
-            encoding.delta, encoding.offset = calculate_delta_offset(min_val, max_val, bitwidth)
+            encoding.delta, encoding.offset = calculate_delta_offset(min_val, max_val, bitwidth,
+                                                                     is_symmetric, use_strict_symmetric)
             return  encoding
 
         if self.is_encoding_valid():
@@ -462,10 +463,12 @@ class QuantizerInfo:
             if isinstance(encoding_min, np.ndarray):
                 encoding = []
                 for i, encoding_min_val in enumerate(encoding_min):
-                    _encoding = _create_encoding_object(encoding_min_val, encoding_max[i], bitwidth)
+                    _encoding = _create_encoding_object(encoding_min_val, encoding_max[i], bitwidth,
+                                                        self.use_symmetric_encoding, self.use_strict_symmetric)
                     encoding.append(_encoding)
             else:
-                encoding = _create_encoding_object(encoding_min, encoding_max, bitwidth)
+                encoding = _create_encoding_object(encoding_min, encoding_max, bitwidth, self.use_symmetric_encoding,
+                                                   self.use_strict_symmetric)
         else:
             raise AssertionError('Compute encoding or Set encoding must be invoked before')
 

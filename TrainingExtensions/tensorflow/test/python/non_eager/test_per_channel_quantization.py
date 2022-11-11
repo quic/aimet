@@ -703,8 +703,9 @@ class TestTrainingExtensionsQcQuantizeOpPerChannel(unittest.TestCase):
             _encoding.min = random.uniform(0, 1)
             _encoding.max = random.uniform(1, 3)
             _encoding.bw = 8
-            _encoding.delta, _encoding.offset = calculate_delta_offset(_encoding.min, _encoding.max,
-                                                                       8)
+            _encoding.delta, _encoding.offset = calculate_delta_offset(_encoding.min, _encoding.max, bitwidth=8,
+                                                                       use_symmetric_encodings=False,
+                                                                       use_strict_symmetric=False)
             return _encoding
 
         # Set the encodings for activation quantizers
@@ -1430,7 +1431,9 @@ class TestTrainingExtensionsQcQuantizeOpPerChannel(unittest.TestCase):
             _encoding.min = random.uniform(0, 1)
             _encoding.max = random.uniform(1, 3)
             _encoding.bw = 8
-            _encoding.delta, _encoding.offset = calculate_delta_offset(_encoding.min, _encoding.max, 8)
+            _encoding.delta, _encoding.offset = calculate_delta_offset(_encoding.min, _encoding.max, bitwidth=8,
+                                                                       use_symmetric_encodings=False,
+                                                                       use_strict_symmetric=False)
             return _encoding
 
         # Set the encodings for activation quantizers

@@ -217,7 +217,9 @@ class Adaround:
             all_inp_data, all_out_data = act_sampler.sample_activation(op, hard_rounded_op, session,
                                                                        session_hard_rounded_weight, starting_op_names,
                                                                        params.num_batches)
-            is_symmetric = cls._get_is_symmetric_flag_for_op_param(configs, op.type, param_name="weight")
+            is_symmetric = cls.get_is_symmetric_flag_for_op_param(configs, op.type,
+                                                                  param_name="weight",
+                                                                  framework_to_onnx_type_dict=tf_op_type_to_onnx_type_dict)
 
 
             # Find next following activation function
@@ -259,14 +261,13 @@ class Adaround:
         :return: Config dictionary, strict symmetric flag, unsigned symmetric flag, enable per channel flag.
         """
         configs = JsonConfigImporter.import_json_config_file(config_file)
-        # Strict_symmetric and unsigned_symmetric flags have default value False and True respectively
         strict_symmetric = configs[ConfigDictKeys.DEFAULTS].get(ConfigDictKeys.STRICT_SYMMETRIC, False)
-        unisgned_symmetric = configs[ConfigDictKeys.DEFAULTS].get(ConfigDictKeys.UNSIGNED_SYMMETRIC, True)
+        unsigned_symmetric = configs[ConfigDictKeys.DEFAULTS].get(ConfigDictKeys.UNSIGNED_SYMMETRIC, False)
 
         # Read per-channel quantization field. Default = False
         per_channel_enabled = configs[ConfigDictKeys.DEFAULTS].get(ConfigDictKeys.PER_CHANNEL_QUANTIZATION, False)
 
-        return configs, strict_symmetric, unisgned_symmetric, per_channel_enabled
+        return configs, strict_symmetric, unsigned_symmetric, per_channel_enabled
 
     @staticmethod
     def _get_ordered_list_of_ops(graph: tf.Graph, input_op_names: List[str], output_op_names: List[str]) \
@@ -355,7 +356,8 @@ class Adaround:
                                            'is_symmetric': is_symmetric}]
 
     @staticmethod
-    def _get_is_symmetric_flag_for_op_param(configs: ConfigDictType, tf_op_type: str, param_name: str):
+    def get_is_symmetric_flag_for_op_param(configs: ConfigDictType, tf_op_type: str, param_name: str,
+                                           framework_to_onnx_type_dict: dict) -> bool:
         """
         NOTE: Checks config file in reverse order of specificity.
 
@@ -367,13 +369,14 @@ class Adaround:
         :param configs: Dictionary containing configs.
         :param tf_op_type: TensorFlow operation type.
         :param param_name: Parameter name.
-        :return: Is_symmetric flag for given op's param.
+        :param framework_to_onnx_type_dict: Dictionary mapping framework type to ONNX type.
+        :return: is_symmetric flag for given op's param.
         """
         assert param_name in MAP_TF_PARAM_NAME_TO_QUANTSIM_NAME.keys(), "param name is invalid."
 
         # third level of specificity which applies to specific op_type's parameters.
         try:
-            onnx_type = tf_op_type_to_onnx_type_dict[tf_op_type]
+            onnx_type = framework_to_onnx_type_dict[tf_op_type]
             return configs[ConfigDictKeys.OP_TYPE] \
                 [onnx_type] \
                 [ConfigDictKeys.PARAMS] \

@@ -373,7 +373,7 @@ class QuantizationSimModel:
         try:
             convert_h5_model_to_pb_model(f'{model_path}.h5', custom_objects=custom_objects)
         except ValueError:
-            _logger.error("Could not convert h5 to frozen pb."
+            _logger.error("Could not convert h5 to frozen pb. "
                           "Please call export() again with custom_objects defined.")
             raise
         encodings_dict = self.get_encodings_dict()
@@ -396,7 +396,7 @@ class QuantizationSimModel:
                                 channel_slice = weight_tensor.reshape(*last_two_axes_combined_shape)
                                 channel_slice = channel_slice.take(index, channel_slice.ndim - 1)
                             elif isinstance(quantizer_wrapper.original_layer, tf.keras.layers.Conv2DTranspose):
-                                if len(weight_tensor) == 4:
+                                if weight_tensor.ndim == 4:
                                     channel_slice = weight_tensor.take(index, weight_tensor.ndim - 2)
                                 else:
                                     # For bias in Transpose layers

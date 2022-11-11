@@ -52,7 +52,7 @@ from tensorflow.python.keras.layers import Conv2DTranspose
 from aimet_common.utils import AimetLogger
 from aimet_common.quantsim_config.json_config_importer import JsonConfigImporter
 from aimet_tensorflow.examples.test_models import keras_model, single_residual
-from aimet_tensorflow.adaround.adaround_weight import Adaround, AdaroundParameters
+from aimet_tensorflow.adaround.adaround_weight import Adaround, AdaroundParameters, tf_op_type_to_onnx_type_dict
 
 logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Test)
 tf.compat.v1.disable_eager_execution()
@@ -176,7 +176,9 @@ class TestAdaroundWeight(unittest.TestCase):
 
         try:
             configs = JsonConfigImporter.import_json_config_file(config_file='./config.json')
-            assert not Adaround._get_is_symmetric_flag_for_op_param(configs, conv_op.type, param_name="weight")
+            assert not Adaround.get_is_symmetric_flag_for_op_param(configs, conv_op.type,
+                                                                   param_name="weight",
+                                                                   framework_to_onnx_type_dict=tf_op_type_to_onnx_type_dict)
         finally:
             if os.path.isfile('./config.json'):
                 os.remove('./config.json')
@@ -202,7 +204,9 @@ class TestAdaroundWeight(unittest.TestCase):
 
         try:
             configs = JsonConfigImporter.import_json_config_file(config_file='./config.json')
-            assert Adaround._get_is_symmetric_flag_for_op_param(configs, conv_op.type, param_name="weight")
+            assert Adaround.get_is_symmetric_flag_for_op_param(configs, conv_op.type,
+                                                               param_name="weight",
+                                                               framework_to_onnx_type_dict=tf_op_type_to_onnx_type_dict)
         finally:
             if os.path.isfile('./config.json'):
                 os.remove('./config.json')
@@ -232,7 +236,9 @@ class TestAdaroundWeight(unittest.TestCase):
 
         try:
             configs = JsonConfigImporter.import_json_config_file(config_file='./config.json')
-            assert Adaround._get_is_symmetric_flag_for_op_param(configs, conv_op.type, param_name="weight")
+            assert Adaround.get_is_symmetric_flag_for_op_param(configs, conv_op.type,
+                                                               param_name="weight",
+                                                               framework_to_onnx_type_dict=tf_op_type_to_onnx_type_dict)
         finally:
             if os.path.isfile('./config.json'):
                 os.remove('./config.json')
@@ -273,9 +279,13 @@ class TestAdaroundWeight(unittest.TestCase):
 
         try:
             configs = JsonConfigImporter.import_json_config_file(config_file='./config.json')
-            assert Adaround._get_is_symmetric_flag_for_op_param(configs, conv_op.type, param_name="weight")
+            assert Adaround.get_is_symmetric_flag_for_op_param(configs, conv_op.type,
+                                                               param_name="weight",
+                                                               framework_to_onnx_type_dict=tf_op_type_to_onnx_type_dict)
             # For matmul op, is_symmetric should be False.
-            assert not Adaround._get_is_symmetric_flag_for_op_param(configs, matmul_op.type, param_name="weight")
+            assert not Adaround.get_is_symmetric_flag_for_op_param(configs, matmul_op.type,
+                                                                   param_name="weight",
+                                                                   framework_to_onnx_type_dict=tf_op_type_to_onnx_type_dict)
         finally:
             if os.path.isfile('./config.json'):
                 os.remove('./config.json')
