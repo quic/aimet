@@ -100,11 +100,7 @@ set(whl_action_args_install "")
 macro(whl_add_whl_action_target whl_name)
     foreach(whl_action ${WHL_ACTIONS})
         add_custom_target(whl_${whl_action}_${whl_name}
-            ${CMAKE_COMMAND} -E env
-                WHL_PREP_DIR=${WHL_PREP_DIR}
-                ENABLE_CUDA=${ENABLE_CUDA}
-                ENABLE_TORCH=${ENABLE_TORCH}
-                ENABLE_TENSORFLOW=${ENABLE_TENSORFLOW}
+            ${CMAKE_COMMAND} -E env WHL_PREP_DIR=${WHL_PREP_DIR}
             ${Python3_EXECUTABLE} setup.py build --build-base ${WHL_PREP_DIR}/build_${whl_name} ${whl_action} ${whl_action_args_${whl_action}}
             WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/src/python
         )
