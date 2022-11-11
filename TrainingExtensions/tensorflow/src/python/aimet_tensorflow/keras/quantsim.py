@@ -396,7 +396,7 @@ class QuantizationSimModel:
                                 channel_slice = weight_tensor.reshape(*last_two_axes_combined_shape)
                                 channel_slice = channel_slice.take(index, channel_slice.ndim - 1)
                             elif isinstance(quantizer_wrapper.original_layer, tf.keras.layers.Conv2DTranspose):
-                                if len(weight_tensor) == 4:
+                                if weight_tensor.ndim == 4:
                                     channel_slice = weight_tensor.take(index, weight_tensor.ndim - 2)
                                 else:
                                     # For bias in Transpose layers

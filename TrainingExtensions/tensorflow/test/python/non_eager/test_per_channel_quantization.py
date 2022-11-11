@@ -682,7 +682,7 @@ class TestTrainingExtensionsQcQuantizeOpPerChannel(unittest.TestCase):
                     encodings.append(lst)
 
             encoding_numpy = compute_tf_encodings_given_numpy_data(weight_val, axis=3)
-            assert np.allclose(encoding_numpy, encodings, rtol=0.1)
+            assert np.allclose(encoding_numpy, encodings, rtol=0.01)
 
     def test_export_encodings(self):
         save_config_file_for_per_channel_quantization()

@@ -219,8 +219,6 @@ def _initialize_param_quantizers(layer: layers.Layer, param_config_dict: TreeLik
         if weight.dtype in QUANT_ALLOWED_DTYPES:
             weight_name = weight.name.split(":")[0]
             param_type = "bias" if "bias" in weight_name else "weight"
-            if "prelu" in layer.name.lower():
-                print()
             # quant_settings is the global setting of the config file here. For params, if one of the settings is not
             # specified, we will use the global setting (which may be specificed or defaulted).
             if param_type in param_config_dict:
