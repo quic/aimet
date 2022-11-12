@@ -47,28 +47,10 @@ import tensorflow as tf
 from tensorflow.python.platform import gfile
 
 from aimet_tensorflow.keras.quantsim import QuantizationSimModel
-from aimet_tensorflow.keras.utils.common import convert_h5_model_to_pb_model
-from aimet_tensorflow.keras.utils.common import replace_layer_in_functional_model
+from aimet_tensorflow.keras.utils.common import replace_layer_in_functional_model, \
+    convert_h5_model_to_pb_model, prepare_model
 
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
-
-
-def subclass_model_to_functional(subclassed_model):
-    input_layer = tf.keras.Input(shape=subclassed_model.input_shape[1:])
-    prev_layer = input_layer
-
-    for layer in subclassed_model.layers[1:]:
-        # Go through each "Layers" properities, if the layer is subclassed, then we will have the wrapped
-        # layers as properties that can be extracted over and used to create a functioncal model.
-        sub_layers = [sub_layer for _, sub_layer in subclassed_model.get_layer(layer.name).__dict__.items()
-                      if isinstance(sub_layer, tf.keras.layers.Layer)]
-        if sub_layers:
-            for sub_layer in sub_layers:
-                prev_layer = sub_layer(prev_layer)
-                # prev_layer = copy_layer(sub_layer)
-        else:
-            prev_layer = layer(prev_layer)
-    return tf.keras.Model(inputs=input_layer, outputs=prev_layer)
 
 
 def conv_functional():
@@ -111,7 +93,6 @@ class ConvTimesThree(tf.keras.layers.Layer):
         x = self.depth_conv(x)
         return x
 
-
 # See comment above ConvTimesThree Class
 def conv_sub_class():
     input_shape = (128, 28, 28, 1)
@@ -123,6 +104,74 @@ def conv_sub_class():
 
     model = tf.keras.Model(inputs=inp, outputs=x, name='conv_classes')
     return model
+
+# Below models are based on Deep Learning with Python by Francois Chollet Second Edition (page 182 - 185)
+# Only Subclassing
+class CustomerTicketModel(tf.keras.Model):
+
+    def __init__(self, num_departments):
+        super().__init__()
+        self.concat_layer = tf.keras.layers.Concatenate()
+        self.mixing_layer = tf.keras.layers.Dense(64, activation="relu")
+        self.priority_scorer = tf.keras.layers.Dense(1, activation="sigmoid")
+        self.department_classifier = tf.keras.layers.Dense(num_departments, activation="softmax")
+
+    def call(self, inputs):
+        title = inputs["title"]
+        text_body = inputs["text_body"]
+        tags = inputs["tags"]
+
+        features = self.concat_layer([title, text_body, tags])
+        features = self.mixing_layer(features)
+        priority = self.priority_scorer(features)
+        department = self.department_classifier(features)
+        return priority, department
+
+# Functional model that includes subclassed layers
+class Classifier(tf.keras.Model):
+
+    def __init__(self, num_classes=4):
+        super().__init__()
+        if num_classes == 2:
+            num_units = 1
+            activation = "sigmoid"
+        else:
+            num_units = num_classes
+            activation = "softmax"
+        self.dense = tf.keras.layers.Dense(num_units, activation=activation)
+
+    def call(self, inputs):
+        return self.dense(inputs)
+
+def functional_model_with_subclassed_layers():
+    inputs = tf.keras.layers.Input(shape=(3,))
+    features = tf.keras.layers.Dense(64, activation="relu")(inputs)
+    outputs = Classifier(num_classes=10)(features)
+    model = tf.keras.Model(inputs=inputs, outputs=outputs)
+    return model
+
+
+# Subclass model that includes functional layers
+
+def subclass_model_with_functional_layers():
+    inputs = tf.keras.Input(shape=(64,))
+    outputs = tf.keras.layers.Dense(1, activation="sigmoid")(inputs)
+    binary_classifier = tf.keras.Model(inputs=inputs, outputs=outputs)
+
+    class MyModel(tf.keras.Model):
+
+        def __init__(self, num_classes=2):
+            super().__init__()
+            self.dense = tf.keras.layers.Dense(64, activation="relu")
+            self.classifier = binary_classifier
+
+        def call(self, inputs):
+            features = self.dense(inputs)
+            return self.classifier(features)
+
+    model = MyModel()
+    return model
+
 
 
 def test_replace_middle_layers():
@@ -331,9 +380,8 @@ def check_conversion_tensor_names(model, custom_objects=None):
         json.dump(quantsim_config, f)
 
     random_input_data = tf.random.normal(shape=(128, *model.input_shape[1:]))
-    # run forward pass on dense to generate weights
+    # run forward pass to generate weights
     _ = model.predict(random_input_data)
-    unrolled_model = subclass_model_to_functional(model)
 
     sim = QuantizationSimModel(
         model, quant_scheme='tf', config_file='./config.json')
@@ -391,4 +439,54 @@ def test_convert_h5_to_pb_pretrained_keras():
     check_conversion_tensor_names(model)
 
 
-test_convert_h5_to_pb_subclass_model()
+def compare_weights(original_model, functional_model):
+    """
+    Helper function to compare the weights of two models. This function is used to test the conversion script.
+    :param original_model: the original model
+    :param functional_model: the model that was converted from the original model
+    """
+    original_weights = original_model.get_weights()
+    functional_weights = functional_model.get_weights()
+    for i in range(len(original_weights)):
+        assert np.array_equal(original_weights[i], functional_weights[i])
+
+
+def test_full_subclass_to_functional():
+    vocabulary_size = 10000
+    num_tags = 100
+    num_departments = 4
+    num_samples = 1280
+
+    title_data = np.random.randint(0, 2, size=(num_samples, vocabulary_size))
+    text_body_data = np.random.randint(0, 2, size=(num_samples, vocabulary_size))
+    tags_data = np.random.randint(0, 2, size=(num_samples, num_tags))
+
+
+    model = CustomerTicketModel(num_departments=num_departments)
+    _ = model({"title": title_data,
+               "text_body": text_body_data,
+               "tags": tags_data})
+    # Since this model is fully subclassed, specifically at the beginning, we call prepare model with
+    # the inputs to have Keras symoblic tensor fit the rest of the layers correctly.
+    functional_model = prepare_model(model,
+                                     [tf.keras.Input(shape=(num_samples, vocabulary_size,)),
+                                      tf.keras.Input(shape=(num_samples, vocabulary_size,)),
+                                      tf.keras.Input(shape=(num_samples, num_tags,))])
+    assert functional_model.count_params() == model.count_params()
+
+def test_functional_model_with_subclassed_layers_to_functional():
+    model = functional_model_with_subclassed_layers()
+    random_input = np.random.rand(32, 3)
+    _ = model(random_input)
+
+    functional_model = prepare_model(model)
+    assert functional_model.count_params() == model.count_params()
+
+def test_subclass_model_with_subclassed_layers_to_functional():
+    model = subclass_model_with_functional_layers()
+    input_shape = (32, 64)
+    random_input = np.random.rand(*input_shape)
+    _ = model(random_input)
+
+    functional_model = prepare_model(model, tf.keras.Input(shape=input_shape[1:]))
+    assert functional_model.count_params() == model.count_params()

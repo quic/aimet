@@ -39,10 +39,11 @@
 """ Common Utilities for tf 2 keras """
 import errno
 import os
-import typing
+from typing import Union, List, Dict, Tuple, AnyStr
 import tensorflow as tf
 from tensorflow.python.framework.convert_to_constants import convert_variables_to_constants_from_session_graph
 from tensorflow.python.framework.graph_util_impl import remove_training_nodes
+from tensorflow.python.keras.engine.functional import Functional
 
 from aimet_common.utils import AimetLogger
 from aimet_tensorflow.defs import AxisHandling
@@ -68,7 +69,7 @@ def is_lambda_operator(layer: tf.keras.layers.Layer) -> bool:
 
 
 def module_to_name_map(cur_layer: (tf.keras.Model, tf.keras.layers.Layer)) \
-        -> typing.Dict[tf.keras.layers.Layer, typing.Tuple[tf.keras.Model, str]]:
+        -> Dict[tf.keras.layers.Layer, Tuple[tf.keras.Model, str]]:
     """
     To find a variable name and parent reference of one module.
 
@@ -89,7 +90,7 @@ def module_to_name_map(cur_layer: (tf.keras.Model, tf.keras.layers.Layer)) \
     return ref_name
 
 
-def find_input_layers(node_layer_map: typing.Dict) -> typing.List[tf.keras.layers.InputLayer]:
+def find_input_layers(node_layer_map: Dict) -> List[tf.keras.layers.InputLayer]:
     """
     helper to find the input layers of the model.
 
@@ -107,7 +108,7 @@ def find_input_layers(node_layer_map: typing.Dict) -> typing.List[tf.keras.layer
 
 
 def _find_last_layers(cur_layer: (tf.keras.Model, tf.keras.layers.Layer)) \
-        -> typing.List[tf.keras.layers.Layer]:
+        -> List[tf.keras.layers.Layer]:
     """
     helper to find the last layers of the model.
 
@@ -127,7 +128,7 @@ def _find_last_layers(cur_layer: (tf.keras.Model, tf.keras.layers.Layer)) \
     return last_layers
 
 
-def create_layer_to_out_node_map(cur_layer: (tf.keras.Model, tf.keras.layers.Layer)) -> typing.Dict:
+def create_layer_to_out_node_map(cur_layer: (tf.keras.Model, tf.keras.layers.Layer)) -> Dict:
     """
     To find the outbound nodes of one layer.
 
@@ -151,7 +152,7 @@ def create_layer_to_out_node_map(cur_layer: (tf.keras.Model, tf.keras.layers.Lay
 
 def _submodule_handler_node_to_layer_map(
         cur_layer: (tf.keras.Model, tf.keras.layers.Layer),
-        node_layer_map: typing.Dict) -> (typing.Dict, str, typing.List):
+        node_layer_map: Dict) -> (Dict, str, List):
     """
     The utility to extract node_layer_map for the cur_layer submodule and
     provide the connectivity with the outer model.
@@ -204,7 +205,7 @@ def _submodule_handler_node_to_layer_map(
     return im_node_layer_map, im_node_input, im_nodes_after_input_layer
 
 
-def create_node_to_layer_map(cur_layer: (tf.keras.Model, tf.keras.layers.Layer)) -> typing.Dict:
+def create_node_to_layer_map(cur_layer: (tf.keras.Model, tf.keras.layers.Layer)) -> Dict:
     """
     To find the input layers and output layer of one node.
 
@@ -238,7 +239,7 @@ def create_node_to_layer_map(cur_layer: (tf.keras.Model, tf.keras.layers.Layer))
 
 
 def replace_layer_in_functional_model(model: tf.keras.Model, old_layer: tf.keras.layers.Layer,
-                                      new_layers: typing.Union[typing.List, tf.keras.layers.Layer]):
+                                      new_layers: Union[List, tf.keras.layers.Layer]):
     """
     Replace a layer in a model with a list of new layers to be called in sequential order.
     :param model: Model containing layer to replace
@@ -284,8 +285,8 @@ def replace_layer_in_functional_model(model: tf.keras.Model, old_layer: tf.keras
     residing_model._insert_layers(new_layers + list(following_layers_and_inputs_dict.keys()))
 
 
-def _get_residing_model_of_layer(model: tf.keras.Model, layer: tf.keras.layers.Layer) -> typing.Union[tf.keras.Model,
-                                                                                                      None]:
+def _get_residing_model_of_layer(model: tf.keras.Model, layer: tf.keras.layers.Layer) -> Union[tf.keras.Model,
+                                                                                               None]:
     """
     Get the model in which the layer resides, given a top level model. The residing model could be the topmost level
     model itself, or a submodel inside the topmost model.
@@ -306,7 +307,7 @@ def _get_residing_model_of_layer(model: tf.keras.Model, layer: tf.keras.layers.L
 
 
 def _get_following_layers_and_inputs(model: tf.keras.Model, layer: tf.keras.layers.Layer) -> \
-        typing.Dict[tf.keras.layers.Layer, typing.List]:
+        Dict[tf.keras.layers.Layer, List]:
     """
     Get a dictionary mapping following layers of the given layer to the keras inputs for the following layer.
     :param model: Model containing layer
@@ -327,7 +328,7 @@ def _get_following_layers_and_inputs(model: tf.keras.Model, layer: tf.keras.laye
     return following_layers_and_inputs
 
 
-def _remove_network_nodes(model: tf.keras.Model, layers: typing.List[tf.keras.layers.Layer]):
+def _remove_network_nodes(model: tf.keras.Model, layers: List[tf.keras.layers.Layer]):
     """
     Remove network nodes in the model corresponding to the given layers
     :param model: Model to remove network nodes from
@@ -339,8 +340,8 @@ def _remove_network_nodes(model: tf.keras.Model, layers: typing.List[tf.keras.la
         model._network_nodes.remove(node_key)
 
 
-def _call_new_layers_sequentially(parent_layers: typing.List[tf.keras.layers.Layer],
-                                  new_layers: typing.List[tf.keras.layers.Layer]) -> tf.Tensor:
+def _call_new_layers_sequentially(parent_layers: List[tf.keras.layers.Layer],
+                                  new_layers: List[tf.keras.layers.Layer]) -> tf.Tensor:
     """
     Call new layers sequentially to create nodes, starting from parent layers.
     :param parent_layers: Parent layers to start building new nodes from
@@ -364,9 +365,9 @@ def _call_new_layers_sequentially(parent_layers: typing.List[tf.keras.layers.Lay
 
 
 def _clear_inbound_and_outbound_nodes(layer_of_interest: tf.keras.layers.Layer,
-                                      parent_layers: typing.List[tf.keras.layers.Layer],
-                                      following_layers_and_inputs_dict: typing.Dict[tf.keras.layers.Layer,
-                                                                                    typing.List[tf.Tensor]]):
+                                      parent_layers: List[tf.keras.layers.Layer],
+                                      following_layers_and_inputs_dict: Dict[tf.keras.layers.Layer,
+                                                                             List[tf.Tensor]]):
     """
     Clear certain outbound nodes of parent layers, inbound node of layer_of_interest, outbound nodes of
     layer_of_interest, and inbound nodes of following layers.
@@ -405,8 +406,8 @@ def _clear_inbound_and_outbound_nodes(layer_of_interest: tf.keras.layers.Layer,
 
 
 def _link_following_layers_to_new_layer_output(new_tensor_output: tf.Tensor,
-                                               following_layers_and_inputs_dict: typing.Dict[tf.keras.layers.Layer,
-                                                                                             typing.List[tf.Tensor]],
+                                               following_layers_and_inputs_dict: Dict[tf.keras.layers.Layer,
+                                                                                      List[tf.Tensor]],
                                                replaced_layer: tf.keras.layers.Layer):
     """
     Link following layers to the given tensor.
@@ -454,7 +455,7 @@ def _update_model_output_info(residing_model: tf.keras.Model, replaced_layer: tf
 
 def parse_activation_layer(
         activation_layer: tf.keras.layers.Activation,
-) -> typing.List[str]:
+) -> List[str]:
     """
     Parse generic tf.keras.layers.Activation and convert it to corresponding onnx type
 
@@ -481,7 +482,7 @@ def parse_activation_layer(
     return [onnx_activation]
 
 
-def get_number_of_outputs_and_axis_handling(layer, weight_shape, param_type) -> typing.Tuple[int, AxisHandling]:
+def get_number_of_outputs_and_axis_handling(layer, weight_shape, param_type) -> Tuple[int, AxisHandling]:
     """
     Get number of output of channels and handling axis for a specific layers
     :param layer: tf.keras.layers.Layer
@@ -516,7 +517,7 @@ def log_param_quantizer_wrapper_details(layer, axis_handling=None, num_output_ch
                       axis_handling, num_output_channels)
 
 
-def convert_h5_model_to_pb_model(h5_model_path: str, custom_objects: dict = None):
+def convert_h5_model_to_pb_model(h5_model_path: AnyStr, custom_objects: Dict = None):
     """
     This utility function converts a h5_model from Keras into a frozen pb for consumption by SNPE/QNN
     :param h5_model_path: Path to the saved h5 Keras Model
@@ -524,7 +525,7 @@ def convert_h5_model_to_pb_model(h5_model_path: str, custom_objects: dict = None
     """
 
     # Function for validating if the file exist and is a h5
-    def validate_model_path() -> typing.Tuple[str, str]:
+    def validate_model_path() -> Tuple[str, str]:
         if not os.path.exists(h5_model_path):
             raise FileNotFoundError(errno.ENOENT, os.strerror(errno.ENOENT), h5_model_path)
 
@@ -577,3 +578,40 @@ def convert_h5_model_to_pb_model(h5_model_path: str, custom_objects: dict = None
             tf.io.write_graph(frozen_graph, save_path, model_name, as_text=False)
 
             _logger.info("Success. The converted model is located at %s saved as %s", save_path, model_name)
+
+
+def prepare_model(original_model: tf.keras.Model, input_layer: Union[tf.keras.Input, List[tf.keras.Input]] = None):
+    """
+    This function prepares a Keras model before continuing on with AIMET. Specifically, it will convert the model into
+    a purely Functional API model and copy over the original models weights.
+    :param original_model: The original model to be prepared
+    :param input_layer: The input layer to be used for the new model. By default, the input layer is set to None. If the
+    beginning portion of the model is subclassed, then the input layer must be passed in.
+    """
+    try:
+        input_layer = original_model.layers[0].input
+        prev_layer = input_layer
+        layers_to_copy = original_model.layers[1:]
+    except AttributeError:
+        if input_layer is None:
+            raise ValueError("The top layer of this model is subclassed. Please provide an input layer via the "
+                             "input_layer parameter.")
+        prev_layer = input_layer
+        layers_to_copy = original_model.layers
+
+    for layer in layers_to_copy:
+        # If the layer is another Functional model, we need to take out it's layer minus the input layer
+        if isinstance(layer, Functional):
+            for func_layer in layer.layers[1:]:
+                prev_layer = func_layer(prev_layer)
+        else:
+            # Go through each "Layers" properities, if the layer is subclassed, then we will have the wrapped
+            # layers as properties that can be extracted over and used to create a functioncal model.
+            sub_layers = [sub_layer for _, sub_layer in original_model.get_layer(layer.name).__dict__.items()
+                          if isinstance(sub_layer, tf.keras.layers.Layer)]
+            if sub_layers:
+                for sub_layer in sub_layers:
+                    prev_layer = sub_layer(prev_layer)
+            else:
+                prev_layer = layer(prev_layer)
+    return tf.keras.Model(inputs=input_layer, outputs=prev_layer)
