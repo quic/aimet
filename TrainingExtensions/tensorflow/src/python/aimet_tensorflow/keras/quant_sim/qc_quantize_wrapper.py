@@ -37,6 +37,7 @@
 # =============================================================================
 """ Qc Quantize wrapper for tf 2 keras """
 from typing import Union, List, Dict
+from enum import IntEnum
 import tensorflow as tf
 
 import aimet_common.libpymo as libpymo
@@ -50,6 +51,15 @@ from aimet_tensorflow.keras.utils.common import is_lambda_operator
 from aimet_tensorflow.utils.constants import QUANT_ALLOWED_DTYPES
 
 _logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Quant)
+
+class BnParamQuantizerIndex(IntEnum):
+    """
+    Enumeration of Bn param_quantizers index
+    """
+    GAMMA = 0
+    BETA = 1
+    MEAN = 2
+    VAR = 3
 
 
 class QuantizerSettings:
@@ -264,6 +274,10 @@ class QcQuantizeWrapper(tf.keras.layers.Layer):
                                                 self._param_quant_settings.use_unsigned_symmetric,
                                                 enabled=True))
 
+        # disable BN moving mean and moving variance to ensure consistency with torch
+        if isinstance(self._layer_to_wrap, tf.keras.layers.BatchNormalization):
+            self.param_quantizers[BnParamQuantizerIndex.MEAN].disable()
+            self.param_quantizers[BnParamQuantizerIndex.VAR].disable()
     @property
     def original_layer(self):
         """ layer to wrap (original layer) getter """
@@ -289,8 +303,17 @@ class QcQuantizeWrapper(tf.keras.layers.Layer):
         :param inputs: Inputs passed to the module in the forward pass
         :return: Quantized output from the wrapped module
         """
+        is_call_training_mode = kwargs["training"]
+
         for idx, param in enumerate(self._layer_to_wrap.weights):
             self._shadow_params[idx].assign(param)
+
+        # for BN with training = True ,only write to shadow params for beta and gamma
+        if isinstance(self._layer_to_wrap, tf.keras.layers.BatchNormalization):
+            if is_call_training_mode:
+                training_shadow_params = [self._shadow_params[BnParamQuantizerIndex.GAMMA], self._shadow_params[BnParamQuantizerIndex.BETA]]
+                self._shadow_params = training_shadow_params
+
         self._quantize_params()
 
         # Special logic for +, -, *, / operators which become lambda layers with kwarg inputs
@@ -301,6 +324,7 @@ class QcQuantizeWrapper(tf.keras.layers.Layer):
             inputs = self._quantize_activation(inputs, self.input_quantizers, True)
         outputs = self._layer_to_wrap(inputs, *args, **kwargs)
         outputs = self._quantize_activation(outputs, self.output_quantizers, False)
+
         self._restore_shadow_params()
         return outputs
 
