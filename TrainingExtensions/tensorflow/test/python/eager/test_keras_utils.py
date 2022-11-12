@@ -473,6 +473,7 @@ def test_full_subclass_to_functional():
                                       tf.keras.Input(shape=(num_samples, vocabulary_size,)),
                                       tf.keras.Input(shape=(num_samples, num_tags,))])
     assert functional_model.count_params() == model.count_params()
+    compare_weights(model, functional_model)
 
 def test_functional_model_with_subclassed_layers_to_functional():
     model = functional_model_with_subclassed_layers()
@@ -481,6 +482,7 @@ def test_functional_model_with_subclassed_layers_to_functional():
 
     functional_model = prepare_model(model)
     assert functional_model.count_params() == model.count_params()
+    compare_weights(model, functional_model)
 
 def test_subclass_model_with_subclassed_layers_to_functional():
     model = subclass_model_with_functional_layers()
@@ -490,3 +492,6 @@ def test_subclass_model_with_subclassed_layers_to_functional():
 
     functional_model = prepare_model(model, tf.keras.Input(shape=input_shape[1:]))
     assert functional_model.count_params() == model.count_params()
+    compare_weights(model, functional_model)
+
+test_full_subclass_to_functional()
