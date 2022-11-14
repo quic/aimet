@@ -53,7 +53,7 @@ class TestQuantSimConfig:
         assert sim.qc_quantize_op_dict['fc_w'].enabled == True
         assert sim.qc_quantize_op_dict['fc_b'].enabled == False
         assert sim.qc_quantize_op_dict['input'].enabled == False
-        assert sim.qc_quantize_op_dict['3'].enabled == True
+        assert sim.qc_quantize_op_dict['3'].enabled == False
         assert sim.qc_quantize_op_dict['4'].enabled == True
         assert sim.qc_quantize_op_dict['5'].enabled == True
         assert sim.qc_quantize_op_dict['6'].enabled == True
@@ -160,7 +160,6 @@ class TestQuantSimConfig:
             "model_input": {},
             "model_output": {}
         }
-
         if not os.path.exists('./data'):
             os.makedirs('./data')
         with open('./data/quantsim_config.json', 'w') as f:
@@ -171,6 +170,51 @@ class TestQuantSimConfig:
         assert sim.qc_quantize_op_dict['conv_w'].use_symmetric_encodings == False
         assert sim.qc_quantize_op_dict['input'].enabled == True
         assert sim.qc_quantize_op_dict['input'].use_symmetric_encodings == False
+
+    def test_parse_config_file_supergroups(self):
+        """ Test that supergroup quantization parameters are set correctly when using json config file """
+        model = test_models.build_dummy_model()
+
+        quantsim_config = {
+            "defaults": {
+                "ops": {
+                    "is_output_quantized": "True",
+                    "is_symmetric": "False"
+                },
+                "params": {
+                    "is_quantized": "False",
+                    "is_symmetric": "False"
+                }
+            },
+            "params": {},
+            "op_type": {},
+            "supergroups": [
+                {
+                    "op_list": ["Conv", "Relu"]
+                },
+                {
+                    "op_list": ["Relu", "MaxPool"]
+                },
+            ],
+            "model_input": {},
+            "model_output": {}
+        }
+
+        if not os.path.exists('./data'):
+            os.makedirs('./data')
+        with open('./data/quantsim_config.json', 'w') as f:
+            json.dump(quantsim_config, f)
+        sim = QuantizationSimModel(model, config_file='./data/quantsim_config.json')
+
+        # 3 in conv output, 4 is relu output (even though it was not touched with Conv, relu pattern, it was disabled for
+        # relu maxpool pattern
+        for name in ['3', '4',]:
+            assert sim.qc_quantize_op_dict[name].enabled == False
+
+        assert sim.qc_quantize_op_dict['5'].enabled == True
+
+        if os.path.exists('./data/quantsim_config.json'):
+            os.remove('./data/quantsim_config.json')
 
     def test_parse_config_file_symmetric_modes(self):
         """ Test that model output quantization parameters are set correctly when using json config file """
@@ -200,6 +244,6 @@ class TestQuantSimConfig:
             json.dump(quantsim_config, f)
         sim = QuantizationSimModel(model, config_file='./data/quantsim_config.json')
 
-        for _, quantizer in sim.qc_quantize_op_dict.items():
+        for quantizer in sim.qc_quantize_op_dict.values():
             assert quantizer.use_strict_symmetric == True
             assert quantizer.use_unsigned_symmetric == False
