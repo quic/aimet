@@ -400,8 +400,7 @@ class QuantSimConfigurator(ABC):
         :param op_configs: Dictionary containing configurations for ops of certain types
         """
 
-    @classmethod
-    def _build_supergroup_patterns(cls, supergroup_config: SupergroupType, callback: SupergroupConfigCallback,
+    def _build_supergroup_patterns(self, supergroup_config: SupergroupType, callback: SupergroupConfigCallback,
                                    onnx_conn_graph_type_mapper: OnnxConnectedGraphTypeMapper) \
             -> List[PatternType]:
         """
@@ -411,9 +410,17 @@ class QuantSimConfigurator(ABC):
         """
         op_list = supergroup_config[ConfigDictKeys.OP_LIST]
         list_of_permutations = _build_list_of_permutations(op_list, onnx_conn_graph_type_mapper)
+        return self._build_list_of_pattern(list_of_permutations, callback)
+
+    @staticmethod
+    def _build_list_of_pattern(list_of_op_names: List[List[str]], callback: SupergroupConfigCallback) -> \
+            List[PatternType]:
+        """
+        Builds list of patterns given a list of op names
+        """
         list_of_patterns = []
-        for permutation in list_of_permutations:
-            list_of_patterns.append(PatternType(pattern=permutation, action=callback))
+        for op_names in list_of_op_names:
+            list_of_patterns.append(PatternType(pattern=op_names, action=callback))
         return list_of_patterns
 
     @abstractmethod
