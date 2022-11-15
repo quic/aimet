@@ -239,15 +239,13 @@ class QuantSimConfigurator(AimetCommonQuantSimConfigurator):
         Set model input specific configurations (fifth level of specificity in configuration file)
         :param model_input_configs: Configuration for model inputs
         """
-        if ConfigDictKeys.IS_INPUT_QUANTIZED in model_input_configs and \
-                model_input_configs[ConfigDictKeys.IS_INPUT_QUANTIZED]:
-            input_ops = get_all_input_ops(self._conn_graph)
-            for input_op in input_ops:
-                op_name = input_op.name
-                if op_name in self._op_to_quantizers:
-                    modified_quantize_ops = {}
-                    self._set_config_for_op(op_name, self._op_to_quantizers[op_name],
-                                            model_input_configs, modified_quantize_ops)
+        input_ops = get_all_input_ops(self._conn_graph)
+        for input_op in input_ops:
+            op_name = input_op.name
+            if op_name in self._op_to_quantizers:
+                modified_quantize_ops = {}
+                self._set_config_for_op(op_name, self._op_to_quantizers[op_name],
+                                        model_input_configs, modified_quantize_ops)
 
     def _set_model_output_configs(self, model_output_configs: ConfigType):
         """

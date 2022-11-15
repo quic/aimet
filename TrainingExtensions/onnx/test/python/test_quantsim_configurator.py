@@ -172,6 +172,30 @@ class TestQuantSimConfig:
         assert sim.qc_quantize_op_dict['input'].use_symmetric_encodings == False
         assert sim.qc_quantize_op_dict['output'].enabled == True
 
+    def test_config_for_model_input(self):
+        model = test_models.build_dummy_model()
+
+        quantsim_config = {
+            "defaults": {
+                "ops": {},
+                "params": {}
+            },
+            "params": {},
+            "op_type": {},
+            "supergroups": [],
+            "model_input": {
+                "is_input_quantized": "True"
+            },
+            "model_output": {}
+        }
+
+        if not os.path.exists('./data'):
+            os.makedirs('./data')
+        with open('./data/quantsim_config.json', 'w') as f:
+            json.dump(quantsim_config, f)
+        sim = QuantizationSimModel(model, config_file='./data/quantsim_config.json')
+        assert sim.qc_quantize_op_dict['input'].enabled == True
+
     def test_parse_config_file_supergroups(self):
         """ Test that supergroup quantization parameters are set correctly when using json config file """
         model = test_models.build_dummy_model()
