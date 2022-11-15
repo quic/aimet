@@ -151,7 +151,6 @@ class QuantizerSettings:
 
 class QcQuantizeWrapper(tf.keras.layers.Layer):
     """ Wrapper for simulating quantization noise """
-
     # pylint: disable=too-many-arguments
     def __init__(self,
                  layer_to_wrap: tf.keras.layers.Layer,
@@ -286,6 +285,23 @@ class QcQuantizeWrapper(tf.keras.layers.Layer):
                 "output_quantizers": [output_quantizer.get_config() for output_quantizer in self.output_quantizers],
                 "param_quantizers": [param_quantizer.get_config() for param_quantizer in self.param_quantizers],
                 "shadow_params": self._shadow_params}
+
+    @classmethod
+    def from_config(cls, config):
+        """ Override from_config """
+
+        # Go through the configs for each quantizer and create the quantizer objects through their from_config methods
+        config["input_quantizers"] = [ActivationTensorQuantizer.from_config(input_quantizer_config)
+                                      for input_quantizer_config in config["input_quantizers"]]
+
+        config["output_quantizers"] = [ActivationTensorQuantizer.from_config(output_quantizer_config)
+                                       for output_quantizer_config in config["output_quantizers"]]
+
+        config["param_quantizers"] = [
+            (lambda quantizer_type: quantizer_type.from_config(param_quantizer_config))
+            (ParamPerChannelQuantizer if isinstance(param_quantizer_config, List) else ParamPerTensorQuantizer)
+            for param_quantizer_config in config["param_quantizers"]]
+        return cls(**config)
 
     # pylint: disable=arguments-differ
     def call(self, inputs, *args, **kwargs):
