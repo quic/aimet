@@ -37,8 +37,6 @@
 # =============================================================================
 import json
 import os
-import numpy as np
-from onnx import load_model
 from aimet_onnx.quantsim import QuantizationSimModel
 import test_models
 
@@ -52,7 +50,7 @@ class TestQuantSimConfig:
         assert sim.qc_quantize_op_dict['conv_b'].enabled == False
         assert sim.qc_quantize_op_dict['fc_w'].enabled == True
         assert sim.qc_quantize_op_dict['fc_b'].enabled == False
-        assert sim.qc_quantize_op_dict['input'].enabled == False
+        assert sim.qc_quantize_op_dict['input'].enabled == True
         assert sim.qc_quantize_op_dict['3'].enabled == False
         assert sim.qc_quantize_op_dict['4'].enabled == True
         assert sim.qc_quantize_op_dict['5'].enabled == True
@@ -129,7 +127,7 @@ class TestQuantSimConfig:
             assert sim.qc_quantize_op_dict[name].enabled == False
             assert sim.qc_quantize_op_dict[name].use_symmetric_encodings == True
 
-    def test_op_level_config(self):
+    def test_op_level_config_and_model_output(self):
         model = test_models.build_dummy_model()
 
         quantsim_config = {
@@ -158,7 +156,9 @@ class TestQuantSimConfig:
             },
             "supergroups": [],
             "model_input": {},
-            "model_output": {}
+            "model_output": {
+                "is_output_quantized": "True",
+            }
         }
         if not os.path.exists('./data'):
             os.makedirs('./data')
@@ -170,6 +170,7 @@ class TestQuantSimConfig:
         assert sim.qc_quantize_op_dict['conv_w'].use_symmetric_encodings == False
         assert sim.qc_quantize_op_dict['input'].enabled == True
         assert sim.qc_quantize_op_dict['input'].use_symmetric_encodings == False
+        assert sim.qc_quantize_op_dict['output'].enabled == True
 
     def test_parse_config_file_supergroups(self):
         """ Test that supergroup quantization parameters are set correctly when using json config file """

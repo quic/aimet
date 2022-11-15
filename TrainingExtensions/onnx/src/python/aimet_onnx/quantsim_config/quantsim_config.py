@@ -42,6 +42,7 @@ from typing import List, Dict
 from onnx import onnx_pb
 from aimet_common.defs import QuantizationDataType
 from aimet_common.graph_searcher import GraphSearcher
+from aimet_common.connected_graph.connectedgraph_utils import get_all_input_ops, get_all_output_ops
 from aimet_common.quantsim_config.json_config_importer import ConfigDictKeys, ConfigType, OpType, ParamType, OpTypeType, \
     SupergroupType
 from aimet_common.quantsim_config.quantsim_config import QuantSimConfigurator as AimetCommonQuantSimConfigurator, \
@@ -238,12 +239,29 @@ class QuantSimConfigurator(AimetCommonQuantSimConfigurator):
         Set model input specific configurations (fifth level of specificity in configuration file)
         :param model_input_configs: Configuration for model inputs
         """
+        if ConfigDictKeys.IS_INPUT_QUANTIZED in model_input_configs and \
+                model_input_configs[ConfigDictKeys.IS_INPUT_QUANTIZED]:
+            input_ops = get_all_input_ops(self._conn_graph)
+            for input_op in input_ops:
+                op_name = input_op.name
+                if op_name in self._op_to_quantizers:
+                    modified_quantize_ops = {}
+                    self._set_config_for_op(op_name, self._op_to_quantizers[op_name],
+                                            model_input_configs, modified_quantize_ops)
 
     def _set_model_output_configs(self, model_output_configs: ConfigType):
         """
         Set model output specific configurations (sixth level of specificity in configuration file)
         :param model_output_configs: Configuration for model outputs
         """
+        output_ops = get_all_output_ops(self._conn_graph)
+
+        for output_op in output_ops:
+            op_name = output_op.name
+            if op_name in self._op_to_quantizers:
+                modified_quantize_ops = {}
+                self._set_config_for_op(op_name, self._op_to_quantizers[op_name],
+                                        model_output_configs, modified_quantize_ops)
 
     def _set_default_configs(self, default_configs):
         """
