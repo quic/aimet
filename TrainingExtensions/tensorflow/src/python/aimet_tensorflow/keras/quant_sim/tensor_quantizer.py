@@ -38,6 +38,7 @@
 """ Tensor quantizer for tf 2 keras """
 import abc
 import functools
+from dataclasses import dataclass
 from typing import List, Optional, Tuple
 import tensorflow as tf
 import tensorflow.keras.backend as K
@@ -54,6 +55,17 @@ from aimet_tensorflow.keras.quant_sim.quantsim_straight_through_grad import qc_s
 import aimet_tensorflow.keras.utils.common as keras_common_utils
 
 _logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Quant)
+
+@dataclass
+class TensorQuantizerState:
+    """
+    Class to store the state of a TensorQuantizer's underlying C++ TensorQuantizer objects. This is used,
+    Specifically to be able to seralize the state of the quantizer and restore it later
+    """
+    quant_scheme: QuantScheme
+    round_mode: str
+    use_strict_symmetric: bool
+    use_unsigned_symmetric: bool
 
 
 def _handle_conv2d_transpose(callback):
@@ -120,6 +132,17 @@ class TensorQuantizer(tf.keras.layers.Layer, abc.ABC):
         # - compute_encoding(), reset_quant_mode() will take no effect.
         # - Tensor quantizer cannot be disabled.
         self._is_encoding_frozen = False
+
+    def get_config(self):
+        """Returns the config of the TensorQuantizer class."""
+        return {
+            'quant_scheme': self._quant_scheme,
+            'bitwidth': self._bitwidth,
+            'is_symmetric': self._is_symmetric,
+            'op_mode': self._quantizer_mode,
+            'is_encoding_valid': self._is_encoding_valid,
+            'is_encoding_frozen': self._is_encoding_frozen
+        }
 
     @property
     def original_layer(self):
@@ -261,6 +284,18 @@ class StaticGridPerTensorQuantizer(TensorQuantizer):
                                                          MAP_ROUND_MODE_TO_PYMO[round_mode])
         self._tensor_quantizer.setStrictSymmetric(use_strict_symmetric)
         self._tensor_quantizer.setUnsignedSymmetric(use_unsigned_symmetric)
+
+    def get_config(self):
+        config = super(StaticGridPerTensorQuantizer, self).get_config()
+        tensor_quantizer_state = TensorQuantizerState(
+            self.tensor_quantizer.getQuantScheme(), self.tensor_quantizer.roundingMode,
+            self.tensor_quantizer.getStrictSymmetric(), self.tensor_quantizer.getUnsignedSymmetric())
+        config.update({
+            'tensor_quantizer': tensor_quantizer_state,
+            'encoding_min': self._encoding_min,
+            'encoding_max': self._encoding_max
+        })
+        return config
 
     @TensorQuantizer.quant_scheme.setter
     def quant_scheme(self, quant_scheme: QuantScheme):
@@ -589,6 +624,21 @@ class StaticGridPerChannelQuantizer(TensorQuantizer):
 
         self._tensor_quantizer = tensor_quantizers
         self._tensor_quantizer_int64 = tensor_quantizer_int64
+
+    def get_config(self):
+        config = super(StaticGridPerChannelQuantizer, self).get_config()
+        tensor_quantizer_state = [
+            TensorQuantizerState(tensor_quantizer.getQuantScheme(), tensor_quantizer.roundingMode,
+                                 tensor_quantizer.getStrictSymmetric(), tensor_quantizer.getUnsignedSymmetric())
+            for tensor_quantizer in self.tensor_quantizer
+        ]
+
+        config.update({
+            'tensor_quantizer': tensor_quantizer_state,
+            'encoding_min': self._encoding_min,
+            'encoding_max': self._encoding_max
+        })
+        return config
 
     @TensorQuantizer.quant_scheme.setter
     def quant_scheme(self, quant_scheme: QuantScheme):

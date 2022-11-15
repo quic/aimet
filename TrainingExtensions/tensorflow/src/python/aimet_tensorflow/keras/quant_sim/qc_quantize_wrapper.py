@@ -282,9 +282,9 @@ class QcQuantizeWrapper(tf.keras.layers.Layer):
                 "param_quant_settings": self._param_quant_settings,
                 "num_inputs": self._num_inputs,
                 "name": self.name,
-                "input_quantizers": self.input_quantizers,
-                "output_quantizers": self.output_quantizers,
-                "param_quantizers": self.param_quantizers,
+                "input_quantizers": [input_quantizer.get_config() for input_quantizer in self.input_quantizers],
+                "output_quantizers": [output_quantizer.get_config() for output_quantizer in self.output_quantizers],
+                "param_quantizers": [param_quantizer.get_config() for param_quantizer in self.param_quantizers],
                 "shadow_params": self._shadow_params}
 
     # pylint: disable=arguments-differ
