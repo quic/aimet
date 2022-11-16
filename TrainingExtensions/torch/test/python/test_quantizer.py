@@ -2852,6 +2852,39 @@ class TestQuantizationSimLearnedGrid:
             encodings = json.load(json_file)['activation_encodings']
             assert set(['5', '6', '7', '9', '11',]).issubset(encodings.keys())
             assert 'scale' in encodings['11'][0]
+    def test_attributes_mismatch_after_manual_change(self):
+        """ Test to enusre that the attributes for quantizers are correctly set when modified manually """
+        class SimpleModel(torch.nn.Module):
+            def __init__(self):
+                super(SimpleModel, self).__init__()
+                self.conv1 = torch.nn.Conv2d(3, 8, kernel_size=2, stride=2, padding=2, bias=False)
+            def forward(self, inputs):
+                x = self.conv1(inputs)
+                return x
+
+        model = SimpleModel().eval()
+        dummy_input = torch.randn(1, 3, 10, 10)
+        quant_sim = QuantizationSimModel(model, dummy_input=dummy_input,
+                                         quant_scheme=QuantScheme.training_range_learning_with_tf_init)
+
+        # Manually change bitwidth, use_strict_symmetric and use_unsigned_symmetric attributes for quantizers.
+        quant_sim.model.conv1.input_quantizers[0].bitwidth = 16
+        quant_sim.model.conv1.output_quantizers[0].bitwidth = 16
+        quant_sim.model.conv1.param_quantizers['weight'].bitwidth = 16
+        quant_sim.model.conv1.input_quantizers[0].use_strict_symmetric = True
+        quant_sim.model.conv1.input_quantizers[0].use_unsigned_symmetric = False
+        quant_sim.model.conv1.input_quantizers[0].use_symmetric_encodings = True
+
+        # Compute encodings.
+        quant_sim.compute_encodings(evaluate, dummy_input)
+
+        # Make sure the attributes are in sync after replacing StaticGridQuantWrapper by LearnedGridQuantWrapper.
+        assert quant_sim.model.conv1.input_quantizers[0].bitwidth == 16
+        assert quant_sim.model.conv1.output_quantizers[0].bitwidth == 16
+        assert quant_sim.model.conv1.param_quantizers['weight'].bitwidth == 16
+        assert quant_sim.model.conv1.input_quantizers[0].use_strict_symmetric
+        assert not quant_sim.model.conv1.input_quantizers[0].use_unsigned_symmetric
+        assert quant_sim.model.conv1.input_quantizers[0].use_symmetric_encodings
 
 class CustModelV1Simple(torch.nn.Module):
     def __init__(self):
