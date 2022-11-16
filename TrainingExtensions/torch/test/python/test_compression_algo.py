@@ -48,7 +48,7 @@ from aimet_common.defs import CostMetric
 from aimet_common.cost_calculator import SpatialSvdCostCalculator
 from aimet_common.compression_algo import CompressionAlgo
 
-from aimet_torch.utils import create_rand_tensors_given_shapes
+from aimet_torch.utils import create_rand_tensors_given_shapes, get_device
 from aimet_torch.examples import mnist_torch_model
 from aimet_torch.layer_database import LayerDatabase
 from aimet_torch.svd.svd_pruner import SpatialSvdPruner
@@ -97,7 +97,7 @@ class TestTrainingExtensionsCompressionAlgo(unittest.TestCase):
                                  50]
 
         input_shape = (1, 1, 28, 28)
-        dummy_input = create_rand_tensors_given_shapes(input_shape)
+        dummy_input = create_rand_tensors_given_shapes(input_shape, get_device(model))
         layer_db = LayerDatabase(model, dummy_input)
 
         pruner = SpatialSvdPruner()
@@ -143,7 +143,7 @@ class TestTrainingExtensionsCompressionAlgo(unittest.TestCase):
                                  50]
 
         input_shape=[(1, 1, 28, 28), (1, 1, 28, 28)]
-        dummy_input = create_rand_tensors_given_shapes(input_shape)
+        dummy_input = create_rand_tensors_given_shapes(input_shape, get_device(model))
         layer_db = LayerDatabase(model, dummy_input)
 
         pruner = SpatialSvdPruner()

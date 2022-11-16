@@ -373,7 +373,7 @@ def find_all_batch_norms_to_fold(model, input_shapes):
     :return: List of pairs of bn and layers to fold bn into
     """
     device = utils.get_device(model)
-    inp_tensor_list = [t.to(device) for t in utils.create_rand_tensors_given_shapes(input_shapes)]
+    inp_tensor_list = utils.create_rand_tensors_given_shapes(input_shapes, device)
     connected_graph = ConnectedGraph(model, inp_tensor_list)
     conv_bn_pairs, bn_conv_pairs = _find_all_batch_norms_to_fold(model, input_shapes, connected_graph)
     return conv_bn_pairs + bn_conv_pairs
@@ -436,7 +436,7 @@ def fold_all_batch_norms_to_weight(
     if isinstance(model, torch.nn.DataParallel):
         return fold_all_batch_norms_to_weight(model.module, input_shapes)
     device = utils.get_device(model)
-    inp_tensor_list = [t.to(device) for t in utils.create_rand_tensors_given_shapes(input_shapes)]
+    inp_tensor_list = utils.create_rand_tensors_given_shapes(input_shapes, device)
     connected_graph = ConnectedGraph(model, inp_tensor_list)
     conv_bn_pairs, bn_conv_pairs = _find_all_batch_norms_to_fold(model, input_shapes, connected_graph)
 
@@ -492,7 +492,7 @@ def find_all_conv_bn_with_activation(model: torch.nn.Module, input_shape: Tuple)
     :return: dictionary of conv/linear layers with associated bn op / activation info
     """
     device = utils.get_device(model)
-    inp_tensor_list = [t.to(device) for t in utils.create_rand_tensors_given_shapes(input_shape)]
+    inp_tensor_list = utils.create_rand_tensors_given_shapes(input_shape, device)
     connected_graph = ConnectedGraph(model, inp_tensor_list)
     return _find_all_conv_bn_with_activation(connected_graph)
 

@@ -1098,7 +1098,7 @@ class TestQuantsimConfig:
         model.eval()
         input_shapes = (1, 3, 32, 32)
 
-        random_inputs = utils.create_rand_tensors_given_shapes(input_shapes)
+        random_inputs = utils.create_rand_tensors_given_shapes(input_shapes, utils.get_device(model))
         conn_graph = ConnectedGraph(model, random_inputs)
         starting_op = conn_graph.get_op_from_module_name('SingleResidual.conv3')
         add_op = [op for op in conn_graph.get_all_ops().values() if op.type == 'Add'][0]

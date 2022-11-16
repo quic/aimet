@@ -243,8 +243,7 @@ def run_hook_for_layers(model: torch.nn.Module, input_shapes: Union[Tuple, List[
     # Run forward pass to execute the hook functions
     # ------------------------------------------------
     device = get_device(model)
-    dummy_tensors = create_rand_tensors_given_shapes(input_shapes)
-    dummy_tensors = [tensor.to(device) for tensor in dummy_tensors]
+    dummy_tensors = create_rand_tensors_given_shapes(input_shapes, device)
     with in_eval_mode(model), torch.no_grad():
         _ = model(*dummy_tensors)
 
@@ -529,7 +528,7 @@ def replace_modules_with_instances_of_new_type(model: torch.nn.Module, modules_t
             replace_modules_with_instances_of_new_type(module_ref, modules_to_replace_list, new_type)
 
 
-def create_rand_tensors_given_shapes(input_shape: Union[Tuple, List[Tuple]], device: torch.device = None) \
+def create_rand_tensors_given_shapes(input_shape: Union[Tuple, List[Tuple]], device: torch.device) \
         -> List[torch.Tensor]:
     """
     Given shapes of some tensors, create one or more random tensors and return them as a list of tensors
@@ -544,10 +543,7 @@ def create_rand_tensors_given_shapes(input_shape: Union[Tuple, List[Tuple]], dev
 
     rand_tensors = []
     for shape in input_shapes:
-        if device is not None:
-            rand_tensors.append(torch.rand(shape).to(device))
-        else:
-            rand_tensors.append(torch.rand(shape))
+        rand_tensors.append(torch.rand(shape).to(device))
 
     return rand_tensors
 
@@ -561,8 +557,7 @@ def get_ordered_lists_of_conv_fc(model: torch.nn.Module, input_shapes: Tuple) ->
     """
 
     device = get_device(model)
-    dummy_input = create_rand_tensors_given_shapes(input_shapes)
-    dummy_input = [tensor.to(device) for tensor in dummy_input]
+    dummy_input = create_rand_tensors_given_shapes(input_shapes, device)
     module_list = get_ordered_list_of_modules(model, dummy_input)
     module_list = [[name, module] for name, module in module_list if
                    isinstance(module, (torch.nn.Conv1d, torch.nn.Conv2d, torch.nn.Linear, torch.nn.ConvTranspose2d))]

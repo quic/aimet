@@ -54,7 +54,7 @@ from aimet_common.defs import LayerCompRatioPair
 from aimet_common.utils import AimetLogger
 import aimet_torch.svd.svd_intf_defs_deprecated
 from aimet_torch.examples import mnist_torch_model as mnist_model
-from aimet_torch.utils import create_rand_tensors_given_shapes
+from aimet_torch.utils import create_rand_tensors_given_shapes, get_device
 from aimet_torch import pymo_utils
 from aimet_torch.svd import layer_selector_deprecated as ls, svd as svd_intf, svd_impl as s
 from aimet_torch.layer_database import LayerDatabase, Layer
@@ -119,7 +119,7 @@ class TestTrainingExtensionsSvd(unittest.TestCase):
         model = MnistModel().to("cpu")
 
         input_shape = (1, 1, 28, 28)
-        dummy_input = create_rand_tensors_given_shapes(input_shape)
+        dummy_input = create_rand_tensors_given_shapes(input_shape, get_device(model))
         layer_db = LayerDatabase(model, dummy_input)
 
         with unittest.mock.patch('aimet_torch.svd.layer_selector_deprecated.LayerSelectorDeprecated._perform_layer_selection'):
@@ -154,7 +154,7 @@ class TestTrainingExtensionsSvd(unittest.TestCase):
         model = MnistModel().to("cpu")
 
         input_shape = (1, 1, 28, 28)
-        dummy_input = create_rand_tensors_given_shapes(input_shape)
+        dummy_input = create_rand_tensors_given_shapes(input_shape, get_device(model))
         layer_db = LayerDatabase(model, dummy_input)
 
         with unittest.mock.patch('aimet_torch.svd.layer_selector_deprecated.LayerSelectorDeprecated._perform_layer_selection'):
@@ -186,7 +186,7 @@ class TestTrainingExtensionsSvd(unittest.TestCase):
         model = MnistModel().to("cpu")
 
         input_shape = (1, 1, 28, 28)
-        dummy_input = create_rand_tensors_given_shapes(input_shape)
+        dummy_input = create_rand_tensors_given_shapes(input_shape, get_device(model))
         layer_db = LayerDatabase(model, dummy_input)
 
         with unittest.mock.patch('aimet_torch.svd.layer_selector_deprecated.LayerSelectorDeprecated._perform_layer_selection'):
@@ -206,7 +206,7 @@ class TestTrainingExtensionsSvd(unittest.TestCase):
         model = mnist_model.Net().to("cpu")
 
         input_shape = (1, 1, 28, 28)
-        dummy_input = create_rand_tensors_given_shapes(input_shape)
+        dummy_input = create_rand_tensors_given_shapes(input_shape, get_device(model))
         layer_db = LayerDatabase(model, dummy_input)
 
         with unittest.mock.patch('aimet_torch.svd.layer_selector_deprecated.LayerSelectorDeprecated'):
@@ -515,7 +515,7 @@ class TestTrainingExtensionsSvd(unittest.TestCase):
         model = MnistModel().to("cpu")
 
         input_shape = (1, 1, 28, 28)
-        dummy_input = create_rand_tensors_given_shapes(input_shape)
+        dummy_input = create_rand_tensors_given_shapes(input_shape, get_device(model))
         layer_db = LayerDatabase(model, dummy_input)
 
         run_model_return_values = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20]
@@ -806,7 +806,7 @@ class TestTrainingExtensionsSvd(unittest.TestCase):
         intf_defs = aimet_torch.svd.svd_intf_defs_deprecated
 
         input_shape = (1, 1, 28, 28)
-        dummy_input = create_rand_tensors_given_shapes(input_shape)
+        dummy_input = create_rand_tensors_given_shapes(input_shape, get_device(model))
         layer_db = LayerDatabase(model, dummy_input)
 
         with unittest.mock.patch('aimet_torch.layer_database.LayerDatabase'):
@@ -844,7 +844,7 @@ class TestWeightSvdPruning(unittest.TestCase):
 
         # Create a layer database
         input_shape = (1, 1, 28, 28)
-        dummy_input = create_rand_tensors_given_shapes(input_shape)
+        dummy_input = create_rand_tensors_given_shapes(input_shape, get_device(model))
         orig_layer_db = LayerDatabase(model, dummy_input)
 
         # Copy the db
@@ -879,7 +879,7 @@ class TestWeightSvdPruning(unittest.TestCase):
 
         # Create a layer database
         input_shape = (1, 1, 28, 28)
-        dummy_input = create_rand_tensors_given_shapes(input_shape)
+        dummy_input = create_rand_tensors_given_shapes(input_shape, get_device(model))
         layer_db = LayerDatabase(model, dummy_input)
 
         fc1 = layer_db.find_layer_by_name('fc1')

@@ -46,7 +46,7 @@ from aimet_common import cost_calculator as cc
 from aimet_common.defs import CostMetric, LayerCompRatioPair
 from aimet_common.utils import AimetLogger
 
-from aimet_torch.utils import create_rand_tensors_given_shapes, create_fake_data_loader
+from aimet_torch.utils import create_rand_tensors_given_shapes, create_fake_data_loader, get_device
 from aimet_torch.layer_database import Layer, LayerDatabase
 from aimet_torch.channel_pruning.channel_pruner import InputChannelPruner, ChannelPruningCostCalculator
 from aimet_torch.examples import mnist_torch_model as mnist_model
@@ -114,7 +114,7 @@ class TestTrainingExtensionsCostCalculator(unittest.TestCase):
         model = MnistSequentialModel().to("cpu")
 
         input_shape = (1, 1, 28, 28)
-        dummy_input = create_rand_tensors_given_shapes(input_shape)
+        dummy_input = create_rand_tensors_given_shapes(input_shape, get_device(model))
         layer_db = LayerDatabase(model, dummy_input)
 
         cost_calc = cc.CostCalculator()
@@ -158,7 +158,7 @@ class TestTrainingExtensionsSpatialSvdCostCalculator(unittest.TestCase):
         linear = nn.Linear(128, 256)
 
         input_shape=(1, 128)
-        dummy_input = create_rand_tensors_given_shapes(input_shape)
+        dummy_input = create_rand_tensors_given_shapes(input_shape, get_device(linear))
         layer_db = LayerDatabase(linear, dummy_input)
 
         layer = layer_db.find_layer_by_module(linear)
@@ -204,7 +204,7 @@ class TestTrainingExtensionsSpatialSvdCostCalculator(unittest.TestCase):
         print(model)
 
         input_shape = (1, 1, 28, 28)
-        dummy_input = create_rand_tensors_given_shapes(input_shape)
+        dummy_input = create_rand_tensors_given_shapes(input_shape, get_device(model))
         layer_db = LayerDatabase(model, dummy_input)
 
         model_cost = cc.SpatialSvdCostCalculator.compute_model_cost(layer_db)
@@ -230,7 +230,7 @@ class TestTrainingExtensionsSpatialSvdCostCalculator(unittest.TestCase):
         model = mnist_model.Net().to("cpu")
 
         input_shape = (1, 1, 28, 28)
-        dummy_input = create_rand_tensors_given_shapes(input_shape)
+        dummy_input = create_rand_tensors_given_shapes(input_shape, get_device(model))
         layer_db = LayerDatabase(model, dummy_input)
 
         # Compress all layers by 50%
@@ -299,7 +299,7 @@ class TestTrainingExtensionsWeightSvdCostCalculator(unittest.TestCase):
         print(model)
 
         input_shape = (1, 1, 28, 28)
-        dummy_input = create_rand_tensors_given_shapes(input_shape)
+        dummy_input = create_rand_tensors_given_shapes(input_shape, get_device(model))
         layer_db = LayerDatabase(model, dummy_input)
 
         # Compress all layers by 50%
@@ -327,7 +327,7 @@ class TestTrainingExtensionsChannelPruningCostCalculator(unittest.TestCase):
         print(model)
 
         input_shape = (1, 1, 28, 28)
-        dummy_input = create_rand_tensors_given_shapes(input_shape)
+        dummy_input = create_rand_tensors_given_shapes(input_shape, get_device(model))
         layer_db = LayerDatabase(model, dummy_input)
 
         # Compress all layers by 50%

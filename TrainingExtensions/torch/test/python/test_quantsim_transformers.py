@@ -192,7 +192,7 @@ class TestQuantizationSimTransformers(unittest.TestCase):
         model = ConvGeLUNet()
         model.eval()
         input_shapes = (1, 3, 32, 32)
-        inp_tensor_list = create_rand_tensors_given_shapes(input_shapes)
+        inp_tensor_list = create_rand_tensors_given_shapes(input_shapes, utils.get_device(model))
 
         def forward_pass(model, args):
             model.eval()

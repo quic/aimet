@@ -110,9 +110,8 @@ def create_connected_graph_with_input_shapes(model: torch.nn.Module, input_shape
     :param input_shapes: input shapes to the torch model
     :return: ConnectedGraph representation of the model
     """
-    random_inputs = create_rand_tensors_given_shapes(input_shapes)
     device = get_device(model)
-    random_inputs = tuple([inp.to(device) for inp in random_inputs])
+    random_inputs = create_rand_tensors_given_shapes(input_shapes, device)
     return ConnectedGraph(model, random_inputs)
 
 

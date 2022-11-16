@@ -134,7 +134,7 @@ class GraphSearchUtils:
     def __init__(self, model: torch.nn.Module, input_shapes: Union[Tuple, List[Tuple]], dummy_input: Union[torch.Tensor, List[torch.Tensor]] = None):
 
         if dummy_input is None:
-            inp_tensor_list = tuple(utils.create_rand_tensors_given_shapes(input_shapes))
+            inp_tensor_list = tuple(utils.create_rand_tensors_given_shapes(input_shapes, get_device(model)))
         else:
             inp_tensor_list = dummy_input
         self._connected_graph = ConnectedGraph(model, inp_tensor_list)
@@ -837,7 +837,7 @@ def equalize_model(model: torch.nn.Module, input_shapes: Union[Tuple, List[Tuple
     :return: None
     """
     if dummy_input is None:
-        dummy_input = create_rand_tensors_given_shapes(input_shapes)
+        dummy_input = create_rand_tensors_given_shapes(input_shapes, torch.device('cpu'))
     if isinstance(dummy_input, List):
         input_shapes = [i.shape for i in dummy_input]
     else:
