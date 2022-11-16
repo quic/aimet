@@ -38,6 +38,7 @@
 
 """ Common Utilities for tf 2 keras """
 import errno
+import inspect
 import os
 from typing import Union, List, Dict, Tuple, AnyStr
 import tensorflow as tf
@@ -588,6 +589,14 @@ def prepare_model(original_model: tf.keras.Model, input_layer: Union[tf.keras.In
     :param input_layer: The input layer to be used for the new model. By default, the input layer is set to None. If the
     beginning portion of the model is subclassed, then the input layer must be passed in.
     """
+    def get_layer_call_order(subclass_layer: tf.keras.layers.Layer):
+        call_layer_order_code = inspect.getsource(subclass_layer.call).splitlines()[1:]
+        call_layer_order = []
+        for line in call_layer_order_code:
+            if 'self.' in line:
+                call_layer_order.append(line.split('self.')[1].split('(')[0])
+        return call_layer_order
+
     try:
         input_layer = original_model.layers[0].input
         prev_layer = input_layer
@@ -607,11 +616,17 @@ def prepare_model(original_model: tf.keras.Model, input_layer: Union[tf.keras.In
         else:
             # Go through each "Layers" properities, if the layer is subclassed, then we will have the wrapped
             # layers as properties that can be extracted over and used to create a functioncal model.
-            sub_layers = [sub_layer for _, sub_layer in original_model.get_layer(layer.name).__dict__.items()
-                          if isinstance(sub_layer, tf.keras.layers.Layer)]
+            sub_layers = {
+                object_name: sub_layer
+                for object_name, sub_layer in original_model.get_layer(layer.name).__dict__.items()
+                if isinstance(sub_layer, tf.keras.layers.Layer)
+            }
+
             if sub_layers:
-                for sub_layer in sub_layers:
-                    prev_layer = sub_layer(prev_layer)
+                call_order = get_layer_call_order(layer)
+                for sub_layer_name in call_order:
+                    prev_layer = sub_layers[sub_layer_name](prev_layer)
             else:
                 prev_layer = layer(prev_layer)
+
     return tf.keras.Model(inputs=input_layer, outputs=prev_layer)
