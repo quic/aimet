@@ -61,7 +61,7 @@ def get_all_output_ops(conn_graph: ConnectedGraph) -> List[Op]:
     :return: List of all operations with no outputs
     """
     all_ops = conn_graph.get_all_ops().values()
-    output_ops = [op for op in all_ops if not op.output]
+    output_ops = [op for op in all_ops if not op.output_ops]
     return output_ops
 
 
