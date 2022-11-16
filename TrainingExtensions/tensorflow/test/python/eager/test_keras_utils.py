@@ -88,10 +88,8 @@ class ConvTimesThree(tf.keras.layers.Layer):
                                                           name='class_conv_depth')
 
     def call(self, x):
-        x = self.conv(x)
-        x = self.conv_transpose(x)
-        x = self.depth_conv(x)
-        return x
+        x = self.conv_transpose(self.conv(x))
+        return self.depth_conv(x)
 
 # See comment above ConvTimesThree Class
 def conv_sub_class():

@@ -602,11 +602,20 @@ def prepare_model(original_model: tf.keras.Model, input_layer: Union[tf.keras.In
 
         # The autograph code has the layers objects wrapped in `ag__.ld`, we can use this to find the internal layers.
         # Since Keras is using this for the actual call to the layer, we know we have the order of the layers correct.
-        return [
-            line.split('ag__.ld(self).')[1].split(',')[0]
-            for line in autograph_code_by_line
-            if 'ag__.ld(self)' in line
-        ]
+        call_order = []
+        autograph_pattern = "ag__.ld(self)."
+        for line in autograph_code_by_line:
+            wrapped_layer_index = line.find(autograph_pattern) + len(autograph_pattern)
+            if autograph_pattern in line:
+                if (num_wrapped_layers_on_line := line.count(autograph_pattern)) > 1:
+                    nested_call_order = []
+                    for _ in range(num_wrapped_layers_on_line):
+                        nested_call_order.append(line[wrapped_layer_index:line.find(",", wrapped_layer_index)])
+                        wrapped_layer_index = line.find(autograph_pattern, wrapped_layer_index) + len(autograph_pattern)
+                    call_order.extend(nested_call_order[::-1])
+                else:
+                    call_order.append(line[wrapped_layer_index:line.find(",", wrapped_layer_index)])
+        return call_order
 
     try:
         input_layer = original_model.layers[0].input
