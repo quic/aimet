@@ -509,49 +509,52 @@ class QuantizationSimModel:
                 self._replace_quantization_wrapper(module_ref, device)
 
     def _construct_and_initialize_trainable_wrapper(self, post_training_module: StaticGridQuantWrapper,
-                                                    device) -> StaticGridQuantWrapper:
+                                                    device: torch.device) -> LearnedGridQuantWrapper:
         """
-        Copies tensor properties (use_symmetric_encodings, enabled, encodings) from post_training_module wrapper to
-        trainable_module wrapper
-        G:param post_training_module: StaticGridQuantWrapper wrapped module
+        Copies following tensor quantizer attributes from StaticGridQuantWrapper to LearnedGridQuantWrapper
+        to avoid any mismatch.
+            - enabled
+            - bitwidth
+            - encoding
+            - use_symmetric_encodings
+            - use_strict_symmetric
+            - use_unsigned_symmetric
+        :param post_training_module: StaticGridQuantWrapper wrapped module
         :param device: device on which model is present
         :return: trainable_module: QcTrainable wrapper module
         """
-        # Creating a StaticGridQuantWrapper module
+        def _copy_quantizer_attributes(new_quantizer, old_quantizer):
+            """
+            :param new_quantizer: New quantizer
+            :param old_quantizer: Old quantizer
+            """
+            new_quantizer.enabled = old_quantizer.enabled
+            new_quantizer.bitwidth = old_quantizer.bitwidth
+            new_quantizer.encoding = old_quantizer.encoding
+            new_quantizer.use_symmetric_encodings = old_quantizer.use_symmetric_encodings
+            new_quantizer.use_strict_symmetric = old_quantizer.use_strict_symmetric
+            new_quantizer.use_unsigned_symmetric = old_quantizer.use_unsigned_symmetric
+
         # pylint: disable=protected-access
         module = post_training_module._module_to_wrap
 
         num_inputs = len(post_training_module.input_quantizers)
         num_outputs = len(post_training_module.output_quantizers)
 
+        # Creating a LearnedGridQuantWrapper module
         trainable_module = LearnedGridQuantWrapper(module, self._default_param_bw,
                                                    self._default_output_bw, self._rounding_mode, self._quant_scheme,
                                                    device=device, num_inputs=num_inputs, num_outputs=num_outputs,
                                                    data_type=QuantizationDataType.int)
-        for index, post_training_output_quantizer in enumerate(post_training_module.output_quantizers):
-            # Setting user set parameters for output
-            trainable_module.output_quantizers[index].use_symmetric_encodings = post_training_output_quantizer. \
-                use_symmetric_encodings
-            trainable_module.output_quantizers[index].enabled = post_training_output_quantizer.enabled
-            # Initializing encodings for trainable wrapper
-            trainable_module.output_quantizers[index].encoding = post_training_output_quantizer.encoding
-
-        for index, post_training_input_quantizer in enumerate(post_training_module.input_quantizers):
-            # Setting user set parameters for input
-            trainable_module.input_quantizers[index].use_symmetric_encodings = post_training_input_quantizer. \
-                use_symmetric_encodings
-            trainable_module.input_quantizers[index].enabled = post_training_input_quantizer.enabled
-            # Initializing encodings for trainable wrapper
-            trainable_module.input_quantizers[index].encoding = post_training_input_quantizer.encoding
-
-        # Setting user set parameters for input
-        for name, _ in module.named_parameters():
-            trainable_module.param_quantizers[name].use_symmetric_encodings = \
-                post_training_module.param_quantizers[name].use_symmetric_encodings
-            trainable_module.param_quantizers[name].enabled = \
-                post_training_module.param_quantizers[name].enabled
-            trainable_module.param_quantizers[name].encoding = \
-                post_training_module.param_quantizers[name].encoding
+        # Copy user settable attributes for outputs
+        for index, quantizer in enumerate(post_training_module.output_quantizers):
+            _copy_quantizer_attributes(trainable_module.output_quantizers[index], quantizer)
+        # Copy user settable attributes for inputs
+        for index, quantizer in enumerate(post_training_module.input_quantizers):
+            _copy_quantizer_attributes(trainable_module.input_quantizers[index], quantizer)
+        # Copy user settable attributes for params
+        for name, quantizer in post_training_module.param_quantizers.items():
+            _copy_quantizer_attributes(trainable_module.param_quantizers[name], quantizer)
 
         return trainable_module
 
