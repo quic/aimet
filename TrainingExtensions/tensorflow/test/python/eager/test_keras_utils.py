@@ -494,4 +494,12 @@ def test_subclass_model_with_subclassed_layers_to_functional():
     assert functional_model.count_params() == model.count_params()
     compare_weights(model, functional_model)
 
-test_full_subclass_to_functional()
+def test_conv_times_three_subclass_to_functional():
+    model = conv_sub_class()
+    input_shape = (32, 28, 28, 1)
+    random_input = np.random.rand(*input_shape)
+    _ = model(random_input)
+
+    functional_model = prepare_model(model)
+    assert functional_model.count_params() == model.count_params()
+    compare_weights(model, functional_model)

@@ -590,12 +590,23 @@ def prepare_model(original_model: tf.keras.Model, input_layer: Union[tf.keras.In
     beginning portion of the model is subclassed, then the input layer must be passed in.
     """
     def get_layer_call_order(subclass_layer: tf.keras.layers.Layer):
-        call_layer_order_code = inspect.getsource(subclass_layer.call).splitlines()[1:]
-        call_layer_order = []
-        for line in call_layer_order_code:
-            if 'self.' in line:
-                call_layer_order.append(line.split('self.')[1].split('(')[0])
-        return call_layer_order
+        """
+        This function returns the call order of a layer. This is used to determine the order of the layers in the
+        Functional API model.
+        :param subclass_layer: The layer to get the call order of
+        :return: The call order of the layer
+        """
+
+        # Using tf.autograph to get the code used when the layer is called
+        autograph_code_by_line = tf.autograph.to_code(subclass_layer.call).splitlines()
+
+        # The autograph code has the layers objects wrapped in `ag__.ld`, we can use this to find the internal layers.
+        # Since Keras is using this for the actual call to the layer, we know we have the order of the layers correct.
+        return [
+            line.split('ag__.ld(self).')[1].split(',')[0]
+            for line in autograph_code_by_line
+            if 'ag__.ld(self)' in line
+        ]
 
     try:
         input_layer = original_model.layers[0].input
