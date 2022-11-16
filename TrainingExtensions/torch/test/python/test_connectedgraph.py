@@ -47,7 +47,7 @@ from aimet_common.connected_graph.connectedgraph_utils import get_all_input_ops,
 from aimet_torch.examples import test_models
 from aimet_torch.meta.connectedgraph import ConnectedGraph
 from aimet_torch.meta import connectedgraph_utils
-from aimet_torch.utils import create_rand_tensors_given_shapes
+from aimet_torch.utils import create_rand_tensors_given_shapes, get_device
 from aimet_torch import elementwise_ops
 
 
@@ -60,7 +60,7 @@ class TestConnectedGraph(unittest.TestCase):
         model = test_models.SingleResidual()
         model.eval()
         inp_shape = (1, 3, 32, 32)
-        inp_tensor_list = create_rand_tensors_given_shapes(inp_shape)
+        inp_tensor_list = create_rand_tensors_given_shapes(inp_shape, get_device(model))
         conn_graph = ConnectedGraph(model, inp_tensor_list)
         self.assertEqual(17, len(conn_graph.ordered_ops))
         # Split count of 2 due to residual as well as reshape having a split
@@ -81,7 +81,7 @@ class TestConnectedGraph(unittest.TestCase):
         model.eval()
         inp_shape_1 = (1, 3, 32, 32)
         inp_shape_2 = (1, 3, 20, 20)
-        inp_tensor_list = create_rand_tensors_given_shapes([inp_shape_1, inp_shape_2])
+        inp_tensor_list = create_rand_tensors_given_shapes([inp_shape_1, inp_shape_2], get_device(model))
         conn_graph = ConnectedGraph(model, inp_tensor_list)
         self.assertEqual(11, len(conn_graph.ordered_ops))
         # Split count of 1 due to reshape having a split
@@ -126,7 +126,7 @@ class TestConnectedGraph(unittest.TestCase):
         inp_shape_1 = (1, 3, 8, 8)
         inp_shape_2 = (1, 3, 8, 8)
         inp_shape_3 = (1, 3, 8, 8)
-        inp_tensor_list = create_rand_tensors_given_shapes([inp_shape_1, inp_shape_2, inp_shape_3])
+        inp_tensor_list = create_rand_tensors_given_shapes([inp_shape_1, inp_shape_2, inp_shape_3], get_device(model))
         conn_graph = ConnectedGraph(model, inp_tensor_list)
         concat_op = [op for op in conn_graph.get_all_ops().values() if op.type == 'Concat'][0]
         self.assertEqual(3, len(concat_op.inputs))
@@ -138,7 +138,7 @@ class TestConnectedGraph(unittest.TestCase):
         model = test_models.ModelWithDropouts()
         model.eval()
         inp_shape = (1, 3, 32, 32)
-        inp_tensor_list = create_rand_tensors_given_shapes(inp_shape)
+        inp_tensor_list = create_rand_tensors_given_shapes(inp_shape, get_device(model))
         conn_graph = ConnectedGraph(model, inp_tensor_list)
         self.assertEqual(9, len(conn_graph.ordered_ops))
         # Split count of 2 due to residual as well as reshape having a split
@@ -169,7 +169,8 @@ class TestConnectedGraph(unittest.TestCase):
         conv_shape = (1, 64, 32, 32)
         inp_shape = (1, 3, 32, 32)
         seq_shape = (1, 3, 8, 8)
-        inp_tensor_list = create_rand_tensors_given_shapes([conv_shape, inp_shape, conv_shape, inp_shape, seq_shape])
+        device = get_device(model)
+        inp_tensor_list = create_rand_tensors_given_shapes([conv_shape, inp_shape, conv_shape, inp_shape, seq_shape], device)
         conn_graph = ConnectedGraph(model, inp_tensor_list)
         self.assertEqual(95, len(conn_graph.ordered_ops))
         self.assertEqual(5, conn_graph._split_count)
@@ -200,7 +201,7 @@ class TestConnectedGraph(unittest.TestCase):
         model = test_models.PassThroughOpLastLayerModel()
         model.eval()
         inp_shape = (1, 3, 32, 32)
-        inp_tensor_list = create_rand_tensors_given_shapes(inp_shape)
+        inp_tensor_list = create_rand_tensors_given_shapes(inp_shape, get_device(model))
         conn_graph = ConnectedGraph(model, inp_tensor_list)
         self.assertEqual(1, len(conn_graph.ordered_ops))
 
@@ -283,7 +284,7 @@ class TestConnectedGraph(unittest.TestCase):
                 return torch.cat([z1, z2, z3], 1)
 
         model = MultiOutputLayersModel()
-        inp_tensor_list = create_rand_tensors_given_shapes([(1, 1, 8, 8), (1, 2, 8, 8), (1, 3, 8, 8)])
+        inp_tensor_list = create_rand_tensors_given_shapes([(1, 1, 8, 8), (1, 2, 8, 8), (1, 3, 8, 8)], get_device(model))
         conn_graph = ConnectedGraph(model, inp_tensor_list)
         self.assertEqual(10, len(conn_graph.ordered_ops))
         self.assertEqual(9, len([op for op in conn_graph.get_all_ops().keys() if 'Conv' in op]))
@@ -345,7 +346,7 @@ class TestConnectedGraph(unittest.TestCase):
                 return torch.cat([z1, z2, z3, x1], 1)
 
         model = MultiOutputShuffledModel()
-        inp_tensor_list = create_rand_tensors_given_shapes([(1, 1, 8, 8), (1, 2, 8, 8), (1, 3, 8, 8)])
+        inp_tensor_list = create_rand_tensors_given_shapes([(1, 1, 8, 8), (1, 2, 8, 8), (1, 3, 8, 8)], get_device(model))
         conn_graph = ConnectedGraph(model, inp_tensor_list)
         self.assertEqual(10, len(conn_graph.ordered_ops))
         self.assertEqual(9, len([op for op in conn_graph.get_all_ops().keys() if 'Conv' in op]))
@@ -488,7 +489,7 @@ class TestConnectedGraph(unittest.TestCase):
         model.eval()
         inp_shape_1 = (1, 3, 32, 32)
         inp_shape_2 = (1, 3, 20, 20)
-        inp_tensor_list = create_rand_tensors_given_shapes([inp_shape_1, inp_shape_2])
+        inp_tensor_list = create_rand_tensors_given_shapes([inp_shape_1, inp_shape_2], get_device(model))
         dict_input = {'inp_1': inp_tensor_list[0], 'inp_2': inp_tensor_list[1]}
         conn_graph = ConnectedGraph(model, dict_input)
         self.assertEqual(13, len(conn_graph.ordered_ops))

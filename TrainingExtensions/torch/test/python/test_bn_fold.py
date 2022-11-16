@@ -52,7 +52,7 @@ from aimet_torch.batch_norm_fold import (
     _find_all_batch_norms_to_fold,
 )
 from aimet_torch.examples.test_models import TransposedConvModel
-from aimet_torch.utils import create_rand_tensors_given_shapes
+from aimet_torch.utils import create_rand_tensors_given_shapes, get_device
 from aimet_torch.quantsim import QuantizationSimModel
 from aimet_torch.model_preparer import prepare_model
 from aimet_common.defs import QuantScheme
@@ -521,7 +521,7 @@ class TestTrainingExtensionBnFold:
 
         input_shape = (2, 10, 24, 24)
         connected_graph = ConnectedGraph(model,
-                                         create_rand_tensors_given_shapes(input_shape))
+                                         create_rand_tensors_given_shapes(input_shape, get_device(model)))
         conv_bn_pairs, bn_conv_pairs = _find_all_batch_norms_to_fold(model, input_shape, connected_graph)
         assert len(conv_bn_pairs) == len(bn_conv_pairs) == 1
         assert (model.conv1, model.bn1) in conv_bn_pairs
@@ -552,7 +552,7 @@ class TestTrainingExtensionBnFold:
         inp_shapes = [(1, 3, 32, 32), (1, 3, 20, 20)]
 
         connected_graph = ConnectedGraph(model,
-                                         create_rand_tensors_given_shapes(inp_shapes))
+                                         create_rand_tensors_given_shapes(inp_shapes, get_device(model)))
         conv_bn_pairs, bn_conv_pairs = _find_all_batch_norms_to_fold(model, inp_shapes, connected_graph)
         assert len(conv_bn_pairs) == 2
         assert not bn_conv_pairs

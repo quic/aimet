@@ -45,7 +45,7 @@ import torch
 import torch.nn.functional as F
 from torchvision import datasets, transforms
 
-from aimet_torch.utils import create_rand_tensors_given_shapes
+from aimet_torch.utils import create_rand_tensors_given_shapes, get_device
 from aimet_torch.winnow.winnow_utils import to_numpy
 from aimet_torch.examples import mnist_torch_model
 from aimet_torch.svd.svd_splitter import SpatialSvdModuleSplitter
@@ -173,7 +173,7 @@ class TestSpatialSvdPruning(unittest.TestCase):
 
         # Create a layer database
         input_shape = (1, 1, 28, 28)
-        dummy_input = create_rand_tensors_given_shapes(input_shape)
+        dummy_input = create_rand_tensors_given_shapes(input_shape, get_device(model))
         orig_layer_db = LayerDatabase(model, dummy_input)
 
         # Copy the db
@@ -218,7 +218,7 @@ class TestSpatialSvdPruning(unittest.TestCase):
 
         # Create a layer database
         input_shape = (1, 1, 28, 28)
-        dummy_input = create_rand_tensors_given_shapes(input_shape)
+        dummy_input = create_rand_tensors_given_shapes(input_shape, get_device(model))
         orig_layer_db = LayerDatabase(model, dummy_input)
 
         # Copy the db

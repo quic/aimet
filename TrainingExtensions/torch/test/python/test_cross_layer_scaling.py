@@ -45,7 +45,7 @@ from torchvision import models
 from aimet_torch import batch_norm_fold
 from aimet_torch.batch_norm_fold import fold_all_batch_norms
 from aimet_torch.cross_layer_equalization import CrossLayerScaling, GraphSearchUtils, HighBiasFold, equalize_model
-from aimet_torch.utils import create_rand_tensors_given_shapes
+from aimet_torch.utils import create_rand_tensors_given_shapes, get_device
 from aimet_torch.utils import get_layer_name
 from aimet_torch.examples.mobilenet import MockMobileNetV2, MockMobileNetV1
 import torch.nn as nn
@@ -622,7 +622,7 @@ class TestTrainingExtensionsCrossLayerScaling(unittest.TestCase):
         model = TwoInputsModel()
         model.eval()
         inp_shapes = [(1, 3, 32, 32), (1, 3, 20, 20)]
-        model_input_list = create_rand_tensors_given_shapes(inp_shapes)
+        model_input_list = create_rand_tensors_given_shapes(inp_shapes, get_device(model))
 
         output_before_equalize = model(*model_input_list)
         equalize_model(model, inp_shapes)

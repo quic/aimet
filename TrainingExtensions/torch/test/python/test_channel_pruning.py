@@ -58,7 +58,7 @@ from aimet_torch.channel_pruning.weight_reconstruction import WeightReconstructo
 from aimet_torch.channel_pruning.channel_pruner import InputChannelPruner
 from aimet_torch.examples.mnist_torch_model import Net as mnist_model
 from aimet_torch.utils import to_numpy, create_fake_data_loader, get_layer_name, get_layer_by_name,\
-    create_rand_tensors_given_shapes
+    create_rand_tensors_given_shapes, get_device
 from aimet_torch.layer_database import Layer, LayerDatabase
 from aimet_torch.examples import mnist_torch_model
 
@@ -636,7 +636,7 @@ class TestTrainingExtensionsChannelPruning(unittest.TestCase):
 
         # Create a layer database
         input_shape = (1, 1, 28, 28)
-        dummy_input = create_rand_tensors_given_shapes(input_shape)
+        dummy_input = create_rand_tensors_given_shapes(input_shape, get_device(orig_model))
         orig_layer_db = LayerDatabase(orig_model, dummy_input)
 
         # Copy the db
@@ -674,7 +674,7 @@ class TestTrainingExtensionsChannelPruning(unittest.TestCase):
 
         # Create a layer database
         input_shape = (1, 3, 224, 224)
-        dummy_input = create_rand_tensors_given_shapes(input_shape)
+        dummy_input = create_rand_tensors_given_shapes(input_shape, get_device(model))
         orig_layer_db = LayerDatabase(model, dummy_input)
 
         # Copy the db
@@ -729,7 +729,7 @@ class TestTrainingExtensionsChannelPruning(unittest.TestCase):
 
         # Create a layer database
         input_shape = (1, 1, 28, 28)
-        dummy_input = create_rand_tensors_given_shapes(input_shape)
+        dummy_input = create_rand_tensors_given_shapes(input_shape, get_device(orig_model))
         orig_layer_db = LayerDatabase(orig_model, dummy_input)
 
         dataset_size = 1000
@@ -776,7 +776,7 @@ class TestTrainingExtensionsChannelPruning(unittest.TestCase):
 
         # Create a layer database
         input_shape = (1, 3, 224, 224)
-        dummy_input = create_rand_tensors_given_shapes(input_shape)
+        dummy_input = create_rand_tensors_given_shapes(input_shape, get_device(model))
         orig_layer_db = LayerDatabase(model, dummy_input)
 
         data_loader = create_fake_data_loader(dataset_size=dataset_size, batch_size=batch_size,

@@ -56,7 +56,7 @@ from aimet_common.bokeh_plots import DataTable
 from aimet_common.bokeh_plots import ProgressBar
 from aimet_common.utils import start_bokeh_server_session
 
-from aimet_torch.utils import create_rand_tensors_given_shapes
+from aimet_torch.utils import create_rand_tensors_given_shapes, get_device
 from aimet_torch.examples import mnist_torch_model
 from aimet_torch.layer_database import Layer, LayerDatabase
 from aimet_torch.svd.svd_pruner import SpatialSvdPruner
@@ -93,7 +93,7 @@ class TestTrainingExtensionsCompRatioSelect(unittest.TestCase):
         model = mnist_torch_model.Net().to('cpu')
 
         input_shape = (1, 1, 28, 28)
-        dummy_input = create_rand_tensors_given_shapes(input_shape)
+        dummy_input = create_rand_tensors_given_shapes(input_shape, get_device(model))
         layer_db = LayerDatabase(model, dummy_input)
 
         layer1 = layer_db.find_layer_by_name('conv1')
@@ -126,7 +126,7 @@ class TestTrainingExtensionsCompRatioSelect(unittest.TestCase):
         model = mnist_torch_model.Net().to('cpu')
 
         input_shape = (1, 1, 28, 28)
-        dummy_input = create_rand_tensors_given_shapes(input_shape)
+        dummy_input = create_rand_tensors_given_shapes(input_shape, get_device(model))
         layer_db = LayerDatabase(model, dummy_input)
 
         layer1 = layer_db.find_layer_by_name('conv1')
@@ -156,7 +156,7 @@ class TestTrainingExtensionsCompRatioSelect(unittest.TestCase):
 
         # Create a layer database
         input_shape = (1, 1, 28, 28)
-        dummy_input = create_rand_tensors_given_shapes(input_shape)
+        dummy_input = create_rand_tensors_given_shapes(input_shape, get_device(model))
         layer_db = LayerDatabase(model, dummy_input)
 
         layer1 = layer_db.find_layer_by_name('conv1')
@@ -234,7 +234,7 @@ class TestTrainingExtensionsCompRatioSelect(unittest.TestCase):
 
         model = mnist_torch_model.Net()
         input_shape = (1, 1, 28, 28)
-        dummy_input = create_rand_tensors_given_shapes(input_shape)
+        dummy_input = create_rand_tensors_given_shapes(input_shape, get_device(model))
         layer_db = LayerDatabase(model, dummy_input)
 
         layer1 = layer_db.find_layer_by_name('conv1')
@@ -304,7 +304,7 @@ class TestTrainingExtensionsCompRatioSelect(unittest.TestCase):
                                              0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]
         model = mnist_torch_model.Net()
         input_shape = (1, 1, 28, 28)
-        dummy_input = create_rand_tensors_given_shapes(input_shape)
+        dummy_input = create_rand_tensors_given_shapes(input_shape, get_device(model))
         layer_db = LayerDatabase(model, dummy_input)
 
         selected_layers = [layer for layer in layer_db if isinstance(layer.module, nn.Conv2d)]
@@ -349,7 +349,7 @@ class TestTrainingExtensionsCompRatioSelect(unittest.TestCase):
 
         model = mnist_torch_model.Net().to('cpu')
         input_shape = (1, 1, 28, 28)
-        dummy_input = create_rand_tensors_given_shapes(input_shape)
+        dummy_input = create_rand_tensors_given_shapes(input_shape, get_device(model))
         layer_db = LayerDatabase(model, dummy_input)
 
         layer1 = layer_db.find_layer_by_name('conv2')

@@ -49,7 +49,7 @@ from torchvision import models
 from aimet_common.utils import AimetLogger
 from aimet_common.defs import QuantScheme
 from aimet_common.quantsim import calculate_delta_offset
-from aimet_torch.utils import create_fake_data_loader, create_rand_tensors_given_shapes, change_tensor_device_placement
+from aimet_torch.utils import create_fake_data_loader, create_rand_tensors_given_shapes, get_device
 from aimet_torch.examples.test_models import TinyModel
 from aimet_torch.quantsim import QuantizationSimModel
 from aimet_torch.qc_quantize_op import StaticGridQuantWrapper, QcQuantizeOpMode
@@ -194,7 +194,7 @@ class TestAdaround:
         input_shape = (1, 3, 32, 32)
         out_before_ada = dummy_forward_pass(model, input_shape)
 
-        inp_tensor_list = create_rand_tensors_given_shapes(input_shape)
+        inp_tensor_list = create_rand_tensors_given_shapes(input_shape, get_device(model))
 
         params = AdaroundParameters(data_loader=data_loader, num_batches=4, default_num_iterations=5)
         ada_rounded_model = Adaround.apply_adaround(model, inp_tensor_list, params, './', 'dummy')
@@ -229,7 +229,7 @@ class TestAdaround:
         input_shape = (1, 3, 32, 32)
         out_before_ada = dummy_forward_pass(model, input_shape)
 
-        inp_tensor_list = create_rand_tensors_given_shapes(input_shape)
+        inp_tensor_list = create_rand_tensors_given_shapes(input_shape, get_device(model))
 
         params = AdaroundParameters(data_loader=data_loader, num_batches=4, default_num_iterations=5)
 
@@ -342,7 +342,7 @@ class TestAdaround:
         print(delta, offset)
 
         input_shape = (1, 3, 32, 32)
-        inp_tensor_list = create_rand_tensors_given_shapes(input_shape)
+        inp_tensor_list = create_rand_tensors_given_shapes(input_shape, get_device(model))
 
         params = AdaroundParameters(data_loader=data_loader, num_batches=4, default_num_iterations=10,
                                     default_reg_param=0.01, default_beta_range=(20, 2))
@@ -375,7 +375,7 @@ class TestAdaround:
         print(delta, offset)
 
         input_shape = (1, 3, 32, 32)
-        inp_tensor_list = create_rand_tensors_given_shapes(input_shape)
+        inp_tensor_list = create_rand_tensors_given_shapes(input_shape, get_device(model))
 
         params = AdaroundParameters(data_loader=data_loader, num_batches=4, default_num_iterations=10,
                                     default_reg_param=0.01, default_beta_range=(20, 2))
@@ -412,7 +412,7 @@ class TestAdaround:
         print(delta, offset)
 
         input_shape = (1, 3, 32, 32)
-        inp_tensor_list = create_rand_tensors_given_shapes(input_shape)
+        inp_tensor_list = create_rand_tensors_given_shapes(input_shape, get_device(model))
 
         params = AdaroundParameters(data_loader=data_loader, num_batches=4, default_num_iterations=10,
                                     default_reg_param=0.01, default_beta_range=(20, 2))
@@ -449,7 +449,7 @@ class TestAdaround:
         logger.info("For the ConvTranspose2d layer's weights, delta = %f, offset = %f", delta, offset)
 
         input_shape = (1, 3, 24, 24)
-        inp_tensor_list = create_rand_tensors_given_shapes(input_shape)
+        inp_tensor_list = create_rand_tensors_given_shapes(input_shape, get_device(model))
 
         # Test Forward Pass
         _ = model(*inp_tensor_list)
@@ -485,7 +485,7 @@ class TestAdaround:
 
         param_bit_width = 4
         input_shape = (1, 3, 24, 24)
-        inp_tensor_list = create_rand_tensors_given_shapes(input_shape)
+        inp_tensor_list = create_rand_tensors_given_shapes(input_shape, get_device(model))
 
         # Test Forward Pass
         _ = model(*inp_tensor_list)
@@ -527,7 +527,7 @@ class TestAdaround:
         model = net.to(torch.device('cpu'))
 
         input_shape = (1, 3, 32, 32)
-        inp_tensor_list = create_rand_tensors_given_shapes(input_shape)
+        inp_tensor_list = create_rand_tensors_given_shapes(input_shape, get_device(model))
 
         params = AdaroundParameters(data_loader=data_loader, num_batches=4, default_num_iterations=5)
 
@@ -566,7 +566,7 @@ class TestAdaround:
         model = net.to(torch.device('cpu'))
 
         input_shape = (1, 3, 32, 32)
-        inp_tensor_list = create_rand_tensors_given_shapes(input_shape)
+        inp_tensor_list = create_rand_tensors_given_shapes(input_shape, get_device(model))
 
         params = AdaroundParameters(data_loader=data_loader, num_batches=4, default_num_iterations=5)
 
@@ -599,7 +599,7 @@ class TestAdaround:
         model = net.to(torch.device('cpu'))
 
         input_shape = (1, 3, 32, 32)
-        inp_tensor_list = create_rand_tensors_given_shapes(input_shape)
+        inp_tensor_list = create_rand_tensors_given_shapes(input_shape, get_device(model))
 
         sim = QuantizationSimModel(model, dummy_input=inp_tensor_list, default_param_bw=8)
         # sim.compute_encodings(dummy_forward_pass, forward_pass_callback_args=input_shape)
@@ -635,7 +635,7 @@ class TestAdaround:
         model = net.to(torch.device('cpu'))
 
         input_shape = (1, 3, 32, 32)
-        inp_tensor_list = create_rand_tensors_given_shapes(input_shape)
+        inp_tensor_list = create_rand_tensors_given_shapes(input_shape, get_device(model))
 
         params = AdaroundParameters(data_loader=data_loader, num_batches=4, default_num_iterations=5)
 
@@ -700,7 +700,7 @@ class TestAdaround:
         model = net.to(torch.device('cpu'))
 
         input_shape = (1, 3, 32, 32)
-        inp_tensor_list = create_rand_tensors_given_shapes(input_shape)
+        inp_tensor_list = create_rand_tensors_given_shapes(input_shape, get_device(model))
 
         params = AdaroundParameters(data_loader=multi_data_loader, num_batches=4, default_num_iterations=5)
 
@@ -737,8 +737,7 @@ class TestAdaround:
         model = net.to(torch.device('cuda'))
 
         input_shape = (1, 3, 32, 32)
-        dummy_input = create_rand_tensors_given_shapes(input_shape)
-        dummy_input = change_tensor_device_placement(dummy_input, device=torch.device('cuda'))
+        dummy_input = create_rand_tensors_given_shapes(input_shape, get_device(model))
         out_before_ada = model(*dummy_input)
 
         params = AdaroundParameters(data_loader=data_loader, num_batches=4, default_num_iterations=1000)
@@ -784,8 +783,7 @@ class TestAdaround:
         model = net.to(torch.device('cuda'))
 
         input_shape = (1, 3, 32, 32)
-        dummy_input = create_rand_tensors_given_shapes(input_shape)
-        dummy_input = change_tensor_device_placement(dummy_input, device=torch.device('cuda'))
+        dummy_input = create_rand_tensors_given_shapes(input_shape, get_device(model))
         out_before_ada = model(*dummy_input)
 
         params = AdaroundParameters(data_loader=data_loader, num_batches=4, default_num_iterations=5)
