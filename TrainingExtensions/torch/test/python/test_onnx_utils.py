@@ -38,6 +38,7 @@
 import contextlib
 import os
 import logging
+from collections import defaultdict
 
 import torch
 from torchvision import models
@@ -803,6 +804,39 @@ class TestOnnxUtils:
 
         for node in onnx_model.graph.node:
             assert node.name.startswith('layer')
+
+        if os.path.exists(onnx_path):
+            os.remove(onnx_path)
+
+    def test_naming_for_model_with_deep_graph(self):
+        """ test naming works for model have large number of sequential nodes """
+
+        model = models.resnet152(pretrained=False)
+        dummy_input = torch.randn(1, 3, 224, 224)
+
+        onnx_path= './data/' + model.__class__.__name__ + '.onnx'
+        with onnx_simply(True):
+            onnx_utils.OnnxSaver.set_node_names(onnx_path, model, dummy_input,
+                                                is_conditional=False, module_marker_map={})
+
+        onnx_model = onnx.load(onnx_path)
+        onnx.checker.check_model(onnx_model)
+        self.check_onnx_node_names(onnx_model)
+
+        counts = defaultdict(int)
+        top_level_nodes = tuple(['conv1', 'bn1', 'relu', 'maxpool', 'avgpool', 'Flatten_', 'fc'])
+        for node in onnx_model.graph.node:
+            if '.' in node.name:
+                layer_name = '.'.join(node.name.split('#')[0].split('.')[:-1])
+                counts[layer_name] += 1
+            else:
+                assert node.name.startswith(top_level_nodes)
+
+        for name, counts in counts.items():
+            if 'downsample' in name:
+                assert counts == 2
+            else:
+                assert counts == 10
 
         if os.path.exists(onnx_path):
             os.remove(onnx_path)
