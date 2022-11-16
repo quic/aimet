@@ -293,7 +293,7 @@ class TestTrainingExtensionsUtils(unittest.TestCase):
         model.eval()
         inp_shape_1 = (1, 3, 32, 32)
         inp_shape_2 = (1, 3, 20, 20)
-        model_input = utils.create_rand_tensors_given_shapes([inp_shape_1, inp_shape_2])
+        model_input = utils.create_rand_tensors_given_shapes([inp_shape_1, inp_shape_2], device)
         def forward_fn(model, inputs):
             model(*inputs)
 
