@@ -38,7 +38,6 @@
 
 """ Common Utilities for tf 2 keras """
 import errno
-import inspect
 import os
 from typing import Union, List, Dict, Tuple, AnyStr
 import tensorflow as tf
@@ -589,11 +588,12 @@ def prepare_model(original_model: tf.keras.Model, input_layer: Union[tf.keras.In
     :param input_layer: The input layer to be used for the new model. By default, the input layer is set to None. If the
     beginning portion of the model is subclassed, then the input layer must be passed in.
     """
-    def get_layer_call_order(subclass_layer: tf.keras.layers.Layer):
+    def get_layer_call_order_and_validate(subclass_layer: tf.keras.layers.Layer, found_internal_layers: List[str]):
         """
         This function returns the call order of a layer. This is used to determine the order of the layers in the
         Functional API model.
         :param subclass_layer: The layer to get the call order of
+        :param found_internal_layers: The list of layers that have been found
         :return: The call order of the layer
         """
 
@@ -615,6 +615,19 @@ def prepare_model(original_model: tf.keras.Model, input_layer: Union[tf.keras.In
                     call_order.extend(nested_call_order[::-1])
                 else:
                     call_order.append(line[wrapped_layer_index:line.find(",", wrapped_layer_index)])
+
+        assert all(call in found_internal_layers for call in call_order), \
+        f"""
+        Could not parse call order correctly for subclassed layer: \"{subclass_layer.name}\".
+        Missing internal layers: {set(call_order) - set(found_internal_layers)}
+        For easier parsing, consider updating the call method of subclassed layers to be functional.
+        For example:
+
+        def call(self, inputs):
+            x = self.layer1(inputs)
+            x = self.layer2(x)
+            return x
+        """
         return call_order
 
     try:
@@ -643,7 +656,7 @@ def prepare_model(original_model: tf.keras.Model, input_layer: Union[tf.keras.In
             }
 
             if sub_layers:
-                call_order = get_layer_call_order(layer)
+                call_order = get_layer_call_order_and_validate(layer, sub_layers.keys())
                 for sub_layer_name in call_order:
                     prev_layer = sub_layers[sub_layer_name](prev_layer)
             else:
