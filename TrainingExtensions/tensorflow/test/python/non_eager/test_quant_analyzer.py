@@ -271,3 +271,52 @@ def test_get_enabled_param_quantizers(cpu_session):
     enabled_quantizers = sim.get_enabled_parameter_quantizers()
     # total 3 param quantizers are enabled as per default config file.
     assert len(enabled_quantizers) == 3
+
+def test_get_enabled_quantizers(cpu_session):
+    """ test get_enabled_quantizers() """
+
+    sim = QuantizationSimModel(cpu_session, ['conv2d_input'], ['keras_model/Softmax'], use_cuda=False)
+    sim.compute_encodings(forward_pass_callback, None)
+    enabled_quantizers = sim.get_enabled_quantizers()
+    # total 12 quantizers are enabled.
+    assert len(enabled_quantizers) == 12
+
+#pylint: disable=redefined-outer-name
+def test_perform_per_layer_analysis_by_enabling_quant_ops(cpu_session):
+    """test _perform_per_op_analysis_by_enabling_quant_ops()"""
+    sim = QuantizationSimModel(cpu_session, ['conv2d_input'], ['keras_model/Softmax'], use_cuda=False)
+    sim.compute_encodings(forward_pass_callback, None)
+    quant_analyzer = QuantAnalyzer(cpu_session, start_op_names=['conv2d_input'],
+                                   output_op_names=['keras_model/Softmax'],
+                                   forward_pass_callback=CallbackFunc(forward_pass_callback),
+                                   eval_callback=CallbackFunc(forward_pass_callback), use_cuda=False)
+    try:
+        #pylint: disable=protected-access
+        quant_analyzer._perform_per_op_analysis_by_enabling_quant_ops(sim, results_dir="./tmp/")
+        assert os.path.isfile("./tmp/per_op_quant_enabled.html")
+        assert os.path.isfile("./tmp/per_op_quant_enabled.json")
+    finally:
+        sim.session.close()
+        cpu_session.close()
+        if os.path.isdir("./tmp/"):
+            shutil.rmtree("./tmp/")
+
+#pylint: disable=redefined-outer-name
+def test_perform_per_layer_analysis_by_disabling_quant_ops(cpu_session):
+    """test _perform_per_op_analysis_by_disabling_quant_ops()"""
+    sim = QuantizationSimModel(cpu_session, ['conv2d_input'], ['keras_model/Softmax'], use_cuda=False)
+    sim.compute_encodings(forward_pass_callback, None)
+    quant_analyzer = QuantAnalyzer(cpu_session, start_op_names=['conv2d_input'],
+                                   output_op_names=['keras_model/Softmax'],
+                                   forward_pass_callback=CallbackFunc(forward_pass_callback),
+                                   eval_callback=CallbackFunc(forward_pass_callback), use_cuda=False)
+    try:
+        #pylint: disable=protected-access
+        quant_analyzer._perform_per_op_analysis_by_disabling_quant_ops(sim, results_dir="./tmp/")
+        assert os.path.isfile("./tmp/per_op_quant_disabled.html")
+        assert os.path.isfile("./tmp/per_op_quant_disabled.json")
+    finally:
+        sim.session.close()
+        cpu_session.close()
+        if os.path.isdir("./tmp/"):
+            shutil.rmtree("./tmp/")

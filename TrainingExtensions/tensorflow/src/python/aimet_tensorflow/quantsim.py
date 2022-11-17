@@ -350,6 +350,20 @@ class QuantizationSimModel:
                 enabled_activation_quantizers.append(quantizer_info)
         return enabled_activation_quantizers
 
+    def get_enabled_quantizers(self):
+        """
+        For given quantsim model, get all enabled activation and parameter quantizers.
+        :return: List of enabled activation and parameter quantizers.
+        """
+        enabled_quantizers_list = []
+        for quantizer_info in self._activation_quantizers.values():
+            if  quantizer_info.enabled:
+                enabled_quantizers_list.append(quantizer_info)
+        for quantizer_info in self._param_quantizers.values():
+            if quantizer_info.enabled:
+                enabled_quantizers_list.append(quantizer_info)
+        return enabled_quantizers_list
+
     @staticmethod
     def enable_disable_quantizers(quantizer_list: List[QuantizerInfo], enabled: bool):
         """
