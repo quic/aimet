@@ -55,6 +55,7 @@ _logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Quant)
 class QuantizerSettings:
     """ Class holding quantizer settings """
 
+    # pylint: disable=too-many-arguments
     def __init__(self, bitwidth: int, default_data_type: QuantizationDataType, round_mode: str,
                  quant_scheme: Union[str, QuantScheme], is_symmetric: bool,
                  use_unsigned_symmetric: bool, use_strict_symmetric: bool,
