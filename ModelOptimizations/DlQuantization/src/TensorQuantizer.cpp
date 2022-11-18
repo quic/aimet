@@ -41,6 +41,7 @@
 #include "quantization_utils.hpp"
 #include <cassert>
 #include <numeric>
+#include <stdexcept>
 
 namespace DlQuantization
 {
