@@ -139,7 +139,7 @@ class TensorQuantizer(tf.keras.layers.Layer, abc.ABC):
     def get_config(self):
         """Returns the config of the TensorQuantizer class."""
         return {
-            'layer': self._original_layer,
+            'layer': self.original_layer,
             'name': self._name,
             'quant_scheme': self._quant_scheme,
             'bitwidth': self._bitwidth.numpy(),
@@ -334,6 +334,7 @@ class StaticGridPerTensorQuantizer(TensorQuantizer):
         rebuilt_quantizer = cls(**blank_initilizer)
 
         rebuilt_quantizer.tensor_quantizer = rebuilt_tensor_quantizer
+        # pylint: disable=protected-access
         rebuilt_quantizer._encoding_min = config['encoding_min']
         rebuilt_quantizer._encoding_max = config['encoding_max']
 
@@ -705,7 +706,7 @@ class StaticGridPerChannelQuantizer(TensorQuantizer):
                             'is_symmetric': config['is_symmetric'],
                             'use_strict_symmetric': tensor_quantizer_state.use_strict_symmetric,
                             'use_unsigned_symmetric': tensor_quantizer_state.use_unsigned_symmetric,
-                            'enabled': config['enabled'], 'axis_handling': config['axis_handling'], 
+                            'enabled': config['enabled'], 'axis_handling': config['axis_handling'],
                             'num_output_channels': config['num_output_channels']}
 
         tensor_quantizer_state = config.pop('tensor_quantizer')
@@ -721,6 +722,7 @@ class StaticGridPerChannelQuantizer(TensorQuantizer):
         rebuilt_quantizer = cls(**blank_initilizer)
 
         rebuilt_quantizer.tensor_quantizer = rebuilt_tensor_quantizers
+        # pylint: disable=protected-access
         rebuilt_quantizer._encoding_min = config['encoding_min']
         rebuilt_quantizer._encoding_max = config['encoding_max']
 
@@ -995,10 +997,10 @@ class ParamPerChannelQuantizer(StaticGridPerChannelQuantizer):
 
     def enable(self):
         """
-            Enable the paramter tensor quantizer
-            If encoding is frozen, no need to do anything (and quant mode should already be set to quantizeDequantize,
-            instead of oneShotQuantizeDequantize)
-            """
+        Enable the paramter tensor quantizer
+        If encoding is frozen, no need to do anything (and quant mode should already be set to quantizeDequantize,
+        instead of oneShotQuantizeDequantize)
+        """
         if not self._is_encoding_frozen:
             self._quantizer_mode.assign(int(libpymo.TensorQuantizerOpMode.quantizeDequantize))
 

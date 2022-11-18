@@ -148,6 +148,19 @@ class QuantizerSettings:
         """ Enabled setter """
         self._enabled = enabled
 
+    def __eq__(self, __o: object) -> bool:
+        """
+        Equality operator. Specifically used for get_config()/from_config()
+        :param __o: Object to compare with
+        :return: True if equal, False otherwise
+        """
+        if isinstance(__o, QuantizerSettings):
+            return self._bitwidth == __o.bitwidth and self._round_mode == __o.round_mode and \
+                   self._quant_scheme == __o.quant_scheme and self._is_symmetric == __o.is_symmetric and \
+                   self._use_unsigned_symmetric == __o.use_unsigned_symmetric and \
+                   self._use_strict_symmetric == __o.use_strict_symmetric and self._enabled == __o.enabled
+        return False
+
 
 class QcQuantizeWrapper(tf.keras.layers.Layer):
     """ Wrapper for simulating quantization noise """
@@ -276,31 +289,38 @@ class QcQuantizeWrapper(tf.keras.layers.Layer):
 
     def get_config(self):
         """ Override get_config """
-        return {"layer_to_wrap": self._layer_to_wrap,
-                "activation_quant_settings": self._activation_quant_settings,
-                "param_quant_settings": self._param_quant_settings,
-                "num_inputs": self._num_inputs,
-                "name": self.name,
-                "input_quantizers": [input_quantizer.get_config() for input_quantizer in self.input_quantizers],
-                "output_quantizers": [output_quantizer.get_config() for output_quantizer in self.output_quantizers],
-                "param_quantizers": [param_quantizer.get_config() for param_quantizer in self.param_quantizers],
-                "shadow_params": self._shadow_params}
+        # NOTE: `layer_to_wrap` is not included in the config. This because during the from_config() it will name the
+        # layer_to_wrap with the incorrect name. Instead, the layer_to_wrap is set in the from_config() method with the
+        # layer coming for the tensor quantizer.
+        return {
+            "activation_quant_settings": self._activation_quant_settings,
+            "param_quant_settings": self._param_quant_settings,
+            "num_inputs": self._num_inputs,
+            "name": self.name,
+            "input_quantizers": [input_quantizer.get_config() for input_quantizer in self.input_quantizers],
+            "output_quantizers": [output_quantizer.get_config() for output_quantizer in self.output_quantizers],
+            "param_quantizers": [param_quantizer.get_config() for param_quantizer in self.param_quantizers],
+            "shadow_params": self._shadow_params
+        }
 
     @classmethod
     def from_config(cls, config):
         """ Override from_config """
+        # Wrapped layer is noted here and built backwards starting from the quantizers
+        config['layer_to_wrap'] = config['input_quantizers'][0]['layer']
 
         # Go through the configs for each quantizer and create the quantizer objects through their from_config methods
-        config["input_quantizers"] = [ActivationTensorQuantizer.from_config(input_quantizer_config)
-                                      for input_quantizer_config in config["input_quantizers"]]
+        config['input_quantizers'] = [ActivationTensorQuantizer.from_config(input_quantizer_config)
+                                      for input_quantizer_config in config['input_quantizers']]
 
-        config["output_quantizers"] = [ActivationTensorQuantizer.from_config(output_quantizer_config)
-                                       for output_quantizer_config in config["output_quantizers"]]
+        config['output_quantizers'] = [ActivationTensorQuantizer.from_config(output_quantizer_config)
+                                       for output_quantizer_config in config['output_quantizers']]
 
-        config["param_quantizers"] = [
-            (lambda quantizer_type: quantizer_type.from_config(param_quantizer_config))
+        config['param_quantizers'] = [
+            (lambda quantizer_type, pqc=param_quantizer_config: quantizer_type.from_config(pqc))
             (ParamPerChannelQuantizer if isinstance(param_quantizer_config, List) else ParamPerTensorQuantizer)
-            for param_quantizer_config in config["param_quantizers"]]
+            for param_quantizer_config in config['param_quantizers']
+            ]
         return cls(**config)
 
     # pylint: disable=arguments-differ

@@ -48,6 +48,8 @@ from tensorflow import keras
 
 from aimet_common.defs import QuantScheme
 from aimet_tensorflow.keras.cross_layer_equalization import equalize_model
+from aimet_tensorflow.keras.quant_sim.qc_quantize_wrapper import QcQuantizeWrapper, QuantizerSettings
+from aimet_tensorflow.keras.quantsim import QuantizationSimModel
 from aimet_tensorflow.keras.quant_sim.qc_mha_wrapper import QcQuantizableMultiHeadAttention
 from aimet_tensorflow.keras.quantsim import QuantizationSimModel
 from test_models_keras import tiny_conv_net
@@ -645,3 +647,26 @@ def test_quantizable_mha_export_encodings():
                 assert encodings['param_encodings'][param_name] == encoding_dict
 
 
+def test_copy_model_from_config():
+    model = dense_functional()
+    rand_inp = np.random.randn(100, 5)
+    _ = model.predict(rand_inp)
+
+    sim = QuantizationSimModel(model, quant_scheme='tf')
+    sim.compute_encodings(lambda m, _: m.predict(rand_inp), None)
+
+    sim_model_config = sim.model.get_config()
+    sim_model_weights = sim.model.get_weights()
+
+    # Instantiate a new model based on the sim.model's config and weights
+    model_from_config = keras.models.Model.from_config(sim_model_config,
+                                                       custom_objects={'QcQuantizeWrapper': QcQuantizeWrapper})
+
+    model_from_config.set_weights(sim_model_weights)
+
+    # Check that the weight names are the same
+    assert {w.name for w in model_from_config.weights} == {w.name for w in sim.model.weights}
+    # Check that the weight values are the same
+    np.testing.assert_equal(sim.model.get_weights(), model_from_config.get_weights())
+    # Check that the models produce the same output for the same input
+    np.testing.assert_equal(sim.model.predict(rand_inp), model_from_config.predict(rand_inp))
