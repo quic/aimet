@@ -467,6 +467,7 @@ class TestPerChannelQcQuantizeOpLearnedGrid:
                                                       enabled_by_default=True,
                                                       data_type=QuantizationDataType.int)
         tensor_quantizer._ch_axis = 0
+        tensor_quantizer.is_unsigned_symmetric = True
 
         encoding_min = torch.nn.Parameter(torch.FloatTensor([0.0, 0.0, 0.0]))
         encoding_max = torch.nn.Parameter(torch.FloatTensor([1.0, 2.5, 3.5]))

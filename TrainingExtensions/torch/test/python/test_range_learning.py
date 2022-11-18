@@ -162,7 +162,7 @@ class TestRangeLearning:
                 enabled_by_default=True,
                 data_type=QuantizationDataType.int)
 
-        tensor_quantizer.use_unsigned_symmetric = True
+        tensor_quantizer.is_unsigned_symmetric = True
         auto_quantizer = RangeLearningSymUnsignedAutograd(bitwidth=8)
 
         init_encoding_min = 0

@@ -498,8 +498,8 @@ class TestQcQuantizeOpLearnedGrid:
                                                       enabled_by_default=True,
                                                       data_type=QuantizationDataType.int)
 
-        def test_with_options(use_unsigned_symmetric, encoding_min):
-            tensor_quantizer.use_unsigned_symmetric = use_unsigned_symmetric
+        def test_with_options(is_unsigned_symmetric, encoding_min):
+            tensor_quantizer.is_unsigned_symmetric = is_unsigned_symmetric
 
             encoding_min = torch.nn.Parameter(torch.FloatTensor([encoding_min]))
             encoding_max = torch.nn.Parameter(torch.FloatTensor([5]))
@@ -520,16 +520,16 @@ class TestQcQuantizeOpLearnedGrid:
             assert np.amin(tensor.detach().numpy(), axis=(0, 1, 2, 3)) >= min_val - grid_length
 
         # this case will fall into signed symmetric since encoding_min < 0
-        test_with_options(use_unsigned_symmetric=True, encoding_min=-5)
+        test_with_options(is_unsigned_symmetric=True, encoding_min=-5)
 
         # unsigned symmetirc case test
-        test_with_options(use_unsigned_symmetric=True, encoding_min=0)
+        test_with_options(is_unsigned_symmetric=True, encoding_min=0)
 
         # signed symmetric test
-        test_with_options(use_unsigned_symmetric=False, encoding_min=-5)
+        test_with_options(is_unsigned_symmetric=False, encoding_min=-5)
 
         # signed symmetric test
-        test_with_options(use_unsigned_symmetric=False, encoding_min=-1)
+        test_with_options(is_unsigned_symmetric=False, encoding_min=-1)
 
 
 

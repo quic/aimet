@@ -78,6 +78,14 @@ class TensorQuantizer:
         self.use_symmetric_encodings = use_symmetric_encodings
         self.use_strict_symmetric = False
         self.use_unsigned_symmetric = True
+        # NOTE: is_unsigned_symmetric flag is to check feasibility about unsigned symmetric quantization is possible
+        #   The difference between use_unsigned_symmetric and is_unsigned_symmetric is
+        #   is_unsigned_symmetric can be false if encoding_min < 0 < encoding_max range
+        #   even if use_unsigned_symmetric is set to true.
+        #
+        #   In other words, is_unsigned_symmetric can be true
+        #   when use_symmetric_encodings=True and use_unsigned_symmetric=True and (encoding_min >= 0 and encoding_max >= 0)
+        self.is_unsigned_symmetric = False
         self.bitwidth = bitwidth
         self.enabled = enabled_by_default
         self.data_type = data_type
@@ -254,6 +262,13 @@ class StaticGridTensorQuantizer(TensorQuantizer):
                         self.enabled = False
                     else:
                         self._encoding.append(encoding)
+
+                # NOTE: Check feasibility about unsigned symmetric case
+                #   whether encoding range is all positive
+                is_in_positive_range = lambda enc_min, enc_max: enc_min >= 0 and enc_max >= 0
+                self.is_unsigned_symmetric = self.use_symmetric_encodings and \
+                                             self.use_unsigned_symmetric and \
+                                             all([is_in_positive_range(enc.min, enc.max) for enc in self._encoding])
 
                 # Check for the case when some cppOp encodings are not valid while others are.
                 # In the case that a module is unused, all cppOp encodings will have is_encoding_valid False, and there

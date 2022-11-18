@@ -102,6 +102,47 @@ class TestTensorQuantizer:
         with pytest.raises(RuntimeError):
             quantizer.get_stats_histogram()
 
+    def test_is_unsigned_symmetric_flag(self):
+        """
+        test whether is_unsigned_symmetric flag is set correctly based on encoding range
+        """
+        def _reset_update_compute_encoding(quantizer, tensor):
+            quantizer.reset_encoding_stats()
+            quantizer.update_encoding_stats(tensor)
+            quantizer.compute_encoding()
+
+        positive_value_only_tensor = torch.tensor([[1.3, 2.6, 10.5, 4.6],
+                                                   [6.8, 7.9, 9.6, 2.5],
+                                                   [20.1, 25.4, 33.3, 15.3]])
+        positive_negative_value_mixed_tensor = torch.tensor([[-3.1, -1.4, 6.9, 7.7],
+                                                             [6.8, 7.9, 9.6, 2.5],
+                                                             [20.1, 25.4, 33.3, 15.3]])
+
+        ### Test for per-tensor quantizer
+        per_tensor_quantizer = StaticGridPerTensorQuantizer(bitwidth=8, round_mode="nearest",
+                                                            quant_scheme=QuantScheme.post_training_tf,
+                                                            use_symmetric_encodings=True,
+                                                            enabled_by_default=True,
+                                                            data_type=QuantizationDataType.int)
+        _reset_update_compute_encoding(per_tensor_quantizer, positive_value_only_tensor)
+        assert per_tensor_quantizer.is_unsigned_symmetric
+
+        _reset_update_compute_encoding(per_tensor_quantizer, positive_negative_value_mixed_tensor)
+        assert not per_tensor_quantizer.is_unsigned_symmetric
+
+        ### Test for per-channel quantizer
+        per_channel_quantizer = StaticGridPerChannelQuantizer(bitwidth=8, round_mode="nearest",
+                                                              quant_scheme=QuantScheme.post_training_tf,
+                                                              use_symmetric_encodings=True,
+                                                              num_channels=3,
+                                                              enabled_by_default=True,
+                                                              data_type=QuantizationDataType.int)
+        _reset_update_compute_encoding(per_channel_quantizer, positive_value_only_tensor)
+        assert per_channel_quantizer.is_unsigned_symmetric
+
+        _reset_update_compute_encoding(per_channel_quantizer, positive_negative_value_mixed_tensor)
+        assert not per_channel_quantizer.is_unsigned_symmetric
+
     def test_learned_grid_set_and_freeze_param_encoding(self):
         """
         test freeze_encoding() method for LearnedGridQuantWrapper.
