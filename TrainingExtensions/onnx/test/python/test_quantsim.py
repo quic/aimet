@@ -197,15 +197,6 @@ class TestQuantSim:
         onnx_model = load_model('/tmp/dummy_model.onnx')
 
         onnx_sim = QuantizationSimModel(onnx_model)
-        for quantizer in onnx_sim.qc_quantize_op_dict:
-            onnx_sim.qc_quantize_op_dict[quantizer].enabled = True
-
-        disables = ['conv4.bias', 'fc.bias', 'fc.weight']
-        weights = ['conv1.weight', 'conv2.weight', 'conv3.weight', 'conv4.weight']
-        for disable in disables:
-            onnx_sim.qc_quantize_op_dict[disable].enabled = False
-        for weight in weights:
-            onnx_sim.qc_quantize_op_dict[weight].use_symmetric_encodings = True
 
         activation_encodings_map = {'12': '9', '15': '10', '21': '12', '24': '13', '27': '14', '30': '15',
                                     '34': '17', '38': '19', 't.1': 'input'}
