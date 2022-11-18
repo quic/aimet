@@ -39,7 +39,7 @@
 
 #ifndef QUANTIZATION_HPP
 #define QUANTIZATION_HPP
-
+#include <cstddef>
 #include <vector>
 
 namespace DlQuantization
