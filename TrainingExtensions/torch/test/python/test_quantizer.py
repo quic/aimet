@@ -53,6 +53,7 @@ from aimet_common.defs import QuantScheme, QuantizationDataType, MAP_ROUND_MODE_
 from aimet_common.utils import AimetLogger
 from aimet_torch import transformer_utils, onnx_utils
 from aimet_torch import utils, elementwise_ops
+from aimet_torch.batch_norm_fold import fold_all_batch_norms
 from aimet_torch.examples.test_models import TwoLayerBidirectionalLSTMModel, SingleLayerRNNModel, \
     ModelWithTwoInputs, SimpleConditional, RoiModel, InputOutputDictModel
 from aimet_torch.meta.connectedgraph import ConnectedGraph
@@ -758,11 +759,12 @@ class TestQuantizationSimStaticGrad:
             print(encoding_data)
 
         activation_keys = list(encoding_data["activation_encodings"].keys())
-        assert activation_keys[0] == "130"
-        assert isinstance(encoding_data["activation_encodings"]["130"], list)
+
+        assert len(activation_keys) == 24
+        assert isinstance(encoding_data["activation_encodings"][activation_keys[0]], list)
 
         param_keys = list(encoding_data["param_encodings"].keys())
-        assert param_keys[0] == "conv1.weight"
+        assert "conv1.weight" in param_keys
         assert isinstance(encoding_data["param_encodings"]["conv1.weight"], list)
 
     def test_export_to_torch_script(self):
@@ -789,8 +791,7 @@ class TestQuantizationSimStaticGrad:
             encoding_data = json.load(json_file)
 
         activation_keys = list(encoding_data["activation_encodings"].keys())
-        assert activation_keys[0] == "103"
-        assert isinstance(encoding_data["activation_encodings"]["103"], list)
+        assert isinstance(encoding_data["activation_encodings"][activation_keys[0]], list)
 
         param_keys = list(encoding_data["param_encodings"].keys())
         assert param_keys[0] == "conv1.weight"
