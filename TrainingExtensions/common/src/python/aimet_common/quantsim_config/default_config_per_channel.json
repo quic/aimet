@@ -11,8 +11,8 @@
       "is_symmetric": "True"
     },
     "strict_symmetric": "False",
-	"unsigned_symmetric": "True",
-	"per_channel_quantization": "True"
+    "unsigned_symmetric": "True",
+    "per_channel_quantization": "True"
   },
 
   "params":
@@ -36,6 +36,10 @@
     "Mean":
     {
       "is_output_quantized": "False"
+    },
+    "Gemm":
+    {
+      "per_channel_quantization": "False"
     }
   },
 
@@ -44,11 +48,8 @@
     {
       "op_list": ["Conv", "Relu"]
     },
-	{
-      "op_list": ["Conv", "Clip"]
-	},
     {
-      "op_list": ["Conv", "BatchNormalization", "Relu"]
+      "op_list": ["Conv", "Clip"]
     },
     {
       "op_list": ["Add", "Relu"]

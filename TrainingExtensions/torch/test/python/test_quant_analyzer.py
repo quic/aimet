@@ -44,6 +44,7 @@ import torch
 from torch.utils.data import Dataset, DataLoader
 
 from aimet_common.defs import QuantScheme
+from aimet_torch.batch_norm_fold import fold_all_batch_norms
 from aimet_torch.examples.test_models import TinyModel
 from aimet_torch.tensor_quantizer import TensorQuantizer
 from aimet_torch.qc_quantize_op import QcQuantizeWrapper
@@ -152,6 +153,7 @@ class TestQuantAnalyzer:
         input_shape = (1, 3, 32, 32)
         dummy_input = torch.randn(*input_shape)
         model = TinyModel().eval()
+        fold_all_batch_norms(model, input_shape)
         sim = QuantizationSimModel(model, dummy_input)
         quant_analyzer = QuantAnalyzer(model, dummy_input, CallbackFunc(None), CallbackFunc(None))
         enabled_quantizers = quant_analyzer._get_enabled_activation_quantizers(sim)
