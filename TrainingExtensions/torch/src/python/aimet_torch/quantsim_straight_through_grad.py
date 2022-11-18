@@ -36,11 +36,14 @@
 #  @@-COPYRIGHT-END-@@
 # =============================================================================
 """ Implements straight through gradient computation for Quant op"""
+import math
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Tuple
 
 import torch
 from torch.autograd import Variable
+
+from aimet_torch.tensor_factory_utils import constant_tensor_factory
 
 if TYPE_CHECKING:
     from aimet_torch.tensor_quantizer import LearnedGridTensorQuantizer
@@ -292,36 +295,12 @@ def compute_dloss_by_dx_using_scale_offset(x: torch.Tensor,
     return dloss_by_dx
 
 
-def get_true_sign_condition(encoding_min: torch.nn.Parameter,
-                            encoding_max: torch.nn.Parameter,
-                            use_unsigned_symmetric: bool) -> bool:
-    """
-    Get true quantizer sign option from encoding parameters and sign flag.
-    This has to be deprecated in the future, but currently there is no way to identify true option
-    only from the flags.
-    :param encoding_min: Encoding min parameter
-    :param encoding_max: Encoding max parameter
-    :param use_unsigned_symmetric: Flag for symmetric (signed/unsigned)
-    :return Tuple of (is_symmetric, is_unsigned_symmetric) flags
-    """
-
-    is_unsigned_symmetric = use_unsigned_symmetric
-    if (encoding_min < 0 < encoding_max) or not use_unsigned_symmetric:
-        # signed symmetric
-        is_unsigned_symmetric = False
-    else:
-        # unsigned symmetric
-        is_unsigned_symmetric = True
-
-    return is_unsigned_symmetric
-
-
 def get_computed_encodings(bitwidth: int,
                            encoding_min: torch.nn.Parameter,
                            encoding_max: torch.nn.Parameter,
                            use_symmetric_encodings: bool,
                            use_strict_symmetric: bool,
-                           use_unsigned_symmetric: bool) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+                           is_unsigned_symmetric: bool) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
     """
     Compute delta and offset, and number of steps given quantization parameters
     Followed the flow of C++ compute encoding function (quantization_utils::getComputedEncodings)
@@ -330,33 +309,35 @@ def get_computed_encodings(bitwidth: int,
     :param encoding_max: Encoding max
     :param use_symmetric_encodings: True if symmetric encoding is used. False otherwise
     :param use_strict_symmetric: True if strict symmetric encoding is used. False otherwise
-    :param use_unsigned_symmetric: Whether to use signed/unsigned in symmetric case
+    :param is_unsigned_symmetric: Whether to use signed/unsigned in symmetric case
     :return: Tuple of delta and offset and num_steps
     """
-    num_steps = torch.pow(torch.tensor([2], device=encoding_min.device), bitwidth) - 1
+    device = encoding_min.device
+    num_steps = 2 ** bitwidth - 1
     if use_symmetric_encodings and use_strict_symmetric:
         num_steps -= 1
+    half_num_steps = num_steps / 2
 
+    num_steps_tensor = constant_tensor_factory(num_steps, device)
     # NOTE: This assumes that the use_* flags reflect true condition (regardless of the encoding_* values)
-    if use_symmetric_encodings and (not use_unsigned_symmetric):
+    if use_symmetric_encodings and (not is_unsigned_symmetric):
         # signed symmetric
         absmax = torch.max(torch.abs(encoding_min), torch.abs(encoding_max))
-        half_num_steps = torch.div(num_steps, 2)
-
-        delta = absmax / torch.floor(half_num_steps)
-        offset = -torch.ceil(half_num_steps)
+        delta = absmax / constant_tensor_factory(math.floor(half_num_steps), device)
+        offset = -constant_tensor_factory(math.ceil(half_num_steps), device)
     else:
-        delta = (encoding_max - encoding_min) / num_steps
+        delta = (encoding_max - encoding_min) / num_steps_tensor
         if use_symmetric_encodings:
             # unsigned symmetric
             offset = encoding_min / delta
         else:
             # asymmetric
+            zero_tensor = constant_tensor_factory(0., device)
             b_zero = torch.round(-encoding_min / delta)
-            b_zero = torch.min(num_steps, torch.max(torch.tensor([0], device=encoding_min.device), b_zero))
-            offset = torch.tensor(-b_zero, device=encoding_min.device)
+            b_zero = torch.min(num_steps_tensor, torch.max(zero_tensor, b_zero))
+            offset = -b_zero.clone().detach()
 
-    return delta, offset, num_steps
+    return delta, offset, num_steps_tensor
 
 
 def _compute_variables_for_range_learning(tensor: torch.Tensor,
@@ -366,7 +347,7 @@ def _compute_variables_for_range_learning(tensor: torch.Tensor,
                                           channel_axis: int,
                                           use_symmetric_encodings: bool,
                                           use_strict_symmetric: bool,
-                                          use_unsigned_symmetric: bool):
+                                          is_unsigned_symmetric: bool) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
     """
     Calculate required variables for range learning
     :param tensor: torch Tensor
@@ -376,52 +357,16 @@ def _compute_variables_for_range_learning(tensor: torch.Tensor,
     :param channel_axis: Channel axis to use for per-channel quant
     :param use_symmetric_encodings: True if symmetric encoding is used. False otherwise
     :param use_strict_symmetric: True if strict symmetric encoding is used. False otherwise
-    :param use_unsigned_symmetric: Whether to use signed/unsigned in symmetric case
+    :param is_unsigned_symmetric: Whether to use signed/unsigned in symmetric case
     """
-
-    if len(encoding_min) > 1:
-
-        for emin, emax in zip(encoding_min, encoding_max):
-            is_unsigned = get_true_sign_condition(emin, emax, use_unsigned_symmetric)
-            if not is_unsigned:
-                # if one is singed, then all of them are considered as signed
-                break
-    else:
-        is_unsigned = get_true_sign_condition(encoding_min, encoding_max, use_unsigned_symmetric)
-
     delta, offset, num_steps = get_computed_encodings(bitwidth, encoding_min, encoding_max,
-                                                      use_symmetric_encodings, use_strict_symmetric, is_unsigned)
+                                                      use_symmetric_encodings, use_strict_symmetric, is_unsigned_symmetric)
     # broadcasting
     if len(encoding_min) > 1:
         delta = broadcast_to_tensor(tensor, delta, channel_axis)
         offset = broadcast_to_tensor(tensor, offset, channel_axis)
 
-    return delta, offset, num_steps, use_symmetric_encodings, is_unsigned
-
-
-def _compute_delta_and_offset(tensor: torch.Tensor,
-                              encoding_min: torch.nn.Parameter,
-                              encoding_max: torch.nn.Parameter,
-                              steps: torch.Tensor,
-                              channel_axis: int) -> Tuple[torch.Tensor, torch.Tensor]:
-    """
-    Compute delta and offset, also broadcast if needed (per-channel case)
-
-    :param tensor: Input tensor
-    :param encoding_min: Encoding min
-    :param encoding_max: Encoding max
-    :param steps: Steps computed by bitwidth
-    :param channel_axis: Channel axis to use for per-channel quant
-    :return: Tuple of delta and offset
-    """
-    delta = (encoding_max - encoding_min) / steps
-    offset = torch.round(encoding_min / delta)
-
-    if len(encoding_min) > 1:
-        delta = broadcast_to_tensor(tensor, delta, channel_axis)
-        offset = broadcast_to_tensor(tensor, offset, channel_axis)
-
-    return delta, offset
+    return delta, offset, num_steps
 
 
 # pylint:disable=too-many-locals
@@ -437,15 +382,16 @@ def calculate_forward_pass(tensor: torch.Tensor,
     :param encoding_max: Encoding max
     :return: QuantizeDequantize out and intermediate result tuple
     """
-    delta, offset, num_steps, is_symmetric, is_unsigned = \
-        _compute_variables_for_range_learning(tensor,
-                                              tensor_quantizer.bitwidth,
-                                              encoding_min,
-                                              encoding_max,
-                                              tensor_quantizer.channel_axis,
-                                              tensor_quantizer.use_symmetric_encodings,
-                                              tensor_quantizer.use_strict_symmetric,
-                                              tensor_quantizer.use_unsigned_symmetric)
+    use_symmetric_encodings = tensor_quantizer.use_symmetric_encodings
+    is_unsigned_symmetric = tensor_quantizer.is_unsigned_symmetric
+    delta, offset, num_steps = _compute_variables_for_range_learning(tensor,
+                                                                     tensor_quantizer.bitwidth,
+                                                                     encoding_min,
+                                                                     encoding_max,
+                                                                     tensor_quantizer.channel_axis,
+                                                                     use_symmetric_encodings,
+                                                                     tensor_quantizer.use_strict_symmetric,
+                                                                     is_unsigned_symmetric)
 
     zero = torch.zeros_like(num_steps)
 
@@ -462,7 +408,7 @@ def calculate_forward_pass(tensor: torch.Tensor,
     intermediate_result = IntermediateResult(x_quant,
                                              encoding_min, encoding_max,
                                              delta, offset, mask_tensor, num_steps,
-                                             is_symmetric, is_unsigned)
+                                             use_symmetric_encodings, is_unsigned_symmetric)
     return x_dequant, intermediate_result
 
 

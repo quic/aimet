@@ -534,6 +534,7 @@ class QuantizationSimModel:
             new_quantizer.use_symmetric_encodings = old_quantizer.use_symmetric_encodings
             new_quantizer.use_strict_symmetric = old_quantizer.use_strict_symmetric
             new_quantizer.use_unsigned_symmetric = old_quantizer.use_unsigned_symmetric
+            new_quantizer.is_unsigned_symmetric = old_quantizer.is_unsigned_symmetric
 
         # pylint: disable=protected-access
         module = post_training_module._module_to_wrap
