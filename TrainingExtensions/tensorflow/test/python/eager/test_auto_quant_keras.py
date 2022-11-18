@@ -183,8 +183,10 @@ def patch_ptq_techniques(bn_folded_acc, cle_acc, adaround_acc):
         def set_and_freeze_param_encodings(self, _):
             pass
 
-        def _add_quantization_wrappers(self, quant_scheme, rounding_mode, default_output_bw, default_param_bw):
-            model = super()._add_quantization_wrappers(quant_scheme, rounding_mode, default_output_bw, default_param_bw)
+        def _add_quantization_wrappers(self, quant_scheme, rounding_mode, default_output_bw,
+                                       default_param_bw, default_data_type):
+            model = super()._add_quantization_wrappers(quant_scheme, rounding_mode, default_output_bw,
+                                                       default_param_bw, default_data_type)
             _set_attr_to_copied_model(model, self._model_without_wrappers)
             return model
 
