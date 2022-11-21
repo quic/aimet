@@ -41,7 +41,7 @@ import tensorflow as tf
 
 import aimet_common.libpymo as libpymo
 from aimet_common.utils import AimetLogger
-from aimet_common.defs import QuantScheme
+from aimet_common.defs import QuantScheme, QuantizationDataType
 import aimet_tensorflow.utils.quantsim as quantsim_utils
 import aimet_tensorflow.keras.utils.common as keras_common_utils
 from aimet_tensorflow.keras.quant_sim.tensor_quantizer import ActivationTensorQuantizer, \
@@ -55,9 +55,13 @@ _logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Quant)
 class QuantizerSettings:
     """ Class holding quantizer settings """
 
-    def __init__(self, bitwidth: int, round_mode: str, quant_scheme: Union[str, QuantScheme], is_symmetric: bool,
-                 use_unsigned_symmetric: bool, use_strict_symmetric: bool, enabled: bool = False):
+    # pylint: disable=too-many-arguments
+    def __init__(self, bitwidth: int, default_data_type: QuantizationDataType, round_mode: str,
+                 quant_scheme: Union[str, QuantScheme], is_symmetric: bool,
+                 use_unsigned_symmetric: bool, use_strict_symmetric: bool,
+                 enabled: bool = False):
         self._bitwidth = bitwidth
+        self._data_type = default_data_type
         self._round_mode = round_mode
         if isinstance(quant_scheme, str):
             if quant_scheme == 'tf':
@@ -93,6 +97,16 @@ class QuantizerSettings:
     def bitwidth(self, bitwidth: int):
         """ Bitwidth setter """
         self._bitwidth = bitwidth
+
+    @property
+    def data_type(self):
+        """ Bitwidth getter """
+        return self._data_type
+
+    @data_type.setter
+    def data_type(self, data_type: QuantizationDataType):
+        """ Data Type Settter """
+        self._data_type = data_type
 
     @property
     def is_symmetric(self):
@@ -187,6 +201,7 @@ class QcQuantizeWrapper(tf.keras.layers.Layer):
                                               self._activation_quant_settings.quant_scheme,
                                               self._activation_quant_settings.round_mode,
                                               self._activation_quant_settings.bitwidth,
+                                              self._activation_quant_settings.data_type,
                                               self._activation_quant_settings.is_symmetric,
                                               self._activation_quant_settings.use_strict_symmetric,
                                               self._activation_quant_settings.use_unsigned_symmetric,
@@ -202,6 +217,7 @@ class QcQuantizeWrapper(tf.keras.layers.Layer):
                                           self._activation_quant_settings.quant_scheme,
                                           self._activation_quant_settings.round_mode,
                                           self._activation_quant_settings.bitwidth,
+                                          self._activation_quant_settings.data_type,
                                           self._activation_quant_settings.is_symmetric,
                                           self._activation_quant_settings.use_strict_symmetric,
                                           self._activation_quant_settings.use_unsigned_symmetric,
@@ -227,6 +243,7 @@ class QcQuantizeWrapper(tf.keras.layers.Layer):
                                                  self._param_quant_settings.quant_scheme,
                                                  self._param_quant_settings.round_mode,
                                                  self._param_quant_settings.bitwidth,
+                                                 self._param_quant_settings.data_type,
                                                  self._param_quant_settings.is_symmetric,
                                                  self._param_quant_settings.use_strict_symmetric,
                                                  self._param_quant_settings.use_unsigned_symmetric,
@@ -241,6 +258,7 @@ class QcQuantizeWrapper(tf.keras.layers.Layer):
                                                 self._param_quant_settings.quant_scheme,
                                                 self._param_quant_settings.round_mode,
                                                 self._param_quant_settings.bitwidth,
+                                                self._param_quant_settings.data_type,
                                                 self._param_quant_settings.is_symmetric,
                                                 self._param_quant_settings.use_strict_symmetric,
                                                 self._param_quant_settings.use_unsigned_symmetric,
@@ -296,8 +314,8 @@ class QcQuantizeWrapper(tf.keras.layers.Layer):
                 self._layer_to_wrap.weights[idx].assign(quantized_param)
                 idx_param_quantizer = idx_param_quantizer + 1
 
-
-    def _quantize_activation(self, activation: Union[tf.Tensor, List], quantizers: List[ActivationTensorQuantizer],
+    def _quantize_activation(self, activation: Union[tf.Tensor, List],
+                             quantizers: List[ActivationTensorQuantizer],
                              is_input_quantization: bool) -> Union[tf.Tensor, List]:
         """
         Quantize activation
@@ -342,7 +360,6 @@ class QcQuantizeWrapper(tf.keras.layers.Layer):
     def set_and_freeze_param_encoding(self, param_encodings: Dict):
         """
         Set and freeze encoding for parameter from encodings dictionary
-        :param module_name: name of module
         :param param_encodings: parameter encodings dictionary
         """
         for idx, param_quantizer in enumerate(self.param_quantizers):

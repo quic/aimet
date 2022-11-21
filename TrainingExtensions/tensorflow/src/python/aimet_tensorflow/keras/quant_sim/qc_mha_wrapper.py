@@ -48,7 +48,7 @@ from tensorflow.python.keras.utils import tf_utils
 from tensorflow.python.ops import math_ops, special_math_ops, array_ops
 
 from aimet_common.utils import AimetLogger
-from aimet_common.defs import QuantScheme
+from aimet_common.defs import QuantScheme, QuantizationDataType
 from aimet_tensorflow.keras.quantsim import QuantizerSettings, QcQuantizeWrapper
 
 _logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Quant)
@@ -65,6 +65,7 @@ class QcQuantizableMultiHeadAttention(MultiHeadAttention):
                  rounding_mode: str = 'nearest',
                  default_output_bw: int = 8,
                  default_param_bw: int = 8,
+                 default_data_type: QuantizationDataType = QuantizationDataType.int,
                  copy_source_weights=None,
                  **kwargs):
         super(QcQuantizableMultiHeadAttention, self).__init__(**kwargs)
@@ -72,6 +73,7 @@ class QcQuantizableMultiHeadAttention(MultiHeadAttention):
         self.rounding_mode = rounding_mode
         self.default_output_bw = default_output_bw
         self.default_param_bw = default_param_bw
+        self.default_data_type = default_data_type
         self.copy_source_weights = copy_source_weights
         self._remove_quantizers = False
 
@@ -86,6 +88,8 @@ class QcQuantizableMultiHeadAttention(MultiHeadAttention):
                 self.default_output_bw,
             "default_param_bw":
                 self.default_param_bw,
+            "default_data_type":
+                self.default_data_type,
             "copy_source_weights":
                 self.copy_source_weights
         }
@@ -99,9 +103,9 @@ class QcQuantizableMultiHeadAttention(MultiHeadAttention):
         :param layer: Layer to wrap
         :return: Wrapped layer, or original layer if layer is not to be wrapped
         """
-        activation_quant_settings = QuantizerSettings(self.default_output_bw, self.rounding_mode,
+        activation_quant_settings = QuantizerSettings(self.default_output_bw, self.default_data_type, self.rounding_mode,
                                                       self.quant_scheme, False, False, False)
-        param_quant_settings = QuantizerSettings(self.default_param_bw, self.rounding_mode,
+        param_quant_settings = QuantizerSettings(self.default_param_bw, self.default_data_type, self.rounding_mode,
                                                  self.quant_scheme, False, False, False)
 
         input_quantizers, output_quantizers, param_quantizers = None, None, None
