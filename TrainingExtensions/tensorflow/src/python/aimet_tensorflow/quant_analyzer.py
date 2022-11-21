@@ -304,13 +304,13 @@ class QuantAnalyzer:
         :return: layer wise eval score dictionary. dict[op_name] = eval_score.
         """
 
-        enabled_quant_wrappers = sim.get_enabled_quantizers()
+        enabled_quant_ops = sim.get_enabled_quantizers()
 
         if disable_all_quantizers:
-            sim.enable_disable_quantizers(enabled_quant_wrappers, enabled=False)
+            sim.enable_disable_quantizers(enabled_quant_ops, enabled=False)
 
         eval_score_dict = {}
-        for quantizer_info in enabled_quant_wrappers:
+        for quantizer_info in enabled_quant_ops:
             quantizer_info_list = []
             quantizer_info_list.append(quantizer_info)
             sim.enable_disable_quantizers(quantizer_info_list, enabled=enabled_before)
@@ -322,7 +322,7 @@ class QuantAnalyzer:
             sim.enable_disable_quantizers(quantizer_info_list, enabled=enabled_after)
 
         if disable_all_quantizers:
-            sim.enable_disable_quantizers(enabled_quant_wrappers, enabled=True)
+            sim.enable_disable_quantizers(enabled_quant_ops, enabled=True)
 
         return eval_score_dict
 
@@ -332,8 +332,8 @@ class QuantAnalyzer:
         NOTE: Not to invoke when quantization scheme is not TF-Enhanced.
 
         Export histogram that represents a PDF of collected statistics by a quantizer for every
-        quant wrapper. After invoking this API, results_dir should have html files in following
-        format for every quantizers of quant wrappers.
+        quant op. After invoking this API, results_dir should have html files in following
+        format for every quantizers of quant ops.
 
         -results_dir
             -activations_pdf
