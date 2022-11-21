@@ -171,6 +171,7 @@ def _initialize_input_quantizers(layer: layers.Layer, quant_settings: QuantizerS
                                                                 quant_settings.quant_scheme,
                                                                 quant_settings.round_mode,
                                                                 quant_settings.bitwidth,
+                                                                quant_settings.data_type,
                                                                 quant_settings.is_symmetric,
                                                                 quant_settings.use_strict_symmetric,
                                                                 quant_settings.use_unsigned_symmetric,
@@ -195,6 +196,7 @@ def _initialize_output_quantizers(layer: layers.Layer, quant_settings: Quantizer
                                                             quant_settings.quant_scheme,
                                                             quant_settings.round_mode,
                                                             quant_settings.bitwidth,
+                                                            quant_settings.data_type,
                                                             quant_settings.is_symmetric,
                                                             quant_settings.use_strict_symmetric,
                                                             quant_settings.use_unsigned_symmetric,
@@ -242,6 +244,7 @@ def _initialize_param_quantizers(layer: layers.Layer, param_config_dict: TreeLik
                                              quant_settings.quant_scheme,
                                              quant_settings.round_mode,
                                              quant_settings.bitwidth,
+                                             quant_settings.data_type,
                                              is_symmetric,
                                              quant_settings.use_strict_symmetric,
                                              quant_settings.use_unsigned_symmetric,
@@ -255,6 +258,7 @@ def _initialize_param_quantizers(layer: layers.Layer, param_config_dict: TreeLik
                                             quant_settings.quant_scheme,
                                             quant_settings.round_mode,
                                             quant_settings.bitwidth,
+                                            quant_settings.data_type,
                                             is_symmetric,
                                             quant_settings.use_strict_symmetric,
                                             quant_settings.use_unsigned_symmetric,
@@ -267,9 +271,9 @@ class QuantSimConfigurator(AimetCommonQuantSimConfigurator):
     """ Class for parsing and applying quantsim configurations from json config file """
 
     def __init__(self, connected_graph: ConnectedGraph, quant_scheme: Union[QuantScheme, str], rounding_mode: str,
-                 default_output_bw: int, default_param_bw: int, config_file: str):
-        # TODO when keras supports fp16, pass default_data_type to below line
-        super(QuantSimConfigurator, self).__init__(config_file, QuantizationDataType.int, default_output_bw,
+                 default_output_bw: int, default_param_bw: int,
+                 default_data_type: QuantizationDataType = QuantizationDataType.int, config_file: str = None):
+        super(QuantSimConfigurator, self).__init__(config_file, default_data_type, default_output_bw,
                                                    default_param_bw)
         self._connected_graph = connected_graph
         self._layer_to_affected_quantizer_info_dict = self._create_layer_to_affected_quantizer_info_dict()
@@ -279,7 +283,7 @@ class QuantSimConfigurator(AimetCommonQuantSimConfigurator):
         self._set_quantsim_configs()
         self.per_channel_quantization_flag = self._parse_per_channel_quantization().get('defaults')
         self._initialize_quantizers_by_layer(
-            quant_scheme, rounding_mode, default_output_bw, default_param_bw)
+            quant_scheme, rounding_mode, default_output_bw, default_param_bw, default_data_type)
 
     def _create_layer_to_affected_quantizer_info_dict(self) -> Dict[layers.Layer, LayerAffectedQuantizerTupleType]:
         """
@@ -457,7 +461,7 @@ class QuantSimConfigurator(AimetCommonQuantSimConfigurator):
                         layer, config_key, config_val)
 
     def _initialize_quantizers_by_layer(self, quant_scheme: Union[QuantScheme, str], rounding_mode: str,
-                                        default_output_bw: int, default_param_bw: int):
+                                        default_output_bw: int, default_param_bw: int, default_data_type: QuantizationDataType = QuantizationDataType.int):
         """
         Initialize quantizers of each layer using configuration dictionary
 
@@ -465,6 +469,7 @@ class QuantSimConfigurator(AimetCommonQuantSimConfigurator):
         :param rounding_mode: Rounding mode to use
         :param default_output_bw: Default bitwidth for activation quantizers
         :param default_param_bw: Default bitwidth for param quantizers
+        :param default_data_type:  Default data type for the param quantizers
         """
         # pylint: disable-msg=too-many-locals
         for layer, config_dict in self._layer_to_config_dict.items():
@@ -481,7 +486,7 @@ class QuantSimConfigurator(AimetCommonQuantSimConfigurator):
                 SETTING, False)
             output_quantizer_enabled = config_dict[ConfigDictKeys.IS_OUTPUT_QUANTIZED].get(
                 SETTING, False)
-            activation_quant_settings = QuantizerSettings(default_output_bw, rounding_mode,
+            activation_quant_settings = QuantizerSettings(default_output_bw, default_data_type, rounding_mode,
                                                           quant_scheme, ops_is_symmetric,
                                                           use_unsigned_symmetric, use_strict_symmetric)
 
@@ -507,7 +512,7 @@ class QuantSimConfigurator(AimetCommonQuantSimConfigurator):
             param_config_dict = config_dict[ConfigDictKeys.PARAMS]
             param_is_symmetric = param_config_dict[ConfigDictKeys.IS_SYMMETRIC].get(
                 SETTING, False)
-            param_quant_settings = QuantizerSettings(default_param_bw, rounding_mode,
+            param_quant_settings = QuantizerSettings(default_param_bw, default_data_type, rounding_mode,
                                                      quant_scheme, param_is_symmetric,
                                                      use_unsigned_symmetric, use_strict_symmetric,
                                                      enabled=param_config_dict[ConfigDictKeys.IS_QUANTIZED].get(

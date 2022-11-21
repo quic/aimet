@@ -33,6 +33,7 @@
 #
 #  @@-COPYRIGHT-END-@@
 # =============================================================================
+""" Unit tests for Keras qc quantize wrapper """
 import random
 import tensorflow as tf
 import tensorflow.keras.backend as K
@@ -40,7 +41,7 @@ import numpy as np
 from packaging import version
 
 import aimet_common.libpymo as libpymo
-from aimet_common.defs import QuantScheme
+from aimet_common.defs import QuantScheme, QuantizationDataType
 from aimet_tensorflow.keras.quant_sim.qc_quantize_wrapper import QcQuantizeWrapper, QuantizerSettings
 
 
@@ -82,8 +83,8 @@ def test_wrapper():
         # run forward pass on dense to generate weights
         _ = dense(test_inp)
         x = QcQuantizeWrapper(dense,
-                              QuantizerSettings(8, 'nearest', 'tf', False, False, False),
-                              QuantizerSettings(8, 'nearest', 'tf', False, False, False),
+                              QuantizerSettings(8, QuantizationDataType.int, 'nearest', 'tf', False, False, False),
+                              QuantizerSettings(8, QuantizationDataType.int, 'nearest', 'tf', False, False, False),
                               num_inputs=1)(inp)
         model = tf.keras.Model(inputs=inp, outputs=x)
 
@@ -129,8 +130,8 @@ def test_wrapper_settings():
         inp = tf.keras.layers.Input(shape=(12,))
         identity = tf.keras.layers.Lambda(lambda x: x)
         out = QcQuantizeWrapper(identity,
-                                QuantizerSettings(8, 'nearest', 'tf_enhanced', False, False, False),
-                                QuantizerSettings(8, 'nearest', 'tf_enhanced', False, False, False),
+                                QuantizerSettings(8, QuantizationDataType.int, 'nearest', 'tf_enhanced', False, False, False),
+                                QuantizerSettings(8, QuantizationDataType.int, 'nearest', 'tf_enhanced', False, False, False),
                                 num_inputs=1)(inp)
         model = tf.keras.Model(inputs=inp, outputs=out)
 
@@ -177,8 +178,8 @@ def test_keras_add_layer():
         i2 = np.array([[-.2, .8]])
 
         wrapped_add = QcQuantizeWrapper(model.layers[2],
-                                        QuantizerSettings(8, 'nearest', 'tf', False, False, False),
-                                        QuantizerSettings(8, 'nearest', 'tf', False, False, False),
+                                        QuantizerSettings(8, QuantizationDataType.int, 'nearest', 'tf', False, False, False),
+                                        QuantizerSettings(8, QuantizationDataType.int, 'nearest', 'tf', False, False, False),
                                         num_inputs=2)
         _ = wrapped_add(i1, y=i2)
         wrapped_add.compute_encoding()
@@ -196,8 +197,8 @@ def test_freeze_encodings():
     # run forward pass on dense to generate weights
     _ = dense(test_inp)
     wrapper = QcQuantizeWrapper(dense,
-                                QuantizerSettings(8, 'nearest', 'tf', False, False, False),
-                                QuantizerSettings(8, 'nearest', 'tf', False, False, False),
+                                QuantizerSettings(8, QuantizationDataType.int, 'nearest', 'tf', False, False, False),
+                                QuantizerSettings(8, QuantizationDataType.int, 'nearest', 'tf', False, False, False),
                                 num_inputs=1)
     wrapper(test_inp)
     wrapper.param_quantizers[0].compute_encoding()
@@ -248,8 +249,8 @@ def test_per_channel_qc_quantizer_conv2d():
     _ = conv2d(test_inp)
     x = QcQuantizeWrapper(
         conv2d,
-        QuantizerSettings(8, 'nearest', 'tf', False, False, False),
-        QuantizerSettings(8, 'nearest', 'tf', False, False, False),
+        QuantizerSettings(8, QuantizationDataType.int, 'nearest', 'tf', False, False, False),
+        QuantizerSettings(8, QuantizationDataType.int, 'nearest', 'tf', False, False, False),
         num_inputs=1,
         per_channel_quantization_enabled=True
     )(inp)
@@ -341,8 +342,8 @@ def test_per_channel_qc_quantizer_conv2d_transpose():
     _ = conv2d_transpose(input_data)
     x = QcQuantizeWrapper(
         conv2d_transpose,
-        QuantizerSettings(8, 'nearest', 'tf', False, False, False),
-        QuantizerSettings(8, 'nearest', 'tf', False, False, False),
+        QuantizerSettings(8, QuantizationDataType.int, 'nearest', 'tf', False, False, False),
+        QuantizerSettings(8, QuantizationDataType.int, 'nearest', 'tf', False, False, False),
         num_inputs=1,
         per_channel_quantization_enabled=True
     )(inputs)
@@ -422,8 +423,8 @@ def test_per_channel_qc_quantizer_depthwise_conv():
     _ = depthwise_conv(test_inp)
     x = QcQuantizeWrapper(
         depthwise_conv,
-        QuantizerSettings(8, 'nearest', 'tf', False, False, False),
-        QuantizerSettings(8, 'nearest', 'tf', False, False, False),
+        QuantizerSettings(8, QuantizationDataType.int, 'nearest', 'tf', False, False, False),
+        QuantizerSettings(8, QuantizationDataType.int, 'nearest', 'tf', False, False, False),
         num_inputs=1,
         per_channel_quantization_enabled=True
     )(inp)
@@ -517,8 +518,8 @@ def test_per_channel_qc_quantizer_separable_conv():
     _ = separable_conv(test_inp)
     x = QcQuantizeWrapper(
         separable_conv,
-        QuantizerSettings(8, 'nearest', 'tf', False, False, False),
-        QuantizerSettings(8, 'nearest', 'tf', False, False, False),
+        QuantizerSettings(8, QuantizationDataType.int, 'nearest', 'tf', False, False, False),
+        QuantizerSettings(8, QuantizationDataType.int, 'nearest', 'tf', False, False, False),
         num_inputs=1,
         per_channel_quantization_enabled=True
     )(inp)
