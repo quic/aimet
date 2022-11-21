@@ -58,6 +58,7 @@ onnx_tf_conn_graph_type_pairs = [
     [["MaxPool"], ["MaxPool"]],
     [["AveragePool"], ["AvgPool"]],
     [["Relu"], ["Relu"]],
+    [["PRelu"], ["PReLU"]],
     [["Clip"], ["Relu6"]],
     [["Gemm", "MatMul"], ["Dense"]],
     [["Add"], ["Add", "AddV2"]],
