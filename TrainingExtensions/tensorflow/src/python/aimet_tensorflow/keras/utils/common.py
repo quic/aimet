@@ -43,7 +43,7 @@ from typing import Union, List, Dict, Tuple, AnyStr
 import tensorflow as tf
 from tensorflow.python.framework.convert_to_constants import convert_variables_to_constants_from_session_graph
 from tensorflow.python.framework.graph_util_impl import remove_training_nodes
-from tensorflow.python.keras.engine.functional import Functional
+
 
 from aimet_common.utils import AimetLogger
 from aimet_tensorflow.defs import AxisHandling
@@ -579,87 +579,3 @@ def convert_h5_model_to_pb_model(h5_model_path: AnyStr, custom_objects: Dict = N
 
             _logger.info("Success. The converted model is located at %s saved as %s", save_path, model_name)
 
-
-def prepare_model(original_model: tf.keras.Model, input_layer: Union[tf.keras.Input, List[tf.keras.Input]] = None):
-    """
-    This function prepares a Keras model before continuing on with AIMET. Specifically, it will convert the model into
-    a purely Functional API model and copy over the original models weights.
-    :param original_model: The original model to be prepared
-    :param input_layer: The input layer to be used for the new model. By default, the input layer is set to None. If the
-    beginning portion of the model is subclassed, then the input layer must be passed in.
-    """
-    def get_layer_call_order_and_validate(subclass_layer: tf.keras.layers.Layer, found_internal_layers: List[str]):
-        """
-        This function returns the call order of a layer. This is used to determine the order of the layers in the
-        Functional API model.
-        :param subclass_layer: The layer to get the call order of
-        :param found_internal_layers: The list of layers that have been found
-        :return: The call order of the layer
-        """
-
-        # Using tf.autograph to get the code used when the layer is called
-        autograph_code_by_line = tf.autograph.to_code(subclass_layer.call).splitlines()
-
-        # The autograph code has the layers objects wrapped in `ag__.ld`, we can use this to find the internal layers.
-        # Since Keras is using this for the actual call to the layer, we know we have the order of the layers correct.
-        call_order = []
-        autograph_pattern = "ag__.ld(self)."
-        for line in autograph_code_by_line:
-            wrapped_layer_index = line.find(autograph_pattern) + len(autograph_pattern)
-            if autograph_pattern in line:
-                if (num_wrapped_layers_on_line := line.count(autograph_pattern)) > 1:
-                    nested_call_order = []
-                    for _ in range(num_wrapped_layers_on_line):
-                        nested_call_order.append(line[wrapped_layer_index:line.find(",", wrapped_layer_index)])
-                        wrapped_layer_index = line.find(autograph_pattern, wrapped_layer_index) + len(autograph_pattern)
-                    call_order.extend(nested_call_order[::-1])
-                else:
-                    call_order.append(line[wrapped_layer_index:line.find(",", wrapped_layer_index)])
-
-        assert all(call in found_internal_layers for call in call_order), \
-        f"""
-        Could not parse call order correctly for subclassed layer: \"{subclass_layer.name}\".
-        Missing internal layers: {set(call_order) - set(found_internal_layers)}
-        For easier parsing, consider updating the call method of subclassed layers to be functional.
-        For example:
-
-        def call(self, inputs):
-            x = self.layer1(inputs)
-            x = self.layer2(x)
-            return x
-        """
-        return call_order
-
-    try:
-        input_layer = original_model.layers[0].input
-        prev_layer = input_layer
-        layers_to_copy = original_model.layers[1:]
-    except AttributeError:
-        if input_layer is None:
-            raise ValueError("The top layer of this model is subclassed. Please provide an input layer via the "
-                             "input_layer parameter.")
-        prev_layer = input_layer
-        layers_to_copy = original_model.layers
-
-    for layer in layers_to_copy:
-        # If the layer is another Functional model, we need to take out it's layer minus the input layer
-        if isinstance(layer, Functional):
-            for func_layer in layer.layers[1:]:
-                prev_layer = func_layer(prev_layer)
-        else:
-            # Go through each "Layers" properities, if the layer is subclassed, then we will have the wrapped
-            # layers as properties that can be extracted over and used to create a functioncal model.
-            sub_layers = {
-                object_name: sub_layer
-                for object_name, sub_layer in original_model.get_layer(layer.name).__dict__.items()
-                if isinstance(sub_layer, tf.keras.layers.Layer)
-            }
-
-            if sub_layers:
-                call_order = get_layer_call_order_and_validate(layer, sub_layers.keys())
-                for sub_layer_name in call_order:
-                    prev_layer = sub_layers[sub_layer_name](prev_layer)
-            else:
-                prev_layer = layer(prev_layer)
-
-    return tf.keras.Model(inputs=input_layer, outputs=prev_layer)
