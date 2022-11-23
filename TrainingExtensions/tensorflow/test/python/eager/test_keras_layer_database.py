@@ -43,7 +43,7 @@ import tensorflow as tf
 from packaging import version
 
 from aimet_common.utils import AimetLogger
-from aimet_tensorflow.keras.amp.layer_database import LayerDatabase, Layer
+from aimet_tensorflow.keras.layer_database import LayerDatabase, Layer
 from aimet_tensorflow.examples import mnist_tf_model
 
 
