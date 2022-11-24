@@ -37,7 +37,6 @@
 # =============================================================================
 
 """Automatic Post-Training Quantization"""
-import copy
 import os
 from dataclasses import dataclass
 from typing import List, Callable, Dict, Any, Tuple, Optional
@@ -274,7 +273,9 @@ class AutoQuant:
         :param model: Model to apply batchnorm folding
         :return: Output model and folded pairs
         """
-        model = copy.deepcopy(model)
+        original_weight = model.get_weights()
+        model = tf.keras.models.clone_model(model)
+        model.set_weights(original_weight)
         folded_pairs = fold_all_batch_norms(model)
         return model, folded_pairs
 

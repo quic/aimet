@@ -135,7 +135,7 @@ def _set_attr_to_copied_model(copied_model: tf.keras.Model,
 def patch_ptq_techniques(bn_folded_acc, cle_acc, adaround_acc):
     def bn_folding(model: tf.keras.Model, *_, **__):
         model.applied_bn_folding.assign(True)
-        return tuple()
+        return model, tuple()
 
     def cle(model: tf.keras.Model, *_, **__):
         copied_model = tf.keras.models.clone_model(model)
@@ -209,7 +209,7 @@ def patch_ptq_techniques(bn_folded_acc, cle_acc, adaround_acc):
         apply_adaround: MagicMock
 
     with patch("aimet_tensorflow.keras.auto_quant.QuantizationSimModel", side_effect=_QuantizationSimModel) as mock_qsim, \
-            patch("aimet_tensorflow.keras.auto_quant.fold_all_batch_norms", side_effect=bn_folding) as mock_bn_folding, \
+            patch("aimet_tensorflow.keras.auto_quant.AutoQuant._apply_batchnorm_folding", side_effect=bn_folding) as mock_bn_folding, \
             patch("aimet_tensorflow.keras.auto_quant.equalize_model", side_effect=cle) as mock_cle, \
             patch("aimet_tensorflow.keras.auto_quant.Adaround.apply_adaround", side_effect=adaround) as mock_adaround:
         try:
