@@ -322,27 +322,62 @@ class GraphSearchUtils:
         :param layer: Conv2D or it's subclass to check activation function
         :return: True If layer has ReLU or PReLU activation, otherwise False
         """
-        activation_info = tf.keras.activations.serialize(layer.activation)
+        def _get_activation_type(_layer: tf.keras.layers.Layer) -> str:
+            """
+            Get activation name string from _layer
+            :param _layer: tf.keras.layers.Layer
+            :return: activation name string
+            """
+            activation_info = tf.keras.activations.serialize(_layer.activation)
 
-        if isinstance(activation_info, str):
-            # Instantiating like tf.keras.layers.Conv2D(8, kernel_size=3, activation=tf.keras.activations.relu)
-            #   has the result of serialization as str type
-            activation_type = activation_info
-        elif isinstance(activation_info, dict):
-            # Instantiating like tf.keras.layers.Conv2D(8, kernel_size=3, activation=tf.keras.layers.ReLU())
-            #   has the result of serialization as dict type
-            activation_type = activation_info["class_name"].lower()
-        else:
-            raise NotImplementedError("Not supported format")
+            if isinstance(activation_info, str):
+                # Instantiating like tf.keras.layers.Conv2D(8, kernel_size=3, activation=tf.keras.activations.relu)
+                #   has the result of serialization as str type
+                _activation_type = activation_info
+            elif isinstance(activation_info, dict):
+                # Instantiating like tf.keras.layers.Conv2D(8, kernel_size=3, activation=tf.keras.layers.ReLU())
+                #   has the result of serialization as dict type
+                _activation_type = activation_info["class_name"].lower()
+            else:
+                raise NotImplementedError("Not supported format")
+
+            return _activation_type
+
+        def _get_outbound_layer(_layer: tf.keras.layers.Layer) -> tf.keras.layers.Layer:
+            """
+            Get outbound layer from current layer
+            If right after layer is folded batchnorm, find next applicable layer
+            :param _layer: tf.keras.layers.Layer
+            :return: outbound layer of _layer
+            """
+            assert len(_layer.outbound_nodes) == 1
+
+            _outbound_layer = _layer.outbound_nodes[0].outbound_layer
+            return _get_outbound_layer(_outbound_layer) \
+                if GraphSearchUtils.is_folded_batch_normalization(_outbound_layer) \
+                else _outbound_layer
+
+        activation_type = _get_activation_type(layer)
+        supported_activation_types = {"relu", "prelu"}
 
         # If activation parameter is not set or None, default activation_type is linear
         if activation_type == "linear" and layer.outbound_nodes:
-            assert len(layer.outbound_nodes) == 1
+            outbound_layer = _get_outbound_layer(layer)
 
-            outbound_layer = layer.outbound_nodes[0].outbound_layer
-            return isinstance(outbound_layer, (tf.keras.layers.ReLU, tf.keras.layers.PReLU))
+            # Case 1. Non-fused use case
+            # Case 1-1. Conv(..., activation=None) -> ReLU() or
+            #           Conv(..., activation=None) -> Folded BN -> ReLU()
+            is_using_relu_layer = isinstance(outbound_layer, cls_supported_activations)
 
-        return activation_type in ["relu", "prelu"]
+            # Case 1-2. Conv(..., activation=None) -> Activation(activation="relu") or
+            #           Conv(..., activation=None) -> Folded BN -> Activation(activation="relu")
+            is_using_activation_layer = isinstance(outbound_layer, tf.keras.layers.Activation) and \
+                                        _get_activation_type(outbound_layer) in supported_activation_types
+            return is_using_relu_layer or is_using_activation_layer
+
+        # Case 2. Fused use case
+        # e.g., Conv(..., activation="relu") or Conv(..., activation=tf.keras.layers.PReLU())
+        return activation_type in supported_activation_types
 
 
 class CrossLayerScaling:
