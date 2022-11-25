@@ -40,6 +40,7 @@ import pytest
 import numpy as np
 import tensorflow as tf
 
+from aimet_tensorflow.keras.batch_norm_fold import fold_all_batch_norms
 from aimet_tensorflow.keras.cross_layer_equalization import GraphSearchUtils, CrossLayerScaling, ClsSetInfo
 from aimet_tensorflow.keras.utils.weight_tensor_utils import WeightTensorUtils
 
@@ -411,6 +412,30 @@ class TestTrainingExtensionsCrossLayerScaling:
             True,
             False
         ]
+        actual = GraphSearchUtils.is_relu_activation_present_in_cls_sets(cls_sets)
+
+        assert actual == expected
+
+    def test_is_relu_activation_present_where_there_is_folded_batchnorm(self):
+        """
+        Test ReLU activation present where there is folded batchnorm between Conv layers
+        """
+        inputs = tf.keras.layers.Input(shape=(28, 28, 3))
+        x = tf.keras.layers.Conv2D(4, kernel_size=3, activation=None)(inputs)
+        x = tf.keras.layers.BatchNormalization()(x)
+        x = tf.keras.layers.Activation("relu")(x)
+        x = tf.keras.layers.Conv2D(16, kernel_size=3, activation=None)(x)
+        x = tf.keras.layers.BatchNormalization()(x)
+        x = tf.keras.layers.PReLU()(x)
+        x = tf.keras.layers.Conv2D(16, kernel_size=3, activation=None)(x)
+        outputs = tf.keras.layers.Conv2D(32, kernel_size=3, activation="relu")(x)
+        model = tf.keras.Model(inputs=inputs, outputs=outputs)
+
+        _ = fold_all_batch_norms(model)
+        _, conv1, _, _, conv2, _, _, conv3, conv4 = model.layers
+        cls_sets = [(conv1, conv2), (conv2, conv3), (conv3, conv4)]
+
+        expected = [True, True, False]
         actual = GraphSearchUtils.is_relu_activation_present_in_cls_sets(cls_sets)
 
         assert actual == expected
