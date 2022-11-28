@@ -41,13 +41,13 @@
 import os
 import json
 from collections import OrderedDict, defaultdict
-from typing import Union, Tuple, Callable, Dict, List, Collection
+from typing import Union, Tuple, Dict, List, Collection
 from bokeh import plotting
 from bokeh.models import ColumnDataSource, Band, Span, tickers
 import torch
 from torch.utils.data import DataLoader
 
-from aimet_common.utils import AimetLogger
+from aimet_common.utils import AimetLogger, CallbackFunc
 from aimet_common.defs import QuantScheme
 from aimet_torch import utils
 from aimet_torch.tensor_quantizer import TensorQuantizer, StaticGridTensorQuantizer
@@ -59,19 +59,6 @@ from aimet_torch.batch_norm_fold import fold_all_batch_norms
 _logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Quant)
 
 DEFAULT_BOKEH_FIGURE_HEIGHT = 300
-
-
-class CallbackFunc:
-    """
-    Class encapsulating callback function, and it's argument(s)
-    """
-    def __init__(self, func: Callable, func_callback_args=None):
-        """
-        :param func: Callable Function
-        :param func_callback_args: Arguments passed to the callable function as-is.
-        """
-        self.func = func
-        self.args = func_callback_args
 
 
 class QuantAnalyzer:
