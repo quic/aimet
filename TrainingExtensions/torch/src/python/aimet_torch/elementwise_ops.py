@@ -132,3 +132,13 @@ class DynamicConv2d(torch.nn.Module):
         Forward-pass routine for conv2d op
         """
         return torch.nn.functional.conv2d(x, weight, bias, self.stride, self.padding, self.dilation, self.groups)
+
+
+class Exponential(torch.nn.Module):
+    """ Exponential module for a functional exponential"""
+    @staticmethod
+    def forward(x: torch.Tensor) -> torch.Tensor:
+        """
+        Forward-pass routine for exponential op
+        """
+        return torch.exp(x)
