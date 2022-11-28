@@ -3,7 +3,7 @@
 # =============================================================================
 #  @@-COPYRIGHT-START-@@
 #
-#  Copyright (c) 2018, Qualcomm Innovation Center, Inc. All rights reserved.
+#  Copyright (c) 2018-2022, Qualcomm Innovation Center, Inc. All rights reserved.
 #
 #  Redistribution and use in source and binary forms, with or without
 #  modification, are permitted provided that the following conditions are met:
@@ -38,18 +38,20 @@
 """ Utility classes and functions that are used by NightlyTests files as well as
     common to both PyTorch and TensorFlow. """
 
-import math
-import os
+import json
 import logging
 import logging.config
 import logging.handlers
+import math
+import os
 import signal
 import socket
 import subprocess
-import time
 import threading
+import time
 from enum import Enum
-import json
+from typing import Callable
+
 import yaml
 from tqdm import tqdm
 
@@ -70,6 +72,19 @@ class ModelApi(Enum):
     tensorflow = 1
     keras = 2
     onnx = 3
+
+
+class CallbackFunc:
+    """
+    Class encapsulating callback function, and it's argument(s)
+    """
+    def __init__(self, func: Callable, func_callback_args=None):
+        """
+        :param func: Callable Function
+        :param func_callback_args: Arguments passed to the callable function as-is.
+        """
+        self.func = func
+        self.args = func_callback_args
 
 
 class SingletonType(type):
