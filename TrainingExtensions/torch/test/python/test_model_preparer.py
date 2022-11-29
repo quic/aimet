@@ -1114,6 +1114,36 @@ class TestFX:
 
         assert isinstance(model_transformed.module_add, elementwise_ops.Add)
 
+    def test_fx_with_elementwise_mean(self):
+        """
+        test torch fx with interpolate functional
+        """
+
+        class ModelWithMean(torch.nn.Module):
+            def __init__(self) -> None:
+                super(ModelWithMean, self).__init__()
+                self.conv = torch.nn.Conv2d(3, 4, kernel_size=2, stride=2, padding=2)
+
+
+            def forward(self, x):
+                x = self.conv(x)
+                x = torch.mean(x)
+                x = torch.mean(x, 0)
+                x = torch.mean(x, dim=0, keepdim=True)
+                return x
+
+        input_shape = (1, 3, 32, 32)
+        dummy_input = torch.randn(*input_shape)
+        model = ModelWithMean().eval()
+        model_transformed = prepare_model(model)
+        print(model_transformed)
+
+        assert torch.allclose(model_transformed(dummy_input), model(dummy_input))
+
+        assert isinstance(model_transformed.module_mean, elementwise_ops.Mean)
+        assert isinstance(model_transformed.module_mean_1, elementwise_ops.Mean)
+        assert isinstance(model_transformed.module_mean_2, elementwise_ops.Mean)
+
     def test_fx_with_interpolate(self):
         """
         test torch fx with interpolate functional

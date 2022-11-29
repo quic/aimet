@@ -112,6 +112,7 @@ functional_with_args_kwargs = {
     'max_pool2d'                : elementwise_ops.MaxPool2d,
     'max_pool2d_with_indices'   : elementwise_ops.MaxPool2d,
     'adaptive_avg_pool2d'       : elementwise_ops.AdaptiveAvgPool2d,
+    'mean'                      : elementwise_ops.Mean,
 }
 
 

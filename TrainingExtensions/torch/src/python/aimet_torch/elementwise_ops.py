@@ -162,3 +162,14 @@ class AdaptiveAvgPool2d(torch.nn.Module):
         Forward-pass routine for adaptive_avg_pool2d op
         """
         return torch.nn.functional.adaptive_avg_pool2d(*args, **kwargs)
+
+
+class Mean(torch.nn.Module):
+    """ReduceMean module for a functional mean"""
+    # pylint:disable=arguments-differ
+    @staticmethod
+    def forward(*args, **kwargs) -> torch.Tensor:
+        """
+        Forward-pass routine for Mean op
+        """
+        return torch.mean(*args, **kwargs)
