@@ -43,6 +43,9 @@ from typing import List, Set, Union
 import tensorflow as tf
 from tensorflow.python.keras.engine.functional import Functional
 
+from aimet_common.utils import AimetLogger
+logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.ModelPreparer)
+
 
 def _get_result_from_conditional(line: str, subclass_layer: tf.keras.layers.Layer):
     """
@@ -60,12 +63,12 @@ def _get_result_from_conditional(line: str, subclass_layer: tf.keras.layers.Laye
         if not attr.startswith('__') and attr in bool_to_eval:
             bool_to_eval = bool_to_eval.replace(f'self.{attr}', f'{getattr(subclass_layer, attr)}')
 
-    return eval(bool_to_eval) # pylint: disable=eval-used
+    return eval(bool_to_eval)  # pylint: disable=eval-used
 
 
-def _clean_up_code(call_code: List[str], subclass_layer: tf.keras.layers.Layer) -> List[str]:
+def _refractor_call_code(call_code: List[str], subclass_layer: tf.keras.layers.Layer) -> List[str]:
     """
-    Clean up the code to make it easier to parse
+    Refractor the sublayer's call code to be more readable
     :param call_code: The code to be cleaned up
     :return: The cleaned up code
     """
@@ -101,7 +104,7 @@ def _get_layer_call_order_and_validate(subclass_layer: tf.keras.layers.Layer, fo
     # TODO: Need to check for if conditions. Potentially autograd call will handle for us.
     # TODO: Using layers in computations. i.e. self.layer(x) * 2
     # Using tf.autograph to get the code used when the layer is called
-    code_by_line = _clean_up_code(inspect.getsource(subclass_layer.call).splitlines(), subclass_layer)
+    code_by_line = _refractor_call_code(inspect.getsource(subclass_layer.call).splitlines(), subclass_layer)
 
     call_order = []
     attr_layer_pattern = "self."
@@ -163,6 +166,7 @@ def prepare_model(original_model: tf.keras.Model, input_layer: Union[tf.keras.In
         prev_layer = input_layer
         layers_to_copy = original_model.layers[1:]
     except AttributeError:
+        logger.info("Input layer not found. Using input layer passed in.")
         if input_layer is None:
             raise ValueError("The top layer of this model is subclassed. Please provide an input layer via the "
                              "input_layer parameter.")
@@ -172,17 +176,32 @@ def prepare_model(original_model: tf.keras.Model, input_layer: Union[tf.keras.In
     for layer in layers_to_copy:
         # If the layer is another Functional model, we need to take out it's layer minus the input layer
         if isinstance(layer, Functional):
+            logger.debug("Functional model found. Extracting layers.")
             for func_layer in layer.layers[1:]:
                 prev_layer = func_layer(prev_layer)
+            logger.info("Functional model extracted.")
 
         elif found_sub_layers := {object_name: sub_layer
                                   for object_name, sub_layer in layer.__dict__.items()
                                   if isinstance(sub_layer, tf.keras.layers.Layer)}:
+            logger.debug("Subclassed layer %s found. Attempting to convert to Functional API.", layer.name)
             prev_layer = _handle_sub_layers(layer, found_sub_layers, prev_layer)
-
+            logger.info("Subclassed layer %s converted to Functional API.", layer.name)
         else:
             prev_layer = layer(prev_layer)
 
     functional_model = tf.keras.Model(inputs=input_layer, outputs=prev_layer)
-    functional_model.set_weights(original_model.get_weights())
+    logger.debug("Functional model architecture created.")
+
+    try:
+        functional_model.set_weights(original_model.get_weights())
+    except ValueError:
+        logger.error(
+            "Could not copy weights from original model to functional model. This can occur when "
+            "custom sublayers are defined not in the same order as the sublayers call method. Please ensure that the "
+            "sublayers internal layers are defined in the same order as the sublayers call method.")
+        raise
+    logger.debug("Functional model weights copied.")
+    logger.info("Model prepared for AIMET in Functional API format.")
+
     return functional_model

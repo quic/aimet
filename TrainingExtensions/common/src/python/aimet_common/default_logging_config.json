@@ -111,8 +111,13 @@
             "level": "INFO",
             "handlers": ["console"],
             "propagate": false
-        }
+        },
 
+        "ModelPreparer": {
+            "level": "INFO",
+            "handlers": ["console"],
+            "propagate": false
+        }
     },
 
     "root": {

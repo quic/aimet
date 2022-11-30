@@ -70,14 +70,16 @@ class ConvTimesThree(tf.keras.layers.Layer):
                                            kernel_size=(3, 3),
                                            activation='relu',
                                            name='class_conv')
-        self.depth_conv = tf.keras.layers.DepthwiseConv2D(depth_multiplier=1,
-                                                          kernel_size=(3, 3),
-                                                          activation='relu',
-                                                          name='class_conv_depth')
+
         self.conv_transpose = tf.keras.layers.Conv2DTranspose(64,
                                                               kernel_size=(3, 3),
                                                               activation='relu',
                                                               name='class_conv_transpose')
+
+        self.depth_conv = tf.keras.layers.DepthwiseConv2D(depth_multiplier=1,
+                                                          kernel_size=(3, 3),
+                                                          activation='relu',
+                                                          name='class_conv_depth')
 
         self.use_nested_calls = use_nested_calls
 
@@ -185,7 +187,7 @@ def compare_weights(original_model, functional_model):
     original_weights = original_model.get_weights()
     functional_weights = functional_model.get_weights()
     for i in range(len(original_weights)):
-        assert np.array_equal(original_weights[i], functional_weights[i])
+        np.testing.assert_array_equal(original_weights[i], functional_weights[i])
 
 
 def test_full_subclass_to_functional():
