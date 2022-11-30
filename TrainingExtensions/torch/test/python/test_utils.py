@@ -490,7 +490,7 @@ class TestTrainingExtensionsUtils(unittest.TestCase):
         #3 model in eval mode in the beginning with exception safety check
         model.eval()
         try:
-            with utils.in_eval_mode(model):
+            with utils.in_train_mode(model):
                 model(model_input)
                 _assert_mode_recursive(model, training=True)
                 raise AssertionError   # raise an exception
