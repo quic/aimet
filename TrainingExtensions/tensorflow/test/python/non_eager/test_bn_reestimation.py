@@ -131,8 +131,8 @@ def sessions(device):
         with graph.as_default():
             bn_momentum_var = tf.compat.v1.Variable(0.3, name='bn_momentum_var')
             bn_momentum_var1 = tf.compat.v1.Variable(0.4, name='bn_momentum_var1')
-            bn_training_var = tf.compat.v1.Variable(tf.compat.v1.constant(True), name='bn_training_var')
-            bn_training_var1 = tf.compat.v1.Variable(tf.compat.v1.constant(True), name='bn_training_var1')
+            bn_training_var = tf.compat.v1.Variable(tf.compat.v1.constant(False), name='bn_training_var')
+            bn_training_var1 = tf.compat.v1.Variable(tf.compat.v1.constant(False), name='bn_training_var1')
             bn_trainable_var = True
             inputs = tf.keras.Input(shape=(32, 32, 3,))
             conv_op = tf.keras.layers.Conv2D(32, (3, 3))(inputs)
@@ -161,30 +161,8 @@ def sessions(device):
             input_op_names = [inputs.op.name]
             output_op_names = [logit.op.name]
 
-            quantsim_config = {
-                "defaults": {
-                    "ops": {
-                        "is_output_quantized": "True",
-                        "is_symmetric": "False"
-                    },
-                    "params": {
-                        "is_quantized": "True",
-                        "is_symmetric": "False"
-                    },
-                    "per_channel_quantization": "True",
-                },
-                "params": {},
-                "op_type": {},
-                "supergroups": [],
-                "model_input": {},
-                "model_output": {}
-            }
-            with open('./quantsim_config.json', 'w') as f:
-                json.dump(quantsim_config, f)
-
             sim = QuantizationSimModel(sess, input_op_names, output_op_names, use_cuda=True,
-                                       quant_scheme=QuantScheme.training_range_learning_with_tf_init,
-                                       config_file='./quantsim_config.json')
+                                       quant_scheme=QuantScheme.training_range_learning_with_tf_init)
 
             def dummy_forward_pass(sess, args):
                 model_input = sess.graph.get_tensor_by_name('input_1:0')
@@ -293,8 +271,8 @@ class TestBNReEstimation:
             # eval(), momentum  no change
             assert not is_two_dict_close_numpy_array(bn_mean_var_ori, bn_mean_var_est)
             assert not is_dict_close_numpy_array_zeros(bn_mean_var_est)
-            assert is_two_dict_close_float(bn_momentum_ori, bn_momentum_est)
-            assert is_two_dict_close_bool(bn_training_ori, bn_training_est)
+            assert not is_two_dict_close_float(bn_momentum_ori, bn_momentum_est)
+            assert not is_two_dict_close_bool(bn_training_ori, bn_training_est)
 
         bn_mean_var_restored, bn_momentum_restored, bn_training_restored = get_all_status(sess_sim.session,
                                                                                           bn_mean_var_tf_var_list,
