@@ -168,7 +168,7 @@ def reestimate_bn_stats(model: torch.nn.Module,
     forward_fn = forward_fn or (lambda model, data: model(data))
     bn_modules = tuple(_get_active_bn_modules(model))
 
-    with in_train_mode(model), torch.no_grad():
+    with in_train_mode(bn_modules), torch.no_grad():
         with _for_each_module(bn_modules, action=_reset_momentum):
             handle = _for_each_module(bn_modules, action=_reset_bn_stats)
 
