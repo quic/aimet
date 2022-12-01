@@ -720,7 +720,6 @@ class TestTrainingExtensionsQcQuantizeOpPerChannel(unittest.TestCase):
                 _encoding = create_encoding()
                 encoding.append(_encoding)
             quantizer_info.set_encoding(encoding)
-
         sim.export('/tmp', 'quant_sim_model')
 
         with open('/tmp/quant_sim_model.encodings') as json_file:
@@ -728,9 +727,7 @@ class TestTrainingExtensionsQcQuantizeOpPerChannel(unittest.TestCase):
 
         param_keys = list(encoding_data["param_encodings"].keys())
         self.assertTrue(param_keys[1] == "conv2d/Conv2D/ReadVariableOp:0")
-        self.assertTrue(isinstance(encoding_data["param_encodings"]["conv2d/Conv2D/ReadVariableOp:0"][0]['max'], list))
-        self.assertEqual(len(encoding_data["param_encodings"]["conv2d/Conv2D/ReadVariableOp:0"][0]['max']), 32)
-        self.assertTrue(isinstance(encoding_data["param_encodings"]["conv2d/Conv2D/ReadVariableOp:0"][0]['min'], list))
+        self.assertEqual(len(encoding_data["param_encodings"]["conv2d/Conv2D/ReadVariableOp:0"]), 32)
 
     @pytest.mark.cuda
     def test_compute_encodings_gpu_model(self):
@@ -1583,3 +1580,4 @@ def compute_tf_encodings_given_numpy_data(data, axis):
         encodings.append((encoding_min, encoding_max))
 
     return encodings
+TestTrainingExtensionsQcQuantizeOpPerChannel().test_save_model_with_embedded_quantization_nodes_per_channel()

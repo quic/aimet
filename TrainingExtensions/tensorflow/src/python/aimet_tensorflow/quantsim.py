@@ -536,9 +536,16 @@ class QuantizationSimModel:
                 op = orig_sess.graph.get_tensor_by_name(tensor_name).op
                 consumers = [consumer for consumer in op.outputs[0].consumers() if 'gradients' not in consumer.name]
                 if tensor_name in encodings_dicts:
-                    encoding_max = encodings_dicts[tensor_name][0].get('max')
-                    encoding_min = encodings_dicts[tensor_name][0].get('min')
-                    encoding_bw = encodings_dicts[tensor_name][0].get('bitwidth')
+                    # Check for per channel quantization
+                    if self.per_channel_quantization_enabled and len(encodings_dicts[tensor_name]) > 1:
+                        encoding_min = [channel_dict['min'] for channel_dict in encodings_dicts[tensor_name]]
+                        encoding_max = [channel_dict['max'] for channel_dict in encodings_dicts[tensor_name]]
+                        encoding_bw = encodings_dicts[tensor_name][0]['bitwidth']
+                    else:
+                        encoding_max = encodings_dicts[tensor_name][0].get('max')
+                        encoding_min = encodings_dicts[tensor_name][0].get('min')
+                        encoding_bw = encodings_dicts[tensor_name][0].get('bitwidth')
+
                 else:
                     if not quantizer_info.is_encoding_valid():
                         if  quantizer_info.data_type == QuantizationDataType.float and quantizer_info.get_op_mode() in\
@@ -673,19 +680,25 @@ class QuantizationSimModel:
             if self.per_channel_quantization_enabled and isinstance(min_val, np.ndarray):
                 min_val = min_val.tolist()
                 max_val = max_val.tolist()
+            else:
+                # Wrap single min/max value in a list to support list comprehension
+                min_val = [min_val]
+                max_val = [max_val]
+                delta = [delta]
+                offset = [offset]
             is_symmetric = str(self._get_op_variable_value(quant_op,
                                                            QuantizeOpIndices.use_symmetric_encoding))
 
             tensor_name = quant_op.inputs[0].name
             if quant_op.type in ['QcQuantizePerChannel'] and 'EagerPyFunc' in tensor_name:
                 tensor_name = quant_op.inputs[0].op.inputs[0].name
-            encoding_dict[tensor_name] = [{'min': min_val,
-                                           'max': max_val,
-                                           'scale': delta,
-                                           'offset': offset,
+            encoding_dict[tensor_name] = [{'min': min_val[idx],
+                                           'max': max_val[idx],
+                                           'scale': delta[idx],
+                                           'offset': offset[idx],
                                            'bitwidth': op_bitwidth,
                                            'is_symmetric': is_symmetric,
-                                           'dtype': 'int'}]
+                                           'dtype': 'int'} for idx in range(len(min_val))]
 
         param_encodings = {}
         for quant_op_name, quantizer_info in self._param_quantizers.items():
