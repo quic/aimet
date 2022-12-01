@@ -41,11 +41,12 @@
 import itertools
 from typing import Iterable, List, Callable, Any
 
+from tqdm import tqdm
 import torch
 from torch.utils.data import DataLoader
 from torch.nn.modules.batchnorm import _BatchNorm
 
-from aimet_torch.utils import in_train_mode
+from aimet_torch.utils import in_eval_mode, in_train_mode
 
 
 
@@ -168,7 +169,8 @@ def reestimate_bn_stats(model: torch.nn.Module,
     forward_fn = forward_fn or (lambda model, data: model(data))
     bn_modules = tuple(_get_active_bn_modules(model))
 
-    with in_train_mode(model), torch.no_grad():
+    # Set all the layers to eval mode except batchnorm layers
+    with in_eval_mode(model), in_train_mode(bn_modules), torch.no_grad():
         with _for_each_module(bn_modules, action=_reset_momentum):
             handle = _for_each_module(bn_modules, action=_reset_bn_stats)
 
@@ -180,7 +182,12 @@ def reestimate_bn_stats(model: torch.nn.Module,
                     for bn in bn_modules
                 }
 
-                for data in itertools.islice(dataloader, num_batches):
+                num_batches = min(len(dataloader), num_batches)
+                dataloader_slice = itertools.islice(dataloader, num_batches)
+
+                for data in tqdm(dataloader_slice,
+                                 total=num_batches,
+                                 desc="batchnorm reestimation"):
                     forward_fn(model, data)
 
                     for bn in bn_modules:

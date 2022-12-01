@@ -1,4 +1,4 @@
-# /usr/bin/env python3.5
+# /usr/bin/env python3.8
 # -*- mode: python -*-
 # =============================================================================
 #  @@-COPYRIGHT-START-@@
@@ -440,32 +440,63 @@ class TestTrainingExtensionsUtils(unittest.TestCase):
         """
         Test in_eval_mode functionality for given model
         """
-        model = TinyModel()
+        model = TinyModel().eval()
         model_input = torch.randn(1, 3, 32, 32)
         #1 model in eval mode in the beginning
         model.eval()
         with utils.in_eval_mode(model):
             model(model_input)
-            assert model.training == False
-        assert model.training == False
+            _assert_mode_recursive(model, training=False)
+        _assert_mode_recursive(model, training=False)
 
         #2 model in train mode in the beginning
         model.train()
         with utils.in_eval_mode(model):
             model(model_input)
-            assert model.training == False
-        assert model.training == True
+            _assert_mode_recursive(model, training=False)
+        _assert_mode_recursive(model, training=True)
 
         #3 model in train mode in the beginning with exception safety check
         model.train()
         try:
             with utils.in_eval_mode(model):
                 model(model_input)
-                assert model.training == False
+                _assert_mode_recursive(model, training=False)
                 raise AssertionError   # raise an exception
         except:
             pass
-        assert model.training == True
+        _assert_mode_recursive(model, training=True)
+
+    def test_model_in_train_mode(self):
+        """
+        Test in_train_mode functionality for given model
+        """
+        model = TinyModel().eval()
+        model_input = torch.randn(1, 3, 32, 32)
+        #1 model in eval mode in the beginning
+        model.eval()
+        with utils.in_train_mode(model):
+            model(model_input)
+            _assert_mode_recursive(model, training=True)
+        _assert_mode_recursive(model, training=False)
+
+        #2 model in train mode in the beginning
+        model.train()
+        with utils.in_train_mode(model):
+            model(model_input)
+            _assert_mode_recursive(model, training=True)
+        _assert_mode_recursive(model, training=True)
+
+        #3 model in eval mode in the beginning with exception safety check
+        model.eval()
+        try:
+            with utils.in_train_mode(model):
+                model(model_input)
+                _assert_mode_recursive(model, training=True)
+                raise AssertionError   # raise an exception
+        except:
+            pass
+        _assert_mode_recursive(model, training=False)
 
     def test_is_torch_module(self):
         """ test _is_torch_nn_module() utility """
@@ -488,3 +519,8 @@ class TestTrainingExtensionsUtils(unittest.TestCase):
                 return x * F.softplus(x).sigmoid()
 
         assert not utils.is_torch_nn_module(CustomModule())
+
+
+def _assert_mode_recursive(root: torch.nn.Module, training: bool):
+    for module in root.modules():
+        assert module.training == training

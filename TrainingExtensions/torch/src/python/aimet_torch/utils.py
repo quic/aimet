@@ -36,7 +36,7 @@
 """ Utilities that are used for different AIMET PyTorch features """
 
 import itertools
-from typing import List, Tuple, Union, Dict, Callable, Any
+from typing import List, Tuple, Union, Dict, Callable, Any, Iterable
 import contextlib
 import os
 import pickle
@@ -693,42 +693,41 @@ def get_reused_modules(model: torch.nn.Module, model_input: Union[torch.Tensor, 
 
 
 @contextlib.contextmanager
-def in_eval_mode(model: torch.nn.Module):
+def in_eval_mode(module: Union[torch.nn.Module, Iterable[torch.nn.Module]]):
     """
     Utility to temporarily put model in eval mode using context manager.
-    :param model: PyTorch model
+    :param module: PyTorch module or a list of modules
     :return: None
     """
-    if not model.training:
+    with _in_mode(module, train=False):
         yield
-    else:
-        with _in_mode(model, train=False):
-            yield
 
 
 @contextlib.contextmanager
-def in_train_mode(model: torch.nn.Module):
+def in_train_mode(module: Union[torch.nn.Module, Iterable[torch.nn.Module]]):
     """
     Utility to temporarily put model in train mode using context manager.
-    :param model: PyTorch model
+    :param module: PyTorch module or a list of modules
     :return: None
     """
-    if model.training:
+    with _in_mode(module, train=True):
         yield
-    else:
-        with _in_mode(model, train=True):
-            yield
 
 
 @contextlib.contextmanager
-def _in_mode(model: torch.nn.Module, train: bool):
-    train_orig = model.training
+def _in_mode(modules: Union[torch.nn.Module, Iterable[torch.nn.Module]], train: bool):
+    if isinstance(modules, torch.nn.Module):
+        modules = [modules]
+
+    original_modes = [module.training for module in modules]
 
     try:
-        model.train(mode=train)
+        for module in modules:
+            module.train(mode=train)
         yield
     finally:
-        model.train(mode=train_orig)
+        for module, original_mode in zip(modules, original_modes):
+            module.train(mode=original_mode)
 
 
 def is_torch_nn_module(module: torch.nn.Module) -> bool:
