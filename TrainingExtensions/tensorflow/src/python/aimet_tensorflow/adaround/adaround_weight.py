@@ -340,20 +340,14 @@ class Adaround:
         :param is_symmetric: Symmetric vs Asymmetric boolean
         """
         tensor_name = op.inputs[1].name
-        if isinstance(encoding, list):
-            encoding_dict[tensor_name] = [{'min': [enc.min for enc in encoding],
-                                           'max': [enc.max for enc in encoding],
-                                           'scale': [enc.delta for enc in encoding],
-                                           'offset': [enc.offset for enc in encoding],
-                                           'bitwidth': encoding[0].bw,
-                                           'is_symmetric': is_symmetric}]
-        else:
-            encoding_dict[tensor_name] = [{'min': encoding.min,
-                                           'max': encoding.max,
-                                           'scale': encoding.delta,
-                                           'offset': encoding.offset,
-                                           'bitwidth': encoding.bw,
-                                           'is_symmetric': is_symmetric}]
+        # Wrap Per Tensor encoding in a list for list comprehension
+        encoding = encoding if isinstance(encoding, list) else [encoding]
+        encoding_dict[tensor_name] = [{'min': enc.min,
+                                       'max': enc.max,
+                                       'scale': enc.delta,
+                                       'offset': enc.offset,
+                                       'bitwidth': enc.bw,
+                                       'is_symmetric': is_symmetric} for enc in encoding]
 
     @staticmethod
     def get_is_symmetric_flag_for_op_param(configs: ConfigDictType, tf_op_type: str, param_name: str,
