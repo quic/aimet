@@ -175,9 +175,10 @@ std::tuple<DTYPE, DTYPE> PercentileEncodingAnalyzer<DTYPE>::_computePercentileRa
     float rightPercentile = this->_percentile / 100;
     for (auto i = numBins - 1; i >= 0; i--)
     {
-        if (cdf[i] < rightPercentile)
+        // Ensure that percentileMax is not greater than the max value of the tensor.
+        if (cdf[i] < rightPercentile && this->_stats.xLeft[i] < maxVal)
         {
-            percentileMax = this->_stats.xLeft[i + 1];
+            percentileMax = this->_stats.xLeft[i] + histBinWidth;
             break;
         }
     }
