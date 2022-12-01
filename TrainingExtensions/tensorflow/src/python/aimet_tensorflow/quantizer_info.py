@@ -333,11 +333,8 @@ class QuantizerInfo:
         Reads Quantize op flag that indicates if op is enabled or disabled
         :return: bool
         """
-        is_enabled = True
         # return the variable value from op
-        if self.get_op_mode() == int(libpymo.TensorQuantizerOpMode.passThrough):
-            is_enabled = False
-        return is_enabled
+        return self.get_op_mode() != int(libpymo.TensorQuantizerOpMode.passThrough)
 
     @enabled.setter
     def enabled(self, enabled: bool):
@@ -345,24 +342,27 @@ class QuantizerInfo:
          Enables or disables given Quantize op if enabled is False
         :param enabled: boolean flag to indicate enable or disable
         """
+        op_mode = None
+
         # if disable is requested on the op and this op was not already in "passThrough" mode,
         # we will disable the op by marking it as "passThrough"
-        if not enabled and self.get_op_mode() != int(libpymo.TensorQuantizerOpMode.passThrough):
+        if not enabled and self.enabled:
             op_mode = int(libpymo.TensorQuantizerOpMode.passThrough)
-            # update the isEncodingValid state to False
-            self._invalidate_tensor_quantizer_encodings()
+
         # if enable is requested and this op was previously disabled
         # we enable the op by setting the initial op_mode that depends on the Quantizer type
-        elif enabled and self.get_op_mode() == int(libpymo.TensorQuantizerOpMode.passThrough):
-            if self.quantizer_type is QuantizerType.param:
+        elif enabled and not self.enabled:
+            if self.quantizer_type == QuantizerType.param:
                 op_mode = int(libpymo.TensorQuantizerOpMode.oneShotQuantizeDequantize)
-            elif self.quantizer_type is QuantizerType.activation:
+            else:
+                assert self.quantizer_type == QuantizerType.activation
                 op_mode = int(libpymo.TensorQuantizerOpMode.updateStats)
+
+        if op_mode is not None:
             # update the isEncodingValid state to False
             self._invalidate_tensor_quantizer_encodings()
-
-        var_name = self.quant_op_name + '_op_mode'
-        self.set_variable(var_name, op_mode)
+            var_name = self.quant_op_name + '_op_mode'
+            self.set_variable(var_name, op_mode)
 
     def enable_keeping_encoding(self):
         """
