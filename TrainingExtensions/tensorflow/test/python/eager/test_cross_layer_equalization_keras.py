@@ -39,9 +39,9 @@
 import pytest
 import numpy as np
 import tensorflow as tf
-
 from aimet_tensorflow.keras.batch_norm_fold import fold_all_batch_norms
-from aimet_tensorflow.keras.cross_layer_equalization import GraphSearchUtils, CrossLayerScaling, ClsSetInfo
+from aimet_tensorflow.keras.cross_layer_equalization import CrossLayerScaling, ClsSetInfo
+from aimet_tensorflow.keras.graphsearchtuils import GraphSearchUtils
 from aimet_tensorflow.keras.utils.weight_tensor_utils import WeightTensorUtils
 
 
