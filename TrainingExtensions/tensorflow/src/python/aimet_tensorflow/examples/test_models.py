@@ -203,6 +203,22 @@ def keras_model_functional_with_non_fused_batchnorms_for_tf2():
     return model
 
 
+def keras_functional_conv_net():
+    """ Function for returning basic keras functional conv net """
+    inputs = tf.keras.layers.Input(shape=(28, 28, 3))
+    x = tf.keras.layers.Conv2D(4, kernel_size=3, activation=None)(inputs)
+    x = tf.keras.layers.BatchNormalization()(x)
+    x = tf.keras.layers.Activation("relu")(x)
+    x = tf.keras.layers.Conv2D(16, kernel_size=3, activation=None)(x)
+    x = tf.keras.layers.BatchNormalization()(x)
+    x = tf.keras.layers.PReLU()(x)
+    x = tf.keras.layers.Conv2D(16, kernel_size=3, activation=None)(x)
+    outputs = tf.keras.layers.Conv2D(32, kernel_size=3, activation="relu")(x)
+    model = tf.keras.Model(inputs=inputs, outputs=outputs)
+
+    return model
+
+
 def tf_slim_basic_model(inp):
     """ Function for returning basic tf slim model """
     is_training = tf.compat.v1.placeholder_with_default(tf.constant(True), shape=(), name='is_training')

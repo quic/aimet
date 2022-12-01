@@ -41,7 +41,13 @@ import os
 import tensorflow as tf
 
 from aimet_common.defs import QuantScheme
-from aimet_common.utils import CallbackFunc
+from aimet_common.utils import CallbackFunc, AimetLogger
+from aimet_tensorflow.keras.batch_norm_fold import fold_all_batch_norms
+from aimet_tensorflow.keras.quantsim import QuantizationSimModel
+from aimet_tensorflow.keras.utils.quantizer_utils import get_enabled_activation_quantizers, enable_disable_quantizers, \
+    get_enabled_param_quantizers
+
+_logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Quant)
 
 
 class QuantAnalyzer:
@@ -81,6 +87,7 @@ class QuantAnalyzer:
     # pylint: disable=unused-argument, no-self-use
     def analyze(self,
                 quant_scheme: QuantScheme = QuantScheme.post_training_tf_enhanced,
+                rounding_mode: str = "nearest",
                 default_param_bw: int = 8,
                 default_output_bw: int = 8,
                 config_file: str = None,
@@ -95,6 +102,7 @@ class QuantAnalyzer:
 
         :param quant_scheme: Quantization scheme. Supported values are
                 QuantScheme.post_training_tf or QuantScheme.post_training_tf_enhanced.
+        :param rounding_mode: The round scheme to used. One of: 'nearest' or 'stochastic', defaults to 'nearest'
         :param default_param_bw: Default bitwidth (4-31) to use for quantizing layer parameters.
         :param default_output_bw: Default bitwidth (4-31) to use for quantizing layer inputs and outputs.
         :param config_file: Path to configuration file for model quantizers.
@@ -102,3 +110,104 @@ class QuantAnalyzer:
         """
         results_dir = os.path.abspath(results_dir)
         os.makedirs(results_dir, exist_ok=True)
+
+        sim = self._create_quantsim_and_encodings(quant_scheme,
+                                                  rounding_mode,
+                                                  default_param_bw,
+                                                  default_output_bw,
+                                                  config_file)
+
+        # Check model sensitivity to weight and activation quantization individually.
+        self._check_model_sensitivity_to_quantization(sim, default_param_bw, default_output_bw)
+
+
+    def _create_quantsim_and_encodings(self,
+                                       quant_scheme: QuantScheme,
+                                       rounding_mode: str,
+                                       default_param_bw: int,
+                                       default_output_bw: int,
+                                       config_file: str) -> QuantizationSimModel:
+        """
+        Create Quantsim and compute encodings.
+
+        :param quant_scheme: Quantization scheme.
+        :param rounding_mode: The round scheme to used. One of: 'nearest' or 'stochastic', defaults to 'nearest'
+        :param default_param_bw: Default bitwidth (4-31) to use for quantizing layer parameters.
+        :param default_output_bw: Default bitwidth (4-31) to use for quantizing layer inputs and outputs.
+        :param config_file: Path to configuration file for model quantizers.
+        :return: Quantsim model.
+        """
+        _ = fold_all_batch_norms(self._model)
+        sim = QuantizationSimModel(self._model,
+                                   quant_scheme=quant_scheme,
+                                   rounding_mode=rounding_mode,
+                                   default_output_bw=default_output_bw,
+                                   default_param_bw=default_param_bw,
+                                   config_file=config_file)
+
+        sim.compute_encodings(forward_pass_callback=self._forward_pass_callback.func,
+                              forward_pass_callback_args=self._forward_pass_callback.args)
+
+        return sim
+
+    def _check_model_sensitivity_to_quantization(self,
+                                                 sim: QuantizationSimModel,
+                                                 default_param_bw: int,
+                                                 default_output_bw: int):
+        """
+        Perform the sensitivity analysis to weight and activation quantization
+        individually.
+
+        :param sim: Quantsim model.
+        :param default_param_bw: Default bitwidth (4-31) to use for quantizing layer parameters.
+        :param default_output_bw: Default bitwidth (4-31) to use for quantizing layer inputs and outputs.
+        :return: FP32 eval score, weight-quantized eval score, act-quantized eval score.
+        """
+        fp32_eval_score = self._eval_model(self._model)
+        _logger.info("FP32 eval score (W32A32): %f", fp32_eval_score)
+
+        weight_quantized_eval_score = self._eval_weight_quantized_model(sim)
+        _logger.info("Weight-quantized eval score (W%dA32): %f", default_param_bw,
+                     weight_quantized_eval_score)
+
+        act_quantized_eval_score = self._eval_activation_quantized_model(sim)
+        _logger.info("Activation-quantized eval score (W32A%d): %f", default_output_bw,
+                     act_quantized_eval_score)
+
+    def _eval_model(self, model: tf.keras.Model) -> float:
+        """
+        Evaluate the model performance.
+        :param model: tf.keras.Model to be evaluated
+        :return: Scalar value representing model performance
+        """
+        return self._eval_callback.func(model, self._eval_callback.args)
+
+    def _eval_weight_quantized_model(self, sim: QuantizationSimModel) -> float:
+        """
+        Evaluate weight quantized model performance.
+        For weight quantized model performance, disable enabled activation quantizers, measure
+        eval score and enable again.
+
+        :param sim: Quantsim model.
+        :return: Quantized model performance.
+        """
+        enabled_activation_quantizers = get_enabled_activation_quantizers(sim)
+        enable_disable_quantizers(enabled_activation_quantizers, enabled=False)
+        eval_score = self._eval_model(sim.model)
+        enable_disable_quantizers(enabled_activation_quantizers, enabled=True)
+        return eval_score
+
+    def _eval_activation_quantized_model(self, sim: QuantizationSimModel) -> float:
+        """
+        Evaluate activation quantized model performance.
+        For activation quantized model performance, disable enabled param quantizers, measure
+        eval score and enable again.
+
+        :param sim: Quantsim model.
+        :return: Quantized model performance.
+        """
+        enabled_param_quantizers = get_enabled_param_quantizers(sim)
+        enable_disable_quantizers(enabled_param_quantizers, enabled=False)
+        eval_score = self._eval_model(sim.model)
+        enable_disable_quantizers(enabled_param_quantizers, enabled=True)
+        return eval_score
