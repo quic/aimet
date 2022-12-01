@@ -66,8 +66,13 @@ class Model(torch.nn.Module):
 
 
 @pytest.fixture
-def fp32_model():
-    return Model().cpu().eval()
+def fp32_model(data_loader):
+    model = Model().cpu()
+    # Run forward pass to initalize batchnorm statistics
+    with torch.no_grad():
+        for data in data_loader:
+            model(data)
+    return model
 
 
 def quantsim_model(fp32_model, dummy_input, quant_scheme):
@@ -148,10 +153,6 @@ def test_reestimation_with_quantsim_model(fp32_model, dummy_input, quant_scheme,
 
 def _test_reestimation(model, data_loader, expected_mean, expected_var):
     old_params = copy.deepcopy(list(model.parameters()))
-
-    with torch.no_grad():
-        for data in data_loader:
-            model(data)
 
     mean_orig, var_orig = [
         ( bn.running_mean.clone().detach(), bn.running_var.clone().detach() )
