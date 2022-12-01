@@ -1580,4 +1580,3 @@ def compute_tf_encodings_given_numpy_data(data, axis):
         encodings.append((encoding_min, encoding_max))
 
     return encodings
-TestTrainingExtensionsQcQuantizeOpPerChannel().test_save_model_with_embedded_quantization_nodes_per_channel()
