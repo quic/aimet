@@ -133,6 +133,7 @@ def get_op_dict_key(op: Op):
     For torch and tensorflow models, returns op.get_module(). For onnx models, returns the original op.
 
     :param op: connected graph layer to be used as a dictionary key
+    :return: object (op or op.get_module()) to be used as a key in the conv/linear BN dict
     """
     module = op.get_module()
     # ONNX NodeProto objects are not hashable, return the original Op object instead
