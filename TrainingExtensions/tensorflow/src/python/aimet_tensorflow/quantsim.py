@@ -604,7 +604,8 @@ class QuantizationSimModel:
             quant_op = self.session.graph.get_operation_by_name(op_name)
             tensor_name = quant_op.inputs[0].name
             if tensor_name in param_encodings:
-                encoding_dict = param_encodings[tensor_name][0]
+                encoding_dict = param_encodings[tensor_name] if self.per_channel_quantization_enabled else \
+                    param_encodings[tensor_name][0]
                 encoding, is_symmetric = create_encoding_from_dict(encoding_dict)
                 quantizer_info.use_symmetric_encoding = is_symmetric
                 quantizer_info.set_and_freeze_encoding_and_op_mode(encoding, op_mode)
