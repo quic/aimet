@@ -39,6 +39,7 @@
 
 from aimet_common.defs import ActivationType
 from aimet_common.utils import AimetLogger
+from aimet_common.connected_graph.operation import Op
 
 logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Utils)
 
@@ -100,8 +101,9 @@ class ConvBnPatternHandler:
         for op in op_subset:
             if op.type in convolution_types + linear_types:
                 conv_op = op
-                if conv_op.get_module() in self.conv_linears_with_bn_dict.keys():
-                    bn_activation_info = self.conv_linears_with_bn_dict[conv_op.get_module()]
+                op_key = get_op_dict_key(conv_op)
+                if op_key in self.conv_linears_with_bn_dict.keys():
+                    bn_activation_info = self.conv_linears_with_bn_dict[op_key]
             elif op.type in bn_types:
                 bn_op = op
             elif op.type in ['Relu6', 'Clip']:
@@ -121,5 +123,20 @@ class ConvBnPatternHandler:
             elif len(op_subset) >= 3 and op_subset[1].type in ['Dense']:
                 bn_activation_info.output_bn = bn_op
                 bn_activation_info.out_activation_type = activation_type
+        op_key = get_op_dict_key(conv_op)
+        self.conv_linears_with_bn_dict[op_key] = bn_activation_info
 
-        self.conv_linears_with_bn_dict[conv_op.get_module()] = bn_activation_info
+
+def get_op_dict_key(op: Op):
+    """
+    Returns the object to be used as a key in the conv/linear BN dict.
+    For torch and tensorflow models, returns op.get_module(). For onnx models, returns the original op.
+
+    :param op: connected graph layer to be used as a dictionary key
+    :return: object (op or op.get_module()) to be used as a key in the conv/linear BN dict
+    """
+    module = op.get_module()
+    # ONNX NodeProto objects are not hashable, return the original Op object instead
+    if module.__hash__ is None:
+        return op
+    return module
