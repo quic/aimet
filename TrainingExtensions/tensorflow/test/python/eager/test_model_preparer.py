@@ -62,7 +62,6 @@ def conv_functional():
     return model
 
 
-# Not used for testing at the moment. This is placed here for future testing.
 class ConvTimesThree(tf.keras.layers.Layer):
     def __init__(self, use_nested_calls=False, **kwargs):
         super(ConvTimesThree, self).__init__(**kwargs)
@@ -71,15 +70,15 @@ class ConvTimesThree(tf.keras.layers.Layer):
                                            activation='relu',
                                            name='class_conv')
 
-        self.conv_transpose = tf.keras.layers.Conv2DTranspose(64,
-                                                              kernel_size=(3, 3),
-                                                              activation='relu',
-                                                              name='class_conv_transpose')
-
         self.depth_conv = tf.keras.layers.DepthwiseConv2D(depth_multiplier=1,
                                                           kernel_size=(3, 3),
                                                           activation='relu',
                                                           name='class_conv_depth')
+
+        self.conv_transpose = tf.keras.layers.Conv2DTranspose(64,
+                                                              kernel_size=(3, 3),
+                                                              activation='relu',
+                                                              name='class_conv_transpose')
 
         self.use_nested_calls = use_nested_calls
 
@@ -92,7 +91,6 @@ class ConvTimesThree(tf.keras.layers.Layer):
         return self.depth_conv(x)
 
 # See comment above ConvTimesThree Class
-
 
 def conv_sub_class():
     input_shape = (128, 28, 28, 1)
@@ -107,7 +105,6 @@ def conv_sub_class():
 
 # Below models are based on Deep Learning with Python by Francois Chollet Second Edition (page 182 - 185)
 # Only Subclassing
-
 
 class CustomerTicketModel(tf.keras.Model):
 
@@ -130,8 +127,6 @@ class CustomerTicketModel(tf.keras.Model):
         return priority, department
 
 # Functional model that includes subclassed layers
-
-
 class Classifier(tf.keras.Model):
 
     def __init__(self, num_classes=4):
@@ -157,7 +152,6 @@ def functional_model_with_subclassed_layers():
 
 
 # Subclass model that includes functional layers
-
 def subclass_model_with_functional_layers():
     inputs = tf.keras.Input(shape=(64,))
     outputs = tf.keras.layers.Dense(1, activation="sigmoid")(inputs)
@@ -176,6 +170,20 @@ def subclass_model_with_functional_layers():
 
     model = MyModel()
     return model
+
+# Layer with multiple math operations in call
+class MultiMathOperations(tf.keras.layers.Layer):
+    def __init__(self):
+        super(MultiMathOperations, self).__init__(name='multi_math_operations', trainable=False)
+        self.r = tf.constant(np.random.rand(1, 1), dtype=tf.float32)
+        self.g = tf.constant(np.random.rand(1, 1), dtype=tf.float32)
+        self.b = tf.constant(np.random.rand(1, 1), dtype=tf.float32)
+
+    def call(self, inputs):
+        r = tf.math.multiply(inputs[:, :, :, 0:1], self.r)
+        g = tf.math.multiply(inputs[:, :, :, 1:2], self.g)
+        b = tf.math.multiply(inputs[:, :, :, 2:3], self.b)
+        return tf.concat([r, g, b], axis=3)
 
 
 def compare_weights(original_model, functional_model):
@@ -245,5 +253,13 @@ def test_conv_times_three_subclass_to_functional():
     assert functional_model.count_params() == model.count_params()
     compare_weights(model, functional_model)
 
+def test_multi_math_operations_subclass_to_functional():
+    input = tf.keras.Input(shape=(32, 32, 1))
+    output = MultiMathOperations()(input)
+    model = tf.keras.Model(inputs=input, outputs=output)
+    functional_model = prepare_model(model)
+
+    assert functional_model.count_params() == model.count_params()
+    compare_weights(model, functional_model)
 
 test_conv_times_three_subclass_to_functional()
