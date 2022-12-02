@@ -40,6 +40,7 @@
 
 import inspect
 from typing import List, Set, Union
+import numpy as np
 import tensorflow as tf
 from tensorflow.python.keras.engine.functional import Functional
 
@@ -152,6 +153,33 @@ def _handle_sub_layers(sub_layer: tf.keras.layers.Layer, found_sub_layers: Set[t
     return prev_layer
 
 
+def get_original_models_weights_in_functional_model_order(original_model: tf.keras.Model,
+                                                          functional_model: tf.keras.Model) -> np.ndarray:
+    """
+    Map the original model's weights to the functional model's weights
+    :param original_model: The original model
+    :param functional_model: The functional model
+    :return: A list of the original model's weights in the order of the functional model's weights
+    """
+
+    # Make the original model's weights into a dictionary for quick lookup by name
+    original_model_weights = {weight.name: weight for weight in original_model.weights}
+
+    # Get the functional model's weights in order as a dictionary for quick lookup where the key is the weight name
+    # and the position of the weight's order is the value
+    functional_model_weight_order = {weight.name: position for position, weight in enumerate(functional_model.weights)}
+
+    # Using the functional model's weights order, get the original model's weights in the same order. The lambda here
+    # uses the weight's name to get position in the functional model's weights order and the sorts the original model's
+    # weights by that position.
+    weights_in_correct_order = [
+        weight.numpy() for _, weight in
+        sorted(original_model_weights.items(), key=lambda weight_info: functional_model_weight_order[weight_info[0]])
+    ]
+
+    return weights_in_correct_order
+
+
 def prepare_model(original_model: tf.keras.Model, input_layer: Union[tf.keras.Input, List[tf.keras.Input]] = None):
     """
     This function prepares a Keras model before continuing on with AIMET. Specifically, it will convert the model into
@@ -193,14 +221,16 @@ def prepare_model(original_model: tf.keras.Model, input_layer: Union[tf.keras.In
     functional_model = tf.keras.Model(inputs=input_layer, outputs=prev_layer)
     logger.debug("Functional model architecture created.")
 
+    weights_in_correct_order = get_original_models_weights_in_functional_model_order(original_model, functional_model)
     try:
-        functional_model.set_weights(original_model.get_weights())
+        functional_model.set_weights(weights_in_correct_order)
     except ValueError:
         logger.error(
             "Could not copy weights from original model to functional model. This can occur when "
             "custom sublayers are defined not in the same order as the sublayers call method. Please ensure that the "
             "sublayers internal layers are defined in the same order as the sublayers call method.")
         raise
+
     logger.debug("Functional model weights copied.")
     logger.info("Model prepared for AIMET in Functional API format.")
 

@@ -41,7 +41,7 @@ import os
 
 import numpy as np
 import tensorflow as tf
-from aimet_tensorflow.keras.model_preparer import prepare_model
+from aimet_tensorflow.keras.model_preparer import prepare_model, get_original_models_weights_in_functional_model_order
 
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 
@@ -83,6 +83,7 @@ class ConvTimesThree(tf.keras.layers.Layer):
         self.use_nested_calls = use_nested_calls
 
     def call(self, x):
+        # (2 + 2) == 4 added to check parsing of model_perparer of conditionals
         if self.use_nested_calls and (2 + 2 == 4):
             x = self.conv_transpose(self.conv(x))
         else:
@@ -91,6 +92,7 @@ class ConvTimesThree(tf.keras.layers.Layer):
         return self.depth_conv(x)
 
 # See comment above ConvTimesThree Class
+
 
 def conv_sub_class():
     input_shape = (128, 28, 28, 1)
@@ -105,6 +107,7 @@ def conv_sub_class():
 
 # Below models are based on Deep Learning with Python by Francois Chollet Second Edition (page 182 - 185)
 # Only Subclassing
+
 
 class CustomerTicketModel(tf.keras.Model):
 
@@ -127,6 +130,8 @@ class CustomerTicketModel(tf.keras.Model):
         return priority, department
 
 # Functional model that includes subclassed layers
+
+
 class Classifier(tf.keras.Model):
 
     def __init__(self, num_classes=4):
@@ -172,6 +177,8 @@ def subclass_model_with_functional_layers():
     return model
 
 # Layer with multiple math operations in call
+
+
 class MultiMathOperations(tf.keras.layers.Layer):
     def __init__(self):
         super(MultiMathOperations, self).__init__(name='multi_math_operations', trainable=False)
@@ -186,14 +193,13 @@ class MultiMathOperations(tf.keras.layers.Layer):
         return tf.concat([r, g, b], axis=3)
 
 
-def compare_weights(original_model, functional_model):
+def compare_weights(original_weights, functional_weights):
     """
     Helper function to compare the weights of two models. This function is used to test the conversion script.
-    :param original_model: the original model
-    :param functional_model: the model that was converted from the original model
+    :param original_weights: the original model's weights 
+    :param functional_weights: the model's weights that was converted from the original model
     """
-    original_weights = original_model.get_weights()
-    functional_weights = functional_model.get_weights()
+
     for i in range(len(original_weights)):
         np.testing.assert_array_equal(original_weights[i], functional_weights[i])
 
@@ -219,7 +225,7 @@ def test_full_subclass_to_functional():
                                       tf.keras.Input(shape=(num_samples, vocabulary_size,)),
                                       tf.keras.Input(shape=(num_samples, num_tags,))])
     assert functional_model.count_params() == model.count_params()
-    compare_weights(model, functional_model)
+    compare_weights(model.get_weights(), functional_model.get_weights())
 
 
 def test_functional_model_with_subclassed_layers_to_functional():
@@ -229,7 +235,7 @@ def test_functional_model_with_subclassed_layers_to_functional():
 
     functional_model = prepare_model(model)
     assert functional_model.count_params() == model.count_params()
-    compare_weights(model, functional_model)
+    compare_weights(model.get_weights(), functional_model.get_weights())
 
 
 def test_subclass_model_with_subclassed_layers_to_functional():
@@ -240,7 +246,7 @@ def test_subclass_model_with_subclassed_layers_to_functional():
 
     functional_model = prepare_model(model, tf.keras.Input(shape=input_shape[1:]))
     assert functional_model.count_params() == model.count_params()
-    compare_weights(model, functional_model)
+    compare_weights(model.get_weights(), functional_model.get_weights())
 
 
 def test_conv_times_three_subclass_to_functional():
@@ -251,15 +257,21 @@ def test_conv_times_three_subclass_to_functional():
 
     functional_model = prepare_model(model)
     assert functional_model.count_params() == model.count_params()
-    compare_weights(model, functional_model)
+
+    # NOTE: Since ConvTimesThree has the internal layers out of order compared to the call method,
+    # the weights are not in the order of what the actual architecture is (this is a Keras design).
+    # Therefore, we get the original model's weights and sort them in the order of the actual
+    # architecture and use those weights to compare to the functional model's weights.
+    model_weights_in_correct_order = get_original_models_weights_in_functional_model_order(
+        model, functional_model)
+    compare_weights(model_weights_in_correct_order, functional_model.get_weights())
+
 
 def test_multi_math_operations_subclass_to_functional():
-    input = tf.keras.Input(shape=(32, 32, 1))
-    output = MultiMathOperations()(input)
-    model = tf.keras.Model(inputs=input, outputs=output)
+    input_layer = tf.keras.Input(shape=(32, 32, 1))
+    output = MultiMathOperations()(input_layer)
+    model = tf.keras.Model(inputs=input_layer, outputs=output)
+
     functional_model = prepare_model(model)
-
     assert functional_model.count_params() == model.count_params()
-    compare_weights(model, functional_model)
-
-test_conv_times_three_subclass_to_functional()
+    compare_weights(model.get_weights(), functional_model.get_weights())
