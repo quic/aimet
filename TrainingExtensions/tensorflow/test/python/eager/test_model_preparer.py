@@ -91,9 +91,6 @@ class ConvTimesThree(tf.keras.layers.Layer):
             x = self.conv_transpose(x)
         return self.depth_conv(x)
 
-# See comment above ConvTimesThree Class
-
-
 def conv_sub_class():
     input_shape = (128, 28, 28, 1)
     inp = tf.keras.Input(batch_shape=input_shape)
@@ -107,7 +104,6 @@ def conv_sub_class():
 
 # Below models are based on Deep Learning with Python by Francois Chollet Second Edition (page 182 - 185)
 # Only Subclassing
-
 
 class CustomerTicketModel(tf.keras.Model):
 
@@ -130,8 +126,6 @@ class CustomerTicketModel(tf.keras.Model):
         return priority, department
 
 # Functional model that includes subclassed layers
-
-
 class Classifier(tf.keras.Model):
 
     def __init__(self, num_classes=4):
@@ -177,8 +171,6 @@ def subclass_model_with_functional_layers():
     return model
 
 # Layer with multiple math operations in call
-
-
 class MultiMathOperations(tf.keras.layers.Layer):
     def __init__(self):
         super(MultiMathOperations, self).__init__(name='multi_math_operations', trainable=False)

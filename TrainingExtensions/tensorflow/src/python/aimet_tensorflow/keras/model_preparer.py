@@ -102,9 +102,7 @@ def _get_layer_call_order_and_validate(subclass_layer: tf.keras.layers.Layer, fo
     :param found_internal_layers: The list of layers that have been found
     :return: The call order of the layer
     """
-    # TODO: Need to check for if conditions. Potentially autograd call will handle for us.
-    # TODO: Using layers in computations. i.e. self.layer(x) * 2
-    # Using tf.autograph to get the code used when the layer is called
+
     code_by_line = _refractor_call_code(inspect.getsource(subclass_layer.call).splitlines(), subclass_layer)
 
     call_order = []
