@@ -335,7 +335,7 @@ pipeline {
                                     }
                                 }
                             }
-                            post {            
+                            post {
                                 always {
                                     script {
                                         if ("${env.QCInternalValidation}" == "false") {
@@ -355,7 +355,7 @@ pipeline {
                                         }
                                     }
                                 }
-                            }                    
+                            }
                         }
 
                         stage('Static analysis') {
@@ -369,7 +369,7 @@ pipeline {
                             }
                         }
                     } // stages
-                } // stage("TF CPU") 
+                } // stage("TF CPU")
 
 
                 // Start the pipeline for Torch CPU variant
@@ -436,7 +436,7 @@ pipeline {
                                     }
                                 }
                             }
-                            post {            
+                            post {
                                 always {
                                     script {
                                         if ("${env.QCInternalValidation}" == "false") {
@@ -456,7 +456,7 @@ pipeline {
                                         }
                                     }
                                 }
-                            }                    
+                            }
                         }
 
                         stage('Static analysis') {
@@ -480,8 +480,8 @@ pipeline {
                             steps {
                                 script {
                                     if ("${env.QCInternalValidation}" == "true") {
-                                        echo 'Running AIMET additional stages...'
-                                        build job: "AIMET-Extra", parameters: [string(name: 'AIMET_GIT_COMMIT', value: "${CHANGE_BRANCH}")]
+                                        echo 'Running AIMET additional stages'
+                                        callAimetExtra(env.CHANGE_TARGET)
                                     }
                                 }
                             }
@@ -525,3 +525,15 @@ def runStage(aimet_variant, options) {
         """
     }
 }
+
+def callAimetExtra(target_branch) {
+    echo target_branch
+    if (target_branch != "develop") {
+        echo "Running AIMET additional stages on ${CHANGE_TARGET} branch ..."
+        build job: "AIMET-Extra", parameters: [string(name: 'AIMET_GIT_COMMIT', value: "${CHANGE_BRANCH}"), string(name: 'PROJECT_BRANCH', value: target_branch)]
+    }    else {
+        echo "Running AIMET additional stages on develop branch ..."
+        build job: "AIMET-Extra", parameters: [string(name: 'AIMET_GIT_COMMIT', value: "${CHANGE_BRANCH}")]
+    }
+}
+
