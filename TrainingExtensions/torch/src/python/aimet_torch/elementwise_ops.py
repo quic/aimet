@@ -155,10 +155,10 @@ class MaxPool2d(torch.nn.Module):
 
 
 class AdaptiveAvgPool2d(torch.nn.Module):
-    """ MaxPool2d module for a functional MaxPool2d"""
+    """ AdaptiveAvgPool2d module for a functional adaptive_avg_pool2d"""
     @staticmethod
     def forward(*args, **kwargs) -> torch.Tensor:
         """
-        Forward-pass routine for MaxPool2d op
+        Forward-pass routine for adaptive_avg_pool2d op
         """
         return torch.nn.functional.adaptive_avg_pool2d(*args, **kwargs)
