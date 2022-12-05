@@ -81,8 +81,7 @@ class AdaroundAcceptanceTests(unittest.TestCase):
         model = models.resnet18().eval()
         model = model.to(torch.device('cuda'))
         input_shape = (1, 3, 224, 224)
-        dummy_input = create_rand_tensors_given_shapes(input_shape)
-        dummy_input = [item.to(torch.device('cuda')) for item in dummy_input]
+        dummy_input = create_rand_tensors_given_shapes(input_shape, torch.device('cuda'))
 
         orig_output = dummy_forward_pass(model, input_shape)
 
@@ -120,8 +119,7 @@ class AdaroundAcceptanceTests(unittest.TestCase):
         model = models.resnet18().eval()
         model = model.to(torch.device('cuda'))
         input_shape = (1, 3, 224, 224)
-        dummy_input = create_rand_tensors_given_shapes(input_shape)
-        dummy_input = [item.to(torch.device('cuda')) for item in dummy_input]
+        dummy_input = create_rand_tensors_given_shapes(input_shape, torch.device('cuda'))
 
         # create fake data loader with image size (3, 224, 224)
         data_loader = create_fake_data_loader(dataset_size=64, batch_size=16, image_size=input_shape[1:])

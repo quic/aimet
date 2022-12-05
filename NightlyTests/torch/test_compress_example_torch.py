@@ -794,7 +794,7 @@ class FakeEvaluator:
         self.index = -1
         self.return_values = []
 
-        self.rand_inputs = aimet_torch.utils.create_rand_tensors_given_shapes(input_shape)
+        self.rand_inputs = aimet_torch.utils.create_rand_tensors_given_shapes(input_shape, torch.device('cpu'))
 
     @property
     def return_value(self, return_values):
