@@ -77,7 +77,7 @@ class TensorQuantizer:
         self._quant_scheme = quant_scheme
         self.use_symmetric_encodings = use_symmetric_encodings
         self.use_strict_symmetric = False
-        self.use_unsigned_symmetric = True
+        self.use_unsigned_symmetric = False
         # NOTE: is_unsigned_symmetric flag is to check feasibility about unsigned symmetric quantization is possible
         #   The difference between use_unsigned_symmetric and is_unsigned_symmetric is
         #   is_unsigned_symmetric can be false if encoding_min < 0 < encoding_max range
