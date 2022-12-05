@@ -424,7 +424,7 @@ def _prepare_helper(symbolic_traced_model: torch.fx.GraphModule):
 
     # Modify the symbolically traced model by iterating over all the nodes
     for node in symbolic_traced_model.graph.nodes:
-        print(node.name, node.target, node)
+
         # Create new module for functional nodes
         if node.op in ['call_function', 'call_method']:
             functional_name = _find_functional_name_for_node(node)
