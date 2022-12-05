@@ -578,4 +578,3 @@ def convert_h5_model_to_pb_model(h5_model_path: AnyStr, custom_objects: Dict = N
             tf.io.write_graph(frozen_graph, save_path, model_name, as_text=False)
 
             _logger.info("Success. The converted model is located at %s saved as %s", save_path, model_name)
-
