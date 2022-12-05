@@ -56,10 +56,11 @@ functional_op_to_module_map = {
     torch.nn.functional.gelu: torch.nn.GELU
 }
 
-# this is a map of torch.fx node based functional names to module.
-functional_to_module_map = {
-
-    # Non Linear activation functions
+# In this map, function's corresponding torch.nn.Module(__init__()) requires either
+# only keyword arguments or no arguments. Argument(s) should not be inferred dynamically. For example,
+# 1). torch.nn.ReLU takes inplace=False as keyword argument (torch.nn.ReLU(inplace=False)).
+# 2). elementwise_ops.Add module does not require any argument (elementwise_ops.Add()).
+functional_with_kwargs = {
     'relu'          : torch.nn.ReLU,
     'relu6'         : torch.nn.ReLU6,
     'hardtanh'      : torch.nn.Hardtanh,
@@ -85,21 +86,32 @@ functional_to_module_map = {
     'sigmoid'       : torch.nn.Sigmoid,
     'hardsigmoid'   : torch.nn.Hardsigmoid,
     'silu'          : torch.nn.SiLU,
-
-    # Elementwise operations
     'add'           : elementwise_ops.Add,
     'subtract'      : elementwise_ops.Subtract,
+    'sub'           : elementwise_ops.Subtract,
     'mul'           : elementwise_ops.Multiply,
     'div'           : elementwise_ops.Divide,
+    'truediv'       : elementwise_ops.Divide,
     'matmul'        : elementwise_ops.MatMul,
 }
 
-functional_to_module_special_handling_map = {
 
-    # Operations that require special transformation
+# Function that requires special transformation.
+functional_with_special_handling = {
     'cat'           : elementwise_ops.Concat,
-    'interpolate'   : elementwise_ops.Interpolate,
     'conv2d'        : torch.nn.Conv2d,
+}
+
+
+# In this map, function requires both keyword and positional arguments and also
+# support dynamically inferred argument(s). For example,
+# 1.) Functional interpolate takes both positional and keyword arguments and arguments can be inferred dynamically.
+#   torch.nn.functional.interpolate(x, size=(x.size(2),  x.size(3)))
+functional_with_args_kwargs = {
+    'interpolate'               : elementwise_ops.Interpolate,
+    'max_pool2d'                : elementwise_ops.MaxPool2d,
+    'max_pool2d_with_indices'   : elementwise_ops.MaxPool2d,
+    'adaptive_avg_pool2d'       : elementwise_ops.AdaptiveAvgPool2d,
 }
 
 
@@ -268,42 +280,10 @@ def concat_create_module(node: torch.fx.node) -> torch.nn.Module:
 
     return module
 
-def interpolate_create_node(symbolic_traced_model: torch.fx.GraphModule, module_name: str, node: torch.fx.node)\
-        -> torch.fx.node:
-    """
-    Create the node to be inserted in the graph model for interpolate.
-    :param symbolic_traced_model: Symbolically traced model
-    :param module_name: Qualified module name in symbolic_traced_model hierarchy corresponding to new node
-    :param node: Current node in the graph after which new node will be inserted
-    :return: torch.fx.node to be inserted in the graph
-    """
-    # Merge args and kwargs.
-    args = [node.args[0]]
-    for arg in node.kwargs.values():
-        args.append(arg)
-
-    with symbolic_traced_model.graph.inserting_after(node):
-        new_node = symbolic_traced_model.graph.call_module(module_name, args=tuple(args))
-        return new_node
-
-
-def interpolate_create_module(node: torch.fx.node) -> torch.nn.Module:
-    """
-    Create the replacement module.
-
-    :param node: Current node in the graph after which new node will be inserted
-    :return: New module.
-    """
-    _ = node.kwargs
-    module = elementwise_ops.Interpolate()
-
-    return module
-
 
 special_handler_functions = {
     # Special handling functions for creating node and module
     'cat': {'node_fn': concat_create_node, 'module_fn': concat_create_module},
-    'interpolate': {'node_fn': interpolate_create_node, 'module_fn': interpolate_create_module},
     'conv2d': {'node_fn': conv2d_create_node, 'module_fn': conv2d_create_module}
 }
 
@@ -411,8 +391,7 @@ def prepare_model(model: torch.nn.Module, modules_to_exclude: List[torch.nn.Modu
 def _trace_model(model: torch.nn.Module, modules_to_exclude: Optional[List[torch.nn.Module]],
                  concrete_args: Optional[Dict[str, Any]]):
     """
-    Overrides the is_leaf_module() method of parent class when modules_to_exclude list is not None.
-
+    Overrides the is_leaf_module() method of parent class when modules_to_exclude list is not None
     :param model: pytorch Model to be modified.
     :param modules_to_exclude: List of modules to exclude when tracing.
     :param concrete_args: Concrete arguments that should not be treated as Proxies.
@@ -445,7 +424,7 @@ def _prepare_helper(symbolic_traced_model: torch.fx.GraphModule):
 
     # Modify the symbolically traced model by iterating over all the nodes
     for node in symbolic_traced_model.graph.nodes:
-
+        print(node.name, node.target, node)
         # Create new module for functional nodes
         if node.op in ['call_function', 'call_method']:
             functional_name = _find_functional_name_for_node(node)
@@ -474,7 +453,7 @@ def _prepare_helper(symbolic_traced_model: torch.fx.GraphModule):
 
 def _verify_symbolic_traced_model(symbolic_traced_model: torch.fx.GraphModule):
     """
-    Does some checks to make sure the graph is well formed and recompile the forward() method of symbolic_traced
+    Does some checks to make sure the graph is well-formed and recompile the forward() method of symbolic_traced
     model from its graph
     :param symbolic_traced_model: Symbolically traced model
     :return: None
@@ -487,7 +466,7 @@ def _create_node_for_new_module(symbolic_traced_model: torch.fx.GraphModule, nod
                                 module_name: str, functional_name: str = None):
     """
     Insert 'call module' node into graph and replace all the uses of 'node' with newly added node and erase the
-    the old node from graph.
+    old node from graph
     :param symbolic_traced_model: Symbolically traced model
     :param node: Current node in the graph after which new node will be inserted
     :param module_name: Qualified module name in symbolic_traced_model hierarchy corresponding to new node
@@ -496,8 +475,11 @@ def _create_node_for_new_module(symbolic_traced_model: torch.fx.GraphModule, nod
     """
     with symbolic_traced_model.graph.inserting_after(node):
         if functional_name:
-            if functional_name in functional_to_module_special_handling_map.keys():
+            if functional_name in functional_with_special_handling.keys():
                 new_node = special_handler_functions[functional_name]['node_fn'](symbolic_traced_model, module_name, node)
+            elif functional_name in functional_with_args_kwargs.keys():
+                merged_args = _merge_args_and_kwargs(node)
+                new_node = symbolic_traced_model.graph.call_module(module_name, args=tuple(merged_args))
             else:
                 new_node = symbolic_traced_model.graph.call_module(module_name, args=node.args)
         else:
@@ -514,11 +496,12 @@ def _find_functional_name_for_node(node: torch.fx.node) -> Union[str, None]:
     :return: corresponding functional name if found, else None
     """
 
-    combined_ops_map = {**functional_to_module_map, **functional_to_module_special_handling_map}
+    combined_ops_map = {**functional_with_kwargs, **functional_with_special_handling,
+                        **functional_with_args_kwargs}
     for functional_name in combined_ops_map:
         # \b boundary character to find the exact match from the functional_to_module lookup
         pattern = r"\b" + functional_name + r"\b"
-        if search(pattern, str(node.target)):
+        if search(pattern, str(node.target)) or search(pattern, str(node)):
             return functional_name
 
     return None
@@ -531,16 +514,16 @@ def _create_module_for_functional_node(node: torch.fx.node, functional_name: str
     :param functional_name: Functional name for given node
     :return: New module
     """
-    kwargs = node.kwargs
-
     # Instantiate new module from lookup
-    if functional_name in functional_to_module_map.keys():
-        module = functional_to_module_map[functional_name]()
+    if functional_name in functional_with_kwargs.keys():
+        module = functional_with_kwargs[functional_name]()
         # Set the parameters for module from node.kwargs
-        for key, value in kwargs.items():
+        for key, value in node.kwargs.items():
             setattr(module, key, value)
-    elif functional_name in functional_to_module_special_handling_map:
+    elif functional_name in functional_with_special_handling.keys():
         module = special_handler_functions[functional_name]['module_fn'](node)
+    elif functional_name in functional_with_args_kwargs.keys():
+        module = functional_with_args_kwargs[functional_name]()
     else:
         raise ValueError("Unsupported module: {}".format(functional_name))
     return module
@@ -578,7 +561,7 @@ def _get_module_for_dotted_name(module: torch.fx.GraphModule, dotted_name: str) 
 
 def get_module_for_activation_fn(act_fn: torch.nn.functional):
     """
-    returns module instance for functional tyoe handled within PT transformers for activation functions.
+    returns module instance for functional tyoe handled within PT transformers for activation functions
     :param act_fn: activation function implemented as a functional.
     :return: module equivalent for the activation function.
     """
@@ -592,7 +575,7 @@ def get_module_for_activation_fn(act_fn: torch.nn.functional):
 
 def prepare_pt_transformer_for_quantsim(transformer_model: torch.nn.Module):
     """
-    Replaces functionals with modules for activation function, updates model in-place.
+    Replaces functionals with modules for activation function, updates model in-place
     :param transformer_model: model with PyTorch nn.Transformer layer
     :return: updated model with modules for activation function.
     """
@@ -605,3 +588,17 @@ def prepare_pt_transformer_for_quantsim(transformer_model: torch.nn.Module):
 
         if isinstance(module, torch.nn.TransformerDecoderLayer) and not isinstance(module.activation, torch.nn.Module):
             module.activation = get_module_for_activation_fn(module.activation)
+
+
+def _merge_args_and_kwargs(node: torch.fx.node) -> List:
+    """
+    Merge node's args and kwargs
+    :param node: Torch FX node in the graph whose args and kwargs to be merged.
+    :return: List of merged args.
+    """
+    merged_args = []
+    for arg in node.args:
+        merged_args.append(arg)
+    for arg in node.kwargs.values():
+        merged_args.append(arg)
+    return merged_args
