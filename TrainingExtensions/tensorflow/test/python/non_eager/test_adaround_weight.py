@@ -355,25 +355,15 @@ class TestAdaroundWeight(unittest.TestCase):
 
         with open('./dummy.encodings') as json_file:
             encoding_data = json.load(json_file)
-
         param_keys = list(encoding_data.keys())
 
         self.assertTrue(param_keys[0] == "conv2d/Conv2D/ReadVariableOp:0")
         self.assertTrue(isinstance(encoding_data["conv2d/Conv2D/ReadVariableOp:0"], list))
-        param_encoding_keys = encoding_data["conv2d/Conv2D/ReadVariableOp:0"][0].keys()
+        self.assertTrue(len(encoding_data["conv2d/Conv2D/ReadVariableOp:0"]) == 8)
 
-        self.assertTrue(
-            "max" in param_encoding_keys and isinstance(encoding_data["conv2d/Conv2D/ReadVariableOp:0"][0]['max'],
-                                                        list))
-        self.assertTrue(
-            "min" in param_encoding_keys and isinstance(encoding_data["conv2d/Conv2D/ReadVariableOp:0"][0]['min'],
-                                                        list))
-        self.assertTrue(
-            "offset" in param_encoding_keys and isinstance(encoding_data["conv2d/Conv2D/ReadVariableOp:0"][0]['offset'],
-                                                           list))
-        self.assertTrue(
-            "scale" in param_encoding_keys and isinstance(encoding_data["conv2d/Conv2D/ReadVariableOp:0"][0]['scale'],
-                                                          list))
+        self.assertTrue(param_keys[1] == "conv2d_1/Conv2D/ReadVariableOp:0")
+        self.assertTrue(isinstance(encoding_data["conv2d_1/Conv2D/ReadVariableOp:0"], list))
+        self.assertTrue(len(encoding_data["conv2d_1/Conv2D/ReadVariableOp:0"]) == 4)
 
         # Delete encodings file
         if os.path.exists("./dummy.encodings"):
@@ -449,23 +439,10 @@ class TestAdaroundWeight(unittest.TestCase):
         self.assertTrue(param_keys[0] == "conv2d_transpose/conv2d_transpose/ReadVariableOp:0")
         conv_transpose_encoding_data = encoding_data["conv2d_transpose/conv2d_transpose/ReadVariableOp:0"]
         self.assertTrue(isinstance(conv_transpose_encoding_data, list))
-        param_encoding_keys = conv_transpose_encoding_data[0].keys()
 
-        self.assertTrue("max" in param_encoding_keys)
-        self.assertTrue(isinstance(conv_transpose_encoding_data[0]['max'], list))
-        self.assertTrue(len(conv_transpose_encoding_data[0]['max']) == 8)
+        self.assertTrue(isinstance(conv_transpose_encoding_data, list))
+        self.assertTrue(len(conv_transpose_encoding_data) == 8)
 
-        self.assertTrue("min" in param_encoding_keys)
-        self.assertTrue(isinstance(conv_transpose_encoding_data[0]['min'], list))
-        self.assertTrue(len(conv_transpose_encoding_data[0]['min']) == 8)
-
-        self.assertTrue("offset" in param_encoding_keys)
-        self.assertTrue(isinstance(conv_transpose_encoding_data[0]['offset'], list))
-        self.assertTrue(len(conv_transpose_encoding_data[0]['offset']) == 8)
-
-        self.assertTrue("scale" in param_encoding_keys)
-        self.assertTrue(isinstance(conv_transpose_encoding_data[0]['scale'], list))
-        self.assertTrue(len(conv_transpose_encoding_data[0]['scale']) == 8)
 
         def dummy_forward_pass(session: tf.compat.v1.Session, _):
             """
