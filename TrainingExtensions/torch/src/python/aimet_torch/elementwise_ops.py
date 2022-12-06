@@ -142,3 +142,23 @@ class Exponential(torch.nn.Module):
         Forward-pass routine for exponential op
         """
         return torch.exp(x)
+
+
+class MaxPool2d(torch.nn.Module):
+    """ MaxPool2d module for a functional MaxPool2d"""
+    @staticmethod
+    def forward(*args, **kwargs) -> torch.Tensor:
+        """
+        Forward-pass routine for MaxPool2d op
+        """
+        return torch.nn.functional.max_pool2d(*args, **kwargs)
+
+
+class AdaptiveAvgPool2d(torch.nn.Module):
+    """ AdaptiveAvgPool2d module for a functional adaptive_avg_pool2d"""
+    @staticmethod
+    def forward(*args, **kwargs) -> torch.Tensor:
+        """
+        Forward-pass routine for adaptive_avg_pool2d op
+        """
+        return torch.nn.functional.adaptive_avg_pool2d(*args, **kwargs)
