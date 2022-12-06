@@ -67,9 +67,9 @@ def _get_result_from_conditional(line: str, subclass_layer: tf.keras.layers.Laye
     return eval(bool_to_eval)  # pylint: disable=eval-used
 
 
-def _refractor_call_code(call_code: List[str], subclass_layer: tf.keras.layers.Layer) -> List[str]:
+def _refactor_call_code(call_code: List[str], subclass_layer: tf.keras.layers.Layer) -> List[str]:
     """
-    Refractor the sublayer's call code to be more readable
+    Refactor the sublayer's call code to be more readable
     :param call_code: The code to be cleaned up
     :return: The cleaned up code
     """
@@ -103,7 +103,7 @@ def _get_layer_call_order_and_validate(subclass_layer: tf.keras.layers.Layer, fo
     :return: The call order of the layer
     """
 
-    code_by_line = _refractor_call_code(inspect.getsource(subclass_layer.call).splitlines(), subclass_layer)
+    code_by_line = _refactor_call_code(inspect.getsource(subclass_layer.call).splitlines(), subclass_layer)
 
     call_order = []
     attr_layer_pattern = "self."
