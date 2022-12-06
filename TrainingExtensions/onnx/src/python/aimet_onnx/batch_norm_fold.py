@@ -91,10 +91,8 @@ def _find_conv_bn_pairs(connected_graph: ConnectedGraph) -> Dict:
     return convs_bn_activation_dict
 
 
-def find_all_batch_norms_to_fold(
-        connected_graph: ConnectedGraph,
-) -> Tuple[List[Tuple[Op, Op]],
-           List[Tuple[Op, Op]]]:
+def find_all_batch_norms_to_fold(connected_graph: ConnectedGraph) -> Tuple[List[Tuple[Op, Op]],
+                                                                           List[Tuple[Op, Op]]]:
     """
     Find all possible batch norm layers that can be folded. Returns a list of pairs such that (bn, layer)
     means bn will be forward-folded into layer and (layer, bn) means bn will be backward-folded into layer
