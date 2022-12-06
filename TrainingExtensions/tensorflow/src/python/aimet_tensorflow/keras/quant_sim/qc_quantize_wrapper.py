@@ -172,7 +172,6 @@ class QcQuantizeWrapper(tf.keras.layers.Layer):
                  output_quantizers: Union[None, List[ActivationTensorQuantizer]] = None,
                  param_quantizers: Union[None, List[ParamPerTensorQuantizer], List[ParamPerChannelQuantizer]] = None,
                  per_channel_quantization_enabled: bool = False,
-                 #shadow_params: List[tf.Variable] = None,
                  shadow_params: Dict[str, tf.Variable] = None,
                  **kwargs):
         super(QcQuantizeWrapper, self).__init__(**kwargs)
@@ -194,9 +193,7 @@ class QcQuantizeWrapper(tf.keras.layers.Layer):
         # TF's static graph stores the first set of param values seen and uses them for all future forward passes.
         # Get around this by using Tf.Variables to store param values.
         if self._shadow_params is None:
-            k = [param.name for param in self._layer_to_wrap.weights]
-            v = [tf.Variable(param, trainable=False) for param in self._layer_to_wrap.weights]
-            self._shadow_params = dict(zip(k, v))
+            self._shadow_params = dict(zip([param.name for param in self._layer_to_wrap.weights], [tf.Variable(param, trainable=False) for param in self._layer_to_wrap.weights]))
 
     def _set_quantizers(self, per_channel_quantization_enabled):
         """
