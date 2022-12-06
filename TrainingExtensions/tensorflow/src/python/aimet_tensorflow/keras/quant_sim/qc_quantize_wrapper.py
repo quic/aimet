@@ -172,7 +172,8 @@ class QcQuantizeWrapper(tf.keras.layers.Layer):
                  output_quantizers: Union[None, List[ActivationTensorQuantizer]] = None,
                  param_quantizers: Union[None, List[ParamPerTensorQuantizer], List[ParamPerChannelQuantizer]] = None,
                  per_channel_quantization_enabled: bool = False,
-                 shadow_params: List[tf.Variable] = None,
+                 #shadow_params: List[tf.Variable] = None,
+                 shadow_params: Dict[str, tf.Variable] = None,
                  **kwargs):
         super(QcQuantizeWrapper, self).__init__(**kwargs)
         self._layer_to_wrap = layer_to_wrap
@@ -193,7 +194,9 @@ class QcQuantizeWrapper(tf.keras.layers.Layer):
         # TF's static graph stores the first set of param values seen and uses them for all future forward passes.
         # Get around this by using Tf.Variables to store param values.
         if self._shadow_params is None:
-            self._shadow_params = [tf.Variable(param, trainable=False) for param in self._layer_to_wrap.weights]
+            k = [param.name for param in self._layer_to_wrap.weights]
+            v = [tf.Variable(param, trainable=False) for param in self._layer_to_wrap.weights]
+            self._shadow_params = dict(zip(k, v))
 
     def _set_quantizers(self, per_channel_quantization_enabled):
         """
@@ -304,15 +307,12 @@ class QcQuantizeWrapper(tf.keras.layers.Layer):
         :return: Quantized output from the wrapped module
         """
         is_call_training_mode = kwargs["training"]
-
-        for idx, param in enumerate(self._layer_to_wrap.weights):
-            self._shadow_params[idx].assign(param)
-
+        for param in self._layer_to_wrap.weights:
+            self._shadow_params[param.name].assign(param)
         # for BN with training = True ,only write to shadow params for beta and gamma
         if isinstance(self._layer_to_wrap, tf.keras.layers.BatchNormalization):
             if is_call_training_mode:
-                training_shadow_params = [self._shadow_params[BnParamQuantizerIndex.GAMMA], self._shadow_params[BnParamQuantizerIndex.BETA]]
-                self._shadow_params = training_shadow_params
+                self._shadow_params = {k:v for k, v in self._shadow_params.items()  if "gamma:0" in k  or "beta:0" in k}
 
         self._quantize_params()
 
@@ -408,5 +408,5 @@ class QcQuantizeWrapper(tf.keras.layers.Layer):
         """
         Restore saved parameters
         """
-        for idx, param in enumerate(self._shadow_params):
+        for idx, param in enumerate(self._shadow_params.values()):
             self._layer_to_wrap.weights[idx].assign(param)
