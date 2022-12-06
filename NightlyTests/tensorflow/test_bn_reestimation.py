@@ -140,10 +140,85 @@ class TestBNReEstimation:
         modify_sess_bn_mutable(sess, start_op_names, end_op_names, training_tf_placeholder=False)
 
         # PTQ
+
+        default_config_per_channel = {
+            "defaults":
+                {
+                    "ops":
+                        {
+                            "is_output_quantized": "True"
+                        },
+                    "params":
+                        {
+                            "is_quantized": "True",
+                            "is_symmetric": "True"
+                        },
+                    "strict_symmetric": "False",
+                    "unsigned_symmetric": "True",
+                    "per_channel_quantization": "True"
+                },
+
+            "params":
+                {
+                    "bias":
+                        {
+                            "is_quantized": "False"
+                        }
+                },
+
+            "op_type":
+                {
+                    "Squeeze":
+                        {
+                            "is_output_quantized": "False"
+                        },
+                    "Pad":
+                        {
+                            "is_output_quantized": "False"
+                        },
+                    "Mean":
+                        {
+                            "is_output_quantized": "False"
+                        }
+                },
+
+            "supergroups":
+                [
+                    {
+                        "op_list": ["Conv", "Relu"]
+                    },
+                    {
+                        "op_list": ["Conv", "Clip"]
+                    },
+                    {
+                        "op_list": ["Conv", "BatchNormalization", "Relu"]
+                    },
+                    {
+                        "op_list": ["Add", "Relu"]
+                    },
+                    {
+                        "op_list": ["Gemm", "Relu"]
+                    }
+                ],
+
+            "model_input":
+                {
+                    "is_input_quantized": "True"
+                },
+
+            "model_output":
+                {}
+        }
+
+        config_file_path = "/tmp/default_config_per_channel.json"
+        with open(config_file_path, "w") as f:
+            json.dump(default_config_per_channel, f)
+
         sim = QuantizationSimModel(sess, start_op_names, end_op_names, use_cuda=True,
                                    quant_scheme=QuantScheme.training_range_learning_with_tf_init,
-                                   config_file='../../TrainingExtensions/common/src/python/aimet_common/'
-                                                    'quantsim_config/default_config_per_channel.json')
+                                   config_file=config_file_path)
+
+
 
         def dummy_forward_pass(sess, args):
             model_input = sess.graph.get_tensor_by_name("input_1:0")
