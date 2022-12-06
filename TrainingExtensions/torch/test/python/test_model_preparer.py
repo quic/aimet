@@ -1441,3 +1441,33 @@ class TestFX:
         assert not hasattr(prepared, "module_sigmoid")
         assert not hasattr(prepared, "module_mul")
         assert hasattr(prepared, "custom")
+
+    def test_fx_with_max_pool2d_indices(self):
+        """ test torch fx with adaptive_avg_pool2d """
+        class ModelWithMaxPool2d(torch.nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.conv = torch.nn.Conv2d(3, 4, kernel_size=2, stride=2, padding=2)
+
+            def forward(self, x):
+                x = self.conv(x)
+                x, indices = torch.nn.functional.max_pool2d(x, 3, return_indices=True)
+                return x, indices
+
+        input_shape = (1, 3, 32, 32)
+        dummy_input = torch.randn(input_shape)
+        model = ModelWithMaxPool2d().eval()
+        model_transformed = prepare_model(model)
+        print(model_transformed)
+
+        # Compare output and indices.
+        assert torch.equal(model_transformed(dummy_input)[0], model(dummy_input)[0])
+        assert torch.equal(model_transformed(dummy_input)[1], model(dummy_input)[1])
+
+        # Verify Quantization workflow.
+        sim = QuantizationSimModel(model_transformed, dummy_input=dummy_input)
+        sim.compute_encodings(evaluate, forward_pass_callback_args=dummy_input)
+
+        # Quantizer enabled for output and disabled for indices (integer values)
+        assert sim.model.module_max_pool2d_with_indices.output_quantizers[0].enabled
+        assert not sim.model.module_max_pool2d_with_indices.output_quantizers[1].enabled

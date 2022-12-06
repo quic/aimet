@@ -46,6 +46,7 @@ from aimet_torch.model_validator import validation_checks
 from aimet_torch.examples import test_models
 from aimet_torch.meta import connectedgraph_utils
 from aimet_torch.model_preparer import prepare_model
+from aimet_torch import elementwise_ops
 
 
 class CustomModule(torch.nn.Module):
@@ -158,6 +159,39 @@ class TestModelValidatorPreparer:
         # Prepare model and verify the outputs.
         prepared_model = prepare_model(model)
         assert torch.equal(model(dummy_input), prepared_model(dummy_input))
+
+        # ModelValidator check should be True after.
+        assert ModelValidator.validate_model(prepared_model, dummy_input)
+
+    def test_model_validator_preparer_using_elementwise_operations(self):
+        """ Validate model validator and preparer workflow for some common elementwise operations """
+        class TestModel(torch.nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.conv1 = torch.nn.Conv2d(3, 16, kernel_size=(3, 3))
+                self.conv2 = torch.nn.Conv2d(16, 32, kernel_size=(3, 3))
+                self.conv3 = torch.nn.Conv2d(32, 64, kernel_size=(3, 3))
+                self.conv4 = torch.nn.Conv2d(64, 128, kernel_size=(3, 3))
+            def forward(self, x: torch.Tensor):
+                x = torch.nn.functional.relu(self.conv1(x) * torch.ones((1, 16, 30, 30)))
+                x = self.conv2(x) - torch.ones((1, 32, 28, 28))
+                x = self.conv3(x) / torch.ones((1, 64, 26, 26))
+                x = torch.nn.functional.max_pool2d(x, 3)
+                x = self.conv4(x) * torch.ones((1, 128, 6, 6))
+                x = torch.nn.functional.adaptive_avg_pool2d(x, output_size=32)
+                return x
+
+        model = TestModel().eval()
+        prepared_model = prepare_model(model)
+        print(prepared_model)
+
+        input_shape = (1, 3, 32, 32)
+        dummy_input = torch.randn(*input_shape)
+        assert torch.equal(prepared_model(dummy_input), model(dummy_input))
+        assert isinstance(prepared_model.module_sub, elementwise_ops.Subtract)
+        assert isinstance(prepared_model.module_truediv, elementwise_ops.Divide)
+        assert isinstance(prepared_model.module_max_pool2d, elementwise_ops.MaxPool2d)
+        assert isinstance(prepared_model.module_adaptive_avg_pool2d, elementwise_ops.AdaptiveAvgPool2d)
 
         # ModelValidator check should be True after.
         assert ModelValidator.validate_model(prepared_model, dummy_input)
