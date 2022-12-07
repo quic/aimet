@@ -293,80 +293,8 @@ def prepare_model(model: torch.nn.Module, modules_to_exclude: List[torch.nn.Modu
     """
     Prepare and modify the pytorch model for AIMET features using torch.FX symbolic tracing API.
 
-    #1 Replace torch.nn.functional by torch.nn.Module.
-    #2 Create new independent torch.nn.Module instances for reused/duplicate module.
-
-    Example #1 Replace torch.nn.functional by torch.nn.module::
-
-        class ModelWithFunctionalReLU(torch.nn.Module):
-
-            def __init__(self):
-                super(ModelWithFunctionalReLU, self).__init__()
-                self.conv1 = torch.nn.Conv2d(3, 32, kernel_size=3)
-
-            def forward(self, *inputs):
-                x = self.conv1(inputs[0])
-                x = torch.nn.functional.relu(x, inplace=True)
-                return x
-
-        model = ModelWithFunctionalReLU().eval()
-        model_transformed = prepare_model(model)
-
-    This function can replace the ReLU of type torch.nn.functional by type torch.nn.Module and make sure
-    both the modified and original model are functionally same.
-
-    Example #2 Create new module for reused/duplicate module::
-
-        class ModelWithDuplicateReLU(torch.nn.Module):
-
-            def __init__(self):
-                super(ModelWithDuplicateReLU, self).__init__()
-                self.conv1 = torch.nn.Conv2d(3, 32, kernel_size=3)
-                self.relu = torch.nn.ReLU(inplace=True)
-
-            def forward(self, *inputs):
-                x = self.relu(inputs[0])
-                x = self.conv1(x)
-                x = self.relu(x)
-                return x
-
-        model = ModelWithDuplicateReLU().eval()
-        model_transformed = prepare_model(model)
-
-    This function can create new independent torch.nn.ReLU type module for reused module and make sure
-    both the modified and original model are functionally same.
-
-    Limitations of torch.fx symbolic trace API:
-
-    #1 Dynamic control flow where conditions depend on some of the input values. This limitation can be overcome by
-    binding concrete values to arguments during symbolic tracing::
-
-        def f(x, flag):
-            if flag: return x
-            else: return x*2
-
-        torch.fx.symbolic_trace(f) # Fails!
-        torch.fx.symbolic_trace(f, concrete_args={'flag': True}) # Passes!
-
-    #2 Non-torch functions which does not use __torch_function__ mechanism is not supported by default in symbolic
-    tracing. If we do not want to capture them in symbolic tracing then use torch.fx.wrap() API at module-scope level::
-
-        import torch
-        import torch.fx
-        torch.fx.wrap('len')  # call the API at module-level scope.
-        torch.fx.wrap('sqrt') # call the API at module-level scope.
-
-        class ModelWithNonTorchFunction(torch.nn.Module):
-            def __init__(self):
-                super(ModelWithNonTorchFunction, self).__init__()
-                self.conv = torch.nn.Conv2d(3, 4, kernel_size=2, stride=2, padding=2, bias=False)
-
-            def forward(self, *inputs):
-                x = self.conv(inputs[0])
-                return x / sqrt(len(x))
-
-        model = ModelWithNonTorchFunction().eval()
-        model_transformed = prepare_model(model)
+    1. Replace torch.nn.functional by torch.nn.Module
+    2. Create new independent torch.nn.Module instances for reused/duplicate module
 
     :param model: pytorch Model to be modified.
     :param modules_to_exclude: List of modules to exclude when tracing.
