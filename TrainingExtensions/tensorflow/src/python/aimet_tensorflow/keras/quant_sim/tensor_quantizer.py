@@ -142,6 +142,7 @@ class TensorQuantizer(tf.keras.layers.Layer, abc.ABC):
             'name': self._name,
             'quant_scheme': self._quant_scheme,
             'bitwidth': self._bitwidth.numpy(),
+            'data_type': self.data_type,
             'is_symmetric': self._is_symmetric.numpy(),
             'is_encoding_valid': self._is_encoding_valid,
             'is_encoding_frozen': self._is_encoding_frozen,
@@ -318,7 +319,7 @@ class StaticGridPerTensorQuantizer(TensorQuantizer):
         round_mode = 'nearest' if tensor_quantizer_state.round_mode == libpymo.RoundingMode.ROUND_NEAREST \
             else 'stochastic'
         blank_initilizer = {'layer': config['layer_to_wrap'], 'name': config['name'], 'quant_scheme': config['quant_scheme'],
-                            'round_mode': round_mode, 'bitwidth': config['bitwidth'],
+                            'round_mode': round_mode, 'bitwidth': config['bitwidth'], 'data_type': config['data_type'],
                             'is_symmetric': config['is_symmetric'],
                             'use_strict_symmetric': tensor_quantizer_state.use_strict_symmetric,
                             'use_unsigned_symmetric': tensor_quantizer_state.use_unsigned_symmetric,
@@ -701,7 +702,7 @@ class StaticGridPerChannelQuantizer(TensorQuantizer):
         round_mode = 'nearest' if tensor_quantizer_state.round_mode == libpymo.RoundingMode.ROUND_NEAREST \
             else 'stochastic'
         blank_initilizer = {'layer': config['layer_to_wrap'], 'name': config['name'], 'quant_scheme': config['quant_scheme'],
-                            'round_mode': round_mode, 'bitwidth': config['bitwidth'],
+                            'round_mode': round_mode, 'bitwidth': config['bitwidth'], 'data_type': config['data_type'],
                             'is_symmetric': config['is_symmetric'],
                             'use_strict_symmetric': tensor_quantizer_state.use_strict_symmetric,
                             'use_unsigned_symmetric': tensor_quantizer_state.use_unsigned_symmetric,
