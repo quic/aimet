@@ -168,22 +168,18 @@ AIMET model preparer API exposes 'module_to_exclude' argument which can be used 
 traced through. For example, let's examine following code snippet where we don't want to trace CustomModule further::
 
         class CustomModule(torch.nn.Module):
-        @staticmethod
-        def forward(x):
-            return x * torch.nn.functional.softplus(x).sigmoid()
+            @staticmethod
+            def forward(x):
+                return x * torch.nn.functional.softplus(x).sigmoid()
 
         class CustomModel(torch.nn.Module):
             def __init__(self):
                 super(CustomModel, self).__init__()
-                self.conv1 = torch.nn.Conv2d(3, 8, kernel_size=2, stride=2, padding=2, bias=False)
-                self.bn1 = torch.nn.BatchNorm2d(8)
-                self.relu1 = torch.nn.ReLU(inplace=True)
+                self.conv1 = torch.nn.Conv2d(3, 8, kernel_size=2)
                 self.custom = CustomModule()
 
             def forward(self, inputs):
                 x = self.conv1(inputs)
-                x = self.relu1(x)
-                x = self.bn1(x)
                 x = self.custom(x)
                 return x
 
@@ -222,6 +218,7 @@ Workaround for this problem:
         @torch.fx.wrap
         def do_not_trace_me(x):
             return torch.arange(x.shape[0], device=x.device)
+
         def f(x):
             return do_not_trace_me(x)
 
