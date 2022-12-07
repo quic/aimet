@@ -300,24 +300,36 @@ class QcQuantizeWrapper(tf.keras.layers.Layer):
             "input_quantizers": [input_quantizer.get_config() for input_quantizer in self.input_quantizers],
             "output_quantizers": [output_quantizer.get_config() for output_quantizer in self.output_quantizers],
             "param_quantizers": [param_quantizer.get_config() for param_quantizer in self.param_quantizers],
-            "shadow_params": self._shadow_params
+            "shadow_params": self._shadow_params,
+            "layer_to_wrap": {
+                'original_keras_layer_class': self._layer_to_wrap.__class__,
+                'config': self._layer_to_wrap.get_config(),
+            }
         }
 
     @classmethod
     def from_config(cls, config):
         """ Override from_config """
-        # Wrapped layer is noted here and built backwards starting from the quantizers
-        config['layer_to_wrap'] = config['input_quantizers'][0]['layer']
+        # Wrapped layer is noted here and built backwards starting from the quantizers. This is to ensure that the wrapped
+        # layer is made only once and used by all the quantizers.
+        config['layer_to_wrap'] = config['layer_to_wrap']['original_keras_layer_class'].from_config(config['layer_to_wrap']['config'])
 
         # Go through the configs for each quantizer and create the quantizer objects through their from_config methods
+        # First, the quantizer configs are updated with the layer_to_wrap which was built in the line above.
+        for input_quantizer_config in config['input_quantizers']:
+            input_quantizer_config['layer_to_wrap'] = config['layer_to_wrap']
         config['input_quantizers'] = [ActivationTensorQuantizer.from_config(input_quantizer_config)
                                       for input_quantizer_config in config['input_quantizers']]
 
+        for output_quantizer_config in config['output_quantizers']:
+            output_quantizer_config['layer_to_wrap'] = config['layer_to_wrap']
         config['output_quantizers'] = [ActivationTensorQuantizer.from_config(output_quantizer_config)
                                        for output_quantizer_config in config['output_quantizers']]
 
+        for param_quantizer_config in config['param_quantizers']:
+            param_quantizer_config['layer_to_wrap'] = config['layer_to_wrap']
         config['param_quantizers'] = [
-            (lambda quantizer_type, pqc=param_quantizer_config: quantizer_type.from_config(pqc))
+            (lambda quantizer_type, pqc=param_quantizer_config: quantizer_type.from_config(pqc)) # pylint: disable=undefined-loop-variable
             (ParamPerChannelQuantizer if isinstance(param_quantizer_config, List) else ParamPerTensorQuantizer)
             for param_quantizer_config in config['param_quantizers']
             ]

@@ -403,6 +403,12 @@ class QuantizationSimModel(tf.keras.Model):
         model_path = os.path.join(path, filename_prefix)
         self._model_without_wrappers.save(model_path)
         self._model_without_wrappers.save(model_path + '.h5', save_format='h5')
+
+        custom_objects = custom_objects or {}
+        custom_objects['QcQuantizeWrapper'] = QcQuantizeWrapper
+
+        quantsim_model_config = self.model.get_config()
+        quantsim_model_weights = self.model.get_weights()
         # Conversion of saved h5 model to pb model for consumption by SNPE/QNN]
         try:
             convert_h5_model_to_pb_model(f'{model_path}.h5', custom_objects=custom_objects)
@@ -410,6 +416,9 @@ class QuantizationSimModel(tf.keras.Model):
             _logger.error("Could not convert h5 to frozen pb. "
                           "Please call export() again with custom_objects defined.")
             raise
+
+        self.model = tf.keras.Model.from_config(quantsim_model_config, custom_objects=custom_objects)
+        self.model.set_weights(quantsim_model_weights)
 
         encodings_dict = self.get_encodings_dict()
         encoding_file_path = os.path.join(path, filename_prefix + '.encodings')

@@ -37,10 +37,12 @@
 import json
 import os
 from typing import List
+import shutil
+import tempfile
+import pytest
 
 import aimet_common.libpymo as libpymo
 import numpy as np
-import pytest
 import tensorflow as tf
 from aimet_common.libpymo import TfEncoding
 from packaging import version
@@ -663,3 +665,83 @@ def test_copy_model_from_config():
     np.testing.assert_equal(sim.model.get_weights(), copied_model.get_weights())
     # Check that the models produce the same output for the same input
     np.testing.assert_equal(sim.model.predict(rand_inp), copied_model.predict(rand_inp))
+
+
+def _common_stays_valid_after_export_helper(model, rand_inp, config=None):
+    sim = QuantizationSimModel(model, quant_scheme='tf', config_file=config)
+    sim.compute_encodings(lambda m, _: m.predict(rand_inp), None)
+
+    # make tmp directory
+    tmp_dir = os.path.join(tempfile.mkdtemp(), 'valid_keras_model_after_export_test')
+    sim.export(path=tmp_dir, filename_prefix="test")
+
+    if os.path.exists(tmp_dir):
+        shutil.rmtree(tmp_dir)
+
+    try:
+        _ = sim.model.predict(rand_inp)
+    except ValueError:
+        pytest.fail("Model is no longer valid after export")
+
+def test_model_stays_valid_after_export_per_tensor():
+    model = dense_functional()
+    rand_inp = np.random.randn(100, 5)
+    _ = model.predict(rand_inp)
+
+    _common_stays_valid_after_export_helper(model, rand_inp)
+
+
+def test_model_stays_valid_after_export_per_channel():
+    model = dense_functional()
+    rand_inp = np.random.randn(100, 5)
+    _ = model.predict(rand_inp)
+
+    quantsim_config = {
+        "defaults": {
+            "ops": {
+                "is_output_quantized": "True"
+            },
+            "params": {
+                "is_symmetric": "True",
+                "is_quantized": "True"
+            },
+            "per_channel_quantization": "True",
+        },
+        "params": {},
+        "op_type": {
+            "Conv": {
+                "is_input_quantized": "True",
+                "is_output_quantized": "True"
+            },
+            "ConvTranspose": {
+                "is_input_quantized": "True",
+                "is_output_quantized": "True"
+            },
+            "Gemm": {
+                "is_input_quantized": "True",
+                "is_output_quantized": "True"
+            },
+            "MatMul": {
+                "is_input_quantized": "True",
+                "is_output_quantized": "True"
+            },
+            "MaxPooling2D": {
+                "is_input_quantized": "True",
+                "is_output_quantized": "True"
+            }
+        },
+        "supergroups": [],
+        "model_input": {},
+        "model_output": {
+            "is_output_quantized": "True"
+        }
+    }
+
+    tmp_config_file = os.path.join(tempfile.mkdtemp(), 'config.json')
+    with open(tmp_config_file, 'w') as f:
+        json.dump(quantsim_config, f)
+
+    _common_stays_valid_after_export_helper(model, rand_inp, config=tmp_config_file)
+
+    if os.path.exists(tmp_config_file):
+        os.remove(tmp_config_file)

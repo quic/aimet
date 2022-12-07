@@ -139,7 +139,6 @@ class TensorQuantizer(tf.keras.layers.Layer, abc.ABC):
     def get_config(self):
         """Returns the config of the TensorQuantizer class."""
         return {
-            'layer': self.original_layer,
             'name': self._name,
             'quant_scheme': self._quant_scheme,
             'bitwidth': self._bitwidth.numpy(),
@@ -318,7 +317,7 @@ class StaticGridPerTensorQuantizer(TensorQuantizer):
         tensor_quantizer_state = config.pop('tensor_quantizer')
         round_mode = 'nearest' if tensor_quantizer_state.round_mode == libpymo.RoundingMode.ROUND_NEAREST \
             else 'stochastic'
-        blank_initilizer = {'layer': config['layer'], 'name': config['name'], 'quant_scheme': config['quant_scheme'],
+        blank_initilizer = {'layer': config['layer_to_wrap'], 'name': config['name'], 'quant_scheme': config['quant_scheme'],
                             'round_mode': round_mode, 'bitwidth': config['bitwidth'],
                             'is_symmetric': config['is_symmetric'],
                             'use_strict_symmetric': tensor_quantizer_state.use_strict_symmetric,
@@ -701,7 +700,7 @@ class StaticGridPerChannelQuantizer(TensorQuantizer):
         tensor_quantizer_state = config['tensor_quantizer'][0]
         round_mode = 'nearest' if tensor_quantizer_state.round_mode == libpymo.RoundingMode.ROUND_NEAREST \
             else 'stochastic'
-        blank_initilizer = {'layer': config['layer'], 'name': config['name'], 'quant_scheme': config['quant_scheme'],
+        blank_initilizer = {'layer': config['layer_to_wrap'], 'name': config['name'], 'quant_scheme': config['quant_scheme'],
                             'round_mode': round_mode, 'bitwidth': config['bitwidth'],
                             'is_symmetric': config['is_symmetric'],
                             'use_strict_symmetric': tensor_quantizer_state.use_strict_symmetric,
