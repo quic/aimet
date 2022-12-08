@@ -37,7 +37,6 @@
 # =============================================================================
 """ Qc Quantize wrapper for tf 2 keras """
 from typing import Union, List, Dict
-from enum import IntEnum
 import tensorflow as tf
 
 import aimet_common.libpymo as libpymo
@@ -51,16 +50,6 @@ from aimet_tensorflow.keras.utils.common import is_lambda_operator
 from aimet_tensorflow.utils.constants import QUANT_ALLOWED_DTYPES
 
 _logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Quant)
-
-class BnParamQuantizerIndex(IntEnum):
-    """
-    Enumeration of Bn param_quantizers index
-    """
-    GAMMA = 0
-    BETA = 1
-    MEAN = 2
-    VAR = 3
-
 
 class QuantizerSettings:
     """ Class holding quantizer settings """
@@ -276,8 +265,10 @@ class QcQuantizeWrapper(tf.keras.layers.Layer):
 
         # disable BN moving mean and moving variance to ensure consistency with torch
         if isinstance(self._layer_to_wrap, tf.keras.layers.BatchNormalization):
-            self.param_quantizers[BnParamQuantizerIndex.MEAN].disable()
-            self.param_quantizers[BnParamQuantizerIndex.VAR].disable()
+            for param_quantizer in self.param_quantizers:
+                if "moving_mean" in param_quantizer.name or "moving_var" in param_quantizer.name:
+                    param_quantizer.disable()
+
     @property
     def original_layer(self):
         """ layer to wrap (original layer) getter """
