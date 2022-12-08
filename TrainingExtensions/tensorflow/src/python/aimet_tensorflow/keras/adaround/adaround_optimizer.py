@@ -50,6 +50,8 @@ logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Quant)
 
 BATCH_SIZE = 32
 
+#pylint: disable=too-many-ancestors
+#pylint: disable=abstract-method
 class CustomModel(keras.Model):
     """
     Custom model to train adaraound wrapper
@@ -107,6 +109,7 @@ class AccessEpochNumber(keras.callbacks.Callback):
     This epoch number will be used for calculating loss
     """
     def __init__(self, model):
+        super().__init__()
         self.model = model
     def on_epoch_begin(self, epoch, logs=None):
         K.set_value(self.model.epoch_count, epoch)
