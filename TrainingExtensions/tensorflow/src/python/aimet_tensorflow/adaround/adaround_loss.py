@@ -41,6 +41,7 @@
 from typing import Tuple, Union
 import numpy as np
 import tensorflow as tf
+import tensorflow.keras.backend as K
 
 # Import AIMET specific modules
 from aimet_common.defs import AdaroundConstants
@@ -130,5 +131,27 @@ class AdaroundLoss:
         # compute relative iteration of current iteration
         rel_iter = (cur_iter - warm_start_end_iter) / (max_iter - warm_start_end_iter)
         beta = end_beta + 0.5 * (start_beta - end_beta) * (1 + np.cos(rel_iter * np.pi))
+
+        return beta
+
+    @staticmethod
+    def compute_beta_for_keras(max_iter: int, cur_iter: int, beta_range: Tuple, warm_start: float) -> float:
+        """
+        Compute beta parameter used in regularization function using cosine decay
+        :param max_iter: total maximum number of iterations
+        :param cur_iter: current iteration
+        :param beta_range: range for beta decay (start_beta, end_beta)
+        :param warm_start: warm up period, during which rounding loss has zero effect
+        :return: parameter beta
+        """
+        #  Start and stop beta for annealing of rounding loss (start_beta, end_beta)
+        start_beta, end_beta = beta_range
+
+        # iteration at end of warm start period, which is 20% of max iterations
+        warm_start_end_iter = warm_start * max_iter
+
+        # compute relative iteration of current iteration
+        rel_iter = (cur_iter - warm_start_end_iter) / (max_iter - warm_start_end_iter)
+        beta = end_beta + 0.5 * (start_beta - end_beta) * (1 + K.cos(rel_iter * np.pi))
 
         return beta
