@@ -54,7 +54,7 @@ from aimet_tensorflow.common.sub_graph_matcher_op_templates import op_type_templ
 from aimet_tensorflow.quantize import graph_matcher
 from aimet_tensorflow.utils.common import get_valid_ops
 
-if not version.parse(tf.version.VERSION) >= version.parse("2.0"):
+if version.parse(tf.version.VERSION) < version.parse("2.0"):
     from tensorflow_core.contrib import slim # pylint: disable=import-error
 else:
     import transformers.activations_tf
