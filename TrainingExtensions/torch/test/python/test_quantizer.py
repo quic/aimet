@@ -2910,6 +2910,32 @@ class TestQuantizationSimLearnedGrid:
         assert not quant_sim.model.conv1.input_quantizers[0].use_unsigned_symmetric
         assert quant_sim.model.conv1.input_quantizers[0].use_symmetric_encodings
 
+    def test_unused_module_handling(self):
+        class SimpleModel(torch.nn.Module):
+            def __init__(self):
+                super(SimpleModel, self).__init__()
+                self.conv1 = torch.nn.Conv2d(3, 3, kernel_size=2, stride=2, padding=2, bias=False)
+
+                # This is an unused module
+                self.conv2 = torch.nn.Conv2d(3, 3, kernel_size=2, stride=2, padding=2, bias=False)
+
+            def forward(self, inputs):
+                x = self.conv1(inputs)
+                return x
+
+        model = SimpleModel().eval()
+        dummy_input = torch.randn(1, 3, 10, 10)
+        quant_sim = QuantizationSimModel(model, dummy_input=dummy_input,
+                                         quant_scheme=QuantScheme.training_range_learning_with_tf_init)
+
+        # Compute encodings.
+        quant_sim.compute_encodings(evaluate, dummy_input)
+
+        # Forward and backward should finish without runtime error
+        out = quant_sim.model(dummy_input)
+        out.sum().backward()
+
+
 class CustModelV1Simple(torch.nn.Module):
     def __init__(self):
         super(CustModelV1Simple, self).__init__()
