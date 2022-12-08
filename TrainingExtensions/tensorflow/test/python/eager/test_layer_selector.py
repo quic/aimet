@@ -47,7 +47,6 @@ from aimet_tensorflow.keras.layer_database import Layer
 from aimet_tensorflow.keras.layer_selector import ConvFcLayerSelector, ConvNoDepthwiseLayerSelector
 
 tf.compat.v1.logging.set_verbosity(tf.compat.v1.logging.WARN)
-tf.compat.v1.disable_eager_execution()
 
 
 def get_model():
