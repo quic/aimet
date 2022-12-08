@@ -78,7 +78,13 @@ class CustomModel(keras.Model):
         self.compiled_metrics.update_state(y, y_pred)
         return {}
 
-    def calculate_loss_wrapper (self, opt_params: AdaroundHyperParameters, wrapper: AdaroundWrapper, channels_index: int):
+    def calculate_loss_wrapper(self, opt_params: AdaroundHyperParameters, wrapper: AdaroundWrapper, channels_index: int):
+        """
+        Wrapper function to compute loss
+        :param opt_params: Adaround hyper parameters
+        :param wrapper: Adaround wrapper
+        :param channels_index: channels_index across which reconstruction loss will be computed
+        """
         def calculate_loss(orig_out_tensor, adaround_out_tensor):
             """
             :param inp_tensor: Input activation data tensor
@@ -100,7 +106,7 @@ class AccessEpochNumber(keras.callbacks.Callback):
     Class to access and set epoch number during training.
     This epoch number will be used for calculating loss
     """
-    def __init__(self,model):
+    def __init__(self, model):
         self.model = model
     def on_epoch_begin(self, epoch, logs=None):
         K.set_value(self.model.epoch_count, epoch)
@@ -210,9 +216,9 @@ class AdaroundOptimizer:
 
         # Create custom model and training phase
         model = CustomModel(inp_layer, adaround_out_tensor)
-        model.compile(optimizer=optimizer, loss=model.calculate_loss_wrapper(opt_params,wrapper,channels_index))
+        model.compile(optimizer=optimizer, loss=model.calculate_loss_wrapper(opt_params, wrapper, channels_index))
         epochNumberCallback = AccessEpochNumber(model=model)
-        model.fit(inp_data, orig_out_data, epochs = opt_params.num_iterations,
+        model.fit(inp_data, orig_out_data, epochs=opt_params.num_iterations,
                   callbacks=[epochNumberCallback], verbose=0)
 
         wrapper.use_soft_rounding.assign(False)
