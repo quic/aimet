@@ -39,7 +39,10 @@
 
 import os
 import json
+import tempfile
 import unittest
+
+import onnx
 import torch
 import numpy as np
 import torch.nn as nn
@@ -525,6 +528,7 @@ class TestQuantizationSimTransformers(unittest.TestCase):
                 model(dummy_input, dummy_input)
 
         num_encoder_layers = 12
+        default_num_decoder_layers = 6
 
         # start with a vanilla PyTorch transformer layer
         transformer_model = nn.Transformer(nhead=16, num_encoder_layers=num_encoder_layers)
@@ -566,4 +570,12 @@ class TestQuantizationSimTransformers(unittest.TestCase):
             self.assertTrue(sim.model.encoder.layers[i].self_attn.matmul_2.output_quantizers[0].encoding)
             self.assertTrue(sim.model.encoder.layers[i].self_attn.softmax.output_quantizers[0].encoding)
 
+        with tempfile.TemporaryDirectory() as tmpdir:
+            sim.export(tmpdir, 'transformer', dummy_input=(src, src))
+
+            # verify that MHA layers are named in onnx export.
+            onnx_path= os.path.join(tmpdir, 'transformer.onnx')
+            onnx_model = onnx.load(onnx_path)
+            mha_names = { '.'.join(n.name.split('#')[0].split('.')[:-1]) for n in onnx_model.graph.node  if 'self_attn' in n.name }
+            assert len(mha_names) == default_num_decoder_layers + num_encoder_layers
 
