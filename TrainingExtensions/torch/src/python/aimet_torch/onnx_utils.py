@@ -202,9 +202,7 @@ class CustomMarkerFunc(torch.autograd.Function):
 
     @staticmethod
     def forward(ctx, inp, _identifier, _start, _is_leaf):     # pylint: disable=arguments-differ
-        if inp.dtype == torch.bool:
-            return inp
-        return inp.clamp(0)
+        return inp.clone().detach() # clone prevents export tracing to avoid optimizing out the operation.
 
     @staticmethod
     def backward(ctx, _grad):                       # pylint: disable=arguments-differ
@@ -227,32 +225,23 @@ class CustomMarker(torch.nn.Module):
         """
         Forward method for this CustomMarker layer
         """
-        marked_inputs = []
-        for t in inputs:
-            if isinstance(t, torch.Tensor):
-                t = CustomMarkerFunc.apply(t, self.identifier, 'True', self.is_leaf)
-            elif isinstance(t, dict):
-                t = self.apply_marker_to_dict(t, is_start_marker='True')
-            marked_inputs.append(t)
+        marked_tensor_map = dict()
+        marked_inputs = self._apply_markers_to_tuple(inputs, 'True', marked_tensor_map)
 
         if kwargs:
-            kwargs = self.apply_marker_to_dict(kwargs, 'True')
+            kwargs = self._apply_marker_to_dict(kwargs, 'True', marked_tensor_map)
 
         x = self.marked_module(*marked_inputs, **kwargs)
+
+        marked_tensor_map.clear() # TODO should input/output be decoupled?
         if isinstance(x, dict):
-            output = self.apply_marker_to_dict(x, is_start_marker='False')
+            output = self._apply_marker_to_dict(x, 'False', marked_tensor_map)
         else:
             was_output_tuple = isinstance(x, tuple)
             if isinstance(x, torch.Tensor):
                 x = [x]
 
-            output = []
-            for t in x:
-                if isinstance(t, torch.Tensor):
-                    t = CustomMarkerFunc.apply(t, self.identifier, 'False', self.is_leaf)
-                elif isinstance(t, dict):
-                    t = self.apply_marker_to_dict(t, is_start_marker='False')
-                output.append(t)
+            output = self._apply_markers_to_tuple(x, 'False', marked_tensor_map)
 
             # retain the tuple as output if marked module generates tuple.
             if len(output) == 1 and not was_output_tuple:
@@ -262,17 +251,47 @@ class CustomMarker(torch.nn.Module):
 
         return output
 
-    def apply_marker_to_dict(self, tensors_dict: Dict, is_start_marker: str) -> Dict:
+    def _apply_markers_to_tuple(
+            self, inputs, is_start_marker, marked_tensor_map) -> List[Union[torch.Tensor, Dict]]:
+        """
+        method to apply marker to every tensor or dictionary of tensor in the tuple
+        :param is_start_marker: set to 'True' or 'False' based on if called for input or output dict of tensors
+        :param marked_tensor_map: contains a map of id(tensor) to updated tensor i.e. after applying marker function.
+        """
+        marked_inputs = []
+        for t in inputs:
+            if id(t) in marked_tensor_map: # if tensor is already seen before map to the previous tensor
+                t = marked_tensor_map[id(t)]
+            else:
+                key = id(t)
+                if isinstance(t, torch.Tensor):
+                    t = CustomMarkerFunc.apply(t, self.identifier, is_start_marker, self.is_leaf)
+                elif isinstance(t, dict):
+                    t = self._apply_marker_to_dict(t, is_start_marker, marked_tensor_map)
+                marked_tensor_map[key] = t
+
+            marked_inputs.append(t)
+
+        return marked_inputs
+
+    def _apply_marker_to_dict(
+            self, tensors_dict: Dict, is_start_marker: str, marked_tensor_map) -> Dict:
         """
         method to apply marker to every tensor value in the dictionary
         :param tensors_dict: dictionary that may contain tensor values, currently not enabled for recursion
             i.e. dict of dict
         :param is_start_marker: set to 'True' or 'False' based on if called for input or output dict of tensors
+        :param marked_tensor_map: contains a map of id(tensor) to updated tensor i.e. after applying marker function.
         """
         marked_dict_inputs = dict()
         for k, t in tensors_dict.items():
-            if isinstance(t, torch.Tensor):
-                t = CustomMarkerFunc.apply(t, self.identifier, is_start_marker, self.is_leaf)
+            if id(t) in marked_tensor_map: # if tensor is already seen before map to the previous tensor
+                t = marked_tensor_map[id(t)]
+            else:
+                key = id(t)
+                if isinstance(t, torch.Tensor):
+                    t = CustomMarkerFunc.apply(t, self.identifier, is_start_marker, self.is_leaf)
+                marked_tensor_map[key] = t
             marked_dict_inputs[k] = t
         return marked_dict_inputs
 
@@ -789,7 +808,8 @@ class OnnxSaver:
                 # Check if inp_tensor name is already named as a parameter (name.param_name, instead of a number). If so,
                 # sanity check that the name we want to replace it with is the same as the existing name, then continue.
                 if '.' in inp_tensor:
-                    assert inp_tensor == new_param_name
+                    if inp_tensor != new_param_name:
+                        print(f'{inp_tensor} != {new_param_name} expected param name set')
                     continue
                 node.input.remove(inp_tensor)
                 node.input.insert(input_index, new_param_name)
