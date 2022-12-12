@@ -10,6 +10,10 @@ User Guide Link
 ===============
 To learn more about this technique, please see :ref:`Cross-Layer Equalization<ug-post-training-quantization>`
 
+Examples Notebook Link
+======================
+For an end-to-end notebook showing how to use TensorFlow Cross Layer Equalization, please see :doc:`here<../Examples/tensorflow/quantization/cle_bc>`.
+
 Introduction
 ============
 AIMET functionality for TensorFlow Cross Layer Equalization supports three techniques-

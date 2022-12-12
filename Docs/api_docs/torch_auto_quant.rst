@@ -10,6 +10,10 @@ User Guide Link
 ===============
 To learn more about this technique, please see :ref:`AutoQuant<ug-auto-quant>`
 
+Examples Notebook Link
+======================
+For an end-to-end notebook showing how to use PyTorch AutoQuant, please see :doc:`here<../Examples/torch/quantization/autoquant>`.
+
 Top-level API
 =============
 .. autoclass:: aimet_torch.auto_quant.AutoQuant
