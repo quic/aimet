@@ -160,7 +160,6 @@ def is_valid_bn_fold(conv: Op, fold_backward: bool) -> bool:
     if not fold_backward:
         # Cannot fold BN -> Conv with padding. AIMET does not support forward folding to grouped or DW Conv
         if conv.type == 'Conv':
-            print(conv_attr_dict["pads"])
             valid &= all(item == 0 for item in conv_attr_dict["pads"])
             valid &= conv_attr_dict["group"] == 1
         # AIMET does not support forward folding to ConvTranspose
@@ -173,7 +172,7 @@ def is_valid_bn_fold(conv: Op, fold_backward: bool) -> bool:
     return valid
 
 
-def infer_input_output_channels(model: ConnectedGraph, op_list: List[Op]):
+def infer_input_output_channels(conn_graph: ConnectedGraph, op_list: List[Op]):
     """
     Find the input and output channels of the layers specified in op_list and set the
     layer.num_in_channels and layer.num_out_channels for each layer accordingly
@@ -181,16 +180,16 @@ def infer_input_output_channels(model: ConnectedGraph, op_list: List[Op]):
     :param op_list: List of the layers for which to find the input and output channels
     """
     # Find all intermediate activation shapes
-    shape_info = onnx.shape_inference.infer_shapes(model.model).graph.value_info
+    shape_info = onnx.shape_inference.infer_shapes(conn_graph.model).graph.value_info
     # Create dictionary of tensor.name : tensor.shape
     shape_dict = {item.name: item.type.tensor_type.shape.dim for item in shape_info}
 
     # Add the model's input and output shapes to the shape_dict
-    for item in model.model.graph.input:
+    for item in conn_graph.model.graph.input:
         inp_type = item.type
         if hasattr(inp_type, "tensor_type"):
             shape_dict[item.name] = inp_type.tensor_type.shape.dim
-    for item in model.model.graph.output:
+    for item in conn_graph.model.graph.output:
         inp_type = item.type
         if hasattr(inp_type, "tensor_type"):
             shape_dict[item.name] = inp_type.tensor_type.shape.dim

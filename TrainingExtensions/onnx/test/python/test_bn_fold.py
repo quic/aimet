@@ -425,7 +425,6 @@ class TestBatchNormFold:
         model = _convert_to_onnx_no_fold(model, x)
         conn_graph = ConnectedGraph(model)
         conv_bn, bn_conv = find_all_batch_norms_to_fold(conn_graph)
-        # should not fold if there is zero padding
         assert len(conv_bn) == 1
         assert not bn_conv
         model = BNAfterConv(padding=0)
