@@ -5,5 +5,5 @@ numpy==1.21.0
 onnx
 onnxruntime-extensions
 onnxsim
-scikit-learn
+scikit-learn==1.1.3
 tensorboardX==2.4
