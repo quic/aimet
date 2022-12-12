@@ -66,7 +66,7 @@ AIMET Quantization Features
     - :ref:`Bias Correction<ug-post-training-quantization>` [Deprecated]:
         Bias Correction is considered deprecated. It is advised to use AdaRound instead.
 
-- Quantization-Aware Fine-Tuning (QAT)
+- :ref:`Quantization-Aware Training (QAT)<ug-quantization-aware-training>`:
     QAT allows users to take a QuantSim model and further fine-tune the model parameters by taking quantization into
     account.
 

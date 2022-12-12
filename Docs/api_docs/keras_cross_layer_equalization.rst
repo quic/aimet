@@ -10,6 +10,10 @@ User Guide Link
 ===============
 To learn more about this technique, please see :ref:`Cross-Layer Equalization<ug-post-training-quantization>`
 
+Examples Notebook Link
+======================
+For an end-to-end notebook showing how to use Keras Cross Layer Equalization, please see :doc:`here<../Examples/tensorflow/quantization/keras/quantsim_cle>`.
+
 Introduction
 ============
 AIMET functionality for Keras Cross Layer Equalization supports three techniques:

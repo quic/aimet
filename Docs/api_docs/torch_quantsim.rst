@@ -10,6 +10,10 @@ User Guide Link
 ===============
 To learn more about Quantization Simulation, please see :ref:`Quantization Sim<ug-quantsim>`
 
+Examples Notebook Link
+======================
+For an end-to-end notebook showing how to use PyTorch Quantization-Aware Training, please see :doc:`here<../Examples/torch/quantization/qat>`.
+
 Guidelines
 ===============
 AIMET Quantization Sim requires PyTorch model definition to follow certain guidelines. These guidelines are described
