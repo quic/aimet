@@ -1,6 +1,6 @@
 bert-tensorflow
 holoviews==1.12.7
 numpy==1.19.5
-scikit-learn
+scikit-learn==1.1.3
 tensorflow-hub
 tensorflow-model-optimization
