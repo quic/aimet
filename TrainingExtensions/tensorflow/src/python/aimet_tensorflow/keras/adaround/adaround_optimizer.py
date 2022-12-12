@@ -46,7 +46,7 @@ import tensorflow.keras.backend as K
 from aimet_common.utils import AimetLogger
 from aimet_tensorflow.adaround.adaround_loss import AdaroundLoss, AdaroundHyperParameters
 from aimet_tensorflow.adaround.adaround_wrapper import AdaroundWrapper
-from adaround_loss import compute_beta
+from aimet_tensorflow.keras.adaround.adaround_loss import compute_beta
 logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Quant)
 
 BATCH_SIZE = 32
