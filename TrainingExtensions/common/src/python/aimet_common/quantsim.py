@@ -44,6 +44,7 @@ import numpy as np
 from aimet_common.defs import QuantScheme, QuantizationDataType
 from aimet_common.quantsim_config.quantsim_config import QuantSimConfigurator
 import aimet_common.libpymo as libpymo
+
 # Defined below is a quantization encoding format version, which will follow XX.YY.ZZ versioning as described below,
 #
 #    XX = Major Revision
@@ -55,6 +56,7 @@ import aimet_common.libpymo as libpymo
 # The patching version shall be updated to indicate minor updates to quantization simulation e.g. bug fix etc.
 encoding_version = '0.6.1'
 ALLOW_EXPERIMENTAL = False
+
 
 def gate_min_max(min_val: float, max_val: float) -> Tuple[float, float]:
     """
@@ -98,7 +100,7 @@ def calculate_delta_offset(min_val: Union[float, np.ndarray], max_val: Union[flo
     delta = (max_val - min_val) / num_steps
 
     if isinstance(delta, np.ndarray):
-        offset = np.around(min_val/delta)
+        offset = np.around(min_val / delta)
         delta = delta.tolist()
         offset = offset.tolist()
     else:
@@ -201,11 +203,23 @@ def validate_quantsim_inputs(
             raise ValueError(
                 'float data_type can only be used when default_param_bw set to 16, not ' + str(default_param_bw))
 
-def extract_global_quantizer_args(quant_scheme: Union[str, QuantScheme], quantsim_configurator: QuantSimConfigurator) -> Dict:
+
+def extract_global_quantizer_args(quant_scheme: Union[str, QuantScheme],
+                                  quantsim_configurator: QuantSimConfigurator) -> Dict:
+    """
+    Extracts quantizer arguments used to configure QuantSim
+    :param quant_scheme: Quantization scheme. Supported options are 'tf_enhanced' or 'tf' or 'percentile'
+                         or using Quant Scheme Enum QuantScheme.post_training_tf or QuantScheme.post_training_tf_enhanced
+                         or QuantScheme.post_training_percentile
+    :param quantsim_configurator: An instance of QuantSimConfigurator which has been populated either by config file
+                                  or via function arguments.
+    :return: A dictionary of quantizer arguments
+    """
     quant_args = {}
-    default_dict = quantsim_configurator._quantsim_configs["defaults"]
+    default_dict = quantsim_configurator.quantsim_configs["defaults"]
     param_dict = default_dict["params"]
-    is_per_channel_quant = default_dict["per_channel_quantization"] if "per_channel_quantization" in default_dict else False
+    is_per_channel_quant = default_dict[
+        "per_channel_quantization"] if "per_channel_quantization" in default_dict else False
 
     if (isinstance(quant_scheme, str) and quant_scheme == QuantScheme.training_range_learning_with_tf_init or
             quant_scheme == QuantScheme.training_range_learning_with_tf_init):
@@ -215,10 +229,11 @@ def extract_global_quantizer_args(quant_scheme: Union[str, QuantScheme], quantsi
         quant_scheme = QuantScheme.post_training_tf_enhanced
 
     quant_args.update({"quant_scheme": quant_scheme.name if isinstance(quant_scheme, QuantScheme) else quant_scheme,
-                       "param_bitwidth": quantsim_configurator._default_param_bw,
-                       "activation_bitwidth": quantsim_configurator._default_output_bw,
-                       "dtype": quantsim_configurator._default_data_type.name,
-                       "is_symmetric": param_dict["is_symmetric"] if "is_symmetric" in param_dict else is_per_channel_quant,
+                       "param_bitwidth": quantsim_configurator.default_param_bw,
+                       "activation_bitwidth": quantsim_configurator.default_output_bw,
+                       "dtype": quantsim_configurator.default_data_type.name,
+                       "is_symmetric": param_dict[
+                           "is_symmetric"] if "is_symmetric" in param_dict else is_per_channel_quant,
                        "per_channel_quantization": is_per_channel_quant
                        })
     return quant_args
