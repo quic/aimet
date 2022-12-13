@@ -50,7 +50,7 @@ import aimet_common.libpymo as libpymo
 import aimet_common.libaimet_tf_ops as qcops
 from aimet_common.defs import QuantScheme, QuantizationDataType
 from aimet_common.quantsim import calculate_delta_offset, encoding_version, validate_quantsim_inputs, \
-    recompute_grid_params
+    recompute_grid_params, extract_global_quantizer_args
 from aimet_common.quant_utils import get_conv_accum_bounds
 from aimet_common.utils import AimetLogger, save_json_yaml
 from aimet_tensorflow import graph_editor
@@ -181,6 +181,8 @@ class QuantizationSimModel:
         self._supported_kernels = self._quantsim_configurator.get_supported_kernels()
         self.per_channel_quantization_enabled = self._quantsim_configurator.per_channel_quantization_flag
         self._op_name_to_output_channels_axis_handling_dict = {}
+
+        self.quant_args = extract_global_quantizer_args(quant_scheme, self._quantsim_configurator)
 
         with self.session.graph.as_default():
             self._add_and_configure_quant_nodes(starting_op_names, output_op_names, default_param_bw, default_output_bw,
@@ -721,7 +723,8 @@ class QuantizationSimModel:
 
         encodings_dict = {'version': encoding_version,
                           'activation_encodings': activation_encodings,
-                          'param_encodings': param_encodings}
+                          'param_encodings': param_encodings,
+                          'quantizer_args': self.quant_args}
 
         save_json_yaml(encoding_file_path, encodings_dict)
 

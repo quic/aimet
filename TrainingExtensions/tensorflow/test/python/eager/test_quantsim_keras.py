@@ -151,6 +151,26 @@ def test_quantsim_basic():
 
         qsim.export('./data', 'test_export')
 
+def test_quantsim_export_quantizer_args():
+    if version.parse(tf.version.VERSION) >= version.parse("2.00"):
+        model = dense_functional()
+        rand_inp = np.random.randn(100, 5)
+
+        qsim = QuantizationSimModel(model, quant_scheme=QuantScheme.post_training_tf_enhanced, default_param_bw=16, default_output_bw=16 )
+
+        qsim.export('./data', 'test_export_with_quant_args')
+
+        with open('./data/test_export_with_quant_args.encodings') as json_file:
+            encoding_data = json.load(json_file)
+
+        assert "quantizer_args" in encoding_data
+        quantizer_args = encoding_data["quantizer_args"]
+        assert quantizer_args["activation_bitwidth"] == 16
+        assert quantizer_args["param_bitwidth"] == 16
+        assert not quantizer_args["per_channel_quantization"]
+        assert quantizer_args["quant_scheme"] == QuantScheme.post_training_tf_enhanced.name
+        assert quantizer_args["dtype"] == "int"
+        assert quantizer_args["is_symmetric"]
 
 def test_quantsim_with_custom_config_file():
     quantsim_config = {

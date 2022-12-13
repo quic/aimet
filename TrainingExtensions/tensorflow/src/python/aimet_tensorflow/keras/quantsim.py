@@ -46,7 +46,7 @@ from aimet_common import libpymo
 
 from aimet_common.defs import QuantScheme, QuantizationDataType
 from aimet_common.utils import AimetLogger, save_json_yaml
-from aimet_common.quantsim import encoding_version
+from aimet_common.quantsim import encoding_version, extract_global_quantizer_args
 from aimet_tensorflow.defs import AxisHandling
 from aimet_tensorflow.keras.connectedgraph import ConnectedGraph
 from aimet_tensorflow.keras.cross_layer_equalization import GraphSearchUtils
@@ -106,6 +106,7 @@ class QuantizationSimModel:
         self.per_channel_quantization_enabled = self._quantsim_configurator.per_channel_quantization_flag
         self.model = self._add_quantization_wrappers(quant_scheme, rounding_mode,
                                                      default_output_bw, default_param_bw, default_data_type)
+        self.quant_args = extract_global_quantizer_args(quant_scheme, self._quantsim_configurator)
         self._disable_quantizers_in_folded_batchnorm()
 
     def _validate_model(self):
@@ -311,7 +312,8 @@ class QuantizationSimModel:
                     activation_encodings[tensor_name] = encoding_dict
         encodings_dict = {'version': encoding_version,
                           'activation_encodings': activation_encodings,
-                          'param_encodings': param_encodings}
+                          'param_encodings': param_encodings,
+                          'quantizer_args': self.quant_args if hasattr(self, "quant_args") else {}}
         return encodings_dict
 
     def compute_encodings(self, forward_pass_callback, forward_pass_callback_args):
