@@ -58,23 +58,24 @@ _logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Quant)
 def _handle_conv2d_transpose(callback):
     def _handle(cls, tensor):
         if isinstance(cls.original_layer, tf.keras.layers.Conv2DTranspose):
-            # Transpose input tensor, pass to qc_quantize_per_channel, transpose result back
-            # Permute dimensions used to transpose the input tensor to a dimensionality that
-            # the underlying C++ Op is expecting for this type of axis handling.
-            # HWOI -> HWIO
-            permute = [0, 1, 3, 2]
-            tensor = K.permute_dimensions(tensor, permute)
+            if len(tensor.shape) == 4:
+                # Transpose input tensor, pass to qc_quantize_per_channel, transpose result back
+                # Permute dimensions used to transpose the input tensor to a dimensionality that
+                # the underlying C++ Op is expecting for this type of axis handling.
+                # HWOI -> HWIO
+                permute = [0, 1, 3, 2]
+                tensor = K.permute_dimensions(tensor, permute)
 
-            # TODO: Workaround until gradient support for non-range learning is implemented
-            return_val = callback(cls, tensor)
-            if isinstance(return_val, tuple):
-                # If the function returns both quantized tensor and gradient
-                # In the case of call_quantsim_custom_grad_learned_grid
-                return K.permute_dimensions(return_val[0], permute), return_val[1]
+                # TODO: Workaround until gradient support for non-range learning is implemented
+                return_val = callback(cls, tensor)
+                if isinstance(return_val, tuple):
+                    # If the function returns both quantized tensor and gradient
+                    # In the case of call_quantsim_custom_grad_learned_grid
+                    return K.permute_dimensions(return_val[0], permute), return_val[1]
 
-            # If the function returns just the quantized tensor
-            # In the case of call_per_channel_quantize_dequantize
-            return K.permute_dimensions(return_val, permute)
+                # If the function returns just the quantized tensor
+                # In the case of call_per_channel_quantize_dequantize
+                return K.permute_dimensions(return_val, permute)
 
         return callback(cls, tensor)
 

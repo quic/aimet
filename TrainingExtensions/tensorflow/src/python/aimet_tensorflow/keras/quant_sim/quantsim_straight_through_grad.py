@@ -34,14 +34,17 @@
 #
 #  @@-COPYRIGHT-END-@@
 # =============================================================================
-""" implements straight through graident computation for Quantize Op"""
+""" implements straight through gradient computation for Quantize Op"""
+
+from typing import List, Tuple
 
 import tensorflow as tf
 
 from aimet_tensorflow.defs import AxisHandling
 
 
-def _compute_dloss_by_dx(encoding_min, encoding_max, inputs, op_mode, grad):
+def _compute_dloss_by_dx(encoding_min: tf.Variable, encoding_max: tf.Variable, inputs: tf.Tensor, op_mode: tf.Variable,
+                         grad: tf.Variable) -> tf.Variable:
     x = tf.cast(inputs[0], tf.float32)
     encoding_min = tf.cast(encoding_min, tf.float32)
     encoding_max = tf.cast(encoding_max, tf.float32)
@@ -61,7 +64,8 @@ def _compute_dloss_by_dx(encoding_min, encoding_max, inputs, op_mode, grad):
     return dloss_by_dx
 
 
-def qc_straight_through_estimator_grad(inputs, encoding_min, encoding_max, op_mode, grad):
+def qc_straight_through_estimator_grad(inputs: tf.Tensor, encoding_min: tf.Variable, encoding_max: tf.Variable,
+                                       op_mode: tf.Variable, grad: tf.Variable) -> Tuple[tf.Variable, List[None]]:
     # pylint: disable=unused-argument
     """
     straight through estimator logic used to compute gradient for Quantize Op.
@@ -77,7 +81,7 @@ def qc_straight_through_estimator_grad(inputs, encoding_min, encoding_max, op_mo
     return dloss_by_dx, [None, None]
 
 
-def _get_n_and_p(bitwidth, use_symmetric_encoding):
+def _get_n_and_p(bitwidth: tf.Variable, use_symmetric_encoding: tf.Variable) -> Tuple[tf.Variable, tf.Variable]:
     """
     compute bounds n and p params given bitwidth and use_symmetric_encoding flag
     :param bitwidth: tf tensor with bitwidth configured
@@ -92,17 +96,17 @@ def _get_n_and_p(bitwidth, use_symmetric_encoding):
     one_as_float32 = tf.cast(tf.constant(1), tf.float32)
 
     # symmetric case : n = (- 2 ** (bw -1 )) + 1 , p = (2 ** (bw -1) - 1)
-    def n_symmetric_encoding():
+    def n_symmetric_encoding() -> tf.Variable:
         return tf.add(tf.multiply(minus_one_as_float32, two_pow_bw_minus_1), one_as_float32)
 
-    def p_symmetric_encoding():
+    def p_symmetric_encoding() -> tf.Variable:
         return tf.subtract(two_pow_bw_minus_1, one_as_float32)
 
     # asymmetric case : n = 0 , p = 2 ** (bw) - 1
-    def n_asymmetric_encoding():
+    def n_asymmetric_encoding() -> tf.Variable:
         return tf.cast(0, tf.float32)
 
-    def p_asymmetric_encoding():
+    def p_asymmetric_encoding() -> tf.Variable:
         return tf.cast(two_pow_bw - 1, tf.float32)
 
     n = tf.cond(use_symmetric_encoding, n_symmetric_encoding, n_asymmetric_encoding)
@@ -112,7 +116,7 @@ def _get_n_and_p(bitwidth, use_symmetric_encoding):
     return n, p
 
 
-def _compute_dloss_by_dmin_using_dmax(dloss_by_dmax):
+def _compute_dloss_by_dmin_using_dmax(dloss_by_dmax: tf.Variable) -> tf.Variable:
     """
     compute derivative of loss w.r.t min, it is sign flipped version of derivative w.r.t max
     :param dloss_by_dmax: derivative w.r.t max
@@ -122,7 +126,8 @@ def _compute_dloss_by_dmin_using_dmax(dloss_by_dmax):
     return tf.negative(dloss_by_dmax)
 
 
-def _compute_dloss_by_dmax(x, grad, scaling, offset, bitwidth, use_symmetric_encoding):
+def _compute_dloss_by_dmax(x: tf.Tensor, grad: tf.Variable, scaling: tf.Variable, offset: tf.Variable,
+                           bitwidth: tf.Variable, use_symmetric_encoding: tf.Variable):
     """
     helper function to compute derivative of loss w.r.t encoding max
     :param grad: gradient param
@@ -155,8 +160,9 @@ def _compute_dloss_by_dmax(x, grad, scaling, offset, bitwidth, use_symmetric_enc
     return dloss_by_dmax
 
 
-def _compute_dloss_by_dmin_dmax_and_dx(inputs, encoding_min, encoding_max, op_mode, bitwidth,
-                                       is_symmetric, grad):
+def _compute_dloss_by_dmin_dmax_and_dx(inputs: tf.Tensor, encoding_min: tf.Variable, encoding_max: tf.Variable,
+                                       op_mode: tf.Variable, bitwidth: tf.Variable,
+                                       is_symmetric: tf.Variable, grad: tf.Variable) -> Tuple:
     """
     Return tensors for dloss_by_dmin, dloss_by_dmax, and dloss_by_dx.
     :param inputs: Inputs to op
@@ -211,7 +217,9 @@ def _compute_dloss_by_dmin_dmax_and_dx(inputs, encoding_min, encoding_max, op_mo
     return dloss_by_dmin, dloss_by_dmax, dloss_by_dx
 
 
-def quantsim_custom_grad_learned_grid(inputs, encoding_min, encoding_max, op_mode, bitwidth, is_symmetric, grad):
+def quantsim_custom_grad_learned_grid(inputs: tf.Tensor, encoding_min: tf.Variable, encoding_max: tf.Variable,
+                                      op_mode: tf.Variable, bitwidth: tf.Variable, is_symmetric: tf.Variable,
+                                      grad: tf.Variable) -> Tuple[tf.Variable, List[tf.Variable]]:
     """
     Performs custom gradient calculations for trained Quantize op
     :param inputs: inputs used in forward pass
@@ -230,7 +238,7 @@ def quantsim_custom_grad_learned_grid(inputs, encoding_min, encoding_max, op_mod
 
 
 @tf.function
-def reshape_input_and_grad_for_axis_handling(inputs, grad, axis_handling):
+def reshape_input_and_grad_for_axis_handling(inputs: tf.Tensor, grad: tf.Variable, axis_handling: int):
     """
     Reshape input and grad tensors from (H, W, channels, depth multiplier) to (H, W, channels * depth multiplier) in
     the case of axis_handling = LAST_TWO_AXES to get all channel elements in last dimension only.
@@ -258,7 +266,8 @@ def reshape_input_and_grad_for_axis_handling(inputs, grad, axis_handling):
 
 
 @tf.function
-def reshape_dloss_by_dx_for_axis_handling(inputs, dloss_by_dx, axis_handling):
+def reshape_dloss_by_dx_for_axis_handling(inputs: tf.Tensor, dloss_by_dx: tf.Variable,
+                                          axis_handling: int) -> tf.Variable:
     """
     Reshape dloss_by_dx tensor from (H, W, channels * depth multiplier) to (H, W, channels, depth multiplier) in
     the case of axis_handling = LAST_TWO_AXES to match shape with that of the weight tensor to update.
@@ -277,8 +286,11 @@ def reshape_dloss_by_dx_for_axis_handling(inputs, dloss_by_dx, axis_handling):
 
 
 # pylint: disable=too-many-arguments
-def _compute_dloss_by_dmin_dmax_and_dx_for_per_channel(inputs, encoding_min, encoding_max, op_mode, bitwidth,
-                                                       is_symmetric, is_int_data_type, axis_handling, grad):
+def _compute_dloss_by_dmin_dmax_and_dx_for_per_channel(inputs: tf.Tensor, encoding_min: tf.Variable,
+                                                       encoding_max: tf.Variable, op_mode: tf.Variable,
+                                                       bitwidth: tf.Variable,
+                                                       is_symmetric: tf.Variable, is_int_data_type: bool,
+                                                       axis_handling: int, grad: tf.Variable) -> Tuple:
     """
     Return tensors for dloss_by_dmin, dloss_by_dmax, and dloss_by_dx in the case of per channel.
     :param inputs: Inputs to op
@@ -307,9 +319,11 @@ def _compute_dloss_by_dmin_dmax_and_dx_for_per_channel(inputs, encoding_min, enc
 
 # pylint: disable=too-many-arguments
 @tf.function
-def quantsim_per_channel_custom_grad_learned_grid(inputs, encoding_min, encoding_max, op_mode, bitwidth,
-                                                  is_symmetric,
-                                                  is_int_data_type, axis_handling, grad):
+def quantsim_per_channel_custom_grad_learned_grid(inputs: tf.Tensor, encoding_min: tf.Variable,
+                                                  encoding_max: tf.Variable, op_mode: tf.Variable,
+                                                  bitwidth: tf.Variable,
+                                                  is_symmetric: tf.Variable, is_int_data_type: bool,
+                                                  axis_handling: int, grad: tf.Variable) -> Tuple:
     """
     Performs custom gradient calculations for trained Quantize op for per-channel
     :param inputs: inputs used in forward pass
