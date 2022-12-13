@@ -51,7 +51,7 @@ _logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Quant)
 
 lambda_operators = ['__operators__.add', 'math.multiply', 'math.truediv', 'math.subtract']
 per_channel_quantizeable_layers = (tf.keras.layers.Conv2D, tf.keras.layers.Conv2DTranspose,
-                                   tf.keras.layers.DepthwiseConv2D, tf.keras.layers.SeparableConv2D)
+                                   tf.keras.layers.DepthwiseConv2D, tf.keras.layers.SeparableConv2D, tf.keras.layers.Dense)
 
 
 

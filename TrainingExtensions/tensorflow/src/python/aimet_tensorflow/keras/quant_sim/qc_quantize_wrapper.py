@@ -51,7 +51,6 @@ from aimet_tensorflow.utils.constants import QUANT_ALLOWED_DTYPES
 
 _logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Quant)
 
-
 class QuantizerSettings:
     """ Class holding quantizer settings """
 
@@ -162,7 +161,7 @@ class QcQuantizeWrapper(tf.keras.layers.Layer):
                  output_quantizers: Union[None, List[ActivationTensorQuantizer]] = None,
                  param_quantizers: Union[None, List[ParamPerTensorQuantizer], List[ParamPerChannelQuantizer]] = None,
                  per_channel_quantization_enabled: bool = False,
-                 shadow_params: List[tf.Variable] = None,
+                 shadow_params: Dict[str, tf.Variable] = None,
                  **kwargs):
         super(QcQuantizeWrapper, self).__init__(**kwargs)
         self._layer_to_wrap = layer_to_wrap
@@ -183,7 +182,7 @@ class QcQuantizeWrapper(tf.keras.layers.Layer):
         # TF's static graph stores the first set of param values seen and uses them for all future forward passes.
         # Get around this by using Tf.Variables to store param values.
         if self._shadow_params is None:
-            self._shadow_params = [tf.Variable(param, trainable=False) for param in self._layer_to_wrap.weights]
+            self._shadow_params = dict(zip([param.name for param in self._layer_to_wrap.weights], [tf.Variable(param, trainable=False) for param in self._layer_to_wrap.weights]))
 
     def _set_quantizers(self, per_channel_quantization_enabled):
         """
@@ -264,6 +263,12 @@ class QcQuantizeWrapper(tf.keras.layers.Layer):
                                                 self._param_quant_settings.use_unsigned_symmetric,
                                                 enabled=True))
 
+        # disable BN moving mean and moving variance to ensure consistency with torch
+        if isinstance(self._layer_to_wrap, tf.keras.layers.BatchNormalization):
+            for param_quantizer in self.param_quantizers:
+                if "moving_mean" in param_quantizer.name or "moving_var" in param_quantizer.name:
+                    param_quantizer.disable()
+
     @property
     def original_layer(self):
         """ layer to wrap (original layer) getter """
@@ -289,8 +294,14 @@ class QcQuantizeWrapper(tf.keras.layers.Layer):
         :param inputs: Inputs passed to the module in the forward pass
         :return: Quantized output from the wrapped module
         """
-        for idx, param in enumerate(self._layer_to_wrap.weights):
-            self._shadow_params[idx].assign(param)
+        is_call_training_mode = kwargs["training"]
+        for param in self._layer_to_wrap.weights:
+            self._shadow_params[param.name].assign(param)
+        # for BN with training = True ,only write to shadow params for beta and gamma
+        if isinstance(self._layer_to_wrap, tf.keras.layers.BatchNormalization):
+            if is_call_training_mode:
+                self._shadow_params = {k:v for k, v in self._shadow_params.items()  if "gamma:0" in k  or "beta:0" in k}
+
         self._quantize_params()
 
         # Special logic for +, -, *, / operators which become lambda layers with kwarg inputs
@@ -301,6 +312,7 @@ class QcQuantizeWrapper(tf.keras.layers.Layer):
             inputs = self._quantize_activation(inputs, self.input_quantizers, True)
         outputs = self._layer_to_wrap(inputs, *args, **kwargs)
         outputs = self._quantize_activation(outputs, self.output_quantizers, False)
+
         self._restore_shadow_params()
         return outputs
 
@@ -384,5 +396,5 @@ class QcQuantizeWrapper(tf.keras.layers.Layer):
         """
         Restore saved parameters
         """
-        for idx, param in enumerate(self._shadow_params):
+        for idx, param in enumerate(self._shadow_params.values()):
             self._layer_to_wrap.weights[idx].assign(param)
