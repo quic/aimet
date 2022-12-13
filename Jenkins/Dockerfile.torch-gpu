@@ -153,7 +153,7 @@ RUN python3 -m pip --no-cache-dir install \
         docutils==0.16 \
         grpcio \
         grpcio-tools \
-        h5py==2.9.0 \
+        h5py==2.10.0 \
         ipykernel \
         Jinja2==3.0.3 \
         jupyter \
@@ -162,7 +162,7 @@ RUN python3 -m pip --no-cache-dir install \
         mock \
         nbsphinx \
         'numpy>=1.19.5' \
-        onnx \
+        onnx==1.12.0 \
         onnxsim \
         onnxruntime-gpu \
         onnxruntime-extensions \
@@ -186,7 +186,7 @@ RUN python3 -m pip --no-cache-dir install \
         sphinx==2.1.1 \
         sphinx-jinja==1.1.1 \
         sphinx-autodoc-typehints==1.6.0 \
-        tensorboard==1.15 \
+        tensorboard==2.4.0 \
         tensorboardX==1.7 \
         timm==0.4.12 \
         torch==1.9.1+cu111 -f https://download.pytorch.org/whl/torch_stable.html \
