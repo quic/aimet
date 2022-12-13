@@ -343,6 +343,16 @@ class StaticGridPerTensorQuantizer(TensorQuantizer):
     def enable(self):
         """ Enable the tensor quantizer """
 
+    @property
+    def encoding_min(self) -> tf.Variable:
+        """Return the encoding_min variable"""
+        return self._encoding_min
+
+    @property
+    def encoding_max(self) -> tf.Variable:
+        """Return the encoding_max variable"""
+        return self._encoding_max
+
     def _set_encoding_values(self, encoding: libpymo.TfEncoding):
         """
         Set encoding values.
@@ -436,6 +446,14 @@ class StaticGridPerTensorQuantizer(TensorQuantizer):
                                  bit_width=self._bitwidth,
                                  use_symmetric_encoding=self._is_symmetric,
                                  is_int_data_type=self._is_int_data_type), grad
+
+    def get_gradients_for_encoding_min_max(self, weight_tensor, grad):
+
+        _, [dloss_by_dmin, dloss_by_dmax] = quantsim_custom_grad_learned_grid(weight_tensor, self._encoding_min,
+                                                                              self._encoding_max, self._quantizer_mode,
+                                                                              self._bitwidth, self.is_symmetric, grad)
+
+        return dloss_by_dmin, dloss_by_dmax
 
 
 # pylint: disable=too-many-ancestors
@@ -633,6 +651,16 @@ class StaticGridPerChannelQuantizer(TensorQuantizer):
     def encoding(self, encoding: libpymo.TfEncoding):
         pass
 
+    @property
+    def encoding_min(self) -> tf.Variable:
+        """Return the encoding_min variable"""
+        return self._encoding_min
+
+    @property
+    def encoding_max(self) -> tf.Variable:
+        """Return the encoding_min variable"""
+        return self._encoding_max
+
     @abc.abstractmethod
     def enable(self):
         """ Enable the tensor quantizer """
@@ -733,6 +761,20 @@ class StaticGridPerChannelQuantizer(TensorQuantizer):
                                              is_int_data_type=self._is_int_data_type,
                                              axis_handling=self.axis_handling,
                                              is_training=bool(tf.keras.backend.learning_phase()))
+
+    def get_gradients_for_encoding_min_max(self, weight_tensor, grad):
+
+        gradients = quantsim_per_channel_custom_grad_learned_grid(weight_tensor,
+                                                                  self._encoding_min,
+                                                                  self._encoding_max,
+                                                                  self._quantizer_mode,
+                                                                  self._bitwidth,
+                                                                  self.is_symmetric,
+                                                                  self._is_int_data_type,
+                                                                  self.axis_handling,
+                                                                  grad)
+
+        return gradients[3], gradients[4]
 
 
 # pylint: disable=too-many-ancestors

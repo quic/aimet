@@ -43,6 +43,10 @@ import numpy as np
 
 from aimet_tensorflow.keras.quantsim import QuantizationSimModel, QuantScheme
 
+config = tf.compat.v1.ConfigProto()
+config.gpu_options.allow_growth = True
+session = tf.compat.v1.InteractiveSession(config=config)
+
 
 def save_config_file_bias_quantized_for_per_channel_quantization():
     quantsim_config = {
@@ -98,28 +102,30 @@ class TestPerChannelQuantizationKeras(unittest.TestCase):
             labels = np.random.randint(10, size=batches)
             one_hot_labels = np.eye(10)[labels]
 
-            model.predict(input_data)
+            # model.predict(input_data)
 
             qsim.compute_encodings(lambda m, _: m.predict(input_data), None)
-            qsim.model.compile(optimizer=tf.keras.optimizers.Adam(learning_rate=1e-3),
-                               loss=tf.keras.losses.MeanSquaredError())
+            qsim.compile(optimizer=tf.keras.optimizers.Adam(),
+                         loss=tf.keras.losses.MeanSquaredError())
 
             _get_value = tf.keras.backend.get_value
 
-            encoding_min_before_train = _get_value(qsim.model.layers[1].input_quantizers[0]._encoding_min)
-            encoding_max_before_train = _get_value(qsim.model.layers[1].input_quantizers[0]._encoding_max)
+            encoding_min_before_train = _get_value(qsim.model.layers[1].param_quantizers[0].encoding_min)
+            encoding_max_before_train = _get_value(qsim.model.layers[1].param_quantizers[0].encoding_max)
 
-            conv2d_output_encoding_min_before_train = _get_value(qsim.model.layers[1].output_quantizers[0]._encoding_min)
-            conv2d_output_encoding_max_before_train = _get_value(qsim.model.layers[1].output_quantizers[0]._encoding_min)
+            conv2d_output_encoding_min_before_train = _get_value(
+                qsim.model.layers[1].output_quantizers[0]._encoding_min)
+            conv2d_output_encoding_max_before_train = _get_value(
+                qsim.model.layers[1].output_quantizers[0]._encoding_min)
 
             dense_bias_encoding_min_before_train = _get_value(qsim.model.layers[4].output_quantizers[0]._encoding_min)
             dense_bias_encoding_max_before_train = _get_value(qsim.model.layers[4].output_quantizers[0]._encoding_min)
 
             for _ in range(10):
-                _ = qsim.model.fit(input_data, one_hot_labels)
+                qsim.fit(input_data, one_hot_labels)
 
-            encoding_min_after_train = _get_value(qsim.model.layers[1].input_quantizers[0]._encoding_min)
-            encoding_max_after_train = _get_value(qsim.model.layers[1].input_quantizers[0]._encoding_max)
+            encoding_min_after_train = _get_value(qsim.model.layers[1].param_quantizers[0].encoding_min)
+            encoding_max_after_train = _get_value(qsim.model.layers[1].param_quantizers[0].encoding_max)
 
             conv2d_output_encoding_min_after_train = _get_value(qsim.model.layers[1].output_quantizers[0]._encoding_min)
             conv2d_output_encoding_max_after_train = _get_value(qsim.model.layers[1].output_quantizers[0]._encoding_min)
