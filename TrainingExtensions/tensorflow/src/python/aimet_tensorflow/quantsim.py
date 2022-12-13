@@ -170,6 +170,7 @@ class QuantizationSimModel:
         self._activation_quantizers = {}
         self._default_output_bw = default_output_bw
         self._default_param_bw = default_param_bw
+        self._op_to_quant_ops_dict = {}
         self.connected_graph = ConnectedGraph(self.session.graph, starting_op_names, output_op_names)
 
         # We save a copy of the original model (to be used during export later)
@@ -255,9 +256,9 @@ class QuantizationSimModel:
                          f'overriden, please override configure_quantization_ops() as well.')
             _logger.error(error_msg)
             raise AssertionError(error_msg)
-        op_to_quant_ops_dict = create_op_to_quant_ops_dict(self.session.graph, conn_graph, ops_with_param_names, indices,
-                                                           params_to_quantize, activation_op_names)
-        self._quantsim_configurator.configure_quantizers(op_to_quant_ops_dict, self._param_quantizers,
+        self._op_to_quant_ops_dict = create_op_to_quant_ops_dict(self.session.graph, conn_graph, ops_with_param_names, indices,
+                                                                 params_to_quantize, activation_op_names)
+        self._quantsim_configurator.configure_quantizers(self._op_to_quant_ops_dict, self._param_quantizers,
                                                          self._activation_quantizers)
 
     def compute_encodings(self, forward_pass_callback: Callable[[tf.compat.v1.Session, Any], None],
@@ -349,20 +350,6 @@ class QuantizationSimModel:
             if quantizer_info.enabled:
                 enabled_activation_quantizers.append(quantizer_info)
         return enabled_activation_quantizers
-
-    def get_enabled_quantizers(self):
-        """
-        For given quantsim model, get all enabled activation and parameter quantizers.
-        :return: List of enabled activation and parameter quantizers.
-        """
-        enabled_quantizers_list = []
-        for quantizer_info in self._activation_quantizers.values():
-            if  quantizer_info.enabled:
-                enabled_quantizers_list.append(quantizer_info)
-        for quantizer_info in self._param_quantizers.values():
-            if quantizer_info.enabled:
-                enabled_quantizers_list.append(quantizer_info)
-        return enabled_quantizers_list
 
     @staticmethod
     def enable_disable_quantizers(quantizer_list: List[QuantizerInfo], enabled: bool):
