@@ -37,6 +37,7 @@
 # =============================================================================
 """ Tensor quantizer for tf 2 keras """
 import abc
+import functools
 from typing import List, Optional
 import tensorflow as tf
 import tensorflow.keras.backend as K
@@ -56,6 +57,7 @@ _logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Quant)
 
 
 def _handle_conv2d_transpose(callback):
+    @functools.wraps(callback)
     def _handle(cls, tensor):
         if isinstance(cls.original_layer, tf.keras.layers.Conv2DTranspose):
             if len(tensor.shape) == 4:
@@ -674,7 +676,6 @@ class StaticGridPerChannelQuantizer(TensorQuantizer):
         if self.quant_scheme in [QuantScheme.training_range_learning_with_tf_init,
                                  QuantScheme.training_range_learning_with_tf_enhanced_init]:
             return self.call_quantsim_custom_grad_learned_grid(tensor)
-        # TODO: Currently only supports QuantSim(forward pass) without range learning
         return self.call_per_channel_quantize_dequantize(tensor)
 
     @tf.custom_gradient
@@ -703,22 +704,18 @@ class StaticGridPerChannelQuantizer(TensorQuantizer):
                                                                  axis_handling=self.axis_handling,
                                                                  grad=upstream)
 
-        qc_quantize_out = qcops.qc_quantize_per_channel(name='qc_quantize_per_channel_op',
-                                                        in_tensor=tensor,
-                                                        op_mode=self._quantizer_mode,
-                                                        tensor_quantizer_reference=self._tensor_quantizer_int64,
-                                                        encoding_min=self._encoding_min,
-                                                        encoding_max=self._encoding_max,
-                                                        bit_width=self._bitwidth,
-                                                        use_symmetric_encoding=self._is_symmetric,
-                                                        is_int_data_type=True,
-                                                        axis_handling=self.axis_handling,
-                                                        is_training=bool(tf.keras.backend.learning_phase()))
+        return qcops.qc_quantize_per_channel(name='qc_quantize_per_channel_op',
+                                             in_tensor=tensor,
+                                             op_mode=self._quantizer_mode,
+                                             tensor_quantizer_reference=self._tensor_quantizer_int64,
+                                             encoding_min=self._encoding_min,
+                                             encoding_max=self._encoding_max,
+                                             bit_width=self._bitwidth,
+                                             use_symmetric_encoding=self._is_symmetric,
+                                             is_int_data_type=self._is_int_data_type,
+                                             axis_handling=self.axis_handling,
+                                             is_training=bool(tf.keras.backend.learning_phase())), grad
 
-        return qc_quantize_out, grad
-
-    # TODO: Currently only available for QuantSim (forward pass)
-    # tf.custom_gradient needs to be defined for training
     @_handle_conv2d_transpose
     def call_per_channel_quantize_dequantize(self, tensor: tf.Tensor):
         """
