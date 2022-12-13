@@ -237,6 +237,7 @@ def test_per_channel_qc_quantizer_conv2d():
         [[[[-1.4, -0.61],
            [1.59, 0.68]]]], dtype=np.float
     )
+
     conv2d = tf.keras.layers.Conv2D(
         2, 1, input_shape=input_shape[1:],
         kernel_initializer=tf.initializers.Constant(
@@ -553,3 +554,118 @@ def test_per_channel_qc_quantizer_separable_conv():
                                if not np.allclose(expected[key], actual[key], rtol=0.01)}
         assert not incorrect_encodings, f"Key pairs for expected and actual did not match. " \
                                         f"key: [expected, actual] {incorrect_encodings}"
+
+def test_per_channel_qc_quantizer_Dense():
+    """ Tests Dense Per Channel """
+    tf.keras.backend.clear_session()
+    input_shape = (1, 2)
+    inp = tf.keras.layers.Input(shape=input_shape[1:])
+    test_inp = np.random.random(input_shape)
+    kernel_init_constant = np.array(
+        [[-1.4, -0.61],[1.59, 0.68]],dtype=np.float
+    )  
+    dense = tf.keras.layers.Dense(2, kernel_initializer=tf.initializers.Constant(kernel_init_constant))
+    # run forward pass on conv2d to generate weights
+    _ = dense(test_inp)
+    x = QcQuantizeWrapper(
+        dense,
+        QuantizerSettings(8, QuantizationDataType.int, 'nearest', 'tf', False, False, False),
+        QuantizerSettings(8, QuantizationDataType.int, 'nearest', 'tf', False, False, False),
+        num_inputs=1,
+        per_channel_quantization_enabled=True
+    )(inp)
+    model = tf.keras.Model(inputs=inp, outputs=x)
+    baseline_output = model.predict(test_inp)
+
+    # Disable all quantizers and run model as normal
+    model.layers[1].input_quantizers[0].disable()
+    model.layers[1].param_quantizers[0].disable()
+    model.layers[1].param_quantizers[1].disable()
+    model.layers[1].output_quantizers[0].disable()
+
+    assert model.layers[1].input_quantizers[0].encoding is None
+    assert model.layers[1].param_quantizers[0].encoding is None
+    assert model.layers[1].output_quantizers[0].encoding is None
+
+    no_quant_output = model.predict(test_inp)
+    assert np.allclose(no_quant_output, baseline_output,atol=0.01)
+
+    # Check per channel encodings
+    model.layers[1].param_quantizers[0].enable()
+    model.layers[1].param_quantizers[0].compute_encoding()
+    assert model.layers[1].param_quantizers[0].encoding
+
+
+    def _get_expected_encoding_dict(ch):
+        bitwidth = 8
+        ch_min = np.min(kernel_init_constant[:, ch])
+        ch_max = np.max(kernel_init_constant[:,ch])
+        ch_delta = (ch_max - ch_min) / (2 ** bitwidth - 1)
+        ch_offset = np.round(ch_min / ch_delta)
+        return {'bw': bitwidth, 'min': ch_min, 'max': ch_max, 'delta': ch_delta, 'offset': ch_offset}
+
+    per_channel_encodings_expected = [
+        _get_expected_encoding_dict(0),  # channel 0
+        _get_expected_encoding_dict(1),  # channel 1
+    ]
+
+    all_per_channel_encodings = model.layers[1].param_quantizers[0].encoding
+
+    for expected, current_encoding in zip(per_channel_encodings_expected, all_per_channel_encodings):
+        actual = {
+            'bw': current_encoding.bw,
+            'min': current_encoding.min,
+            'max': current_encoding.max,
+            'delta': current_encoding.delta,
+            'offset': current_encoding.offset
+        }
+
+        # Make new dictionary containing key of encoding parameter with values from both
+        # expected and actual that failed to match
+        incorrect_encodings = {key: [expected[key], actual[key]] for key in expected
+                               if not np.allclose(expected[key], actual[key], rtol=0.01)}
+        assert not incorrect_encodings, f"Key pairs for expected and actual did not match. " \
+                                        f"key: [expected, actual] {incorrect_encodings}"
+
+
+def test_bn_QcQuantizeWrapper():
+    def _test_bn_correctness(model, bn_layers, dummy_inputs):
+        # original mean, var, momentum
+        output_false = model(dummy_inputs, training=False)
+        bn_mean_false = {layer.name: layer.moving_mean.numpy() for layer in bn_layers}
+        bn_var_false = {layer.name: layer.moving_variance.numpy() for layer in bn_layers}
+
+        output_true = model(dummy_inputs, training=True)
+        bn_mean_true = {layer.name: layer.moving_mean.numpy() for layer in bn_layers}
+        bn_var_true = {layer.name: layer.moving_variance.numpy() for layer in bn_layers}
+        assert not np.allclose(output_true, output_false)
+        assert not all(np.allclose(bn_mean_false[key], bn_mean_true[key]) for key in bn_mean_true)
+        assert not all(np.allclose(bn_var_false[key], bn_var_true[key]) for key in bn_var_true)
+
+    tf.keras.backend.clear_session()
+    np.random.seed(0)
+    input_data = np.random.randn(1024, 32,32,3).astype(np.float32)
+    batch_size = 4
+    dataset = tf.data.Dataset.from_tensor_slices(input_data)
+    dataset = dataset.batch(batch_size=batch_size)
+    it = iter(dataset)
+    dummy_inputs = next(it)
+
+    inputs = tf.keras.Input(shape=(32, 32, 3,))
+    bn = tf.keras.layers.BatchNormalization(fused=True, beta_initializer='random_uniform',
+                                            gamma_initializer='random_uniform',
+                                            moving_mean_initializer='random_uniform',
+                                            moving_variance_initializer='ones')
+
+    bn_fp32 = bn(inputs)
+    model_fp32 = tf.keras.Model(inputs=inputs, outputs=bn_fp32)
+    bn_layers = [model_fp32.layers[1]]
+    _test_bn_correctness(model_fp32, bn_layers, dummy_inputs)
+
+    bn_wrapper = QcQuantizeWrapper(bn,
+                            QuantizerSettings(8, QuantizationDataType.int, 'nearest', 'tf', False, False, False),
+                            QuantizerSettings(8, QuantizationDataType.int, 'nearest', 'tf', False, False, False),
+                          num_inputs=1)(inputs)
+    model_wrapper = tf.keras.Model(inputs=inputs, outputs=bn_wrapper)
+    bn_layers_wrapper = [model_wrapper.layers[1].original_layer]
+    _test_bn_correctness(model_wrapper, bn_layers_wrapper, dummy_inputs)
