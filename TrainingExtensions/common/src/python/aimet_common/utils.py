@@ -375,7 +375,7 @@ class Spinner(tqdm):
         super(Spinner, self).__exit__(*args, **kwargs)
 
 
-class _Handle:
+class Handle:
     """ Removable handle. """
 
     def __init__(self, cleanup_fn):

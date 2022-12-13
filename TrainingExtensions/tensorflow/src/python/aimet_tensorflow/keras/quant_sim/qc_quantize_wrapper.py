@@ -296,7 +296,8 @@ class QcQuantizeWrapper(tf.keras.layers.Layer):
         """
         is_call_training_mode = kwargs["training"]
         for param in self._layer_to_wrap.weights:
-            self._shadow_params[param.name].assign(param)
+            if param.name in self._shadow_params.keys():
+                self._shadow_params[param.name].assign(param)
         # for BN with training = True ,only write to shadow params for beta and gamma
         if isinstance(self._layer_to_wrap, tf.keras.layers.BatchNormalization):
             if is_call_training_mode:

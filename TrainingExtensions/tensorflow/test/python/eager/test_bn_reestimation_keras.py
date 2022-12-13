@@ -110,4 +110,4 @@ def test_bn_reestimation():
 
         qsim.compute_encodings(lambda m, _: m.predict(dummy_inputs+1), None)
         qsim.model.compile(optimizer=tf.keras.optimizers.Adam(learning_rate=1e-3), loss=tf.keras.losses.MeanSquaredError())
-        #_reestimate_and_compare_results(qsim.model, dataset)
+        _reestimate_and_compare_results(qsim.model, dataset)

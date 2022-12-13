@@ -40,7 +40,7 @@
 from typing import List, Tuple, Dict
 import numpy as np
 import tensorflow as tf
-from aimet_common.utils import _Handle, AimetLogger
+from aimet_common.utils import Handle, AimetLogger
 from aimet_tensorflow.utils.op.fusedbatchnorm import BNUtils
 from aimet_tensorflow.batch_norm_fold import find_all_batch_norms_to_fold
 from aimet_tensorflow.common.graph_eval import initialize_uninitialized_vars
@@ -112,7 +112,7 @@ def _get_all_tf_bn_vars_list(sim: QuantizationSimModel, start_op_names: List[str
 # pylint: disable=not-an-iterable
 # pylint: disable=unsubscriptable-object
 def _reset_bn_stats(sess: tf.compat.v1.Session, bn_mean_var_checkpoints: Dict, bn_momentum_checkpoints: Dict,
-                    bn_training_checkpoints: Dict) -> _Handle:
+                    bn_training_checkpoints: Dict) -> Handle:
     """
     reset bn stats
     :param sess: tf session
@@ -135,7 +135,7 @@ def _reset_bn_stats(sess: tf.compat.v1.Session, bn_mean_var_checkpoints: Dict, b
         with sess.graph.as_default():
             sess.run([tf.compat.v1.assign(k, 0.0) for k in bn_momentum_checkpoints.keys()])
             sess.run([tf.compat.v1.assign(k, tf.compat.v1.constant(True)) for k in bn_training_checkpoints.keys()])
-        return _Handle(cleanup)
+        return Handle(cleanup)
     except:
         cleanup()
         raise
@@ -147,7 +147,7 @@ def _reset_bn_stats(sess: tf.compat.v1.Session, bn_mean_var_checkpoints: Dict, b
 # pylint: disable=too-many-locals
 def reestimate_bn_stats(sim: QuantizationSimModel, start_op_names: List[str],
                         output_op_names: List[str], bn_re_estimation_dataset: tf.compat.v1.data.Dataset,
-                        bn_num_batches: int = 100) -> _Handle:
+                        bn_num_batches: int = 100) -> Handle:
     """
     top level api for end user directly call for eval()
     :param sim: tf quantized model

@@ -40,7 +40,7 @@
 from typing import List, Dict
 import numpy as np
 import tensorflow as tf
-from aimet_common.utils import _Handle, AimetLogger
+from aimet_common.utils import Handle, AimetLogger
 
 logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Utils)
 
@@ -52,7 +52,7 @@ def _get_bn_submodules(model: tf.keras.Model) -> List[tf.keras.layers.Layer]:
     return bn_layers
 
 
-def _reset_bn_stats(bn_layers: List[tf.keras.layers.Layer], bn_mean_checkpoints: Dict, bn_var_checkpoints: Dict, bn_momentum_checkpoints: Dict) -> _Handle:
+def _reset_bn_stats(bn_layers: List[tf.keras.layers.Layer], bn_mean_checkpoints: Dict, bn_var_checkpoints: Dict, bn_momentum_checkpoints: Dict) -> Handle:
     """
     reset bn stats
     :param bn_layers: keras bn_layers
@@ -76,14 +76,14 @@ def _reset_bn_stats(bn_layers: List[tf.keras.layers.Layer], bn_mean_checkpoints:
     try:
         for layer in bn_layers:
             layer.momentum = 0.0
-        return _Handle(cleanup)
+        return Handle(cleanup)
     except:
         cleanup()
         raise ValueError('exception for reset_bn_stats')
 
 # pylint: disable=too-many-locals
 def reestimate_bn_stats(model: tf.keras.Model, bn_re_estimation_dataset: tf.data.Dataset,
-                        bn_num_batches: int = 100) -> _Handle:
+                        bn_num_batches: int = 100) -> Handle:
     """
     top level api for end user directly call
     :param model: tf.keras.Model
