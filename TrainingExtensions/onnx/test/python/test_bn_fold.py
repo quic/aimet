@@ -43,7 +43,7 @@ from onnxruntime.quantization.onnx_quantizer import ONNXModel
 import torch
 from torch.nn.modules.batchnorm import _BatchNorm
 
-from aimet_onnx.batch_norm_fold import _find_conv_bn_pairs
+from aimet_onnx.batch_norm_fold import _find_conv_bn_pairs, find_all_batch_norms_to_fold
 from aimet_onnx.meta.connectedgraph import ConnectedGraph
 
 
@@ -365,3 +365,90 @@ class TestBatchNormFold:
         assert len(bn_info.keys()) == 1
         assert conv_layer in bn_info.keys()
         assert bn_info[conv_layer].output_bn == conn_graph.get_op_from_module_name('BatchNormalization_1')
+
+    def test_filter_bn_before_conv_transpose(self):
+        x = torch.randn((2, 10, 24, 24))
+        model = BNBeforeConvTranspose()
+        model = _convert_to_onnx_no_fold(model, x)
+        conn_graph = ConnectedGraph(model)
+        conv_bn, bn_conv = find_all_batch_norms_to_fold(conn_graph)
+        assert not conv_bn
+        assert not bn_conv
+
+
+    def test_filter_bn_after_conv_transpose(self):
+        x = torch.randn((2, 10, 24, 24))
+        model = BNAfterConvTranspose()
+        model = _convert_to_onnx_no_fold(model, x)
+        conn_graph = ConnectedGraph(model)
+        conv_bn, bn_conv = find_all_batch_norms_to_fold(conn_graph)
+        assert len(conv_bn) == 1
+        assert not bn_conv
+        model = BNAfterConvTranspose(groups=2)
+        model = _convert_to_onnx_no_fold(model, x)
+        conn_graph = ConnectedGraph(model)
+        conv_bn, bn_conv = find_all_batch_norms_to_fold(conn_graph)
+        assert not conv_bn
+        assert not bn_conv
+        model = BNAfterConvTranspose(groups=10)
+        model = _convert_to_onnx_no_fold(model, x)
+        conn_graph = ConnectedGraph(model)
+        conv_bn, bn_conv = find_all_batch_norms_to_fold(conn_graph)
+        assert len(conv_bn) == 1
+        assert not bn_conv
+
+    def test_filter_bn_before_conv(self):
+        x = torch.randn((2, 10, 24, 24))
+        model = BNBeforeConv(padding=1)
+        model = _convert_to_onnx_no_fold(model, x)
+        conn_graph = ConnectedGraph(model)
+        conv_bn, bn_conv = find_all_batch_norms_to_fold(conn_graph)
+        # should not fold if there is zero padding
+        assert not conv_bn
+        assert not bn_conv
+        model = BNBeforeConv(padding=0)
+        model = _convert_to_onnx_no_fold(model, x)
+        conn_graph = ConnectedGraph(model)
+        conv_bn, bn_conv = find_all_batch_norms_to_fold(conn_graph)
+        assert not conv_bn
+        assert len(bn_conv) == 1
+        model = BNBeforeConv(groups=20)
+        model = _convert_to_onnx_no_fold(model, x)
+        conn_graph = ConnectedGraph(model)
+        conv_bn, bn_conv = find_all_batch_norms_to_fold(conn_graph)
+        assert not conv_bn
+        assert not bn_conv
+
+    def test_filter_bn_after_conv(self):
+        x = torch.randn((2, 10, 24, 24))
+        model = BNAfterConv(padding=1)
+        model = _convert_to_onnx_no_fold(model, x)
+        conn_graph = ConnectedGraph(model)
+        conv_bn, bn_conv = find_all_batch_norms_to_fold(conn_graph)
+        assert len(conv_bn) == 1
+        assert not bn_conv
+        model = BNAfterConv(padding=0)
+        model = _convert_to_onnx_no_fold(model, x)
+        conn_graph = ConnectedGraph(model)
+        conv_bn, bn_conv = find_all_batch_norms_to_fold(conn_graph)
+        assert len(conv_bn) == 1
+        assert not bn_conv
+        model = BNAfterConv(groups=20)
+        model = _convert_to_onnx_no_fold(model, x)
+        conn_graph = ConnectedGraph(model)
+        conv_bn, bn_conv = find_all_batch_norms_to_fold(conn_graph)
+        assert len(conv_bn) == 1
+        assert not bn_conv
+
+    def test_filter_bn_before_flatten(self):
+        x = torch.randn((2, 10, 24, 24))
+        model = BNBeforeFlattenLinear()
+        model = _convert_to_onnx_no_fold(model, x)
+        conn_graph = ConnectedGraph(model)
+        conv_bn, bn_conv = find_all_batch_norms_to_fold(conn_graph)
+        linear_layer = conn_graph.get_op_from_module_name('Gemm_4')
+        assert len(bn_conv) == 1
+        assert linear_layer == bn_conv[0][1]
+        assert not conv_bn
+
+
