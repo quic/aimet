@@ -147,7 +147,7 @@ RUN python3 -m pip --no-cache-dir install \
         mock \
         nbsphinx \
         'numpy>=1.19.5' \
-        onnx \
+        onnx==1.12.0 \
         onnxsim \
         onnxruntime \
         onnxruntime-extensions \
@@ -155,7 +155,7 @@ RUN python3 -m pip --no-cache-dir install \
         Pillow==8.4.0 \
         pluggy==0.12.0 \
         progressbar2 \
-        protobuf==3.20.2 \
+        protobuf==3.20.1 \
         psutil \
         ptflops \
         pybind11 \
