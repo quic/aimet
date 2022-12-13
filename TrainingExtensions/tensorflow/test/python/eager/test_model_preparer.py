@@ -38,10 +38,11 @@
 
 """ Unit tests for keras model preparer """
 import os
-
+import pytest
 import numpy as np
 import tensorflow as tf
 from aimet_tensorflow.keras.model_preparer import prepare_model, get_original_models_weights_in_functional_model_order
+from aimet_tensorflow.keras.quantsim import QuantizationSimModel
 
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 
@@ -62,34 +63,38 @@ def conv_functional():
     return model
 
 
-class ConvTimesThree(tf.keras.layers.Layer):
-    def __init__(self, use_nested_calls=False, **kwargs):
-        super(ConvTimesThree, self).__init__(**kwargs)
+class TwoConvs(tf.keras.layers.Layer):
+    def __init__(self, **kwargs):
+        super(TwoConvs, self).__init__(**kwargs)
         self.conv = tf.keras.layers.Conv2D(32,
                                            kernel_size=(3, 3),
                                            activation='relu',
                                            name='class_conv')
-
-        self.depth_conv = tf.keras.layers.DepthwiseConv2D(depth_multiplier=1,
-                                                          kernel_size=(3, 3),
-                                                          activation='relu',
-                                                          name='class_conv_depth')
 
         self.conv_transpose = tf.keras.layers.Conv2DTranspose(64,
                                                               kernel_size=(3, 3),
                                                               activation='relu',
                                                               name='class_conv_transpose')
 
-        self.use_nested_calls = use_nested_calls
+    def call(self, x):
+        x = self.conv(x)
+        x = self.conv_transpose(x)
+        return x
+
+
+class ConvTimesThree(tf.keras.layers.Layer):
+    def __init__(self, **kwargs):
+
+        super(ConvTimesThree, self).__init__(**kwargs)
+        self.depth_conv = tf.keras.layers.DepthwiseConv2D(depth_multiplier=1,
+                                                          kernel_size=(3, 3),
+                                                          activation='relu',
+                                                          name='class_conv_depth')
+        self.two_convs = TwoConvs()
 
     def call(self, x):
-        # (2 + 2) == 4 added to check parsing of model_perparer of conditionals
-        if self.use_nested_calls and (2 + 2 == 4):
-            x = self.conv_transpose(self.conv(x))
-        else:
-            x = self.conv(x)
-            x = self.conv_transpose(x)
-        return self.depth_conv(x)
+        return self.depth_conv(self.two_convs(x))
+
 
 def conv_sub_class():
     input_shape = (128, 28, 28, 1)
@@ -102,9 +107,13 @@ def conv_sub_class():
     model = tf.keras.Model(inputs=inp, outputs=x, name='conv_classes')
     return model
 
-# Below models are based on Deep Learning with Python by Francois Chollet Second Edition (page 182 - 185)
-# Only Subclassing
+###########################################################################################################
+#                                                                                                         #
+# Below models are based on Deep Learning with Python by Francois Chollet Second Edition (page 182 - 185) #
+#                                                                                                         #
+###########################################################################################################
 
+# Only Subclassing
 class CustomerTicketModel(tf.keras.Model):
 
     def __init__(self, num_departments):
@@ -184,6 +193,11 @@ class MultiMathOperations(tf.keras.layers.Layer):
         b = tf.math.multiply(inputs[:, :, :, 2:3], self.b)
         return tf.concat([r, g, b], axis=3)
 
+    ################################
+    #                              #
+    #  Start of testing functions  #
+    #                              #
+    ################################
 
 def compare_weights(original_weights, functional_weights):
     """
@@ -196,28 +210,53 @@ def compare_weights(original_weights, functional_weights):
         np.testing.assert_array_equal(original_weights[i], functional_weights[i])
 
 
+def verify_functional_model_is_ready_for_aimet(functional_model, model, random_input, number_of_layers_in_model):
+    """
+    Helper function to verify that the functional model is ready for AIMET. This function is used to test the conversion script.
+    """
+    # Verify the functional model produces the same output as the original model
+    np.testing.assert_array_equal(functional_model(random_input).numpy(), model(random_input).numpy())
+    assert len(functional_model.layers) == number_of_layers_in_model
+
+    # Check if QuantizationSimModel sees the correct layers in functional format
+    sim = QuantizationSimModel(functional_model)
+    # number_of_layers_in_model - 1 because the input layer is not included in the list of layers
+    assert len(sim.connected_graph.ordered_ops) == (number_of_layers_in_model - 1)
+    assert "Unknown" not in sim.connected_graph.ordered_ops
+
+
+@pytest.mark.skip("Need to verify how multiple inputs are handled on AIMET")
 def test_full_subclass_to_functional():
     vocabulary_size = 10000
     num_tags = 100
     num_departments = 4
     num_samples = 1280
 
-    title_data = np.random.randint(0, 2, size=(num_samples, vocabulary_size))
-    text_body_data = np.random.randint(0, 2, size=(num_samples, vocabulary_size))
-    tags_data = np.random.randint(0, 2, size=(num_samples, num_tags))
+    title_data = np.random.randint(0, 2, size=(1, num_samples, vocabulary_size))
+    text_body_data = np.random.randint(0, 2, size=(1, num_samples, vocabulary_size))
+    tags_data = np.random.randint(0, 2, size=(1, num_samples, num_tags))
 
     model = CustomerTicketModel(num_departments=num_departments)
+    number_of_layers_in_model = 4
     _ = model({"title": title_data,
                "text_body": text_body_data,
                "tags": tags_data})
     # Since this model is fully subclassed, specifically at the beginning, we call prepare model with
     # the inputs to have Keras symoblic tensor fit the rest of the layers correctly.
-    functional_model = prepare_model(model,
-                                     [tf.keras.Input(shape=(num_samples, vocabulary_size,)),
-                                      tf.keras.Input(shape=(num_samples, vocabulary_size,)),
-                                      tf.keras.Input(shape=(num_samples, num_tags,))])
+    input_layers = [tf.keras.Input(shape=(num_samples, vocabulary_size,), name="title"),
+                    tf.keras.Input(shape=(num_samples, vocabulary_size,), name="text_body"),
+                    tf.keras.Input(shape=(num_samples, num_tags,), name="tags")]
+    functional_model = prepare_model(model, input_layers)
     assert functional_model.count_params() == model.count_params()
     compare_weights(model.get_weights(), functional_model.get_weights())
+    
+    assert len(functional_model.layers) == number_of_layers_in_model + len(input_layers)
+
+    # Check if QuantizationSimModel sees the correct layers in functional format
+    sim = QuantizationSimModel(functional_model)
+    # number_of_layers_in_model - 1 because the input layer is not included in the list of layers
+    assert len(sim.connected_graph.ordered_ops) == (number_of_layers_in_model - 1)
+    assert "Unknown" not in sim.connected_graph.ordered_ops
 
 
 def test_functional_model_with_subclassed_layers_to_functional():
@@ -228,6 +267,11 @@ def test_functional_model_with_subclassed_layers_to_functional():
     functional_model = prepare_model(model)
     assert functional_model.count_params() == model.count_params()
     compare_weights(model.get_weights(), functional_model.get_weights())
+    np.testing.assert_array_equal(functional_model(random_input).numpy(), model(random_input).numpy())
+    verify_functional_model_is_ready_for_aimet(functional_model,
+                                               model,
+                                               random_input,
+                                               number_of_layers_in_model=3)
 
 
 def test_subclass_model_with_subclassed_layers_to_functional():
@@ -239,6 +283,10 @@ def test_subclass_model_with_subclassed_layers_to_functional():
     functional_model = prepare_model(model, tf.keras.Input(shape=input_shape[1:]))
     assert functional_model.count_params() == model.count_params()
     compare_weights(model.get_weights(), functional_model.get_weights())
+    verify_functional_model_is_ready_for_aimet(functional_model,
+                                               model,
+                                               random_input,
+                                               number_of_layers_in_model=3)
 
 
 def test_conv_times_three_subclass_to_functional():
@@ -257,6 +305,10 @@ def test_conv_times_three_subclass_to_functional():
     model_weights_in_correct_order = get_original_models_weights_in_functional_model_order(
         model, functional_model)
     compare_weights(model_weights_in_correct_order, functional_model.get_weights())
+    verify_functional_model_is_ready_for_aimet(functional_model,
+                                               model,
+                                               random_input,
+                                               number_of_layers_in_model=7)
 
 
 def test_multi_math_operations_subclass_to_functional():

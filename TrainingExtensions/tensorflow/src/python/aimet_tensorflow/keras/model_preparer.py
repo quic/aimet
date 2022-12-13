@@ -38,117 +38,13 @@
 
 """ Implementation to automatically prepare keras models for AIMET by converting them to a functional model """
 
-import inspect
-from typing import List, Set, Union
+from typing import List, Union
 import numpy as np
 import tensorflow as tf
 from tensorflow.python.keras.engine.functional import Functional
 
 from aimet_common.utils import AimetLogger
 logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.ModelPreparer)
-
-
-def _get_result_from_conditional(line: str, subclass_layer: tf.keras.layers.Layer):
-    """
-    Get the result of a conditional statement in a subclassed layer
-    :param line: The line of code to evaluate
-    :param subclass_layer: The subclassed layer
-    :return: The result of the conditional statement
-    """
-
-    if 'else' in line:
-        return True
-
-    bool_to_eval = line.split('if')[1].split(':')[0]
-    for attr in dir(subclass_layer):
-        if not attr.startswith('__') and attr in bool_to_eval:
-            bool_to_eval = bool_to_eval.replace(f'self.{attr}', f'{getattr(subclass_layer, attr)}')
-
-    return eval(bool_to_eval)  # pylint: disable=eval-used
-
-
-def _refactor_call_code(call_code: List[str], subclass_layer: tf.keras.layers.Layer) -> List[str]:
-    """
-    Refactor the sublayer's call code to be more readable
-    :param call_code: The code to be cleaned up
-    :return: The cleaned up code
-    """
-    # Remove docstring
-    call_code = call_code[1:]
-    # Remove any comments
-    call_code = [line.split('#')[0] for line in call_code]
-
-    find_conditionals = [(line_number, _get_result_from_conditional(line, subclass_layer))
-                         for line_number, line in enumerate(call_code)
-                         if any(cond in line for cond in ('if', 'elif', 'else'))]
-
-    # remove index if the conditional is false up until next conditional
-    for line_number, result in find_conditionals:
-        if not result:
-            call_code.pop(line_number)
-            for line in call_code[line_number:]:
-                call_code.pop(line_number)
-                if any(cond in line for cond in ('if', 'elif', 'else', 'return')):
-                    break
-
-    return call_code
-
-
-def _get_layer_call_order_and_validate(subclass_layer: tf.keras.layers.Layer, found_internal_layers: List[str]):
-    """
-    This function returns the call order of a layer. This is used to determine the order of the layers in the
-    Functional API model.
-    :param subclass_layer: The layer to get the call order of
-    :param found_internal_layers: The list of layers that have been found
-    :return: The call order of the layer
-    """
-
-    code_by_line = _refactor_call_code(inspect.getsource(subclass_layer.call).splitlines(), subclass_layer)
-
-    call_order = []
-    attr_layer_pattern = "self."
-    for line in code_by_line:
-        wrapped_layer_index = line.find(attr_layer_pattern) + len(attr_layer_pattern)
-        if attr_layer_pattern in line:
-            if (num_wrapped_layers_on_line := line.count(attr_layer_pattern)) > 1:
-                nested_call_order = []
-                for _ in range(num_wrapped_layers_on_line):
-                    nested_call_order.append(line[wrapped_layer_index:line.find(",", wrapped_layer_index)])
-                    wrapped_layer_index = line.find(attr_layer_pattern, wrapped_layer_index) + len(attr_layer_pattern)
-                call_order.extend(nested_call_order[::-1])
-            else:
-                call_order.append(line[wrapped_layer_index:line.find("(", wrapped_layer_index)])
-
-    assert all(layer in call_order for layer in found_internal_layers), \
-        f"""
-        Could not parse call order correctly for subclassed layer: \"{subclass_layer.name}\".
-        Missing internal layers: {set(call_order) - set(found_internal_layers)}
-        For easier parsing, consider updating the call method of subclassed layers to be functional.
-        For example:
-
-        def call(self, inputs):
-            x = self.layer1(inputs)
-            x = self.layer2(x)
-            return x
-        """
-    return call_order
-
-
-def _handle_sub_layers(sub_layer: tf.keras.layers.Layer, found_sub_layers: Set[tf.keras.layers.Layer],
-                       prev_layer: tf.keras.layers.Layer) -> tf.keras.layers.Layer:
-    """
-    Go through each "Layers" properities, if the layer is subclassed, then we will have the wrapped
-    layers as properties that can be extracted over and used to create a functioncal model.
-    :param sub_layer: The layer to be handled
-    :param found_sub_layers: The set of layers that have been found
-    :param prev_layer: The previous layer in the model
-    :return: The new layer to be used in the model
-    """
-    call_order = _get_layer_call_order_and_validate(sub_layer, found_sub_layers.keys())
-    for sub_layer_name in call_order:
-        prev_layer = found_sub_layers[sub_layer_name](prev_layer)
-
-    return prev_layer
 
 
 def get_original_models_weights_in_functional_model_order(original_model: tf.keras.Model,
@@ -178,19 +74,65 @@ def get_original_models_weights_in_functional_model_order(original_model: tf.ker
     return weights_in_correct_order
 
 
-def prepare_model(original_model: tf.keras.Model, input_layer: Union[tf.keras.Input, List[tf.keras.Input]] = None):
+def _recursively_unwrap_subclass_layer(subclassed_layer: tf.keras.layers.Layer,
+                                       prev_layer: tf.keras.layers.Layer) -> tf.keras.layers.Layer:
     """
-    This function prepares a Keras model before continuing on with AIMET. Specifically, it will convert the model into
-    a purely Functional API model and copy over the original models weights.
-    :param original_model: The original model to be prepared
-    :param input_layer: The input layer to be used for the new model. By default, the input layer is set to None. If the
-    beginning portion of the model is subclassed, then the input layer must be passed in.
+    This function recursively unwraps the layers of a subclassed layer. While unwrapping, it also builds up the
+    functional model by connecting the layers together.
+    :return: The last layer in the model
     """
+
+    # Base case: If the subclassed_layer is not subclassed, return the layer
+    if not subclassed_layer.submodules:
+        logger.debug("Base case: %s", subclassed_layer.name)
+        return subclassed_layer(prev_layer)
+
+    # First, get the input shape of the subclassed layer and create an input layer with that shape
+    # This is used to great a model based on the subclassed layer
+    input_shape = subclassed_layer.input.shape[1:]
+    x = tf.keras.Input(shape=input_shape)
+
+    # Create a model based on the subclassed layer.
+    # This is done with the input layer created above being used for two reasons:
+    # 1) The input layer is used to create the temporary functional model
+    # 2) The input layer is used in the subclass layers call function as a symbolic tensor to get internal layers
+    temp_model = tf.keras.Model(inputs=[x], outputs=subclassed_layer.call(x))
+
+    # Recursively unwrap the layers of the temporary model. If the temporary model also has subclassed layers,
+    # the recursive call will unwrap those layers as well.
+    for layer in temp_model.layers[1:]:
+        logger.debug("Unwrapping layer: %s", layer.name)
+        prev_layer = _recursively_unwrap_subclass_layer(layer, prev_layer)
+
+    return prev_layer
+
+
+def _extract_functional_model(functional_model_found: Functional,
+                              prev_layer: tf.keras.layers.Layer) -> tf.keras.layers.Layer:
+    """
+    This function extracts the layers from a Functional API model and returns the last layer in the model.
+    :param functional_model_found: The Functional API model to be extracted
+    :param prev_layer: The previous layer in the model
+    :return: The last layer in the model
+    """
+
+    logger.debug("Functional model found. Extracting layers.")
+    for func_layer in functional_model_found.layers[1:]:
+        prev_layer = func_layer(prev_layer)
+    logger.info("Functional model extracted.")
+
+    return prev_layer
+
+
+def _format_input_layer_and_get_layers_to_copy(original_model: tf.keras.Model,
+                                               input_layer: Union[tf.keras.Input, List[tf.keras.Input]] = None) -> \
+        Union[tf.keras.layers.Layer, tf.keras.layers.Layer, List[tf.keras.layers.Layer]]:
 
     try:
         input_layer = original_model.layers[0].input
         prev_layer = input_layer
         layers_to_copy = original_model.layers[1:]
+
     except AttributeError:
         logger.info("Input layer not found. Using input layer passed in.")
         if input_layer is None:
@@ -199,26 +141,10 @@ def prepare_model(original_model: tf.keras.Model, input_layer: Union[tf.keras.In
         prev_layer = input_layer
         layers_to_copy = original_model.layers
 
-    for layer in layers_to_copy:
-        # If the layer is another Functional model, we need to take out it's layer minus the input layer
-        if isinstance(layer, Functional):
-            logger.debug("Functional model found. Extracting layers.")
-            for func_layer in layer.layers[1:]:
-                prev_layer = func_layer(prev_layer)
-            logger.info("Functional model extracted.")
+    return input_layer, prev_layer, layers_to_copy
 
-        elif found_sub_layers := {object_name: sub_layer
-                                  for object_name, sub_layer in layer.__dict__.items()
-                                  if isinstance(sub_layer, tf.keras.layers.Layer)}:
-            logger.debug("Subclassed layer %s found. Attempting to convert to Functional API.", layer.name)
-            prev_layer = _handle_sub_layers(layer, found_sub_layers, prev_layer)
-            logger.info("Subclassed layer %s converted to Functional API.", layer.name)
-        else:
-            prev_layer = layer(prev_layer)
 
-    functional_model = tf.keras.Model(inputs=input_layer, outputs=prev_layer)
-    logger.debug("Functional model architecture created.")
-
+def _set_functional_models_weights(original_model: tf.keras.Model, functional_model: tf.keras.Model) -> None:
     weights_in_correct_order = get_original_models_weights_in_functional_model_order(original_model, functional_model)
     try:
         functional_model.set_weights(weights_in_correct_order)
@@ -231,5 +157,33 @@ def prepare_model(original_model: tf.keras.Model, input_layer: Union[tf.keras.In
 
     logger.debug("Functional model weights copied.")
     logger.info("Model prepared for AIMET in Functional API format.")
+
+
+def prepare_model(original_model: tf.keras.Model, input_layer: Union[tf.keras.Input, List[tf.keras.Input]] = None):
+    """
+    This function prepares a Keras model before continuing on with AIMET. Specifically, it will convert the model into
+    a purely Functional API model and copy over the original models weights.
+    :param original_model: The original model to be prepared
+    :param input_layer: The input layer to be used for the new model. By default, the input layer is set to None. If the
+    beginning portion of the model is subclassed, then the input layer must be passed in.
+    """
+
+    input_layer, prev_layer, layers_to_copy = _format_input_layer_and_get_layers_to_copy(original_model, input_layer)
+
+    for layer in layers_to_copy:
+        if isinstance(layer, Functional):
+            prev_layer = _extract_functional_model(layer, prev_layer)
+
+        elif layer.submodules:
+            logger.debug("Subclass layer found. Extracting layers.")
+            prev_layer = _recursively_unwrap_subclass_layer(layer, prev_layer)
+
+        else:
+            prev_layer = layer(prev_layer)
+
+    functional_model = tf.keras.Model(inputs=input_layer, outputs=prev_layer)
+    logger.debug("Functional model architecture created.")
+
+    _set_functional_models_weights(original_model, functional_model)
 
     return functional_model
