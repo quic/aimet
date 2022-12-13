@@ -504,6 +504,7 @@ class QuantizationSimModel(tf.keras.Model):
                     gradients[enc_min_index] = dloss_by_dmin
                     gradients[enc_max_index] = dloss_by_dmax
 
+    # pylint: disable=useless-super-delegation
     def get_config(self):
         return super().get_config()
 

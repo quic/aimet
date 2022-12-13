@@ -67,7 +67,7 @@ def _compute_derivative_of_loss_function(x: tf.Tensor,
 
 
 def _compute_dloss_by_dx(encoding_min: tf.Variable, encoding_max: tf.Variable, inputs: tf.Tensor, op_mode: tf.Variable,
-                         grad: tf.Variable) -> tf.Variable:
+                         grad: tf.Tensor) -> tf.Variable:
     x = tf.cast(inputs[0], tf.float32)
     encoding_min = tf.cast(encoding_min, tf.float32)
     encoding_max = tf.cast(encoding_max, tf.float32)
@@ -88,7 +88,7 @@ def _compute_dloss_by_dx(encoding_min: tf.Variable, encoding_max: tf.Variable, i
 
 
 def qc_straight_through_estimator_grad(inputs: tf.Tensor, encoding_min: tf.Variable, encoding_max: tf.Variable,
-                                       op_mode: tf.Variable, grad: tf.Variable) -> Tuple[tf.Variable, List[None]]:
+                                       op_mode: tf.Variable, grad: tf.Tensor) -> Tuple[tf.Variable, List[None]]:
     # pylint: disable=unused-argument
     """
     straight through estimator logic used to compute gradient for Quantize Op.
@@ -149,7 +149,7 @@ def _compute_dloss_by_dmin_using_dmax(dloss_by_dmax: tf.Variable) -> tf.Variable
     return tf.negative(dloss_by_dmax)
 
 
-def _compute_dloss_by_dmax(x: tf.Tensor, grad: tf.Variable, scaling: tf.Variable, offset: tf.Variable,
+def _compute_dloss_by_dmax(x: tf.Tensor, grad: tf.Tensor, scaling: tf.Variable, offset: tf.Variable,
                            bitwidth: tf.Variable, use_symmetric_encoding: tf.Variable):
     """
     helper function to compute derivative of loss w.r.t encoding max
@@ -185,7 +185,7 @@ def _compute_dloss_by_dmax(x: tf.Tensor, grad: tf.Variable, scaling: tf.Variable
 
 def _compute_dloss_by_dmin_dmax_and_dx(inputs: tf.Tensor, encoding_min: tf.Variable, encoding_max: tf.Variable,
                                        op_mode: tf.Variable, bitwidth: tf.Variable,
-                                       is_symmetric: tf.Variable, grad: tf.Variable) -> Tuple:
+                                       is_symmetric: tf.Variable, grad: tf.Tensor) -> Tuple:
     """
     Return tensors for dloss_by_dmin, dloss_by_dmax, and dloss_by_dx.
     :param inputs: Inputs to op
@@ -242,7 +242,7 @@ def _compute_dloss_by_dmin_dmax_and_dx(inputs: tf.Tensor, encoding_min: tf.Varia
 
 def quantsim_custom_grad_learned_grid(inputs: tf.Tensor, encoding_min: tf.Variable, encoding_max: tf.Variable,
                                       op_mode: tf.Variable, bitwidth: tf.Variable, is_symmetric: tf.Variable,
-                                      grad: tf.Variable) -> Tuple[tf.Variable, List[tf.Variable]]:
+                                      grad: tf.Tensor) -> Tuple[tf.Variable, List[tf.Variable]]:
     """
     Performs custom gradient calculations for trained Quantize op
     :param inputs: inputs used in forward pass
@@ -261,7 +261,7 @@ def quantsim_custom_grad_learned_grid(inputs: tf.Tensor, encoding_min: tf.Variab
 
 
 @tf.function
-def reshape_input_and_grad_for_axis_handling(inputs: tf.Tensor, grad: tf.Variable, axis_handling: int):
+def reshape_input_and_grad_for_axis_handling(inputs: tf.Tensor, grad: tf.Tensor, axis_handling: int):
     """
     Reshape input and grad tensors from (H, W, channels, depth multiplier) to (H, W, channels * depth multiplier) in
     the case of axis_handling = LAST_TWO_AXES to get all channel elements in last dimension only.
@@ -314,7 +314,7 @@ def _compute_dloss_by_dmin_dmax_and_dx_for_per_channel(inputs: tf.Tensor, encodi
                                                        encoding_max: tf.Variable, op_mode: tf.Variable,
                                                        bitwidth: tf.Variable, is_symmetric: tf.Variable,
                                                        is_int_data_type: tf.Variable, axis_handling: AxisHandling,
-                                                       grad: tf.Variable) -> Tuple:
+                                                       grad: tf.Tensor) -> Tuple:
     """
     Return tensors for dloss_by_dmin, dloss_by_dmax, and dloss_by_dx in the case of per channel.
     :param inputs: Inputs to op
@@ -347,7 +347,7 @@ def quantsim_per_channel_custom_grad_learned_grid(inputs: tf.Tensor, encoding_mi
                                                   encoding_max: tf.Variable, op_mode: tf.Variable,
                                                   bitwidth: tf.Variable, is_symmetric: tf.Variable,
                                                   is_int_data_type: tf.Variable, axis_handling: AxisHandling,
-                                                  grad: tf.Variable) -> Tuple:
+                                                  grad: tf.Tensor) -> Tuple:
     """
     Performs custom gradient calculations for trained Quantize op for per-channel
     :param inputs: inputs used in forward pass

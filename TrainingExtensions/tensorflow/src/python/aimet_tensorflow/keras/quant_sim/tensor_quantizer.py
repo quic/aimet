@@ -386,20 +386,20 @@ class StaticGridPerTensorQuantizer(TensorQuantizer):
                     self._quantizer_mode.assign(int(libpymo.TensorQuantizerOpMode.passThrough))
 
     # pylint: disable=arguments-differ
-    def _call_handler(self, tensor):
+    def _call_handler(self, tensor: tf.Tensor):
         if self.quant_scheme in [QuantScheme.training_range_learning_with_tf_init,
                                  QuantScheme.training_range_learning_with_tf_enhanced_init]:
             return self.call_quantsim_custom_grad_learned_grid(tensor)
         return self.call_quantize_straight_through_estimator_grad(tensor)
 
     @tf.custom_gradient
-    def call_quantize_straight_through_estimator_grad(self, tensor):
+    def call_quantize_straight_through_estimator_grad(self, tensor: tf.Tensor):
         """
         Quantizes tensor with straight through estimator grad
         :param tensor: Tensor to quantize
         """
 
-        def grad(upstream, variables):
+        def grad(upstream: tf.Tensor, variables: List):
             """
             Straight through estimator grad function
             :param upstream: Gradient from child layers
@@ -420,13 +420,13 @@ class StaticGridPerTensorQuantizer(TensorQuantizer):
                                  is_int_data_type=self._is_int_data_type), grad
 
     @tf.custom_gradient
-    def call_quantsim_custom_grad_learned_grid(self, tensor):
+    def call_quantsim_custom_grad_learned_grid(self, tensor: tf.Tensor):
         """
         Quantizes tensor with range learning grad
         :param tensor: Tensor to quantize
         """
 
-        def grad(upstream, variables):
+        def grad(upstream: tf.Tensor, variables: List):
             """
             Range learning grad function
             :param upstream: Gradient from child layers
@@ -447,8 +447,12 @@ class StaticGridPerTensorQuantizer(TensorQuantizer):
                                  use_symmetric_encoding=self._is_symmetric,
                                  is_int_data_type=self._is_int_data_type), grad
 
-    def get_gradients_for_encoding_min_max(self, weight_tensor, grad):
-
+    def get_gradients_for_encoding_min_max(self, weight_tensor: tf.Tensor, grad: tf.Tensor):
+        """
+        Compute the gradients for encoding min/max using weights and their gradients
+        :param weight_tensor: Weight for which encoding min/max gradients are needed
+        :param grad: Gradients of the weights
+        """
         _, [dloss_by_dmin, dloss_by_dmax] = quantsim_custom_grad_learned_grid(weight_tensor, self._encoding_min,
                                                                               self._encoding_max, self._quantizer_mode,
                                                                               self._bitwidth, self.is_symmetric, grad)
@@ -762,8 +766,12 @@ class StaticGridPerChannelQuantizer(TensorQuantizer):
                                              axis_handling=self.axis_handling,
                                              is_training=bool(tf.keras.backend.learning_phase()))
 
-    def get_gradients_for_encoding_min_max(self, weight_tensor, grad):
-
+    def get_gradients_for_encoding_min_max(self, weight_tensor: tf.Tensor, grad: tf.Tensor):
+        """
+        Compute the gradients for encoding min/max using weights and their gradients
+        :param weight_tensor: Weight for which encoding min/max gradients are needed
+        :param grad: Gradients of the weights
+        """
         gradients = quantsim_per_channel_custom_grad_learned_grid(weight_tensor,
                                                                   self._encoding_min,
                                                                   self._encoding_max,
