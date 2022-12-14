@@ -39,12 +39,11 @@
 """ Quant Analyzer """
 
 import os
-import tensorflow.compat.v1 as tf
-from typing import List, Tuple, Dict
 import json
+from typing import List, Tuple, Dict
+import tensorflow.compat.v1 as tf
 from bokeh import plotting
 from bokeh.models import ColumnDataSource, Band, Span, tickers
-
 from aimet_common.defs import QuantScheme
 from aimet_common.utils import AimetLogger, CallbackFunc
 from aimet_tensorflow.quantizer_info import QuantizerInfo
