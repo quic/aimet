@@ -45,30 +45,8 @@ from tqdm import tqdm
 import torch
 from torch.utils.data import DataLoader
 from torch.nn.modules.batchnorm import _BatchNorm
-
 from aimet_torch.utils import in_eval_mode, in_train_mode
-
-
-
-class _Handle:
-    """ Removable handle. """
-
-    def __init__(self, cleanup_fn):
-        self._cleanup_fn = cleanup_fn
-        self._removed = False
-
-    def remove(self):
-        """ Run clean up function """
-        if not self._removed:
-            self._cleanup_fn()
-            self._removed = True
-
-    def __enter__(self):
-        return self
-
-    def __exit__(self, *_):
-        self.remove()
-
+from aimet_common.utils import Handle
 
 def _get_active_bn_modules(model: torch.nn.Module) -> Iterable[_BatchNorm]:
     for module in model.modules():
@@ -79,7 +57,7 @@ def _get_active_bn_modules(model: torch.nn.Module) -> Iterable[_BatchNorm]:
 
 
 def _for_each_module(modules: Iterable[torch.nn.Module],
-                     action: Callable[[torch.nn.Module], _Handle]) -> _Handle:
+                     action: Callable[[torch.nn.Module], Handle]) -> Handle:
     """
     Apply an undoable action to each module.
 
@@ -88,7 +66,7 @@ def _for_each_module(modules: Iterable[torch.nn.Module],
     :returns: Handle that undos the applied action.
     """
 
-    handles: List[_Handle] = []
+    handles: List[Handle] = []
 
     def cleanup():
         for handle in handles:
@@ -97,15 +75,15 @@ def _for_each_module(modules: Iterable[torch.nn.Module],
     try:
         for module in modules:
             handle = action(module)
-            assert isinstance(handle, _Handle)
+            assert isinstance(handle, Handle)
             handles.append(handle)
-        return _Handle(cleanup)
+        return Handle(cleanup)
     except:
         cleanup()
         raise
 
 
-def _reset_bn_stats(module: _BatchNorm) -> _Handle:
+def _reset_bn_stats(module: _BatchNorm) -> Handle:
     """
     Reset BN statistics to the initial values.
 
@@ -123,13 +101,13 @@ def _reset_bn_stats(module: _BatchNorm) -> _Handle:
 
     try:
         module.reset_running_stats()
-        return _Handle(cleanup)
+        return Handle(cleanup)
     except:
         cleanup()
         raise
 
 
-def _reset_momentum(module: _BatchNorm) -> _Handle:
+def _reset_momentum(module: _BatchNorm) -> Handle:
     """
     Set BN momentum to 1.0.
 
@@ -143,7 +121,7 @@ def _reset_momentum(module: _BatchNorm) -> _Handle:
 
     try:
         module.momentum = 1.0
-        return _Handle(cleanup)
+        return Handle(cleanup)
     except:
         cleanup()
         raise
@@ -155,7 +133,7 @@ DEFAULT_NUM_BATCHES = 100
 def reestimate_bn_stats(model: torch.nn.Module,
                         dataloader: DataLoader,
                         num_batches: int = DEFAULT_NUM_BATCHES,
-                        forward_fn: Callable[[torch.nn.Module, Any], Any] = None) -> _Handle:
+                        forward_fn: Callable[[torch.nn.Module, Any], Any] = None) -> Handle:
     """
     Reestimate BatchNorm statistics (running mean and var).
 

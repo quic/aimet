@@ -373,3 +373,23 @@ class Spinner(tqdm):
         self._stop.set()
         self._refresh_thread.join()
         super(Spinner, self).__exit__(*args, **kwargs)
+
+
+class Handle:
+    """ Removable handle. """
+
+    def __init__(self, cleanup_fn):
+        self._cleanup_fn = cleanup_fn
+        self._removed = False
+
+    def remove(self):
+        """ Run clean up function """
+        if not self._removed:
+            self._cleanup_fn()
+            self._removed = True
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *_):
+        self.remove()
