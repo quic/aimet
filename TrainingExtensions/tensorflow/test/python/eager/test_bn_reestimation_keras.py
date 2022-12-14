@@ -38,15 +38,9 @@
 
 """ bn_reestimation for Keras Unit Test Cases """
 
-
-import json
-import os
-import unittest
 import tensorflow as tf
 import numpy as np
 from packaging import version
-import aimet_common.libpymo as libpymo
-from aimet_common.defs import QuantScheme
 from aimet_tensorflow.keras.quantsim import QuantizationSimModel
 from aimet_tensorflow.keras.bn_reestimation import reestimate_bn_stats, _get_bn_submodules
 
@@ -88,26 +82,25 @@ def test_bn_reestimation():
     """
     Test batchnorm reestimation
     """
-    if version.parse(tf.version.VERSION) >= version.parse("2.00"):
-        tf.keras.backend.clear_session()
-        np.random.seed(0)
-        input_data = np.random.randn(1024, 32,32,3).astype(np.float32)
-        batch_size = 4
-        dataset = tf.data.Dataset.from_tensor_slices(input_data)
-        dataset = dataset.batch(batch_size=batch_size)
-        it = iter(dataset)
-        dummy_inputs = next(it)
+    tf.keras.backend.clear_session()
+    np.random.seed(0)
+    input_data = np.random.randn(1024, 32,32,3).astype(np.float32)
+    batch_size = 4
+    dataset = tf.data.Dataset.from_tensor_slices(input_data)
+    dataset = dataset.batch(batch_size=batch_size)
+    it = iter(dataset)
+    dummy_inputs = next(it)
 
-        inputs = tf.keras.Input(shape=(32, 32, 3,))
-        bn = tf.keras.layers.BatchNormalization(fused=True, beta_initializer='random_uniform',
-                                                gamma_initializer='random_uniform',
-                                                moving_mean_initializer='random_uniform',
-                                                moving_variance_initializer='ones') (inputs)
-        model_fp32 = tf.keras.Model(inputs=inputs, outputs=bn)
-        _reestimate_and_compare_results(model_fp32, dataset)
+    inputs = tf.keras.Input(shape=(32, 32, 3,))
+    bn = tf.keras.layers.BatchNormalization(fused=True, beta_initializer='random_uniform',
+                                            gamma_initializer='random_uniform',
+                                            moving_mean_initializer='random_uniform',
+                                            moving_variance_initializer='ones') (inputs)
+    model_fp32 = tf.keras.Model(inputs=inputs, outputs=bn)
+    _reestimate_and_compare_results(model_fp32, dataset)
 
-        qsim = QuantizationSimModel(model_fp32)
+    qsim = QuantizationSimModel(model_fp32)
 
-        qsim.compute_encodings(lambda m, _: m.predict(dummy_inputs+1), None)
-        qsim.model.compile(optimizer=tf.keras.optimizers.Adam(learning_rate=1e-3), loss=tf.keras.losses.MeanSquaredError())
-        _reestimate_and_compare_results(qsim.model, dataset)
+    qsim.compute_encodings(lambda m, _: m.predict(dummy_inputs+1), None)
+    qsim.model.compile(optimizer=tf.keras.optimizers.Adam(learning_rate=1e-3), loss=tf.keras.losses.MeanSquaredError())
+    _reestimate_and_compare_results(qsim.model, dataset)

@@ -101,7 +101,7 @@ def reestimate_bn_stats(model: tf.keras.Model, bn_re_estimation_dataset: tf.data
     # 1. switch to re-estimation mode and setup remove
     handle = _reset_bn_stats(bn_layers, bn_mean_ori, bn_var_ori, bn_momentum_ori)
 
-    # 2. intilization mean&var buffers
+    # 2. mean &var initialization
     mean_sum_dict = {layer.name: np.zeros(layer.moving_mean.shape, dtype=layer.moving_mean.dtype.as_numpy_dtype) for layer in bn_layers}
     var_sum_dict = {layer.name: np.zeros(layer.moving_variance.shape, dtype=layer.moving_variance.dtype.as_numpy_dtype) for  layer in bn_layers}
 
