@@ -97,7 +97,8 @@ class QuantizationSimModel(tf.keras.Model):
         self._model_without_wrappers = model
         if not in_place:
             self._model_without_wrappers = tf.keras.models.clone_model(model)
-            self._model_without_wrappers.set_weights(model.get_weights())
+            n_weights = len(self._model_without_wrappers.weights)
+            self._model_without_wrappers.set_weights(model.get_weights()[:n_weights])
         self._layer_name_to_quant_wrapper = {}
         self._validate_model()
         self.connected_graph = ConnectedGraph(self._model_without_wrappers)
