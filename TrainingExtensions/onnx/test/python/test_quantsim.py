@@ -145,11 +145,17 @@ class TestQuantSim:
         if not os.path.exists('./tmp'):
             os.mkdir('./tmp')
         model = build_dummy_model()
-        sim = QuantizationSimModel(model, default_output_bw=16, default_param_bw=16,
+        sim = QuantizationSimModel(model, default_activation_bw=16, default_param_bw=16,
                                    quant_scheme=QuantScheme.post_training_tf)
 
         for quantizer in sim.qc_quantize_op_dict:
             sim.qc_quantize_op_dict[quantizer].enabled = True
+
+
+        def dummy_callback(session, args):
+            pass
+
+        sim.compute_encodings(dummy_callback, None)
 
         sim.export('./tmp/', 'quant_sim_model_with_quant_args')
         with open('./tmp/quant_sim_model_with_quant_args.encodings') as json_file:

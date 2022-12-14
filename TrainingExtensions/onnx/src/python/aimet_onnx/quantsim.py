@@ -99,7 +99,7 @@ class QuantizationSimModel:
         self._add_quantization_nodes()
         self.session = self._build_session(self.providers)
 
-        quantsim_configurator = self._add_configuration(config_file)
+        quantsim_configurator = self._add_configuration_(config_file)
         self.quant_args = extract_global_quantizer_args(quant_scheme, quantsim_configurator)
 
     def _add_configuration_(self, config_file: str):
