@@ -207,9 +207,6 @@ def _fold_to_weight(model: onnx_pb.ModelProto, conv_linear: Op, bn: Op, fold_bac
     :param bn: BatchNorm to fold.
     :param fold_backward: True if the BatchNorm comes after the Conv
     """
-    # Transpose weights to C, N, H, W from N, C, H, W since axis are flipped for transposed conv
-    # However depthwise conv layers are always N, 1, H, W whether transposed-conv or not, so no need to transpose
-    # if conv_linear.type == "ConvTranspose" and conv_linear groups == 1:
     node = conv_linear.get_module()
     # Must convert MatMul layers to Gemm to allow bias
     if node.op_type == "MatMul":
@@ -228,13 +225,18 @@ def _fold_to_weight(model: onnx_pb.ModelProto, conv_linear: Op, bn: Op, fold_bac
         node.input.append(bias_name)
         bias = ParamUtils.get_param(model, node, BIAS_INDEX)
 
+    # Transpose weights to C, N, H, W from N, C, H, W since axis are flipped for transposed conv
+    # However depthwise conv layers are always N, 1, H, W whether transposed-conv or not, so no need to transpose
+    # if conv_linear.type == "ConvTranspose" and conv_linear groups == 1:
     if conv_linear.type == "ConvTranspose" and groups == 1:
         weight = transpose_tensor(weight, (1, 0, 2, 3))
+    # Gemm layers may or may not need to have weights transposed depending on value of transB attribute
     elif conv_linear.type in LinearType and not get_node_attribute(node, "transB"):
         weight = transpose_tensor(weight, (1, 0))
 
     _call_mo_batch_norm_fold(model, weight, bias, bn.get_module(), fold_backward=fold_backward)
 
+    # Transpose weight back to original configuration
     if conv_linear.type == "ConvTranspose" and groups == 1:
         weight = transpose_tensor(weight, (1, 0, 2, 3))
     elif conv_linear.type in LinearType and not get_node_attribute(node, "transB"):
