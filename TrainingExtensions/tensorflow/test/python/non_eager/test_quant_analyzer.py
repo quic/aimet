@@ -246,11 +246,14 @@ def test_model_sensitivity_to_quantization(cpu_session):
                                    eval_callback=CallbackFunc(forward_pass_callback), use_cuda=False)
     #pylint: disable=protected-access
     fp32_acc, weight_quantized_acc, act_quantized_acc = quant_analyzer._check_model_sensitivity_to_quantization(sim)
-
-    assert fp32_acc >= weight_quantized_acc
-    assert fp32_acc >= act_quantized_acc
-    #pylint: disable=protected-access
-    assert quant_analyzer._session is cpu_session
+    try:
+        assert fp32_acc >= weight_quantized_acc
+        assert fp32_acc >= act_quantized_acc
+        #pylint: disable=protected-access
+        assert quant_analyzer._session is cpu_session
+    finally:
+        sim.session.close()
+        cpu_session.close()
 
 #pylint: disable=redefined-outer-name
 def test_get_enabled_activation_quantizers(cpu_session):
@@ -260,7 +263,11 @@ def test_get_enabled_activation_quantizers(cpu_session):
     sim.compute_encodings(forward_pass_callback, None)
     enabled_quantizers = sim.get_enabled_activation_quantizers()
     # total 9 activation quantizers are enabled as per default config file.
-    assert len(enabled_quantizers) == 9
+    try:
+        assert len(enabled_quantizers) == 9
+    finally:
+        sim.session.close()
+        cpu_session.close()
 
 #pylint: disable=redefined-outer-name
 def test_get_enabled_param_quantizers(cpu_session):
@@ -270,7 +277,11 @@ def test_get_enabled_param_quantizers(cpu_session):
     sim.compute_encodings(forward_pass_callback, None)
     enabled_quantizers = sim.get_enabled_parameter_quantizers()
     # total 3 param quantizers are enabled as per default config file.
-    assert len(enabled_quantizers) == 3
+    try:
+        assert len(enabled_quantizers) == 3
+    finally:
+        sim.session.close()
+        cpu_session.close()
 
 def test_get_enabled_quantizer_groups(cpu_session):
     """ test get_enabled_quantizers() """
@@ -284,7 +295,11 @@ def test_get_enabled_quantizer_groups(cpu_session):
     # total 10 quantizer groups are created.
     #pylint: disable=protected-access
     #pylint: disable=no-member
-    assert len(quant_analyzer._get_enabled_quantizer_groups(sim)) == 10
+    try:
+        assert len(quant_analyzer._get_enabled_quantizer_groups(sim)) == 10
+    finally:
+        sim.session.close()
+        cpu_session.close()
 
 #pylint: disable=redefined-outer-name
 def test_perform_per_layer_analysis_by_enabling_quant_ops(cpu_session):

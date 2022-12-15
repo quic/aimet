@@ -351,20 +351,6 @@ class QuantizationSimModel:
                 enabled_activation_quantizers.append(quantizer_info)
         return enabled_activation_quantizers
 
-    @staticmethod
-    def enable_disable_quantizers(quantizer_list: List[QuantizerInfo], enabled: bool):
-        """
-        For given list of quantizers, set (enable/disable) quantizer's enabled.
-
-        :param quantizer_list: List of quantizers.
-        :param enabled: Enabled flag.
-        """
-        for quantizer_info in quantizer_list:
-            if enabled:
-                quantizer_info.enable_keeping_encoding()
-            else:
-                quantizer_info.enabled = enabled
-
     def _set_op_mode_parameters(self, op_mode: libpymo.TensorQuantizerOpMode,
                                 ops_with_invalid_encodings: List):
         """

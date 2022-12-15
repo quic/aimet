@@ -46,6 +46,7 @@ from bokeh import plotting
 from bokeh.models import ColumnDataSource, Band, Span, tickers
 from aimet_common.defs import QuantScheme
 from aimet_common.utils import AimetLogger, CallbackFunc
+from aimet_tensorflow.common.operation import Op
 from aimet_tensorflow.quantizer_info import QuantizerInfo
 from aimet_tensorflow.quantsim import QuantizationSimModel
 
@@ -200,9 +201,9 @@ class QuantAnalyzer:
         :return: Quantized model performance.
         """
         enabled_activation_quantizers = sim.get_enabled_activation_quantizers()
-        sim.enable_disable_quantizers(enabled_activation_quantizers, enabled=False)
+        self._enable_disable_quantizers(enabled_activation_quantizers, enabled=False)
         eval_score = self._eval_model(sim.session)
-        sim.enable_disable_quantizers(enabled_activation_quantizers, enabled=True)
+        self._enable_disable_quantizers(enabled_activation_quantizers, enabled=True)
         return eval_score
 
     def _eval_activation_quantized_model(self, sim):
@@ -215,9 +216,9 @@ class QuantAnalyzer:
         :return: Quantized model performance.
         """
         enabled_param_quantizers = sim.get_enabled_parameter_quantizers()
-        sim.enable_disable_quantizers(enabled_param_quantizers, enabled=False)
+        self._enable_disable_quantizers(enabled_param_quantizers, enabled=False)
         eval_score = self._eval_model(sim.session)
-        sim.enable_disable_quantizers(enabled_param_quantizers, enabled=True)
+        self._enable_disable_quantizers(enabled_param_quantizers, enabled=True)
         return eval_score
 
     def _perform_per_op_analysis_by_enabling_quant_ops(self,
@@ -300,7 +301,7 @@ class QuantAnalyzer:
         :param disable_all_quantizers: Flag to disable all the quantizers before per-layer analysis.
         :param enabled_before: Flag to set enabled for quantizers before computing encodings.
         :param enabled_after: Flag to set enabled for quantizers after computing encodings.
-        :return: layer wise eval score dictionary. dict[op_name] = eval_score.
+        :return: layer wise eval score dictionary. dict[conn_graph_op] = eval_score.
         """
 
         enabled_quant_ops = self._get_enabled_quantizer_groups(sim)
@@ -308,51 +309,65 @@ class QuantAnalyzer:
         if disable_all_quantizers:
             for quantizer_group_list in enabled_quant_ops.values():
                 if quantizer_group_list:
-                    sim.enable_disable_quantizers(quantizer_group_list, enabled=False)
+                    self._enable_disable_quantizers(quantizer_group_list, enabled=False)
 
         eval_score_dict = {}
-        for op_name, quantizer_info_list in enabled_quant_ops.items():
+        for conn_graph_op, quantizer_info_list in enabled_quant_ops.items():
             if quantizer_info_list:
-                op_name = str(op_name)
-                sim.enable_disable_quantizers(quantizer_info_list, enabled=enabled_before)
+                conn_graph_op = str(conn_graph_op)
+                self._enable_disable_quantizers(quantizer_info_list, enabled=enabled_before)
 
                 # Record eval score.
-                eval_score_dict[op_name] = self._eval_model(sim.session)
-                _logger.info("For layer: %s, the eval score is: %f", op_name, eval_score_dict[op_name])
+                eval_score_dict[conn_graph_op] = self._eval_model(sim.session)
+                _logger.info("For connected graph op: %s, the eval score is: %f", conn_graph_op, eval_score_dict[conn_graph_op])
 
-                sim.enable_disable_quantizers(quantizer_info_list, enabled=enabled_after)
+                self._enable_disable_quantizers(quantizer_info_list, enabled=enabled_after)
 
         if disable_all_quantizers:
             for quantizer_group_list in enabled_quant_ops.values():
                 if quantizer_group_list:
-                    sim.enable_disable_quantizers(quantizer_group_list, enabled=True)
+                    self._enable_disable_quantizers(quantizer_group_list, enabled=True)
 
         return eval_score_dict
 
-    # pylint: disable=no-self-use
-    def _get_enabled_quantizer_groups(self, sim: QuantizationSimModel):
+    @staticmethod
+    def _get_enabled_quantizer_groups(sim: QuantizationSimModel)-> Dict[Op, List[QuantizerInfo]]:
         """
         For given quantsim model, get all enabled activation and parameter quantizers.
         :param sim: Quantsim model.
-        :return: List of enabled activation and parameter quantizers.
+        :return: Dictionary which maps a connected graph op to a list of enabled quantizer info in it.
         """
-        enabled_quantizers_group_list = {}
+        enabled_quantizers_dict = {}
         # pylint: disable=protected-access
-        for op_name, quantizer_group in sim._op_to_quant_ops_dict.items():
+        for conn_graph_op, quantizer_group in sim._op_to_quant_ops_dict.items():
             group = []
             # pylint: disable=protected-access
-            activation_quantize_info = sim._activation_quantizers.get(quantizer_group[1].name)
+            param_quant_op_dict, act_quant_op = quantizer_group
+            activation_quantize_info = sim._activation_quantizers.get(act_quant_op.name)
             if activation_quantize_info.enabled:
                 group.append(activation_quantize_info)
-            param_op_dict = quantizer_group[0]
-            for param_op_set in param_op_dict.values():
+            for param_op_set in param_quant_op_dict.values():
                 for param_op in param_op_set:
                     # pylint: disable=protected-access
                     param_quantize_info = sim._param_quantizers.get(param_op.name)
                     if param_quantize_info.enabled:
                         group.append(param_quantize_info)
-            enabled_quantizers_group_list[op_name] = group
-        return enabled_quantizers_group_list
+            enabled_quantizers_dict[conn_graph_op] = group
+        return enabled_quantizers_dict
+
+    @staticmethod
+    def _enable_disable_quantizers(quantizer_list: List[QuantizerInfo], enabled: bool):
+        """
+        For given list of quantizers, set (enable/disable) quantizer's enabled.
+
+        :param quantizer_list: List of quantizers.
+        :param enabled: Enabled flag.
+        """
+        for quantizer_info in quantizer_list:
+            if enabled:
+                quantizer_info.enable_keeping_encoding()
+            else:
+                quantizer_info.enabled = enabled
 
     def _export_per_layer_stats_histogram(self, sim: QuantizationSimModel,
                                           results_dir: str = "./tmp/"):
