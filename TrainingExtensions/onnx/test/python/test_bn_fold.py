@@ -78,6 +78,27 @@ def _convert_to_onnx(model: torch.nn.Module, dummy_input, filename='./temp_model
     model = ONNXModel(load_model(filename))
     return model
 
+
+def get_outputs_after_fold(model, test_data):
+    onnx.checker.check_model(model.model)
+    filename = './onnx_test_model.onnx'
+    onnx.save(model.model, filename)
+    pairs = fold_all_batch_norms_to_weight(model.model)
+
+    onnx.checker.check_model(model.model)
+    folded_filename = './onnx_test_model_folded.onnx'
+    onnx.save(model.model, folded_filename)
+
+    sess = rt.InferenceSession(filename)
+    fold_sess = rt.InferenceSession(folded_filename)
+
+    input_name = sess.get_inputs()[0].name
+    baseline_output = sess.run(None, {input_name: test_data})
+    input_name = fold_sess.get_inputs()[0].name
+    folded_output = fold_sess.run(None, {input_name: test_data})
+    return baseline_output, folded_output, pairs
+
+
 class TwoInputs(torch.nn.Module):
     def __init__(self, num_classes=3):
         super(TwoInputs, self).__init__()
@@ -799,28 +820,3 @@ class TestBatchNormFold:
 
         assert len(model.graph().node) == layers_orig - 1
         assert np.allclose(baseline_output[0], folded_output[0], rtol=1e-2)
-
-
-
-
-
-
-def get_outputs_after_fold(model, test_data):
-    onnx.checker.check_model(model.model)
-    filename = './onnx_test_model.onnx'
-    onnx.save(model.model, filename)
-    pairs = fold_all_batch_norms_to_weight(model.model)
-
-    onnx.checker.check_model(model.model)
-    folded_filename = './onnx_test_model_folded.onnx'
-    onnx.save(model.model, folded_filename)
-
-    sess = rt.InferenceSession(filename)
-    fold_sess = rt.InferenceSession(folded_filename)
-
-    input_name = sess.get_inputs()[0].name
-    baseline_output = sess.run(None, {input_name: test_data})
-    input_name = fold_sess.get_inputs()[0].name
-    folded_output = fold_sess.run(None, {input_name: test_data})
-    return baseline_output, folded_output, pairs
-
