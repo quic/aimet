@@ -93,7 +93,7 @@ Set the <variant_string> to ONE of the following depending on your desired varia
 
     export AIMET_VARIANT=<variant_string>
 
-Replace <release_tag> in the steps below with the appropriate tag:
+Replace <variant_string> in the steps below with the appropriate tag:
 
 .. code-block::
 

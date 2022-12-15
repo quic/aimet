@@ -8,7 +8,11 @@ AIMET Keras AdaRound API
 
 User Guide Link
 ===============
-To learn more about this technique, please see :ref:`AdaRound<ug-adaround>`
+To learn more about this technique, please see :ref:`AdaRound<ug-adaround>`.
+
+Examples Notebook Link
+======================
+For an end-to-end notebook showing how to use Keras AdaRound, please see :doc:`here<../Examples/tensorflow/quantization/keras/adaround>`.
 
 Top-level API
 =============
