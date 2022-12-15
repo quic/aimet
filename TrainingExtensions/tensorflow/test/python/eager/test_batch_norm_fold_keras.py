@@ -38,15 +38,20 @@
 """
 This file contains unit tests for testing batch norm folding
 """
+import json
 import unittest
 import tensorflow as tf
 import numpy as np
-from packaging import version
-
 from aimet_tensorflow.keras.utils import common
 from aimet_tensorflow.keras.batch_norm_fold import _delete_all_bns_from_model, _find_possible_convs_linears_bn, _get_ordered_conv_linears, _find_all_batch_norms_to_fold, fold_all_batch_norms
+from aimet_tensorflow.keras.batch_norm_fold import fold_all_batch_norms_to_scale
 from aimet_tensorflow.keras.utils.op.batchnorm import BNUtils
+from aimet_tensorflow.keras.utils.op.conv import WeightTensorUtils
+from aimet_tensorflow.keras.quantsim import QuantizationSimModel
+from aimet_common.defs import QuantScheme
 
+np.random.seed(0)
+tf.random.set_seed(0)
 
 class TestBatchNormFold(unittest.TestCase):
     """ Test methods for BatchNormFold"""
@@ -965,3 +970,335 @@ class TestBatchNormFold(unittest.TestCase):
         output_after_batchnorm_folding = model(mock_input)
 
         assert np.allclose(output_before_batchnorm_folding, output_after_batchnorm_folding, rtol=1e-2)
+
+class TestBatchNormFoldToScale(unittest.TestCase):
+    """ Test methods for BatchNormFoldToScale"""
+    def test_modify_bn_params_to_make_as_passthrough(self):
+        tf.keras.backend.clear_session()
+        inputs = tf.keras.Input(shape=(1,))
+        add_ = tf.keras.layers.Lambda(lambda x: x + 10)(inputs)
+        outputs = tf.keras.layers.BatchNormalization(epsilon=0, beta_initializer='random_uniform',
+                                                     gamma_initializer='random_uniform',
+                                                     moving_mean_initializer='random_uniform',
+                                                     moving_variance_initializer='ones')(add_)
+        model = tf.keras.Model(inputs=inputs, outputs=outputs, name="functional_model")
+
+        w_shape = model._layers[0].input.shape
+        dummy_inputs = np.random.rand(1, w_shape[1]).astype(np.float32)
+
+        qsim = self._qsim_setup_for_fold_scale(model, model.layers[1], model.layers[2], dummy_inputs, is_disable_qauntizers_compute_encodings=True)
+        qsim.compute_encodings(lambda m, _: m.predict(dummy_inputs), None)
+
+        BNUtils.modify_bn_params_to_make_as_passthrough(qsim._model_without_wrappers.layers[2])
+
+        var = tf.constant([[5.0]])
+        out = qsim.model(var)
+
+        self.assertTrue(out.numpy(), 15.0)
+
+    def test_find_conv_bn_pairs_functional(self):
+        tf.keras.backend.clear_session()
+        input1 = tf.keras.Input(name='input1', shape=(10, 10, 3))
+        input2 = tf.keras.Input(name='input2', shape=(12, 12, 3))
+        x1 = tf.keras.layers.Conv2D(8, (1, 1), name='conv1a')(input1)
+        y = tf.keras.layers.BatchNormalization()(x1)
+        x2 = tf.keras.layers.BatchNormalization()(input2)
+        x2 = tf.keras.layers.Conv2D(8, (3, 3), name='conv1b')(x2)
+        x = tf.keras.layers.add([y, x2])
+        x = tf.keras.layers.Conv2D(4, (1, 1), name='conv2')(x)
+        bn_op = tf.keras.layers.BatchNormalization(fused=True)(x)
+        output = tf.nn.relu(bn_op)
+        model = tf.keras.Model([input1, input2], output)
+        w_shape = model._layers[0].input.shape
+        dummy_inputs = np.random.rand(1, w_shape[1], w_shape[2], w_shape[3]).astype(np.float32)
+
+        qsim = self._qsim_setup_for_fold_scale(model, model.layers[1], model.layers[2], dummy_inputs,is_disable_qauntizers_compute_encodings=False)
+
+        node_layer_map = common.create_node_to_layer_map(qsim._model_without_wrappers)
+        layer_out_node_map = common.create_layer_to_out_node_map(qsim._model_without_wrappers)
+        conv_linear_with_bn_dict = _find_possible_convs_linears_bn(node_layer_map, layer_out_node_map)
+
+        self.assertEqual(3, len(conv_linear_with_bn_dict))
+
+    def test_find_all_bns_to_fold_functional(self):
+        tf.keras.backend.clear_session()
+        input1 = tf.keras.Input(name='input1', shape=(10, 10, 3))
+        x1 = tf.keras.layers.Conv2D(8, (1, 1), name='conv1a')(input1)
+        y = tf.keras.layers.BatchNormalization()(x1)
+        x2 = tf.keras.layers.Conv2D(8, (3, 3), name='conv1b')(y)
+        x3 = tf.keras.layers.Conv2D(8, (3, 3), name='conv2b')(y)
+        y2 = tf.keras.layers.BatchNormalization()(x2)
+        y3 = tf.keras.layers.BatchNormalization()(x3)
+        x = tf.keras.layers.add([y3, y2])
+        x = tf.keras.layers.Conv2D(4, (1, 1), name='conv3')(x)
+        bn_op = tf.keras.layers.BatchNormalization(fused=True)(x)
+        output = tf.keras.layers.ReLU()(bn_op)
+        model = tf.keras.Model(input1, output)
+        w_shape = model._layers[0].input.shape
+        dummy_inputs = np.random.rand(1, w_shape[1], w_shape[2], w_shape[3]).astype(np.float32)
+
+        qsim = self._qsim_setup_for_fold_scale(model, model.layers[1], model.layers[2], dummy_inputs, is_disable_qauntizers_compute_encodings=False)
+        conv_bn_pairs = _find_all_batch_norms_to_fold(qsim._model_without_wrappers)
+
+        self.assertEqual(4, len(conv_bn_pairs))
+
+
+    def test_bn_fold_auto_rules_bn_after_conv(self):
+        """
+        Test batch norm fold layer selection when conv layer is followed by a BN layer
+        """
+        tf.keras.backend.clear_session()
+        inputs = tf.keras.Input(shape=(32, 32, 3,), name="inputs")
+        conv_op = tf.keras.layers.Conv2D(32, (3, 3))(inputs)
+        bn_op = tf.keras.layers.BatchNormalization(fused=True)(conv_op)
+        relu = tf.nn.relu(bn_op)
+        model = tf.keras.Model(inputs = inputs, outputs = relu)
+        w_shape = model._layers[0].input.shape
+        dummy_inputs = np.random.rand(1, w_shape[1], w_shape[2], w_shape[3]).astype(np.float32)
+
+        qsim = self._qsim_setup_for_fold_scale(model, model.layers[1], model.layers[2], dummy_inputs, is_disable_qauntizers_compute_encodings=False)
+        bn_conv_linear_pairs = _find_all_batch_norms_to_fold(qsim._model_without_wrappers)
+        self.assertEqual(1, len(bn_conv_linear_pairs))
+
+    def test_bn_fold_auto_rules_bn_before_conv(self):
+        """
+        Test batch norm fold layer selection when BN layer is followed by a conv layer
+        """
+        tf.keras.backend.clear_session()
+        inputs = tf.keras.Input(shape=(32, 32, 3,), name="inputs")
+        bn_op = tf.keras.layers.BatchNormalization(fused=True)(inputs)
+        conv_op = tf.keras.layers.Conv2D(32, (3, 3))(bn_op)
+        relu = tf.nn.relu(conv_op)
+        model = tf.keras.Model(inputs=inputs, outputs=relu)
+        w_shape = model._layers[0].input.shape
+        dummy_inputs = np.random.rand(1, w_shape[1], w_shape[2], w_shape[3]).astype(np.float32)
+
+        qsim = self._qsim_setup_for_fold_scale(model, model.layers[1], model.layers[2], dummy_inputs, is_disable_qauntizers_compute_encodings=False)
+        bn_conv_linear_pairs = _find_all_batch_norms_to_fold(qsim._model_without_wrappers)
+        self.assertEqual(1, len(bn_conv_linear_pairs))
+
+    def test_bn_fold_find_layers_model_with_multi_input(self):
+        """
+        Test bn fold with multiple input nodes
+        """
+        tf.keras.backend.clear_session()
+        input1 = tf.keras.Input(name='input1', shape=(10, 10, 3))
+        input2 = tf.keras.Input(name='input2', shape=(12, 12, 3))
+        x1 = tf.keras.layers.Conv2D(8, (1, 1), name='conv1a')(input1)
+        x2 = tf.keras.layers.Conv2D(8, (3, 3), name='conv1b')(input2)
+        x = tf.keras.layers.add([x1, x2])
+        x = tf.keras.layers.Conv2D(4, (1, 1), name='conv2')(x)
+        bn_op = tf.keras.layers.BatchNormalization(fused=True)(x)
+        relu = tf.nn.relu(bn_op)
+        model = tf.keras.Model(inputs=[input1, input2], outputs=relu)
+        w_shape = model._layers[0].input.shape
+        dummy_inputs = np.random.rand(1, w_shape[1], w_shape[2], w_shape[3]).astype(np.float32)
+
+        qsim = self._qsim_setup_for_fold_scale(model, model.layers[1], model.layers[2], dummy_inputs, is_disable_qauntizers_compute_encodings=False)
+        bn_conv_linear_pairs = _find_all_batch_norms_to_fold(qsim._model_without_wrappers)
+        self.assertEqual(1, len(bn_conv_linear_pairs))
+
+    def test_bn_fold_auto_rules_conv_bn_conv(self):
+        """
+        Test batch norm fold layer selection with pattern conv1 - bn - conv2
+        bn folds into conv1
+        """
+        tf.keras.backend.clear_session()
+        inputs = tf.keras.Input(shape=(32, 32, 3,), name="inputs")
+        conv = tf.keras.layers.Conv2D(32, (3, 3), name ='conv1')(inputs)
+        bn = tf.keras.layers.BatchNormalization(fused=True)(conv)
+        conv2 = tf.keras.layers.Conv2D(32, (3, 3), name ='conv2')(bn)
+        relu = tf.nn.relu(conv2)
+        model = tf.keras.Model(inputs=inputs, outputs=relu)
+        w_shape = model._layers[0].input.shape
+        dummy_inputs = np.random.rand(1, w_shape[1], w_shape[2], w_shape[3]).astype(np.float32)
+
+        qsim = self._qsim_setup_for_fold_scale(model, model.layers[1], model.layers[2], dummy_inputs, is_disable_qauntizers_compute_encodings=False)
+        bn_conv_linear_pairs = _find_all_batch_norms_to_fold(qsim._model_without_wrappers)
+        self.assertEqual(1, len(bn_conv_linear_pairs))
+        conv_linear, batchnorm, is_batch_norm_second = bn_conv_linear_pairs[0]
+        self.assertEqual('conv1', conv_linear.name)
+        # add additional check to verify backward fold is picked over forward in case both are available
+        self.assertEqual(True, is_batch_norm_second)
+
+    def test_bn_fold_with_linear_layer(self):
+        """
+        Custom Model where BN layer is followed by Dense layer
+        :return:
+        """
+        tf.keras.backend.clear_session()
+        inputs = tf.keras.Input(shape=(1, 1, 4,))
+        bn = tf.keras.layers.BatchNormalization(fused=True)(inputs, training=False)
+        x = tf.keras.layers.Flatten()(bn)
+        dense = tf.keras.layers.Dense(2, activation=tf.nn.relu, name="linear_layer")(x)
+        model = tf.keras.Model(inputs=inputs, outputs=dense)
+
+        # get baseline output
+        np.random.seed(0)
+        w_shape = model._layers[0].input.shape
+        dummy_inputs = np.random.rand(1, w_shape[1], w_shape[2], w_shape[3]).astype(np.float32)
+
+        qsim = self._qsim_setup_for_fold_scale(model, model.layers[2], model.layers[1], dummy_inputs, is_disable_qauntizers_compute_encodings=False)
+
+        qsim.compute_encodings(lambda m, _: m.predict(dummy_inputs), None)
+        self._fold_all_batch_norms_to_scale_and_compare_results(qsim, dummy_inputs, 5e-3)
+
+    def test_bn_fold_with_no_bias(self):
+        tf.keras.backend.clear_session()
+        inputs = tf.keras.Input((32, 32, 3))
+        x = tf.keras.layers.Conv2D(16, 3, use_bias=False)(inputs)
+        x = tf.keras.layers.BatchNormalization(beta_initializer="normal", gamma_initializer="normal")(x)
+        outputs = tf.keras.layers.ReLU()(x)
+        model = tf.keras.Model(inputs=inputs, outputs=outputs)
+        WeightTensorUtils._create_bias_and_insert(model)
+
+        dummy_inputs = np.random.randn(1, 32, 32, 3)
+
+        qsim = self._qsim_setup_for_fold_scale(model, model.layers[1], model.layers[2], dummy_inputs)
+
+        self._fold_all_batch_norms_to_scale_and_compare_results(qsim, dummy_inputs, 5e-3)
+
+    def test_batch_norm_fold_with_random_data_fuse_true(self):
+        tf.keras.backend.clear_session()
+        inputs = tf.keras.Input((32, 32, 3))
+        x = tf.keras.layers.Conv2D(16, 3, use_bias=True)(inputs)
+        x = tf.keras.layers.BatchNormalization(fused=True, beta_initializer='random_uniform',
+                                                       gamma_initializer='random_uniform',
+                                                       moving_mean_initializer='random_uniform',
+                                                       moving_variance_initializer='random_uniform')(x)
+        outputs = tf.keras.layers.ReLU()(x)
+        model = tf.keras.Model(inputs=inputs, outputs=outputs)
+        dummy_inputs = np.random.randn(1, 32, 32, 3)
+
+        qsim = self._qsim_setup_for_fold_scale(model, model.layers[1], model.layers[2], dummy_inputs)
+        self._fold_all_batch_norms_to_scale_and_compare_results(qsim, dummy_inputs, 5e-3)
+
+    def test_bn_fold_convolution(self):
+        tf.keras.backend.clear_session()
+        inputs = tf.keras.Input((32, 32, 3))
+        x = tf.keras.layers.Conv2D(16, 3, use_bias=True)(inputs)
+        x = tf.keras.layers.BatchNormalization(beta_initializer='normal',
+                                               gamma_initializer='normal')(x)
+        outputs = tf.keras.layers.ReLU()(x)
+        model = tf.keras.Model(inputs=inputs, outputs=outputs)
+        dummy_inputs = np.random.randn(1, 32, 32, 3)
+
+        qsim = self._qsim_setup_for_fold_scale(model, model.layers[1], model.layers[2], dummy_inputs)
+        self._fold_all_batch_norms_to_scale_and_compare_results(qsim, dummy_inputs, 1e-3)
+
+    def test_bn_fold_depthwise_convolution(self):
+        tf.keras.backend.clear_session()
+        inputs = tf.keras.Input((32, 32, 3))
+        x = tf.keras.layers.DepthwiseConv2D(16, use_bias=True)(inputs)
+        x = tf.keras.layers.BatchNormalization(beta_initializer='normal',
+                                               gamma_initializer='normal',
+                                               moving_mean_initializer='normal',
+                                               moving_variance_initializer='normal')(x)
+        outputs = tf.keras.layers.ReLU()(x)
+        model = tf.keras.Model(inputs=inputs, outputs=outputs)
+        dummy_inputs = np.random.randn(1, 32, 32, 3)
+
+        qsim = self._qsim_setup_for_fold_scale(model, model.layers[1], model.layers[2],dummy_inputs )
+        self._fold_all_batch_norms_to_scale_and_compare_results(qsim, dummy_inputs, 5e-3)
+
+    def _fold_all_batch_norms_to_scale_and_compare_results(self, qsim, dummy_inputs, tolerance):
+        output_before_batchnorm_folding = qsim.model(dummy_inputs)
+        fold_all_batch_norms_to_scale(qsim)
+        output_after_batchnorm_folding = qsim.model(dummy_inputs)
+        assert np.allclose(output_before_batchnorm_folding, output_after_batchnorm_folding, atol = tolerance, equal_nan=True)
+
+    def _qsim_setup_for_fold_scale(self, model, conv_layer, bn_layer, dummy_inputs, is_disable_qauntizers_compute_encodings=True):
+        default_config_per_channel = {
+              "defaults":
+              {
+                "ops":
+                {
+                  "is_output_quantized": "True"
+                },
+                "params":
+                {
+                  "is_quantized": "True",
+                  "is_symmetric": "True"
+                },
+                "strict_symmetric": "False",
+                "unsigned_symmetric": "True",
+                "per_channel_quantization": "True"
+              },
+
+              "params":
+              {
+                "bias":
+                {
+                  "is_quantized": "False"
+                }
+              },
+
+              "op_type":
+              {
+                "Squeeze":
+                {
+                  "is_output_quantized": "False"
+                },
+                "Pad":
+                {
+                  "is_output_quantized": "False"
+                },
+                "Mean":
+                {
+                  "is_output_quantized": "False"
+                }
+              },
+
+              "supergroups":
+              [
+                {
+                  "op_list": ["Conv", "Relu"]
+                },
+                {
+                  "op_list": ["Conv", "Clip"]
+                },
+                {
+                  "op_list": ["Conv", "BatchNormalization", "Relu"]
+                },
+                {
+                  "op_list": ["Add", "Relu"]
+                },
+                {
+                  "op_list": ["Gemm", "Relu"]
+                }
+              ],
+
+              "model_input":
+              {
+                "is_input_quantized": "True"
+              },
+
+              "model_output":
+              {}
+            }
+
+        with open("/tmp/default_config_per_channel.json", "w") as f:
+            json.dump(default_config_per_channel, f)
+
+        qsim = QuantizationSimModel(model, quant_scheme=QuantScheme.training_range_learning_with_tf_init,
+                                     config_file="/tmp/default_config_per_channel.json")
+
+        if is_disable_qauntizers_compute_encodings:
+            # Disable quantizers of conv's output and bias
+            conv_wrapper = qsim.get_quant_wrapper_for_layer_name(conv_layer.name)
+            # check no bias
+            if  hasattr(conv_wrapper, 'param_quantizers[1]'):
+                conv_wrapper.param_quantizers[1].disable()
+            conv_wrapper.output_quantizers[0].disable()
+
+            # Disable quantizers of batchnorms
+            bn_wrapper = qsim.get_quant_wrapper_for_layer_name(bn_layer.name)
+            bn_wrapper.param_quantizers[0].disable()
+            bn_wrapper.param_quantizers[1].disable()
+            bn_wrapper.param_quantizers[2].disable()
+            bn_wrapper.param_quantizers[3].disable()
+            bn_wrapper.input_quantizers[0].disable()
+            bn_wrapper.output_quantizers[0].disable()
+            qsim.compute_encodings(lambda m, _: m.predict(dummy_inputs), None)
+
+        return qsim
