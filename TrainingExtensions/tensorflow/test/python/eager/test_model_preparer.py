@@ -39,14 +39,12 @@
 """ Unit tests for keras model preparer """
 import logging
 import os
-import tempfile
 import pytest
 import numpy as np
 import tensorflow as tf
 from aimet_common.utils import AimetLogger
 from aimet_tensorflow.keras.connectedgraph import ConnectedGraph
 from aimet_tensorflow.keras.model_preparer import prepare_model, _get_original_models_weights_in_functional_model_order
-from aimet_tensorflow.keras.quantsim import QuantizationSimModel
 from aimet_common.connected_graph.connectedgraph_utils import get_all_input_ops, get_all_output_ops
 
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
@@ -186,8 +184,8 @@ def subclass_model_with_functional_layers():
 
 # Layer with multiple math operations in call
 class MultiMathOperations(tf.keras.layers.Layer):
-    def __init__(self):
-        super(MultiMathOperations, self).__init__(name='multi_math_operations', trainable=False)
+    def __init__(self, **kwargs):
+        super(MultiMathOperations, self).__init__(**kwargs)
         self.r = tf.constant(np.random.rand(1, 1), dtype=tf.float32)
         self.g = tf.constant(np.random.rand(1, 1), dtype=tf.float32)
         self.b = tf.constant(np.random.rand(1, 1), dtype=tf.float32)

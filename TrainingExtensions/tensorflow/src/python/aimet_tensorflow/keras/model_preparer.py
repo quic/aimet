@@ -43,7 +43,7 @@ import re
 import numpy as np
 import tensorflow as tf
 from tensorflow.python.keras.engine.functional import Functional
-
+from tensorflow.python.keras.layers.core import TFOpLambda
 from aimet_common.utils import AimetLogger
 logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.ModelPreparer)
 
@@ -111,102 +111,82 @@ def _set_functional_models_weights(original_model: tf.keras.Model, functional_mo
     logger.info("Model prepared for AIMET in Functional API format.")
 
 
-def _unwrap_subclass_layer(subclassed_layer: tf.keras.layers.Layer,
-                           prev_layer: tf.keras.layers.Layer,
-                           class_names: List[str]) -> tf.keras.layers.Layer:
-    """
-    This function recursively unwraps the layers of a subclassed layer. While unwrapping, it also builds up the
-    functional model by connecting the layers together.
-    :param subclassed_layer: The subclassed layer to be unwrapped
-    :param prev_layer: The previous layer in the functional model
-    :param class_names: The names of the classes that the original model was subclassed from
-    :return: The last layer in the model
-    """
-
-    # First, get the input shape of the subclassed layer and create an input layer with that shape
-    # This is used to great a model based on the subclassed layer
-    temp_input_shape = prev_layer.shape[1:]
-    temp_input = tf.keras.Input(shape=temp_input_shape)
-
-    # Create a model based on the subclassed layer.
-    # This is done with the input layer created above being used for two reasons:
-    # 1) The input layer is used to create the temporary functional model
-    # 2) The input layer is used in the subclass layers call function as a symbolic tensor to get internal layers
-    temp_model = tf.keras.Model(inputs=[temp_input], outputs=subclassed_layer.call(temp_input, training=False))
-    logger.debug("Model created for layer %s", subclassed_layer.name)
-    temp_model.summary(print_fn=logger.debug)
-
-    # If the temporary model has submodules, recursively unwrap the layers of the model.
-    # This list comprehension goes through the layers of the temporary model above and checks if the layer has submodules
-    # but only if that layer is written by a user and not a Keras layer with submodules (e.g. MultiHeadAttention)
-    if [layer.submodules
-            for layer in temp_model.layers[1:]
-            if layer.submodules and "tensorflow.python.keras" not in layer.__module__]:
-
-        for current_layer in temp_model.layers[1:]:
-            prev_layer = _prepare_model_layer_checker(current_layer, prev_layer, class_names)
-
-    # If the temporary model does not have submodules, connect the layers of the temporary model to the functional model
-    else:
-        return temp_model.call(prev_layer)
-
-    # Final unwrapped layer is returned
-    return prev_layer
-
-
-def _format_input_layer_and_get_layers_to_copy(original_model: tf.keras.Model,
-                                               input_layer: Union[tf.keras.Input, List[tf.keras.Input]] = None) -> \
-        Union[tf.keras.layers.Layer, tf.keras.layers.Layer, List[tf.keras.layers.Layer]]:
+def _format_input_layer(original_model: tf.keras.Model,
+                        input_layer: Union[tf.keras.Input, List[tf.keras.Input]] = None) -> \
+        Union[tf.keras.layers.Layer, tf.keras.layers.Layer, ]:
     """
     This function formats the input layer and gets the layers to be copied from the original model.
     :param original_model: The original model to be copied
     :param input_layer: The input layer to be used for the functional model
-    :return: The input layer, the previous layer, and the layers to be copied
+    :return: The input layer, the previous layer,
     """
 
     try:
         input_layer = original_model.layers[0].input
-        prev_layer = input_layer
-        layers_to_copy = original_model.layers[1:]
 
     except AttributeError:
         logger.info("Input layer not found. Using input layer passed in.")
         if input_layer is None:
             raise ValueError("The top layer of this model is subclassed. Please provide an input layer via the "
                              "\'input_layer\' parameter.")
-        prev_layer = input_layer
-        layers_to_copy = original_model.layers
 
-    return input_layer, prev_layer, layers_to_copy
+    prev_layer = input_layer
+    return input_layer, prev_layer
 
 
-def _prepare_model_layer_checker(current_layer: tf.keras.layers.Layer,
-                                 prev_layer: tf.keras.layers.Layer,
-                                 class_names: List[str]) -> tf.keras.layers.Layer:
+def _prepare_model_helper(model: tf.keras.Model, prev_layer: tf.keras.layers.Layer, class_names: List[str]) \
+        -> tf.keras.layers.Layer:
     """
-    This function checks the type of layer and calls the appropriate function to handle the layer.
-    :param current_layer: The current layer to be checked
-    :param prev_layer: The previous layer in the functional model
+    Helper function to recursively prepare a model. This function will be recursively called if a subclassed layer is
+    found. This function will extract the layers from the subclassed layer and add them to the functional model.
+    Otherwise, it will add the layer to the functional model.
+    :param model: The model to prepare
+    :param prev_layer: The previous layer
     :param class_names: The names of the classes that the original model was subclassed from
-    :return: The last layer in the model
+    :return: The last layer of the model
     """
 
-    if current_layer.submodules and not isinstance(current_layer, Functional):
-        logger.debug("Subclass layer \'%s\' found. Extracting layers.", current_layer.name)
-        # Converts CamelCase to snake_case of subclassed layers class name
-        class_names.append(
-            regex_for_camel_case_to_snake_case.sub("_", current_layer.__class__.__name__).lower())
-        prev_layer = _unwrap_subclass_layer(current_layer, prev_layer, class_names=class_names)
+    for current_layer in model.layers:
+        # Skip input layer
+        if isinstance(current_layer, tf.keras.layers.InputLayer):
+            continue
 
-    elif "tensorflow.python.keras" not in current_layer.__module__ or isinstance(current_layer, Functional):
-        logger.debug("Functional model layer \'%s\' found. Extracting layers.", current_layer.name)
-        prev_layer = current_layer.call(prev_layer)
+        # If the current layer is a subclassed layer, extract the layers from the subclassed layer
+        if current_layer.submodules and "tensorflow.python.keras" not in current_layer.__module__:
+            logger.debug("Subclass layer \'%s\' found. Extracting layers.", current_layer.name)
+            # Converts CamelCase to snake_case of subclassed layers class name
+            class_names.append(
+                regex_for_camel_case_to_snake_case.sub("_", current_layer.__class__.__name__).lower())
 
-    else:
-        logger.debug("Layer \'%s\' found. Adding to functional model.", current_layer.name)
-        prev_layer = current_layer(prev_layer)
+            # First, get the input shape of the subclassed layer and create an input layer with that shape
+            # This is used to great a model based on the subclassed layer
+            temp_input_shape = prev_layer.shape[1:]
+            temp_input = tf.keras.Input(shape=temp_input_shape)
+
+            # Create a model based on the subclassed layer.
+            # This is done with the input layer created above being used for two reasons:
+            # 1) The input layer is used to create the temporary functional model
+            # 2) The input layer is used in the subclass layers call function as a symbolic tensor to get internal layers
+            temp_model = tf.keras.Model(inputs=[temp_input], outputs=current_layer.call(temp_input, training=False))
+            logger.debug("Model created for layer %s", current_layer.name)
+            temp_model.summary(print_fn=logger.debug)
+
+            prev_layer = _prepare_model_helper(temp_model, prev_layer, class_names=class_names)
+
+        # If the current layer is a functional layer, call the layer with the previous layer
+        elif isinstance(current_layer, Functional):
+            prev_layer = current_layer.call(prev_layer)
+
+        # If a normal Keras defined layer
+        elif not isinstance(current_layer, TFOpLambda) and not isinstance(current_layer, tf.keras.layers.MultiHeadAttention):
+            prev_layer = current_layer(prev_layer)
+
+        # Call entire model if the current model doesn't have any Functional or Subclassed layers
+        else:
+            return model.call(prev_layer)
 
     return prev_layer
+
 
 def prepare_model(original_model: tf.keras.Model, input_layer: Union[tf.keras.Input, List[tf.keras.Input]] = None):
     """
@@ -218,14 +198,12 @@ def prepare_model(original_model: tf.keras.Model, input_layer: Union[tf.keras.In
     """
     logger.debug("Preparing model for AIMET. Original model architecture")
     original_model.summary(print_fn=logger.debug)
-    functional_input_layer, prev_layer, layers_to_copy = \
-        _format_input_layer_and_get_layers_to_copy(original_model, input_layer)
+    functional_input_layer, prev_layer = _format_input_layer(original_model, input_layer)
 
     # Used to fix weight names at end of unwrapping
     # Originally set to the name of the original model's class in the case that their is an inherited model
     class_names = [regex_for_camel_case_to_snake_case.sub("_", original_model.__class__.__name__).lower()]
-    for current_layer in layers_to_copy:
-        prev_layer = _prepare_model_layer_checker(current_layer, prev_layer, class_names)
+    prev_layer = _prepare_model_helper(original_model, prev_layer, class_names)
 
     functional_model = tf.keras.Model(inputs=functional_input_layer, outputs=prev_layer)
 
