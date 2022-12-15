@@ -40,16 +40,79 @@
 from typing import Callable
 import numpy as np
 import tensorflow as tf
-
+from tensorflow import keras
+import tensorflow.keras.backend as K
 # Import AIMET specific modules
 from aimet_common.utils import AimetLogger
 from aimet_tensorflow.adaround.adaround_loss import AdaroundLoss, AdaroundHyperParameters
 from aimet_tensorflow.adaround.adaround_wrapper import AdaroundWrapper
-from aimet_tensorflow.adaround.adaround_optimizer import AdaroundOptimizer as TfAdaroundOptimizer
-
+from aimet_tensorflow.keras.adaround.adaround_loss import compute_beta
 logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Quant)
+
 BATCH_SIZE = 32
 
+#pylint: disable=too-many-ancestors
+#pylint: disable=abstract-method
+class CustomModel(keras.Model):
+    """
+    Custom model to train adaraound wrapper
+    """
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.epoch_count = K.variable(0)
+
+    def train_step(self, data):
+        # Unpack the data. Its structure depends on your model and
+        # on what you pass to `fit()`.
+        x, y = data
+
+        with tf.GradientTape() as tape:
+            y_pred = self(x, training=True)  # Forward pass
+            # Compute the loss value
+            # (the loss function is configured in `compile()`)
+            loss = self.compiled_loss(y, y_pred, regularization_losses=self.losses)
+
+        # Compute gradients
+        trainable_vars = self.trainable_variables
+        gradients = tape.gradient(loss, trainable_vars)
+        # Update weights
+        self.optimizer.apply_gradients(zip(gradients, trainable_vars))
+        # Update metrics (includes the metric that tracks the loss)
+        self.compiled_metrics.update_state(y, y_pred)
+        return {}
+
+    def calculate_loss_wrapper(self, opt_params: AdaroundHyperParameters, wrapper: AdaroundWrapper, channels_index: int):
+        """
+        Wrapper function to compute loss
+        :param opt_params: Adaround hyper parameters
+        :param wrapper: Adaround wrapper
+        :param channels_index: channels_index across which reconstruction loss will be computed
+        """
+        def calculate_loss(orig_out_tensor, adaround_out_tensor):
+            """
+            :param inp_tensor: Input activation data tensor
+            :param orig_out_tensor: Original output activation data tensor
+            """
+            warm_start = self.epoch_count < opt_params.num_iterations * opt_params.warm_start
+
+            # Compute beta parameter used in regularization function using cosine decay
+            beta = compute_beta(opt_params.num_iterations, self.epoch_count, opt_params.beta_range, opt_params.warm_start)
+            recon_loss = AdaroundLoss.compute_recon_loss(adaround_out_tensor, orig_out_tensor, channels_index=channels_index)
+            round_loss = AdaroundLoss.compute_round_loss(alpha=wrapper.alpha, reg_param=opt_params.reg_param, warm_start=tf.cast(warm_start, tf.bool), beta=beta)
+            total_loss = recon_loss + round_loss
+            return total_loss
+        return calculate_loss
+
+class AccessEpochNumber(keras.callbacks.Callback):
+    """
+    Class to access and set epoch number during training.
+    This epoch number will be used for calculating loss
+    """
+    def __init__(self, model):
+        super().__init__()
+        self.model = model
+    def on_epoch_begin(self, epoch, logs=None):
+        K.set_value(self.model.epoch_count, epoch)
 
 class AdaroundOptimizer:
     """
@@ -136,31 +199,30 @@ class AdaroundOptimizer:
         optimizer = tf.keras.optimizers.Adam(learning_rate=1e-3)
         wrapper.use_soft_rounding.assign(True)
 
-        for cur_iteration in range(opt_params.num_iterations):
-            # During warm start period, rounding loss is zero
-            warm_start = cur_iteration < opt_params.num_iterations * opt_params.warm_start
+        # Get random indices of batch size and get original output and input activation data of batch size
+        indices = np.random.permutation(all_inp_data.shape[0])[:BATCH_SIZE]
+        inp_data = all_inp_data[indices]
+        orig_out_data = all_orig_out_data[indices]
 
-            # Compute beta parameter used in regularization function using cosine decay
-            beta = AdaroundLoss.compute_beta(opt_params.num_iterations, cur_iteration, opt_params.beta_range,
-                                             opt_params.warm_start)
+        # Get the channels index for 'channels_last' data format to compute reconstruction loss
+        # across the channels index
+        channels_index = len(orig_out_data.shape) - 1
 
-            # Get random indices of batch size and get original output and input activation data of batch size
-            indices = np.random.permutation(all_inp_data.shape[0])[:BATCH_SIZE]
-            # inp_data = tf.gather(all_inp_data, indices)
-            # orig_out_data = tf.gather(all_orig_out_data, indices)
-            inp_data = all_inp_data[indices]
-            orig_out_data = all_orig_out_data[indices]
+        inp_shape = inp_data.shape[1:]
+        inp_layer = tf.keras.Input(shape=inp_shape)
+        adaround_out_tensor = wrapper(inp_layer)
 
-            # Get the channels index for 'channels_last' data format to compute reconstruction loss
-            # across the channels index
-            channels_index = len(orig_out_data.shape) - 1
-            _, (total_loss, recon_loss, round_loss) = TfAdaroundOptimizer.train_step(wrapper, act_func, optimizer,
-                                                                                     inp_data, orig_out_data,
-                                                                                     opt_params.reg_param, warm_start,
-                                                                                     beta, channels_index)
-            if cur_iteration == 0 or cur_iteration % 100 == 0:
-                logger.debug("After iterations=%d, Total loss=%5f, Recons. loss=%5f, Rounding loss=%5f",
-                             cur_iteration, float(total_loss), float(recon_loss), float(round_loss))
+        # If followed by an activation function
+        if act_func is not None:
+            adaround_out_tensor = act_func(adaround_out_tensor)
+            orig_out_data = act_func(orig_out_data)
+
+        # Create custom model and training phase
+        model = CustomModel(inp_layer, adaround_out_tensor)
+        model.compile(optimizer=optimizer, loss=model.calculate_loss_wrapper(opt_params, wrapper, channels_index))
+        epochNumberCallback = AccessEpochNumber(model=model)
+        model.fit(inp_data, orig_out_data, epochs=opt_params.num_iterations,
+                  callbacks=[epochNumberCallback], verbose=0)
 
         wrapper.use_soft_rounding.assign(False)
         hard_rounded_weight = wrapper.adaround_weights()
