@@ -65,6 +65,7 @@ map_keras_types_to_onnx = {
     tf.keras.layers.BatchNormalization: ["BatchNormalization"],
     tf.keras.layers.ReLU: ["Relu"],
     tf.keras.layers.MaxPool2D: ["MaxPool"],
+    tf.keras.layers.GlobalAveragePooling1D: ["GlobalAveragePool"],
     tf.keras.layers.GlobalAveragePooling2D: ["GlobalAveragePool"],
     tf.keras.layers.Reshape: ["Reshape"],
     tf.keras.layers.Dense: ["Gemm", "MatMul"],
@@ -81,6 +82,7 @@ map_keras_types_to_onnx = {
     tf.keras.layers.Subtract: ["Sub"],
     tf.keras.layers.Multiply: ["Mul"],
     tf.keras.layers.Concatenate: ["Concat"],
+    tf.keras.layers.LayerNormalization: ["LayerNormalization"]
 }
 
 
