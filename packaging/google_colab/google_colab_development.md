@@ -65,7 +65,7 @@ Please run below commands to install dependencies to build AIMET:
 
 !pip3 --no-cache-dir install opencv-python==4.1.0.25
 
-!pip3 --no-cache-dir install pillow==6.2.1
+!pip3 --no-cache-dir install pillow==9.3.0
 
 !pip3 install pytorch-ignite==0.1.2
 
@@ -109,7 +109,7 @@ Please run below commands to install dependencies to build AIMET:
 
 !pip3 install scikit-learn==0.21.0
 
-!pip3 install tensorboardX==1.7
+!pip3 install tensorboardX==2.4
 
 !pip3 install https://download.pytorch.org/whl/cu100/torch-1.4.0%2Bcu100-cp36-cp36m-linux_x86_64.whl
 
@@ -125,7 +125,7 @@ Please run below commands to install dependencies to build AIMET:
 
 !pip3 install bokeh==1.2.0
 
-!pip3 install pandas==0.22.0
+!pip3 install pandas==1.4.3
 
 !pip3 install holoviews==1.12.7
 
