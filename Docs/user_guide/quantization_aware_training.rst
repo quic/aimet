@@ -1,3 +1,5 @@
+.. _ug-quantization-aware-training:
+
 =================================
 AIMET Quantization Aware Training
 =================================
@@ -40,3 +42,16 @@ as training takes place.
 
 In both variants, parameter quantizer encoding values will continue to update in accordance with the parameters
 themselves updating during training.
+
+Recommendations for Quantization-Aware Training
+===============================================
+Here are some general guidelines that can aid in improving performance or faster convergence with Quantization-aware Training (QAT):
+
+* Initialization:
+    - Often it can be beneficial to first apply post training quantization techniques like :ref:`AutoQuant<ug-auto-quant>` before applying QAT.
+      This is especially beneficial if there is large drop in INT8 performance compared to the FP32 baseline.
+* Hyper-parameters:
+    - Number of epochs: 15-20 epochs are generally sufficient for convergence
+    - Learning rate: Comparable (or one order higher) to FP32 model's final learning rate at convergence.
+      Results in AIMET are with learning of the order 1e-6.
+    - Learning rate schedule: Divide learning rate by 10 every 5-10 epochs

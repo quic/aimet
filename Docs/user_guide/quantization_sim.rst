@@ -16,7 +16,7 @@ techniques to obtain an updated model to then pass into QuantSim to observe a di
 result of applying the techniques.
 
 Once a QuantSim object has been created, users can fine-tune the model within the QuantSim object using their
-existing pipeline. This method is described in the :doc:`Quantization Aware Training<quantization_aware_training>` page.
+existing pipeline. This method is described in the :ref:`Quantization Aware Training<ug-quantization-aware-training>` page.
 
 The quantization nodes used in QuantSim are custom quantizers defined in AIMET, and are not recognized by targets.
 QuantSim provides an export functionality that will save a copy of the model with quantization nodes removed, as well as
@@ -90,13 +90,13 @@ Quantization Schemes
 ====================
 AIMET supports various techniques for coming up with min and max values for encodings, also called quantization schemes:
 
-- Min-Max: Also referred to as "TensorFlow" in AIMET (The name TensorFlow represents the origin of this technique and
+- Min-Max: Also referred to as "TF" in AIMET (The name TF represents the origin of this technique and
   has no relation to what framework the user is using). To cover the whole dynamic range of the tensor, we can define
   the quantization parameters Min and Max to be the observed Min and Max during the calibration process. This leads to
   no clipping error. However, this approach is sensitive to outliers, as strong outliers may cause excessive rounding
   errors.
 
-- Signal-to-Quantization-Noise (SQNR): Also referred to as “TensorFlow Enhanced” in AIMET (The name TensorFlow
+- Signal-to-Quantization-Noise (SQNR): Also referred to as “TF Enhanced” in AIMET (The name TF
   represents the origin of this technique and has no relation to what framework the user is using). The SQNR approach is
   similar to the Mean Square Error (MSE) minimization approach. In the SQNR range setting method, we find qmin and qmax
   that minimize the total MSE between the original and the quantized tensor. Quantization noise and saturation noise are
@@ -112,7 +112,7 @@ The "training range learning" variants are used during QAT with Range Learning. 
 initial encoding values for each quantization node, but also allow encoding values for activations to be learned
 alongside parameter quantizer encodings during training.
 
-For more details on QAT, refer to :doc:`Quantization Aware Training<quantization_aware_training>`.
+For more details on QAT, refer to :ref:`Quantization Aware Training<ug-quantization-aware-training>`.
 
 Configuring Quantization Simulation Ops
 =======================================

@@ -10,6 +10,10 @@ User Guide Link
 ===============
 To learn more about this technique, please see :ref:`AutoQuant<ug-auto-quant>`
 
+Examples Notebook Link
+======================
+For an end-to-end notebook showing how to use TensorFlow AutoQuant, please see :doc:`here<../Examples/tensorflow/quantization/autoquant>`.
+
 Top-level API
 =============
 .. autoclass:: aimet_tensorflow.auto_quant.AutoQuant

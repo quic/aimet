@@ -10,6 +10,10 @@ User Guide Link
 ===============
 To learn more about this technique, please see :ref:`AdaRound<ug-adaround>`
 
+Examples Notebook Link
+======================
+For an end-to-end notebook showing how to use TensorFlow AdaRound, please see :doc:`here<../Examples/tensorflow/quantization/adaround>`.
+
 Top-level API
 =============
 .. autofunction:: aimet_tensorflow.adaround.adaround_weight.Adaround.apply_adaround

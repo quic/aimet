@@ -10,6 +10,9 @@ User Guide Link
 ===============
 To learn more about Quantization Simulation, please see :ref:`Quantization Sim<ug-quantsim>`
 
+Examples Notebook Link
+======================
+For an end-to-end notebook showing how to use TensorFlow Quantization-Aware Training, please see :doc:`here<../Examples/tensorflow/quantization/qat>`.
 
 Top-level API
 =============

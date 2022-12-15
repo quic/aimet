@@ -17,7 +17,7 @@ Browse the notebooks
 ====================
 
 The following table has links to browsable versions of the notebooks for different features.
-|
+
 **Model Quantization Examples**
 
 .. list-table::
@@ -47,10 +47,6 @@ The following table has links to browsable versions of the notebooks for differe
    * - AutoQuant
      - `Link <../Examples/torch/quantization/autoquant.ipynb>`_
      - `Link <../Examples/tensorflow/quantization/autoquant.ipynb>`_
-     -
-   * - BN Re-estimation
-     - `Link <../Examples/torch/quantization/bn_reestimation.ipynb>`_
-     -
      -
 
 |
