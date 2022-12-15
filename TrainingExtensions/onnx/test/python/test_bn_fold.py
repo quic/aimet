@@ -517,7 +517,7 @@ class TestBatchNormFold:
 
         assert pairs[0][0].name == "MatMul_4"
         assert len(model.graph().node) == layers_orig - 1
-        assert np.allclose(baseline_output[0], folded_output[0], rtol=1e-2)
+        assert np.allclose(baseline_output[0], folded_output[0], rtol=1e-2, atol=1e-6)
 
     def test_fold_bn_before_flatten_no_bias_with_transpose(self):
         torch.manual_seed(10)
@@ -534,7 +534,7 @@ class TestBatchNormFold:
 
         assert pairs[0][0].name == "MatMul_5"
         assert len(model.graph().node) == layers_orig - 1
-        assert np.allclose(baseline_output[0], folded_output[0], rtol=1e-2)
+        assert np.allclose(baseline_output[0], folded_output[0], rtol=1e-2, atol=1e-6)
 
     def test_fold_resnet18(self):
         torch.manual_seed(10)
@@ -550,7 +550,7 @@ class TestBatchNormFold:
         baseline_output, folded_output, pairs = get_outputs_after_fold(model, test_data)
         assert len(pairs) == num_batchnorm
         assert len(model.graph().node) == layers_orig - num_batchnorm
-        assert np.allclose(baseline_output[0], folded_output[0], rtol=1e-2)
+        assert np.allclose(baseline_output[0], folded_output[0], rtol=1e-2, atol=1e-6)
 
     def test_fold_bn_before_conv_no_bias(self):
         torch.manual_seed(10)
@@ -566,7 +566,7 @@ class TestBatchNormFold:
         baseline_output, folded_output, pairs = get_outputs_after_fold(model, test_data)
         assert pairs[0][0].name == "Conv_3"
         assert len(model.graph().node) == layers_orig - 1
-        assert np.allclose(baseline_output[0], folded_output[0], rtol=1e-2)
+        assert np.allclose(baseline_output[0], folded_output[0], rtol=1e-2, atol=1e-6)
 
     def test_fold_bn_before_conv_with_bias(self):
         torch.manual_seed(10)
@@ -583,7 +583,7 @@ class TestBatchNormFold:
 
         assert pairs[0][0].name == "Conv_3"
         assert len(model.graph().node) == layers_orig - 1
-        assert np.allclose(baseline_output[0], folded_output[0], rtol=1e-2)
+        assert np.allclose(baseline_output[0], folded_output[0], rtol=1e-2, atol=1e-6)
 
     def test_fold_bn_before_conv_depthwise(self):
         torch.manual_seed(10)
@@ -599,7 +599,7 @@ class TestBatchNormFold:
         baseline_output, folded_output, pairs = get_outputs_after_fold(model, test_data)
 
         assert len(pairs) == 0
-        assert np.allclose(baseline_output[0], folded_output[0], rtol=1e-2)
+        assert np.allclose(baseline_output[0], folded_output[0], rtol=1e-2, atol=1e-6)
 
 
     def test_fold_bn_after_conv_no_bias(self):
@@ -617,7 +617,7 @@ class TestBatchNormFold:
 
         assert pairs[0][0].name == "Conv_2"
         assert len(model.graph().node) == layers_orig - 1
-        assert np.allclose(baseline_output[0], folded_output[0], rtol=1e-2)
+        assert np.allclose(baseline_output[0], folded_output[0], rtol=1e-2, atol=1e-6)
 
     def test_fold_bn_after_conv_depthwise(self):
         torch.manual_seed(10)
@@ -634,7 +634,7 @@ class TestBatchNormFold:
 
         assert pairs[0][0].name == "Conv_2"
         assert len(model.graph().node) == layers_orig - 1
-        assert np.allclose(baseline_output[0], folded_output[0], rtol=1e-2)
+        assert np.allclose(baseline_output[0], folded_output[0], rtol=1e-2, atol=1e-6)
 
     def test_fold_bn_after_conv_grouped(self):
         torch.manual_seed(10)
@@ -651,7 +651,7 @@ class TestBatchNormFold:
 
         assert pairs[0][0].name == "Conv_2"
         assert len(model.graph().node) == layers_orig - 1
-        assert np.allclose(baseline_output[0], folded_output[0], rtol=1e-2)
+        assert np.allclose(baseline_output[0], folded_output[0], rtol=1e-2, atol=1e-6)
 
     def test_fold_bn_after_transposed_conv_depthwise(self):
         torch.manual_seed(10)
@@ -668,7 +668,7 @@ class TestBatchNormFold:
 
         assert pairs[0][0].name == "ConvTranspose_0"
         assert len(model.graph().node) == layers_orig - 1
-        assert np.allclose(baseline_output[0], folded_output[0], rtol=1e-2)
+        assert np.allclose(baseline_output[0], folded_output[0], rtol=1e-2, atol=1e-6)
 
     def test_fold_bn_after_conv_with_bias(self):
         torch.manual_seed(10)
@@ -685,7 +685,7 @@ class TestBatchNormFold:
 
         assert pairs[0][0].name == "ConvTranspose_0"
         assert len(model.graph().node) == layers_orig - 1
-        assert np.allclose(baseline_output[0], folded_output[0], rtol=1e-2)
+        assert np.allclose(baseline_output[0], folded_output[0], rtol=1e-2, atol=1e-6)
 
     def test_fold_bn_after_conv_with_bias(self):
         torch.manual_seed(10)
@@ -702,7 +702,7 @@ class TestBatchNormFold:
 
         assert pairs[0][0].name == "Conv_2"
         assert len(model.graph().node) == layers_orig - 1
-        assert np.allclose(baseline_output[0], folded_output[0], rtol=1e-2)
+        assert np.allclose(baseline_output[0], folded_output[0], rtol=1e-2, atol=1e-6)
 
     def test_fold_bn_before_linear_layer_no_bias(self):
         torch.manual_seed(10)
@@ -719,7 +719,7 @@ class TestBatchNormFold:
 
         assert pairs[0][0].name == "MatMul_5"
         assert len(model.graph().node) == layers_orig - 1
-        assert np.allclose(baseline_output[0], folded_output[0], rtol=1e-2)
+        assert np.allclose(baseline_output[0], folded_output[0], rtol=1e-2, atol=1e-6)
 
         model = _convert_to_onnx(torch_model, torch.randn(input_shape))
         layers_orig = len(model.graph().node)
@@ -727,7 +727,7 @@ class TestBatchNormFold:
 
         assert pairs[0][0].name == "MatMul_3"
         assert len(model.graph().node) == layers_orig - 1
-        assert np.allclose(baseline_output[0], folded_output[0], rtol=1e-2)
+        assert np.allclose(baseline_output[0], folded_output[0], rtol=1e-2, atol=1e-6)
 
     def test_fold_bn_before_linear_layer_with_bias(self):
         torch.manual_seed(10)
@@ -744,7 +744,7 @@ class TestBatchNormFold:
 
         assert pairs[0][0].name == "Gemm_3"
         assert len(model.graph().node) == layers_orig - 1
-        assert np.allclose(baseline_output[0], folded_output[0], rtol=1e-2)
+        assert np.allclose(baseline_output[0], folded_output[0], rtol=1e-2, atol=1e-6)
 
     def test_fold_bn_after_linear_layer_with_bias(self):
         torch.manual_seed(10)
@@ -761,7 +761,7 @@ class TestBatchNormFold:
 
         assert pairs[0][0].name == "Gemm_0"
         assert len(model.graph().node) == layers_orig - 1
-        assert np.allclose(baseline_output[0], folded_output[0], rtol=1e-2)
+        assert np.allclose(baseline_output[0], folded_output[0], rtol=1e-2, atol=1e-6)
 
     def test_fold_bn_after_linear_layer_no_bias(self):
         torch.manual_seed(10)
@@ -778,7 +778,7 @@ class TestBatchNormFold:
 
         assert pairs[0][0].name == "MatMul_1"
         assert len(model.graph().node) == layers_orig - 1
-        assert np.allclose(baseline_output[0], folded_output[0], rtol=1e-2)
+        assert np.allclose(baseline_output[0], folded_output[0], rtol=1e-2, atol=1e-6)
 
         model = _convert_to_onnx(torch_model, torch.randn(input_shape))
         layers_orig = len(model.graph().node)
@@ -786,7 +786,7 @@ class TestBatchNormFold:
 
         assert pairs[0][0].name == "MatMul_0"
         assert len(model.graph().node) == layers_orig - 1
-        assert np.allclose(baseline_output[0], folded_output[0], rtol=1e-2)
+        assert np.allclose(baseline_output[0], folded_output[0], rtol=1e-2, atol=1e-6)
 
     def test_fold_bn_before_conv1d_with_bias(self):
         torch.manual_seed(10)
@@ -802,7 +802,7 @@ class TestBatchNormFold:
         baseline_output, folded_output, pairs = get_outputs_after_fold(model, test_data)
 
         assert len(model.graph().node) == layers_orig - 1
-        assert np.allclose(baseline_output[0], folded_output[0], rtol=1e-2)
+        assert np.allclose(baseline_output[0], folded_output[0], rtol=1e-2, atol=1e-6)
 
 
     def test_fold_bn_after_conv1d_no_bias(self):
@@ -819,4 +819,4 @@ class TestBatchNormFold:
         baseline_output, folded_output, pairs = get_outputs_after_fold(model, test_data)
 
         assert len(model.graph().node) == layers_orig - 1
-        assert np.allclose(baseline_output[0], folded_output[0], rtol=1e-2)
+        assert np.allclose(baseline_output[0], folded_output[0], rtol=1e-2, atol=1e-6)
