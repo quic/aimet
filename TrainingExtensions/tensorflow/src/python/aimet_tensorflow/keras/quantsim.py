@@ -49,7 +49,7 @@ from aimet_common.utils import AimetLogger, save_json_yaml
 from aimet_common.quantsim import encoding_version
 from aimet_tensorflow.defs import AxisHandling
 from aimet_tensorflow.keras.connectedgraph import ConnectedGraph
-from aimet_tensorflow.keras.cross_layer_equalization import GraphSearchUtils
+from aimet_tensorflow.keras.graphsearchtuils import GraphSearchUtils
 from aimet_tensorflow.keras.quant_sim.qc_quantize_wrapper import QcQuantizeWrapper, QuantizerSettings
 from aimet_tensorflow.keras.quant_sim.qc_mha_wrapper import QcQuantizableMultiHeadAttention
 from aimet_tensorflow.keras.quant_sim.tensor_quantizer import TensorQuantizer, ActivationTensorQuantizer, \
@@ -131,7 +131,6 @@ class QuantizationSimModel:
                                           config_file: str = None) -> QuantSimConfigurator:
         """
         Initialize quantsim configurator
-
         :param quant_scheme: Quantization Scheme
         :param rounding_mode: The round scheme to used
         :param default_output_bw: bitwidth to use for activation tensors
@@ -192,7 +191,6 @@ class QuantizationSimModel:
                                                                                     ParamPerChannelQuantizer]]:
         """
         Get input/output/param quantizers from quantizers dictionary or initialize quantizers if layer is not found
-
         :param layer: Target layer
         :return: tuple of input, output, param quantizers
         """
@@ -317,7 +315,6 @@ class QuantizationSimModel:
     def compute_encodings(self, forward_pass_callback, forward_pass_callback_args):
         """
         Computes encodings for all quantization sim nodes in the model.
-
         :param forward_pass_callback: A callback function that is expected to runs forward passes on a model.
                This callback function should use representative data for the forward pass, so the calculated
                encodings work for all data samples.
@@ -365,13 +362,10 @@ class QuantizationSimModel:
     def export(self, path, filename_prefix, custom_objects=None):
         """
         This method exports out the quant-sim model so it is ready to be run on-target.
-
         Specifically, the following are saved
-
         1. The sim-model is exported to a regular Keras model without any simulation ops
         2. The quantization encodings are exported to a separate JSON-formatted file that can
            then be imported by the on-target runtime (if desired)
-
         :param path: path where to store model pth and encodings
         :param filename_prefix: Prefix to use for filenames of the model pth and encodings files
         :param custom_objects: If there are custom objects to load, Keras needs a dict of them to map them
