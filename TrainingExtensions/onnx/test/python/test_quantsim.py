@@ -40,6 +40,7 @@ import os
 import torch
 import numpy as np
 from onnx import load_model
+from aimet_common.defs import QuantScheme
 from aimet_onnx.quantsim import QuantizationSimModel
 from aimet_onnx.qc_quantize_op import OpMode, reset_qc_quantize_op_dict
 from aimet_torch.quantsim import QuantizationSimModel as PtQuantizationSimModel
@@ -138,6 +139,36 @@ class TestQuantSim:
             assert qc_op.tensor_quantizer.isEncodingValid is True
             assert qc_op.op_mode == OpMode.quantize_dequantize or OpMode.one_shot_quantize_dequantize
         reset_qc_quantize_op_dict()
+
+    def test_export_model_with_quant_args(self):
+        """Test to export encodings and model"""
+        if not os.path.exists('./tmp'):
+            os.mkdir('./tmp')
+        model = build_dummy_model()
+        sim = QuantizationSimModel(model, default_activation_bw=16, default_param_bw=16,
+                                   quant_scheme=QuantScheme.post_training_tf)
+
+        for quantizer in sim.qc_quantize_op_dict:
+            sim.qc_quantize_op_dict[quantizer].enabled = True
+
+
+        def dummy_callback(session, args):
+            pass
+
+        sim.compute_encodings(dummy_callback, None)
+
+        sim.export('./tmp/', 'quant_sim_model_with_quant_args')
+        with open('./tmp/quant_sim_model_with_quant_args.encodings') as json_file:
+            encoding_data = json.load(json_file)
+
+        assert "quantizer_args" in encoding_data
+        quantizer_args = encoding_data["quantizer_args"]
+        assert quantizer_args["activation_bitwidth"] == 16
+        assert quantizer_args["param_bitwidth"] == 16
+        assert not quantizer_args["per_channel_quantization"]
+        assert quantizer_args["quant_scheme"] == QuantScheme.post_training_tf.name
+        assert quantizer_args["dtype"] == "int"
+        assert "is_symmetric" in quantizer_args
 
     def test_export_model(self):
         """Test to export encodings and model"""

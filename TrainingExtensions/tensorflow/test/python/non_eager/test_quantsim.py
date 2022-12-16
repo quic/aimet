@@ -728,6 +728,35 @@ class TestQuantSim(unittest.TestCase):
         sim.session.close()
         del sim
 
+    def test_export_quantizer_args(self):
+        """
+        Create QuantSim for a CPU model, compute encodings and export out a resulting model
+        """
+        tf.compat.v1.reset_default_graph()
+        with tf.device('/cpu:0'):
+            model = tf.keras.Sequential()
+            model.add(tf.keras.layers.Conv2D(32, kernel_size=3, input_shape=(28, 28, 3), activation='relu'))
+            model.summary()
+
+        sess = tf.compat.v1.Session()
+        initialize_uninitialized_vars(sess)
+        sim = QuantizationSimModel(sess, [model.input.op.name], [model.output.op.name], use_cuda=False,
+                                   quant_scheme=QuantScheme.post_training_tf_enhanced, default_output_bw=16,
+                                   default_param_bw=4)
+
+        sim.export('/tmp', 'quant_sim_with_quantizer_args')
+        with open('/tmp/quant_sim_with_quantizer_args.encodings') as json_file:
+             encoding_data = json.load(json_file)
+
+        assert "quantizer_args" in encoding_data
+        quantizer_args = encoding_data["quantizer_args"]
+        assert quantizer_args["activation_bitwidth"] == 16
+        assert quantizer_args["param_bitwidth"] == 4
+        assert quantizer_args["per_channel_quantization"] == False
+        assert quantizer_args["quant_scheme"] == QuantScheme.post_training_tf_enhanced.name
+        assert quantizer_args["is_symmetric"] == True
+        assert quantizer_args["dtype"] == "int"
+
     def test_export_cpu_model(self):
         """
         Create QuantSim for a CPU model, compute encodings and export out a resulting model

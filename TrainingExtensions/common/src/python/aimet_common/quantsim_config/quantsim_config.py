@@ -350,6 +350,26 @@ class QuantSimConfigurator(ABC):
                         param_dtype)
             self._override_param_bw_dtype(quantizer_data, param_dtype, param_bw)
 
+    @property
+    def quantsim_configs(self):
+        """ Returns quant sim config"""
+        return self._quantsim_configs
+
+    @property
+    def default_output_bw(self):
+        """ Returns output bit-width"""
+        return self._default_output_bw
+
+    @property
+    def default_param_bw(self):
+        """ Returns parameter bit-width"""
+        return self._default_param_bw
+
+    @property
+    def default_data_type(self):
+        """ Returns default datatype"""
+        return self._default_data_type
+
     @abstractmethod
     def _override_param_bw_dtype(self, quantizer_data, data_type: QuantizationDataType, bitwidth: int):
         """
