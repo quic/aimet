@@ -52,7 +52,7 @@ import aimet_common
 import aimet_common.libpymo as libpymo
 from aimet_common.utils import AimetLogger, save_json_yaml
 from aimet_common.defs import QuantScheme, QuantizationDataType, SupportedKernelsAction, QuantDtypeBwInfo
-from aimet_common.quantsim import encoding_version, validate_quantsim_inputs, calculate_delta_offset
+from aimet_common.quantsim import encoding_version, validate_quantsim_inputs, calculate_delta_offset, extract_global_quantizer_args
 from aimet_common.quant_utils import get_conv_accum_bounds
 
 from aimet_torch.quantsim_config.quantsim_config import QuantSimConfigurator
@@ -190,6 +190,7 @@ class QuantizationSimModel:
 
         quantsim_configurator = self.configure_quantization_ops(config_file, default_output_bw, default_param_bw,
                                                                 default_data_type)
+        self.quant_args = extract_global_quantizer_args(quant_scheme, quantsim_configurator)
         self._supported_kernels = quantsim_configurator.get_supported_kernels()
 
         self._validate_supported_kernels_for_quantizers(SUPPORTED_KERNELS_ACTION)
@@ -377,7 +378,8 @@ class QuantizationSimModel:
         elif isinstance(onnx_export_args, OnnxExportApiArgs):
             self.export_onnx_model_and_encodings(path, filename_prefix, model_to_export, self.model,
                                                  dummy_input, onnx_export_args, propagate_encodings,
-                                                 self._module_marker_map, self._is_conditional, self._excluded_layer_names)
+                                                 self._module_marker_map, self._is_conditional, self._excluded_layer_names,
+                                                 quantizer_args=self.quant_args)
         else:
 
             raise ValueError(f'unsupported opt_args type={type(onnx_export_args)}')
@@ -419,7 +421,8 @@ class QuantizationSimModel:
                                         sim_model: torch.nn.Module, dummy_input: Union[torch.Tensor, Tuple],
                                         onnx_export_args: OnnxExportApiArgs, propagate_encodings: bool,
                                         module_marker_map: Dict[torch.nn.Module, torch.Tensor] = None,
-                                        is_conditional: bool = False, excluded_layer_names: List = None):
+                                        is_conditional: bool = False, excluded_layer_names: List = None,
+                                        quantizer_args: Dict = None):
         """
         This method exports a onnx model and the corresponding encodings
 
@@ -458,7 +461,8 @@ class QuantizationSimModel:
         # Export encodings
         QuantizationSimModel._export_encodings_to_files(sim_model, path, filename_prefix,
                                                         onnx_node_to_io_tensor_map, valid_param_set,
-                                                        excluded_layer_names, propagate_encodings)
+                                                        excluded_layer_names, propagate_encodings,
+                                                        quantizer_args=quantizer_args)
 
     def exclude_layers_from_quantization(self, layers_to_exclude: List[torch.nn.Module]):
         """
@@ -672,7 +676,7 @@ class QuantizationSimModel:
 
     @staticmethod
     def _export_encodings_to_files(model: torch.nn.Module, path: str, filename_prefix: str, op_to_io_tensor_map: Dict,
-                                   valid_param_set: set, excluded_layer_names, propagate_encodings: bool):
+                                   valid_param_set: set, excluded_layer_names, propagate_encodings: bool, quantizer_args: Dict = None):
         """
         Save the quantized model weight encodings
 
@@ -684,6 +688,7 @@ class QuantizationSimModel:
         :param propagate_encodings: If True, encoding entries for intermediate ops (when one PyTorch ops results in
                 multiple ONNX nodes) are filled with the same BW and data_type as the output tensor for that series of
                 ops.
+        :param quantizer_args
         """
 
         # pylint: disable=too-many-locals
@@ -713,6 +718,10 @@ class QuantizationSimModel:
                                   'activation_encodings': activation_encodings_torch,
                                   'param_encodings': param_encodings,
                                   'excluded_layers': excluded_layer_names}
+
+        if quantizer_args:
+            encodings_dict_pytorch.update({'quantizer_args': quantizer_args})
+            encodings_dict_onnx.update({'quantizer_args': quantizer_args})
 
         logger.info("Layers excluded from quantization: %s", excluded_layer_names)
 

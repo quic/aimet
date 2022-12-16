@@ -45,7 +45,7 @@ from onnxruntime.quantization.onnx_quantizer import ONNXModel
 from onnxruntime_extensions import get_library_path
 from aimet_onnx.qc_quantize_op import QcQuantizeOp, OpMode, qc_quantize_op_dict
 from aimet_common.defs import QuantScheme
-from aimet_common.quantsim import encoding_version
+from aimet_common.quantsim import encoding_version, extract_global_quantizer_args
 from aimet_common.utils import save_json_yaml
 
 from aimet_onnx.quantsim_config.quantsim_config import QuantSimConfigurator
@@ -69,7 +69,7 @@ class QuantizationSimModel:
                  config_file: str = None):
         """
         Constructor
-        
+
         :param model: ONNX model or path to model
         :param quant_scheme: Quantization scheme (e.g. QuantScheme.post_training_tf)
         :param rounding_mode: Rounding mode (e.g. nearest)
@@ -99,16 +99,19 @@ class QuantizationSimModel:
         self._add_quantization_nodes()
         self.session = self._build_session(self.providers)
 
-        self._add_configuration(config_file)
+        quantsim_configurator = self._add_configuration_(config_file)
+        self.quant_args = extract_global_quantizer_args(quant_scheme, quantsim_configurator)
 
-    def _add_configuration(self, config_file: str):
+    def _add_configuration_(self, config_file: str):
         """
         Add configuration based on config file
         :param config_file: Path to Configuration file for model quantizers
         """
-        quantsim_configurator = QuantSimConfigurator(self.model, self.connected_graph, config_file, self._default_activation_bw,
-                                                     self._default_param_bw)
+        quantsim_configurator = QuantSimConfigurator(self.model, self.connected_graph, config_file,
+                                                     self._default_activation_bw, self._default_param_bw)
         quantsim_configurator.configure_quantizers(self.qc_quantize_op_dict, self.param_names, self.activation_names)
+
+        return quantsim_configurator
 
     def _get_param_names(self):
         """
@@ -262,7 +265,8 @@ class QuantizationSimModel:
 
         encodings_dict = {'version': encoding_version,
                           'activation_encodings': activation_encodings,
-                          'param_encodings': param_encodings}
+                          'param_encodings': param_encodings,
+                          'quantizer_args': self.quant_args}
 
         save_json_yaml(encoding_file_path, encodings_dict)
 
