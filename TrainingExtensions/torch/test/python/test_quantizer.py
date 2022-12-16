@@ -767,6 +767,30 @@ class TestQuantizationSimStaticGrad:
         assert "conv1.weight" in param_keys
         assert isinstance(encoding_data["param_encodings"]["conv1.weight"], list)
 
+    def test_export_with_quantizer_args(self):
+        """ test export functionality on ResNet18 """
+
+        resnet18 = models.resnet18()
+        resnet18.eval()
+        dummy_input = torch.randn(1, 3, 224, 224)
+
+        # Get Dict mapping node name to the input and output names
+        sim = QuantizationSimModel(resnet18, dummy_input=dummy_input, default_output_bw=16, default_param_bw=16,
+                                   quant_scheme=QuantScheme.post_training_tf)
+
+        sim.export('./data/', 'resnet18_with_quant_args', dummy_input)
+        with open('./data/resnet18_with_quant_args.encodings') as json_file:
+            encoding_data = json.load(json_file)
+
+        assert "quantizer_args" in encoding_data
+        quantizer_args = encoding_data["quantizer_args"]
+        assert quantizer_args["activation_bitwidth"] == 16
+        assert quantizer_args["param_bitwidth"] == 16
+        assert not quantizer_args["per_channel_quantization"]
+        assert quantizer_args["quant_scheme"] == QuantScheme.post_training_tf.name
+        assert quantizer_args["dtype"] == "int"
+        assert "is_symmetric" in quantizer_args
+
     def test_export_to_torch_script(self):
         """ test export functionality on ResNet18 """
 
