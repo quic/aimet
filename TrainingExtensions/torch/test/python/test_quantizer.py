@@ -38,6 +38,7 @@ import copy
 import logging
 import json as json
 import os
+import shutil
 import unittest.mock
 from packaging import version
 import numpy as np
@@ -2506,6 +2507,117 @@ class TestQuantizationSimLearnedGrid:
 
         if os.path.exists(config_file_path):
             os.remove(config_file_path)
+
+    def test_get_effective_encoding(self):
+        model = ModelWithTwoInputsOneToAdd()
+        dummy_input = (torch.rand(32, 1, 100, 100), torch.rand(32, 10, 22, 22))
+
+        sim = QuantizationSimModel(model,
+                                   dummy_input=dummy_input,
+                                   quant_scheme=QuantScheme.training_range_learning_with_tf_init)
+
+        def forward_pass(sim_model, _):
+            sim_model.eval()
+            with torch.no_grad():
+                sim_model(*dummy_input)
+
+        sim.compute_encodings(forward_pass, None)
+        optimizer = torch.optim.SGD(sim.model.parameters(), lr=0.005, momentum=0.5)
+        for _ in range(20):
+            inputs = (torch.rand(32, 1, 100, 100), torch.rand(32, 10, 22, 22))
+            out = sim.model(*inputs)
+            loss = out.flatten().sum()
+            loss.backward()
+            optimizer.step()
+
+        def _helper(_module_name: str):
+            wrapper = getattr(sim.model, _module_name)
+            param_quantizers = [x for x in wrapper.param_quantizers.values()]
+            quantizers = wrapper.output_quantizers + param_quantizers
+
+            for quantizer in quantizers:
+                if not quantizer.enabled:
+                    continue
+
+                encoding = quantizer.get_effective_encoding()
+                delta = encoding.delta
+                offset = encoding.offset
+                encoding_min = encoding.min
+                encoding_max = encoding.max
+
+                assert np.isclose(encoding_min, delta * offset, atol=1e-6)
+                assert np.isclose(encoding_max, encoding_min + delta * 255, atol=1e-6)
+
+        module_names = ["conv1_a", "maxpool1_a", "relu1_a",
+                        "conv1_b", "maxpool1_b", "relu1_b",
+                        "add", "conv2", "maxpool2", "relu2",
+                        "fc1", "relu3", "dropout", "fc2"]
+
+        for module_name in module_names:
+            _helper(module_name)
+
+    def test_symmetry_characteristic_and_export_result(self):
+        model = ModelWithTwoInputsOneToAdd()
+        dummy_input = (torch.rand(32, 1, 100, 100), torch.rand(32, 10, 22, 22))
+
+        sim = QuantizationSimModel(model,
+                                   dummy_input=dummy_input,
+                                   quant_scheme=QuantScheme.training_range_learning_with_tf_init)
+
+        def forward_pass(sim_model, _):
+            sim_model.eval()
+            with torch.no_grad():
+                sim_model(*dummy_input)
+
+        sim.compute_encodings(forward_pass, None)
+        assert sim.model.conv1_a.weight_encoding_min == -sim.model.conv1_a.weight_encoding_max
+        assert sim.model.fc1.weight_encoding_min == -sim.model.fc1.weight_encoding_max
+
+        before_conv1_weight_encoding_min = sim.model.conv1_a.weight_encoding_min.detach()
+        before_fc_weight_encoding_min = sim.model.fc1.weight_encoding_min.detach()
+
+        optimizer = torch.optim.SGD(sim.model.parameters(), lr=0.05, momentum=0.5)
+        for _ in range(20):
+            inputs = (torch.rand(32, 1, 100, 100), torch.rand(32, 10, 22, 22))
+            out = sim.model(*inputs)
+            loss = out.flatten().sum()
+            loss.backward()
+            optimizer.step()
+
+        assert sim.model.conv1_a.weight_encoding_min == -sim.model.conv1_a.weight_encoding_max
+        assert sim.model.fc1.weight_encoding_min == -sim.model.fc1.weight_encoding_max
+
+        after_conv1_weight_encoding_min = sim.model.conv1_a.weight_encoding_min
+        after_fc_weight_encoding_min = sim.model.fc1.weight_encoding_min
+
+        assert before_conv1_weight_encoding_min != after_conv1_weight_encoding_min
+        assert before_fc_weight_encoding_min != after_fc_weight_encoding_min
+
+        results_dir = '/tmp/symmetry_and_calibration'
+        if not os.path.exists(results_dir):
+            os.makedirs(results_dir)
+
+        sim.export(results_dir, "results", dummy_input)
+        with open(f"{results_dir}/results.encodings", "r") as encodings_file:
+            encodings = json.load(encodings_file)
+
+            param_encodings = encodings["param_encodings"]
+            for layer in ["conv1_a", "conv2", "fc1"]:
+                encoding_info = param_encodings[f"{layer}.weight"][0]
+                encoding_min = encoding_info["min"]
+                encoding_max = encoding_info["max"]
+                scale = encoding_info["scale"]
+                offset = encoding_info["offset"]
+
+                # Default HTP config is non-strict symmetric when parameter quantization
+                # Non-strict symmetric should have
+                # encoding_min == -encoding_max - scale (one more bin)
+                # offset as -128
+                assert encoding_min == -encoding_max - scale
+                assert offset == -128
+
+        if os.path.exists(results_dir):
+            shutil.rmtree(results_dir)
 
     def test_set_and_get_encoding_properties(self):
         torch.manual_seed(0)

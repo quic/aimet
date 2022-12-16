@@ -1465,8 +1465,8 @@ class TestTrainingExtensionBnFoldToScale:
 
         assert isinstance(model.bn1._module_to_wrap, torch.nn.Identity)
 
-        relu_output_encoding = model.relu1.output_quantizers[0].encoding
-        delta = float((relu_output_encoding.max - relu_output_encoding.min)/255)
+        conv2_output_encoding = model.conv2.output_quantizers[0].encoding
+        delta = float((conv2_output_encoding.max - conv2_output_encoding.min) / 255)
         assert torch.allclose(baseline_output, output_after_fold, atol=delta) # Allow 1-tick difference
         assert len(folded_pairs) == 2
 

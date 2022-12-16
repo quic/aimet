@@ -82,6 +82,21 @@ def gate_min_max(min_val: float, max_val: float) -> Tuple[float, float]:
     return gated_min, gated_max
 
 
+def is_non_strict_symmetric(use_symmetric_encodings: bool,
+                            use_strict_symmetric: bool,
+                            is_unsigned_symmetric: bool) -> bool:
+    """
+    Check whether non-strict symmetric encoding or not
+    :param use_symmetric_encodings: use_symmetric_encodings flag
+    :param use_strict_symmetric: use_strict_symmetric flag
+    :param is_unsigned_symmetric: is_unsigned_symmetric flag
+    :return: True if it satisfies non-strict symmetric else False
+    """
+    return use_symmetric_encodings and \
+           not use_strict_symmetric and \
+           not is_unsigned_symmetric
+
+
 def calculate_delta_offset(min_val: Union[float, np.ndarray], max_val: Union[float, np.ndarray], bitwidth: int,
                            use_symmetric_encodings: bool, use_strict_symmetric: bool) \
         -> Union[Tuple[float, float], Tuple[List, List]]:
@@ -90,6 +105,8 @@ def calculate_delta_offset(min_val: Union[float, np.ndarray], max_val: Union[flo
     :param min_val: min encoding value
     :param max_val: max encoding value
     :param bitwidth: bitwidth used for quantization
+    :param use_symmetric_encodings: use_symmetric_encodings flag
+    :param use_strict_symmetric: use_strict_symmetric flag
     :return: delta and offset values computed
     """
     num_steps = 2 ** bitwidth - 1
