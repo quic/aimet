@@ -323,9 +323,14 @@ class QcQuantizeWrapper(tf.keras.layers.Layer):
         idx_param_quantizer = 0
         for idx, param in enumerate(self._layer_to_wrap.weights):
             if self._layer_to_wrap.weights[idx].dtype in QUANT_ALLOWED_DTYPES:
-                quantized_param = self.param_quantizers[idx_param_quantizer](param)
-                self._layer_to_wrap.weights[idx].assign(quantized_param)
-                idx_param_quantizer = idx_param_quantizer + 1
+                # check if idx_param_quantizer is valid before usage
+                try:
+                    quantized_param = self.param_quantizers[idx_param_quantizer](param)
+                    self._layer_to_wrap.weights[idx].assign(quantized_param)
+                    idx_param_quantizer = idx_param_quantizer + 1
+                except IndexError:
+                    _logger.info("list index out of range.")
+                    break
 
     def _quantize_activation(self, activation: Union[tf.Tensor, List],
                              quantizers: List[ActivationTensorQuantizer],
