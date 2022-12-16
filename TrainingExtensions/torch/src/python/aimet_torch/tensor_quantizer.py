@@ -36,15 +36,17 @@
 #  @@-COPYRIGHT-END-@@
 # =============================================================================
 """ Custom Tensor Quantizers for PyTorch Op for quantizing weights and activations """
+# pylint: disable=too-many-lines
 import functools
 import io
-from typing import List, Union, Tuple
+from typing import List, Union, Tuple, Optional
 
 import torch
 
 import aimet_common.AimetTensorQuantizer as AimetTensorQuantizer
 import aimet_common.libpymo as libpymo
 from aimet_common.defs import QuantScheme, QuantizationDataType, MAP_QUANT_SCHEME_TO_PYMO
+from aimet_common.quantsim import is_non_strict_symmetric
 from aimet_common.utils import AimetLogger
 import aimet_torch.quantsim_straight_through_grad as grad_fn
 from aimet_torch.quantsim_straight_through_grad import IntermediateResult
@@ -561,9 +563,57 @@ class LearnedGridTensorQuantizer(TensorQuantizer):
         _, p = self.get_n_and_p(self.bitwidth, self.use_strict_symmetric, self.use_strict_symmetric, device or self.device)
         return p
 
+    def get_effective_encoding(self) -> Optional[Union[libpymo.TfEncoding, List[libpymo.TfEncoding]]]:
+        """
+        Returns an adjusted encoding that are faithful to the user's initial quant scheme configuration.
+
+        Note that the internally stored encodings (self.encoding) may not be necessarily faithful to the user's initial quant scheme.
+        For example, in range learning with non-strict symmetric scheme,
+            updating encoding min&max by gradients breaks the semantics of non-strict symmetry and causes max + delta != -min.
+        To counter the semantics violation in range learning, the non-strict symmetric quantizers
+            internally store strictly symmetric encodings (where max == -min) which will be used for forward/backward computation
+            and use an adjusted encoding (where max + delta == -min) elsewhere, for example, when exporting QuantizationSimModel.
+
+        :return: Adjusted TfEncoding or list of adjusted TfEncoding
+        """
+        if not self.enabled:
+            return None
+
+        encodings = self.encoding
+        if isinstance(encodings, libpymo.TfEncoding):
+            encodings = [encodings]
+
+        effective_encodings = []
+        for tf_encoding in encodings:
+            # NOTE: While non-strict symmetric in range learning, encoding min/max have same absolute values
+            #   To express correctly, encoding_min should be calibrated by considering one more bin
+            if is_non_strict_symmetric(self.use_symmetric_encodings, self.use_strict_symmetric,
+                                       self.is_unsigned_symmetric):
+                effective_encoding = libpymo.TfEncoding()
+                effective_encoding.min = tf_encoding.min - tf_encoding.delta
+                effective_encoding.max = tf_encoding.max
+                effective_encoding.offset = tf_encoding.offset
+                effective_encoding.delta = tf_encoding.delta
+                effective_encoding.bw = tf_encoding.bw
+
+                effective_encodings.append(effective_encoding)
+            else:
+                effective_encodings.append(tf_encoding)
+
+        # TODO: Remove when using only sequence of encodings (Done for backward compatibility)
+        if len(effective_encodings) == 1:
+            effective_encodings = effective_encodings[0]
+
+        return effective_encodings
+
     @property
     def encoding(self) -> Union[None, libpymo.TfEncoding, List[libpymo.TfEncoding]]:
         """
+        Returns an internally stored encodings.
+
+        Note that the internally stored encodings may not be necessarily faithful to the user's initial quant scheme.
+        Take a look and use get_effective_encoding to obtain the faithful encoding.
+
         NOTE: encoding.getter first compute updated encoding and then return it.
 
         Property to get learned (up-to-date) encoding computed from encoding min and max parameters.
@@ -616,7 +666,7 @@ class LearnedGridTensorQuantizer(TensorQuantizer):
                                                                                             self.bitwidth,
                                                                                             self.enabled))
         if self.encoding:
-            encoding = self.encoding
+            encoding = self.get_effective_encoding()
             # Todo: Remove this check when encodings is always a sequence
             if isinstance(encoding, libpymo.TfEncoding):
                 encoding = [encoding]
@@ -669,8 +719,21 @@ class LearnedGridTensorQuantizer(TensorQuantizer):
         for minimum, maximum in zip(encoding_min, encoding_max):
             tf_encoding = libpymo.TfEncoding()
             scale, offset = self.compute_scaling_offset(minimum, maximum)
-            tf_encoding.min, tf_encoding.max, tf_encoding.offset, tf_encoding.delta, \
-            tf_encoding.bw = minimum, maximum, offset, scale, self.bitwidth
+
+            # Calculate 'min' and 'max' based on 'delta' and 'offset'
+            #   because offset was adjusted so that zero must be quantizable
+            #   in the case of asymmetric or unsigned symmetric quantization
+            #   Please refer quantization_utils.cpp if you need
+            if not self.use_symmetric_encodings or self.is_unsigned_symmetric:
+                tf_encoding.min = scale * offset
+                # NOTE: We want to calculate: max = delta * numSteps + min
+                #   To avoid numerical accuracy issues on Linaro, we simplify the math.
+                tf_encoding.max = maximum - minimum + tf_encoding.min
+            else:
+                tf_encoding.min = minimum
+                tf_encoding.max = maximum
+
+            tf_encoding.offset, tf_encoding.delta, tf_encoding.bw = offset, scale, self.bitwidth
             encodings.append(tf_encoding)
 
         # TODO: Remove when using only sequence of encodings (Done for backward compatibility)
