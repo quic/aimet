@@ -37,8 +37,6 @@
 # =============================================================================
 """ Keras bn_reestimation Nightly Tests """
 import json
-import os
-import unittest
 import tensorflow as tf
 import numpy as np
 from aimet_common.defs import QuantScheme
