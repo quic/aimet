@@ -95,8 +95,9 @@ def _find_conv_bn_pairs(connected_graph: ConnectedGraph) -> Dict:
     return convs_bn_activation_dict
 
 
-def find_all_batch_norms_to_fold(connected_graph: ConnectedGraph) -> Tuple[List[Tuple[Op, Op]],
-                                                                           List[Tuple[Op, Op]]]:
+def find_all_batch_norms_to_fold(connected_graph: ConnectedGraph,
+                                 ) -> Tuple[List[Tuple[onnx_pb.NodeProto, onnx_pb.NodeProto]],
+                                            List[Tuple[onnx_pb.NodeProto, onnx_pb.NodeProto]]]:
     """
     Find all possible batch norm layers that can be folded. Returns a list of pairs such that (bn, layer)
     means bn will be forward-folded into layer and (layer, bn) means bn will be backward-folded into layer
@@ -105,30 +106,29 @@ def find_all_batch_norms_to_fold(connected_graph: ConnectedGraph) -> Tuple[List[
              where `bn` can be folded into to `layer`.
     """
     conv_linear_bn_activation_info_dict = _find_conv_bn_pairs(connected_graph)
-
+    model = connected_graph.model
     # To mark BN's already picked for backward folding
     bn_picked_for_folding = set()
 
     ordered_conv_fc_nodes = get_ordered_conv_linears(connected_graph)
-    # Layer input channels are needed to determine if conv is standard, depth-wise, or grouped
-    infer_input_output_channels(connected_graph, ordered_conv_fc_nodes)
+
     conv_bn_pairs = []
     # Backward fold is given priority over Forward fold
     for node in ordered_conv_fc_nodes:
         # Filter out combinations that are not supported
-        if node in conv_linear_bn_activation_info_dict.keys() and is_valid_bn_fold(node, True):
+        if node in conv_linear_bn_activation_info_dict.keys() and is_valid_bn_fold(node.get_module(), model, True):
             bn_info = conv_linear_bn_activation_info_dict[node]
             if bn_info.output_bn and bn_info.output_bn not in bn_picked_for_folding:
-                conv_bn_pairs.append((node, bn_info.output_bn))
+                conv_bn_pairs.append((node.get_module(), bn_info.output_bn.get_module()))
                 bn_picked_for_folding.add(bn_info.output_bn)
 
     bn_conv_pairs = []
     for node in ordered_conv_fc_nodes:
         # Filter out combinations that are not supported
-        if node in conv_linear_bn_activation_info_dict.keys() and is_valid_bn_fold(node, False):
+        if node in conv_linear_bn_activation_info_dict.keys() and is_valid_bn_fold(node.get_module(), model, False):
             bn_info = conv_linear_bn_activation_info_dict[node]
             if bn_info.input_bn and bn_info.input_bn not in bn_picked_for_folding:
-                bn_conv_pairs.append((bn_info.input_bn, node))
+                bn_conv_pairs.append((bn_info.input_bn.get_module(), node.get_module()))
                 bn_picked_for_folding.add(bn_info.input_bn)
 
     return conv_bn_pairs, bn_conv_pairs
@@ -151,32 +151,31 @@ def get_ordered_conv_linears(conn_graph: ConnectedGraph) -> List[Op]:
     return ordered_convs
 
 
-def is_valid_bn_fold(conv: Op, fold_backward: bool) -> bool:
+def is_valid_bn_fold(conv: onnx_pb.NodeProto, model: onnx_pb.ModelProto, fold_backward: bool) -> bool:
     """
     Determine if a given layer can successfully absorb a BatchNorm given the layer type and parameters
     :param conv: The Conv/Linear layer to fold a BatchNorm into.
+    :param model: The model to which the Conv/Linear layer belongs.
     :param fold_backward: True if BatchNorm comes after Conv/Linear layer
     :return: True if a BatchNorm layer can be folded without causing output error.
     """
-    # Convert the layer's attribute list to dictionary
-    conv_attr_dict = {attr.name: helper.get_attribute_value(attr) for attr in conv.get_module().attribute}
     valid = True
     if not fold_backward:
         # Cannot fold BN -> Conv with padding. AIMET does not support forward folding to grouped or DW Conv
-        if conv.type == 'Conv':
-            valid &= all(item == 0 for item in conv_attr_dict["pads"])
-            valid &= conv_attr_dict["group"] == 1
+        if conv.op_type == 'Conv':
+            valid &= all(item == 0 for item in get_node_attribute(conv, "pads"))
+            valid &= get_node_attribute(conv, "group") == 1
         # AIMET does not support forward folding to ConvTranspose
-        elif conv.type == 'ConvTranspose':
+        elif conv.op_type == 'ConvTranspose':
             valid = False
     else:
         # AIMET does not support backwards folding to grouped ConvTranspose
-        if conv.type == 'ConvTranspose':
-            valid &= (conv_attr_dict["group"] == 1 or conv_attr_dict["group"] == conv.num_in_channels)
+        if conv.op_type == 'ConvTranspose':
+            valid &= get_node_attribute(conv, "group") in (1, get_input_output_channels(conv, model)[0])
     return valid
 
 
-def fold_all_batch_norms_to_weight(model: onnx_pb.ModelProto) -> List[Tuple[Op, Op]]:
+def fold_all_batch_norms_to_weight(model: onnx_pb.ModelProto) -> List[Tuple[onnx_pb.NodeProto, onnx_pb.NodeProto]]:
     """
     Fold all possible batch_norm layers in a model into the weight of the corresponding conv layers
 
@@ -189,16 +188,19 @@ def fold_all_batch_norms_to_weight(model: onnx_pb.ModelProto) -> List[Tuple[Op, 
 
     for conv, bn in conv_bn_pairs:
         _fold_to_weight(model, conv, bn, True)
-        remove_node(bn.get_module(), model.graph)
+        remove_node(bn, model.graph)
 
     for bn, conv in bn_conv_pairs:
         _fold_to_weight(model, conv, bn, False)
-        remove_node(bn.get_module(), model.graph)
+        remove_node(bn, model.graph)
 
     return conv_bn_pairs + [(conv, bn) for bn, conv in bn_conv_pairs]
 
 
-def _fold_to_weight(model: onnx_pb.ModelProto, conv_linear: Op, bn: Op, fold_backward: bool):
+def _fold_to_weight(model: onnx_pb.ModelProto,
+                    conv_linear: onnx_pb.NodeProto,
+                    bn: onnx_pb.NodeProto,
+                    fold_backward: bool):
     """
     Fold BatchNorm into the weight and bias of the given layer.
 
@@ -207,43 +209,43 @@ def _fold_to_weight(model: onnx_pb.ModelProto, conv_linear: Op, bn: Op, fold_bac
     :param bn: BatchNorm to fold.
     :param fold_backward: True if the BatchNorm comes after the Conv
     """
-    node = conv_linear.get_module()
     # Must convert MatMul layers to Gemm to allow bias
-    if node.op_type == "MatMul":
-        _matmul_to_gemm(node, model)
+    if conv_linear.op_type == "MatMul":
+        _matmul_to_gemm(conv_linear, model)
 
-    weight = ParamUtils.get_param(model, node, WEIGHT_INDEX)
-    bias = ParamUtils.get_param(model, node, BIAS_INDEX)
-    groups = get_node_attribute(node, "group")
+    weight = ParamUtils.get_param(model, conv_linear, WEIGHT_INDEX)
+    bias = ParamUtils.get_param(model, conv_linear, BIAS_INDEX)
+    groups = get_node_attribute(conv_linear, "group")
 
     # If layer doesn't have bias, create a bias initializer and add it to the model, then retrieve it
     if not bias:
-        bias_data = np.zeros(conv_linear.num_out_channels)
-        bias_name = node.name + ".bias"
+        bias_data = np.zeros(get_input_output_channels(conv_linear, model)[1])
+        bias_name = conv_linear.name + ".bias"
         bias = numpy_helper.from_array(bias_data.astype(np.float32), name=bias_name)
         model.graph.initializer.append(bias)
-        node.input.append(bias_name)
-        bias = ParamUtils.get_param(model, node, BIAS_INDEX)
+        conv_linear.input.append(bias_name)
+        bias = ParamUtils.get_param(model, conv_linear, BIAS_INDEX)
 
     # Transpose weights to C, N, H, W from N, C, H, W since axis are flipped for transposed conv
     # However depthwise conv layers are always N, 1, H, W whether transposed-conv or not, so no need to transpose
     # if conv_linear.type == "ConvTranspose" and conv_linear groups == 1:
-    if conv_linear.type == "ConvTranspose" and groups == 1:
+    if conv_linear.op_type == "ConvTranspose" and groups == 1:
         weight = transpose_tensor(weight, (1, 0, 2, 3))
     # Gemm layers may or may not need to have weights transposed depending on value of transB attribute
-    elif conv_linear.type in LinearType and not get_node_attribute(node, "transB"):
+    elif conv_linear.op_type in LinearType and not get_node_attribute(conv_linear, "transB"):
         weight = transpose_tensor(weight, (1, 0))
 
-    _call_mo_batch_norm_fold(model, weight, bias, bn.get_module(), fold_backward=fold_backward)
+    _call_mo_batch_norm_fold(model, weight, bias, bn, fold_backward=fold_backward)
 
     # Transpose weight back to original configuration
-    if conv_linear.type == "ConvTranspose" and groups == 1:
+    if conv_linear.op_type == "ConvTranspose" and groups == 1:
         weight = transpose_tensor(weight, (1, 0, 2, 3))
-    elif conv_linear.type in LinearType and not get_node_attribute(node, "transB"):
+    elif conv_linear.op_type in LinearType and not get_node_attribute(conv_linear, "transB"):
         weight = transpose_tensor(weight, (1, 0))
 
-    weight_param = ParamUtils.get_param(model, node, WEIGHT_INDEX)
+    weight_param = ParamUtils.get_param(model, conv_linear, WEIGHT_INDEX)
     weight_param.raw_data = weight.raw_data
+
 
 def _matmul_to_gemm(node: onnx_pb.NodeProto, model: onnx_pb.ModelProto):
     """
@@ -362,28 +364,30 @@ def _expand_shape_to_4d(weight_tensor: libpymo.TensorParams):
             weight_tensor.shape = orig_shape
 
 
-def infer_input_output_channels(conn_graph: ConnectedGraph, op_list: List[Op]):
+def get_input_output_channels(node: onnx_pb.NodeProto, model: onnx_pb.ModelProto) -> Tuple[int, int]:
     """
-    Find the input and output channels of the layers specified in op_list and set the
-    layer.num_in_channels and layer.num_out_channels for each layer accordingly
-    :param model: The connected graph to which the layers in op_list belong
-    :param op_list: List of the layers for which to find the input and output channels
+    Find the input and output channels of a given layer.
+    :param node: The node to find the input/output channels of
+    :param model: The onnx model to which the layers belong
+    :return: Tuple of (num channels in, num channels out)
     """
-    for op in op_list:
-        node = op.get_module()
-        weight = ParamUtils.get_param(conn_graph.model, node, WEIGHT_INDEX)
-        groups = get_node_attribute(node, "group")
-        if op.type == "Conv":
-            op.num_in_channels = weight.dims[1] * groups
-            op.num_out_channels = weight.dims[0]
-        elif op.type == "ConvTranspose":
-            op.num_in_channels = weight.dims[0]
-            op.num_out_chanels = weight.dims[1] * groups
-        elif op.type == "Gemm":
-            transB = get_node_attribute(node, "transB")
-            if transB == 1:
-                op.num_out_channels = weight.dims[0]
-                op.num_in_channels = weight.dims[1]
-            else:
-                op.num_out_channels = weight.dims[1]
-                op.num_out_channels = weight.dims[0]
+    weight = ParamUtils.get_param(model, node, WEIGHT_INDEX)
+    groups = get_node_attribute(node, "group")
+    if node.op_type == "Conv":
+        num_in_channels = weight.dims[1] * groups
+        num_out_channels = weight.dims[0]
+    elif node.op_type == "ConvTranspose":
+        num_in_channels = weight.dims[0]
+        num_out_channels = weight.dims[1] * groups
+    elif node.op_type == "Gemm":
+        transB = get_node_attribute(node, "transB")
+        if transB == 1:
+            num_out_channels = weight.dims[0]
+            num_in_channels = weight.dims[1]
+        else:
+            num_out_channels = weight.dims[1]
+            num_in_channels = weight.dims[0]
+    else:
+        num_out_channels = None
+        num_in_channels = None
+    return num_in_channels, num_out_channels

@@ -499,7 +499,7 @@ class TestBatchNormFold:
         conv_bn, bn_conv = find_all_batch_norms_to_fold(conn_graph)
         linear_layer = conn_graph.get_op_from_module_name('Gemm_4')
         assert len(bn_conv) == 1
-        assert linear_layer == bn_conv[0][1]
+        assert linear_layer.get_module() == bn_conv[0][1]
         assert not conv_bn
 
     def test_fold_bn_before_flatten_no_bias(self):
@@ -515,7 +515,7 @@ class TestBatchNormFold:
         layers_orig = len(model.graph().node)
         baseline_output, folded_output, pairs = get_outputs_after_fold(model, test_data)
 
-        assert pairs[0][0].name == "MatMul_4"
+        assert pairs[0][0].name == "Gemm_4"
         assert len(model.graph().node) == layers_orig - 1
         assert np.allclose(baseline_output[0], folded_output[0], rtol=1e-2, atol=1e-6)
 
@@ -532,7 +532,7 @@ class TestBatchNormFold:
         layers_orig = len(model.graph().node)
         baseline_output, folded_output, pairs = get_outputs_after_fold(model, test_data)
 
-        assert pairs[0][0].name == "MatMul_5"
+        assert pairs[0][0].name == "Gemm_5"
         assert len(model.graph().node) == layers_orig - 1
         assert np.allclose(baseline_output[0], folded_output[0], rtol=1e-2, atol=1e-6)
 
@@ -717,7 +717,7 @@ class TestBatchNormFold:
         layers_orig = len(model.graph().node)
         baseline_output, folded_output, pairs = get_outputs_after_fold(model, test_data)
 
-        assert pairs[0][0].name == "MatMul_5"
+        assert pairs[0][0].name == "Gemm_5"
         assert len(model.graph().node) == layers_orig - 1
         assert np.allclose(baseline_output[0], folded_output[0], rtol=1e-2, atol=1e-6)
 
@@ -725,7 +725,7 @@ class TestBatchNormFold:
         layers_orig = len(model.graph().node)
         baseline_output, folded_output, pairs = get_outputs_after_fold(model, test_data)
 
-        assert pairs[0][0].name == "MatMul_3"
+        assert pairs[0][0].name == "Gemm_3"
         assert len(model.graph().node) == layers_orig - 1
         assert np.allclose(baseline_output[0], folded_output[0], rtol=1e-2, atol=1e-6)
 
@@ -776,7 +776,7 @@ class TestBatchNormFold:
         layers_orig = len(model.graph().node)
         baseline_output, folded_output, pairs = get_outputs_after_fold(model, test_data)
 
-        assert pairs[0][0].name == "MatMul_1"
+        assert pairs[0][0].name == "Gemm_1"
         assert len(model.graph().node) == layers_orig - 1
         assert np.allclose(baseline_output[0], folded_output[0], rtol=1e-2, atol=1e-6)
 
@@ -784,7 +784,7 @@ class TestBatchNormFold:
         layers_orig = len(model.graph().node)
         baseline_output, folded_output, pairs = get_outputs_after_fold(model, test_data)
 
-        assert pairs[0][0].name == "MatMul_0"
+        assert pairs[0][0].name == "Gemm_0"
         assert len(model.graph().node) == layers_orig - 1
         assert np.allclose(baseline_output[0], folded_output[0], rtol=1e-2, atol=1e-6)
 
