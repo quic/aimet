@@ -41,7 +41,6 @@ import os
 import unittest
 import tensorflow as tf
 import numpy as np
-#import aimet_common.libpymo as libpymo
 from aimet_common.defs import QuantScheme
 from aimet_tensorflow.keras.quantsim import QuantizationSimModel
 from aimet_tensorflow.keras.bn_reestimation import reestimate_bn_stats, _get_bn_submodules

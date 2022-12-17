@@ -551,7 +551,7 @@ def fold_given_batch_norms(model: Union[tf.keras.Model, QuantizationSimModel], l
 
     :param model: keras fp32 model/quantized model to fold selected batchnorms
     :param layer_pairs: Tuple of conv, bn layers and is_batch_norm_second flag
-    :param is_fold_to_scale: default is False,  when it is Ture, fold BN scaling factor into the per-channel quantization scaling factor of the preceding convolution
+    :param is_fold_to_scale: default is False,  when it is True, fold BN scaling factor into the per-channel quantization scaling factor of the preceding convolution
     """
     if is_fold_to_scale:
         assert isinstance(model, QuantizationSimModel)
