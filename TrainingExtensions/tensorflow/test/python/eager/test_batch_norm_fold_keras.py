@@ -46,7 +46,6 @@ from aimet_tensorflow.keras.utils import common
 from aimet_tensorflow.keras.batch_norm_fold import _delete_all_bns_from_model, _find_possible_convs_linears_bn, _get_ordered_conv_linears, _find_all_batch_norms_to_fold, fold_all_batch_norms
 from aimet_tensorflow.keras.batch_norm_fold import fold_all_batch_norms_to_scale
 from aimet_tensorflow.keras.utils.op.batchnorm import BNUtils
-from aimet_tensorflow.keras.utils.op.conv import WeightTensorUtils
 from aimet_tensorflow.keras.quantsim import QuantizationSimModel
 from aimet_common.defs import QuantScheme
 
@@ -1139,7 +1138,6 @@ class TestBatchNormFoldToScale(unittest.TestCase):
         x = tf.keras.layers.BatchNormalization(beta_initializer="normal", gamma_initializer="normal")(x)
         outputs = tf.keras.layers.ReLU()(x)
         model = tf.keras.Model(inputs=inputs, outputs=outputs)
-        WeightTensorUtils._create_bias_and_insert(model)
 
         dummy_inputs = np.random.randn(1, 32, 32, 3)
 
