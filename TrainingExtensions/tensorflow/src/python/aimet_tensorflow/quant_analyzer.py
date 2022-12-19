@@ -39,14 +39,14 @@
 """ Quant Analyzer """
 
 import os
+import json
 from typing import List, Tuple, Dict
-
 import tensorflow.compat.v1 as tf
 from bokeh import plotting
 from bokeh.models import ColumnDataSource, Band, Span, tickers
-
 from aimet_common.defs import QuantScheme
 from aimet_common.utils import AimetLogger, CallbackFunc
+from aimet_tensorflow.common.operation import Op
 from aimet_tensorflow.quantizer_info import QuantizerInfo
 from aimet_tensorflow.quantsim import QuantizationSimModel
 
@@ -60,6 +60,7 @@ class QuantAnalyzer:
     QuantAnalyzer tool provides
         1) Model sensitivity to weight and activation quantization
         2) Per layer encoding (min - max range) and PDF analysis
+        3) per op sensitivity analysis
     """
 
     def __init__(self, session: tf.compat.v1.Session, start_op_names: List[str], output_op_names: List[str],
@@ -103,6 +104,7 @@ class QuantAnalyzer:
             1) model sensitivity to quantization
             2) export per layer encoding (min - max range)
             3) export per layer statistics histogram (PDF) when quant scheme is TF-Enhanced
+            4) perform per op sensitivity analysis by enabling and disabling quant ops
 
         :param quant_scheme: Quantization Scheme, currently supported schemes are post_training_tf and
                post_training_tf_enhanced, defaults to post_training_tf_enhanced
@@ -128,6 +130,12 @@ class QuantAnalyzer:
         # Export PDF of statistics.
         if quant_scheme == QuantScheme.post_training_tf_enhanced:
             self._export_per_layer_stats_histogram(sim, results_dir)
+
+        # Perform per op analysis by enabling each quant op (OPTION-1).
+        self._perform_per_op_analysis_by_enabling_quant_ops(sim, results_dir)
+
+        # Perform per op analysis by disabling each quant op (OPTION-2).
+        self._perform_per_op_analysis_by_disabling_quant_ops(sim, results_dir)
 
     def _create_quantsim_and_encodings(self, quant_scheme: QuantScheme, rounding_mode: str,
                                        config_file: str) -> QuantizationSimModel:
@@ -193,9 +201,9 @@ class QuantAnalyzer:
         :return: Quantized model performance.
         """
         enabled_activation_quantizers = sim.get_enabled_activation_quantizers()
-        sim.enable_disable_quantizers(enabled_activation_quantizers, enabled=False)
+        self._enable_disable_quantizers(enabled_activation_quantizers, enabled=False)
         eval_score = self._eval_model(sim.session)
-        sim.enable_disable_quantizers(enabled_activation_quantizers, enabled=True)
+        self._enable_disable_quantizers(enabled_activation_quantizers, enabled=True)
         return eval_score
 
     def _eval_activation_quantized_model(self, sim):
@@ -208,10 +216,158 @@ class QuantAnalyzer:
         :return: Quantized model performance.
         """
         enabled_param_quantizers = sim.get_enabled_parameter_quantizers()
-        sim.enable_disable_quantizers(enabled_param_quantizers, enabled=False)
+        self._enable_disable_quantizers(enabled_param_quantizers, enabled=False)
         eval_score = self._eval_model(sim.session)
-        sim.enable_disable_quantizers(enabled_param_quantizers, enabled=True)
+        self._enable_disable_quantizers(enabled_param_quantizers, enabled=True)
         return eval_score
+
+    def _perform_per_op_analysis_by_enabling_quant_ops(self,
+                                                       sim: QuantizationSimModel,
+                                                       results_dir: str = "./tmp/",
+                                                       ) -> Dict:
+        """
+        1. All activations and parameters quantizers are disabled.
+        2. For every activations and parameters quantizers:
+              i. Quantizer is enabled
+             ii. Measure and record eval score on subset of dataset.
+            iii. Disable enabled quantizer in step i.
+        3. Returns dictionary containing quant op name and corresponding eval score.
+
+        :param sim: Quantsim model.
+        :param results_dir: Directory to save the results.
+        :return: layer wise eval score dictionary. dict[op_name] = eval_score
+        """
+        results_dir = os.path.abspath(results_dir)
+        os.makedirs(results_dir, exist_ok=True)
+
+        _logger.info("\nOPTION-1:\nAll the quant ops are disabled.\n"
+                     "Starting per-layer analysis by enabling quant ops as per config file.")
+        op_wise_eval_score_dict = self._perform_per_op_analysis(sim,
+                                                                disable_all_quantizers=True,
+                                                                enabled_before=True,
+                                                                enabled_after=False)
+        self._export_per_layer_sensitivity_analysis_plot(op_wise_eval_score_dict,
+                                                         results_dir,
+                                                         title="per_op_quant_enabled")
+        self._save_json(op_wise_eval_score_dict,
+                        results_dir,
+                        title="per_op_quant_enabled.json")
+        return op_wise_eval_score_dict
+
+    def _perform_per_op_analysis_by_disabling_quant_ops(self,
+                                                        sim: QuantizationSimModel,
+                                                        results_dir: str = "./tmp/",
+                                                        ) -> Dict:
+        """
+        1. All activations and parameters quantizers are enabled as per JSON config file.
+        2. For every activations and parameters quantizers:
+              i. Quantizer is disabled
+             ii. Measure and record eval score on subset of dataset.
+            iii. Enable disabled quantizer in step i.
+        3. Returns dictionary containing quant op name and corresponding eval score.
+
+        :param sim: Quantsim model.
+        :param results_dir: Directory to save the results.
+        :return: layer wise eval score dictionary. dict[op_name] = eval_score
+        """
+        results_dir = os.path.abspath(results_dir)
+        os.makedirs(results_dir, exist_ok=True)
+
+        _logger.info("\nOPTION-2:\nAll the quant ops are enabled as per config file.\n"
+                     "Starting per-layer analysis by disabling quant ops.")
+        op_wise_eval_score_dict = self._perform_per_op_analysis(sim,
+                                                                disable_all_quantizers=False,
+                                                                enabled_before=False,
+                                                                enabled_after=True)
+        self._export_per_layer_sensitivity_analysis_plot(op_wise_eval_score_dict,
+                                                         results_dir,
+                                                         title="per_op_quant_disabled")
+        self._save_json(op_wise_eval_score_dict,
+                        results_dir,
+                        title="per_op_quant_disabled.json")
+        return op_wise_eval_score_dict
+
+    def _perform_per_op_analysis(self,
+                                 sim: QuantizationSimModel,
+                                 disable_all_quantizers: bool,
+                                 enabled_before: bool,
+                                 enabled_after: bool,
+                                 ) -> Dict:
+        """
+        Helper function for perform_per_layer_analysis_by_enabling_quant_ops() and
+        perform_per_layer_analysis_by_disabling_quant_ops()
+
+        :param sim: Quantsim model.
+        :param disable_all_quantizers: Flag to disable all the quantizers before per-layer analysis.
+        :param enabled_before: Flag to set enabled for quantizers before computing encodings.
+        :param enabled_after: Flag to set enabled for quantizers after computing encodings.
+        :return: layer wise eval score dictionary. dict[conn_graph_op] = eval_score.
+        """
+
+        enabled_quant_ops = self._get_enabled_quantizer_groups(sim)
+
+        if disable_all_quantizers:
+            for quantizer_group_list in enabled_quant_ops.values():
+                if quantizer_group_list:
+                    self._enable_disable_quantizers(quantizer_group_list, enabled=False)
+
+        eval_score_dict = {}
+        for conn_graph_op, quantizer_info_list in enabled_quant_ops.items():
+            if quantizer_info_list:
+                conn_graph_op = str(conn_graph_op)
+                self._enable_disable_quantizers(quantizer_info_list, enabled=enabled_before)
+
+                # Record eval score.
+                eval_score_dict[conn_graph_op] = self._eval_model(sim.session)
+                _logger.info("For connected graph op: %s, the eval score is: %f", conn_graph_op, eval_score_dict[conn_graph_op])
+
+                self._enable_disable_quantizers(quantizer_info_list, enabled=enabled_after)
+
+        if disable_all_quantizers:
+            for quantizer_group_list in enabled_quant_ops.values():
+                if quantizer_group_list:
+                    self._enable_disable_quantizers(quantizer_group_list, enabled=True)
+
+        return eval_score_dict
+
+    @staticmethod
+    def _get_enabled_quantizer_groups(sim: QuantizationSimModel)-> Dict[Op, List[QuantizerInfo]]:
+        """
+        For given quantsim model, get all enabled activation and parameter quantizers.
+        :param sim: Quantsim model.
+        :return: Dictionary which maps a connected graph op to a list of enabled quantizer info in it.
+        """
+        enabled_quantizers_dict = {}
+        # pylint: disable=protected-access
+        for conn_graph_op, quantizer_group in sim._op_to_quant_ops_dict.items():
+            group = []
+            # pylint: disable=protected-access
+            param_quant_op_dict, act_quant_op = quantizer_group
+            activation_quantize_info = sim._activation_quantizers.get(act_quant_op.name)
+            if activation_quantize_info.enabled:
+                group.append(activation_quantize_info)
+            for param_op_set in param_quant_op_dict.values():
+                for param_op in param_op_set:
+                    # pylint: disable=protected-access
+                    param_quantize_info = sim._param_quantizers.get(param_op.name)
+                    if param_quantize_info.enabled:
+                        group.append(param_quantize_info)
+            enabled_quantizers_dict[conn_graph_op] = group
+        return enabled_quantizers_dict
+
+    @staticmethod
+    def _enable_disable_quantizers(quantizer_list: List[QuantizerInfo], enabled: bool):
+        """
+        For given list of quantizers, set (enable/disable) quantizer's enabled.
+
+        :param quantizer_list: List of quantizers.
+        :param enabled: Enabled flag.
+        """
+        for quantizer_info in quantizer_list:
+            if enabled:
+                quantizer_info.enable_keeping_encoding()
+            else:
+                quantizer_info.enabled = enabled
 
     def _export_per_layer_stats_histogram(self, sim: QuantizationSimModel,
                                           results_dir: str = "./tmp/"):
@@ -219,8 +375,8 @@ class QuantAnalyzer:
         NOTE: Not to invoke when quantization scheme is not TF-Enhanced.
 
         Export histogram that represents a PDF of collected statistics by a quantizer for every
-        quant wrapper. After invoking this API, results_dir should have html files in following
-        format for every quantizers of quant wrappers.
+        quant op. After invoking this API, results_dir should have html files in following
+        format for every quantizers of quant ops.
 
         -results_dir
             -activations_pdf
@@ -251,6 +407,48 @@ class QuantAnalyzer:
 
         _logger.info("Exported per layer stats histogram.")
 
+    @staticmethod
+    def _export_per_layer_sensitivity_analysis_plot(layer_wise_eval_score_dict: Dict, results_dir: str,
+                                                    title: str) -> plotting.Figure:
+        """
+        Export per layer sensitivity analysis in html format.
+
+        :param layer_wise_eval_score_dict: layer wise eval score dictionary. dict[layer_name] = eval_score.
+        :param results_dir: Directory to save the results.
+        :param title: Title of the plot.
+        """
+        layer_names = []
+        eval_scores = []
+        for layer_name, eval_score in layer_wise_eval_score_dict.items():
+            layer_names.append(layer_name)
+            eval_scores.append(eval_score)
+
+        # Configure the output file to be saved.
+        filename = os.path.join(results_dir, f"{title}.html")
+        plotting.output_file(filename)
+        plot = plotting.figure(x_range=layer_names,
+                               plot_height=DEFAULT_BOKEH_FIGURE_HEIGHT,
+                               title=title,
+                               x_axis_label="Ops",
+                               y_axis_label="Eval score")
+        plot.line(x=layer_names, y=eval_scores)
+        plot.y_range.start = 0
+        plot.xaxis.major_label_orientation = "vertical"
+        plot.sizing_mode = "scale_width"
+        plotting.save(plot)
+        return plot
+
+    @staticmethod
+    def _save_json(dictionary: Dict, results_dir: str, title: str):
+        """
+        Save dictionary in JSON format.
+        :param dictionary: Dictionary to be saved.
+        :param results_dir: Directory to save the results.
+        :param title: Title of the file.
+        """
+        filename = os.path.join(results_dir, title)
+        with open(filename, 'w') as f:
+            json.dump(dictionary, f, indent=4)
 
     def _export_per_layer_encoding_min_max_range(self, sim: QuantizationSimModel,
                                                  results_dir: str = "./tmp/"

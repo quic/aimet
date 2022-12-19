@@ -170,6 +170,7 @@ class QuantizationSimModel:
         self._activation_quantizers = {}
         self._default_output_bw = default_output_bw
         self._default_param_bw = default_param_bw
+        self._op_to_quant_ops_dict = {}
         self.connected_graph = ConnectedGraph(self.session.graph, starting_op_names, output_op_names)
 
         # We save a copy of the original model (to be used during export later)
@@ -257,9 +258,9 @@ class QuantizationSimModel:
                          f'overriden, please override configure_quantization_ops() as well.')
             _logger.error(error_msg)
             raise AssertionError(error_msg)
-        op_to_quant_ops_dict = create_op_to_quant_ops_dict(self.session.graph, conn_graph, ops_with_param_names, indices,
-                                                           params_to_quantize, activation_op_names)
-        self._quantsim_configurator.configure_quantizers(op_to_quant_ops_dict, self._param_quantizers,
+        self._op_to_quant_ops_dict = create_op_to_quant_ops_dict(self.session.graph, conn_graph, ops_with_param_names, indices,
+                                                                 params_to_quantize, activation_op_names)
+        self._quantsim_configurator.configure_quantizers(self._op_to_quant_ops_dict, self._param_quantizers,
                                                          self._activation_quantizers)
 
     def compute_encodings(self, forward_pass_callback: Callable[[tf.compat.v1.Session, Any], None],
@@ -351,20 +352,6 @@ class QuantizationSimModel:
             if quantizer_info.enabled:
                 enabled_activation_quantizers.append(quantizer_info)
         return enabled_activation_quantizers
-
-    @staticmethod
-    def enable_disable_quantizers(quantizer_list: List[QuantizerInfo], enabled: bool):
-        """
-        For given list of quantizers, set (enable/disable) quantizer's enabled.
-
-        :param quantizer_list: List of quantizers.
-        :param enabled: Enabled flag.
-        """
-        for quantizer_info in quantizer_list:
-            if enabled:
-                quantizer_info.enable_keeping_encoding()
-            else:
-                quantizer_info.enabled = enabled
 
     def _set_op_mode_parameters(self, op_mode: libpymo.TensorQuantizerOpMode,
                                 ops_with_invalid_encodings: List):
