@@ -45,7 +45,7 @@ from aimet_tensorflow.keras.bn_reestimation import reestimate_bn_stats, _get_bn_
 from aimet_tensorflow.keras.batch_norm_fold import fold_all_batch_norms_to_scale
 
 
-def _qsim_setup_for_fold_scale(model, conv_layer, bn_layer, dummy_inputs):
+def _qsim_setup_for_fold_scale(model, dummy_inputs):
     default_config_per_channel = {
         "defaults":
             {
@@ -122,21 +122,6 @@ def _qsim_setup_for_fold_scale(model, conv_layer, bn_layer, dummy_inputs):
                                 config_file="/tmp/default_config_per_channel.json")
 
 
-    # Disable quantizers of conv's output and bias
-    conv_wrapper = qsim.get_quant_wrapper_for_layer_name(conv_layer.name)
-    # check no bias
-    if hasattr(conv_wrapper, 'param_quantizers[1]'):
-        conv_wrapper.param_quantizers[1].disable()
-    conv_wrapper.output_quantizers[0].disable()
-
-    # Disable quantizers of batchnorms
-    bn_wrapper = qsim.get_quant_wrapper_for_layer_name(bn_layer.name)
-    bn_wrapper.param_quantizers[0].disable()
-    bn_wrapper.param_quantizers[1].disable()
-    bn_wrapper.param_quantizers[2].disable()
-    bn_wrapper.param_quantizers[3].disable()
-    bn_wrapper.input_quantizers[0].disable()
-    bn_wrapper.output_quantizers[0].disable()
     qsim.compute_encodings(lambda m, _: m.predict(dummy_inputs), None)
 
     return qsim
@@ -195,7 +180,8 @@ def test_bn_reestimation():
     it = iter(dataset)
     dummy_inputs = next(it)
     model = tf.keras.applications.mobilenet_v2.MobileNetV2(weights=None, input_shape=(32, 32, 3))
-    qsim = _qsim_setup_for_fold_scale(model, model.layers[1], model.layers[2],dummy_inputs )
+    #qsim = _qsim_setup_for_fold_scale(model, model.layers[1], model.layers[2],dummy_inputs )
+    qsim = _qsim_setup_for_fold_scale(model, dummy_inputs)
     qsim.model.compile(optimizer=tf.keras.optimizers.Adam(learning_rate=1e-3), loss=tf.keras.losses.MeanSquaredError())
     _reestimate_and_compare_results(qsim.model, dataset)
     _fold_all_batch_norms_to_scale_and_compare_results(qsim, dummy_inputs, 5e-3)
