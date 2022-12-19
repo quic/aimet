@@ -6,14 +6,15 @@
 Model Preparer API
 ==================
 
-AIMET Keras ModelPreparer API is used to prepare a Keras model that is not using the Keras Functional API. Specifically,
-it targets models that have been created using the subclassing feature in Keras. The ModelPreparer API will convert the
-subclassing model to a Keras Functional API model. This is required because the AIMET Keras Quantization API requires
-a Keras Functional API model as input.
+AIMET Keras ModelPreparer API is used to prepare a Keras model that is not using the Keras Functional or Sequential API.
+Specifically, it targets models that have been created using the subclassing feature in Keras. The ModelPreparer API will
+convert the subclassing model to a Keras Functional API model. This is required because the AIMET Keras Quantization API
+requires a Keras Functional API model as input.
 
 Users are strongly encouraged to use AIMET Keras ModelPreparer API first and then use the returned model as input
 to all the AIMET Quantization features. It is manditory to use the AIMET Keras ModelPreparer API if the model is
-created using the subclassing feature in Keras.
+created using the subclassing feature in Keras, if any of the submodules of the model are created via subclassing, or if
+any custom layers that inherit from the Keras Layer class are used in the model.
 
 
 
@@ -82,7 +83,7 @@ The AIMET Keras ModelPreparer API has the following limitations:
 
 * The AIMET Keras ModelPreparer API is able to convert subclass layers that have arthmetic experssion in their call function.
   However, this API and Keras, will convert these operations to TFOPLambda layers which are not currently supported by AIMET Keras Quantization API. 
-  If possible, it is recommended to have the subclass layers call function ressemble the Keras Functional API layers.
+  If possible, it is recommended to have the subclass layers call function resemble the Keras Functional API layers.
     For example, if a subclass layer has two convolution layers in its call function, the call function should look like
     the following::
 
@@ -94,3 +95,4 @@ The AIMET Keras ModelPreparer API has the following limitations:
 * If the model starts with a subclassed layer, the AIMET Keras ModelPreparer API will need an Keras Input Layer as input.
   This is becuase the Keras Functional API requires an Input Layer as the first layer in the model. The AIMET Keras ModelPreparer API
   will raise an exception if the model starts with a subclassed layer and an Input Layer is not provided as input.
+  
