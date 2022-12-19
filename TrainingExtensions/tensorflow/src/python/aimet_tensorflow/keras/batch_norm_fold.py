@@ -532,7 +532,7 @@ def fold_all_batch_norms_to_scale(sim: QuantizationSimModel):
 
     # When returning the pairs, we want the second element of the pair to be the BN
     pairs_to_return = []
-    for bn, conv, is_batch_norm_second in bn_conv_linear_pairs:
+    for bn, conv, _ in bn_conv_linear_pairs:
         pairs_to_return.append((bn, conv))
 
     return pairs_to_return
