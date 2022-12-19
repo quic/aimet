@@ -180,7 +180,6 @@ def test_bn_reestimation():
     it = iter(dataset)
     dummy_inputs = next(it)
     model = tf.keras.applications.mobilenet_v2.MobileNetV2(weights=None, input_shape=(32, 32, 3))
-    #qsim = _qsim_setup_for_fold_scale(model, model.layers[1], model.layers[2],dummy_inputs )
     qsim = _qsim_setup_for_fold_scale(model, dummy_inputs)
     qsim.model.compile(optimizer=tf.keras.optimizers.Adam(learning_rate=1e-3), loss=tf.keras.losses.MeanSquaredError())
     _reestimate_and_compare_results(qsim.model, dataset)
