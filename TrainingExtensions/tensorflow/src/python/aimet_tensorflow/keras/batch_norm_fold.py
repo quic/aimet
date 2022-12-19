@@ -61,13 +61,6 @@ LINEAR_TYPE = tf.keras.layers.Dense
 CONV_TYPE = tf.keras.layers.Conv2D
 FLATTEN_TYPE = Union[tf.keras.layers.Flatten, tf.keras.layers.Reshape]
 
-class BnConvLinearPairs(IntEnum):
-    """
-    Enumeration of Bn and ConvLinear Pairs
-    """
-    BN = 0
-    CONVLINEAR = 1
-
 class PerChannelQuantizerType(IntEnum):
     """
     Enumeration of ConvLinear Input/Output/Param PerChannel Quantizers
@@ -539,8 +532,8 @@ def fold_all_batch_norms_to_scale(sim: QuantizationSimModel):
 
     # When returning the pairs, we want the second element of the pair to be the BN
     pairs_to_return = []
-    for pair in bn_conv_linear_pairs:
-        pairs_to_return.append((pair[BnConvLinearPairs.BN], pair[BnConvLinearPairs.CONVLINEAR]))
+    for bn, conv, is_batch_norm_second in bn_conv_linear_pairs:
+        pairs_to_return.append((bn, conv))
 
     return pairs_to_return
 

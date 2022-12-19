@@ -45,7 +45,7 @@ from aimet_tensorflow.keras.bn_reestimation import reestimate_bn_stats, _get_bn_
 from aimet_tensorflow.keras.batch_norm_fold import fold_all_batch_norms_to_scale
 
 
-def _qsim_setup_for_fold_scale(model, conv_layer, bn_layer, dummy_inputs, is_disable_qauntizers_compute_encodings=True):
+def _qsim_setup_for_fold_scale(model, conv_layer, bn_layer, dummy_inputs):
     default_config_per_channel = {
         "defaults":
             {
@@ -121,23 +121,23 @@ def _qsim_setup_for_fold_scale(model, conv_layer, bn_layer, dummy_inputs, is_dis
     qsim = QuantizationSimModel(model, quant_scheme=QuantScheme.training_range_learning_with_tf_init,
                                 config_file="/tmp/default_config_per_channel.json")
 
-    if is_disable_qauntizers_compute_encodings:
-        # Disable quantizers of conv's output and bias
-        conv_wrapper = qsim.get_quant_wrapper_for_layer_name(conv_layer.name)
-        # check no bias
-        if hasattr(conv_wrapper, 'param_quantizers[1]'):
-            conv_wrapper.param_quantizers[1].disable()
-        conv_wrapper.output_quantizers[0].disable()
 
-        # Disable quantizers of batchnorms
-        bn_wrapper = qsim.get_quant_wrapper_for_layer_name(bn_layer.name)
-        bn_wrapper.param_quantizers[0].disable()
-        bn_wrapper.param_quantizers[1].disable()
-        bn_wrapper.param_quantizers[2].disable()
-        bn_wrapper.param_quantizers[3].disable()
-        bn_wrapper.input_quantizers[0].disable()
-        bn_wrapper.output_quantizers[0].disable()
-        qsim.compute_encodings(lambda m, _: m.predict(dummy_inputs), None)
+    # Disable quantizers of conv's output and bias
+    conv_wrapper = qsim.get_quant_wrapper_for_layer_name(conv_layer.name)
+    # check no bias
+    if hasattr(conv_wrapper, 'param_quantizers[1]'):
+        conv_wrapper.param_quantizers[1].disable()
+    conv_wrapper.output_quantizers[0].disable()
+
+    # Disable quantizers of batchnorms
+    bn_wrapper = qsim.get_quant_wrapper_for_layer_name(bn_layer.name)
+    bn_wrapper.param_quantizers[0].disable()
+    bn_wrapper.param_quantizers[1].disable()
+    bn_wrapper.param_quantizers[2].disable()
+    bn_wrapper.param_quantizers[3].disable()
+    bn_wrapper.input_quantizers[0].disable()
+    bn_wrapper.output_quantizers[0].disable()
+    qsim.compute_encodings(lambda m, _: m.predict(dummy_inputs), None)
 
     return qsim
 
