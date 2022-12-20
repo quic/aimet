@@ -100,6 +100,7 @@ class QuantizationSimModel(tf.keras.Model):
             n_weights = len(self._model_without_wrappers.weights)
             self._model_without_wrappers.set_weights(model.get_weights()[:n_weights])
         self._layer_name_to_quant_wrapper = {}
+        self._substituted_layer = {}    # to hold the substituted layers
         self._validate_model()
         self.connected_graph = ConnectedGraph(self._model_without_wrappers)
         self._quantsim_configurator = self._initialize_quantsim_configurator(quant_scheme, rounding_mode,
@@ -172,7 +173,9 @@ class QuantizationSimModel(tf.keras.Model):
                 new_class = substitutable_modules[type(layer)]
                 config = layer.get_config()
                 config["copy_source_weights"] = layer.get_weights()
-                return new_class(**config)
+                wrapped_layer = new_class(**config)
+                self._substituted_layer[layer] = wrapped_layer
+                return wrapped_layer
 
             if isinstance(layer, unquantizable_modules) or layer.submodules:
                 return layer
