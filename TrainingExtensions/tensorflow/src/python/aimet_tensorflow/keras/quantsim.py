@@ -65,8 +65,8 @@ substitutable_modules = {
     tf.keras.layers.MultiHeadAttention: QcQuantizableMultiHeadAttention
 }
 
-
-class QuantizationSimModel:
+# pylint: disable=too-many-ancestors
+class QuantizationSimModel(tf.keras.Model):
     """
     Implements mechanism to add quantization simulations ops to a model. This allows for off-target simulation of
     inference accuracy. Also allows the model to be fine-tuned to counter the effects of quantization.
@@ -92,10 +92,13 @@ class QuantizationSimModel:
                                  Note that the mode default_data_type=QuantizationDataType.float is only supported with
                                  default_output_bw=16 and default_param_bw=16
         """
+        super(QuantizationSimModel, self).__init__()
+
         self._model_without_wrappers = model
         if not in_place:
             self._model_without_wrappers = tf.keras.models.clone_model(model)
-            self._model_without_wrappers.set_weights(model.get_weights())
+            n_weights = len(self._model_without_wrappers.weights)
+            self._model_without_wrappers.set_weights(model.get_weights()[:n_weights])
         self._layer_name_to_quant_wrapper = {}
         self._validate_model()
         self.connected_graph = ConnectedGraph(self._model_without_wrappers)
@@ -459,3 +462,83 @@ class QuantizationSimModel:
         :return: Qc quant wrapper corresponding to a layer name
         """
         return self._layer_name_to_quant_wrapper.get(layer_name)
+
+    def _fill_missing_encoding_min_max_gradients(self, gradients: list):
+        """
+        Computes the encoding min/max gradients and populates the gradients list
+        :param gradients: gradients computed using GradientTape(gradients for encoding min/max will be `None`)
+        """
+
+        def _find_weight_in_layer(weight_name: str, model_layer: tf.keras.layers.Layer):
+
+            for weight in model_layer.weights:
+                if weight.name.split(":")[0] == weight_name:
+                    return weight
+
+            return None
+
+        # Mapping used to get the gradients of weights(kernel, bias etc)
+        weight_name_to_gradient = dict(zip([weight.name.split(":")[0] for weight in self.model.trainable_weights],
+                                           gradients))
+
+        # Mapping used to get index of encoding min/max gradients (which would be `None`) and fill them
+        weight_name_to_index = dict(zip([weight.name for weight in self.model.trainable_weights],
+                                        range(len(self.model.trainable_weights))))
+
+        # Only process layers where 'param_quantizers' is defined (i.e. QcQuantizeWrapper layers)
+        for layer in filter(lambda _layer: hasattr(_layer, 'param_quantizers'), self.model.layers):
+            for param_quantizer in layer.param_quantizers:
+                if param_quantizer.name in weight_name_to_gradient:
+                    # Value of weight associated with this param quantizer
+                    weight_tensor = _find_weight_in_layer(param_quantizer.name, layer.original_layer)
+
+                    # Gradients of the weights
+                    grad = weight_name_to_gradient[param_quantizer.name]
+
+                    # Using the weights and it's gradients, compute gradients for encoding min/max
+                    dloss_by_dmin, dloss_by_dmax = param_quantizer.get_gradients_for_encoding_min_max(weight_tensor,
+                                                                                                      grad)
+
+                    enc_min_index = weight_name_to_index[param_quantizer.encoding_min.name]
+                    enc_max_index = weight_name_to_index[param_quantizer.encoding_max.name]
+
+                    gradients[enc_min_index] = dloss_by_dmin
+                    gradients[enc_max_index] = dloss_by_dmax
+
+    # pylint: disable=useless-super-delegation
+    def get_config(self):
+        return super().get_config()
+
+    def call(self, inputs, training=None, mask=None):
+        return self.model.call(inputs, training, mask)
+
+    def train_step(self, data):
+        """
+        Custom training loop, equivalent to overriding `keras.Model.fit` function
+        Reference: https://keras.io/guides/customizing_what_happens_in_fit/
+        Only relevant when using range-learning, otherwise equivalent to `keras.Model.fit`
+        Param quantizers are disconnected in the op graph of the wrapped model
+        Because of this, the gradients are not computed for encoding min/max(when range learning is enabled)
+        This custom train_step function computes the missing gradients for encoding min/max of param quantizers
+        """
+        x, y = data
+
+        with tf.GradientTape() as tape:
+            predictions = self(x, training=True)
+            loss = self.compiled_loss(y, predictions)
+
+        gradients = tape.gradient(loss, self.model.trainable_weights)
+
+        # Manually compute missing gradients for encoding min/max when using range learning
+        if self.quant_scheme in [QuantScheme.training_range_learning_with_tf_init,
+                                 QuantScheme.training_range_learning_with_tf_enhanced_init]:
+            self._fill_missing_encoding_min_max_gradients(gradients)
+
+        gradients_to_apply = [(gradient, weight) for gradient, weight in zip(gradients, self.model.trainable_weights)
+                              if gradient is not None]
+
+        self.optimizer.apply_gradients(gradients_to_apply)
+
+        self.compiled_metrics.update_state(y, predictions)
+
+        return {m.name: m.result() for m in self.metrics}
