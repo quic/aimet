@@ -147,7 +147,7 @@ RUN python3 -m pip --no-cache-dir install \
         matplotlib>=3 \
         mock \
         nbsphinx \
-        numpy \
+        'numpy<1.24,>=1.16.6' \
         onnx==1.12.0 \
         onnxsim \
         onnxruntime \
