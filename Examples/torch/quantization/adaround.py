@@ -126,10 +126,7 @@ def apply_adaround_and_find_quantized_accuracy(model: torch.nn.Module, evaluator
 
     :param model: The loaded model
     :param evaluator: The Eval function to use for evaluation
-    :param dataloader: The dataloader to be passed into the AdaroundParameters api
-    :param num_val_samples_per_class: No of samples to use from every class in
-                                      computing encodings. Not used in pascal voc
-                                      dataset
+    :param data_loader: The dataloader to be passed into the AdaroundParameters api
     :param use_cuda: The cuda device.
     :param logdir: Path to a directory for logging.
     :return: A tuple of quantized model and accuracy of model on this quantsim
@@ -220,7 +217,7 @@ def adaround_example(config: argparse.Namespace):
 
 
 if __name__ == '__main__':
-    default_logdir = os.path.join("benchmark_output", "adaround" + datetime.now().strftime("%Y-%m-%d-%H-%M-%S"))
+    default_logdir = os.path.join("benchmark_output", "adaround_" + datetime.now().strftime("%Y-%m-%d-%H-%M-%S"))
 
     parser = argparse.ArgumentParser(
         description='Apply Adaround on pretrained ResNet18 model and evaluate on ImageNet dataset')
