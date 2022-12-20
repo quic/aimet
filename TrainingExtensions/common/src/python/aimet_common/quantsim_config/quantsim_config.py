@@ -341,13 +341,20 @@ class QuantSimConfigurator(ABC):
         # --------------------------------------------------------------------------------------------------- #
 
         if not is_current_config_same_as_override_option(
-                QuantDtypeBwInfo(self._default_data_type, self._default_output_bw,
-                                 self._default_data_type, self._default_param_bw), op_config[ConfigDictKeys.SUPPORTED_KERNELS]):
-            param_bw = op_config[ConfigDictKeys.SUPPORTED_KERNELS][DEFAULT_OVERRIDE_SUPPORTED_KERNEL_INDEX]['param']['bitwidth']
-            param_dtype = op_config[ConfigDictKeys.SUPPORTED_KERNELS][DEFAULT_OVERRIDE_SUPPORTED_KERNEL_INDEX]['param']['dtype']
-            logger.info(' Enforcing target kernel config for param bw = {%s} and dtype = {%s}',
-                        param_bw,
-                        param_dtype)
+                QuantDtypeBwInfo(self._default_data_type, self._default_output_bw, self._default_data_type,
+                                 self._default_param_bw),
+                op_config[ConfigDictKeys.SUPPORTED_KERNELS]):
+            act_bw = op_config[ConfigDictKeys.SUPPORTED_KERNELS][DEFAULT_OVERRIDE_SUPPORTED_KERNEL_INDEX][
+                ConfigDictKeys.ACTIVATION][ConfigDictKeys.BITWIDTH]
+            act_dtype = op_config[ConfigDictKeys.SUPPORTED_KERNELS][DEFAULT_OVERRIDE_SUPPORTED_KERNEL_INDEX][
+                ConfigDictKeys.ACTIVATION][ConfigDictKeys.DTYPE]
+            param_bw = op_config[ConfigDictKeys.SUPPORTED_KERNELS][DEFAULT_OVERRIDE_SUPPORTED_KERNEL_INDEX][
+                ConfigDictKeys.PARAM][ConfigDictKeys.BITWIDTH]
+            param_dtype = op_config[ConfigDictKeys.SUPPORTED_KERNELS][DEFAULT_OVERRIDE_SUPPORTED_KERNEL_INDEX][
+                ConfigDictKeys.PARAM][ConfigDictKeys.DTYPE]
+            logger.info('Enforcing target kernel config for activation bw/dtype = %s/%s, param bw/dtype = %s/%s',
+                        act_bw, act_dtype, param_bw, param_dtype)
+            self._override_act_bw_dtype(quantizer_data, act_dtype, act_bw)
             self._override_param_bw_dtype(quantizer_data, param_dtype, param_bw)
 
     @property
@@ -375,6 +382,16 @@ class QuantSimConfigurator(ABC):
         """
         overrides data type and bitwidth default config for param quantizers of given data
         :param quantizer_data: object containing which param override will be applied to
+        :param bitwidth: bitwidth
+        :param data_type: data type as QuantizationDataType
+        :return:
+        """
+
+    @abstractmethod
+    def _override_act_bw_dtype(self, quantizer_data, data_type: QuantizationDataType, bitwidth: int):
+        """
+        overrides data type and bitwidth default config for activation quantizers of given data
+        :param quantizer_data: object containing which activation override will be applied to
         :param bitwidth: bitwidth
         :param data_type: data type as QuantizationDataType
         :return:
@@ -463,6 +480,26 @@ class QuantSimConfigurator(ABC):
         Set model output specific configurations (sixth level of specificity in configuration file)
         :param model_output_configs: Configuration for model outputs
         """
+
+    def _op_type_default_override_supported_kernel_lookup(self, op_type: str, bw: int, dtype: QuantizationDataType) \
+             -> bool:
+        """
+        Check if bw and dtype are provided as the default supported kernel override for the given op type
+        :param op_type: Op type to check override for
+        :param bw: Bitwidth to check in supported kernel default override
+        :param dtype: Data type to check in supported kernel default override
+        :return: True if bw, dtype is the default supported kernel override, False otherwise
+        """
+        if op_type in self._quantsim_configs[ConfigDictKeys.OP_TYPE] and \
+            ConfigDictKeys.SUPPORTED_KERNELS in self._quantsim_configs[ConfigDictKeys.OP_TYPE][op_type]:
+            op_supported_kernels = self._quantsim_configs[ConfigDictKeys.OP_TYPE][op_type][
+                ConfigDictKeys.SUPPORTED_KERNELS]
+            if op_supported_kernels[DEFAULT_OVERRIDE_SUPPORTED_KERNEL_INDEX][ConfigDictKeys.ACTIVATION][
+                    ConfigDictKeys.BITWIDTH] == bw and \
+                op_supported_kernels[DEFAULT_OVERRIDE_SUPPORTED_KERNEL_INDEX][ConfigDictKeys.ACTIVATION][
+                    ConfigDictKeys.DTYPE] == dtype:
+                return True
+        return False
 
 
 def _build_list_of_permutations(op_list: List[str], onnx_conn_graph_type_mapper: OnnxConnectedGraphTypeMapper) \
