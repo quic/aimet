@@ -173,7 +173,7 @@ def apply_cross_layer_equalization(model: torch.nn.Module, input_shape: tuple):
         Batch Norm Folding
         Cross Layer Scaling
         High Bias Fold
-    Converts any ReLU6 into ReLU.
+        Converts any ReLU6 into ReLU.
     :param model: the loaded model
     :param input_shape: the shape of the input to the model
     :return:

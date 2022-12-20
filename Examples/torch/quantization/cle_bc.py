@@ -155,13 +155,11 @@ def calculate_quantsim_accuracy(model: torch.nn.Module, evaluator: aimet_common.
 
 def apply_cross_layer_equalization(model: torch.nn.Module, input_shape: tuple):
     """
-    Applies CLE on the model and calculates model accuracy on quantized simulator
     Applying CLE on the model inplace consists of:
         - Batch Norm Folding
         - Converts any ReLU6 layers to ReLU layers
         - Cross Layer Scaling
         - High Bias Fold
-        - Converts any ReLU6 into ReLU
 
     :param model: the loaded model
     :param input_shape: the shape of the input to the model
