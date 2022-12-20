@@ -1163,7 +1163,7 @@ class TestBatchNormFoldToScale(unittest.TestCase):
     def test_bn_fold_convolution(self):
         tf.keras.backend.clear_session()
         inputs = tf.keras.Input((32, 32, 3))
-        x = tf.keras.layers.Conv2D(16, 3, use_bias=True)(inputs)
+        x = tf.keras.layers.Conv2D(16, 3, use_bias=False)(inputs)
         x = tf.keras.layers.BatchNormalization(beta_initializer='normal',
                                                gamma_initializer='normal')(x)
         outputs = tf.keras.layers.ReLU()(x)
@@ -1176,7 +1176,7 @@ class TestBatchNormFoldToScale(unittest.TestCase):
     def test_bn_fold_depthwise_convolution(self):
         tf.keras.backend.clear_session()
         inputs = tf.keras.Input((32, 32, 3))
-        x = tf.keras.layers.DepthwiseConv2D(16, use_bias=True)(inputs)
+        x = tf.keras.layers.DepthwiseConv2D(16, use_bias=False)(inputs)
         x = tf.keras.layers.BatchNormalization(beta_initializer='normal',
                                                gamma_initializer='normal',
                                                moving_mean_initializer='normal',
