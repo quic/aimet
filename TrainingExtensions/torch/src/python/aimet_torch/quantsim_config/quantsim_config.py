@@ -572,24 +572,26 @@ class QuantSimConfigurator(AimetCommonQuantSimConfigurator):
                 output_quantizer.data_type = data_type
                 output_quantizer.bitwidth = bitwidth
 
-    def _override_param_bw_dtype(self, quantizer_data, data_type: QuantizationDataType, bitwidth: int):
+    def _override_param_bw_dtype(self, quantize_wrapper: QcQuantizeWrapper, data_type: QuantizationDataType,
+                                 bitwidth: int):
         """
         overrides data type and bitwidth default config for param quantizers of given quantsim wrapper.
-        :param quantizer_data : Quantizer wrapper that to which param override will be applied to.
+        :param quantize_wrapper : Quantize wrapper that to which param override will be applied to.
         :param bitwidth: bitwidth
         :param data_type: data type as QuantizationDataType
         :return:
         """
         # Set configs for all params
-        if quantizer_data.param_quantizers:
-            for param_quantizer in quantizer_data.param_quantizers.values():
+        if quantize_wrapper.param_quantizers:
+            for param_quantizer in quantize_wrapper.param_quantizers.values():
                 param_quantizer.data_type = data_type
                 param_quantizer.bitwidth = bitwidth
 
-    def _override_act_bw_dtype(self, quantizer_data, data_type: QuantizationDataType, bitwidth: int):
+    def _override_act_bw_dtype(self, quantize_wrapper: QcQuantizeWrapper, data_type: QuantizationDataType,
+                               bitwidth: int):
         """
         Override activation bw and dtype for activation quantizers of the quantsim wrapper if applicable.
-        :param quantizer_data : Quantizer wrapper that to which activation override will be applied to.
+        :param quantize_wrapper : Quantize wrapper that to which activation override will be applied to.
         :param data_type: data type as QuantizationDataType
         :param bitwidth: bitwidth
         """
@@ -601,7 +603,7 @@ class QuantSimConfigurator(AimetCommonQuantSimConfigurator):
         # quantizer can be set to fp16.
         if data_type == QuantizationDataType.float and bitwidth == 16:
             # pylint: disable=protected-access
-            conn_graph_op = self._conn_graph._module_to_op_dict[quantizer_data._module_to_wrap]
+            conn_graph_op = self._conn_graph._module_to_op_dict[quantize_wrapper._module_to_wrap]
 
             # Checking if input quantizer(s) should be set to fp16. Only set to fp16 if all input ops are also only
             # fp16 supported.
@@ -612,7 +614,7 @@ class QuantSimConfigurator(AimetCommonQuantSimConfigurator):
                     all_input_ops_fp16 = False
                     break
             if all_input_ops_fp16:
-                for input_quantizer in quantizer_data.input_quantizers:
+                for input_quantizer in quantize_wrapper.input_quantizers:
                     input_quantizer.bitwidth = bitwidth
                     input_quantizer.data_type = data_type
 
@@ -625,7 +627,7 @@ class QuantSimConfigurator(AimetCommonQuantSimConfigurator):
                     all_output_ops_fp16 = False
                     break
             if all_output_ops_fp16:
-                for output_quantizer in quantizer_data.output_quantizers:
+                for output_quantizer in quantize_wrapper.output_quantizers:
                     output_quantizer.bitwidth = bitwidth
                     output_quantizer.data_type = data_type
 
