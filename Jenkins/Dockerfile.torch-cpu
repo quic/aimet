@@ -146,7 +146,7 @@ RUN python3 -m pip --no-cache-dir install \
         lmdb==1.2.1 \
         mock \
         nbsphinx \
-        'numpy>=1.19.5' \
+        'numpy<1.24,>=1.16.6' \
         onnx==1.12.0 \
         onnxsim \
         onnxruntime \
