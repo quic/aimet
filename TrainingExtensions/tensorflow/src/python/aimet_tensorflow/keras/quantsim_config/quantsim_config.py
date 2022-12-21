@@ -581,6 +581,15 @@ class QuantSimConfigurator(AimetCommonQuantSimConfigurator):
         :return:
         """
 
+    def _override_act_bw_dtype(self, quantizer_data, data_type: QuantizationDataType, bitwidth: int):
+        """
+        overrides data type and bitwidth default config for activation quantizers of given data
+        :param quantizer_data: object containing which activation override will be applied to
+        :param bitwidth: bitwidth
+        :param data_type: data type as QuantizationDataType
+        :return:
+        """
+
     def _generate_and_apply_op_instance_specific_config(self):
         """
         Generate op instance specific configurations - currently supported_kernels and per_channel_quantization fields

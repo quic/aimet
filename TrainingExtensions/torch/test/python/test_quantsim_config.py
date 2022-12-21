@@ -51,6 +51,7 @@ from aimet_torch.qc_quantize_op import QcQuantizeWrapper
 from aimet_torch import utils
 from aimet_torch.meta.connectedgraph import ConnectedGraph
 from aimet_torch.tensor_quantizer import StaticGridPerTensorQuantizer, StaticGridPerChannelQuantizer
+from aimet_torch.elementwise_ops import Add
 
 class ModelWithBertCustomLayerNormGelu(torch.nn.Module):
     """ Model with PyTorch LayerNorm and gelu """
@@ -2278,18 +2279,15 @@ class TestQuantsimConfig:
 
 
         # enforce is set to true
-        # LayerNorm params should be set to FP 16, while output is maintained at quantsim defaults (int8)
-        assert(sim.model.customln1.output_quantizers[0].data_type == QuantizationDataType.int)
-        assert(sim.model.customln1.output_quantizers[0].bitwidth == 8)
-
-        # override this with custom config (matches aic100_config.json)
+        # LayerNorm params should be set to FP 16, and activations as well since it is back to back with GeLU
         assert(sim.model.customln1.param_quantizers['weight'].data_type == QuantizationDataType.float)
         assert(sim.model.customln1.param_quantizers['weight'].bitwidth == 16)
+        assert(sim.model.customln1.output_quantizers[0].data_type == QuantizationDataType.float)
+        assert(sim.model.customln1.output_quantizers[0].bitwidth == 16)
 
-        # gelu output should be retained at quantsim defaults (int8) although it has supported_kernels = FP16
-        # as this op doesn't have params
-        assert(sim.model.gelu1.output_quantizers[0].data_type == QuantizationDataType.int)
-        assert(sim.model.gelu1.output_quantizers[0].bitwidth == 8)
+        # gelu output should be set to fp16 as it has no output ops following it
+        assert(sim.model.gelu1.output_quantizers[0].data_type == QuantizationDataType.float)
+        assert(sim.model.gelu1.output_quantizers[0].bitwidth == 16)
 
         # remove test config created
         qsim_config.ENFORCE_TARGET_DTYPE_BITWIDTH_CONFIG = False
@@ -2307,3 +2305,145 @@ class TestQuantsimConfig:
         assert q1 != q2
         assert q1 == q3
 
+    def test_fp16_back_to_back_overrides(self):
+        """
+        Test that activation tensors are set to fp16 as expected in case of standalone vs back to back.
+        """
+        quantsim_config = {
+            "defaults": {
+                "ops": {
+                    "is_output_quantized": "True"
+                },
+                "params": {
+                    "is_quantized": "True"
+                }
+            },
+            "params": {},
+            "op_type": {
+                "PRelu": {
+                    "supported_kernels":
+                        [
+                            {
+                                "activation": {
+                                    "bitwidth": 16,
+                                    "dtype": "float"
+                                },
+                                "param": {
+                                    "bitwidth": 16,
+                                    "dtype": "float"
+                                }
+                            },
+                        ]
+                },
+                "Add": {
+                    "is_output_quantized": "True",
+                    "supported_kernels":
+                        [
+                            {
+                                "activation": {
+                                    "bitwidth": 16,
+                                    "dtype": "float"
+                                },
+                                "param": {
+                                    "bitwidth": 16,
+                                    "dtype": "float"
+                                }
+                            },
+                        ]
+                }
+            },
+            "supergroups": [],
+            "model_input": {"is_input_quantized": "True"},
+            "model_output": {}
+        }
+
+        with open('./data/quantsim_config.json', 'w') as f:
+            json.dump(quantsim_config, f)
+
+        class ModelForFP16Override(torch.nn.Module):
+            """
+            Model for testing fp16 back to back overrides
+            """
+
+            def __init__(self):
+                super(ModelForFP16Override, self).__init__()
+                self.prelu1 = torch.nn.PReLU()
+                self.prelu2 = torch.nn.PReLU()
+                self.relu1 = torch.nn.ReLU()
+                self.add1 = Add()
+                self.prelu3 = torch.nn.PReLU()
+                self.prelu4 = torch.nn.PReLU()
+                self.add2 = Add()
+
+            def forward(self, x1, x2, x3):
+                x1 = self.prelu1(x1)
+                x1 = self.prelu2(x1)
+                x1 = self.relu1(x1)
+                x1 = self.add1(x1, x2)
+                x1 = self.prelu3(x1)
+                x3 = self.prelu4(x3)
+                x1 = self.add2(x1, x3)
+                return x1
+
+        # Model to test structured as follows:
+        #   x1     x2        x3
+        #   |       |        |
+        # prelu1    |        |
+        #   |       |        |
+        # prelu2    |        |
+        #   |       |        |
+        # relu1     |        |
+        #     \    /         |
+        #      add1          |
+        #        |           |
+        #      prelu3     prelu4
+        #            \   /
+        #            add2
+        #              |
+        #
+        # Since all modules except relu are in fp16 mode, we expect all quantizers to be set to fp16 except for relu1
+        # output and add1 inputs
+
+        model = ModelForFP16Override()
+        model.eval()
+
+        random_input = (torch.rand(1, 2), torch.rand(1, 2), torch.rand(1, 2))
+
+        qsim_config.ENFORCE_TARGET_DTYPE_BITWIDTH_CONFIG = True
+        sim = QuantizationSimModel(model, quant_scheme=QuantScheme.post_training_tf,
+                                   dummy_input=random_input, default_data_type=QuantizationDataType.int,
+                                   default_output_bw=8, default_param_bw=8,
+                                   config_file='./data/quantsim_config.json')
+        for name, module in sim.quant_wrappers():
+            if name == 'prelu2':
+                assert module.input_quantizers[0].bitwidth == 16
+                assert module.input_quantizers[0].data_type == QuantizationDataType.float
+                assert module.output_quantizers[0].bitwidth == 8
+                assert module.output_quantizers[0].data_type == QuantizationDataType.int
+            elif name == 'relu1':
+                assert module.input_quantizers[0].bitwidth == 8
+                assert module.input_quantizers[0].data_type == QuantizationDataType.int
+                assert module.output_quantizers[0].bitwidth == 8
+                assert module.output_quantizers[0].data_type == QuantizationDataType.int
+            elif name == 'add1':
+                assert module.input_quantizers[0].bitwidth == 8
+                assert module.input_quantizers[0].data_type == QuantizationDataType.int
+                assert module.input_quantizers[1].bitwidth == 8
+                assert module.input_quantizers[1].data_type == QuantizationDataType.int
+                assert module.output_quantizers[0].bitwidth == 16
+                assert module.output_quantizers[0].data_type == QuantizationDataType.float
+            else:
+                for input_q in module.input_quantizers:
+                    assert input_q.bitwidth == 16
+                    assert input_q.data_type == QuantizationDataType.float
+                for output_q in module.output_quantizers:
+                    assert output_q.bitwidth == 16
+                    assert output_q.data_type == QuantizationDataType.float
+            for param_q in module.param_quantizers.values():
+                assert param_q.bitwidth == 16
+                assert param_q.data_type == QuantizationDataType.float
+
+        # remove test config created
+        qsim_config.ENFORCE_TARGET_DTYPE_BITWIDTH_CONFIG = False
+        if os.path.exists('./data/quantsim_config.json'):
+            os.remove('./data/quantsim_config.json')
