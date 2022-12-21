@@ -274,10 +274,12 @@ class TestTrainingExtensionBnFold:
 
         baseline_output = model(random_input)
 
-        fold_all_batch_norms(model, (20, 10, 6, 6))
+        conv_bn = fold_all_batch_norms(model, (20, 10, 6, 6))
 
         output_after_fold = model(random_input)
 
+        assert not conv_bn
+        assert isinstance(model.bn1, torch.nn.BatchNorm2d)
         assert torch.allclose(baseline_output, output_after_fold, rtol=1.e-2)
 
     def test_fold_bn_before_conv_transpose(self):
@@ -307,10 +309,12 @@ class TestTrainingExtensionBnFold:
 
         baseline_output = model(random_input)
 
-        fold_all_batch_norms(model, (20, 10, 6, 6))
+        conv_bn = fold_all_batch_norms(model, (20, 10, 6, 6))
 
         output_after_fold = model(random_input)
 
+        assert not conv_bn
+        assert isinstance(model.bn1, torch.nn.BatchNorm2d)
         assert torch.allclose(baseline_output, output_after_fold, rtol=1.e-2)
 
     def test_filter_conv_bn_pair(self):
