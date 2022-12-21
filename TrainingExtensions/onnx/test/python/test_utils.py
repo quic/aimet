@@ -132,3 +132,27 @@ class TestUtils:
                 assert weights.name == 'conv1.weight'
                 assert bias.name == 'conv1.bias'
                 break
+
+    def test_remove_node(self):
+        """
+        Test remove node from model
+        """
+        model = test_models.build_dummy_model()
+        node_ls = [node.op_type for node in model.graph.node]
+        assert node_ls == ['Conv', 'Relu', 'MaxPool', 'Flatten', 'Gemm']
+        gemm_node = model.graph.node[-1]
+        utils.remove_node(gemm_node, model.graph)
+
+        new_node_ls = [node.op_type for node in model.graph.node]
+        assert new_node_ls == ['Conv', 'Relu', 'MaxPool', 'Flatten']
+        assert model.graph.output[0].name in model.graph.node[-1].output
+
+
+    def test_get_attribute(self):
+        """
+        Test get attribute value from node
+        """
+        model = test_models.build_dummy_model()
+        conv_layer = model.graph.node[0]
+        assert utils.get_node_attribute(conv_layer, "pads") == [1, 1, 1, 1]
+        assert utils.get_node_attribute(conv_layer, "kernel_shape") == [3, 3]

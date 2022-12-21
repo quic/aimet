@@ -95,7 +95,7 @@ class ConvBnPatternHandler:
         conv_op = None
         bn_op = None
         convolution_types = ['Conv1d', 'Conv2D', 'DepthwiseConv2dNative', 'Conv', 'ConvTranspose']
-        linear_types = ['Dense', 'Gemm']
+        linear_types = ['Dense', 'Gemm', 'MatMul']
         bn_types = ['FusedBatchNormV3', 'FusedBatchNorm', 'BatchNormalization']
 
         for op in op_subset:
