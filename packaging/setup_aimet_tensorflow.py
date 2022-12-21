@@ -77,8 +77,9 @@ required_package_data = ['acceptance_tests/*.*']
 for path, _, filenames in os.walk(package_name):
     required_package_data += [os.path.join(path, filename) for filename in filenames if
                               filename.endswith(tuple(package_dependency_files))]
-required_package_data = ['/'.join(files.split('/')[1:]) for files in required_package_data]
 
+required_package_data = ['/'.join(files.split('/')[1:]) for files in required_package_data]
+required_package_data += ['*/*.html']
 
 setup(
     name='AimetTensorflow',
