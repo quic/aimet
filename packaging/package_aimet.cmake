@@ -139,9 +139,11 @@ foreach(package ${package_name_list})
     configure_file("${src_deps_dir}/${variant_name}/${dependency_file}" "${package_deps_dir}/" COPYONLY)
   endforeach()
 
+  file(WRITE "${build_packaging_dir}/MANIFEST.ini" "")
   if("${package}" STREQUAL "aimet_common")
     # NOTE: MANIFEST file is different for different packages
-    file(WRITE "${build_packaging_dir}/MANIFEST.ini" "graft ${package}/x86_64-linux-gnu")
+    file(APPEND "${build_packaging_dir}/MANIFEST.ini" "graft ${package}/x86_64-linux-gnu \n")
+    file(APPEND "${build_packaging_dir}/MANIFEST.ini" "include ${package}/*/*.html \n")
     # Populate the python code
     file(COPY ${AIMET_PACKAGE_PATH}/lib/python/${package} DESTINATION ${build_packaging_dir}/)
     # Populate the C++ libraries
@@ -155,10 +157,11 @@ foreach(package ${package_name_list})
     configure_file("${src_packaging_dir}/envsetup.sh" "${package_deps_dir}/" COPYONLY)
   elseif("${package}" STREQUAL "aimet")
     # Populate top-level AIMET package contents (manifest file)
-    file(WRITE "${build_packaging_dir}/MANIFEST.ini" "include README.txt NOTICE.txt")
+    file(APPEND "${build_packaging_dir}/MANIFEST.ini" "include README.txt NOTICE.txt \n")
   else()
     # Populate AIMET Tensorflow or Torch package contents (manifest and python code)
-    file(WRITE "${build_packaging_dir}/MANIFEST.ini" "graft ${package}/acceptance_tests")
+    file(APPEND "${build_packaging_dir}/MANIFEST.ini" "graft ${package}/acceptance_tests \n")
+    file(APPEND "${build_packaging_dir}/MANIFEST.ini" "include ${package}/*/*.html \n")
     file(COPY ${AIMET_PACKAGE_PATH}/lib/python/${package} DESTINATION ${build_packaging_dir}/)
   endif()
   # Update RPATH to relative paths ($ORIGIN) to not bother by a path where python is installed
@@ -171,5 +174,8 @@ foreach(package ${package_name_list})
   )
   # Invoke the setup tools script to create the wheel packages.
   execute_process(COMMAND python3 setup.py sdist bdist_wheel ${CUDA_OPTION} WORKING_DIRECTORY ${build_packaging_dir} OUTPUT_VARIABLE output_var)
+
+  # Rename and keep a copy of the manifest file for debugging/reference purposes
+  configure_file("${build_packaging_dir}/MANIFEST.ini" "${build_packaging_dir}/MANIFEST.ini.${package}" COPYONLY)
 
 endforeach()
