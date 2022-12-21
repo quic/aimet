@@ -81,7 +81,7 @@ def module_to_name_map(cur_layer: (tf.keras.Model, tf.keras.layers.Layer)) \
     ref_name = {}
     # pylint: disable=protected-access
     for inner_layer in cur_layer._layers:
-        if isinstance(inner_layer, dict):
+        if not isinstance(inner_layer, tf.keras.layers.Layer):
             continue
         if inner_layer.submodules:
             ref_name.update(module_to_name_map(inner_layer))
@@ -122,7 +122,7 @@ def _find_last_layers(cur_layer: (tf.keras.Model, tf.keras.layers.Layer)) \
     last_layers = []
     # pylint: disable=protected-access
     for inner_layer in cur_layer._layers:
-        if isinstance(inner_layer, dict):
+        if not isinstance(inner_layer, tf.keras.layers.Layer):
             continue
         if inner_layer.outbound_nodes == []:
             if inner_layer.submodules:
@@ -221,7 +221,7 @@ def create_node_to_layer_map(cur_layer: (tf.keras.Model, tf.keras.layers.Layer))
     node_layer_map = {}
     # pylint: disable=protected-access
     for inner_layer in cur_layer._layers:
-        if isinstance(inner_layer, dict):
+        if not isinstance(inner_layer, tf.keras.layers.Layer):
             continue
         for out_node in inner_layer.outbound_nodes:
             if out_node in node_layer_map:
