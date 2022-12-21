@@ -322,15 +322,13 @@ class QcQuantizeWrapper(tf.keras.layers.Layer):
 
         idx_param_quantizer = 0
         for idx, param in enumerate(self._layer_to_wrap.weights):
+            # check and break  if idx_param_quantizer is out of range (Batchnorm fold will update bias tensor, even in case there was no existing bias add op in given conv2D op, use_bias=False)
+            if idx_param_quantizer == len(self.param_quantizers):
+                break
             if self._layer_to_wrap.weights[idx].dtype in QUANT_ALLOWED_DTYPES:
-                # check if idx_param_quantizer is valid before usage
-                try:
-                    quantized_param = self.param_quantizers[idx_param_quantizer](param)
-                    self._layer_to_wrap.weights[idx].assign(quantized_param)
-                    idx_param_quantizer = idx_param_quantizer + 1
-                except IndexError:
-                    _logger.info('quantizers(%s) list index (%s) out of range', self.param_quantizers, idx_param_quantizer)
-                    break
+                quantized_param = self.param_quantizers[idx_param_quantizer](param)
+                self._layer_to_wrap.weights[idx].assign(quantized_param)
+                idx_param_quantizer = idx_param_quantizer + 1
 
     def _quantize_activation(self, activation: Union[tf.Tensor, List],
                              quantizers: List[ActivationTensorQuantizer],

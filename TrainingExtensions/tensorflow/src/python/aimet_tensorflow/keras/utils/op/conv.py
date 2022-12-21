@@ -62,23 +62,3 @@ def get_strides_for_split_conv_ops(layer: tf.keras.layers.Layer) -> (Tuple, Tupl
     conv_b_strides = (1, strides[1])
 
     return conv_a_strides, conv_b_strides
-
-class WeightTensorUtils:
-    """
-    Conv related utils
-    """
-    @staticmethod
-    def _create_bias_and_insert(model: tf.keras.Model):
-        """
-        creates and adds a bias op to conv layer
-        :model: model contains Conv2D layer without bias
-        """
-        for layer in model.layers:
-            if isinstance(layer, tf.keras.layers.Conv2D) and not layer.use_bias:
-                weight_tensor = layer.get_weights()
-                layer.use_bias = True
-                layer.bias = layer.add_weight(name="bias",
-                                              initializer="zeros",
-                                              shape=(weight_tensor[0].shape[-1]),
-                                              dtype=weight_tensor[0].dtype,
-                                              trainable=True)

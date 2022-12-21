@@ -1138,7 +1138,6 @@ class TestBatchNormFoldToScale(unittest.TestCase):
         x = tf.keras.layers.BatchNormalization(beta_initializer="normal", gamma_initializer="normal")(x)
         outputs = tf.keras.layers.ReLU()(x)
         model = tf.keras.Model(inputs=inputs, outputs=outputs)
-
         dummy_inputs = np.random.randn(1, 32, 32, 3)
 
         qsim = self._qsim_setup_for_fold_scale(model, model.layers[1], model.layers[2], dummy_inputs)
@@ -1186,6 +1185,21 @@ class TestBatchNormFoldToScale(unittest.TestCase):
         dummy_inputs = np.random.randn(1, 32, 32, 3)
 
         qsim = self._qsim_setup_for_fold_scale(model, model.layers[1], model.layers[2],dummy_inputs )
+        self._fold_all_batch_norms_to_scale_and_compare_results(qsim, dummy_inputs, 5e-3)
+
+    def test_bn_fold_conv2DTranspose(self):
+        tf.keras.backend.clear_session()
+        inputs = tf.keras.Input((32, 32, 3))
+        x = tf.keras.layers.Conv2DTranspose(64, kernel_size=1, strides=1, padding="same")(inputs)
+        x = tf.keras.layers.BatchNormalization(beta_initializer='normal',
+                                               gamma_initializer='normal',
+                                               moving_mean_initializer='normal',
+                                               moving_variance_initializer='normal')(x)
+        outputs = tf.keras.layers.ReLU()(x)
+        model = tf.keras.Model(inputs=inputs, outputs=outputs)
+        dummy_inputs = np.random.randn(1, 32, 32, 3)
+
+        qsim = self._qsim_setup_for_fold_scale(model, model.layers[1], model.layers[2], dummy_inputs)
         self._fold_all_batch_norms_to_scale_and_compare_results(qsim, dummy_inputs, 5e-3)
 
     def _fold_all_batch_norms_to_scale_and_compare_results(self, qsim, dummy_inputs, tolerance):
