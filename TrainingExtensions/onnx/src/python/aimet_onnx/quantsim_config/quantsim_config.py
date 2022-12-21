@@ -172,6 +172,16 @@ class QuantSimConfigurator(AimetCommonQuantSimConfigurator):
         """
         raise NotImplementedError
 
+    def _override_act_bw_dtype(self, quantizer_data, data_type: QuantizationDataType, bitwidth: int):
+        """
+        overrides data type and bitwidth default config for activation quantizers of given data
+        :param quantizer_data: object containing which activation override will be applied to
+        :param bitwidth: bitwidth
+        :param data_type: data type as QuantizationDataType
+        :return:
+        """
+        raise NotImplementedError
+
     def _override_default_act_bw_dtype(self, data_type: QuantizationDataType, bitwidth: int):
         """
         overrides data type and bw default config for input/output quantizers.

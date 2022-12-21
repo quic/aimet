@@ -353,11 +353,16 @@ class TestQuantizationSimTransformers(unittest.TestCase):
         # validate config after compute encodings
         sim.compute_encodings(forward_pass, None)
 
+        # check output quantizer for linear
+        self.assertTrue(sim.model.linear1.output_quantizers[0].encoding)
+        self.assertTrue(sim.model.linear1.output_quantizers[0].bitwidth == 8)
+        self.assertTrue(sim.model.linear1.output_quantizers[0].data_type == QuantizationDataType.int)
+
         # LayerNorm output quantization is enabled by default
         # override this with custom config (matches aic100_config.json)
-        self.assertTrue(sim.model.customln1.output_quantizers[0].encoding)
-        self.assertTrue(sim.model.customln1.output_quantizers[0].bitwidth == 8)
-        self.assertTrue(sim.model.gelu.output_quantizers[0].data_type == QuantizationDataType.int)
+        self.assertIsNone(sim.model.customln1.output_quantizers[0].encoding)
+        self.assertTrue(sim.model.customln1.output_quantizers[0].bitwidth == 16)
+        self.assertTrue(sim.model.customln1.output_quantizers[0].data_type == QuantizationDataType.float)
 
         #  gamma (weight) quantizer of LayerNorm is enabled by default
         # override this with custom config (matches aic100_config.json)
@@ -369,9 +374,9 @@ class TestQuantizationSimTransformers(unittest.TestCase):
         self.assertIsNone(sim.model.customln1.param_quantizers['weight'].encoding)
         self.assertIsNone(sim.model.customln1.param_quantizers['bias'].encoding)
 
-        self.assertTrue(sim.model.gelu.output_quantizers[0].bitwidth == 8)
-        self.assertTrue(sim.model.gelu.output_quantizers[0].data_type == QuantizationDataType.int)
-        self.assertIsNotNone(sim.model.gelu.output_quantizers[0].encoding)
+        self.assertTrue(sim.model.gelu.output_quantizers[0].bitwidth == 16)
+        self.assertTrue(sim.model.gelu.output_quantizers[0].data_type == QuantizationDataType.float)
+        self.assertIsNone(sim.model.gelu.output_quantizers[0].encoding)
 
         # clear data dir that was used in this test
         qsim_config.ENFORCE_TARGET_DTYPE_BITWIDTH_CONFIG = False

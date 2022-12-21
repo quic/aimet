@@ -40,10 +40,12 @@
 import os
 import json
 import unittest
+from unittest.mock import patch
 import jsonschema
 from aimet_common.quantsim_config.json_config_importer import _validate_syntax, _validate_semantics, JsonConfigImporter,\
     ConfigDictKeys
-from aimet_common.quantsim_config.quantsim_config import _build_list_of_permutations, OnnxConnectedGraphTypeMapper
+from aimet_common.quantsim_config.quantsim_config import _build_list_of_permutations, OnnxConnectedGraphTypeMapper, \
+    QuantSimConfigurator, QuantizationDataType
 
 
 class TestJsonConfigImporter(unittest.TestCase):
@@ -448,3 +450,75 @@ class TestQuantSimConfig(unittest.TestCase):
         finally:
             if os.path.isfile('./config.json'):
                 os.remove('./config.json')
+
+    @patch("aimet_common.quantsim_config.quantsim_config.QuantSimConfigurator.__abstractmethods__", set())
+    def test_op_type_default_override_supported_kernel_lookup(self):
+        # config with default unsigned symmetric flag.
+        config = {
+            "defaults": {
+                "ops": {},
+                "params": {},
+            },
+            "params": {},
+            "op_type": {
+                "Type1": {
+                    "supported_kernels": [
+                        {
+                            "activation": {
+                                "bitwidth": 16,
+                                "dtype": "float"
+                            },
+                            "param": {
+                                "bitwidth": 16,
+                                "dtype": "float"
+                            }
+                        },
+                    ]
+                },
+                "Type2": {
+                    "supported_kernels": [
+                        {
+                            "activation": {
+                                "bitwidth": 8,
+                                "dtype": "int"
+                            },
+                            "param": {
+                                "bitwidth": 8,
+                                "dtype": "int"
+                            }
+                        },
+                        {
+                            "activation": {
+                                "bitwidth": 16,
+                                "dtype": "float"
+                            },
+                            "param": {
+                                "bitwidth": 16,
+                                "dtype": "float"
+                            }
+                        }
+                    ]
+                },
+                "Type3": {
+                    "is_output_quantized": "True"
+                }
+            },
+            "supergroups": [],
+            "model_input": {},
+            "model_output": {
+                "is_output_quantized": "True"
+            }
+        }
+        with open('./config.json', 'w') as f:
+            json.dump(config, f)
+
+        qsim_config = QuantSimConfigurator(config_file='./config.json', default_data_type=QuantizationDataType.int,
+                                           default_output_bw=8, default_param_bw=8)
+        assert qsim_config._op_type_default_override_supported_kernel_lookup('Type1', 16, QuantizationDataType.float)
+        assert not qsim_config._op_type_default_override_supported_kernel_lookup('Type2', 16,
+                                                                                 QuantizationDataType.float)
+        assert not qsim_config._op_type_default_override_supported_kernel_lookup('Type3', 16,
+                                                                                 QuantizationDataType.float)
+
+        if os.path.isfile('./config.json'):
+            os.remove('./config.json')
