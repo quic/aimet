@@ -43,6 +43,7 @@ from onnxruntime.quantization.onnx_quantizer import ONNXModel
 import onnxruntime as rt
 import numpy as np
 import torchvision
+import pytest
 
 import torch
 from torch.nn.modules.batchnorm import _BatchNorm
@@ -552,25 +553,10 @@ class TestBatchNormFold:
         assert len(model.graph().node) == layers_orig - num_batchnorm
         assert np.allclose(baseline_output[0], folded_output[0], rtol=1e-2, atol=1e-6)
 
-    def test_fold_bn_before_conv_no_bias(self):
+    @pytest.mark.parametrize("bias", [True, False])
+    def test_fold_bn_before_conv(self, bias):
         torch.manual_seed(10)
-        torch_model = BNBeforeConv(bias=False)
-        torch_model.eval()
-        _initialize_bn_params(torch_model)
-
-        input_shape = (2, 10, 24, 24)
-        test_data = np.random.randn(*input_shape).astype(np.float32)
-
-        model = _convert_to_onnx_no_fold(torch_model, torch.randn(input_shape))
-        layers_orig = len(model.graph().node)
-        baseline_output, folded_output, pairs = get_outputs_after_fold(model, test_data)
-        assert pairs[0][0].name == "Conv_3"
-        assert len(model.graph().node) == layers_orig - 1
-        assert np.allclose(baseline_output[0], folded_output[0], rtol=1e-2, atol=1e-6)
-
-    def test_fold_bn_before_conv_with_bias(self):
-        torch.manual_seed(10)
-        torch_model = BNBeforeConv(bias=True)
+        torch_model = BNBeforeConv(bias=bias)
         torch_model.eval()
         _initialize_bn_params(torch_model)
 
@@ -601,46 +587,13 @@ class TestBatchNormFold:
         assert len(pairs) == 0
         assert np.allclose(baseline_output[0], folded_output[0], rtol=1e-2, atol=1e-6)
 
-
-    def test_fold_bn_after_conv_no_bias(self):
+    @pytest.mark.parametrize("bias", [True, False])
+    @pytest.mark.parametrize("padding", [0, 1])
+    @pytest.mark.parametrize("groups", [1, 5, 20])
+    def test_fold_bn_after_conv_no_bias(self, bias, padding, groups):
         torch.manual_seed(10)
-        torch_model = BNAfterConv(bias=False)
+        torch_model = BNAfterConv(bias=bias, padding=padding, groups=groups)
         torch_model.eval()
-        _initialize_bn_params(torch_model)
-
-        input_shape = (2, 10, 24, 24)
-        test_data = np.random.randn(*input_shape).astype(np.float32)
-
-        model = _convert_to_onnx_no_fold(torch_model, torch.randn(input_shape))
-        layers_orig = len(model.graph().node)
-        baseline_output, folded_output, pairs = get_outputs_after_fold(model, test_data)
-
-        assert pairs[0][0].name == "Conv_2"
-        assert len(model.graph().node) == layers_orig - 1
-        assert np.allclose(baseline_output[0], folded_output[0], rtol=1e-2, atol=1e-6)
-
-    def test_fold_bn_after_conv_depthwise(self):
-        torch.manual_seed(10)
-        torch_model = BNAfterConv(groups=20)
-        torch_model.eval()
-        _initialize_bn_params(torch_model)
-
-        input_shape = (2, 10, 24, 24)
-        test_data = np.random.randn(*input_shape).astype(np.float32)
-
-        model = _convert_to_onnx_no_fold(torch_model, torch.randn(input_shape))
-        layers_orig = len(model.graph().node)
-        baseline_output, folded_output, pairs = get_outputs_after_fold(model, test_data)
-
-        assert pairs[0][0].name == "Conv_2"
-        assert len(model.graph().node) == layers_orig - 1
-        assert np.allclose(baseline_output[0], folded_output[0], rtol=1e-2, atol=1e-6)
-
-    def test_fold_bn_after_conv_grouped(self):
-        torch.manual_seed(10)
-        torch_model = BNAfterConv(groups=5)
-        torch_model.eval()
-        _initialize_bn_params(torch_model)
 
         input_shape = (2, 10, 24, 24)
         test_data = np.random.randn(*input_shape).astype(np.float32)
@@ -667,40 +620,6 @@ class TestBatchNormFold:
         baseline_output, folded_output, pairs = get_outputs_after_fold(model, test_data)
 
         assert pairs[0][0].name == "ConvTranspose_0"
-        assert len(model.graph().node) == layers_orig - 1
-        assert np.allclose(baseline_output[0], folded_output[0], rtol=1e-2, atol=1e-6)
-
-    def test_fold_bn_after_conv_with_bias(self):
-        torch.manual_seed(10)
-        torch_model = BNAfterConv(bias=True)
-        torch_model.eval()
-        _initialize_bn_params(torch_model)
-
-        input_shape = (2, 10, 24, 24)
-        test_data = np.random.randn(*input_shape).astype(np.float32)
-
-        model = _convert_to_onnx_no_fold(torch_model, torch.randn(input_shape))
-        layers_orig = len(model.graph().node)
-        baseline_output, folded_output, pairs = get_outputs_after_fold(model, test_data)
-
-        assert pairs[0][0].name == "ConvTranspose_0"
-        assert len(model.graph().node) == layers_orig - 1
-        assert np.allclose(baseline_output[0], folded_output[0], rtol=1e-2, atol=1e-6)
-
-    def test_fold_bn_after_conv_with_bias(self):
-        torch.manual_seed(10)
-        torch_model = BNAfterConv(bias=True)
-        torch_model.eval()
-        _initialize_bn_params(torch_model)
-
-        input_shape = (2, 10, 24, 24)
-        test_data = np.random.randn(*input_shape).astype(np.float32)
-
-        model = _convert_to_onnx_no_fold(torch_model, torch.randn(input_shape))
-        layers_orig = len(model.graph().node)
-        baseline_output, folded_output, pairs = get_outputs_after_fold(model, test_data)
-
-        assert pairs[0][0].name == "Conv_2"
         assert len(model.graph().node) == layers_orig - 1
         assert np.allclose(baseline_output[0], folded_output[0], rtol=1e-2, atol=1e-6)
 
@@ -788,9 +707,10 @@ class TestBatchNormFold:
         assert len(model.graph().node) == layers_orig - 1
         assert np.allclose(baseline_output[0], folded_output[0], rtol=1e-2, atol=1e-6)
 
-    def test_fold_bn_before_conv1d_with_bias(self):
+    @pytest.mark.parametrize("bias", [True, False])
+    def test_fold_bn_before_conv1d(self, bias):
         torch.manual_seed(10)
-        torch_model = BNBeforeConv1d(bias=True)
+        torch_model = BNBeforeConv1d(bias=bias)
         torch_model.eval()
         _initialize_bn_params(torch_model)
 
@@ -804,10 +724,10 @@ class TestBatchNormFold:
         assert len(model.graph().node) == layers_orig - 1
         assert np.allclose(baseline_output[0], folded_output[0], rtol=1e-2, atol=1e-6)
 
-
-    def test_fold_bn_after_conv1d_no_bias(self):
+    @pytest.mark.parametrize("bias", [True, False])
+    def test_fold_bn_after_conv1d(self, bias):
         torch.manual_seed(10)
-        torch_model = BNAfterConv1d(bias=False)
+        torch_model = BNAfterConv1d(bias=bias)
         torch_model.eval()
         _initialize_bn_params(torch_model)
 
