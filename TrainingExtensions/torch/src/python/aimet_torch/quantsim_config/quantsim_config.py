@@ -572,6 +572,7 @@ class QuantSimConfigurator(AimetCommonQuantSimConfigurator):
                 output_quantizer.data_type = data_type
                 output_quantizer.bitwidth = bitwidth
 
+    # pylint: disable=arguments-differ
     def _override_param_bw_dtype(self, quantize_wrapper: QcQuantizeWrapper, data_type: QuantizationDataType,
                                  bitwidth: int):
         """
@@ -587,6 +588,7 @@ class QuantSimConfigurator(AimetCommonQuantSimConfigurator):
                 param_quantizer.data_type = data_type
                 param_quantizer.bitwidth = bitwidth
 
+    # pylint: disable=arguments-differ
     def _override_act_bw_dtype(self, quantize_wrapper: QcQuantizeWrapper, data_type: QuantizationDataType,
                                bitwidth: int):
         """
