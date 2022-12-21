@@ -36,13 +36,14 @@
 #  @@-COPYRIGHT-END-@@
 # =============================================================================
 """ Utility functions for ONNX """
-from typing import Dict, List
+from typing import Dict, List, Union, Tuple
 
+import numpy as np
 import onnx
-from onnx import onnx_pb
+from onnx import onnx_pb, helper, numpy_helper
 
 
-OP_TYPES_WITH_PARAMS = ['Conv', 'Gemm', 'ConvTranspose', 'BatchNormalization']
+OP_TYPES_WITH_PARAMS = ['Conv', 'Gemm', 'ConvTranspose', 'BatchNormalization', 'MatMul']
 
 
 def remove_nodes_with_type(node_type: str, onnx_graph: onnx.onnx_pb.GraphProto):
@@ -67,6 +68,46 @@ def remove_nodes_with_type(node_type: str, onnx_graph: onnx.onnx_pb.GraphProto):
                 node.output[0] = outputs.name
 
 
+def remove_node(node: onnx_pb.ModelProto, onnx_graph: onnx.onnx_pb.GraphProto):
+    """
+    Remove a specific node from graph along with associated initializers
+
+    :param node: the node to be removed
+    :param onnx_graph: onnx graph to modify
+
+    """
+    onnx_graph.node.remove(node)
+    for other_node in onnx_graph.node:
+        if other_node.input and other_node.output:
+            # Check if other node takes input from removed node
+            for idx in range(len(other_node.input)):
+                if other_node.input[idx] == node.output[0]:
+                    other_node.input[idx] = node.input[0]
+            # Check if removed node output is an output of the graph
+            for outputs in onnx_graph.output:
+                if outputs.name in node.output[0] and other_node.output[0] == node.input[0]:
+                    other_node.output[0] = outputs.name
+    inits_to_remove = []
+    # Remove the node's initializers
+    for item in onnx_graph.initializer:
+        if item.name in node.input:
+            inits_to_remove.append(item)
+    for item in inits_to_remove:
+        onnx_graph.initializer.remove(item)
+
+
+def transpose_tensor(t: onnx.onnx_ml_pb2.TensorProto, axes: Union[List, Tuple]) -> onnx.onnx_ml_pb2.TensorProto:
+    """
+    Permutes the axes of a given array using numpy.transpose
+
+    :param t: tensor to transpose
+    :param axes: tuple or list containing the permuted axis ordering
+    :return: t permuted according to the axis ordering in axes
+    """
+    t_np = numpy_helper.to_array(t)
+    return numpy_helper.from_array(np.transpose(t_np, axes), name=t.name)
+
+
 def replace_node_with_op(node_type: str, new_type: str, onnx_graph: onnx.onnx_pb.GraphProto):
     """
     Replace the given op type of nodes to new op type
@@ -79,6 +120,20 @@ def replace_node_with_op(node_type: str, new_type: str, onnx_graph: onnx.onnx_pb
     for node in onnx_graph.node:
         if node.op_type == node_type:
             node.op_type = new_type
+
+
+def get_node_attribute(node: onnx_pb.NodeProto, name: str):
+    """
+    Return the value of a node's attribute specified by its name
+
+    :param node: NodeProto object to retrieve the attribute from
+    :param name: string containing the name of the attribute to retrieve
+    :return: value of the attribute
+    """
+    for item in node.attribute:
+        if item.name == name:
+            return helper.get_attribute_value(item)
+    return None
 
 
 def get_weights(name: str, onnx_graph: onnx.onnx_pb.GraphProto) -> bytes:
