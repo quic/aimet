@@ -103,6 +103,7 @@ class BNUtils:
                       tf.compat.v1.assign(bn_mean_tf_var, np.zeros(bn_mean_tf_var.shape, dtype=bn_mean_tf_var.dtype.as_numpy_dtype)),
                       tf.compat.v1.assign(bn_var_tf_var, np.ones(bn_var_tf_var.shape, dtype=bn_var_tf_var.dtype.as_numpy_dtype))])
 
+
     @staticmethod
     def skip_bn_op(sess: tf.compat.v1.Session, bn_op: tf.Operation, in_tensor: tf.Tensor, out_tensor: tf.Tensor):
         """
@@ -185,7 +186,8 @@ class BNUtils:
                 assert 'read' in beta_read.name
         elif bn_op.type in ['Identity']:
             cond = bn_op.inputs[0].op
-            beta_read = cond.inputs[2].op
+            beta_read_tensor = cond.inputs[2]
+            beta_read = [node for node in cond.graph.get_operations() if beta_read_tensor in node.inputs][2]
         else:
             logger.error("Error, unknown BN op")
             assert False
@@ -272,7 +274,8 @@ class BNUtils:
         elif bn_op.type in ['Identity']:
             assert len(bn_op.inputs) == 1
             cond = bn_op.inputs[0].op
-            gamma_read = cond.inputs[1].op
+            gamma_read_tensor = cond.inputs[1]
+            gamma_read = [node for node in cond.graph.get_operations() if gamma_read_tensor in node.inputs][2]
         else:
             logger.error("Error, unknown BN op")
             assert False
@@ -436,7 +439,8 @@ class BNUtils:
         elif bn_op.type in ['Identity']:
             assert len(bn_op.inputs) == 1
             cond = bn_op.inputs[0].op
-            moving_var_read = cond.inputs[4].op
+            moving_var_read_tensor = cond.inputs[4]
+            moving_var_read = [node for node in cond.graph.get_operations() if moving_var_read_tensor in node.inputs][2]
         else:
             logger.error("Error, unknown BN op")
             assert False
@@ -619,8 +623,8 @@ class BNUtils:
         elif bn_op.type in ['Identity']:
             assert len(bn_op.inputs) == 1
             cond = bn_op.inputs[0].op
-            moving_mean_read = cond.inputs[3].op
-
+            moving_mean_read_tensor = cond.inputs[3]
+            moving_mean_read = [node for node in cond.graph.get_operations() if moving_mean_read_tensor in node.inputs][2]
         else:
             logger.error("Error, unknown BN op")
             assert False
