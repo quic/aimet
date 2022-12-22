@@ -49,7 +49,7 @@ import torch
 from torch.utils.data import Dataset, DataLoader
 
 from aimet_torch import utils
-from aimet_torch.auto_quant import AutoQuant
+from aimet_torch._auto_quant_tmp import AutoQuant
 from aimet_torch.adaround.adaround_weight import AdaroundParameters, Adaround
 from aimet_torch.quantsim import QuantizationSimModel, OnnxExportApiArgs
 
@@ -190,10 +190,10 @@ def patch_ptq_techniques(bn_folded_acc, cle_acc, adaround_acc):
         equalize_model: MagicMock
         apply_adaround: MagicMock
 
-    with patch("aimet_torch.auto_quant.QuantizationSimModel", side_effect=_QuantizationSimModel) as mock_qsim,\
-            patch("aimet_torch.auto_quant.fold_all_batch_norms", side_effect=bn_folding) as mock_bn_folding,\
-            patch("aimet_torch.auto_quant.equalize_model", side_effect=cle) as mock_cle,\
-            patch("aimet_torch.auto_quant.Adaround.apply_adaround", side_effect=adaround) as mock_adaround:
+    with patch("aimet_torch._auto_quant_tmp.QuantizationSimModel", side_effect=_QuantizationSimModel) as mock_qsim,\
+            patch("aimet_torch._auto_quant_tmp.fold_all_batch_norms", side_effect=bn_folding) as mock_bn_folding,\
+            patch("aimet_torch._auto_quant_tmp.equalize_model", side_effect=cle) as mock_cle,\
+            patch("aimet_torch._auto_quant_tmp.Adaround.apply_adaround", side_effect=adaround) as mock_adaround:
         try:
             yield Mocks(
                 eval_callback=mock_eval_callback,
@@ -211,7 +211,7 @@ def patch_dependencies():
     def render(*_, **__):
         return ""
 
-    with patch("aimet_torch.auto_quant.jinja2.environment.Template.render", side_effect=render):
+    with patch("aimet_torch._auto_quant_tmp.jinja2.environment.Template.render", side_effect=render):
          yield
 
 
