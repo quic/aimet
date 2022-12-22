@@ -511,7 +511,7 @@ def fold_all_batch_norms(model: tf.keras.Model):
 
     # When returning the pairs, we want the second element of the pair to be the BN
     pairs_to_return = []
-    for  bn, conv, _ in bn_conv_linear_pairs:
+    for bn, conv, _ in bn_conv_linear_pairs:
         pairs_to_return.append((bn, conv))
 
     return pairs_to_return
