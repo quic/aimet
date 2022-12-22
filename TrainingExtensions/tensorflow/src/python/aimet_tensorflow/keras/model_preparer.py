@@ -112,7 +112,7 @@ def _set_functional_models_weights(original_model: tf.keras.Model, functional_mo
 
 
 def _format_input_layer(original_model: tf.keras.Model,
-                        input_layer: Union[tf.keras.Input, List[tf.keras.Input]] = None) -> \
+                        input_layer: Union[tf.keras.layers.InputLayer, List[tf.keras.layers.InputLayer]] = None) -> \
         Union[tf.keras.layers.Layer, tf.keras.layers.Layer, ]:
     """
     This function formats the input layer and gets the layers to be copied from the original model.
@@ -188,7 +188,8 @@ def _prepare_model_helper(model: tf.keras.Model, prev_layer: tf.keras.layers.Lay
     return prev_layer
 
 
-def prepare_model(original_model: tf.keras.Model, input_layer: Union[tf.keras.Input, List[tf.keras.Input]] = None):
+def prepare_model(original_model: tf.keras.Model,
+                  input_layer: Union[tf.keras.layers.InputLayer, List[tf.keras.layers.InputLayer]] = None):
     """
     This function prepares a Keras model before continuing on with AIMET. Specifically, it will convert the model into
     a purely Functional API model and copy over the original models weights.
