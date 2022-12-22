@@ -67,6 +67,8 @@ for path, _, filenames in os.walk(package_name):
                               path.startswith(package_name + '/x86_64-linux-gnu') or
                               filename.endswith(tuple(package_dependency_files))]
 required_package_data = ['/'.join(files.split('/')[1:]) for files in required_package_data]
+#TODO For some reason, we need to explicitly add HTML files from subfolders like this
+required_package_data += ['*/*.html']
 
 setup(
     name='AimetCommon',
