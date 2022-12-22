@@ -34,12 +34,40 @@
 #
 #  @@-COPYRIGHT-END-@@
 # =============================================================================
-""" implements straight through graident computation for Quantize Op"""
+""" implements straight through gradient computation for Quantize Op"""
+
+from typing import List, Tuple
 
 import tensorflow as tf
 
+from aimet_tensorflow.defs import AxisHandling
 
-def _compute_dloss_by_dx(encoding_min, encoding_max, inputs, op_mode, grad):
+
+def _compute_derivative_of_loss_function(x: tf.Tensor,
+                                         derivative_of_quantizer: tf.Tensor,
+                                         grad: tf.Tensor,
+                                         scaling: tf.Tensor) -> tf.Tensor:
+    """
+    Compute derivative of the loss function like dloss_by_dmin or dloss_by_dmax
+
+    :param x: input
+    :param derivative_of_quantizer: derivative of the quantizer function like dq_by_dmin or dq_by_dmax
+    :param grad: gradient
+    :param scaling: scaling factor computed for given encoding min/max
+    :return: computed derivative of loss w.r.t derivative of quantizer
+    """
+
+    # If per channel is active, scaling tensor will be rank 1 (an array instead of a singular value).
+    # In case of per channel, we reduce by all but the last dimension. Otherwise, we reduce all dimensions.
+    derivative_of_loss_function = tf.cond(tf.equal(tf.rank(scaling), 0),
+                                          lambda: tf.reduce_sum(derivative_of_quantizer * grad),
+                                          lambda: tf.reduce_sum(derivative_of_quantizer * grad,
+                                                                axis=tf.range(0, tf.rank(x) - 1)))
+    return derivative_of_loss_function
+
+
+def _compute_dloss_by_dx(encoding_min: tf.Variable, encoding_max: tf.Variable, inputs: tf.Tensor, op_mode: tf.Variable,
+                         grad: tf.Tensor) -> tf.Variable:
     x = tf.cast(inputs[0], tf.float32)
     encoding_min = tf.cast(encoding_min, tf.float32)
     encoding_max = tf.cast(encoding_max, tf.float32)
@@ -59,7 +87,8 @@ def _compute_dloss_by_dx(encoding_min, encoding_max, inputs, op_mode, grad):
     return dloss_by_dx
 
 
-def qc_straight_through_estimator_grad(inputs, encoding_min, encoding_max, op_mode, grad):
+def qc_straight_through_estimator_grad(inputs: tf.Tensor, encoding_min: tf.Variable, encoding_max: tf.Variable,
+                                       op_mode: tf.Variable, grad: tf.Tensor) -> Tuple[tf.Variable, List[None]]:
     # pylint: disable=unused-argument
     """
     straight through estimator logic used to compute gradient for Quantize Op.
@@ -75,7 +104,7 @@ def qc_straight_through_estimator_grad(inputs, encoding_min, encoding_max, op_mo
     return dloss_by_dx, [None, None]
 
 
-def _get_n_and_p(bitwidth, use_symmetric_encoding):
+def _get_n_and_p(bitwidth: tf.Variable, use_symmetric_encoding: tf.Variable) -> Tuple[tf.Variable, tf.Variable]:
     """
     compute bounds n and p params given bitwidth and use_symmetric_encoding flag
     :param bitwidth: tf tensor with bitwidth configured
@@ -90,17 +119,17 @@ def _get_n_and_p(bitwidth, use_symmetric_encoding):
     one_as_float32 = tf.cast(tf.constant(1), tf.float32)
 
     # symmetric case : n = (- 2 ** (bw -1 )) + 1 , p = (2 ** (bw -1) - 1)
-    def n_symmetric_encoding():
+    def n_symmetric_encoding() -> tf.Variable:
         return tf.add(tf.multiply(minus_one_as_float32, two_pow_bw_minus_1), one_as_float32)
 
-    def p_symmetric_encoding():
+    def p_symmetric_encoding() -> tf.Variable:
         return tf.subtract(two_pow_bw_minus_1, one_as_float32)
 
     # asymmetric case : n = 0 , p = 2 ** (bw) - 1
-    def n_asymmetric_encoding():
+    def n_asymmetric_encoding() -> tf.Variable:
         return tf.cast(0, tf.float32)
 
-    def p_asymmetric_encoding():
+    def p_asymmetric_encoding() -> tf.Variable:
         return tf.cast(two_pow_bw - 1, tf.float32)
 
     n = tf.cond(use_symmetric_encoding, n_symmetric_encoding, n_asymmetric_encoding)
@@ -110,17 +139,18 @@ def _get_n_and_p(bitwidth, use_symmetric_encoding):
     return n, p
 
 
-def _compute_dloss_by_dmin_using_dmax(dloss_by_dmax):
+def _compute_dloss_by_dmin_using_dmax(dloss_by_dmax: tf.Variable) -> tf.Variable:
     """
     compute derivative of loss w.r.t min, it is sign flipped version of derivative w.r.t max
-    :param dq_by_dmax derivative w.r.t max
+    :param dloss_by_dmax: derivative w.r.t max
     :return: derivative w.r.t min
     """
 
     return tf.negative(dloss_by_dmax)
 
 
-def _compute_dloss_by_dmax(x, grad, scaling, offset, bitwidth, use_symmetric_encoding):
+def _compute_dloss_by_dmax(x: tf.Tensor, grad: tf.Tensor, scaling: tf.Variable, offset: tf.Variable,
+                           bitwidth: tf.Variable, use_symmetric_encoding: tf.Variable):
     """
     helper function to compute derivative of loss w.r.t encoding max
     :param grad: gradient param
@@ -148,22 +178,24 @@ def _compute_dloss_by_dmax(x, grad, scaling, offset, bitwidth, use_symmetric_enc
     # to single value before returning gradient
     # this uses chain rule, multiply by loss and sum it to get scalar.
     dq_by_dmax = tf.where(tf.less_equal(n, r_x_by_s_plus_round_o), inner_cond, false_expr)
-    dloss_by_dmax = tf.reduce_sum(dq_by_dmax * grad)
+    dloss_by_dmax = _compute_derivative_of_loss_function(x, dq_by_dmax, grad, scaling)
 
     return dloss_by_dmax
 
 
-def quantsim_custom_grad_learned_grid(inputs, encoding_min, encoding_max, op_mode, bitwidth, is_symmetric, grad):
+def _compute_dloss_by_dmin_dmax_and_dx(inputs: tf.Tensor, encoding_min: tf.Variable, encoding_max: tf.Variable,
+                                       op_mode: tf.Variable, bitwidth: tf.Variable,
+                                       is_symmetric: tf.Variable, grad: tf.Tensor) -> Tuple:
     """
-    Performs custom gradient calculations for trained Quantize op
-    :param inputs: inputs used in forward pass
-    :param encoding_min: Encoding min variable used to quantize/dequantize
-    :param encoding_max: Encoding max variable used to quantize/dequantize
-    :param op_mode: Mode of tensor quantizer (update stats, one shot quant/dequant, quant/dequant, passthrough)
-    :param bitwidth: Bitwidth used to quantize/dequantize
-    :param is_symmetric: True if using symmetric encodings, False otherwise
-    :param grad: gradient from child layers
-    :return: gradients computed for input and variables
+    Return tensors for dloss_by_dmin, dloss_by_dmax, and dloss_by_dx.
+    :param inputs: Inputs to op
+    :param encoding_min: Encoding min value(s), will be more than one if per channel is active
+    :param encoding_max: Encoding max value(s), will be more than one if per channel is active
+    :param op_mode: Op mode (if passthrough, gradient is returned as is)
+    :param bitwidth: Bitwidth used to quantize
+    :param is_symmetric: True if symmetric encodings are used, False otherwise
+    :param grad: Gradient from child layer
+    :return: Tensors for dloss_by_dmin, dloss_by_dmax, and dloss_by_dx
     """
     # pylint: disable=R0914
 
@@ -172,13 +204,11 @@ def quantsim_custom_grad_learned_grid(inputs, encoding_min, encoding_max, op_mod
     x = tf.cast(inputs, tf.float32)
     bitwidth = tf.cast(bitwidth, tf.float32)
     op_mode = tf.cast(op_mode, tf.int8)
-
     encoding_min = tf.cast(encoding_min, tf.float32)
-    encoding_max_read = tf.cast(encoding_max, tf.float32)
-
+    encoding_max = tf.cast(encoding_max, tf.float32)
     # handle min == max to avoid divide by zero
     epsilon = tf.constant(1e-5, dtype=tf.float32)
-    encoding_max = tf.math.maximum(encoding_max_read, tf.add(encoding_min, epsilon))
+    encoding_max = tf.math.maximum(encoding_max, tf.add(encoding_min, epsilon))
 
     # compute n, p, scaling and offset params
     # choose n based on symmetric or asymmetric flag
@@ -207,4 +237,132 @@ def quantsim_custom_grad_learned_grid(inputs, encoding_min, encoding_max, op_mod
     # Pass through gradient for skipped ops
     dloss_by_dx = tf.cond(tf.equal(op_mode, 3), lambda: grad, lambda: dloss_by_dx)
 
+    return dloss_by_dmin, dloss_by_dmax, dloss_by_dx
+
+
+def quantsim_custom_grad_learned_grid(inputs: tf.Tensor, encoding_min: tf.Variable, encoding_max: tf.Variable,
+                                      op_mode: tf.Variable, bitwidth: tf.Variable, is_symmetric: tf.Variable,
+                                      grad: tf.Tensor) -> Tuple[tf.Variable, List[tf.Variable]]:
+    """
+    Performs custom gradient calculations for trained Quantize op
+    :param inputs: inputs used in forward pass
+    :param encoding_min: Encoding min variable used to quantize/dequantize
+    :param encoding_max: Encoding max variable used to quantize/dequantize
+    :param op_mode: Mode of tensor quantizer (update stats, one shot quant/dequant, quant/dequant, passthrough)
+    :param bitwidth: Bitwidth used to quantize/dequantize
+    :param is_symmetric: True if using symmetric encodings, False otherwise
+    :param grad: gradient from child layers
+    :return: gradients computed for input and variables
+    """
+    dloss_by_dmin, dloss_by_dmax, dloss_by_dx = \
+        _compute_dloss_by_dmin_dmax_and_dx(inputs, encoding_min, encoding_max, op_mode, bitwidth, is_symmetric, grad)
+
     return dloss_by_dx, [dloss_by_dmin, dloss_by_dmax]
+
+
+@tf.function
+def reshape_input_and_grad_for_axis_handling(inputs: tf.Tensor, grad: tf.Tensor, axis_handling: int):
+    """
+    Reshape input and grad tensors from (H, W, channels, depth multiplier) to (H, W, channels * depth multiplier) in
+    the case of axis_handling = LAST_TWO_AXES to get all channel elements in last dimension only.
+    :param inputs: inputs to reshape
+    :param grad: gradient to reshape
+    :param axis_handling: Axis handling to determine reshape behavior
+    :return: reshaped inputs and grad tensors
+    """
+    if tf.equal(axis_handling, tf.constant([AxisHandling.LAST_TWO_AXES.value])):
+        # Even when in the case of inputs being a bias tensor, and axis handling will not be LAST_TWO_AXES, TF will
+        # still execute both paths of the conditional branch to construct the graph. When doing so, if there are not
+        # 4 dimensions to the tensor, the below code will fail, even though during session run we would not be going
+        # down this path.
+        # To fix this, add 3 dummy dimensions to the left side dimensions of the tensor such that we are guaranteed
+        # to have at least 4 dimensions. Then continue with taking the rightmost 4 dimensions for the shape to
+        # reshape to.
+        # To avoid using `tf.expand_dims` multiple times, use tf.newaxis
+        inputs = inputs[3 * (tf.newaxis,)]
+        orig_shape = tf.shape(inputs)
+
+        # As stated above, this is to take the rightmost 4 dimensions for reshaping
+        inputs = tf.reshape(inputs, [orig_shape[-4], orig_shape[-3], orig_shape[-2] * orig_shape[-1]])
+        grad = tf.reshape(grad, [orig_shape[-4], orig_shape[-3], orig_shape[-2] * orig_shape[-1]])
+    return inputs, grad
+
+
+@tf.function
+def reshape_dloss_by_dx_for_axis_handling(inputs: tf.Tensor, dloss_by_dx: tf.Variable,
+                                          axis_handling: int) -> tf.Variable:
+    """
+    Reshape dloss_by_dx tensor from (H, W, channels * depth multiplier) to (H, W, channels, depth multiplier) in
+    the case of axis_handling = LAST_TWO_AXES to match shape with that of the weight tensor to update.
+    :param inputs: inputs tensor to get original shape from
+    :param dloss_by_dx: dloss_by_dx tensor to reshape
+    :param axis_handling: Axis handling to determine reshape behavior
+    :return: reshaped dloss_by_dx tensor
+    """
+    if tf.equal(axis_handling, tf.constant([AxisHandling.LAST_TWO_AXES.value])):
+        # To avoid using `tf.expand_dims` multiple times, use tf.newaxis
+        inputs = inputs[3 * (tf.newaxis,)]
+        orig_shape = tf.shape(inputs)
+        dloss_by_dx = tf.reshape(dloss_by_dx, [orig_shape[-4], orig_shape[-3], orig_shape[-2], orig_shape[-1]])
+
+    return dloss_by_dx
+
+
+# pylint: disable=too-many-arguments
+@tf.function
+def _compute_dloss_by_dmin_dmax_and_dx_for_per_channel(inputs: tf.Tensor, encoding_min: tf.Variable,
+                                                       encoding_max: tf.Variable, op_mode: tf.Variable,
+                                                       bitwidth: tf.Variable, is_symmetric: tf.Variable,
+                                                       is_int_data_type: tf.Variable, axis_handling: AxisHandling,
+                                                       grad: tf.Tensor) -> Tuple:
+    """
+    Return tensors for dloss_by_dmin, dloss_by_dmax, and dloss_by_dx in the case of per channel.
+    :param inputs: Inputs to op
+    :param bitwidth: Bitwidth used to quantize
+    :param op_mode: Op mode (if passthrough, gradient is returned as is)
+    :param encoding_min: Encoding min value(s), will be more than one if per channel is active
+    :param encoding_max: Encoding max value(s), will be more than one if per channel is active
+    :param is_symmetric: True if symmetric encodings are used, False otherwise
+    :param is_int_data_type: True if op needs to operate with int data type, else False
+    :param axis_handling: Determines behavior for reshaping inputs and gradients based on axis handling value.
+    :param grad: Gradient from child layer
+    :return: Tensors for dloss_by_dmin, dloss_by_dmax, and dloss_by_dx
+    """
+    reshaped_inputs, grad = reshape_input_and_grad_for_axis_handling(inputs, grad, axis_handling)
+    dloss_by_dmin, dloss_by_dmax, dloss_by_dx = \
+        _compute_dloss_by_dmin_dmax_and_dx(reshaped_inputs, encoding_min, encoding_max, op_mode, bitwidth, is_symmetric,
+                                           grad)
+
+    dloss_by_dx = reshape_dloss_by_dx_for_axis_handling(inputs, dloss_by_dx, axis_handling)
+
+    # return grad in case of floating-point mode
+    dloss_by_dx = tf.cond(is_int_data_type, lambda: dloss_by_dx, lambda: grad)
+
+    return dloss_by_dmin, dloss_by_dmax, dloss_by_dx
+
+
+# pylint: disable=too-many-arguments
+@tf.function
+def quantsim_per_channel_custom_grad_learned_grid(inputs: tf.Tensor, encoding_min: tf.Variable,
+                                                  encoding_max: tf.Variable, op_mode: tf.Variable,
+                                                  bitwidth: tf.Variable, is_symmetric: tf.Variable,
+                                                  is_int_data_type: tf.Variable, axis_handling: AxisHandling,
+                                                  grad: tf.Tensor) -> Tuple:
+    """
+    Performs custom gradient calculations for trained Quantize op for per-channel
+    :param inputs: inputs used in forward pass
+    :param encoding_min: Encoding min variable used to quantize/dequantize
+    :param encoding_max: Encoding max variable used to quantize/dequantize
+    :param op_mode: Mode of tensor quantizer (update stats, one shot quant/dequant, quant/dequant, passthrough)
+    :param bitwidth: Bitwidth used to quantize/dequantize
+    :param is_symmetric: True if using symmetric encodings, False otherwise
+    :param grad: gradient from child layers
+    :param is_int_data_type: True if op needs to operate with int data type, else False
+    :param axis_handling: Determines behavior for reshaping inputs and gradients based on axis handling value.
+    :return: gradients computed for input and variables
+    """
+    dloss_by_dmin, dloss_by_dmax, dloss_by_dx = \
+        _compute_dloss_by_dmin_dmax_and_dx_for_per_channel(inputs, encoding_min, encoding_max, op_mode, bitwidth,
+                                                           is_symmetric, is_int_data_type, axis_handling, grad)
+
+    return dloss_by_dx, None, None, dloss_by_dmin, dloss_by_dmax, None, None, None, None, None

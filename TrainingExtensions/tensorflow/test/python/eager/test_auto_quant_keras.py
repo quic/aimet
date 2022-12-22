@@ -156,6 +156,10 @@ def patch_ptq_techniques(bn_folded_acc, cle_acc, adaround_acc):
         def __init__(self, model, quant_scheme: Union[QuantScheme, str] = 'tf_enhanced', rounding_mode: str = 'nearest',
                      default_output_bw: int = 8, default_param_bw: int = 8, in_place: bool = False,
                      config_file: str = None):
+
+            super(_QuantizationSimModel, self).__init__(model, quant_scheme, rounding_mode, default_output_bw,
+                                                        default_param_bw, in_place, config_file)
+
             self._model_without_wrappers = model
             if not in_place:
                 self._model_without_wrappers = tf.keras.models.clone_model(model)
