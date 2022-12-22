@@ -204,6 +204,14 @@ def bn_re_estimation_dataset(bn_num_batches, batch_size):
         dataset = dataset.batch(batch_size)
         return dataset
 
+@pytest.fixture
+def bn_re_estimation_dataset_mobiledet(bn_num_batches, batch_size):
+    graph = tf.Graph()
+    with graph.as_default():
+        dummy_inputs = tf.random.normal((bn_num_batches * batch_size, 160, 160, 32))
+        dataset = tf.compat.v1.data.Dataset.from_tensor_slices(dummy_inputs)
+        dataset = dataset.batch(batch_size)
+        return dataset
 
 class TestBNReEstimation:
     def test_reestimation_with_quantsim_model(self, gpu_sessions, bn_re_estimation_dataset,
@@ -244,6 +252,38 @@ class TestBNReEstimation:
         sim.compute_encodings(dummy_forward_pass, None)
 
         self._reestimate_and_compare_results(sim, sess, bn_re_estimation_dataset, bn_num_batches, inputs.op.name, outputs.op.name)
+
+    def test_reestimation_with_rewriter_mobiledet(self, bn_re_estimation_dataset_mobiledet, bn_num_batches):
+        tf.compat.v1.reset_default_graph()
+        saver = tf.compat.v1.train.import_meta_graph(
+            "/local/mnt/workspace2/haijunz/SW/checkpoint4AIMET_xuebing/AIMET/model.ckpt.meta")
+        with tf.compat.v1.Session() as sess:
+            saver.restore(sess, tf.compat.v1.train.latest_checkpoint(
+                "/local/mnt/workspace2/haijunz/SW/checkpoint4AIMET_xuebing/AIMET"))
+            initialize_uninitialized_vars(sess)
+
+            start_op_names = ['FeatureExtractor/MobileDetEdgeTPU/Conv/Conv2D']
+            end_op_names = ["concat", "concat_1"]
+            #dummy_val = np.random.randn(1, 32, 32, 3)
+
+            modify_sess_bn_mutable(sess, start_op_names, end_op_names, training_tf_placeholder=False)
+            from aimet_tensorflow.batch_norm_fold import find_all_batch_norms_to_fold
+            pairs = find_all_batch_norms_to_fold(sess, start_op_names, end_op_names)
+            for conv, bn, _ in pairs:
+                print("bn_name:", bn.op.name, "   ||type:", bn.op.type)
+
+            sim = QuantizationSimModel(sess, start_op_names, end_op_names)
+
+            def dummy_forward_pass(sess, args):
+                model_input = sess.graph.get_tensor_by_name("FeatureExtractor/MobileDetEdgeTPU/Conv/Conv2D:0")
+                model_output = sess.graph.get_tensor_by_name("concat:0")
+                dummy_val = np.random.randn(1, *model_input.shape[1:])
+                sess.run(model_output, feed_dict={model_input: dummy_val})
+
+            sim.compute_encodings(dummy_forward_pass, None)
+
+            self._reestimate_and_compare_results(sim, sess, bn_re_estimation_dataset_mobiledet, bn_num_batches, 'FeatureExtractor/MobileDetEdgeTPU/Conv/Conv2D',
+                                                 "concat")
 
     def _reestimate_and_compare_results(self, sess_sim, sess_fp32, bn_re_restimation_dataset, bn_num_batches, input_op, output_op):
         bn_mean_var_tf_var_list, bn_momentum_tf_var_list, bn_training_tf_var_list = _get_all_tf_bn_vars_list(
