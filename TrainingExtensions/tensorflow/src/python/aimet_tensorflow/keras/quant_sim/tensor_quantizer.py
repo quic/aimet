@@ -284,7 +284,7 @@ class StaticGridPerTensorQuantizer(TensorQuantizer):
 
         super(StaticGridPerTensorQuantizer, self).__init__(layer, name, op_mode, quant_scheme,
                                                            bitwidth, data_type, is_symmetric)
-
+        # Order of adding weights matters! Min then max always.
         self._encoding_min = self.add_weight(name + '.encoding_min', dtype=tf.float64, trainable=True,
                                              initializer=tf.constant_initializer(0.))
         self._encoding_max = self.add_weight(name + '.encoding_max', dtype=tf.float64, trainable=True,
@@ -325,18 +325,20 @@ class StaticGridPerTensorQuantizer(TensorQuantizer):
                             'use_unsigned_symmetric': tensor_quantizer_state.use_unsigned_symmetric,
                             'enabled': config['enabled']}
 
+        rebuilt_quantizer = cls(**blank_initilizer)
+
         rebuilt_tensor_quantizer = libpymo.TensorQuantizer(tensor_quantizer_state.quant_scheme,
                                                            tensor_quantizer_state.round_mode)
         rebuilt_tensor_quantizer.setStrictSymmetric(tensor_quantizer_state.use_strict_symmetric)
         rebuilt_tensor_quantizer.setUnsignedSymmetric(tensor_quantizer_state.use_unsigned_symmetric)
         rebuilt_tensor_quantizer.isEncodingValid = config['is_encoding_valid']
 
-        rebuilt_quantizer = cls(**blank_initilizer)
-
         rebuilt_quantizer.tensor_quantizer = rebuilt_tensor_quantizer
         # pylint: disable=protected-access
         rebuilt_quantizer._encoding_min = config['encoding_min']
         rebuilt_quantizer._encoding_max = config['encoding_max']
+        rebuilt_quantizer._is_encoding_frozen = config['is_encoding_frozen']
+        rebuilt_quantizer._is_encoding_valid = config['is_encoding_valid']
 
         return rebuilt_quantizer
 
@@ -654,10 +656,12 @@ class StaticGridPerChannelQuantizer(TensorQuantizer):
                                                             bitwidth, data_type, is_symmetric)
 
         self.axis_handling = axis_handling.value
-        self._encoding_max = self.add_weight(name + '.encoding_max', dtype=tf.float64, trainable=True,
-                                             initializer=tf.constant_initializer(0.), shape=(num_output_channels,))
+        # Order of adding weights matters! Min then max always.
         self._encoding_min = self.add_weight(name + '.encoding_min', dtype=tf.float64, trainable=True,
                                              initializer=tf.constant_initializer(0.), shape=(num_output_channels,))
+        self._encoding_max = self.add_weight(name + '.encoding_max', dtype=tf.float64, trainable=True,
+                                             initializer=tf.constant_initializer(0.), shape=(num_output_channels,))
+
 
         tensor_quantizer_int64 = []
         tensor_quantizers = []
@@ -685,7 +689,7 @@ class StaticGridPerChannelQuantizer(TensorQuantizer):
             'tensor_quantizer': tensor_quantizer_state,
             'encoding_min': self._encoding_min,
             'encoding_max': self._encoding_max,
-            'axis_handling': self.axis_handling,
+            'axis_handling': AxisHandling.LAST_AXIS if self.axis_handling == AxisHandling.LAST_AXIS.value else AxisHandling.LAST_TWO_AXES,
             'num_output_channels': self._encoding_max.shape[0]
         })
         return config
@@ -709,22 +713,29 @@ class StaticGridPerChannelQuantizer(TensorQuantizer):
                             'enabled': config['enabled'], 'axis_handling': config['axis_handling'],
                             'num_output_channels': config['num_output_channels']}
 
-        tensor_quantizer_state = config.pop('tensor_quantizer')
-        rebuilt_tensor_quantizers = []
-        for tensor_quantizer in tensor_quantizer_state:
-            tensor_quantizer = libpymo.TensorQuantizer(tensor_quantizer.quant_scheme,
-                                                       tensor_quantizer.round_mode)
-            tensor_quantizer.setStrictSymmetric(tensor_quantizer.use_strict_symmetric)
-            tensor_quantizer.setUnsignedSymmetric(tensor_quantizer.use_unsigned_symmetric)
-            tensor_quantizer.isEncodingValid = config['is_encoding_valid']
-            rebuilt_tensor_quantizers.append(tensor_quantizer)
-
         rebuilt_quantizer = cls(**blank_initilizer)
+
+        tensor_quantizer_state = config.pop('tensor_quantizer')
+
+        rebuilt_tensor_quantizers_int64 = []
+        rebuilt_tensor_quantizers = []
+        for current_tensor_quantizer_state in tensor_quantizer_state:
+            tensor_quantizer = libpymo.TensorQuantizer(current_tensor_quantizer_state.quant_scheme,
+                                                       current_tensor_quantizer_state.round_mode)
+            tensor_quantizer.setStrictSymmetric(current_tensor_quantizer_state.use_strict_symmetric)
+            tensor_quantizer.setUnsignedSymmetric(current_tensor_quantizer_state.use_unsigned_symmetric)
+            tensor_quantizer.isEncodingValid = config['is_encoding_valid']
+
+            rebuilt_tensor_quantizers.append(tensor_quantizer)
+            rebuilt_tensor_quantizers_int64.append(libpymo.PtrToInt64(tensor_quantizer))
 
         rebuilt_quantizer.tensor_quantizer = rebuilt_tensor_quantizers
         # pylint: disable=protected-access
+        rebuilt_quantizer._tensor_quantizer_int64 = rebuilt_tensor_quantizers_int64
         rebuilt_quantizer._encoding_min = config['encoding_min']
         rebuilt_quantizer._encoding_max = config['encoding_max']
+        rebuilt_quantizer._is_encoding_frozen = config['is_encoding_frozen']
+        rebuilt_quantizer._is_encoding_valid = config['is_encoding_valid']
 
         return rebuilt_quantizer
 

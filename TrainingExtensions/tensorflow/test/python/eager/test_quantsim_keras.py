@@ -39,6 +39,7 @@ import os
 from typing import List
 import shutil
 import tempfile
+from typing import List
 import pytest
 
 import aimet_common.libpymo as libpymo
@@ -671,6 +672,20 @@ def _common_stays_valid_after_export_helper(model, rand_inp, config=None):
     sim = QuantizationSimModel(model, quant_scheme='tf', config_file=config)
     sim.compute_encodings(lambda m, _: m.predict(rand_inp), None)
 
+    original_sim_output = sim.model.predict(rand_inp)
+    original_sim_model_weights = sim.model.get_weights()
+
+    original_layers_and_quantizers = {}
+    for layer in sim.model.layers:
+        if isinstance(layer, tf.keras.layers.InputLayer):
+            continue
+
+        original_layers_and_quantizers[layer.name] = {}
+        original_layers_and_quantizers[layer.name]["input_quantizers"] = layer.input_quantizers
+        original_layers_and_quantizers[layer.name]["output_quantizers"] = layer.output_quantizers
+        original_layers_and_quantizers[layer.name]["param_quantizers"] = layer.param_quantizers
+
+
     # make tmp directory
     tmp_dir = os.path.join(tempfile.mkdtemp(), 'valid_keras_model_after_export_test')
     sim.export(path=tmp_dir, filename_prefix="test")
@@ -682,6 +697,46 @@ def _common_stays_valid_after_export_helper(model, rand_inp, config=None):
         _ = sim.model.predict(rand_inp)
     except ValueError:
         pytest.fail("Model is no longer valid after export")
+
+    for i, _ in enumerate(original_sim_model_weights):
+        np.testing.assert_array_equal(original_sim_model_weights[i], sim.model.get_weights()[i])
+
+    def check_encodings(original_encoding, new_encoding):
+        if not original_encoding and not new_encoding:
+            return
+
+        if not isinstance(original_encoding, List):
+            original_encoding = [original_encoding]
+            new_encoding = [new_encoding]
+
+        for i, _ in enumerate(original_encoding):
+            assert original_encoding[i].bw == new_encoding[i].bw, f"original: {original_encoding[i].bw}, new: {new_encoding[i].bw}"
+            assert original_encoding[i].delta == new_encoding[i].delta, f"original: {original_encoding[i].delta}, new: {new_encoding[i].delta}"
+            assert original_encoding[i].offset == new_encoding[i].offset, f"original: {original_encoding[i].offset}, new: {new_encoding[i].offset}"
+            assert original_encoding[i].min == new_encoding[i].min, f"original: {original_encoding[i].min}, new: {new_encoding[i].min}"
+            assert original_encoding[i].max == new_encoding[i].max, f"original: {original_encoding[i].max}, new: {new_encoding[i].max}"
+
+    for layer in sim.model.layers:
+        if isinstance(layer, tf.keras.layers.InputLayer):
+            continue
+        
+        assert len(layer.input_quantizers) == len(original_layers_and_quantizers[layer.name]["input_quantizers"]), f"Not the same number of input quantizers for layer {layer.name}"
+        for i, _ in enumerate(layer.input_quantizers):
+            check_encodings(original_layers_and_quantizers[layer.name]["input_quantizers"][i].encoding,
+                            layer.input_quantizers[i].encoding)
+
+        assert len(layer.output_quantizers) == len(original_layers_and_quantizers[layer.name]["output_quantizers"]), f"Not the same number of output quantizers for layer {layer.name}"
+        for i, _ in enumerate(layer.output_quantizers):
+            check_encodings(original_layers_and_quantizers[layer.name]["output_quantizers"][i].encoding,
+                            layer.output_quantizers[i].encoding)
+
+        assert len(layer.param_quantizers) == len(original_layers_and_quantizers[layer.name]["param_quantizers"]), f"Not the same number of param quantizers for layer {layer.name}"
+        for i, _ in enumerate(layer.param_quantizers):
+            check_encodings(original_layers_and_quantizers[layer.name]["param_quantizers"][i].encoding,
+                            layer.param_quantizers[i].encoding)
+
+    np.testing.assert_array_equal(original_sim_output, sim.model.predict(rand_inp))
+
 
 def test_model_stays_valid_after_export_per_tensor():
     model = dense_functional()

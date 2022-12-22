@@ -330,9 +330,9 @@ class QcQuantizeWrapper(tf.keras.layers.Layer):
             param_quantizer_config['layer_to_wrap'] = config['layer_to_wrap']
         config['param_quantizers'] = [
             (lambda quantizer_type, pqc=param_quantizer_config: quantizer_type.from_config(pqc)) # pylint: disable=undefined-loop-variable
-            (ParamPerChannelQuantizer if isinstance(param_quantizer_config, List) else ParamPerTensorQuantizer)
+            (ParamPerChannelQuantizer if isinstance(param_quantizer_config['tensor_quantizer'], List) else ParamPerTensorQuantizer)
             for param_quantizer_config in config['param_quantizers']
-            ]
+        ]
         return cls(**config)
 
     # pylint: disable=arguments-differ
