@@ -650,7 +650,7 @@ def test_quantizable_mha_export_encodings():
                 assert encodings['param_encodings'][param_name] == encoding_dict
 
 
-def test_copy_model_from_config():
+def test_clone_model():
     model = dense_functional()
     rand_inp = np.random.randn(100, 5)
     _ = model.predict(rand_inp)
@@ -658,14 +658,15 @@ def test_copy_model_from_config():
     sim = QuantizationSimModel(model, quant_scheme='tf')
     sim.compute_encodings(lambda m, _: m.predict(rand_inp), None)
 
-    copied_model = sim.copy_model()
+    cloned_model = tf.keras.models.clone_model(sim.model)
+    cloned_model.set_weights(sim.model.get_weights())
 
-    # Check that the weight names are the same
-    assert {w.name for w in copied_model.weights} == {w.name for w in sim.model.weights}
     # Check that the weight values are the same
-    np.testing.assert_equal(sim.model.get_weights(), copied_model.get_weights())
+    for i, _ in enumerate(model.get_weights()):
+        np.testing.assert_equal(sim.model.get_weights()[i], cloned_model.get_weights()[i])
+
     # Check that the models produce the same output for the same input
-    np.testing.assert_equal(sim.model.predict(rand_inp), copied_model.predict(rand_inp))
+    np.testing.assert_equal(sim.model.predict(rand_inp), cloned_model.predict(rand_inp))
 
 
 def _common_stays_valid_after_export_helper(model, rand_inp, config=None):
@@ -675,16 +676,15 @@ def _common_stays_valid_after_export_helper(model, rand_inp, config=None):
     original_sim_output = sim.model.predict(rand_inp)
     original_sim_model_weights = sim.model.get_weights()
 
-    original_layers_and_quantizers = {}
+    original_layer_and_quantizers = {}
     for layer in sim.model.layers:
         if isinstance(layer, tf.keras.layers.InputLayer):
             continue
 
-        original_layers_and_quantizers[layer.name] = {}
-        original_layers_and_quantizers[layer.name]["input_quantizers"] = layer.input_quantizers
-        original_layers_and_quantizers[layer.name]["output_quantizers"] = layer.output_quantizers
-        original_layers_and_quantizers[layer.name]["param_quantizers"] = layer.param_quantizers
-
+        original_layer_and_quantizers[layer.name] = {}
+        original_layer_and_quantizers[layer.name]["input_quantizers"] = layer.input_quantizers
+        original_layer_and_quantizers[layer.name]["output_quantizers"] = layer.output_quantizers
+        original_layer_and_quantizers[layer.name]["param_quantizers"] = layer.param_quantizers
 
     # make tmp directory
     tmp_dir = os.path.join(tempfile.mkdtemp(), 'valid_keras_model_after_export_test')
@@ -719,20 +719,20 @@ def _common_stays_valid_after_export_helper(model, rand_inp, config=None):
     for layer in sim.model.layers:
         if isinstance(layer, tf.keras.layers.InputLayer):
             continue
-        
-        assert len(layer.input_quantizers) == len(original_layers_and_quantizers[layer.name]["input_quantizers"]), f"Not the same number of input quantizers for layer {layer.name}"
+
+        assert len(layer.input_quantizers) == len(original_layer_and_quantizers[layer.name]["input_quantizers"]), f"Not the same number of input quantizers for layer {layer.name}"
         for i, _ in enumerate(layer.input_quantizers):
-            check_encodings(original_layers_and_quantizers[layer.name]["input_quantizers"][i].encoding,
+            check_encodings(original_layer_and_quantizers[layer.name]["input_quantizers"][i].encoding,
                             layer.input_quantizers[i].encoding)
 
-        assert len(layer.output_quantizers) == len(original_layers_and_quantizers[layer.name]["output_quantizers"]), f"Not the same number of output quantizers for layer {layer.name}"
+        assert len(layer.output_quantizers) == len(original_layer_and_quantizers[layer.name]["output_quantizers"]), f"Not the same number of output quantizers for layer {layer.name}"
         for i, _ in enumerate(layer.output_quantizers):
-            check_encodings(original_layers_and_quantizers[layer.name]["output_quantizers"][i].encoding,
+            check_encodings(original_layer_and_quantizers[layer.name]["output_quantizers"][i].encoding,
                             layer.output_quantizers[i].encoding)
 
-        assert len(layer.param_quantizers) == len(original_layers_and_quantizers[layer.name]["param_quantizers"]), f"Not the same number of param quantizers for layer {layer.name}"
+        assert len(layer.param_quantizers) == len(original_layer_and_quantizers[layer.name]["param_quantizers"]), f"Not the same number of param quantizers for layer {layer.name}"
         for i, _ in enumerate(layer.param_quantizers):
-            check_encodings(original_layers_and_quantizers[layer.name]["param_quantizers"][i].encoding,
+            check_encodings(original_layer_and_quantizers[layer.name]["param_quantizers"][i].encoding,
                             layer.param_quantizers[i].encoding)
 
     np.testing.assert_array_equal(original_sim_output, sim.model.predict(rand_inp))

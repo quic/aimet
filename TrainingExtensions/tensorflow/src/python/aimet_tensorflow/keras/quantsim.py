@@ -323,24 +323,6 @@ class QuantizationSimModel(tf.keras.Model):
                           'quantizer_args': self.quant_args if hasattr(self, "quant_args") else {}}
         return encodings_dict
 
-    def copy_model(self, custom_objects=None) -> tf.keras.Model:
-        """
-        Copies the model by serializing and deserializing it using the Keras config API's.
-        :param custom_objects: Custom objects to use when deserializing the model
-        :return: copy of the model
-        """
-        # Make custom objects dict empty if none provided or use the provided one. Then add QcQuantizeWrapper to it.
-        custom_objects = custom_objects or {}
-        custom_objects['QcQuantizeWrapper'] = QcQuantizeWrapper
-
-        sim_model_config = self.model.get_config()
-        sim_model_weights = self.model.get_weights()
-
-        copied_model = tf.keras.models.Model.from_config(sim_model_config, custom_objects=custom_objects)
-        copied_model.set_weights(sim_model_weights)
-
-        return copied_model
-
 
     def compute_encodings(self, forward_pass_callback, forward_pass_callback_args):
         """

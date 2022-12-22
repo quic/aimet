@@ -333,6 +333,7 @@ class QcQuantizeWrapper(tf.keras.layers.Layer):
             (ParamPerChannelQuantizer if isinstance(param_quantizer_config['tensor_quantizer'], List) else ParamPerTensorQuantizer)
             for param_quantizer_config in config['param_quantizers']
         ]
+
         return cls(**config)
 
     # pylint: disable=arguments-differ
