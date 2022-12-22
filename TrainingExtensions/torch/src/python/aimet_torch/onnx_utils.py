@@ -102,6 +102,7 @@ map_torch_types_to_onnx = {
     nn.Softmax: ['Softmax'],
     nn.Tanh: ['Tanh'],
     nn.Softplus: ['Softplus'],
+    nn.Hardswish: ['HardSwish'],
     elementwise_ops.Add: ['Add'],
     elementwise_ops.Subtract: ['Sub'],
     elementwise_ops.Multiply: ['Mul'],
