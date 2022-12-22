@@ -609,6 +609,21 @@ def fold_given_batch_norms(model: Union[tf.keras.Model, QuantizationSimModel], l
 
         if is_fold_to_scale:
             sim = model
+            conv_wrapper = sim.get_quant_wrapper_for_layer_name(conv_linear.name)
+            # check no bias
+            if hasattr(conv_wrapper, 'param_quantizers[1]'):
+                conv_wrapper.param_quantizers[1].disable()
+            conv_wrapper.output_quantizers[0].disable()
+
+            # Disable quantizers of batchnorms
+            bn_wrapper = sim.get_quant_wrapper_for_layer_name(batchnorm.name)
+            bn_wrapper.param_quantizers[0].disable()
+            bn_wrapper.param_quantizers[1].disable()
+            bn_wrapper.param_quantizers[2].disable()
+            bn_wrapper.param_quantizers[3].disable()
+            bn_wrapper.input_quantizers[0].disable()
+            bn_wrapper.output_quantizers[0].disable()
+
             _fold_pair_scale(sim, conv_linear, bn_params)
 
         BNUtils.modify_bn_params_to_make_as_passthrough(batchnorm)

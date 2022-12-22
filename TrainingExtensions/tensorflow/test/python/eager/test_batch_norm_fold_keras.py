@@ -1119,7 +1119,8 @@ class TestBatchNormFoldToScale(unittest.TestCase):
         bn = tf.keras.layers.BatchNormalization(fused=True)(inputs, training=False)
         x = tf.keras.layers.Flatten()(bn)
         dense = tf.keras.layers.Dense(2, activation=tf.nn.relu, name="linear_layer")(x)
-        model = tf.keras.Model(inputs=inputs, outputs=dense)
+        outputs = tf.keras.layers.ReLU()(dense)
+        model = tf.keras.Model(inputs=inputs, outputs=outputs)
 
         # get baseline output
         np.random.seed(0)
@@ -1129,7 +1130,7 @@ class TestBatchNormFoldToScale(unittest.TestCase):
         qsim = self._qsim_setup_for_fold_scale(model, model.layers[2], model.layers[1], dummy_inputs, is_disable_qauntizers_compute_encodings=False)
 
         qsim.compute_encodings(lambda m, _: m.predict(dummy_inputs), None)
-        self._fold_all_batch_norms_to_scale_and_compare_results(qsim, dummy_inputs, 5e-3)
+        self._fold_all_batch_norms_to_scale_and_compare_results(qsim, dummy_inputs)
 
     def test_bn_fold_with_no_bias(self):
         tf.keras.backend.clear_session()
@@ -1142,7 +1143,7 @@ class TestBatchNormFoldToScale(unittest.TestCase):
 
         qsim = self._qsim_setup_for_fold_scale(model, model.layers[1], model.layers[2], dummy_inputs)
 
-        self._fold_all_batch_norms_to_scale_and_compare_results(qsim, dummy_inputs, 5e-3)
+        self._fold_all_batch_norms_to_scale_and_compare_results(qsim, dummy_inputs)
 
     def test_batch_norm_fold_with_random_data_fuse_true(self):
         tf.keras.backend.clear_session()
@@ -1157,7 +1158,7 @@ class TestBatchNormFoldToScale(unittest.TestCase):
         dummy_inputs = np.random.randn(1, 32, 32, 3)
 
         qsim = self._qsim_setup_for_fold_scale(model, model.layers[1], model.layers[2], dummy_inputs)
-        self._fold_all_batch_norms_to_scale_and_compare_results(qsim, dummy_inputs, 5e-3)
+        self._fold_all_batch_norms_to_scale_and_compare_results(qsim, dummy_inputs)
 
     def test_bn_fold_convolution(self):
         tf.keras.backend.clear_session()
@@ -1170,7 +1171,7 @@ class TestBatchNormFoldToScale(unittest.TestCase):
         dummy_inputs = np.random.randn(1, 32, 32, 3)
 
         qsim = self._qsim_setup_for_fold_scale(model, model.layers[1], model.layers[2], dummy_inputs)
-        self._fold_all_batch_norms_to_scale_and_compare_results(qsim, dummy_inputs, 1e-3)
+        self._fold_all_batch_norms_to_scale_and_compare_results(qsim, dummy_inputs)
 
     def test_bn_fold_depthwise_convolution(self):
         tf.keras.backend.clear_session()
@@ -1185,7 +1186,7 @@ class TestBatchNormFoldToScale(unittest.TestCase):
         dummy_inputs = np.random.randn(1, 32, 32, 3)
 
         qsim = self._qsim_setup_for_fold_scale(model, model.layers[1], model.layers[2],dummy_inputs )
-        self._fold_all_batch_norms_to_scale_and_compare_results(qsim, dummy_inputs, 5e-3)
+        self._fold_all_batch_norms_to_scale_and_compare_results(qsim, dummy_inputs)
 
     def test_bn_fold_conv2dtranspose(self):
         tf.keras.backend.clear_session()
@@ -1200,13 +1201,15 @@ class TestBatchNormFoldToScale(unittest.TestCase):
         dummy_inputs = np.random.randn(1, 32, 32, 3)
 
         qsim = self._qsim_setup_for_fold_scale(model, model.layers[1], model.layers[2], dummy_inputs, is_disable_qauntizers_compute_encodings=True)
-        self._fold_all_batch_norms_to_scale_and_compare_results(qsim, dummy_inputs, 5e-3)
+        self._fold_all_batch_norms_to_scale_and_compare_results(qsim, dummy_inputs)
 
-    def _fold_all_batch_norms_to_scale_and_compare_results(self, qsim, dummy_inputs, tolerance):
+    def _fold_all_batch_norms_to_scale_and_compare_results(self, qsim, dummy_inputs):
         output_before_batchnorm_folding = qsim.model(dummy_inputs)
         fold_all_batch_norms_to_scale(qsim)
         output_after_batchnorm_folding = qsim.model(dummy_inputs)
-        assert np.allclose(output_before_batchnorm_folding, output_after_batchnorm_folding, atol = tolerance, equal_nan=True)
+        last_output_encoding = qsim.get_quant_wrapper_for_layer_name("re_lu").output_quantizers[0].encoding
+        delta = float((last_output_encoding.max - last_output_encoding.min) / 255)
+        assert np.allclose(output_before_batchnorm_folding, output_after_batchnorm_folding, atol=3 * delta, equal_nan=True)
 
     def _qsim_setup_for_fold_scale(self, model, conv_layer, bn_layer, dummy_inputs, is_disable_qauntizers_compute_encodings=True):
         default_config_per_channel = {
@@ -1291,7 +1294,6 @@ class TestBatchNormFoldToScale(unittest.TestCase):
             if  hasattr(conv_wrapper, 'param_quantizers[1]'):
                 conv_wrapper.param_quantizers[1].disable()
             conv_wrapper.output_quantizers[0].disable()
-
             # Disable quantizers of batchnorms
             bn_wrapper = qsim.get_quant_wrapper_for_layer_name(bn_layer.name)
             bn_wrapper.param_quantizers[0].disable()
