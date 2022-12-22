@@ -94,7 +94,6 @@ def modify_sess_bn_mutable(sess: tf.compat.v1.Session, start_op_names: Union[Lis
             mean_init = tf.compat.v1.constant_initializer(mean, dtype=tf.float32, verify_shape=True)
             var_init = tf.compat.v1.constant_initializer(var, dtype=tf.float32, verify_shape=True)
             momentum = tf.Variable(_DEFAULT_TF_BN_MOMENTUM, trainable=False, name=modified_name + "/momentum_mutable")
-
             new_bn = tf.compat.v1.layers.batch_normalization(batchnorm_tensor.in_tensor, beta_initializer=beta_init,
                                                              gamma_initializer=gamma_init,
                                                              moving_mean_initializer=mean_init,
