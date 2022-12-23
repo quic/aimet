@@ -39,14 +39,14 @@
 """ Utility for batch norm fold in tf 2.x """
 
 from typing import Tuple, Union, List, Dict, Set
-
+from enum import IntEnum
 import numpy as np
 import tensorflow as tf
 import aimet_common.libpymo as libpymo
 from aimet_common.utils import AimetLogger
 from aimet_tensorflow.keras.utils import common
 from aimet_tensorflow.keras.utils.op.batchnorm import BNUtils
-
+from aimet_tensorflow.keras.quantsim import QuantizationSimModel
 logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Utils)
 
 LAYER_TYPE = Union[tf.keras.layers.Conv2D, tf.keras.layers.Dense, tf.keras.layers.Conv2DTranspose,
@@ -60,6 +60,21 @@ BN_TYPE = tf.keras.layers.BatchNormalization
 LINEAR_TYPE = tf.keras.layers.Dense
 CONV_TYPE = tf.keras.layers.Conv2D
 FLATTEN_TYPE = Union[tf.keras.layers.Flatten, tf.keras.layers.Reshape]
+
+class PerChannelQuantizerType(IntEnum):
+    """
+    Enumeration of ConvLinear Input/Output/Param PerChannel Quantizers
+    """
+    INPUTS = 0
+    OUPUTS = 1
+    PARAMS = 2
+
+class ConvLinearParamType(IntEnum):
+    """
+    Enumeration of ConvLinear Param Type
+    """
+    WEIGHTS = 0
+    BIAS = 1
 
 
 def _check_layer_to_find_pattern(cur_layer: tf.keras.layers.Layer,
@@ -483,14 +498,58 @@ def _find_all_batch_norms_to_fold(model: tf.keras.Model) -> List[PAIR_TYPE]:
 
     return valid_bn_conv_linear_pairs
 
-
-def fold_given_batch_norms(model: tf.keras.Model, layer_pairs: List[PAIR_TYPE]):
+def fold_all_batch_norms(model: tf.keras.Model):
     """
-    Fold a given set of batch_norm layers into conv layers
+    Fold all batch_norm layers in a model into corresponding conv/linear layers
 
-    :param model: model to fold selected batchnorms for
+    :param model: model to find all batch norms for
+    """
+
+    bn_conv_linear_pairs = _find_all_batch_norms_to_fold(model)
+
+    fold_given_batch_norms(model, bn_conv_linear_pairs)
+
+    # When returning the pairs, we want the second element of the pair to be the BN
+    pairs_to_return = []
+    for bn, conv, _ in bn_conv_linear_pairs:
+        pairs_to_return.append((bn, conv))
+
+    return pairs_to_return
+
+#pylint: disable=protected-access
+def fold_all_batch_norms_to_scale(sim: QuantizationSimModel):
+    """
+    Fold all batch_norm layers in a model into corresponding conv/linear layers
+
+    :param sim: quantized keras model to fold all batch norms
+    """
+
+    assert isinstance(sim, QuantizationSimModel)
+
+    bn_conv_linear_pairs = _find_all_batch_norms_to_fold(sim._model_without_wrappers)
+
+    fold_given_batch_norms(sim, bn_conv_linear_pairs, is_fold_to_scale=True)
+
+    # When returning the pairs, we want the second element of the pair to be the BN
+    pairs_to_return = []
+    for bn, conv, _ in bn_conv_linear_pairs:
+        pairs_to_return.append((bn, conv))
+
+    return pairs_to_return
+
+# pylint: disable=too-many-locals
+def fold_given_batch_norms(model: Union[tf.keras.Model, QuantizationSimModel], layer_pairs: List[PAIR_TYPE], is_fold_to_scale: bool = False):
+    """
+    Fold a given set of batch_norm layers into conv_linear layers
+
+    :param model: keras fp32 model/quantized model to fold selected batchnorms
     :param layer_pairs: Tuple of conv, bn layers and is_batch_norm_second flag
+    :param is_fold_to_scale: default is False,  when it is True, fold BN scaling factor into the per-channel quantization scaling factor of the preceding convolution
     """
+    if is_fold_to_scale:
+        assert isinstance(model, QuantizationSimModel)
+    else:
+        assert isinstance(model, tf.keras.Model)
 
     list_of_bn_layers = []
     for pair in layer_pairs:
@@ -548,25 +607,54 @@ def fold_given_batch_norms(model: tf.keras.Model, layer_pairs: List[PAIR_TYPE]):
                                                       trainable=True)
         conv_linear.set_weights([numpy_weight_reshaped.data, numpy_bias_reshaped])
 
+        if is_fold_to_scale:
+            sim = model
+            conv_wrapper = sim.get_quant_wrapper_for_layer_name(conv_linear.name)
+            # check no bias
+            if hasattr(conv_wrapper, 'param_quantizers[1]'):
+                conv_wrapper.param_quantizers[1].disable()
+            conv_wrapper.output_quantizers[0].disable()
+
+            # Disable quantizers of batchnorms
+            bn_wrapper = sim.get_quant_wrapper_for_layer_name(batchnorm.name)
+            bn_wrapper.param_quantizers[0].disable()
+            bn_wrapper.param_quantizers[1].disable()
+            bn_wrapper.param_quantizers[2].disable()
+            bn_wrapper.param_quantizers[3].disable()
+            bn_wrapper.input_quantizers[0].disable()
+            bn_wrapper.output_quantizers[0].disable()
+
+            _fold_pair_scale(sim, conv_linear, bn_params)
+
         BNUtils.modify_bn_params_to_make_as_passthrough(batchnorm)
 
+    if is_fold_to_scale:
+        return
     _delete_all_bns_from_model(model, list_of_bn_layers)
 
-
-def fold_all_batch_norms(model: tf.keras.Model):
+def _fold_pair_scale(sim: QuantizationSimModel, conv_linear: tf.keras.layers, bn_params: libpymo.BNParams()):
     """
-    Fold all batch_norm layers in a model into corresponding conv layers
-
-    :param model: model to find all batch norms for
+     Fold a batch_norm layer into conv_linear's scale
+    :param sim: keras quantized model
+    :param conv_linear: conv or Linear layer
+    :param bn_params: bn_params
     """
+    assert isinstance(sim, QuantizationSimModel)
+    conv_linear_quantizer_w = sim._get_quantizers_by_layer(conv_linear)[PerChannelQuantizerType.PARAMS][ConvLinearParamType.WEIGHTS]
+    encodings = conv_linear_quantizer_w.encoding
+    new_encodings = []
+    for old_encoding, bn_gamma_to_runningvar_ratio in zip(encodings, np.array(bn_params.gamma) * (1.0 / np.array(bn_params.runningVar))):
+        new_encoding = libpymo.TfEncoding()
+        if bn_gamma_to_runningvar_ratio >= 0:
+            new_encoding.max = old_encoding.max * bn_gamma_to_runningvar_ratio
+            new_encoding.min = old_encoding.min * bn_gamma_to_runningvar_ratio
+        else:
+            new_encoding.max = old_encoding.min * bn_gamma_to_runningvar_ratio
+            new_encoding.min = old_encoding.max * bn_gamma_to_runningvar_ratio
+        new_encoding.delta = old_encoding.delta * abs(bn_gamma_to_runningvar_ratio)
+        new_encoding.offset = new_encoding.min/new_encoding.delta
+        new_encoding.bw = old_encoding.bw
 
-    bn_conv_linear_pairs = _find_all_batch_norms_to_fold(model)
+        new_encodings.append(new_encoding)
 
-    fold_given_batch_norms(model, bn_conv_linear_pairs)
-
-    # When returning the pairs, we want the second element of the pair to be the BN
-    pairs_to_return = []
-    for pair in bn_conv_linear_pairs:
-        pairs_to_return.append((pair[0], pair[1]))
-
-    return pairs_to_return
+    conv_linear_quantizer_w.encoding = new_encodings
