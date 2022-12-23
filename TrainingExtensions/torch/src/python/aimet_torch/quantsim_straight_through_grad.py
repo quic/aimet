@@ -81,9 +81,9 @@ class IntermediateResultForLearnedGrid:
     """
     Data carrier containing intermediate result for learned grid backward computation
 
-    forward_result: Round(x / scaling) + Round(offset)
+    forward_result: Round(x / scaling) - Round(offset)
     rounding_error_q: Round(x / scaling) - (x / scaling)
-    rounding_error_o: Round(offset) - offset
+    rounding_error_o: offset - Round(offset)
     """
     forward_result: torch.Tensor
     rounding_error_q: torch.Tensor
@@ -188,9 +188,9 @@ def compute_intermediate_result_for_learned_grid(x: torch.Tensor,
     :param offset: offset computed
     :return: forward result, rounding error of quantizer, rounding error of offset tuple
     """
-    forward_result = torch.round(x / scaling) + torch.round(offset)
+    forward_result = torch.round(x / scaling) - torch.round(offset)
     rounding_error_q = torch.round(x / scaling) - (x / scaling)
-    rounding_error_o = torch.round(offset) - offset
+    rounding_error_o = offset - torch.round(offset)
 
     return IntermediateResultForLearnedGrid(forward_result, rounding_error_q, rounding_error_o)
 
@@ -280,8 +280,8 @@ def compute_dloss_by_dx_using_scale_offset(x: torch.Tensor,
     :return: gradient w.r.t input
     """
     scaling, offset, n, p = grid_params.scaling, grid_params.offset, grid_params.n, grid_params.p
-    # R(x/s) + R(o)
-    r_x_by_s_plus_round_o = torch.round(x / scaling) + offset
+    # R(x/s) - R(o)
+    r_x_by_s_plus_round_o = torch.round(x / scaling) - offset
 
     # compute dloss_by_dx = dq_by_dx * grad
     inner_cond = torch.where(torch.le(r_x_by_s_plus_round_o.data, p.data),  # condition to check per value

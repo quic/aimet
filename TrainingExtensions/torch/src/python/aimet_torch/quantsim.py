@@ -192,6 +192,8 @@ class QuantizationSimModel:
                                                                 default_data_type)
         self.quant_args = extract_global_quantizer_args(quant_scheme, quantsim_configurator)
         self._supported_kernels = quantsim_configurator.get_supported_kernels()
+        # pylint: disable=protected-access
+        self._hw_version = quantsim_configurator._get_hw_version()
 
         self._validate_supported_kernels_for_quantizers(SUPPORTED_KERNELS_ACTION)
 

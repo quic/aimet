@@ -431,16 +431,16 @@ class CustomFunc(torch.autograd.Function):
     @staticmethod
     def compute_scaling_offset(weight_min, weight_max):
         scaling = (weight_max - weight_min) / 255
-        offset = torch.round(-weight_min / scaling)
+        offset = torch.round(weight_min / scaling)
         return scaling, offset
 
     @staticmethod
     def quant_dequant_param(x, _min, _max, n, p):
         delta = (_max - _min) / p  # only valid n=0, p=2**bw - 1
-        offset = torch.round(-_min / delta)
-        x = torch.round(x / delta) + offset
+        offset = torch.round(_min / delta)
+        x = torch.round(x / delta) - offset
         x = torch.clamp(x, n, p)
-        x = (x - offset) * delta
+        x = (x + offset) * delta
         return x
 
     @staticmethod
@@ -477,7 +477,7 @@ class CustomFunc(torch.autograd.Function):
         # print('input, min, max passed are ', input, weight_min, weight_max)
         # print('--------------------------------')
         scale = (weight_max - weight_min) / p  # only valid n=0, p=2**bw-1
-        offset = -weight_min / scale
+        offset = weight_min / scale
 
         grid_params = LearnedGridParams(scale, offset, n, p)
         intermediate_result = compute_intermediate_result_for_learned_grid(input, scale, offset)
@@ -543,10 +543,10 @@ class TestQcQuantizeOpLearnedGrid:
 
         def quant_dequant_param(x, _min, _max):
             delta = (_max - _min) / p
-            offset = ste(-_min / delta)
-            x = ste(x / delta) + offset
+            offset = ste(_min / delta)
+            x = ste(x / delta) - offset
             x = torch.clamp(x, n, p)
-            x = (x - offset) * delta
+            x = (x + offset) * delta
             return x
 
         # use same tensor for auto and custom grad
