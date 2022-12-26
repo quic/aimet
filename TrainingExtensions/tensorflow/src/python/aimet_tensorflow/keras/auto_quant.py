@@ -196,7 +196,10 @@ class AutoQuant:
                                      eval_manager, results_dir)
 
             acc = ret["accuracy"]
-            _logger.info("Best eval score: %f", acc)
+            encoding_path = ret["encoding_path"]
+            applied_techniques = ", ".join(ret["applied_techniques"])
+            _logger.info("Best eval score: %f. Encoding path: %s. Applied techniques %s",
+                         acc, encoding_path, applied_techniques)
 
             if acc < target_acc:
                 _logger.info(
@@ -337,12 +340,14 @@ class AutoQuant:
             sess.diagnostics.add(
                 f"Weight-quantized eval score (W{self.default_param_bw}A32): {acc:f}"
             )
+            _logger.info("Weight-quantized eval score (W%dA32): %f", self.default_param_bw, acc)
 
         with eval_manager.analysis_session("Activation Quantization Sensitivity") as sess:
             acc = sess.eval(fp32_model, default_param_bw=32)
             sess.diagnostics.add(
                 f"Activation-quantized eval score (W32A{self.default_output_bw}): {acc:f}"
             )
+            _logger.info("Activation-quantized eval score (W32A%d): %f", self.default_output_bw, acc)
 
         # Batchnorm Folding
         with eval_manager.ptq_session("Batchnorm Folding") as sess:
@@ -626,6 +631,7 @@ class _PtqSession(_EvalSession):
                                      encoding_path=encoding_path,
                                      accuracy=acc,
                                      applied_techniques=applied_techniques)
+        _logger.info(self._ptq_result)
         return self._ptq_result
 
     def _export(self, sim: QuantizationSimModel) -> Tuple[str, str]:
