@@ -22,12 +22,31 @@ Top-level APIs
 
 .. autofunction:: aimet_tensorflow.keras.bn_reestimation.reestimate_bn_stats
 
+.. autofunction:: aimet_tensorflow.keras.batch_norm_fold.fold_all_batch_norms
+
+.. autofunction:: aimet_tensorflow.keras.batch_norm_fold.fold_all_batch_norms_to_scale
+
+.. autofunction:: aimet_tensorflow.keras.batch_norm_fold.fold_given_batch_norms
+
 
 
 Code Example
 ============
 
 reestimate_bn_stats(qsim.model, dataset, 100)
+
+**Required imports**
+
+.. literalinclude:: ../keras_code_examples/bn_reestimation_example.py
+    :language: python
+    :lines: 44
+
+**Perform BatchNorm Re-estimation**
+
+.. literalinclude:: ../keras_code_examples/bn_reestimation_example.py
+    :language: python
+    :start-after: # start BatchNorm Re-estimation
+    :end-before: # end BatchNorm Re-estimation
 
 
 Limitations
