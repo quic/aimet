@@ -22,13 +22,6 @@ Top-level APIs
 
 .. autofunction:: aimet_tensorflow.keras.bn_reestimation.reestimate_bn_stats
 
-.. autofunction:: aimet_tensorflow.keras.batch_norm_fold.fold_all_batch_norms
-
-.. autofunction:: aimet_tensorflow.keras.batch_norm_fold.fold_all_batch_norms_to_scale
-
-.. autofunction:: aimet_tensorflow.keras.batch_norm_fold.fold_given_batch_norms
-
-
 
 Code Example
 ============
