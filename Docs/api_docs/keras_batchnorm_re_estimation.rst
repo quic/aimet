@@ -18,9 +18,20 @@ AIMET functionality for Keras BatchNorm Re-estimation recalculates the batchnorm
 Top-level APIs
 ============================
 
-**API(s) for  BatchNorm Re-estimation**
+**API for  BatchNorm Re-estimation**
 
-.. autofunction:: aimet_tensorflow.keras.bn_reestimation.reestimate_bn_stats
+reestimate_bn_stats(model: tf.keras.Model, bn_re_estimation_dataset: tf.data.Dataset, bn_num_batches: int = 100)
+
+:param model: tf.keras.Model
+:param bn_re_estimation_dataset: Training dataset
+:param bn_num_batches: The number of batches to be used for reestimation
+
+
+**API for  BatchNorm fold to scale**
+
+fold_all_batch_norms_to_scale(sim: QuantizationSimModel):
+
+:param sim: quantized keras model to fold all batch norms
 
 
 Code Example
@@ -30,7 +41,15 @@ Code Example
 
 .. literalinclude:: ../keras_code_examples/bn_reestimation_example.py
     :language: python
-    :lines: 44
+    :lines: 44, 45
+
+
+**Prepare BatchNorm Re-estimation dataset**
+
+.. literalinclude:: ../keras_code_examples/bn_reestimation_example.py
+    :language: python
+    :start-after: # preparing dataset start
+    :end-before: # preparing dataset end
 
 **Perform BatchNorm Re-estimation**
 
@@ -38,6 +57,13 @@ Code Example
     :language: python
     :start-after: # start BatchNorm Re-estimation
     :end-before: # end BatchNorm Re-estimation
+
+**Perform BatchNorm Fold to scale**
+
+.. literalinclude:: ../keras_code_examples/bn_reestimation_example.py
+    :language: python
+    :start-after: # start BatchNorm fold to scale
+    :end-before: # end BatchNorm fold to scale
 
 
 Limitations

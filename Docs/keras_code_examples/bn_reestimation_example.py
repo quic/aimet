@@ -187,14 +187,14 @@ print("test loss, test acc:", results)
 
 
 import numpy as np
-from aimet_tensorflow.keras.bn_reestimation import reestimate_bn_stats, _get_bn_submodules
 
-# start BatchNorm Re-estimation
+# preparing dataset start
 batch_size = 4
 dataset = tf.data.Dataset.from_tensor_slices(x_train[0:100])
 dataset = dataset.batch(batch_size=batch_size)
 it = iter(dataset)
 dummy_inputs = next(it)
+# preparing dataset end
 
 bn_layers = _get_bn_submodules(qsim.model)
 bn_mean_ori = {layer.name: layer.moving_mean.numpy() for layer in bn_layers}
@@ -202,6 +202,7 @@ bn_var_ori = {layer.name: layer.moving_variance.numpy() for layer in bn_layers}
 bn_momentum_ori = {layer.name: layer.momentum for layer in bn_layers}
 output_ori = qsim.model(dummy_inputs, training=False)
 
+# start BatchNorm Re-estimation
 with reestimate_bn_stats(qsim.model, dataset, 1):
     # check re_estimation mean, var, momentum
     bn_mean_est = {layer.name: layer.moving_mean.numpy() for layer in bn_layers}
@@ -223,9 +224,9 @@ assert all(np.allclose(bn_mean_ori[key], bn_mean_restored[key]) for key in bn_me
 assert all(np.allclose(bn_var_ori[key], bn_var_restored[key]) for key in bn_var_ori)
 assert (bn_momentum_ori == bn_momentum_restored)
 
-
-from aimet_tensorflow.keras.batch_norm_fold import fold_all_batch_norms_to_scale
+# start BatchNorm fold to scale
 fold_all_batch_norms_to_scale(qsim)
+# end BatchNorm fold to scale
 
 import os
 os.makedirs('./output/', exist_ok=True)
