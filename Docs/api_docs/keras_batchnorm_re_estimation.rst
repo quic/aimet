@@ -33,8 +33,6 @@ Top-level APIs
 Code Example
 ============
 
-reestimate_bn_stats(qsim.model, dataset, 100)
-
 **Required imports**
 
 .. literalinclude:: ../keras_code_examples/bn_reestimation_example.py
