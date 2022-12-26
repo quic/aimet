@@ -635,8 +635,8 @@ class LearnedGridTensorQuantizer(TensorQuantizer):
         :param encoding_max: encoding max of a tensor
         :return:
         """
-        scaling = (encoding_max - encoding_min) / self.p(device=encoding_min.device)
-        offset = self.round_ste_func(-encoding_min / scaling)
+        scaling, offset, _ = grad_fn.get_computed_encodings(self.bitwidth, encoding_min, encoding_max, self.use_symmetric_encodings,
+                                                            self.use_strict_symmetric, self.is_unsigned_symmetric)
         return scaling, offset
 
     def quantize_dequantize(self, tensor: torch.Tensor, encoding_min: torch.nn.Parameter,
