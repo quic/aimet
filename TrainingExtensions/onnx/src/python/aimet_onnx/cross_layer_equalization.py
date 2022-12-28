@@ -60,6 +60,8 @@ logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Quant)
 ScaleFactor = Union[np.ndarray, Tuple[np.ndarray]]
 cls_supported_layer_types = ['Conv', 'ConvTranspose']
 cls_supported_activation_types = ['Relu', 'PRelu']
+ClsSupportedLayer = Union['Conv']
+
 
 class ClsLayerType(Enum):
     """Enum class to represent CLS layer types"""
@@ -125,6 +127,99 @@ class GraphSearchUtils:
         self._connected_graph = ConnectedGraph(model)
         self._ordered_module_list = get_ordered_list_of_conv_modules(self._connected_graph.starting_ops)
 
+    def convert_layer_group_to_cls_sets(self, layer_group):
+        """
+        Helper function to convert a layer group to a list of cls sets
+        :param layer_group: Given layer group to generate cls sets
+        :return: List of cls sets
+
+        Supported layer combinations for CLS are:
+        1. Conv + Conv
+        2. DepthwiseConv + Conv
+        3. Conv + DepthwiseConv + Conv
+
+        Can be rewritten as,
+        Conv
+            -> Conv
+            -> DepthwiseConv
+                -> Conv
+        DepthwiseConv
+            -> Conv
+
+        If a combination is partially supported, the cls_set is completely omitted and restarted from the next
+        supported layer
+        For example: Consider Conv + DepthwiseConv + Depthwise(unsupported)
+        - Since Depthwise(unsupported) is the last layer encountered, we need to omit all the three layers and restart
+        the cls sets from the next supported layer.
+
+        """
+
+        # pylint: disable=too-many-branches
+        def convert_to_cls_layer_type(layer: Op) -> Tuple[ClsLayerType, ClsSupportedLayer]:
+            """
+            Given the layer, check if its supported in CLS
+            :param layer: layer to check
+            :return: Tuple of ClsLayerType and the layer
+            """
+            if layer.groups == 1:
+                layer_type = ClsLayerType.Conv
+                # Check if it is a depthwise layer (the last two dimensions of weight param will be equal to groups
+                weight_param_shape = [param for param, param_type in layer.parameters.values() if param_type == 'weight'][0].shape
+                if layer.groups == weight_param_shape[-1] and weight_param_shape[-1] == weight_param_shape[-2]:
+                    # depthwiseConv layer with depth multiplier = 1
+                    layer_type = ClsLayerType.DepthwiseConv
+            else:
+                layer_type = ClsLayerType.Unsupported
+
+            return layer_type, layer
+
+        def get_next_layer() -> Union[Tuple[ClsLayerType, Union[ClsSupportedLayer, None]]]:
+            """
+            :return: Tuple of ClsLayerType and the next layer in layer_group
+            """
+            if not layer_group:
+                return ClsLayerType.Unsupported, None
+            layer = layer_group.pop(0)
+            return convert_to_cls_layer_type(layer)
+
+        cls_sets = []
+
+        first_layer_to_scale = (ClsLayerType.Unsupported, None)
+        while layer_group:
+            while layer_group and first_layer_to_scale[0] is ClsLayerType.Unsupported:
+                first_layer_to_scale = get_next_layer()
+                if first_layer_to_scale[0] is ClsLayerType.Unsupported:
+                    logger.info('Layer %s is not supported. Ignoring for cls', first_layer_to_scale[1])
+
+            second_layer_to_scale = get_next_layer()
+            if first_layer_to_scale[0] == ClsLayerType.Conv:
+                if second_layer_to_scale[0] == ClsLayerType.Conv:
+                    cls_sets.append((first_layer_to_scale[1], second_layer_to_scale[1]))
+                    first_layer_to_scale = second_layer_to_scale
+                elif second_layer_to_scale[0] == ClsLayerType.DepthwiseConv:
+                    if layer_group:
+                        # do not pop third layer yet, determine its type and then pop it
+                        third_layer_to_scale = convert_to_cls_layer_type(layer_group[0])
+                        if third_layer_to_scale[0] == ClsLayerType.Conv:
+                            cls_sets.append(
+                                (first_layer_to_scale[1], second_layer_to_scale[1], third_layer_to_scale[1]))
+                            # adding third_layer_to_scale for the next round of CLS set determination
+                            first_layer_to_scale = get_next_layer()
+                        else:
+                            # unsupported combination encountered
+                            first_layer_to_scale = second_layer_to_scale
+                else:
+                    logger.info('Layer %s is not supported. Ignoring for cls', second_layer_to_scale[1])
+                    first_layer_to_scale = (ClsLayerType.Unsupported, None)
+            elif first_layer_to_scale[0] == ClsLayerType.DepthwiseConv:
+                if second_layer_to_scale[0] == ClsLayerType.Conv:
+                    cls_sets.append((first_layer_to_scale[1], second_layer_to_scale[1]))
+                first_layer_to_scale = second_layer_to_scale
+            else:
+                logger.info('Layer %s is not supported. Ignoring for cls', first_layer_to_scale[1])
+                first_layer_to_scale = second_layer_to_scale
+
+        return cls_sets
 
     @staticmethod
     def find_downstream_layer_groups_to_scale(op: Op, layer_groups: List, current_group=None, visited_nodes=None):
@@ -147,7 +242,7 @@ class GraphSearchUtils:
 
         # If current node is Conv2D, add to the current group
         if op.get_module() and op.type in cls_supported_layer_types:
-            current_group.append(op.dotted_name)
+            current_group.append(op)
 
         # Terminating condition for current group
         if not op.get_module() or not op.type in cls_supported_layer_types + cls_supported_activation_types:
@@ -180,7 +275,7 @@ class GraphSearchUtils:
         ordered_layer_groups = []
         for module_name, _ in self._ordered_module_list:
             for layer_group in layer_groups:
-                if layer_group[0] == module_name:
+                if layer_group[0].dotted_name == module_name:
                     ordered_layer_groups.append(layer_group)
 
         return ordered_layer_groups

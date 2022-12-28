@@ -128,6 +128,10 @@ class ConnectedGraph(AimetCommonConnectedGraph):
         op = Op(name=node.name, dotted_name=node.name, output_shape=None, is_anonymous=False, op_type=node.op_type)
         # Add corresponding node to op
         op.model_module = ONNXModelModule(node)
+
+        if op.type == 'Conv':
+            op.groups = 1
+
         return op
 
     def _add_children_ops_to_op_queue(self, node: onnx_pb.NodeProto, op_queue: List):

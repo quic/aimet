@@ -39,11 +39,23 @@ from aimet_onnx.cross_layer_equalization import GraphSearchUtils
 import test_models
 
 
-class TestConnectedGraph:
+class TestCLS:
     def test_graph_search_utils_single_residual_model(self):
         model = test_models.single_residual_model()
         graph_search_utils = GraphSearchUtils(model)
-        ordered_layer_groups = graph_search_utils.find_layer_groups_to_scale()
-        assert ordered_layer_groups == [['Conv_3', 'Conv_5']]
+        ordered_layer_groups = graph_search_utils.find_layer_groups_to_scale()[0]
+        ordered_layer_groups_names = [op.dotted_name for op in ordered_layer_groups]
+        assert ordered_layer_groups_names == ['Conv_3', 'Conv_5']
 
+    def test_graph_search_utils_depthwise_model(self):
+        model = test_models.depthwise_conv_model()
 
+        graph_search_utils = GraphSearchUtils(model)
+        ordered_layer_groups = graph_search_utils.find_layer_groups_to_scale()[0]
+        # Find cls sets from the layer groups
+        cls_sets = graph_search_utils.convert_layer_group_to_cls_sets(ordered_layer_groups)
+        cls_sets_names = []
+        for cls_set in cls_sets:
+            cls_sets_name = tuple([op.dotted_name for op in cls_set])
+            cls_sets_names.append(cls_sets_name)
+        assert cls_sets_names == [('Conv_0', 'Conv_2'), ('Conv_2', 'Conv_4', 'Conv_6'), ('Conv_6', 'Conv_8', 'Conv_10'), ('Conv_10', 'Conv_12', 'Conv_14'), ('Conv_14', 'Conv_16', 'Conv_18'), ('Conv_18', 'Conv_20', 'Conv_22'), ('Conv_22', 'Conv_24', 'Conv_26'), ('Conv_26', 'Conv_28', 'Conv_30')]
