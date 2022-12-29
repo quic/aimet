@@ -294,13 +294,15 @@ class QcQuantizeWrapper(tf.keras.layers.Layer):
         :param inputs: Inputs passed to the module in the forward pass
         :return: Quantized output from the wrapped module
         """
-        # check kwargs = {},  which found in AimetPro-CD-Pipeline-TF docker
+
+        # TODO kwargs = {} in some instances which needs to be investigated
+        kwargs = {}
         if "training" in kwargs.keys():
             is_call_training_mode = kwargs["training"]
         else:
             is_call_training_mode = False
 
-        for param in self._layer_to_wrap.weights:
+        for param in self._layer_tostatus_wrap.weights:
             if param.name in self._shadow_params.keys():
                 self._shadow_params[param.name].assign(param)
         # for BN with training = True ,only write to shadow params for beta and gamma
