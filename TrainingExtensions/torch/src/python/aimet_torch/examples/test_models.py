@@ -39,7 +39,7 @@
 
 # pylint: skip-file
 from collections import namedtuple
-from typing import Dict
+from typing import Dict, List
 
 import torch
 import torch.nn as nn
@@ -1006,3 +1006,30 @@ class InputOutputDictModel(nn.Module):
 
         output_def = namedtuple('output_def', ['ab', 'bc', 'ca'])
         return output_def(ab, bc, ca)
+
+
+class Float32AndInt64InputModel(nn.Module):
+    """
+    This model uses a list of Tensors as input. The input Tensor list contains both float32 and int63 tensors.
+    """
+    def __init__(self):
+        super(Float32AndInt64InputModel, self).__init__()
+        self.index_feature_map = 0
+        self.index_x = 1
+        self.index_y = 2
+        self.conv1 = nn.Conv2d(3, 32, kernel_size=2, stride=2, padding=2, bias=False)
+        self.bn1 = nn.BatchNorm2d(32)
+        self.add = aimet_elementwise.Add()
+
+    def forward(self, inputs: List[torch.Tensor]):
+        grid_x = inputs[self.index_x]
+        grid_y = inputs[self.index_y]
+
+        x = inputs[self.index_feature_map]
+        x = self.conv1(x)
+        x = self.bn1(x)
+        f_00 = x[:, :, grid_x, grid_y]
+        f_01 = x[:, :, grid_y, grid_x]
+        return self.add(f_00, f_01)
+
+

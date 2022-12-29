@@ -254,7 +254,8 @@ def run_hook_for_layers(model: torch.nn.Module, input_shapes: Union[Tuple, List[
         h.remove()
 
 
-def run_hook_for_layers_with_given_input(model: torch.nn.Module, input_tensor: Union[torch.Tensor, Tuple],
+def run_hook_for_layers_with_given_input(model: torch.nn.Module,
+                                         input_tensor: Union[torch.Tensor, List[torch.Tensor], Tuple],
                                          hook, module_type_for_attaching_hook=None, leaf_node_only=True):
     """
     Register the given hook function for all layers in the model
@@ -442,7 +443,8 @@ def get_one_positions_in_binary_mask(mask):
     return mask_one_positions
 
 
-def get_ordered_list_of_modules(model: torch.nn.Module, dummy_input: Union[torch.Tensor, Tuple]) -> List:
+def get_ordered_list_of_modules(model: torch.nn.Module,
+                                dummy_input: Union[torch.Tensor, List[torch.Tensor], Tuple]) -> List:
     """
     Finds ordered modules in given model.
     :param model: PyTorch model.
@@ -548,16 +550,19 @@ def create_rand_tensors_given_shapes(input_shape: Union[Tuple, List[Tuple]], dev
     return rand_tensors
 
 
-def get_ordered_lists_of_conv_fc(model: torch.nn.Module, input_shapes: Tuple) -> List:
+def get_ordered_lists_of_conv_fc(model: torch.nn.Module, input_shapes: Tuple,
+                                 dummy_input: Union[torch.Tensor, List[torch.Tensor]] = None) -> List:
     """
     Finds order of nodes in graph
     :param model: model
-    :param input_shape: input shape to model
+    :param input_shapes: input shape to model
+    :param dummy_input: A dummy input to the model. Can be a Tensor or a list of Tensors
     :return: List of names in graph in order
     """
 
     device = get_device(model)
-    dummy_input = create_rand_tensors_given_shapes(input_shapes, device)
+    if dummy_input is None:
+        dummy_input = create_rand_tensors_given_shapes(input_shapes, device)
     module_list = get_ordered_list_of_modules(model, dummy_input)
     module_list = [[name, module] for name, module in module_list if
                    isinstance(module, (torch.nn.Conv1d, torch.nn.Conv2d, torch.nn.Linear, torch.nn.ConvTranspose2d))]

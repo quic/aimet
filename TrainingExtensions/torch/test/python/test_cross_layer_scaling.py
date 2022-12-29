@@ -42,15 +42,18 @@ import pytest
 import torch
 from torchvision import models
 
+from aimet_common.utils import AimetLogger
 from aimet_torch import batch_norm_fold
 from aimet_torch.batch_norm_fold import fold_all_batch_norms
 from aimet_torch.cross_layer_equalization import CrossLayerScaling, GraphSearchUtils, HighBiasFold, equalize_model
 from aimet_torch.utils import create_rand_tensors_given_shapes, get_device
 from aimet_torch.utils import get_layer_name
 from aimet_torch.examples.mobilenet import MockMobileNetV2, MockMobileNetV1
+from aimet_torch.examples.test_models import Float32AndInt64InputModel
 import torch.nn as nn
 import numpy as np
 
+logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Quant)
 
 class TwoInputsModel(torch.nn.Module):
     def __init__(self, num_classes=3):
@@ -670,4 +673,31 @@ class TestTrainingExtensionsCrossLayerScaling(unittest.TestCase):
         self.assertTrue(np.all(max(output_diff) < 1e-6))
         self.assertEqual(2, len(scale_factors))
         self.assertEqual(2, len(scale_factors[0].cls_pair_info_list))
-        
+
+    def test_float32_and_int64_input_model(self):
+
+        model = Float32AndInt64InputModel().to(torch.device('cpu'))
+        model.eval()
+        print(model)
+
+        inp_shapes = [(1, 3, 32, 32), (3, 20, 20), (3, 20, 20)]
+        model_input_list = create_rand_tensors_given_shapes(inp_shapes, torch.device('cpu'))
+        model_input = tuple(model_input_list)
+        print(model_input)
+        try:
+            # _ = model(model_input_list)
+            equalize_model(model, input_shapes=inp_shapes, dummy_input=model_input)
+        except Exception as e:
+            print(e)
+
+        # Now change the 2nd and 3rd tensors in the list to int64.
+        model_input_list[1] = torch.randint(0, 30, (3, 20, 20))
+        model_input_list[2] = torch.randint(9, 27, (3, 20, 20))
+
+        print(model_input_list)
+        try:
+            # _ = model(model_input_list)
+            equalize_model(model, input_shapes=inp_shapes, dummy_input=model_input_list)
+            print("\nNo Problem")
+        except Exception as e:
+            print(e)
