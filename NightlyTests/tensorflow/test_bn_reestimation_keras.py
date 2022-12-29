@@ -174,7 +174,7 @@ def test_bn_reestimation():
     tf.keras.backend.clear_session()
     np.random.seed(0)
     input_data = np.random.randn(1024, 32,32,3).astype(np.float32)
-    batch_size = 8
+    batch_size = 4
     dataset = tf.data.Dataset.from_tensor_slices(input_data)
     dataset = dataset.batch(batch_size=batch_size)
 
