@@ -177,8 +177,8 @@ def test_bn_reestimation():
     batch_size = 4
     dataset = tf.data.Dataset.from_tensor_slices(input_data)
     dataset = dataset.batch(batch_size=batch_size)
-    it = iter(dataset)
-    dummy_inputs = next(it)
+
+    dummy_inputs = np.random.randn(2, 32,32,3).astype(np.float32)
     model = tf.keras.applications.mobilenet_v2.MobileNetV2(weights=None, input_shape=(32, 32, 3))
     sub_model = tf.keras.Sequential()
     for layer in model.layers[0:12]:
