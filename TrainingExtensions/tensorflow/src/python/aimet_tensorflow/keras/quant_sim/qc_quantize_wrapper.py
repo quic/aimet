@@ -294,7 +294,7 @@ class QcQuantizeWrapper(tf.keras.layers.Layer):
         :param inputs: Inputs passed to the module in the forward pass
         :return: Quantized output from the wrapped module
         """
-        # check kwargs = {}, which found in AimetPro-CD-Pipeline-TF
+        # check kwargs = {},  which found in AimetPro-CD-Pipeline-TF docker
         if "training" in kwargs.keys():
             is_call_training_mode = kwargs["training"]
         else:
