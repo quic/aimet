@@ -295,14 +295,13 @@ class QcQuantizeWrapper(tf.keras.layers.Layer):
         :return: Quantized output from the wrapped module
         """
 
-        # TODO kwargs = {} in some instances which needs to be investigated
-        kwargs = {}
+        # TODO kwargs = {} in same instalnce which needs to be investigation
         if "training" in kwargs.keys():
             is_call_training_mode = kwargs["training"]
         else:
             is_call_training_mode = False
 
-        for param in self._layer_tostatus_wrap.weights:
+        for param in self._layer_to_wrap.weights:
             if param.name in self._shadow_params.keys():
                 self._shadow_params[param.name].assign(param)
         # for BN with training = True ,only write to shadow params for beta and gamma
