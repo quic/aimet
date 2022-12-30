@@ -52,8 +52,10 @@ _logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Quant)
 
 lambda_operators = ['__operators__.add', 'math.multiply', 'math.truediv', 'math.subtract']
 per_channel_quantizeable_layers = (tf.keras.layers.Conv2D, tf.keras.layers.Conv2DTranspose,
-                                   tf.keras.layers.DepthwiseConv2D, tf.keras.layers.SeparableConv2D)
+                                   tf.keras.layers.DepthwiseConv2D, tf.keras.layers.SeparableConv2D,
+                                   tf.keras.layers.Dense)
 
+SUBMODULES_TO_SKIP = (tf.keras.layers.MultiHeadAttention,)
 
 
 def is_lambda_operator(layer: tf.keras.layers.Layer) -> bool:
@@ -80,6 +82,8 @@ def module_to_name_map(cur_layer: (tf.keras.Model, tf.keras.layers.Layer)) \
     ref_name = {}
     # pylint: disable=protected-access
     for inner_layer in cur_layer._layers:
+        if not isinstance(inner_layer, tf.keras.layers.Layer):
+            continue
         if inner_layer.submodules:
             ref_name.update(module_to_name_map(inner_layer))
         else:
@@ -119,6 +123,8 @@ def _find_last_layers(cur_layer: (tf.keras.Model, tf.keras.layers.Layer)) \
     last_layers = []
     # pylint: disable=protected-access
     for inner_layer in cur_layer._layers:
+        if not isinstance(inner_layer, tf.keras.layers.Layer):
+            continue
         if inner_layer.outbound_nodes == []:
             if inner_layer.submodules:
                 last_layers.extend(_find_last_layers(inner_layer))
@@ -216,6 +222,8 @@ def create_node_to_layer_map(cur_layer: (tf.keras.Model, tf.keras.layers.Layer))
     node_layer_map = {}
     # pylint: disable=protected-access
     for inner_layer in cur_layer._layers:
+        if not isinstance(inner_layer, tf.keras.layers.Layer):
+            continue
         for out_node in inner_layer.outbound_nodes:
             if out_node in node_layer_map:
                 node_layer_map[out_node][0].append(inner_layer)
@@ -226,7 +234,11 @@ def create_node_to_layer_map(cur_layer: (tf.keras.Model, tf.keras.layers.Layer))
                 node_layer_map[in_node][1] = inner_layer
             else:
                 node_layer_map[in_node] = [None, inner_layer]
-        if inner_layer.submodules:
+
+        # If the layer has submodules we try to find out the input/output map for those layers as well.
+        # But in case of few layers having submodules, internal connection for them is not present. It means
+        # inbound and outbound nodes for the submodules are empty so, we treat them as a single layer only.
+        if inner_layer.submodules and not isinstance(inner_layer, SUBMODULES_TO_SKIP):
             im_node_layer_map, im_node_input, im_nodes_after_input_layer = \
                 _submodule_handler_node_to_layer_map(inner_layer, node_layer_map)
             if len(im_nodes_after_input_layer) == 1:
