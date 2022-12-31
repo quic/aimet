@@ -12,27 +12,20 @@ For an end-to-end notebook showing how to use Keras Quantization-Aware Training 
 
 Introduction
 ============
-AIMET functionality for Keras BatchNorm Re-estimation recalculates the batchnorm statistics based on the model after QAT. By doing so, we aim to make our model learn batchnorm statistics from from stable outputs after QAT, rather than from likely noisy outputs during QAT:
+AIMET functionality for Keras BatchNorm Re-estimation recalculates the batchnorm statistics based on the model after
+QAT. By doing so, we aim to make our model learn batchnorm statistics from from stable outputs after QAT, rather than from likely noisy outputs during QAT.
 
 
 Top-level APIs
 ============================
 
-**API for  BatchNorm Re-estimation**
+**API for BatchNorm Re-estimation**
 
-reestimate_bn_stats(model: tf.keras.Model, bn_re_estimation_dataset: tf.data.Dataset, bn_num_batches: int = 100)
+.. autofunction:: aimet_tensorflow.keras.bn_reestimation.reestimate_bn_stats
 
-:param model: tf.keras.Model
-:param bn_re_estimation_dataset: Training dataset
-:param bn_num_batches: The number of batches to be used for reestimation
+**API for BatchNorm fold to scale**
 
-
-**API for  BatchNorm fold to scale**
-
-fold_all_batch_norms_to_scale(sim: QuantizationSimModel):
-
-:param sim: quantized keras model to fold all batch norms
-
+.. autofunction:: aimet_tensorflow.keras.batch_norm_fold.fold_all_batch_norms_to_scale
 
 Code Example
 ============
