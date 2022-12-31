@@ -710,7 +710,6 @@ class StaticGridPerChannelQuantizer(TensorQuantizer):
             return self.call_quantsim_custom_grad_learned_grid(tensor)
         return self.call_per_channel_quantize_dequantize(tensor)
 
-
     @tf.custom_gradient
     @_handle_conv2d_transpose
     def call_quantsim_custom_grad_learned_grid(self, tensor: tf.Tensor):
