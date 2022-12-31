@@ -203,69 +203,71 @@ class TestTrainingExtensionsChannelPruning(unittest.TestCase):
             self.assertTrue(np.prod(input_match.shape) == kernel_size[0] * kernel_size[1])
 
             sess.close()
-    @pytest.mark.skip('Skip while investigating TF GPU unit test failure')
+    #@pytest.mark.skip('Skip while investigating TF GPU unit test failure')
     def test_find_input_match_for_pixel_from_output_data_baseline_channels_last(self):
         """
         Test find input match for output pixel implementation with channels_last (NHWC) format
         """
-        tf.compat.v1.reset_default_graph()
 
-        strides = [[1, 1], [2, 2], [1, 2], [2, 1]]
-        kernel_size_options = [[1, 1], [2, 2], [3, 3], [1, 3], [3, 1]]
-        padding_options = ['SAME', 'VALID']
-        # test middle and border values
-        size_options = [[5, 5], [0, 0], [3, 3]]
+        with tf.device('/gpu:0'):
+            tf.compat.v1.reset_default_graph()
 
-        all_options = [kernel_size_options, padding_options, size_options, strides]
+            strides = [[1, 1], [2, 2], [1, 2], [2, 1]]
+            kernel_size_options = [[1, 1], [2, 2], [3, 3], [1, 3], [3, 1]]
+            padding_options = ['SAME', 'VALID']
+            # test middle and border values
+            size_options = [[5, 5], [0, 0], [3, 3]]
 
-        for kernel_size, padding, size_opt, stride in itertools.product(*all_options):
+            all_options = [kernel_size_options, padding_options, size_options, strides]
 
-            if isinstance(kernel_size, int):
-                kernel_size = [kernel_size, kernel_size]
+            for kernel_size, padding, size_opt, stride in itertools.product(*all_options):
 
-            if isinstance(stride, list) and len(stride) == 2:
-                height, width = [size_opt[0]//stride[0], size_opt[1] // stride[1]]
+                if isinstance(kernel_size, int):
+                    kernel_size = [kernel_size, kernel_size]
 
-            else:
-                height, width = [size // stride for size in size_opt]
+                if isinstance(stride, list) and len(stride) == 2:
+                    height, width = [size_opt[0]//stride[0], size_opt[1] // stride[1]]
 
-            output_data_pixel = (height, width)
+                else:
+                    height, width = [size // stride for size in size_opt]
 
-            input_data = np.array(range(8 * 8)).reshape([1, 8, 8, 1])
-            filter_data = np.ones([kernel_size[0], kernel_size[1], 1, 1], dtype=np.float32)
+                output_data_pixel = (height, width)
 
-            g = tf.Graph()
-            with g.as_default():
-                inp_tensor = tf.Variable(initial_value=input_data, name='inp_tensor', dtype=tf.float32)
-                filter_tensor = tf.Variable(initial_value=filter_data, name='filter_tensor', dtype=tf.float32)
-                _ = tf.nn.conv2d(inp_tensor, filter_tensor, strides=[1, stride[0], stride[1], 1],
-                                 padding=padding, data_format="NHWC", name='Conv2D_1')
-                init = tf.compat.v1.global_variables_initializer()
+                input_data = np.array(range(8 * 8)).reshape([1, 8, 8, 1])
+                filter_data = np.ones([kernel_size[0], kernel_size[1], 1, 1], dtype=np.float32)
 
-            conv1_op = g.get_operation_by_name('Conv2D_1')
-            layer_attributes = aimet_tensorflow.utils.op.conv.get_layer_attributes(sess=None, op=conv1_op,
-                                                                                   input_op_names=None,
-                                                                                   input_shape=None)
+                g = tf.Graph()
+                with g.as_default():
+                    inp_tensor = tf.Variable(initial_value=input_data, name='inp_tensor', dtype=tf.float32)
+                    filter_tensor = tf.Variable(initial_value=filter_data, name='filter_tensor', dtype=tf.float32)
+                    _ = tf.nn.conv2d(inp_tensor, filter_tensor, strides=[1, stride[0], stride[1], 1],
+                                     padding=padding, data_format="NHWC", name='Conv2D_1')
+                    init = tf.compat.v1.global_variables_initializer()
 
-            # reshape input_data, output_data function expects activations in channels_first format
-            input_data = input_data.reshape(1, 1, 8, 8)
-            input_match = InputMatchSearch._find_input_match_for_output_pixel(input_data[0], layer_attributes,
-                                                                              output_data_pixel)
+                conv1_op = g.get_operation_by_name('Conv2D_1')
+                layer_attributes = aimet_tensorflow.utils.op.conv.get_layer_attributes(sess=None, op=conv1_op,
+                                                                                       input_op_names=None,
+                                                                                       input_shape=None)
 
-            sess = tf.compat.v1.Session(graph=g)
-            sess.run(init)
+                # reshape input_data, output_data function expects activations in channels_first format
+                input_data = input_data.reshape(1, 1, 8, 8)
+                input_match = InputMatchSearch._find_input_match_for_output_pixel(input_data[0], layer_attributes,
+                                                                                  output_data_pixel)
 
-            conv2d_out = sess.run(conv1_op.outputs[0])
+                sess = tf.compat.v1.Session(graph=g)
+                sess.run(init)
 
-            predicted_output = int(np.sum(input_match))
-            generated_output = int(conv2d_out[0, height, width, 0])
-            print('generated output: ', generated_output)
-            print('predicted output: ', predicted_output)
+                conv2d_out = sess.run(conv1_op.outputs[0])
 
-            self.assertEqual(generated_output, predicted_output)
-            self.assertTrue(np.prod(input_match.shape) == kernel_size[0] * kernel_size[1])
+                predicted_output = int(np.sum(input_match))
+                generated_output = int(conv2d_out[0, height, width, 0])
+                print('generated output: ', generated_output)
+                print('predicted output: ', predicted_output)
 
-            sess.close()
+                self.assertEqual(generated_output, predicted_output)
+                self.assertTrue(np.prod(input_match.shape) == kernel_size[0] * kernel_size[1])
+
+                sess.close()
 
     @unittest.mock.patch('numpy.random.choice')
     def test_subsample_data_channels_first(self, np_choice_function):
