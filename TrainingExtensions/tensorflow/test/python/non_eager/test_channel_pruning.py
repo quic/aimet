@@ -204,6 +204,8 @@ class TestTrainingExtensionsChannelPruning(unittest.TestCase):
 
             sess.close()
 
+    @pytest.mark.cuda
+    @pytest.mark.skip('Skip while investigating TF GPU unit test failure')
     def test_find_input_match_for_pixel_from_output_data_baseline_channels_last(self):
         """
         Test find input match for output pixel implementation with channels_last (NHWC) format

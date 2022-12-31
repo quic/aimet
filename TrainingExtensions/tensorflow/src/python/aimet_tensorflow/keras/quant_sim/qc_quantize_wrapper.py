@@ -294,7 +294,13 @@ class QcQuantizeWrapper(tf.keras.layers.Layer):
         :param inputs: Inputs passed to the module in the forward pass
         :return: Quantized output from the wrapped module
         """
-        is_call_training_mode = kwargs["training"]
+
+        # TODO kwargs = {} in same instalnce which needs to be investigation
+        if "training" in kwargs.keys():
+            is_call_training_mode = kwargs["training"]
+        else:
+            is_call_training_mode = False
+
         for param in self._layer_to_wrap.weights:
             if param.name in self._shadow_params.keys():
                 self._shadow_params[param.name].assign(param)
