@@ -1,9 +1,9 @@
-# /usr/bin/env python3.6
+# /usr/bin/env python3.8
 # -*- mode: python -*-
 # =============================================================================
 #  @@-COPYRIGHT-START-@@
 #
-#  Copyright (c) 2022, Qualcomm Innovation Center, Inc. All rights reserved.
+#  Copyright (c) 2022-2023, Qualcomm Innovation Center, Inc. All rights reserved.
 #
 #  Redistribution and use in source and binary forms, with or without
 #  modification, are permitted provided that the following conditions are met:
@@ -39,12 +39,12 @@
 """ Quant Analyzer """
 
 import os
-import json
 from typing import List, Tuple, Dict
 import tensorflow.compat.v1 as tf
 from bokeh import plotting
 from bokeh.models import ColumnDataSource, Band, Span, tickers
 from aimet_common.defs import QuantScheme
+from aimet_common.quant_analyzer import save_json, export_per_layer_sensitivity_analysis_plot
 from aimet_common.utils import AimetLogger, CallbackFunc
 from aimet_tensorflow.common.operation import Op
 from aimet_tensorflow.quantizer_info import QuantizerInfo
@@ -246,12 +246,12 @@ class QuantAnalyzer:
                                                                 disable_all_quantizers=True,
                                                                 enabled_before=True,
                                                                 enabled_after=False)
-        self._export_per_layer_sensitivity_analysis_plot(op_wise_eval_score_dict,
-                                                         results_dir,
-                                                         title="per_op_quant_enabled")
-        self._save_json(op_wise_eval_score_dict,
-                        results_dir,
-                        title="per_op_quant_enabled.json")
+        export_per_layer_sensitivity_analysis_plot(op_wise_eval_score_dict,
+                                                   results_dir,
+                                                   title="per_op_quant_enabled")
+        save_json(op_wise_eval_score_dict,
+                  results_dir,
+                  title="per_op_quant_enabled.json")
         return op_wise_eval_score_dict
 
     def _perform_per_op_analysis_by_disabling_quant_ops(self,
@@ -279,12 +279,12 @@ class QuantAnalyzer:
                                                                 disable_all_quantizers=False,
                                                                 enabled_before=False,
                                                                 enabled_after=True)
-        self._export_per_layer_sensitivity_analysis_plot(op_wise_eval_score_dict,
-                                                         results_dir,
-                                                         title="per_op_quant_disabled")
-        self._save_json(op_wise_eval_score_dict,
-                        results_dir,
-                        title="per_op_quant_disabled.json")
+        export_per_layer_sensitivity_analysis_plot(op_wise_eval_score_dict,
+                                                   results_dir,
+                                                   title="per_op_quant_disabled")
+        save_json(op_wise_eval_score_dict,
+                  results_dir,
+                  title="per_op_quant_disabled.json")
         return op_wise_eval_score_dict
 
     def _perform_per_op_analysis(self,
@@ -406,49 +406,6 @@ class QuantAnalyzer:
                                                              title=f"{quant_op_name}")
 
         _logger.info("Exported per layer stats histogram.")
-
-    @staticmethod
-    def _export_per_layer_sensitivity_analysis_plot(layer_wise_eval_score_dict: Dict, results_dir: str,
-                                                    title: str) -> plotting.Figure:
-        """
-        Export per layer sensitivity analysis in html format.
-
-        :param layer_wise_eval_score_dict: layer wise eval score dictionary. dict[layer_name] = eval_score.
-        :param results_dir: Directory to save the results.
-        :param title: Title of the plot.
-        """
-        layer_names = []
-        eval_scores = []
-        for layer_name, eval_score in layer_wise_eval_score_dict.items():
-            layer_names.append(layer_name)
-            eval_scores.append(eval_score)
-
-        # Configure the output file to be saved.
-        filename = os.path.join(results_dir, f"{title}.html")
-        plotting.output_file(filename)
-        plot = plotting.figure(x_range=layer_names,
-                               plot_height=DEFAULT_BOKEH_FIGURE_HEIGHT,
-                               title=title,
-                               x_axis_label="Ops",
-                               y_axis_label="Eval score")
-        plot.line(x=layer_names, y=eval_scores)
-        plot.y_range.start = 0
-        plot.xaxis.major_label_orientation = "vertical"
-        plot.sizing_mode = "scale_width"
-        plotting.save(plot)
-        return plot
-
-    @staticmethod
-    def _save_json(dictionary: Dict, results_dir: str, title: str):
-        """
-        Save dictionary in JSON format.
-        :param dictionary: Dictionary to be saved.
-        :param results_dir: Directory to save the results.
-        :param title: Title of the file.
-        """
-        filename = os.path.join(results_dir, title)
-        with open(filename, 'w') as f:
-            json.dump(dictionary, f, indent=4)
 
     def _export_per_layer_encoding_min_max_range(self, sim: QuantizationSimModel,
                                                  results_dir: str = "./tmp/"
