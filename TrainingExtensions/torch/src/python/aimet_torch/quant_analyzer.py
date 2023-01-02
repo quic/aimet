@@ -1,9 +1,9 @@
-# /usr/bin/env python3.6
+# /usr/bin/env python3.8
 # -*- mode: python -*-
 # =============================================================================
 #  @@-COPYRIGHT-START-@@
 #
-#  Copyright (c) 2022, Qualcomm Innovation Center, Inc. All rights reserved.
+#  Copyright (c) 2022-2023, Qualcomm Innovation Center, Inc. All rights reserved.
 #
 #  Redistribution and use in source and binary forms, with or without
 #  modification, are permitted provided that the following conditions are met:
@@ -39,7 +39,6 @@
 """ Quant Analyzer """
 
 import os
-import json
 from collections import OrderedDict, defaultdict
 from typing import Union, Tuple, Dict, List, Collection
 from bokeh import plotting
@@ -47,6 +46,7 @@ from bokeh.models import ColumnDataSource, Band, Span, tickers
 import torch
 from torch.utils.data import DataLoader
 
+from aimet_common.quant_analyzer import save_json, export_per_layer_sensitivity_analysis_plot
 from aimet_common.utils import AimetLogger, CallbackFunc
 from aimet_common.defs import QuantScheme
 from aimet_torch import utils
@@ -384,37 +384,6 @@ class QuantAnalyzer:
         return eval_score_dict
 
     @staticmethod
-    def _export_per_layer_sensitivity_analysis_plot(layer_wise_eval_score_dict: Dict, results_dir: str,
-                                                    title: str) -> plotting.Figure:
-        """
-        Export per layer sensitivity analysis in html format.
-
-        :param layer_wise_eval_score_dict: layer wise eval score dictionary. dict[layer_name] = eval_score.
-        :param results_dir: Directory to save the results.
-        :param title: Title of the plot.
-        """
-        layer_names = []
-        eval_scores = []
-        for layer_name, eval_score in layer_wise_eval_score_dict.items():
-            layer_names.append(layer_name)
-            eval_scores.append(eval_score)
-
-        # Configure the output file to be saved.
-        filename = os.path.join(results_dir, f"{title}.html")
-        plotting.output_file(filename)
-        plot = plotting.figure(x_range=layer_names,
-                               plot_height=DEFAULT_BOKEH_FIGURE_HEIGHT,
-                               title=title,
-                               x_axis_label="Layers",
-                               y_axis_label="Eval score")
-        plot.line(x=layer_names, y=eval_scores)
-        plot.y_range.start = 0
-        plot.xaxis.major_label_orientation = "vertical"
-        plot.sizing_mode = "scale_width"
-        plotting.save(plot)
-        return plot
-
-    @staticmethod
     def _export_stats_histogram_plot(histogram: List, encoding, results_dir: str, title: str) -> plotting.Figure:
         """
         Export histogram (PDF) of statistics with overlaying encoding min and max
@@ -619,12 +588,12 @@ class QuantAnalyzer:
                                                                       disable_all_quantizers=True,
                                                                       enabled_before=True,
                                                                       enabled_after=False)
-        self._export_per_layer_sensitivity_analysis_plot(layer_wise_eval_score_dict,
-                                                         results_dir,
-                                                         title="per_layer_quant_enabled")
-        self._save_json(layer_wise_eval_score_dict,
-                        results_dir,
-                        title="per_layer_quant_enabled.json")
+        export_per_layer_sensitivity_analysis_plot(layer_wise_eval_score_dict,
+                                                   results_dir,
+                                                   title="per_layer_quant_enabled")
+        save_json(layer_wise_eval_score_dict,
+                  results_dir,
+                  title="per_layer_quant_enabled.json")
         _logger.info("Exported per-layer quant analysis (enabled) plot.")
         return layer_wise_eval_score_dict
 
@@ -656,12 +625,12 @@ class QuantAnalyzer:
                                                                       disable_all_quantizers=False,
                                                                       enabled_before=False,
                                                                       enabled_after=True)
-        self._export_per_layer_sensitivity_analysis_plot(layer_wise_eval_score_dict,
-                                                         results_dir,
-                                                         title="per_layer_quant_disabled")
-        self._save_json(layer_wise_eval_score_dict,
-                        results_dir,
-                        title="per_layer_quant_disabled.json")
+        export_per_layer_sensitivity_analysis_plot(layer_wise_eval_score_dict,
+                                                   results_dir,
+                                                   title="per_layer_quant_disabled")
+        save_json(layer_wise_eval_score_dict,
+                  results_dir,
+                  title="per_layer_quant_disabled.json")
         _logger.info("Exported per-layer quant analysis (disabled) plot.")
         return layer_wise_eval_score_dict
 
@@ -723,8 +692,8 @@ class QuantAnalyzer:
         self._create_and_export_min_max_ranges_plot(min_max_range_for_activations_dict,
                                                     min_max_ranges_dir,
                                                     title="activations")
-        self._save_json(min_max_range_for_weights_dict, min_max_ranges_dir, title="weights.json")
-        self._save_json(min_max_range_for_activations_dict, min_max_ranges_dir, title="activations.json")
+        save_json(min_max_range_for_weights_dict, min_max_ranges_dir, title="weights.json")
+        save_json(min_max_range_for_activations_dict, min_max_ranges_dir, title="activations.json")
         _logger.info("Exported per layer encodings min-max ranges plot(s).")
         return min_max_range_for_weights_dict, min_max_range_for_activations_dict
 
@@ -805,7 +774,7 @@ class QuantAnalyzer:
         self._export_per_layer_mse_plot(mse_loss_dict,
                                         results_dir,
                                         title="per_layer_mse_loss")
-        self._save_json(mse_loss_dict, results_dir, title="per_layer_mse_loss.json")
+        save_json(mse_loss_dict, results_dir, title="per_layer_mse_loss.json")
         _logger.info("Exported per layer MSE loss plot.")
         return mse_loss_dict
 
@@ -870,15 +839,3 @@ class QuantAnalyzer:
             quant_wrappers_to_ignore.append(quant_wrapper)
 
         sim.exclude_layers_from_quantization(quant_wrappers_to_ignore)
-
-    @staticmethod
-    def _save_json(dictionary: Dict, results_dir: str, title: str):
-        """
-        Save dictionary in JSON format.
-        :param dictionary: Dictionary to be saved.
-        :param results_dir: Directory to save the results.
-        :param title: Title of the file.
-        """
-        filename = os.path.join(results_dir, title)
-        with open(filename, 'w') as f:
-            json.dump(dictionary, f, indent=4)
