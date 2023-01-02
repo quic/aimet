@@ -35,22 +35,36 @@
 #
 #  @@-COPYRIGHT-END-@@
 # =============================================================================
-""" Keras bn_reestimation Nightly Tests """
+""" Keras code example for bn_reestimation """
 import json
+import os
 import tensorflow as tf
-import numpy as np
+
 from aimet_common.defs import QuantScheme
 from aimet_tensorflow.keras.quantsim import QuantizationSimModel
 from aimet_tensorflow.keras.bn_reestimation import reestimate_bn_stats, _get_bn_submodules
 from aimet_tensorflow.keras.batch_norm_fold import fold_all_batch_norms_to_scale
 
-import tensorflow as tf
-from aimet_tensorflow.keras.quantsim import QuantizationSimModel
+
+def evaluate(model: tf.keras.Model, forward_pass_callback_args):
+    """
+    This is intended to be the user-defined model evaluation function. AIMET requires the above signature. So if the
+    user's eval function does not match this signature, please create a simple wrapper.
+    Use representative dataset that covers diversity in training data to compute optimal encodings.
+    :param model: Model to evaluate
+    :param forward_pass_callback_args: These argument(s) are passed to the forward_pass_callback as-is. Up to
+           the user to determine the type of this parameter. E.g. could be simply an integer representing the number
+           of data samples to use. Or could be a tuple of parameters or an object representing something more
+           complex.
+           If set to None, forward_pass_callback will be invoked with no parameters.
+    """
+    dummy_x = forward_pass_callback_args
+    model(dummy_x)
+
+
 mnist = tf.keras.datasets.mnist
 (x_train, y_train), (x_test, y_test) = mnist.load_data()
 x_train, x_test = x_train / 255.0, x_test / 255.0
-
-
 
 
 tf.keras.backend.clear_session()
@@ -66,9 +80,6 @@ functional_model = tf.keras.Model(inputs=inputs, outputs=dense)
 
 functional_model.summary()
 
-
-
-
 loss_fn = tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True)
 
 functional_model.compile(optimizer='adam',
@@ -83,11 +94,6 @@ results =  functional_model.evaluate(x_test, y_test, batch_size=128)
 print("test loss, test acc:", results)
 
 
-
-
-import json
-from aimet_common.defs import QuantScheme
-from aimet_tensorflow.keras.quantsim import QuantizationSimModel
 
 default_config_per_channel = {
         "defaults":
@@ -164,9 +170,8 @@ with open("/tmp/default_config_per_channel.json", "w") as f:
 
 
 qsim = QuantizationSimModel(functional_model, quant_scheme=QuantScheme.training_range_learning_with_tf_init, config_file="/tmp/default_config_per_channel.json")
+qsim.compute_encodings(evaluate, forward_pass_callback_args=(x_test[0:100]))
 
-
-qsim.compute_encodings(lambda m, _: m(x_test[0:100]), None)
 
 qsim.model.compile(optimizer=tf.keras.optimizers.Adam(learning_rate=1e-3), loss=tf.keras.losses.MeanSquaredError())
 print("Evaluate quantized model on test data")
@@ -186,48 +191,20 @@ results =  qsim.model.evaluate(x_test, y_test, batch_size=128)
 print("test loss, test acc:", results)
 
 
-import numpy as np
-
 # preparing dataset start
 batch_size = 4
 dataset = tf.data.Dataset.from_tensor_slices(x_train[0:100])
 dataset = dataset.batch(batch_size=batch_size)
-it = iter(dataset)
-dummy_inputs = next(it)
+dummy_inputs = x_train[0:4]
 # preparing dataset end
 
-bn_layers = _get_bn_submodules(qsim.model)
-bn_mean_ori = {layer.name: layer.moving_mean.numpy() for layer in bn_layers}
-bn_var_ori = {layer.name: layer.moving_variance.numpy() for layer in bn_layers}
-bn_momentum_ori = {layer.name: layer.momentum for layer in bn_layers}
-output_ori = qsim.model(dummy_inputs, training=False)
 
 # start BatchNorm Re-estimation
-with reestimate_bn_stats(qsim.model, dataset, 1):
-    # check re_estimation mean, var, momentum
-    bn_mean_est = {layer.name: layer.moving_mean.numpy() for layer in bn_layers}
-    bn_var_est = {layer.name: layer.moving_variance.numpy() for layer in bn_layers}
-    bn_momentum_est = {layer.name: layer.momentum for layer in bn_layers}
-    assert not all(np.allclose(bn_mean_ori[key], bn_mean_est[key]) for key in bn_mean_est)
-    assert not all(np.allclose(bn_var_ori[key], bn_var_est[key]) for key in bn_var_est)
-    assert not (bn_momentum_ori == bn_momentum_est)
-    output_est = qsim.model(dummy_inputs, training=False)
-    assert not np.allclose(output_est, output_ori)
+reestimate_bn_stats(qsim.model, dataset, 1)
 # end BatchNorm Re-estimation
-
-# check restored  mean, var, momentum
-bn_mean_restored = {layer.name: layer.moving_mean.numpy() for layer in bn_layers}
-bn_var_restored = {layer.name: layer.moving_variance.numpy() for layer in bn_layers}
-bn_momentum_restored = {layer.name: layer.momentum for layer in bn_layers}
-
-assert all(np.allclose(bn_mean_ori[key], bn_mean_restored[key]) for key in bn_mean_ori)
-assert all(np.allclose(bn_var_ori[key], bn_var_restored[key]) for key in bn_var_ori)
-assert (bn_momentum_ori == bn_momentum_restored)
-
 # start BatchNorm fold to scale
 fold_all_batch_norms_to_scale(qsim)
 # end BatchNorm fold to scale
 
-import os
 os.makedirs('./output/', exist_ok=True)
 qsim.export(path='./output/', filename_prefix='mnist_after_bn_re_estimation_qat_range_learning')
