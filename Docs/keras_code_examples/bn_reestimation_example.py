@@ -42,7 +42,7 @@ import tensorflow as tf
 
 from aimet_common.defs import QuantScheme
 from aimet_tensorflow.keras.quantsim import QuantizationSimModel
-from aimet_tensorflow.keras.bn_reestimation import reestimate_bn_stats, _get_bn_submodules
+from aimet_tensorflow.keras.bn_reestimation import reestimate_bn_stats
 from aimet_tensorflow.keras.batch_norm_fold import fold_all_batch_norms_to_scale
 
 
