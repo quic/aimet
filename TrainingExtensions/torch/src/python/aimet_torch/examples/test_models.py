@@ -1021,7 +1021,7 @@ class Float32AndInt64InputModel(nn.Module):
         self.bn1 = nn.BatchNorm2d(32)
         self.add = aimet_elementwise.Add()
 
-    def forward(self, inputs: List[torch.Tensor]):
+    def forward(self, *inputs: List[torch.Tensor]):
         grid_x = inputs[self.index_x]
         grid_y = inputs[self.index_y]
 

@@ -681,20 +681,26 @@ class TestTrainingExtensionsCrossLayerScaling(unittest.TestCase):
         print(model)
 
         inp_shapes = [(1, 3, 32, 32), (3, 20, 20), (3, 20, 20)]
-        model_input_list = create_rand_tensors_given_shapes(inp_shapes, torch.device('cpu'))
+        model_input_list = []
+
         # try:
         #     # _ = model(model_input_list)
         # equalize_model(model, input_shapes=inp_shapes, dummy_input=model_input_list)
         # except Exception as e:
         #     print(e)
 
-        # # Now change the 2nd and 3rd tensors in the list to int64.
-        model_input_list[1] = torch.randint(0, 10, (3, 20, 20))
-        model_input_list[2] = torch.randint(0, 10, (3, 20, 20))
+        # # Now change the 2nd and 3rd tensors in the list to int64.(
+        a = torch.rand(1, 3, 32, 32)
+        b = torch.randint(0, 10, (3, 20, 20))
+        c = torch.randint(0, 10, (3, 20, 20))
+        input_tuple = (a,b,c)
         print(model_input_list)
 
         # try:
-        #     # _ = model(model_input_list)
-        equalize_model(model, input_shapes=inp_shapes, dummy_input=model_input_list)
+        print("\nPassed data before CLE\n")
+        _ = model(*input_tuple)
+        print("\nStart CLE \n")
+        # model_input_list = (model_input_list)
+        equalize_model(model, input_shapes=inp_shapes, dummy_input=input_tuple)
         # except Exception as e:
         #     print(e)

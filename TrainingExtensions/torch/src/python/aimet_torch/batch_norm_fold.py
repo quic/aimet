@@ -364,7 +364,7 @@ def _fold_given_batch_norms(model,
         _delete_bn_from_model(model, bn_modules)
 
 
-def find_all_batch_norms_to_fold(model, input_shapes, dummy_input: Union[torch.Tensor, List[torch.Tensor]] = None):
+def find_all_batch_norms_to_fold(model, input_shapes, dummy_input: Union[torch.Tensor, Tuple] = None):
     """
     Find all possible batch norm layers that can be folded. And returns a list of pairs such that (bn, layer)
     means bn will be forward-folded into layer and (layer, bn) means bn will be backward-folded into layer
@@ -384,7 +384,7 @@ def _find_all_batch_norms_to_fold(
         model: torch.nn.Module,
         input_shapes: Union[Tuple, List[Tuple]],
         connected_graph: ConnectedGraph,
-        dummy_input: Union[torch.Tensor, List[torch.Tensor]] = None
+        dummy_input: Union[torch.Tensor, Tuple] = None
 ) -> Tuple[List[Tuple[LayerType, BatchNormType]],
            List[Tuple[BatchNormType, LayerType]]]:
     """
@@ -427,7 +427,7 @@ def _find_all_batch_norms_to_fold(
 def fold_all_batch_norms_to_weight(
         model: torch.nn.Module,
         input_shapes: Union[Tuple, List[Tuple]],
-        dummy_input: Union[torch.Tensor, List[torch.Tensor]] = None
+        dummy_input: Union[torch.Tensor, Tuple] = None
 ) -> List[Tuple[LayerType, BatchNormType]]:
     """
     Fold all batch_norm layers in a model into the weight of the corresponding conv layers

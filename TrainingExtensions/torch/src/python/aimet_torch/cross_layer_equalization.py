@@ -829,7 +829,7 @@ class HighBiasFold:
 
 
 def equalize_model(model: torch.nn.Module, input_shapes: Union[Tuple, List[Tuple]],
-                   dummy_input: Union[torch.Tensor, List[torch.Tensor]] = None):
+                   dummy_input: Union[torch.Tensor, Tuple] = None):
     """
     High-level API to perform Cross-Layer Equalization (CLE) on the given model. The model is equalized in place.
 
@@ -840,7 +840,7 @@ def equalize_model(model: torch.nn.Module, input_shapes: Union[Tuple, List[Tuple
     """
     if dummy_input is None:
         dummy_input = create_rand_tensors_given_shapes(input_shapes, torch.device('cpu'))
-    if isinstance(dummy_input, list):
+    if isinstance(dummy_input, (list, tuple)):
         input_shapes = [i.shape for i in dummy_input]
     else:
         input_shapes = dummy_input.shape
@@ -859,7 +859,7 @@ def equalize_model(model: torch.nn.Module, input_shapes: Union[Tuple, List[Tuple
 def equalize_bn_folded_model(model: torch.nn.Module,
                              input_shapes: Union[Tuple, List[Tuple]],
                              folded_pairs: List[Tuple[torch.nn.Module, torch.nn.BatchNorm2d]],
-                             dummy_input: Union[torch.Tensor, List[torch.Tensor]] = None
+                             dummy_input: Union[torch.Tensor, Tuple] = None
                              ):
     """
     Perform Cross-Layer Scaling (CLS) and High Bias Folding (HBF) on a batchnorm-folded model.
