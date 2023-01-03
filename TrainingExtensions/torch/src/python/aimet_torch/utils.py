@@ -255,7 +255,7 @@ def run_hook_for_layers(model: torch.nn.Module, input_shapes: Union[Tuple, List[
 
 
 def run_hook_for_layers_with_given_input(model: torch.nn.Module,
-                                         input_tensor: Union[torch.Tensor, List[torch.Tensor], Tuple],
+                                         input_tensor: Union[torch.Tensor, Tuple],
                                          hook, module_type_for_attaching_hook=None, leaf_node_only=True):
     """
     Register the given hook function for all layers in the model

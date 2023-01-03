@@ -682,22 +682,19 @@ class TestTrainingExtensionsCrossLayerScaling(unittest.TestCase):
 
         inp_shapes = [(1, 3, 32, 32), (3, 20, 20), (3, 20, 20)]
         model_input_list = create_rand_tensors_given_shapes(inp_shapes, torch.device('cpu'))
-        model_input = tuple(model_input_list)
-        print(model_input)
-        try:
-            # _ = model(model_input_list)
-            equalize_model(model, input_shapes=inp_shapes, dummy_input=model_input)
-        except Exception as e:
-            print(e)
+        # try:
+        #     # _ = model(model_input_list)
+        # equalize_model(model, input_shapes=inp_shapes, dummy_input=model_input_list)
+        # except Exception as e:
+        #     print(e)
 
-        # Now change the 2nd and 3rd tensors in the list to int64.
-        model_input_list[1] = torch.randint(0, 30, (3, 20, 20))
-        model_input_list[2] = torch.randint(9, 27, (3, 20, 20))
-
+        # # Now change the 2nd and 3rd tensors in the list to int64.
+        model_input_list[1] = torch.randint(0, 10, (3, 20, 20))
+        model_input_list[2] = torch.randint(0, 10, (3, 20, 20))
         print(model_input_list)
-        try:
-            # _ = model(model_input_list)
-            equalize_model(model, input_shapes=inp_shapes, dummy_input=model_input_list)
-            print("\nNo Problem")
-        except Exception as e:
-            print(e)
+
+        # try:
+        #     # _ = model(model_input_list)
+        equalize_model(model, input_shapes=inp_shapes, dummy_input=model_input_list)
+        # except Exception as e:
+        #     print(e)
