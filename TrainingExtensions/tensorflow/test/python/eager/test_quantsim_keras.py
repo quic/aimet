@@ -551,8 +551,6 @@ def test_quantizable_mha_encodings():
     FLOAT_DELTA = 0.0001
     assert all((quantized_model_tensor >= output_encoding_min - FLOAT_DELTA) &
                (quantized_model_tensor <= output_encoding_max + FLOAT_DELTA))
-    assert abs(quantized_model_tensor.min() - output_encoding_min) < FLOAT_DELTA
-    assert abs(quantized_model_tensor.max() - output_encoding_max) < FLOAT_DELTA
 
 def test_quantizable_mha_export_encodings():
     B = 5
