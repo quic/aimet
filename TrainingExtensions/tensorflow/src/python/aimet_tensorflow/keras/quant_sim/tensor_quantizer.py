@@ -746,7 +746,7 @@ class StaticGridPerChannelQuantizer(TensorQuantizer):
                                              use_symmetric_encoding=self._is_symmetric,
                                              is_int_data_type=self._is_int_data_type,
                                              axis_handling=self.axis_handling,
-                                             is_training=bool(tf.keras.backend.learning_phase())), grad
+                                             is_training=tf.cast(tf.keras.backend.learning_phase(), dtype=tf.bool)), grad
 
     @_handle_conv2d_transpose
     def call_per_channel_quantize_dequantize(self, tensor: tf.Tensor):
