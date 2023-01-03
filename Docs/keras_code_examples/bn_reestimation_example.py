@@ -198,7 +198,6 @@ dataset = dataset.batch(batch_size=batch_size)
 dummy_inputs = x_train[0:4]
 # preparing dataset end
 
-
 # start BatchNorm Re-estimation
 reestimate_bn_stats(qsim.model, dataset, 1)
 # end BatchNorm Re-estimation
