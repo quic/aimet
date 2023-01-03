@@ -126,10 +126,10 @@ def _qsim_setup_for_fold_scale(model, dummy_inputs):
 
     return qsim
 
-def _reestimate_and_compare_results(model, dataset):
-    it = iter(dataset)
-    dummy_inputs = next(it)
 
+def _reestimate_and_compare_results(model, dataset):
+
+    dummy_inputs = np.random.randn(1, 32, 32, 3).astype(np.float32)
     bn_layers = _get_bn_submodules(model)
     bn_mean_ori = {layer.name: layer.moving_mean.numpy() for layer in bn_layers}
     bn_var_ori = {layer.name: layer.moving_variance.numpy() for layer in bn_layers}
