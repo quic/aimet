@@ -35,14 +35,19 @@
 #
 #  @@-COPYRIGHT-END-@@
 # =============================================================================
-from aimet_onnx.cross_layer_equalization import GraphSearchUtils
+from aimet_common.cross_layer_equalization import GraphSearchUtils
+from aimet_onnx.meta.connectedgraph import ConnectedGraph
+from aimet_onnx.cross_layer_equalization import get_ordered_list_of_conv_modules, \
+    cls_supported_layer_types, cls_supported_activation_types
 import test_models
 
 
 class TestCLS:
     def test_graph_search_utils_single_residual_model(self):
         model = test_models.single_residual_model()
-        graph_search_utils = GraphSearchUtils(model)
+        connected_graph = ConnectedGraph(model)
+        ordered_module_list = get_ordered_list_of_conv_modules(connected_graph.starting_ops)
+        graph_search_utils = GraphSearchUtils(connected_graph, ordered_module_list, cls_supported_layer_types, cls_supported_activation_types)
         ordered_layer_groups = graph_search_utils.find_layer_groups_to_scale()[0]
         ordered_layer_groups_names = [op.dotted_name for op in ordered_layer_groups]
         assert ordered_layer_groups_names == ['Conv_3', 'Conv_5']
@@ -50,7 +55,11 @@ class TestCLS:
     def test_graph_search_utils_depthwise_model(self):
         model = test_models.depthwise_conv_model()
 
-        graph_search_utils = GraphSearchUtils(model)
+        connected_graph = ConnectedGraph(model)
+        ordered_module_list = get_ordered_list_of_conv_modules(connected_graph.starting_ops)
+        graph_search_utils = GraphSearchUtils(connected_graph, ordered_module_list, cls_supported_layer_types,
+                                              cls_supported_activation_types)
+
         ordered_layer_groups = graph_search_utils.find_layer_groups_to_scale()[0]
         # Find cls sets from the layer groups
         cls_sets = graph_search_utils.convert_layer_group_to_cls_sets(ordered_layer_groups)
