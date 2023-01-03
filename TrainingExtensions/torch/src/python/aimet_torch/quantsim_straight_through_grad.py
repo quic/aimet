@@ -1,9 +1,9 @@
-# /usr/bin/env python3.5
+# /usr/bin/env python3.8
 # -*- mode: python -*-
 # =============================================================================
 #  @@-COPYRIGHT-START-@@
 #
-#  Copyright (c) 2020-2022, Qualcomm Innovation Center, Inc. All rights reserved.
+#  Copyright (c) 2020-2023, Qualcomm Innovation Center, Inc. All rights reserved.
 #
 #  Redistribution and use in source and binary forms, with or without
 #  modification, are permitted provided that the following conditions are met:
@@ -65,31 +65,6 @@ class IntermediateResult:
     is_unsigned: bool
 
 
-@dataclass
-class LearnedGridParams:
-    """
-    Data carrier containing parameters for learned grid
-    """
-    scaling: torch.Tensor
-    offset: torch.Tensor
-    n: torch.Tensor
-    p: torch.Tensor
-
-
-@dataclass
-class IntermediateResultForLearnedGrid:
-    """
-    Data carrier containing intermediate result for learned grid backward computation
-
-    forward_result: Round(x / scaling) - Round(offset)
-    rounding_error_q: Round(x / scaling) - (x / scaling)
-    rounding_error_o: offset - Round(offset)
-    """
-    forward_result: torch.Tensor
-    rounding_error_q: torch.Tensor
-    rounding_error_o: torch.Tensor
-
-
 def broadcast_to_tensor(tensor, encoding, ch_axis):
     """
     This helper method takes n-dimension tensor and a 1-dimension encoding. And the encoding is broad-casted to
@@ -147,150 +122,6 @@ def compute_dloss_by_dx(x, grad, encoding_min, encoding_max, ch_axis=0):
     dloss_by_dx = torch.where(torch.le(encoding_min, x),  # condition to check per value
                               inner_cond,  # execute if true
                               torch.zeros_like(x)) * grad
-
-    return dloss_by_dx
-
-
-def _compute_derivative_of_loss_function(x: torch.Tensor,
-                                         derivative_of_quantizer: torch.Tensor,
-                                         grad: torch.Tensor,
-                                         scaling: torch.Tensor,
-                                         ch_axis: int) -> torch.Tensor:
-    """
-    Compute derivative of the loss function like dloss_by_dmin or dloss_by_dmax
-
-    :param x: input
-    :param derivative_of_quantizer: derivative of the quantizer function like dq_by_dmin or dq_by_dmax
-    :param grad: gradient
-    :param scaling: scaling factor computed for given encoding min/max
-    :param ch_axis: channel axis along which sum is computed for gradient calculation
-    :return: computed derivative of loss w.r.t derivative of quantizer
-    """
-    derivative_of_loss_function = derivative_of_quantizer * grad
-    if len(scaling) > 1 and len(x.shape) > 1:
-        dim = list(range(len(x.shape)))
-        # Remove the output axis
-        dim.pop(ch_axis)
-        derivative_of_loss_function = torch.sum(derivative_of_loss_function, dim=dim)
-    elif len(scaling) == 1:
-        derivative_of_loss_function = torch.sum(derivative_of_loss_function.flatten(), dim=0, keepdim=True)
-
-    return derivative_of_loss_function
-
-
-def compute_intermediate_result_for_learned_grid(x: torch.Tensor,
-                                                 scaling: torch.Tensor,
-                                                 offset: torch.Tensor) -> IntermediateResultForLearnedGrid:
-    """
-    helper function to compute forward result and rounding error before derivative
-    :param x: input
-    :param scaling: scaling factor computed for given encoding min/max
-    :param offset: offset computed
-    :return: forward result, rounding error of quantizer, rounding error of offset tuple
-    """
-    forward_result = torch.round(x / scaling) - torch.round(offset)
-    rounding_error_q = torch.round(x / scaling) - (x / scaling)
-    rounding_error_o = offset - torch.round(offset)
-
-    return IntermediateResultForLearnedGrid(forward_result, rounding_error_q, rounding_error_o)
-
-
-def compute_dloss_by_dmin(x: torch.Tensor,
-                          grad: torch.Tensor,
-                          intermediate_result: IntermediateResultForLearnedGrid,
-                          grid_params: LearnedGridParams,
-                          ch_axis: int = 0) -> torch.Tensor:
-    """
-    helper function to compute derivative of loss w.r.t encoding min
-    Implementation based on LSQ+ ( https://arxiv.org/pdf/2004.09576.pdf )
-
-    Inner condition ( n <= fw <= p ):
-        dq_by_dmin = (round(x/s) - x/s) / -p
-    Outer condition ( fw < n ):
-        dq_by_dmin = -n/p + 1 + (round(o) - o)/p
-    Outer condition ( p < fw ):
-        dq_by_dmin = (round(o) - o)/p
-
-    :param x: input
-    :param grad: gradient
-    :param intermediate_result: data carrier containing intermediate result (forward result, rounding error q and o)
-    :param grid_params: data carrier containing parameters for learned grid (scale, offset, n, p)
-    :param ch_axis: channel axis along which sum is computed for gradient calculation
-    :return: computed derivative of loss w.r.t encoding min
-    """
-    scaling, _, n, p = grid_params.scaling, grid_params.offset, grid_params.n, grid_params.p
-    forward_result = intermediate_result.forward_result
-    rounding_error_q = intermediate_result.rounding_error_q
-    rounding_error_o = intermediate_result.rounding_error_o
-
-    dq_by_dmin = torch.where(torch.le(forward_result.data, p),
-                             -rounding_error_q / p, rounding_error_o / p)
-    dq_by_dmin = torch.where(torch.le(n, forward_result.data),
-                             dq_by_dmin, -n / p + 1 + rounding_error_o / p)
-
-    dloss_by_dmin = _compute_derivative_of_loss_function(x, dq_by_dmin, grad, scaling, ch_axis)
-    return dloss_by_dmin
-
-
-def compute_dloss_by_dmax(x: torch.Tensor,
-                          grad: torch.Tensor,
-                          intermediate_result: IntermediateResultForLearnedGrid,
-                          grid_params: LearnedGridParams,
-                          ch_axis: int = 0) -> torch.Tensor:
-    """
-    helper function to compute derivative of loss w.r.t encoding max
-    Implementation based on LSQ+ ( https://arxiv.org/pdf/2004.09576.pdf )
-
-    Inner condition ( n <= fw <= p ):
-        dq_by_dmax = (round(x/s) - x/s) / p
-    Outer condition ( fw < n ):
-        dq_by_dmax = n/p - (round(o) - o)/p
-    Outer condition ( p < fw ):
-        dq_by_dmax = 1 - (round(o) - o)/p
-
-    :param x: input
-    :param grad: gradient
-    :param intermediate_result: data carrier containing intermediate result tensors (forward result, rounding errors)
-    :param grid_params: data carrier containing parameters for learned grid (scale, offset, n, p)
-    :param ch_axis: channel axis along which sum is computed for gradient calculation
-    :return: computed derivative of loss w.r.t encoding max
-    """
-    scaling, _, n, p = grid_params.scaling, grid_params.offset, grid_params.n, grid_params.p
-    forward_result = intermediate_result.forward_result
-    rounding_error_q = intermediate_result.rounding_error_q
-    rounding_error_o = intermediate_result.rounding_error_o
-
-    dq_by_dmax = torch.where(torch.le(forward_result.data, p),
-                             rounding_error_q / p, torch.ones_like(p) - rounding_error_o / p)
-    dq_by_dmax = torch.where(torch.le(n, forward_result.data),
-                             dq_by_dmax, n / p - rounding_error_o / p)
-
-    dloss_by_dmax = _compute_derivative_of_loss_function(x, dq_by_dmax, grad, scaling, ch_axis)
-    return dloss_by_dmax
-
-
-def compute_dloss_by_dx_using_scale_offset(x: torch.Tensor,
-                                           grad: torch.Tensor,
-                                           grid_params: LearnedGridParams) -> torch.Tensor:
-    """
-    compute derivative w.r.t input
-    :param x: input
-    :param grad: gradient
-    :param grid_params: data carrier containing parameters for learned grid (scale, offset, n, p)
-    :return: gradient w.r.t input
-    """
-    scaling, offset, n, p = grid_params.scaling, grid_params.offset, grid_params.n, grid_params.p
-    # R(x/s) - R(o)
-    r_x_by_s_plus_round_o = torch.round(x / scaling) - offset
-
-    # compute dloss_by_dx = dq_by_dx * grad
-    inner_cond = torch.where(torch.le(r_x_by_s_plus_round_o.data, p.data),  # condition to check per value
-                             torch.ones_like(r_x_by_s_plus_round_o),  # execute if true
-                             torch.zeros_like(r_x_by_s_plus_round_o))  # execute if false
-
-    dloss_by_dx = torch.where(torch.le(n.data, r_x_by_s_plus_round_o.data),  # condition to check per value
-                              inner_cond,  # execute if true
-                              torch.zeros_like(r_x_by_s_plus_round_o.data)) * grad
 
     return dloss_by_dx
 
