@@ -2,7 +2,7 @@
 # =============================================================================
 #  @@-COPYRIGHT-START-@@
 #
-#  Copyright (c) 2017-2022, Qualcomm Innovation Center, Inc. All rights reserved.
+#  Copyright (c) 2017-2023, Qualcomm Innovation Center, Inc. All rights reserved.
 #
 #  Redistribution and use in source and binary forms, with or without
 #  modification, are permitted provided that the following conditions are met:
@@ -48,8 +48,6 @@ from aimet_common.defs import MAP_ROUND_MODE_TO_PYMO, QuantizationDataType
 from aimet_torch.qc_quantize_op import QuantScheme
 from aimet_torch.qc_quantize_op import StaticGridQuantWrapper, LearnedGridQuantWrapper, SteGatingFuncForParameters, \
     QcQuantizeOpMode
-from aimet_torch.quantsim_straight_through_grad import compute_dloss_by_dmax, compute_dloss_by_dmin, \
-    compute_dloss_by_dx_using_scale_offset, LearnedGridParams, compute_intermediate_result_for_learned_grid
 from aimet_torch.tensor_quantizer import LearnedGridTensorQuantizer
 from aimet_torch.tensor_quantizer import StaticGridPerTensorQuantizer, QuantizeDequantizeFunc
 
@@ -422,73 +420,6 @@ class RoundStraightThrough(torch.autograd.Function):
         return output_grad
 
 
-class CustomFunc(torch.autograd.Function):
-    """
-    This a custom function to perform custom gradient computation using
-    to be performed for range learning.
-    """
-
-    @staticmethod
-    def compute_scaling_offset(weight_min, weight_max):
-        scaling = (weight_max - weight_min) / 255
-        offset = torch.round(weight_min / scaling)
-        return scaling, offset
-
-    @staticmethod
-    def quant_dequant_param(x, _min, _max, n, p):
-        delta = (_max - _min) / p  # only valid n=0, p=2**bw - 1
-        offset = torch.round(_min / delta)
-        x = torch.round(x / delta) - offset
-        x = torch.clamp(x, n, p)
-        x = (x + offset) * delta
-        return x
-
-    @staticmethod
-    def forward(ctx, tensor, enc_min, enc_max, n, p):
-        """
-        Forward pass function
-        :param ctx: context
-        :param tensor: input tensor
-        :param enc_min: encoding min
-        :param enc_max: encoding max
-        :param n: lower bound for a given bitwidth and symmetric/asymmetric encoding
-        :param p: upper bound for a given bitwidth and symmetric/asymmetric encoding
-        :return: computed quant dequant output
-        """
-        # save tensors for backward pass
-        ctx.save_for_backward(tensor, enc_min, enc_max, n, p)
-        y = CustomFunc.quant_dequant_param(tensor, enc_min, enc_max, n, p)
-        return y
-
-    @staticmethod
-    def backward(ctx, grad):
-        """
-        In the backward pass we receive a Tensor containing the gradient of the loss
-        with respect to the output, and we need to compute the gradient of the loss
-        with respect to the inputs.
-        :param ctx: current context
-        :param grad: gradients as a tensor containing gradient of loss w.r.t output
-        :return: gradients w.r.t input, encoding_min and encoding_max and None for two extra params.
-        """
-
-        input, weight_min, weight_max, n, p = ctx.saved_tensors
-        # print('--------------------------------')
-        # print('gradient computation code ')
-        # print('input, min, max passed are ', input, weight_min, weight_max)
-        # print('--------------------------------')
-        scale = (weight_max - weight_min) / p  # only valid n=0, p=2**bw-1
-        offset = weight_min / scale
-
-        grid_params = LearnedGridParams(scale, offset, n, p)
-        intermediate_result = compute_intermediate_result_for_learned_grid(input, scale, offset)
-
-        grad_input = compute_dloss_by_dx_using_scale_offset(input, grad, grid_params)
-        grad_min = compute_dloss_by_dmin(input, grad, intermediate_result, grid_params)
-        grad_max = compute_dloss_by_dmax(input, grad, intermediate_result, grid_params)
-
-        return grad_input, grad_min, grad_max, None, None
-
-
 class TestQcQuantizeOpLearnedGrid:
 
     def test_trainable_tensor_quantizer_forward_backward(self):
@@ -572,34 +503,6 @@ class TestQcQuantizeOpLearnedGrid:
         assert torch.equal(quant_out, expected_output)
 
     @staticmethod
-    def perform_custom_grad_computation(custom_input, min_value, max_value, bw, sym_flag):
-
-        c_input_tensor = copy.deepcopy(custom_input)
-        c_enc_min = torch.nn.Parameter(torch.Tensor([min_value]), requires_grad=True)
-        c_enc_max = torch.nn.Parameter(torch.Tensor([max_value]), requires_grad=True)
-        # n = torch.nn.Parameter(torch.Tensor([0]), requires_grad=False)
-
-        # To apply our Function, we use Function.apply method.
-        # We alias this as 'custom_op'.
-        custom_op = CustomFunc.apply
-
-        # Forward pass: compute predicted y using operations; we compute
-        # using our "custom" autograd operation.
-        y_pred = custom_op(c_input_tensor, c_enc_min, c_enc_max, bw, sym_flag)
-
-        # Compute and print loss
-        loss = y_pred.flatten().sum()
-        # Use custom grad to compute the backward pass.ctx.p = p
-        loss.backward()
-
-        # print(' grads after custom computation ...')
-        # print(c_input_tensor.grad)
-        # print(c_enc_min.grad)
-        # print(c_enc_max.grad)
-
-        return c_input_tensor.grad, c_enc_min.grad, c_enc_max.grad
-
-    @staticmethod
     def perform_optimized_custom_grad_computation(custom_input, min_value, max_value):
         oc_input_tensor = copy.deepcopy(custom_input)
         oc_enc_min = torch.nn.Parameter(torch.Tensor([min_value]), requires_grad=True)
@@ -645,23 +548,10 @@ class TestQcQuantizeOpLearnedGrid:
             custom_input, _min, _max
         )
 
-        # custom gradient computation
-        # compute this one time and pass it to forward function
-        n, p = LearnedGridTensorQuantizer.get_n_and_p(bitwidth=8, use_symmetric_encoding=False,
-                                                      use_strict_symmetric=False, device="cpu")
-        c_input_grad, c_min_grad, c_max_grad = TestQcQuantizeOpLearnedGrid.perform_custom_grad_computation(
-            custom_input, _min, _max, n, p
-        )
-
         # Optimized custom gradient computation
         oc_input_grad, oc_min_grad, oc_max_grad = TestQcQuantizeOpLearnedGrid.perform_optimized_custom_grad_computation(
             custom_input, _min, _max
         )
-
-        # validate gradients computed from custom gradients and autograd engine
-        assert torch.allclose(c_input_grad.data[0], a_input_grad.data[0])
-        assert torch.isclose(c_min_grad.data[0], a_min_grad.data[0], atol=1e-3)
-        assert torch.isclose(c_max_grad.data[0], a_max_grad.data[0], atol=1e-3)
 
         # validate gradients computed from autograd engine and optimized custom gradients
         # NOTE: Optimized custom grad follows same computation logic of autograd engine
@@ -696,13 +586,11 @@ class TestQcQuantizeOpLearnedGrid:
         time_taken_by_custom = 0
         torch.manual_seed(0)
         custom_input = torch.rand((2, 2), requires_grad=True, dtype=dtype, device=device)
-        n, p = LearnedGridTensorQuantizer.get_n_and_p(bitwidth=8, use_symmetric_encoding=True,
-                                                      use_strict_symmetric=False, device="cpu")
 
         for i in range(1, iterations):
             # compute this one time and pass it to forward function
             start_time = time.perf_counter()
-            _ = TestQcQuantizeOpLearnedGrid.perform_custom_grad_computation(custom_input, 0.0015, 1.0, n, p)
+            _ = TestQcQuantizeOpLearnedGrid.perform_optimized_custom_grad_computation(custom_input, 0.0015, 1.0)
             exec_time = time.perf_counter() - start_time
             time_taken_by_custom = time_taken_by_custom + exec_time
 
