@@ -73,7 +73,8 @@ def test_adaround_mobilenet_only_weights():
     params = AdaroundParameters(data_set=dataset, num_batches=possible_batches, default_num_iterations=1,
                                 default_reg_param=0.01, default_beta_range=(20, 2), default_warm_start=0.2)
 
-    adarounded_model = Adaround.apply_adaround(mobilenet_model, params, path='./',
+    adarounded_model = Adaround.apply_adaround(mobilenet_model, params, path='../../../../aimet-pro/NightlyTests'
+                                                                             '/tensorflow/',
                                                filename_prefix='mobilenet', default_param_bw=4,
                                                default_quant_scheme=QuantScheme.post_training_tf_enhanced)
 
@@ -118,7 +119,7 @@ def test_adaround_followed_by_quantsim():
     output_bw = 8
     quant_scheme = QuantScheme.post_training_tf_enhanced
 
-    adarounded_model = Adaround.apply_adaround(model, params, path='./', filename_prefix='dummy',
+    adarounded_model = Adaround.apply_adaround(model, params, path='../../../../aimet-pro/NightlyTests/tensorflow/', filename_prefix='dummy',
                                                default_param_bw=param_bw, default_quant_scheme=quant_scheme)
 
     # Read exported param encodings JSON file
