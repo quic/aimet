@@ -36,17 +36,19 @@
 #  @@-COPYRIGHT-END-@@
 # =============================================================================
 """Test Quant Analyzer"""
+import json
 import os
 import shutil
 
 import numpy as np
+import pytest
 import tensorflow as tf
 from aimet_tensorflow.keras.quant_analyzer import QuantAnalyzer
 
 from aimet_common.utils import CallbackFunc
 from aimet_tensorflow.keras.quantsim import QuantizationSimModel
 
-from aimet_tensorflow.examples.test_models import keras_functional_conv_net
+from aimet_tensorflow.examples.test_models import keras_functional_conv_net, keras_sequential_conv_net
 
 
 def forward_pass_func(model: tf.keras.Model, dummy_input):
@@ -60,6 +62,11 @@ def eval_func(model: tf.keras.Model, dummy_input):
 
     model.evaluate(dummy_input)
     return 0.8
+
+
+@pytest.fixture()
+def clear_session() -> None:
+    tf.keras.backend.clear_session()
 
 
 class TestQuantAnalyzer:
@@ -78,7 +85,7 @@ class TestQuantAnalyzer:
 
         try:
             layer_wise_eval_score_dict = \
-                quant_analyzer._perform_per_layer_analysis_by_enabling_quant_wrappers(sim, results_dir="./tmp/")
+                quant_analyzer.perform_per_layer_analysis_by_enabling_quant_wrappers(sim, results_dir="./tmp/")
             assert type(layer_wise_eval_score_dict) == dict
             assert len(layer_wise_eval_score_dict) == 6
 
@@ -106,7 +113,7 @@ class TestQuantAnalyzer:
         quant_analyzer = QuantAnalyzer(model, forward_pass_callback, eval_callback)
         try:
             layer_wise_eval_score_dict = \
-                quant_analyzer._perform_per_layer_analysis_by_disabling_quant_wrappers(sim, results_dir="./tmp/")
+                quant_analyzer.perform_per_layer_analysis_by_disabling_quant_wrappers(sim, results_dir="./tmp/")
             assert type(layer_wise_eval_score_dict) == dict
             assert len(layer_wise_eval_score_dict) == 6
 
@@ -116,6 +123,72 @@ class TestQuantAnalyzer:
 
                 # Check if it is exported to correct html file.
                 assert os.path.isfile("./tmp/per_layer_quant_disabled.html")
+        finally:
+            if os.path.isdir("./tmp/"):
+                shutil.rmtree("./tmp/")
+
+    def test_export_per_layer_encoding_min_max_range(self, clear_session):
+        """ test export_per_layer_encoding_min_max_range() """
+        model = keras_functional_conv_net()
+
+        dummy_input = np.random.rand(1, 28, 28, 3)
+        sim = QuantizationSimModel(model)
+        sim.compute_encodings(forward_pass_func, dummy_input)
+
+        forward_pass_callback = CallbackFunc(forward_pass_func, dummy_input)
+        eval_callback = CallbackFunc(eval_func, dummy_input)
+        quant_analyzer = QuantAnalyzer(model, forward_pass_callback, eval_callback)
+        try:
+            quant_analyzer.export_per_layer_encoding_min_max_range(sim, results_dir="./tmp/")
+            assert os.path.isfile("./tmp/min_max_ranges/weights.html")
+            assert os.path.isfile("./tmp/min_max_ranges/activations.html")
+        finally:
+            if os.path.isdir("./tmp/"):
+                shutil.rmtree("./tmp/")
+
+    def test_export_per_layer_encoding_min_max_range_per_channel(self, clear_session):
+        """ test export_per_layer_encoding_min_max_range() for per channel quantization """
+        results_dir = os.path.abspath("./tmp/")
+        os.makedirs(results_dir, exist_ok=True)
+
+        quantsim_config = {
+            "defaults": {
+                "ops": {
+                    "is_output_quantized": "True"
+                },
+                "params": {
+                    "is_quantized": "True"
+                },
+                "per_channel_quantization": "True",
+            },
+            "params": {
+                "bias": {
+                    "is_quantized": "False"
+                }
+            },
+            "op_type": {},
+            "supergroups": [],
+            "model_input": {},
+            "model_output": {}
+        }
+
+        with open("./tmp/quantsim_config.json", "w") as f:
+            json.dump(quantsim_config, f)
+
+        model = keras_sequential_conv_net()
+
+        dummy_input = np.random.rand(1, 28, 28, 3)
+        sim = QuantizationSimModel(model, config_file="./tmp/quantsim_config.json")
+        sim.compute_encodings(forward_pass_func, dummy_input)
+
+        forward_pass_callback = CallbackFunc(forward_pass_func, dummy_input)
+        eval_callback = CallbackFunc(eval_func, dummy_input)
+        quant_analyzer = QuantAnalyzer(model, forward_pass_callback, eval_callback)
+        try:
+            quant_analyzer.export_per_layer_encoding_min_max_range(sim, results_dir="./tmp/")
+            assert os.path.isfile("./tmp/min_max_ranges/activations.html")
+            assert os.path.isfile("./tmp/min_max_ranges/conv2d_conv2d-kernel.html")
+            assert os.path.isfile("./tmp/min_max_ranges/dense_dense-kernel.html")
         finally:
             if os.path.isdir("./tmp/"):
                 shutil.rmtree("./tmp/")

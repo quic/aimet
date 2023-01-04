@@ -41,6 +41,7 @@ import os
 from typing import Dict
 
 from bokeh import plotting
+from bokeh.models import tickers
 
 DEFAULT_BOKEH_FIGURE_HEIGHT = 300
 
@@ -86,3 +87,61 @@ def save_json(dictionary: Dict, results_dir: str, title: str):
     filename = os.path.join(results_dir, title)
     with open(filename, 'w') as f:
         json.dump(dictionary, f, indent=4)
+
+
+def create_and_export_min_max_ranges_plot(min_max_ranges_dict: Dict,
+                                          results_dir: str,
+                                          title: str):
+    """
+    Create and export per layer encoding(s) min-max ranges in html format.
+
+    :param min_max_ranges_dict: Dictionary containing encoding min and max ranges.
+    :param results_dir: Directory to save the results.
+    :param title: Title of the plot.
+    """
+    os.makedirs(results_dir, exist_ok=True)
+
+    if set(map(type, min_max_ranges_dict.values())) == {dict}:
+        for name, per_channel_encodings_dict in min_max_ranges_dict.items():
+            _export_per_layer_min_max_ranges_plot(per_channel_encodings_dict,
+                                                  results_dir=results_dir,
+                                                  title=name)
+    elif set(map(type, min_max_ranges_dict.values())) == {tuple}:
+        _export_per_layer_min_max_ranges_plot(min_max_ranges_dict,
+                                              results_dir=results_dir,
+                                              title=title)
+    else:
+        raise RuntimeError("Per channel quantization should be enabled for all the layers.")
+
+
+def _export_per_layer_min_max_ranges_plot(layer_wise_min_max_ranges_dict: Dict, results_dir: str, title: str) \
+        -> plotting.Figure:
+    """
+    Export per layer encoding min-max range in html format.
+
+    :param layer_wise_min_max_ranges_dict: layer wise eval score dictionary.
+     dict[layer_name] = (encoding min, encoding max)
+    :param results_dir:  Directory to save the results.
+    :param title: Title of the plot.
+    :return: Encoding min-max range plot.
+    """
+    layer_names = []
+    enc_min_values = []
+    enc_max_values = []
+    for layer_name, (enc_min, enc_max) in layer_wise_min_max_ranges_dict.items():
+        layer_names.append(layer_name)
+        enc_min_values.append(enc_min)
+        enc_max_values.append(enc_max)
+
+    # Configure the output file to be saved.
+    filename = os.path.join(results_dir, f"{title}.html")
+    plotting.output_file(filename)
+    plot = plotting.figure(x_range=layer_names,
+                           plot_height=DEFAULT_BOKEH_FIGURE_HEIGHT,
+                           title=title)
+    plot.vbar(x=layer_names, width=0.2, bottom=enc_min_values, top=enc_max_values)
+    plot.xaxis.major_label_orientation = "vertical"
+    plot.sizing_mode = "scale_width"
+    plot.yaxis.ticker = tickers.SingleIntervalTicker(interval=0.25)
+    plotting.save(plot)
+    return plot

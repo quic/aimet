@@ -38,12 +38,13 @@
 """Quant Analyzer"""
 import os
 from collections import OrderedDict, defaultdict
-from typing import Dict, List
+from typing import Dict, List, Tuple
 
 import tensorflow as tf
 
 from aimet_common.defs import QuantScheme
-from aimet_common.quant_analyzer import export_per_layer_sensitivity_analysis_plot, save_json
+from aimet_common.quant_analyzer import export_per_layer_sensitivity_analysis_plot, save_json, \
+    create_and_export_min_max_ranges_plot
 from aimet_common.utils import CallbackFunc, AimetLogger
 from aimet_tensorflow.keras.batch_norm_fold import fold_all_batch_norms
 from aimet_tensorflow.keras.quant_sim.qc_quantize_wrapper import QcQuantizeWrapper
@@ -166,13 +167,16 @@ class QuantAnalyzer:
                                                   config_file)
 
         # Check model sensitivity to weight and activation quantization individually.
-        self._check_model_sensitivity_to_quantization(sim, default_param_bw, default_output_bw)
+        self.check_model_sensitivity_to_quantization(sim, default_param_bw, default_output_bw)
 
         # Perform per layer analysis by enabling each quant wrapper (OPTION-1).
-        self._perform_per_layer_analysis_by_enabling_quant_wrappers(sim, results_dir)
+        self.perform_per_layer_analysis_by_enabling_quant_wrappers(sim, results_dir)
 
         # Perform per layer analysis by disabling each quant wrapper (OPTION-2).
-        self._perform_per_layer_analysis_by_disabling_quant_wrappers(sim, results_dir)
+        self.perform_per_layer_analysis_by_disabling_quant_wrappers(sim, results_dir)
+
+        # Export encoding min-max range.
+        self.export_per_layer_encoding_min_max_range(sim, results_dir)
 
     def _create_quantsim_and_encodings(self,
                                        quant_scheme: QuantScheme,
@@ -203,10 +207,10 @@ class QuantAnalyzer:
 
         return sim
 
-    def _check_model_sensitivity_to_quantization(self,
-                                                 sim: QuantizationSimModel,
-                                                 default_param_bw: int,
-                                                 default_output_bw: int):
+    def check_model_sensitivity_to_quantization(self,
+                                                sim: QuantizationSimModel,
+                                                default_param_bw: int,
+                                                default_output_bw: int):
         """
         Perform the sensitivity analysis to weight and activation quantization
         individually.
@@ -265,9 +269,9 @@ class QuantAnalyzer:
         enable_disable_quantizers(enabled_param_quantizers, enabled=True)
         return eval_score
 
-    def _perform_per_layer_analysis_by_enabling_quant_wrappers(self,
-                                                               sim: QuantizationSimModel,
-                                                               results_dir: str) -> Dict[str, float]:
+    def perform_per_layer_analysis_by_enabling_quant_wrappers(self,
+                                                              sim: QuantizationSimModel,
+                                                              results_dir: str) -> Dict[str, float]:
         """
         NOTE: Option 1
 
@@ -302,9 +306,9 @@ class QuantAnalyzer:
         _logger.info("Exported per-layer quant analysis (enabled) plot.")
         return layer_wise_eval_score_dict
 
-    def _perform_per_layer_analysis_by_disabling_quant_wrappers(self,
-                                                                sim: QuantizationSimModel,
-                                                                results_dir: str) -> Dict[str, float]:
+    def perform_per_layer_analysis_by_disabling_quant_wrappers(self,
+                                                               sim: QuantizationSimModel,
+                                                               results_dir: str) -> Dict[str, float]:
         """
         NOTE: Option 2
 
@@ -382,3 +386,68 @@ class QuantAnalyzer:
                 enable_disable_quantizers(enabled_quantizers, enabled=True)
 
         return eval_score_dict
+
+    # pylint: disable=no-self-use
+    def export_per_layer_encoding_min_max_range(self,
+                                                sim: QuantizationSimModel,
+                                                results_dir: str) -> Tuple[Dict, Dict]:
+        """
+        Export encoding min and max range for all weights and activations. results_dir should have
+        html files in following format.
+
+        -results_dir
+            -activations.html
+            -weights.html
+
+        If per channel quantization(PCQ) is enabled then,
+
+        -results_dir
+            -activations.html
+            -{wrapped_module_name}_{param_name}.html
+
+        :param sim: Quantsim model.
+        :param results_dir: Directory to save the results.
+        :return: layer wise min-max range for weights and activations.
+        """
+        min_max_ranges_dir = os.path.join(results_dir, "min_max_ranges")
+
+        min_max_range_for_activations_dict = {}
+        min_max_range_for_weights_dict = {}
+        for quant_wrapper in sim.quant_wrappers():
+            wrapped_layer_name = quant_wrapper.original_layer.name
+
+            for index, quantizer in enumerate(quant_wrapper.input_quantizers):
+                if quantizer.is_enabled():
+                    name = f"{wrapped_layer_name}_input_{index}"
+                    min_max_range_for_activations_dict[name] = (quantizer.encoding.min, quantizer.encoding.max)
+
+            for index, quantizer in enumerate(quant_wrapper.output_quantizers):
+                if quantizer.is_enabled():
+                    name = f"{wrapped_layer_name}_output_{index}"
+                    min_max_range_for_activations_dict[name] = (quantizer.encoding.min, quantizer.encoding.max)
+
+            for quantizer in quant_wrapper.param_quantizers:
+                if quantizer.is_enabled():
+                    # Keras parameter name usually contains slash (/) and it can cause incorrect file path when saving
+                    #   Replace slash (/) with dash (-) to avoid it
+                    quantizer_name = quantizer.name.replace("/", "-")
+                    name = f"{wrapped_layer_name}_{quantizer_name}"
+
+                    if isinstance(quantizer.encoding, List): # per-channel
+                        per_channel_encodings = {}
+                        for index, encoding in enumerate(quantizer.encoding):
+                            per_channel_encodings[f"{name}_{index}"] = (encoding.min, encoding.max)
+                        min_max_range_for_weights_dict[name] = per_channel_encodings
+                    else: # per-tensor
+                        min_max_range_for_weights_dict[name] = (quantizer.encoding.min, quantizer.encoding.max)
+
+        create_and_export_min_max_ranges_plot(min_max_range_for_weights_dict,
+                                              min_max_ranges_dir,
+                                              title="weights")
+        create_and_export_min_max_ranges_plot(min_max_range_for_activations_dict,
+                                              min_max_ranges_dir,
+                                              title="activations")
+        save_json(min_max_range_for_weights_dict, min_max_ranges_dir, title="weights.json")
+        save_json(min_max_range_for_activations_dict, min_max_ranges_dir, title="activations.json")
+        _logger.info("Exported per layer encodings min-max ranges plot(s).")
+        return min_max_range_for_weights_dict, min_max_range_for_activations_dict
