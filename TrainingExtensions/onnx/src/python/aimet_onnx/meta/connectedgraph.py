@@ -128,6 +128,10 @@ class ConnectedGraph(AimetCommonConnectedGraph):
         op = Op(name=node.name, dotted_name=node.name, output_shape=None, is_anonymous=False, op_type=node.op_type)
         # Add corresponding node to op
         op.model_module = ONNXModelModule(node)
+
+        if op.type == 'Conv':
+            op.groups = get_op_groups(node)
+
         return op
 
     def _add_children_ops_to_op_queue(self, node: onnx_pb.NodeProto, op_queue: List):
@@ -419,3 +423,10 @@ class ConnectedGraph(AimetCommonConnectedGraph):
         for op in self._ops.values():
             handler = switcher.get(op.type, handle_default)
             handler(op)
+
+
+def get_op_groups(node: onnx_pb.NodeProto):
+    """Gets group information for Conv type node"""
+    for attribute in node.attribute:
+        if attribute.name == 'group':
+            return attribute.i
