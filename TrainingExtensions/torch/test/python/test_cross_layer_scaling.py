@@ -674,33 +674,26 @@ class TestTrainingExtensionsCrossLayerScaling(unittest.TestCase):
         self.assertEqual(2, len(scale_factors))
         self.assertEqual(2, len(scale_factors[0].cls_pair_info_list))
 
-    def test_float32_and_int64_input_model(self):
+    def test_cle_for_float32_and_int64_input_model(self):
 
         model = Float32AndInt64InputModel().to(torch.device('cpu'))
         model.eval()
         print(model)
 
         inp_shapes = [(1, 3, 32, 32), (3, 20, 20), (3, 20, 20)]
-        model_input_list = []
 
-        # try:
-        #     # _ = model(model_input_list)
-        # equalize_model(model, input_shapes=inp_shapes, dummy_input=model_input_list)
-        # except Exception as e:
-        #     print(e)
-
-        # # Now change the 2nd and 3rd tensors in the list to int64.(
         a = torch.rand(1, 3, 32, 32)
         b = torch.randint(0, 10, (3, 20, 20))
         c = torch.randint(0, 10, (3, 20, 20))
-        input_tuple = (a,b,c)
-        print(model_input_list)
+        input_tuple = (a, b, c)
 
-        # try:
-        print("\nPassed data before CLE\n")
-        _ = model(*input_tuple)
-        print("\nStart CLE \n")
-        # model_input_list = (model_input_list)
+        output_before_cle = model(*input_tuple)
+
+        # equalize the model
         equalize_model(model, input_shapes=inp_shapes, dummy_input=input_tuple)
-        # except Exception as e:
-        #     print(e)
+
+        output_after_cle = model(*input_tuple)
+
+        print("\n ", output_before_cle, output_after_cle)
+
+        self.assertTrue(torch.allclose(output_before_cle, output_after_cle, rtol=1.e-2))

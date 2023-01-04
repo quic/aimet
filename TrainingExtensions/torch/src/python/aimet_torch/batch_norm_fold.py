@@ -370,7 +370,7 @@ def find_all_batch_norms_to_fold(model, input_shapes, dummy_input: Union[torch.T
     means bn will be forward-folded into layer and (layer, bn) means bn will be backward-folded into layer
     :param model: Model to search
     :param input_shapes: Input shapes to use for the model (can be one or multiple inputs)
-    :param dummy_input: A dummy input to the model. Can be a Tensor or a list of Tensors
+    :param dummy_input: A dummy input to the model. Can be a Tensor or a Tuple of Tensors
     :return: List of pairs of bn and layers to fold bn into
     """
     device = utils.get_device(model)
