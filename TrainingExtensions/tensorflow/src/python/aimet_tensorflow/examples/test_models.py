@@ -219,6 +219,19 @@ def keras_functional_conv_net():
     return model
 
 
+def keras_sequential_conv_net():
+    """ Function for returning basic keras sequential conv net """
+    model = tf.keras.Sequential([
+        tf.keras.layers.Input(shape=(28, 28, 3)),
+        tf.keras.layers.Conv2D(4, kernel_size=3, activation=None),
+        tf.keras.layers.BatchNormalization(),
+        tf.keras.layers.Activation("relu"),
+        tf.keras.layers.AvgPool2D(),
+        tf.keras.layers.Dense(10)
+    ])
+    return model
+
+
 def tf_slim_basic_model(inp):
     """ Function for returning basic tf slim model """
     is_training = tf.compat.v1.placeholder_with_default(tf.constant(True), shape=(), name='is_training')
