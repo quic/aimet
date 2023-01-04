@@ -835,10 +835,13 @@ def equalize_model(model: torch.nn.Module, input_shapes: Union[Tuple, List[Tuple
 
     :param model: Model to equalize
     :param input_shapes: Shape of the input (can be a tuple or a list of tuples if multiple inputs)
-    :param dummy_input: A dummy input to the model. Can be a Tensor or a list of Tensors
+    :param dummy_input: A dummy input to the model. Can be a Tensor or a Tuple of Tensors
     :return: None
     """
     if dummy_input is None:
+        # The use of input_shapes will be removed in a future release. It is maintained now for backward compatibility.
+        # Note, create_rand_tensors_given_shapes() creates all FP32 tensors where as some multi-input models might
+        # additionally use Integer Tensors.
         dummy_input = create_rand_tensors_given_shapes(input_shapes, torch.device('cpu'))
     if isinstance(dummy_input, (list, tuple)):
         input_shapes = [i.shape for i in dummy_input]

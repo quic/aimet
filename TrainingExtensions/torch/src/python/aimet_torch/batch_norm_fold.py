@@ -393,7 +393,7 @@ def _find_all_batch_norms_to_fold(
     :param model: Model to search
     :param input_shapes: Input shapes to use for the model (can be one or multiple inputs)
     :param connected_graph: Connected graph associated with the model.
-    :param dummy_input: A dummy input to the model. Can be a Tensor or a list of Tensors
+    :param dummy_input: A dummy input to the model. Can be a Tensor or a Tuple of Tensors
     :return: A list of (layer, bn) pairs and a list of (bn, layer) pairs,
              where `bn` can be folded into to `layer`.
     """
@@ -434,11 +434,11 @@ def fold_all_batch_norms_to_weight(
 
     :param model: Model
     :param input_shapes: Input shapes for the model (can be one or multiple inputs)
-    :param dummy_input: A dummy input to the model. Can be a Tensor or a list of Tensors
+    :param dummy_input: A dummy input to the model. Can be a Tensor or a Tuple of Tensors
     :return: A list of pairs of layers [(Conv/Linear, BN layer that got folded)]
     """
     if isinstance(model, torch.nn.DataParallel):
-        return fold_all_batch_norms_to_weight(model.module, input_shapes)
+        return fold_all_batch_norms_to_weight(model.module, input_shapes, dummy_input)
     device = utils.get_device(model)
     if dummy_input is None:
         inp_tensor_list = utils.create_rand_tensors_given_shapes(input_shapes, device)

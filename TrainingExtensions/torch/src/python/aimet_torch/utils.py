@@ -551,12 +551,12 @@ def create_rand_tensors_given_shapes(input_shape: Union[Tuple, List[Tuple]], dev
 
 
 def get_ordered_lists_of_conv_fc(model: torch.nn.Module, input_shapes: Tuple,
-                                 dummy_input: Union[torch.Tensor, List[torch.Tensor]] = None) -> List:
+                                 dummy_input: Union[torch.Tensor, Tuple] = None) -> List:
     """
     Finds order of nodes in graph
     :param model: model
     :param input_shapes: input shape to model
-    :param dummy_input: A dummy input to the model. Can be a Tensor or a list of Tensors
+    :param dummy_input: A dummy input to the model. Can be a Tensor or a Tuple of Tensors
     :return: List of names in graph in order
     """
 
