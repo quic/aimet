@@ -52,7 +52,7 @@ class TestCLS:
         ordered_layer_groups_names = [op.dotted_name for op in ordered_layer_groups]
         assert ordered_layer_groups_names == ['Conv_3', 'Conv_5']
 
-    def test_graph_search_utils_depthwise_model(self):
+    def test_find_cls_sets_depthwise_model(self):
         model = test_models.depthwise_conv_model()
 
         connected_graph = ConnectedGraph(model)
@@ -67,4 +67,21 @@ class TestCLS:
         for cls_set in cls_sets:
             cls_sets_name = tuple([op.dotted_name for op in cls_set])
             cls_sets_names.append(cls_sets_name)
-        assert cls_sets_names == [('Conv_0', 'Conv_2'), ('Conv_2', 'Conv_4', 'Conv_6'), ('Conv_6', 'Conv_8', 'Conv_10'), ('Conv_10', 'Conv_12', 'Conv_14'), ('Conv_14', 'Conv_16', 'Conv_18'), ('Conv_18', 'Conv_20', 'Conv_22'), ('Conv_22', 'Conv_24', 'Conv_26'), ('Conv_26', 'Conv_28', 'Conv_30')]
+        assert cls_sets_names == [('Conv_0', 'Conv_2', 'Conv_4'), ('Conv_4', 'Conv_6', 'Conv_8'), ('Conv_8', 'Conv_10', 'Conv_12'), ('Conv_12', 'Conv_14', 'Conv_16'), ('Conv_16', 'Conv_18', 'Conv_20'), ('Conv_20', 'Conv_22', 'Conv_24'), ('Conv_24', 'Conv_26', 'Conv_28'), ('Conv_28', 'Conv_30', 'Conv_32')]
+
+    def test_find_cls_sets_resnet_model(self):
+        model = test_models.single_residual_model()
+
+        connected_graph = ConnectedGraph(model)
+        ordered_module_list = get_ordered_list_of_conv_modules(connected_graph.starting_ops)
+        graph_search_utils = GraphSearchUtils(connected_graph, ordered_module_list, cls_supported_layer_types,
+                                              cls_supported_activation_types)
+
+        ordered_layer_groups = graph_search_utils.find_layer_groups_to_scale()[0]
+        # Find cls sets from the layer groups
+        cls_sets = graph_search_utils.convert_layer_group_to_cls_sets(ordered_layer_groups)
+        cls_sets_names = []
+        for cls_set in cls_sets:
+            cls_sets_name = tuple([op.dotted_name for op in cls_set])
+            cls_sets_names.append(cls_sets_name)
+        assert cls_sets_names == [('Conv_3', 'Conv_5')]

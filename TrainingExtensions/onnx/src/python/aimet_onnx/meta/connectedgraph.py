@@ -130,7 +130,7 @@ class ConnectedGraph(AimetCommonConnectedGraph):
         op.model_module = ONNXModelModule(node)
 
         if op.type == 'Conv':
-            op.groups = 1
+            op.groups = get_op_groups(node)
 
         return op
 
@@ -423,3 +423,10 @@ class ConnectedGraph(AimetCommonConnectedGraph):
         for op in self._ops.values():
             handler = switcher.get(op.type, handle_default)
             handler(op)
+
+
+def get_op_groups(node: onnx_pb.NodeProto):
+    """Gets group information for Conv type node"""
+    for attribute in node.attribute:
+        if attribute.name == 'group':
+            return attribute.i

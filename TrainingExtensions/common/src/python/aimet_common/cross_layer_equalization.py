@@ -166,14 +166,14 @@ class GraphSearchUtils:
             :param layer: layer to check
             :return: Tuple of ClsLayerType and the layer
             """
+            weight_param_shape = [param for param, param_type in layer.parameters.values() if param_type == 'weight'][
+                0].shape
+
             if layer.groups == 1:
                 layer_type = ClsLayerType.Conv
-                # Check if it is a depthwise layer (the last two dimensions of weight param will be equal to groups
-                weight_param_shape = [param for param, param_type in layer.parameters.values() if param_type == 'weight'][
-                    0].shape
-                if layer.groups == weight_param_shape[-1] and weight_param_shape[-1] == weight_param_shape[-2]:
-                    # depthwiseConv layer with depth multiplier = 1
-                    layer_type = ClsLayerType.DepthwiseConv
+            elif layer.groups == weight_param_shape[0] and weight_param_shape[0] == weight_param_shape[1] * layer.groups:
+                # depthwiseConv layer with depth multiplier = 1
+                layer_type = ClsLayerType.DepthwiseConv
             else:
                 layer_type = ClsLayerType.Unsupported
 
