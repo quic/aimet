@@ -65,6 +65,7 @@ add_custom_target(AcceptanceTests.TfNonEager
       ${Python3_EXECUTABLE} -m pytest -s ${CMAKE_CURRENT_SOURCE_DIR}/non_eager -m ${MARKER_FLAG} --junitxml=${CMAKE_CURRENT_BINARY_DIR}/py_test_non_eager_output.xml)
 
 add_dependencies(AcceptanceTests.TfNonEager AcceptanceTests.TensorflowDependencies)
+
 if (NOT TF_VERSION MATCHES "^1.15")
    add_custom_target(AcceptanceTests.TfEager
       VERBATIM COMMAND ${CMAKE_COMMAND} -E env

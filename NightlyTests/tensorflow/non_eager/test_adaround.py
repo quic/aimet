@@ -98,7 +98,7 @@ class AdaroundAcceptanceTests(unittest.TestCase):
         else:
             output_op_names = ['act_softmax/Softmax']
 
-        adarounded_session = Adaround.apply_adaround(session, starting_op_names, output_op_names, params, path='../../../../aimet-pro/NightlyTests/tensorflow/',
+        adarounded_session = Adaround.apply_adaround(session, starting_op_names, output_op_names, params, path='./',
 
                                                      filename_prefix='mobilenet', default_param_bw=4,
                                                      default_quant_scheme=QuantScheme.post_training_tf_enhanced)
@@ -157,7 +157,7 @@ class AdaroundAcceptanceTests(unittest.TestCase):
         output_bw = 8
         quant_scheme = QuantScheme.post_training_tf_enhanced
 
-        adarounded_session = Adaround.apply_adaround(session, starting_op_names, output_op_names, params, path='../../../../aimet-pro/NightlyTests/tensorflow/',
+        adarounded_session = Adaround.apply_adaround(session, starting_op_names, output_op_names, params, path='./',
                                                      filename_prefix='dummy', default_param_bw=param_bw,
                                                      default_quant_scheme=quant_scheme, default_config_file=None)
 
