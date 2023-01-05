@@ -42,6 +42,7 @@ from dataclasses import dataclass
 import itertools
 from unittest.mock import patch, MagicMock
 import os
+from aimet_torch.qc_quantize_op import StaticGridQuantWrapper
 import pytest
 import shutil
 from typing import Callable
@@ -147,7 +148,8 @@ def assert_applied_techniques(
         assert encoding_path.endswith("adaround.encodings")
 
 
-FP32_ACC = 80.0
+FP32_ACC = .8
+W32_ACC = FP32_ACC # Assume W32 accuracy is equal to FP32 accuracy
 
 
 @contextlib.contextmanager
@@ -173,14 +175,19 @@ def patch_ptq_techniques(bn_folded_acc, cle_acc, adaround_acc):
             pass
 
     def mock_eval_callback(model, _):
-        if model.applied_adaround:
-            return adaround_acc
-        if model.applied_cle:
-            return cle_acc
-        if model.applied_bn_folding:
-            return bn_folded_acc
+        if not isinstance(model._conv_0, StaticGridQuantWrapper):
+            # Not quantized: return fp32 accuracy
+            return FP32_ACC
+        if model._conv_0.param_quantizers["weight"].bitwidth == 32:
+            # W32 evaluation for early exit. Return W32 accuracy
+            return W32_ACC
 
-        return FP32_ACC
+        acc = bn_folded_acc
+        if model.applied_cle:
+            acc = cle_acc
+        if model.applied_adaround:
+            acc = adaround_acc
+        return acc
 
     @dataclass
     class Mocks:
@@ -227,9 +234,9 @@ class TestAutoQuant:
 
     @pytest.mark.parametrize(
         "bn_folded_acc, cle_acc, adaround_acc",
-        itertools.permutations([50., 60., 70.])
+        itertools.permutations([.5, .6, .7])
     )
-    @pytest.mark.parametrize("allowed_accuracy_drop", [5., 15.])
+    @pytest.mark.parametrize("allowed_accuracy_drop", [.05, .15])
     def test_auto_quant_cpu(
             self, cpu_model, dummy_input, unlabeled_data_loader,
             allowed_accuracy_drop, bn_folded_acc, cle_acc, adaround_acc,
@@ -241,9 +248,9 @@ class TestAutoQuant:
 
     @pytest.mark.parametrize(
         "bn_folded_acc, cle_acc, adaround_acc",
-        itertools.permutations([50., 60., 70.])
+        itertools.permutations([.5, .6, .7])
     )
-    @pytest.mark.parametrize("allowed_accuracy_drop", [5., 15.])
+    @pytest.mark.parametrize("allowed_accuracy_drop", [.05, .15])
     @pytest.mark.cuda
     def test_auto_quant_gpu(
             self, gpu_model, dummy_input, unlabeled_data_loader,
@@ -320,11 +327,37 @@ class TestAutoQuant:
         with pytest.raises(ValueError):
             auto_quant.apply(Model().cuda(), unlabeled_data_loader)
 
+    def test_auto_quant_early_exit(self, cpu_model, dummy_input, unlabeled_data_loader):
+        global W32_ACC
+        allowed_accuracy_drop = 0.1
+        _ORIGINAL_W32_ACC = W32_ACC
+        try:
+            W32_ACC = FP32_ACC - (allowed_accuracy_drop * 2)
+
+            with create_tmp_directory() as results_dir:
+                with patch_ptq_techniques(
+                    bn_folded_acc=0, cle_acc=0, adaround_acc=0
+                ) as mocks:
+                    auto_quant = AutoQuant(
+                        allowed_accuracy_drop=allowed_accuracy_drop,
+                        unlabeled_dataset_iterable=unlabeled_data_loader,
+                        eval_callback=mocks.eval_callback,
+                    )
+                    output_model, acc, encoding_path =\
+                        auto_quant.apply(cpu_model,
+                                         dummy_input_on_cpu=dummy_input.cpu(),
+                                         results_dir=results_dir)
+            assert output_model is None
+            assert acc is None
+            assert encoding_path is None
+        finally:
+            W32_ACC = _ORIGINAL_W32_ACC
+
     def test_auto_quant_caching(
         self, cpu_model, dummy_input, unlabeled_data_loader,
     ):
         allowed_accuracy_drop = 0.0
-        bn_folded_acc, cle_acc, adaround_acc = 40., 50., 60.
+        bn_folded_acc, cle_acc, adaround_acc = .4, .5, .6
         with patch_ptq_techniques(
             bn_folded_acc, cle_acc, adaround_acc
         ) as mocks:

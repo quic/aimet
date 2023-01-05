@@ -473,13 +473,14 @@ class _AutoQuantV2:
                                          eval_manager, results_dir)
 
                 acc = ret["accuracy"]
-                _logger.info("Best eval score: %f", acc)
+                if acc is not None:
+                    _logger.info("Best eval score: %f", acc)
 
-                if acc < target_acc:
-                    _logger.info(
-                        "AutoQuant is unable to match the target accuracy. "
-                        "Consider Quantization Aware Training."
-                    )
+                    if acc < target_acc:
+                        _logger.info(
+                            "AutoQuant is unable to match the target accuracy. "
+                            "Consider Quantization Aware Training."
+                        )
 
                 eval_manager.export_diagnostics()
 
@@ -504,17 +505,25 @@ class _AutoQuantV2:
         :param results_dir: Directory to save the results.
         :return: The best ptq result as a dictionary.
         """
-        with eval_manager.analysis_session("Weight Quantization Sensitivity") as sess:
-            acc = sess.eval(fp32_model, default_output_bw=32)
-            sess.diagnostics.add(
-                f"Weight-quantized eval score (W{self.default_param_bw}A32): {acc:f}"
-            )
+        with eval_manager.analysis_session(f"W32A{self.default_output_bw} Evaluation") as sess:
+            w32_eval_score = sess.eval(model=fp32_model, default_param_bw=32)
 
-        with eval_manager.analysis_session("Activation Quantization Sensitivity") as sess:
-            acc = sess.eval(fp32_model, default_param_bw=32)
-            sess.diagnostics.add(
-                f"Activation-quantized eval score (W32A{self.default_output_bw}): {acc:f}"
-            )
+            # Early exit
+            if w32_eval_score < target_acc:
+                _logger.info(
+                    f"W32A{self.default_output_bw} eval score ({w32_eval_score}) is lower "\
+                    f"than the target eval score ({target_acc}). This means it is unlikely that "\
+                    "the target eval score can be met using PTQ techniques. "\
+                    "Please consider finetuning the model using range learning."
+                )
+
+                # Since AutoQuant pipeline exited early, all the return values are set to None
+                return {
+                    "model": None,
+                    "accuracy": None,
+                    "encoding_path": None,
+                    "applied_techniques": None,
+                }
 
         # Batchnorm Folding
         with eval_manager.ptq_session("Batchnorm Folding") as sess:
@@ -771,7 +780,7 @@ class _PtqSession(_EvalSession):
     def ptq_result(self) -> PtqResult:
         """Getter of self._ptq_result."""
         if self._ptq_result is None:
-            raise RuntimeError
+            raise RuntimeError("Attribute `_ptq_result` is not set.")
         return self._ptq_result
 
     def set_ptq_result(
@@ -867,11 +876,8 @@ class _PtqSession(_EvalSession):
         if exc_val is not None:
             return
 
-        if self._ptq_result is None:
-            raise RuntimeError
-
         _logger.info("Session finished: %s. (eval score: %f)",
-                     self._title, self._ptq_result.accuracy)
+                     self._title, self.ptq_result.accuracy)
 
 
 @contextlib.contextmanager
