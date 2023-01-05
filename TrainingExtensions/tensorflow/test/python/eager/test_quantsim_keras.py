@@ -1,7 +1,7 @@
 # =============================================================================
 #  @@-COPYRIGHT-START-@@
 #
-#  Copyright (c) 2022, Qualcomm Innovation Center, Inc. All rights reserved.
+#  Copyright (c) 2022-2023, Qualcomm Innovation Center, Inc. All rights reserved.
 #
 #  Redistribution and use in source and binary forms, with or without
 #  modification, are permitted provided that the following conditions are met:
@@ -36,20 +36,20 @@
 
 import json
 import os
-import pytest
-
-from aimet_tensorflow.keras.cross_layer_equalization import equalize_model
-
-from packaging import version
-import numpy as np
-import tensorflow as tf
-from tensorflow import keras
+from typing import List
 
 import aimet_common.libpymo as libpymo
-from aimet_common.defs import QuantScheme
-from aimet_tensorflow.keras.quantsim import QuantizationSimModel
-from aimet_tensorflow.keras.quant_sim.qc_mha_wrapper import QcQuantizableMultiHeadAttention
+import numpy as np
+import pytest
+import tensorflow as tf
+from aimet_common.libpymo import TfEncoding
+from packaging import version
+from tensorflow import keras
 
+from aimet_common.defs import QuantScheme
+from aimet_tensorflow.keras.cross_layer_equalization import equalize_model
+from aimet_tensorflow.keras.quant_sim.qc_mha_wrapper import QcQuantizableMultiHeadAttention
+from aimet_tensorflow.keras.quantsim import QuantizationSimModel
 from test_models_keras import tiny_conv_net
 
 
@@ -283,6 +283,60 @@ def test_quantsim_handling_folded_bn_layer():
                 assert q.is_enabled()
             for q in layer.param_quantizers:
                 assert q.is_enabled()
+
+    if os.path.exists("./data/quantsim_config.json"):
+        os.remove("./data/quantsim_config.json")
+
+
+def test_quantsim_with_specific_op_type_per_channel_quantization() -> None:
+    """
+    Test whether TfEncoding is set correctly when specific op type has per_channel_quantization property
+    """
+    quantsim_config = {
+        "defaults": {
+            "ops": {"is_output_quantized": "True"},
+            "params": {
+                "is_quantized": "True",
+                "is_symmetric": "True"
+            },
+            "strict_symmetric": "False",
+            "unsigned_symmetric": "True",
+            "per_channel_quantization": "True"
+        },
+        "params": {
+            "bias": {"is_quantized": "False"}
+        },
+        "op_type": {
+            "Gemm": {"per_channel_quantization": "False"}
+        },
+        "supergroups": [],
+        "model_input": {"is_input_quantized": "True"},
+        "model_output": {}
+    }
+    with open("./data/quantsim_config.json", "w") as f:
+        json.dump(quantsim_config, f)
+
+    model = tiny_conv_net()
+    cle_applied_model = equalize_model(model)
+    qsim = QuantizationSimModel(cle_applied_model, quant_scheme='tf',
+                                config_file="./data/quantsim_config.json")
+
+    dummy_input = np.random.randn(4, 32, 32, 3)
+    qsim.compute_encodings(lambda m, _: m(dummy_input), None)
+
+    layers = qsim.model.layers
+    conv1, conv2, conv3, dense = layers[1], layers[5], layers[8], layers[12]
+
+    for conv_layer in [conv1, conv2, conv3]:
+        # Conv type will follow default per_channel_quantization=True
+        for q in conv_layer.param_quantizers:
+            if q.is_enabled():
+                assert isinstance(q.encoding, List)
+
+    for q in dense.param_quantizers:
+        # Gemm type will follow op_type per_channel_quantization=False
+        if q.is_enabled():
+            assert isinstance(q.encoding, TfEncoding)
 
     if os.path.exists("./data/quantsim_config.json"):
         os.remove("./data/quantsim_config.json")

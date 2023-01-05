@@ -1,7 +1,7 @@
 # =============================================================================
 #  @@-COPYRIGHT-START-@@
 #
-#  Copyright (c) 2022, Qualcomm Innovation Center, Inc. All rights reserved.
+#  Copyright (c) 2022-2023, Qualcomm Innovation Center, Inc. All rights reserved.
 #
 #  Redistribution and use in source and binary forms, with or without
 #  modification, are permitted provided that the following conditions are met:
@@ -35,11 +35,14 @@
 # =============================================================================
 import json
 import os
+
 import pytest
+import tensorflow as tf
 from tensorflow.keras.layers import InputLayer
 
 from aimet_common.defs import QuantScheme, QuantizationDataType
 from aimet_tensorflow.keras.connectedgraph import ConnectedGraph
+from aimet_tensorflow.keras.quant_sim.tensor_quantizer import ParamPerChannelQuantizer, ParamPerTensorQuantizer
 from aimet_tensorflow.keras.quantsim_config.quantsim_config import QuantSimConfigurator, INPUT_QUANTIZERS, \
     OUTPUT_QUANTIZERS, PARAM_QUANTIZERS
 from test_models_keras import single_residual, concat_functional, tiny_conv_net
@@ -571,6 +574,52 @@ class TestQuantSimConfig:
             for q in layer_to_quantizers_dict[layer][PARAM_QUANTIZERS]:
                 assert not q.is_enabled()
                 assert not q.is_symmetric
+
+        if os.path.exists("./data/quantsim_config.json"):
+            os.remove("./data/quantsim_config.json")
+
+    def test_parse_op_type_per_channel_quantization(self) -> None:
+        """
+        Test when specific op type has per_channel_quantization property in json config file
+        """
+        quantsim_config = {
+            "defaults": {
+                "ops": { "is_output_quantized": "True" },
+                "params": {
+                    "is_quantized": "True",
+                    "is_symmetric": "True"
+                },
+                "strict_symmetric": "False",
+                "unsigned_symmetric": "True",
+                "per_channel_quantization": "True"
+            },
+            "params": {
+                "bias": { "is_quantized": "False" }
+            },
+            "op_type": {
+                "Gemm": { "per_channel_quantization": "False" }
+            },
+            "supergroups": [],
+            "model_input": { "is_input_quantized": "True" },
+            "model_output": {}
+        }
+        with open("./data/quantsim_config.json", "w") as f:
+            json.dump(quantsim_config, f)
+
+        model = tiny_conv_net()
+        connected_graph = ConnectedGraph(model)
+        quant_sim_configurator = QuantSimConfigurator(connected_graph, QuantScheme.post_training_tf_enhanced,
+                                                      "nearest", 8, 8, QuantizationDataType.int, "./data/quantsim_config.json")
+
+        layer_to_quantizers_dict = quant_sim_configurator._layer_to_quantizers_dict
+        for layer, quantizers in layer_to_quantizers_dict.items():
+            if isinstance(layer, tf.keras.layers.Conv2D):
+                for q in layer_to_quantizers_dict[layer][PARAM_QUANTIZERS]:
+                    assert isinstance(q, ParamPerChannelQuantizer)
+
+            if isinstance(layer, tf.keras.layers.Dense):
+                for q in layer_to_quantizers_dict[layer][PARAM_QUANTIZERS]:
+                    assert isinstance(q, ParamPerTensorQuantizer)
 
         if os.path.exists("./data/quantsim_config.json"):
             os.remove("./data/quantsim_config.json")

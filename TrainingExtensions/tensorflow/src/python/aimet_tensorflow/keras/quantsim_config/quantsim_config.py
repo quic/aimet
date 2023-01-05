@@ -1,9 +1,9 @@
-# /usr/bin/env python3.6
+# /usr/bin/env python3.8
 # -*- mode: python -*-
 # =============================================================================
 #  @@-COPYRIGHT-START-@@
 #
-#  Copyright (c) 2022, Qualcomm Innovation Center, Inc. All rights reserved.
+#  Copyright (c) 2022-2023, Qualcomm Innovation Center, Inc. All rights reserved.
 #
 #  Redistribution and use in source and binary forms, with or without
 #  modification, are permitted provided that the following conditions are met:
@@ -398,9 +398,12 @@ class QuantSimConfigurator(AimetCommonQuantSimConfigurator):
                         self._update_layer_param_config(layer, config_val)
                     else:
                         self._layer_to_config_dict[layer][config_key][SETTING] = config_val
+                        # NOTE: Skip storing affected quantizers when config key is PER_CHANNEL_QUANTIZATION
+                        if config_key == ConfigDictKeys.PER_CHANNEL_QUANTIZATION:
+                            continue
+
                         self._layer_to_config_dict[layer][config_key][AFFECTED_QUANTIZERS] = \
-                            self._get_affected_quantizers_by_config(
-                                layer, config_key, config_val)
+                            self._get_affected_quantizers_by_config(layer, config_key, config_val)
 
     def _update_layer_param_config(self, layer: layers.Layer, param_configs: ParamType):
         """
@@ -510,18 +513,18 @@ class QuantSimConfigurator(AimetCommonQuantSimConfigurator):
 
             # Configs for Params
             param_config_dict = config_dict[ConfigDictKeys.PARAMS]
-            param_is_symmetric = param_config_dict[ConfigDictKeys.IS_SYMMETRIC].get(
-                SETTING, False)
+            param_is_symmetric = param_config_dict[ConfigDictKeys.IS_SYMMETRIC].get(SETTING, False)
+            param_quantizer_enabled = param_config_dict[ConfigDictKeys.IS_QUANTIZED].get(SETTING, False)
             param_quant_settings = QuantizerSettings(default_param_bw, default_data_type, rounding_mode,
                                                      quant_scheme, param_is_symmetric,
                                                      use_unsigned_symmetric, use_strict_symmetric,
-                                                     enabled=param_config_dict[ConfigDictKeys.IS_QUANTIZED].get(
-                                                         SETTING, False))
+                                                     enabled=param_quantizer_enabled)
 
             # Initialize Param Quantizers
+            # NOTE: Use op type specific PCQ flag if exists. If not, use default PCQ flag
+            per_channel_quantization_flag = config_dict[ConfigDictKeys.PER_CHANNEL_QUANTIZATION].get(SETTING, self.per_channel_quantization_flag)
             self._layer_to_quantizers_dict[layer][PARAM_QUANTIZERS] = \
-                _initialize_param_quantizers(layer, param_config_dict, param_quant_settings,
-                                             self.per_channel_quantization_flag)
+                _initialize_param_quantizers(layer, param_config_dict, param_quant_settings, per_channel_quantization_flag)
 
     def _check_existence_of_conflict_case(self, layer: layers.Layer, config_key: str, current_setting: bool):
         """
