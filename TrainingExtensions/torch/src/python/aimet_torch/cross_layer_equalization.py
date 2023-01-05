@@ -828,17 +828,22 @@ class HighBiasFold:
         cls_pair_info.layer2.bias.data = cls_pair_info.layer2.bias.data.type(torch.FloatTensor)
 
 
-def equalize_model(model: torch.nn.Module, input_shapes: Union[Tuple, List[Tuple]], dummy_input: Union[torch.Tensor, List[torch.Tensor]] = None):
+def equalize_model(model: torch.nn.Module, input_shapes: Union[Tuple, List[Tuple]],
+                   dummy_input: Union[torch.Tensor, Tuple] = None):
     """
     High-level API to perform Cross-Layer Equalization (CLE) on the given model. The model is equalized in place.
 
     :param model: Model to equalize
     :param input_shapes: Shape of the input (can be a tuple or a list of tuples if multiple inputs)
+    :param dummy_input: A dummy input to the model. Can be a Tensor or a Tuple of Tensors
     :return: None
     """
     if dummy_input is None:
+        # The use of input_shapes will be removed in a future release. It is maintained now for backward compatibility.
+        # Note, create_rand_tensors_given_shapes() creates all FP32 tensors where as some multi-input models might
+        # additionally use Integer Tensors.
         dummy_input = create_rand_tensors_given_shapes(input_shapes, torch.device('cpu'))
-    if isinstance(dummy_input, List):
+    if isinstance(dummy_input, (list, tuple)):
         input_shapes = [i.shape for i in dummy_input]
     else:
         input_shapes = dummy_input.shape
@@ -849,7 +854,7 @@ def equalize_model(model: torch.nn.Module, input_shapes: Union[Tuple, List[Tuple
         device = get_device(model)
         model.cpu()
         # fold batchnorm layers
-        folded_pairs = fold_all_batch_norms(model, input_shapes)
+        folded_pairs = fold_all_batch_norms(model, input_shapes, dummy_input)
         equalize_bn_folded_model(model, input_shapes, folded_pairs, dummy_input=dummy_input)
 
         model.to(device=device)
@@ -857,7 +862,7 @@ def equalize_model(model: torch.nn.Module, input_shapes: Union[Tuple, List[Tuple
 def equalize_bn_folded_model(model: torch.nn.Module,
                              input_shapes: Union[Tuple, List[Tuple]],
                              folded_pairs: List[Tuple[torch.nn.Module, torch.nn.BatchNorm2d]],
-                             dummy_input: Union[torch.Tensor, List[torch.Tensor]] = None
+                             dummy_input: Union[torch.Tensor, Tuple] = None
                              ):
     """
     Perform Cross-Layer Scaling (CLS) and High Bias Folding (HBF) on a batchnorm-folded model.

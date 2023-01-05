@@ -364,18 +364,19 @@ def _fold_given_batch_norms(model,
         _delete_bn_from_model(model, bn_modules)
 
 
-def find_all_batch_norms_to_fold(model, input_shapes):
+def find_all_batch_norms_to_fold(model, input_shapes, dummy_input: Union[torch.Tensor, Tuple] = None):
     """
     Find all possible batch norm layers that can be folded. And returns a list of pairs such that (bn, layer)
     means bn will be forward-folded into layer and (layer, bn) means bn will be backward-folded into layer
     :param model: Model to search
     :param input_shapes: Input shapes to use for the model (can be one or multiple inputs)
+    :param dummy_input: A dummy input to the model. Can be a Tensor or a Tuple of Tensors
     :return: List of pairs of bn and layers to fold bn into
     """
     device = utils.get_device(model)
     inp_tensor_list = utils.create_rand_tensors_given_shapes(input_shapes, device)
     connected_graph = ConnectedGraph(model, inp_tensor_list)
-    conv_bn_pairs, bn_conv_pairs = _find_all_batch_norms_to_fold(model, input_shapes, connected_graph)
+    conv_bn_pairs, bn_conv_pairs = _find_all_batch_norms_to_fold(model, input_shapes, connected_graph, dummy_input)
     return conv_bn_pairs + bn_conv_pairs
 
 
@@ -383,6 +384,7 @@ def _find_all_batch_norms_to_fold(
         model: torch.nn.Module,
         input_shapes: Union[Tuple, List[Tuple]],
         connected_graph: ConnectedGraph,
+        dummy_input: Union[torch.Tensor, Tuple] = None
 ) -> Tuple[List[Tuple[LayerType, BatchNormType]],
            List[Tuple[BatchNormType, LayerType]]]:
     """
@@ -391,6 +393,7 @@ def _find_all_batch_norms_to_fold(
     :param model: Model to search
     :param input_shapes: Input shapes to use for the model (can be one or multiple inputs)
     :param connected_graph: Connected graph associated with the model.
+    :param dummy_input: A dummy input to the model. Can be a Tensor or a Tuple of Tensors
     :return: A list of (layer, bn) pairs and a list of (bn, layer) pairs,
              where `bn` can be folded into to `layer`.
     """
@@ -399,7 +402,7 @@ def _find_all_batch_norms_to_fold(
     # To mark BN's already picked for backward folding
     bn_picked_for_folding = set()
 
-    ordered_conv_fc_nodes = utils.get_ordered_lists_of_conv_fc(model, input_shapes)
+    ordered_conv_fc_nodes = utils.get_ordered_lists_of_conv_fc(model, input_shapes, dummy_input)
 
     conv_bn_pairs = []
     # Backward fold is given priority over Forward fold
@@ -424,21 +427,25 @@ def _find_all_batch_norms_to_fold(
 def fold_all_batch_norms_to_weight(
         model: torch.nn.Module,
         input_shapes: Union[Tuple, List[Tuple]],
+        dummy_input: Union[torch.Tensor, Tuple] = None
 ) -> List[Tuple[LayerType, BatchNormType]]:
     """
     Fold all batch_norm layers in a model into the weight of the corresponding conv layers
 
     :param model: Model
     :param input_shapes: Input shapes for the model (can be one or multiple inputs)
-    :param fold_to_scale: If True, fold BatchNorms to quantization scale parameter.
+    :param dummy_input: A dummy input to the model. Can be a Tensor or a Tuple of Tensors
     :return: A list of pairs of layers [(Conv/Linear, BN layer that got folded)]
     """
     if isinstance(model, torch.nn.DataParallel):
-        return fold_all_batch_norms_to_weight(model.module, input_shapes)
+        return fold_all_batch_norms_to_weight(model.module, input_shapes, dummy_input)
     device = utils.get_device(model)
-    inp_tensor_list = utils.create_rand_tensors_given_shapes(input_shapes, device)
+    if dummy_input is None:
+        inp_tensor_list = utils.create_rand_tensors_given_shapes(input_shapes, device)
+    else:
+        inp_tensor_list = dummy_input
     connected_graph = ConnectedGraph(model, inp_tensor_list)
-    conv_bn_pairs, bn_conv_pairs = _find_all_batch_norms_to_fold(model, input_shapes, connected_graph)
+    conv_bn_pairs, bn_conv_pairs = _find_all_batch_norms_to_fold(model, input_shapes, connected_graph, dummy_input)
 
     _fold_given_batch_norms(model, conv_bn_pairs, bn_conv_pairs)
 
