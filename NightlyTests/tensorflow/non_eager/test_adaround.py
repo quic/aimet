@@ -99,7 +99,6 @@ class AdaroundAcceptanceTests(unittest.TestCase):
             output_op_names = ['act_softmax/Softmax']
 
         adarounded_session = Adaround.apply_adaround(session, starting_op_names, output_op_names, params, path='./',
-
                                                      filename_prefix='mobilenet', default_param_bw=4,
                                                      default_quant_scheme=QuantScheme.post_training_tf_enhanced)
 
