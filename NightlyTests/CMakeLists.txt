@@ -47,7 +47,12 @@ endif (ENABLE_TORCH)
 
 if (ENABLE_TENSORFLOW)
     add_dependencies(AcceptanceTests
-            AcceptanceTests.Tensorflow)
+            AcceptanceTests.TfNonEager)
+
+    if (NOT TF_VERSION MATCHES "^1.15")
+        add_dependencies(AcceptanceTests
+            AcceptanceTests.TfEager)
+    endif ()
 endif (ENABLE_TENSORFLOW)
 
 if (ENABLE_TORCH)
