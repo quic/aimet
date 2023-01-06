@@ -1026,10 +1026,10 @@ class TestQuantSim(unittest.TestCase):
         self.assertTrue(use_strict_symmetric)
 
         use_unsigned_symmetric = p_quantizer.use_unsigned_symmetric
-        self.assertTrue(use_unsigned_symmetric)
-        p_quantizer.use_unsigned_symmetric = False
-        use_unsigned_symmetric = p_quantizer.use_unsigned_symmetric
         self.assertFalse(use_unsigned_symmetric)
+        p_quantizer.use_unsigned_symmetric = True
+        use_unsigned_symmetric = p_quantizer.use_unsigned_symmetric
+        self.assertTrue(use_unsigned_symmetric)
 
         sim.session.close()
         del sim
