@@ -36,6 +36,8 @@
 #  @@-COPYRIGHT-END-@@
 # =============================================================================
 
+# pylint: disable=too-many-lines
+
 """Automatic Post-Training Quantization"""
 import copy
 import contextlib
@@ -55,6 +57,7 @@ from aimet_torch.batch_norm_fold import fold_all_batch_norms
 from aimet_torch.quantsim import QuantizationSimModel
 from aimet_torch.utils import in_eval_mode
 from aimet_torch.onnx_utils import OnnxExportApiArgs
+from aimet_torch.auto_quant_v2 import _AutoQuantV2
 
 from aimet_common.auto_quant import Diagnostics
 from aimet_common.cache import Cache
@@ -73,7 +76,7 @@ cache = Cache()
 NUM_SAMPLES_FOR_PERFORMANCE_EVALUATION = None
 
 
-class AutoQuant:
+class _AutoQuantV1:
     """
     Integrate and apply post-training quantization techniques.
 
@@ -825,7 +828,7 @@ class _PtqSession(_EvalSession):
 
 
 @contextlib.contextmanager
-def spy_auto_quant(auto_quant: AutoQuant):
+def spy_auto_quant(auto_quant: "AutoQuant"):
     """
     Install a spy that collects the handles to the ptq result of
     each stage of AutoQuant.
@@ -872,3 +875,23 @@ def spy_auto_quant(auto_quant: AutoQuant):
         yield spy
     finally:
         setattr(auto_quant, "_auto_quant_main", _auto_quant_main)
+
+
+
+AutoQuant = _AutoQuantV1
+
+
+def enable_auto_quant_v2():
+    """
+    Enable AutoQuantV2
+    """
+    global AutoQuant # pylint: disable=global-statement
+    AutoQuant = _AutoQuantV2
+
+
+def disable_auto_quant_v2():
+    """
+    Disable AutoQuantV2
+    """
+    global AutoQuant # pylint: disable=global-statement
+    AutoQuant = _AutoQuantV1

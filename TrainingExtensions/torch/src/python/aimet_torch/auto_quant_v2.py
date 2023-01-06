@@ -73,7 +73,7 @@ cache = Cache()
 NUM_SAMPLES_FOR_PERFORMANCE_EVALUATION = None
 
 
-class AutoQuant:
+class _AutoQuantV2:
     """
     Integrate and apply post-training quantization techniques.
 
@@ -825,7 +825,7 @@ class _PtqSession(_EvalSession):
 
 
 @contextlib.contextmanager
-def spy_auto_quant(auto_quant: AutoQuant):
+def spy_auto_quant(auto_quant: _AutoQuantV2):
     """
     Install a spy that collects the handles to the ptq result of
     each stage of AutoQuant.
