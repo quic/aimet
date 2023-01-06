@@ -407,7 +407,7 @@ def _find_all_batch_norms_to_fold(
     conv_bn_pairs = []
     # Backward fold is given priority over Forward fold
     for _, module in ordered_conv_fc_nodes:
-        if module in conv_linear_bn_activation_info_dict.keys():
+        if module in conv_linear_bn_activation_info_dict.keys() and _is_valid_bn_fold(module, True):
             bn_info = conv_linear_bn_activation_info_dict[module]
             if bn_info.output_bn and bn_info.output_bn not in bn_picked_for_folding:
                 conv_bn_pairs.append((module, bn_info.output_bn.get_module()))
@@ -415,13 +415,36 @@ def _find_all_batch_norms_to_fold(
 
     bn_conv_pairs = []
     for _, module in ordered_conv_fc_nodes:
-        if module in conv_linear_bn_activation_info_dict.keys():
+        if module in conv_linear_bn_activation_info_dict.keys() and _is_valid_bn_fold(module, False):
             bn_info = conv_linear_bn_activation_info_dict[module]
             if bn_info.input_bn and bn_info.input_bn not in bn_picked_for_folding:
                 bn_conv_pairs.append((bn_info.input_bn.get_module(), module))
                 bn_picked_for_folding.add(bn_info.input_bn)
 
     return conv_bn_pairs, bn_conv_pairs
+
+
+def _is_valid_bn_fold(conv: LayerType, fold_backward: bool) -> bool:
+    """
+    Determine if a given layer can successfully absorb a BatchNorm given the layer type and parameters
+    :param conv: The Conv/Linear layer to fold a BatchNorm into.
+    :param fold_backward: True if BatchNorm comes after Conv/Linear layer
+    :return: True if a BatchNorm layer can be folded without causing output error.
+    """
+    valid = True
+    if not fold_backward:
+        # Cannot fold BN -> Conv with padding. AIMET does not support forward folding to grouped or DW Conv
+        if isinstance(conv, (torch.nn.Conv2d, torch.nn.Conv1d)):
+            valid &= all(item == 0 for item in conv.padding)
+            valid &= conv.groups == 1
+        # AIMET does not support forward folding to ConvTranspose
+        elif isinstance(conv, torch.nn.ConvTranspose2d):
+            valid = False
+    else:
+        # AIMET does not support backwards folding to grouped ConvTranspose
+        if isinstance(conv, torch.nn.ConvTranspose2d):
+            valid &= conv.groups in (1, conv.in_channels)
+    return valid
 
 
 def fold_all_batch_norms_to_weight(
