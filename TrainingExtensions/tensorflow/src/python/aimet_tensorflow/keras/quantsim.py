@@ -177,6 +177,9 @@ class QuantizationSimModel(tf.keras.Model):
                 self._substituted_layer[layer] = wrapped_layer
                 return wrapped_layer
 
+            if isinstance(layer, tf.keras.Sequential):
+                return tf.keras.models.clone_model(layer, clone_function=wrap_layer)
+
             if isinstance(layer, unquantizable_modules) or layer.submodules:
                 return layer
 
@@ -458,6 +461,10 @@ class QuantizationSimModel(tf.keras.Model):
             if isinstance(layer, QcQuantizableMultiHeadAttention):
                 yield from layer.quant_wrappers()
 
+            # For Getting Quantizers from Sequantial Block
+            if isinstance(layer, tf.keras.Sequential):
+                yield from quant_wrappers_for_sequential_block(layer)
+
     def get_quant_wrapper_for_layer_name(self, layer_name: str) -> QcQuantizeWrapper:
         """
         Return qc quant wrapper corresponding to a layer name
@@ -545,3 +552,18 @@ class QuantizationSimModel(tf.keras.Model):
         self.compiled_metrics.update_state(y, predictions)
 
         return {m.name: m.result() for m in self.metrics}
+
+
+def quant_wrappers_for_sequential_block(seq_block: tf.keras.Sequential):
+    """
+        Generator for yielding all quantization wrappers for a Sequantial Block
+    """
+    for layer in seq_block.layers:
+        if isinstance(layer, QcQuantizeWrapper):
+            yield layer
+        if isinstance(layer, QcQuantizableMultiHeadAttention):
+            yield from layer.quant_wrappers()
+
+        # in cases of nested Sequential Block
+        if isinstance(layer, tf.keras.Sequential):
+            yield from quant_wrappers_for_sequential_block(layer)
