@@ -267,11 +267,12 @@ class TestBNReEstimation:
             #dummy_val = np.random.randn(1, 32, 32, 3)
 
             modify_sess_bn_mutable(sess, start_op_names, end_op_names, training_tf_placeholder=False)
+            """
             from aimet_tensorflow.batch_norm_fold import find_all_batch_norms_to_fold
             pairs = find_all_batch_norms_to_fold(sess, start_op_names, end_op_names)
             for conv, bn, _ in pairs:
                 print("bn_name:", bn.op.name, "   ||type:", bn.op.type)
-
+            """
             sim = QuantizationSimModel(sess, start_op_names, end_op_names)
 
             def dummy_forward_pass(sess, args):
@@ -282,8 +283,14 @@ class TestBNReEstimation:
 
             sim.compute_encodings(dummy_forward_pass, None)
 
-            self._reestimate_and_compare_results(sim, sess, bn_re_estimation_dataset_mobiledet, bn_num_batches, 'FeatureExtractor/MobileDetEdgeTPU/Conv/Conv2D',
-                                                 "concat")
+
+            self._reestimate_and_compare_results(sim, sess, bn_re_estimation_dataset_mobiledet, bn_num_batches, 'FeatureExtractor/MobileDetEdgeTPU/Conv/Conv2D', "concat")
+
+            from aimet_tensorflow.batch_norm_fold import fold_all_batch_norms_to_scale
+            fold_all_batch_norms_to_scale(sim, "FeatureExtractor/MobileDetEdgeTPU/Conv/Conv2D", "concat")
+
+            print("==========verify both with mobileDet=================")
+
 
     def _reestimate_and_compare_results(self, sess_sim, sess_fp32, bn_re_restimation_dataset, bn_num_batches, input_op, output_op):
         bn_mean_var_tf_var_list, bn_momentum_tf_var_list, bn_training_tf_var_list = _get_all_tf_bn_vars_list(
