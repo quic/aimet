@@ -439,25 +439,31 @@ def _fold_given_auto_selected_batch_norms_scale(sim: QuantizationSimModel, layer
     :param sim: tf quantized model
     :param layer_pairs: layer_pairs: pair of conv and bn layers
     """
+
     sess = sim.session
     with sess.graph.as_default():
         for pair in layer_pairs:
             batchnorm_tf_op = sess.graph.get_operation_by_name(pair[1].op.name)
+            bn_quantizer_name = batchnorm_tf_op.name + "_quantized"
             conv_linear_tf_op = sess.graph.get_operation_by_name(pair[0].name)
             #  check flag
             is_bias_valid = False
             if not BiasUtils.is_bias_none(conv_linear_tf_op):
                 is_bias_valid = True
             assert batchnorm_tf_op.type in ['FusedBatchNormV3', 'Identity']
-            if batchnorm_tf_op.type == 'Identity':
-                # It is safeguard for Bn type 'Identity'  normal behavior. Bn type'FusedBatchNormV3' does not need since training&momentum are immutable
-                bn_momentum_tf_var_name = sess.graph.get_operation_by_name(batchnorm_tf_op.name.split("/")[0] + "/cond_1").outputs[0].op.inputs[1].name
-                bn_training_tf_var_name = batchnorm_tf_op.inputs[0].op.inputs[0].op.inputs[0].name
-                for v in tf.compat.v1.get_collection(tf.compat.v1.GraphKeys.GLOBAL_VARIABLES):
-                    if v.name == bn_momentum_tf_var_name:
-                        sess.run(tf.compat.v1.assign(v, 1.0))
-                    if v.name == bn_training_tf_var_name:
-                        sess.run(tf.compat.v1.assign(v, tf.compat.v1.constant(False)))
+
+            if batchnorm_tf_op.type == 'FusedBatchNormV3':
+                conv_linear_quantizer_a_name = batchnorm_tf_op.inputs[0].name.split(":")[0]
+
+            else:
+                conv_linear_quantizer_a_name = batchnorm_tf_op.inputs[0].op.inputs[5].name.split(":")[0]
+
+            # Disable activation of conv, Disable quantizers of batchnorms
+            conv_linear_quantizer_a = sim.quantizer_config(conv_linear_quantizer_a_name)
+            conv_linear_quantizer_a.set_op_mode(int(libpymo.TensorQuantizerOpMode.passThrough))
+            bn_quantizer = sim.quantizer_config(bn_quantizer_name)
+            bn_quantizer.set_op_mode(int(libpymo.TensorQuantizerOpMode.passThrough))
+
             bn_params = _get_bn_params(sess, batchnorm_tf_op)
             weight_tensor = _get_weight_tensor_transpose_reshape(sess, conv_linear_tf_op)
             bias_tensor = _get_bias_tensor(sess, conv_linear_tf_op)
@@ -477,8 +483,9 @@ def _fold_given_auto_selected_batch_norms_scale(sim: QuantizationSimModel, layer
                 numpy_weight_reshaped = np.reshape(weight_tensor.data, weight_tensor.shape).transpose((2, 3, 1, 0))
             WeightTensorUtils.update_tensor_for_sim_op(sess, conv_linear_tf_op, numpy_weight_reshaped)
             BiasUtils.update_bias_for_sim_op(sess, conv_linear_tf_op, np.reshape(bias, [weight_tensor.shape[0]]))
-            BNUtils.modify_bn_params_to_make_as_passthrough(sess, batchnorm_tf_op)
             _fold_pair_scale(sim, conv_linear_tf_op, bn_params)
+            BNUtils.modify_bn_params_to_make_as_passthrough(sess, batchnorm_tf_op)
+
 
 
 def _fold_pair_scale(sim: QuantizationSimModel, conv_linear_tf_op: tf.Operation, bn_params: libpymo.BNParams()):
