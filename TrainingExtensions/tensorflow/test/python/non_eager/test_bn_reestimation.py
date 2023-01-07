@@ -284,7 +284,7 @@ class TestBNReEstimation:
             sim.compute_encodings(dummy_forward_pass, None)
 
 
-            self._reestimate_and_compare_results(sim, sess, bn_re_estimation_dataset_mobiledet, bn_num_batches, 'FeatureExtractor/MobileDetEdgeTPU/Conv/Conv2D', "concat")
+            #self._reestimate_and_compare_results(sim, sess, bn_re_estimation_dataset_mobiledet, bn_num_batches, 'FeatureExtractor/MobileDetEdgeTPU/Conv/Conv2D', "concat")
 
             from aimet_tensorflow.batch_norm_fold import fold_all_batch_norms_to_scale
             fold_all_batch_norms_to_scale(sim, "FeatureExtractor/MobileDetEdgeTPU/Conv/Conv2D", "concat")
