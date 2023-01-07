@@ -497,17 +497,18 @@ def _fold_pair_scale(sim: QuantizationSimModel, conv_linear_tf_op: tf.Operation,
     :param bn_params: bn_params
     """
     conv_linear_quantizer_w = sim.quantizer_config(conv_linear_tf_op.name + "/ReadVariableOp_quantized")
-    encodings = conv_linear_quantizer_w.get_encoding()
-    new_encodings = []
-    for old_encoding, c in zip(encodings, np.array(bn_params.gamma) * (1.0 / np.array(bn_params.runningVar))):
-        new_encoding = libpymo.TfEncoding()
-        if c >= 0:
-            new_encoding.max = old_encoding.max * c
-            new_encoding.min = old_encoding.min * c
-        else:
-            new_encoding.max = old_encoding.min * c
-            new_encoding.min = old_encoding.max * c
-        new_encoding.offset = old_encoding.offset
-        new_encoding.bw = old_encoding.bw
-        new_encodings.append(new_encoding)
-    conv_linear_quantizer_w.set_encoding(new_encodings)
+    if conv_linear_quantizer_w:
+        encodings = conv_linear_quantizer_w.get_encoding()
+        new_encodings = []
+        for old_encoding, c in zip(encodings, np.array(bn_params.gamma) * (1.0 / np.array(bn_params.runningVar))):
+            new_encoding = libpymo.TfEncoding()
+            if c >= 0:
+                new_encoding.max = old_encoding.max * c
+                new_encoding.min = old_encoding.min * c
+            else:
+                new_encoding.max = old_encoding.min * c
+                new_encoding.min = old_encoding.max * c
+            new_encoding.offset = old_encoding.offset
+            new_encoding.bw = old_encoding.bw
+            new_encodings.append(new_encoding)
+        conv_linear_quantizer_w.set_encoding(new_encodings)
