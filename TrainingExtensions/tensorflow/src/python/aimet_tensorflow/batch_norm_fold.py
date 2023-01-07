@@ -259,7 +259,7 @@ def _get_bn_params(sess: tf.compat.v1.Session, bn: tf.Operation) -> libpymo.BNPa
         bn_params.runningVar = sigma
     return bn_params
 
-
+# pylint: disable=too-many-locals
 def _fold_given_auto_selected_batch_norms(sess: tf.compat.v1.Session, layer_pairs: List[PairType]) -> tf.compat.v1.Session:
     """
     Fold a given set of batch_norm layers into conv layers
@@ -432,6 +432,7 @@ def fold_all_batch_norms_to_scale(sim: QuantizationSimModel, input_op_names: Uni
     new_sess = graph_saver.load_model_from_meta(meta_path=os.path.join("/tmp/", 'sim_model.meta'))
     bn_conv_linear_pairs = find_all_batch_norms_to_fold(new_sess, input_op_names, output_op_names)
     _fold_given_auto_selected_batch_norms_scale(sim, bn_conv_linear_pairs)
+
 
 def _fold_given_auto_selected_batch_norms_scale(sim: QuantizationSimModel, layer_pairs: List[PairType]):
     """
