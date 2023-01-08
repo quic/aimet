@@ -56,10 +56,6 @@ from aimet_tensorflow.bn_reestimation import reestimate_bn_stats, _get_all_tf_bn
 from aimet_tensorflow.batch_norm_fold import fold_all_batch_norms_to_scale
 from aimet_tensorflow.common.graph_eval import initialize_uninitialized_vars
 from aimet_tensorflow.utils.op.bn_mutable import modify_sess_bn_mutable
-from aimet_tensorflow.utils.op.fusedbatchnorm import BNUtils
-
-
-
 tf.compat.v1.logging.set_verbosity(tf.compat.v1.logging.WARN)
 logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Test)
 AimetLogger.set_level_for_all_areas(logging.DEBUG)
@@ -131,147 +127,6 @@ def bn_re_estimation_dataset(bn_num_batches, batch_size):
 
 class TestBNReEstimation:
 
-    def test_modle_rewriter_ptq_reestimation_fold_mobiledet(self, bn_re_estimation_dataset, bn_num_batches):
-
-        """
-        tf.compat.v1.reset_default_graph()
-        model = tf.keras.applications.mobilenet_v2.MobileNetV2(weights=None, input_shape=(32, 32, 3))
-        graph = model.inputs[0].graph
-        sess = tf.compat.v1.Session(graph=graph)
-        initialize_uninitialized_vars(sess)
-
-        # model rewriter
-        start_op_names = ["input_1"]
-        end_op_names = ["predictions/Softmax"]
-        modify_sess_bn_mutable(sess, start_op_names, end_op_names, training_tf_placeholder=False)
-        """
-
-
-
-        tf.compat.v1.reset_default_graph()
-        saver = tf.compat.v1.train.import_meta_graph(
-            "/local/mnt/workspace2/haijunz/SW/checkpoint4AIMET_xuebing/AIMET/model.ckpt.meta")
-        with tf.compat.v1.Session() as sess:
-            saver.restore(sess, tf.compat.v1.train.latest_checkpoint(
-                "/local/mnt/workspace2/haijunz/SW/checkpoint4AIMET_xuebing/AIMET"))
-            initialize_uninitialized_vars(sess)
-
-            start_op_names = ['FeatureExtractor/MobileDetEdgeTPU/Conv/Conv2D']
-            end_op_names = ["concat", "concat_1"]
-            # dummy_val = np.random.randn(1, 32, 32, 3)
-
-
-            from aimet_tensorflow.utils.op.conv import BiasUtils
-            sess = BiasUtils.initialize_model_with_bias(sess, start_op_names, end_op_names)
-            modify_sess_bn_mutable(sess, start_op_names, end_op_names, training_tf_placeholder=False)
-
-            # PTQ
-
-            default_config_per_channel = {
-                "defaults":
-                    {
-                        "ops":
-                            {
-                                "is_output_quantized": "True"
-                            },
-                        "params":
-                            {
-                                "is_quantized": "True",
-                                "is_symmetric": "True"
-                            },
-                        "strict_symmetric": "False",
-                        "unsigned_symmetric": "True",
-                        "per_channel_quantization": "True"
-                    },
-
-                "params":
-                    {
-                        "bias":
-                            {
-                                "is_quantized": "False"
-                            }
-                    },
-
-                "op_type":
-                    {
-                        "Squeeze":
-                            {
-                                "is_output_quantized": "False"
-                            },
-                        "Pad":
-                            {
-                                "is_output_quantized": "False"
-                            },
-                        "Mean":
-                            {
-                                "is_output_quantized": "False"
-                            }
-                    },
-
-                "supergroups":
-                    [
-                        {
-                            "op_list": ["Conv", "Relu"]
-                        },
-                        {
-                            "op_list": ["Conv", "Clip"]
-                        },
-                        {
-                            "op_list": ["Conv", "BatchNormalization", "Relu"]
-                        },
-                        {
-                            "op_list": ["Add", "Relu"]
-                        },
-                        {
-                            "op_list": ["Gemm", "Relu"]
-                        }
-                    ],
-
-                "model_input":
-                    {
-                        "is_input_quantized": "True"
-                    },
-
-                "model_output":
-                    {}
-            }
-
-            config_file_path = "/tmp/default_config_per_channel.json"
-            with open(config_file_path, "w") as f:
-                json.dump(default_config_per_channel, f)
-
-            sim = QuantizationSimModel(sess, start_op_names, end_op_names, use_cuda=True,
-                                       quant_scheme=QuantScheme.training_range_learning_with_tf_init,
-                                       config_file=config_file_path)
-
-            conv_linear_tf_op = sim.session.graph.get_operation_by_name('FeatureExtractor/MobileDetEdgeTPU/TuckerConv/Conv/Conv2D')
-
-            print("=====conv_linear_tf_op=============",conv_linear_tf_op)
-            conv_linear_quantizer_w = sim.quantizer_config(conv_linear_tf_op.name + "/ReadVariableOp_quantized")
-            print("=====conv_linear_quantizer_w===========",conv_linear_quantizer_w)
-
-            if conv_linear_quantizer_w:
-                encodings = conv_linear_quantizer_w.get_encoding()
-            print("========done===========")
-
-            def dummy_forward_pass(sess, args):
-                model_input = sess.graph.get_tensor_by_name("FeatureExtractor/MobileDetEdgeTPU/Conv/Conv2D:0")
-                model_output1 = sess.graph.get_tensor_by_name('concat:0')
-                model_output2 = sess.graph.get_tensor_by_name('concat_1:0')
-                dummy_val = np.random.randn(1, *model_input.shape[1:])
-                sess.run([model_output1,model_output2], feed_dict={model_input: dummy_val})
-
-            sim.compute_encodings(dummy_forward_pass, None)
-
-            # check bn_re_estimation
-            dummy_inputs = tf.random.normal((bn_num_batches * batch_size, 32, 32, 3))
-            dataset = tf.compat.v1.data.Dataset.from_tensor_slices(dummy_inputs)
-            dataset = dataset.batch(batch_size)
-            reestimate_bn_stats(sim=sim, start_op_names=start_op_names, output_op_names= end_op_names,bn_re_estimation_dataset=dataset,bn_num_batches=bn_num_batches)
-
-            fold_all_batch_norms_to_scale(sim, start_op_names, end_op_names)
-
-
     def test_modle_rewriter_ptq_reestimation_fold(self, bn_re_estimation_dataset, bn_num_batches):
         tf.compat.v1.reset_default_graph()
         model = tf.keras.applications.mobilenet_v2.MobileNetV2(weights=None, input_shape=(32, 32, 3))
@@ -283,12 +138,6 @@ class TestBNReEstimation:
         start_op_names = ["input_1"]
         end_op_names = ["predictions/Softmax"]
         modify_sess_bn_mutable(sess, start_op_names, end_op_names, training_tf_placeholder=False)
-
-
-
-
-
-
 
         # PTQ
 

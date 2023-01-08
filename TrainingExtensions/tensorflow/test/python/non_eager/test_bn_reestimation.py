@@ -253,62 +253,76 @@ class TestBNReEstimation:
 
         self._reestimate_and_compare_results(sim, sess, bn_re_estimation_dataset, bn_num_batches, inputs.op.name, outputs.op.name)
 
-    def test_reestimation_with_rewriter_mobiledet(self, bn_re_estimation_dataset_mobiledet, bn_num_batches):
+    def test_reestimation_with_rewriter_multiple_branches(self, bn_re_estimation_dataset, bn_num_batches):
         tf.compat.v1.reset_default_graph()
-        saver = tf.compat.v1.train.import_meta_graph(
-            "/local/mnt/workspace2/haijunz/SW/checkpoint4AIMET_xuebing/AIMET/model.ckpt.meta")
-        with tf.compat.v1.Session() as sess:
-            saver.restore(sess, tf.compat.v1.train.latest_checkpoint(
-                "/local/mnt/workspace2/haijunz/SW/checkpoint4AIMET_xuebing/AIMET"))
-            initialize_uninitialized_vars(sess)
+        sess = tf.compat.v1.Session()
 
-            start_op_names = ['FeatureExtractor/MobileDetEdgeTPU/Conv/Conv2D']
-            end_op_names = ["concat", "concat_1"]
-            #dummy_val = np.random.randn(1, 32, 32, 3)
+        inputs = tf.keras.Input(shape=(32, 32, 3,))
+        conv_op1 = tf.keras.layers.Conv2D(32, (3, 3))(inputs)
+        conv_op2 = tf.keras.layers.Conv2D(32, (3, 3))(inputs)
 
-            modify_sess_bn_mutable(sess, start_op_names, end_op_names, training_tf_placeholder=False)
-            """
-            from aimet_tensorflow.batch_norm_fold import find_all_batch_norms_to_fold
-            pairs = find_all_batch_norms_to_fold(sess, start_op_names, end_op_names)
-            for conv, bn, _ in pairs:
-                print("bn_name:", bn.op.name, "   ||type:", bn.op.type)
-            """
-            sim = QuantizationSimModel(sess, start_op_names, end_op_names)
+        bn_op1 = tf.compat.v1.layers.batch_normalization(conv_op1,
+                                                        beta_initializer=tf.compat.v1.random_uniform_initializer(),
+                                                        gamma_initializer=tf.compat.v1.random_uniform_initializer(),
+                                                        moving_mean_initializer=tf.compat.v1.random_uniform_initializer(),
+                                                        moving_variance_initializer=tf.compat.v1.random_uniform_initializer(),
+                                                        fused=True)
 
-            def dummy_forward_pass(sess, args):
-                model_input = sess.graph.get_tensor_by_name("FeatureExtractor/MobileDetEdgeTPU/Conv/Conv2D:0")
-                model_output = sess.graph.get_tensor_by_name("concat:0")
-                dummy_val = np.random.randn(1, *model_input.shape[1:])
-                sess.run(model_output, feed_dict={model_input: dummy_val})
+        bn_op2 = tf.compat.v1.layers.batch_normalization(conv_op2,
+                                                         beta_initializer=tf.compat.v1.random_uniform_initializer(),
+                                                         gamma_initializer=tf.compat.v1.random_uniform_initializer(),
+                                                         moving_mean_initializer=tf.compat.v1.random_uniform_initializer(),
+                                                         moving_variance_initializer=tf.compat.v1.random_uniform_initializer(),
+                                                         fused=True)
 
-            sim.compute_encodings(dummy_forward_pass, None)
+        outputs1 = tf.nn.relu(bn_op1)
+        outputs2 = tf.nn.relu(bn_op2)
 
 
-            #self._reestimate_and_compare_results(sim, sess, bn_re_estimation_dataset_mobiledet, bn_num_batches, 'FeatureExtractor/MobileDetEdgeTPU/Conv/Conv2D', "concat")
+        initialize_uninitialized_vars(sess)
 
-            from aimet_tensorflow.batch_norm_fold import fold_all_batch_norms_to_scale
-            fold_all_batch_norms_to_scale(sim, "FeatureExtractor/MobileDetEdgeTPU/Conv/Conv2D", "concat")
+        start_op_names = [inputs.op.name]
+        end_op_names = [outputs1.op.name, outputs2.op.name]
 
-            print("==========verify both with mobileDet=================")
+        modify_sess_bn_mutable(sess, start_op_names, end_op_names, training_tf_placeholder=False)
+
+        sim = QuantizationSimModel(sess, start_op_names, end_op_names)
+
+        def dummy_forward_pass(sess, args):
+            model_input = sess.graph.get_tensor_by_name(inputs.name)
+            model_output1 = sess.graph.get_tensor_by_name(outputs1.name)
+            model_output2 = sess.graph.get_tensor_by_name(outputs2.name)
+            dummy_val = np.random.randn(1, *model_input.shape[1:])
+            sess.run([model_output1,model_output2], feed_dict={model_input: dummy_val})
+
+        sim.compute_encodings(dummy_forward_pass, None)
+
+        self._reestimate_and_compare_results(sim, sess, bn_re_estimation_dataset, bn_num_batches, [inputs.op.name],
+                                             [outputs1.op.name,outputs2.op.name])
 
 
-    def _reestimate_and_compare_results(self, sess_sim, sess_fp32, bn_re_restimation_dataset, bn_num_batches, input_op, output_op):
+    def _reestimate_and_compare_results(self, sess_sim, sess_fp32, bn_re_restimation_dataset, bn_num_batches, input_ops_name, output_ops_name):
         bn_mean_var_tf_var_list, bn_momentum_tf_var_list, bn_training_tf_var_list = _get_all_tf_bn_vars_list(
-            sess_sim, [input_op], [output_op])
+            sess_sim, input_ops_name, output_ops_name)
 
-        model_input = sess_sim.session.graph.get_tensor_by_name(input_op + ':0')
-        model_output = sess_sim.session.graph.get_tensor_by_name(output_op + ':0')
-        dummy_val = np.random.randn(1, *model_input.shape[1:])
+        model_inputs= sess_sim.session.graph.get_tensor_by_name(input_ops_name[0] + ':0')
 
-        feed_dict_data = {model_input: dummy_val}
+        model_outputs = []
+        for output_op in output_ops_name:
+            output_tensor = sess_sim.session.graph.get_tensor_by_name(output_op + ':0')
+            model_outputs.append(output_tensor)
+
+        dummy_val = np.random.randn(1, *model_inputs.shape[1:])
+
+        feed_dict_data = {model_inputs: dummy_val}
         for bn_training in bn_training_tf_var_list:
             feed_dict_data[bn_training]: True
-        sess_sim.session.run(model_output, feed_dict=feed_dict_data)
+        sess_sim.session.run(model_outputs, feed_dict=feed_dict_data)
 
         bn_mean_var_ori, bn_momentum_ori, bn_training_ori = get_all_status(sess_sim.session, bn_mean_var_tf_var_list,
                                                                            bn_momentum_tf_var_list, bn_training_tf_var_list)
 
-        with reestimate_bn_stats(sim=sess_sim, start_op_names=[input_op], output_op_names=[output_op],
+        with reestimate_bn_stats(sim=sess_sim, start_op_names=input_ops_name, output_op_names=output_ops_name,
                                  bn_re_estimation_dataset=bn_re_restimation_dataset,
                                  bn_num_batches=bn_num_batches):
             bn_mean_var_est, bn_momentum_est, bn_training_est = get_all_status(sess_sim.session, bn_mean_var_tf_var_list,
