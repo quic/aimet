@@ -433,7 +433,6 @@ def fold_all_batch_norms_to_scale(sim: QuantizationSimModel, input_op_names: Uni
     bn_conv_linear_pairs = find_all_batch_norms_to_fold(new_sess, input_op_names, output_op_names)
     _fold_given_auto_selected_batch_norms_scale(sim, bn_conv_linear_pairs)
 
-
 def _fold_given_auto_selected_batch_norms_scale(sim: QuantizationSimModel, layer_pairs: List[PairType]):
     """
      Fold a given set of batch_norm layers into conv layers
