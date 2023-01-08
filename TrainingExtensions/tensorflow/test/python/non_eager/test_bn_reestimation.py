@@ -204,14 +204,6 @@ def bn_re_estimation_dataset(bn_num_batches, batch_size):
         dataset = dataset.batch(batch_size)
         return dataset
 
-@pytest.fixture
-def bn_re_estimation_dataset_mobiledet(bn_num_batches, batch_size):
-    graph = tf.Graph()
-    with graph.as_default():
-        dummy_inputs = tf.random.normal((bn_num_batches * batch_size, 160, 160, 32))
-        dataset = tf.compat.v1.data.Dataset.from_tensor_slices(dummy_inputs)
-        dataset = dataset.batch(batch_size)
-        return dataset
 
 class TestBNReEstimation:
     def test_reestimation_with_quantsim_model(self, gpu_sessions, bn_re_estimation_dataset,
@@ -219,7 +211,7 @@ class TestBNReEstimation:
                                               bn_momentum_names, bn_training_names):
         sess_sim, sess_fp32 = gpu_sessions
         self._reestimate_and_compare_results(sess_sim, sess_fp32, bn_re_estimation_dataset, bn_num_batches,
-                                'input_1', 'dense/BiasAdd')
+                                ['input_1'], ['dense/BiasAdd'])
 
     def test_reestimation_with_rewriter(self, bn_re_estimation_dataset, bn_num_batches):
         tf.compat.v1.reset_default_graph()
@@ -251,7 +243,7 @@ class TestBNReEstimation:
             sess.run(model_output, feed_dict={model_input: dummy_val})
         sim.compute_encodings(dummy_forward_pass, None)
 
-        self._reestimate_and_compare_results(sim, sess, bn_re_estimation_dataset, bn_num_batches, inputs.op.name, outputs.op.name)
+        self._reestimate_and_compare_results(sim, sess, bn_re_estimation_dataset, bn_num_batches, [inputs.op.name], [outputs.op.name])
 
     def test_reestimation_with_rewriter_multiple_branches(self, bn_re_estimation_dataset, bn_num_batches):
         tf.compat.v1.reset_default_graph()
