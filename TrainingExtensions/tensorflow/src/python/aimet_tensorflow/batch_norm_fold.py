@@ -493,24 +493,25 @@ def _fold_given_auto_selected_batch_norms_scale(sim: QuantizationSimModel, layer
 
 def _fold_pair_scale(sim: QuantizationSimModel, conv_linear_tf_op: tf.Operation, bn_params: libpymo.BNParams()):
     """
-     Fold a batch_norm layer into conv layer's scale
+     Fold a batch_norm layer into conv_linear's scale
     :param sim: tf quantized model
     :param conv_linear_tf_op: conv layer
     :param bn_params: bn_params
     """
-    conv_linear_quantizer_w = sim.quantizer_config(conv_linear_tf_op.name + "/ReadVariableOp_quantized")
-    if conv_linear_quantizer_w:
-        encodings = conv_linear_quantizer_w.get_encoding()
+    conv_linear_quantizer_weights = sim.quantizer_config(conv_linear_tf_op.name + "/ReadVariableOp_quantized")
+    if conv_linear_quantizer_weights:
+        encodings = conv_linear_quantizer_weights.get_encoding()
         new_encodings = []
-        for old_encoding, c in zip(encodings, np.array(bn_params.gamma) * (1.0 / np.array(bn_params.runningVar))):
+        for old_encoding, bn_gamma_to_runningvar_ratio in zip(encodings, np.array(bn_params.gamma) * (1.0 / np.array(bn_params.runningVar))):
             new_encoding = libpymo.TfEncoding()
-            if c >= 0:
-                new_encoding.max = old_encoding.max * c
-                new_encoding.min = old_encoding.min * c
+            if bn_gamma_to_runningvar_ratio >= 0:
+                new_encoding.max = old_encoding.max * bn_gamma_to_runningvar_ratio
+                new_encoding.min = old_encoding.min * bn_gamma_to_runningvar_ratio
             else:
-                new_encoding.max = old_encoding.min * c
-                new_encoding.min = old_encoding.max * c
-            new_encoding.offset = old_encoding.offset
+                new_encoding.max = old_encoding.min * bn_gamma_to_runningvar_ratio
+                new_encoding.min = old_encoding.max * bn_gamma_to_runningvar_ratio
+            new_encoding.delta = old_encoding.delta * abs(bn_gamma_to_runningvar_ratio)
+            new_encoding.offset = new_encoding.min / new_encoding.delta
             new_encoding.bw = old_encoding.bw
             new_encodings.append(new_encoding)
-        conv_linear_quantizer_w.set_encoding(new_encodings)
+        conv_linear_quantizer_weights.set_encoding(new_encodings)
