@@ -43,6 +43,7 @@ import os
 import numpy as np
 import tensorflow as tf
 
+import aimet_tensorflow
 from aimet_tensorflow.common.connectedgraph import ConnectedGraph
 from aimet_tensorflow.common.operation import OpWithMetaInfoType, Op
 from aimet_tensorflow.quantsim import QuantizationSimModel
@@ -57,6 +58,7 @@ from aimet_common.bias_correction import ConvBnPatternHandler
 from aimet_common.graph_pattern_matcher import PatternType
 from aimet_common.utils import AimetLogger
 import aimet_common.libpymo as libpymo
+
 
 logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.CrosslayerEqualization)
 
@@ -451,11 +453,14 @@ def _fold_given_auto_selected_batch_norms_scale(sim: QuantizationSimModel, layer
             if not BiasUtils.is_bias_none(conv_linear_tf_op):
                 is_bias_valid = True
             assert batchnorm_tf_op.type in ['FusedBatchNormV3', 'Identity']
+            if is_bias_valid:
+                conv_linear_quantizer_a_name = conv_linear_tf_op.outputs[0].consumers()[0].outputs[0].consumers()[0].name
+                # Disable activation of conv
+                conv_linear_quantizer_a = sim.quantizer_config(conv_linear_quantizer_a_name)
+                assert isinstance(conv_linear_quantizer_a, aimet_tensorflow.quantizer_info.QuantizerInfo)
+                conv_linear_quantizer_a.set_op_mode(int(libpymo.TensorQuantizerOpMode.passThrough))
 
-            conv_linear_quantizer_a_name = conv_linear_tf_op.outputs[0].consumers()[0].outputs[0].consumers()[0].name
-            # Disable activation of conv, Disable quantizers of batchnorms
-            conv_linear_quantizer_a = sim.quantizer_config(conv_linear_quantizer_a_name)
-            conv_linear_quantizer_a.set_op_mode(int(libpymo.TensorQuantizerOpMode.passThrough))
+            # Disable quantizers of batchnorms
             bn_quantizer = sim.quantizer_config(bn_quantizer_name)
             bn_quantizer.set_op_mode(int(libpymo.TensorQuantizerOpMode.passThrough))
 
@@ -477,7 +482,8 @@ def _fold_given_auto_selected_batch_norms_scale(sim: QuantizationSimModel, layer
                 # we sent in format [Noc, Nic, kh, kw]
                 numpy_weight_reshaped = np.reshape(weight_tensor.data, weight_tensor.shape).transpose((2, 3, 1, 0))
             WeightTensorUtils.update_tensor_for_sim_op(sess, conv_linear_tf_op, numpy_weight_reshaped)
-            BiasUtils.update_bias_for_sim_op(sess, conv_linear_tf_op, np.reshape(bias, [weight_tensor.shape[0]]))
+            if is_bias_valid:
+                BiasUtils.update_bias_for_sim_op(sess, conv_linear_tf_op, np.reshape(bias, [weight_tensor.shape[0]]))
             _fold_pair_scale(sim, conv_linear_tf_op, bn_params)
             BNUtils.modify_bn_params_to_make_as_passthrough(sess, batchnorm_tf_op)
 
