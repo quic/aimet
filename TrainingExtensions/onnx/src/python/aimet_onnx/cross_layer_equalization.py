@@ -158,7 +158,7 @@ class CrossLayerScaling(CLS):
         """
         Update weight parameter from libpymo object
         """
-        weight = onnx_pb.TensorProto()
+        weight = ParamUtils.get_param(self._model.model, module, WEIGHT_INDEX)
         weight.raw_data = np.asarray(layer_param.weight, dtype=np.float32).tobytes()
         groups = get_node_attribute(module, "group")
         # Transpose weight back to original configuration

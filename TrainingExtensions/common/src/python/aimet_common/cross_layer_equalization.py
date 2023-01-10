@@ -277,18 +277,17 @@ class GraphSearchUtils:
 
         for op in self._connected_graph.get_all_ops().values():
 
-            if op.model_module and op.model_module.get_module() is module:
-                assert len(op.output.consumers) == 1
+            if op.model_module and op.get_module() is module and len(op.output.consumers) == 1:
                 is_relu_activation = isinstance(op.output.consumers[0].model_module.get_module(),
                                                 self._cls_supported_activation_types)
                 return is_relu_activation
 
         return False
 
-    def is_relu_activation_present_in_cls_sets(self, cls_sets: List):
+    def is_relu_activation_present_in_cls_sets(self, cls_sets: List) -> List[Tuple]:
         """
         :param cls_sets: CLS sets to find relu activations in
-        :return: List of groups of layers. Each group can be independently equalized
+        :return: Tuple of booleans representing if activation is Relu (True) or not (False)
         """
 
         is_relu_activation_in_cls_sets = []

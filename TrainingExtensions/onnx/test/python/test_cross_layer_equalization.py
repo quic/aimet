@@ -38,11 +38,13 @@
 import numpy as np
 from onnxruntime import SessionOptions, GraphOptimizationLevel, InferenceSession
 from onnxruntime_extensions import get_library_path
+from onnx import numpy_helper
 
 from aimet_common.cross_layer_equalization import GraphSearchUtils
-from aimet_onnx.meta.connectedgraph import ConnectedGraph
+from aimet_onnx.meta.connectedgraph import ConnectedGraph, WEIGHT_INDEX
 from aimet_onnx.cross_layer_equalization import get_ordered_list_of_conv_modules, \
     cls_supported_layer_types, cls_supported_activation_types, CrossLayerScaling
+from aimet_onnx.utils import ParamUtils
 import test_models
 
 
@@ -98,20 +100,30 @@ class TestCLS:
         session = _build_session(model)
         output_before_cls = session.run(None, {'input': test_data})
         cls = CrossLayerScaling(model)
-        cls.scale_model()
+        cls_set_info = cls.scale_model()
         output_after_cls = session.run(None, {'input': test_data})
         assert np.allclose(output_after_cls, output_before_cls)
+        conv_3 = cls_set_info[0].cls_pair_info_list[0].layer1.get_module()
+        conv_5 = cls_set_info[0].cls_pair_info_list[0].layer2.get_module()
+        weight_3 = numpy_helper.to_array(ParamUtils.get_param(model.model, conv_3, WEIGHT_INDEX))
+        weight_5 = numpy_helper.to_array(ParamUtils.get_param(model.model, conv_5, WEIGHT_INDEX))
+        assert np.allclose(np.amax(np.abs(weight_3), axis=(1, 2, 3)), np.amax(np.abs(weight_5), axis=(0, 2, 3)))
 
     def test_scale_model_tranposed_conv(self):
-        model = test_models.transposed_conv_model()
+        model = test_models.transposed_conv_model_without_bn()
         input_shape = (10,10,4,4)
         test_data = np.random.randn(*input_shape).astype(np.float32)
         session = _build_session(model)
         output_before_cls = session.run(None, {'input': test_data})
         cls = CrossLayerScaling(model)
-        cls.scale_model()
+        cls_set_info = cls.scale_model()
         output_after_cls = session.run(None, {'input': test_data})
         assert np.allclose(output_after_cls, output_before_cls)
+        conv_3 = cls_set_info[0].cls_pair_info_list[0].layer1.get_module()
+        conv_5 = cls_set_info[0].cls_pair_info_list[0].layer2.get_module()
+        weight_3 = numpy_helper.to_array(ParamUtils.get_param(model.model, conv_3, WEIGHT_INDEX))
+        weight_5 = numpy_helper.to_array(ParamUtils.get_param(model.model, conv_5, WEIGHT_INDEX))
+        assert np.allclose(np.amax(np.abs(weight_3), axis=(0, 2, 3)), np.amax(np.abs(weight_5), axis=(1, 2, 3)))
 
 def _build_session(model):
     """

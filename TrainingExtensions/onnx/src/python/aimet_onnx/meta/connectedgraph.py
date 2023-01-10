@@ -129,7 +129,7 @@ class ConnectedGraph(AimetCommonConnectedGraph):
         # Add corresponding node to op
         op.model_module = ONNXModelModule(node)
 
-        if op.type == 'Conv':
+        if op.type in ['Conv', 'ConvTranspose']:
             op.groups = get_op_groups(node)
 
         return op
