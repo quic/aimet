@@ -40,6 +40,7 @@
 import pytest
 import unittest.mock
 import torch
+import torch.nn as nn
 import torch.nn.functional as F
 import torchvision.models
 
@@ -537,6 +538,38 @@ class TestConnectedGraph(unittest.TestCase):
         self.assertEqual(8, len(conn_graph.get_all_products()))
 
 
+class ModelWithMultipleActivations(nn.Module):
+    def __init__(self):
+        super(ModelWithMultipleActivations, self).__init__()
+        self.conv1 = nn.Conv2d(3, 64, kernel_size=2, stride=2, padding=2, bias=False)
+        self.bn1 = nn.BatchNorm2d(64)
+        self.hardshrink = nn.Hardshrink()
+        self.conv2 = nn.Conv2d(64, 32, kernel_size=2, stride=2, padding=2, bias=False)
+        self.bn2 = nn.BatchNorm2d(32)
+        self.gelu = nn.GELU()
+        self.conv3 = nn.Conv2d(32, 16, kernel_size=2, stride=2, padding=2, bias=False)
+        self.tanhshrink = nn.Tanhshrink()
+        self.conv4 = nn.Conv2d(16, 8, kernel_size=2, stride=2, padding=2, bias=True)
+        self.mish = nn.Mish()
+        self.conv5 = nn.Conv2d(8, 4, kernel_size=2, stride=2, padding=2, bias=True)
+        self.softmax2d = nn.Softmax2d()
+
+    def forward(self, *inputs):
+        x = self.conv1(inputs[0])
+        x = self.bn1(x)
+        x = self.hardshrink(x)
+        x = self.conv2(x)
+        x = self.bn2(x)
+        x = self.gelu(x)
+        x = self.conv3(x)
+        x = self.tanhshrink(x)
+        x = self.conv4(x)
+        x = self.mish(x)
+        x = self.conv5(x)
+        x = self.softmax2d(x)
+        return x
+
+
 class TestConnectedGraphUtils(unittest.TestCase):
     """ Unit tests for testing connectedgraph_utils module"""
 
@@ -562,6 +595,23 @@ class TestConnectedGraphUtils(unittest.TestCase):
 
         # final module case
         self.assertEqual(module_act_func_pair[model.fc], None)
+
+    def test_get_module_act_func_pair_for_activations(self):
+        model = ModelWithMultipleActivations().eval()
+        inp_tensor_list = [torch.randn(1, 3, 32, 32)]
+
+        module_act_func_pair = connectedgraph_utils.get_module_act_func_pair(model, inp_tensor_list)
+
+        # followed by activation case
+        self.assertTrue(isinstance(module_act_func_pair[model.bn1], torch.nn.Hardshrink))
+        self.assertTrue(isinstance(module_act_func_pair[model.bn2], torch.nn.GELU))
+        self.assertTrue(isinstance(module_act_func_pair[model.conv3], torch.nn.Tanhshrink))
+        self.assertTrue(isinstance(module_act_func_pair[model.conv4], torch.nn.Mish))
+        self.assertTrue(isinstance(module_act_func_pair[model.conv5], torch.nn.Softmax2d))
+
+        # followed by non-activation case
+        self.assertEqual(module_act_func_pair[model.conv1], None)
+        self.assertEqual(module_act_func_pair[model.hardshrink], None)
 
     def test_get_ops_with_missing_modules(self):
         """ Check that get ops with missing modules reports ops with missing modules correctly """

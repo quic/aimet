@@ -51,7 +51,11 @@ logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Utils)
 
 ActivationTypes = (torch.nn.ReLU6, torch.nn.ReLU, torch.nn.PReLU, torch.nn.RReLU, torch.nn.LeakyReLU,
                    torch.nn.Sigmoid, torch.nn.LogSigmoid, torch.nn.Softmin, torch.nn.Softmax, torch.nn.LogSoftmax,
-                   torch.nn.Tanh, torch.nn.Hardtanh)
+                   torch.nn.Tanh, torch.nn.Hardtanh, torch.nn.ELU, torch.nn.Hardshrink, torch.nn.Hardsigmoid,
+                   torch.nn.Hardtanh, torch.nn.Hardswish, torch.nn.MultiheadAttention, torch.nn.SELU, torch.nn.CELU,
+                   torch.nn.GELU, torch.nn.SiLU, torch.nn.Mish, torch.nn.Softplus, torch.nn.Softshrink,
+                   torch.nn.Softsign, torch.nn.Tanhshrink, torch.nn.Threshold, torch.nn.GLU, torch.nn.Softmax2d,
+                   torch.nn.AdaptiveLogSoftmaxWithLoss)
 
 
 def get_module_act_func_pair(model: torch.nn.Module, model_input: Union[Tuple[torch.Tensor], List[torch.Tensor]]) -> \
