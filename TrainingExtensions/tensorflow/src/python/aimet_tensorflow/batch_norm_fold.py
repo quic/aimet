@@ -495,7 +495,7 @@ def _fold_pair_scale(sim: QuantizationSimModel, conv_linear_tf_op: tf.Operation,
     """
      Fold a batch_norm layer into conv_linear's scale
     :param sim: tf quantized model
-    :param conv_linear_tf_op: conv layer
+    :param conv_linear_tf_op: conv layer or Linear layer
     :param bn_params: bn_params
     """
     conv_linear_quantizer_weights = sim.quantizer_config(conv_linear_tf_op.name + "/ReadVariableOp_quantized")
