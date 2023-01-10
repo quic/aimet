@@ -453,12 +453,14 @@ def _fold_given_auto_selected_batch_norms_scale(sim: QuantizationSimModel, layer
             if not BiasUtils.is_bias_none(conv_linear_tf_op):
                 is_bias_valid = True
             assert batchnorm_tf_op.type in ['FusedBatchNormV3', 'Identity']
-            if is_bias_valid:
-                conv_linear_quantizer_a_name = conv_linear_tf_op.outputs[0].consumers()[0].outputs[0].consumers()[0].name
-                # Disable activation of conv
-                conv_linear_quantizer_a = sim.quantizer_config(conv_linear_quantizer_a_name)
-                assert isinstance(conv_linear_quantizer_a, aimet_tensorflow.quantizer_info.QuantizerInfo)
-                conv_linear_quantizer_a.set_op_mode(int(libpymo.TensorQuantizerOpMode.passThrough))
+
+            conv_linear_quantizer_a_name = conv_linear_tf_op.outputs[0].consumers()[0].outputs[0].consumers()[0].name
+
+            conv_linear_quantizer_a = sim.quantizer_config(conv_linear_quantizer_a_name)
+            assert isinstance(conv_linear_quantizer_a, aimet_tensorflow.quantizer_info.QuantizerInfo)
+
+            # Disable quantizers activation of conv
+            conv_linear_quantizer_a.set_op_mode(int(libpymo.TensorQuantizerOpMode.passThrough))
 
             # Disable quantizers of batchnorms
             bn_quantizer = sim.quantizer_config(bn_quantizer_name)
