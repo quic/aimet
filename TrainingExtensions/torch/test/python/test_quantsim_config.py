@@ -119,11 +119,18 @@ class TestQuantsimConfig:
                 else:
                     assert module.output_quantizers[0].enabled
                 assert not module.input_quantizers[0].use_symmetric_encodings
+                assert not module.input_quantizers[0].use_strict_symmetric
+                assert not module.input_quantizers[0].use_unsigned_symmetric
                 assert not module.output_quantizers[0].use_symmetric_encodings
+                assert not module.output_quantizers[0].use_strict_symmetric
+                assert not module.output_quantizers[0].use_unsigned_symmetric
+
 
                 for _, param_quantizer in module.param_quantizers.items():
                     assert not param_quantizer.enabled
                     assert param_quantizer.use_symmetric_encodings
+                    assert not param_quantizer.use_strict_symmetric
+                    assert not param_quantizer.use_unsigned_symmetric
                     assert len(param_quantizer._cppOp) > 1
 
         if os.path.exists('./data/quantsim_config.json'):

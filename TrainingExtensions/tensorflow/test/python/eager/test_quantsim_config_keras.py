@@ -195,14 +195,25 @@ class TestQuantSimConfig:
             for q in layer_to_quantizers_dict[layer][INPUT_QUANTIZERS]:
                 assert not q.is_enabled()
                 assert not q.is_symmetric
+                assert not q.use_unsigned_symmetric
+                assert not q.use_strict_symmetric
 
             for q in layer_to_quantizers_dict[layer][OUTPUT_QUANTIZERS]:
                 assert q.is_enabled()
                 assert not q.is_symmetric
+                assert not q.use_unsigned_symmetric
+                assert not q.use_strict_symmetric
 
             for q in layer_to_quantizers_dict[layer][PARAM_QUANTIZERS]:
                 assert not q.is_enabled()
                 assert q.is_symmetric
+                if isinstance(q._tensor_quantizer, list):
+                    for tensor_quantizer in q._tensor_quantizer:
+                        assert not tensor_quantizer.getUnsignedSymmetric()
+                        assert not tensor_quantizer.getStrictSymmetric()
+                else:
+                    assert not q._tensor_quantizer.getUnsignedSymmetric()
+                    assert not q._tensor_quantizer.getStrictSymmetric()
 
         if os.path.exists('./data/quantsim_config.json'):
             os.remove('./data/quantsim_config.json')

@@ -50,7 +50,7 @@ TensorQuantizer::TensorQuantizer(QuantizationMode quantScheme, RoundingMode roun
     roundingMode(roundingMode),
     isEncodingValid(false),
     _useStrictSymmetric(false),
-    _useUnsignedSymmetric(true),
+    _useUnsignedSymmetric(false),
     _validStats(false)
 {
     _encodingAnalyzer      = getEncodingAnalyzerInstance<float>(quantScheme);
