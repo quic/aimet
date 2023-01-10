@@ -118,6 +118,7 @@ class TestQcQuantizeOp:
         qc_op = QcQuantizeOp(quant_scheme=QuantScheme.post_training_tf, rounding_mode='nearest',
                              op_mode=OpMode.one_shot_quantize_dequantize, bitwidth=8,
                              use_symmetric_encodings=True, use_cuda=False)
+        qc_op.use_unsigned_symmetric = True
         input_arr = np.asarray([[[[0, 1.2, 1.5, 4.0, 4.9, 5.3]]]]).astype(np.float32)
         output_oneshot = qc_op.compute(input_arr)
 

@@ -172,6 +172,10 @@ class TestQuantsimConfig(unittest.TestCase):
             self.assertEqual(sim.session.run(is_symmetric_tensor), True)
             self.assertEqual(sim.session.run(op_mode_tensor),
                              int(pymo.TensorQuantizerOpMode.oneShotQuantizeDequantize))
+            self.assertFalse(sim._param_quantizers[op_name].use_unsigned_symmetric)
+            self.assertFalse(sim._param_quantizers[op_name].use_strict_symmetric)
+            self.assertEqual(sim.session.run(op_mode_tensor),
+                             int(pymo.TensorQuantizerOpMode.oneShotQuantizeDequantize))
 
         for op_name in activation_quantizers:
             op = sim.session.graph.get_operation_by_name(op_name)
@@ -261,6 +265,8 @@ class TestQuantsimConfig(unittest.TestCase):
             self.assertEqual(sim.session.run(is_symmetric_tensor), True)
             self.assertEqual(sim.session.run(op_mode_tensor),
                              int(pymo.TensorQuantizerOpMode.oneShotQuantizeDequantize))
+            self.assertFalse(sim._param_quantizers[op_name].use_unsigned_symmetric)
+            self.assertFalse(sim._param_quantizers[op_name].use_strict_symmetric)
 
         for op_name in activation_quantizers:
             op = sim.session.graph.get_operation_by_name(op_name)

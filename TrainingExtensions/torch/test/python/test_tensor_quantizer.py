@@ -124,6 +124,7 @@ class TestTensorQuantizer:
                                                             use_symmetric_encodings=True,
                                                             enabled_by_default=True,
                                                             data_type=QuantizationDataType.int)
+        per_tensor_quantizer.use_unsigned_symmetric = True
         _reset_update_compute_encoding(per_tensor_quantizer, positive_value_only_tensor)
         assert per_tensor_quantizer.is_unsigned_symmetric
 
@@ -137,6 +138,7 @@ class TestTensorQuantizer:
                                                               num_channels=3,
                                                               enabled_by_default=True,
                                                               data_type=QuantizationDataType.int)
+        per_channel_quantizer.use_unsigned_symmetric = True
         _reset_update_compute_encoding(per_channel_quantizer, positive_value_only_tensor)
         assert per_channel_quantizer.is_unsigned_symmetric
 

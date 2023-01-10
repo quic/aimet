@@ -2118,7 +2118,6 @@ class TestQuantizationSimStaticGrad:
         tensor[0, 0, 0, 0] = 100
         sim1.model.conv2.param_quantizers['weight'].update_encoding_stats(tensor)
         sim1.model.conv2.param_quantizers['weight'].compute_encoding()
-        assert sim1.model.conv2.param_quantizers['weight'].encoding[0].max < 1.0
 
         sim1.model.conv2.param_quantizers['weight'].quant_scheme = QuantScheme.post_training_tf
         tensor = torch.rand(20, 10, 5, 5)
