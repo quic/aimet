@@ -448,13 +448,15 @@ def _fold_given_auto_selected_batch_norms_scale(sim: QuantizationSimModel, layer
             batchnorm_tf_op = sess.graph.get_operation_by_name(pair[1].op.name)
             bn_quantizer_name = batchnorm_tf_op.name + "_quantized"
             conv_linear_tf_op = sess.graph.get_operation_by_name(pair[0].name)
+            assert batchnorm_tf_op.type in ['FusedBatchNormV3', 'Identity']
             #  check flag
             is_bias_valid = False
             if not BiasUtils.is_bias_none(conv_linear_tf_op):
                 is_bias_valid = True
-            assert batchnorm_tf_op.type in ['FusedBatchNormV3', 'Identity']
-
-            conv_linear_quantizer_a_name = conv_linear_tf_op.outputs[0].consumers()[0].outputs[0].consumers()[0].name
+                conv_linear_quantizer_a_name = conv_linear_tf_op.outputs[0].consumers()[0].outputs[0].consumers()[
+                    0].name
+            else:
+                conv_linear_quantizer_a_name = conv_linear_tf_op.outputs[0].consumers()[0].name
 
             conv_linear_quantizer_a = sim.quantizer_config(conv_linear_quantizer_a_name)
             assert isinstance(conv_linear_quantizer_a, aimet_tensorflow.quantizer_info.QuantizerInfo)
@@ -484,10 +486,13 @@ def _fold_given_auto_selected_batch_norms_scale(sim: QuantizationSimModel, layer
                 # we sent in format [Noc, Nic, kh, kw]
                 numpy_weight_reshaped = np.reshape(weight_tensor.data, weight_tensor.shape).transpose((2, 3, 1, 0))
             WeightTensorUtils.update_tensor_for_sim_op(sess, conv_linear_tf_op, numpy_weight_reshaped)
-            if is_bias_valid:
-                BiasUtils.update_bias_for_sim_op(sess, conv_linear_tf_op, np.reshape(bias, [weight_tensor.shape[0]]))
+            BiasUtils.update_bias_for_sim_op(sess, conv_linear_tf_op, np.reshape(bias, [weight_tensor.shape[0]]))
             _fold_pair_scale(sim, conv_linear_tf_op, bn_params)
             BNUtils.modify_bn_params_to_make_as_passthrough(sess, batchnorm_tf_op)
+        # we edited the graph, so we should load and save for the metagraph associated with the session to be
+        # updated
+        after_fold_sess = save_and_load_graph('./temp_bn_fold', sess)
+    sim.session = after_fold_sess
 
 
 
