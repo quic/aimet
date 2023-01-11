@@ -238,9 +238,13 @@ class TestBNReEstimation:
         output_baseline = sim.session.run(model_output, feed_dict={model_input: dummy_val})
 
         fold_all_batch_norms_to_scale(sim, start_op_names, end_op_names)
-        output_fold = sim.session.run(model_output, feed_dict={model_input: dummy_val})
 
-        assert np.allclose(output_baseline, output_fold, atol=1e-2)
+        model_input_after_fold = sim.session.graph.get_tensor_by_name("input_1:0")
+        model_output_after_fold = sim.session.graph.get_tensor_by_name('predictions/Softmax:0')
+
+        output_fold_after_fold = sim.session.run(model_output_after_fold, feed_dict={model_input_after_fold: dummy_val})
+
+        assert np.allclose(output_baseline, output_fold_after_fold, atol=1e-2)
         sim.session.close()
 
 
