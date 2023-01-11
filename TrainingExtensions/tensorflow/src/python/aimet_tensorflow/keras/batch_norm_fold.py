@@ -573,12 +573,14 @@ def _delete_all_bns_from_model(model: Union[tf.keras.Model, tf.keras.layers.Laye
             else:
                 _delete_bn_for_non_subclassed_model(model, bn_layer)
 
-def _find_all_batch_norms_to_fold(model: tf.keras.Model) -> List[PairType]:
+
+def _find_all_batch_norms_to_fold(model: tf.keras.Model) -> Tuple[List[PAIR_TYPE], List[PAIR_TYPE], Set[tf.keras.layers.BatchNormalization]]:
     """
     uses searcher to choose layers for bias correction
 
     :param model: model to obtain conv_linear pairs for
-    :return: List of conv/linear layers with associated bn op / activation info
+    :return: List of conv/linear layers with associated bn op / activation info and
+            a Set of all the batch norms which are marked for folding.
     """
 
     node_layer_map = common.create_node_to_layer_map(model)
@@ -605,7 +607,8 @@ def _find_all_batch_norms_to_fold(model: tf.keras.Model) -> List[PairType]:
     conv_bn_pairs = get_pairs(conv_is_first=True)
     bn_conv_pairs = get_pairs(conv_is_first=False)
 
-    return conv_bn_pairs, bn_conv_pairs
+    return conv_bn_pairs, bn_conv_pairs, bn_picked_for_folding
+
 
 def fold_all_batch_norms(model: tf.keras.Model) \
         -> Tuple[List[Tuple[LayerType, BatchNormType]], tf.keras.Model]:
@@ -617,20 +620,63 @@ def fold_all_batch_norms(model: tf.keras.Model) \
     Batch Normalization layers folded
     """
 
-    conv_bn_pairs, bn_conv_pairs = _find_all_batch_norms_to_fold(model)
+    conv_bn_pairs, bn_conv_pairs, folded_bns = _find_all_batch_norms_to_fold(model)
 
     # Potential new model is returned in case the model is a functional model
     potential_new_model = _fold_given_batch_norms(model, conv_bn_pairs, bn_conv_pairs)
     model = potential_new_model if potential_new_model else model
+
+    # Convert the standalone BNs which are not folded
+    bn_converted = convert_standalone_batchnorms(model, folded_bns)
+    if bn_converted:
+        _logger.info("%d BatchNorms' weights got converted", len(bn_converted))
+        model.compile()
 
     _logger.warning("A new model is returned with the Batch Normalization layers removed for Keras models. "
                     "Please use this new model for the rest of the AIMET flow.")
 
     return conv_bn_pairs + [(conv, bn) for bn, conv in bn_conv_pairs], model
 
+
+def convert_standalone_batchnorms(model: tf.keras.Model, folded_bns: set) -> List[tf.keras.layers.BatchNormalization]:
+    """
+    Converts the weights of standalone batch norms remaining in the model after BN folding
+    :param model: keras model on which batch norm folding is being performed
+    :param folded_bns: list of batch norms which got folded
+    :return: list of BatchNorms whose weights is converted
+    """
+    bn_converted = []
+    for layer in model.layers:
+        if isinstance(layer, tf.keras.layers.BatchNormalization) and layer not in folded_bns:
+            convert_batchnorm_parameters(layer)
+            _logger.debug("%s weights got converted", layer.name)
+            bn_converted.append(layer)
+    return bn_converted
+
+
+def convert_batchnorm_parameters(bn: tf.keras.layers.BatchNormalization):
+    """
+    Convert the weights of BN such that it works as y = weights * x + bias
+    :param bn: Batch Norm layer whose weights need to be converted
+    """
+    bn_params = _get_bn_params(bn)
+
+    # inv ::  1/ Sqrt(var + eps)
+    inv = tf.math.rsqrt(bn.moving_variance.numpy() + bn.epsilon)
+    weight = np.array(bn_params.gamma) * np.array(inv)
+    bias = np.array(bn_params.beta) - np.array(bn_params.runningMean) * weight
+
+    new_bn_weights = [weight.data, bias.data,
+                      np.zeros(shape=bn.moving_mean.shape, dtype=np.float32),
+                      np.ones(shape=bn.moving_variance.shape, dtype=np.float32)]
+    bn.trainable = False
+    bn.set_weights(new_bn_weights)
+    bn.epsilon = 0
+
+
 # pylint: disable=protected-access
 def fold_all_batch_norms_to_scale(sim: QuantizationSimModel) -> \
-    Tuple[List[Tuple[QcQuantizeWrapper, QcQuantizeWrapper]], tf.keras.Model]:
+        Tuple[List[Tuple[QcQuantizeWrapper, QcQuantizeWrapper]], tf.keras.Model]:
     """
     Fold all batch_norm layers in a model into the quantization scale parameter
     of the corresponding conv layers
@@ -648,7 +694,7 @@ def fold_all_batch_norms_to_scale(sim: QuantizationSimModel) -> \
         for quant_wrapper in sim.quant_wrappers()
     }
 
-    conv_bn_pairs, bn_conv_pairs = _find_all_batch_norms_to_fold(model)
+    conv_bn_pairs, bn_conv_pairs, _ = _find_all_batch_norms_to_fold(model)
     conv_bn_pairs = [
         (quant_wrappers[conv], quant_wrappers[bn]) for conv, bn in conv_bn_pairs
     ]
