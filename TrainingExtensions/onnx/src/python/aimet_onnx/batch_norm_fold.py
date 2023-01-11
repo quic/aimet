@@ -158,32 +158,32 @@ def get_ordered_conv_linears(conn_graph: ConnectedGraph) -> List[Op]:
     return ordered_convs
 
 
-def is_valid_bn_fold(conv: onnx_pb.NodeProto, model: onnx_pb.ModelProto, fold_backward: bool) -> bool:
+def is_valid_bn_fold(conv_linear: onnx_pb.NodeProto, model: onnx_pb.ModelProto, fold_backward: bool) -> bool:
     """
     Determine if a given layer can successfully absorb a BatchNorm given the layer type and parameters
-    :param conv: The Conv/Linear layer to fold a BatchNorm into.
+    :param conv_linear: The Conv/Linear layer to fold a BatchNorm into.
     :param model: The model to which the Conv/Linear layer belongs.
     :param fold_backward: True if BatchNorm comes after Conv/Linear layer
     :return: True if a BatchNorm layer can be folded without causing output error.
     """
     valid = True
-    if conv.op_type in LinearType:
+    if conv_linear.op_type in LinearType:
         # Check if this is actually a fully connected layer or a dynamic matmul
-        w = retrieve_constant_input(conv, model, WEIGHT_INDEX)[0]
+        w = retrieve_constant_input(conv_linear, model, WEIGHT_INDEX)[0]
         if w is None:
             valid = False
     if not fold_backward:
         # Cannot fold BN -> Conv with padding. AIMET does not support forward folding to grouped or DW Conv
-        if conv.op_type == 'Conv':
-            valid &= all(item == 0 for item in get_node_attribute(conv, "pads"))
-            valid &= get_node_attribute(conv, "group") == 1
+        if conv_linear.op_type == 'Conv':
+            valid &= all(item == 0 for item in get_node_attribute(conv_linear, "pads"))
+            valid &= get_node_attribute(conv_linear, "group") == 1
         # AIMET does not support forward folding to ConvTranspose
-        elif conv.op_type == 'ConvTranspose':
+        elif conv_linear.op_type == 'ConvTranspose':
             valid = False
     else:
         # AIMET does not support backwards folding to grouped ConvTranspose
-        if conv.op_type == 'ConvTranspose':
-            valid &= get_node_attribute(conv, "group") in (1, get_input_output_channels(conv, model)[0])
+        if conv_linear.op_type == 'ConvTranspose':
+            valid &= get_node_attribute(conv_linear, "group") in (1, get_input_output_channels(conv_linear, model)[0])
     return valid
 
 
