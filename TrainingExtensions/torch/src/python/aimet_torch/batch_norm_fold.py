@@ -40,7 +40,7 @@
 
 import contextlib
 import math
-from typing import List, Tuple, Union, Dict, Iterable, Set
+from typing import List, Tuple, Union, Dict, Iterable, Set, Any
 import numpy as np
 import torch
 import torch.nn
@@ -383,7 +383,7 @@ def find_all_batch_norms_to_fold(model, input_shapes, dummy_input: Union[torch.T
         inp_tensor_list = utils.create_rand_tensors_given_shapes(input_shapes, device)
         connected_graph = ConnectedGraph(model, inp_tensor_list)
 
-    conv_bn_pairs, bn_conv_pairs = _find_all_batch_norms_to_fold(connected_graph)
+    conv_bn_pairs, bn_conv_pairs,_ = _find_all_batch_norms_to_fold(connected_graph)
     return conv_bn_pairs + bn_conv_pairs
 
 
@@ -396,8 +396,8 @@ def _find_all_batch_norms_to_fold(connected_graph: ConnectedGraph) -> Tuple[
     :return: A list of (layer, bn) pairs and a list of (bn, layer) pairs,
              where `bn` can be folded into to `layer`.
     """
-    conv_bn_pairs, bn_conv_pairs, _ = _find_foldable_bn_pair_and_bn_picked_for_folding(connected_graph)
-    return conv_bn_pairs, bn_conv_pairs
+    conv_bn_pairs, bn_conv_pairs, bn_to_fold = _find_foldable_bn_pair_and_bn_picked_for_folding(connected_graph)
+    return conv_bn_pairs, bn_conv_pairs, bn_to_fold
 
 def _find_foldable_bn_pair_and_bn_picked_for_folding(connected_graph: ConnectedGraph) -> Tuple[
         List[Tuple[LayerType, BatchNormType]], List[Tuple[BatchNormType, LayerType]], Set]:
@@ -492,11 +492,69 @@ def fold_all_batch_norms_to_weight(
     else:
         inp_tensor_list = dummy_input
     connected_graph = ConnectedGraph(model, inp_tensor_list)
-    conv_bn_pairs, bn_conv_pairs = _find_all_batch_norms_to_fold(connected_graph)
+
+    conv_bn_pairs, bn_conv_pairs, bn_to_fold = _find_all_batch_norms_to_fold(connected_graph)
 
     _fold_given_batch_norms(model, conv_bn_pairs, bn_conv_pairs)
 
+     # Convert the standalone BNs which are not folded
+    bn_converted = convert_standalone_batchnorms(model, inp_tensor_list, bn_to_fold)
+    _logger.info("%d BatchNorms' weights got converted", len(bn_converted))
     return conv_bn_pairs + [(conv, bn) for bn, conv in bn_conv_pairs]
+
+
+def convert_standalone_batchnorms(model: torch.nn.Module,
+                                  dummy_input: Union[torch.Tensor, Tuple],
+                                  folded_bn: set) -> List[Tuple[Any, BatchNorm2d]]:
+    """
+    Convert the weights of all the standalone batchnorms of a model which didn't get folded.
+    :param model: torch model for which batch norm folding is being performed
+    :param dummy_input: dummy input for the model
+    :param folded_bn: list of BNs which got folded
+    :return: List of tuple(name, bn_module) whose weights got converted
+    """
+
+    module_list = utils.get_ordered_list_of_modules(model, dummy_input)
+    bn_converted = []
+    for name, module in module_list:
+        if isinstance(module, (torch.nn.BatchNorm1d, torch.nn.BatchNorm2d)) and module not in folded_bn:
+            convert_batchnorm_parameters(model, module)
+            _logger.debug("%s weights got converted", name)
+            bn_converted.append((name, module))
+    return bn_converted
+
+
+def convert_batchnorm_parameters(model: torch.nn.Module, bn: Union[torch.nn.BatchNorm1d, torch.nn.BatchNorm2d]):
+    """
+    To convert the weight of a batchnorm such that it becomes in the format y = weights*input + bias
+    :param model: torch model for which batch norm folding is being performed
+    :param bn: BatchNorm module whose weights needs to be converted
+    """
+    with utils.in_eval_mode(model), torch.no_grad():
+        bn_params = libpymo.BNParams()
+        bn_params.gamma = bn.weight.detach().cpu().numpy().reshape(-1)
+        bn_params.beta = bn.bias.detach().cpu().numpy().reshape(-1)
+        bn_params.runningMean = bn.running_mean.detach().cpu().numpy().reshape(-1)
+        inv_sigma = torch.rsqrt(bn.running_var + bn.eps)
+        bn_params.runningVar = inv_sigma.detach().cpu().numpy().reshape(-1)
+
+        weight = np.array(bn_params.gamma)*np.array(bn_params.runningVar)
+        bias = np.array(bn_params.beta) - np.array(bn_params.runningMean) * weight
+
+        # Update the values
+        bn.eps = 0
+        bn.track_running_stats = False
+        bn.weight.copy_(torch.tensor(weight, device=bn.weight.device, dtype=bn.weight.dtype).reshape_as(bn.weight))
+
+        bn.bias.copy_(torch.tensor(bias, device=bn.bias.device, dtype=bn.bias.dtype).reshape_as(bn.bias))
+
+        new_mean = np.zeros(bn.running_mean.shape)
+        bn.running_mean.copy_(torch.tensor(new_mean, device=bn.running_mean.device, dtype=bn.running_mean.dtype).reshape_as(bn.running_mean))
+
+        new_var = np.ones(bn.running_var.shape)
+        bn.running_var.copy_(torch.tensor(new_var, device=bn.running_var.device, dtype=bn.running_var.dtype).reshape_as(bn.running_var))
+
+
 
 
 fold_all_batch_norms = fold_all_batch_norms_to_weight
@@ -523,7 +581,7 @@ def fold_all_batch_norms_to_scale(
         quant_wrapper._module_to_wrap: quant_wrapper
         for _, quant_wrapper in sim.quant_wrappers()
     }
-    conv_bn_pairs, bn_conv_pairs = _find_all_batch_norms_to_fold(connected_graph)
+    conv_bn_pairs, bn_conv_pairs, _ = _find_all_batch_norms_to_fold(connected_graph)
     conv_bn_pairs = [
         (quant_wrappers[conv], quant_wrappers[bn]) for conv, bn in conv_bn_pairs
     ]

@@ -3,7 +3,7 @@
 # =============================================================================
 #  @@-COPYRIGHT-START-@@
 #
-#  Copyright (c) 2021, Qualcomm Innovation Center, Inc. All rights reserved.
+#  Copyright (c) 2021-2023, Qualcomm Innovation Center, Inc. All rights reserved.
 #
 #  Redistribution and use in source and binary forms, with or without
 #  modification, are permitted provided that the following conditions are met:
@@ -770,7 +770,7 @@ class TestBatchNormFold(unittest.TestCase):
         Block1.add(tf.keras.layers.Conv2D(6, 6))
         Block1.add(tf.keras.layers.ReLU())
 
-        conv_bn_pairs, bn_conv_pairs = _find_all_batch_norms_to_fold(Block1)
+        conv_bn_pairs, bn_conv_pairs, _ = _find_all_batch_norms_to_fold(Block1)
         self.assertEqual(2, len(conv_bn_pairs) + len(bn_conv_pairs))
         self.assertEqual((Block1.layers[2], Block1.layers[3]), conv_bn_pairs[0])
         self.assertEqual((Block1.layers[1], Block1.layers[2]), bn_conv_pairs[0])
@@ -789,7 +789,7 @@ class TestBatchNormFold(unittest.TestCase):
         output = tf.keras.layers.ReLU()(bn_op)
         model = tf.keras.Model(input1, output)
 
-        conv_bn_pairs, bn_conv_pairs = _find_all_batch_norms_to_fold(model)
+        conv_bn_pairs, bn_conv_pairs, _ = _find_all_batch_norms_to_fold(model)
         self.assertEqual(4, len(conv_bn_pairs) + len(bn_conv_pairs))
 
     def test_find_all_bns_to_fold_combined_model(self):
@@ -834,7 +834,7 @@ class TestBatchNormFold(unittest.TestCase):
 
         model = MyModelMLP((64, 64, 64))
 
-        conv_bn_pairs, bn_conv_pairs = _find_all_batch_norms_to_fold(model)
+        conv_bn_pairs, bn_conv_pairs, _ = _find_all_batch_norms_to_fold(model)
 
         self.assertEqual(3, len(conv_bn_pairs) + len(bn_conv_pairs))
         self.assertEqual((model._layers[4]._layers[1], model._layers[4]._layers[2]), bn_conv_pairs[0])
@@ -855,7 +855,7 @@ class TestBatchNormFold(unittest.TestCase):
         relu = tf.nn.relu(bn_op)
         model = tf.keras.Model(inputs=inputs, outputs=relu)
 
-        conv_bn_pairs, bn_conv_pairs = _find_all_batch_norms_to_fold(model)
+        conv_bn_pairs, bn_conv_pairs, _ = _find_all_batch_norms_to_fold(model)
         self.assertEqual(1, len(conv_bn_pairs) + len(bn_conv_pairs))
 
     def test_bn_fold_layer_selection_looped_network(self):
@@ -878,7 +878,7 @@ class TestBatchNormFold(unittest.TestCase):
 
         model = tf.keras.Model(inputs=input1, outputs=x2)
 
-        conv_bn_pairs, bn_conv_pairs = _find_all_batch_norms_to_fold(model)
+        conv_bn_pairs, bn_conv_pairs, _ = _find_all_batch_norms_to_fold(model)
 
         self.assertEqual(0, len(conv_bn_pairs) + len(bn_conv_pairs))
 
@@ -892,7 +892,7 @@ class TestBatchNormFold(unittest.TestCase):
         relu = tf.nn.relu(conv_op)
         model = tf.keras.Model(inputs=inputs, outputs=relu)
 
-        conv_bn_pairs, bn_conv_pairs = _find_all_batch_norms_to_fold(model)
+        conv_bn_pairs, bn_conv_pairs, _ = _find_all_batch_norms_to_fold(model)
         self.assertEqual(1, len(conv_bn_pairs) + len(bn_conv_pairs))
 
     def test_bn_fold_find_layers_model_with_multi_input(self):
@@ -910,7 +910,7 @@ class TestBatchNormFold(unittest.TestCase):
         relu = tf.nn.relu(bn_op)
         model = tf.keras.Model(inputs=[input1, input2], outputs=relu)
 
-        conv_bn_pairs, bn_conv_pairs = _find_all_batch_norms_to_fold(model)
+        conv_bn_pairs, bn_conv_pairs, _ = _find_all_batch_norms_to_fold(model)
         self.assertEqual(1, len(conv_bn_pairs) + len(bn_conv_pairs))
 
     def test_bn_fold_auto_rules_conv_bn_conv(self):
@@ -925,7 +925,7 @@ class TestBatchNormFold(unittest.TestCase):
         relu = tf.nn.relu(conv2)
         model = tf.keras.Model(inputs=inputs, outputs=relu)
 
-        conv_bn_pairs, bn_conv_pairs = _find_all_batch_norms_to_fold(model)
+        conv_bn_pairs, bn_conv_pairs, _ = _find_all_batch_norms_to_fold(model)
         self.assertEqual(1, len(conv_bn_pairs) + len(bn_conv_pairs))
         conv_linear, batchnorm = conv_bn_pairs[0]
         self.assertEqual('conv1', conv_linear.name)
@@ -1064,6 +1064,26 @@ class TestBatchNormFold(unittest.TestCase):
         _, model = fold_all_batch_norms(model)
         output_after_batchnorm_folding = model(mock_input)
 
+        assert np.allclose(output_before_batchnorm_folding, output_after_batchnorm_folding, rtol=1e-2)
+
+    def test_bn_conversion(self):
+        inputs = tf.keras.Input((26, 26, 3))
+        x = tf.keras.layers.MaxPool2D()(inputs)
+
+        # Standalone Batch Norm which will get converted.
+        x = tf.keras.layers.BatchNormalization()(x)
+        x = tf.keras.layers.ReLU()(x)
+        x = tf.keras.layers.Conv2D(filters=3, kernel_size=3, strides=1)(x)
+        x = tf.keras.layers.BatchNormalization(fused=True)(x)
+        x = tf.keras.layers.ReLU()(x)
+        outputs = tf.keras.layers.Dense(units = 10)(x)
+        model = tf.keras.Model(inputs, outputs)
+
+        mock_input = np.random.randn(1, 26, 26, 3)
+        output_before_batchnorm_folding = model(mock_input)
+        folded_pairs, model = fold_all_batch_norms(model)
+        output_after_batchnorm_folding = model(mock_input)
+        assert 1 == len(folded_pairs)
         assert np.allclose(output_before_batchnorm_folding, output_after_batchnorm_folding, rtol=1e-2)
 
 
