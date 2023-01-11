@@ -494,7 +494,7 @@ class TestBatchNormFold:
         assert np.allclose(baseline_output[0], folded_output[0], rtol=1e-2, atol=1e-6)
 
     @pytest.mark.parametrize("bias", [True, False])
-    def test_fold_bn_after_conv1d(self, bias):
+    def test_fold_bn_after_dynamic_matmul(self, bias):
         torch.manual_seed(10)
         torch_model = BNAfterDynamicMatMul(bias=bias, padding=1)
         torch_model.eval()
