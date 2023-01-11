@@ -147,7 +147,12 @@ class ConnectedGraph(AimetCommonConnectedGraph):
         'randn',
         'flatten',
         'permute',
-        'squeeze'
+        'squeeze',
+        'contiguous',
+        'copy',
+        'clone',
+        'index',
+        'ScalarImplicit'
     }
 
     # Graph nodes for which which we will treat as passthrough and not represent with an Op
