@@ -39,7 +39,7 @@
 """ Implementation to automatically prepare pytorch models for AIMET features """
 
 import copy
-from re import search
+from re import split
 from typing import Any, Optional, Dict, Union, List
 import torch
 import torch.fx
@@ -355,7 +355,7 @@ def _prepare_helper(symbolic_traced_model: torch.fx.GraphModule):
 
         # Create new module for functional nodes
         if node.op in ['call_function', 'call_method']:
-            functional_name = _find_functional_name_for_node(node)
+            functional_name = _find_functional_name_for_node(node.name)
             if functional_name:
                 # Instantiate new module for functional node
                 new_module = _create_module_for_functional_node(node, functional_name)
@@ -417,21 +417,25 @@ def _create_node_for_new_module(symbolic_traced_model: torch.fx.GraphModule, nod
     symbolic_traced_model.graph.erase_node(node)
 
 
-def _find_functional_name_for_node(node: torch.fx.node) -> Union[str, None]:
+def _find_functional_name_for_node(node_name: str) -> Union[str, None]:
     """
-    For given node, find corresponding functional name from functional_to_module lookup
-    :param node: torch.fx Node
+    For given node name, find corresponding functional name from combined lookup
+
+    :param node_name: torch.fx Node name
     :return: corresponding functional name if found, else None
     """
+    combined_lookup = {**functional_with_kwargs, **functional_with_special_handling, **functional_with_args_kwargs}
 
-    combined_ops_map = {**functional_with_kwargs, **functional_with_special_handling,
-                        **functional_with_args_kwargs}
-    for functional_name in combined_ops_map:
-        # \b boundary character to find the exact match from the functional_to_module lookup
-        pattern = r"\b" + functional_name + r"\b"
-        if search(pattern, str(node.target)) or search(pattern, str(node)):
-            return functional_name
+    # Functional operations with similar names are differentiated using "_count" suffix
+    # when symbolically traced. For example, two add operations will have name 'add' and 'add_1'.
+    # Split given node name by occurrence of pattern. \d is used to match [0-9] followed by '_'.
+    strings = split(pattern=r'_\d', string=node_name)
+    for string in strings:
+        if string in combined_lookup.keys():
+            return string
 
+    logger.debug("Couldn't find functional: %s in the lookup. If functional op isn't math invariant,"
+                 " add an entry in the lookup.", node_name)
     return None
 
 
