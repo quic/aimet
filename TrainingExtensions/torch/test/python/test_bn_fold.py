@@ -630,10 +630,13 @@ class TestTrainingExtensionBnFold:
         input_shape = (2, 10, 24, 24)
         connected_graph = ConnectedGraph(model,
                                          create_rand_tensors_given_shapes(input_shape, get_device(model)))
-        conv_bn_pairs, bn_conv_pairs = _find_all_batch_norms_to_fold(connected_graph)
+
+        conv_bn_pairs, bn_conv_pairs, bn_picked = _find_all_batch_norms_to_fold(connected_graph)
+
         assert len(conv_bn_pairs) == len(bn_conv_pairs) == 1
         assert (model.conv1, model.bn1) in conv_bn_pairs
         assert (model.bn2, model.conv3) in bn_conv_pairs
+        assert len(bn_picked) == 2
 
     def test_bn_fold_auto_mode_transposed_conv2d(self):
         torch.manual_seed(10)
@@ -661,7 +664,10 @@ class TestTrainingExtensionBnFold:
 
         connected_graph = ConnectedGraph(model,
                                          create_rand_tensors_given_shapes(inp_shapes, get_device(model)))
-        conv_bn_pairs, bn_conv_pairs = _find_all_batch_norms_to_fold(connected_graph)
+
+        conv_bn_pairs, bn_conv_pairs, _ = _find_all_batch_norms_to_fold(connected_graph)
+
+
         assert len(conv_bn_pairs) == 2
         assert not bn_conv_pairs
         assert (model.conv1, model.bn1) in conv_bn_pairs
@@ -715,6 +721,41 @@ class TestTrainingExtensionBnFold:
 
         assert 1 == len(bn_pairs)
         assert (model.conv1d, orig_bn) in bn_pairs
+
+    def test_bn_conversion(self):
+        class MyModel(torch.nn.Module):
+            def __init__(self):
+
+                super(MyModel, self).__init__()
+                self.conv1d = torch.nn.Conv1d(10, 20, kernel_size=2)
+                self.relu = torch.nn.ReLU()
+                self.bn1 = torch.nn.BatchNorm1d(20)
+
+            def forward(self, x):
+                x = self.conv1d(x)
+                x = self.relu(x)
+                x = self.bn1(x)
+
+                return x
+
+        model = MyModel().eval()
+        _initialize_bn_params(model)
+
+        random_input = torch.randn((2, 10, 32))
+
+        baseline_output = model(random_input)
+        orig_bn = model.bn1
+
+        bn_pairs = fold_all_batch_norms(model, (2, 10, 32))
+        output_after_fold = model(random_input)
+
+        assert isinstance(model.bn1, torch.nn.BatchNorm1d)
+        assert torch.allclose(baseline_output, output_after_fold, rtol=1.e-2)
+
+        assert 0 == len(bn_pairs)
+        assert (model.conv1d, orig_bn) not in bn_pairs
+
+
 
     def test_fold_manual_with_bn_after_Conv1d_layer_no_bias(self):
         class MyModel(torch.nn.Module):
