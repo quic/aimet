@@ -56,6 +56,7 @@ from aimet_tensorflow.bn_reestimation import reestimate_bn_stats, _get_all_tf_bn
 from aimet_tensorflow.batch_norm_fold import fold_all_batch_norms_to_scale
 from aimet_tensorflow.common.graph_eval import initialize_uninitialized_vars
 from aimet_tensorflow.utils.op.bn_mutable import modify_sess_bn_mutable
+from aimet_tensorflow.utils.op.conv import BiasUtils
 tf.compat.v1.logging.set_verbosity(tf.compat.v1.logging.WARN)
 logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Test)
 AimetLogger.set_level_for_all_areas(logging.DEBUG)
@@ -138,6 +139,7 @@ class TestBNReEstimation:
         start_op_names = ["input_1"]
         end_op_names = ["predictions/Softmax"]
         modify_sess_bn_mutable(sess, start_op_names, end_op_names, training_tf_placeholder=False)
+        sess = BiasUtils.initialize_model_with_bias(sess, start_op_names, end_op_names)
 
         # PTQ
 
