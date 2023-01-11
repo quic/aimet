@@ -61,7 +61,7 @@ from aimet_torch.examples.test_models import ModelWithFunctionalReLU, SingleResi
     ConcatModel
 from aimet_torch.quantsim import QuantizationSimModel, QuantParams
 from aimet_torch.utils import create_fake_data_loader
-from aimet_torch.model_preparer import prepare_model
+from aimet_torch.model_preparer import prepare_model, _find_functional_name_for_node
 from aimet_torch.batch_norm_fold import fold_all_batch_norms
 from aimet_torch.cross_layer_equalization import  equalize_model
 from aimet_torch.adaround.adaround_weight import Adaround, AdaroundParameters
@@ -676,6 +676,8 @@ class TestFX:
                 x = self.conv1(inputs[0])
                 x = torch.nn.functional.relu6(x)
                 x = torch.nn.functional.relu(x)
+                x = torch.nn.functional.relu6(x)
+                x = torch.nn.functional.relu(x)
                 return x
 
         input_shape = (1, 3, 32, 32)
@@ -689,6 +691,8 @@ class TestFX:
 
         assert isinstance(model_transformed.module_relu6, torch.nn.ReLU6)
         assert isinstance(model_transformed.module_relu, torch.nn.ReLU)
+        assert isinstance(model_transformed.module_relu6_1, torch.nn.ReLU6)
+        assert isinstance(model_transformed.module_relu_1, torch.nn.ReLU)
 
     def test_fx_with_elu(self):
         """
@@ -1451,10 +1455,13 @@ class TestFX:
 
             def forward(self, x):
                 x = self.conv(x)
-                x, indices = torch.nn.functional.max_pool2d(x, 3, return_indices=True)
+                x = torch.nn.functional.max_pool2d(x, 2)
+                x = torch.nn.functional.max_pool2d(x, return_indices=False, kernel_size=2)
+                x, indices = torch.nn.functional.max_pool2d(x, 2, return_indices=True)
+                x, indices = torch.nn.functional.max_pool2d(x, return_indices=True, kernel_size=2)
                 return x, indices
 
-        input_shape = (1, 3, 32, 32)
+        input_shape = (1, 3, 64, 64)
         dummy_input = torch.randn(input_shape)
         model = ModelWithMaxPool2d().eval()
         model_transformed = prepare_model(model)
@@ -1464,6 +1471,12 @@ class TestFX:
         assert torch.equal(model_transformed(dummy_input)[0], model(dummy_input)[0])
         assert torch.equal(model_transformed(dummy_input)[1], model(dummy_input)[1])
 
+        # Verify that the modules are added correctly
+        assert isinstance(model_transformed.module_max_pool2d, elementwise_ops.MaxPool2d)
+        assert isinstance(model_transformed.module_max_pool2d_1, elementwise_ops.MaxPool2d)
+        assert isinstance(model_transformed.module_max_pool2d_with_indices, elementwise_ops.MaxPool2d)
+        assert isinstance(model_transformed.module_max_pool2d_with_indices_1, elementwise_ops.MaxPool2d)
+
         # Verify Quantization workflow.
         sim = QuantizationSimModel(model_transformed, dummy_input=dummy_input)
         sim.compute_encodings(evaluate, forward_pass_callback_args=dummy_input)
@@ -1471,3 +1484,10 @@ class TestFX:
         # Quantizer enabled for output and disabled for indices (integer values)
         assert sim.model.module_max_pool2d_with_indices.output_quantizers[0].enabled
         assert not sim.model.module_max_pool2d_with_indices.output_quantizers[1].enabled
+
+    def test_find_functional_name_for_node(self):
+        assert _find_functional_name_for_node("add_123") == "add"
+        assert _find_functional_name_for_node("max_pool2d_with_indices_123") == "max_pool2d_with_indices"
+        assert _find_functional_name_for_node("cat_123_1") == "cat"
+        assert _find_functional_name_for_node("relu6_123") == "relu6"
+        assert _find_functional_name_for_node("123_relu6_123") is None # Not a valid name.
