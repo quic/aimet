@@ -39,7 +39,7 @@
 
 from typing import Dict, List, Tuple
 import contextlib
-from onnx import helper, onnx_pb, numpy_helper
+from onnx import onnx_pb, numpy_helper
 import numpy as np
 
 from aimet_common.bias_correction import ConvBnPatternHandler
@@ -47,12 +47,14 @@ from aimet_common.graph_pattern_matcher import PatternType
 from aimet_common.graph_searcher import GraphSearcher
 from aimet_common.connected_graph.connectedgraph_utils import get_ordered_ops
 import aimet_common.libpymo as libpymo
+from aimet_common.utils import AimetLogger
 
 from aimet_onnx.meta.connectedgraph import ConnectedGraph
 from aimet_onnx.meta.connectedgraph import WEIGHT_INDEX, BIAS_INDEX, RUNNING_MEAN_INDEX, RUNNING_VAR_INDEX
 from aimet_onnx.meta.operations import Op
 from aimet_onnx.utils import get_node_attribute, remove_node, transpose_tensor, ParamUtils
 
+logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.BatchNormFoldiing)
 
 ConvType = ['Conv', 'ConvTranspose']
 LinearType = ['Gemm', 'MatMul']
@@ -72,12 +74,11 @@ def _find_conv_bn_pairs(connected_graph: ConnectedGraph) -> Dict:
     preceding_linear_op_types = ['Flatten', 'Reshape']
 
     # Linear layer combinations
-    for preceding_linear_op_type in preceding_linear_op_types:
-        # BN -> Linear
-        patterns_with_callbacks.append(PatternType(pattern=['BatchNormalization', preceding_linear_op_type, 'Gemm'],
-                                                   action=layer_select_handler))
-        patterns_with_callbacks.append(PatternType(pattern=['BatchNormalization', preceding_linear_op_type, 'MatMul'],
-                                                   action=layer_select_handler))
+    for linear_op in LinearType:
+        for preceding_linear_op_type in preceding_linear_op_types:
+            # BN -> Linear
+            patterns_with_callbacks.append(PatternType(pattern=['BatchNormalization', preceding_linear_op_type, linear_op],
+                                                       action=layer_select_handler))
 
     for op_type in ConvType + LinearType:
         patterns_with_callbacks.append(PatternType(pattern=['BatchNormalization', op_type],
@@ -116,20 +117,26 @@ def find_all_batch_norms_to_fold(connected_graph: ConnectedGraph,
     # Backward fold is given priority over Forward fold
     for node in ordered_conv_fc_nodes:
         # Filter out combinations that are not supported
-        if node in conv_linear_bn_activation_info_dict.keys() and is_valid_bn_fold(node.get_module(), model, True):
+        if node in conv_linear_bn_activation_info_dict.keys():
             bn_info = conv_linear_bn_activation_info_dict[node]
             if bn_info.output_bn and bn_info.output_bn not in bn_picked_for_folding:
-                conv_bn_pairs.append((node.get_module(), bn_info.output_bn.get_module()))
-                bn_picked_for_folding.add(bn_info.output_bn)
+                if is_valid_bn_fold(node.get_module(), model, True):
+                    conv_bn_pairs.append((node.get_module(), bn_info.output_bn.get_module()))
+                    bn_picked_for_folding.add(bn_info.output_bn)
+                else:
+                    logger.info('...... invalid combination to fold %s', [node.name, bn_info.output_bn.name])
 
     bn_conv_pairs = []
     for node in ordered_conv_fc_nodes:
         # Filter out combinations that are not supported
-        if node in conv_linear_bn_activation_info_dict.keys() and is_valid_bn_fold(node.get_module(), model, False):
+        if node in conv_linear_bn_activation_info_dict.keys():
             bn_info = conv_linear_bn_activation_info_dict[node]
             if bn_info.input_bn and bn_info.input_bn not in bn_picked_for_folding:
-                bn_conv_pairs.append((bn_info.input_bn.get_module(), node.get_module()))
-                bn_picked_for_folding.add(bn_info.input_bn)
+                if is_valid_bn_fold(node.get_module(), model, False):
+                    bn_conv_pairs.append((bn_info.input_bn.get_module(), node.get_module()))
+                    bn_picked_for_folding.add(bn_info.input_bn)
+                else:
+                    logger.info('...... invalid combination to fold %s', [bn_info.input_bn.name, node.name])
 
     return conv_bn_pairs, bn_conv_pairs
 
@@ -160,6 +167,11 @@ def is_valid_bn_fold(conv: onnx_pb.NodeProto, model: onnx_pb.ModelProto, fold_ba
     :return: True if a BatchNorm layer can be folded without causing output error.
     """
     valid = True
+    if conv.op_type in LinearType:
+        # Check if this is actually a fully connected layer or a dynamic matmul
+        w = retrieve_constant_input(conv, model, WEIGHT_INDEX)[0]
+        if w is None:
+            valid = False
     if not fold_backward:
         # Cannot fold BN -> Conv with padding. AIMET does not support forward folding to grouped or DW Conv
         if conv.op_type == 'Conv':
@@ -256,26 +268,17 @@ def _matmul_to_gemm(node: onnx_pb.NodeProto, model: onnx_pb.ModelProto):
     """
     assert node.op_type == "MatMul"
 
-    weight_input = node.input[WEIGHT_INDEX]
-    weight = ParamUtils.get_param(model, node, WEIGHT_INDEX)
-    transposed = False
-    # Check if the weight is transposed before entering the node
-    for other_node in model.graph.node:
-        if weight_input in other_node.output and other_node.op_type == "Transpose":
-            node.input[WEIGHT_INDEX] = other_node.input[0]
-            weight = ParamUtils.get_param(model, node, WEIGHT_INDEX)
-            transposed = True
-    if not transposed:
+    weight, transposed = retrieve_constant_input(node, model, WEIGHT_INDEX)
+    if transposed:
+        node.input[WEIGHT_INDEX] = weight.name
         model.graph.initializer.remove(weight)
         weight = transpose_tensor(weight, (1, 0))
         model.graph.initializer.append(weight)
-    trans_b = helper.make_attribute("transB", 1)
-    node.attribute.append(trans_b)
     node.op_type = "Gemm"
     node.name = node.name.replace("MatMul", "Gemm")
     # Create bias vector for Gemm operation
     bias_name = node.name + ".bias"
-    bias_data = np.zeros(weight.dims[1]) if trans_b is None else np.zeros(weight.dims[0])
+    bias_data = np.zeros(weight.dims[1])
     bias = numpy_helper.from_array(bias_data.astype(np.float32), name=bias_name)
     model.graph.initializer.append(bias)
     node.input.append(bias_name)
@@ -391,3 +394,26 @@ def get_input_output_channels(node: onnx_pb.NodeProto, model: onnx_pb.ModelProto
         num_out_channels = None
         num_in_channels = None
     return num_in_channels, num_out_channels
+
+
+def retrieve_constant_input(node: onnx_pb.NodeProto, model: onnx_pb.ModelProto, index: int
+                            ) -> Tuple[onnx_pb.TensorProto, bool]:
+    """
+    Retrieves node input at the specified index if the input has a corresponding initializer in model.graph.initializer
+    and is separated from node by no more than one Transpose operation.
+    :param node: The node to find the input for
+    :param model: The model to which the node belongs
+    :param index: The index of the desired input within node.input
+    :return: Tuple containing the input parameter and a bool specifying whether the param is transposed before entering
+             the node
+    """
+    weight_input = node.input[WEIGHT_INDEX]
+    transposed = False
+    weight = ParamUtils.get_param(model, node, index)
+    if not weight:
+        # Check if the weight is transposed before entering the node
+        for other_node in model.graph.node:
+            if weight_input in other_node.output and other_node.op_type == "Transpose":
+                weight = ParamUtils.get_param(model, other_node, 0)
+                transposed = True
+    return weight, transposed

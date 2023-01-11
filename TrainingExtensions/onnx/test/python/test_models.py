@@ -196,3 +196,243 @@ def hierarchical_model():
                       output_names=['output'])
     model = ONNXModel(load_model('./hierarchical_model.onnx'))
     return model
+
+class BNBeforeConv(torch.nn.Module):
+    def __init__(self, padding=0, stride=1, dilation=1, groups=1, bias=False):
+        super(BNBeforeConv, self).__init__()
+        self.conv1 = torch.nn.Conv2d(10, 20, 3, bias=bias)
+        self.relu1 = torch.nn.ReLU()
+        self.bn1 = torch.nn.BatchNorm2d(20)
+        self.conv2 = torch.nn.Conv2d(20, 20, 3, bias=bias, padding=padding, stride=stride,
+                                     dilation=dilation, groups=groups)
+
+    def forward(self, x):
+        x = self.conv1(x)
+        x = self.relu1(x)
+        x = self.bn1(x)
+        x = self.conv2(x)
+
+        return x
+
+
+class BNAfterConv(torch.nn.Module):
+    def __init__(self, padding=0, stride=1, dilation=1, groups=1, bias=False):
+        super(BNAfterConv, self).__init__()
+        self.conv1 = torch.nn.Conv2d(10, 20, 3, bias=bias)
+        self.relu1 = torch.nn.ReLU()
+        self.conv2 = torch.nn.Conv2d(20, 20, 3, bias=bias, padding=padding, stride=stride,
+                                     dilation=dilation, groups=groups)
+        self.bn1 = torch.nn.BatchNorm2d(20)
+        self.relu2 = torch.nn.ReLU()
+
+    def forward(self, x):
+        x = self.conv1(x)
+        x = self.relu1(x)
+        x = self.conv2(x)
+        x = self.bn1(x)
+        x = self.relu2(x)
+
+        return x
+
+
+class BNAfterLinear(torch.nn.Module):
+    def __init__(self, bias=False):
+        super(BNAfterLinear, self).__init__()
+        self.fc1 = torch.nn.Linear(10, 20, bias=bias)
+        self.bn1 = torch.nn.BatchNorm1d(20)
+
+    def forward(self, x):
+        x = self.fc1(x)
+        x = self.bn1(x)
+
+        return x
+
+
+class BNBeforeLinear(torch.nn.Module):
+    def __init__(self, bias=False):
+        super(BNBeforeLinear, self).__init__()
+        self.fc1 = torch.nn.Linear(10, 20, bias=bias)
+        self.relu1 = torch.nn.ReLU()
+        self.bn1 = torch.nn.BatchNorm1d(20)
+        self.fc2 = torch.nn.Linear(20, 20, bias=bias)
+
+    def forward(self, x):
+        x = self.fc1(x)
+        x = self.relu1(x)
+        x = self.bn1(x)
+        x = self.fc2(x)
+
+        return x
+
+
+class BNBeforeFlattenLinear(torch.nn.Module):
+    def __init__(self, bias=False):
+        super(BNBeforeFlattenLinear, self).__init__()
+        self.conv1 = torch.nn.Conv2d(10, 20, 3, padding=1, stride=2)
+        self.relu1 = torch.nn.ReLU()
+        self.bn1 = torch.nn.BatchNorm2d(20)
+        self.flatten = torch.nn.Flatten()
+        self.fc2 = torch.nn.Linear(20 * 12 * 12, 20, bias=bias)
+
+    def forward(self, x):
+        x = self.conv1(x)
+        x = self.relu1(x)
+        x = self.bn1(x)
+        x = self.flatten(x)
+        x = self.fc2(x)
+
+        return x
+
+
+class BNAfterConvTranspose(torch.nn.Module):
+    def __init__(self, padding=0, stride=1, dilation=1, groups=1, output_padding=0):
+        super(BNAfterConvTranspose, self).__init__()
+        self.conv1 = torch.nn.ConvTranspose2d(10, 10, 3, padding=padding, stride=stride, dilation=dilation,
+                                              groups=groups, output_padding=output_padding)
+        self.bn1 = torch.nn.BatchNorm2d(10)
+        self.relu1 = torch.nn.ReLU()
+
+    def forward(self, x):
+        x = self.conv1(x)
+        x = self.bn1(x)
+        x = self.relu1(x)
+
+        return x
+
+
+class BNBeforeConvTranspose(torch.nn.Module):
+    def __init__(self, padding=0, stride=1, dilation=1, groups=1, output_padding=0):
+        super(BNBeforeConvTranspose, self).__init__()
+        self.conv1 = torch.nn.Conv2d(10, 10, 3, bias=False)
+        self.relu1 = torch.nn.ReLU()
+        self.bn1 = torch.nn.BatchNorm2d(10)
+        self.conv2 = torch.nn.ConvTranspose2d(10, 10, 3, padding=padding, stride=stride, dilation=dilation,
+                                              groups=groups, output_padding=output_padding)
+
+    def forward(self, x):
+        x = self.conv1(x)
+        x = self.relu1(x)
+        x = self.bn1(x)
+        x = self.conv2(x)
+
+        return x
+
+
+class BNAfterConv1d(torch.nn.Module):
+    def __init__(self, padding=0, stride=1, dilation=1, groups=1, bias=False):
+        super(BNAfterConv1d, self).__init__()
+        self.conv1 = torch.nn.Conv1d(10, 10, 3, padding=padding, stride=stride, dilation=dilation, groups=groups, bias=bias)
+        self.bn1 = torch.nn.BatchNorm1d(10)
+        self.relu1 = torch.nn.ReLU()
+
+    def forward(self, x):
+        x = self.conv1(x)
+        x = self.bn1(x)
+        x = self.relu1(x)
+
+        return x
+
+class BNBeforeConv1d(torch.nn.Module):
+    def __init__(self, padding=0, stride=1, dilation=1, groups=1, bias=False):
+
+        super(BNBeforeConv1d, self).__init__()
+        self.bn1 = torch.nn.BatchNorm1d(10)
+        self.conv1d = torch.nn.Conv1d(10, 20, 3, padding=padding, stride=stride, dilation=dilation, groups=groups, bias=bias)
+
+    def forward(self, x):
+        x = self.bn1(x)
+        x = self.conv1d(x)
+
+        return x
+
+class BNAfterDynamicMatMul(torch.nn.Module):
+    def __init__(self, padding=0, stride=1, dilation=1, groups=1, bias=False):
+        super(BNAfterDynamicMatMul, self).__init__()
+        self.conv1d = torch.nn.Conv1d(10, 20, 3, padding=padding, stride=stride, dilation=dilation, groups=groups,
+                                      bias=bias)
+        self.fc1 = torch.nn.Linear(24*10, 20)
+        self.flatten = torch.nn.Flatten()
+        self.conv1d = torch.nn.Conv1d(10, 20, 3, padding=padding, stride=stride, dilation=dilation, groups=groups,
+                                      bias=bias)
+        self.bn1 = torch.nn.BatchNorm1d(1)
+
+    def forward(self, x):
+        x1 = self.conv1d(x)
+        x2 = self.fc1(self.flatten(x)).unsqueeze(1)
+        x = torch.matmul(x2, x1)
+        x = self.bn1(x)
+        return x
+
+class MyModel(torch.nn.Module):
+    def __init__(self):
+        super(MyModel, self).__init__()
+
+        self.conv1 = torch.nn.Conv2d(10, 20, 3)
+        self.bn1 = torch.nn.BatchNorm2d(20)
+        self.relu1 = torch.nn.ReLU()
+
+        self.conv2 = torch.nn.Conv2d(20, 15, 3)
+        self.relu2 = torch.nn.ReLU()
+
+        self.bn2 = torch.nn.BatchNorm2d(15)
+        self.conv3 = torch.nn.Conv2d(15, 20, 3)
+
+        self.conv4 = torch.nn.Conv2d(20, 20, 3)
+        self.bn3 = torch.nn.BatchNorm2d(20)
+        self.bn4 = torch.nn.BatchNorm2d(20)
+
+        self.fc1 = torch.nn.Linear(5120, 10)
+
+    def forward(self, x):
+        # Regular case - conv followed by bn
+        x = self.conv1(x)
+        x = self.bn1(x)
+        x = self.relu1(x)
+
+        # Non-linearity between conv and bn, not a candidate for fold
+        x = self.conv2(x)
+        x = self.relu2(x)
+
+        # Case where BN can fold into an immediate downstream conv
+        x = self.bn2(x)
+        x = self.conv3(x)
+
+        # No fold if there is a split between conv and BN
+        x = self.conv4(x)
+        bn1_out = self.bn3(x)
+        bn2_out = self.bn4(x)
+
+        x = bn1_out + bn2_out
+
+        x = x.view(x.size(0), -1)
+        x = self.fc1(x)
+
+        return x
+
+def _convert_to_onnx_no_fold(model: torch.nn.Module, dummy_input, filename='./temp_model.onnx'):
+    torch.onnx.export(model.eval(),
+                      dummy_input,
+                      filename,
+                      training=torch.onnx.TrainingMode.PRESERVE,
+                      export_params=True,
+                      opset_version=12,
+                      do_constant_folding=False,
+                      input_names=['input'],
+                      output_names=['output'])
+    model = ONNXModel(load_model(filename))
+    return model
+
+
+def _convert_to_onnx(model: torch.nn.Module, dummy_input, filename='./temp_model.onnx'):
+    torch.onnx.export(model.eval(),
+                      dummy_input,
+                      filename,
+                      training=torch.onnx.TrainingMode.EVAL,
+                      export_params=True,
+                      opset_version=12,
+                      do_constant_folding=True,
+                      input_names=['input'],
+                      output_names=['output'])
+    model = ONNXModel(load_model(filename))
+    return model
+

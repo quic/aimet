@@ -43,7 +43,7 @@ import onnx
 from onnx import onnx_pb, helper, numpy_helper
 
 
-OP_TYPES_WITH_PARAMS = ['Conv', 'Gemm', 'ConvTranspose', 'BatchNormalization', 'MatMul']
+OP_TYPES_WITH_PARAMS = ['Conv', 'Gemm', 'ConvTranspose', 'BatchNormalization', 'MatMul', 'Transpose']
 
 
 def remove_nodes_with_type(node_type: str, onnx_graph: onnx.onnx_pb.GraphProto):
