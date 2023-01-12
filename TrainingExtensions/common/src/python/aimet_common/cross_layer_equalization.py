@@ -450,9 +450,8 @@ class CrossLayerScaling(ABC):
         :param curr_layer_params: Data structure holding weight and bias for current layer in cls set.
         """
 
-    @staticmethod
     @abstractmethod
-    def _pack_params_for_depthwise_conv(cls_set,
+    def _pack_params_for_depthwise_conv(self, cls_set,
                                         prev_layer_params: libpymo.EqualizationParams,
                                         curr_layer_params: libpymo.EqualizationParams,
                                         next_layer_params: libpymo.EqualizationParams):
@@ -466,9 +465,8 @@ class CrossLayerScaling(ABC):
         :param model: Model
         """
 
-    @staticmethod
     @abstractmethod
-    def _update_params_for_depthwise_conv(cls_set,
+    def _update_params_for_depthwise_conv(self, cls_set,
                                           prev_layer_params: libpymo.EqualizationParams,
                                           curr_layer_params: libpymo.EqualizationParams,
                                           next_layer_params: libpymo.EqualizationParams):
