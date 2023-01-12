@@ -608,6 +608,25 @@ class TransposedConvModel(torch.nn.Module):
         return x
 
 
+class TransposedConvModelWithoutBN(torch.nn.Module):
+    """
+    Model with transposed conv2D
+    """
+    def __init__(self):
+        super(TransposedConvModelWithoutBN, self).__init__()
+        self.conv1 = torch.nn.ConvTranspose2d(10, 10, 3)
+        self.relu1 = torch.nn.ReLU()
+        self.conv2 = torch.nn.ConvTranspose2d(10, 10, 3)
+
+    # pylint: disable=arguments-differ
+    def forward(self, x):
+        # Regular case - conv followed by bn
+        x = self.conv1(x)
+        x = self.relu1(x)
+        x = self.conv2(x)
+        return x
+
+
 class TupleOutputModel(torch.nn.Module):
     """
     Model with Tuple of Tensors as output
