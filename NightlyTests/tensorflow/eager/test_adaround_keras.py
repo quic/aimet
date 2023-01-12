@@ -41,7 +41,6 @@ import logging
 import os
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
 import pytest
-pytestmark = pytest.mark.skip("Disable tests that requires eager execution")
 import numpy as np
 import tensorflow as tf
 from tensorflow.keras.applications.mobilenet import MobileNet
