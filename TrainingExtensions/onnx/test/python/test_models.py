@@ -41,7 +41,7 @@ import torch
 from onnx import helper, numpy_helper, OperatorSetIdProto, TensorProto, load_model
 from onnxruntime.quantization.onnx_quantizer import ONNXModel
 from aimet_torch.examples.test_models import SingleResidualWithAvgPool, ModelWithTwoInputs, TransposedConvModel, \
-    ConcatModel, HierarchicalModel
+    ConcatModel, HierarchicalModel, TransposedConvModelWithoutBN
 from aimet_torch.examples.mobilenet import MockMobileNetV1
 
 # pylint: disable=no-member
@@ -140,6 +140,22 @@ def transposed_conv_model():
                       input_names=['input'],  # the model's input names
                       output_names=['output'])
     model = ONNXModel(load_model('./model_transposed_conv.onnx'))
+    return model
+
+def transposed_conv_model_without_bn():
+    x = torch.randn(10, 10, 4, 4, requires_grad=True)
+    model = TransposedConvModelWithoutBN()
+
+    # Export the model
+    torch.onnx.export(model,  # model being run
+                      x,  # model input (or a tuple for multiple inputs)
+                      "./model_transposed_conv_without_bn.onnx",  # where to save the model (can be a file or file-like object)
+                      export_params=True,  # store the trained parameter weights inside the model file
+                      opset_version=12,  # the ONNX version to export the model to
+                      do_constant_folding=True,  # whether to execute constant folding for optimization
+                      input_names=['input'],  # the model's input names
+                      output_names=['output'])
+    model = ONNXModel(load_model('./model_transposed_conv_without_bn.onnx'))
     return model
 
 def depthwise_conv_model():
