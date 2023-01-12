@@ -64,13 +64,24 @@ class Model(torch.nn.Module):
         self._conv_0 = torch.nn.Conv2d(in_channels=3, out_channels=3, kernel_size=(3, 3), padding=1)
         self._relu = torch.nn.ReLU()
 
-        self.applied_bn_folding = False
-        self.applied_cle = False
-        self.applied_adaround = False
+        self.register_buffer("applied_bn_folding", torch.tensor(False, dtype=torch.bool), persistent=True)
+        self.register_buffer("applied_cle", torch.tensor(False, dtype=torch.bool), persistent=True)
+        self.register_buffer("applied_adaround", torch.tensor(False, dtype=torch.bool), persistent=True)
 
     def forward(self, x: torch.Tensor):
-        assert utils.get_device(self) == x.device
+        x = torch.where(self.applied_bn_folding, x, x)
+        x = torch.where(self.applied_cle, x, x)
+        x = torch.where(self.applied_adaround, x, x)
         return self._relu(self._conv_0(x))
+
+
+class InvalidModel(Model):
+    def forward(self, x):
+        # This if statement throws error during model preparer
+        # since `x` is a torch.fx.Proxy object which cannot be converted to bool
+        if x[0,0,0,0]:
+            pass
+        return super().forward(x)
 
 
 @pytest.fixture(scope="session")
@@ -152,17 +163,19 @@ FP32_ACC = 80.0
 
 @contextlib.contextmanager
 def patch_ptq_techniques(bn_folded_acc, cle_acc, adaround_acc):
+    const_true = torch.tensor(True, dtype=torch.bool)
+
     def bn_folding(model: Model, *_, **__):
-        model.applied_bn_folding = True
+        model.applied_bn_folding.copy_(const_true)
         return tuple()
 
     def cle(model: Model, *_, **__):
-        model.applied_bn_folding = True
-        model.applied_cle = True
+        model.applied_bn_folding.copy_(const_true)
+        model.applied_cle.copy_(const_true)
 
     def adaround(model: Model, *_, **__):
         model = copy.deepcopy(model)
-        model.applied_adaround = True
+        model.applied_adaround.copy_(const_true)
         return model
 
     class _QuantizationSimModel(QuantizationSimModel):
@@ -314,11 +327,32 @@ class TestAutoQuant:
         with pytest.raises(ValueError):
             _ = AutoQuant(0, unlabeled_data_loader, MagicMock(), default_output_bw=64)
 
+    def test_auto_quant_model_preparer(self, unlabeled_data_loader, dummy_input):
+        allowed_accuracy_drop = 0.0
+        bn_folded_acc, cle_acc, adaround_acc = 40., 50., 60.
+
+        with patch_ptq_techniques(
+            bn_folded_acc, cle_acc, adaround_acc
+        ) as mocks:
+            auto_quant = AutoQuant(
+                allowed_accuracy_drop=allowed_accuracy_drop,
+                unlabeled_dataset_iterable=unlabeled_data_loader,
+                eval_callback=mocks.eval_callback,
+            )
+
+            # If strict_validation is True (default), AutoQuant crashes with an exception.
+            with pytest.raises(torch.fx.proxy.TraceError):
+                auto_quant.apply(InvalidModel(), dummy_input, strict_validation=True)
+
+            # If strict_validation is False, AutoQuant ignores the errors and proceed. 
+            auto_quant.apply(InvalidModel(), dummy_input, strict_validation=False)
+
     @pytest.mark.cuda
-    def test_auto_quant_invalid_input_gpu(self, unlabeled_data_loader):
+    def test_auto_quant_invalid_input_gpu(self, unlabeled_data_loader, dummy_input):
         auto_quant = AutoQuant(0, unlabeled_data_loader, MagicMock())
+        # If model is on cuda device, dummy input on gpu should be provided.
         with pytest.raises(ValueError):
-            auto_quant.apply(Model().cuda(), unlabeled_data_loader)
+            auto_quant.apply(Model().cuda(), dummy_input.cpu())
 
     def test_auto_quant_caching(
         self, cpu_model, dummy_input, unlabeled_data_loader,
