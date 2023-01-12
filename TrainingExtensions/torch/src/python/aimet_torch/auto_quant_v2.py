@@ -511,10 +511,11 @@ class _AutoQuantV2:
             # Early exit
             if w32_eval_score < target_acc:
                 _logger.info(
-                    f"W32A{self.default_output_bw} eval score ({w32_eval_score}) is lower "\
-                    f"than the target eval score ({target_acc}). This means it is unlikely that "\
+                    "W32A%d eval score (%f) is lower "\
+                    "than the target eval score (%f). This means it is unlikely that "\
                     "the target eval score can be met using PTQ techniques. "\
-                    "Please consider finetuning the model using range learning."
+                    "Please consider finetuning the model using range learning.",
+                    self.default_output_bw, w32_eval_score, target_acc
                 )
 
                 # Since AutoQuant pipeline exited early, all the return values are set to None
