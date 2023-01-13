@@ -235,7 +235,7 @@ def _compute_dloss_by_dmin_dmax_and_dx(inputs: tf.Tensor, encoding_min: tf.Varia
     dloss_by_dmin = tf.cast(_compute_dloss_by_dmin_using_dmax(dloss_by_dmax), tf.float64)
 
     # Pass through gradient for skipped ops
-    dloss_by_dx = tf.cond(tf.equal(op_mode, 3), lambda: grad, lambda: dloss_by_dx)
+    dloss_by_dx = tf.cond(tf.equal(op_mode, 3), lambda: tf.convert_to_tensor(grad), lambda: dloss_by_dx)
 
     return dloss_by_dmin, dloss_by_dmax, dloss_by_dx
 
