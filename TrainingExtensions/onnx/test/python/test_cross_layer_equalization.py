@@ -125,6 +125,18 @@ class TestCLS:
         weight_5 = numpy_helper.to_array(ParamUtils.get_param(model.model, conv_5, WEIGHT_INDEX))
         assert np.allclose(np.amax(np.abs(weight_3), axis=(0, 2, 3)), np.amax(np.abs(weight_5), axis=(1, 2, 3)))
 
+    def test_scale_model_depthwise(self):
+        model = test_models.depthwise_conv_model()
+        input_shape = (1, 3, 224, 224)
+        test_data = np.random.randn(*input_shape).astype(np.float32)
+        session = _build_session(model)
+        output_before_cls = session.run(None, {'input': test_data})
+        cls = CrossLayerScaling(model)
+        cls_set_infos = cls.scale_model()
+        output_after_cls = session.run(None, {'input': test_data})
+        assert np.allclose(output_after_cls, output_before_cls)
+        assert len(cls_set_infos) == 8
+
 def _build_session(model):
     """
     Build and return onnxruntime inference session
