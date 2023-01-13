@@ -35,8 +35,9 @@
 #  @@-COPYRIGHT-END-@@
 # =============================================================================
 
+import copy
+import numpy as np
 import unittest.mock
-
 import pytest
 import torch
 from torchvision import models
@@ -49,7 +50,6 @@ from aimet_torch.utils import create_rand_tensors_given_shapes, get_device
 from aimet_torch.utils import get_layer_name
 from models.mobilenet import MockMobileNetV2, MockMobileNetV1
 from models.test_models import Float32AndInt64InputModel
-import numpy as np
 
 logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Quant)
 
@@ -695,3 +695,72 @@ class TestTrainingExtensionsCrossLayerScaling(unittest.TestCase):
         print("\n ", output_before_cle, output_after_cle)
 
         self.assertTrue(torch.allclose(output_before_cle, output_after_cle, rtol=1.e-2))
+
+    @pytest.mark.cuda
+    def test_end_to_end_python_only_cle(self):
+        """ Compare MO and python implementation for CLE """
+        torch.manual_seed(10)
+        random_input = torch.rand(2, 10, 24, 24).cuda()
+
+        model = MyModel().eval().cuda()
+        model_copy = copy.deepcopy(model).eval()
+
+        # original outputs
+        output = model(random_input)
+
+        # equalize using MO
+        equalize_model(model, (2, 10, 24, 24), dummy_input=random_input, python_only=False)
+        output_using_mo = model(random_input)
+
+        # equalize using python
+        equalize_model(model_copy, (2, 10, 24, 24), dummy_input=random_input, python_only=True)
+        output_using_python = model_copy(random_input)
+
+        assert torch.allclose(output_using_mo, output_using_python)
+        assert torch.allclose(output, output_using_mo)
+        assert torch.allclose(output, output_using_python)
+
+    @pytest.mark.cuda
+    def test_scale_cls_set_with_conv_layers_api(self):
+        """ Compare scale_cls_set_with_conv_layers API """
+        torch.manual_seed(10)
+        model = MyModel().cuda().eval()
+        model_copy = copy.deepcopy(model).eval()
+        random_input = torch.rand((2, 10, 24, 24)).cuda()
+
+        # original outputs
+        output = model(random_input)
+
+        # Invoke MO implementation
+        CrossLayerScaling.scale_cls_set_with_conv_layers((model.conv1, model.conv2), python_only=False)
+        output_using_mo = model(random_input)
+
+        # Invoke python implementation
+        CrossLayerScaling.scale_cls_set_with_conv_layers((model_copy.conv1, model_copy.conv2), python_only=True)
+        output_using_python = model_copy(random_input)
+
+        assert torch.allclose(output_using_mo, output_using_python)
+        assert torch.allclose(output, output_using_mo)
+        assert torch.allclose(output, output_using_python)
+
+    @pytest.mark.cuda
+    def test_end_to_end_python_only_cls(self):
+        """ Compare MO and python implementation for CLS """
+        torch.manual_seed(10)
+        model = MockMobileNetV1().cuda().eval()
+        model_copy = copy.deepcopy(model).cuda().eval()
+        dummy_input = torch.rand((1, 3, 224, 224)).cuda()
+
+        # BN fold
+        fold_all_batch_norms(model, (1, 3, 224, 224), dummy_input=dummy_input)
+        fold_all_batch_norms(model_copy, (1, 3, 224, 224), dummy_input=dummy_input)
+
+        # CLS using MO and python.
+        scale_factors_mo = CrossLayerScaling.scale_model(model, (1, 3, 224, 224), dummy_input, python_only=False)
+        scale_factors_python = CrossLayerScaling.scale_model(model_copy, (1, 3, 224, 224), dummy_input, python_only=True)
+
+        assert len(scale_factors_mo) == 8
+        assert len(scale_factors_python) == 8
+
+        # Verify the outputs.
+        assert torch.allclose(model(dummy_input), model_copy(dummy_input))

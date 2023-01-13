@@ -35,21 +35,23 @@
 #  @@-COPYRIGHT-END-@@
 # =============================================================================
 
+# pylint: disable=too-many-lines
+
 """ Cross Layer Equalization
 
 Some terminology for this code.
 CLS set: Set of layers (2 or 3) that can be used for cross-layer scaling
 Layer groups: Groups of layers that are immediately connected and can be decomposed further into CLS sets
 """
-
+import abc
 from typing import Tuple, List, Union, Dict
 from enum import Enum
 import numpy as np
 import torch
 
 import aimet_common.libpymo as libpymo      # pylint: disable=import-error
-
 from aimet_common.utils import AimetLogger
+
 from aimet_torch import utils
 from aimet_torch.meta.connectedgraph import ConnectedGraph
 from aimet_torch.batch_norm_fold import fold_all_batch_norms
@@ -130,7 +132,8 @@ class GraphSearchUtils:
     Code to search a model graph to find nodes to use for cross-layer-scaling and high-bias-fold
     """
 
-    def __init__(self, model: torch.nn.Module, input_shapes: Union[Tuple, List[Tuple]], dummy_input: Union[torch.Tensor, List[torch.Tensor]] = None):
+    def __init__(self, model: torch.nn.Module, input_shapes: Union[Tuple, List[Tuple]],
+                 dummy_input: Union[torch.Tensor, List[torch.Tensor]] = None):
 
         if dummy_input is None:
             inp_tensor_list = tuple(utils.create_rand_tensors_given_shapes(input_shapes, get_device(model)))
@@ -150,7 +153,6 @@ class GraphSearchUtils:
         :param visited_nodes: Running list of visited nodes (to short-circuit recursion)
         :return: None
         """
-
         if not visited_nodes:
             visited_nodes = []
         if not current_group:
@@ -349,39 +351,58 @@ class CrossLayerScaling:
     """
 
     @staticmethod
-    def scale_cls_sets(cls_sets: List[ClsSet]) -> List[ScaleFactor]:
+    def scale_cls_sets(cls_sets: List[ClsSet], python_only: bool = False) -> List[ScaleFactor]:
         """
         Scale multiple CLS sets
 
         :param cls_sets: List of CLS sets
+        :param python_only: Enable python only version of CLE algorithm. If set to False, MO (c++) version
+         is used. Default is False.
         :return: Scaling factors calculated and applied for each CLS set in order
         """
         scale_factor_list = []
         for cls_set in cls_sets:
-            scale_factor = CrossLayerScaling.scale_cls_set(cls_set)
+            scale_factor = CrossLayerScaling.scale_cls_set(cls_set, python_only=python_only)
             scale_factor_list.append(scale_factor)
         return scale_factor_list
 
     @staticmethod
-    def scale_cls_set(cls_set: ClsSet) -> ScaleFactor:
+    def scale_cls_set(cls_set: ClsSet, python_only: bool = False) -> ScaleFactor:
         """
         Scale a CLS set
         :param cls_set: Either a pair or regular conv layers or a triplet of depthwise separable layers
+        :param python_only: Enable python only version of CLE algorithm. If set to False, MO (c++) version
+         is used. Default is False.
         :return: Scaling factor calculated and applied
         """
-        if len(cls_set) == 3:
-            scale_factor = CrossLayerScaling.scale_cls_set_with_depthwise_layers(cls_set)
-        else:
-            scale_factor = CrossLayerScaling.scale_cls_set_with_conv_layers(cls_set)
+        on_gpu = False
+        for module in cls_set:
+            if not isinstance(module, cls_supported_layers):
+                raise ValueError("Only Conv or Transposed Conv layers are supported for cross layer equalization")
+            if module.weight.is_cuda:
+                on_gpu = True
+                module.cpu()
+
+        # Pick implementation version (either MO (c++) or python) depending on the user provided flag.
+        cls_impl = DepthwiseLayerCLSImpl() if len(cls_set) == 3 else ConvLayerCLSImpl()
+        scale_factor = cls_impl.scale_using_python_impl(cls_set) if python_only else cls_impl.scale_using_mo_impl(cls_set)
+
+        if on_gpu:
+            for module in cls_set:
+                module.to(device="cuda")
 
         return scale_factor
 
     @classmethod
-    def scale_cls_set_with_conv_layers(cls, cls_set: ClsSet) -> np.ndarray:
+    def scale_cls_set_with_conv_layers(cls, cls_set: ClsSet, python_only: bool = False) -> np.ndarray:
         """
         API to invoke equalize layer params (update for weights and bias is in place)
 
+        NOTE: This API is kept for backward compatibility and will be removed in future releases.
+
         :param cls_set: Consecutive Conv layers Tuple whose weights and biases need to be equalized
+        :param python_only: Enable python only version of CLE algorithm. If set to False, MO (c++) version
+         is used. Default is False.
         :return: Scaling factor S_12 for each conv layer pair: numpy array
         """
         on_gpu = False
@@ -392,18 +413,9 @@ class CrossLayerScaling:
                 on_gpu = True
                 module.cpu()
 
-        # Create structs for holding layer weights and bias parameters
-        prev_layer_params = libpymo.EqualizationParams()
-        curr_layer_params = libpymo.EqualizationParams()
-
-        # Prepare and pack data structures for cls set.
-        cls._pack_params_for_conv(cls_set, prev_layer_params, curr_layer_params)
-
-        # Scales weights and bias for consecutive layers and updates data structures in-place.
-        scaling_factor = libpymo.scaleLayerParams(prev_layer_params, curr_layer_params)
-
-        # Update weight and biases for cls set using updated data structures.
-        cls._update_params_for_conv(cls_set, prev_layer_params, curr_layer_params)
+        cls_impl = ConvLayerCLSImpl()
+        scaling_factor =\
+            cls_impl.scale_using_python_impl(cls_set) if python_only else cls_impl.scale_using_mo_impl(cls_set)
 
         if on_gpu:
             for module in cls_set:
@@ -412,12 +424,16 @@ class CrossLayerScaling:
         return scaling_factor
 
     @classmethod
-    def scale_cls_set_with_depthwise_layers(cls, cls_set: ClsSet) -> [np.ndarray, np.ndarray]:
+    def scale_cls_set_with_depthwise_layers(cls, cls_set: ClsSet, python_only: bool = False) -> [np.ndarray, np.ndarray]:
         """
         API to invoke equalize layer params for depth wise separable layers(update for weights and bias is in place)
 
+        NOTE: This API is kept for backward compatibility and will be removed in future releases.
+
         :param cls_set: Consecutive Conv layers whose weights and biases need to be equalized.
                         Second Conv layer is a depth-wise conv and third conv layer is point-wise conv
+        :param python_only: Enable python only version of CLE algorithm. If set to False, MO (c++) version
+         is used. Default is False.
         :return: Scaling factors S_12 and S_23 : numpy arrays
         """
         on_gpu = False
@@ -428,25 +444,15 @@ class CrossLayerScaling:
                 on_gpu = True
                 module.cpu()
 
-        # Create structs for holding layer weights and bias parameters
-        prev_layer_params = libpymo.EqualizationParams()
-        curr_layer_params = libpymo.EqualizationParams()
-        next_layer_params = libpymo.EqualizationParams()
-
-        # Prepare and pack data structures for cls set.
-        cls._pack_params_for_depthwise_conv(cls_set, prev_layer_params, curr_layer_params, next_layer_params)
-
-        # Scales weights and bias for consecutive layers and updates data structures in-place.
-        scaling_params = libpymo.scaleDepthWiseSeparableLayer(prev_layer_params, curr_layer_params, next_layer_params)
-
-        # Update weight and biases for cls set using updated data structures.
-        cls._update_params_for_depthwise_conv(cls_set, prev_layer_params, curr_layer_params, next_layer_params)
+        cls_impl = DepthwiseLayerCLSImpl()
+        scaling_factors =\
+            cls_impl.scale_using_python_impl(cls_set) if python_only else cls_impl.scale_using_mo_impl(cls_set)
 
         if on_gpu:
             for module in cls_set:
                 module.to(device="cuda")
 
-        return scaling_params.scalingMatrix12, scaling_params.scalingMatrix23
+        return scaling_factors
 
     @staticmethod
     def create_cls_set_info_list(cls_sets: List[ClsSet], scale_factors: List[ScaleFactor],
@@ -487,19 +493,27 @@ class CrossLayerScaling:
         return cls_set_info_list
 
     @staticmethod
-    def scale_model(model: torch.nn.Module, input_shapes: Union[Tuple, List[Tuple]], dummy_input: Union[torch.Tensor, List[torch.Tensor]] = None) -> List[ClsSetInfo]:
+    def scale_model(model: torch.nn.Module, input_shapes: Union[Tuple, List[Tuple]],
+                    dummy_input: Union[torch.Tensor, List[torch.Tensor]] = None,
+                    python_only: bool = False) -> List[ClsSetInfo]:
         """
         Uses cross-layer scaling to scale all applicable layers in the given model
 
         :param model: Model to scale
         :param input_shapes: Input shape for the model (can be one or multiple inputs)
-        :param dummy_input: Dummy input to the model. Used to parse model graph. User is expected to place the tensors on the appropriate device.
+        :param dummy_input: Dummy input to the model. Used to parse model graph. User is expected to place
+         the tensors on the appropriate device.
+        :param python_only: Enable python only version of CLE algorithm. If set to False, MO (c++) version
+         is used. Default is False.
         :return: CLS information for each CLS set
         """
         if isinstance(model, torch.nn.DataParallel):
-            return CrossLayerScaling.scale_model(model.module, input_shapes, dummy_input=dummy_input)
+            return CrossLayerScaling.scale_model(model.module, input_shapes,
+                                                 dummy_input=dummy_input, python_only=python_only)
+        # Place model and dummy input on the cpu.
         device = get_device(model)
         model.cpu()
+        dummy_input = utils.change_tensor_device_placement(dummy_input, device=torch.device('cpu'))
 
         # Find layer groups
         graph_search = GraphSearchUtils(model, input_shapes, dummy_input=dummy_input)
@@ -512,7 +526,7 @@ class CrossLayerScaling:
             cls_sets += cls_set
 
         # Scale the CLS sets
-        scale_factors = CrossLayerScaling.scale_cls_sets(cls_sets)
+        scale_factors = CrossLayerScaling.scale_cls_sets(cls_sets, python_only=python_only)
 
         # Find if there were relu activations between layers of each cls set
         is_relu_activation_in_cls_sets = graph_search.is_relu_activation_present_in_cls_sets(cls_sets)
@@ -523,190 +537,6 @@ class CrossLayerScaling:
 
         model.to(device=device)
         return cls_set_info_list
-
-    @staticmethod
-    def _pack_params_for_conv(cls_set: ClsSet,
-                              prev_layer_params: libpymo.EqualizationParams,
-                              curr_layer_params: libpymo.EqualizationParams):
-        """
-        Prepare and pack data structure for previous and current layer in given cls set.
-
-        :param cls_set: Consecutive Conv layers Tuple whose weights and biases need to be equalized.
-        :param prev_layer_params: Data structure holding weight and bias for previous layer in cls set.
-        :param curr_layer_params: Data structure holding weight and bias for current layer in cls set.
-        """
-        weight_set_0 = cls_set[0].weight
-
-        # Transpose weights to C, N, H, W from N, C, H, W since axis are flipped for transposed conv
-        if isinstance(cls_set[0], torch.nn.ConvTranspose2d):
-            weight_set_0 = weight_set_0.permute(1, 0, 2, 3)
-        if isinstance(cls_set[0], torch.nn.ConvTranspose1d):
-            weight_set_0 = weight_set_0.permute(1, 0, 2)
-
-        prev_layer_params.weight = weight_set_0.detach().numpy().reshape(-1)
-        prev_layer_params.weightShape = np.array(weight_set_0.shape)
-        if len(prev_layer_params.weightShape) == 3:
-            prev_layer_params.weightShape = prev_layer_params.weightShape + [1]
-
-        weight_set_1 = cls_set[1].weight
-
-        # Transpose weights to C, N, H, W from N, C, H, W since axis are flipped for transposed conv
-        if isinstance(cls_set[1], torch.nn.ConvTranspose2d):
-            weight_set_1 = weight_set_1.permute(1, 0, 2, 3)
-        if isinstance(cls_set[1], torch.nn.ConvTranspose1d):
-            weight_set_1 = weight_set_1.permute(1, 0, 2)
-
-        curr_layer_params.weight = weight_set_1.detach().numpy().reshape(-1)
-        curr_layer_params.weightShape = np.array(weight_set_1.shape)
-        if len(curr_layer_params.weightShape) == 3:
-            curr_layer_params.weightShape = curr_layer_params.weightShape + [1]
-
-        if cls_set[0].bias is not None:
-            prev_layer_params.bias = cls_set[0].bias.detach().numpy()
-        else:
-            prev_layer_params.isBiasNone = True
-
-    @staticmethod
-    def _update_params_for_conv(cls_set: ClsSet,
-                                prev_layer_params: libpymo.EqualizationParams,
-                                curr_layer_params: libpymo.EqualizationParams):
-        """
-        Update weight and biases for cls set using updated data structures.
-
-        :param cls_set: Consecutive Conv layers Tuple whose weights and biases need to be equalized.
-        :param prev_layer_params: Data structure holding weight and bias for previous layer in cls set.
-        :param curr_layer_params: Data structure holding weight and bias for current layer in cls set.
-        """
-        if isinstance(cls_set[0], (torch.nn.Conv1d, torch.nn.ConvTranspose1d)):
-            prev_layer_params.weightShape = prev_layer_params.weightShape[:-1]
-        cls_set[0].weight.data = torch.from_numpy(np.reshape(prev_layer_params.weight,
-                                                             prev_layer_params.weightShape))
-        cls_set[0].weight.data = cls_set[0].weight.data.type(torch.FloatTensor)
-
-
-        # Transpose weight back to N, C, H, W for transposed Conv2D
-        if isinstance(cls_set[0], torch.nn.ConvTranspose2d):
-            cls_set[0].weight.data = cls_set[0].weight.data.permute(1, 0, 2, 3).contiguous()
-        if isinstance(cls_set[0], torch.nn.ConvTranspose1d):
-            cls_set[0].weight.data = cls_set[0].weight.data.permute(1, 0, 2).contiguous()
-
-        if isinstance(cls_set[1], (torch.nn.Conv1d, torch.nn.ConvTranspose1d)):
-            curr_layer_params.weightShape = curr_layer_params.weightShape[:-1]
-        cls_set[1].weight.data = torch.from_numpy(np.reshape(curr_layer_params.weight,
-                                                             curr_layer_params.weightShape))
-        cls_set[1].weight.data = cls_set[1].weight.data.type(torch.FloatTensor)
-
-        # Transpose weight back to N, C, H, W for transposed Conv2D
-        if isinstance(cls_set[1], torch.nn.ConvTranspose2d):
-            cls_set[1].weight.data = cls_set[1].weight.data.permute(1, 0, 2, 3).contiguous()
-        if isinstance(cls_set[1], torch.nn.ConvTranspose1d):
-            cls_set[1].weight.data = cls_set[1].weight.data.permute(1, 0, 2).contiguous()
-
-        if cls_set[0].bias is not None:
-            cls_set[0].bias.data = torch.from_numpy(np.reshape(prev_layer_params.bias,
-                                                               prev_layer_params.weightShape[0]))
-            cls_set[0].bias.data = cls_set[0].bias.data.type(torch.FloatTensor)
-
-    @staticmethod
-    def _pack_params_for_depthwise_conv(cls_set: ClsSet,
-                                        prev_layer_params: libpymo.EqualizationParams,
-                                        curr_layer_params: libpymo.EqualizationParams,
-                                        next_layer_params: libpymo.EqualizationParams):
-        """
-        Prepare and pack data structure for previous, current and next layer in given cls set.
-
-        :param cls_set: Consecutive Conv layers Tuple whose weights and biases need to be equalized.
-        :param prev_layer_params: Data structure holding weight and bias for previous layer in cls set.
-        :param curr_layer_params: Data structure holding weight and bias for current layer in cls set.
-        :param next_layer_params: Data structure holding weight and bias for next layer in cls set.
-        """
-        if isinstance(cls_set[0], torch.nn.ConvTranspose2d):
-            cls_set[0].weight.data = cls_set[0].weight.data.permute(1, 0, 2, 3).contiguous()
-        if isinstance(cls_set[0], torch.nn.ConvTranspose1d):
-            cls_set[0].weight.data = cls_set[0].weight.data.permute(1, 0, 2).contiguous()
-
-        if isinstance(cls_set[2], torch.nn.ConvTranspose2d):
-            cls_set[2].weight.data = cls_set[2].weight.data.permute(1, 0, 2, 3).contiguous()
-        if isinstance(cls_set[2], torch.nn.ConvTranspose1d):
-            cls_set[2].weight.data = cls_set[2].weight.data.permute(1, 0, 2).contiguous()
-
-        assert cls_set[1].groups > 1
-
-        prev_layer_params.weight = cls_set[0].weight.detach().numpy().flatten()
-        prev_layer_params.weightShape = np.array(cls_set[0].weight.shape)
-        if len(prev_layer_params.weightShape) == 3:
-            prev_layer_params.weightShape = prev_layer_params.weightShape + [1]
-
-        curr_layer_params.weight = cls_set[1].weight.detach().numpy().flatten()
-        curr_layer_params.weightShape = np.array(cls_set[1].weight.shape)
-        if len(curr_layer_params.weightShape) == 3:
-            curr_layer_params.weightShape = curr_layer_params.weightShape + [1]
-
-        next_layer_params.weight = cls_set[2].weight.detach().numpy().flatten()
-        next_layer_params.weightShape = np.array(cls_set[2].weight.shape)
-        if len(next_layer_params.weightShape) == 3:
-            next_layer_params.weightShape = next_layer_params.weightShape + [1]
-
-
-        if cls_set[0].bias is not None:
-            prev_layer_params.bias = cls_set[0].bias.detach().numpy()
-        else:
-            prev_layer_params.isBiasNone = True
-
-        if cls_set[1].bias is not None:
-            curr_layer_params.bias = cls_set[1].bias.detach().numpy()
-        else:
-            curr_layer_params.isBiasNone = True
-
-    @staticmethod
-    def _update_params_for_depthwise_conv(cls_set: ClsSet,
-                                          prev_layer_params: libpymo.EqualizationParams,
-                                          curr_layer_params: libpymo.EqualizationParams,
-                                          next_layer_params: libpymo.EqualizationParams):
-        """
-        Update weight and biases for cls set using updated data structures.
-
-        :param cls_set: Consecutive Conv layers Tuple whose weights and biases need to be equalized.
-        :param prev_layer_params: Data structure holding weight and bias for previous layer in cls set.
-        :param curr_layer_params: Data structure holding weight and bias for current layer in cls set.
-        :param next_layer_params: Data structure holding weight and bias for next layer in cls set.
-        """
-        if isinstance(cls_set[0], (torch.nn.Conv1d, torch.nn.ConvTranspose1d)):
-            prev_layer_params.weightShape = prev_layer_params.weightShape[:-1]
-        cls_set[0].weight.data = torch.from_numpy(np.reshape(prev_layer_params.weight,
-                                                             prev_layer_params.weightShape))
-        cls_set[0].weight.data = cls_set[0].weight.data.type(torch.FloatTensor)
-        if isinstance(cls_set[0], torch.nn.ConvTranspose2d):
-            cls_set[0].weight.data = cls_set[0].weight.data.permute(1, 0, 2, 3).contiguous()
-        if isinstance(cls_set[0], torch.nn.ConvTranspose1d):
-            cls_set[0].weight.data = cls_set[0].weight.data.permute(1, 0, 2).contiguous()
-
-        if isinstance(cls_set[1], (torch.nn.Conv1d, torch.nn.ConvTranspose1d)):
-            curr_layer_params.weightShape = curr_layer_params.weightShape[:-1]
-        cls_set[1].weight.data = torch.from_numpy(np.reshape(curr_layer_params.weight,
-                                                             curr_layer_params.weightShape))
-        cls_set[1].weight.data = cls_set[1].weight.data.type(torch.FloatTensor)
-
-        if isinstance(cls_set[2], (torch.nn.Conv1d, torch.nn.ConvTranspose1d)):
-            next_layer_params.weightShape = next_layer_params.weightShape[:-1]
-
-        cls_set[2].weight.data = torch.from_numpy(np.reshape(next_layer_params.weight,
-                                                             next_layer_params.weightShape))
-        cls_set[2].weight.data = cls_set[2].weight.data.type(torch.FloatTensor)
-        if isinstance(cls_set[2], torch.nn.ConvTranspose2d):
-            cls_set[2].weight.data = cls_set[2].weight.data.permute(1, 0, 2, 3).contiguous()
-        if isinstance(cls_set[2], torch.nn.ConvTranspose1d):
-            cls_set[2].weight.data = cls_set[2].weight.data.permute(1, 0, 2).contiguous()
-
-        if cls_set[0].bias is not None:
-            cls_set[0].bias.data = torch.from_numpy(np.reshape(prev_layer_params.bias,
-                                                               prev_layer_params.weightShape[0]))
-            cls_set[0].bias.data = cls_set[0].bias.data.type(torch.FloatTensor)
-
-        if cls_set[1].bias is not None:
-            cls_set[1].bias.data = torch.from_numpy(np.reshape(curr_layer_params.bias,
-                                                               curr_layer_params.weightShape[0]))
-            cls_set[1].bias.data = cls_set[1].bias.data.type(torch.FloatTensor)
 
 
 class HighBiasFold:
@@ -826,15 +656,362 @@ class HighBiasFold:
                                                                      curr_layer_params.weightShape[0]))
         cls_pair_info.layer2.bias.data = cls_pair_info.layer2.bias.data.type(torch.FloatTensor)
 
+class CLSImpl(abc.ABC):
+    """
+    The Implementation interface declares methods using MO (c++) and python versions of CLS algorithm.
+    """
+    @abc.abstractmethod
+    def scale_using_mo_impl(self, cls_set: ClsSet) -> ScaleFactor:
+        """
+        CLS algorithm implementation using Model optimization (c++) version.
+
+        :param cls_set: CLS set
+        :return: Scaling factor calculated and applied to CLS set.
+        """
+
+    @abc.abstractmethod
+    def scale_using_python_impl(self, cls_set: ClsSet) -> ScaleFactor:
+        """
+        CLS algorithm implementation using python version.
+
+        :param cls_set: CLS set
+        :return: Scaling factor calculated and applied to CLS set.
+        """
+
+    @staticmethod
+    def _transpose_tensor_in_common_format(module: torch.nn.Module, tensor: torch.Tensor) -> torch.Tensor:
+        """
+        Transpose tensor in the common format [Noc, Nin, Kh, Kw].
+        For transposed conv, weight are stored in [Nin, Noc, Kh, Kw] format.
+
+        :param module: Module.
+        :param tensor: Input tensor.
+        :return: Output tensor.
+        """
+        # Transpose weights to C, N, H, W from N, C, H, W since axis are flipped for transposed conv
+        if isinstance(module, torch.nn.ConvTranspose2d):
+            tensor = tensor.permute(1, 0, 2, 3)
+        if isinstance(module, torch.nn.ConvTranspose1d):
+            tensor = tensor.permute(1, 0, 2)
+        return tensor
+
+    @staticmethod
+    def _make_4d_tensor(module: torch.nn.Module, tensor: torch.Tensor) -> torch.Tensor:
+        """
+        Return 4 dimensional tensor by adding a dimension on the end if the tensor is not 4d.
+
+        :param module: Module.
+        :param tensor: Input tensor.
+        :return: Output tensor.
+        """
+        if isinstance(module, (torch.nn.Conv1d, torch.nn.ConvTranspose1d)):
+            tensor = torch.unsqueeze(tensor, dim=-1)
+        return tensor
+
+    @staticmethod
+    def _get_tensor_max(tensor: torch.Tensor, dim: Union[int, Tuple]) -> torch.Tensor:
+        """
+        Return the max value of the tensor in given dimension.
+
+        :param tensor: Input Tensor.
+        :param dim: dimension(s)
+        :return: Output tensor.
+        """
+        return torch.amax(torch.abs(tensor), dim=dim)
+
+
+class ConvLayerCLSImpl(CLSImpl):
+    """
+    CLS implementation for Conv layers.
+    """
+    def scale_using_mo_impl(self, cls_set: ClsSet) -> np.ndarray:
+
+        # Create structs for holding layer weights and bias parameters
+        prev_layer_params = libpymo.EqualizationParams()
+        curr_layer_params = libpymo.EqualizationParams()
+
+        # Prepare and pack data structures for cls set.
+        self._pack_params_for_conv(cls_set, prev_layer_params, curr_layer_params)
+
+        # Scales weights and bias for consecutive layers and updates data structures in-place.
+        scaling_factor = libpymo.scaleLayerParams(prev_layer_params, curr_layer_params)
+
+        # Update weight and biases for cls set using updated data structures.
+        self._update_params_for_conv(cls_set, prev_layer_params, curr_layer_params)
+
+        return scaling_factor
+
+    def scale_using_python_impl(self, cls_set: ClsSet) -> np.ndarray:
+
+        weight_0 = cls_set[0].weight.detach()
+        weight_0 = self._transpose_tensor_in_common_format(cls_set[0], weight_0)
+        weight_0 = self._make_4d_tensor(cls_set[0], weight_0)
+
+        weight_1 = cls_set[1].weight.detach()
+        weight_1 = self._transpose_tensor_in_common_format(cls_set[1], weight_1)
+        weight_1 = self._make_4d_tensor(cls_set[1], weight_1)
+
+        bias_0 = cls_set[0].bias.detach()
+
+        max_0 = self._get_tensor_max(weight_0, (1, 2, 3))
+        max_1 = self._get_tensor_max(weight_1, (0, 2, 3))
+        scale_factor = max_0 / torch.pow(max_0 * max_1, 1. / 2)
+
+        weight_0 *= (1.0 / scale_factor[:, None, None, None])
+        weight_1 *= scale_factor[None, :, None, None]
+        if bias_0 is not None:
+            bias_0 *= (1.0 / scale_factor)
+
+        return scale_factor.numpy()
+
+    @staticmethod
+    def _pack_params_for_conv(cls_set: ClsSet,
+                              prev_layer_params: libpymo.EqualizationParams,
+                              curr_layer_params: libpymo.EqualizationParams):
+        """
+        Prepare and pack data structure for previous and current layer in given cls set.
+
+        :param cls_set: Consecutive Conv layers Tuple whose weights and biases need to be equalized.
+        :param prev_layer_params: Data structure holding weight and bias for previous layer in cls set.
+        :param curr_layer_params: Data structure holding weight and bias for current layer in cls set.
+        """
+        weight_set_0 = cls_set[0].weight
+
+        # Transpose weights to C, N, H, W from N, C, H, W since axis are flipped for transposed conv
+        if isinstance(cls_set[0], torch.nn.ConvTranspose2d):
+            weight_set_0 = weight_set_0.permute(1, 0, 2, 3)
+        if isinstance(cls_set[0], torch.nn.ConvTranspose1d):
+            weight_set_0 = weight_set_0.permute(1, 0, 2)
+
+        prev_layer_params.weight = weight_set_0.detach().numpy().reshape(-1)
+        prev_layer_params.weightShape = np.array(weight_set_0.shape)
+        if len(prev_layer_params.weightShape) == 3:
+            prev_layer_params.weightShape = prev_layer_params.weightShape + [1]
+
+        weight_set_1 = cls_set[1].weight
+
+        # Transpose weights to C, N, H, W from N, C, H, W since axis are flipped for transposed conv
+        if isinstance(cls_set[1], torch.nn.ConvTranspose2d):
+            weight_set_1 = weight_set_1.permute(1, 0, 2, 3)
+        if isinstance(cls_set[1], torch.nn.ConvTranspose1d):
+            weight_set_1 = weight_set_1.permute(1, 0, 2)
+
+        curr_layer_params.weight = weight_set_1.detach().numpy().reshape(-1)
+        curr_layer_params.weightShape = np.array(weight_set_1.shape)
+        if len(curr_layer_params.weightShape) == 3:
+            curr_layer_params.weightShape = curr_layer_params.weightShape + [1]
+
+        if cls_set[0].bias is not None:
+            prev_layer_params.bias = cls_set[0].bias.detach().numpy()
+        else:
+            prev_layer_params.isBiasNone = True
+
+    @staticmethod
+    def _update_params_for_conv(cls_set: ClsSet,
+                                prev_layer_params: libpymo.EqualizationParams,
+                                curr_layer_params: libpymo.EqualizationParams):
+        """
+        Update weight and biases for cls set using updated data structures.
+
+        :param cls_set: Consecutive Conv layers Tuple whose weights and biases need to be equalized.
+        :param prev_layer_params: Data structure holding weight and bias for previous layer in cls set.
+        :param curr_layer_params: Data structure holding weight and bias for current layer in cls set.
+        """
+        if isinstance(cls_set[0], (torch.nn.Conv1d, torch.nn.ConvTranspose1d)):
+            prev_layer_params.weightShape = prev_layer_params.weightShape[:-1]
+        cls_set[0].weight.data = torch.from_numpy(np.reshape(prev_layer_params.weight,
+                                                             prev_layer_params.weightShape))
+        cls_set[0].weight.data = cls_set[0].weight.data.type(torch.FloatTensor)
+
+        # Transpose weight back to N, C, H, W for transposed Conv2D
+        if isinstance(cls_set[0], torch.nn.ConvTranspose2d):
+            cls_set[0].weight.data = cls_set[0].weight.data.permute(1, 0, 2, 3).contiguous()
+        if isinstance(cls_set[0], torch.nn.ConvTranspose1d):
+            cls_set[0].weight.data = cls_set[0].weight.data.permute(1, 0, 2).contiguous()
+
+        if isinstance(cls_set[1], (torch.nn.Conv1d, torch.nn.ConvTranspose1d)):
+            curr_layer_params.weightShape = curr_layer_params.weightShape[:-1]
+        cls_set[1].weight.data = torch.from_numpy(np.reshape(curr_layer_params.weight,
+                                                             curr_layer_params.weightShape))
+        cls_set[1].weight.data = cls_set[1].weight.data.type(torch.FloatTensor)
+
+        # Transpose weight back to N, C, H, W for transposed Conv2D
+        if isinstance(cls_set[1], torch.nn.ConvTranspose2d):
+            cls_set[1].weight.data = cls_set[1].weight.data.permute(1, 0, 2, 3).contiguous()
+        if isinstance(cls_set[1], torch.nn.ConvTranspose1d):
+            cls_set[1].weight.data = cls_set[1].weight.data.permute(1, 0, 2).contiguous()
+
+        if cls_set[0].bias is not None:
+            cls_set[0].bias.data = torch.from_numpy(np.reshape(prev_layer_params.bias,
+                                                               prev_layer_params.weightShape[0]))
+            cls_set[0].bias.data = cls_set[0].bias.data.type(torch.FloatTensor)
+
+
+class DepthwiseLayerCLSImpl(CLSImpl):
+    """
+    CLS implementation for Depthwise conv layers.
+    """
+    def scale_using_mo_impl(self, cls_set: ClsSet) -> Tuple[np.ndarray, np.ndarray]:
+
+        # Create structs for holding layer weights and bias parameters
+        prev_layer_params = libpymo.EqualizationParams()
+        curr_layer_params = libpymo.EqualizationParams()
+        next_layer_params = libpymo.EqualizationParams()
+
+        # Prepare and pack data structures for cls set.
+        self._pack_params_for_depthwise_conv(cls_set, prev_layer_params, curr_layer_params, next_layer_params)
+
+        # Scales weights and bias for consecutive layers and updates data structures in-place.
+        scaling_params = libpymo.scaleDepthWiseSeparableLayer(prev_layer_params, curr_layer_params, next_layer_params)
+
+        # Update weight and biases for cls set using updated data structures.
+        self._update_params_for_depthwise_conv(cls_set, prev_layer_params, curr_layer_params, next_layer_params)
+
+        return scaling_params.scalingMatrix12, scaling_params.scalingMatrix23
+    def scale_using_python_impl(self, cls_set: ClsSet) -> Tuple[np.ndarray, np.ndarray]:
+
+        weight_0 = cls_set[0].weight.detach()
+        weight_0 = self._transpose_tensor_in_common_format(cls_set[0], weight_0)
+        weight_0 = self._make_4d_tensor(cls_set[0], weight_0)
+
+        weight_1 = cls_set[1].weight.detach()
+        assert cls_set[1].groups > 1
+        weight_1 = self._make_4d_tensor(cls_set[1], weight_1)
+
+        weight_2 = cls_set[2].weight.detach()
+        weight_2 = self._transpose_tensor_in_common_format(cls_set[2], weight_2)
+        weight_2 = self._make_4d_tensor(cls_set[2], weight_2)
+
+        bias_0 = cls_set[0].bias.detach()
+        bias_1 = cls_set[1].bias.detach()
+
+        max_0 = self._get_tensor_max(weight_0, (1, 2, 3))
+        max_1 = self._get_tensor_max(weight_1, (1, 2, 3))
+        max_2 = self._get_tensor_max(weight_2, (0, 2, 3))
+        s_12 = max_0 / torch.pow(max_0 * max_1 * max_2, 1.0 / 3)
+        s_23 = torch.pow(max_0 * max_1 * max_2, 1.0 / 3) / max_2
+
+        weight_0 *= (1.0 / s_12[:, None, None, None])
+        weight_1 *= s_12[:, None, None, None] * (1.0 / s_23[:, None, None, None])
+        weight_2 *= s_23[None, :, None, None]
+        if bias_0 is not None:
+            bias_0 *= (1.0 / s_12)
+        if bias_1 is not None:
+            bias_1 *= (1.0 / s_23)
+
+        return s_12.numpy(), s_23.numpy()
+
+    @staticmethod
+    def _pack_params_for_depthwise_conv(cls_set: ClsSet,
+                                        prev_layer_params: libpymo.EqualizationParams,
+                                        curr_layer_params: libpymo.EqualizationParams,
+                                        next_layer_params: libpymo.EqualizationParams):
+        """
+        Prepare and pack data structure for previous, current and next layer in given cls set.
+
+        :param cls_set: Consecutive Conv layers Tuple whose weights and biases need to be equalized.
+        :param prev_layer_params: Data structure holding weight and bias for previous layer in cls set.
+        :param curr_layer_params: Data structure holding weight and bias for current layer in cls set.
+        :param next_layer_params: Data structure holding weight and bias for next layer in cls set.
+        """
+        if isinstance(cls_set[0], torch.nn.ConvTranspose2d):
+            cls_set[0].weight.data = cls_set[0].weight.data.permute(1, 0, 2, 3).contiguous()
+        if isinstance(cls_set[0], torch.nn.ConvTranspose1d):
+            cls_set[0].weight.data = cls_set[0].weight.data.permute(1, 0, 2).contiguous()
+
+        if isinstance(cls_set[2], torch.nn.ConvTranspose2d):
+            cls_set[2].weight.data = cls_set[2].weight.data.permute(1, 0, 2, 3).contiguous()
+        if isinstance(cls_set[2], torch.nn.ConvTranspose1d):
+            cls_set[2].weight.data = cls_set[2].weight.data.permute(1, 0, 2).contiguous()
+
+        assert cls_set[1].groups > 1
+
+        prev_layer_params.weight = cls_set[0].weight.detach().numpy().flatten()
+        prev_layer_params.weightShape = np.array(cls_set[0].weight.shape)
+        if len(prev_layer_params.weightShape) == 3:
+            prev_layer_params.weightShape = prev_layer_params.weightShape + [1]
+
+        curr_layer_params.weight = cls_set[1].weight.detach().numpy().flatten()
+        curr_layer_params.weightShape = np.array(cls_set[1].weight.shape)
+        if len(curr_layer_params.weightShape) == 3:
+            curr_layer_params.weightShape = curr_layer_params.weightShape + [1]
+
+        next_layer_params.weight = cls_set[2].weight.detach().numpy().flatten()
+        next_layer_params.weightShape = np.array(cls_set[2].weight.shape)
+        if len(next_layer_params.weightShape) == 3:
+            next_layer_params.weightShape = next_layer_params.weightShape + [1]
+
+        if cls_set[0].bias is not None:
+            prev_layer_params.bias = cls_set[0].bias.detach().numpy()
+        else:
+            prev_layer_params.isBiasNone = True
+
+        if cls_set[1].bias is not None:
+            curr_layer_params.bias = cls_set[1].bias.detach().numpy()
+        else:
+            curr_layer_params.isBiasNone = True
+
+    @staticmethod
+    def _update_params_for_depthwise_conv(cls_set: ClsSet,
+                                          prev_layer_params: libpymo.EqualizationParams,
+                                          curr_layer_params: libpymo.EqualizationParams,
+                                          next_layer_params: libpymo.EqualizationParams):
+        """
+        Update weight and biases for cls set using updated data structures.
+
+        :param cls_set: Consecutive Conv layers Tuple whose weights and biases need to be equalized.
+        :param prev_layer_params: Data structure holding weight and bias for previous layer in cls set.
+        :param curr_layer_params: Data structure holding weight and bias for current layer in cls set.
+        :param next_layer_params: Data structure holding weight and bias for next layer in cls set.
+        """
+        if isinstance(cls_set[0], (torch.nn.Conv1d, torch.nn.ConvTranspose1d)):
+            prev_layer_params.weightShape = prev_layer_params.weightShape[:-1]
+        cls_set[0].weight.data = torch.from_numpy(np.reshape(prev_layer_params.weight,
+                                                             prev_layer_params.weightShape))
+        cls_set[0].weight.data = cls_set[0].weight.data.type(torch.FloatTensor)
+        if isinstance(cls_set[0], torch.nn.ConvTranspose2d):
+            cls_set[0].weight.data = cls_set[0].weight.data.permute(1, 0, 2, 3).contiguous()
+        if isinstance(cls_set[0], torch.nn.ConvTranspose1d):
+            cls_set[0].weight.data = cls_set[0].weight.data.permute(1, 0, 2).contiguous()
+
+        if isinstance(cls_set[1], (torch.nn.Conv1d, torch.nn.ConvTranspose1d)):
+            curr_layer_params.weightShape = curr_layer_params.weightShape[:-1]
+        cls_set[1].weight.data = torch.from_numpy(np.reshape(curr_layer_params.weight,
+                                                             curr_layer_params.weightShape))
+        cls_set[1].weight.data = cls_set[1].weight.data.type(torch.FloatTensor)
+
+        if isinstance(cls_set[2], (torch.nn.Conv1d, torch.nn.ConvTranspose1d)):
+            next_layer_params.weightShape = next_layer_params.weightShape[:-1]
+
+        cls_set[2].weight.data = torch.from_numpy(np.reshape(next_layer_params.weight,
+                                                             next_layer_params.weightShape))
+        cls_set[2].weight.data = cls_set[2].weight.data.type(torch.FloatTensor)
+        if isinstance(cls_set[2], torch.nn.ConvTranspose2d):
+            cls_set[2].weight.data = cls_set[2].weight.data.permute(1, 0, 2, 3).contiguous()
+        if isinstance(cls_set[2], torch.nn.ConvTranspose1d):
+            cls_set[2].weight.data = cls_set[2].weight.data.permute(1, 0, 2).contiguous()
+
+        if cls_set[0].bias is not None:
+            cls_set[0].bias.data = torch.from_numpy(np.reshape(prev_layer_params.bias,
+                                                               prev_layer_params.weightShape[0]))
+            cls_set[0].bias.data = cls_set[0].bias.data.type(torch.FloatTensor)
+
+        if cls_set[1].bias is not None:
+            cls_set[1].bias.data = torch.from_numpy(np.reshape(curr_layer_params.bias,
+                                                               curr_layer_params.weightShape[0]))
+            cls_set[1].bias.data = cls_set[1].bias.data.type(torch.FloatTensor)
+
 
 def equalize_model(model: torch.nn.Module, input_shapes: Union[Tuple, List[Tuple]],
-                   dummy_input: Union[torch.Tensor, Tuple] = None):
+                   dummy_input: Union[torch.Tensor, Tuple] = None, python_only: bool = False):
     """
     High-level API to perform Cross-Layer Equalization (CLE) on the given model. The model is equalized in place.
 
     :param model: Model to equalize
     :param input_shapes: Shape of the input (can be a tuple or a list of tuples if multiple inputs)
     :param dummy_input: A dummy input to the model. Can be a Tensor or a Tuple of Tensors
+    :param python_only: Enable python only version of CLE algorithm. If set to False, MO (c++) version is
+     used. Default is False.
     :return: None
     """
     if dummy_input is None:
@@ -848,20 +1025,24 @@ def equalize_model(model: torch.nn.Module, input_shapes: Union[Tuple, List[Tuple
         input_shapes = dummy_input.shape
 
     if isinstance(model, torch.nn.DataParallel):
-        equalize_model(model.module, input_shapes, dummy_input)
+        equalize_model(model.module, input_shapes, dummy_input=dummy_input, python_only=python_only)
     else:
+        # Place model and dummy input on the cpu.
         device = get_device(model)
         model.cpu()
-        # fold batchnorm layers
-        folded_pairs = fold_all_batch_norms(model, input_shapes, dummy_input)
-        equalize_bn_folded_model(model, input_shapes, folded_pairs, dummy_input=dummy_input)
+        dummy_input = utils.change_tensor_device_placement(dummy_input, device=torch.device('cpu'))
+
+        # fold batchnorm layers and perform CLE on the folded model.
+        folded_pairs = fold_all_batch_norms(model, input_shapes, dummy_input=dummy_input)
+        equalize_bn_folded_model(model, input_shapes, folded_pairs,
+                                 dummy_input=dummy_input, python_only=python_only)
 
         model.to(device=device)
 
 def equalize_bn_folded_model(model: torch.nn.Module,
                              input_shapes: Union[Tuple, List[Tuple]],
                              folded_pairs: List[Tuple[torch.nn.Module, torch.nn.BatchNorm2d]],
-                             dummy_input: Union[torch.Tensor, Tuple] = None
+                             dummy_input: Union[torch.Tensor, Tuple] = None, python_only: bool = False
                              ):
     """
     Perform Cross-Layer Scaling (CLS) and High Bias Folding (HBF) on a batchnorm-folded model.
@@ -869,15 +1050,22 @@ def equalize_bn_folded_model(model: torch.nn.Module,
 
     :param model: Batchnorm-folded model to equalize
     :param input_shapes: Shape of the input (can be a tuple or a list of tuples if multiple inputs)
-    :param dummy_input: Dummy input to the model. Used to parse model graph. User is expected to place the tensors on the appropriate device.
+    :param dummy_input: Dummy input to the model. Used to parse model graph. User is expected to place the tensors
+     on the appropriate device.
     :param folded_pairs: List of pairs of folded layers
+    :param python_only: Enable python only version of CLE algorithm. If set to False, MO (c++) version is
+     used. Default is False.
     :return: None
     """
     if isinstance(model, torch.nn.DataParallel):
-        equalize_bn_folded_model(model.module, input_shapes, folded_pairs, dummy_input=dummy_input)
+        equalize_bn_folded_model(model.module, input_shapes, folded_pairs,
+                                 dummy_input=dummy_input, python_only=python_only)
     else:
+        # Place model and dummy input on the cpu.
         device = get_device(model)
         model.cpu()
+        dummy_input = utils.change_tensor_device_placement(dummy_input, device=torch.device('cpu'))
+
         bn_dict = {}
         for conv_bn in folded_pairs:
             bn_dict[conv_bn[0]] = conv_bn[1]
@@ -886,8 +1074,8 @@ def equalize_bn_folded_model(model: torch.nn.Module,
         utils.replace_modules_of_type1_with_type2(model, torch.nn.ReLU6, torch.nn.ReLU)
 
         # perform cross-layer scaling on applicable layer sets
-        cls_set_info_list = CrossLayerScaling.scale_model(model, input_shapes, dummy_input=dummy_input)
-
+        cls_set_info_list = CrossLayerScaling.scale_model(model, input_shapes,
+                                                          dummy_input=dummy_input, python_only=python_only)
         # high-bias fold
         HighBiasFold.bias_fold(cls_set_info_list, bn_dict)
 
