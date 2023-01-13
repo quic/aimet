@@ -187,8 +187,7 @@ class CrossLayerScaling(CLS):
                                               BIAS_INDEX)
             bias_param.raw_data = np.asarray(prev_layer_params.bias, dtype=np.float32).tobytes()
 
-    @staticmethod
-    def _pack_params_for_depthwise_conv(cls_set,
+    def _pack_params_for_depthwise_conv(self, cls_set,
                                         prev_layer_params: libpymo.EqualizationParams,
                                         curr_layer_params: libpymo.EqualizationParams,
                                         next_layer_params: libpymo.EqualizationParams):
@@ -201,8 +200,29 @@ class CrossLayerScaling(CLS):
         :param next_layer_params: Data structure holding weight and bias for next layer in cls set.
         """
 
-    @staticmethod
-    def _update_params_for_depthwise_conv(cls_set,
+        self._populate_libpymo_params(cls_set[0].get_module(), prev_layer_params)
+
+        assert cls_set[1].groups > 1
+
+        weight = ParamUtils.get_param(self._model.model, cls_set[1].get_module(), WEIGHT_INDEX)
+        curr_layer_params.weight = numpy_helper.to_array(weight).reshape(-1)
+        curr_layer_params.weightShape = np.array(weight.dims)
+
+        self._populate_libpymo_params(cls_set[2].get_module(), next_layer_params)
+
+        cls_set_0_bias = ParamUtils.get_param(self._model.model, cls_set[0].get_module(), BIAS_INDEX)
+        if cls_set_0_bias is not None:
+            prev_layer_params.bias = numpy_helper.to_array(cls_set_0_bias).reshape(-1)
+        else:
+            prev_layer_params.isBiasNone = True
+
+        cls_set_1_bias = ParamUtils.get_param(self._model.model, cls_set[1].get_module(), BIAS_INDEX)
+        if cls_set_1_bias is not None:
+            curr_layer_params.bias = numpy_helper.to_array(cls_set_1_bias).reshape(-1)
+        else:
+            curr_layer_params.isBiasNone = True
+
+    def _update_params_for_depthwise_conv(self, cls_set,
                                           prev_layer_params: libpymo.EqualizationParams,
                                           curr_layer_params: libpymo.EqualizationParams,
                                           next_layer_params: libpymo.EqualizationParams):
@@ -214,3 +234,16 @@ class CrossLayerScaling(CLS):
         :param curr_layer_params: Data structure holding weight and bias for current layer in cls set.
         :param next_layer_params: Data structure holding weight and bias for next layer in cls set.
         """
+        self._update_weight_for_layer_from_libpymo_obj(prev_layer_params, cls_set[0].get_module())
+        self._update_weight_for_layer_from_libpymo_obj(curr_layer_params, cls_set[1].get_module())
+        self._update_weight_for_layer_from_libpymo_obj(next_layer_params, cls_set[2].get_module())
+
+        if not prev_layer_params.isBiasNone:
+            bias_param = ParamUtils.get_param(self._model.model, cls_set[0].get_module(),
+                                              BIAS_INDEX)
+            bias_param.raw_data = np.asarray(prev_layer_params.bias, dtype=np.float32).tobytes()
+
+        if not curr_layer_params.isBiasNone:
+            bias_param = ParamUtils.get_param(self._model.model, cls_set[1].get_module(),
+                                              BIAS_INDEX)
+            bias_param.raw_data = np.asarray(curr_layer_params.bias, dtype=np.float32).tobytes()
