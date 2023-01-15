@@ -98,6 +98,7 @@ class QuantAnalyzer:
         self._unlabeled_dataset = None
         self._num_batches = None
 
+    # pylint: disable=too-many-arguments
     def analyze(self,
                 quant_scheme: QuantScheme = QuantScheme.post_training_tf_enhanced,
                 rounding_mode: str = 'nearest',
@@ -105,7 +106,7 @@ class QuantAnalyzer:
                 default_output_bw: int = 8,
                 config_file: str = None,
                 unlabeled_dataset: tf.compat.v1.data.Dataset = None,
-                num_batches : int = None,
+                num_batches: int = None,
                 results_dir: str = "./tmp/"):
         """
         Analyze model for quantization and point out sensitive parts/hotspots of the model by performing
@@ -352,9 +353,10 @@ class QuantAnalyzer:
 
         return eval_score_dict
 
+    # pylint: disable=too-many-locals
     def _perform_per_op_mse_loss(self,
-                                sim: QuantizationSimModel,
-                                results_dir: str,
+                                 sim: QuantizationSimModel,
+                                 results_dir: str,
                                 ) -> Dict:
         """
         MSE loss computation between fp32 and quantized output activations for each op.
@@ -367,16 +369,17 @@ class QuantAnalyzer:
         os.makedirs(results_dir, exist_ok=True)
 
         output_op_names = [graph_op.output_op_node.name for graph_op in sim.connected_graph.get_all_ops().values()
-                           if graph_op.output_op_node != None]
+                           if graph_op.output_op_node is not None]
         mse = tf.keras.losses.MeanSquaredError()
         mse_loss_dict = {}
 
-        for i in range(len(output_op_names)):
+        for _, output_op_name in enumerate(output_op_names):
             total = 0
             loss = 0.0
+            # pylint: disable=protected-access
             with self._unlabeled_dataset._graph.as_default():
                 iterator = iterate_tf_dataset(self._unlabeled_dataset)
-            for batch_index in range(self._num_batches):
+            for _ in range(self._num_batches):
                 try:
                     model_inputs = next(iterator)
                 except tf.errors.OutOfRangeError:
@@ -384,12 +387,12 @@ class QuantAnalyzer:
 
                 # Collect output activation data from original op
                 feed_dict = create_input_feed_dict(self._session.graph, self._start_op_names, model_inputs)
-                orig_op = self._session.graph.get_operation_by_name(output_op_names[i])
+                orig_op = self._session.graph.get_operation_by_name(output_op_name)
                 orig_out_data = self._session.run(orig_op.outputs[0], feed_dict=feed_dict)
 
                 # Collect output activation data from quant sim op
                 feed_dict = create_input_feed_dict(sim.session.graph, self._start_op_names, model_inputs)
-                quant_op = sim.session.graph.get_operation_by_name(output_op_names[i])
+                quant_op = sim.session.graph.get_operation_by_name(output_op_name)
                 quantized_out_data = sim.session.run(quant_op.outputs[0], feed_dict=feed_dict)
 
                 # Calculate MSE loss
@@ -398,7 +401,7 @@ class QuantAnalyzer:
                     loss += MSE.eval()
                 total += orig_out_data.shape[0]
 
-            mse_loss_dict[output_op_names[i]] = loss/total
+            mse_loss_dict[output_op_name] = loss/total
 
         export_per_layer_mse_plot(mse_loss_dict,
                                   results_dir,
