@@ -46,8 +46,8 @@ from bokeh.models import ColumnDataSource, Band, Span
 import torch
 from torch.utils.data import DataLoader
 
-from aimet_common.quant_analyzer import save_json, export_per_layer_sensitivity_analysis_plot, \
-    create_and_export_min_max_ranges_plot
+from aimet_common.quant_analyzer import save_json, export_per_layer_sensitivity_analysis_plot,\
+    create_and_export_min_max_ranges_plot, export_per_layer_mse_plot
 from aimet_common.utils import AimetLogger, CallbackFunc
 from aimet_common.defs import QuantScheme
 from aimet_torch import utils
@@ -425,6 +425,7 @@ class QuantAnalyzer:
         return plot
 
 
+<<<<<<< HEAD
     @staticmethod
     def _export_per_layer_mse_plot(mse_loss_dict: Dict, results_dir: str, title: str) -> plotting.Figure:
         """
@@ -455,6 +456,33 @@ class QuantAnalyzer:
         plot.sizing_mode = "scale_width"
         plotting.save(plot)
         return plot
+=======
+    def _create_and_export_min_max_ranges_plot(self,
+                                               min_max_ranges_dict: Dict,
+                                               results_dir: str,
+                                               title: str
+                                               ):
+        """
+        Create and export per layer encoding(s) min-max ranges in html format.
+
+        :param min_max_ranges_dict: Dictionary containing encoding min and max ranges.
+        :param results_dir: Directory to save the results.
+        :param title: Title of the plot.
+        """
+        os.makedirs(results_dir, exist_ok=True)
+
+        if set(map(type, min_max_ranges_dict.values())) == {dict}:
+            for name, per_channel_encodings_dict in min_max_ranges_dict.items():
+                self._export_per_layer_min_max_ranges_plot(per_channel_encodings_dict,
+                                                           results_dir=results_dir,
+                                                           title=name)
+        elif set(map(type, min_max_ranges_dict.values())) == {tuple}:
+            self._export_per_layer_min_max_ranges_plot(min_max_ranges_dict,
+                                                       results_dir=results_dir,
+                                                       title=title)
+        else:
+            raise RuntimeError("Per channel quantization should be enabled for all the layers.")
+>>>>>>> TF per op MSE loss
 
     def _create_and_export_stats_histogram_plot(self,
                                                 quantizer: StaticGridTensorQuantizer,
@@ -715,9 +743,9 @@ class QuantAnalyzer:
             loss = self._compute_mse_loss(module, quant_wrapper, self._model, sim)
             mse_loss_dict[name] = loss
 
-        self._export_per_layer_mse_plot(mse_loss_dict,
-                                        results_dir,
-                                        title="per_layer_mse_loss")
+        export_per_layer_mse_plot(mse_loss_dict,
+                                  results_dir,
+                                  title="per_layer_mse_loss")
         save_json(mse_loss_dict, results_dir, title="per_layer_mse_loss.json")
         _logger.info("Exported per layer MSE loss plot.")
         return mse_loss_dict

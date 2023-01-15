@@ -44,24 +44,27 @@ import tensorflow.compat.v1 as tf
 from bokeh import plotting
 from bokeh.models import ColumnDataSource, Band, Span
 from aimet_common.defs import QuantScheme
-from aimet_common.quant_analyzer import save_json, export_per_layer_sensitivity_analysis_plot, \
-    create_and_export_min_max_ranges_plot
+from aimet_common.quant_analyzer import save_json, export_per_layer_sensitivity_analysis_plot,\
+    create_and_export_min_max_ranges_plot, export_per_layer_mse_plot
 from aimet_common.utils import AimetLogger, CallbackFunc
 from aimet_tensorflow.common.operation import Op
+from aimet_tensorflow.utils.common import create_input_feed_dict, iterate_tf_dataset
 from aimet_tensorflow.quantizer_info import QuantizerInfo
 from aimet_tensorflow.quantsim import QuantizationSimModel
+from aimet_tensorflow import batch_norm_fold as aimet_bnf
 
 _logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Quant)
 
 DEFAULT_BOKEH_FIGURE_HEIGHT = 300
-
 
 class QuantAnalyzer:
     """
     QuantAnalyzer tool provides
         1) Model sensitivity to weight and activation quantization
         2) Per layer encoding (min - max range) and PDF analysis
-        3) per op sensitivity analysis
+        3) Per op sensitivity analysis
+        4) Per op MSE analysis
+
     """
 
     def __init__(self, session: tf.compat.v1.Session, start_op_names: List[str], output_op_names: List[str],
@@ -92,6 +95,8 @@ class QuantAnalyzer:
         self._use_cuda = use_cuda
         self._default_output_bw = None
         self._default_param_bw = None
+        self._unlabeled_dataset = None
+        self._num_batches = None
 
     def analyze(self,
                 quant_scheme: QuantScheme = QuantScheme.post_training_tf_enhanced,
@@ -99,6 +104,8 @@ class QuantAnalyzer:
                 default_param_bw: int = 8,
                 default_output_bw: int = 8,
                 config_file: str = None,
+                unlabeled_dataset: tf.compat.v1.data.Dataset = None,
+                num_batches : int = None,
                 results_dir: str = "./tmp/"):
         """
         Analyze model for quantization and point out sensitive parts/hotspots of the model by performing
@@ -106,6 +113,7 @@ class QuantAnalyzer:
             2) export per layer encoding (min - max range)
             3) export per layer statistics histogram (PDF) when quant scheme is TF-Enhanced
             4) perform per op sensitivity analysis by enabling and disabling quant ops
+            5) per op MSE loss between fp32 and quantized output activations
 
         :param quant_scheme: Quantization Scheme, currently supported schemes are post_training_tf and
                post_training_tf_enhanced, defaults to post_training_tf_enhanced
@@ -114,10 +122,16 @@ class QuantAnalyzer:
         :param default_output_bw: bitwidth to use for activation tensors, defaults to 8
         :param config_file: Path to a config file to use to specify rules for placing quant ops in the model
         :param results_dir: Directory to save the results.
+        :param unlabeled_dataset: Unlabeled TF dataset
+                Used in per op MSE loss calculation
+        :param num_batches: Number of batches. Approximately 256 samples/images are recommended,
+                so if batch size of data loader is 64, then 4 number of batches leads to 256 samples/images
+                Used in per op MSE loss calculation
         """
+        self._unlabeled_dataset = unlabeled_dataset
+        self._num_batches = num_batches
         self._default_param_bw = default_param_bw
         self._default_output_bw = default_output_bw
-
         sim = self._create_quantsim_and_encodings(quant_scheme, rounding_mode, config_file)
         results_dir = os.path.abspath(results_dir)
         os.makedirs(results_dir, exist_ok=True)
@@ -138,6 +152,10 @@ class QuantAnalyzer:
         # Perform per op analysis by disabling each quant op (OPTION-2).
         self._perform_per_op_analysis_by_disabling_quant_ops(sim, results_dir)
 
+        # Perform per op MSE loss between fp32 and quantized output activations.
+        if self._unlabeled_dataset and self._num_batches:
+            self._perform_per_op_mse_loss(sim, results_dir)
+
     def _create_quantsim_and_encodings(self, quant_scheme: QuantScheme, rounding_mode: str,
                                        config_file: str) -> QuantizationSimModel:
         """"
@@ -148,7 +166,10 @@ class QuantAnalyzer:
         :param config_file: Path to a config file
         :return: Quantsim model
         """
-        quant_sim_model = QuantizationSimModel(session=self._session,
+        BN_folded_sess, _ = aimet_bnf.fold_all_batch_norms(self._session, input_op_names=self._start_op_names,
+                                                           output_op_names=self._output_op_names)
+        self._session = BN_folded_sess
+        quant_sim_model = QuantizationSimModel(session=BN_folded_sess,
                                                starting_op_names=self._start_op_names,
                                                output_op_names=self._output_op_names,
                                                quant_scheme=quant_scheme, rounding_mode=rounding_mode,
@@ -236,13 +257,13 @@ class QuantAnalyzer:
 
         :param sim: Quantsim model.
         :param results_dir: Directory to save the results.
-        :return: layer wise eval score dictionary. dict[op_name] = eval_score
+        :return: op wise eval score dictionary. dict[op_name] = eval_score
         """
         results_dir = os.path.abspath(results_dir)
         os.makedirs(results_dir, exist_ok=True)
 
         _logger.info("\nOPTION-1:\nAll the quant ops are disabled.\n"
-                     "Starting per-layer analysis by enabling quant ops as per config file.")
+                     "Starting per-op analysis by enabling quant ops as per config file.")
         op_wise_eval_score_dict = self._perform_per_op_analysis(sim,
                                                                 disable_all_quantizers=True,
                                                                 enabled_before=True,
@@ -269,13 +290,13 @@ class QuantAnalyzer:
 
         :param sim: Quantsim model.
         :param results_dir: Directory to save the results.
-        :return: layer wise eval score dictionary. dict[op_name] = eval_score
+        :return: op wise eval score dictionary. dict[op_name] = eval_score
         """
         results_dir = os.path.abspath(results_dir)
         os.makedirs(results_dir, exist_ok=True)
 
         _logger.info("\nOPTION-2:\nAll the quant ops are enabled as per config file.\n"
-                     "Starting per-layer analysis by disabling quant ops.")
+                     "Starting per-op analysis by disabling quant ops.")
         op_wise_eval_score_dict = self._perform_per_op_analysis(sim,
                                                                 disable_all_quantizers=False,
                                                                 enabled_before=False,
@@ -295,14 +316,14 @@ class QuantAnalyzer:
                                  enabled_after: bool,
                                  ) -> Dict:
         """
-        Helper function for perform_per_layer_analysis_by_enabling_quant_ops() and
-        perform_per_layer_analysis_by_disabling_quant_ops()
+        Helper function for perform_per_op_analysis_by_enabling_quant_ops() and
+        perform_per_op_analysis_by_disabling_quant_ops()
 
         :param sim: Quantsim model.
-        :param disable_all_quantizers: Flag to disable all the quantizers before per-layer analysis.
+        :param disable_all_quantizers: Flag to disable all the quantizers before per-op analysis.
         :param enabled_before: Flag to set enabled for quantizers before computing encodings.
         :param enabled_after: Flag to set enabled for quantizers after computing encodings.
-        :return: layer wise eval score dictionary. dict[conn_graph_op] = eval_score.
+        :return: op wise eval score dictionary. dict[conn_graph_op] = eval_score.
         """
 
         enabled_quant_ops = self._get_enabled_quantizer_groups(sim)
@@ -330,6 +351,61 @@ class QuantAnalyzer:
                     self._enable_disable_quantizers(quantizer_group_list, enabled=True)
 
         return eval_score_dict
+
+    def _perform_per_op_mse_loss(self,
+                                sim: QuantizationSimModel,
+                                results_dir: str,
+                                ) -> Dict:
+        """
+        MSE loss computation between fp32 and quantized output activations for each op.
+        :param sim: Quantsim model.
+        :param results_dir: Directory to save the results.
+        :return op wise MSE loss. dict[op_name] = MSE loss.
+        """
+
+        results_dir = os.path.abspath(results_dir)
+        os.makedirs(results_dir, exist_ok=True)
+
+        output_op_names = [graph_op.output_op_node.name for graph_op in sim.connected_graph.get_all_ops().values()
+                           if graph_op.output_op_node != None]
+        mse = tf.keras.losses.MeanSquaredError()
+        mse_loss_dict = {}
+
+        for i in range(len(output_op_names)):
+            total = 0
+            loss = 0.0
+            with self._unlabeled_dataset._graph.as_default():
+                iterator = iterate_tf_dataset(self._unlabeled_dataset)
+            for batch_index in range(self._num_batches):
+                try:
+                    model_inputs = next(iterator)
+                except tf.errors.OutOfRangeError:
+                    raise StopIteration("Can not fetch {} batches from dataset.".format(self._num_batches))
+
+                # Collect output activation data from original op
+                feed_dict = create_input_feed_dict(self._session.graph, self._start_op_names, model_inputs)
+                orig_op = self._session.graph.get_operation_by_name(output_op_names[i])
+                orig_out_data = self._session.run(orig_op.outputs[0], feed_dict=feed_dict)
+
+                # Collect output activation data from quant sim op
+                feed_dict = create_input_feed_dict(sim.session.graph, self._start_op_names, model_inputs)
+                quant_op = sim.session.graph.get_operation_by_name(output_op_names[i])
+                quantized_out_data = sim.session.run(quant_op.outputs[0], feed_dict=feed_dict)
+
+                # Calculate MSE loss
+                MSE = mse(orig_out_data, quantized_out_data)
+                with tf.compat.v1.Session().as_default():
+                    loss += MSE.eval()
+                total += orig_out_data.shape[0]
+
+            mse_loss_dict[output_op_names[i]] = loss/total
+
+        export_per_layer_mse_plot(mse_loss_dict,
+                                  results_dir,
+                                  title="per_op_mse_loss")
+        save_json(mse_loss_dict, results_dir, title="per_op_mse_loss.json")
+        _logger.info("Exported per op MSE loss plot.")
+        return mse_loss_dict
 
     @staticmethod
     def _get_enabled_quantizer_groups(sim: QuantizationSimModel)-> Dict[Op, List[QuantizerInfo]]:
