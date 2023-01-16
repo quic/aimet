@@ -45,7 +45,8 @@ from torchvision import models
 from aimet_common.utils import AimetLogger
 from aimet_torch import batch_norm_fold
 from aimet_torch.batch_norm_fold import fold_all_batch_norms
-from aimet_torch.cross_layer_equalization import CrossLayerScaling, GraphSearchUtils, equalize_model
+from aimet_torch.cross_layer_equalization import CrossLayerScaling, GraphSearchUtils, equalize_model, ClsSetInfo,\
+    HighBiasFold
 from aimet_torch.utils import create_rand_tensors_given_shapes, get_device
 from aimet_torch.utils import get_layer_name
 from models.mobilenet import MockMobileNetV2, MockMobileNetV1
@@ -697,14 +698,12 @@ class TestTrainingExtensionsCrossLayerScaling(unittest.TestCase):
         self.assertTrue(torch.allclose(output_before_cle, output_after_cle, rtol=1.e-2))
 
     @pytest.mark.cuda
-    def test_end_to_end_python_only_cle(self):
+    def test_cle_using_python_impl(self):
         """ Compare MO and python implementation for CLE """
         torch.manual_seed(10)
         random_input = torch.rand(2, 10, 24, 24).cuda()
-
         model = MyModel().eval().cuda()
         model_copy = copy.deepcopy(model).eval()
-
         # original outputs
         output = model(random_input)
 
@@ -721,7 +720,7 @@ class TestTrainingExtensionsCrossLayerScaling(unittest.TestCase):
         assert torch.allclose(output, output_using_python)
 
     @pytest.mark.cuda
-    def test_scale_cls_set_with_conv_layers_api(self):
+    def test_scale_cls_set_with_conv_layers_using_python_impl(self):
         """ Compare scale_cls_set_with_conv_layers API """
         torch.manual_seed(10)
         model = MyModel().cuda().eval()
@@ -744,7 +743,7 @@ class TestTrainingExtensionsCrossLayerScaling(unittest.TestCase):
         assert torch.allclose(output, output_using_python)
 
     @pytest.mark.cuda
-    def test_end_to_end_python_only_cls(self):
+    def test_cls_using_python_impl(self):
         """ Compare MO and python implementation for CLS """
         torch.manual_seed(10)
         model = MockMobileNetV1().cuda().eval()
@@ -764,3 +763,64 @@ class TestTrainingExtensionsCrossLayerScaling(unittest.TestCase):
 
         # Verify the outputs.
         assert torch.allclose(model(dummy_input), model_copy(dummy_input))
+
+    def test_bias_fold_using_python_impl(self):
+        """ Verify bias fold API using python implementation """
+        class Model(torch.nn.Module):
+            def __init__(self):
+                super(Model, self).__init__()
+                self.conv1 = torch.nn.Conv2d(3, 16, kernel_size=2)
+                self.bn1 = torch.nn.BatchNorm2d(16)
+                self.conv2 = torch.nn.ConvTranspose2d(16, 32, kernel_size=3)
+                self.bn2 = torch.nn.BatchNorm2d(32)
+                self.conv3 = torch.nn.Conv2d(32, 32, kernel_size=3)
+                for m in self.modules():
+                    if isinstance(m, torch.nn.BatchNorm2d):
+                        torch.nn.init.normal_(m.weight)
+                        torch.nn.init.constant_(m.bias, 4)
+            def forward(self, x):
+                x = self.conv1(x)
+                x = self.bn1(x)
+                x = self.conv2(x)
+                x = self.bn2(x)
+                x = self.conv3(x)
+                return x
+
+        def _verify_bias_fold(model, dummy_input, python_only):
+
+            folded_pairs = batch_norm_fold.fold_all_batch_norms(model, (1, 3, 224, 224), dummy_input=dummy_input)
+            bn_dict = {}
+            for conv, bn in folded_pairs:
+                bn_dict[conv] = bn
+
+            # Create a list of consecutive conv layers to be equalized and scale them.
+            consecutive_layer_list = [(model.conv1, model.conv2), (model.conv2, model.conv3)]
+            scaling_factor_list = CrossLayerScaling.scale_cls_sets(consecutive_layer_list)
+
+            cls_set_info_list = \
+                [ClsSetInfo(ClsSetInfo.ClsSetLayerPairInfo(model.conv1, model.conv2, scaling_factor_list[0], True)),
+                 ClsSetInfo(ClsSetInfo.ClsSetLayerPairInfo(model.conv2, model.conv3, scaling_factor_list[1], True))]
+
+            # Fold the biases.
+            HighBiasFold.bias_fold(cls_set_info_list, bn_dict, python_only=python_only)
+
+            conv1_bias = model.conv1.bias.detach().cpu()
+            conv2_bias = model.conv2.bias.detach().cpu()
+            conv3_bias = model.conv2.bias.detach().cpu()
+
+            return conv1_bias, conv2_bias, conv3_bias
+
+        torch.manual_seed(10)
+        model = Model().eval()
+        model_copy = copy.deepcopy(model)
+        dummy_input = torch.randn(1, 3, 10, 10)
+
+        # invoke with MO (c++) implementation
+        conv1_bias_mo, conv2_bias_mo, conv3_bias_mo = _verify_bias_fold(model, dummy_input, python_only=False)
+        # invoke with python implementation
+        conv1_bias_p, conv2_bias_p, conv3_bias_p = _verify_bias_fold(model_copy, dummy_input, python_only=True)
+
+        assert torch.allclose(conv1_bias_mo, conv1_bias_p)
+        assert torch.allclose(conv2_bias_mo, conv2_bias_p)
+        assert torch.allclose(conv3_bias_mo, conv3_bias_p)
+        assert torch.allclose(model(dummy_input), model_copy(dummy_input), rtol=1.e-2)

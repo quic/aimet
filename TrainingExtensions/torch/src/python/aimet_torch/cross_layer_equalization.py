@@ -134,13 +134,20 @@ class GraphSearchUtils:
 
     def __init__(self, model: torch.nn.Module, input_shapes: Union[Tuple, List[Tuple]],
                  dummy_input: Union[torch.Tensor, List[torch.Tensor]] = None):
-
+        """
+        :param model: PyTorch model.
+        :param input_shapes: Input shape for the model (can be one or multiple inputs)
+        :param dummy_input: Dummy input to the model. Used to parse model graph.
+        """
+        device = get_device(model)
         if dummy_input is None:
-            inp_tensor_list = tuple(utils.create_rand_tensors_given_shapes(input_shapes, get_device(model)))
-        else:
-            inp_tensor_list = dummy_input
-        self._connected_graph = ConnectedGraph(model, inp_tensor_list)
-        self._ordered_module_list = get_ordered_list_of_conv_modules(model, inp_tensor_list)
+            dummy_input = tuple(utils.create_rand_tensors_given_shapes(input_shapes, device))
+
+        # Place dummy input on the same device as model.
+        dummy_input = utils.change_tensor_device_placement(dummy_input, device=device)
+
+        self._connected_graph = ConnectedGraph(model, dummy_input)
+        self._ordered_module_list = get_ordered_list_of_conv_modules(model, dummy_input)
 
 
     @staticmethod
@@ -510,10 +517,8 @@ class CrossLayerScaling:
         if isinstance(model, torch.nn.DataParallel):
             return CrossLayerScaling.scale_model(model.module, input_shapes,
                                                  dummy_input=dummy_input, python_only=python_only)
-        # Place model and dummy input on the cpu.
         device = get_device(model)
         model.cpu()
-        dummy_input = utils.change_tensor_device_placement(dummy_input, device=torch.device('cpu'))
 
         # Find layer groups
         graph_search = GraphSearchUtils(model, input_shapes, dummy_input=dummy_input)
@@ -549,12 +554,15 @@ class HighBiasFold:
 
     @classmethod
     def bias_fold(cls, cls_set_info_list: List[ClsSetInfo],
-                  bn_layers: Dict[Union[torch.nn.Conv2d, torch.nn.ConvTranspose2d], torch.nn.BatchNorm2d]):
+                  bn_layers: Dict[Union[torch.nn.Conv2d, torch.nn.ConvTranspose2d], torch.nn.BatchNorm2d],
+                  python_only: bool = False):
         """
         Folds bias values greater than 3 * sigma to next layer's bias
 
         :param cls_set_info_list: List of info elements for each cls set
         :param bn_layers: Key: Conv/Linear layer Value: Corresponding folded BN layer
+        :param python_only: Enable python only version of CLE algorithm. If set to False, MO (c++) version is
+         used. Default is False.
         :return: None
         """
         if not bn_layers:
@@ -563,25 +571,83 @@ class HighBiasFold:
 
         for cls_set_info in cls_set_info_list:
             for cls_pair_info in cls_set_info.cls_pair_info_list:
-
                 if (cls_pair_info.layer1.bias is None) or (cls_pair_info.layer2.bias is None) or \
                         (cls_pair_info.layer1 not in bn_layers):
                     continue
 
-                # Create data structures for holding layer weights and bias parameters.
-                prev_layer_params = libpymo.LayerParams()
-                curr_layer_params = libpymo.LayerParams()
-                prev_layer_bn_params = libpymo.BNParamsHighBiasFold()
+                # Pick implementation version based on user provided flag.
+                if python_only:
+                    cls._bias_fold_using_python_impl(cls_pair_info, bn_layers)
+                else:
+                    cls._bias_fold_using_mo_impl(cls_pair_info, bn_layers)
 
-                # Prepare and pack data structures for high bias fold.
-                cls._pack_bn_layer_params(cls_pair_info, bn_layers, prev_layer_bn_params)
-                cls._pack_previous_and_current_layer_params(cls_pair_info, prev_layer_params, curr_layer_params)
+    @classmethod
+    def _bias_fold_using_mo_impl(cls, cls_pair_info, bn_layers):
+        """
+        Bias fold implementation using Model optimization (c++) version.
 
-                # Update bias for previous and current layer and data structures in-place.
-                libpymo.updateBias(prev_layer_params, curr_layer_params, prev_layer_bn_params)
+        :param cls_pair_info: Layer pairs that were scaled using CLS and related information.
+        :param bn_layers: Dictionary with Key being Conv/Linear layer and value being corresponding folded BN layer.
+        :return:
+        """
+        # Create data structures for holding layer weights and bias parameters.
+        prev_layer_params = libpymo.LayerParams()
+        curr_layer_params = libpymo.LayerParams()
+        prev_layer_bn_params = libpymo.BNParamsHighBiasFold()
 
-                # Set updated biases for previous and current layer.
-                cls._update_previous_and_current_layer_bias(cls_pair_info, prev_layer_params, curr_layer_params)
+        # Prepare and pack data structures for high bias fold.
+        cls._pack_bn_layer_params(cls_pair_info, bn_layers, prev_layer_bn_params)
+        cls._pack_previous_and_current_layer_params(cls_pair_info, prev_layer_params, curr_layer_params)
+
+        # Update bias for previous and current layer and data structures in-place.
+        libpymo.updateBias(prev_layer_params, curr_layer_params, prev_layer_bn_params)
+
+        # Set updated biases for previous and current layer.
+        cls._update_previous_and_current_layer_bias(cls_pair_info, prev_layer_params, curr_layer_params)
+
+    @classmethod
+    def _bias_fold_using_python_impl(cls, cls_pair_info, bn_layers):
+        """
+        Bias fold implementation using python version.
+
+        :param cls_pair_info: Layer pairs that were scaled using CLS and related information.
+        :param bn_layers: Dictionary with Key being Conv/Linear layer and value being corresponding folded BN layer.
+        """
+        activation_is_relu = cls_pair_info.relu_activation_between_layers
+        beta = bn_layers[cls_pair_info.layer1].bias.detach() / torch.Tensor(cls_pair_info.scale_factor)
+        gamma = bn_layers[cls_pair_info.layer1].weight.detach() / torch.Tensor(cls_pair_info.scale_factor)
+        weight = cls_pair_info.layer2.weight.detach().cpu()
+
+        # Transpose weights to C, N, H, W from N, C, H, W since axis are flipped for transposed conv
+        if isinstance(cls_pair_info.layer2, (torch.nn.ConvTranspose1d, torch.nn.ConvTranspose2d)) and \
+                cls_pair_info.layer2.groups == 1:
+            weight = weight.permute(1, 0, 2, 3)
+
+        if isinstance(cls_pair_info.layer2, (torch.nn.Conv1d, torch.nn.ConvTranspose1d)):
+            weight = torch.unsqueeze(weight, dim=-1)
+
+        bias_prev_layer = cls_pair_info.layer1.bias.detach()
+        bias_curr_layer = cls_pair_info.layer2.bias.detach()
+
+        if not activation_is_relu:
+            # No activation function, absorb whole bias
+            absorb_bias = beta
+        else:
+            # Only absorb bias part that is more than 'min_std' standard deviations
+            abs_gamma = torch.abs(gamma)
+            absorb_bias = np.maximum(0, beta - 3 * abs_gamma)
+
+        # Calculate correction term for next layer
+        weight_matrix = weight.sum(3).sum(2)
+        if weight_matrix.shape[1] == 1:
+            weight_matrix = weight_matrix.reshape(weight_matrix.shape[0])
+            bias_correction = torch.multiply(weight_matrix, absorb_bias)
+        else:
+            bias_correction = torch.matmul(weight_matrix, absorb_bias)
+
+        # Update bias for previous and current layers.
+        bias_prev_layer -= absorb_bias
+        bias_curr_layer += bias_correction
 
     @staticmethod
     def _pack_bn_layer_params(cls_pair_info: ClsSetInfo.ClsSetLayerPairInfo,
@@ -655,6 +721,7 @@ class HighBiasFold:
         cls_pair_info.layer2.bias.data = torch.from_numpy(np.reshape(curr_layer_params.bias,
                                                                      curr_layer_params.weightShape[0]))
         cls_pair_info.layer2.bias.data = cls_pair_info.layer2.bias.data.type(torch.FloatTensor)
+
 
 class CLSImpl(abc.ABC):
     """
@@ -1061,11 +1128,8 @@ def equalize_bn_folded_model(model: torch.nn.Module,
         equalize_bn_folded_model(model.module, input_shapes, folded_pairs,
                                  dummy_input=dummy_input, python_only=python_only)
     else:
-        # Place model and dummy input on the cpu.
         device = get_device(model)
         model.cpu()
-        dummy_input = utils.change_tensor_device_placement(dummy_input, device=torch.device('cpu'))
-
         bn_dict = {}
         for conv_bn in folded_pairs:
             bn_dict[conv_bn[0]] = conv_bn[1]
@@ -1077,6 +1141,6 @@ def equalize_bn_folded_model(model: torch.nn.Module,
         cls_set_info_list = CrossLayerScaling.scale_model(model, input_shapes,
                                                           dummy_input=dummy_input, python_only=python_only)
         # high-bias fold
-        HighBiasFold.bias_fold(cls_set_info_list, bn_dict)
+        HighBiasFold.bias_fold(cls_set_info_list, bn_dict, python_only=python_only)
 
         model.to(device=device)
