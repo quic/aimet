@@ -53,6 +53,8 @@ from aimet_torch import utils
 from aimet_torch.auto_quant import _AutoQuantV2 as AutoQuant
 from aimet_torch.adaround.adaround_weight import AdaroundParameters, Adaround
 from aimet_torch.quantsim import QuantizationSimModel, OnnxExportApiArgs
+from aimet_torch.qc_quantize_op import StaticGridQuantWrapper
+from aimet_common.defs import QuantScheme
 
 
 class Model(torch.nn.Module):
@@ -426,6 +428,36 @@ class TestAutoQuant:
                 assert mocks.fold_all_batch_norms.call_count == 1
                 assert mocks.equalize_model.call_count == 1
                 assert mocks.apply_adaround.call_count == 1
+
+    def test_auto_quant_scheme_selection(
+        self, cpu_model, dummy_input, unlabeled_data_loader,
+    ):
+        allowed_accuracy_drop = 0.0
+        bn_folded_acc, cle_acc, adaround_acc = 40., 50., 60.
+        with patch_ptq_techniques(
+            bn_folded_acc, cle_acc, adaround_acc
+        ) as mocks:
+            def eval_callback(model, _):
+                # If quant scheme is tf, the model's eval score drops to 0.
+                if isinstance(model._conv_0, StaticGridQuantWrapper):
+                    if model._conv_0.param_quantizers["weight"].quant_scheme == QuantScheme.post_training_tf:
+                        return 0.0
+                return mocks.eval_callback(model, _)
+
+            real_auto_quant_main = AutoQuant._auto_quant_main
+            def auto_quant_main_fn(self, *args, **kwargs):
+                # Since the model's eval score with tf scheme is 0,
+                # tfe is expected to be selected as the quant scheme for AutoQuant.
+                assert self.default_quant_scheme == QuantScheme.post_training_tf_enhanced
+                return real_auto_quant_main(self, *args, **kwargs)
+
+            with patch("aimet_torch.auto_quant_v2._AutoQuantV2._auto_quant_main", auto_quant_main_fn):
+                auto_quant = AutoQuant(
+                    allowed_accuracy_drop=allowed_accuracy_drop,
+                    unlabeled_dataset_iterable=unlabeled_data_loader,
+                    eval_callback=eval_callback,
+                )
+                auto_quant.apply(cpu_model, dummy_input)
 
     def test_set_additional_params(self, cpu_model, dummy_input, unlabeled_data_loader):
         allowed_accuracy_drop = 0

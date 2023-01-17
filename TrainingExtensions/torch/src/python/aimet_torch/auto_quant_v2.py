@@ -62,7 +62,7 @@ from aimet_common.auto_quant import Diagnostics
 from aimet_common.cache import Cache
 from aimet_common.defs import QuantScheme
 from aimet_common.utils import AimetLogger, Spinner
-from aimet_common.quantsim import validate_quantsim_inputs
+from aimet_common.quantsim import _validate_quant_scheme, _validate_rounding_mode, _validate_bitwidth
 
 
 _logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.AutoQuant)
@@ -73,6 +73,11 @@ cache = Cache()
 # The number of samples to be used for performance evaluation.
 # NOTE: None means "all".
 NUM_SAMPLES_FOR_PERFORMANCE_EVALUATION = None
+
+QUANT_SCHEME_CANDIDATES = [
+    QuantScheme.post_training_tf,
+    QuantScheme.post_training_tf_enhanced,
+]
 
 
 class _AutoQuantV2:
@@ -92,7 +97,7 @@ class _AutoQuantV2:
             eval_callback: Callable[[torch.nn.Module, Optional[int]], float],
             default_param_bw: int = 8,
             default_output_bw: int = 8,
-            default_quant_scheme: QuantScheme = QuantScheme.post_training_tf_enhanced,
+            default_quant_scheme: QuantScheme = None,
             default_rounding_mode: str = 'nearest',
             default_config_file: str = None,
     ) -> None:
@@ -124,10 +129,11 @@ class _AutoQuantV2:
                 .format(allowed_accuracy_drop)
             )
 
-        validate_quantsim_inputs(default_quant_scheme,
-                                 default_rounding_mode,
-                                 default_output_bw,
-                                 default_param_bw)
+        if default_quant_scheme:
+            _validate_quant_scheme(default_quant_scheme)
+
+        _validate_rounding_mode(default_rounding_mode)
+        _validate_bitwidth(default_param_bw, default_output_bw)
 
         @functools.wraps(eval_callback)
         def eval_callback_wrapper(model: torch.nn.Module,
@@ -491,8 +497,21 @@ class _AutoQuantV2:
                     results_dir=results_dir,
                 )
 
-                ret = auto_quant_main_fn(fp32_model, target_acc, dummy_input,
-                                         eval_manager, results_dir)
+                orig_quant_scheme = self.default_quant_scheme
+
+                if self.default_quant_scheme is None:
+                    with eval_manager.analysis_session("Selecting optimal quantization scheme") as sess:
+                        # Find the quant scheme that yields the best eval score
+                        self.default_quant_scheme = max(
+                            QUANT_SCHEME_CANDIDATES,
+                            key=lambda quant_scheme: sess.eval(fp32_model, quant_scheme=quant_scheme)
+                        )
+
+                try:
+                    ret = auto_quant_main_fn(fp32_model, target_acc, dummy_input,
+                                             eval_manager, results_dir)
+                finally:
+                    self.default_quant_scheme = orig_quant_scheme
 
                 acc = ret["accuracy"]
                 if acc is not None:
