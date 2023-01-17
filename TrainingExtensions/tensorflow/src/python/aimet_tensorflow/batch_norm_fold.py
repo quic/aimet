@@ -43,6 +43,7 @@ import os
 import numpy as np
 import tensorflow as tf
 
+import aimet_tensorflow
 from aimet_tensorflow.common.connectedgraph import ConnectedGraph
 from aimet_tensorflow.common.operation import OpWithMetaInfoType, Op
 from aimet_tensorflow.quantsim import QuantizationSimModel
@@ -57,6 +58,7 @@ from aimet_common.bias_correction import ConvBnPatternHandler
 from aimet_common.graph_pattern_matcher import PatternType
 from aimet_common.utils import AimetLogger
 import aimet_common.libpymo as libpymo
+
 
 logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.CrosslayerEqualization)
 
@@ -259,7 +261,7 @@ def _get_bn_params(sess: tf.compat.v1.Session, bn: tf.Operation) -> libpymo.BNPa
         bn_params.runningVar = sigma
     return bn_params
 
-
+# pylint: disable=too-many-locals
 def _fold_given_auto_selected_batch_norms(sess: tf.compat.v1.Session, layer_pairs: List[PairType]) -> tf.compat.v1.Session:
     """
     Fold a given set of batch_norm layers into conv layers
@@ -439,25 +441,33 @@ def _fold_given_auto_selected_batch_norms_scale(sim: QuantizationSimModel, layer
     :param sim: tf quantized model
     :param layer_pairs: layer_pairs: pair of conv and bn layers
     """
+
     sess = sim.session
     with sess.graph.as_default():
         for pair in layer_pairs:
             batchnorm_tf_op = sess.graph.get_operation_by_name(pair[1].op.name)
+            bn_quantizer_name = batchnorm_tf_op.name + "_quantized"
             conv_linear_tf_op = sess.graph.get_operation_by_name(pair[0].name)
+            assert batchnorm_tf_op.type in ['FusedBatchNormV3', 'Identity']
             #  check flag
             is_bias_valid = False
             if not BiasUtils.is_bias_none(conv_linear_tf_op):
                 is_bias_valid = True
-            assert batchnorm_tf_op.type in ['FusedBatchNormV3', 'Identity']
-            if batchnorm_tf_op.type == 'Identity':
-                # It is safeguard for Bn type 'Identity'  normal behavior. Bn type'FusedBatchNormV3' does not need since training&momentum are immutable
-                bn_momentum_tf_var_name = sess.graph.get_operation_by_name(batchnorm_tf_op.name.split("/")[0] + "/cond_1").outputs[0].op.inputs[1].name
-                bn_training_tf_var_name = batchnorm_tf_op.inputs[0].op.inputs[0].op.inputs[0].name
-                for v in tf.compat.v1.get_collection(tf.compat.v1.GraphKeys.GLOBAL_VARIABLES):
-                    if v.name == bn_momentum_tf_var_name:
-                        sess.run(tf.compat.v1.assign(v, 1.0))
-                    if v.name == bn_training_tf_var_name:
-                        sess.run(tf.compat.v1.assign(v, tf.compat.v1.constant(False)))
+                conv_linear_quantizer_a_name = conv_linear_tf_op.outputs[0].consumers()[0].outputs[0].consumers()[
+                    0].name
+            else:
+                conv_linear_quantizer_a_name = conv_linear_tf_op.outputs[0].consumers()[0].name
+
+            conv_linear_quantizer_a = sim.quantizer_config(conv_linear_quantizer_a_name)
+            assert isinstance(conv_linear_quantizer_a, aimet_tensorflow.quantizer_info.QuantizerInfo)
+
+            # Disable quantizers activation of conv
+            conv_linear_quantizer_a.set_op_mode(int(libpymo.TensorQuantizerOpMode.passThrough))
+
+            # Disable quantizers of batchnorms
+            bn_quantizer = sim.quantizer_config(bn_quantizer_name)
+            bn_quantizer.set_op_mode(int(libpymo.TensorQuantizerOpMode.passThrough))
+
             bn_params = _get_bn_params(sess, batchnorm_tf_op)
             weight_tensor = _get_weight_tensor_transpose_reshape(sess, conv_linear_tf_op)
             bias_tensor = _get_bias_tensor(sess, conv_linear_tf_op)
@@ -477,29 +487,36 @@ def _fold_given_auto_selected_batch_norms_scale(sim: QuantizationSimModel, layer
                 numpy_weight_reshaped = np.reshape(weight_tensor.data, weight_tensor.shape).transpose((2, 3, 1, 0))
             WeightTensorUtils.update_tensor_for_sim_op(sess, conv_linear_tf_op, numpy_weight_reshaped)
             BiasUtils.update_bias_for_sim_op(sess, conv_linear_tf_op, np.reshape(bias, [weight_tensor.shape[0]]))
-            BNUtils.modify_bn_params_to_make_as_passthrough(sess, batchnorm_tf_op)
             _fold_pair_scale(sim, conv_linear_tf_op, bn_params)
+            BNUtils.modify_bn_params_to_make_as_passthrough(sess, batchnorm_tf_op)
+        # we edited the graph, so we should load and save for the metagraph associated with the session to be
+        # updated
+        after_fold_sess = save_and_load_graph('./temp_bn_fold', sess)
+    sim.session = after_fold_sess
+
 
 
 def _fold_pair_scale(sim: QuantizationSimModel, conv_linear_tf_op: tf.Operation, bn_params: libpymo.BNParams()):
     """
-     Fold a batch_norm layer into conv layer's scale
+     Fold a batch_norm layer into conv_linear's scale
     :param sim: tf quantized model
-    :param conv_linear_tf_op: conv layer
+    :param conv_linear_tf_op: conv layer or Linear layer
     :param bn_params: bn_params
     """
-    conv_linear_quantizer_w = sim.quantizer_config(conv_linear_tf_op.name + "/ReadVariableOp_quantized")
-    encodings = conv_linear_quantizer_w.get_encoding()
-    new_encodings = []
-    for old_encoding, c in zip(encodings, np.array(bn_params.gamma) * (1.0 / np.array(bn_params.runningVar))):
-        new_encoding = libpymo.TfEncoding()
-        if c >= 0:
-            new_encoding.max = old_encoding.max * c
-            new_encoding.min = old_encoding.min * c
-        else:
-            new_encoding.max = old_encoding.min * c
-            new_encoding.min = old_encoding.max * c
-        new_encoding.offset = old_encoding.offset
-        new_encoding.bw = old_encoding.bw
-        new_encodings.append(new_encoding)
-    conv_linear_quantizer_w.set_encoding(new_encodings)
+    conv_linear_quantizer_weights = sim.quantizer_config(conv_linear_tf_op.name + "/ReadVariableOp_quantized")
+    if conv_linear_quantizer_weights:
+        encodings = conv_linear_quantizer_weights.get_encoding()
+        new_encodings = []
+        for old_encoding, bn_gamma_to_runningvar_ratio in zip(encodings, np.array(bn_params.gamma) * (1.0 / np.array(bn_params.runningVar))):
+            new_encoding = libpymo.TfEncoding()
+            if bn_gamma_to_runningvar_ratio >= 0:
+                new_encoding.max = old_encoding.max * bn_gamma_to_runningvar_ratio
+                new_encoding.min = old_encoding.min * bn_gamma_to_runningvar_ratio
+            else:
+                new_encoding.max = old_encoding.min * bn_gamma_to_runningvar_ratio
+                new_encoding.min = old_encoding.max * bn_gamma_to_runningvar_ratio
+            new_encoding.delta = old_encoding.delta * abs(bn_gamma_to_runningvar_ratio)
+            new_encoding.offset = new_encoding.min / new_encoding.delta
+            new_encoding.bw = old_encoding.bw
+            new_encodings.append(new_encoding)
+        conv_linear_quantizer_weights.set_encoding(new_encodings)
