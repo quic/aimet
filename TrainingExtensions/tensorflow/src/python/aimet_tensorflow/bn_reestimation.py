@@ -178,7 +178,10 @@ def reestimate_bn_stats(sim: QuantizationSimModel, start_op_names: List[str],
         bn_dataset_iterator = iterate_tf_dataset(bn_re_estimation_dataset)
         update_ops = tf.compat.v1.get_collection(tf.compat.v1.GraphKeys.UPDATE_OPS)
         with tf.compat.v1.control_dependencies(update_ops):
-            output_tensors = tf.compat.v1.identity(output_tensors)
+            output_tensors_dependencies = []
+            for output_tensor in output_tensors:
+                output_tensor = tf.compat.v1.identity(output_tensor)
+                output_tensors_dependencies.append(output_tensor)
         initialize_uninitialized_vars(sess)
         # (1)intilization
         sum_dict = {v: np.zeros(v.shape, dtype=v.dtype.as_numpy_dtype) for v in bn_mean_var_tf_var_list}
@@ -187,7 +190,7 @@ def reestimate_bn_stats(sim: QuantizationSimModel, start_op_names: List[str],
         try:
             batch_data = next(bn_dataset_iterator)
             feed_dict = create_input_feed_dict(sess.graph, start_op_names, batch_data)
-            sess.run(output_tensors, feed_dict=feed_dict)
+            sess.run(output_tensors_dependencies, feed_dict=feed_dict)
             for v in bn_mean_var_tf_var_list:
                 sum_dict[v] += sess.run(v)
             if batch_index == bn_num_batches - 1:

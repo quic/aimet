@@ -50,13 +50,10 @@ from aimet_tensorflow.batch_norm_fold import fold_all_batch_norms, find_all_batc
     fold_all_batch_norms_to_scale
 from aimet_tensorflow.common.connectedgraph import ConnectedGraph
 from aimet_tensorflow.examples.test_models import tf_slim_basic_model
-from aimet_tensorflow.utils.op.conv import WeightTensorUtils
 from aimet_tensorflow.utils.graph import update_keras_bn_ops_trainable_flag
 from aimet_tensorflow.quantsim import QuantizationSimModel
 from aimet_common.defs import QuantScheme
-from aimet_tensorflow.utils.op.fusedbatchnorm import BNUtils
-from aimet_tensorflow.utils.op.conv import WeightTensorUtils, BiasUtils, get_output_activation_shape
-
+from aimet_tensorflow.utils.op.conv import WeightTensorUtils
 
 tf.compat.v1.logging.set_verbosity(tf.compat.v1.logging.WARN)
 tf.compat.v1.disable_eager_execution()
@@ -552,10 +549,6 @@ def get_sim_model_conv2d_no_bias_FusedBatchNormV3():
     conv = sess.graph.get_operation_by_name('conv2d/Conv2D')
     assert (sess.graph.get_operation_by_name('conv2d/Conv2D').outputs[0].consumers()[0].type != 'BiasAdd')
   
-    sess = BiasUtils.initialize_model_with_bias(sess, ['input_1'], ['conv2d/Conv2D'])
-    # Check that conv2d has a bias inserted but not conv2d_1
-    new_conv = sess.graph.get_operation_by_name('conv2d/Conv2D')
-    assert(sess.graph.get_operation_by_name('conv2d/Conv2D').outputs[0].consumers()[0].type == 'BiasAdd')
 
     quantsim_config = {
         "defaults": {
