@@ -340,7 +340,7 @@ class TestQuantAnalyzer:
                     "is_quantized": "False"
                 }
             },
-            "op_type": {},
+            "op_type": {"Gemm": {"per_channel_quantization": "False"}},
             "supergroups": [],
             "model_input": {},
             "model_output": {}
@@ -360,7 +360,8 @@ class TestQuantAnalyzer:
             quant_analyzer._export_per_layer_encoding_min_max_range(sim, results_dir="./tmp/")
             assert os.path.isfile("./tmp/min_max_ranges/activations.html")
             assert os.path.isfile("./tmp/min_max_ranges/conv1_weight.html")
-            assert os.path.isfile("./tmp/min_max_ranges/fc_weight.html")
+            # Dense (Gemm) is disabled to per-channel quantization, it should be in weights.html
+            assert os.path.isfile("./tmp/min_max_ranges/weights.html")
         finally:
             if os.path.isdir("./tmp/"):
                 shutil.rmtree("./tmp/")
