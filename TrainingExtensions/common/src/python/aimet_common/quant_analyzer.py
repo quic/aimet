@@ -101,17 +101,22 @@ def create_and_export_min_max_ranges_plot(min_max_ranges_dict: Dict,
     """
     os.makedirs(results_dir, exist_ok=True)
 
-    if set(map(type, min_max_ranges_dict.values())) == {dict}:
-        for name, per_channel_encodings_dict in min_max_ranges_dict.items():
-            _export_per_layer_min_max_ranges_plot(per_channel_encodings_dict,
-                                                  results_dir=results_dir,
-                                                  title=name)
-    elif set(map(type, min_max_ranges_dict.values())) == {tuple}:
-        _export_per_layer_min_max_ranges_plot(min_max_ranges_dict,
+    per_channel_min_max_ranges_dict = {
+        k: v for k, v in min_max_ranges_dict.items() if isinstance(v, dict)
+    }
+    per_tensor_min_max_ranges_dict = {
+        k: v for k, v in min_max_ranges_dict.items() if isinstance(v, tuple)
+    }
+
+    for name, per_channel_encodings_dict in per_channel_min_max_ranges_dict.items():
+        _export_per_layer_min_max_ranges_plot(per_channel_encodings_dict,
+                                              results_dir=results_dir,
+                                              title=name)
+
+    if per_tensor_min_max_ranges_dict:
+        _export_per_layer_min_max_ranges_plot(per_tensor_min_max_ranges_dict,
                                               results_dir=results_dir,
                                               title=title)
-    else:
-        raise RuntimeError("Per channel quantization should be enabled for all the layers.")
 
 
 def _export_per_layer_min_max_ranges_plot(layer_wise_min_max_ranges_dict: Dict, results_dir: str, title: str) \
