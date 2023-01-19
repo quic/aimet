@@ -55,6 +55,8 @@ from aimet_torch.batch_norm_fold import fold_all_batch_norms
 from aimet_torch.quantsim import QuantizationSimModel
 from aimet_torch.utils import in_eval_mode
 from aimet_torch.onnx_utils import OnnxExportApiArgs
+from aimet_torch.model_preparer import prepare_model
+from aimet_torch.model_validator.model_validator import ModelValidator
 
 from aimet_common.auto_quant import Diagnostics
 from aimet_common.cache import Cache
@@ -333,6 +335,8 @@ class _AutoQuantV2:
             dummy_input_on_gpu: Optional[Union[torch.Tensor, Tuple]] = None,
             results_dir: str = "/tmp",
             cache_id: str = None,
+            concrete_args: Dict[str, Any] = None,
+            strict_validation: bool = False,
     ) -> Tuple[torch.nn.Module, float, str]:
         """
         Apply post-training quantization techniques.
@@ -345,6 +349,13 @@ class _AutoQuantV2:
         :param cache_id: A string that composes a cache id in combination with results_dir.
             If specified, AutoQuant will load/save the PTQ results from/to the file system
             if previous PTQ results produced under the same results_dir and cache_id exist,
+        :param concrete_args: Parameter for model preparer. Allows you to partially specialize
+            your function, whether it's to remove control flow or data structures. If the
+            model has control flow, torch.fx won't be able to trace the model. Check
+            torch.fx.symbolic_trace API in detail.
+        :param strict_validation: Flag set to True by default. When False, AutoQuant will
+            proceed with execution and try to handle errors internally if possible. This
+            may produce unideal or unintuitive results.
         :return: Tuple of  (best model, eval score, encoding path front).
         :raises:
             - ValueError if the model is on GPU and dummy_input_on_gpu is not specified.
@@ -354,12 +365,14 @@ class _AutoQuantV2:
                                     dummy_input_on_cpu,
                                     dummy_input_on_gpu,
                                     results_dir,
-                                    cache_id)
+                                    cache_id,
+                                    concrete_args,
+                                    strict_validation)
         return result["model"],\
                result["accuracy"],\
                result["encoding_path"]
 
-    def _apply_helper(
+    def _apply_helper( # pylint: disable=too-many-arguments, too-many-locals
             self,
             auto_quant_main_fn: Callable,
             fp32_model: torch.nn.Module,
@@ -367,6 +380,8 @@ class _AutoQuantV2:
             dummy_input_on_gpu: Optional[Union[torch.Tensor, Tuple]] = None,
             results_dir: str = "/tmp",
             cache_id: str = None,
+            concrete_args: Dict[str, Any] = None,
+            strict_validation: bool = False,
     ) -> Dict[str, Any]:
         """
         Helper for self.apply().
@@ -380,6 +395,13 @@ class _AutoQuantV2:
         :param cache_id: A string that composes a cache id in combination with results_dir.
             If specified, AutoQuant will load/save the PTQ results from/to the file system
             if previous PTQ results produced under the same results_dir and cache_id exist,
+        :param concrete_args: Parameter for model preparer. Allows you to partially specialize
+            your function, whether it's to remove control flow or data structures. If the
+            model has control flow, torch.fx won't be able to trace the model. Check
+            torch.fx.symbolic_trace API in detail.
+        :param strict_validation: Flag set to True by default. When False, AutoQuant will
+            proceed with execution and try to handle errors internally if possible. This
+            may produce unideal or unintuitive results.
         :return: The best ptq result as a dictionary.
         :raises:
             - ValueError if the model is on GPU and dummy_input_on_gpu is not specified.
@@ -400,6 +422,34 @@ class _AutoQuantV2:
             cache_dir = None
         else:
             cache_dir = os.path.join(results_dir, ".auto_quant_cache", cache_id)
+
+        try:
+            fp32_model = prepare_model(fp32_model, concrete_args=concrete_args)
+        except Exception as e: # pylint: disable=broad-except
+            if strict_validation:
+                raise
+            # TODO: Add warning to summary
+            _logger.warning(
+                "Model preparation has failed."
+                " Falling back to the original model (Reason: %s)", str(e)
+            )
+
+
+        if ModelValidator.validate_model(fp32_model, dummy_input):
+            # TODO: Add warning to summary
+            _logger.info(
+                "Model validation has succeeded. Proceeding to AutoQuant algorithm."
+            )
+        else:
+            if strict_validation:
+                raise ValueError(
+                    "Model validation has failed."
+                    " Please make the necessary changes to the model and run again."
+                )
+            # TODO: Add warning to summary
+            _logger.warning(
+                "Model validation has failed. Proceeding to AutoQuant algorithm regardless."
+            )
 
         with in_eval_mode(fp32_model):
             with cache.enable(cache_dir):
