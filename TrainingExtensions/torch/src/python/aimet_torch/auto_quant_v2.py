@@ -229,6 +229,12 @@ class _AutoQuantV2:
         :param encoding_path: Path to parameter encodings file.
         :return: Quantsim model.
         """
+        if default_output_bw is not None:
+            assert default_output_bw <= 32
+
+        if default_param_bw is not None:
+            assert default_param_bw <= 32
+
         kwargs = dict(
             quant_scheme=(quant_scheme or self.default_quant_scheme),
             rounding_mode=(rounding_mode or self.default_rounding_mode),
@@ -241,7 +247,23 @@ class _AutoQuantV2:
         if encoding_path:
             sim.set_and_freeze_param_encodings(encoding_path)
 
-        sim.compute_encodings(self.forward_pass_callback, None)
+        param_quantizers, input_quantizers, output_quantizers = utils.get_all_quantizers(sim.model)
+
+        # Disable input/output quantizers, using fp32 to simulate int32.
+        if default_output_bw == 32:
+            for quantizer in input_quantizers + output_quantizers:
+                quantizer.enabled = False
+
+        # Disable param quantizers, using fp32 to simulate int32.
+        if default_param_bw == 32:
+            for quantizer in param_quantizers:
+                quantizer.enabled = False
+
+        # Skip encoding computation if none of the quantizers are enabled
+        if any(quantizer.enabled for quantizer in param_quantizers +\
+                                                  input_quantizers +\
+                                                  output_quantizers):
+            sim.compute_encodings(self.forward_pass_callback, None)
 
         return sim
 

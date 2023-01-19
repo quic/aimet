@@ -783,3 +783,27 @@ def get_torch_tensortype_shape(torch_graph_output: torch._C.TensorType) -> Union
     if isinstance(torch_graph_output.type(), torch._C.TensorType):
         shape = torch_graph_output.type().sizes()
     return shape
+
+
+def get_all_quantizers(model: torch.nn.Module):
+    """
+    Get all the quantizers in the model
+    :param model: Root module
+    :returns: List of parameter, input, and output quantizers
+    """
+    from aimet_torch.qc_quantize_op import QcQuantizeWrapper
+    from aimet_torch.qc_quantize_recurrent import QcQuantizeRecurrent
+
+    param_quantizers = []
+    input_quantizers = []
+    output_quantizers = []
+
+    quant_wrappers = [
+        m for m in model.modules() if isinstance(m, (QcQuantizeWrapper, QcQuantizeRecurrent))
+    ]
+    for quant_wrapper in quant_wrappers:
+        param_quantizers.extend(quant_wrapper.param_quantizers.values())
+        input_quantizers.extend(quant_wrapper.input_quantizers)
+        output_quantizers.extend(quant_wrapper.output_quantizers)
+
+    return param_quantizers, input_quantizers, output_quantizers
