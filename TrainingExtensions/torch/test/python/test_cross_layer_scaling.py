@@ -738,9 +738,14 @@ class TestTrainingExtensionsCrossLayerScaling(unittest.TestCase):
         CrossLayerScaling.scale_cls_set_with_conv_layers((model_copy.conv1, model_copy.conv2), python_only=True)
         output_using_python = model_copy(random_input)
 
+        # Verify the outputs.
         assert torch.allclose(output_using_mo, output_using_python)
         assert torch.allclose(output, output_using_mo)
         assert torch.allclose(output, output_using_python)
+
+        # Verify the weights.
+        assert torch.allclose(model.conv1.weight, model_copy.conv1.weight)
+        assert torch.allclose(model.conv2.weight, model_copy.conv2.weight)
 
     @pytest.mark.cuda
     def test_cls_using_python_impl(self):
@@ -763,6 +768,9 @@ class TestTrainingExtensionsCrossLayerScaling(unittest.TestCase):
 
         # Verify the outputs.
         assert torch.allclose(model(dummy_input), model_copy(dummy_input))
+
+        # Verify the weights
+        assert torch.allclose(model.model[0][0].weight, model_copy.model[0][0].weight)
 
     def test_bias_fold_using_python_impl(self):
         """ Verify bias fold API using python implementation """
