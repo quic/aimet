@@ -188,7 +188,7 @@ class QuantAnalyzer:
             input_shape = tuple(self._dummy_input.shape)
         else:
             input_shape = [tuple(x.shape) for x in self._dummy_input]
-        _ = fold_all_batch_norms(self._model, input_shape)
+        _ = fold_all_batch_norms(self._model, input_shape, dummy_input=self._dummy_input)
 
         kwargs = dict(
             quant_scheme=quant_scheme,
