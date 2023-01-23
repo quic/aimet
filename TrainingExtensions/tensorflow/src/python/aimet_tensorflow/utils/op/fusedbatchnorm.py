@@ -103,6 +103,20 @@ class BNUtils:
                       tf.compat.v1.assign(bn_mean_tf_var, np.zeros(bn_mean_tf_var.shape, dtype=bn_mean_tf_var.dtype.as_numpy_dtype)),
                       tf.compat.v1.assign(bn_var_tf_var, np.ones(bn_var_tf_var.shape, dtype=bn_var_tf_var.dtype.as_numpy_dtype))])
 
+    @staticmethod
+    def modify_bn_params_to_weight_bias_form(sess: tf.compat.v1.Session, bn_op: tf.Operation, weight: np.ndarray, bias: np.ndarray):
+        """
+        To change the batch normalization parameters to work as y = weight * input + bias
+        :param sess:
+        :param bn_op: Batch normalization op that should be worked as passthrough op (no-op)
+        """
+        bn_gamma_tf_var, bn_beta_tf_var, bn_mean_tf_var, bn_var_tf_var = BNUtils.get_bn_params_tf_variable(sess, bn_op)
+        with sess.graph.as_default():
+            sess.run([tf.compat.v1.assign(bn_gamma_tf_var, weight),
+                      tf.compat.v1.assign(bn_beta_tf_var, bias),
+                      tf.compat.v1.assign(bn_mean_tf_var, np.zeros(bn_mean_tf_var.shape, dtype=bn_mean_tf_var.dtype.as_numpy_dtype)),
+                      tf.compat.v1.assign(bn_var_tf_var, np.ones(bn_var_tf_var.shape, dtype=bn_var_tf_var.dtype.as_numpy_dtype))])
+
 
     @staticmethod
     def skip_bn_op(sess: tf.compat.v1.Session, bn_op: tf.Operation, in_tensor: tf.Tensor, out_tensor: tf.Tensor):
