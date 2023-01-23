@@ -55,7 +55,7 @@ from aimet_tensorflow.utils.op.conv import WeightTensorUtils, BiasUtils
 from aimet_tensorflow.utils.op.fusedbatchnorm import BNUtils
 from aimet_tensorflow.utils.graph_saver import save_and_load_graph
 from aimet_tensorflow.utils.op.conv import get_weight_tensor_with_shape
-from aimet_tensorflow.utils.common import get_ordered_conv_linears
+from aimet_tensorflow.utils.common import get_ordered_conv_linears, get_ordered_ops
 from aimet_tensorflow.quantizer_info import QuantizerInfo
 
 logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.BatchNormFolding)
@@ -152,9 +152,9 @@ def find_all_batch_norms_to_fold(sess: tf.compat.v1.Session, start_op_names: Uni
         output_op_names = [output_op_names]
 
     conn_graph = ConnectedGraph(sess.graph, start_op_names, output_op_names)
-    bn_conv_linear_pairs, _ = _find_all_batch_norms_to_fold(conn_graph, start_op_names, output_op_names,
+    bn_conv_linear_pairs, marked_bn_set = _find_all_batch_norms_to_fold(conn_graph, start_op_names, output_op_names,
                                                             return_bn_conn_op)
-    return bn_conv_linear_pairs
+    return bn_conv_linear_pairs, marked_bn_set
 
 
 def _get_bias_tensor(sess: tf.compat.v1.Session, conv: tf.Operation) -> libpymo.TensorParams():
@@ -346,7 +346,7 @@ def fold_all_batch_norms(sess: tf.compat.v1.Session, input_op_names: Union[str, 
     if isinstance(output_op_names, str):
         output_op_names = [output_op_names]
 
-    bn_conv_linear_pairs = find_all_batch_norms_to_fold(sess, input_op_names, output_op_names)
+    bn_conv_linear_pairs, bns_to_fold = find_all_batch_norms_to_fold(sess, input_op_names, output_op_names)
 
     after_fold_sess = _fold_given_auto_selected_batch_norms(sess, bn_conv_linear_pairs)
 
@@ -359,8 +359,50 @@ def fold_all_batch_norms(sess: tf.compat.v1.Session, input_op_names: Union[str, 
     for pair in bn_conv_linear_pairs:
         pairs_to_return.append((pair[0], pair[1].op))
 
+
+    # Convert the standalone BNs which are not folded
+    bn_converted = ConvertBatchNorms(after_fold_sess, input_op_names, output_op_names, bns_to_fold)
+    if bn_converted:
+        logger.info("%d BatchNorms' weights got converted", len(bn_converted))
+
+        # we edited the graph, so we should load and save for the metagraph associated with the session to be updated
+        after_fold_sess = save_and_load_graph('./temp_bn_fold', after_fold_sess)
+
     return after_fold_sess, pairs_to_return
 
+def ConvertBatchNorms(sess, input_op_names: Union[str, List[str]],
+                      output_op_names: Union[str, List[str]], bns_folded: List):
+    """
+    Converts the weights of standalone batch norms remaining in the model after BN folding
+    :param sess: TF session in which the graph is loaded
+    :param input_op_names: Name of the starting op in the given graph or a list of names in case of multi-input model
+    :param output_op_names: List of output op names of the model, used to help ConnectedGraph determine valid ops
+           (to ignore training ops for example).  If None, all ops in the model are considered valid.
+    :param bns_folded: list of batch norms which got folded
+    :return: list of BatchNorms whose weights is converted
+    """
+
+    list_of_ordered_ops = get_ordered_ops(sess.graph, input_op_names, output_op_names)
+
+    converted_bns = []
+    # look for bn layers which are not folded
+    for op in list_of_ordered_ops:
+        if op.type in ['FusedBatchNormV3', 'FusedBatchNorm', 'BatchNormalization'] and op not in bns_folded:
+            ConvertBN(sess, op)
+            converted_bns.append(op)
+            logger.debug("%s weights got converted", op)
+    return converted_bns
+
+def ConvertBN(sess, op):
+    """
+    Convert the weights of BN such that it works as y = weights * x + bias
+    :param sess: TF Session in which the graph is loaded
+    :param op: bn_op which whose weights need to be converted
+    """
+    bn_params = _get_bn_params(sess, op)
+    weight = np.array(bn_params.gamma) / np.array(bn_params.runningVar)
+    bias = np.array(bn_params.beta) - np.array(bn_params.runningMean) * weight
+    BNUtils.modify_bn_params_to_weight_bias_form(sess, op, weight, bias)
 
 def fold_all_batch_norms_to_scale(sim: QuantizationSimModel,
                                   starting_op_names: List[str],
