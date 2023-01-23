@@ -40,6 +40,8 @@ import numpy as np
 import torch
 from onnx import helper, numpy_helper, OperatorSetIdProto, TensorProto, load_model
 from onnxruntime.quantization.onnx_quantizer import ONNXModel
+from torch.nn.modules.batchnorm import _BatchNorm
+
 from aimet_torch.examples.test_models import SingleResidualWithAvgPool, ModelWithTwoInputs, TransposedConvModel, \
     ConcatModel, HierarchicalModel, TransposedConvModelWithoutBN
 from aimet_torch.examples.mobilenet import MockMobileNetV1
@@ -425,6 +427,38 @@ class MyModel(torch.nn.Module):
 
         return x
 
+
+class MyModelFoldFoward(torch.nn.Module):
+    def __init__(self):
+        super(MyModelFoldFoward, self).__init__()
+
+        self.conv1 = torch.nn.Conv2d(10, 20, 3)
+        self.bn1 = torch.nn.BatchNorm2d(20)
+        self.relu1 = torch.nn.ReLU()
+
+        self.conv2 = torch.nn.Conv2d(20, 15, 3)
+        self.bn2 = torch.nn.BatchNorm2d(15)
+        self.relu2 = torch.nn.ReLU()
+
+        self.conv3 = torch.nn.Conv2d(15, 20, 3)
+
+    def forward(self, x):
+        # Regular case - conv followed by bn
+        x = self.conv1(x)
+        x = self.bn1(x)
+        x = self.relu1(x)
+
+        # Non-linearity between conv and bn, not a candidate for fold
+        x = self.conv2(x)
+        x = self.bn2(x)
+        x = self.relu2(x)
+
+        # Case where BN can fold into an immediate downstream conv
+        x = self.conv3(x)
+
+        return x
+
+
 def _convert_to_onnx_no_fold(model: torch.nn.Module, dummy_input, filename='./temp_model.onnx'):
     torch.onnx.export(model.eval(),
                       dummy_input,
@@ -452,3 +486,35 @@ def _convert_to_onnx(model: torch.nn.Module, dummy_input, filename='./temp_model
     model = ONNXModel(load_model(filename))
     return model
 
+
+def my_model_with_bns():
+    torch.manual_seed(10)
+    model = MyModelFoldFoward().eval()
+    initialize_bn_params(model)
+
+    input_shape = (2, 10, 24, 24)
+    x = torch.randn(*input_shape, requires_grad=True)
+
+    # Export the model
+    torch.onnx.export(model,  # model being run
+                      x,  # model input (or a tuple for multiple inputs)
+                      "./model_single_residual.onnx",
+                      # where to save the model (can be a file or file-like object),
+                      training=torch.onnx.TrainingMode.TRAINING,
+                      export_params=True,  # store the trained parameter weights inside the model file
+                      opset_version=12,  # the ONNX version to export the model to
+                      do_constant_folding=False,  # whether to execute constant folding for optimization
+                      input_names=['input'],  # the model's input names
+                      output_names=['output'])
+    model = ONNXModel(load_model('./model_single_residual.onnx'))
+    return model
+
+
+def initialize_bn_params(model: torch.nn.Module):
+    for module in model.modules():
+        if isinstance(module, _BatchNorm) and module.affine:
+            with torch.no_grad():
+                module.weight.copy_(torch.randn_like(module.weight))
+                module.bias.copy_(torch.randn_like(module.bias))
+                module.running_mean.copy_(torch.randn_like(module.bias))
+                module.running_var.add_(torch.randn_like(module.bias).abs())

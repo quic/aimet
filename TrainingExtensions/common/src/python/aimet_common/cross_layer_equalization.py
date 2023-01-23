@@ -44,7 +44,7 @@ Layer groups: Groups of layers that are immediately connected and can be decompo
 """
 
 from abc import ABC, abstractmethod
-from typing import List, Union, Tuple
+from typing import List, Union, Tuple, Dict
 from enum import Enum
 import numpy as np
 from onnx import onnx_pb
@@ -477,4 +477,102 @@ class CrossLayerScaling(ABC):
         :param prev_layer_params: Data structure holding weight and bias for previous layer in cls set.
         :param curr_layer_params: Data structure holding weight and bias for current layer in cls set.
         :param next_layer_params: Data structure holding weight and bias for next layer in cls set.
+        """
+
+
+class HighBiasFold(ABC):
+    """
+    Code to apply the high-bias-fold technique to a model
+    """
+
+    ActivationIsReluForFirstModule = bool
+    ScaleForFirstModule = np.ndarray
+
+    @abstractmethod
+    def _check_if_bias_is_none(self, layer) -> bool:
+        """ Returns if bias is a None for a layer. True if bias is None"""
+
+    def bias_fold(self, cls_set_info_list: List[ClsSetInfo],
+                  bn_layers: Dict):
+        """
+        Folds bias values greater than 3 * sigma to next layer's bias
+
+        :param cls_set_info_list: List of info elements for each cls set
+        :param bn_layers: Key: Conv/Linear layer Value: Corresponding folded BN layer
+        :return: None
+        """
+        if not bn_layers:
+            logger.info('High Bias folding is not supported for models without BatchNorm Layers')
+            return
+
+        for cls_set_info in cls_set_info_list:
+            for cls_pair_info in cls_set_info.cls_pair_info_list:
+
+                if self._check_if_bias_is_none(cls_pair_info.layer1) or self._check_if_bias_is_none(cls_pair_info.layer2)\
+                        or (cls_pair_info.layer1.dotted_name not in bn_layers):
+                    continue
+
+                # Create data structures for holding layer weights and bias parameters.
+                prev_layer_params = libpymo.LayerParams()
+                curr_layer_params = libpymo.LayerParams()
+                prev_layer_bn_params = libpymo.BNParamsHighBiasFold()
+
+                # Prepare and pack data structures for high bias fold.
+                self._pack_bn_layer_params(cls_pair_info, bn_layers, prev_layer_bn_params)
+                self._pack_previous_and_current_layer_params(cls_pair_info, prev_layer_params, curr_layer_params)
+
+                # Update bias for previous and current layer and data structures in-place.
+                libpymo.updateBias(prev_layer_params, curr_layer_params, prev_layer_bn_params)
+
+                # Set updated biases for previous and current layer.
+                self._update_previous_and_current_layer_bias(cls_pair_info, prev_layer_params, curr_layer_params)
+
+    @abstractmethod
+    def _populate_bn_params_in_libpymo_obj(self, prev_layer_bn_params: libpymo.BNParamsHighBiasFold, bn_layer):
+        """
+        Populates BatchNorm params in the libpymo object
+        :param prev_layer_bn_params: Data structure to pack batch norm parameter
+        :param bn_layer: BatchNorm layer
+        """
+
+    def _pack_bn_layer_params(self, cls_pair_info: ClsSetInfo.ClsSetLayerPairInfo,
+                              bn_layers: Dict,
+                              prev_layer_bn_params: libpymo.BNParamsHighBiasFold):
+        """
+        Helper method to pack batch norm layer parameter for high bias fold.
+
+        :param cls_pair_info: Layer pairs that were scaled using CLS and related information.
+        :param bn_layers: Dictionary with Key being Conv/Linear layer and value being corresponding folded BN layer.
+        :param prev_layer_bn_params: Data structure to pack batch norm parameter.
+        """
+        scaling_parameter = cls_pair_info.scale_factor
+
+        self._populate_bn_params_in_libpymo_obj(prev_layer_bn_params, bn_layers[cls_pair_info.layer1.dotted_name])
+
+        if len(scaling_parameter) != len(prev_layer_bn_params.gamma) or \
+                len(scaling_parameter) != len(prev_layer_bn_params.beta):
+            raise ValueError("High Bias absorption is not supported for networks with fold-forward BatchNorms")
+        prev_layer_bn_params.gamma = np.divide(prev_layer_bn_params.gamma, scaling_parameter)
+        prev_layer_bn_params.beta = np.divide(prev_layer_bn_params.beta, scaling_parameter)
+
+    @abstractmethod
+    def _pack_previous_and_current_layer_params(self, cls_pair_info, prev_layer_params, curr_layer_params):
+        """
+        Helper method to pack information of previous and current layer.
+
+        :param cls_pair_info: Layer pairs that were scaled using CLS and related information.
+        :param prev_layer_params: Data structure to pack previous layer parameters.
+        :param curr_layer_params: Data structure to pack current layer parameters.
+        """
+
+    @abstractmethod
+    def _update_previous_and_current_layer_bias(self, cls_pair_info: ClsSetInfo.ClsSetLayerPairInfo,
+                                                prev_layer_params: libpymo.LayerParams,
+                                                curr_layer_params: libpymo.LayerParams):
+        """
+        Update biases for previous and current layer.
+
+        :param cls_pair_info: Layer pairs that were scaled using CLS and related information.
+        :param prev_layer_params: Data structure holding weight and bias for previous layer in cls set.
+        :param curr_layer_params: Data structure holding weight and bias for current layer in cls set.
         """
