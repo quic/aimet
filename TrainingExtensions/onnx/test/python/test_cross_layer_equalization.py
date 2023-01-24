@@ -147,7 +147,7 @@ class TestHighBiasFold:
     def test_find_batch_norms_to_fold(self):
         model = test_models.my_model_with_bns()
 
-        conv_bn_pairs = fold_all_batch_norms_to_weight(model.model)
+        conv_bn_pairs, bn_conv_pairs = fold_all_batch_norms_to_weight(model.model)
         bn_dict = {}
         convs = []
         for conv_bn in conv_bn_pairs:

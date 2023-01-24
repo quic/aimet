@@ -275,7 +275,9 @@ class HighBiasFold(HBF):
         prev_layer_bn_params.gamma = bn_layer.gamma
         prev_layer_bn_params.beta = bn_layer.beta
 
-    def _pack_previous_and_current_layer_params(self, cls_pair_info, prev_layer_params, curr_layer_params):
+    def _pack_previous_and_current_layer_params(self, cls_pair_info: ClsSetInfo.ClsSetLayerPairInfo,
+                                                prev_layer_params: libpymo.LayerParams,
+                                                curr_layer_params: libpymo.LayerParams):
         """
         Helper method to pack information of previous and current layer.
 
@@ -285,13 +287,10 @@ class HighBiasFold(HBF):
         """
         prev_layer_params.activationIsRelu = cls_pair_info.relu_activation_between_layers
 
-        weight = ParamUtils.get_param(self._model.model, cls_pair_info.layer1.get_module(),
-                                      WEIGHT_INDEX)
         bias = ParamUtils.get_param(self._model.model, cls_pair_info.layer1.get_module(),
                                     BIAS_INDEX)
 
         prev_layer_params.bias = numpy_helper.to_array(bias).reshape(-1)
-        prev_layer_params.weight = numpy_helper.to_array(weight).reshape(-1)
 
         module = cls_pair_info.layer2.get_module()
         weight = ParamUtils.get_param(self._model.model, module, WEIGHT_INDEX)
@@ -307,7 +306,7 @@ class HighBiasFold(HBF):
         curr_layer_params.weight = numpy_helper.to_array(weight).reshape(-1)
         curr_layer_params.weightShape = np.array(weight.dims)
 
-    def _update_bias_for_layer_from_libpymo_obj(self, layer_param: libpymo.EqualizationParams,
+    def _update_bias_for_layer_from_libpymo_obj(self, layer_param: libpymo.LayerParams,
                                                 module: onnx_pb.NodeProto):
         """
         Update bias parameter from libpymo object
