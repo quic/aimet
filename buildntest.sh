@@ -173,10 +173,10 @@ fi
 # Set the root URL that hosts the pre-built development docker image
 if [ -n "$AIMET_PREBUILT_DOCKER_IMAGE_URL" ]; then
     # Use a custom source if one is provided
-    prebuilt_docker_image_url=${PREBUILT_DOCKER_IMAGE_URL}
+    prebuilt_docker_image_url=${AIMET_PREBUILT_DOCKER_IMAGE_URL}
 else
     # Use the default docker images from Code Linaro
-    prebuilt_docker_image_url="artifacts.codelinaro.org/codelinaro-aimet/"
+    prebuilt_docker_image_url="artifacts.codelinaro.org/codelinaro-aimet"
 fi
 
 # Select the docker file based on the build variant
