@@ -73,10 +73,10 @@ pipeline {
                                     sh "bash -l -c \"git clone ${env.REPO_OR_FORK_URL} -b ${env.CHANGE_BRANCH} commit_checks_repo\""
                                     if ("${env.QCInternalValidation}" == "true") {
                                         withCredentials([usernameColonPassword(credentialsId: 'neoci-pat', variable: 'USERPASS')]) {
-                                            sh "bash -l -c \"cd ${REPO_NAME} && ${env.DEPENDENCY_DATA_PATH}/commit_check/commit-checks.sh \""
+                                            sh "AIMET_VARIANT=${aimet_variant} bash -l -c \"cd ${REPO_NAME} && ${env.DEPENDENCY_DATA_PATH}/commit_check/commit-checks.sh -e AIMET_VARIANT ${env.USE_LINARO} ${env.PREBUILT_DOCKER_IMAGE_URL}\""
                                         }
                                     } else {
-                                        sh "bash -l -c \"cd ${REPO_NAME} && ${env.DEPENDENCY_DATA_PATH}/commit_check/commit-checks.sh \""
+                                        sh "AIMET_VARIANT=${aimet_variant} bash -l -c \"cd ${REPO_NAME} && ${env.DEPENDENCY_DATA_PATH}/commit_check/commit-checks.sh -e AIMET_VARIANT ${env.USE_LINARO} ${env.PREBUILT_DOCKER_IMAGE_URL}\""
                                     }
                                 }
                                 sh "bash -l -c \"rm -rf commit_checks_repo\""
