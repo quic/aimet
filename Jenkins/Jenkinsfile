@@ -5,6 +5,7 @@ pipeline {
         string(name: 'BUILD_LABEL_CPU', defaultValue: 'docker-build-aimet-pr-cpu', description: 'Jenkins node host name or label for CPU variants')
         string(name: 'BUILD_TIMEOUT', defaultValue: '3', description: 'Build timeout in hours')
         string(name: 'USE_LINARO', defaultValue: '-l', description: 'Use pre-built Linaro images, if available.')
+        string(name: 'PREBUILT_DOCKER_IMAGE_URL', defaultValue: '', description: 'Use pre-built docker image from URL, if available.', required:false)
     }
     agent { label "${params.BUILD_LABEL_CPU}" }
     options {
@@ -521,7 +522,7 @@ def runStage(aimet_variant, options) {
            print "Jenkins/Dockerfile.${aimet_variant} not found in changed file list, so using Linaro Docker image for ${aimet_variant}"
         }
         sh """
-            AIMET_VARIANT=${aimet_variant} bash -l -c "cd ${REPO_NAME} && ./buildntest.sh -e AIMET_VARIANT ${options} ${env.USE_LINARO}"
+            AIMET_VARIANT=${aimet_variant} bash -l -c "cd ${REPO_NAME} && ./buildntest.sh -e AIMET_VARIANT ${options} ${env.USE_LINARO} ${env.PREBUILT_DOCKER_IMAGE_URL}"
         """
     }
 }
