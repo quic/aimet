@@ -38,3 +38,107 @@ find_package(Python3 COMPONENTS Interpreter)
 
 add_subdirectory(src/python)
 add_subdirectory(test)
+
+
+add_library(OnnxCppOps SHARED
+        #src/DummyCustomOp.cpp
+        #src/DummyCustomOp.h
+        src/QcQuantizeOp.h
+        src/AimetOpUtils.h
+        src/AimetOpUtils.cpp
+        src/QcQuantizeInfo.cpp
+        src/QcQuantizeInfo.h
+        src/QcQuantizeOp.cpp)
+
+set(ONNXRUNTIME_VER "1.13.1" CACHE STRING "ONNX Runtime version")
+set(ONNXRUNTIME_URL "v${ONNXRUNTIME_VER}/onnxruntime-linux-x64-${ONNXRUNTIME_VER}.tgz")
+
+FetchContent_Declare(
+        onnxruntime
+        URL https://github.com/microsoft/onnxruntime/releases/download/${ONNXRUNTIME_URL}
+)
+
+FetchContent_makeAvailable(onnxruntime)
+set(ONNXRUNTIME_INCLUDE_DIR ${onnxruntime_SOURCE_DIR}/include)
+set(ONNXRUNTIME_LIB_DIR ${onnxruntime_SOURCE_DIR}/lib)
+
+
+target_include_directories(OnnxCppOps PRIVATE
+        ${ONNXRUNTIME_INCLUDE_DIR}
+        ${ONNXRUNTIME_LIB_DIR}
+        ${CMAKE_CURRENT_SOURCE_DIR}/../common/include
+        )
+
+if (ENABLE_CUDA)
+target_link_libraries(OnnxCppOps PUBLIC
+        MoDlQuantization
+        MoDlEqualization
+        MoDlQuantizationCuda
+        MoDlCompression
+
+        CUDA::cublas
+        ${Python_LIBRARIES}
+        )
+else (ENABLE_CUDA)
+    target_link_libraries(OnnxCppOps PUBLIC
+            MoDlQuantization
+            MoDlEqualization
+            MoDlCompression
+
+            ${Python_LIBRARIES}
+            )
+endif (ENABLE_CUDA)
+
+
+set_target_properties(OnnxCppOps PROPERTIES
+        OUTPUT_NAME "aimet_ort_ops"
+        LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/artifacts/aimet_onnx"
+        )
+
+
+Python3_add_library(quant_info SHARED
+        src/QcQuantizeInfo.h
+        src/QcQuantizeInfo.cpp)
+
+
+if (ENABLE_CUDA)
+    target_link_libraries(quant_info
+            PUBLIC
+            stdc++
+            MoDlQuantization
+            MoDlEqualization
+            MoDlQuantizationCuda
+            MoDlCompression
+            PyModelOptimizations
+
+            CUDA::cublas
+            ${OPENCV_LINK_LIBRARIES}
+            z
+            )
+
+else (ENABLE_CUDA)
+    target_link_libraries(quant_info
+            PUBLIC
+            stdc++
+            MoDlQuantization
+            MoDlEqualization
+            MoDlCompression
+            PyModelOptimizations
+
+            ${OPENCV_LINK_LIBRARIES}
+            z
+            )
+
+endif (ENABLE_CUDA)
+
+
+set_target_properties(quant_info
+        PROPERTIES
+        OUTPUT_NAME "quant_info"
+        SUFFIX ".${Python3_SOABI}.so"
+        LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/artifacts/aimet_onnx/"
+        )
+
+install(TARGETS quant_info
+        LIBRARY DESTINATION ${AIMET_INSTALL_DIR}/lib/python/aimet_onnx
+        )
