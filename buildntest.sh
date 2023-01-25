@@ -169,23 +169,33 @@ if [ -n "$PYTHON_VER" ]; then
     fi
 fi
 
+
+# Set the root URL that hosts the pre-built development docker image
+if [ -n "$AIMET_PREBUILT_DOCKER_IMAGE_URL" ]; then
+    # Use a custom source if one is provided
+    prebuilt_docker_image_url=${AIMET_PREBUILT_DOCKER_IMAGE_URL}
+else
+    # Use the default docker images from Code Linaro
+    prebuilt_docker_image_url="artifacts.codelinaro.org/codelinaro-aimet"
+fi
+
 # Select the docker file based on the build variant
 if [ -n "$AIMET_VARIANT" ]; then
     docker_file="Dockerfile.${AIMET_VARIANT}"
     docker_image_name="aimet-dev-docker:${AIMET_VARIANT}"
-    linaro_docker_image_name="artifacts.codelinaro.org/codelinaro-aimet/aimet-dev:latest.${AIMET_VARIANT}"
+    prebuilt_docker_image_name="${prebuilt_docker_image_url}/aimet-dev:latest.${AIMET_VARIANT}"
 else
     docker_file="Dockerfile"
     docker_image_name="aimet-dev-docker:latest"
-    linaro_docker_image_name="artifacts.codelinaro.org/codelinaro-aimet/aimet:latest"
+    prebuilt_docker_image_name="${prebuilt_docker_image_url}/aimet:latest"
 fi
 
 # Either use code linaro docker image or build it from scratch
 if [ -n "$USE_LINARO" ]; then
-    docker_image_name=$linaro_docker_image_name
-    echo -e "Using linaro docker image: $docker_image_name \n"
+    docker_image_name=$prebuilt_docker_image_name
+    echo -e "*** Using pre-built docker image: $docker_image_name ***\n"
 else
-    echo -e "Building docker image${loading_symbol} \n"
+    echo -e "*** Building docker image${loading_symbol} ***\n"
     pushd ${dockerfile_path}
     DOCKER_BUILD_CMD="docker build -t ${docker_image_name} -f ${docker_file} ."
     if [ $interactive_mode -eq 1 ] && [ $dry_run -eq 1 ]; then
