@@ -110,9 +110,9 @@ class TestQuantSim:
         # Check if op_mode is set correctly for each qc quantize op node
         qc_quantize_op_dict = sim.get_qc_quantize_op()
         for name in sim.param_names:
-            assert qc_quantize_op_dict[name].op_mode == OpMode.one_shot_quantize_dequantize
+            assert qc_quantize_op_dict[name].op_mode == OpMode.oneShotQuantizeDequantize
         for name in sim.activation_names:
-            assert qc_quantize_op_dict[name].op_mode == OpMode.update_stats
+            assert qc_quantize_op_dict[name].op_mode == OpMode.updateStats
         reset_qc_quantize_op_dict()
 
     def test_compute_encodings(self):
@@ -137,7 +137,7 @@ class TestQuantSim:
 
         for name, qc_op in sim.get_qc_quantize_op().items():
             assert qc_op.tensor_quantizer.isEncodingValid is True
-            assert qc_op.op_mode == OpMode.quantize_dequantize or OpMode.one_shot_quantize_dequantize
+            assert qc_op.op_mode == OpMode.quantizeDequantize or OpMode.oneShotQuantizeDequantize
         reset_qc_quantize_op_dict()
 
     def test_export_model_with_quant_args(self):
