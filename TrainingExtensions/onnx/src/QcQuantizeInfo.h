@@ -60,7 +60,6 @@ struct QcQuantizeInfo {
     DlQuantization::TfEncoding *encoding;
     DlQuantization::TensorQuantizerOpMode opMode;
     bool useSymmetricEncoding;
-    bool isIntDataType;
     bool enabled;
     std::string name;
 };

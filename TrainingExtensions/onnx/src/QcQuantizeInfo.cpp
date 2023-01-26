@@ -50,7 +50,6 @@ PYBIND11_MODULE(libquant_info, m)
         .def_property("tensorQuantizerRef", &QcQuantizeInfo::get_tensor_quantizer, &QcQuantizeInfo::set_tensor_quantizer)
         .def_property("encoding", &QcQuantizeInfo::getEncoding, &QcQuantizeInfo::setEncoding)
         .def_readwrite("opMode", &QcQuantizeInfo::opMode)
-        .def_readwrite("isIntDataType", &QcQuantizeInfo::isIntDataType)
         .def_readwrite("name", &QcQuantizeInfo::name)
         .def_readwrite("enabled", &QcQuantizeInfo::enabled)
         .def_readwrite("useSymmetricEncoding", &QcQuantizeInfo::useSymmetricEncoding);

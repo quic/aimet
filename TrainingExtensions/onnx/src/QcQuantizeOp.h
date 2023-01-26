@@ -70,16 +70,8 @@ struct QcQuantizeOp : Ort::CustomOpBase<QcQuantizeOp, QcQuantizeKernel> {
     static ONNXTensorElementDataType GetOutputType(size_t index) ;
 };
 
-#ifdef __cplusplus
-extern "C" {
-#endif
 
-ORT_EXPORT OrtStatus* ORT_API_CALL RegisterCustomOps(OrtSessionOptions* options, const OrtApiBase* api);
-
-#ifdef __cplusplus
-}
-#endif
-
+extern "C" ORT_EXPORT OrtStatus* ORT_API_CALL RegisterCustomOps(OrtSessionOptions* options, const OrtApiBase* api);
 
 
 #endif //AIMET_MAIN_QCQUANTIZEOP_H

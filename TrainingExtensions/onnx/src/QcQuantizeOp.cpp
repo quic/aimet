@@ -86,21 +86,10 @@ void QcQuantizeKernel::Compute(OrtKernelContext* context) {
 
     api_.ReleaseTensorTypeAndShapeInfo(output_info);
 
-    // Hardcode as true until fp16 support added
-    bool isIntDataType  = true;
-
-    if(isIntDataType)
-    {
-        DlQuantization::IAllocator* allocator = nullptr;
-        modeSpecificActionInt(input_data, size, result,
-                              quant_info->tensorQuantizerRef, op_mode,
-                               encoding->min, encoding->max, encoding->bw, quant_info->useSymmetricEncoding, allocator);
-    }
-    else
-    {
-        //modeSpecificActionFp16<Device, T>(context, inTensor, quantizerAddr, opMode, outTensor);
-    }
-
+    DlQuantization::IAllocator* allocator = nullptr;
+    modeSpecificActionInt(input_data, size, result,
+                          quant_info->tensorQuantizerRef, op_mode,
+                           encoding->min, encoding->max, encoding->bw, quant_info->useSymmetricEncoding, allocator);
 }
 
 

@@ -41,8 +41,6 @@ add_subdirectory(test)
 
 
 add_library(OnnxCppOps SHARED
-        #src/DummyCustomOp.cpp
-        #src/DummyCustomOp.h
         src/QcQuantizeOp.h
         src/AimetOpUtils.h
         src/AimetOpUtils.cpp
