@@ -115,21 +115,21 @@ class TestQcQuantizeOp:
         assert qc_op.tensor_quantizer.isEncodingValid is True
         tensor_quantizer = libpymo.TensorQuantizer(MAP_QUANT_SCHEME_TO_PYMO[QuantScheme.post_training_tf],
                                                     MAP_ROUND_MODE_TO_PYMO['stochastic'])
-        cxx_encodings = libpymo.TfEncoding()
-        quant_info = create_quant_info(cxx_encodings, tensor_quantizer, PyMoOpMode.updateStats, useSymmetricEncoding=False)
+        cpp_encodings = libpymo.TfEncoding()
+        quant_info = create_quant_info(cpp_encodings, tensor_quantizer, PyMoOpMode.updateStats, useSymmetricEncoding=False)
         quant_node = helper.make_node(op_name, inputs=['input'], outputs=['output'],
                                       domain=op_domain, quant_info=libpymo.PtrToInt64(quant_info))
         model = create_model_from_node(quant_node, input_arr.shape)
         session = build_session(model, ['CPUExecutionProvider'])
         session.run(None, {'input':input_arr})
-        cxx_encodings = tensor_quantizer.computeEncoding(cxx_encodings.bw,
+        cpp_encodings = tensor_quantizer.computeEncoding(cpp_encodings.bw,
                                          quant_info.useSymmetricEncoding)
 
         assert quant_info.tensorQuantizerRef.isEncodingValid is True
-        assert cxx_encodings.max == encodings.max
-        assert cxx_encodings.min == encodings.min
-        assert cxx_encodings.delta == encodings.delta
-        assert cxx_encodings.offset == encodings.offset
+        assert cpp_encodings.max == encodings.max
+        assert cpp_encodings.min == encodings.min
+        assert cpp_encodings.delta == encodings.delta
+        assert cpp_encodings.offset == encodings.offset
 
 
     def test_compare_quantize_dequantize(self):
@@ -157,8 +157,8 @@ class TestQcQuantizeOp:
                                       domain=op_domain, quant_info=libpymo.PtrToInt64(quant_info))
         model = create_model_from_node(quant_node, input_arr.shape)
         session = build_session(model, ['CPUExecutionProvider'])
-        cxx_output = session.run(None, {'input':input_arr})
-        assert np.alltrue(output == cxx_output)
+        cpp_output = session.run(None, {'input':input_arr})
+        assert np.alltrue(output == cpp_output)
 
 
     def test_one_shot_quantize_dequantize_asymmetric_cpu(self):
@@ -177,9 +177,9 @@ class TestQcQuantizeOp:
                                       domain=op_domain, quant_info=libpymo.PtrToInt64(quant_info))
         model = create_model_from_node(quant_node, input_arr.shape)
         session = build_session(model, ['CPUExecutionProvider'])
-        cxx_output = session.run(None, {'input':input_arr})
+        cpp_output = session.run(None, {'input':input_arr})
 
-        assert np.allclose(output_oneshot, cxx_output)
+        assert np.allclose(output_oneshot, cpp_output)
 
     def test_one_shot_quantize_dequantize_symmetric_signed_cpu(self):
         qc_op = QcQuantizeOp(quant_scheme=QuantScheme.post_training_tf, rounding_mode='nearest',
@@ -198,9 +198,9 @@ class TestQcQuantizeOp:
                                       domain=op_domain, quant_info=libpymo.PtrToInt64(quant_info))
         model = create_model_from_node(quant_node, input_arr.shape)
         session = build_session(model, ['CPUExecutionProvider'])
-        cxx_output = session.run(None, {'input':input_arr})
+        cpp_output = session.run(None, {'input':input_arr})
 
-        assert np.alltrue(output_oneshot == cxx_output)
+        assert np.alltrue(output_oneshot == cpp_output)
 
     def test_one_shot_quantize_dequantize_symmetric_unsigned_cpu(self):
         qc_op = QcQuantizeOp(quant_scheme=QuantScheme.post_training_tf, rounding_mode='nearest',
@@ -220,6 +220,6 @@ class TestQcQuantizeOp:
                                       domain=op_domain, quant_info=libpymo.PtrToInt64(quant_info))
         model = create_model_from_node(quant_node, input_arr.shape)
         session = build_session(model, ['CPUExecutionProvider'])
-        cxx_output = session.run(None, {'input':input_arr})
+        cpp_output = session.run(None, {'input':input_arr})
 
-        assert np.alltrue(output_oneshot == cxx_output)
+        assert np.alltrue(output_oneshot == cpp_output)
