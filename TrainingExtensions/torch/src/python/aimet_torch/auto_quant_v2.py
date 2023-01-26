@@ -35,6 +35,7 @@
 #
 #  @@-COPYRIGHT-END-@@
 # =============================================================================
+# pylint: disable=too-many-lines
 
 """Temporary buffer file for adding new features to AutoQuant"""
 import copy
