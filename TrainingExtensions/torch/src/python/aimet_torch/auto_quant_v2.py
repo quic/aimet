@@ -82,7 +82,7 @@ class _QuantSchemePair:
     output_quant_scheme: QuantScheme
 
 
-QUANT_SCHEME_CANDIDATES = [
+QUANT_SCHEME_CANDIDATES = (
     # Weight:     tf
     # Activation: tf
     _QuantSchemePair(QuantScheme.post_training_tf,
@@ -102,7 +102,48 @@ QUANT_SCHEME_CANDIDATES = [
     # Activation: tf_enhanced
     _QuantSchemePair(QuantScheme.post_training_tf_enhanced,
                      QuantScheme.post_training_tf_enhanced),
-]
+)
+
+
+def _choose_default_quant_scheme(param_bw: int,
+                                 output_bw: int,
+                                 eval_fn: Callable[[_QuantSchemePair], float]) -> _QuantSchemePair:
+    """
+    Choose a default param/output quant scheme among QUANT_SCHEME_CANDIDATES.
+
+    :param param_bw: Parameter bitwidth
+    :param output_bw: Output bitwidth
+    :param eval_fn: A callable that takes a pair of quant schemes
+        (for param and output respectively) and return the eval score
+    :return: The quant scheme that yields the best eval score.
+    """
+    candidates = QUANT_SCHEME_CANDIDATES
+
+    # If the weight representation has sufficient precision (i.e. bitwidth >= 16),
+    # always use tf scheme
+    if param_bw >= 16:
+        candidates = [
+            candidate for candidate in candidates
+            if candidate.param_quant_scheme == QuantScheme.post_training_tf
+        ]
+
+    # If the output representation has sufficient precision (i.e. bitwidth >= 16),
+    # always use tf scheme
+    if output_bw >= 16:
+        candidates = [
+            candidate for candidate in candidates
+            if candidate.output_quant_scheme == QuantScheme.post_training_tf
+        ]
+
+    # If we have only one candidate left, we don't need to evaluated
+    # the quant scheme for comparison
+    if len(candidates) == 1:
+        return candidates[0]
+
+    assert candidates
+
+    # Find the quant scheme that yields the best eval score
+    return max(candidates, key=eval_fn)
 
 
 class _AutoQuantV2:
@@ -540,16 +581,19 @@ class _AutoQuantV2:
 
                 orig_quant_scheme = self.default_quant_scheme
 
+                # Default quant scheme is not set. Choose quant scheme automatically.
                 if self.default_quant_scheme is None:
                     with eval_manager.analysis_session("Selecting optimal quantization scheme") as sess:
-                        # Find the quant scheme that yields the best eval score
-                        self.default_quant_scheme = max(
-                            QUANT_SCHEME_CANDIDATES,
-                            key=lambda candidate: sess.eval(fp32_model,
-                                                            param_quant_scheme=candidate.param_quant_scheme,
-                                                            output_quant_scheme=candidate.output_quant_scheme)
-                        )
+                        def eval_fn(quant_scheme: _QuantSchemePair):
+                            return sess.eval(
+                                fp32_model,
+                                param_quant_scheme=quant_scheme.param_quant_scheme,
+                                output_quant_scheme=quant_scheme.output_quant_scheme
+                            )
 
+                        self.default_quant_scheme = _choose_default_quant_scheme(self.default_param_bw,
+                                                                                 self.default_output_bw,
+                                                                                 eval_fn)
                 try:
                     ret = auto_quant_main_fn(fp32_model, target_acc, dummy_input,
                                              eval_manager, results_dir)
