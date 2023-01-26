@@ -533,9 +533,9 @@ class _AutoQuantV2:
             # Early exit
             if w32_eval_score < target_acc:
                 _logger.info(
-                    "W32A%d eval score (%f) is lower "\
-                    "than the target eval score (%f). This means it is unlikely that "\
-                    "the target eval score can be met using PTQ techniques. "\
+                    "W32A%d eval score (%f) is lower "
+                    "than the target eval score (%f). This means it is unlikely that "
+                    "the target eval score can be met using PTQ techniques. "
                     "Please consider finetuning the model using range learning.",
                     self.default_output_bw, w32_eval_score, target_acc
                 )
