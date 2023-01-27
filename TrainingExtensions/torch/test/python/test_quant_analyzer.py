@@ -251,7 +251,7 @@ class TestQuantAnalyzer:
             # Check if it is exported to correct html file.
             assert os.path.exists("./tmp/activations_pdf")
             assert os.path.exists("./tmp/weights_pdf")
-            assert os.path.isfile("./tmp/activations_pdf/conv1_input_0.html")
+            assert os.path.isfile("./tmp/activations_pdf/conv1_input_q0_0.html")
             assert os.path.isfile("./tmp/weights_pdf/conv1/conv1_weight_0.html")
         finally:
             if os.path.isdir("./tmp/"):
@@ -293,7 +293,7 @@ class TestQuantAnalyzer:
             quant_analyzer._export_per_layer_stats_histogram(sim, results_dir="./tmp/")
             assert os.path.exists("./tmp/activations_pdf")
             assert os.path.exists("./tmp/weights_pdf")
-            assert os.path.isfile("./tmp/activations_pdf/bn1_output_0.html")
+            assert os.path.isfile("./tmp/activations_pdf/bn1_output_q0_0.html")
             assert os.path.isfile("./tmp/weights_pdf/conv1/conv1_weight_0.html")
             assert os.path.isfile("./tmp/weights_pdf/conv1/conv1_weight_31.html")
             assert os.path.isfile("./tmp/weights_pdf/conv2/conv2_weight_0.html")

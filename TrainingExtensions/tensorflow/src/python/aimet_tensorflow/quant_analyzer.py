@@ -41,11 +41,9 @@
 import os
 from typing import List, Tuple, Dict
 import tensorflow.compat.v1 as tf
-from bokeh import plotting
-from bokeh.models import ColumnDataSource, Band, Span
 from aimet_common.defs import QuantScheme
 from aimet_common.quant_analyzer import save_json, export_per_layer_sensitivity_analysis_plot,\
-    create_and_export_min_max_ranges_plot, export_per_layer_mse_plot
+    create_and_export_min_max_ranges_plot, export_per_layer_mse_plot, export_stats_histogram_plot
 from aimet_common.utils import AimetLogger, CallbackFunc
 from aimet_tensorflow.common.operation import Op
 from aimet_tensorflow.utils.common import create_input_feed_dict, iterate_tf_dataset
@@ -566,45 +564,4 @@ class QuantAnalyzer:
             encodings = [encodings]
 
         for index, (histogram, encoding) in enumerate(zip(histograms, encodings)):
-            self._export_stats_histogram_plot(histogram, encoding, results_dir,
-                                              title=f"{title}_{index}")
-
-    @staticmethod
-    def _export_stats_histogram_plot(histogram: List, encoding, results_dir: str, title: str) -> plotting.Figure:
-        """
-        Export histogram (PDF) of statistics with overlaying encoding min and max
-        values in html format.
-
-        :param histogram: List of buckets where each bucket is (xLeft, PDF).
-        :param encoding: Encoding.
-        :param results_dir: Directory to save the results.
-        :param title: Title of the plot.
-        :return: Histogram plot.
-        """
-        entries = []
-        pdfs = []
-        for entry, pdf in histogram:
-            entries.append(entry)
-            pdfs.append(pdf)
-
-        # Configure the output file to be saved.
-        filename = os.path.join(results_dir, f"{title}.html")
-        plotting.output_file(filename)
-        plot = plotting.figure(plot_height=DEFAULT_BOKEH_FIGURE_HEIGHT,
-                               title=title)
-        # Add line and underlying color for histogram.
-        plot_source = ColumnDataSource(data=dict(entries=entries, pdfs=pdfs))
-        plot.line("entries", "pdfs", source=plot_source, color="blue", legend="PDF")
-        band = Band(base='entries', upper='pdfs', source=plot_source, level='underlay', fill_color='blue')
-        plot.add_layout(band)
-
-        # Overlay encoding min and max values.
-        line = Span(location=encoding.min, dimension='height', line_color='green', line_dash='dashed')
-        plot.line([], [], line_dash='dashed', line_color="green", legend='MIN_VAL')
-        plot.add_layout(line)
-        line = Span(location=encoding.max, dimension='height', line_color='red', line_dash='dashed')
-        plot.line([], [], line_dash='dashed', line_color="red", legend='MAX_VAL')
-        plot.add_layout(line)
-
-        plotting.save(plot)
-        return plot
+            export_stats_histogram_plot(histogram, encoding, results_dir, title=f"{title}_{index}")
