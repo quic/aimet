@@ -38,7 +38,7 @@
 """ Tensor quantizer for tf 2 keras """
 import abc
 import functools
-from typing import List, Optional
+from typing import List, Optional, Tuple
 import tensorflow as tf
 import tensorflow.keras.backend as K
 
@@ -459,6 +459,27 @@ class StaticGridPerTensorQuantizer(TensorQuantizer):
 
         return dloss_by_dmin, dloss_by_dmax
 
+    def get_stats_histogram(self) -> List[List[Tuple]]:
+        """
+        NOTE: Not to invoke when quantization scheme is not TF-Enhanced.
+
+        Get histogram of statistics. Returns list of buckets where each bucket is
+        tuple of two values - the float value representing the left edge of the
+        bucket and a PDF of the values in this bucket relative to all the values
+        seen across all buckets.
+
+        :return: List of buckets where each bucket is (xLeft, PDF).
+        """
+        if self._quant_scheme != QuantScheme.post_training_tf_enhanced:
+            raise RuntimeError("get_stats_histogram() can be invoked only when quantization scheme is TF-Enhanced.")
+
+        if not self.is_encoding_valid():
+            raise RuntimeError("get_stats_histogram() can be invoked only when encoding is computed.")
+
+        # Return a list of histograms for compatability with per-channel case
+        histograms = [self.tensor_quantizer.getStatsHistogram()]
+        return histograms
+
 
 # pylint: disable=too-many-ancestors
 class ParamPerTensorQuantizer(StaticGridPerTensorQuantizer):
@@ -783,6 +804,26 @@ class StaticGridPerChannelQuantizer(TensorQuantizer):
                                                                   grad)
 
         return gradients[3], gradients[4]
+
+    def get_stats_histogram(self) -> List[List[Tuple]]:
+        """
+        NOTE: Not to invoke when quantization scheme is not TF-Enhanced.
+
+        Get histogram of statistics. Returns list of buckets where each bucket is
+        tuple of two values - the float value representing the left edge of the
+        bucket and a PDF of the values in this bucket relative to all the values
+        seen across all buckets.
+
+        :return: List of buckets where each bucket is (xLeft, PDF).
+        """
+        if self._quant_scheme != QuantScheme.post_training_tf_enhanced:
+            raise RuntimeError("get_stats_histogram() can be invoked only when quantization scheme is TF-Enhanced.")
+
+        if not self.is_encoding_valid():
+            raise RuntimeError("get_stats_histogram() can be invoked only when encoding is computed.")
+
+        histograms = [quantizer.getStatsHistogram() for quantizer in self.tensor_quantizer]
+        return histograms
 
 
 # pylint: disable=too-many-ancestors
