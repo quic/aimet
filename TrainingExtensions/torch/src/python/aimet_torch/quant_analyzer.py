@@ -41,13 +41,11 @@
 import os
 from collections import OrderedDict, defaultdict
 from typing import Union, Tuple, Dict, List, Collection
-from bokeh import plotting
-from bokeh.models import ColumnDataSource, Band, Span
 import torch
 from torch.utils.data import DataLoader
 
 from aimet_common.quant_analyzer import save_json, export_per_layer_sensitivity_analysis_plot,\
-    create_and_export_min_max_ranges_plot, export_per_layer_mse_plot
+    create_and_export_min_max_ranges_plot, export_per_layer_mse_plot, export_stats_histogram_plot
 from aimet_common.utils import AimetLogger, CallbackFunc
 from aimet_common.defs import QuantScheme
 from aimet_torch import utils
@@ -384,46 +382,7 @@ class QuantAnalyzer:
 
         return eval_score_dict
 
-    @staticmethod
-    def _export_stats_histogram_plot(histogram: List, encoding, results_dir: str, title: str) -> plotting.Figure:
-        """
-        Export histogram (PDF) of statistics with overlaying encoding min and max
-        values in html format.
-
-        :param histogram: List of buckets where each bucket is (xLeft, PDF).
-        :param encoding: Encoding.
-        :param results_dir: Directory to save the results.
-        :param title: Title of the plot.
-        :return: Histogram plot.
-        """
-        entries = []
-        pdfs = []
-        for entry, pdf in histogram:
-            entries.append(entry)
-            pdfs.append(pdf)
-
-        # Configure the output file to be saved.
-        filename = os.path.join(results_dir, f"{title}.html")
-        plotting.output_file(filename)
-        plot = plotting.figure(plot_height=DEFAULT_BOKEH_FIGURE_HEIGHT,
-                               title=title)
-        # Add line and underlying color for histogram.
-        plot_source = ColumnDataSource(data=dict(entries=entries, pdfs=pdfs))
-        plot.line("entries", "pdfs", source=plot_source, color="blue", legend="PDF")
-        band = Band(base='entries', upper='pdfs', source=plot_source, level='underlay', fill_color='blue')
-        plot.add_layout(band)
-
-        # Overlay encoding min and max values.
-        line = Span(location=encoding.min, dimension='height', line_color='green', line_dash='dashed')
-        plot.line([], [], line_dash='dashed', line_color="green", legend='MIN_VAL')
-        plot.add_layout(line)
-        line = Span(location=encoding.max, dimension='height', line_color='red', line_dash='dashed')
-        plot.line([], [], line_dash='dashed', line_color="red", legend='MAX_VAL')
-        plot.add_layout(line)
-
-        plotting.save(plot)
-        return plot
-
+    # pylint: disable=no-self-use
     def _create_and_export_stats_histogram_plot(self,
                                                 quantizer: StaticGridTensorQuantizer,
                                                 results_dir: str,
@@ -444,8 +403,7 @@ class QuantAnalyzer:
             encodings = [encodings]
 
         for index, (histogram, encoding) in enumerate(zip(histograms, encodings)):
-            self._export_stats_histogram_plot(histogram, encoding, results_dir,
-                                              title=f"{title}_{index}")
+            export_stats_histogram_plot(histogram, encoding, results_dir, title=f"{title}_{index}")
 
     def _check_model_sensitivity_to_quantization(self,
                                                  sim: QuantizationSimModel,
@@ -639,16 +597,16 @@ class QuantAnalyzer:
 
         for _, quant_wrapper in sim.quant_wrappers():
             wrapped_module_name = module_to_name_dict[quant_wrapper]
-            for quantizer in quant_wrapper.input_quantizers:
+            for index, quantizer in enumerate(quant_wrapper.input_quantizers):
                 if quantizer.encoding:
                     self._create_and_export_stats_histogram_plot(quantizer,
                                                                  activations_pdf_dir,
-                                                                 title=f"{wrapped_module_name}_input")
-            for quantizer in quant_wrapper.output_quantizers:
+                                                                 title=f"{wrapped_module_name}_input_q{index}")
+            for index, quantizer in enumerate(quant_wrapper.output_quantizers):
                 if quantizer.encoding:
                     self._create_and_export_stats_histogram_plot(quantizer,
                                                                  activations_pdf_dir,
-                                                                 title=f"{wrapped_module_name}_output")
+                                                                 title=f"{wrapped_module_name}_output_q{index}")
             for param_name, quantizer in quant_wrapper.param_quantizers.items():
                 if quantizer.encoding:
                     self._create_and_export_stats_histogram_plot(quantizer,

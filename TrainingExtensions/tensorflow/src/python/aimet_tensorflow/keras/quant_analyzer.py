@@ -44,7 +44,7 @@ import tensorflow as tf
 
 from aimet_common.defs import QuantScheme
 from aimet_common.quant_analyzer import export_per_layer_sensitivity_analysis_plot, save_json, \
-    create_and_export_min_max_ranges_plot
+    create_and_export_min_max_ranges_plot, export_stats_histogram_plot
 from aimet_common.utils import CallbackFunc, AimetLogger
 from aimet_tensorflow.keras.batch_norm_fold import fold_all_batch_norms
 from aimet_tensorflow.keras.quant_sim.qc_quantize_wrapper import QcQuantizeWrapper
@@ -177,6 +177,10 @@ class QuantAnalyzer:
 
         # Export encoding min-max range.
         self.export_per_layer_encoding_min_max_range(sim, results_dir)
+
+        # Export PDF of statistics
+        if quant_scheme == QuantScheme.post_training_tf_enhanced:
+            self.export_per_layer_stats_histogram(sim, results_dir)
 
     def _create_quantsim_and_encodings(self,
                                        quant_scheme: QuantScheme,
@@ -451,3 +455,67 @@ class QuantAnalyzer:
         save_json(min_max_range_for_activations_dict, min_max_ranges_dir, title="activations.json")
         _logger.info("Exported per layer encodings min-max ranges plot(s).")
         return min_max_range_for_weights_dict, min_max_range_for_activations_dict
+
+    def export_per_layer_stats_histogram(self, sim: QuantizationSimModel, results_dir: str) -> None:
+        """
+        NOTE: Not to invoke when quantization scheme is not TF-Enhanced.
+
+        Export histogram that represents a PDF of collected statistics by a quantizer for every
+        quant wrapper. After invoking this API, results_dir should have html files in following
+        format for every quantizers of quant wrappers.
+
+        -results_dir
+            -activations_pdf
+                name_{input/output}_{index}.html
+            -weights_pdf
+                -name
+                    param_name_{channel_index}.html
+
+        :param sim: Quantsim model.
+        :param results_dir: Directory to save the results.
+        """
+        weights_pdf_dir = os.path.join(results_dir, "weights_pdf")
+        activations_pdf_dir = os.path.join(results_dir, "activations_pdf")
+
+        for quant_wrapper in sim.quant_wrappers():
+            wrapped_layer_name = quant_wrapper.original_layer.name
+
+            for index, quantizer in enumerate(quant_wrapper.input_quantizers):
+                if quantizer.encoding:
+                    self._create_and_export_stats_histogram_plot(quantizer, activations_pdf_dir,
+                                                                 title=f"{wrapped_layer_name}_input_q{index}")
+
+            for index, quantizer in enumerate(quant_wrapper.output_quantizers):
+                if quantizer.encoding:
+                    self._create_and_export_stats_histogram_plot(quantizer, activations_pdf_dir,
+                                                                 title=f"{wrapped_layer_name}_output_q{index}")
+
+            for quantizer in quant_wrapper.param_quantizers:
+                if quantizer.encoding:
+                    # Keras parameter name usually contains slash (/) and it can cause incorrect file path when saving
+                    #   Replace slash (/) with dash (-) to avoid it
+                    param_name = quantizer.name.replace("/", "-")
+                    self._create_and_export_stats_histogram_plot(quantizer,
+                                                                 os.path.join(weights_pdf_dir, wrapped_layer_name),
+                                                                 title=f"{wrapped_layer_name}_{param_name}")
+
+    @staticmethod
+    def _create_and_export_stats_histogram_plot(quantizer: TensorQuantizer,
+                                                results_dir: str,
+                                                title: str) -> None:
+        """
+        For given quantizer, create and export histogram (PDF) of statistics in html format.
+
+        :param quantizer: Quantizer.
+        :param results_dir: Directory to save the results.
+        :param title: Title of the plot.
+        """
+        os.makedirs(results_dir, exist_ok=True)
+
+        histograms = quantizer.get_stats_histogram()
+        encodings = quantizer.encoding
+        if not isinstance(encodings, List):
+            encodings = [encodings]
+
+        for index, (histogram, encoding) in enumerate(zip(histograms, encodings)):
+            export_stats_histogram_plot(histogram, encoding, results_dir, title=f"{title}_{index}")
