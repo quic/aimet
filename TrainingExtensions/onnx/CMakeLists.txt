@@ -68,22 +68,14 @@ target_include_directories(OnnxCppOps PRIVATE
         )
 
 if (ENABLE_CUDA)
-target_link_libraries(OnnxCppOps PUBLIC
-        MoDlQuantization
-        MoDlEqualization
-        MoDlQuantizationCuda
-        MoDlCompression
-
-        CUDA::cublas
-        ${Python_LIBRARIES}
-        )
+    target_link_libraries(OnnxCppOps PUBLIC
+            MoDlQuantization
+            MoDlQuantizationCuda
+            CUDA::cublas
+            )
 else (ENABLE_CUDA)
     target_link_libraries(OnnxCppOps PUBLIC
             MoDlQuantization
-            MoDlEqualization
-            MoDlCompression
-
-            ${Python_LIBRARIES}
             )
 endif (ENABLE_CUDA)
 
@@ -102,29 +94,15 @@ Python3_add_library(quant_info SHARED
 if (ENABLE_CUDA)
     target_link_libraries(quant_info
             PUBLIC
-            stdc++
             MoDlQuantization
-            MoDlEqualization
             MoDlQuantizationCuda
-            MoDlCompression
-            PyModelOptimizations
-
             CUDA::cublas
-            ${OPENCV_LINK_LIBRARIES}
-            z
             )
 
 else (ENABLE_CUDA)
     target_link_libraries(quant_info
             PUBLIC
-            stdc++
             MoDlQuantization
-            MoDlEqualization
-            MoDlCompression
-            PyModelOptimizations
-
-            ${OPENCV_LINK_LIBRARIES}
-            z
             )
 
 endif (ENABLE_CUDA)

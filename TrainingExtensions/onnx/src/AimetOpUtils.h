@@ -45,55 +45,57 @@
 #include <stdexcept>
 
 
-
-
 template <typename T>
 void copyInputTensorsToOutputTensors(const T* inTensor, size_t count, T* outTensor);
 
 
-
 template <typename T>
 void modeSpecificActionInt(const T* inTensor, size_t count, T* outTensor,
-                           DlQuantization::TensorQuantizerOpFacade* tensorQuantizer, const DlQuantization::TensorQuantizerOpMode opMode,
-                           const double encodingMin, const double encodingMax, const int bitwidth,
+                           DlQuantization::TensorQuantizerOpFacade* tensorQuantizer,
+                           const DlQuantization::TensorQuantizerOpMode opMode, DlQuantization::TfEncoding* encoding,
                            const bool useSymmetricEncoding, DlQuantization::IAllocator* allocator)
 {
-    bool useCuda = false; // Hard code as false until GPU support added
+    bool useCuda = false;   // Hard code as false until GPU support added
 
     switch (opMode)
     {
-        case DlQuantization::TensorQuantizerOpMode::oneShotQuantizeDequantize:
-        {
-            tensorQuantizer->resetEncodingStats();
-            tensorQuantizer->updateStats(inTensor, count, useCuda, allocator);
-            DlQuantization::TfEncoding initial_encoding = tensorQuantizer->computeEncoding(bitwidth, useSymmetricEncoding);
-            tensorQuantizer->quantizeDequantize(inTensor, count, outTensor, initial_encoding.min, initial_encoding.max,
-                                                bitwidth, useCuda);
-
-            break;
-        }
-
-        case DlQuantization::TensorQuantizerOpMode::updateStats:
-        {
-            tensorQuantizer->updateStats(inTensor, count, useCuda, allocator);
-            copyInputTensorsToOutputTensors(inTensor, count, outTensor);
-            break;
-        }
-        case DlQuantization::TensorQuantizerOpMode::quantizeDequantize:
-        {
-            tensorQuantizer->quantizeDequantize(inTensor, count, outTensor, encodingMin, encodingMax, bitwidth, useCuda);
-            break;
-        }
-        case DlQuantization::TensorQuantizerOpMode::passThrough:
-        {
-            copyInputTensorsToOutputTensors(inTensor, count, outTensor);
-            break;
-        }
-        default:
-        {
-            throw std::exception();
-        }
+    case DlQuantization::TensorQuantizerOpMode::oneShotQuantizeDequantize:
+    {
+        tensorQuantizer->resetEncodingStats();
+        tensorQuantizer->updateStats(inTensor, count, useCuda, allocator);
+        DlQuantization::TfEncoding initial_encoding =
+            tensorQuantizer->computeEncoding(encoding->bw, useSymmetricEncoding);
+        tensorQuantizer->quantizeDequantize(inTensor, count, outTensor, initial_encoding.min, initial_encoding.max,
+                                            encoding->bw, useCuda);
+        // Update encoding object with computed encoding
+        encoding->min    = initial_encoding.min;
+        encoding->max    = initial_encoding.max;
+        encoding->offset = initial_encoding.offset;
+        encoding->delta  = initial_encoding.delta;
+        break;
+    }
+    case DlQuantization::TensorQuantizerOpMode::updateStats:
+    {
+        tensorQuantizer->updateStats(inTensor, count, useCuda, allocator);
+        copyInputTensorsToOutputTensors(inTensor, count, outTensor);
+        break;
+    }
+    case DlQuantization::TensorQuantizerOpMode::quantizeDequantize:
+    {
+        tensorQuantizer->quantizeDequantize(inTensor, count, outTensor, encoding->min, encoding->max, encoding->bw,
+                                            useCuda);
+        break;
+    }
+    case DlQuantization::TensorQuantizerOpMode::passThrough:
+    {
+        copyInputTensorsToOutputTensors(inTensor, count, outTensor);
+        break;
+    }
+    default:
+    {
+        throw std::exception();
+    }
     }
 }
 
-#endif //AIMET_MAIN_AIMETOPUTILS_H
+#endif   // AIMET_MAIN_AIMETOPUTILS_H

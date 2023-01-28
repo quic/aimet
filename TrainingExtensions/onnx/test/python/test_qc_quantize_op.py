@@ -37,6 +37,7 @@
 # =============================================================================
 import numpy as np
 import onnx
+import math
 import onnxruntime as ort
 from onnx import helper
 import os
@@ -77,7 +78,7 @@ def create_model_from_node(quant_node, shape):
                                    'dummy_graph', [input_info], [output_info],
                                    [])
 
-    model = helper.make_model(onnx_graph, opset_imports=[onnx.helper.make_opsetid(op_domain, 13)])
+    model = helper.make_model(onnx_graph)
     return model
 
 
@@ -145,6 +146,65 @@ class TestQcQuantizeOp:
         assert np.max(output) <= 1.1
         assert np.min(output) >= -5
 
+    def test_update_stats_quantize_dequantize(self):
+
+        input_arr = np.asarray([[[[-7, -5, -3, 0, .1, 2.5]]]]).astype(np.float32)
+        input_arr2 = np.random.randn(*input_arr.shape).astype(np.float32) * 10
+        quant_info = libquant_info.QcQuantizeInfo()
+        quant_node = helper.make_node(op_name, inputs=['input'], outputs=['output'],
+                                      domain=op_domain, quant_info=libpymo.PtrToInt64(quant_info))
+        model = create_model_from_node(quant_node, input_arr.shape)
+        session = build_session(model, ['CPUExecutionProvider'])
+        qc_op = QcQuantizeOp(quant_info=quant_info,
+                     quant_scheme=QuantScheme.post_training_tf,
+                     rounding_mode='nearest',
+                     encodings=None,
+                     op_mode=OpMode.updateStats,
+                     bitwidth=8,
+                     use_symmetric_encodings=False,
+                     use_cuda=False)
+
+        session.run(None, {'input': input_arr})[0]
+        qc_op.compute_encodings()
+        assert math.isclose(qc_op.encodings.max, 2.5, rel_tol=1e-2)
+        assert math.isclose(qc_op.encodings.min, -7, rel_tol=1e-2)
+
+        qc_op.set_mode(OpMode.quantizeDequantize)
+        output = session.run(None, {'input': input_arr2})[0]
+        assert np.max(output) <= 2.6
+        assert np.min(output) >= -7.1
+        assert not np.allclose(output, input_arr2)
+
+    def test_compare_one_shot_with_pymo(self):
+
+        input_arr = np.random.randn(2, 3, 5, 1).astype(np.float32)
+        quant_info = libquant_info.QcQuantizeInfo()
+        quant_node = helper.make_node(op_name, inputs=['input'], outputs=['output'],
+                                      domain=op_domain, quant_info=libpymo.PtrToInt64(quant_info))
+        model = create_model_from_node(quant_node, input_arr.shape)
+        session = build_session(model, ['CPUExecutionProvider'])
+        qc_op = QcQuantizeOp(quant_info=quant_info,
+                     quant_scheme=QuantScheme.post_training_tf,
+                     rounding_mode='nearest',
+                     encodings=None,
+                     op_mode=OpMode.oneShotQuantizeDequantize,
+                     bitwidth=8,
+                     use_symmetric_encodings=False,
+                     use_cuda=False)
+
+        quantizer = libpymo.TensorQuantizer(MAP_QUANT_SCHEME_TO_PYMO[QuantScheme.post_training_tf],
+                                       MAP_ROUND_MODE_TO_PYMO['nearest'])
+        out_tensor = np.zeros(input_arr.shape).astype(np.float32)
+        # Perform one-shot quant-dequant in python
+        quantizer.updateStats(input_arr, False)
+        enc = quantizer.computeEncoding(8, False)
+        quantizer.quantizeDequantize(input_arr.copy(), out_tensor, enc.min,
+                                                 enc.max, 8, False)
+
+        output = session.run(None, {'input': input_arr})[0]
+        assert quant_info.encoding.max == enc.max
+        assert quant_info.encoding.min == enc.min
+        assert np.allclose(output, out_tensor)
 
     def test_one_shot_quantize_dequantize_asymmetric_cpu(self):
         input_arr = np.asarray([[[[-7, -5, -3, 0, .1, 2.5]]]]).astype(np.float32)
@@ -249,7 +309,10 @@ class TestQcQuantizeOp:
                      use_symmetric_encodings=True,
                      use_cuda=False)
         qc_op.use_strict_symmetric = True
-        assert qc_op.use_strict_symmetric == True
+        assert quant_info.tensorQuantizerRef.getStrictSymmetric() == True
 
         qc_op.use_unsigned_symmetric = False
-        assert qc_op.use_unsigned_symmetric == False
+        assert quant_info.tensorQuantizerRef.getUnsignedSymmetric()== False
+
+        qc_op.use_unsigned_symmetric = True
+        assert quant_info.tensorQuantizerRef.getUnsignedSymmetric() == True

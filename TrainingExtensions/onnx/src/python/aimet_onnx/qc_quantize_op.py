@@ -82,7 +82,7 @@ class QcQuantizeOp:
         self.quant_info = quant_info
         self.quant_scheme = quant_scheme
         self.rounding_mode = rounding_mode
-        self.tensor_quantizer = self._build_tensor_quantizer()
+        self.set_tensor_quantizer(self._build_tensor_quantizer())
         self.op_mode = op_mode
         self.bitwidth = bitwidth
         self.encodings = encodings
@@ -94,18 +94,9 @@ class QcQuantizeOp:
         return libpymo.TensorQuantizer(MAP_QUANT_SCHEME_TO_PYMO[self.quant_scheme],
                                        MAP_ROUND_MODE_TO_PYMO[self.rounding_mode])
 
-    @property
-    def tensor_quantizer(self) -> libpymo.TensorQuantizer:
+    def set_tensor_quantizer(self, tensor_quantizer: libpymo.TensorQuantizer):
         """
-        Accesses the TensorQuantizer contained in self.quant_info
-        :return: The TensorQuantizer object used by the C++ op
-        """
-        return self.quant_info.tensorQuantizerRef
-
-    @tensor_quantizer.setter
-    def tensor_quantizer(self, tensor_quantizer: libpymo.TensorQuantizer):
-        """
-        Stores tensor_quantizer in self._tensor_quantizer to prevent deletion and passes a pointer to the object
+        Stores tensor_quantizer in self._tensor_quantizer and passes a pointer to the object
         to the C++ op's QcQuantInfo object
         :param tensor_quantizer: The libpymo.TensorQuantizer object to give to the C++ op
         """
@@ -150,7 +141,7 @@ class QcQuantizeOp:
         Reads useStrictSymmetric config from Tensor Quantizer
         :return: True if strict symmetric mode is to be used, False otherwise
         """
-        return self.tensor_quantizer.getStrictSymmetric()
+        return self._tensor_quantizer.getStrictSymmetric()
 
     @use_strict_symmetric.setter
     def use_strict_symmetric(self, use_strict_symmetric: bool):
@@ -158,7 +149,7 @@ class QcQuantizeOp:
         Sets the useStrictSymmetric associated with the Tensor Quantizer
         :param use_strict_symmetric: True if strict symmetric mode is to be used, False otherwise
         """
-        self.tensor_quantizer.setStrictSymmetric(use_strict_symmetric)
+        self._tensor_quantizer.setStrictSymmetric(use_strict_symmetric)
         self.encodings = None
 
     @property
@@ -167,7 +158,7 @@ class QcQuantizeOp:
         Reads useStrictSymmetric config from Tensor Quantizer
         :return: True if unsigned symmetric mode is to be used, False otherwise
         """
-        return self.tensor_quantizer.getUnsignedSymmetric()
+        return self._tensor_quantizer.getUnsignedSymmetric()
 
     @use_unsigned_symmetric.setter
     def use_unsigned_symmetric(self, use_unsigned_symmetric: bool):
@@ -175,7 +166,7 @@ class QcQuantizeOp:
         Sets the useUnsignedSymmetric associated with the Tensor Quantizer
         :param use_unsigned_symmetric: True if unsigned symmetric mode is to be used, False otherwise
         """
-        self.tensor_quantizer.setUnsignedSymmetric(use_unsigned_symmetric)
+        self._tensor_quantizer.setUnsignedSymmetric(use_unsigned_symmetric)
         self.encodings = None
 
     @property
@@ -195,6 +186,9 @@ class QcQuantizeOp:
         """
         if encoding is None:
             encoding = libpymo.TfEncoding()
+            self._tensor_quantizer.isEncodingValid = False
+        else:
+            self._tensor_quantizer.isEncodingValid = True
         self._encoding = encoding
         self.quant_info.encoding = encoding
         self.quant_info.encoding.bw = self.bitwidth
@@ -220,7 +214,7 @@ class QcQuantizeOp:
         set encodings of tensor quantizer by given encodings
         """
         self.encodings = encodings
-        self.tensor_quantizer.isEncodingValid = True
+        self._tensor_quantizer.isEncodingValid = True
 
     def set_mode(self, op_mode: OpMode):
         """
@@ -233,7 +227,7 @@ class QcQuantizeOp:
         reset the stats of tensor quantizer
         """
         self.encodings = None
-        self.tensor_quantizer.resetEncodingStats()
+        self._tensor_quantizer.resetEncodingStats()
 
     def set_bitwidth(self, bitwidth: int):
         """
@@ -247,13 +241,13 @@ class QcQuantizeOp:
         Set QcQuantizeOp as given quant scheme
         """
         self.quant_scheme = quant_scheme
-        self.tensor_quantizer = self._build_tensor_quantizer()
+        self.set_tensor_quantizer(self._build_tensor_quantizer())
         self.reset_encoding_stats()
 
     def compute_encodings(self) -> libpymo.TfEncoding:
         """
         Compute and return encodings of each tensor quantizer
         """
-        self.encodings = self.tensor_quantizer.computeEncoding(self.bitwidth,
+        self.encodings = self._tensor_quantizer.computeEncoding(self.bitwidth,
                                                                self.use_symmetric_encodings)
         return self.encodings

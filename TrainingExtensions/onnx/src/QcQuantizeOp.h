@@ -43,14 +43,14 @@
 #include "onnxruntime_cxx_api.h"
 #undef ORT_API_MANUAL_INIT
 
-#include <DlQuantization/TensorQuantizerOpFacade.h>
 #include "QcQuantizeInfo.h"
+#include <DlQuantization/TensorQuantizerOpFacade.h>
 
 
-struct QcQuantizeKernel {
+struct QcQuantizeKernel
+{
 public:
-
-    QcQuantizeKernel(const OrtApi* api,  const OrtKernelInfo* info);
+    QcQuantizeKernel(const OrtApi* api, const OrtKernelInfo* info);
 
     void Compute(OrtKernelContext* context);
 
@@ -61,17 +61,18 @@ private:
 };
 
 
-struct QcQuantizeOp : Ort::CustomOpBase<QcQuantizeOp, QcQuantizeKernel> {
-    static void* CreateKernel(const OrtApi& api, const OrtKernelInfo* info) ;
-    static const char* GetName() ;
-    static size_t GetInputTypeCount() ;
-    static ONNXTensorElementDataType GetInputType(size_t index) ;
-    static size_t GetOutputTypeCount() ;
-    static ONNXTensorElementDataType GetOutputType(size_t index) ;
+struct QcQuantizeOp : Ort::CustomOpBase<QcQuantizeOp, QcQuantizeKernel>
+{
+    static void* CreateKernel(const OrtApi& api, const OrtKernelInfo* info);
+    static const char* GetName();
+    static size_t GetInputTypeCount();
+    static ONNXTensorElementDataType GetInputType(size_t index);
+    static size_t GetOutputTypeCount();
+    static ONNXTensorElementDataType GetOutputType(size_t index);
 };
 
 
 extern "C" ORT_EXPORT OrtStatus* ORT_API_CALL RegisterCustomOps(OrtSessionOptions* options, const OrtApiBase* api);
 
 
-#endif //AIMET_MAIN_QCQUANTIZEOP_H
+#endif   // AIMET_MAIN_QCQUANTIZEOP_H

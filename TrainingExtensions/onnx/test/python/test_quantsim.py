@@ -124,7 +124,7 @@ class TestQuantSim:
             sim.qc_quantize_op_dict[quantizer].enabled = True
 
         for name, qc_op in sim.get_qc_quantize_op().items():
-            assert qc_op.tensor_quantizer.isEncodingValid is False
+            assert qc_op.quant_info.tensorQuantizerRef.isEncodingValid is False
 
         def callback(session, args):
             in_tensor = {'input': np.random.rand(1, 3, 32, 32).astype(np.float32)}
@@ -136,7 +136,7 @@ class TestQuantSim:
             assert qc_op.encodings.bw == 8
 
         for name, qc_op in sim.get_qc_quantize_op().items():
-            assert qc_op.tensor_quantizer.isEncodingValid is True
+            assert qc_op.quant_info.tensorQuantizerRef.isEncodingValid is True
             assert qc_op.op_mode == OpMode.quantizeDequantize or OpMode.oneShotQuantizeDequantize
         reset_qc_quantize_op_dict()
 

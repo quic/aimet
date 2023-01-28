@@ -47,4 +47,3 @@ void copyInputTensorsToOutputTensors(const T* inTensor, size_t count, T* outTens
 
 
 template void copyInputTensorsToOutputTensors(const float* inTensor, size_t count, float* outTensor);
-

@@ -38,29 +38,25 @@
 
 #pragma once
 
-#include <string>
 #include <DlQuantization/IQuantizationEncodingAnalyzer.hpp>
 #include <DlQuantization/QuantizerFactory.hpp>
+#include <string>
 
 
-struct QcQuantizeInfo {
-    void set_tensor_quantizer(uint64_t addr){
+struct QcQuantizeInfo
+{
+    void set_tensor_quantizer(uint64_t addr)
+    {
         tensorQuantizerRef = reinterpret_cast<DlQuantization::TensorQuantizerOpFacade*>(addr);
     }
-    DlQuantization::TensorQuantizer* get_tensor_quantizer() const{
+    DlQuantization::TensorQuantizer* get_tensor_quantizer() const
+    {
         return reinterpret_cast<DlQuantization::TensorQuantizer*>(tensorQuantizerRef);
     }
-    DlQuantization::TfEncoding* getEncoding() const{
-        return encoding;
-    }
-    void setEncoding(DlQuantization::TfEncoding *enc){
-        encoding = enc;
-    }
-    DlQuantization::TensorQuantizerOpFacade *tensorQuantizerRef;
-    DlQuantization::TfEncoding *encoding;
+    DlQuantization::TensorQuantizerOpFacade* tensorQuantizerRef;
+    DlQuantization::TfEncoding* encoding;
     DlQuantization::TensorQuantizerOpMode opMode;
     bool useSymmetricEncoding;
     bool enabled;
     std::string name;
 };
-
