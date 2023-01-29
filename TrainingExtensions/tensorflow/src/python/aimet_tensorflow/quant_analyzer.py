@@ -51,8 +51,7 @@ from aimet_tensorflow.common.operation import Op
 from aimet_tensorflow.utils.common import create_input_feed_dict, iterate_tf_dataset
 from aimet_tensorflow.quantizer_info import QuantizerInfo
 from aimet_tensorflow.quantsim import QuantizationSimModel
-from aimet_tensorflow import batch_norm_fold as aimet_bnf
-
+from aimet_tensorflow import batch_norm_fold
 _logger = AimetLogger.get_area_logger(AimetLogger.LogAreas.Quant)
 
 DEFAULT_BOKEH_FIGURE_HEIGHT = 300
@@ -167,10 +166,10 @@ class QuantAnalyzer:
         :param config_file: Path to a config file
         :return: Quantsim model
         """
-        BN_folded_sess, _ = aimet_bnf.fold_all_batch_norms(self._session, input_op_names=self._start_op_names,
-                                                           output_op_names=self._output_op_names)
-        self._session = BN_folded_sess
-        quant_sim_model = QuantizationSimModel(session=BN_folded_sess,
+        bn_folded_sess, _ = batch_norm_fold.fold_all_batch_norms(self._session, input_op_names=self._start_op_names,
+                                                                 output_op_names=self._output_op_names)
+        self._session = bn_folded_sess
+        quant_sim_model = QuantizationSimModel(session=bn_folded_sess,
                                                starting_op_names=self._start_op_names,
                                                output_op_names=self._output_op_names,
                                                quant_scheme=quant_scheme, rounding_mode=rounding_mode,
@@ -178,7 +177,6 @@ class QuantAnalyzer:
                                                default_param_bw=self._default_param_bw,
                                                use_cuda=self._use_cuda,
                                                config_file=config_file)
-
         quant_sim_model.compute_encodings(forward_pass_callback=self._forward_pass_callback.func,
                                           forward_pass_callback_args=self._forward_pass_callback.args)
 
@@ -357,7 +355,7 @@ class QuantAnalyzer:
     def _perform_per_op_mse_loss(self,
                                  sim: QuantizationSimModel,
                                  results_dir: str,
-                                ) -> Dict:
+                                 ) -> Dict:
         """
         MSE loss computation between fp32 and quantized output activations for each op.
         :param sim: Quantsim model.
@@ -370,38 +368,10 @@ class QuantAnalyzer:
 
         output_op_names = [graph_op.output_op_node.name for graph_op in sim.connected_graph.get_all_ops().values()
                            if graph_op.output_op_node is not None]
-        mse = tf.keras.losses.MeanSquaredError()
         mse_loss_dict = {}
 
         for _, output_op_name in enumerate(output_op_names):
-            total = 0
-            loss = 0.0
-            # pylint: disable=protected-access
-            with self._unlabeled_dataset._graph.as_default():
-                iterator = iterate_tf_dataset(self._unlabeled_dataset)
-            for _ in range(self._num_batches):
-                try:
-                    model_inputs = next(iterator)
-                except tf.errors.OutOfRangeError:
-                    raise StopIteration("Can not fetch {} batches from dataset.".format(self._num_batches))
-
-                # Collect output activation data from original op
-                feed_dict = create_input_feed_dict(self._session.graph, self._start_op_names, model_inputs)
-                orig_op = self._session.graph.get_operation_by_name(output_op_name)
-                orig_out_data = self._session.run(orig_op.outputs[0], feed_dict=feed_dict)
-
-                # Collect output activation data from quant sim op
-                feed_dict = create_input_feed_dict(sim.session.graph, self._start_op_names, model_inputs)
-                quant_op = sim.session.graph.get_operation_by_name(output_op_name)
-                quantized_out_data = sim.session.run(quant_op.outputs[0], feed_dict=feed_dict)
-
-                # Calculate MSE loss
-                MSE = mse(orig_out_data, quantized_out_data)
-                with tf.compat.v1.Session().as_default():
-                    loss += MSE.eval()
-                total += orig_out_data.shape[0]
-
-            mse_loss_dict[output_op_name] = loss/total
+            mse_loss_dict[output_op_name] = self._compute_mse_loss(sim, output_op_name)
 
         export_per_layer_mse_plot(mse_loss_dict,
                                   results_dir,
@@ -409,6 +379,41 @@ class QuantAnalyzer:
         save_json(mse_loss_dict, results_dir, title="per_op_mse_loss.json")
         _logger.info("Exported per op MSE loss plot.")
         return mse_loss_dict
+
+    def _compute_mse_loss(self, sim: QuantizationSimModel, output_op_name) -> float:
+        """
+        Compute MSE loss between fp32 and quantized output activations for each batch, add for
+        all the batches and return averaged mse loss.
+        :param sim: Quantsim model.
+        :param output_op_name: Output op name.
+        :return: MSE loss between fp32 and quantized output activations.
+        """
+        total = 0
+        loss = 0.0
+        mse_loss = tf.keras.losses.MeanSquaredError()
+        iterator = iterate_tf_dataset(self._unlabeled_dataset)
+        for _ in range(self._num_batches):
+            try:
+                model_inputs = next(iterator)
+            except StopIteration:
+                raise ValueError(f'Can not fetch {self._num_batches} batches from dataset')
+
+            # Collect output activation data from original op
+            feed_dict = create_input_feed_dict(self._session.graph, self._start_op_names, model_inputs)
+            orig_op = self._session.graph.get_operation_by_name(output_op_name)
+            orig_out_data = self._session.run(orig_op.outputs[0], feed_dict=feed_dict)
+
+            # Collect output activation data from quant sim op
+            feed_dict = create_input_feed_dict(sim.session.graph, self._start_op_names, model_inputs)
+            quant_op = sim.session.graph.get_operation_by_name(output_op_name)
+            quantized_out_data = sim.session.run(quant_op.outputs[0], feed_dict=feed_dict)
+
+            # Calculate MSE loss
+            mse = mse_loss(orig_out_data, quantized_out_data)
+            with tf.compat.v1.Session().as_default():
+                loss += mse.eval()
+            total += orig_out_data.shape[0]
+        return loss/total
 
     @staticmethod
     def _get_enabled_quantizer_groups(sim: QuantizationSimModel)-> Dict[Op, List[QuantizerInfo]]:
