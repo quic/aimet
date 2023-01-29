@@ -424,66 +424,6 @@ class QuantAnalyzer:
         plotting.save(plot)
         return plot
 
-
-<<<<<<< HEAD
-    @staticmethod
-    def _export_per_layer_mse_plot(mse_loss_dict: Dict, results_dir: str, title: str) -> plotting.Figure:
-        """
-        Export per layer MSE loss between fp32 and quantized output activations in html format.
-
-        :param mse_loss_dict: layer wise MSE loss.
-        :param results_dir:  Directory to save the results.
-        :param title: Title of the plot.
-        :return: Layer-wise MSE loss plot.
-        """
-        layer_names = []
-        mse_losses = []
-        for layer_name, mse_loss in mse_loss_dict.items():
-            layer_names.append(layer_name)
-            mse_losses.append(mse_loss)
-
-        # Configure the output file to be saved.
-        filename = os.path.join(results_dir, f"{title}.html")
-        plotting.output_file(filename)
-        plot = plotting.figure(x_range=layer_names,
-                               plot_height=DEFAULT_BOKEH_FIGURE_HEIGHT,
-                               title=title,
-                               x_axis_label="Layers",
-                               y_axis_label="MSE loss")
-        plot.circle(x=layer_names, y=mse_losses, size=10)
-        plot.line(x=layer_names, y=mse_losses)
-        plot.xaxis.major_label_orientation = "vertical"
-        plot.sizing_mode = "scale_width"
-        plotting.save(plot)
-        return plot
-=======
-    def _create_and_export_min_max_ranges_plot(self,
-                                               min_max_ranges_dict: Dict,
-                                               results_dir: str,
-                                               title: str
-                                               ):
-        """
-        Create and export per layer encoding(s) min-max ranges in html format.
-
-        :param min_max_ranges_dict: Dictionary containing encoding min and max ranges.
-        :param results_dir: Directory to save the results.
-        :param title: Title of the plot.
-        """
-        os.makedirs(results_dir, exist_ok=True)
-
-        if set(map(type, min_max_ranges_dict.values())) == {dict}:
-            for name, per_channel_encodings_dict in min_max_ranges_dict.items():
-                self._export_per_layer_min_max_ranges_plot(per_channel_encodings_dict,
-                                                           results_dir=results_dir,
-                                                           title=name)
-        elif set(map(type, min_max_ranges_dict.values())) == {tuple}:
-            self._export_per_layer_min_max_ranges_plot(min_max_ranges_dict,
-                                                       results_dir=results_dir,
-                                                       title=title)
-        else:
-            raise RuntimeError("Per channel quantization should be enabled for all the layers.")
->>>>>>> TF per op MSE loss
-
     def _create_and_export_stats_histogram_plot(self,
                                                 quantizer: StaticGridTensorQuantizer,
                                                 results_dir: str,
