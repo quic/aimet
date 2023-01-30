@@ -62,7 +62,7 @@ class QcQuantizeOp:
 
     # pylint: disable=too-many-arguments
     def __init__(self, quant_info: libquant_info.QcQuantizeInfo,
-                 quant_scheme: QuantScheme = QuantScheme.post_training_tf,
+                 quant_scheme: QuantScheme = QuantScheme.post_training_tf_enhanced,
                  rounding_mode: str = 'nearest',
                  encodings: Union[libpymo.TfEncoding, None] = None,
                  op_mode: Union[OpMode, None] = None,
