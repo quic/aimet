@@ -1,6 +1,6 @@
 :orphan:
 
-.. _api-torch-cle:
+.. _api-onnx-cle:
 
 ========================================
 AIMET ONNX Cross Layer Equalization APIs
