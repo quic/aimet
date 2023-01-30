@@ -170,4 +170,4 @@ def export_per_layer_mse_plot(mse_loss_dict: Dict, results_dir: str, title: str)
     plot.xaxis.major_label_orientation = "vertical"
     plot.sizing_mode = "scale_width"
     plotting.save(plot)
-    return
+    return plot
